@@ -12,6 +12,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
@@ -87,6 +88,14 @@ func (a *App) RegisterRoutes() {
 	entityHandler := entities.NewHandler(entityService)
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
 
+	// Media plugin: file upload, storage, thumbnailing, serving.
+	// Graceful degradation: if the media directory can't be created, log a warning
+	// but don't crash -- the rest of the app keeps running.
+	mediaRepo := media.NewMediaRepository(a.DB)
+	mediaService := media.NewMediaService(mediaRepo, a.Config.Upload.MediaPath, a.Config.Upload.MaxSize)
+	mediaHandler := media.NewHandler(mediaService)
+	media.RegisterRoutes(e, mediaHandler, authService)
+
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
 	admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
@@ -113,6 +122,27 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetCampaignID(ctx, cc.Campaign.ID)
 			ctx = layouts.SetCampaignName(ctx, cc.Campaign.Name)
 			ctx = layouts.SetCampaignRole(ctx, int(cc.MemberRole))
+
+			// Entity types for dynamic sidebar rendering.
+			if etypes, err := entityService.GetEntityTypes(c.Request().Context(), cc.Campaign.ID); err == nil {
+				sidebarTypes := make([]layouts.SidebarEntityType, len(etypes))
+				for i, et := range etypes {
+					sidebarTypes[i] = layouts.SidebarEntityType{
+						ID:         et.ID,
+						Slug:       et.Slug,
+						Name:       et.Name,
+						NamePlural: et.NamePlural,
+						Icon:       et.Icon,
+						Color:      et.Color,
+					}
+				}
+				ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
+			}
+
+			// Entity counts per type for sidebar badges.
+			if counts, err := entityService.CountByType(c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole)); err == nil {
+				ctx = layouts.SetEntityCounts(ctx, counts)
+			}
 		}
 
 		// CSRF token for forms.

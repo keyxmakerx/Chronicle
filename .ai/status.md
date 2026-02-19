@@ -8,33 +8,43 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- Auto-migrations, first-user-is-admin, /health alias
+2026-02-19 -- Phase 2: Media plugin, security hardening, dynamic sidebar, UI upgrade
 
 ## Current Phase
-**Phase 1: Foundation** -- Core infrastructure, auth, campaigns, SMTP, admin,
-entities plugins, UI layouts, editor widget, and UI polish are built. App
-compiles and tests pass. CI/CD pipeline configured. Docker image builds and
-pushes to GHCR. Production deployment hardened with DB/Redis retry logic,
-real health checks, separate DB env vars, and auto-migrations on startup.
-Next: @mentions, password reset, deploy testing on Cosmos Cloud.
+**Phase 2: Media & UI** -- Building on the Phase 1 foundation. Media plugin
+for file uploads and image management, security hardening (IDOR fixes, HSTS,
+rate limiting, magic byte validation), dynamic sidebar from DB, entity image
+upload, and UI quality improvements with Font Awesome icons. All tests pass.
 
 ## Last Session Summary
 
 ### Completed
-- **Auto-migrations on startup:** Added `golang-migrate/migrate/v4` as a library
-  dependency. New `database.RunMigrations()` runs all pending migrations
-  automatically when the app starts. No more manual `make migrate-up` needed
-  after deployment. Already-applied migrations are safely skipped.
-- **First user is admin:** The first user to register automatically gets
-  `is_admin = true`. Subsequent users get `false` as before. Uses existing
-  `CountUsers()` to check if the users table is empty.
-- **`/health` alias:** Added `/health` alongside `/healthz` so both paths work
-  for health probes. Cosmos Cloud's default health check hits `/health`.
-- **Dockerfile fix:** Migrations now copied to `/app/db/migrations` (was
-  `/app/migrations`) so the path matches local dev (`db/migrations`).
-- **Simplified DB config:** (prior commit) `DB_HOST=host:port`, no DB_PORT.
-- **Special-char-safe DSN:** (prior commit) `mysql.Config.FormatDSN()`.
-- **DB/Redis retry-with-backoff:** (prior commit) Eliminates crash-loop restarts.
+- **Media plugin:** Full implementation with model, repository, service, handler,
+  routes, and migration 000005. Upload with magic byte validation (JPEG/PNG/WebP/GIF),
+  UUID filenames in YYYY/MM/ directory structure, thumbnail generation at 300px + 800px
+  using golang.org/x/image (Catmull-Rom interpolation). Serve with Cache-Control:
+  immutable. Rate-limited uploads (30/min per IP).
+- **Rate limiting middleware:** Per-IP sliding window counter with background cleanup.
+  Applied to auth routes (login: 10/min, register: 5/min) and media upload.
+- **IDOR security fixes:** All entity handlers (Show, EditForm, Update, Delete,
+  GetEntry, UpdateEntryAPI, UpdateImageAPI) now verify entity.CampaignID matches
+  the campaign from the URL before proceeding.
+- **HSTS header:** Added Strict-Transport-Security (1 year, includeSubDomains)
+  to security middleware.
+- **Editor save button:** Made prominent with bg-gray-200 default, accent color
+  highlight via .has-changes class when content is modified.
+- **Entity image upload:** Full pipeline: UpdateImage in repository/service/handler,
+  PUT /campaigns/:id/entities/:eid/image route, image_upload.js widget that
+  uploads to media then sets path on entity. Show page displays image with
+  hover overlay for editors.
+- **Dynamic sidebar:** Entity types loaded from DB into layout context
+  (SidebarEntityType struct in data.go, LayoutInjector populates from
+  entityService.GetEntityTypes). Sidebar renders Font Awesome icons and entity
+  count badges per type.
+- **UI quality upgrade:** Entity cards show image thumbnails (or type icon
+  placeholder), Font Awesome icons on type badges, smooth hover transitions.
+  Index page type filter uses FA icons. Improved empty state. Breadcrumbs
+  on entity show page include type link.
 
 ### In Progress
 - Nothing currently in progress
@@ -43,26 +53,49 @@ Next: @mentions, password reset, deploy testing on Cosmos Cloud.
 - Nothing blocked
 
 ### Files Modified This Session
-- `internal/database/migrate.go` -- New file: RunMigrations() using golang-migrate
-- `cmd/server/main.go` -- Call RunMigrations() after DB connect
-- `internal/plugins/auth/service.go` -- First user gets IsAdmin=true
-- `internal/app/routes.go` -- /health alias for /healthz
-- `Dockerfile` -- Migrations copy to db/migrations
-- `.ai/status.md` -- Updated
+- `db/migrations/000005_create_media.up.sql` -- New: media_files table + campaigns.backdrop_path
+- `db/migrations/000005_create_media.down.sql` -- New: rollback
+- `internal/plugins/media/model.go` -- New: MediaFile, UploadInput, AllowedMimeTypes
+- `internal/plugins/media/repository.go` -- New: CRUD with JSON thumbnail paths
+- `internal/plugins/media/service.go` -- New: upload, validate, thumbnails, delete
+- `internal/plugins/media/handler.go` -- New: Upload, Serve, ServeThumbnail, Info, Delete
+- `internal/plugins/media/routes.go` -- New: media routes with auth + rate limiting
+- `internal/middleware/ratelimit.go` -- New: per-IP rate limiter
+- `internal/middleware/security.go` -- Added HSTS header
+- `internal/config/config.go` -- Added MediaPath to UploadConfig
+- `internal/app/routes.go` -- Wired media plugin, entity types in LayoutInjector
+- `internal/plugins/auth/routes.go` -- Rate limiting on login/register
+- `internal/plugins/entities/model.go` -- ImagePath in UpdateEntityInput
+- `internal/plugins/entities/repository.go` -- UpdateImage method
+- `internal/plugins/entities/service.go` -- UpdateImage method
+- `internal/plugins/entities/handler.go` -- IDOR on all handlers + UpdateImageAPI
+- `internal/plugins/entities/routes.go` -- Image API route
+- `internal/plugins/entities/service_test.go` -- UpdateImage in mock
+- `internal/plugins/entities/show.templ` -- Image display + upload widget + breadcrumbs
+- `internal/plugins/entities/entity_card.templ` -- Image thumbnails + FA icons
+- `internal/plugins/entities/index.templ` -- FA icons in type filter + empty state
+- `internal/templates/layouts/data.go` -- SidebarEntityType, entity types/counts context
+- `internal/templates/layouts/app.templ` -- Dynamic sidebar with FA icons + count badges
+- `internal/templates/layouts/base.templ` -- image_upload.js script tag
+- `static/css/input.css` -- Editor save button styles
+- `static/js/widgets/image_upload.js` -- New: image upload widget
+- `go.mod` / `go.sum` -- golang.org/x/image dependency
 
 ## Active Branch
-`claude/setup-ai-project-docs-LhvVz`
+`claude/resume-previous-work-YqXiG`
 
 ## Next Session Should
-1. **Deploy testing** -- Pull new image on server, `docker compose down -v && up -d`,
-   verify app starts cleanly, test `/healthz`, create account, create campaign
-2. **@mentions** -- Search entities, insert link, parse/render server-side
-3. **Password reset** -- Wire auth password reset with SMTP when configured
+1. **@mentions** -- Search entities in editor, insert link, parse/render server-side
+2. **Password reset** -- Wire auth password reset with SMTP when configured
+3. **Entity relations** -- Bi-directional entity linking
+4. **Sidebar customization** -- Campaign-level sidebar config (migration 000006)
+5. **Layout builder** -- Entity type layout_json for custom profile layouts (migration 000007)
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
 - Templ generated files (`*_templ.go`) are gitignored, so `templ generate`
   must run before build on a fresh clone
+- Tailwind CSS output (`static/css/app.css`) is gitignored, needs `make tailwind`
 
 ## Recently Completed Milestones
 - 2026-02-19: Project scaffolding and three-tier AI documentation system
@@ -81,5 +114,8 @@ Next: @mentions, password reset, deploy testing on Cosmos Cloud.
 - 2026-02-19: Dockerfile fixed for production (Go 1.24, pinned Tailwind)
 - 2026-02-19: CI/CD pipeline (GitHub Actions: build, test, Docker push to GHCR)
 - 2026-02-19: Production deployment hardening (retry logic, real healthcheck, credential sync)
-- 2026-02-19: Separate DB env vars for Cosmos Cloud compatibility
 - 2026-02-19: Auto-migrations on startup, first-user-is-admin, /health alias
+- 2026-02-19: Media plugin (upload, thumbnails, magic byte validation, rate limiting)
+- 2026-02-19: Security hardening (IDOR fixes, HSTS, rate limiting on auth)
+- 2026-02-19: Dynamic sidebar with entity types from DB + count badges
+- 2026-02-19: Entity image upload pipeline + UI quality upgrade

@@ -26,6 +26,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/entities/:eid/entry", h.UpdateEntryAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// Image API (JSON endpoint for image upload widget).
+	cg.PUT("/entities/:eid/image", h.UpdateImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Scribe routes (create/edit access).
 	cg.GET("/entities/new", h.NewForm, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities", h.Create, campaigns.RequireRole(campaigns.RoleScribe))

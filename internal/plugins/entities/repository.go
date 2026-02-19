@@ -215,6 +215,7 @@ type EntityRepository interface {
 	FindBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entity *Entity) error
 	UpdateEntry(ctx context.Context, id, entryJSON, entryHTML string) error
+	UpdateImage(ctx context.Context, id, imagePath string) error
 	Delete(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
 
@@ -357,6 +358,30 @@ func (r *entityRepository) UpdateEntry(ctx context.Context, id, entryJSON, entry
 	}
 
 	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
+// UpdateImage updates only the image_path for an entity. Used by the image
+// upload API to set or clear an entity's header image.
+func (r *entityRepository) UpdateImage(ctx context.Context, id, imagePath string) error {
+	var imgVal any
+	if imagePath != "" {
+		imgVal = imagePath
+	}
+
+	query := `UPDATE entities SET image_path = ?, updated_at = NOW() WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, imgVal, id)
+	if err != nil {
+		return fmt.Errorf("updating entity image: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
 	if rows == 0 {
 		return apperror.NewNotFound("entity not found")
 	}

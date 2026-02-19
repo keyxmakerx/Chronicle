@@ -9,6 +9,7 @@ package layouts
 
 import "context"
 import "fmt"
+import "strconv"
 import "strings"
 
 // App renders the authenticated layout with sidebar navigation and a
@@ -107,17 +108,14 @@ templ CampaignSidebarNav() {
 		Dashboard
 	</a>
 
-	<!-- Entity type links -->
+	<!-- Entity type links (dynamically rendered from DB) -->
 	<div class="mt-4 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
 		Entities
 	</div>
 
-	@entityTypeLink("characters", "Characters", "#3b82f6")
-	@entityTypeLink("locations", "Locations", "#ef4444")
-	@entityTypeLink("organizations", "Organizations", "#f59e0b")
-	@entityTypeLink("items", "Items", "#8b5cf6")
-	@entityTypeLink("notes", "Notes", "#10b981")
-	@entityTypeLink("events", "Events", "#ec4899")
+	for _, et := range GetEntityTypes(ctx) {
+		@entityTypeLink(et.Slug+"s", et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID))
+	}
 
 	<!-- All entities link -->
 	<a
@@ -127,7 +125,7 @@ templ CampaignSidebarNav() {
 			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
 	>
 		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-			<span class="w-2 h-2 rounded-full bg-gray-400"></span>
+			<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
 		</span>
 		All Entities
 	</a>
@@ -205,8 +203,8 @@ templ DefaultSidebarNav() {
 }
 
 // entityTypeLink renders a single entity type navigation link in the sidebar.
-// Uses a colored dot indicator matching the entity type's theme color.
-templ entityTypeLink(slug string, label string, color string) {
+// Uses a Font Awesome icon with the entity type's theme color.
+templ entityTypeLink(slug string, label string, color string, icon string, count int) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug)) }
 		class={ sidebarNavLink,
@@ -214,9 +212,16 @@ templ entityTypeLink(slug string, label string, color string) {
 			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))) }
 	>
 		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-			<span class="w-2 h-2 rounded-full" style={ fmt.Sprintf("background-color: %s", color) }></span>
+			if icon != "" {
+				<i class={ "fa-solid " + icon, "text-xs" } style={ fmt.Sprintf("color: %s", color) }></i>
+			} else {
+				<span class="w-2 h-2 rounded-full" style={ fmt.Sprintf("background-color: %s", color) }></span>
+			}
 		</span>
-		{ label }
+		<span class="flex-1">{ label }</span>
+		if count > 0 {
+			<span class="ml-auto text-xs text-gray-500">{ strconv.Itoa(count) }</span>
+		}
 	</a>
 }
 

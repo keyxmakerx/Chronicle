@@ -104,6 +104,7 @@ type UpdateEntityInput struct {
 	TypeLabel  string
 	IsPrivate  bool
 	Entry      string
+	ImagePath  string
 	FieldsData map[string]any
 }
 

@@ -68,8 +68,12 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 								hx-target="#entity-list"
 								hx-swap="outerHTML"
 							>
-								<span class="flex items-center">
-									<span class="w-2 h-2 rounded-full mr-2" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
+								<span class="flex items-center gap-2">
+									if et.Icon != "" {
+										<i class={ "fa-solid " + et.Icon, "text-xs w-3.5 text-center" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
+									} else {
+										<span class="w-2 h-2 rounded-full" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
+									}
 									{ et.NamePlural }
 								</span>
 								<span class="text-xs text-gray-400">{ fmt.Sprintf("%d", counts[et.ID]) }</span>
@@ -82,8 +86,14 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 			<!-- Entity grid -->
 			<div class="flex-1">
 				if len(entities) == 0 {
-					<div class="text-center py-16">
-						<p class="text-gray-500 text-lg mb-4">No entities found.</p>
+					<div class="empty-state">
+						<div class="empty-state__icon">
+							<i class="fa-solid fa-scroll text-gray-400"></i>
+						</div>
+						<div class="empty-state__title">No entities found</div>
+						<div class="empty-state__description mb-4">
+							Start building your world by creating characters, locations, and more.
+						</div>
 						if cc.MemberRole >= campaigns.RoleScribe {
 							<a
 								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }

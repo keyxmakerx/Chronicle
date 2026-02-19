@@ -165,7 +165,13 @@
   }
 
   .chronicle-editor__btn--save {
-    @apply ml-auto px-3 w-auto text-xs font-medium text-gray-500 hover:text-accent;
+    @apply ml-auto px-3 py-1 w-auto text-xs font-semibold rounded-md
+           bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors;
+  }
+
+  /* Highlight the save button when there are unsaved changes. */
+  .chronicle-editor__btn--save.has-changes {
+    @apply bg-accent text-white hover:bg-accent-hover;
   }
 
   .chronicle-editor__separator {

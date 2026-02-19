@@ -119,6 +119,9 @@ type AuthConfig struct {
 type UploadConfig struct {
 	// MaxSize is the maximum upload file size in bytes.
 	MaxSize int64
+
+	// MediaPath is the root directory for media file storage.
+	MediaPath string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -151,7 +154,8 @@ func Load() (*Config, error) {
 		},
 
 		Upload: UploadConfig{
-			MaxSize: getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
+			MaxSize:   getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
+			MediaPath: getEnv("MEDIA_PATH", "./media"),
 		},
 	}
 

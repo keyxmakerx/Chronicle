@@ -27,8 +27,6 @@ func NewHandler(service EntityService) *Handler {
 // --- Entity CRUD ---
 
 // Index renders the entity list page (GET /campaigns/:id/entities).
-// Supports optional type filtering via entity_type_slug context key
-// (set by shortcut routes) or entity_type_id query param.
 func (h *Handler) Index(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -85,8 +83,6 @@ func (h *Handler) NewForm(c echo.Context) error {
 
 	entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)
-
-	// Pre-select entity type from query param.
 	preselect, _ := strconv.Atoi(c.QueryParam("type"))
 
 	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, csrfToken, ""))
@@ -104,7 +100,6 @@ func (h *Handler) Create(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	// Parse dynamic fields from form (field_<key> params).
 	fieldsData := h.parseFieldsFromForm(c, cc.Campaign.ID, req.EntityTypeID)
 
 	userID := auth.GetUserID(c)
@@ -148,13 +143,16 @@ func (h *Handler) Show(c echo.Context) error {
 		return err
 	}
 
-	// Privacy check: private entities return 404 for Players (not 403,
-	// to avoid revealing existence).
+	// IDOR protection: verify entity belongs to the campaign in the URL.
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Privacy check: private entities return 404 for Players.
 	if entity.IsPrivate && cc.MemberRole < campaigns.RoleScribe {
 		return apperror.NewNotFound("entity not found")
 	}
 
-	// Get the entity type for field definitions.
 	entityType, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
 	if err != nil {
 		return apperror.NewInternal(nil)
@@ -177,6 +175,11 @@ func (h *Handler) EditForm(c echo.Context) error {
 		return err
 	}
 
+	// IDOR protection.
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
 	entityType, _ := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
 	csrfToken := middleware.GetCSRFToken(c)
@@ -197,12 +200,16 @@ func (h *Handler) Update(c echo.Context) error {
 		return err
 	}
 
+	// IDOR protection.
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	var req UpdateEntityRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	// Parse dynamic fields from form.
 	fieldsData := h.parseFieldsFromForm(c, cc.Campaign.ID, entity.EntityTypeID)
 
 	input := UpdateEntityInput{
@@ -241,6 +248,16 @@ func (h *Handler) Delete(c echo.Context) error {
 	}
 
 	entityID := c.Param("eid")
+
+	// IDOR protection: verify entity belongs to the campaign.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	if err := h.service.Delete(c.Request().Context(), entityID); err != nil {
 		return err
 	}
@@ -254,7 +271,6 @@ func (h *Handler) Delete(c echo.Context) error {
 }
 
 // SearchAPI handles entity search requests (GET /campaigns/:id/entities/search).
-// Returns an HTMX fragment with matching entities.
 func (h *Handler) SearchAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -270,7 +286,6 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 
 	results, total, err := h.service.Search(c.Request().Context(), cc.Campaign.ID, query, typeID, role, opts)
 	if err != nil {
-		// Return empty results for validation errors (query too short).
 		if _, ok := err.(*apperror.AppError); ok {
 			return middleware.Render(c, http.StatusOK, SearchResultsFragment(nil, 0, cc))
 		}
@@ -283,7 +298,6 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 // --- Entry API (JSON endpoints for editor widget) ---
 
 // GetEntry returns the entity's entry content as JSON.
-// Used by the editor widget to load content on mount.
 // GET /campaigns/:id/entities/:eid/entry
 func (h *Handler) GetEntry(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -297,7 +311,12 @@ func (h *Handler) GetEntry(c echo.Context) error {
 		return err
 	}
 
-	// Privacy check: private entities return 404 for Players.
+	// IDOR protection.
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Privacy check.
 	if entity.IsPrivate && cc.MemberRole < campaigns.RoleScribe {
 		return apperror.NewNotFound("entity not found")
 	}
@@ -310,7 +329,6 @@ func (h *Handler) GetEntry(c echo.Context) error {
 }
 
 // UpdateEntryAPI saves the entity's entry content from the editor widget.
-// Accepts JSON body with "entry" (ProseMirror JSON string) and "entry_html" fields.
 // PUT /campaigns/:id/entities/:eid/entry
 func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -319,6 +337,15 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	}
 
 	entityID := c.Param("eid")
+
+	// IDOR protection.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
 
 	var body struct {
 		Entry     string `json:"entry"`
@@ -335,11 +362,45 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// --- Image API ---
+
+// UpdateImageAPI updates the entity's header image path.
+// PUT /campaigns/:id/entities/:eid/image
+func (h *Handler) UpdateImageAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	entityID := c.Param("eid")
+
+	// IDOR protection.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var body struct {
+		ImagePath string `json:"image_path"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdateImage(c.Request().Context(), entityID, body.ImagePath); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- Helpers ---
 
 // parseFieldsFromForm collects field_<key> form parameters and builds a
-// map of field values. Uses the entity type's field definitions to know
-// which keys to look for.
+// map of field values.
 func (h *Handler) parseFieldsFromForm(c echo.Context, campaignID string, entityTypeID int) map[string]any {
 	fieldsData := make(map[string]any)
 

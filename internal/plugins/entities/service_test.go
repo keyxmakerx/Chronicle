@@ -61,6 +61,7 @@ type mockEntityRepo struct {
 	findBySlugFn    func(ctx context.Context, campaignID, slug string) (*Entity, error)
 	updateFn        func(ctx context.Context, entity *Entity) error
 	updateEntryFn   func(ctx context.Context, id, entryJSON, entryHTML string) error
+	updateImageFn   func(ctx context.Context, id, imagePath string) error
 	deleteFn        func(ctx context.Context, id string) error
 	slugExistsFn    func(ctx context.Context, campaignID, slug string) (bool, error)
 	listByCampaignFn func(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
@@ -99,6 +100,13 @@ func (m *mockEntityRepo) Update(ctx context.Context, entity *Entity) error {
 func (m *mockEntityRepo) UpdateEntry(ctx context.Context, id, entryJSON, entryHTML string) error {
 	if m.updateEntryFn != nil {
 		return m.updateEntryFn(ctx, id, entryJSON, entryHTML)
+	}
+	return nil
+}
+
+func (m *mockEntityRepo) UpdateImage(ctx context.Context, id, imagePath string) error {
+	if m.updateImageFn != nil {
+		return m.updateImageFn(ctx, id, imagePath)
 	}
 	return nil
 }

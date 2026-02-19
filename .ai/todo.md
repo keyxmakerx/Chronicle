@@ -106,7 +106,7 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [ ] Tags widget (tag CRUD, entity tagging)
 - [ ] Entity nesting (parent/child relationships)
 - [ ] Entity posts (additional sections on entity profile)
-- [ ] Image upload for entity headers
+- [x] Image upload for entity headers
 - [ ] Dark mode toggle
 
 ---
@@ -116,9 +116,17 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 ### Phase 2 -- Maps & Media
 - [ ] Leaflet.js map viewer widget
 - [ ] Map pin CRUD with entity linking
-- [ ] Image upload system with thumbnails
+- [x] Image upload system with thumbnails (media plugin)
 - [ ] Entity relations plugin (bi-directional)
 - [ ] REST API plugin with PASETO token auth
+- [x] Rate limiting middleware (auth + uploads)
+- [x] IDOR protection on all entity endpoints
+- [x] HSTS security header
+- [x] Dynamic sidebar with entity types from DB
+- [x] Entity image upload pipeline
+- [x] UI upgrade with Font Awesome icons
+- [ ] Sidebar customization (campaign-level config)
+- [ ] Layout builder (entity type profile customization)
 
 ### Phase 3 -- Permissions & Advanced Multi-User
 - [ ] Per-entity permissions (view/edit per role/user)

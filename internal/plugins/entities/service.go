@@ -21,6 +21,7 @@ type EntityService interface {
 	GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
 	UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error
+	UpdateImage(ctx context.Context, entityID, imagePath string) error
 	Delete(ctx context.Context, entityID string) error
 
 	// Listing and search
@@ -194,6 +195,18 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 		return err
 	}
 	slog.Info("entity entry updated", slog.String("entity_id", entityID))
+	return nil
+}
+
+// UpdateImage sets or clears the entity's header image path.
+func (s *entityService) UpdateImage(ctx context.Context, entityID, imagePath string) error {
+	if err := s.entities.UpdateImage(ctx, entityID, imagePath); err != nil {
+		return err
+	}
+	slog.Info("entity image updated",
+		slog.String("entity_id", entityID),
+		slog.String("image_path", imagePath),
+	)
 	return nil
 }
 

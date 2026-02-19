@@ -116,11 +116,12 @@
         });
       }
 
-      // Track changes for autosave.
+      // Track changes for autosave and highlight the save button.
       if (editable) {
         editor.on('update', function () {
           state.dirty = true;
           setStatus(statusEl, 'unsaved');
+          updateSaveButton(toolbar, true);
         });
 
         // Set up autosave interval.
@@ -239,11 +240,16 @@
       executeCommand(state.editor, cmd);
     });
 
-    // Save button.
+    // Separator before save button.
+    var saveSep = document.createElement('span');
+    saveSep.className = 'chronicle-editor__separator';
+    toolbar.appendChild(saveSep);
+
+    // Save button -- prominent, highlights when there are unsaved changes.
     var saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.className = 'chronicle-editor__btn chronicle-editor__btn--save';
-    saveBtn.textContent = 'Save';
+    saveBtn.innerHTML = '&#128190; Save';
     saveBtn.title = 'Save (Ctrl+S)';
     saveBtn.setAttribute('data-cmd', 'save');
     toolbar.appendChild(saveBtn);
@@ -367,6 +373,7 @@
         state.dirty = false;
         state.saving = false;
         setStatus(state.statusEl, 'saved');
+        updateSaveButton(state.toolbar, false);
       })
       .catch(function (err) {
         console.error('[Editor] Save error:', err);
@@ -407,6 +414,17 @@
 
     el.textContent = text;
     el.className = cls;
+  }
+
+  /**
+   * Toggle the save button's visual highlight based on unsaved changes.
+   */
+  function updateSaveButton(toolbar, hasChanges) {
+    if (!toolbar) return;
+    var saveBtn = toolbar.querySelector('.chronicle-editor__btn--save');
+    if (saveBtn) {
+      saveBtn.classList.toggle('has-changes', hasChanges);
+    }
   }
 
   // --- Keyboard Shortcuts ---

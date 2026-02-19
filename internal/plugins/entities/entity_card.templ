@@ -1,4 +1,6 @@
 // entity_card.templ renders a single entity card for the entity list grid.
+// Displays an image thumbnail (if available), type badge with icon, and
+// privacy indicator.
 
 package entities
 
@@ -7,35 +9,54 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// EntityCard renders a single entity card with type badge and privacy indicator.
+// EntityCard renders a single entity card with image, type badge, and privacy indicator.
 templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-		class="card p-4 hover:shadow-lg transition-shadow block"
+		class="card p-0 overflow-hidden hover:shadow-lg transition-shadow block group"
 	>
-		<div class="flex items-start justify-between mb-2">
-			<h3 class="text-base font-semibold text-gray-900 truncate">{ entity.Name }</h3>
-			if entity.IsPrivate && cc.MemberRole >= campaigns.RoleScribe {
-				<span class="text-gray-400 ml-2 shrink-0" title="Private (GM only)">
-					&#128274;
+		<!-- Image or placeholder header -->
+		if entity.ImagePath != nil && *entity.ImagePath != "" {
+			<div class="h-36 bg-gray-100 overflow-hidden">
+				<img
+					src={ fmt.Sprintf("/media/%s", *entity.ImagePath) }
+					alt={ entity.Name }
+					class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+				/>
+			</div>
+		} else {
+			<div class="h-20 flex items-center justify-center" style={ fmt.Sprintf("background-color: %s10", entity.TypeColor) }>
+				if entity.TypeIcon != "" {
+					<i class={ "fa-solid " + entity.TypeIcon, "text-2xl opacity-30" } style={ fmt.Sprintf("color: %s", entity.TypeColor) }></i>
+				}
+			</div>
+		}
+
+		<!-- Card body -->
+		<div class="p-4">
+			<div class="flex items-start justify-between mb-2">
+				<h3 class="text-base font-semibold text-gray-900 truncate group-hover:text-accent transition-colors">{ entity.Name }</h3>
+				if entity.IsPrivate && cc.MemberRole >= campaigns.RoleScribe {
+					<span class="text-gray-400 ml-2 shrink-0" title="Private (GM only)">
+						<i class="fa-solid fa-lock text-xs"></i>
+					</span>
+				}
+			</div>
+
+			<div class="flex items-center gap-2">
+				<span
+					class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white"
+					style={ fmt.Sprintf("background-color: %s", entity.TypeColor) }
+				>
+					if entity.TypeIcon != "" {
+						<i class={ "fa-solid " + entity.TypeIcon, "text-[10px]" }></i>
+					}
+					{ entity.TypeName }
 				</span>
-			}
-		</div>
-
-		<div class="flex items-center gap-2 mb-2">
-			<span
-				class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-white"
-				style={ fmt.Sprintf("background-color: %s", entity.TypeColor) }
-			>
-				{ entity.TypeName }
-			</span>
-			if entity.TypeLabel != nil && *entity.TypeLabel != "" {
-				<span class="text-xs text-gray-500">{ *entity.TypeLabel }</span>
-			}
-		</div>
-
-		<div class="text-xs text-gray-400">
-			{ entity.UpdatedAt.Format("Jan 2, 2006") }
+				if entity.TypeLabel != nil && *entity.TypeLabel != "" {
+					<span class="text-xs text-gray-500">{ *entity.TypeLabel }</span>
+				}
+			</div>
 		</div>
 	</a>
 }

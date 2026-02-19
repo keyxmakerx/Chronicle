@@ -32,6 +32,11 @@ func SecurityHeaders() echo.MiddlewareFunc {
 					"form-action 'self'",
 			)
 
+			// Strict-Transport-Security: enforce HTTPS for 1 year including subdomains.
+			// Chronicle runs behind a reverse proxy that terminates TLS; this header
+			// tells browsers to always use HTTPS for subsequent requests.
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+
 			// X-Content-Type-Options: prevent MIME type sniffing.
 			h.Set("X-Content-Type-Options", "nosniff")
 
