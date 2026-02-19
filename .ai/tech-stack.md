@@ -10,7 +10,7 @@
 
 | Technology | Version | Role | Why |
 |-----------|---------|------|-----|
-| Go | 1.22+ | Backend language | Fast, single binary, strong typing |
+| Go | 1.24+ | Backend language | Fast, single binary, strong typing |
 | Echo | v4 | HTTP framework | Mature middleware, validation, Templ-friendly |
 | Templ | latest | HTML templating | Type-safe, compiles to Go, component model |
 | HTMX | 2.x | Frontend interactivity | Server-driven partials, no SPA, no Node |

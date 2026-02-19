@@ -92,6 +92,14 @@ All routes require `auth.RequireAuth` + `auth.RequireSiteAdmin`.
 |--------|------|---------|----------|-------------|
 | GET | `/campaigns/:id/entities/:eid/entry` | GetEntry | Player | Get entry content (JSON) |
 | PUT | `/campaigns/:id/entities/:eid/entry` | UpdateEntryAPI | Scribe | Save entry content (JSON) |
+| PUT | `/campaigns/:id/entities/:eid/image` | UpdateImageAPI | Scribe | Update entity header image path |
+
+### Entity Type Layout API (Plugin: entities, JSON endpoints for layout builder) -- implemented
+
+| Method | Path | Handler | Min Role | Description |
+|--------|------|---------|----------|-------------|
+| GET | `/campaigns/:id/entity-types/:etid/layout` | GetEntityTypeLayout | Owner | Get entity type layout (JSON) |
+| PUT | `/campaigns/:id/entity-types/:etid/layout` | UpdateEntityTypeLayout | Owner | Save entity type layout (JSON) |
 
 ### Entity Shortcut Routes (by type) -- implemented
 
