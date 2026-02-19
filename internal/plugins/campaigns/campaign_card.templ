@@ -1,0 +1,23 @@
+// campaign_card.templ renders a single campaign card for the campaign list.
+
+package campaigns
+
+import "fmt"
+
+// CampaignCard renders a single campaign card for the grid.
+templ CampaignCard(campaign *Campaign) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", campaign.ID)) }
+		class="card p-6 hover:shadow-lg transition-shadow block"
+	>
+		<h3 class="text-lg font-semibold text-gray-900 mb-2">{ campaign.Name }</h3>
+		if campaign.Description != nil && *campaign.Description != "" {
+			<p class="text-sm text-gray-600 line-clamp-3">{ *campaign.Description }</p>
+		} else {
+			<p class="text-sm text-gray-400 italic">No description</p>
+		}
+		<div class="mt-4 text-xs text-gray-400">
+			{ campaign.UpdatedAt.Format("Jan 2, 2006") }
+		</div>
+	</a>
+}

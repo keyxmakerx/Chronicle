@@ -26,10 +26,9 @@ User --< CampaignMember >-- Campaign
 
 ## Tables
 
-> **NOTE:** No tables exist yet. This section will be populated as migrations
-> are written. The schema below is the PLANNED design from the project spec.
+> Tables marked with **(implemented)** have migrations written. Others are planned.
 
-### users
+### users (implemented -- migration 000001)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | CHAR(36) | PK | UUID generated in Go |
@@ -43,7 +42,7 @@ User --< CampaignMember >-- Campaign
 | created_at | DATETIME | NOT NULL, DEFAULT NOW() | |
 | last_login_at | DATETIME | NULL | |
 
-### campaigns
+### campaigns (implemented -- migration 000002)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | CHAR(36) | PK | UUID |
@@ -54,6 +53,39 @@ User --< CampaignMember >-- Campaign
 | created_by | CHAR(36) | FK -> users.id | |
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
+
+### campaign_members (implemented -- migration 000002)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| campaign_id | CHAR(36) | PK (composite), FK -> campaigns.id ON DELETE CASCADE | |
+| user_id | CHAR(36) | PK (composite), FK -> users.id ON DELETE CASCADE | |
+| role | VARCHAR(20) | NOT NULL, DEFAULT 'player', CHECK IN ('owner','scribe','player') | |
+| joined_at | DATETIME | NOT NULL, DEFAULT NOW() | |
+
+### ownership_transfers (implemented -- migration 000002)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | CHAR(36) | PK | UUID |
+| campaign_id | CHAR(36) | UNIQUE, FK -> campaigns.id ON DELETE CASCADE | One pending per campaign |
+| from_user_id | CHAR(36) | FK -> users.id | Current owner |
+| to_user_id | CHAR(36) | FK -> users.id | Target new owner |
+| token | VARCHAR(128) | UNIQUE, NOT NULL | 64-byte hex token |
+| expires_at | DATETIME | NOT NULL | 72h from creation |
+| created_at | DATETIME | NOT NULL, DEFAULT NOW() | |
+
+### smtp_settings (implemented -- migration 000003)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, DEFAULT 1, CHECK (id = 1) | Singleton row |
+| host | VARCHAR(255) | NOT NULL, DEFAULT '' | SMTP server host |
+| port | INT | NOT NULL, DEFAULT 587 | SMTP port |
+| username | VARCHAR(255) | NOT NULL, DEFAULT '' | SMTP username |
+| password_encrypted | VARBINARY(512) | NULL | AES-256-GCM encrypted |
+| from_address | VARCHAR(255) | NOT NULL, DEFAULT '' | Sender email |
+| from_name | VARCHAR(100) | NOT NULL, DEFAULT 'Chronicle' | Sender display name |
+| encryption | VARCHAR(20) | NOT NULL, DEFAULT 'starttls' | 'starttls', 'ssl', 'none' |
+| enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | |
+| updated_at | DATETIME | NOT NULL, DEFAULT NOW() ON UPDATE | |
 
 ### entity_types
 | Column | Type | Constraints | Notes |
@@ -147,4 +179,6 @@ User --< CampaignMember >-- Campaign
 
 | # | File | Description | Date Applied |
 |---|------|-------------|-------------|
-| - | - | No migrations yet | - |
+| 1 | 000001_create_users | Users table with auth fields | 2026-02-19 |
+| 2 | 000002_create_campaigns | Campaigns, campaign_members, ownership_transfers | 2026-02-19 |
+| 3 | 000003_create_smtp_settings | SMTP settings singleton table | 2026-02-19 |

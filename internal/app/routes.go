@@ -6,7 +6,10 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 )
 
@@ -39,18 +42,28 @@ func (a *App) RegisterRoutes() {
 	authHandler := auth.NewHandler(authService)
 	auth.RegisterRoutes(e, authHandler)
 
-	// Authenticated route group -- all routes below require a valid session.
-	_ = e.Group("", auth.RequireAuth(authService))
+	// SMTP plugin: outbound email for transfers, password resets.
+	smtpRepo := smtp.NewSMTPRepository(a.DB)
+	smtpService := smtp.NewSMTPService(smtpRepo, a.Config.Auth.SecretKey)
+	smtpHandler := smtp.NewHandler(smtpService)
 
-	// TODO: campaigns plugin
-	// campaignPlugin.RegisterRoutes(authed)
+	// Campaigns plugin: CRUD, membership, ownership transfer.
+	userFinder := campaigns.NewUserFinderAdapter(authRepo)
+	campaignRepo := campaigns.NewCampaignRepository(a.DB)
+	campaignService := campaigns.NewCampaignService(campaignRepo, userFinder, smtpService, a.Config.BaseURL)
+	campaignHandler := campaigns.NewHandler(campaignService)
+	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
+
+	// Admin plugin: site-wide management (users, campaigns, SMTP settings).
+	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
+	admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
 
 	// TODO: entities plugin (scoped to campaign)
 	// entityPlugin.RegisterRoutes(authed)
 
-	// Dashboard placeholder for authenticated users.
+	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, pages.Landing())
+		return c.Redirect(http.StatusSeeOther, "/campaigns")
 	}, auth.RequireAuth(authService))
 
 	// --- Module Routes ---

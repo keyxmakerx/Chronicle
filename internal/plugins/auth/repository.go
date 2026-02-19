@@ -17,6 +17,11 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*User, error)
 	EmailExists(ctx context.Context, email string) (bool, error)
 	UpdateLastLogin(ctx context.Context, id string) error
+
+	// Admin operations.
+	ListUsers(ctx context.Context, offset, limit int) ([]User, int, error)
+	UpdateIsAdmin(ctx context.Context, id string, isAdmin bool) error
+	CountUsers(ctx context.Context) (int, error)
 }
 
 // userRepository implements UserRepository with hand-written MariaDB queries.
@@ -133,4 +138,66 @@ func (r *userRepository) UpdateLastLogin(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+// --- Admin Operations ---
+
+// ListUsers returns a paginated list of all users ordered by creation date.
+// Also returns the total count for pagination.
+func (r *userRepository) ListUsers(ctx context.Context, offset, limit int) ([]User, int, error) {
+	// Get total count.
+	var total int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("counting users: %w", err)
+	}
+
+	query := `SELECT id, email, display_name, password_hash, avatar_path,
+	                 is_admin, totp_secret, totp_enabled, created_at, last_login_at
+	          FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?`
+
+	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("listing users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(
+			&u.ID, &u.Email, &u.DisplayName, &u.PasswordHash, &u.AvatarPath,
+			&u.IsAdmin, &u.TOTPSecret, &u.TOTPEnabled, &u.CreatedAt, &u.LastLoginAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scanning user row: %w", err)
+		}
+		users = append(users, u)
+	}
+
+	return users, total, rows.Err()
+}
+
+// UpdateIsAdmin sets or clears the is_admin flag for a user.
+func (r *userRepository) UpdateIsAdmin(ctx context.Context, id string, isAdmin bool) error {
+	query := `UPDATE users SET is_admin = ? WHERE id = ?`
+
+	result, err := r.db.ExecContext(ctx, query, isAdmin, id)
+	if err != nil {
+		return fmt.Errorf("updating is_admin: %w", err)
+	}
+
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return apperror.NewNotFound("user not found")
+	}
+
+	return nil
+}
+
+// CountUsers returns the total number of registered users.
+func (r *userRepository) CountUsers(ctx context.Context) (int, error) {
+	var count int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
+		return 0, fmt.Errorf("counting users: %w", err)
+	}
+	return count, nil
 }

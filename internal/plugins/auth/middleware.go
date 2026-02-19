@@ -85,6 +85,28 @@ func GetUserID(c echo.Context) string {
 	return id
 }
 
+// RequireSiteAdmin returns middleware that ensures the user has the site-wide
+// is_admin flag set. Must be applied AFTER RequireAuth.
+//
+// Used by: admin plugin routes, SMTP settings routes.
+func RequireSiteAdmin() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			session := GetSession(c)
+			if session == nil {
+				return handleUnauthenticated(c)
+			}
+			if !session.IsAdmin {
+				return c.JSON(http.StatusForbidden, map[string]string{
+					"error":   "forbidden",
+					"message": "admin access required",
+				})
+			}
+			return next(c)
+		}
+	}
+}
+
 // --- Helpers ---
 
 // isAPIRequest returns true if the request targets the /api/ path.

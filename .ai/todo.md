@@ -38,16 +38,34 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Login/Register Templ pages with HTMX support
 - [x] Logout handler (destroy session)
 - [x] Security middleware (CSP, proxy trust, CORS, CSRF)
+- [x] RequireSiteAdmin middleware for admin routes
+- [x] ListUsers, UpdateIsAdmin, CountUsers for admin panel
 
 ### Priority 3 -- Campaigns Plugin (Must Do)
-- [ ] Campaign model and MariaDB table (migration 000002)
-- [ ] Campaign CRUD (create, list, show, edit, delete)
-- [ ] Campaign membership (owner only for Phase 1)
-- [ ] Campaign selector in navigation
-- [ ] Campaign Templ pages (list, show, settings)
+- [x] Campaign model and MariaDB tables (migration 000002)
+- [x] Campaign CRUD (create, list, show, edit, delete)
+- [x] Campaign membership with roles (Owner, Scribe, Player)
+- [x] RequireCampaignAccess + RequireRole middleware
+- [x] Ownership transfer flow (72h token, optional email)
+- [x] Campaign Templ pages (index, show, form, settings, members)
+- [ ] Campaign selector in navigation (needs app layout)
+
+### Priority 3.5 -- SMTP Plugin
+- [x] SMTP settings singleton table (migration 000003)
+- [x] AES-256-GCM password encryption
+- [x] MailService interface (SendMail, IsConfigured)
+- [x] SMTP settings admin page with test connection
+- [x] SMTP password never returned to UI
+
+### Priority 3.5 -- Admin Plugin
+- [x] Admin dashboard with stats
+- [x] User management (list, toggle admin)
+- [x] Campaign management (list all, delete, join as role, leave)
+- [x] SMTP settings integration
+- [ ] Password reset flow (requires SMTP, wire into auth)
 
 ### Priority 4 -- Entities Plugin (Must Do)
-- [ ] Entity types table with configurable fields (migration 000003)
+- [ ] Entity types table with configurable fields (migration 000004)
 - [ ] Default entity types seeded (Character, Location, Organization, Item, etc.)
 - [ ] Entity CRUD (create, list, show, edit, delete)
 - [ ] Entity list view (grid layout like Kanka)
@@ -75,7 +93,7 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [ ] Dockerfile builds successfully (multi-stage)
 - [ ] docker-compose.yml works for full stack (app + MariaDB + Redis)
 - [ ] GitHub Actions CI (build, lint, test)
-- [ ] Basic health check endpoint (`/healthz`)
+- [x] Basic health check endpoint (`/healthz`)
 
 ### Priority 8 -- Nice to Have (Phase 1)
 - [ ] Tags widget (tag CRUD, entity tagging)
@@ -95,10 +113,9 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [ ] Entity relations plugin (bi-directional)
 - [ ] REST API plugin with PASETO token auth
 
-### Phase 3 -- Permissions & Multi-User
-- [ ] Campaign roles system
+### Phase 3 -- Permissions & Advanced Multi-User
 - [ ] Per-entity permissions (view/edit per role/user)
-- [ ] Invite system
+- [ ] Invite system (email invitations for campaigns)
 - [ ] 2FA/TOTP support
 - [ ] Audit log
 - [ ] Entity type layout editor (drag-drop field customization)

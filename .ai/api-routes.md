@@ -7,10 +7,9 @@
 <!-- Update: Whenever a route is added, removed, or its handler changes.      -->
 <!-- ====================================================================== -->
 
-> **NOTE:** No routes exist yet. This is the PLANNED route design. Routes will
-> be added here as they are implemented.
+> Routes marked with **(implemented)** have working handlers. Others are planned.
 
-## Public Routes (No Auth Required)
+## Public Routes (No Auth Required) -- implemented
 
 | Method | Path | Plugin | Handler | Description |
 |--------|------|--------|---------|-------------|
@@ -24,20 +23,56 @@
 
 ## Authenticated Routes
 
-### Campaign Management (Plugin: campaigns)
+### Campaign Management (Plugin: campaigns) -- implemented
 
-| Method | Path | Handler | HTMX? | Description |
-|--------|------|---------|-------|-------------|
-| GET | `/campaigns` | Index | Yes | List user's campaigns |
-| GET | `/campaigns/new` | NewForm | Yes | Create campaign form |
-| POST | `/campaigns` | Create | Yes | Create campaign |
-| GET | `/campaigns/:id` | Show | Yes | Campaign dashboard |
-| GET | `/campaigns/:id/edit` | EditForm | Yes | Edit campaign form |
-| PUT | `/campaigns/:id` | Update | Yes | Update campaign |
-| DELETE | `/campaigns/:id` | Delete | Yes | Delete campaign |
-| GET | `/campaigns/:id/settings` | Settings | No | Campaign settings page |
+| Method | Path | Handler | Min Role | Description |
+|--------|------|---------|----------|-------------|
+| GET | `/campaigns` | Index | Auth only | List user's campaigns |
+| GET | `/campaigns/new` | NewForm | Auth only | Create campaign form |
+| POST | `/campaigns` | Create | Auth only | Create campaign |
+| GET | `/campaigns/:id` | Show | Player | Campaign dashboard |
+| GET | `/campaigns/:id/edit` | EditForm | Owner | Edit campaign form |
+| PUT | `/campaigns/:id` | Update | Owner | Update campaign |
+| DELETE | `/campaigns/:id` | Delete | Owner | Delete campaign |
+| GET | `/campaigns/:id/settings` | Settings | Owner | Campaign settings page |
+| GET | `/campaigns/:id/members` | Members | Player | Member list page |
+| POST | `/campaigns/:id/members` | AddMember | Owner | Add member by email |
+| DELETE | `/campaigns/:id/members/:uid` | RemoveMember | Owner | Remove member |
+| PUT | `/campaigns/:id/members/:uid/role` | UpdateRole | Owner | Change member role |
+| GET | `/campaigns/:id/transfer` | TransferForm | Owner | Transfer ownership form |
+| POST | `/campaigns/:id/transfer` | Transfer | Owner | Initiate transfer |
+| GET | `/campaigns/:id/accept-transfer` | AcceptTransfer | Auth only | Accept transfer (token) |
+| POST | `/campaigns/:id/cancel-transfer` | CancelTransfer | Owner | Cancel pending transfer |
 
-### Entity Management (Plugin: entities)
+### Dashboard Redirect -- implemented
+
+| Method | Path | Handler | Description |
+|--------|------|---------|-------------|
+| GET | `/dashboard` | redirect | Redirects to `/campaigns` |
+
+### Admin Panel (Plugin: admin) -- implemented
+
+All routes require `auth.RequireAuth` + `auth.RequireSiteAdmin`.
+
+| Method | Path | Handler | Description |
+|--------|------|---------|-------------|
+| GET | `/admin` | Dashboard | Overview stats (users, campaigns, SMTP) |
+| GET | `/admin/users` | Users | User management list |
+| PUT | `/admin/users/:id/admin` | ToggleAdmin | Toggle user's admin flag |
+| GET | `/admin/campaigns` | Campaigns | All campaigns list |
+| DELETE | `/admin/campaigns/:id` | DeleteCampaign | Force-delete campaign |
+| POST | `/admin/campaigns/:id/join` | JoinCampaign | Admin joins with role |
+| DELETE | `/admin/campaigns/:id/leave` | LeaveCampaign | Admin leaves campaign |
+
+### SMTP Settings (Plugin: smtp, under admin) -- implemented
+
+| Method | Path | Handler | Description |
+|--------|------|---------|-------------|
+| GET | `/admin/smtp` | Settings | SMTP settings form |
+| PUT | `/admin/smtp` | UpdateSettings | Save SMTP settings |
+| POST | `/admin/smtp/test` | TestConnection | Test SMTP connectivity |
+
+### Entity Management (Plugin: entities) -- planned
 
 | Method | Path | Handler | HTMX? | Description |
 |--------|------|---------|-------|-------------|
@@ -49,7 +84,7 @@
 | PUT | `/campaigns/:cid/entities/:eid` | Update | Yes | Update entity |
 | DELETE | `/campaigns/:cid/entities/:eid` | Delete | Yes | Delete entity |
 
-### Entity Shortcut Routes (by type)
+### Entity Shortcut Routes (by type) -- planned
 
 | Method | Path | Handler | Description |
 |--------|------|---------|-------------|
@@ -58,7 +93,7 @@
 | GET | `/campaigns/:cid/organizations` | Index (type=organization) | List orgs |
 | GET | `/campaigns/:cid/items` | Index (type=item) | List items |
 
-## REST API (for external clients like Foundry VTT)
+## REST API (for external clients like Foundry VTT) -- planned
 
 ### Authentication
 
@@ -84,14 +119,14 @@
 | GET | `/api/v1/campaigns/:id/entity-types` | List entity types |
 | GET | `/api/v1/campaigns/:id/tags` | List tags |
 
-### Widget API Endpoints
+### Widget API Endpoints -- planned
 
 | Method | Path | Widget | Description |
 |--------|------|--------|-------------|
 | GET | `/api/v1/search/entities` | mentions | Search entities for @mentions |
 | GET | `/api/v1/search/tags` | tags | Search tags for tag picker |
 
-### Module (Game System) Routes
+### Module (Game System) Routes -- planned
 
 | Method | Path | Module | Description |
 |--------|------|--------|-------------|

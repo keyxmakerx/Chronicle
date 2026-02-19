@@ -1,0 +1,47 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// AdminDashboardPage renders the admin overview with high-level stats.
+templ AdminDashboardPage(userCount, campaignCount int, smtpConfigured bool) {
+	@layouts.Base("Admin Dashboard - Chronicle") {
+		<div class="max-w-4xl mx-auto py-8 px-4">
+			<h1 class="text-2xl font-bold text-gray-100 mb-6">Admin Dashboard</h1>
+			<!-- Stats Cards -->
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+				<!-- Users -->
+				<a href="/admin/users" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-750 transition-colors">
+					<p class="text-sm text-gray-400">Total Users</p>
+					<p class="text-3xl font-bold text-gray-100 mt-1">{ fmt.Sprintf("%d", userCount) }</p>
+				</a>
+				<!-- Campaigns -->
+				<a href="/admin/campaigns" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-750 transition-colors">
+					<p class="text-sm text-gray-400">Total Campaigns</p>
+					<p class="text-3xl font-bold text-gray-100 mt-1">{ fmt.Sprintf("%d", campaignCount) }</p>
+				</a>
+				<!-- SMTP -->
+				<a href="/admin/smtp" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-750 transition-colors">
+					<p class="text-sm text-gray-400">SMTP Status</p>
+					if smtpConfigured {
+						<p class="text-lg font-semibold text-green-400 mt-1">Configured</p>
+					} else {
+						<p class="text-lg font-semibold text-yellow-400 mt-1">Not Configured</p>
+					}
+				</a>
+			</div>
+			<!-- Quick Links -->
+			<div class="bg-gray-800 rounded-lg p-6">
+				<h2 class="text-lg font-semibold text-gray-100 mb-4">Quick Links</h2>
+				<div class="space-y-2">
+					<a href="/admin/users" class="block text-indigo-400 hover:text-indigo-300">Manage Users</a>
+					<a href="/admin/campaigns" class="block text-indigo-400 hover:text-indigo-300">Manage Campaigns</a>
+					<a href="/admin/smtp" class="block text-indigo-400 hover:text-indigo-300">SMTP Settings</a>
+					<a href="/campaigns" class="block text-indigo-400 hover:text-indigo-300">Back to Campaigns</a>
+				</div>
+			</div>
+		</div>
+	}
+}

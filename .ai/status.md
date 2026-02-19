@@ -8,39 +8,54 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- Auth plugin implementation session
+2026-02-19 -- Campaigns, SMTP, and Admin plugins implementation session
 
 ## Current Phase
-**Phase 1: Foundation** -- Core infrastructure + auth plugin are built. App
-compiles successfully. Next: campaigns plugin, then entities plugin.
+**Phase 1: Foundation** -- Core infrastructure, auth plugin, campaigns plugin,
+SMTP plugin, and admin plugin are built. App compiles successfully. Next: entities
+plugin, then editor widget.
 
 ## Last Session Summary
 
 ### Completed
-- Created `internal/middleware/security.go` -- security headers (CSP, X-Frame-Options,
-  X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection)
-- Created `internal/middleware/proxy.go` -- trusted reverse proxy IP extraction for
-  Cosmos Cloud. Custom IPExtractor trusts X-Forwarded-For/X-Real-IP from Docker CIDRs.
-- Created `internal/middleware/cors.go` -- CORS middleware with HTMX header support.
-  Exposes HX-Redirect/HX-Refresh/HX-Trigger. Caches preflight for 1 hour.
-- Created `internal/middleware/csrf.go` -- double-submit cookie CSRF with HTMX
-  integration. Cookie NOT HttpOnly so JS can read it for X-CSRF-Token header.
-- Updated `internal/app/app.go` -- wired all new middleware + trusted proxy config
-- **Auth plugin fully implemented:**
-  - `model.go` -- User domain model, RegisterRequest/LoginRequest DTOs,
-    RegisterInput/LoginInput service DTOs, Session struct for Redis
-  - `repository.go` -- UserRepository interface + MariaDB implementation
-    (Create, FindByID, FindByEmail, EmailExists, UpdateLastLogin)
-  - `service.go` -- AuthService with Register (argon2id hash, UUID gen),
-    Login (password verify, Redis session create), ValidateSession, DestroySession
-  - `handler.go` -- thin HTTP handlers for login/register/logout with HTMX support
-  - `login.templ` -- login page + form (HTMX partial replacement on error)
-  - `register.templ` -- register page + form (HTMX partial replacement on error)
-  - `middleware.go` -- RequireAuth middleware, GetSession/GetUserID helpers
-  - `routes.go` -- public route registration
-- Updated `internal/app/routes.go` -- wired auth plugin with DI, added dashboard
-  placeholder route behind RequireAuth middleware
-- **Build succeeds:** `go build ./...` passes with zero errors
+- **Campaigns plugin fully implemented:**
+  - Migration 000002 (campaigns, campaign_members, ownership_transfers tables)
+  - `model.go` -- Campaign, CampaignMember, Role system (Player=1, Scribe=2, Owner=3),
+    CampaignContext with dual permission model, OwnershipTransfer, UserFinder interface,
+    MailService interface, all DTOs, Slugify helper
+  - `repository.go` -- Full CampaignRepository (CRUD, membership CRUD, transfer CRUD,
+    TransferOwnership with atomic DB transaction, ForceTransferOwnership for admin)
+  - `user_finder.go` -- UserFinderAdapter wrapping auth.UserRepository
+  - `service.go` -- CampaignService with CRUD, slug generation with dedup, membership
+    validation, ownership transfer flow (72h tokens, optional email), admin operations
+  - `middleware.go` -- RequireCampaignAccess (resolves campaign + membership + admin),
+    RequireRole (checks MemberRole, no admin bypass for content)
+  - `handler.go` -- 16 thin handlers (Index, NewForm, Create, Show, EditForm, Update,
+    Delete, Settings, Members, AddMember, RemoveMember, UpdateRole, TransferForm,
+    Transfer, AcceptTransfer, CancelTransfer)
+  - `routes.go` -- Route registration with middleware chains
+  - Templ templates: index, campaign_card, form, show, settings, members
+- **SMTP plugin fully implemented:**
+  - Migration 000003 (smtp_settings singleton table)
+  - `model.go` -- SMTPSettings (HasPassword bool, never exposes password), smtpRow, DTOs
+  - `crypto.go` -- AES-256-GCM encrypt/decrypt with SHA-256(SECRET_KEY)
+  - `repository.go` -- Get/Upsert singleton row
+  - `service.go` -- MailService (SendMail, IsConfigured) + SMTPService (settings mgmt,
+    test connection). Supports STARTTLS, SSL, and plain modes.
+  - `handler.go` -- Settings GET/PUT, TestConnection POST
+  - `settings.templ` -- SMTP form with password handling (never shows value)
+  - `routes.go` -- Under /admin/smtp group
+- **Admin plugin fully implemented:**
+  - `handler.go` -- Dashboard, Users, ToggleAdmin, Campaigns, DeleteCampaign,
+    JoinCampaign, LeaveCampaign
+  - `routes.go` -- /admin group with auth + RequireSiteAdmin middleware
+  - Templates: dashboard, users, campaigns
+- **Auth plugin extended:**
+  - `repository.go` -- Added ListUsers, UpdateIsAdmin, CountUsers for admin
+  - `middleware.go` -- Added RequireSiteAdmin middleware
+- **Route wiring:** All three new plugins wired in app/routes.go with full DI.
+  Dashboard redirects to /campaigns. SMTP MailService injected into campaigns.
+- **Build succeeds:** `go build ./...` and `go vet ./...` pass with zero errors
 
 ### In Progress
 - Nothing currently in progress
@@ -49,27 +64,40 @@ compiles successfully. Next: campaigns plugin, then entities plugin.
 - Nothing blocked
 
 ### Files Created This Session
-- `internal/middleware/security.go`, `proxy.go`, `cors.go`, `csrf.go`
-- `internal/plugins/auth/model.go`, `repository.go`, `service.go`
-- `internal/plugins/auth/handler.go`, `middleware.go`, `routes.go`
-- `internal/plugins/auth/login.templ`, `register.templ`
-- `internal/plugins/auth/login_templ.go`, `register_templ.go` (generated)
+- `db/migrations/000002_create_campaigns.up.sql`, `000002_create_campaigns.down.sql`
+- `db/migrations/000003_create_smtp_settings.up.sql`, `000003_create_smtp_settings.down.sql`
+- `internal/plugins/campaigns/` -- model.go, repository.go, user_finder.go, service.go,
+  middleware.go, handler.go, routes.go, index.templ, campaign_card.templ, form.templ,
+  show.templ, settings.templ, members.templ + generated _templ.go files
+- `internal/plugins/smtp/` -- model.go, crypto.go, repository.go, service.go, handler.go,
+  routes.go, settings.templ + generated _templ.go
+- `internal/plugins/admin/` -- handler.go, routes.go, dashboard.templ, users.templ,
+  campaigns.templ + generated _templ.go files
+
+### Files Modified This Session
+- `internal/app/routes.go` -- Wired campaigns, SMTP, admin plugins
+- `internal/plugins/auth/repository.go` -- Added ListUsers, UpdateIsAdmin, CountUsers
+- `internal/plugins/auth/middleware.go` -- Added RequireSiteAdmin
 
 ## Active Branch
 `claude/setup-ai-project-docs-LhvVz`
 
 ## Next Session Should
-1. **Campaign plugin** -- implement CRUD:
-   - Campaign model, migration 000002_create_campaigns
-   - Repository with Create, FindByID, ListByUser, Update, Delete
-   - Service with Create, GetByID, List, Update, Delete + slug gen
-   - Handler with campaign list/show/create/edit/delete + Templ pages
-   - Campaign Templ pages (list, show, create, edit)
-2. **Entities plugin** -- after campaigns work:
-   - Entity + EntityType models, migration 000003
-   - Seed default entity types (Character, Location, etc.)
-   - CRUD + entity profile page
-3. **Editor widget** -- TipTap integration after entities
+1. **Entities plugin** -- implement entity types + entity CRUD:
+   - Entity + EntityType models, migration 000004
+   - Seed default entity types (Character, Location, Organization, Item, etc.)
+   - CRUD + entity profile page with fields
+   - Entity search (MariaDB FULLTEXT)
+2. **Editor widget** -- TipTap integration:
+   - TipTap vendored JS bundle
+   - editor.js widget with Chronicle.register()
+   - boot.js widget auto-mounter
+   - Save/load entity entry content
+3. **UI & Layouts** -- Authenticated app layout:
+   - Sidebar navigation (campaign entities, collapsible)
+   - Topbar (user menu, campaign selector, search)
+   - Tailwind CSS styling
+4. **Password reset** -- Wire auth password reset with SMTP when configured
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -78,10 +106,14 @@ compiles successfully. Next: campaigns plugin, then entities plugin.
   `tailwindcss` binary to generate it
 - Templ generated files (`*_templ.go`) are gitignored, so `templ generate`
   must run before build on a fresh clone
-- Dashboard route currently renders the landing page as a placeholder
+- SMTP migration assumes smtp_settings table exists before first admin access
+  (migration must be applied)
 
 ## Recently Completed Milestones
 - 2026-02-19: Project scaffolding and three-tier AI documentation system
 - 2026-02-19: Core infrastructure (config, database, middleware, app, server)
 - 2026-02-19: Security middleware (proxy trust, CORS, CSRF, security headers)
 - 2026-02-19: Auth plugin (register, login, logout, session management)
+- 2026-02-19: Campaigns plugin (CRUD, roles, membership, ownership transfer)
+- 2026-02-19: SMTP plugin (encrypted password, STARTTLS/SSL, test connection)
+- 2026-02-19: Admin plugin (user management, campaign oversight, SMTP config)

@@ -179,3 +179,68 @@ Enabled/disabled per campaign.
 - Simpler structure than plugins (no service/repo).
 - @mentions can reference both campaign entities AND module content.
 - Must only include SRD/OGL content (legal).
+
+---
+
+## ADR-009: Dual Permission Model (Action vs Content Visibility)
+
+**Date:** 2026-02-19
+**Status:** Accepted
+
+**Context:** Site admins need to manage campaigns (delete, force-transfer) without
+necessarily seeing all campaign content. A site admin who is also a player in a
+campaign shouldn't be spoiled by seeing GM-only content.
+
+**Decision:** Two distinct permission concepts:
+1. **Action permissions** -- "can this user perform admin actions?" Checks
+   `users.is_admin` flag. Admin actions go through `/admin` routes.
+2. **Content visibility** -- "what content can this user see?" Uses the actual
+   `campaign_members.role` value. No admin bypass for content.
+
+An admin joining as Player sees only Player-visible content. An admin who hasn't
+joined has `MemberRole=RoleNone` (no content access) but can still perform admin
+actions via the admin panel.
+
+**Role levels:** Player (1) < Scribe (2) < Owner (3). Admin is site-wide, not a
+campaign role. `RequireRole(min)` checks `MemberRole >= min`.
+
+**Alternatives Considered:**
+- Single permission model with admin override: admins would always see everything,
+  ruining the player experience for admin-players.
+- Separate admin accounts: inconvenient for small servers where the admin is also
+  a player.
+
+**Consequences:**
+- Admins can enjoy campaigns as players without spoilers.
+- Admin operations are cleanly separated into `/admin` routes.
+- Campaign routes never check `is_admin` -- only membership role.
+- Future entity permissions (is_private) will respect MemberRole, not admin flag.
+
+---
+
+## ADR-010: SMTP Password Encryption with AES-256-GCM
+
+**Date:** 2026-02-19
+**Status:** Accepted
+
+**Context:** SMTP settings include a password that must be stored securely. The
+password must be encrypted at rest and NEVER returned to the UI.
+
+**Decision:** AES-256-GCM encryption with key derived from `SHA-256(SECRET_KEY)`.
+Nonce prepended to ciphertext. Password decrypted only at send time, never cached.
+UI shows `HasPassword: bool` only.
+
+Empty password on update = keep existing. SECRET_KEY rotation makes stored password
+unrecoverable -- admin must re-enter.
+
+**Alternatives Considered:**
+- Bcrypt/argon2id hash: can't decrypt to use for SMTP auth.
+- Environment variable only: less flexible for web-based management.
+- Reversible encryption with separate key: unnecessary complexity.
+
+**Consequences:**
+- Password encrypted at rest using app's SECRET_KEY.
+- No password recovery -- by design. Admin re-enters on key rotation.
+- Single encryption key (SECRET_KEY) for simplicity.
+- If SECRET_KEY leaked, SMTP password is compromised (acceptable tradeoff
+  for self-hosted). Document key management best practices.

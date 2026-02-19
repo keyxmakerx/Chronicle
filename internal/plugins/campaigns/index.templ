@@ -1,0 +1,62 @@
+// index.templ renders the campaign list page showing all campaigns
+// the authenticated user is a member of.
+
+package campaigns
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CampaignIndexPage renders the full campaign list page.
+templ CampaignIndexPage(campaigns []Campaign, total int, opts ListOptions, csrfToken string) {
+	@layouts.App("My Campaigns") {
+		@CampaignListContent(campaigns, total, opts, csrfToken)
+	}
+}
+
+// CampaignListContent renders the campaign list content (for HTMX partial swap).
+templ CampaignListContent(campaigns []Campaign, total int, opts ListOptions, csrfToken string) {
+	<div id="campaign-list">
+		<div class="flex items-center justify-between mb-6">
+			<h1 class="text-2xl font-bold text-gray-900">My Campaigns</h1>
+			<a href="/campaigns/new" class="btn-primary">New Campaign</a>
+		</div>
+
+		if len(campaigns) == 0 {
+			<div class="text-center py-16">
+				<p class="text-gray-500 text-lg mb-4">You don't have any campaigns yet.</p>
+				<a href="/campaigns/new" class="btn-primary">Create Your First Campaign</a>
+			</div>
+		} else {
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+				for _, campaign := range campaigns {
+					@CampaignCard(&campaign)
+				}
+			</div>
+
+			if total > opts.PerPage {
+				<div class="mt-8 flex justify-center space-x-2">
+					if opts.Page > 1 {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns?page=%d", opts.Page-1)) }
+							class="btn-secondary text-sm"
+							hx-get={ fmt.Sprintf("/campaigns?page=%d", opts.Page-1) }
+							hx-target="#campaign-list"
+							hx-swap="outerHTML"
+						>Previous</a>
+					}
+					if opts.Page * opts.PerPage < total {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns?page=%d", opts.Page+1)) }
+							class="btn-secondary text-sm"
+							hx-get={ fmt.Sprintf("/campaigns?page=%d", opts.Page+1) }
+							hx-target="#campaign-list"
+							hx-swap="outerHTML"
+						>Next</a>
+					}
+				</div>
+			}
+		}
+	</div>
+}

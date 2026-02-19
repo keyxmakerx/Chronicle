@@ -1,0 +1,95 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// AdminUsersPage renders the user management page with a paginated user list.
+templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken string) {
+	@layouts.Base("Users - Admin - Chronicle") {
+		<div class="max-w-4xl mx-auto py-8 px-4">
+			<div class="flex justify-between items-center mb-6">
+				<h1 class="text-2xl font-bold text-gray-100">Users ({ fmt.Sprintf("%d", total) })</h1>
+				<a href="/admin" class="text-gray-400 hover:text-gray-200">Back to Admin</a>
+			</div>
+			<div class="bg-gray-800 rounded-lg overflow-hidden">
+				<table class="w-full">
+					<thead>
+						<tr class="border-b border-gray-700">
+							<th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Name</th>
+							<th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Email</th>
+							<th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Admin</th>
+							<th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Joined</th>
+							<th class="text-right px-4 py-3 text-sm font-medium text-gray-400">Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, user := range users {
+							<tr class="border-b border-gray-700/50">
+								<td class="px-4 py-3 text-gray-100">{ user.DisplayName }</td>
+								<td class="px-4 py-3 text-gray-300">{ user.Email }</td>
+								<td class="px-4 py-3">
+									if user.IsAdmin {
+										<span class="px-2 py-0.5 bg-indigo-900/50 text-indigo-300 text-xs rounded-full">Admin</span>
+									} else {
+										<span class="px-2 py-0.5 bg-gray-700 text-gray-400 text-xs rounded-full">User</span>
+									}
+								</td>
+								<td class="px-4 py-3 text-gray-400 text-sm">
+									{ user.CreatedAt.Format("Jan 2, 2006") }
+								</td>
+								<td class="px-4 py-3 text-right">
+									if user.IsAdmin {
+										<button
+											hx-put={ fmt.Sprintf("/admin/users/%s/admin", user.ID) }
+											hx-confirm="Remove admin privileges from this user?"
+											hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+											class="text-sm text-red-400 hover:text-red-300"
+										>
+											Remove Admin
+										</button>
+									} else {
+										<button
+											hx-put={ fmt.Sprintf("/admin/users/%s/admin", user.ID) }
+											hx-confirm="Grant admin privileges to this user?"
+											hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+											class="text-sm text-indigo-400 hover:text-indigo-300"
+										>
+											Make Admin
+										</button>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<!-- Pagination -->
+			if total > perPage {
+				<div class="flex justify-center gap-2 mt-6">
+					if page > 1 {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/admin/users?page=%d", page-1)) }
+							class="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+						>
+							Previous
+						</a>
+					}
+					<span class="px-3 py-1 text-gray-400">
+						Page { fmt.Sprintf("%d", page) } of { fmt.Sprintf("%d", (total+perPage-1)/perPage) }
+					</span>
+					if page*perPage < total {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/admin/users?page=%d", page+1)) }
+							class="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+						>
+							Next
+						</a>
+					}
+				</div>
+			}
+		</div>
+	}
+}
