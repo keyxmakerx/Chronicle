@@ -34,7 +34,8 @@ func (a *App) RegisterRoutes() {
 
 	// Health check endpoint for Docker/Cosmos health monitoring.
 	// Pings both MariaDB and Redis to report actual infrastructure health.
-	e.GET("/healthz", func(c echo.Context) error {
+	// Registered on both /healthz (Kubernetes convention) and /health (common alias).
+	healthHandler := func(c echo.Context) error {
 		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
 		defer cancel()
 
@@ -51,7 +52,9 @@ func (a *App) RegisterRoutes() {
 			})
 		}
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-	})
+	}
+	e.GET("/healthz", healthHandler)
+	e.GET("/health", healthHandler)
 
 	// --- Plugin Routes ---
 

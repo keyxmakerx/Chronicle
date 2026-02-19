@@ -79,12 +79,22 @@ func (s *authService) Register(ctx context.Context, input RegisterInput) (*User,
 		return nil, apperror.NewInternal(fmt.Errorf("hashing password: %w", err))
 	}
 
+	// The very first user to register becomes the site admin automatically.
+	isAdmin := false
+	userCount, err := s.repo.CountUsers(ctx)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("counting users: %w", err))
+	}
+	if userCount == 0 {
+		isAdmin = true
+	}
+
 	user := &User{
 		ID:           generateUUID(),
 		Email:        strings.ToLower(strings.TrimSpace(input.Email)),
 		DisplayName:  strings.TrimSpace(input.DisplayName),
 		PasswordHash: hash,
-		IsAdmin:      false,
+		IsAdmin:      isAdmin,
 		CreatedAt:    time.Now().UTC(),
 	}
 
@@ -95,6 +105,7 @@ func (s *authService) Register(ctx context.Context, input RegisterInput) (*User,
 	slog.Info("user registered",
 		slog.String("user_id", user.ID),
 		slog.String("email", user.Email),
+		slog.Bool("is_admin", user.IsAdmin),
 	)
 
 	return user, nil
