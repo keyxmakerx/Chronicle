@@ -1,0 +1,177 @@
+package smtp
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// SMTPSettingsPage renders the full SMTP settings page (admin only).
+templ SMTPSettingsPage(settings *SMTPSettings, csrfToken, errMsg string) {
+	@layouts.App("SMTP Settings - Admin") {
+		<div class="max-w-2xl mx-auto">
+			<div class="flex justify-between items-center mb-6">
+				<div>
+					<h1 class="text-2xl font-bold text-gray-900">SMTP Settings</h1>
+					<p class="text-sm text-gray-500 mt-1">
+						Configure outbound email for password resets and campaign transfer notifications.
+					</p>
+				</div>
+				<a href="/admin" class="text-sm text-gray-500 hover:text-gray-700 transition-colors">Back to Admin</a>
+			</div>
+			<div id="smtp-form-container">
+				@SMTPFormComponent(settings, csrfToken, errMsg, "")
+			</div>
+		</div>
+	}
+}
+
+// SMTPFormComponent renders the SMTP settings form. Used for full page and HTMX partial swaps.
+templ SMTPFormComponent(settings *SMTPSettings, csrfToken, errMsg, successMsg string) {
+	<form
+		hx-put="/admin/smtp"
+		hx-target="#smtp-form-container"
+		hx-swap="innerHTML"
+		hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+		class="card space-y-6"
+	>
+		<input type="hidden" name="_csrf" value={ csrfToken }/>
+		if errMsg != "" {
+			<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
+				{ errMsg }
+			</div>
+		}
+		if successMsg != "" {
+			<div class="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md text-sm" role="status">
+				{ successMsg }
+			</div>
+		}
+		<!-- Host -->
+		<div>
+			<label for="host" class="block text-sm font-medium text-gray-700 mb-1">SMTP Host</label>
+			<input
+				type="text"
+				id="host"
+				name="host"
+				value={ settings.Host }
+				placeholder="smtp.example.com"
+				class="input"
+			/>
+		</div>
+		<!-- Port -->
+		<div>
+			<label for="port" class="block text-sm font-medium text-gray-700 mb-1">Port</label>
+			<input
+				type="number"
+				id="port"
+				name="port"
+				value={ fmt.Sprintf("%d", settings.Port) }
+				class="input"
+			/>
+		</div>
+		<!-- Encryption -->
+		<div>
+			<label for="encryption" class="block text-sm font-medium text-gray-700 mb-1">Encryption</label>
+			<select
+				id="encryption"
+				name="encryption"
+				class="input"
+			>
+				<option value="starttls" selected?={ settings.Encryption == "starttls" }>STARTTLS (port 587)</option>
+				<option value="ssl" selected?={ settings.Encryption == "ssl" }>SSL/TLS (port 465)</option>
+				<option value="none" selected?={ settings.Encryption == "none" }>None</option>
+			</select>
+		</div>
+		<!-- Username -->
+		<div>
+			<label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+			<input
+				type="text"
+				id="username"
+				name="username"
+				value={ settings.Username }
+				placeholder="user@example.com"
+				class="input"
+			/>
+		</div>
+		<!-- Password (never shows existing value) -->
+		<div>
+			<label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+			<input
+				type="password"
+				id="password"
+				name="password"
+				if settings.HasPassword {
+					placeholder="••••••••  (leave blank to keep current)"
+				} else {
+					placeholder="Enter SMTP password"
+				}
+				class="input"
+			/>
+			<p class="text-xs text-gray-400 mt-1">
+				Password is encrypted and cannot be recovered. Leave blank to keep the current password.
+			</p>
+		</div>
+		<!-- From Address -->
+		<div>
+			<label for="from_address" class="block text-sm font-medium text-gray-700 mb-1">From Address</label>
+			<input
+				type="email"
+				id="from_address"
+				name="from_address"
+				value={ settings.FromAddress }
+				placeholder="chronicle@example.com"
+				class="input"
+			/>
+		</div>
+		<!-- From Name -->
+		<div>
+			<label for="from_name" class="block text-sm font-medium text-gray-700 mb-1">From Name</label>
+			<input
+				type="text"
+				id="from_name"
+				name="from_name"
+				value={ settings.FromName }
+				placeholder="Chronicle"
+				class="input"
+			/>
+		</div>
+		<!-- Enabled -->
+		<div class="flex items-center gap-3">
+			<input
+				type="checkbox"
+				id="enabled"
+				name="enabled"
+				value="true"
+				checked?={ settings.Enabled }
+				class="rounded border-gray-300 text-accent focus:ring-accent"
+			/>
+			<label for="enabled" class="text-sm font-medium text-gray-700">Enable SMTP</label>
+		</div>
+		<!-- Actions -->
+		<div class="flex items-center gap-3 pt-4 border-t border-gray-200">
+			<button
+				type="submit"
+				class="btn-primary"
+			>
+				Save Settings
+			</button>
+			<button
+				type="button"
+				hx-post="/admin/smtp/test"
+				hx-target="#smtp-form-container"
+				hx-swap="innerHTML"
+				hx-include="closest form"
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+				class="btn-secondary"
+			>
+				Test Connection
+			</button>
+			<a
+				href="/admin"
+				class="text-sm text-gray-500 hover:text-gray-700 transition-colors ml-auto"
+			>
+				Cancel
+			</a>
+		</div>
+	</form>
+}

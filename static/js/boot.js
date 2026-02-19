@@ -1,0 +1,175 @@
+/**
+ * boot.js -- Chronicle Widget Auto-Mounter
+ *
+ * Scans the DOM for elements with `data-widget` attributes and mounts
+ * registered widget implementations. Widgets register themselves via
+ * `Chronicle.register(name, { init, destroy })`.
+ *
+ * Usage in HTML:
+ *   <div data-widget="editor"
+ *        data-endpoint="/api/v1/campaigns/abc/entities/42/entry"
+ *        data-editable="true">
+ *   </div>
+ *
+ * Widget registration:
+ *   Chronicle.register('editor', {
+ *       init(el, config) { ... },
+ *       destroy(el) { ... }
+ *   });
+ *
+ * After HTMX swaps (hx-swap), new widgets are auto-mounted via the
+ * htmx:afterSettle event listener.
+ */
+(function () {
+  'use strict';
+
+  // Global namespace for Chronicle's widget system.
+  window.Chronicle = window.Chronicle || {};
+
+  // Registry of widget implementations keyed by name.
+  var widgets = {};
+
+  // WeakMap tracking mounted widget instances to prevent double-init
+  // and enable cleanup on destroy.
+  var mounted = new WeakMap();
+
+  /**
+   * Register a widget implementation.
+   *
+   * @param {string} name - Widget name (matches data-widget attribute).
+   * @param {Object} impl - Implementation with init(el, config) and optional destroy(el).
+   */
+  Chronicle.register = function (name, impl) {
+    if (!name || !impl || typeof impl.init !== 'function') {
+      console.error('[Chronicle] Invalid widget registration:', name);
+      return;
+    }
+    widgets[name] = impl;
+
+    // If DOM is already loaded, mount any existing elements for this widget.
+    if (document.readyState !== 'loading') {
+      mountWidgets(document, name);
+    }
+  };
+
+  /**
+   * Mount all widget elements within a root element.
+   * If widgetName is provided, only mount widgets of that type.
+   *
+   * @param {Element} root - Root element to scan.
+   * @param {string} [widgetName] - Optional: only mount this widget type.
+   */
+  function mountWidgets(root, widgetName) {
+    var selector = widgetName
+      ? '[data-widget="' + widgetName + '"]'
+      : '[data-widget]';
+
+    var elements = root.querySelectorAll(selector);
+    for (var i = 0; i < elements.length; i++) {
+      mountElement(elements[i]);
+    }
+  }
+
+  /**
+   * Mount a single widget element.
+   *
+   * @param {Element} el - DOM element with data-widget attribute.
+   */
+  function mountElement(el) {
+    // Skip if already mounted.
+    if (mounted.has(el)) {
+      return;
+    }
+
+    var name = el.getAttribute('data-widget');
+    var impl = widgets[name];
+    if (!impl) {
+      // Widget not yet registered -- will be mounted when register() is called.
+      return;
+    }
+
+    // Collect all data-* attributes as a config object.
+    // data-endpoint="/foo" -> config.endpoint = "/foo"
+    // data-auto-save="30" -> config.autoSave = "30"
+    var config = {};
+    for (var j = 0; j < el.attributes.length; j++) {
+      var attr = el.attributes[j];
+      if (attr.name.startsWith('data-') && attr.name !== 'data-widget') {
+        var key = attr.name
+          .slice(5) // Remove 'data-'
+          .replace(/-([a-z])/g, function (_, c) {
+            return c.toUpperCase();
+          }); // kebab-case to camelCase
+        config[key] = attr.value;
+      }
+    }
+
+    // Parse boolean and numeric values.
+    for (var k in config) {
+      if (config[k] === 'true') config[k] = true;
+      else if (config[k] === 'false') config[k] = false;
+      else if (config[k] !== '' && !isNaN(Number(config[k])))
+        config[k] = Number(config[k]);
+    }
+
+    try {
+      impl.init(el, config);
+      mounted.set(el, name);
+    } catch (err) {
+      console.error('[Chronicle] Failed to mount widget "' + name + '":', err);
+    }
+  }
+
+  /**
+   * Destroy a mounted widget and clean up.
+   *
+   * @param {Element} el - DOM element with a mounted widget.
+   */
+  function destroyElement(el) {
+    var name = mounted.get(el);
+    if (!name) return;
+
+    var impl = widgets[name];
+    if (impl && typeof impl.destroy === 'function') {
+      try {
+        impl.destroy(el);
+      } catch (err) {
+        console.error(
+          '[Chronicle] Failed to destroy widget "' + name + '":',
+          err
+        );
+      }
+    }
+    mounted.delete(el);
+  }
+
+  // --- Lifecycle ---
+
+  // Mount all widgets on initial page load.
+  document.addEventListener('DOMContentLoaded', function () {
+    mountWidgets(document);
+  });
+
+  // Re-mount widgets after HTMX content swaps.
+  // htmx:afterSettle fires after new content is settled in the DOM.
+  document.addEventListener('htmx:afterSettle', function (event) {
+    if (event.detail && event.detail.target) {
+      mountWidgets(event.detail.target);
+    }
+  });
+
+  // Destroy widgets before HTMX removes content.
+  // htmx:beforeSwap fires before old content is removed.
+  document.addEventListener('htmx:beforeSwap', function (event) {
+    if (event.detail && event.detail.target) {
+      var elements = event.detail.target.querySelectorAll('[data-widget]');
+      for (var i = 0; i < elements.length; i++) {
+        destroyElement(elements[i]);
+      }
+    }
+  });
+
+  // Expose mount/destroy for manual use if needed.
+  Chronicle.mountWidgets = mountWidgets;
+  Chronicle.destroyWidget = destroyElement;
+})();

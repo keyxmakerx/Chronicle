@@ -1,0 +1,41 @@
+// entity_card.templ renders a single entity card for the entity list grid.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// EntityCard renders a single entity card with type badge and privacy indicator.
+templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+		class="card p-4 hover:shadow-lg transition-shadow block"
+	>
+		<div class="flex items-start justify-between mb-2">
+			<h3 class="text-base font-semibold text-gray-900 truncate">{ entity.Name }</h3>
+			if entity.IsPrivate && cc.MemberRole >= campaigns.RoleScribe {
+				<span class="text-gray-400 ml-2 shrink-0" title="Private (GM only)">
+					&#128274;
+				</span>
+			}
+		</div>
+
+		<div class="flex items-center gap-2 mb-2">
+			<span
+				class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-white"
+				style={ fmt.Sprintf("background-color: %s", entity.TypeColor) }
+			>
+				{ entity.TypeName }
+			</span>
+			if entity.TypeLabel != nil && *entity.TypeLabel != "" {
+				<span class="text-xs text-gray-500">{ *entity.TypeLabel }</span>
+			}
+		</div>
+
+		<div class="text-xs text-gray-400">
+			{ entity.UpdatedAt.Format("Jan 2, 2006") }
+		</div>
+	</a>
+}

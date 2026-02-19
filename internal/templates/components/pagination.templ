@@ -1,0 +1,102 @@
+// pagination.templ provides a reusable pagination component used by entity
+// and campaign list pages. Supports both regular links and HTMX partial swaps.
+
+package components
+
+import "fmt"
+
+// PaginationData holds everything needed to render pagination controls.
+type PaginationData struct {
+	// CurrentPage is the 1-based current page number.
+	CurrentPage int
+	// PerPage is the number of items per page.
+	PerPage int
+	// Total is the total number of items across all pages.
+	Total int
+	// BaseURL is the URL to paginate (e.g., "/campaigns" or "/campaigns/abc/entities").
+	// Page number is appended as ?page=N (or &page=N if it contains ?).
+	BaseURL string
+	// ExtraParams holds additional query params (e.g., "type=3").
+	ExtraParams string
+	// HTMXTarget is the DOM element ID for HTMX partial swap (e.g., "#entity-list").
+	// If empty, pagination uses regular links only (no HTMX).
+	HTMXTarget string
+}
+
+// TotalPages returns the total number of pages.
+func (p PaginationData) TotalPages() int {
+	if p.PerPage <= 0 {
+		return 1
+	}
+	pages := p.Total / p.PerPage
+	if p.Total%p.PerPage > 0 {
+		pages++
+	}
+	if pages < 1 {
+		return 1
+	}
+	return pages
+}
+
+// HasPrevious returns true if there's a previous page.
+func (p PaginationData) HasPrevious() bool {
+	return p.CurrentPage > 1
+}
+
+// HasNext returns true if there's a next page.
+func (p PaginationData) HasNext() bool {
+	return p.CurrentPage < p.TotalPages()
+}
+
+// PageURL returns the URL for a specific page number.
+func (p PaginationData) PageURL(page int) string {
+	params := fmt.Sprintf("page=%d", page)
+	if p.ExtraParams != "" {
+		params = params + "&" + p.ExtraParams
+	}
+	return fmt.Sprintf("%s?%s", p.BaseURL, params)
+}
+
+// Pagination renders previous/next navigation with page info.
+// Only shown when Total > PerPage (i.e., there are multiple pages).
+templ Pagination(data PaginationData) {
+	if data.Total > data.PerPage {
+		<div class="mt-8 flex items-center justify-center space-x-4">
+			if data.HasPrevious() {
+				<a
+					href={ templ.SafeURL(data.PageURL(data.CurrentPage - 1)) }
+					if data.HTMXTarget != "" {
+						hx-get={ data.PageURL(data.CurrentPage - 1) }
+						hx-target={ data.HTMXTarget }
+						hx-swap="outerHTML"
+					}
+					class="btn-secondary text-sm"
+				>
+					Previous
+				</a>
+			} else {
+				<span class="btn text-sm text-gray-300 cursor-not-allowed">Previous</span>
+			}
+
+			<span class="text-sm text-gray-500">
+				Page { fmt.Sprintf("%d", data.CurrentPage) } of { fmt.Sprintf("%d", data.TotalPages()) }
+			</span>
+
+			if data.HasNext() {
+				<a
+					href={ templ.SafeURL(data.PageURL(data.CurrentPage + 1)) }
+					if data.HTMXTarget != "" {
+						hx-get={ data.PageURL(data.CurrentPage + 1) }
+						hx-target={ data.HTMXTarget }
+						hx-swap="outerHTML"
+					}
+					class="btn-secondary text-sm"
+				>
+					Next
+				</a>
+			} else {
+				<span class="btn text-sm text-gray-300 cursor-not-allowed">Next</span>
+			}
+		</div>
+	}
+}

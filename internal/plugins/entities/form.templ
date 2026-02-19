@@ -1,0 +1,288 @@
+// form.templ renders the create/edit entity form with dynamic field rendering
+// based on the entity type's field definitions.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"strconv"
+)
+
+// EntityNewPage renders the full entity creation page.
+templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, csrfToken, errMsg string) {
+	@layouts.App("New Entity - " + cc.Campaign.Name) {
+		<div class="max-w-2xl mx-auto">
+			<nav class="text-sm text-gray-500 mb-4">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-gray-700">Entities</a>
+				<span class="mx-1">/</span>
+				<span class="text-gray-900">New</span>
+			</nav>
+			<h1 class="text-2xl font-bold text-gray-900 mb-6">Create Entity</h1>
+			@EntityCreateFormComponent(cc, entityTypes, preselect, csrfToken, errMsg)
+		</div>
+	}
+}
+
+// EntityEditPage renders the full entity edit page.
+templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, entityTypes []EntityType, csrfToken, errMsg string) {
+	@layouts.App("Edit " + entity.Name + " - " + cc.Campaign.Name) {
+		<div class="max-w-2xl mx-auto">
+			<nav class="text-sm text-gray-500 mb-4">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-gray-700">Entities</a>
+				<span class="mx-1">/</span>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) } class="hover:text-gray-700">{ entity.Name }</a>
+				<span class="mx-1">/</span>
+				<span class="text-gray-900">Edit</span>
+			</nav>
+			<h1 class="text-2xl font-bold text-gray-900 mb-6">Edit { entity.Name }</h1>
+			@EntityEditFormComponent(cc, entity, entityType, csrfToken, errMsg)
+		</div>
+	}
+}
+
+// EntityCreateFormComponent renders the entity creation form.
+templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, csrfToken, errMsg string) {
+	<div id="entity-form">
+		<form
+			class="card p-8 space-y-6"
+			method="POST"
+			action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
+			hx-post={ fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }
+			hx-target="#entity-form"
+			hx-swap="outerHTML"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+
+			if errMsg != "" {
+				<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
+					{ errMsg }
+				</div>
+			}
+
+			<div>
+				<label for="entity_type_id" class="block text-sm font-medium text-gray-700 mb-1">Entity Type</label>
+				<select id="entity_type_id" name="entity_type_id" required class="input w-full">
+					<option value="">Select a type...</option>
+					for _, et := range entityTypes {
+						if et.Enabled {
+							<option
+								value={ strconv.Itoa(et.ID) }
+								selected?={ et.ID == preselect }
+							>{ et.Name }</option>
+						}
+					}
+				</select>
+			</div>
+
+			<div>
+				<label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+				<input
+					type="text"
+					id="name"
+					name="name"
+					required
+					autofocus
+					class="input w-full"
+					placeholder="e.g., Gandalf, Rivendell, The One Ring"
+					maxlength="200"
+				/>
+			</div>
+
+			<div>
+				<label for="type_label" class="block text-sm font-medium text-gray-700 mb-1">Subtype Label (optional)</label>
+				<input
+					type="text"
+					id="type_label"
+					name="type_label"
+					class="input w-full"
+					placeholder="e.g., City, NPC, Artifact"
+					maxlength="100"
+				/>
+				<p class="mt-1 text-xs text-gray-500">A freeform label that appears alongside the type badge.</p>
+			</div>
+
+			<div class="flex items-center">
+				<input type="hidden" name="is_private" value="false"/>
+				<input
+					type="checkbox"
+					id="is_private"
+					name="is_private"
+					value="true"
+					class="rounded border-gray-300 text-blue-600 mr-2"
+				/>
+				<label for="is_private" class="text-sm text-gray-700">Private (visible to GM only)</label>
+			</div>
+
+			<div class="flex items-center space-x-4">
+				<button type="submit" class="btn-primary">Create Entity</button>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="btn-secondary">Cancel</a>
+			</div>
+		</form>
+	</div>
+}
+
+// EntityEditFormComponent renders the entity edit form with dynamic fields.
+templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken, errMsg string) {
+	<div id="entity-form">
+		<form
+			class="card p-8 space-y-6"
+			method="POST"
+			action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+			hx-put={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
+			hx-target="#entity-form"
+			hx-swap="outerHTML"
+		>
+			<input type="hidden" name="_method" value="PUT"/>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+
+			if errMsg != "" {
+				<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
+					{ errMsg }
+				</div>
+			}
+
+			<div>
+				<label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+				<input
+					type="text"
+					id="name"
+					name="name"
+					value={ entity.Name }
+					required
+					class="input w-full"
+					maxlength="200"
+				/>
+			</div>
+
+			<div>
+				<label for="type_label" class="block text-sm font-medium text-gray-700 mb-1">Subtype Label (optional)</label>
+				<input
+					type="text"
+					id="type_label"
+					name="type_label"
+					if entity.TypeLabel != nil {
+						value={ *entity.TypeLabel }
+					}
+					class="input w-full"
+					placeholder="e.g., City, NPC, Artifact"
+					maxlength="100"
+				/>
+			</div>
+
+			<!-- Dynamic fields from entity type -->
+			if entityType != nil && len(entityType.Fields) > 0 {
+				<fieldset class="space-y-4 pt-4 border-t border-gray-200">
+					<legend class="text-sm font-semibold text-gray-900">Type Fields</legend>
+					for _, field := range entityType.Fields {
+						@DynamicField(field, entity.FieldsData)
+					}
+				</fieldset>
+			}
+
+			<div>
+				<label for="entry" class="block text-sm font-medium text-gray-700 mb-1">Entry Content</label>
+				<textarea
+					id="entry"
+					name="entry"
+					class="input w-full h-48"
+					placeholder="Write about this entity..."
+				>
+					if entity.Entry != nil {
+						{ *entity.Entry }
+					}
+				</textarea>
+				<p class="mt-1 text-xs text-gray-500">Plain text for now. Rich text editor coming soon.</p>
+			</div>
+
+			<div class="flex items-center">
+				<input type="hidden" name="is_private" value="false"/>
+				<input
+					type="checkbox"
+					id="is_private"
+					name="is_private"
+					value="true"
+					checked?={ entity.IsPrivate }
+					class="rounded border-gray-300 text-blue-600 mr-2"
+				/>
+				<label for="is_private" class="text-sm text-gray-700">Private (visible to GM only)</label>
+			</div>
+
+			<div class="flex items-center space-x-4">
+				<button type="submit" class="btn-primary">Save Changes</button>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) } class="btn-secondary">Cancel</a>
+			</div>
+		</form>
+	</div>
+}
+
+// DynamicField renders a single form input based on a field definition.
+// The current value is read from the entity's fields_data map.
+templ DynamicField(field FieldDefinition, fieldsData map[string]any) {
+	<div>
+		<label for={ "field_" + field.Key } class="block text-sm font-medium text-gray-700 mb-1">{ field.Label }</label>
+		if field.Type == "textarea" {
+			<textarea
+				id={ "field_" + field.Key }
+				name={ "field_" + field.Key }
+				class="input w-full h-24"
+			>
+				if val, ok := fieldsData[field.Key]; ok && val != nil {
+					{ fmt.Sprintf("%v", val) }
+				}
+			</textarea>
+		} else if field.Type == "select" && len(field.Options) > 0 {
+			<select id={ "field_" + field.Key } name={ "field_" + field.Key } class="input w-full">
+				<option value="">Select...</option>
+				for _, opt := range field.Options {
+					<option
+						value={ opt }
+						selected?={ fieldValueMatches(fieldsData, field.Key, opt) }
+					>{ opt }</option>
+				}
+			</select>
+		} else if field.Type == "checkbox" {
+			<input type="hidden" name={ "field_" + field.Key } value=""/>
+			<input
+				type="checkbox"
+				id={ "field_" + field.Key }
+				name={ "field_" + field.Key }
+				value="true"
+				checked?={ fieldValueMatches(fieldsData, field.Key, "true") }
+				class="rounded border-gray-300 text-blue-600"
+			/>
+		} else {
+			<input
+				type={ fieldInputType(field.Type) }
+				id={ "field_" + field.Key }
+				name={ "field_" + field.Key }
+				if val, ok := fieldsData[field.Key]; ok && val != nil {
+					value={ fmt.Sprintf("%v", val) }
+				}
+				class="input w-full"
+			/>
+		}
+	</div>
+}
+
+// fieldInputType maps field definition types to HTML input types.
+func fieldInputType(t string) string {
+	switch t {
+	case "number":
+		return "number"
+	case "url":
+		return "url"
+	default:
+		return "text"
+	}
+}
+
+// fieldValueMatches checks if a field's stored value matches the expected value.
+func fieldValueMatches(fieldsData map[string]any, key, expected string) bool {
+	val, ok := fieldsData[key]
+	if !ok || val == nil {
+		return false
+	}
+	return fmt.Sprintf("%v", val) == expected
+}

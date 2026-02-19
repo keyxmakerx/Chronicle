@@ -1,0 +1,368 @@
+// app.templ provides the authenticated application layout with sidebar
+// and topbar navigation. Used for all pages after login.
+//
+// Layout data (user name, campaign context, CSRF token) is read from Go's
+// context.Context via helpers in data.go. The LayoutInjector in app/routes.go
+// copies this data from Echo's context before rendering.
+
+package layouts
+
+import "context"
+import "fmt"
+import "strings"
+
+// App renders the authenticated layout with sidebar navigation and a
+// topbar. The main content area is where page-specific content goes.
+templ App(title string) {
+	@Base(title) {
+		<div class="flex h-screen overflow-hidden">
+			<!-- Sidebar -->
+			@Sidebar()
+
+			<!-- Main content area -->
+			<div class="flex-1 flex flex-col overflow-hidden">
+				<!-- Topbar -->
+				@Topbar()
+
+				<!-- Flash messages -->
+				@FlashMessages()
+
+				<!-- Page content (scrollable) -->
+				<main class="flex-1 overflow-y-auto p-6" id="main-content">
+					{ children... }
+				</main>
+			</div>
+		</div>
+	}
+}
+
+// sidebarNavLink is the CSS class set for sidebar navigation links.
+var sidebarNavLink = "flex items-center px-4 py-2 text-sm transition-colors"
+
+// sidebarNavActive is appended for the currently active navigation link.
+var sidebarNavActive = "bg-sidebar-hover text-sidebar-active"
+
+// sidebarNavInactive is the default state for non-active navigation links.
+var sidebarNavInactive = "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active"
+
+// Sidebar renders the left navigation bar. When inside a campaign context
+// (set by RequireCampaignAccess middleware), it shows campaign entity type
+// links. Otherwise, it shows generic navigation.
+templ Sidebar() {
+	<aside class="w-64 bg-sidebar-bg text-sidebar-text flex flex-col shrink-0">
+		<!-- Logo / Brand -->
+		<a href="/campaigns" class="h-16 flex items-center px-4 border-b border-gray-700 hover:bg-sidebar-hover transition-colors">
+			<span class="text-xl font-bold text-white tracking-tight">Chronicle</span>
+		</a>
+
+		<!-- Navigation links -->
+		<nav class="flex-1 py-4 overflow-y-auto">
+			if InCampaign(ctx) {
+				@CampaignSidebarNav()
+			} else {
+				@DefaultSidebarNav()
+			}
+		</nav>
+
+		<!-- Sidebar footer -->
+		<div class="p-4 border-t border-gray-700">
+			if GetIsAdmin(ctx) {
+				<a href="/admin" class="flex items-center text-xs text-gray-500 hover:text-gray-300 transition-colors mb-2">
+					<svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+					</svg>
+					Admin
+				</a>
+			}
+			<div class="text-xs text-gray-600">
+				Chronicle v0.1.0
+			</div>
+		</div>
+	</aside>
+}
+
+// CampaignSidebarNav renders campaign-scoped navigation with entity type links.
+templ CampaignSidebarNav() {
+	<!-- Campaign header -->
+	<div class="px-4 mb-1">
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
+			class="text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+		>
+			{ GetCampaignName(ctx) }
+		</a>
+	</div>
+
+	<!-- Campaign dashboard -->
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))),
+			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))) }
+	>
+		<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+		</svg>
+		Dashboard
+	</a>
+
+	<!-- Entity type links -->
+	<div class="mt-4 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+		Entities
+	</div>
+
+	@entityTypeLink("characters", "Characters", "#3b82f6")
+	@entityTypeLink("locations", "Locations", "#ef4444")
+	@entityTypeLink("organizations", "Organizations", "#f59e0b")
+	@entityTypeLink("items", "Items", "#8b5cf6")
+	@entityTypeLink("notes", "Notes", "#10b981")
+	@entityTypeLink("events", "Events", "#ec4899")
+
+	<!-- All entities link -->
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
+			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
+	>
+		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+			<span class="w-2 h-2 rounded-full bg-gray-400"></span>
+		</span>
+		All Entities
+	</a>
+
+	<!-- Campaign management -->
+	<div class="mt-4 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+		Manage
+	</div>
+
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx))) }
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))),
+			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))) }
+	>
+		<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+		</svg>
+		Members
+	</a>
+
+	if GetCampaignRole(ctx) >= 3 {
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx))) }
+			class={ sidebarNavLink,
+				templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))),
+				templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))) }
+		>
+			<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+			</svg>
+			Settings
+		</a>
+	}
+
+	<!-- Back to campaigns list -->
+	<div class="mt-4 pt-3 border-t border-gray-700">
+		<a href="/campaigns" class={ sidebarNavLink, sidebarNavInactive }>
+			<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
+			</svg>
+			All Campaigns
+		</a>
+	</div>
+}
+
+// DefaultSidebarNav renders generic navigation when not inside a campaign.
+templ DefaultSidebarNav() {
+	<div class="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+		Navigation
+	</div>
+
+	<a
+		href="/campaigns"
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isPathPrefix(ctx, "/campaigns")),
+			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/campaigns")) }
+	>
+		<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+		</svg>
+		My Campaigns
+	</a>
+
+	<a
+		href="/campaigns/new"
+		class={ sidebarNavLink, sidebarNavInactive }
+	>
+		<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+		</svg>
+		New Campaign
+	</a>
+}
+
+// entityTypeLink renders a single entity type navigation link in the sidebar.
+// Uses a colored dot indicator matching the entity type's theme color.
+templ entityTypeLink(slug string, label string, color string) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug)) }
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))),
+			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))) }
+	>
+		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+			<span class="w-2 h-2 rounded-full" style={ fmt.Sprintf("background-color: %s", color) }></span>
+		</span>
+		{ label }
+	</a>
+}
+
+// Topbar renders the top navigation bar with search, campaign breadcrumb,
+// and user menu.
+templ Topbar() {
+	<header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
+		<!-- Left: Campaign selector + Search -->
+		<div class="flex items-center space-x-4">
+			<!-- Campaign selector dropdown -->
+			<div x-data="{ open: false }" class="relative">
+				<button
+					@click="open = !open"
+					@click.outside="open = false"
+					class="flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+				>
+					if InCampaign(ctx) {
+						<span class="truncate max-w-[180px]">{ GetCampaignName(ctx) }</span>
+					} else {
+						<span class="text-gray-500">Select Campaign</span>
+					}
+					<svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+					</svg>
+				</button>
+				<div
+					x-show="open"
+					x-transition:enter="transition ease-out duration-100"
+					x-transition:enter-start="opacity-0 scale-95"
+					x-transition:enter-end="opacity-100 scale-100"
+					x-transition:leave="transition ease-in duration-75"
+					x-transition:leave-start="opacity-100 scale-100"
+					x-transition:leave-end="opacity-0 scale-95"
+					class="absolute left-0 top-full mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden"
+					hx-get="/campaigns/picker"
+					hx-trigger="intersect once"
+					hx-swap="innerHTML"
+				>
+					<div class="px-4 py-3 text-sm text-gray-400">Loading...</div>
+				</div>
+			</div>
+
+			if InCampaign(ctx) {
+				<!-- Campaign-scoped search -->
+				<div class="relative">
+					<input
+						type="search"
+						placeholder={ fmt.Sprintf("Search in %s...", GetCampaignName(ctx)) }
+						class="input w-72 pl-9"
+						name="q"
+						hx-get={ fmt.Sprintf("/campaigns/%s/entities/search", GetCampaignID(ctx)) }
+						hx-trigger="keyup changed delay:300ms"
+						hx-target="#search-results"
+						autocomplete="off"
+					/>
+					<svg class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+					</svg>
+					<div id="search-results" class="absolute top-full left-0 w-full mt-1 z-50"></div>
+				</div>
+			}
+		</div>
+
+		<!-- Right: User menu -->
+		<div class="flex items-center space-x-4">
+			if GetIsAdmin(ctx) {
+				<a href="/admin" class="text-sm text-gray-500 hover:text-gray-700 transition-colors">
+					Admin
+				</a>
+			}
+
+			<div class="flex items-center space-x-2">
+				<!-- User avatar placeholder -->
+				<div class="w-8 h-8 rounded-full bg-accent flex items-center justify-center">
+					<span class="text-xs font-medium text-white">
+						{ userInitials(ctx) }
+					</span>
+				</div>
+				<span class="text-sm font-medium text-gray-700">
+					{ GetUserName(ctx) }
+				</span>
+			</div>
+
+			<form method="POST" action="/logout" class="inline">
+				<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
+				<button
+					type="submit"
+					class="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+				>
+					Logout
+				</button>
+			</form>
+		</div>
+	</header>
+}
+
+// FlashMessages renders success/error flash messages if present in context.
+// Messages auto-dismiss after 5 seconds via Alpine.js.
+templ FlashMessages() {
+	if msg := GetFlashSuccess(ctx); msg != "" {
+		<div
+			x-data="{ show: true }"
+			x-show="show"
+			x-init="setTimeout(() => show = false, 5000)"
+			x-transition
+			class="mx-6 mt-4 px-4 py-3 rounded-md bg-green-50 border border-green-200 text-green-800 text-sm flex items-center justify-between"
+		>
+			<span>{ msg }</span>
+			<button @click="show = false" class="text-green-600 hover:text-green-800 ml-4">&times;</button>
+		</div>
+	}
+	if msg := GetFlashError(ctx); msg != "" {
+		<div
+			x-data="{ show: true }"
+			x-show="show"
+			x-init="setTimeout(() => show = false, 8000)"
+			x-transition
+			class="mx-6 mt-4 px-4 py-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-sm flex items-center justify-between"
+		>
+			<span>{ msg }</span>
+			<button @click="show = false" class="text-red-600 hover:text-red-800 ml-4">&times;</button>
+		</div>
+	}
+}
+
+// isExactPath returns true if the current request path exactly matches the given path.
+func isExactPath(ctx context.Context, path string) bool {
+	return GetActivePath(ctx) == path
+}
+
+// isPathPrefix returns true if the current request path starts with the given prefix.
+func isPathPrefix(ctx context.Context, prefix string) bool {
+	active := GetActivePath(ctx)
+	return active == prefix || strings.HasPrefix(active, prefix+"/")
+}
+
+// userInitials returns the first two initials of the user's display name
+// for the avatar placeholder.
+func userInitials(ctx context.Context) string {
+	name := GetUserName(ctx)
+	if name == "" {
+		return "?"
+	}
+	parts := strings.Fields(name)
+	if len(parts) == 1 {
+		return strings.ToUpper(name[:1])
+	}
+	return strings.ToUpper(string(parts[0][0]) + string(parts[len(parts)-1][0]))
+}

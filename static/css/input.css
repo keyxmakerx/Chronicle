@@ -1,0 +1,203 @@
+/* ============================================================================
+ * Chronicle Tailwind CSS Input
+ * ============================================================================
+ * This is the Tailwind CSS input file. The standalone Tailwind CLI processes
+ * this and generates static/css/app.css (which is gitignored).
+ *
+ * Run: make tailwind        (one-time build)
+ * Run: make tailwind-watch  (watch mode for development)
+ * ============================================================================ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --- Custom Base Styles --- */
+@layer base {
+  /* Default body styling */
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans antialiased;
+  }
+
+  /* Headings */
+  h1 { @apply text-2xl font-bold; }
+  h2 { @apply text-xl font-semibold; }
+  h3 { @apply text-lg font-semibold; }
+}
+
+/* --- Custom Component Classes --- */
+@layer components {
+  /* ---- Buttons ---- */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-md font-medium
+           text-sm transition-colors duration-150 cursor-pointer
+           focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-white hover:bg-accent-hover
+           focus:ring-accent;
+  }
+  .btn-secondary {
+    @apply btn bg-gray-200 text-gray-700 hover:bg-gray-300
+           focus:ring-gray-400;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700
+           focus:ring-red-500;
+  }
+  .btn:disabled,
+  .btn[disabled] {
+    @apply opacity-50 cursor-not-allowed pointer-events-none;
+  }
+
+  /* ---- Cards ---- */
+  .card {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-4;
+  }
+
+  /* ---- Form Inputs ---- */
+  .input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md text-sm
+           bg-white text-gray-900 placeholder-gray-400
+           focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent
+           transition-colors duration-150;
+  }
+  .input:disabled {
+    @apply bg-gray-100 text-gray-500 cursor-not-allowed;
+  }
+
+  /* ---- Links ---- */
+  .link {
+    @apply text-accent hover:text-accent-hover transition-colors duration-150;
+  }
+  .link-muted {
+    @apply text-gray-500 hover:text-gray-700 transition-colors duration-150;
+  }
+  .link-danger {
+    @apply text-red-600 hover:text-red-800 transition-colors duration-150;
+  }
+
+  /* ---- Badges ---- */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-primary {
+    @apply badge bg-accent/10 text-accent;
+  }
+  .badge-gray {
+    @apply badge bg-gray-100 text-gray-600;
+  }
+  .badge-green {
+    @apply badge bg-green-100 text-green-700;
+  }
+  .badge-amber {
+    @apply badge bg-amber-100 text-amber-700;
+  }
+  .badge-red {
+    @apply badge bg-red-100 text-red-700;
+  }
+  .badge-blue {
+    @apply badge bg-blue-100 text-blue-700;
+  }
+
+  /* ---- Alerts ---- */
+  .alert {
+    @apply px-4 py-3 rounded-md text-sm;
+  }
+  .alert-error {
+    @apply alert bg-red-50 border border-red-200 text-red-700;
+  }
+  .alert-success {
+    @apply alert bg-green-50 border border-green-200 text-green-700;
+  }
+  .alert-warning {
+    @apply alert bg-amber-50 border border-amber-200 text-amber-700;
+  }
+  .alert-info {
+    @apply alert bg-blue-50 border border-blue-200 text-blue-700;
+  }
+
+  /* ---- Empty State ---- */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-12 px-4 text-center;
+  }
+  .empty-state__icon {
+    @apply w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4;
+  }
+  .empty-state__title {
+    @apply text-lg font-semibold text-gray-900 mb-1;
+  }
+  .empty-state__description {
+    @apply text-sm text-gray-500 max-w-sm;
+  }
+
+  /* ---- Tables ---- */
+  .table-header {
+    @apply bg-gray-50 border-b border-gray-200;
+  }
+  .table-header th {
+    @apply text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider;
+  }
+  .table-row {
+    @apply hover:bg-gray-50 transition-colors;
+  }
+  .table-row td {
+    @apply px-4 py-3;
+  }
+
+  /* --- Chronicle Editor Widget --- */
+
+  .chronicle-editor {
+    @apply border border-gray-200 rounded-lg bg-white overflow-hidden;
+  }
+
+  .chronicle-editor__toolbar {
+    @apply flex items-center flex-wrap gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-gray-200;
+  }
+
+  .chronicle-editor__btn {
+    @apply w-8 h-8 flex items-center justify-center rounded text-sm text-gray-600
+           hover:bg-gray-200 hover:text-gray-900 transition-colors;
+  }
+
+  .chronicle-editor__btn--active {
+    @apply bg-accent/10 text-accent;
+  }
+
+  .chronicle-editor__btn--save {
+    @apply ml-auto px-3 w-auto text-xs font-medium text-gray-500 hover:text-accent;
+  }
+
+  .chronicle-editor__separator {
+    @apply w-px h-5 bg-gray-300 mx-1;
+  }
+
+  .chronicle-editor__content .tiptap {
+    @apply min-h-[200px] p-4 focus:outline-none;
+  }
+
+  .chronicle-editor__content .tiptap p.is-editor-empty:first-child::before {
+    @apply text-gray-400 float-left h-0 pointer-events-none;
+    content: attr(data-placeholder);
+  }
+
+  .chronicle-editor__status {
+    @apply px-3 py-1.5 text-xs border-t border-gray-100;
+  }
+  .chronicle-editor__status--saved { @apply text-green-600; }
+  .chronicle-editor__status--saving { @apply text-gray-500; }
+  .chronicle-editor__status--unsaved { @apply text-amber-600; }
+  .chronicle-editor__status--error { @apply text-red-600; }
+}
+
+/* --- Utility additions --- */
+@layer utilities {
+  /* HTMX loading indicator */
+  .htmx-indicator {
+    @apply opacity-0 transition-opacity duration-200;
+  }
+  .htmx-request .htmx-indicator,
+  .htmx-request.htmx-indicator {
+    @apply opacity-100;
+  }
+}

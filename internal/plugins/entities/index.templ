@@ -1,0 +1,113 @@
+// index.templ renders the entity list page with a type filter sidebar
+// and an entity grid. Supports HTMX partial swap for pagination and
+// type filtering.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// EntityIndexPage renders the full entity list page.
+templ EntityIndexPage(cc *campaigns.CampaignContext, entities []Entity, entityTypes []EntityType, counts map[int]int, total int, opts ListOptions, activeTypeID int, activeTypeSlug string, csrfToken string) {
+	@layouts.App(cc.Campaign.Name + " - Entities") {
+		@EntityListContent(cc, entities, entityTypes, counts, total, opts, activeTypeID, activeTypeSlug, csrfToken)
+	}
+}
+
+// EntityListContent renders the entity list content (for HTMX partial swap).
+templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entityTypes []EntityType, counts map[int]int, total int, opts ListOptions, activeTypeID int, activeTypeSlug string, csrfToken string) {
+	<div id="entity-list">
+		<div class="flex items-center justify-between mb-6">
+			<h1 class="text-2xl font-bold text-gray-900">
+				if activeTypeSlug != "" {
+					for _, et := range entityTypes {
+						if et.Slug == activeTypeSlug {
+							{ et.NamePlural }
+						}
+					}
+				} else {
+					Entities
+				}
+			</h1>
+			if cc.MemberRole >= campaigns.RoleScribe {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
+					class="btn-primary"
+				>New Entity</a>
+			}
+		</div>
+
+		<div class="flex gap-6">
+			<!-- Type filter sidebar -->
+			<div class="w-48 shrink-0">
+				<nav class="space-y-1">
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
+						class={ "flex items-center justify-between px-3 py-2 text-sm rounded-md transition-colors",
+							templ.KV("bg-gray-100 text-gray-900 font-medium", activeTypeID == 0 && activeTypeSlug == ""),
+							templ.KV("text-gray-600 hover:bg-gray-50 hover:text-gray-900", activeTypeID != 0 || activeTypeSlug != "") }
+						hx-get={ fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }
+						hx-target="#entity-list"
+						hx-swap="outerHTML"
+					>
+						<span>All</span>
+						<span class="text-xs text-gray-400">{ fmt.Sprintf("%d", total) }</span>
+					</a>
+					for _, et := range entityTypes {
+						if et.Enabled {
+							<a
+								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug + "s")) }
+								class={ "flex items-center justify-between px-3 py-2 text-sm rounded-md transition-colors",
+									templ.KV("bg-gray-100 text-gray-900 font-medium", activeTypeSlug == et.Slug || activeTypeID == et.ID),
+									templ.KV("text-gray-600 hover:bg-gray-50 hover:text-gray-900", activeTypeSlug != et.Slug && activeTypeID != et.ID) }
+								hx-get={ fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, et.ID) }
+								hx-target="#entity-list"
+								hx-swap="outerHTML"
+							>
+								<span class="flex items-center">
+									<span class="w-2 h-2 rounded-full mr-2" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
+									{ et.NamePlural }
+								</span>
+								<span class="text-xs text-gray-400">{ fmt.Sprintf("%d", counts[et.ID]) }</span>
+							</a>
+						}
+					}
+				</nav>
+			</div>
+
+			<!-- Entity grid -->
+			<div class="flex-1">
+				if len(entities) == 0 {
+					<div class="text-center py-16">
+						<p class="text-gray-500 text-lg mb-4">No entities found.</p>
+						if cc.MemberRole >= campaigns.RoleScribe {
+							<a
+								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
+								class="btn-primary"
+							>Create Your First Entity</a>
+						}
+					</div>
+				} else {
+					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+						for _, entity := range entities {
+							@EntityCard(&entity, cc)
+						}
+					</div>
+
+					@components.Pagination(components.PaginationData{
+						CurrentPage: opts.Page,
+						PerPage:     opts.PerPage,
+						Total:       total,
+						BaseURL:     fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID),
+						ExtraParams: fmt.Sprintf("type=%d", activeTypeID),
+						HTMXTarget:  "#entity-list",
+					})
+				}
+			</div>
+		</div>
+	</div>
+}

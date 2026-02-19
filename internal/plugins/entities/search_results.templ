@@ -1,0 +1,39 @@
+// search_results.templ renders an HTMX fragment with search results for
+// entity search. Used by the SearchAPI handler.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// SearchResultsFragment renders search results as an HTMX fragment.
+templ SearchResultsFragment(results []Entity, total int, cc *campaigns.CampaignContext) {
+	<div id="search-results" class="absolute mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto">
+		if len(results) == 0 {
+			<div class="px-4 py-3 text-sm text-gray-500">No results found.</div>
+		} else {
+			for _, entity := range results {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+					class="flex items-center px-4 py-2 hover:bg-gray-50 text-sm transition-colors"
+				>
+					<span
+						class="w-2 h-2 rounded-full mr-3 shrink-0"
+						style={ fmt.Sprintf("background-color: %s", entity.TypeColor) }
+					></span>
+					<div class="min-w-0">
+						<div class="font-medium text-gray-900 truncate">{ entity.Name }</div>
+						<div class="text-xs text-gray-500">{ entity.TypeName }</div>
+					</div>
+				</a>
+			}
+			if total > len(results) {
+				<div class="px-4 py-2 text-xs text-gray-400 border-t border-gray-100">
+					{ fmt.Sprintf("Showing %d of %d results", len(results), total) }
+				</div>
+			}
+		}
+	</div>
+}

@@ -1,0 +1,86 @@
+# ============================================================================
+# Chronicle Docker Compose
+# ============================================================================
+# Development and production Docker stack.
+# `make docker-up` starts just MariaDB + Redis for local dev.
+# `make docker-all` starts the full stack including the app.
+#
+# For Cosmos Cloud deployment, import this file directly. Cosmos handles
+# TLS termination and domain routing -- no exposed ports needed on the app.
+# ============================================================================
+
+services:
+  # --- Chronicle Application ---
+  # The Go binary serves HTTP directly (no nginx needed).
+  # Cosmos Cloud reverse-proxies to this container.
+  chronicle:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chronicle
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=chronicle:chronicle@tcp(chronicle-db:3306)/chronicle?parseTime=true
+      - REDIS_URL=redis://chronicle-redis:6379
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production-use-openssl-rand-base64-32}
+      - BASE_URL=${BASE_URL:-http://localhost:8080}
+      - ENV=${ENV:-development}
+      - PORT=8080
+    depends_on:
+      chronicle-db:
+        condition: service_healthy
+      chronicle-redis:
+        condition: service_healthy
+    labels:
+      # Cosmos Cloud stack labels for auto-discovery
+      cosmos-stack: chronicle
+      cosmos-stack-main: chronicle
+
+  # --- MariaDB ---
+  chronicle-db:
+    image: mariadb:10.11
+    container_name: chronicle-db
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootsecret}
+      - MYSQL_DATABASE=chronicle
+      - MYSQL_USER=chronicle
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-chronicle}
+    volumes:
+      - chronicle-dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    labels:
+      cosmos-stack: chronicle
+
+  # --- Redis ---
+  # Used for session storage, caching, and rate limiting.
+  # 128MB max with LRU eviction -- sessions survive restarts via AOF.
+  chronicle-redis:
+    image: redis:7-alpine
+    container_name: chronicle-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+    volumes:
+      - chronicle-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      cosmos-stack: chronicle
+
+volumes:
+  chronicle-dbdata:
+    driver: local
+  chronicle-redisdata:
+    driver: local

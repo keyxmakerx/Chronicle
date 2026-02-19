@@ -1,0 +1,73 @@
+// show.templ renders the campaign dashboard page showing campaign details,
+// quick links, and a pending transfer banner if applicable.
+
+package campaigns
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CampaignShowPage renders the campaign dashboard.
+templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfToken string) {
+	@layouts.App(cc.Campaign.Name) {
+		<div class="max-w-4xl mx-auto">
+			// Pending transfer banner for the target user.
+			if transfer != nil {
+				<div class="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md mb-6 text-sm">
+					<strong>Ownership transfer pending.</strong>
+					if cc.MemberRole == RoleOwner {
+						You have initiated a transfer. The new owner must accept it.
+						<form
+							method="POST"
+							action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID)) }
+							class="inline"
+							hx-post={ fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID) }
+						>
+							<input type="hidden" name="csrf_token" value={ csrfToken }/>
+							<button type="submit" class="underline text-yellow-900 hover:text-yellow-700 ml-2">Cancel transfer</button>
+						</form>
+					}
+				</div>
+			}
+
+			<div class="flex items-center justify-between mb-6">
+				<div>
+					<h1 class="text-3xl font-bold text-gray-900">{ cc.Campaign.Name }</h1>
+					if cc.Campaign.Description != nil && *cc.Campaign.Description != "" {
+						<p class="text-gray-600 mt-2">{ *cc.Campaign.Description }</p>
+					}
+				</div>
+
+				if cc.MemberRole >= RoleOwner {
+					<div class="flex space-x-2">
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/edit", cc.Campaign.ID)) } class="btn-secondary text-sm">Edit</a>
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">Settings</a>
+					</div>
+				}
+			</div>
+
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="card p-6 hover:shadow-lg transition-shadow block">
+					<h3 class="font-semibold text-gray-900 mb-2">Members</h3>
+					<p class="text-sm text-gray-600">View and manage campaign members</p>
+				</a>
+
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="card p-6 hover:shadow-lg transition-shadow block">
+					<h3 class="font-semibold text-gray-900 mb-2">Entities</h3>
+					<p class="text-sm text-gray-600">Characters, locations, items, and more</p>
+				</a>
+
+				<div class="card p-6 opacity-50">
+					<h3 class="font-semibold text-gray-900 mb-2">Maps</h3>
+					<p class="text-sm text-gray-400">Coming soon</p>
+				</div>
+			</div>
+
+			<div class="mt-6 text-xs text-gray-400">
+				Your role: <span class="font-medium">{ cc.MemberRole.DisplayName() }</span>
+				&middot; Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }
+			</div>
+		</div>
+	}
+}
