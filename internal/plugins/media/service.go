@@ -121,8 +121,11 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 
 	// Save to database.
 	if err := s.repo.Create(ctx, file); err != nil {
-		// Clean up disk file on DB failure.
+		// Clean up all disk files (main + thumbnails) on DB failure.
 		os.Remove(fullPath)
+		for _, thumbFile := range file.ThumbnailPaths {
+			os.Remove(filepath.Join(s.mediaPath, thumbFile))
+		}
 		return nil, apperror.NewInternal(fmt.Errorf("saving media record: %w", err))
 	}
 

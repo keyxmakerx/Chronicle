@@ -182,7 +182,8 @@ func Load() (*Config, error) {
 
 // IsDevelopment returns true if running in development mode.
 func (c *Config) IsDevelopment() bool {
-	return c.Env == "development"
+	env := strings.ToLower(c.Env)
+	return env == "development" || env == "dev"
 }
 
 // --- Helper functions for reading environment variables ---
