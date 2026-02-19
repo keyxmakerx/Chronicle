@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -32,8 +33,23 @@ func (a *App) RegisterRoutes() {
 	})
 
 	// Health check endpoint for Docker/Cosmos health monitoring.
+	// Pings both MariaDB and Redis to report actual infrastructure health.
 	e.GET("/healthz", func(c echo.Context) error {
-		// TODO: Check DB and Redis connectivity for a real health check.
+		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
+		defer cancel()
+
+		if err := a.DB.PingContext(ctx); err != nil {
+			return c.JSON(http.StatusServiceUnavailable, map[string]string{
+				"status": "unhealthy",
+				"error":  "mariadb: " + err.Error(),
+			})
+		}
+		if err := a.Redis.Ping(ctx).Err(); err != nil {
+			return c.JSON(http.StatusServiceUnavailable, map[string]string{
+				"status": "unhealthy",
+				"error":  "redis: " + err.Error(),
+			})
+		}
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 	})
 

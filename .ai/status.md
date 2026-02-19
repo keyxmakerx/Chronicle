@@ -8,60 +8,32 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- UI polish, unit tests, Dockerfile fix session
+2026-02-19 -- Production deployment fixes and test readiness session
 
 ## Current Phase
 **Phase 1: Foundation** -- Core infrastructure, auth, campaigns, SMTP, admin,
-entities plugins, UI layouts, editor widget, and **UI polish** are built. App
-compiles and tests pass. Tailwind CSS generated. Dockerfile ready for production.
-Next: @mentions, password reset, CI, final deploy testing.
+entities plugins, UI layouts, editor widget, and UI polish are built. App
+compiles and tests pass. CI/CD pipeline configured. Docker image builds and
+pushes to GHCR. Production deployment hardened with DB/Redis retry logic,
+real health checks, and credential-synced docker-compose.
+Next: @mentions, password reset, deploy testing on Cosmos Cloud.
 
 ## Last Session Summary
 
 ### Completed
-- **SMTP settings page converted from dark to light theme:**
-  - `smtp/settings.templ` -- Rewrote from dark (bg-gray-800) to light theme
-    using `layouts.App()` wrapper, `card` component, `input` classes, `btn-primary`
-    and `btn-secondary` buttons. Consistent with admin pages.
-- **Landing page redesigned:**
-  - `pages/landing.templ` -- Added Font Awesome book icon, larger heading (text-5xl),
-    extended description, refined CTA buttons, self-hosted tagline footer.
-- **Auth templates polished:**
-  - `auth/login.templ` + `auth/register.templ` -- Replaced hardcoded `text-indigo-600`
-    links with `text-accent` / `text-accent-hover` to use the theme system.
-- **CSS component library expanded (`input.css`):**
-  - Added `.link`, `.link-muted`, `.link-danger` link styles
-  - Added `.badge`, `.badge-primary`, `.badge-gray`, `.badge-green`, `.badge-amber`,
-    `.badge-red`, `.badge-blue` badge components
-  - Added `.alert`, `.alert-error`, `.alert-success`, `.alert-warning`, `.alert-info`
-    alert components
-  - Added `.empty-state`, `.empty-state__icon`, `.empty-state__title`,
-    `.empty-state__description` empty state component
-  - Added `.table-header`, `.table-row` table component utilities
-  - Added `.htmx-indicator` HTMX loading indicator utility
-  - Enhanced `.btn` with `focus:ring-2 focus:ring-offset-2` focus states
-  - Enhanced `.input` with `bg-white text-gray-900 placeholder-gray-400` + focus ring
-  - Added `.btn:disabled` and `.input:disabled` states
-- **Tailwind CSS regenerated:**
-  - Generated app.css with all new component classes included
-- **Entity service unit tests (30 tests, all passing):**
-  - `entities/service_test.go` -- Full mock-based test suite covering:
-    - Create: success, empty name, whitespace, too long, invalid type, wrong campaign,
-      slug dedup (-2/-3), name trimming, nil FieldsData defaults
-    - Update: success, empty name, slug regen on name change, slug preserved when
-      unchanged, TypeLabel set/clear
-    - UpdateEntry: success, empty content, whitespace only, repo error propagation
-    - Delete: success, repo error propagation
-    - List: default pagination, per-page clamping
-    - Search: minimum query length, trimming, valid query delegation
-    - Entity types: delegation, SeedDefaults delegation
-    - Slugify: 9 table-driven cases (simple, spaces, special chars, unicode, empty)
-    - ListOptions: Offset calculation for 5 cases (page 1, 2, 3, 0, negative)
-- **Dockerfile fixed for production build:**
-  - Upgraded Go build stage from 1.22 to 1.24 (matches go.mod 1.24.7)
-  - Upgraded Alpine from 3.19 to 3.20
-  - Pinned Tailwind CSS to v3.4.17 (was `latest`, which can break)
-- **Build verified:** `go build ./...`, `go vet ./...`, `go test ./...` all pass
+- **DB/Redis retry-with-backoff:** `NewMariaDB()` and `NewRedis()` now retry
+  up to 10 times with exponential backoff (1s→30s cap). Eliminates crash-loop
+  restarts during Docker Compose cold-starts.
+- **Real `/healthz` endpoint:** Pings both MariaDB and Redis. Returns 503 with
+  error details when infrastructure is down. Docker/Cosmos can now detect actual
+  unhealthy state.
+- **docker-compose.yml hardened:** Removed all `${VAR:-default}` shell
+  interpolation. All env values hardcoded directly. Password in `DATABASE_URL`
+  and `MYSQL_PASSWORD` confirmed to match (`chronicle`). Set `ENV=production`.
+- **`.golangci.yml` created:** Linter config with standard linters enabled,
+  generated `_templ.go` files excluded.
+- **Test readiness audit passed:** 30 unit tests passing, CI pipeline verified,
+  Docker multi-stage build working, all packages compile clean.
 
 ### In Progress
 - Nothing currently in progress
@@ -70,27 +42,23 @@ Next: @mentions, password reset, CI, final deploy testing.
 - Nothing blocked
 
 ### Files Created This Session
-- `internal/plugins/entities/service_test.go` -- 30 unit tests for entity service
+- `.golangci.yml` -- Linter configuration
 
 ### Files Modified This Session
-- `internal/plugins/smtp/settings.templ` -- Dark → light theme rewrite
-- `internal/templates/pages/landing.templ` -- Visual hierarchy improvements
-- `internal/plugins/auth/login.templ` -- accent color for Register link
-- `internal/plugins/auth/register.templ` -- accent color for Sign in link
-- `static/css/input.css` -- Expanded CSS component library
-- `static/css/app.css` -- Regenerated Tailwind output
-- `Dockerfile` -- Go 1.24, Alpine 3.20, pinned Tailwind version
-- `.ai/status.md` -- Updated for UI polish session
-- `.ai/todo.md` -- Marked items complete
+- `internal/database/mariadb.go` -- Retry-with-backoff for DB connection
+- `internal/database/redis.go` -- Retry-with-backoff for Redis connection
+- `internal/app/routes.go` -- Real health check (DB + Redis ping)
+- `docker-compose.yml` -- Hardcoded env values, credential sync
+- `.ai/status.md` -- Updated for deployment fixes session
 
 ## Active Branch
 `claude/setup-ai-project-docs-LhvVz`
 
 ## Next Session Should
-1. **@mentions** -- Search entities, insert link, parse/render server-side
-2. **Password reset** -- Wire auth password reset with SMTP when configured
-3. **CI pipeline** -- GitHub Actions for build, lint, test
-4. **Deploy testing** -- Verify Docker Compose full stack works end-to-end
+1. **Deploy testing** -- Pull new image on server, `docker compose down -v && up -d`,
+   verify app starts cleanly, test `/healthz`, create account, create campaign
+2. **@mentions** -- Search entities, insert link, parse/render server-side
+3. **Password reset** -- Wire auth password reset with SMTP when configured
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -114,3 +82,5 @@ Next: @mentions, password reset, CI, final deploy testing.
 - 2026-02-19: UI polish (light theme unification, CSS component library, landing page)
 - 2026-02-19: Entity service unit tests (30 tests passing)
 - 2026-02-19: Dockerfile fixed for production (Go 1.24, pinned Tailwind)
+- 2026-02-19: CI/CD pipeline (GitHub Actions: build, test, Docker push to GHCR)
+- 2026-02-19: Production deployment hardening (retry logic, real healthcheck, credential sync)

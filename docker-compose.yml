@@ -21,15 +21,17 @@ services:
       dockerfile: Dockerfile
     container_name: chronicle
     ports:
-      - "${PORT:-8080}:8080"
+      - "8080:8080"
     restart: unless-stopped
     environment:
+      # -- Customize these for your deployment --
+      - ENV=production
+      - PORT=8080
+      - BASE_URL=http://localhost:8080
+      - SECRET_KEY=CHANGE-ME-run-openssl-rand-base64-32
+      # -- Database (password must match MYSQL_PASSWORD below) --
       - DATABASE_URL=chronicle:chronicle@tcp(chronicle-db:3306)/chronicle?parseTime=true
       - REDIS_URL=redis://chronicle-redis:6379
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production-use-openssl-rand-base64-32}
-      - BASE_URL=${BASE_URL:-http://localhost:8080}
-      - ENV=${ENV:-development}
-      - PORT=8080
     depends_on:
       chronicle-db:
         condition: service_healthy
@@ -46,10 +48,10 @@ services:
     container_name: chronicle-db
     restart: unless-stopped
     environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootsecret}
+      - MYSQL_ROOT_PASSWORD=rootsecret
       - MYSQL_DATABASE=chronicle
       - MYSQL_USER=chronicle
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-chronicle}
+      - MYSQL_PASSWORD=chronicle
     volumes:
       - chronicle-dbdata:/var/lib/mysql
     healthcheck:
