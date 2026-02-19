@@ -77,10 +77,10 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] EntityTypeSeeder wired into campaigns (seeds on campaign create)
 
 ### Priority 5 -- Editor Widget (Must Do)
-- [ ] TipTap vendored JS bundle
-- [ ] editor.js widget with Chronicle.register()
-- [ ] boot.js widget auto-mounter
-- [ ] Save/load entity entry content via API
+- [x] TipTap vendored JS bundle (static/vendor/tiptap-bundle.min.js)
+- [x] editor.js widget with Chronicle.register() (static/js/widgets/editor.js)
+- [x] boot.js widget auto-mounter (static/js/boot.js)
+- [x] Save/load entity entry content via API (GET/PUT entry endpoints)
 - [ ] @mention system (search entities, insert link)
 - [ ] Entity mention parsing and rendering server-side
 

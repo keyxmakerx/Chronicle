@@ -20,6 +20,7 @@ type EntityService interface {
 	GetByID(ctx context.Context, id string) (*Entity, error)
 	GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
+	UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error
 	Delete(ctx context.Context, entityID string) error
 
 	// Listing and search
@@ -181,6 +182,19 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 	}
 
 	return entity, nil
+}
+
+// UpdateEntry updates only the entry content for an entity. Used by the
+// editor widget's autosave to persist content without a full entity update.
+func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error {
+	if strings.TrimSpace(entryJSON) == "" {
+		return apperror.NewBadRequest("entry content is required")
+	}
+	if err := s.entities.UpdateEntry(ctx, entityID, entryJSON, entryHTML); err != nil {
+		return err
+	}
+	slog.Info("entity entry updated", slog.String("entity_id", entityID))
+	return nil
 }
 
 // Delete removes an entity.

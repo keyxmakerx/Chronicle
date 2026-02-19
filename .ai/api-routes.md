@@ -85,6 +85,13 @@ All routes require `auth.RequireAuth` + `auth.RequireSiteAdmin`.
 | PUT | `/campaigns/:id/entities/:eid` | Update | Scribe | Update entity |
 | DELETE | `/campaigns/:id/entities/:eid` | Delete | Owner | Delete entity |
 
+### Entity Entry API (Plugin: entities, JSON endpoints for editor widget) -- implemented
+
+| Method | Path | Handler | Min Role | Description |
+|--------|------|---------|----------|-------------|
+| GET | `/campaigns/:id/entities/:eid/entry` | GetEntry | Player | Get entry content (JSON) |
+| PUT | `/campaigns/:id/entities/:eid/entry` | UpdateEntryAPI | Scribe | Save entry content (JSON) |
+
 ### Entity Shortcut Routes (by type) -- implemented
 
 | Method | Path | Handler | Description |

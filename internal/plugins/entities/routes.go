@@ -22,6 +22,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/entities/search", h.SearchAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/entities/:eid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
 
+	// Entry API (JSON endpoints for editor widget).
+	cg.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/entities/:eid/entry", h.UpdateEntryAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Scribe routes (create/edit access).
 	cg.GET("/entities/new", h.NewForm, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities", h.Create, campaigns.RequireRole(campaigns.RoleScribe))

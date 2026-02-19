@@ -214,6 +214,7 @@ type EntityRepository interface {
 	FindByID(ctx context.Context, id string) (*Entity, error)
 	FindBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entity *Entity) error
+	UpdateEntry(ctx context.Context, id, entryJSON, entryHTML string) error
 	Delete(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
 
@@ -336,6 +337,23 @@ func (r *entityRepository) Update(ctx context.Context, entity *Entity) error {
 	)
 	if err != nil {
 		return fmt.Errorf("updating entity: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
+// UpdateEntry updates only the entry content (JSON + rendered HTML) for an entity.
+// Used by the editor widget's autosave without touching other fields.
+func (r *entityRepository) UpdateEntry(ctx context.Context, id, entryJSON, entryHTML string) error {
+	query := `UPDATE entities SET entry = ?, entry_html = ?, updated_at = NOW() WHERE id = ?`
+
+	result, err := r.db.ExecContext(ctx, query, entryJSON, entryHTML, id)
+	if err != nil {
+		return fmt.Errorf("updating entity entry: %w", err)
 	}
 
 	rows, _ := result.RowsAffected()

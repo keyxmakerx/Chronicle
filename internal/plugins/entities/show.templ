@@ -91,15 +91,15 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 					</div>
 
 					<!-- Entry content -->
-					<div class="card p-6">
-						if entity.EntryHTML != nil && *entity.EntryHTML != "" {
-							<div class="prose max-w-none">
-								@templ.Raw(*entity.EntryHTML)
-							</div>
-						} else {
-							<p class="text-gray-400 italic">No content yet. Click Edit to add an entry.</p>
+					<div
+						data-widget="editor"
+						data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/entry", cc.Campaign.ID, entity.ID) }
+						if cc.MemberRole >= campaigns.RoleScribe {
+							data-editable="true"
 						}
-					</div>
+						data-autosave="30"
+						data-csrf-token={ csrfToken }
+					></div>
 				</div>
 			</div>
 		</div>

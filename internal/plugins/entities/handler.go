@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -277,6 +278,61 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, SearchResultsFragment(results, total, cc))
+}
+
+// --- Entry API (JSON endpoints for editor widget) ---
+
+// GetEntry returns the entity's entry content as JSON.
+// Used by the editor widget to load content on mount.
+// GET /campaigns/:id/entities/:eid/entry
+func (h *Handler) GetEntry(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	entityID := c.Param("eid")
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+
+	// Privacy check: private entities return 404 for Players.
+	if entity.IsPrivate && cc.MemberRole < campaigns.RoleScribe {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	response := map[string]any{
+		"entry":      entity.Entry,
+		"entry_html": entity.EntryHTML,
+	}
+	return c.JSON(http.StatusOK, response)
+}
+
+// UpdateEntryAPI saves the entity's entry content from the editor widget.
+// Accepts JSON body with "entry" (ProseMirror JSON string) and "entry_html" fields.
+// PUT /campaigns/:id/entities/:eid/entry
+func (h *Handler) UpdateEntryAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	entityID := c.Param("eid")
+
+	var body struct {
+		Entry     string `json:"entry"`
+		EntryHTML string `json:"entry_html"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdateEntry(c.Request().Context(), entityID, body.Entry, body.EntryHTML); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // --- Helpers ---

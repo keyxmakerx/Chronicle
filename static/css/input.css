@@ -51,4 +51,48 @@
     @apply w-full px-3 py-2 border border-gray-300 rounded-md
            focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent;
   }
+
+  /* --- Chronicle Editor Widget --- */
+
+  .chronicle-editor {
+    @apply border border-gray-200 rounded-lg bg-white overflow-hidden;
+  }
+
+  .chronicle-editor__toolbar {
+    @apply flex items-center flex-wrap gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-gray-200;
+  }
+
+  .chronicle-editor__btn {
+    @apply w-8 h-8 flex items-center justify-center rounded text-sm text-gray-600
+           hover:bg-gray-200 hover:text-gray-900 transition-colors;
+  }
+
+  .chronicle-editor__btn--active {
+    @apply bg-accent/10 text-accent;
+  }
+
+  .chronicle-editor__btn--save {
+    @apply ml-auto px-3 w-auto text-xs font-medium text-gray-500 hover:text-accent;
+  }
+
+  .chronicle-editor__separator {
+    @apply w-px h-5 bg-gray-300 mx-1;
+  }
+
+  .chronicle-editor__content .tiptap {
+    @apply min-h-[200px] p-4 focus:outline-none;
+  }
+
+  .chronicle-editor__content .tiptap p.is-editor-empty:first-child::before {
+    @apply text-gray-400 float-left h-0 pointer-events-none;
+    content: attr(data-placeholder);
+  }
+
+  .chronicle-editor__status {
+    @apply px-3 py-1.5 text-xs border-t border-gray-100;
+  }
+  .chronicle-editor__status--saved { @apply text-green-600; }
+  .chronicle-editor__status--saving { @apply text-gray-500; }
+  .chronicle-editor__status--unsaved { @apply text-amber-600; }
+  .chronicle-editor__status--error { @apply text-red-600; }
 }

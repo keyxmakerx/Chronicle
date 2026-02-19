@@ -28,9 +28,12 @@ templ Base(title string) {
 		<script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
 		<script src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
 
-		<!-- Widget auto-mounter -->
-		<!-- TODO: Uncomment when boot.js is created -->
-		<!-- <script src="/static/js/boot.js" defer></script> -->
+		<!-- Widget system: boot.js auto-mounts data-widget elements -->
+		<script src="/static/js/boot.js" defer></script>
+
+		<!-- TipTap rich text editor (vendored bundle) -->
+		<script src="/static/vendor/tiptap-bundle.min.js" defer></script>
+		<script src="/static/js/widgets/editor.js" defer></script>
 	</body>
 	</html>
 }
