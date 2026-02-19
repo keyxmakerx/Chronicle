@@ -258,9 +258,13 @@ func validateMagicBytes(data []byte, declaredMIME string) bool {
 }
 
 // generateUUID creates a new v4 UUID string using crypto/rand.
+// Panics if the system entropy source fails, as this indicates a
+// catastrophic system problem that would compromise all security.
 func generateUUID() string {
 	uuid := make([]byte, 16)
-	_, _ = io.ReadFull(rand.Reader, uuid)
+	if _, err := io.ReadFull(rand.Reader, uuid); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
 	uuid[6] = (uuid[6] & 0x0f) | 0x40
 	uuid[8] = (uuid[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",

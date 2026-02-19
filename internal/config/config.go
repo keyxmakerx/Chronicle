@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -159,9 +160,16 @@ func Load() (*Config, error) {
 		},
 	}
 
-	// Validate required fields.
-	if cfg.Auth.SecretKey == "" && cfg.Env == "production" {
-		return nil, fmt.Errorf("SECRET_KEY is required in production")
+	// Validate required fields in production. Case-insensitive check catches
+	// common variants like "Production", "prod", etc.
+	envLower := strings.ToLower(cfg.Env)
+	if envLower == "production" || envLower == "prod" {
+		if cfg.Auth.SecretKey == "" {
+			return nil, fmt.Errorf("SECRET_KEY is required in production")
+		}
+		if len(cfg.Auth.SecretKey) < 32 {
+			return nil, fmt.Errorf("SECRET_KEY must be at least 32 characters in production")
+		}
 	}
 
 	// Provide a dev-only default secret so local dev works without .env.

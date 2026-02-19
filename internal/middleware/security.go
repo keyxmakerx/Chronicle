@@ -52,9 +52,10 @@ func SecurityHeaders() echo.MiddlewareFunc {
 				"camera=(), microphone=(), geolocation=(), payment=()",
 			)
 
-			// X-XSS-Protection: legacy header for older browsers. Modern browsers
-			// use CSP instead, but this doesn't hurt.
-			h.Set("X-XSS-Protection", "1; mode=block")
+			// X-XSS-Protection: disabled. The browser XSS auditor is deprecated
+			// (Chrome removed it in 2019) and in mode=block can introduce
+			// information leaks. Modern browsers rely on CSP instead.
+			h.Set("X-XSS-Protection", "0")
 
 			return next(c)
 		}

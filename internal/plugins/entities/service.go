@@ -3,6 +3,7 @@ package entities
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -201,7 +202,14 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 }
 
 // UpdateImage sets or clears the entity's header image path.
+// Validates the path to prevent directory traversal attacks.
 func (s *entityService) UpdateImage(ctx context.Context, entityID, imagePath string) error {
+	if imagePath != "" {
+		// Reject absolute paths and directory traversal attempts.
+		if strings.HasPrefix(imagePath, "/") || strings.Contains(imagePath, "..") {
+			return apperror.NewBadRequest("invalid image path")
+		}
+	}
 	if err := s.entities.UpdateImage(ctx, entityID, imagePath); err != nil {
 		return err
 	}
@@ -327,13 +335,18 @@ func (s *entityService) SeedDefaults(ctx context.Context, campaignID string) err
 
 // --- Helpers ---
 
+// maxSlugAttempts caps slug deduplication iterations to prevent DoS from
+// adversarial name collisions (e.g., creating "test", "test-2" ... "test-N").
+const maxSlugAttempts = 100
+
 // generateSlug creates a unique slug for an entity within a campaign.
-// If the base slug is taken, appends -2, -3, etc.
+// If the base slug is taken, appends -2, -3, etc. After maxSlugAttempts,
+// falls back to a random suffix.
 func (s *entityService) generateSlug(ctx context.Context, campaignID, name string) (string, error) {
 	base := Slugify(name)
 	slug := base
 
-	for i := 2; ; i++ {
+	for i := 2; i < maxSlugAttempts+2; i++ {
 		exists, err := s.entities.SlugExists(ctx, campaignID, slug)
 		if err != nil {
 			return "", fmt.Errorf("checking slug: %w", err)
@@ -343,12 +356,23 @@ func (s *entityService) generateSlug(ctx context.Context, campaignID, name strin
 		}
 		slug = fmt.Sprintf("%s-%d", base, i)
 	}
+
+	// Fallback: append random suffix to guarantee uniqueness.
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating random slug suffix: %w", err)
+	}
+	return fmt.Sprintf("%s-%s", base, hex.EncodeToString(b)), nil
 }
 
 // generateUUID creates a new v4 UUID string using crypto/rand.
+// Panics if the system entropy source fails, as this indicates a
+// catastrophic system problem that would compromise all security.
 func generateUUID() string {
 	uuid := make([]byte, 16)
-	_, _ = rand.Read(uuid)
+	if _, err := rand.Read(uuid); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
 	uuid[6] = (uuid[6] & 0x0f) | 0x40 // Version 4
 	uuid[8] = (uuid[8] & 0x3f) | 0x80 // Variant RFC 4122
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",

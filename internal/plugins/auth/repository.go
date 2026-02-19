@@ -22,6 +22,7 @@ type UserRepository interface {
 	ListUsers(ctx context.Context, offset, limit int) ([]User, int, error)
 	UpdateIsAdmin(ctx context.Context, id string, isAdmin bool) error
 	CountUsers(ctx context.Context) (int, error)
+	CountAdmins(ctx context.Context) (int, error)
 }
 
 // userRepository implements UserRepository with hand-written MariaDB queries.
@@ -198,6 +199,16 @@ func (r *userRepository) CountUsers(ctx context.Context) (int, error) {
 	var count int
 	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
 		return 0, fmt.Errorf("counting users: %w", err)
+	}
+	return count, nil
+}
+
+// CountAdmins returns the number of users with is_admin = true.
+// Used to prevent removing the last admin.
+func (r *userRepository) CountAdmins(ctx context.Context) (int, error) {
+	var count int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE is_admin = true`).Scan(&count); err != nil {
+		return 0, fmt.Errorf("counting admins: %w", err)
 	}
 	return count, nil
 }

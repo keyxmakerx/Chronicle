@@ -88,6 +88,18 @@ func (h *Handler) ToggleAdmin(c echo.Context) error {
 	}
 
 	newState := !user.IsAdmin
+
+	// Prevent removing the last admin, which would lock out all admin access.
+	if !newState {
+		adminCount, err := h.authRepo.CountAdmins(c.Request().Context())
+		if err != nil {
+			return err
+		}
+		if adminCount <= 1 {
+			return apperror.NewBadRequest("cannot remove the last admin")
+		}
+	}
+
 	if err := h.authRepo.UpdateIsAdmin(c.Request().Context(), targetID, newState); err != nil {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -510,11 +511,15 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 
 	// FULLTEXT for longer queries, LIKE for short ones.
 	if len(query) >= 4 {
+		// Strip FULLTEXT boolean operators to prevent search manipulation.
+		cleaned := stripFTOperators(query)
 		where += " AND MATCH(e.name) AGAINST(? IN BOOLEAN MODE)"
-		args = append(args, query+"*")
+		args = append(args, cleaned+"*")
 	} else {
+		// Escape LIKE metacharacters to prevent wildcard injection.
+		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
 		where += " AND e.name LIKE ?"
-		args = append(args, "%"+query+"%")
+		args = append(args, "%"+escaped+"%")
 	}
 
 	if typeID > 0 {
@@ -612,4 +617,17 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 		}
 	}
 	return e, nil
+}
+
+// ftOperatorReplacer strips MySQL FULLTEXT boolean mode operators from user input
+// to prevent search manipulation. These operators (+, -, >, <, (, ), ~, *, ")
+// have special meaning in BOOLEAN MODE and could alter search behavior.
+var ftOperatorReplacer = strings.NewReplacer(
+	"+", "", "-", "", ">", "", "<", "",
+	"(", "", ")", "", "~", "", "*", "", "\"", "",
+)
+
+// stripFTOperators removes FULLTEXT boolean operators from a search query.
+func stripFTOperators(query string) string {
+	return ftOperatorReplacer.Replace(query)
 }

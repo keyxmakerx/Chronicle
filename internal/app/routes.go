@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -65,16 +66,20 @@ func (a *App) RegisterRoutes() {
 		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
 		defer cancel()
 
+		// Log full errors server-side but return only generic component names
+		// to avoid leaking internal hostnames, ports, and driver details.
 		if err := a.DB.PingContext(ctx); err != nil {
+			slog.Error("health check failed: mariadb", slog.Any("error", err))
 			return c.JSON(http.StatusServiceUnavailable, map[string]string{
 				"status": "unhealthy",
-				"error":  "mariadb: " + err.Error(),
+				"error":  "mariadb unavailable",
 			})
 		}
 		if err := a.Redis.Ping(ctx).Err(); err != nil {
+			slog.Error("health check failed: redis", slog.Any("error", err))
 			return c.JSON(http.StatusServiceUnavailable, map[string]string{
 				"status": "unhealthy",
-				"error":  "redis: " + err.Error(),
+				"error":  "redis unavailable",
 			})
 		}
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -120,7 +125,7 @@ func (a *App) RegisterRoutes() {
 	mediaRepo := media.NewMediaRepository(a.DB)
 	mediaService := media.NewMediaService(mediaRepo, a.Config.Upload.MediaPath, a.Config.Upload.MaxSize)
 	mediaHandler := media.NewHandler(mediaService)
-	media.RegisterRoutes(e, mediaHandler, authService)
+	media.RegisterRoutes(e, mediaHandler, authService, a.Config.Upload.MaxSize)
 
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
