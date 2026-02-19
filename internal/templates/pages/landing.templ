@@ -1,0 +1,24 @@
+// Package pages provides top-level page templates that are not part of
+// any specific plugin (landing page, error pages, etc.).
+
+package pages
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// Landing renders the public landing page shown to unauthenticated users.
+templ Landing() {
+	@layouts.Base("Welcome") {
+		<div class="min-h-screen flex items-center justify-center">
+			<div class="text-center max-w-lg">
+				<h1 class="text-4xl font-bold text-gray-900 mb-4">Chronicle</h1>
+				<p class="text-lg text-gray-600 mb-8">
+					A self-hosted worldbuilding platform for tabletop RPG campaigns.
+				</p>
+				<div class="space-x-4">
+					<a href="/login" class="btn-primary inline-block">Login</a>
+					<a href="/register" class="btn-secondary inline-block">Register</a>
+				</div>
+			</div>
+		</div>
+	}
+}

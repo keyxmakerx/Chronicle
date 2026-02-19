@@ -15,18 +15,22 @@
 rich text, and basic Kanka-inspired UI. Deployable via Docker.
 
 ### Priority 1 -- Core Infrastructure (Must Do First)
-- [ ] Initialize Go module and install core dependencies
-- [ ] Create `cmd/server/main.go` entry point with Echo server
-- [ ] Create `internal/app/` -- App struct, dependency injection, route aggregation
-- [ ] Create `internal/config/` -- ENV loading with sensible defaults
-- [ ] Create `internal/database/` -- MariaDB connection pool + Redis client
-- [ ] Create `internal/middleware/` -- logging, recovery, CSRF, auth session
-- [ ] Create `internal/apperror/` -- domain error types
+- [x] Initialize Go module and install core dependencies
+- [x] Create `cmd/server/main.go` entry point with Echo server
+- [x] Create `internal/app/` -- App struct, dependency injection, route aggregation
+- [x] Create `internal/config/` -- ENV loading with sensible defaults
+- [x] Create `internal/database/` -- MariaDB connection pool + Redis client
+- [x] Create `internal/middleware/` -- logging, recovery, helpers (IsHTMX, Render)
+- [x] Create `internal/apperror/` -- domain error types
+- [x] Create base Templ layouts (base, app, landing, error)
+- [x] Create migration 000001_create_users
 - [ ] Set up `air` hot reload for dev workflow
+- [ ] Vendor HTMX + Alpine.js (currently loaded from CDN)
 - [ ] Verify `make docker-up` -> `make dev` works end-to-end
 
 ### Priority 2 -- Auth Plugin (Must Do)
-- [ ] User model and MariaDB table (migration 000001)
+- [x] User MariaDB table (migration 000001)
+- [ ] User model in `internal/plugins/auth/model.go`
 - [ ] Registration handler + service + repository
 - [ ] Login handler with argon2id password verification
 - [ ] PASETO v4 session tokens stored in Redis

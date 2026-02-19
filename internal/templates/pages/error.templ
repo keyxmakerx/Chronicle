@@ -1,0 +1,22 @@
+package pages
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// ErrorPage renders a generic error page with status code and message.
+// Used by the Echo error handler for 404, 500, and other error responses.
+templ ErrorPage(statusCode int, message string) {
+	@layouts.Base(fmt.Sprintf("Error %d", statusCode)) {
+		<div class="min-h-screen flex items-center justify-center">
+			<div class="text-center">
+				<h1 class="text-6xl font-bold text-gray-300 mb-4">
+					{ fmt.Sprintf("%d", statusCode) }
+				</h1>
+				<p class="text-xl text-gray-600 mb-8">{ message }</p>
+				<a href="/" class="btn-primary inline-block">Go Home</a>
+			</div>
+		</div>
+	}
+}

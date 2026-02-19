@@ -1,0 +1,163 @@
+// Package config handles loading application configuration from environment
+// variables. All config is centralized here so no other package reads env
+// vars directly. Sensible defaults are provided for development.
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"time"
+)
+
+// Config holds all application configuration. Populated from environment
+// variables at startup. Passed to other packages via dependency injection.
+type Config struct {
+	// Env is the runtime environment: "development" or "production".
+	Env string
+
+	// Port is the HTTP listen port (default: 8080).
+	Port int
+
+	// BaseURL is the public-facing URL used for links and redirects.
+	BaseURL string
+
+	// LogLevel controls log verbosity: "debug", "info", "warn", "error".
+	LogLevel string
+
+	// Database holds MariaDB connection settings.
+	Database DatabaseConfig
+
+	// Redis holds Redis connection settings.
+	Redis RedisConfig
+
+	// Auth holds authentication-related settings.
+	Auth AuthConfig
+
+	// Upload holds file upload settings.
+	Upload UploadConfig
+}
+
+// DatabaseConfig holds MariaDB connection parameters.
+type DatabaseConfig struct {
+	// URL is the MariaDB DSN (e.g., "user:pass@tcp(host:3306)/db?parseTime=true").
+	URL string
+
+	// MaxOpenConns is the maximum number of open connections in the pool.
+	MaxOpenConns int
+
+	// MaxIdleConns is the maximum number of idle connections in the pool.
+	MaxIdleConns int
+
+	// ConnMaxLifetime is how long a connection can be reused.
+	ConnMaxLifetime time.Duration
+}
+
+// RedisConfig holds Redis connection parameters.
+type RedisConfig struct {
+	// URL is the Redis connection URL (e.g., "redis://localhost:6379").
+	URL string
+}
+
+// AuthConfig holds authentication settings.
+type AuthConfig struct {
+	// SecretKey is the PASETO signing key (must be 32+ bytes, base64-encoded).
+	SecretKey string
+
+	// SessionTTL is how long sessions last before expiring.
+	SessionTTL time.Duration
+}
+
+// UploadConfig holds file upload settings.
+type UploadConfig struct {
+	// MaxSize is the maximum upload file size in bytes.
+	MaxSize int64
+}
+
+// Load reads configuration from environment variables with sensible defaults.
+// Returns an error if required variables are missing.
+func Load() (*Config, error) {
+	cfg := &Config{
+		Env:      getEnv("ENV", "development"),
+		Port:     getEnvInt("PORT", 8080),
+		BaseURL:  getEnv("BASE_URL", "http://localhost:8080"),
+		LogLevel: getEnv("LOG_LEVEL", "debug"),
+
+		Database: DatabaseConfig{
+			URL:             getEnv("DATABASE_URL", "chronicle:chronicle@tcp(localhost:3306)/chronicle?parseTime=true"),
+			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
+			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 5),
+			ConnMaxLifetime: getEnvDuration("DB_CONN_MAX_LIFETIME", 5*time.Minute),
+		},
+
+		Redis: RedisConfig{
+			URL: getEnv("REDIS_URL", "redis://localhost:6379"),
+		},
+
+		Auth: AuthConfig{
+			SecretKey:  getEnv("SECRET_KEY", ""),
+			SessionTTL: getEnvDuration("SESSION_TTL", 720*time.Hour),
+		},
+
+		Upload: UploadConfig{
+			MaxSize: getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
+		},
+	}
+
+	// Validate required fields.
+	if cfg.Auth.SecretKey == "" && cfg.Env == "production" {
+		return nil, fmt.Errorf("SECRET_KEY is required in production")
+	}
+
+	// Provide a dev-only default secret so local dev works without .env.
+	if cfg.Auth.SecretKey == "" {
+		cfg.Auth.SecretKey = "dev-secret-key-do-not-use-in-production!!"
+	}
+
+	return cfg, nil
+}
+
+// IsDevelopment returns true if running in development mode.
+func (c *Config) IsDevelopment() bool {
+	return c.Env == "development"
+}
+
+// --- Helper functions for reading environment variables ---
+
+// getEnv reads a string env var or returns the default.
+func getEnv(key, defaultVal string) string {
+	if val, ok := os.LookupEnv(key); ok {
+		return val
+	}
+	return defaultVal
+}
+
+// getEnvInt reads an integer env var or returns the default.
+func getEnvInt(key string, defaultVal int) int {
+	if val, ok := os.LookupEnv(key); ok {
+		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return defaultVal
+}
+
+// getEnvInt64 reads an int64 env var or returns the default.
+func getEnvInt64(key string, defaultVal int64) int64 {
+	if val, ok := os.LookupEnv(key); ok {
+		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
+			return i
+		}
+	}
+	return defaultVal
+}
+
+// getEnvDuration reads a duration env var (e.g., "720h") or returns the default.
+func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
+	if val, ok := os.LookupEnv(key); ok {
+		if d, err := time.ParseDuration(val); err == nil {
+			return d
+		}
+	}
+	return defaultVal
+}
