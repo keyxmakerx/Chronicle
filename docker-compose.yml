@@ -12,12 +12,16 @@
 services:
   # --- Chronicle Application ---
   # The Go binary serves HTTP directly (no nginx needed).
+  # Pull from GHCR, or build locally with `docker compose build chronicle`.
   # Cosmos Cloud reverse-proxies to this container.
   chronicle:
+    image: ghcr.io/keyxmakerx/chronicle:latest
     build:
       context: .
       dockerfile: Dockerfile
     container_name: chronicle
+    ports:
+      - "${PORT:-8080}:8080"
     restart: unless-stopped
     environment:
       - DATABASE_URL=chronicle:chronicle@tcp(chronicle-db:3306)/chronicle?parseTime=true

@@ -143,6 +143,18 @@
     mounted.delete(el);
   }
 
+  // --- CSRF Integration ---
+  // Automatically attach the CSRF token to all HTMX mutating requests.
+  // Reads the token from the chronicle_csrf cookie (set by CSRF middleware).
+  document.addEventListener('htmx:configRequest', function (evt) {
+    var match = document.cookie.match(
+      '(?:^|; )chronicle_csrf=([^;]*)'
+    );
+    if (match) {
+      evt.detail.headers['X-CSRF-Token'] = decodeURIComponent(match[1]);
+    }
+  });
+
   // --- Lifecycle ---
 
   // Mount all widgets on initial page load.

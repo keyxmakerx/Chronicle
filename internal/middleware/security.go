@@ -19,13 +19,13 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			// 'self' allows resources from the same origin only.
 			// 'unsafe-inline' is needed for Alpine.js x-* attributes and inline styles.
 			// 'unsafe-eval' is needed for Alpine.js expressions.
-			// TODO: Tighten this once vendor libs are finalized. Replace CDN with 'self'.
+			// Google Fonts + Font Awesome CDN are explicitly allowed.
 			h.Set("Content-Security-Policy",
 				"default-src 'self'; "+
-					"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "+
-					"style-src 'self' 'unsafe-inline'; "+
+					"script-src 'self' 'unsafe-inline' 'unsafe-eval'; "+
+					"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "+
 					"img-src 'self' data: blob:; "+
-					"font-src 'self'; "+
+					"font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "+
 					"connect-src 'self'; "+
 					"frame-ancestors 'none'; "+
 					"base-uri 'self'; "+

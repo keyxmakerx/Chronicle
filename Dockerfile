@@ -63,4 +63,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:8080/healthz || exit 1
 
 # Run the Chronicle server.
-CMD ["chronicle", "serve"]
+CMD ["chronicle"]
