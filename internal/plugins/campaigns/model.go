@@ -170,6 +170,13 @@ type MailService interface {
 	IsConfigured(ctx context.Context) bool
 }
 
+// EntityTypeSeeder seeds default entity types when a campaign is created.
+// Implemented by the entities plugin's EntityService. Avoids importing the
+// entities package directly.
+type EntityTypeSeeder interface {
+	SeedDefaults(ctx context.Context, campaignID string) error
+}
+
 // --- Request DTOs (bound from HTTP requests) ---
 
 // CreateCampaignRequest holds the data submitted by the campaign creation form.

@@ -87,7 +87,7 @@ User --< CampaignMember >-- Campaign
 | enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | |
 | updated_at | DATETIME | NOT NULL, DEFAULT NOW() ON UPDATE | |
 
-### entity_types
+### entity_types (implemented -- migration 000004)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | INT | PK, AUTO_INCREMENT | |
@@ -103,7 +103,7 @@ User --< CampaignMember >-- Campaign
 | enabled | BOOLEAN | DEFAULT true | |
 | UNIQUE(campaign_id, slug) | | | |
 
-### entities
+### entities (implemented -- migration 000004)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | CHAR(36) | PK | UUID |
@@ -182,3 +182,4 @@ User --< CampaignMember >-- Campaign
 | 1 | 000001_create_users | Users table with auth fields | 2026-02-19 |
 | 2 | 000002_create_campaigns | Campaigns, campaign_members, ownership_transfers | 2026-02-19 |
 | 3 | 000003_create_smtp_settings | SMTP settings singleton table | 2026-02-19 |
+| 4 | 000004_create_entities | Entity types + entities tables | 2026-02-19 |

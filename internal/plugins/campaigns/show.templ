@@ -53,10 +53,10 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfTok
 					<p class="text-sm text-gray-600">View and manage campaign members</p>
 				</a>
 
-				<div class="card p-6 opacity-50">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="card p-6 hover:shadow-lg transition-shadow block">
 					<h3 class="font-semibold text-gray-900 mb-2">Entities</h3>
-					<p class="text-sm text-gray-400">Coming soon</p>
-				</div>
+					<p class="text-sm text-gray-600">Characters, locations, items, and more</p>
+				</a>
 
 				<div class="card p-6 opacity-50">
 					<h3 class="font-semibold text-gray-900 mb-2">Maps</h3>

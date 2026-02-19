@@ -53,17 +53,19 @@ type CampaignService interface {
 type campaignService struct {
 	repo    CampaignRepository
 	users   UserFinder
-	mail    MailService // May be nil if SMTP is not configured.
+	mail    MailService        // May be nil if SMTP is not configured.
+	seeder  EntityTypeSeeder   // Seeds default entity types on campaign creation. May be nil.
 	baseURL string
 }
 
 // NewCampaignService creates a new campaign service with the given dependencies.
-// The mail parameter may be nil if SMTP is not configured.
-func NewCampaignService(repo CampaignRepository, users UserFinder, mail MailService, baseURL string) CampaignService {
+// The mail and seeder parameters may be nil if the corresponding plugins are not yet wired.
+func NewCampaignService(repo CampaignRepository, users UserFinder, mail MailService, seeder EntityTypeSeeder, baseURL string) CampaignService {
 	return &campaignService{
 		repo:    repo,
 		users:   users,
 		mail:    mail,
+		seeder:  seeder,
 		baseURL: baseURL,
 	}
 }
@@ -121,6 +123,17 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 	}
 	if err := s.repo.AddMember(ctx, member); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("adding owner member: %w", err))
+	}
+
+	// Seed default entity types for the new campaign.
+	if s.seeder != nil {
+		if err := s.seeder.SeedDefaults(ctx, campaign.ID); err != nil {
+			// Non-fatal: campaign is still usable without default types.
+			slog.Warn("failed to seed default entity types",
+				slog.String("campaign_id", campaign.ID),
+				slog.Any("error", err),
+			)
+		}
 	}
 
 	slog.Info("campaign created",

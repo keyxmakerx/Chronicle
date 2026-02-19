@@ -72,26 +72,29 @@ All routes require `auth.RequireAuth` + `auth.RequireSiteAdmin`.
 | PUT | `/admin/smtp` | UpdateSettings | Save SMTP settings |
 | POST | `/admin/smtp/test` | TestConnection | Test SMTP connectivity |
 
-### Entity Management (Plugin: entities) -- planned
+### Entity Management (Plugin: entities) -- implemented
 
-| Method | Path | Handler | HTMX? | Description |
-|--------|------|---------|-------|-------------|
-| GET | `/campaigns/:cid/entities` | Index | Yes | List entities (filterable) |
-| GET | `/campaigns/:cid/entities/new` | NewForm | Yes | Create entity form |
-| POST | `/campaigns/:cid/entities` | Create | Yes | Create entity |
-| GET | `/campaigns/:cid/entities/:eid` | Show | Yes | Entity profile page |
-| GET | `/campaigns/:cid/entities/:eid/edit` | EditForm | Yes | Edit entity form |
-| PUT | `/campaigns/:cid/entities/:eid` | Update | Yes | Update entity |
-| DELETE | `/campaigns/:cid/entities/:eid` | Delete | Yes | Delete entity |
+| Method | Path | Handler | Min Role | Description |
+|--------|------|---------|----------|-------------|
+| GET | `/campaigns/:id/entities` | Index | Player | List entities (filterable by type) |
+| GET | `/campaigns/:id/entities/search` | SearchAPI | Player | Search entities (HTMX fragment) |
+| GET | `/campaigns/:id/entities/:eid` | Show | Player | Entity profile page |
+| GET | `/campaigns/:id/entities/new` | NewForm | Scribe | Create entity form |
+| POST | `/campaigns/:id/entities` | Create | Scribe | Create entity |
+| GET | `/campaigns/:id/entities/:eid/edit` | EditForm | Scribe | Edit entity form |
+| PUT | `/campaigns/:id/entities/:eid` | Update | Scribe | Update entity |
+| DELETE | `/campaigns/:id/entities/:eid` | Delete | Owner | Delete entity |
 
-### Entity Shortcut Routes (by type) -- planned
+### Entity Shortcut Routes (by type) -- implemented
 
 | Method | Path | Handler | Description |
 |--------|------|---------|-------------|
-| GET | `/campaigns/:cid/characters` | Index (type=character) | List characters |
-| GET | `/campaigns/:cid/locations` | Index (type=location) | List locations |
-| GET | `/campaigns/:cid/organizations` | Index (type=organization) | List orgs |
-| GET | `/campaigns/:cid/items` | Index (type=item) | List items |
+| GET | `/campaigns/:id/characters` | Index (type=character) | List characters |
+| GET | `/campaigns/:id/locations` | Index (type=location) | List locations |
+| GET | `/campaigns/:id/organizations` | Index (type=organization) | List orgs |
+| GET | `/campaigns/:id/items` | Index (type=item) | List items |
+| GET | `/campaigns/:id/notes` | Index (type=note) | List notes |
+| GET | `/campaigns/:id/events` | Index (type=event) | List events |
 
 ## REST API (for external clients like Foundry VTT) -- planned
 

@@ -9,6 +9,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 )
@@ -47,19 +48,27 @@ func (a *App) RegisterRoutes() {
 	smtpService := smtp.NewSMTPService(smtpRepo, a.Config.Auth.SecretKey)
 	smtpHandler := smtp.NewHandler(smtpService)
 
+	// Entities plugin: entity types + entity CRUD (must be created before
+	// campaigns so we can pass EntityService as the EntityTypeSeeder).
+	entityTypeRepo := entities.NewEntityTypeRepository(a.DB)
+	entityRepo := entities.NewEntityRepository(a.DB)
+	entityService := entities.NewEntityService(entityRepo, entityTypeRepo)
+
 	// Campaigns plugin: CRUD, membership, ownership transfer.
+	// EntityService is passed as EntityTypeSeeder to seed defaults on campaign creation.
 	userFinder := campaigns.NewUserFinderAdapter(authRepo)
 	campaignRepo := campaigns.NewCampaignRepository(a.DB)
-	campaignService := campaigns.NewCampaignService(campaignRepo, userFinder, smtpService, a.Config.BaseURL)
+	campaignService := campaigns.NewCampaignService(campaignRepo, userFinder, smtpService, entityService, a.Config.BaseURL)
 	campaignHandler := campaigns.NewHandler(campaignService)
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
+
+	// Entity routes (campaign-scoped, registered after campaign service exists).
+	entityHandler := entities.NewHandler(entityService)
+	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
 
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
 	admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
-
-	// TODO: entities plugin (scoped to campaign)
-	// entityPlugin.RegisterRoutes(authed)
 
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {

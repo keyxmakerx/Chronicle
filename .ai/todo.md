@@ -65,12 +65,15 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [ ] Password reset flow (requires SMTP, wire into auth)
 
 ### Priority 4 -- Entities Plugin (Must Do)
-- [ ] Entity types table with configurable fields (migration 000004)
-- [ ] Default entity types seeded (Character, Location, Organization, Item, etc.)
-- [ ] Entity CRUD (create, list, show, edit, delete)
-- [ ] Entity list view (grid layout like Kanka)
-- [ ] Entity profile page (sidebar with fields + main content area)
-- [ ] Entity search (MariaDB FULLTEXT)
+- [x] Entity types table with configurable fields (migration 000004)
+- [x] Default entity types seeded (Character, Location, Organization, Item, Note, Event)
+- [x] Entity CRUD (create, list, show, edit, delete)
+- [x] Entity list view (grid layout with type filter sidebar)
+- [x] Entity profile page (sidebar with fields + main content area)
+- [x] Entity search (MariaDB FULLTEXT + LIKE fallback)
+- [x] Shortcut routes (/characters, /locations, /organizations, /items, /notes, /events)
+- [x] Privacy filtering (is_private at SQL level, 404 for Players)
+- [x] EntityTypeSeeder wired into campaigns (seeds on campaign create)
 
 ### Priority 5 -- Editor Widget (Must Do)
 - [ ] TipTap vendored JS bundle
