@@ -40,6 +40,9 @@ All tests pass.
   - Media upload body size limit middleware
 - **Documentation fixes:** Updated Go version in tech-stack.md, added missing
   API routes to api-routes.md (image upload, entity type layout endpoints).
+- **Bug fixes:**
+  - `config.IsDevelopment()` now case-insensitive, also matches "dev"
+  - Media upload: clean up thumbnails on disk when DB insert fails
 
 ### In Progress
 - Nothing currently in progress
