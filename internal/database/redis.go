@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -20,14 +21,35 @@ func NewRedis(cfg config.RedisConfig) (*redis.Client, error) {
 
 	client := redis.NewClient(opts)
 
-	// Verify the connection is alive before returning.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Retry with exponential backoff — Redis may still be starting up
+	// when the app container launches.
+	const maxRetries = 10
+	backoff := 1 * time.Second
+	var pingErr error
 
-	if err := client.Ping(ctx).Err(); err != nil {
-		client.Close()
-		return nil, fmt.Errorf("pinging redis: %w", err)
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		pingErr = client.Ping(ctx).Err()
+		cancel()
+
+		if pingErr == nil {
+			return client, nil
+		}
+
+		if attempt == maxRetries {
+			break
+		}
+
+		slog.Warn("redis not ready, retrying...",
+			slog.Int("attempt", attempt),
+			slog.Int("max_retries", maxRetries),
+			slog.Duration("backoff", backoff),
+			slog.Any("error", pingErr),
+		)
+		time.Sleep(backoff)
+		backoff = min(backoff*2, 30*time.Second)
 	}
 
-	return client, nil
+	client.Close()
+	return nil, fmt.Errorf("pinging redis after %d attempts: %w", maxRetries, pingErr)
 }

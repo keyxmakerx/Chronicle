@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"time"
 
 	// MariaDB driver -- imported for side effect of registering the driver.
@@ -31,15 +32,36 @@ func NewMariaDB(cfg config.DatabaseConfig) (*sql.DB, error) {
 	db.SetMaxIdleConns(cfg.MaxIdleConns)
 	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 
-	// Verify the connection is alive before returning. Use a short timeout
-	// so startup fails fast if the database is unreachable.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Retry with exponential backoff — MariaDB may still be starting up
+	// when the app container launches. This avoids crash-loop restarts
+	// during Docker Compose cold-starts.
+	const maxRetries = 10
+	backoff := 1 * time.Second
+	var pingErr error
 
-	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("pinging mariadb: %w", err)
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		pingErr = db.PingContext(ctx)
+		cancel()
+
+		if pingErr == nil {
+			return db, nil
+		}
+
+		if attempt == maxRetries {
+			break
+		}
+
+		slog.Warn("mariadb not ready, retrying...",
+			slog.Int("attempt", attempt),
+			slog.Int("max_retries", maxRetries),
+			slog.Duration("backoff", backoff),
+			slog.Any("error", pingErr),
+		)
+		time.Sleep(backoff)
+		backoff = min(backoff*2, 30*time.Second)
 	}
 
-	return db, nil
+	db.Close()
+	return nil, fmt.Errorf("pinging mariadb after %d attempts: %w", maxRetries, pingErr)
 }

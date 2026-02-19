@@ -1,0 +1,28 @@
+# golangci-lint configuration for Chronicle.
+# Tuned for the project's conventions: hand-written SQL, Templ templates,
+# Echo handlers. Run with `make lint`.
+
+run:
+  go: "1.24"
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosimple
+    - typecheck
+
+issues:
+  # Exclude generated templ files from all linters.
+  exclude-dirs:
+    - vendor
+  exclude-files:
+    - ".*_templ\\.go$"
+
+  # Don't limit the number of issues reported per linter.
+  max-issues-per-linter: 0
+  max-same-issues: 0
