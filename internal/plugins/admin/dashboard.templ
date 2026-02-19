@@ -7,39 +7,76 @@ import (
 
 // AdminDashboardPage renders the admin overview with high-level stats.
 templ AdminDashboardPage(userCount, campaignCount int, smtpConfigured bool) {
-	@layouts.Base("Admin Dashboard - Chronicle") {
-		<div class="max-w-4xl mx-auto py-8 px-4">
-			<h1 class="text-2xl font-bold text-gray-100 mb-6">Admin Dashboard</h1>
+	@layouts.App("Admin Dashboard") {
+		<div class="max-w-4xl mx-auto">
+			<div class="flex items-center justify-between mb-6">
+				<h1 class="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+				<a href="/campaigns" class="text-sm text-gray-500 hover:text-gray-700 transition-colors">
+					Back to Campaigns
+				</a>
+			</div>
+
 			<!-- Stats Cards -->
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
 				<!-- Users -->
-				<a href="/admin/users" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-750 transition-colors">
-					<p class="text-sm text-gray-400">Total Users</p>
-					<p class="text-3xl font-bold text-gray-100 mt-1">{ fmt.Sprintf("%d", userCount) }</p>
+				<a href="/admin/users" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-gray-500">Total Users</p>
+						<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+							<i class="fa-solid fa-users text-accent"></i>
+						</span>
+					</div>
+					<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", userCount) }</p>
+					<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">Manage users &rarr;</p>
 				</a>
 				<!-- Campaigns -->
-				<a href="/admin/campaigns" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-750 transition-colors">
-					<p class="text-sm text-gray-400">Total Campaigns</p>
-					<p class="text-3xl font-bold text-gray-100 mt-1">{ fmt.Sprintf("%d", campaignCount) }</p>
+				<a href="/admin/campaigns" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-gray-500">Total Campaigns</p>
+						<span class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+							<i class="fa-solid fa-book-open text-blue-500"></i>
+						</span>
+					</div>
+					<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", campaignCount) }</p>
+					<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">Manage campaigns &rarr;</p>
 				</a>
 				<!-- SMTP -->
-				<a href="/admin/smtp" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-750 transition-colors">
-					<p class="text-sm text-gray-400">SMTP Status</p>
+				<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-gray-500">SMTP Status</p>
+						<span class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+							<i class="fa-solid fa-envelope text-emerald-500"></i>
+						</span>
+					</div>
 					if smtpConfigured {
-						<p class="text-lg font-semibold text-green-400 mt-1">Configured</p>
+						<p class="text-lg font-semibold text-emerald-600 mt-2">Configured</p>
 					} else {
-						<p class="text-lg font-semibold text-yellow-400 mt-1">Not Configured</p>
+						<p class="text-lg font-semibold text-amber-600 mt-2">Not Configured</p>
 					}
+					<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">SMTP settings &rarr;</p>
 				</a>
 			</div>
+
 			<!-- Quick Links -->
-			<div class="bg-gray-800 rounded-lg p-6">
-				<h2 class="text-lg font-semibold text-gray-100 mb-4">Quick Links</h2>
-				<div class="space-y-2">
-					<a href="/admin/users" class="block text-indigo-400 hover:text-indigo-300">Manage Users</a>
-					<a href="/admin/campaigns" class="block text-indigo-400 hover:text-indigo-300">Manage Campaigns</a>
-					<a href="/admin/smtp" class="block text-indigo-400 hover:text-indigo-300">SMTP Settings</a>
-					<a href="/campaigns" class="block text-indigo-400 hover:text-indigo-300">Back to Campaigns</a>
+			<div class="card">
+				<h2 class="text-lg font-semibold text-gray-900 mb-4">Quick Links</h2>
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+					<a href="/admin/users" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors group">
+						<i class="fa-solid fa-user-gear text-gray-400 group-hover:text-accent transition-colors"></i>
+						<span class="text-sm text-gray-700 group-hover:text-gray-900">Manage Users</span>
+					</a>
+					<a href="/admin/campaigns" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors group">
+						<i class="fa-solid fa-book-open text-gray-400 group-hover:text-accent transition-colors"></i>
+						<span class="text-sm text-gray-700 group-hover:text-gray-900">Manage Campaigns</span>
+					</a>
+					<a href="/admin/smtp" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors group">
+						<i class="fa-solid fa-envelope text-gray-400 group-hover:text-accent transition-colors"></i>
+						<span class="text-sm text-gray-700 group-hover:text-gray-900">SMTP Settings</span>
+					</a>
+					<a href="/campaigns" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors group">
+						<i class="fa-solid fa-arrow-left text-gray-400 group-hover:text-accent transition-colors"></i>
+						<span class="text-sm text-gray-700 group-hover:text-gray-900">Back to Campaigns</span>
+					</a>
 				</div>
 			</div>
 		</div>

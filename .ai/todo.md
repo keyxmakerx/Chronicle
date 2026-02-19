@@ -94,10 +94,10 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Pagination component (shared, HTMX-aware, used by campaigns + entities)
 - [x] LayoutInjector pattern (middleware.Render copies auth/campaign data to Go context)
 - [x] Campaign selector dropdown in topbar (HTMX lazy-loaded, Alpine.js toggle)
-- [ ] Generate Tailwind CSS output (requires tailwindcss binary)
+- [x] Generate Tailwind CSS output (tailwindcss v3.4.17 standalone binary)
 
 ### Priority 7 -- Build & Deploy (Should Do)
-- [ ] Dockerfile builds successfully (multi-stage)
+- [x] Dockerfile builds successfully (multi-stage, Go 1.24, pinned Tailwind)
 - [ ] docker-compose.yml works for full stack (app + MariaDB + Redis)
 - [ ] GitHub Actions CI (build, lint, test)
 - [x] Basic health check endpoint (`/healthz`)

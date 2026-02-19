@@ -8,43 +8,60 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- Editor widget session (TipTap integration, boot.js, entry API)
+2026-02-19 -- UI polish, unit tests, Dockerfile fix session
 
 ## Current Phase
 **Phase 1: Foundation** -- Core infrastructure, auth, campaigns, SMTP, admin,
-entities plugins, UI layouts, and **editor widget** are built. App compiles
-successfully. Next: @mentions, campaign selector, tests, deploy polish.
+entities plugins, UI layouts, editor widget, and **UI polish** are built. App
+compiles and tests pass. Tailwind CSS generated. Dockerfile ready for production.
+Next: @mentions, password reset, CI, final deploy testing.
 
 ## Last Session Summary
 
 ### Completed
-- **Editor widget (TipTap integration):**
-  - `static/js/boot.js` -- Widget auto-mounter. Scans DOM for `data-widget`
-    attributes, collects config from `data-*` attrs, and calls registered widget
-    `init()`. Re-mounts after HTMX swaps via `htmx:afterSettle`. WeakMap prevents
-    double-init. Destroys widgets before HTMX removes content.
-  - `static/vendor/tiptap-bundle.min.js` -- Vendored TipTap 2.x bundle (345KB).
-    Built via npm + esbuild from @tiptap/core, starter-kit, placeholder, link,
-    underline. Exported as `window.TipTap` global.
-  - `static/js/widgets/editor.js` -- Rich text editor widget. Registers via
-    `Chronicle.register('editor', ...)`. Features: toolbar (bold, italic,
-    underline, strike, H1-H3, lists, blockquote, code, hr, undo/redo, save),
-    autosave (configurable interval, default 30s), status bar (saved/saving/
-    unsaved/error), Ctrl+S keyboard shortcut, load/save via JSON API.
-  - `static/css/input.css` -- Added editor widget CSS classes (chronicle-editor,
-    toolbar, buttons, separator, content, status states).
-  - Entry API endpoints: `GET /campaigns/:id/entities/:eid/entry` (load content),
-    `PUT /campaigns/:id/entities/:eid/entry` (save content). JSON endpoints for
-    the editor widget. Privacy-aware (Players get 404 for private entities).
-  - `entities/service.go` -- Added `UpdateEntry` method for targeted entry saves.
-  - `entities/repository.go` -- Added `UpdateEntry` SQL method.
-  - `entities/handler.go` -- Added `GetEntry` and `UpdateEntryAPI` handlers.
-  - `entities/routes.go` -- Registered entry API routes.
-  - `entities/show.templ` -- Replaced static entry display with editor widget
-    mount point (`data-widget="editor"` with endpoint, editable, autosave, csrf).
-  - `layouts/base.templ` -- Enabled boot.js, added tiptap-bundle and editor.js
-    script tags.
-- **Build succeeds:** `go build ./...` and `go vet ./...` pass with zero errors
+- **SMTP settings page converted from dark to light theme:**
+  - `smtp/settings.templ` -- Rewrote from dark (bg-gray-800) to light theme
+    using `layouts.App()` wrapper, `card` component, `input` classes, `btn-primary`
+    and `btn-secondary` buttons. Consistent with admin pages.
+- **Landing page redesigned:**
+  - `pages/landing.templ` -- Added Font Awesome book icon, larger heading (text-5xl),
+    extended description, refined CTA buttons, self-hosted tagline footer.
+- **Auth templates polished:**
+  - `auth/login.templ` + `auth/register.templ` -- Replaced hardcoded `text-indigo-600`
+    links with `text-accent` / `text-accent-hover` to use the theme system.
+- **CSS component library expanded (`input.css`):**
+  - Added `.link`, `.link-muted`, `.link-danger` link styles
+  - Added `.badge`, `.badge-primary`, `.badge-gray`, `.badge-green`, `.badge-amber`,
+    `.badge-red`, `.badge-blue` badge components
+  - Added `.alert`, `.alert-error`, `.alert-success`, `.alert-warning`, `.alert-info`
+    alert components
+  - Added `.empty-state`, `.empty-state__icon`, `.empty-state__title`,
+    `.empty-state__description` empty state component
+  - Added `.table-header`, `.table-row` table component utilities
+  - Added `.htmx-indicator` HTMX loading indicator utility
+  - Enhanced `.btn` with `focus:ring-2 focus:ring-offset-2` focus states
+  - Enhanced `.input` with `bg-white text-gray-900 placeholder-gray-400` + focus ring
+  - Added `.btn:disabled` and `.input:disabled` states
+- **Tailwind CSS regenerated:**
+  - Generated app.css with all new component classes included
+- **Entity service unit tests (30 tests, all passing):**
+  - `entities/service_test.go` -- Full mock-based test suite covering:
+    - Create: success, empty name, whitespace, too long, invalid type, wrong campaign,
+      slug dedup (-2/-3), name trimming, nil FieldsData defaults
+    - Update: success, empty name, slug regen on name change, slug preserved when
+      unchanged, TypeLabel set/clear
+    - UpdateEntry: success, empty content, whitespace only, repo error propagation
+    - Delete: success, repo error propagation
+    - List: default pagination, per-page clamping
+    - Search: minimum query length, trimming, valid query delegation
+    - Entity types: delegation, SeedDefaults delegation
+    - Slugify: 9 table-driven cases (simple, spaces, special chars, unicode, empty)
+    - ListOptions: Offset calculation for 5 cases (page 1, 2, 3, 0, negative)
+- **Dockerfile fixed for production build:**
+  - Upgraded Go build stage from 1.22 to 1.24 (matches go.mod 1.24.7)
+  - Upgraded Alpine from 3.19 to 3.20
+  - Pinned Tailwind CSS to v3.4.17 (was `latest`, which can break)
+- **Build verified:** `go build ./...`, `go vet ./...`, `go test ./...` all pass
 
 ### In Progress
 - Nothing currently in progress
@@ -53,22 +70,18 @@ successfully. Next: @mentions, campaign selector, tests, deploy polish.
 - Nothing blocked
 
 ### Files Created This Session
-- `static/js/boot.js` -- Widget auto-mounter
-- `static/vendor/tiptap-bundle.min.js` -- Vendored TipTap bundle
-- `static/js/widgets/editor.js` -- Rich text editor widget
+- `internal/plugins/entities/service_test.go` -- 30 unit tests for entity service
 
 ### Files Modified This Session
-- `static/css/input.css` -- Added editor widget CSS
-- `internal/plugins/entities/service.go` -- Added UpdateEntry method
-- `internal/plugins/entities/repository.go` -- Added UpdateEntry to interface + impl
-- `internal/plugins/entities/handler.go` -- Added GetEntry + UpdateEntryAPI handlers
-- `internal/plugins/entities/routes.go` -- Added entry API routes
-- `internal/plugins/entities/show.templ` -- Editor widget mount point
-- `internal/templates/layouts/base.templ` -- Enabled boot.js + vendor scripts
-- `internal/plugins/entities/.ai.md` -- Updated routes + notes
-- `.ai/todo.md` -- Marked editor widget items complete
-- `.ai/api-routes.md` -- Added entry API routes
-- `.ai/status.md` -- Updated for editor widget session
+- `internal/plugins/smtp/settings.templ` -- Dark → light theme rewrite
+- `internal/templates/pages/landing.templ` -- Visual hierarchy improvements
+- `internal/plugins/auth/login.templ` -- accent color for Register link
+- `internal/plugins/auth/register.templ` -- accent color for Sign in link
+- `static/css/input.css` -- Expanded CSS component library
+- `static/css/app.css` -- Regenerated Tailwind output
+- `Dockerfile` -- Go 1.24, Alpine 3.20, pinned Tailwind version
+- `.ai/status.md` -- Updated for UI polish session
+- `.ai/todo.md` -- Marked items complete
 
 ## Active Branch
 `claude/setup-ai-project-docs-LhvVz`
@@ -76,13 +89,11 @@ successfully. Next: @mentions, campaign selector, tests, deploy polish.
 ## Next Session Should
 1. **@mentions** -- Search entities, insert link, parse/render server-side
 2. **Password reset** -- Wire auth password reset with SMTP when configured
-3. **Tests** -- Unit tests for entities service and repository
-4. **Tailwind CSS** -- Generate app.css (requires tailwindcss binary)
+3. **CI pipeline** -- GitHub Actions for build, lint, test
+4. **Deploy testing** -- Verify Docker Compose full stack works end-to-end
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
-- Tailwind CSS output (`static/css/app.css`) doesn't exist yet -- needs
-  `tailwindcss` binary to generate it
 - Templ generated files (`*_templ.go`) are gitignored, so `templ generate`
   must run before build on a fresh clone
 - SMTP migration assumes smtp_settings table exists before first admin access
@@ -100,3 +111,6 @@ successfully. Next: @mentions, campaign selector, tests, deploy polish.
 - 2026-02-19: UI & Layouts (dynamic sidebar, topbar, pagination, flash messages, error pages)
 - 2026-02-19: Editor widget (TipTap integration, boot.js auto-mounter, entry API)
 - 2026-02-19: Vendor HTMX + Alpine.js, campaign selector dropdown
+- 2026-02-19: UI polish (light theme unification, CSS component library, landing page)
+- 2026-02-19: Entity service unit tests (30 tests passing)
+- 2026-02-19: Dockerfile fixed for production (Go 1.24, pinned Tailwind)

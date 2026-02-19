@@ -43,8 +43,7 @@ module.exports = {
     },
   },
   plugins: [
-    // Add Tailwind plugins here as needed:
-    // require('@tailwindcss/typography'),  // For prose styling (rich text)
-    // require('@tailwindcss/forms'),       // For form element styling
+    require('@tailwindcss/typography'),  // For prose styling (rich text editor)
+    require('@tailwindcss/forms'),       // For cleaner form element defaults
   ],
 }

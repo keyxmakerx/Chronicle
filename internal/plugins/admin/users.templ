@@ -8,36 +8,36 @@ import (
 
 // AdminUsersPage renders the user management page with a paginated user list.
 templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken string) {
-	@layouts.Base("Users - Admin - Chronicle") {
-		<div class="max-w-4xl mx-auto py-8 px-4">
+	@layouts.App("Users - Admin") {
+		<div class="max-w-4xl mx-auto">
 			<div class="flex justify-between items-center mb-6">
-				<h1 class="text-2xl font-bold text-gray-100">Users ({ fmt.Sprintf("%d", total) })</h1>
-				<a href="/admin" class="text-gray-400 hover:text-gray-200">Back to Admin</a>
+				<h1 class="text-2xl font-bold text-gray-900">Users ({ fmt.Sprintf("%d", total) })</h1>
+				<a href="/admin" class="text-sm text-gray-500 hover:text-gray-700 transition-colors">Back to Admin</a>
 			</div>
-			<div class="bg-gray-800 rounded-lg overflow-hidden">
+			<div class="card p-0 overflow-hidden">
 				<table class="w-full">
 					<thead>
-						<tr class="border-b border-gray-700">
-							<th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Name</th>
-							<th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Email</th>
-							<th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Admin</th>
-							<th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Joined</th>
-							<th class="text-right px-4 py-3 text-sm font-medium text-gray-400">Actions</th>
+						<tr class="bg-gray-50 border-b border-gray-200">
+							<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Role</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Joined</th>
+							<th class="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
 						</tr>
 					</thead>
-					<tbody>
+					<tbody class="divide-y divide-gray-100">
 						for _, user := range users {
-							<tr class="border-b border-gray-700/50">
-								<td class="px-4 py-3 text-gray-100">{ user.DisplayName }</td>
-								<td class="px-4 py-3 text-gray-300">{ user.Email }</td>
+							<tr class="hover:bg-gray-50 transition-colors">
+								<td class="px-4 py-3 text-sm font-medium text-gray-900">{ user.DisplayName }</td>
+								<td class="px-4 py-3 text-sm text-gray-500">{ user.Email }</td>
 								<td class="px-4 py-3">
 									if user.IsAdmin {
-										<span class="px-2 py-0.5 bg-indigo-900/50 text-indigo-300 text-xs rounded-full">Admin</span>
+										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent/10 text-accent">Admin</span>
 									} else {
-										<span class="px-2 py-0.5 bg-gray-700 text-gray-400 text-xs rounded-full">User</span>
+										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">User</span>
 									}
 								</td>
-								<td class="px-4 py-3 text-gray-400 text-sm">
+								<td class="px-4 py-3 text-sm text-gray-400">
 									{ user.CreatedAt.Format("Jan 2, 2006") }
 								</td>
 								<td class="px-4 py-3 text-right">
@@ -46,7 +46,7 @@ templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken stri
 											hx-put={ fmt.Sprintf("/admin/users/%s/admin", user.ID) }
 											hx-confirm="Remove admin privileges from this user?"
 											hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-											class="text-sm text-red-400 hover:text-red-300"
+											class="text-sm text-red-600 hover:text-red-800 transition-colors"
 										>
 											Remove Admin
 										</button>
@@ -55,7 +55,7 @@ templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken stri
 											hx-put={ fmt.Sprintf("/admin/users/%s/admin", user.ID) }
 											hx-confirm="Grant admin privileges to this user?"
 											hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-											class="text-sm text-indigo-400 hover:text-indigo-300"
+											class="text-sm text-accent hover:text-accent-hover transition-colors"
 										>
 											Make Admin
 										</button>
@@ -68,25 +68,29 @@ templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken stri
 			</div>
 			<!-- Pagination -->
 			if total > perPage {
-				<div class="flex justify-center gap-2 mt-6">
+				<div class="flex justify-center items-center gap-4 mt-6">
 					if page > 1 {
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/admin/users?page=%d", page-1)) }
-							class="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+							class="btn-secondary text-sm"
 						>
 							Previous
 						</a>
+					} else {
+						<span class="btn text-sm text-gray-300 cursor-not-allowed opacity-50">Previous</span>
 					}
-					<span class="px-3 py-1 text-gray-400">
+					<span class="text-sm text-gray-500">
 						Page { fmt.Sprintf("%d", page) } of { fmt.Sprintf("%d", (total+perPage-1)/perPage) }
 					</span>
 					if page*perPage < total {
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/admin/users?page=%d", page+1)) }
-							class="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+							class="btn-secondary text-sm"
 						>
 							Next
 						</a>
+					} else {
+						<span class="btn text-sm text-gray-300 cursor-not-allowed opacity-50">Next</span>
 					}
 				</div>
 			}

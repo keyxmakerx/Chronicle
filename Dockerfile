@@ -7,11 +7,11 @@
 # ============================================================================
 
 # --- Stage 1: Tailwind CSS ---
-FROM alpine:3.19 AS tailwind
+FROM alpine:3.20 AS tailwind
 
-# Download the standalone Tailwind CSS CLI (no Node.js required).
+# Download the standalone Tailwind CSS CLI v3.4.17 (no Node.js required).
 RUN wget -O /usr/local/bin/tailwindcss \
-    https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64 \
+    https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64 \
     && chmod +x /usr/local/bin/tailwindcss
 
 COPY . /src
@@ -21,7 +21,7 @@ WORKDIR /src
 RUN tailwindcss -i static/css/input.css -o static/css/app.css --minify
 
 # --- Stage 2: Go Build ---
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Install templ CLI for generating Go code from .templ files.
 RUN go install github.com/a-h/templ/cmd/templ@latest
@@ -39,7 +39,7 @@ RUN templ generate
 RUN CGO_ENABLED=0 GOOS=linux go build -o /chronicle ./cmd/server
 
 # --- Stage 3: Runtime ---
-FROM alpine:3.19
+FROM alpine:3.20
 
 # Install CA certificates for HTTPS calls (if needed) and timezone data.
 RUN apk add --no-cache ca-certificates tzdata
