@@ -34,7 +34,7 @@ templ SMTPFormComponent(settings *SMTPSettings, csrfToken, errMsg, successMsg st
 		hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
 		class="card space-y-6"
 	>
-		<input type="hidden" name="_csrf" value={ csrfToken }/>
+		<input type="hidden" name="csrf_token" value={ csrfToken }/>
 		if errMsg != "" {
 			<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
 				{ errMsg }

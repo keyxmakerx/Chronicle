@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -119,6 +120,9 @@ type AuthConfig struct {
 type UploadConfig struct {
 	// MaxSize is the maximum upload file size in bytes.
 	MaxSize int64
+
+	// MediaPath is the root directory for media file storage.
+	MediaPath string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -151,13 +155,21 @@ func Load() (*Config, error) {
 		},
 
 		Upload: UploadConfig{
-			MaxSize: getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
+			MaxSize:   getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
+			MediaPath: getEnv("MEDIA_PATH", "./media"),
 		},
 	}
 
-	// Validate required fields.
-	if cfg.Auth.SecretKey == "" && cfg.Env == "production" {
-		return nil, fmt.Errorf("SECRET_KEY is required in production")
+	// Validate required fields in production. Case-insensitive check catches
+	// common variants like "Production", "prod", etc.
+	envLower := strings.ToLower(cfg.Env)
+	if envLower == "production" || envLower == "prod" {
+		if cfg.Auth.SecretKey == "" {
+			return nil, fmt.Errorf("SECRET_KEY is required in production")
+		}
+		if len(cfg.Auth.SecretKey) < 32 {
+			return nil, fmt.Errorf("SECRET_KEY must be at least 32 characters in production")
+		}
 	}
 
 	// Provide a dev-only default secret so local dev works without .env.
@@ -170,7 +182,8 @@ func Load() (*Config, error) {
 
 // IsDevelopment returns true if running in development mode.
 func (c *Config) IsDevelopment() bool {
-	return c.Env == "development"
+	env := strings.ToLower(c.Env)
+	return env == "development" || env == "dev"
 }
 
 // --- Helper functions for reading environment variables ---

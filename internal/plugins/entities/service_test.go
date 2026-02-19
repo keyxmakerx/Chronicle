@@ -12,11 +12,12 @@ import (
 
 // mockEntityTypeRepo implements EntityTypeRepository for testing.
 type mockEntityTypeRepo struct {
-	findByIDFn      func(ctx context.Context, id int) (*EntityType, error)
-	findBySlugFn    func(ctx context.Context, campaignID, slug string) (*EntityType, error)
+	findByIDFn       func(ctx context.Context, id int) (*EntityType, error)
+	findBySlugFn     func(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	listByCampaignFn func(ctx context.Context, campaignID string) ([]EntityType, error)
-	seedDefaultsFn  func(ctx context.Context, campaignID string) error
-	createFn        func(ctx context.Context, et *EntityType) error
+	updateLayoutFn   func(ctx context.Context, id int, layoutJSON string) error
+	seedDefaultsFn   func(ctx context.Context, campaignID string) error
+	createFn         func(ctx context.Context, et *EntityType) error
 }
 
 func (m *mockEntityTypeRepo) Create(ctx context.Context, et *EntityType) error {
@@ -47,6 +48,13 @@ func (m *mockEntityTypeRepo) ListByCampaign(ctx context.Context, campaignID stri
 	return nil, nil
 }
 
+func (m *mockEntityTypeRepo) UpdateLayout(ctx context.Context, id int, layoutJSON string) error {
+	if m.updateLayoutFn != nil {
+		return m.updateLayoutFn(ctx, id, layoutJSON)
+	}
+	return nil
+}
+
 func (m *mockEntityTypeRepo) SeedDefaults(ctx context.Context, campaignID string) error {
 	if m.seedDefaultsFn != nil {
 		return m.seedDefaultsFn(ctx, campaignID)
@@ -61,6 +69,7 @@ type mockEntityRepo struct {
 	findBySlugFn    func(ctx context.Context, campaignID, slug string) (*Entity, error)
 	updateFn        func(ctx context.Context, entity *Entity) error
 	updateEntryFn   func(ctx context.Context, id, entryJSON, entryHTML string) error
+	updateImageFn   func(ctx context.Context, id, imagePath string) error
 	deleteFn        func(ctx context.Context, id string) error
 	slugExistsFn    func(ctx context.Context, campaignID, slug string) (bool, error)
 	listByCampaignFn func(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
@@ -99,6 +108,13 @@ func (m *mockEntityRepo) Update(ctx context.Context, entity *Entity) error {
 func (m *mockEntityRepo) UpdateEntry(ctx context.Context, id, entryJSON, entryHTML string) error {
 	if m.updateEntryFn != nil {
 		return m.updateEntryFn(ctx, id, entryJSON, entryHTML)
+	}
+	return nil
+}
+
+func (m *mockEntityRepo) UpdateImage(ctx context.Context, id, imagePath string) error {
+	if m.updateImageFn != nil {
+		return m.updateImageFn(ctx, id, imagePath)
 	}
 	return nil
 }

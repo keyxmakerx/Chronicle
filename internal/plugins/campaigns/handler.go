@@ -1,6 +1,8 @@
 package campaigns
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -11,15 +13,37 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
 
+// EntityTypeLister lists entity types for the settings page sidebar config.
+// Avoids importing the entities package directly.
+type EntityTypeLister interface {
+	GetEntityTypesForSettings(ctx context.Context, campaignID string) ([]SettingsEntityType, error)
+}
+
+// SettingsEntityType is a minimal entity type representation for the settings page.
+type SettingsEntityType struct {
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	NamePlural string `json:"name_plural"`
+	Icon       string `json:"icon"`
+	Color      string `json:"color"`
+}
+
 // Handler handles HTTP requests for campaign operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service CampaignService
+	service      CampaignService
+	entityLister EntityTypeLister
 }
 
 // NewHandler creates a new campaign handler.
 func NewHandler(service CampaignService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetEntityLister sets the entity type lister for the settings page.
+// Called after both plugins are wired to avoid circular dependencies.
+func (h *Handler) SetEntityLister(lister EntityTypeLister) {
+	h.entityLister = lister
 }
 
 // --- Campaign CRUD ---
@@ -197,7 +221,54 @@ func (h *Handler) Settings(c echo.Context) error {
 	transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)
 
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, ""))
+	// Fetch entity types for sidebar config widget.
+	var entityTypes []SettingsEntityType
+	if h.entityLister != nil {
+		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
+	}
+
+	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, ""))
+}
+
+// --- Sidebar Config API ---
+
+// GetSidebarConfig returns the sidebar configuration as JSON (GET /campaigns/:id/sidebar-config).
+func (h *Handler) GetSidebarConfig(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	cfg, err := h.service.GetSidebarConfig(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, cfg)
+}
+
+// UpdateSidebarConfig updates the sidebar configuration (PUT /campaigns/:id/sidebar-config).
+func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	var req UpdateSidebarConfigRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	config := SidebarConfig{
+		EntityTypeOrder: req.EntityTypeOrder,
+		HiddenTypeIDs:   req.HiddenTypeIDs,
+	}
+
+	if err := h.service.UpdateSidebarConfig(c.Request().Context(), cc.Campaign.ID, config); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // --- Members ---
@@ -324,7 +395,12 @@ func (h *Handler) TransferForm(c echo.Context) error {
 	transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)
 
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, ""))
+	var entityTypes []SettingsEntityType
+	if h.entityLister != nil {
+		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
+	}
+
+	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, ""))
 }
 
 // Transfer initiates an ownership transfer (POST /campaigns/:id/transfer).
@@ -348,7 +424,11 @@ func (h *Handler) Transfer(c echo.Context) error {
 		if appErr, ok := err.(*apperror.AppError); ok {
 			errMsg = appErr.Message
 		}
-		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, errMsg))
+		var entityTypes []SettingsEntityType
+		if h.entityLister != nil {
+			entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
+		}
+		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, errMsg))
 	}
 
 	if middleware.IsHTMX(c) {

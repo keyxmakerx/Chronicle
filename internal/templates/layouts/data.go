@@ -11,17 +11,81 @@ import "context"
 type ctxKey string
 
 const (
-	keyUserName     ctxKey = "layout_user_name"
-	keyUserEmail    ctxKey = "layout_user_email"
-	keyIsAdmin      ctxKey = "layout_is_admin"
-	keyCampaignID   ctxKey = "layout_campaign_id"
-	keyCampaignName ctxKey = "layout_campaign_name"
-	keyCampaignRole ctxKey = "layout_campaign_role"
-	keyCSRFToken    ctxKey = "layout_csrf_token"
-	keyFlashSuccess ctxKey = "layout_flash_success"
-	keyFlashError   ctxKey = "layout_flash_error"
-	keyActivePath   ctxKey = "layout_active_path"
+	keyUserName      ctxKey = "layout_user_name"
+	keyUserEmail     ctxKey = "layout_user_email"
+	keyIsAdmin       ctxKey = "layout_is_admin"
+	keyCampaignID    ctxKey = "layout_campaign_id"
+	keyCampaignName  ctxKey = "layout_campaign_name"
+	keyCampaignRole  ctxKey = "layout_campaign_role"
+	keyCSRFToken     ctxKey = "layout_csrf_token"
+	keyFlashSuccess  ctxKey = "layout_flash_success"
+	keyFlashError    ctxKey = "layout_flash_error"
+	keyActivePath    ctxKey = "layout_active_path"
+	keyEntityTypes   ctxKey = "layout_entity_types"
+	keyEntityCounts  ctxKey = "layout_entity_counts"
 )
+
+// SidebarEntityType holds the minimum entity type info needed for sidebar
+// rendering. Defined here to avoid importing the entities package.
+type SidebarEntityType struct {
+	ID         int
+	Slug       string
+	Name       string
+	NamePlural string
+	Icon       string
+	Color      string
+	SortOrder  int
+}
+
+// SortSidebarTypes reorders entity types according to a sidebar config
+// ordering and filters out hidden types. Types not in the order list appear
+// at the end in their original sort_order.
+func SortSidebarTypes(types []SidebarEntityType, order []int, hidden []int) []SidebarEntityType {
+	// Build hidden set.
+	hiddenSet := make(map[int]bool, len(hidden))
+	for _, id := range hidden {
+		hiddenSet[id] = true
+	}
+
+	// If no custom order, just filter hidden.
+	if len(order) == 0 {
+		result := make([]SidebarEntityType, 0, len(types))
+		for _, t := range types {
+			if !hiddenSet[t.ID] {
+				result = append(result, t)
+			}
+		}
+		return result
+	}
+
+	// Build a map for quick lookup.
+	typeMap := make(map[int]SidebarEntityType, len(types))
+	for _, t := range types {
+		typeMap[t.ID] = t
+	}
+
+	// Ordered types first.
+	seen := make(map[int]bool, len(order))
+	result := make([]SidebarEntityType, 0, len(types))
+	for _, id := range order {
+		if hiddenSet[id] {
+			continue
+		}
+		if t, ok := typeMap[id]; ok {
+			result = append(result, t)
+			seen[id] = true
+		}
+	}
+
+	// Remaining types not in the order list (preserving original sort_order).
+	for _, t := range types {
+		if !seen[t.ID] && !hiddenSet[t.ID] {
+			result = append(result, t)
+		}
+	}
+
+	return result
+}
 
 // --- Setters (called by the layout injector in app/routes.go) ---
 
@@ -140,4 +204,37 @@ func GetActivePath(ctx context.Context) string {
 // InCampaign returns true if we're currently in a campaign context.
 func InCampaign(ctx context.Context) bool {
 	return GetCampaignID(ctx) != ""
+}
+
+// --- Entity Types (for sidebar) ---
+
+// SetEntityTypes stores the campaign's entity types for sidebar rendering.
+func SetEntityTypes(ctx context.Context, types []SidebarEntityType) context.Context {
+	return context.WithValue(ctx, keyEntityTypes, types)
+}
+
+// GetEntityTypes returns the campaign's entity types for the sidebar.
+func GetEntityTypes(ctx context.Context) []SidebarEntityType {
+	types, _ := ctx.Value(keyEntityTypes).([]SidebarEntityType)
+	return types
+}
+
+// SetEntityCounts stores per-type entity counts for sidebar badges.
+func SetEntityCounts(ctx context.Context, counts map[int]int) context.Context {
+	return context.WithValue(ctx, keyEntityCounts, counts)
+}
+
+// GetEntityCounts returns per-type entity counts for sidebar badges.
+func GetEntityCounts(ctx context.Context) map[int]int {
+	counts, _ := ctx.Value(keyEntityCounts).(map[int]int)
+	return counts
+}
+
+// GetEntityCount returns the entity count for a specific type ID.
+func GetEntityCount(ctx context.Context, typeID int) int {
+	counts := GetEntityCounts(ctx)
+	if counts == nil {
+		return 0
+	}
+	return counts[typeID]
 }

@@ -7,6 +7,8 @@ package campaigns
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -88,14 +90,44 @@ func (r Role) IsValid() bool {
 
 // Campaign represents a top-level worldbuilding container.
 type Campaign struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Slug        string    `json:"slug"`
-	Description *string   `json:"description,omitempty"`
-	Settings    string    `json:"settings"`
-	CreatedBy   string    `json:"created_by"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Slug          string    `json:"slug"`
+	Description   *string   `json:"description,omitempty"`
+	Settings      string    `json:"settings"`
+	BackdropPath  *string   `json:"backdrop_path,omitempty"`
+	SidebarConfig string    `json:"sidebar_config"`
+	CreatedBy     string    `json:"created_by"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// SidebarConfig holds campaign-level sidebar customization settings.
+// Stored as JSON in campaigns.sidebar_config. Controls entity type ordering
+// and visibility in the sidebar navigation.
+type SidebarConfig struct {
+	// EntityTypeOrder is an ordered list of entity type IDs controlling
+	// sidebar display order. Types not listed appear at the end.
+	EntityTypeOrder []int `json:"entity_type_order,omitempty"`
+
+	// HiddenTypeIDs is a set of entity type IDs that should not appear
+	// in the sidebar. Hidden types are still accessible via the All Entities page.
+	HiddenTypeIDs []int `json:"hidden_type_ids,omitempty"`
+}
+
+// ParseSidebarConfig parses the campaign's sidebar_config JSON into a
+// SidebarConfig struct. Returns an empty config on parse failure.
+func (c *Campaign) ParseSidebarConfig() SidebarConfig {
+	var cfg SidebarConfig
+	if c.SidebarConfig != "" {
+		if err := json.Unmarshal([]byte(c.SidebarConfig), &cfg); err != nil {
+			slog.Warn("failed to parse sidebar config, using defaults",
+				slog.String("campaign_id", c.ID),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+	return cfg
 }
 
 // CampaignMember represents a user's membership in a campaign.
@@ -205,6 +237,12 @@ type UpdateRoleRequest struct {
 // TransferOwnershipRequest holds the data for initiating an ownership transfer.
 type TransferOwnershipRequest struct {
 	Email string `json:"email" form:"email"`
+}
+
+// UpdateSidebarConfigRequest holds the data for updating sidebar configuration.
+type UpdateSidebarConfigRequest struct {
+	EntityTypeOrder []int `json:"entity_type_order"`
+	HiddenTypeIDs   []int `json:"hidden_type_ids"`
 }
 
 // --- Service Input DTOs ---

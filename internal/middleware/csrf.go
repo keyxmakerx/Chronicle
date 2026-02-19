@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
 
@@ -87,7 +88,9 @@ func CSRF() echo.MiddlewareFunc {
 				submittedToken = req.FormValue(csrfFormField)
 			}
 
-			if submittedToken == "" || submittedToken != cookieToken {
+			// Use constant-time comparison to prevent timing side-channel attacks
+			// that could allow an attacker to deduce the token byte-by-byte.
+			if submittedToken == "" || subtle.ConstantTimeCompare([]byte(submittedToken), []byte(cookieToken)) != 1 {
 				return echo.NewHTTPError(http.StatusForbidden, "invalid or missing CSRF token")
 			}
 

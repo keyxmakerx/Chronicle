@@ -53,7 +53,7 @@ templ AdminCampaignsPage(allCampaigns []campaigns.Campaign, total, page, perPage
 												class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-10 overflow-hidden"
 											>
 												<form hx-post={ fmt.Sprintf("/admin/campaigns/%s/join", c.ID) } hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }>
-													<input type="hidden" name="_csrf" value={ csrfToken }/>
+													<input type="hidden" name="csrf_token" value={ csrfToken }/>
 													<button type="submit" name="role" value="player" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">Player</button>
 													<button type="submit" name="role" value="scribe" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">Scribe</button>
 													<button type="submit" name="role" value="owner" class="block w-full text-left px-4 py-2 text-sm text-amber-600 hover:bg-gray-50 transition-colors">Owner (transfers)</button>

@@ -37,6 +37,9 @@ type CampaignRepository interface {
 	FindTransferByCampaign(ctx context.Context, campaignID string) (*OwnershipTransfer, error)
 	DeleteTransfer(ctx context.Context, id string) error
 
+	// UpdateSidebarConfig updates only the sidebar_config JSON column.
+	UpdateSidebarConfig(ctx context.Context, campaignID, configJSON string) error
+
 	// TransferOwnership atomically transfers campaign ownership from one user
 	// to another within a database transaction.
 	TransferOwnership(ctx context.Context, campaignID, fromUserID, toUserID string) error
@@ -60,12 +63,13 @@ func NewCampaignRepository(db *sql.DB) CampaignRepository {
 
 // Create inserts a new campaign row.
 func (r *campaignRepository) Create(ctx context.Context, campaign *Campaign) error {
-	query := `INSERT INTO campaigns (id, name, slug, description, settings, created_by, created_at, updated_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO campaigns (id, name, slug, description, settings, backdrop_path, sidebar_config, created_by, created_at, updated_at)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query,
 		campaign.ID, campaign.Name, campaign.Slug, campaign.Description,
-		campaign.Settings, campaign.CreatedBy, campaign.CreatedAt, campaign.UpdatedAt,
+		campaign.Settings, campaign.BackdropPath, campaign.SidebarConfig,
+		campaign.CreatedBy, campaign.CreatedAt, campaign.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting campaign: %w", err)
@@ -75,13 +79,14 @@ func (r *campaignRepository) Create(ctx context.Context, campaign *Campaign) err
 
 // FindByID retrieves a campaign by its UUID.
 func (r *campaignRepository) FindByID(ctx context.Context, id string) (*Campaign, error) {
-	query := `SELECT id, name, slug, description, settings, created_by, created_at, updated_at
+	query := `SELECT id, name, slug, description, settings, backdrop_path, sidebar_config, created_by, created_at, updated_at
 	          FROM campaigns WHERE id = ?`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&c.ID, &c.Name, &c.Slug, &c.Description,
-		&c.Settings, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+		&c.Settings, &c.BackdropPath, &c.SidebarConfig,
+		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("campaign not found")
@@ -94,13 +99,14 @@ func (r *campaignRepository) FindByID(ctx context.Context, id string) (*Campaign
 
 // FindBySlug retrieves a campaign by its URL slug.
 func (r *campaignRepository) FindBySlug(ctx context.Context, slug string) (*Campaign, error) {
-	query := `SELECT id, name, slug, description, settings, created_by, created_at, updated_at
+	query := `SELECT id, name, slug, description, settings, backdrop_path, sidebar_config, created_by, created_at, updated_at
 	          FROM campaigns WHERE slug = ?`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, slug).Scan(
 		&c.ID, &c.Name, &c.Slug, &c.Description,
-		&c.Settings, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+		&c.Settings, &c.BackdropPath, &c.SidebarConfig,
+		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("campaign not found")
@@ -124,6 +130,7 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 	}
 
 	query := `SELECT c.id, c.name, c.slug, c.description, c.settings,
+	                 c.backdrop_path, c.sidebar_config,
 	                 c.created_by, c.created_at, c.updated_at
 	          FROM campaigns c
 	          INNER JOIN campaign_members cm ON cm.campaign_id = c.id
@@ -142,7 +149,8 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 		var c Campaign
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.Slug, &c.Description,
-			&c.Settings, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+			&c.Settings, &c.BackdropPath, &c.SidebarConfig,
+			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning campaign row: %w", err)
 		}
@@ -159,7 +167,7 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 		return nil, 0, fmt.Errorf("counting all campaigns: %w", err)
 	}
 
-	query := `SELECT id, name, slug, description, settings, created_by, created_at, updated_at
+	query := `SELECT id, name, slug, description, settings, backdrop_path, sidebar_config, created_by, created_at, updated_at
 	          FROM campaigns ORDER BY updated_at DESC LIMIT ? OFFSET ?`
 
 	rows, err := r.db.QueryContext(ctx, query, opts.PerPage, opts.Offset())
@@ -173,7 +181,8 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 		var c Campaign
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.Slug, &c.Description,
-			&c.Settings, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+			&c.Settings, &c.BackdropPath, &c.SidebarConfig,
+			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning campaign row: %w", err)
 		}
@@ -182,14 +191,15 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 	return campaigns, total, rows.Err()
 }
 
-// Update modifies an existing campaign's name, description, and settings.
+// Update modifies an existing campaign's name, description, settings, and sidebar config.
 func (r *campaignRepository) Update(ctx context.Context, campaign *Campaign) error {
-	query := `UPDATE campaigns SET name = ?, slug = ?, description = ?, settings = ?, updated_at = NOW()
+	query := `UPDATE campaigns SET name = ?, slug = ?, description = ?, settings = ?,
+	          sidebar_config = ?, updated_at = NOW()
 	          WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query,
 		campaign.Name, campaign.Slug, campaign.Description,
-		campaign.Settings, campaign.ID,
+		campaign.Settings, campaign.SidebarConfig, campaign.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating campaign: %w", err)
@@ -236,6 +246,22 @@ func (r *campaignRepository) CountAll(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("counting campaigns: %w", err)
 	}
 	return count, nil
+}
+
+// UpdateSidebarConfig updates only the sidebar_config JSON for a campaign.
+func (r *campaignRepository) UpdateSidebarConfig(ctx context.Context, campaignID, configJSON string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaigns SET sidebar_config = ?, updated_at = NOW() WHERE id = ?`,
+		configJSON, campaignID,
+	)
+	if err != nil {
+		return fmt.Errorf("updating sidebar config: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("campaign not found")
+	}
+	return nil
 }
 
 // --- Membership ---

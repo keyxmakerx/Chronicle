@@ -3,6 +3,8 @@ package entities
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -21,6 +23,7 @@ type EntityService interface {
 	GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
 	UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error
+	UpdateImage(ctx context.Context, entityID, imagePath string) error
 	Delete(ctx context.Context, entityID string) error
 
 	// Listing and search
@@ -32,6 +35,7 @@ type EntityService interface {
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	GetEntityTypeByID(ctx context.Context, id int) (*EntityType, error)
 	CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error)
+	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
 
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
@@ -197,6 +201,25 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 	return nil
 }
 
+// UpdateImage sets or clears the entity's header image path.
+// Validates the path to prevent directory traversal attacks.
+func (s *entityService) UpdateImage(ctx context.Context, entityID, imagePath string) error {
+	if imagePath != "" {
+		// Reject absolute paths and directory traversal attempts.
+		if strings.HasPrefix(imagePath, "/") || strings.Contains(imagePath, "..") {
+			return apperror.NewBadRequest("invalid image path")
+		}
+	}
+	if err := s.entities.UpdateImage(ctx, entityID, imagePath); err != nil {
+		return err
+	}
+	slog.Info("entity image updated",
+		slog.String("entity_id", entityID),
+		slog.String("image_path", imagePath),
+	)
+	return nil
+}
+
 // Delete removes an entity.
 func (s *entityService) Delete(ctx context.Context, entityID string) error {
 	if err := s.entities.Delete(ctx, entityID); err != nil {
@@ -256,6 +279,52 @@ func (s *entityService) CountByType(ctx context.Context, campaignID string, role
 	return s.entities.CountByType(ctx, campaignID, role)
 }
 
+// maxLayoutSections caps the number of sections in a layout to prevent abuse.
+const maxLayoutSections = 50
+
+// validLayoutColumns are the allowed values for LayoutSection.Column.
+var validLayoutColumns = map[string]bool{"left": true, "right": true}
+
+// validLayoutTypes are the allowed values for LayoutSection.Type.
+var validLayoutTypes = map[string]bool{"fields": true, "entry": true, "posts": true}
+
+// UpdateEntityTypeLayout validates and persists a new layout for an entity type.
+func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error {
+	if len(layout.Sections) > maxLayoutSections {
+		return apperror.NewBadRequest("too many layout sections")
+	}
+
+	seen := make(map[string]bool, len(layout.Sections))
+	for _, sec := range layout.Sections {
+		if strings.TrimSpace(sec.Key) == "" {
+			return apperror.NewBadRequest("layout section key is required")
+		}
+		if seen[sec.Key] {
+			return apperror.NewBadRequest("duplicate layout section key: " + sec.Key)
+		}
+		seen[sec.Key] = true
+
+		if !validLayoutColumns[sec.Column] {
+			return apperror.NewBadRequest("invalid layout column: must be 'left' or 'right'")
+		}
+		if !validLayoutTypes[sec.Type] {
+			return apperror.NewBadRequest("invalid layout section type: must be 'fields', 'entry', or 'posts'")
+		}
+	}
+
+	layoutJSON, err := json.Marshal(layout)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling layout: %w", err))
+	}
+
+	if err := s.types.UpdateLayout(ctx, id, string(layoutJSON)); err != nil {
+		return err
+	}
+
+	slog.Info("entity type layout updated", slog.Int("entity_type_id", id))
+	return nil
+}
+
 // --- Seeder ---
 
 // SeedDefaults seeds the default entity types for a campaign. This method
@@ -266,13 +335,18 @@ func (s *entityService) SeedDefaults(ctx context.Context, campaignID string) err
 
 // --- Helpers ---
 
+// maxSlugAttempts caps slug deduplication iterations to prevent DoS from
+// adversarial name collisions (e.g., creating "test", "test-2" ... "test-N").
+const maxSlugAttempts = 100
+
 // generateSlug creates a unique slug for an entity within a campaign.
-// If the base slug is taken, appends -2, -3, etc.
+// If the base slug is taken, appends -2, -3, etc. After maxSlugAttempts,
+// falls back to a random suffix.
 func (s *entityService) generateSlug(ctx context.Context, campaignID, name string) (string, error) {
 	base := Slugify(name)
 	slug := base
 
-	for i := 2; ; i++ {
+	for i := 2; i < maxSlugAttempts+2; i++ {
 		exists, err := s.entities.SlugExists(ctx, campaignID, slug)
 		if err != nil {
 			return "", fmt.Errorf("checking slug: %w", err)
@@ -282,12 +356,23 @@ func (s *entityService) generateSlug(ctx context.Context, campaignID, name strin
 		}
 		slug = fmt.Sprintf("%s-%d", base, i)
 	}
+
+	// Fallback: append random suffix to guarantee uniqueness.
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating random slug suffix: %w", err)
+	}
+	return fmt.Sprintf("%s-%s", base, hex.EncodeToString(b)), nil
 }
 
 // generateUUID creates a new v4 UUID string using crypto/rand.
+// Panics if the system entropy source fails, as this indicates a
+// catastrophic system problem that would compromise all security.
 func generateUUID() string {
 	uuid := make([]byte, 16)
-	_, _ = rand.Read(uuid)
+	if _, err := rand.Read(uuid); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
 	uuid[6] = (uuid[6] & 0x0f) | 0x40 // Version 4
 	uuid[8] = (uuid[8] & 0x3f) | 0x80 // Variant RFC 4122
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",

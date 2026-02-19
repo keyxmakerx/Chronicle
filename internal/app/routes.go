@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -12,10 +13,36 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 )
+
+// entityTypeListerAdapter wraps entities.EntityService to implement the
+// campaigns.EntityTypeLister interface without creating a circular import.
+type entityTypeListerAdapter struct {
+	svc entities.EntityService
+}
+
+// GetEntityTypesForSettings returns entity types formatted for the settings page.
+func (a *entityTypeListerAdapter) GetEntityTypesForSettings(ctx context.Context, campaignID string) ([]campaigns.SettingsEntityType, error) {
+	etypes, err := a.svc.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]campaigns.SettingsEntityType, len(etypes))
+	for i, et := range etypes {
+		result[i] = campaigns.SettingsEntityType{
+			ID:         et.ID,
+			Name:       et.Name,
+			NamePlural: et.NamePlural,
+			Icon:       et.Icon,
+			Color:      et.Color,
+		}
+	}
+	return result, nil
+}
 
 // RegisterRoutes sets up all application routes. It registers public routes
 // directly and delegates to each plugin's route registration function.
@@ -39,16 +66,20 @@ func (a *App) RegisterRoutes() {
 		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
 		defer cancel()
 
+		// Log full errors server-side but return only generic component names
+		// to avoid leaking internal hostnames, ports, and driver details.
 		if err := a.DB.PingContext(ctx); err != nil {
+			slog.Error("health check failed: mariadb", slog.Any("error", err))
 			return c.JSON(http.StatusServiceUnavailable, map[string]string{
 				"status": "unhealthy",
-				"error":  "mariadb: " + err.Error(),
+				"error":  "mariadb unavailable",
 			})
 		}
 		if err := a.Redis.Ping(ctx).Err(); err != nil {
+			slog.Error("health check failed: redis", slog.Any("error", err))
 			return c.JSON(http.StatusServiceUnavailable, map[string]string{
 				"status": "unhealthy",
-				"error":  "redis: " + err.Error(),
+				"error":  "redis unavailable",
 			})
 		}
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -81,11 +112,20 @@ func (a *App) RegisterRoutes() {
 	campaignRepo := campaigns.NewCampaignRepository(a.DB)
 	campaignService := campaigns.NewCampaignService(campaignRepo, userFinder, smtpService, entityService, a.Config.BaseURL)
 	campaignHandler := campaigns.NewHandler(campaignService)
+	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
 
 	// Entity routes (campaign-scoped, registered after campaign service exists).
 	entityHandler := entities.NewHandler(entityService)
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
+
+	// Media plugin: file upload, storage, thumbnailing, serving.
+	// Graceful degradation: if the media directory can't be created, log a warning
+	// but don't crash -- the rest of the app keeps running.
+	mediaRepo := media.NewMediaRepository(a.DB)
+	mediaService := media.NewMediaService(mediaRepo, a.Config.Upload.MediaPath, a.Config.Upload.MaxSize)
+	mediaHandler := media.NewHandler(mediaService)
+	media.RegisterRoutes(e, mediaHandler, authService, a.Config.Upload.MaxSize)
 
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
@@ -113,6 +153,36 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetCampaignID(ctx, cc.Campaign.ID)
 			ctx = layouts.SetCampaignName(ctx, cc.Campaign.Name)
 			ctx = layouts.SetCampaignRole(ctx, int(cc.MemberRole))
+
+			// Entity types for dynamic sidebar rendering.
+			// Use the request context (not the enriched ctx) since service calls
+			// only need cancellation/deadline, not layout data.
+			reqCtx := c.Request().Context()
+			if etypes, err := entityService.GetEntityTypes(reqCtx, cc.Campaign.ID); err == nil {
+				sidebarTypes := make([]layouts.SidebarEntityType, len(etypes))
+				for i, et := range etypes {
+					sidebarTypes[i] = layouts.SidebarEntityType{
+						ID:         et.ID,
+						Slug:       et.Slug,
+						Name:       et.Name,
+						NamePlural: et.NamePlural,
+						Icon:       et.Icon,
+						Color:      et.Color,
+						SortOrder:  et.SortOrder,
+					}
+				}
+
+				// Apply sidebar config ordering/hiding if configured.
+				sidebarCfg := cc.Campaign.ParseSidebarConfig()
+				sidebarTypes = layouts.SortSidebarTypes(sidebarTypes, sidebarCfg.EntityTypeOrder, sidebarCfg.HiddenTypeIDs)
+
+				ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
+			}
+
+			// Entity counts per type for sidebar badges.
+			if counts, err := entityService.CountByType(reqCtx, cc.Campaign.ID, int(cc.MemberRole)); err == nil {
+				ctx = layouts.SetEntityCounts(ctx, counts)
+			}
 		}
 
 		// CSRF token for forms.

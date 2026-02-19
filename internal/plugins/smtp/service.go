@@ -83,11 +83,14 @@ func (s *smtpService) SendMail(ctx context.Context, to []string, subject, body s
 
 	from := mail.Address{Name: row.FromName, Address: row.FromAddress}
 
+	// Strip newlines from subject to prevent SMTP header injection.
+	safeSubject := strings.NewReplacer("\r", "", "\n", "").Replace(subject)
+
 	// Build RFC 2822 message.
 	var msg strings.Builder
 	msg.WriteString(fmt.Sprintf("From: %s\r\n", from.String()))
 	msg.WriteString(fmt.Sprintf("To: %s\r\n", strings.Join(to, ", ")))
-	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", safeSubject))
 	msg.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z)))
 	msg.WriteString("MIME-Version: 1.0\r\n")
 	msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
@@ -226,7 +229,7 @@ func (s *smtpService) UpdateSettings(ctx context.Context, req UpdateSMTPRequest)
 		Enabled:     req.Enabled,
 	}
 
-	if row.Port <= 0 {
+	if row.Port <= 0 || row.Port > 65535 {
 		row.Port = 587
 	}
 	if row.FromName == "" {
@@ -234,6 +237,23 @@ func (s *smtpService) UpdateSettings(ctx context.Context, req UpdateSMTPRequest)
 	}
 	if row.Encryption == "" {
 		row.Encryption = "starttls"
+	}
+
+	// Validate encryption mode against allowed values.
+	validEncryptions := map[string]bool{"starttls": true, "ssl": true, "none": true}
+	if !validEncryptions[row.Encryption] {
+		return apperror.NewBadRequest("invalid encryption mode; must be starttls, ssl, or none")
+	}
+
+	// Validate from_address to prevent SMTP header injection via newlines.
+	if row.FromAddress != "" {
+		if _, err := mail.ParseAddress(row.FromAddress); err != nil {
+			return apperror.NewBadRequest("invalid from address")
+		}
+	}
+	// Reject newlines in from_name to prevent header injection.
+	if strings.ContainsAny(row.FromName, "\r\n") {
+		return apperror.NewBadRequest("from name contains invalid characters")
 	}
 
 	// Handle password: empty = keep existing, non-empty = encrypt + store.

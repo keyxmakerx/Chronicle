@@ -32,6 +32,11 @@ func SecurityHeaders() echo.MiddlewareFunc {
 					"form-action 'self'",
 			)
 
+			// Strict-Transport-Security: enforce HTTPS for 1 year including subdomains.
+			// Chronicle runs behind a reverse proxy that terminates TLS; this header
+			// tells browsers to always use HTTPS for subsequent requests.
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+
 			// X-Content-Type-Options: prevent MIME type sniffing.
 			h.Set("X-Content-Type-Options", "nosniff")
 
@@ -47,9 +52,10 @@ func SecurityHeaders() echo.MiddlewareFunc {
 				"camera=(), microphone=(), geolocation=(), payment=()",
 			)
 
-			// X-XSS-Protection: legacy header for older browsers. Modern browsers
-			// use CSP instead, but this doesn't hurt.
-			h.Set("X-XSS-Protection", "1; mode=block")
+			// X-XSS-Protection: disabled. The browser XSS auditor is deprecated
+			// (Chrome removed it in 2019) and in mode=block can introduce
+			// information leaks. Modern browsers rely on CSP instead.
+			h.Set("X-XSS-Protection", "0")
 
 			return next(c)
 		}

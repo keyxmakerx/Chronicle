@@ -244,3 +244,58 @@ unrecoverable -- admin must re-enter.
 - Single encryption key (SECRET_KEY) for simplicity.
 - If SECRET_KEY leaked, SMTP password is compromised (acceptable tradeoff
   for self-hosted). Document key management best practices.
+
+---
+
+## ADR-011: Sidebar Customization via Campaign JSON Column
+
+**Date:** 2026-02-19
+**Status:** Accepted
+
+**Context:** Campaign owners want to reorder and hide entity types in the sidebar
+to match their campaign's focus (e.g., hide "Events" if not used, promote
+"Characters" to the top).
+
+**Decision:** Store sidebar configuration as JSON in `campaigns.sidebar_config`
+column (migration 000006). Config contains `entity_type_order` (ordered list
+of type IDs) and `hidden_type_ids`. LayoutInjector applies the config before
+rendering. Client-side drag-to-reorder widget with auto-save via PUT API.
+
+**Alternatives Considered:**
+- Separate `sidebar_order` table: more normalized but overkill for a simple
+  ordered list. One campaign has at most ~20 entity types.
+- Store order in `entity_types.sort_order`: sort_order is type-global, not
+  per-campaign. Two campaigns sharing the same type definitions would conflict.
+
+**Consequences:**
+- Simple single-column storage, no joins needed.
+- Config parsed on every page render (small JSON, negligible overhead).
+- Graceful degradation: malformed JSON falls back to default sort_order.
+- Owner-only access -- players cannot customize the sidebar.
+
+---
+
+## ADR-012: Entity Type Layout Builder with JSON Column
+
+**Date:** 2026-02-19
+**Status:** Accepted
+
+**Context:** Entity profile pages need customizable layouts -- different entity
+types should display their sections in different arrangements (e.g., Characters
+might want "Basics" fields in a left sidebar with the entry in the main column).
+
+**Decision:** Store layout configuration as JSON in `entity_types.layout_json`
+column (migration 000007). Layout defines sections with key/label/type/column
+properties. "column" is either "left" (sidebar) or "right" (main). Section types
+are "fields", "entry", or "posts". Client-side two-column drag-and-drop widget.
+
+**Alternatives Considered:**
+- Separate layout_sections table: over-normalized for what is always read as a
+  unit. The JSON blob is never queried individually.
+- Hardcoded layouts per entity type: inflexible, defeats the purpose.
+
+**Consequences:**
+- Layout config read with entity type, no additional query.
+- Sections validated server-side (valid types, valid columns, unique keys).
+- Default layout auto-generated from field definitions when empty.
+- Entity show page must read layout_json to render the profile (not yet wired).
