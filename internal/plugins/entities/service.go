@@ -3,6 +3,7 @@ package entities
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -33,6 +34,7 @@ type EntityService interface {
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	GetEntityTypeByID(ctx context.Context, id int) (*EntityType, error)
 	CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error)
+	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
 
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
@@ -267,6 +269,21 @@ func (s *entityService) GetEntityTypeByID(ctx context.Context, id int) (*EntityT
 // CountByType returns entity counts per entity type for sidebar badges.
 func (s *entityService) CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error) {
 	return s.entities.CountByType(ctx, campaignID, role)
+}
+
+// UpdateEntityTypeLayout persists a new layout for an entity type.
+func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error {
+	layoutJSON, err := json.Marshal(layout)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling layout: %w", err))
+	}
+
+	if err := s.types.UpdateLayout(ctx, id, string(layoutJSON)); err != nil {
+		return err
+	}
+
+	slog.Info("entity type layout updated", slog.Int("entity_type_id", id))
+	return nil
 }
 
 // --- Seeder ---

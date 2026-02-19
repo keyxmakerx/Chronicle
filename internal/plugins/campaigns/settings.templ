@@ -1,15 +1,25 @@
-// settings.templ renders the campaign settings page with edit info,
-// danger zone (delete, transfer ownership), and pending transfer status.
+// settings.templ renders the campaign settings page with sidebar customization,
+// ownership transfer, and danger zone (delete campaign).
 
 package campaigns
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
+// entityTypesJSON serializes entity types to JSON for the sidebar config widget.
+func entityTypesJSON(types []SettingsEntityType) string {
+	b, err := json.Marshal(types)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
 // CampaignSettingsPage renders the campaign settings page.
-templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfToken, errMsg string) {
+templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, entityTypes []SettingsEntityType, csrfToken, errMsg string) {
 	@layouts.App(cc.Campaign.Name + " - Settings") {
 		<div class="max-w-2xl mx-auto">
 			<div class="flex items-center justify-between mb-6">
@@ -22,6 +32,64 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csr
 					{ errMsg }
 				</div>
 			}
+
+			// Sidebar customization section.
+			<div class="card p-6 mb-6">
+				<h2 class="text-lg font-semibold text-gray-900 mb-2">Sidebar</h2>
+				<p class="text-sm text-gray-600 mb-4">
+					Customize which entity types appear in the sidebar and their order.
+					Changes are saved automatically.
+				</p>
+				<div
+					data-widget="sidebar-config"
+					data-endpoint={ fmt.Sprintf("/campaigns/%s/sidebar-config", cc.Campaign.ID) }
+					data-entity-types={ entityTypesJSON(entityTypes) }
+				></div>
+			</div>
+
+			// Entity type layout builders.
+			<div class="card p-6 mb-6">
+				<h2 class="text-lg font-semibold text-gray-900 mb-2">Entity Layouts</h2>
+				<p class="text-sm text-gray-600 mb-4">
+					Customize the profile page layout for each entity type. Drag sections
+					between the left (sidebar) and right (main) columns.
+				</p>
+
+				if len(entityTypes) > 0 {
+					<div x-data="{ open: null }" class="space-y-2">
+						for _, et := range entityTypes {
+							<div class="border border-gray-200 rounded-md">
+								<button
+									type="button"
+									@click={ fmt.Sprintf("open = open === %d ? null : %d", et.ID, et.ID) }
+									class="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+								>
+									<span class="flex items-center">
+										<i class={ "fa-solid " + et.Icon + " text-xs mr-2" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
+										{ et.Name }
+									</span>
+									<svg class="w-4 h-4 text-gray-400 transition-transform" :class={ fmt.Sprintf("{ 'rotate-180': open === %d }", et.ID) } fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+									</svg>
+								</button>
+								<div
+									x-show={ fmt.Sprintf("open === %d", et.ID) }
+									x-transition
+									class="px-4 pb-4"
+								>
+									<div
+										data-widget="layout-builder"
+										data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/layout", cc.Campaign.ID, et.ID) }
+										data-entity-type-name={ et.Name }
+									></div>
+								</div>
+							</div>
+						}
+					</div>
+				} else {
+					<p class="text-sm text-gray-500">No entity types found.</p>
+				}
+			</div>
 
 			// Transfer ownership section.
 			<div class="card p-6 mb-6">

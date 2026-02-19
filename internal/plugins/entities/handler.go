@@ -397,6 +397,74 @@ func (h *Handler) UpdateImageAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// --- Layout API ---
+
+// GetEntityTypeLayout returns the entity type's layout as JSON.
+// GET /campaigns/:id/entity-types/:etid/layout
+func (h *Handler) GetEntityTypeLayout(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	// IDOR protection: ensure entity type belongs to this campaign.
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"layout": et.Layout,
+		"fields": et.Fields,
+	})
+}
+
+// UpdateEntityTypeLayout saves the entity type's profile layout.
+// PUT /campaigns/:id/entity-types/:etid/layout
+func (h *Handler) UpdateEntityTypeLayout(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	// IDOR protection: ensure entity type belongs to this campaign.
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	var body struct {
+		Layout EntityTypeLayout `json:"layout"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdateEntityTypeLayout(c.Request().Context(), etID, body.Layout); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- Helpers ---
 
 // parseFieldsFromForm collects field_<key> form parameters and builds a

@@ -38,6 +38,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Owner routes (delete access).
 	cg.DELETE("/entities/:eid", h.Delete, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Entity type layout API (Owner only).
+	cg.GET("/entity-types/:etid/layout", h.GetEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/entity-types/:etid/layout", h.UpdateEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Shortcut routes: /campaigns/:id/characters -> entities filtered by type.
 	// Each sets a context value that the Index handler reads.
 	shortcuts := []struct {

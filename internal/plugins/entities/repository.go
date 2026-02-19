@@ -18,6 +18,7 @@ type EntityTypeRepository interface {
 	FindByID(ctx context.Context, id int) (*EntityType, error)
 	FindBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]EntityType, error)
+	UpdateLayout(ctx context.Context, id int, layoutJSON string) error
 	SeedDefaults(ctx context.Context, campaignID string) error
 }
 
@@ -37,13 +38,17 @@ func (r *entityTypeRepository) Create(ctx context.Context, et *EntityType) error
 	if err != nil {
 		return fmt.Errorf("marshaling fields: %w", err)
 	}
+	layoutJSON, err := json.Marshal(et.Layout)
+	if err != nil {
+		return fmt.Errorf("marshaling layout: %w", err)
+	}
 
-	query := `INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon, color, fields, sort_order, is_default, enabled)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon, color, fields, layout_json, sort_order, is_default, enabled)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := r.db.ExecContext(ctx, query,
 		et.CampaignID, et.Slug, et.Name, et.NamePlural,
-		et.Icon, et.Color, fieldsJSON, et.SortOrder,
+		et.Icon, et.Color, fieldsJSON, layoutJSON, et.SortOrder,
 		et.IsDefault, et.Enabled,
 	)
 	if err != nil {
@@ -60,14 +65,14 @@ func (r *entityTypeRepository) Create(ctx context.Context, et *EntityType) error
 
 // FindByID retrieves an entity type by its auto-increment ID.
 func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color, fields, sort_order, is_default, enabled
+	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color, fields, layout_json, sort_order, is_default, enabled
 	          FROM entity_types WHERE id = ?`
 
 	et := &EntityType{}
-	var fieldsRaw []byte
+	var fieldsRaw, layoutRaw []byte
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-		&et.Icon, &et.Color, &fieldsRaw, &et.SortOrder,
+		&et.Icon, &et.Color, &fieldsRaw, &layoutRaw, &et.SortOrder,
 		&et.IsDefault, &et.Enabled,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -80,19 +85,22 @@ func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityTyp
 	if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
 		return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 	}
+	if len(layoutRaw) > 0 {
+		_ = json.Unmarshal(layoutRaw, &et.Layout)
+	}
 	return et, nil
 }
 
 // FindBySlug retrieves an entity type by campaign ID and slug.
 func (r *entityTypeRepository) FindBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color, fields, sort_order, is_default, enabled
+	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color, fields, layout_json, sort_order, is_default, enabled
 	          FROM entity_types WHERE campaign_id = ? AND slug = ?`
 
 	et := &EntityType{}
-	var fieldsRaw []byte
+	var fieldsRaw, layoutRaw []byte
 	err := r.db.QueryRowContext(ctx, query, campaignID, slug).Scan(
 		&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-		&et.Icon, &et.Color, &fieldsRaw, &et.SortOrder,
+		&et.Icon, &et.Color, &fieldsRaw, &layoutRaw, &et.SortOrder,
 		&et.IsDefault, &et.Enabled,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -105,12 +113,15 @@ func (r *entityTypeRepository) FindBySlug(ctx context.Context, campaignID, slug 
 	if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
 		return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 	}
+	if len(layoutRaw) > 0 {
+		_ = json.Unmarshal(layoutRaw, &et.Layout)
+	}
 	return et, nil
 }
 
 // ListByCampaign returns all entity types for a campaign, ordered by sort_order.
 func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID string) ([]EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color, fields, sort_order, is_default, enabled
+	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color, fields, layout_json, sort_order, is_default, enabled
 	          FROM entity_types WHERE campaign_id = ? ORDER BY sort_order, name`
 
 	rows, err := r.db.QueryContext(ctx, query, campaignID)
@@ -122,10 +133,10 @@ func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID st
 	var types []EntityType
 	for rows.Next() {
 		var et EntityType
-		var fieldsRaw []byte
+		var fieldsRaw, layoutRaw []byte
 		if err := rows.Scan(
 			&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-			&et.Icon, &et.Color, &fieldsRaw, &et.SortOrder,
+			&et.Icon, &et.Color, &fieldsRaw, &layoutRaw, &et.SortOrder,
 			&et.IsDefault, &et.Enabled,
 		); err != nil {
 			return nil, fmt.Errorf("scanning entity type row: %w", err)
@@ -133,9 +144,29 @@ func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID st
 		if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
 			return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 		}
+		if len(layoutRaw) > 0 {
+			_ = json.Unmarshal(layoutRaw, &et.Layout)
+		}
 		types = append(types, et)
 	}
 	return types, rows.Err()
+}
+
+// UpdateLayout updates only the layout_json for an entity type. Used by the
+// layout builder widget to persist layout changes.
+func (r *entityTypeRepository) UpdateLayout(ctx context.Context, id int, layoutJSON string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE entity_types SET layout_json = ? WHERE id = ?`,
+		layoutJSON, id,
+	)
+	if err != nil {
+		return fmt.Errorf("updating entity type layout: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("entity type not found")
+	}
+	return nil
 }
 
 // defaultEntityTypes defines the entity types seeded when a campaign is created.

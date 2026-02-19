@@ -34,6 +34,57 @@ type SidebarEntityType struct {
 	NamePlural string
 	Icon       string
 	Color      string
+	SortOrder  int
+}
+
+// SortSidebarTypes reorders entity types according to a sidebar config
+// ordering and filters out hidden types. Types not in the order list appear
+// at the end in their original sort_order.
+func SortSidebarTypes(types []SidebarEntityType, order []int, hidden []int) []SidebarEntityType {
+	// Build hidden set.
+	hiddenSet := make(map[int]bool, len(hidden))
+	for _, id := range hidden {
+		hiddenSet[id] = true
+	}
+
+	// If no custom order, just filter hidden.
+	if len(order) == 0 {
+		result := make([]SidebarEntityType, 0, len(types))
+		for _, t := range types {
+			if !hiddenSet[t.ID] {
+				result = append(result, t)
+			}
+		}
+		return result
+	}
+
+	// Build a map for quick lookup.
+	typeMap := make(map[int]SidebarEntityType, len(types))
+	for _, t := range types {
+		typeMap[t.ID] = t
+	}
+
+	// Ordered types first.
+	seen := make(map[int]bool, len(order))
+	result := make([]SidebarEntityType, 0, len(types))
+	for _, id := range order {
+		if hiddenSet[id] {
+			continue
+		}
+		if t, ok := typeMap[id]; ok {
+			result = append(result, t)
+			seen[id] = true
+		}
+	}
+
+	// Remaining types not in the order list (preserving original sort_order).
+	for _, t := range types {
+		if !seen[t.ID] && !hiddenSet[t.ID] {
+			result = append(result, t)
+		}
+	}
+
+	return result
 }
 
 // --- Setters (called by the layout injector in app/routes.go) ---

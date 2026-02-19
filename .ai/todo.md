@@ -125,8 +125,9 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Dynamic sidebar with entity types from DB
 - [x] Entity image upload pipeline
 - [x] UI upgrade with Font Awesome icons
-- [ ] Sidebar customization (campaign-level config)
-- [ ] Layout builder (entity type profile customization)
+- [x] Sidebar customization (campaign-level config, migration 000006)
+- [x] Layout builder scaffold (entity type layout_json, migration 000007)
+- [ ] Apply layout_json to entity show page rendering
 
 ### Phase 3 -- Permissions & Advanced Multi-User
 - [ ] Per-entity permissions (view/edit per role/user)

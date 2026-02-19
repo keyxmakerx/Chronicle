@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -43,6 +44,10 @@ type CampaignService interface {
 	AcceptTransfer(ctx context.Context, token string, acceptingUserID string) error
 	CancelTransfer(ctx context.Context, campaignID string) error
 	GetPendingTransfer(ctx context.Context, campaignID string) (*OwnershipTransfer, error)
+
+	// Sidebar configuration
+	UpdateSidebarConfig(ctx context.Context, campaignID string, config SidebarConfig) error
+	GetSidebarConfig(ctx context.Context, campaignID string) (*SidebarConfig, error)
 
 	// Admin operations
 	ForceTransferOwnership(ctx context.Context, campaignID, newOwnerID string) error
@@ -100,14 +105,15 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 	}
 
 	campaign := &Campaign{
-		ID:          generateUUID(),
-		Name:        name,
-		Slug:        slug,
-		Description: descPtr,
-		Settings:    "{}",
-		CreatedBy:   userID,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:            generateUUID(),
+		Name:          name,
+		Slug:          slug,
+		Description:   descPtr,
+		Settings:      "{}",
+		SidebarConfig: "{}",
+		CreatedBy:     userID,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	if err := s.repo.Create(ctx, campaign); err != nil {
@@ -483,6 +489,34 @@ func (s *campaignService) CancelTransfer(ctx context.Context, campaignID string)
 // GetPendingTransfer returns the pending transfer for a campaign, or nil.
 func (s *campaignService) GetPendingTransfer(ctx context.Context, campaignID string) (*OwnershipTransfer, error) {
 	return s.repo.FindTransferByCampaign(ctx, campaignID)
+}
+
+// --- Sidebar Configuration ---
+
+// UpdateSidebarConfig updates the campaign's sidebar configuration. Validates
+// the config and persists as JSON.
+func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID string, config SidebarConfig) error {
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling sidebar config: %w", err))
+	}
+
+	if err := s.repo.UpdateSidebarConfig(ctx, campaignID, string(configJSON)); err != nil {
+		return err
+	}
+
+	slog.Info("sidebar config updated", slog.String("campaign_id", campaignID))
+	return nil
+}
+
+// GetSidebarConfig returns the parsed sidebar configuration for a campaign.
+func (s *campaignService) GetSidebarConfig(ctx context.Context, campaignID string) (*SidebarConfig, error) {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	cfg := campaign.ParseSidebarConfig()
+	return &cfg, nil
 }
 
 // --- Admin Operations ---

@@ -18,6 +18,31 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 )
 
+// entityTypeListerAdapter wraps entities.EntityService to implement the
+// campaigns.EntityTypeLister interface without creating a circular import.
+type entityTypeListerAdapter struct {
+	svc entities.EntityService
+}
+
+// GetEntityTypesForSettings returns entity types formatted for the settings page.
+func (a *entityTypeListerAdapter) GetEntityTypesForSettings(ctx context.Context, campaignID string) ([]campaigns.SettingsEntityType, error) {
+	etypes, err := a.svc.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]campaigns.SettingsEntityType, len(etypes))
+	for i, et := range etypes {
+		result[i] = campaigns.SettingsEntityType{
+			ID:         et.ID,
+			Name:       et.Name,
+			NamePlural: et.NamePlural,
+			Icon:       et.Icon,
+			Color:      et.Color,
+		}
+	}
+	return result, nil
+}
+
 // RegisterRoutes sets up all application routes. It registers public routes
 // directly and delegates to each plugin's route registration function.
 //
@@ -82,6 +107,7 @@ func (a *App) RegisterRoutes() {
 	campaignRepo := campaigns.NewCampaignRepository(a.DB)
 	campaignService := campaigns.NewCampaignService(campaignRepo, userFinder, smtpService, entityService, a.Config.BaseURL)
 	campaignHandler := campaigns.NewHandler(campaignService)
+	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
 
 	// Entity routes (campaign-scoped, registered after campaign service exists).
@@ -134,8 +160,14 @@ func (a *App) RegisterRoutes() {
 						NamePlural: et.NamePlural,
 						Icon:       et.Icon,
 						Color:      et.Color,
+						SortOrder:  et.SortOrder,
 					}
 				}
+
+				// Apply sidebar config ordering/hiding if configured.
+				sidebarCfg := cc.Campaign.ParseSidebarConfig()
+				sidebarTypes = layouts.SortSidebarTypes(sidebarTypes, sidebarCfg.EntityTypeOrder, sidebarCfg.HiddenTypeIDs)
+
 				ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
 			}
 

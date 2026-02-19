@@ -12,11 +12,12 @@ import (
 
 // mockEntityTypeRepo implements EntityTypeRepository for testing.
 type mockEntityTypeRepo struct {
-	findByIDFn      func(ctx context.Context, id int) (*EntityType, error)
-	findBySlugFn    func(ctx context.Context, campaignID, slug string) (*EntityType, error)
+	findByIDFn       func(ctx context.Context, id int) (*EntityType, error)
+	findBySlugFn     func(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	listByCampaignFn func(ctx context.Context, campaignID string) ([]EntityType, error)
-	seedDefaultsFn  func(ctx context.Context, campaignID string) error
-	createFn        func(ctx context.Context, et *EntityType) error
+	updateLayoutFn   func(ctx context.Context, id int, layoutJSON string) error
+	seedDefaultsFn   func(ctx context.Context, campaignID string) error
+	createFn         func(ctx context.Context, et *EntityType) error
 }
 
 func (m *mockEntityTypeRepo) Create(ctx context.Context, et *EntityType) error {
@@ -45,6 +46,13 @@ func (m *mockEntityTypeRepo) ListByCampaign(ctx context.Context, campaignID stri
 		return m.listByCampaignFn(ctx, campaignID)
 	}
 	return nil, nil
+}
+
+func (m *mockEntityTypeRepo) UpdateLayout(ctx context.Context, id int, layoutJSON string) error {
+	if m.updateLayoutFn != nil {
+		return m.updateLayoutFn(ctx, id, layoutJSON)
+	}
+	return nil
 }
 
 func (m *mockEntityTypeRepo) SeedDefaults(ctx context.Context, campaignID string) error {

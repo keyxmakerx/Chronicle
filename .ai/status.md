@@ -8,43 +8,40 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- Phase 2: Media plugin, security hardening, dynamic sidebar, UI upgrade
+2026-02-19 -- Phase 2: Sidebar customization + Layout builder scaffold
 
 ## Current Phase
 **Phase 2: Media & UI** -- Building on the Phase 1 foundation. Media plugin
-for file uploads and image management, security hardening (IDOR fixes, HSTS,
-rate limiting, magic byte validation), dynamic sidebar from DB, entity image
-upload, and UI quality improvements with Font Awesome icons. All tests pass.
+for file uploads, security hardening, dynamic sidebar, entity image upload,
+UI quality improvements, sidebar customization (drag-to-reorder, hide/show
+entity types), and layout builder scaffold (two-column entity profile layout
+editor). All tests pass.
 
 ## Last Session Summary
 
 ### Completed
-- **Media plugin:** Full implementation with model, repository, service, handler,
-  routes, and migration 000005. Upload with magic byte validation (JPEG/PNG/WebP/GIF),
-  UUID filenames in YYYY/MM/ directory structure, thumbnail generation at 300px + 800px
-  using golang.org/x/image (Catmull-Rom interpolation). Serve with Cache-Control:
-  immutable. Rate-limited uploads (30/min per IP).
-- **Rate limiting middleware:** Per-IP sliding window counter with background cleanup.
-  Applied to auth routes (login: 10/min, register: 5/min) and media upload.
-- **IDOR security fixes:** All entity handlers (Show, EditForm, Update, Delete,
-  GetEntry, UpdateEntryAPI, UpdateImageAPI) now verify entity.CampaignID matches
-  the campaign from the URL before proceeding.
-- **HSTS header:** Added Strict-Transport-Security (1 year, includeSubDomains)
-  to security middleware.
-- **Editor save button:** Made prominent with bg-gray-200 default, accent color
-  highlight via .has-changes class when content is modified.
-- **Entity image upload:** Full pipeline: UpdateImage in repository/service/handler,
-  PUT /campaigns/:id/entities/:eid/image route, image_upload.js widget that
-  uploads to media then sets path on entity. Show page displays image with
-  hover overlay for editors.
-- **Dynamic sidebar:** Entity types loaded from DB into layout context
-  (SidebarEntityType struct in data.go, LayoutInjector populates from
-  entityService.GetEntityTypes). Sidebar renders Font Awesome icons and entity
-  count badges per type.
-- **UI quality upgrade:** Entity cards show image thumbnails (or type icon
-  placeholder), Font Awesome icons on type badges, smooth hover transitions.
-  Index page type filter uses FA icons. Improved empty state. Breadcrumbs
-  on entity show page include type link.
+- **Sidebar customization (migration 000006):** Added `sidebar_config` JSON
+  column to campaigns table. Campaign owners can reorder and hide/show entity
+  types in the sidebar via a drag-to-reorder widget on the settings page.
+  SidebarConfig model with EntityTypeOrder and HiddenTypeIDs. LayoutInjector
+  applies the config to sort/filter sidebar entity types. Full API
+  (GET/PUT /campaigns/:id/sidebar-config).
+- **Layout builder scaffold (migration 000007):** Added `layout_json` JSON
+  column to entity_types table. EntityTypeLayout model with Sections
+  (key/label/type/column). Full API (GET/PUT /campaigns/:id/entity-types/:etid/layout).
+  Layout builder JS widget renders two-column drag-and-drop editor for
+  customizing entity profile page sections. Accordion UI on settings page
+  shows one layout builder per entity type.
+- **sidebar_config.js widget:** Drag-to-reorder entity type list with
+  visibility toggles (eye icon). Auto-saves on every change.
+- **layout_builder.js widget:** Two-column (left/right) section editor
+  with drag-and-drop between columns. Generates default sections from
+  field definitions. Auto-saves on every change.
+- **Campaign settings page enhanced:** Now has three sections: Sidebar
+  customization, Entity Layouts (accordion of layout builders), and
+  the existing Transfer Ownership + Danger Zone.
+- **EntityTypeLister adapter:** Clean interface adapter in app/routes.go
+  to pass entity type data to campaign settings page without circular imports.
 
 ### In Progress
 - Nothing currently in progress
@@ -53,33 +50,28 @@ upload, and UI quality improvements with Font Awesome icons. All tests pass.
 - Nothing blocked
 
 ### Files Modified This Session
-- `db/migrations/000005_create_media.up.sql` -- New: media_files table + campaigns.backdrop_path
-- `db/migrations/000005_create_media.down.sql` -- New: rollback
-- `internal/plugins/media/model.go` -- New: MediaFile, UploadInput, AllowedMimeTypes
-- `internal/plugins/media/repository.go` -- New: CRUD with JSON thumbnail paths
-- `internal/plugins/media/service.go` -- New: upload, validate, thumbnails, delete
-- `internal/plugins/media/handler.go` -- New: Upload, Serve, ServeThumbnail, Info, Delete
-- `internal/plugins/media/routes.go` -- New: media routes with auth + rate limiting
-- `internal/middleware/ratelimit.go` -- New: per-IP rate limiter
-- `internal/middleware/security.go` -- Added HSTS header
-- `internal/config/config.go` -- Added MediaPath to UploadConfig
-- `internal/app/routes.go` -- Wired media plugin, entity types in LayoutInjector
-- `internal/plugins/auth/routes.go` -- Rate limiting on login/register
-- `internal/plugins/entities/model.go` -- ImagePath in UpdateEntityInput
-- `internal/plugins/entities/repository.go` -- UpdateImage method
-- `internal/plugins/entities/service.go` -- UpdateImage method
-- `internal/plugins/entities/handler.go` -- IDOR on all handlers + UpdateImageAPI
-- `internal/plugins/entities/routes.go` -- Image API route
-- `internal/plugins/entities/service_test.go` -- UpdateImage in mock
-- `internal/plugins/entities/show.templ` -- Image display + upload widget + breadcrumbs
-- `internal/plugins/entities/entity_card.templ` -- Image thumbnails + FA icons
-- `internal/plugins/entities/index.templ` -- FA icons in type filter + empty state
-- `internal/templates/layouts/data.go` -- SidebarEntityType, entity types/counts context
-- `internal/templates/layouts/app.templ` -- Dynamic sidebar with FA icons + count badges
-- `internal/templates/layouts/base.templ` -- image_upload.js script tag
-- `static/css/input.css` -- Editor save button styles
-- `static/js/widgets/image_upload.js` -- New: image upload widget
-- `go.mod` / `go.sum` -- golang.org/x/image dependency
+- `db/migrations/000006_sidebar_config.up.sql` -- New: sidebar_config column
+- `db/migrations/000006_sidebar_config.down.sql` -- New: rollback
+- `db/migrations/000007_entity_type_layout.up.sql` -- New: layout_json column
+- `db/migrations/000007_entity_type_layout.down.sql` -- New: rollback
+- `internal/plugins/campaigns/model.go` -- SidebarConfig, ParseSidebarConfig, BackdropPath, new fields
+- `internal/plugins/campaigns/repository.go` -- All queries updated for new columns + UpdateSidebarConfig
+- `internal/plugins/campaigns/service.go` -- UpdateSidebarConfig, GetSidebarConfig methods
+- `internal/plugins/campaigns/handler.go` -- EntityTypeLister interface, sidebar config API handlers, Settings handler updated
+- `internal/plugins/campaigns/routes.go` -- Sidebar config API routes
+- `internal/plugins/campaigns/settings.templ` -- Sidebar config widget + layout builder accordion
+- `internal/plugins/entities/model.go` -- EntityTypeLayout, LayoutSection types, Layout field on EntityType
+- `internal/plugins/entities/repository.go` -- layout_json in all queries + UpdateLayout
+- `internal/plugins/entities/service.go` -- UpdateEntityTypeLayout method
+- `internal/plugins/entities/handler.go` -- GetEntityTypeLayout, UpdateEntityTypeLayout handlers
+- `internal/plugins/entities/routes.go` -- Layout API routes
+- `internal/plugins/entities/service_test.go` -- UpdateLayout in mock
+- `internal/templates/layouts/data.go` -- SortSidebarTypes function, SortOrder field
+- `internal/templates/layouts/app.templ` -- (Unchanged, sidebar rendering already dynamic)
+- `internal/templates/layouts/base.templ` -- sidebar_config.js + layout_builder.js script tags
+- `internal/app/routes.go` -- entityTypeListerAdapter, SetEntityLister wiring, SortSidebarTypes call
+- `static/js/widgets/sidebar_config.js` -- New: drag-to-reorder sidebar config widget
+- `static/js/widgets/layout_builder.js` -- New: two-column layout builder widget
 
 ## Active Branch
 `claude/resume-previous-work-YqXiG`
@@ -88,8 +80,8 @@ upload, and UI quality improvements with Font Awesome icons. All tests pass.
 1. **@mentions** -- Search entities in editor, insert link, parse/render server-side
 2. **Password reset** -- Wire auth password reset with SMTP when configured
 3. **Entity relations** -- Bi-directional entity linking
-4. **Sidebar customization** -- Campaign-level sidebar config (migration 000006)
-5. **Layout builder** -- Entity type layout_json for custom profile layouts (migration 000007)
+4. **Apply layout_json to entity show page** -- Render entity profiles using the layout config
+5. **Entity type CRUD** -- Let campaign owners add/edit/remove entity types
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -119,3 +111,5 @@ upload, and UI quality improvements with Font Awesome icons. All tests pass.
 - 2026-02-19: Security hardening (IDOR fixes, HSTS, rate limiting on auth)
 - 2026-02-19: Dynamic sidebar with entity types from DB + count badges
 - 2026-02-19: Entity image upload pipeline + UI quality upgrade
+- 2026-02-19: Sidebar customization (drag-to-reorder, hide/show entity types)
+- 2026-02-19: Layout builder scaffold (two-column entity profile layout editor)

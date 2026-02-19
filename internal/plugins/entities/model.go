@@ -26,9 +26,28 @@ type EntityType struct {
 	Icon       string            `json:"icon"`
 	Color      string            `json:"color"`
 	Fields     []FieldDefinition `json:"fields"`
+	Layout     EntityTypeLayout  `json:"layout"`
 	SortOrder  int               `json:"sort_order"`
 	IsDefault  bool              `json:"is_default"`
 	Enabled    bool              `json:"enabled"`
+}
+
+// EntityTypeLayout describes the profile page layout for entities of this type.
+// Controls the two-column layout with configurable sections. Stored as JSON
+// in entity_types.layout_json.
+type EntityTypeLayout struct {
+	// Sections defines the ordered list of sections on the entity profile.
+	// Each section appears as a collapsible block on the entity page.
+	Sections []LayoutSection `json:"sections"`
+}
+
+// LayoutSection is a named group of content on the entity profile page.
+// Sections can contain fields, the main entry editor, or custom blocks.
+type LayoutSection struct {
+	Key    string `json:"key"`    // Machine-readable identifier (e.g., "basics", "entry").
+	Label  string `json:"label"`  // Human-readable label (e.g., "Basics", "Main Entry").
+	Type   string `json:"type"`   // Section type: "fields", "entry", "posts".
+	Column string `json:"column"` // Layout column: "left" (sidebar) or "right" (main).
 }
 
 // FieldDefinition describes a single custom field in an entity type.
