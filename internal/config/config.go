@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
 )
 
 // Config holds all application configuration. Populated from environment
@@ -73,13 +75,20 @@ type DatabaseConfig struct {
 
 // DSN returns the go-sql-driver/mysql connection string. If DATABASE_URL was
 // set, it is returned as-is. Otherwise the DSN is built from the individual
-// Host/Port/User/Password/Name fields.
+// Host/Port/User/Password/Name fields using the driver's Config.FormatDSN()
+// to safely handle special characters in passwords.
 func (d DatabaseConfig) DSN() string {
 	if d.dsnOverride != "" {
 		return d.dsnOverride
 	}
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true",
-		d.User, d.Password, d.Host, d.Port, d.Name)
+	cfg := mysql.NewConfig()
+	cfg.User = d.User
+	cfg.Passwd = d.Password
+	cfg.Net = "tcp"
+	cfg.Addr = fmt.Sprintf("%s:%d", d.Host, d.Port)
+	cfg.DBName = d.Name
+	cfg.ParseTime = true
+	return cfg.FormatDSN()
 }
 
 // RedisConfig holds Redis connection parameters.
