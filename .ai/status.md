@@ -8,30 +8,33 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- Add DATABASE_URL to docker-compose, special-char-safe DSN builder
+2026-02-19 -- Auto-migrations, first-user-is-admin, /health alias
 
 ## Current Phase
 **Phase 1: Foundation** -- Core infrastructure, auth, campaigns, SMTP, admin,
 entities plugins, UI layouts, editor widget, and UI polish are built. App
 compiles and tests pass. CI/CD pipeline configured. Docker image builds and
 pushes to GHCR. Production deployment hardened with DB/Redis retry logic,
-real health checks, and separate DB env vars for Cosmos Cloud.
+real health checks, separate DB env vars, and auto-migrations on startup.
 Next: @mentions, password reset, deploy testing on Cosmos Cloud.
 
 ## Last Session Summary
 
 ### Completed
-- **DATABASE_URL added to docker-compose.yml:** Active (not commented out) so
-  users with off-site databases have a single connection string to set.
-  `DATABASE_URL` takes precedence over individual `DB_*` vars when both are set.
-- **Special-char-safe DSN builder:** Replaced `fmt.Sprintf` DSN construction
-  with `mysql.Config{}.FormatDSN()` from go-sql-driver/mysql. This is the
-  driver's canonical method and safely handles passwords with special characters
-  (`@`, `:`, `(`, `)`, etc.) that would break manual string interpolation.
-- **Separate DB env vars:** (prior commit) Individual `DB_HOST`, `DB_PORT`,
-  `DB_USER`, `DB_PASSWORD`, `DB_NAME` for Cosmos Cloud compatibility.
+- **Auto-migrations on startup:** Added `golang-migrate/migrate/v4` as a library
+  dependency. New `database.RunMigrations()` runs all pending migrations
+  automatically when the app starts. No more manual `make migrate-up` needed
+  after deployment. Already-applied migrations are safely skipped.
+- **First user is admin:** The first user to register automatically gets
+  `is_admin = true`. Subsequent users get `false` as before. Uses existing
+  `CountUsers()` to check if the users table is empty.
+- **`/health` alias:** Added `/health` alongside `/healthz` so both paths work
+  for health probes. Cosmos Cloud's default health check hits `/health`.
+- **Dockerfile fix:** Migrations now copied to `/app/db/migrations` (was
+  `/app/migrations`) so the path matches local dev (`db/migrations`).
+- **Simplified DB config:** (prior commit) `DB_HOST=host:port`, no DB_PORT.
+- **Special-char-safe DSN:** (prior commit) `mysql.Config.FormatDSN()`.
 - **DB/Redis retry-with-backoff:** (prior commit) Eliminates crash-loop restarts.
-- **Real `/healthz` endpoint:** (prior commit) Pings DB + Redis, returns 503 when down.
 
 ### In Progress
 - Nothing currently in progress
@@ -40,8 +43,11 @@ Next: @mentions, password reset, deploy testing on Cosmos Cloud.
 - Nothing blocked
 
 ### Files Modified This Session
-- `internal/config/config.go` -- DSN() now uses mysql.Config.FormatDSN()
-- `docker-compose.yml` -- Added DATABASE_URL env var (active)
+- `internal/database/migrate.go` -- New file: RunMigrations() using golang-migrate
+- `cmd/server/main.go` -- Call RunMigrations() after DB connect
+- `internal/plugins/auth/service.go` -- First user gets IsAdmin=true
+- `internal/app/routes.go` -- /health alias for /healthz
+- `Dockerfile` -- Migrations copy to db/migrations
 - `.ai/status.md` -- Updated
 
 ## Active Branch
@@ -57,8 +63,6 @@ Next: @mentions, password reset, deploy testing on Cosmos Cloud.
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
 - Templ generated files (`*_templ.go`) are gitignored, so `templ generate`
   must run before build on a fresh clone
-- SMTP migration assumes smtp_settings table exists before first admin access
-  (migration must be applied)
 
 ## Recently Completed Milestones
 - 2026-02-19: Project scaffolding and three-tier AI documentation system
@@ -78,3 +82,4 @@ Next: @mentions, password reset, deploy testing on Cosmos Cloud.
 - 2026-02-19: CI/CD pipeline (GitHub Actions: build, test, Docker push to GHCR)
 - 2026-02-19: Production deployment hardening (retry logic, real healthcheck, credential sync)
 - 2026-02-19: Separate DB env vars for Cosmos Cloud compatibility
+- 2026-02-19: Auto-migrations on startup, first-user-is-admin, /health alias

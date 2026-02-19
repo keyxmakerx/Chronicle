@@ -51,7 +51,7 @@ COPY --from=builder /chronicle /usr/local/bin/chronicle
 COPY --from=builder /src/static /app/static
 
 # Copy database migrations for auto-migration on startup.
-COPY --from=builder /src/db/migrations /app/migrations
+COPY --from=builder /src/db/migrations /app/db/migrations
 
 WORKDIR /app
 
