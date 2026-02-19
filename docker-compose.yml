@@ -29,13 +29,8 @@ services:
       - PORT=8080
       - BASE_URL=http://localhost:8080
       - SECRET_KEY=CHANGE-ME-run-openssl-rand-base64-32
-      # -- Database --
-      # DATABASE_URL takes precedence when set. Individual DB_* vars are
-      # ignored if DATABASE_URL is present. Use DATABASE_URL for off-site DBs.
-      # DB_PASSWORD must match MYSQL_PASSWORD below when using local DB.
-      - DATABASE_URL=chronicle:chronicle@tcp(chronicle-db:3306)/chronicle?parseTime=true
-      - DB_HOST=chronicle-db
-      - DB_PORT=3306
+      # -- Database (DB_PASSWORD must match MYSQL_PASSWORD below) --
+      - DB_HOST=chronicle-db:3306
       - DB_USER=chronicle
       - DB_PASSWORD=chronicle
       - DB_NAME=chronicle

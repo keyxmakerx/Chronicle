@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"time"
@@ -41,15 +42,13 @@ type Config struct {
 }
 
 // DatabaseConfig holds MariaDB connection parameters. Individual fields
-// (Host, Port, User, Password, Name) are read from separate env vars so
+// (Host, User, Password, Name) are read from separate env vars so
 // container orchestrators like Cosmos Cloud can manage each independently.
 // If DATABASE_URL is set, it takes precedence over the individual fields.
 type DatabaseConfig struct {
-	// Host is the MariaDB hostname (default: "localhost").
+	// Host is the MariaDB address in host:port format (default: "localhost:3306").
+	// If no port is specified, 3306 is appended automatically.
 	Host string
-
-	// Port is the MariaDB port (default: 3306).
-	Port int
 
 	// User is the MariaDB username (default: "chronicle").
 	User string
@@ -75,7 +74,7 @@ type DatabaseConfig struct {
 
 // DSN returns the go-sql-driver/mysql connection string. If DATABASE_URL was
 // set, it is returned as-is. Otherwise the DSN is built from the individual
-// Host/Port/User/Password/Name fields using the driver's Config.FormatDSN()
+// Host/User/Password/Name fields using the driver's Config.FormatDSN()
 // to safely handle special characters in passwords.
 func (d DatabaseConfig) DSN() string {
 	if d.dsnOverride != "" {
@@ -85,10 +84,20 @@ func (d DatabaseConfig) DSN() string {
 	cfg.User = d.User
 	cfg.Passwd = d.Password
 	cfg.Net = "tcp"
-	cfg.Addr = fmt.Sprintf("%s:%d", d.Host, d.Port)
+	cfg.Addr = ensurePort(d.Host, "3306")
 	cfg.DBName = d.Name
 	cfg.ParseTime = true
 	return cfg.FormatDSN()
+}
+
+// ensurePort appends the default port if the host string doesn't include one.
+// Allows users to set DB_HOST=mydb (gets :3306) or DB_HOST=mydb:3307 (as-is).
+func ensurePort(host, defaultPort string) string {
+	_, _, err := net.SplitHostPort(host)
+	if err != nil {
+		return net.JoinHostPort(host, defaultPort)
+	}
+	return host
 }
 
 // RedisConfig holds Redis connection parameters.
@@ -122,8 +131,7 @@ func Load() (*Config, error) {
 		LogLevel: getEnv("LOG_LEVEL", "debug"),
 
 		Database: DatabaseConfig{
-			Host:            getEnv("DB_HOST", "localhost"),
-			Port:            getEnvInt("DB_PORT", 3306),
+			Host:            getEnv("DB_HOST", "localhost:3306"),
 			User:            getEnv("DB_USER", "chronicle"),
 			Password:        getEnv("DB_PASSWORD", "chronicle"),
 			Name:            getEnv("DB_NAME", "chronicle"),

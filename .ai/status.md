@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- Add DATABASE_URL to docker-compose, special-char-safe DSN builder
+2026-02-19 -- Simplify DB config: merge host+port, drop redundant vars
 
 ## Current Phase
 **Phase 1: Foundation** -- Core infrastructure, auth, campaigns, SMTP, admin,
@@ -21,15 +21,14 @@ Next: @mentions, password reset, deploy testing on Cosmos Cloud.
 ## Last Session Summary
 
 ### Completed
-- **DATABASE_URL added to docker-compose.yml:** Active (not commented out) so
-  users with off-site databases have a single connection string to set.
-  `DATABASE_URL` takes precedence over individual `DB_*` vars when both are set.
-- **Special-char-safe DSN builder:** Replaced `fmt.Sprintf` DSN construction
-  with `mysql.Config{}.FormatDSN()` from go-sql-driver/mysql. This is the
-  driver's canonical method and safely handles passwords with special characters
-  (`@`, `:`, `(`, `)`, etc.) that would break manual string interpolation.
-- **Separate DB env vars:** (prior commit) Individual `DB_HOST`, `DB_PORT`,
-  `DB_USER`, `DB_PASSWORD`, `DB_NAME` for Cosmos Cloud compatibility.
+- **Simplified DB config:** Merged `DB_HOST` + `DB_PORT` into single
+  `DB_HOST=host:port` field (defaults to `:3306` if port omitted). Removed
+  `DB_PORT` and `DATABASE_URL` from docker-compose. 6 DB env vars → 4.
+  `DATABASE_URL` still silently supported in code as a full-DSN override.
+- **Special-char-safe DSN builder:** (prior commit) Uses `mysql.Config.FormatDSN()`
+  to safely handle passwords with special characters.
+- **Separate DB env vars:** (prior commit) Individual `DB_HOST`, `DB_USER`,
+  `DB_PASSWORD`, `DB_NAME` for Cosmos Cloud compatibility.
 - **DB/Redis retry-with-backoff:** (prior commit) Eliminates crash-loop restarts.
 - **Real `/healthz` endpoint:** (prior commit) Pings DB + Redis, returns 503 when down.
 
@@ -40,8 +39,9 @@ Next: @mentions, password reset, deploy testing on Cosmos Cloud.
 - Nothing blocked
 
 ### Files Modified This Session
-- `internal/config/config.go` -- DSN() now uses mysql.Config.FormatDSN()
-- `docker-compose.yml` -- Added DATABASE_URL env var (active)
+- `internal/config/config.go` -- Removed Port field, DB_HOST accepts host:port, added ensurePort()
+- `docker-compose.yml` -- Removed DATABASE_URL and DB_PORT, DB_HOST includes port
+- `.env.example` -- Same simplification
 - `.ai/status.md` -- Updated
 
 ## Active Branch
