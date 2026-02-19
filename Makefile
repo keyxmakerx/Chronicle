@@ -104,8 +104,8 @@ migrate-status: ## Show current migration version
 	migrate -path $(MIGRATIONS) -database "$(DATABASE_URL)" version
 
 .PHONY: seed
-seed: ## Seed dev database with sample data
-	go run ./cmd/seed
+seed: ## Seed dev database with sample data (TODO: implement cmd/seed)
+	@echo "cmd/seed not yet implemented. Default entity types are seeded automatically when creating a campaign."
 
 # --- Docker ---
 .PHONY: docker-up
