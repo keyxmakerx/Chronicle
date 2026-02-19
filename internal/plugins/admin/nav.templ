@@ -1,0 +1,89 @@
+// nav.templ provides a shared admin sidebar navigation component.
+// All admin pages include this to give a consistent navigation experience.
+// The Modules section lists installed game system modules (content packs).
+
+package admin
+
+// adminNav renders the admin sidebar navigation. The activePage parameter
+// highlights the current page link (e.g., "dashboard", "users", "campaigns", "smtp").
+templ adminNav(activePage string) {
+	<nav class="space-y-6">
+		<!-- Administration section -->
+		<div>
+			<h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-3">Administration</h3>
+			<div class="space-y-0.5">
+				<a
+					href="/admin"
+					class={ "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
+						templ.KV("bg-accent/10 text-accent font-medium", activePage == "dashboard"),
+						templ.KV("text-gray-600 hover:bg-gray-100 hover:text-gray-900", activePage != "dashboard") }
+				>
+					<i class="fa-solid fa-gauge w-4 text-center text-xs"></i>
+					Dashboard
+				</a>
+				<a
+					href="/admin/users"
+					class={ "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
+						templ.KV("bg-accent/10 text-accent font-medium", activePage == "users"),
+						templ.KV("text-gray-600 hover:bg-gray-100 hover:text-gray-900", activePage != "users") }
+				>
+					<i class="fa-solid fa-users w-4 text-center text-xs"></i>
+					Users
+				</a>
+				<a
+					href="/admin/campaigns"
+					class={ "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
+						templ.KV("bg-accent/10 text-accent font-medium", activePage == "campaigns"),
+						templ.KV("text-gray-600 hover:bg-gray-100 hover:text-gray-900", activePage != "campaigns") }
+				>
+					<i class="fa-solid fa-book-open w-4 text-center text-xs"></i>
+					Campaigns
+				</a>
+				<a
+					href="/admin/smtp"
+					class={ "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
+						templ.KV("bg-accent/10 text-accent font-medium", activePage == "smtp"),
+						templ.KV("text-gray-600 hover:bg-gray-100 hover:text-gray-900", activePage != "smtp") }
+				>
+					<i class="fa-solid fa-envelope w-4 text-center text-xs"></i>
+					SMTP Settings
+				</a>
+			</div>
+		</div>
+
+		<!-- Modules section -->
+		<div>
+			<h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-3">Modules</h3>
+			<div class="px-3 py-4 text-center">
+				<i class="fa-solid fa-puzzle-piece text-2xl text-gray-200 mb-2"></i>
+				<p class="text-xs text-gray-400">No modules installed</p>
+				<p class="text-xs text-gray-300 mt-1">Game system packs (D&D 5e, Pathfinder, etc.) will appear here.</p>
+			</div>
+		</div>
+
+		<!-- Back link -->
+		<div class="pt-2 border-t border-gray-100">
+			<a href="/campaigns" class="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors">
+				<i class="fa-solid fa-arrow-left w-4 text-center text-xs"></i>
+				Back to Campaigns
+			</a>
+		</div>
+	</nav>
+}
+
+// AdminLayout wraps admin page content with the shared sidebar navigation.
+// Provides consistent two-column layout: nav sidebar + content area.
+templ AdminLayout(title string, activePage string) {
+	<div class="max-w-6xl mx-auto">
+		<div class="flex gap-8">
+			<!-- Admin sidebar nav -->
+			<div class="w-56 shrink-0">
+				@adminNav(activePage)
+			</div>
+			<!-- Page content -->
+			<div class="flex-1 min-w-0">
+				{ children... }
+			</div>
+		</div>
+	</div>
+}

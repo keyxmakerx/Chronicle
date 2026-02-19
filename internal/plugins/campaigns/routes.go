@@ -7,8 +7,8 @@ import (
 )
 
 // RegisterRoutes sets up all campaign-related routes on the given Echo instance.
-// Campaign list and creation require auth only. Campaign-scoped routes require
-// campaign membership via RequireCampaignAccess middleware.
+// Campaign list and creation require auth. Campaign-scoped view routes allow
+// public access to public campaigns. Mutating routes require membership.
 func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.AuthService) {
 	// Campaign list and creation require authentication only.
 	authed := e.Group("", auth.RequireAuth(authSvc))
@@ -20,14 +20,21 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// Accept transfer requires auth but not campaign membership (uses token).
 	authed.GET("/campaigns/:id/accept-transfer", h.AcceptTransfer)
 
-	// Campaign-scoped routes require membership.
+	// Public-capable view routes: logged-in users see full UI, guests see
+	// read-only content for public campaigns.
+	pub := e.Group("/campaigns/:id",
+		auth.OptionalAuth(authSvc),
+		AllowPublicCampaignAccess(svc),
+	)
+	pub.GET("", h.Show, RequireRole(RolePlayer))
+
+	// Authenticated campaign-scoped routes require membership.
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		RequireCampaignAccess(svc),
 	)
 
-	// All members can view the campaign and member list.
-	cg.GET("", h.Show, RequireRole(RolePlayer))
+	// All members.
 	cg.GET("/members", h.Members, RequireRole(RolePlayer))
 
 	// Owner-only routes.

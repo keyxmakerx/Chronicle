@@ -20,6 +20,7 @@ type EntityTypeRepository interface {
 	FindBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]EntityType, error)
 	UpdateLayout(ctx context.Context, id int, layoutJSON string) error
+	UpdateColor(ctx context.Context, id int, color string) error
 	SeedDefaults(ctx context.Context, campaignID string) error
 }
 
@@ -86,9 +87,7 @@ func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityTyp
 	if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
 		return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 	}
-	if len(layoutRaw) > 0 {
-		_ = json.Unmarshal(layoutRaw, &et.Layout)
-	}
+	et.Layout = ParseLayoutJSON(layoutRaw)
 	return et, nil
 }
 
@@ -114,9 +113,7 @@ func (r *entityTypeRepository) FindBySlug(ctx context.Context, campaignID, slug 
 	if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
 		return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 	}
-	if len(layoutRaw) > 0 {
-		_ = json.Unmarshal(layoutRaw, &et.Layout)
-	}
+	et.Layout = ParseLayoutJSON(layoutRaw)
 	return et, nil
 }
 
@@ -145,9 +142,7 @@ func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID st
 		if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
 			return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 		}
-		if len(layoutRaw) > 0 {
-			_ = json.Unmarshal(layoutRaw, &et.Layout)
-		}
+		et.Layout = ParseLayoutJSON(layoutRaw)
 		types = append(types, et)
 	}
 	return types, rows.Err()
@@ -162,6 +157,23 @@ func (r *entityTypeRepository) UpdateLayout(ctx context.Context, id int, layoutJ
 	)
 	if err != nil {
 		return fmt.Errorf("updating entity type layout: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("entity type not found")
+	}
+	return nil
+}
+
+// UpdateColor updates only the color for an entity type. Used by the
+// entity type settings widget to change the display color.
+func (r *entityTypeRepository) UpdateColor(ctx context.Context, id int, color string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE entity_types SET color = ? WHERE id = ?`,
+		color, id,
+	)
+	if err != nil {
+		return fmt.Errorf("updating entity type color: %w", err)
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {

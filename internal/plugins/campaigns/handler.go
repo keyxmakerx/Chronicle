@@ -172,6 +172,7 @@ func (h *Handler) Update(c echo.Context) error {
 	input := UpdateCampaignInput{
 		Name:        req.Name,
 		Description: req.Description,
+		IsPublic:    req.IsPublic,
 	}
 
 	_, err := h.service.Update(c.Request().Context(), cc.Campaign.ID, input)

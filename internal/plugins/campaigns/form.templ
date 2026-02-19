@@ -77,6 +77,23 @@ templ CampaignFormComponent(csrfToken string, campaign *Campaign, req *CreateCam
 					</textarea>
 				</div>
 
+				<div class="flex items-center">
+					<input
+						type="checkbox"
+						id="is_public"
+						name="is_public"
+						value="true"
+						if campaign.IsPublic {
+							checked
+						}
+						class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+					/>
+					<label for="is_public" class="ml-2 block text-sm text-gray-700">
+						Make this campaign public
+					</label>
+				</div>
+				<p class="text-xs text-gray-500 -mt-4 ml-6">Public campaigns can be viewed by anyone without logging in.</p>
+
 				<div class="flex items-center space-x-4">
 					<button type="submit" class="btn-primary">Save Changes</button>
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", campaign.ID)) } class="btn-secondary">Cancel</a>

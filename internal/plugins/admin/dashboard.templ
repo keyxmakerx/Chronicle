@@ -8,77 +8,51 @@ import (
 // AdminDashboardPage renders the admin overview with high-level stats.
 templ AdminDashboardPage(userCount, campaignCount int, smtpConfigured bool) {
 	@layouts.App("Admin Dashboard") {
-		<div class="max-w-4xl mx-auto">
-			<div class="flex items-center justify-between mb-6">
+		@AdminLayout("Admin Dashboard", "dashboard") {
+			<div class="space-y-6">
 				<h1 class="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-				<a href="/campaigns" class="text-sm text-gray-500 hover:text-gray-700 transition-colors">
-					Back to Campaigns
-				</a>
-			</div>
 
-			<!-- Stats Cards -->
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-				<!-- Users -->
-				<a href="/admin/users" class="card hover:shadow-md transition-shadow group">
-					<div class="flex items-center justify-between">
-						<p class="text-sm font-medium text-gray-500">Total Users</p>
-						<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
-							<i class="fa-solid fa-users text-accent"></i>
-						</span>
-					</div>
-					<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", userCount) }</p>
-					<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">Manage users &rarr;</p>
-				</a>
-				<!-- Campaigns -->
-				<a href="/admin/campaigns" class="card hover:shadow-md transition-shadow group">
-					<div class="flex items-center justify-between">
-						<p class="text-sm font-medium text-gray-500">Total Campaigns</p>
-						<span class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
-							<i class="fa-solid fa-book-open text-blue-500"></i>
-						</span>
-					</div>
-					<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", campaignCount) }</p>
-					<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">Manage campaigns &rarr;</p>
-				</a>
-				<!-- SMTP -->
-				<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">
-					<div class="flex items-center justify-between">
-						<p class="text-sm font-medium text-gray-500">SMTP Status</p>
-						<span class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
-							<i class="fa-solid fa-envelope text-emerald-500"></i>
-						</span>
-					</div>
-					if smtpConfigured {
-						<p class="text-lg font-semibold text-emerald-600 mt-2">Configured</p>
-					} else {
-						<p class="text-lg font-semibold text-amber-600 mt-2">Not Configured</p>
-					}
-					<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">SMTP settings &rarr;</p>
-				</a>
-			</div>
-
-			<!-- Quick Links -->
-			<div class="card">
-				<h2 class="text-lg font-semibold text-gray-900 mb-4">Quick Links</h2>
-				<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-					<a href="/admin/users" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors group">
-						<i class="fa-solid fa-user-gear text-gray-400 group-hover:text-accent transition-colors"></i>
-						<span class="text-sm text-gray-700 group-hover:text-gray-900">Manage Users</span>
+				<!-- Stats Cards -->
+				<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+					<!-- Users -->
+					<a href="/admin/users" class="card hover:shadow-md transition-shadow group">
+						<div class="flex items-center justify-between">
+							<p class="text-sm font-medium text-gray-500">Total Users</p>
+							<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+								<i class="fa-solid fa-users text-accent"></i>
+							</span>
+						</div>
+						<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", userCount) }</p>
+						<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">Manage users &rarr;</p>
 					</a>
-					<a href="/admin/campaigns" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors group">
-						<i class="fa-solid fa-book-open text-gray-400 group-hover:text-accent transition-colors"></i>
-						<span class="text-sm text-gray-700 group-hover:text-gray-900">Manage Campaigns</span>
+					<!-- Campaigns -->
+					<a href="/admin/campaigns" class="card hover:shadow-md transition-shadow group">
+						<div class="flex items-center justify-between">
+							<p class="text-sm font-medium text-gray-500">Total Campaigns</p>
+							<span class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+								<i class="fa-solid fa-book-open text-blue-500"></i>
+							</span>
+						</div>
+						<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", campaignCount) }</p>
+						<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">Manage campaigns &rarr;</p>
 					</a>
-					<a href="/admin/smtp" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors group">
-						<i class="fa-solid fa-envelope text-gray-400 group-hover:text-accent transition-colors"></i>
-						<span class="text-sm text-gray-700 group-hover:text-gray-900">SMTP Settings</span>
-					</a>
-					<a href="/campaigns" class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors group">
-						<i class="fa-solid fa-arrow-left text-gray-400 group-hover:text-accent transition-colors"></i>
-						<span class="text-sm text-gray-700 group-hover:text-gray-900">Back to Campaigns</span>
+					<!-- SMTP -->
+					<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">
+						<div class="flex items-center justify-between">
+							<p class="text-sm font-medium text-gray-500">SMTP Status</p>
+							<span class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+								<i class="fa-solid fa-envelope text-emerald-500"></i>
+							</span>
+						</div>
+						if smtpConfigured {
+							<p class="text-lg font-semibold text-emerald-600 mt-2">Configured</p>
+						} else {
+							<p class="text-lg font-semibold text-amber-600 mt-2">Not Configured</p>
+						}
+						<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">SMTP settings &rarr;</p>
 					</a>
 				</div>
 			</div>
-		</div>
+		}
 	}
 }

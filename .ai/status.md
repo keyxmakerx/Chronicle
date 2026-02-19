@@ -8,41 +8,43 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- Security audit: comprehensive vulnerability fixes
+2026-02-19 -- Visual template editor, layout-driven entity pages, admin nav
 
 ## Current Phase
 **Phase 2: Media & UI** -- Building on the Phase 1 foundation. Media plugin
 for file uploads, security hardening, dynamic sidebar, entity image upload,
-UI quality improvements, sidebar customization (drag-to-reorder, hide/show
-entity types), and layout builder scaffold (two-column entity profile layout
-editor). Comprehensive security audit completed with 14 fixes across 14 files.
-All tests pass.
+UI quality improvements, sidebar customization, visual template editor for
+entity type page layouts, and public campaign support.
 
 ## Last Session Summary
 
 ### Completed
-- **Full codebase security audit:** Reviewed all 6 plugins, middleware, core
-  infrastructure, templates, and JS widgets for vulnerabilities and code quality.
-- **14 security fixes applied across 14 files:**
-  - CSRF timing attack fix (constant-time comparison)
-  - CSRF form field name mismatch (`_csrf` -> `csrf_token` in 2 templates)
-  - Deprecated X-XSS-Protection header disabled (set to "0")
-  - Health endpoint info leak fixed (generic error messages, server-side logging)
-  - SECRET_KEY validation (case-insensitive env check, 32-char minimum in prod)
-  - generateUUID error handling (panic on rand failure in 3 locations)
-  - Slug generation bounded loop (100 attempts + random fallback in 2 locations)
-  - FULLTEXT boolean mode operator stripping in entity search
-  - LIKE wildcard injection escaping in entity search
-  - Directory traversal prevention for entity image paths
-  - Last admin removal protection
-  - SMTP header injection prevention (from_address, from_name, subject)
-  - SMTP encryption mode and port range validation
-  - Media upload body size limit middleware
-- **Documentation fixes:** Updated Go version in tech-stack.md, added missing
-  API routes to api-routes.md (image upload, entity type layout endpoints).
-- **Bug fixes:**
-  - `config.IsDevelopment()` now case-insensitive, also matches "dev"
-  - Media upload: clean up thumbnails on disk when DB insert fails
+- **Visual template editor:** Full drag-and-drop page template editor for
+  entity types. Campaign owners can design entity profile page layouts at
+  `/campaigns/:id/entity-types/:etid/template`.
+  - New row/column/block grid system (12-column CSS grid).
+  - Six block types: title, image, entry, attributes, details, divider.
+  - Row layout presets: full-width, 50/50, 67/33, 33/67, 3-column, 4-column.
+  - Drag from palette to add blocks, drag within canvas to reorder.
+  - Auto-save via PUT endpoint, Ctrl+S keyboard shortcut.
+  - Backward-compatible ParseLayoutJSON() handles old section format.
+- **Layout-driven entity show page:** Entity profile pages now render
+  dynamically from the entity type's layout_json instead of a hardcoded
+  two-column layout. Block components: blockTitle, blockImage, blockEntry,
+  blockAttributes, blockDetails, blockDivider. Falls back to default layout
+  if no layout is configured.
+- **Admin panel navigation with modules section:** All admin pages now share
+  a consistent sidebar navigation (`AdminLayout` component) with:
+  - Administration links: Dashboard, Users, Campaigns, SMTP Settings
+  - Modules section: placeholder for game system content packs (D&D 5e, etc.)
+  - "Back to Campaigns" link
+- **Public campaign support** (from previous session, finalized):
+  - Edit form checkbox, IsPublic wired into service Update
+  - Guest-friendly topbar, sidebar, and campaign picker
+- **Cleanup:** Removed stale layout_builder.js, simplified entity_type_config.js
+  to sidebar ordering + visibility + color only (no inline layout editing).
+- **Tailwind safelist:** Added col-span-1 through col-span-12 to tailwind
+  config safelist for dynamic grid column rendering.
 
 ### In Progress
 - Nothing currently in progress
@@ -50,33 +52,28 @@ All tests pass.
 ### Blocked
 - Nothing blocked
 
-### Known Security Items (Deferred -- Larger Changes)
-- **Stored XSS via entry_html:** entry_html is not rendered as raw HTML in
-  templates (TipTap uses ProseMirror JSON), but adding bluemonday sanitization
-  at storage time would provide defense-in-depth. Requires new dependency.
-- **CSP unsafe-eval/unsafe-inline:** Required by Alpine.js. Migrating to
-  Alpine.js CSP build would allow tightening the Content-Security-Policy.
-- **In-memory rate limiter:** Current rate limiter uses sync.Map (not Redis),
-  so limits don't persist across restarts or multiple instances. Fine for
-  single-instance deployments but should move to Redis for multi-instance.
-
 ### Files Modified This Session
-- `internal/middleware/csrf.go` -- Constant-time CSRF comparison
-- `internal/middleware/security.go` -- X-XSS-Protection set to "0"
-- `internal/app/routes.go` -- Health endpoint info leak fix, media route maxSize param
-- `internal/config/config.go` -- Case-insensitive env check, 32-char SECRET_KEY minimum
-- `internal/plugins/entities/service.go` -- generateUUID panic, slug bounds, path traversal
-- `internal/plugins/entities/repository.go` -- FULLTEXT operator stripping, LIKE escaping
-- `internal/plugins/campaigns/service.go` -- generateUUID panic, slug bounds
-- `internal/plugins/admin/handler.go` -- Last admin removal protection
-- `internal/plugins/auth/repository.go` -- CountAdmins interface + implementation
-- `internal/plugins/smtp/service.go` -- Header injection, validation hardening
-- `internal/plugins/smtp/settings.templ` -- CSRF field name fix
-- `internal/plugins/admin/campaigns.templ` -- CSRF field name fix
-- `internal/plugins/media/service.go` -- generateUUID panic fix
-- `internal/plugins/media/routes.go` -- Body size limit middleware
-- `.ai/tech-stack.md` -- Go version updated to 1.24+
-- `.ai/api-routes.md` -- Added missing image + layout API routes
+- `internal/plugins/entities/model.go` -- New TemplateRow/Column/Block types, DefaultLayout(), ParseLayoutJSON()
+- `internal/plugins/entities/repository.go` -- ParseLayoutJSON in all scan locations
+- `internal/plugins/entities/service.go` -- Row/column/block validation for layout updates
+- `internal/plugins/entities/handler.go` -- TemplateEditor handler
+- `internal/plugins/entities/routes.go` -- Template editor route
+- `internal/plugins/entities/show.templ` -- Dynamic layout rendering with block components
+- `internal/plugins/entities/template_editor.templ` -- New template editor page
+- `static/js/widgets/template_editor.js` -- New drag-and-drop editor widget
+- `static/js/widgets/entity_type_config.js` -- Simplified (removed inline layout editing)
+- `internal/plugins/admin/nav.templ` -- New shared admin nav component
+- `internal/plugins/admin/dashboard.templ` -- Uses AdminLayout
+- `internal/plugins/admin/users.templ` -- Uses AdminLayout
+- `internal/plugins/admin/campaigns.templ` -- Uses AdminLayout
+- `internal/templates/layouts/base.templ` -- Added template_editor.js script tag
+- `tailwind.config.js` -- Added col-span safelist for dynamic grid
+- `internal/plugins/campaigns/service.go` -- IsPublic in Update
+- `internal/plugins/campaigns/form.templ` -- IsPublic checkbox
+- `internal/templates/layouts/data.go` -- IsAuthenticated context helper
+- `internal/templates/layouts/app.templ` -- Guest-friendly topbar/sidebar
+- `internal/app/routes.go` -- SetIsAuthenticated in LayoutInjector
+- Deleted: `static/js/widgets/layout_builder.js` (replaced by template_editor.js)
 
 ## Active Branch
 `claude/resume-previous-work-YqXiG`
@@ -85,8 +82,9 @@ All tests pass.
 1. **@mentions** -- Search entities in editor, insert link, parse/render server-side
 2. **Password reset** -- Wire auth password reset with SMTP when configured
 3. **Entity relations** -- Bi-directional entity linking
-4. **Apply layout_json to entity show page** -- Render entity profiles using the layout config
-5. **Entity type CRUD** -- Let campaign owners add/edit/remove entity types
+4. **Entity type CRUD** -- Let campaign owners add/edit/remove entity types
+5. **Game system modules** -- Implement module registry, D&D 5e module, admin module settings
+6. **Regenerate Tailwind CSS** -- Run `make tailwind` to include new safelist classes
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -119,3 +117,5 @@ All tests pass.
 - 2026-02-19: Sidebar customization (drag-to-reorder, hide/show entity types)
 - 2026-02-19: Layout builder scaffold (two-column entity profile layout editor)
 - 2026-02-19: Comprehensive security audit (14 vulnerability fixes across 14 files)
+- 2026-02-19: Unified entity type config, color picker, public campaigns
+- 2026-02-19: Visual template editor, layout-driven entity pages, admin nav with modules

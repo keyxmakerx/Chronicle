@@ -11,9 +11,10 @@ import "context"
 type ctxKey string
 
 const (
-	keyUserName      ctxKey = "layout_user_name"
-	keyUserEmail     ctxKey = "layout_user_email"
-	keyIsAdmin       ctxKey = "layout_is_admin"
+	keyIsAuthenticated ctxKey = "layout_is_authenticated"
+	keyUserName        ctxKey = "layout_user_name"
+	keyUserEmail       ctxKey = "layout_user_email"
+	keyIsAdmin         ctxKey = "layout_is_admin"
 	keyCampaignID    ctxKey = "layout_campaign_id"
 	keyCampaignName  ctxKey = "layout_campaign_name"
 	keyCampaignRole  ctxKey = "layout_campaign_role"
@@ -89,6 +90,11 @@ func SortSidebarTypes(types []SidebarEntityType, order []int, hidden []int) []Si
 
 // --- Setters (called by the layout injector in app/routes.go) ---
 
+// SetIsAuthenticated marks whether the current request has a valid session.
+func SetIsAuthenticated(ctx context.Context, authed bool) context.Context {
+	return context.WithValue(ctx, keyIsAuthenticated, authed)
+}
+
 // SetUserName stores the authenticated user's display name in context.
 func SetUserName(ctx context.Context, name string) context.Context {
 	return context.WithValue(ctx, keyUserName, name)
@@ -140,6 +146,12 @@ func SetActivePath(ctx context.Context, path string) context.Context {
 }
 
 // --- Getters (called by Templ templates) ---
+
+// IsAuthenticated returns true if the current request has a valid session.
+func IsAuthenticated(ctx context.Context) bool {
+	authed, _ := ctx.Value(keyIsAuthenticated).(bool)
+	return authed
+}
 
 // GetUserName returns the authenticated user's display name, or "".
 func GetUserName(ctx context.Context) string {

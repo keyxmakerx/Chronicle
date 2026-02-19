@@ -1,0 +1,68 @@
+// template_editor.templ renders the visual template editor for an entity type.
+// Campaign owners use this to design entity page layouts by dragging and
+// dropping blocks into a 12-column grid.
+
+package entities
+
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// layoutJSON serializes the entity type layout for the JS widget.
+func layoutJSON(et *EntityType) string {
+	b, _ := json.Marshal(et.Layout)
+	return string(b)
+}
+
+// fieldsJSON serializes the entity type fields for the JS widget.
+func fieldsJSON(et *EntityType) string {
+	b, _ := json.Marshal(et.Fields)
+	return string(b)
+}
+
+// TemplateEditorPage renders the full-page template editor.
+templ TemplateEditorPage(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
+	@layouts.App(fmt.Sprintf("Template: %s", et.Name)) {
+		<div class="h-full flex flex-col -m-6">
+			<!-- Editor header -->
+			<div class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+				<div class="flex items-center gap-3">
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) }
+						class="text-gray-400 hover:text-gray-600 transition-colors"
+						title="Back to settings"
+					>
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+						</svg>
+					</a>
+					<div>
+						<h1 class="text-lg font-semibold text-gray-900">
+							<i class={ "fa-solid " + et.Icon, "mr-1" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
+							{ et.Name } Template
+						</h1>
+						<p class="text-xs text-gray-500">Drag blocks to design the { et.Name } page layout</p>
+					</div>
+				</div>
+				<div class="flex items-center gap-2">
+					<span id="te-save-status" class="text-xs text-gray-400"></span>
+					<button id="te-save-btn" class="btn-primary text-sm">Save Template</button>
+				</div>
+			</div>
+
+			<!-- Editor body -->
+			<div
+				class="flex-1 overflow-hidden"
+				data-widget="template-editor"
+				data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/layout", cc.Campaign.ID, et.ID) }
+				data-layout={ layoutJSON(et) }
+				data-fields={ fieldsJSON(et) }
+				data-entity-type-name={ et.Name }
+				data-csrf-token={ csrfToken }
+			></div>
+		</div>
+	}
+}

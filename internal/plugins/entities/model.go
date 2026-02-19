@@ -7,6 +7,8 @@
 package entities
 
 import (
+	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -33,21 +35,144 @@ type EntityType struct {
 }
 
 // EntityTypeLayout describes the profile page layout for entities of this type.
-// Controls the two-column layout with configurable sections. Stored as JSON
-// in entity_types.layout_json.
+// Uses a row-based 12-column grid system. Stored as JSON in entity_types.layout_json.
+//
+// Schema: {"rows": [{"id":"r1", "columns": [{"id":"c1", "width":8, "blocks":[...]}]}]}
 type EntityTypeLayout struct {
-	// Sections defines the ordered list of sections on the entity profile.
-	// Each section appears as a collapsible block on the entity page.
-	Sections []LayoutSection `json:"sections"`
+	Rows []TemplateRow `json:"rows"`
 }
 
-// LayoutSection is a named group of content on the entity profile page.
-// Sections can contain fields, the main entry editor, or custom blocks.
-type LayoutSection struct {
-	Key    string `json:"key"`    // Machine-readable identifier (e.g., "basics", "entry").
-	Label  string `json:"label"`  // Human-readable label (e.g., "Basics", "Main Entry").
-	Type   string `json:"type"`   // Section type: "fields", "entry", "posts".
-	Column string `json:"column"` // Layout column: "left" (sidebar) or "right" (main).
+// TemplateRow is a horizontal row in the page template grid.
+type TemplateRow struct {
+	ID      string           `json:"id"`
+	Columns []TemplateColumn `json:"columns"`
+}
+
+// TemplateColumn is a column within a row. Width uses a 12-column grid (1-12).
+type TemplateColumn struct {
+	ID     string          `json:"id"`
+	Width  int             `json:"width"`
+	Blocks []TemplateBlock `json:"blocks"`
+}
+
+// TemplateBlock is a content component placed inside a column.
+// Valid types: "title", "image", "entry", "attributes", "details", "divider".
+type TemplateBlock struct {
+	ID     string         `json:"id"`
+	Type   string         `json:"type"`
+	Config map[string]any `json:"config,omitempty"`
+}
+
+// DefaultLayout returns the standard two-column layout used for new entity types.
+func DefaultLayout() EntityTypeLayout {
+	return EntityTypeLayout{
+		Rows: []TemplateRow{
+			{
+				ID: "row-1",
+				Columns: []TemplateColumn{
+					{
+						ID:    "col-1-1",
+						Width: 8,
+						Blocks: []TemplateBlock{
+							{ID: "blk-title", Type: "title"},
+							{ID: "blk-entry", Type: "entry"},
+						},
+					},
+					{
+						ID:    "col-1-2",
+						Width: 4,
+						Blocks: []TemplateBlock{
+							{ID: "blk-image", Type: "image"},
+							{ID: "blk-attrs", Type: "attributes"},
+							{ID: "blk-details", Type: "details"},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// ParseLayoutJSON decodes layout JSON with backward compatibility.
+// Handles three cases:
+//  1. New format with "rows" key → unmarshal directly
+//  2. Old format with "sections" key → convert sections to rows/columns
+//  3. Empty/invalid → return DefaultLayout()
+func ParseLayoutJSON(raw []byte) EntityTypeLayout {
+	if len(raw) == 0 {
+		return DefaultLayout()
+	}
+
+	// Try new format first (rows key).
+	var layout EntityTypeLayout
+	if err := json.Unmarshal(raw, &layout); err == nil && len(layout.Rows) > 0 {
+		return layout
+	}
+
+	// Try old format (sections key).
+	var legacy struct {
+		Sections []struct {
+			Key    string `json:"key"`
+			Label  string `json:"label"`
+			Type   string `json:"type"`
+			Column string `json:"column"`
+		} `json:"sections"`
+	}
+	if err := json.Unmarshal(raw, &legacy); err == nil && len(legacy.Sections) > 0 {
+		return convertLegacyLayout(legacy.Sections)
+	}
+
+	return DefaultLayout()
+}
+
+// convertLegacyLayout transforms old section-based layouts into the new
+// row/column/block format.
+func convertLegacyLayout(sections []struct {
+	Key    string `json:"key"`
+	Label  string `json:"label"`
+	Type   string `json:"type"`
+	Column string `json:"column"`
+}) EntityTypeLayout {
+	var leftBlocks, rightBlocks []TemplateBlock
+
+	for _, sec := range sections {
+		blockType := sec.Type
+		switch blockType {
+		case "fields":
+			blockType = "attributes"
+		case "posts":
+			blockType = "details"
+		}
+		block := TemplateBlock{
+			ID:   fmt.Sprintf("blk-%s", sec.Key),
+			Type: blockType,
+		}
+		if sec.Column == "left" {
+			leftBlocks = append(leftBlocks, block)
+		} else {
+			rightBlocks = append(rightBlocks, block)
+		}
+	}
+
+	// Build single row with left=sidebar (4), right=main (8).
+	cols := []TemplateColumn{}
+	if len(rightBlocks) > 0 {
+		cols = append(cols, TemplateColumn{
+			ID: "col-1-1", Width: 8, Blocks: rightBlocks,
+		})
+	}
+	if len(leftBlocks) > 0 {
+		cols = append(cols, TemplateColumn{
+			ID: "col-1-2", Width: 4, Blocks: leftBlocks,
+		})
+	}
+	if len(cols) == 0 {
+		return DefaultLayout()
+	}
+
+	return EntityTypeLayout{
+		Rows: []TemplateRow{{ID: "row-1", Columns: cols}},
+	}
 }
 
 // FieldDefinition describes a single custom field in an entity type.

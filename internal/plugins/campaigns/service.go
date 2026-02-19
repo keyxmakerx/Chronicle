@@ -218,6 +218,7 @@ func (s *campaignService) Update(ctx context.Context, campaignID string, input U
 	} else {
 		campaign.Description = nil
 	}
+	campaign.IsPublic = input.IsPublic
 
 	if err := s.repo.Update(ctx, campaign); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("updating campaign: %w", err))
