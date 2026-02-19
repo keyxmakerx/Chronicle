@@ -4,7 +4,7 @@
 package campaigns
 
 import (
-	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -35,28 +35,13 @@ templ CampaignListContent(campaigns []Campaign, total int, opts ListOptions, csr
 				}
 			</div>
 
-			if total > opts.PerPage {
-				<div class="mt-8 flex justify-center space-x-2">
-					if opts.Page > 1 {
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns?page=%d", opts.Page-1)) }
-							class="btn-secondary text-sm"
-							hx-get={ fmt.Sprintf("/campaigns?page=%d", opts.Page-1) }
-							hx-target="#campaign-list"
-							hx-swap="outerHTML"
-						>Previous</a>
-					}
-					if opts.Page * opts.PerPage < total {
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns?page=%d", opts.Page+1)) }
-							class="btn-secondary text-sm"
-							hx-get={ fmt.Sprintf("/campaigns?page=%d", opts.Page+1) }
-							hx-target="#campaign-list"
-							hx-swap="outerHTML"
-						>Next</a>
-					}
-				</div>
-			}
+			@components.Pagination(components.PaginationData{
+				CurrentPage: opts.Page,
+				PerPage:     opts.PerPage,
+				Total:       total,
+				BaseURL:     "/campaigns",
+				HTMXTarget:  "#campaign-list",
+			})
 		}
 	</div>
 }

@@ -48,7 +48,8 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] RequireCampaignAccess + RequireRole middleware
 - [x] Ownership transfer flow (72h token, optional email)
 - [x] Campaign Templ pages (index, show, form, settings, members)
-- [ ] Campaign selector in navigation (needs app layout)
+- [x] Campaign sidebar navigation in app layout (entity types, members, settings)
+- [ ] Campaign selector dropdown in topbar
 
 ### Priority 3.5 -- SMTP Plugin
 - [x] SMTP settings singleton table (migration 000003)
@@ -84,13 +85,16 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [ ] Entity mention parsing and rendering server-side
 
 ### Priority 6 -- UI & Layouts (Must Do)
-- [ ] Base Templ layout (HTML shell, head, scripts, styles)
-- [ ] App layout (authenticated -- sidebar + topbar + content area)
-- [ ] Sidebar navigation (campaign entities, collapsible)
-- [ ] Topbar (user menu, campaign selector, search)
-- [ ] Tailwind CSS styling (dark sidebar, light content -- Kanka-inspired)
-- [ ] Flash messages component
-- [ ] Pagination component
+- [x] Base Templ layout (HTML shell, head, scripts, styles)
+- [x] App layout (authenticated -- sidebar + topbar + content area)
+- [x] Sidebar navigation (campaign entities, dynamic via context injection)
+- [x] Topbar (user avatar, admin link, campaign-scoped search, CSRF logout)
+- [x] Tailwind CSS config (dark sidebar, light content -- Kanka-inspired)
+- [x] Flash messages component (Alpine.js auto-dismiss, success/error)
+- [x] Pagination component (shared, HTMX-aware, used by campaigns + entities)
+- [x] LayoutInjector pattern (middleware.Render copies auth/campaign data to Go context)
+- [ ] Campaign selector dropdown in topbar
+- [ ] Generate Tailwind CSS output (requires tailwindcss binary)
 
 ### Priority 7 -- Build & Deploy (Should Do)
 - [ ] Dockerfile builds successfully (multi-stage)

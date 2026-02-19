@@ -8,43 +8,41 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- Entities plugin implementation session
+2026-02-19 -- UI & Layouts session (dynamic sidebar, topbar, pagination, flash messages)
 
 ## Current Phase
 **Phase 1: Foundation** -- Core infrastructure, auth, campaigns, SMTP, admin,
-and **entities** plugins are built. App compiles successfully. Next: editor widget,
-then UI/layouts polish.
+entities plugins, and **UI layouts** are built. App compiles successfully.
+Next: editor widget (TipTap), then remaining polish.
 
 ## Last Session Summary
 
 ### Completed
-- **Entities plugin fully implemented:**
-  - Migration 000004 (entity_types + entities tables with FULLTEXT index)
-  - `model.go` -- Entity, EntityType, FieldDefinition structs, CreateEntityRequest,
-    UpdateEntityRequest, CreateEntityInput, UpdateEntityInput DTOs, ListOptions,
-    Slugify helper
-  - `repository.go` -- EntityTypeRepository (CRUD, SeedDefaults with 6 default types
-    in transaction) + EntityRepository (CRUD, ListByCampaign with privacy filtering,
-    Search with FULLTEXT + LIKE fallback, CountByType for sidebar badges, SlugExists)
-  - `service.go` -- EntityService (CRUD with slug gen, privacy enforcement, search,
-    entity type management, SeedDefaults). Also satisfies campaigns.EntityTypeSeeder.
-  - `handler.go` -- 8 thin handlers (Index, NewForm, Create, Show, EditForm, Update,
-    Delete, SearchAPI) with dynamic field parsing from form params (field_<key>)
-  - `routes.go` -- Campaign-scoped routes with RequireCampaignAccess + RequireRole
-    middleware. Shortcut routes: /characters, /locations, /organizations, /items,
-    /notes, /events
-  - Templ templates: index (type filter sidebar + grid), entity_card (type badge +
-    privacy), show (profile with sidebar fields + main content), form (create/edit
-    with dynamic fields), search_results (HTMX fragment)
-- **Campaigns plugin extended:**
-  - `model.go` -- Added EntityTypeSeeder interface (like UserFinder, MailService)
-  - `service.go` -- Added `seeder EntityTypeSeeder` field, updated NewCampaignService
-    to accept seeder, Create() now calls SeedDefaults after adding owner (non-fatal)
-  - `show.templ` -- Updated Entities card from "Coming soon" to link to entities list
-- **Route wiring updated:**
-  - `app/routes.go` -- Entities repos/service created BEFORE campaigns service (DI order
-    change). EntityService passed as EntityTypeSeeder to campaigns. Entity routes
-    registered with campaign middleware.
+- **UI & Layouts overhaul:**
+  - `layouts/data.go` -- Layout data context helpers (typed setters/getters for user,
+    campaign, CSRF, flash messages, active path) using Go's `context.Context`
+  - `layouts/app.templ` -- Fully redesigned:
+    - **Dynamic sidebar:** Shows campaign entity type links (Characters, Locations,
+      Organizations, Items, Notes, Events) with colored dot indicators when in
+      campaign context. Shows generic "My Campaigns" nav when not in a campaign.
+      Includes Members, Settings links, "All Campaigns" back link, and Admin link
+      (for site admins). Active state highlighting via path matching.
+    - **Dynamic topbar:** User avatar with initials, user name, admin link (if admin),
+      campaign-scoped entity search (HTMX), CSRF-protected logout form.
+    - **Flash messages:** Success/error flash messages that auto-dismiss via Alpine.js
+      (5s for success, 8s for error) with manual close button.
+  - `middleware/helpers.go` -- Added `LayoutInjector` callback pattern to `Render()`.
+    Before every template render, copies auth session and campaign context data from
+    Echo's context into Go's `context.Context` for Templ to read.
+  - `app/routes.go` -- Registered the LayoutInjector callback that copies: user name,
+    email, admin status, campaign ID/name/role, CSRF token, and active path.
+  - `components/pagination.templ` -- Shared pagination component with `PaginationData`
+    struct. Supports HTMX partial swap via optional `HTMXTarget`. Shows prev/next
+    buttons with page N of M indicator. Used by campaigns and entities list pages.
+  - Updated `campaigns/index.templ` and `entities/index.templ` to use shared pagination
+  - **Error page improvements (previous session):** Contextual error pages with
+    color-coded badges, type-specific titles, smart navigation links, HTMX support
+- **Doc fixes:** Updated admin/.ai.md and smtp/.ai.md integration checkboxes
 - **Build succeeds:** `go build ./...` and `go vet ./...` pass with zero errors
 
 ### In Progress
@@ -54,17 +52,18 @@ then UI/layouts polish.
 - Nothing blocked
 
 ### Files Created This Session
-- `db/migrations/000004_create_entities.up.sql`, `000004_create_entities.down.sql`
-- `internal/plugins/entities/` -- model.go, repository.go, service.go, handler.go,
-  routes.go, index.templ, entity_card.templ, show.templ, form.templ,
-  search_results.templ + generated _templ.go files
+- `internal/templates/layouts/data.go` -- Context helpers for layout data
+- `internal/templates/components/pagination.templ` -- Shared pagination component
 
 ### Files Modified This Session
-- `internal/plugins/campaigns/model.go` -- Added EntityTypeSeeder interface
-- `internal/plugins/campaigns/service.go` -- Added seeder field, updated constructor,
-  seed defaults in Create()
-- `internal/plugins/campaigns/show.templ` -- Updated Entities card to link to entities
-- `internal/app/routes.go` -- Wired entities plugin, reordered DI
+- `internal/templates/layouts/app.templ` -- Complete redesign with dynamic sidebar/topbar
+- `internal/middleware/helpers.go` -- LayoutInjector callback in Render
+- `internal/app/routes.go` -- Layout injector registration, layouts import
+- `internal/plugins/entities/index.templ` -- Replaced inline pagination with component
+- `internal/plugins/campaigns/index.templ` -- Replaced inline pagination with component
+- `internal/plugins/admin/.ai.md` -- Fixed integration checkbox
+- `internal/plugins/smtp/.ai.md` -- Fixed integration checkbox
+- `.ai/todo.md` -- Updated UI & Layouts items
 
 ## Active Branch
 `claude/setup-ai-project-docs-LhvVz`
@@ -74,13 +73,12 @@ then UI/layouts polish.
    - TipTap vendored JS bundle
    - editor.js widget with Chronicle.register()
    - boot.js widget auto-mounter
-   - Save/load entity entry content
-2. **UI & Layouts** -- Authenticated app layout:
-   - Dynamic sidebar navigation (entity types from campaign)
-   - Topbar (user menu, campaign selector, search)
-   - Tailwind CSS styling
+   - Save/load entity entry content via API
+2. **Campaign selector** -- Dropdown in topbar to switch between campaigns
 3. **Password reset** -- Wire auth password reset with SMTP when configured
 4. **Tests** -- Unit tests for entities service and repository
+5. **Tailwind CSS** -- Generate app.css (requires tailwindcss binary)
+6. **Vendor libraries** -- HTMX + Alpine.js (currently CDN)
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -103,3 +101,4 @@ then UI/layouts polish.
 - 2026-02-19: SMTP plugin (encrypted password, STARTTLS/SSL, test connection)
 - 2026-02-19: Admin plugin (user management, campaign oversight, SMTP config)
 - 2026-02-19: Entities plugin (CRUD, entity types, FULLTEXT search, privacy, dynamic fields)
+- 2026-02-19: UI & Layouts (dynamic sidebar, topbar, pagination, flash messages, error pages)

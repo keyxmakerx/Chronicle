@@ -1,0 +1,143 @@
+// data.go provides typed context helpers for passing layout data from
+// handlers/middleware to Templ templates. This avoids importing plugin
+// types in the layouts package — only simple types are stored.
+//
+// Data flow: Handler/Middleware → Echo Context → LayoutInjector → Go Context → Templ
+package layouts
+
+import "context"
+
+// ctxKey is a private type for context keys to prevent collisions.
+type ctxKey string
+
+const (
+	keyUserName     ctxKey = "layout_user_name"
+	keyUserEmail    ctxKey = "layout_user_email"
+	keyIsAdmin      ctxKey = "layout_is_admin"
+	keyCampaignID   ctxKey = "layout_campaign_id"
+	keyCampaignName ctxKey = "layout_campaign_name"
+	keyCampaignRole ctxKey = "layout_campaign_role"
+	keyCSRFToken    ctxKey = "layout_csrf_token"
+	keyFlashSuccess ctxKey = "layout_flash_success"
+	keyFlashError   ctxKey = "layout_flash_error"
+	keyActivePath   ctxKey = "layout_active_path"
+)
+
+// --- Setters (called by the layout injector in app/routes.go) ---
+
+// SetUserName stores the authenticated user's display name in context.
+func SetUserName(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, keyUserName, name)
+}
+
+// SetUserEmail stores the authenticated user's email in context.
+func SetUserEmail(ctx context.Context, email string) context.Context {
+	return context.WithValue(ctx, keyUserEmail, email)
+}
+
+// SetIsAdmin stores whether the user is a site admin.
+func SetIsAdmin(ctx context.Context, isAdmin bool) context.Context {
+	return context.WithValue(ctx, keyIsAdmin, isAdmin)
+}
+
+// SetCampaignID stores the current campaign's ID in context.
+func SetCampaignID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, keyCampaignID, id)
+}
+
+// SetCampaignName stores the current campaign's display name in context.
+func SetCampaignName(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, keyCampaignName, name)
+}
+
+// SetCampaignRole stores the user's campaign membership role (as int).
+func SetCampaignRole(ctx context.Context, role int) context.Context {
+	return context.WithValue(ctx, keyCampaignRole, role)
+}
+
+// SetCSRFToken stores the CSRF token for forms.
+func SetCSRFToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, keyCSRFToken, token)
+}
+
+// SetFlashSuccess stores a success flash message for the current render.
+func SetFlashSuccess(ctx context.Context, msg string) context.Context {
+	return context.WithValue(ctx, keyFlashSuccess, msg)
+}
+
+// SetFlashError stores an error flash message for the current render.
+func SetFlashError(ctx context.Context, msg string) context.Context {
+	return context.WithValue(ctx, keyFlashError, msg)
+}
+
+// SetActivePath stores the current request path for nav highlighting.
+func SetActivePath(ctx context.Context, path string) context.Context {
+	return context.WithValue(ctx, keyActivePath, path)
+}
+
+// --- Getters (called by Templ templates) ---
+
+// GetUserName returns the authenticated user's display name, or "".
+func GetUserName(ctx context.Context) string {
+	name, _ := ctx.Value(keyUserName).(string)
+	return name
+}
+
+// GetUserEmail returns the authenticated user's email, or "".
+func GetUserEmail(ctx context.Context) string {
+	email, _ := ctx.Value(keyUserEmail).(string)
+	return email
+}
+
+// GetIsAdmin returns true if the user is a site admin.
+func GetIsAdmin(ctx context.Context) bool {
+	isAdmin, _ := ctx.Value(keyIsAdmin).(bool)
+	return isAdmin
+}
+
+// GetCampaignID returns the current campaign ID, or "" if not in campaign context.
+func GetCampaignID(ctx context.Context) string {
+	id, _ := ctx.Value(keyCampaignID).(string)
+	return id
+}
+
+// GetCampaignName returns the current campaign name, or "".
+func GetCampaignName(ctx context.Context) string {
+	name, _ := ctx.Value(keyCampaignName).(string)
+	return name
+}
+
+// GetCampaignRole returns the user's campaign role as int, or 0.
+func GetCampaignRole(ctx context.Context) int {
+	role, _ := ctx.Value(keyCampaignRole).(int)
+	return role
+}
+
+// GetCSRFToken returns the CSRF token, or "".
+func GetCSRFToken(ctx context.Context) string {
+	token, _ := ctx.Value(keyCSRFToken).(string)
+	return token
+}
+
+// GetFlashSuccess returns a success flash message, or "".
+func GetFlashSuccess(ctx context.Context) string {
+	msg, _ := ctx.Value(keyFlashSuccess).(string)
+	return msg
+}
+
+// GetFlashError returns an error flash message, or "".
+func GetFlashError(ctx context.Context) string {
+	msg, _ := ctx.Value(keyFlashError).(string)
+	return msg
+}
+
+// GetActivePath returns the current request path for nav highlighting.
+func GetActivePath(ctx context.Context) string {
+	path, _ := ctx.Value(keyActivePath).(string)
+	return path
+}
+
+// InCampaign returns true if we're currently in a campaign context.
+func InCampaign(ctx context.Context) bool {
+	return GetCampaignID(ctx) != ""
+}

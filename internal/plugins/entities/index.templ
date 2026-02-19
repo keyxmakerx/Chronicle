@@ -7,6 +7,7 @@ package entities
 import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -97,28 +98,14 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 						}
 					</div>
 
-					if total > opts.PerPage {
-						<div class="mt-8 flex justify-center space-x-2">
-							if opts.Page > 1 {
-								<a
-									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities?page=%d&type=%d", cc.Campaign.ID, opts.Page-1, activeTypeID)) }
-									class="btn-secondary text-sm"
-									hx-get={ fmt.Sprintf("/campaigns/%s/entities?page=%d&type=%d", cc.Campaign.ID, opts.Page-1, activeTypeID) }
-									hx-target="#entity-list"
-									hx-swap="outerHTML"
-								>Previous</a>
-							}
-							if opts.Page * opts.PerPage < total {
-								<a
-									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities?page=%d&type=%d", cc.Campaign.ID, opts.Page+1, activeTypeID)) }
-									class="btn-secondary text-sm"
-									hx-get={ fmt.Sprintf("/campaigns/%s/entities?page=%d&type=%d", cc.Campaign.ID, opts.Page+1, activeTypeID) }
-									hx-target="#entity-list"
-									hx-swap="outerHTML"
-								>Next</a>
-							}
-						</div>
-					}
+					@components.Pagination(components.PaginationData{
+						CurrentPage: opts.Page,
+						PerPage:     opts.PerPage,
+						Total:       total,
+						BaseURL:     fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID),
+						ExtraParams: fmt.Sprintf("type=%d", activeTypeID),
+						HTMXTarget:  "#entity-list",
+					})
 				}
 			</div>
 		</div>

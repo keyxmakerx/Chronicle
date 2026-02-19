@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -11,6 +12,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 )
 
@@ -74,6 +76,34 @@ func (a *App) RegisterRoutes() {
 	e.GET("/dashboard", func(c echo.Context) error {
 		return c.Redirect(http.StatusSeeOther, "/campaigns")
 	}, auth.RequireAuth(authService))
+
+	// --- Layout Data Injector ---
+	// Registers the callback that copies auth/campaign data from Echo's
+	// context into Go's context.Context so Templ templates can read it.
+	// This runs inside middleware.Render() before every template render.
+	middleware.LayoutInjector = func(c echo.Context, ctx context.Context) context.Context {
+		// User info from auth session.
+		if session := auth.GetSession(c); session != nil {
+			ctx = layouts.SetUserName(ctx, session.Name)
+			ctx = layouts.SetUserEmail(ctx, session.Email)
+			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)
+		}
+
+		// Campaign info from campaign middleware.
+		if cc := campaigns.GetCampaignContext(c); cc != nil {
+			ctx = layouts.SetCampaignID(ctx, cc.Campaign.ID)
+			ctx = layouts.SetCampaignName(ctx, cc.Campaign.Name)
+			ctx = layouts.SetCampaignRole(ctx, int(cc.MemberRole))
+		}
+
+		// CSRF token for forms.
+		ctx = layouts.SetCSRFToken(ctx, middleware.GetCSRFToken(c))
+
+		// Active path for nav highlighting.
+		ctx = layouts.SetActivePath(ctx, c.Request().URL.Path)
+
+		return ctx
+	}
 
 	// --- Module Routes ---
 	// Game system reference pages and tooltip APIs.
