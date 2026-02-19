@@ -1,3 +1,6 @@
+// error.templ renders error pages for all HTTP error responses (404, 403, 401, etc.).
+// The error handler in app.go routes all errors through these templates.
+
 package pages
 
 import (
@@ -5,18 +8,101 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// ErrorPage renders a generic error page with status code and message.
-// Used by the Echo error handler for 404, 500, and other error responses.
+// ErrorPage renders an error page appropriate to the status code.
+// Shows a contextual title, the error message, and helpful navigation links.
 templ ErrorPage(statusCode int, message string) {
 	@layouts.Base(fmt.Sprintf("Error %d", statusCode)) {
-		<div class="min-h-screen flex items-center justify-center">
-			<div class="text-center">
-				<h1 class="text-6xl font-bold text-gray-300 mb-4">
-					{ fmt.Sprintf("%d", statusCode) }
+		<div class="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+			<div class="max-w-md w-full text-center">
+				<!-- Status code badge -->
+				<div class={ "inline-flex items-center justify-center w-20 h-20 rounded-full mb-6", errorBadgeColor(statusCode) }>
+					<span class="text-2xl font-bold text-white">
+						{ fmt.Sprintf("%d", statusCode) }
+					</span>
+				</div>
+
+				<!-- Title -->
+				<h1 class="text-2xl font-bold text-gray-900 mb-3">
+					{ errorTitle(statusCode) }
 				</h1>
-				<p class="text-xl text-gray-600 mb-8">{ message }</p>
-				<a href="/" class="btn-primary inline-block">Go Home</a>
+
+				<!-- Message -->
+				<p class="text-gray-600 mb-8 leading-relaxed">
+					{ message }
+				</p>
+
+				<!-- Navigation links -->
+				<div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+					if statusCode == 401 {
+						<a href="/login" class="btn-primary">Log In</a>
+						<a href="/register" class="btn-secondary">Create Account</a>
+					} else if statusCode == 403 {
+						<a href="/campaigns" class="btn-primary">My Campaigns</a>
+						<a href="javascript:history.back()" class="btn-secondary">Go Back</a>
+					} else if statusCode == 404 {
+						<a href="javascript:history.back()" class="btn-primary">Go Back</a>
+						<a href="/campaigns" class="btn-secondary">My Campaigns</a>
+					} else {
+						<a href="/" class="btn-primary">Go Home</a>
+						<a href="javascript:history.back()" class="btn-secondary">Go Back</a>
+					}
+				</div>
+
+				<!-- Subtle help text -->
+				<p class="mt-8 text-xs text-gray-400">
+					if statusCode >= 500 {
+						If this keeps happening, please contact the server administrator.
+					} else if statusCode == 404 {
+						The page you're looking for doesn't exist or has been moved.
+					} else if statusCode == 403 {
+						You don't have the required role to access this resource.
+					} else if statusCode == 401 {
+						You need to be logged in to view this page.
+					}
+				</p>
 			</div>
 		</div>
+	}
+}
+
+// errorTitle returns a human-friendly title for the error code.
+func errorTitle(code int) string {
+	switch code {
+	case 400:
+		return "Bad Request"
+	case 401:
+		return "Authentication Required"
+	case 403:
+		return "Access Denied"
+	case 404:
+		return "Page Not Found"
+	case 409:
+		return "Conflict"
+	case 422:
+		return "Validation Error"
+	case 429:
+		return "Too Many Requests"
+	case 500:
+		return "Something Went Wrong"
+	case 502:
+		return "Bad Gateway"
+	case 503:
+		return "Service Unavailable"
+	default:
+		return fmt.Sprintf("Error %d", code)
+	}
+}
+
+// errorBadgeColor returns a Tailwind background color class for the status code badge.
+func errorBadgeColor(code int) string {
+	switch {
+	case code == 401 || code == 403:
+		return "bg-amber-500"
+	case code == 404:
+		return "bg-blue-500"
+	case code >= 400 && code < 500:
+		return "bg-orange-500"
+	default:
+		return "bg-red-500"
 	}
 }
