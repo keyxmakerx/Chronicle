@@ -8,6 +8,7 @@ package campaigns
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -119,7 +120,12 @@ type SidebarConfig struct {
 func (c *Campaign) ParseSidebarConfig() SidebarConfig {
 	var cfg SidebarConfig
 	if c.SidebarConfig != "" {
-		_ = json.Unmarshal([]byte(c.SidebarConfig), &cfg)
+		if err := json.Unmarshal([]byte(c.SidebarConfig), &cfg); err != nil {
+			slog.Warn("failed to parse sidebar config, using defaults",
+				slog.String("campaign_id", c.ID),
+				slog.String("error", err.Error()),
+			)
+		}
 	}
 	return cfg
 }

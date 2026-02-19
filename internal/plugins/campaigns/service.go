@@ -493,9 +493,20 @@ func (s *campaignService) GetPendingTransfer(ctx context.Context, campaignID str
 
 // --- Sidebar Configuration ---
 
+// maxSidebarConfigEntries caps the number of entries in sidebar config arrays
+// to prevent abuse via oversized JSON payloads.
+const maxSidebarConfigEntries = 100
+
 // UpdateSidebarConfig updates the campaign's sidebar configuration. Validates
-// the config and persists as JSON.
+// array sizes and persists as JSON.
 func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID string, config SidebarConfig) error {
+	if len(config.EntityTypeOrder) > maxSidebarConfigEntries {
+		return apperror.NewBadRequest("entity type order list is too long")
+	}
+	if len(config.HiddenTypeIDs) > maxSidebarConfigEntries {
+		return apperror.NewBadRequest("hidden type list is too long")
+	}
+
 	configJSON, err := json.Marshal(config)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling sidebar config: %w", err))

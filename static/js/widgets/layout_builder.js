@@ -33,7 +33,10 @@
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin'
       })
-        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.json();
+        })
         .then(function (data) {
           layout = (data.layout && data.layout.sections) ? data.layout : { sections: [] };
           fields = data.fields || [];
@@ -128,13 +131,13 @@
                    section.type === 'posts' ? 'fa-comments' : 'fa-list';
 
         return '<div class="layout-section-item flex items-center px-3 py-2 rounded-md border border-gray-200 bg-white cursor-grab select-none text-sm" ' +
-          'draggable="true" data-section-key="' + escapeHtml(section.key) + '">' +
+          'draggable="true" data-section-key="' + escapeAttr(section.key) + '">' +
           '<span class="drag-handle mr-2 text-gray-400"><i class="fa-solid fa-grip-vertical text-xs"></i></span>' +
           '<span class="w-4 h-4 mr-2 flex items-center justify-center">' +
           '<i class="fa-solid ' + icon + ' text-xs text-gray-500"></i>' +
           '</span>' +
           '<span class="flex-1 text-gray-700">' + escapeHtml(section.label) + '</span>' +
-          '<span class="text-xs text-gray-400">' + section.type + '</span>' +
+          '<span class="text-xs text-gray-400">' + escapeHtml(section.type) + '</span>' +
           '</div>';
       }
 
@@ -186,7 +189,8 @@
             var targetColumn = col.getAttribute('data-column');
 
             // Find the dragged element.
-            var draggedEl = el.querySelector('[data-section-key="' + sectionKey + '"]');
+            var escapedKey = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(sectionKey) : sectionKey;
+            var draggedEl = el.querySelector('[data-section-key="' + escapedKey + '"]');
             if (!draggedEl) return;
 
             // Move the element to this column.
@@ -242,9 +246,13 @@
           },
           credentials: 'same-origin',
           body: JSON.stringify({ layout: layout })
-        }).catch(function (err) {
-          console.error('[layout-builder] Save failed:', err);
-        });
+        })
+          .then(function (res) {
+            if (!res.ok) console.error('[layout-builder] Save returned HTTP ' + res.status);
+          })
+          .catch(function (err) {
+            console.error('[layout-builder] Save failed:', err);
+          });
       }
 
       /**
@@ -254,6 +262,15 @@
         var div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      /**
+       * Escape a string for safe use in an HTML attribute value.
+       */
+      function escapeAttr(text) {
+        return String(text).replace(/[&"'<>]/g, function (c) {
+          return { '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;' }[c];
+        });
       }
     },
 

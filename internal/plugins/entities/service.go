@@ -271,8 +271,39 @@ func (s *entityService) CountByType(ctx context.Context, campaignID string, role
 	return s.entities.CountByType(ctx, campaignID, role)
 }
 
-// UpdateEntityTypeLayout persists a new layout for an entity type.
+// maxLayoutSections caps the number of sections in a layout to prevent abuse.
+const maxLayoutSections = 50
+
+// validLayoutColumns are the allowed values for LayoutSection.Column.
+var validLayoutColumns = map[string]bool{"left": true, "right": true}
+
+// validLayoutTypes are the allowed values for LayoutSection.Type.
+var validLayoutTypes = map[string]bool{"fields": true, "entry": true, "posts": true}
+
+// UpdateEntityTypeLayout validates and persists a new layout for an entity type.
 func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error {
+	if len(layout.Sections) > maxLayoutSections {
+		return apperror.NewBadRequest("too many layout sections")
+	}
+
+	seen := make(map[string]bool, len(layout.Sections))
+	for _, sec := range layout.Sections {
+		if strings.TrimSpace(sec.Key) == "" {
+			return apperror.NewBadRequest("layout section key is required")
+		}
+		if seen[sec.Key] {
+			return apperror.NewBadRequest("duplicate layout section key: " + sec.Key)
+		}
+		seen[sec.Key] = true
+
+		if !validLayoutColumns[sec.Column] {
+			return apperror.NewBadRequest("invalid layout column: must be 'left' or 'right'")
+		}
+		if !validLayoutTypes[sec.Type] {
+			return apperror.NewBadRequest("invalid layout section type: must be 'fields', 'entry', or 'posts'")
+		}
+	}
+
 	layoutJSON, err := json.Marshal(layout)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling layout: %w", err))

@@ -215,18 +215,22 @@ func (r *entityTypeRepository) SeedDefaults(ctx context.Context, campaignID stri
 	}
 	defer tx.Rollback()
 
-	query := `INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon, color, fields, sort_order, is_default, enabled)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon, color, fields, layout_json, sort_order, is_default, enabled)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	for _, et := range defaultEntityTypes {
 		fieldsJSON, err := json.Marshal(et.Fields)
 		if err != nil {
 			return fmt.Errorf("marshaling default fields for %s: %w", et.Slug, err)
 		}
+		layoutJSON, err := json.Marshal(et.Layout)
+		if err != nil {
+			return fmt.Errorf("marshaling default layout for %s: %w", et.Slug, err)
+		}
 
 		_, err = tx.ExecContext(ctx, query,
 			campaignID, et.Slug, et.Name, et.NamePlural,
-			et.Icon, et.Color, fieldsJSON, et.SortOrder,
+			et.Icon, et.Color, fieldsJSON, layoutJSON, et.SortOrder,
 			et.IsDefault, et.Enabled,
 		)
 		if err != nil {

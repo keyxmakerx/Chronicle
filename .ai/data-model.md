@@ -42,7 +42,7 @@ User --< CampaignMember >-- Campaign
 | created_at | DATETIME | NOT NULL, DEFAULT NOW() | |
 | last_login_at | DATETIME | NULL | |
 
-### campaigns (implemented -- migration 000002)
+### campaigns (implemented -- migrations 000002, 000005, 000006)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | CHAR(36) | PK | UUID |
@@ -50,6 +50,8 @@ User --< CampaignMember >-- Campaign
 | slug | VARCHAR(200) | UNIQUE, NOT NULL | URL-safe, derived from name |
 | description | TEXT | NULL | |
 | settings | JSON | DEFAULT '{}' | Enabled modules, theme, etc. |
+| backdrop_path | VARCHAR(500) | NULL | Campaign header image (added 000005) |
+| sidebar_config | JSON | DEFAULT '{}' | Sidebar ordering/visibility (added 000006) |
 | created_by | CHAR(36) | FK -> users.id | |
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
@@ -87,7 +89,7 @@ User --< CampaignMember >-- Campaign
 | enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | |
 | updated_at | DATETIME | NOT NULL, DEFAULT NOW() ON UPDATE | |
 
-### entity_types (implemented -- migration 000004)
+### entity_types (implemented -- migrations 000004, 000007)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | INT | PK, AUTO_INCREMENT | |
@@ -98,6 +100,7 @@ User --< CampaignMember >-- Campaign
 | icon | VARCHAR(50) | DEFAULT 'fa-file' | FA or RPG Awesome class |
 | color | VARCHAR(7) | DEFAULT '#6b7280' | Hex color for badges |
 | fields | JSON | DEFAULT '[]' | Field definitions array |
+| layout_json | JSON | DEFAULT '{"sections":[]}' | Profile page layout (added 000007) |
 | sort_order | INT | DEFAULT 0 | Sidebar order |
 | is_default | BOOLEAN | DEFAULT false | Ships pre-configured |
 | enabled | BOOLEAN | DEFAULT true | |
@@ -124,6 +127,20 @@ User --< CampaignMember >-- Campaign
 | updated_at | DATETIME | NOT NULL | |
 | UNIQUE(campaign_id, slug) | | | |
 | FULLTEXT(name) | | | For search |
+
+### media_files (implemented -- migration 000005)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | CHAR(36) | PK | UUID |
+| campaign_id | CHAR(36) | NULL, FK -> campaigns.id ON DELETE SET NULL | |
+| uploaded_by | CHAR(36) | NOT NULL, FK -> users.id ON DELETE CASCADE | |
+| filename | VARCHAR(500) | NOT NULL | UUID-based stored filename |
+| original_name | VARCHAR(500) | NOT NULL | User's original filename |
+| mime_type | VARCHAR(100) | NOT NULL | Validated MIME type |
+| file_size | BIGINT | NOT NULL | Size in bytes |
+| usage_type | VARCHAR(50) | DEFAULT 'attachment' | 'attachment', 'avatar', etc. |
+| thumbnail_paths | JSON | NULL | Generated thumbnail paths |
+| created_at | TIMESTAMP | NOT NULL, DEFAULT NOW() | |
 
 ### entity_posts
 | Column | Type | Constraints | Notes |
@@ -183,3 +200,6 @@ User --< CampaignMember >-- Campaign
 | 2 | 000002_create_campaigns | Campaigns, campaign_members, ownership_transfers | 2026-02-19 |
 | 3 | 000003_create_smtp_settings | SMTP settings singleton table | 2026-02-19 |
 | 4 | 000004_create_entities | Entity types + entities tables | 2026-02-19 |
+| 5 | 000005_create_media | Media files table + campaigns.backdrop_path | 2026-02-19 |
+| 6 | 000006_sidebar_config | campaigns.sidebar_config JSON column | 2026-02-19 |
+| 7 | 000007_entity_type_layout | entity_types.layout_json JSON column | 2026-02-19 |

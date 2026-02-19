@@ -150,7 +150,10 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetCampaignRole(ctx, int(cc.MemberRole))
 
 			// Entity types for dynamic sidebar rendering.
-			if etypes, err := entityService.GetEntityTypes(c.Request().Context(), cc.Campaign.ID); err == nil {
+			// Use the request context (not the enriched ctx) since service calls
+			// only need cancellation/deadline, not layout data.
+			reqCtx := c.Request().Context()
+			if etypes, err := entityService.GetEntityTypes(reqCtx, cc.Campaign.ID); err == nil {
 				sidebarTypes := make([]layouts.SidebarEntityType, len(etypes))
 				for i, et := range etypes {
 					sidebarTypes[i] = layouts.SidebarEntityType{
@@ -172,7 +175,7 @@ func (a *App) RegisterRoutes() {
 			}
 
 			// Entity counts per type for sidebar badges.
-			if counts, err := entityService.CountByType(c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole)); err == nil {
+			if counts, err := entityService.CountByType(reqCtx, cc.Campaign.ID, int(cc.MemberRole)); err == nil {
 				ctx = layouts.SetEntityCounts(ctx, counts)
 			}
 		}

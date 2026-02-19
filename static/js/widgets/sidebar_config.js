@@ -41,7 +41,10 @@
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin'
       })
-        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.json();
+        })
         .then(function (data) {
           sidebarConfig = data || { entity_type_order: [], hidden_type_ids: [] };
           if (!sidebarConfig.entity_type_order) sidebarConfig.entity_type_order = [];
@@ -105,7 +108,7 @@
             '" draggable="true" data-type-id="' + t.id + '">' +
             '<span class="drag-handle mr-2 text-gray-400"><i class="fa-solid fa-grip-vertical text-xs"></i></span>' +
             '<span class="w-4 h-4 mr-2 flex items-center justify-center">' +
-            '<i class="fa-solid ' + (t.icon || 'fa-file') + ' text-xs" style="color: ' + (t.color || '#6b7280') + '"></i>' +
+            '<i class="fa-solid ' + escapeAttr(t.icon || 'fa-file') + ' text-xs" style="color: ' + escapeAttr(t.color || '#6b7280') + '"></i>' +
             '</span>' +
             '<span class="flex-1 text-sm text-gray-700">' + escapeHtml(t.name_plural || t.name) + '</span>' +
             '<button type="button" class="toggle-visibility ml-2 p-1 text-xs rounded hover:bg-gray-100 transition-colors" data-type-id="' + t.id + '" title="' +
@@ -243,9 +246,13 @@
             entity_type_order: sidebarConfig.entity_type_order || [],
             hidden_type_ids: sidebarConfig.hidden_type_ids || []
           })
-        }).catch(function (err) {
-          console.error('[sidebar-config] Save failed:', err);
-        });
+        })
+          .then(function (res) {
+            if (!res.ok) console.error('[sidebar-config] Save returned HTTP ' + res.status);
+          })
+          .catch(function (err) {
+            console.error('[sidebar-config] Save failed:', err);
+          });
       }
 
       /**
@@ -255,6 +262,16 @@
         var div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      /**
+       * Escape a string for use in an HTML attribute value.
+       * Strips characters that could break out of class/style attributes.
+       */
+      function escapeAttr(text) {
+        return String(text).replace(/[&"'<>]/g, function (c) {
+          return { '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;' }[c];
+        });
       }
     },
 
