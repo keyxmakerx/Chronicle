@@ -8,36 +8,39 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- Phase 1 core infrastructure session
+2026-02-19 -- Auth plugin implementation session
 
 ## Current Phase
-**Phase 1: Foundation** -- Core infrastructure is built. App compiles and
-runs (with MariaDB + Redis available). Next: auth plugin, then campaigns,
-then entities.
+**Phase 1: Foundation** -- Core infrastructure + auth plugin are built. App
+compiles successfully. Next: campaigns plugin, then entities plugin.
 
 ## Last Session Summary
 
 ### Completed
-- Initialized Go module (`github.com/keyxmakerx/chronicle`)
-- Installed all core deps: Echo v4, Templ, go-sql-driver/mysql, go-redis,
-  uuid, golang-migrate, argon2id, validator, bluemonday
-- Created `internal/config/config.go` -- ENV loading with typed config struct
-- Created `internal/apperror/errors.go` -- domain error types (NotFound,
-  BadRequest, Unauthorized, Forbidden, Conflict, Internal, Validation)
-- Created `internal/database/mariadb.go` -- connection pool with ping check
-- Created `internal/database/redis.go` -- Redis client with ping check
-- Created `internal/middleware/` -- logging (slog), recovery (panic handler),
-  helpers (IsHTMX, Render)
-- Created `internal/app/app.go` -- App struct, middleware setup, custom error
-  handler (maps AppError to HTML/JSON responses)
-- Created `internal/app/routes.go` -- route aggregation with landing page,
-  health check, and commented plugin/module slots
-- Created `cmd/server/main.go` -- entry point with graceful shutdown,
-  structured logging (text in dev, JSON in prod)
-- Created Templ layouts: `base.templ` (HTML shell), `app.templ` (sidebar +
-  topbar), `landing.templ`, `error.templ`
-- Created migration `000001_create_users` (up + down)
-- **Build succeeds:** `go build` and `go vet` pass with zero errors
+- Created `internal/middleware/security.go` -- security headers (CSP, X-Frame-Options,
+  X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection)
+- Created `internal/middleware/proxy.go` -- trusted reverse proxy IP extraction for
+  Cosmos Cloud. Custom IPExtractor trusts X-Forwarded-For/X-Real-IP from Docker CIDRs.
+- Created `internal/middleware/cors.go` -- CORS middleware with HTMX header support.
+  Exposes HX-Redirect/HX-Refresh/HX-Trigger. Caches preflight for 1 hour.
+- Created `internal/middleware/csrf.go` -- double-submit cookie CSRF with HTMX
+  integration. Cookie NOT HttpOnly so JS can read it for X-CSRF-Token header.
+- Updated `internal/app/app.go` -- wired all new middleware + trusted proxy config
+- **Auth plugin fully implemented:**
+  - `model.go` -- User domain model, RegisterRequest/LoginRequest DTOs,
+    RegisterInput/LoginInput service DTOs, Session struct for Redis
+  - `repository.go` -- UserRepository interface + MariaDB implementation
+    (Create, FindByID, FindByEmail, EmailExists, UpdateLastLogin)
+  - `service.go` -- AuthService with Register (argon2id hash, UUID gen),
+    Login (password verify, Redis session create), ValidateSession, DestroySession
+  - `handler.go` -- thin HTTP handlers for login/register/logout with HTMX support
+  - `login.templ` -- login page + form (HTMX partial replacement on error)
+  - `register.templ` -- register page + form (HTMX partial replacement on error)
+  - `middleware.go` -- RequireAuth middleware, GetSession/GetUserID helpers
+  - `routes.go` -- public route registration
+- Updated `internal/app/routes.go` -- wired auth plugin with DI, added dashboard
+  placeholder route behind RequireAuth middleware
+- **Build succeeds:** `go build ./...` passes with zero errors
 
 ### In Progress
 - Nothing currently in progress
@@ -46,38 +49,27 @@ then entities.
 - Nothing blocked
 
 ### Files Created This Session
-- `go.mod`, `go.sum`
-- `cmd/server/main.go`
-- `internal/config/config.go`
-- `internal/apperror/errors.go`
-- `internal/database/mariadb.go`, `redis.go`
-- `internal/middleware/logging.go`, `recovery.go`, `helpers.go`
-- `internal/app/app.go`, `routes.go`
-- `internal/templates/layouts/base.templ`, `app.templ`
-- `internal/templates/pages/landing.templ`, `error.templ`
-- `internal/templates/layouts/*_templ.go` (generated)
-- `internal/templates/pages/*_templ.go` (generated)
-- `db/migrations/000001_create_users.up.sql`, `.down.sql`
+- `internal/middleware/security.go`, `proxy.go`, `cors.go`, `csrf.go`
+- `internal/plugins/auth/model.go`, `repository.go`, `service.go`
+- `internal/plugins/auth/handler.go`, `middleware.go`, `routes.go`
+- `internal/plugins/auth/login.templ`, `register.templ`
+- `internal/plugins/auth/login_templ.go`, `register_templ.go` (generated)
 
 ## Active Branch
 `claude/setup-ai-project-docs-LhvVz`
 
 ## Next Session Should
-1. **Auth plugin** -- implement the full auth flow:
-   - User model in `internal/plugins/auth/model.go`
-   - Repository with Create, FindByEmail, FindByID queries
-   - Service with Register, Login, ValidateSession logic
-   - Handler with login/register/logout routes + Templ pages
-   - Auth middleware for session validation
-   - PASETO v4 session token generation
-2. **Campaign plugin** -- after auth works:
-   - Campaign model, migration 000002
-   - CRUD handler/service/repository
-   - Campaign list and show Templ pages
-3. **Entities plugin** -- after campaigns work:
+1. **Campaign plugin** -- implement CRUD:
+   - Campaign model, migration 000002_create_campaigns
+   - Repository with Create, FindByID, ListByUser, Update, Delete
+   - Service with Create, GetByID, List, Update, Delete + slug gen
+   - Handler with campaign list/show/create/edit/delete + Templ pages
+   - Campaign Templ pages (list, show, create, edit)
+2. **Entities plugin** -- after campaigns work:
    - Entity + EntityType models, migration 000003
-   - Seed default entity types
+   - Seed default entity types (Character, Location, etc.)
    - CRUD + entity profile page
+3. **Editor widget** -- TipTap integration after entities
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -86,7 +78,10 @@ then entities.
   `tailwindcss` binary to generate it
 - Templ generated files (`*_templ.go`) are gitignored, so `templ generate`
   must run before build on a fresh clone
+- Dashboard route currently renders the landing page as a placeholder
 
 ## Recently Completed Milestones
 - 2026-02-19: Project scaffolding and three-tier AI documentation system
 - 2026-02-19: Core infrastructure (config, database, middleware, app, server)
+- 2026-02-19: Security middleware (proxy trust, CORS, CSRF, security headers)
+- 2026-02-19: Auth plugin (register, login, logout, session management)

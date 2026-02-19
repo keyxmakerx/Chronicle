@@ -1,0 +1,89 @@
+// login.templ renders the login page and form for Chronicle.
+// The form supports both traditional submission and HTMX-powered
+// partial updates when validation fails.
+
+package auth
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// LoginPage renders the full login page wrapped in the base layout.
+templ LoginPage(csrfToken, email, errMsg string) {
+	@layouts.Base("Login") {
+		<div class="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+			<div class="w-full max-w-md">
+				<div class="text-center mb-8">
+					<h1 class="text-3xl font-bold text-gray-900">Chronicle</h1>
+					<p class="text-gray-600 mt-2">Sign in to your account</p>
+				</div>
+				@LoginForm_(csrfToken, email, errMsg)
+			</div>
+		</div>
+	}
+}
+
+// LoginForm_ renders just the login form. Used for HTMX partial replacement
+// on validation errors (the trailing underscore avoids collision with the
+// Echo handler method name).
+templ LoginForm_(csrfToken, email, errMsg string) {
+	<div id="login-form">
+		<form
+			class="card p-8 space-y-6"
+			method="POST"
+			action="/login"
+			hx-post="/login"
+			hx-target="#login-form"
+			hx-swap="outerHTML"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+
+			if errMsg != "" {
+				<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
+					{ errMsg }
+				</div>
+			}
+
+			<div>
+				<label for="email" class="block text-sm font-medium text-gray-700 mb-1">
+					Email
+				</label>
+				<input
+					type="email"
+					id="email"
+					name="email"
+					value={ email }
+					required
+					autofocus
+					class="input w-full"
+					placeholder="you@example.com"
+					autocomplete="email"
+				/>
+			</div>
+
+			<div>
+				<label for="password" class="block text-sm font-medium text-gray-700 mb-1">
+					Password
+				</label>
+				<input
+					type="password"
+					id="password"
+					name="password"
+					required
+					class="input w-full"
+					placeholder="••••••••"
+					autocomplete="current-password"
+				/>
+			</div>
+
+			<button type="submit" class="btn-primary w-full">
+				Sign In
+			</button>
+
+			<p class="text-center text-sm text-gray-600">
+				Don't have an account?
+				<a href="/register" class="text-indigo-600 hover:text-indigo-500 font-medium">
+					Register
+				</a>
+			</p>
+		</form>
+	</div>
+}

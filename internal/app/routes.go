@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 )
 
@@ -31,20 +32,26 @@ func (a *App) RegisterRoutes() {
 	})
 
 	// --- Plugin Routes ---
-	// Each plugin registers its own routes on a sub-group.
-	// Uncomment as plugins are implemented:
 
-	// auth plugin (public: login, register, logout)
-	// authPlugin.RegisterRoutes(e)
+	// Auth plugin: login, register, logout (public routes).
+	authRepo := auth.NewUserRepository(a.DB)
+	authService := auth.NewAuthService(authRepo, a.Redis, a.Config.Auth.SessionTTL)
+	authHandler := auth.NewHandler(authService)
+	auth.RegisterRoutes(e, authHandler)
 
 	// Authenticated route group -- all routes below require a valid session.
-	// authed := e.Group("", authMiddleware)
+	_ = e.Group("", auth.RequireAuth(authService))
 
-	// campaigns plugin
+	// TODO: campaigns plugin
 	// campaignPlugin.RegisterRoutes(authed)
 
-	// entities plugin (scoped to campaign)
+	// TODO: entities plugin (scoped to campaign)
 	// entityPlugin.RegisterRoutes(authed)
+
+	// Dashboard placeholder for authenticated users.
+	e.GET("/dashboard", func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, pages.Landing())
+	}, auth.RequireAuth(authService))
 
 	// --- Module Routes ---
 	// Game system reference pages and tooltip APIs.

@@ -44,6 +44,17 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client) *App {
 	e.HideBanner = true
 	e.HidePort = true
 
+	// Configure trusted reverse proxy IPs so c.RealIP() returns the actual
+	// client IP instead of the proxy's IP. Critical for rate limiting, audit
+	// logging, and abuse detection. Cosmos Cloud routes through Docker networks.
+	middleware.TrustedProxies(e, []string{
+		"127.0.0.0/8",    // Localhost
+		"10.0.0.0/8",     // Docker default bridge
+		"172.16.0.0/12",  // Docker bridge (alternate range)
+		"192.168.0.0/16", // Common LAN
+		"fd00::/8",       // IPv6 private
+	})
+
 	app := &App{
 		Config: cfg,
 		DB:     db,
@@ -64,10 +75,26 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client) *App {
 }
 
 // setupMiddleware registers global middleware on the Echo instance.
-// Order matters: recovery wraps everything, then logging, then route-specific.
+// Order matters: outermost (recovery) runs first, innermost (CSRF) runs last.
 func (a *App) setupMiddleware() {
+	// Panic recovery -- must be outermost to catch panics from all other middleware.
 	a.Echo.Use(middleware.Recovery())
+
+	// Request logging -- log every request with method, path, status, latency.
 	a.Echo.Use(middleware.RequestLogger())
+
+	// Security headers -- CSP, X-Frame-Options, X-Content-Type-Options, etc.
+	a.Echo.Use(middleware.SecurityHeaders())
+
+	// CORS -- allow cross-origin requests for the REST API.
+	// Only relevant for external clients (Foundry VTT module, etc.).
+	a.Echo.Use(middleware.CORS(middleware.CORSConfig{
+		AllowedOrigins:   []string{a.Config.BaseURL},
+		AllowCredentials: true,
+	}))
+
+	// CSRF -- double-submit cookie pattern on all state-changing requests.
+	a.Echo.Use(middleware.CSRF())
 }
 
 // errorHandler is the custom Echo error handler. It maps domain errors

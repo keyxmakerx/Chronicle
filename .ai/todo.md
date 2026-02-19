@@ -30,13 +30,14 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 
 ### Priority 2 -- Auth Plugin (Must Do)
 - [x] User MariaDB table (migration 000001)
-- [ ] User model in `internal/plugins/auth/model.go`
-- [ ] Registration handler + service + repository
-- [ ] Login handler with argon2id password verification
-- [ ] PASETO v4 session tokens stored in Redis
-- [ ] Auth middleware (session validation, user context injection)
-- [ ] Login/Register Templ pages
-- [ ] Logout handler (destroy session)
+- [x] User model in `internal/plugins/auth/model.go`
+- [x] Registration handler + service + repository
+- [x] Login handler with argon2id password verification
+- [x] Session tokens stored in Redis (random hex tokens)
+- [x] Auth middleware (session validation, user context injection)
+- [x] Login/Register Templ pages with HTMX support
+- [x] Logout handler (destroy session)
+- [x] Security middleware (CSP, proxy trust, CORS, CSRF)
 
 ### Priority 3 -- Campaigns Plugin (Must Do)
 - [ ] Campaign model and MariaDB table (migration 000002)
