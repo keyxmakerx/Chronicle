@@ -130,14 +130,15 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Unified entity type config widget (sidebar + layout + color in one UI)
 - [x] Entity type color picker (PUT color API + hex validation)
 - [x] Public campaign support (is_public flag, migration 000008, OptionalAuth)
-- [ ] Apply layout_json to entity show page rendering
+- [x] Apply layout_json to entity show page rendering
+- [x] Visual template editor (drag-and-drop grid page builder)
+- [x] Admin panel sidebar nav with modules section
 
 ### Phase 3 -- Permissions & Advanced Multi-User
 - [ ] Per-entity permissions (view/edit per role/user)
 - [ ] Invite system (email invitations for campaigns)
 - [ ] 2FA/TOTP support
 - [ ] Audit log
-- [ ] Entity type layout editor (drag-drop field customization)
 
 ### Phase 4 -- Game Systems & Advanced
 - [ ] D&D 5e module (SRD reference data, tooltips, pages)

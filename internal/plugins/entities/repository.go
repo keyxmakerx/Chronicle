@@ -87,9 +87,7 @@ func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityTyp
 	if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
 		return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 	}
-	if len(layoutRaw) > 0 {
-		_ = json.Unmarshal(layoutRaw, &et.Layout)
-	}
+	et.Layout = ParseLayoutJSON(layoutRaw)
 	return et, nil
 }
 
@@ -115,9 +113,7 @@ func (r *entityTypeRepository) FindBySlug(ctx context.Context, campaignID, slug 
 	if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
 		return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 	}
-	if len(layoutRaw) > 0 {
-		_ = json.Unmarshal(layoutRaw, &et.Layout)
-	}
+	et.Layout = ParseLayoutJSON(layoutRaw)
 	return et, nil
 }
 
@@ -146,9 +142,7 @@ func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID st
 		if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
 			return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 		}
-		if len(layoutRaw) > 0 {
-			_ = json.Unmarshal(layoutRaw, &et.Layout)
-		}
+		et.Layout = ParseLayoutJSON(layoutRaw)
 		types = append(types, et)
 	}
 	return types, rows.Err()

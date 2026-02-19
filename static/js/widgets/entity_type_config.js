@@ -1,13 +1,13 @@
 /**
  * entity_type_config.js -- Unified Entity Type Configuration Widget
  *
- * Combines sidebar ordering, visibility toggling, color picking, and layout
- * editing into a single cohesive UI. Replaces the separate sidebar_config
- * and layout_builder widgets.
+ * Combines sidebar ordering, visibility toggling, and color picking into
+ * a single cohesive UI. Each entity type also gets a link to the visual
+ * template editor page.
  *
  * Config attributes:
  *   data-sidebar-endpoint  -- API for sidebar config (GET/PUT)
- *   data-layout-base       -- Base URL for entity type APIs (e.g., /campaigns/:id/entity-types)
+ *   data-layout-base       -- Base URL for entity type routes (e.g., /campaigns/:id/entity-types)
  *   data-entity-types      -- JSON array of entity types from server
  */
 (function () {
@@ -26,9 +26,6 @@
       // State.
       var entityTypes = [];
       var sidebarConfig = { entity_type_order: [], hidden_type_ids: [] };
-      var layouts = {};       // etID -> { sections: [] }
-      var fieldsByType = {};   // etID -> []
-      var expandedType = null; // Currently expanded entity type ID.
       var dragSrcEl = null;
 
       // Parse entity types from data attribute.
@@ -109,12 +106,10 @@
 
         types.forEach(function (t) {
           var hidden = isHidden(t.id);
-          var expanded = expandedType === t.id;
 
           // Main row.
           html += '<div class="et-config-item border border-gray-200 rounded-md' +
             (hidden ? ' opacity-50' : '') +
-            (expanded ? ' border-gray-400 ring-1 ring-gray-300' : '') +
             '" data-type-id="' + t.id + '">';
 
           // Header row: drag handle, color, icon, name, actions.
@@ -137,11 +132,10 @@
           // Name.
           html += '<span class="flex-1 text-sm font-medium text-gray-700">' + escapeHtml(t.name_plural || t.name) + '</span>';
 
-          // Expand/collapse layout button.
-          html += '<button type="button" class="toggle-expand p-1 mr-1.5 text-xs rounded hover:bg-gray-100 transition-colors" data-type-id="' + t.id + '" title="' +
-            (expanded ? 'Collapse layout' : 'Edit layout') + '">';
-          html += '<i class="fa-solid ' + (expanded ? 'fa-chevron-up' : 'fa-sliders') + ' text-gray-400"></i>';
-          html += '</button>';
+          // Template editor link.
+          html += '<a href="' + escapeAttr(layoutBase) + '/' + t.id + '/template" class="p-1 mr-1.5 text-xs rounded hover:bg-gray-100 transition-colors" title="Edit page template">';
+          html += '<i class="fa-solid fa-table-cells-large text-gray-400"></i>';
+          html += '</a>';
 
           // Visibility toggle.
           html += '<button type="button" class="toggle-visibility p-1 text-xs rounded hover:bg-gray-100 transition-colors" data-type-id="' + t.id + '" title="' +
@@ -150,87 +144,14 @@
           html += '</button>';
 
           html += '</div>'; // end header
-
-          // Expandable layout section.
-          if (expanded) {
-            html += '<div class="et-config-layout px-3 pb-3 border-t border-gray-100 mt-0 pt-3">';
-            html += renderLayout(t);
-            html += '</div>';
-          }
-
           html += '</div>'; // end item
         });
 
         html += '</div>'; // end list
-        html += '<p class="text-xs text-gray-400 mt-3">Drag to reorder sidebar. Click the color circle to change. Click <i class="fa-solid fa-sliders text-xs"></i> to edit profile layout.</p>';
+        html += '<p class="text-xs text-gray-400 mt-3">Drag to reorder sidebar. Click the color circle to change. Click <i class="fa-solid fa-table-cells-large text-xs"></i> to design page template.</p>';
 
         el.innerHTML = html;
         bindEvents();
-      }
-
-      // --- Layout Rendering ---
-
-      function renderLayout(t) {
-        var layout = layouts[t.id];
-        if (!layout) {
-          return '<p class="text-xs text-gray-500 italic">Loading layout...</p>';
-        }
-
-        var leftSections = layout.sections.filter(function (s) { return s.column === 'left'; });
-        var rightSections = layout.sections.filter(function (s) { return s.column !== 'left'; });
-
-        var html = '<div class="grid grid-cols-2 gap-3">';
-
-        // Left column.
-        html += '<div>';
-        html += '<h4 class="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Sidebar</h4>';
-        html += '<div class="layout-column min-h-[60px] border border-dashed border-gray-200 rounded-md p-1.5 space-y-1" data-column="left" data-type-id="' + t.id + '">';
-        leftSections.forEach(function (s) { html += layoutSectionItem(s); });
-        html += '</div></div>';
-
-        // Right column.
-        html += '<div>';
-        html += '<h4 class="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Main</h4>';
-        html += '<div class="layout-column min-h-[60px] border border-dashed border-gray-200 rounded-md p-1.5 space-y-1" data-column="right" data-type-id="' + t.id + '">';
-        rightSections.forEach(function (s) { html += layoutSectionItem(s); });
-        html += '</div></div>';
-
-        html += '</div>';
-        return html;
-      }
-
-      function layoutSectionItem(section) {
-        var icon = section.type === 'entry' ? 'fa-align-left' :
-                   section.type === 'posts' ? 'fa-comments' : 'fa-list';
-
-        return '<div class="layout-section-item flex items-center px-2 py-1.5 rounded border border-gray-200 bg-white cursor-grab select-none text-xs" ' +
-          'draggable="true" data-section-key="' + escapeAttr(section.key) + '">' +
-          '<i class="fa-solid fa-grip-vertical text-gray-300 mr-1.5 text-[10px]"></i>' +
-          '<i class="fa-solid ' + icon + ' text-gray-400 mr-1.5 text-[10px]"></i>' +
-          '<span class="flex-1 text-gray-600">' + escapeHtml(section.label) + '</span>' +
-          '<span class="text-[10px] text-gray-400">' + escapeHtml(section.type) + '</span>' +
-          '</div>';
-      }
-
-      // --- Default layout builder ---
-
-      function buildDefaultSections(fieldDefs) {
-        var sections = [];
-        var sectionMap = {};
-        fieldDefs.forEach(function (f) {
-          var sec = f.section || 'Details';
-          if (!sectionMap[sec]) {
-            sectionMap[sec] = true;
-            sections.push({
-              key: sec.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-              label: sec,
-              type: 'fields',
-              column: 'left'
-            });
-          }
-        });
-        sections.push({ key: 'entry', label: 'Main Entry', type: 'entry', column: 'right' });
-        return sections;
       }
 
       // --- Events ---
@@ -251,15 +172,6 @@
             e.stopPropagation();
             var typeID = parseInt(btn.getAttribute('data-type-id'), 10);
             toggleVisibility(typeID);
-          });
-        });
-
-        // Expand/collapse toggles.
-        el.querySelectorAll('.toggle-expand').forEach(function (btn) {
-          btn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            var typeID = parseInt(btn.getAttribute('data-type-id'), 10);
-            toggleExpand(typeID);
           });
         });
 
@@ -314,61 +226,6 @@
             }
           });
         });
-
-        // Layout section drag events.
-        bindLayoutDragEvents();
-      }
-
-      function bindLayoutDragEvents() {
-        var sectionItems = el.querySelectorAll('.layout-section-item');
-        var columns = el.querySelectorAll('.layout-column');
-
-        sectionItems.forEach(function (item) {
-          item.addEventListener('dragstart', function (e) {
-            e.stopPropagation(); // Don't trigger parent drag.
-            item.classList.add('opacity-40');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', 'section:' + item.getAttribute('data-section-key'));
-          });
-          item.addEventListener('dragend', function () {
-            item.classList.remove('opacity-40');
-            columns.forEach(function (col) { col.classList.remove('border-blue-400', 'bg-blue-50'); });
-          });
-        });
-
-        columns.forEach(function (col) {
-          col.addEventListener('dragover', function (e) {
-            // Only accept layout section drags (not entity type reorder).
-            var data = e.dataTransfer.types;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-          });
-          col.addEventListener('dragenter', function (e) {
-            e.preventDefault();
-            col.classList.add('border-blue-400', 'bg-blue-50');
-          });
-          col.addEventListener('dragleave', function (e) {
-            if (e.target === col) col.classList.remove('border-blue-400', 'bg-blue-50');
-          });
-          col.addEventListener('drop', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            col.classList.remove('border-blue-400', 'bg-blue-50');
-
-            var rawData = e.dataTransfer.getData('text/plain');
-            if (!rawData.startsWith('section:')) return;
-            var sectionKey = rawData.substring(8);
-            var typeID = parseInt(col.getAttribute('data-type-id'), 10);
-
-            var escapedKey = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(sectionKey) : sectionKey;
-            var draggedEl = el.querySelector('.layout-section-item[data-section-key="' + escapedKey + '"]');
-            if (!draggedEl) return;
-
-            col.appendChild(draggedEl);
-            updateLayoutFromDOM(typeID);
-            saveLayout(typeID);
-          });
-        });
       }
 
       // --- Actions ---
@@ -382,45 +239,6 @@
         }
         saveSidebarConfig();
         render();
-      }
-
-      function toggleExpand(typeID) {
-        if (expandedType === typeID) {
-          expandedType = null;
-          render();
-          return;
-        }
-
-        expandedType = typeID;
-
-        // Load layout if not cached.
-        if (!layouts[typeID]) {
-          render(); // Show "Loading..."
-          fetch(layoutBase + '/' + typeID + '/layout', {
-            headers: { 'Accept': 'application/json' },
-            credentials: 'same-origin'
-          })
-            .then(function (res) {
-              if (!res.ok) throw new Error('HTTP ' + res.status);
-              return res.json();
-            })
-            .then(function (data) {
-              var layout = (data.layout && data.layout.sections) ? data.layout : { sections: [] };
-              fieldsByType[typeID] = data.fields || [];
-
-              if (layout.sections.length === 0) {
-                layout.sections = buildDefaultSections(fieldsByType[typeID]);
-              }
-              layouts[typeID] = layout;
-              render();
-            })
-            .catch(function () {
-              layouts[typeID] = { sections: [{ key: 'entry', label: 'Main Entry', type: 'entry', column: 'right' }] };
-              render();
-            });
-        } else {
-          render();
-        }
       }
 
       function updateColor(typeID, newColor) {
@@ -452,25 +270,6 @@
         });
       }
 
-      function updateLayoutFromDOM(typeID) {
-        var layout = layouts[typeID];
-        if (!layout) return;
-
-        var newSections = [];
-        var columns = el.querySelectorAll('.layout-column[data-type-id="' + typeID + '"]');
-        columns.forEach(function (col) {
-          var colName = col.getAttribute('data-column');
-          col.querySelectorAll('.layout-section-item').forEach(function (item) {
-            var key = item.getAttribute('data-section-key');
-            var original = layout.sections.find(function (s) { return s.key === key; });
-            if (original) {
-              newSections.push({ key: original.key, label: original.label, type: original.type, column: colName });
-            }
-          });
-        });
-        layout.sections = newSections;
-      }
-
       // --- Save ---
 
       function saveSidebarConfig() {
@@ -488,24 +287,6 @@
           })
           .catch(function (err) {
             console.error('[entity-type-config] Sidebar save error:', err);
-          });
-      }
-
-      function saveLayout(typeID) {
-        var layout = layouts[typeID];
-        if (!layout) return;
-
-        fetch(layoutBase + '/' + typeID + '/layout', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCSRF() },
-          credentials: 'same-origin',
-          body: JSON.stringify({ layout: layout })
-        })
-          .then(function (res) {
-            if (!res.ok) console.error('[entity-type-config] Layout save failed: HTTP ' + res.status);
-          })
-          .catch(function (err) {
-            console.error('[entity-type-config] Layout save error:', err);
           });
       }
     },

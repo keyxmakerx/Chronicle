@@ -397,6 +397,34 @@ func (h *Handler) UpdateImageAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// --- Template Editor ---
+
+// TemplateEditor renders the visual template editor for an entity type.
+// GET /campaigns/:id/entity-types/:etid/template
+func (h *Handler) TemplateEditor(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, TemplateEditorPage(cc, et, csrfToken))
+}
+
 // --- Layout API ---
 
 // GetEntityTypeLayout returns the entity type's layout as JSON.

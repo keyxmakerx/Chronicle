@@ -281,36 +281,64 @@ func (s *entityService) CountByType(ctx context.Context, campaignID string, role
 	return s.entities.CountByType(ctx, campaignID, role)
 }
 
-// maxLayoutSections caps the number of sections in a layout to prevent abuse.
-const maxLayoutSections = 50
+// Layout validation limits.
+const (
+	maxLayoutRows       = 20
+	maxLayoutCols       = 4
+	maxLayoutBlocks     = 10
+	gridWidth           = 12
+)
 
-// validLayoutColumns are the allowed values for LayoutSection.Column.
-var validLayoutColumns = map[string]bool{"left": true, "right": true}
-
-// validLayoutTypes are the allowed values for LayoutSection.Type.
-var validLayoutTypes = map[string]bool{"fields": true, "entry": true, "posts": true}
+// validBlockTypes are the allowed values for TemplateBlock.Type.
+var validBlockTypes = map[string]bool{
+	"title": true, "image": true, "entry": true,
+	"attributes": true, "details": true, "divider": true,
+}
 
 // UpdateEntityTypeLayout validates and persists a new layout for an entity type.
+// Accepts the new row/column/block format.
 func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error {
-	if len(layout.Sections) > maxLayoutSections {
-		return apperror.NewBadRequest("too many layout sections")
+	if len(layout.Rows) > maxLayoutRows {
+		return apperror.NewBadRequest("too many layout rows")
 	}
 
-	seen := make(map[string]bool, len(layout.Sections))
-	for _, sec := range layout.Sections {
-		if strings.TrimSpace(sec.Key) == "" {
-			return apperror.NewBadRequest("layout section key is required")
+	seenBlockIDs := make(map[string]bool)
+	for _, row := range layout.Rows {
+		if strings.TrimSpace(row.ID) == "" {
+			return apperror.NewBadRequest("row ID is required")
 		}
-		if seen[sec.Key] {
-			return apperror.NewBadRequest("duplicate layout section key: " + sec.Key)
+		if len(row.Columns) == 0 || len(row.Columns) > maxLayoutCols {
+			return apperror.NewBadRequest("each row must have 1-4 columns")
 		}
-		seen[sec.Key] = true
 
-		if !validLayoutColumns[sec.Column] {
-			return apperror.NewBadRequest("invalid layout column: must be 'left' or 'right'")
+		totalWidth := 0
+		for _, col := range row.Columns {
+			if strings.TrimSpace(col.ID) == "" {
+				return apperror.NewBadRequest("column ID is required")
+			}
+			if col.Width < 1 || col.Width > gridWidth {
+				return apperror.NewBadRequest("column width must be 1-12")
+			}
+			totalWidth += col.Width
+
+			if len(col.Blocks) > maxLayoutBlocks {
+				return apperror.NewBadRequest("too many blocks in column")
+			}
+			for _, blk := range col.Blocks {
+				if strings.TrimSpace(blk.ID) == "" {
+					return apperror.NewBadRequest("block ID is required")
+				}
+				if seenBlockIDs[blk.ID] {
+					return apperror.NewBadRequest("duplicate block ID: " + blk.ID)
+				}
+				seenBlockIDs[blk.ID] = true
+				if !validBlockTypes[blk.Type] {
+					return apperror.NewBadRequest("invalid block type: " + blk.Type)
+				}
+			}
 		}
-		if !validLayoutTypes[sec.Type] {
-			return apperror.NewBadRequest("invalid layout section type: must be 'fields', 'entry', or 'posts'")
+		if totalWidth != gridWidth {
+			return apperror.NewBadRequest("column widths in a row must sum to 12")
 		}
 	}
 

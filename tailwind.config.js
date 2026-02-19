@@ -42,6 +42,15 @@ module.exports = {
       },
     },
   },
+  // Safelist grid column spans used by the dynamic entity page layout renderer.
+  // These classes are generated programmatically from layout_json column widths,
+  // so Tailwind's JIT scanner can't detect them in source files.
+  safelist: [
+    'col-span-1', 'col-span-2', 'col-span-3', 'col-span-4',
+    'col-span-5', 'col-span-6', 'col-span-7', 'col-span-8',
+    'col-span-9', 'col-span-10', 'col-span-11', 'col-span-12',
+    'grid-cols-12',
+  ],
   plugins: [
     require('@tailwindcss/typography'),  // For prose styling (rich text editor)
     require('@tailwindcss/forms'),       // For cleaner form element defaults

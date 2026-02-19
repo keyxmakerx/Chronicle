@@ -35,6 +35,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Owner routes.
 	cg.DELETE("/entities/:eid", h.Delete, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Template editor (Owner only).
+	cg.GET("/entity-types/:etid/template", h.TemplateEditor, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Entity type API (Owner only).
 	cg.GET("/entity-types/:etid/layout", h.GetEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/layout", h.UpdateEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
