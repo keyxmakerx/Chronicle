@@ -1,0 +1,54 @@
+/* ============================================================================
+ * Chronicle Tailwind CSS Input
+ * ============================================================================
+ * This is the Tailwind CSS input file. The standalone Tailwind CLI processes
+ * this and generates static/css/app.css (which is gitignored).
+ *
+ * Run: make tailwind        (one-time build)
+ * Run: make tailwind-watch  (watch mode for development)
+ * ============================================================================ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --- Custom Base Styles --- */
+@layer base {
+  /* Default body styling */
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans antialiased;
+  }
+
+  /* Headings */
+  h1 { @apply text-2xl font-bold; }
+  h2 { @apply text-xl font-semibold; }
+  h3 { @apply text-lg font-semibold; }
+}
+
+/* --- Custom Component Classes --- */
+@layer components {
+  /* Standard button styles */
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-colors duration-150;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-white hover:bg-accent-hover;
+  }
+  .btn-secondary {
+    @apply btn bg-gray-200 text-gray-700 hover:bg-gray-300;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700;
+  }
+
+  /* Card component */
+  .card {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-4;
+  }
+
+  /* Form input styling */
+  .input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md
+           focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent;
+  }
+}
