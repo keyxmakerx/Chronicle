@@ -29,8 +29,12 @@ services:
       - PORT=8080
       - BASE_URL=http://localhost:8080
       - SECRET_KEY=CHANGE-ME-run-openssl-rand-base64-32
-      # -- Database (password must match MYSQL_PASSWORD below) --
-      - DATABASE_URL=chronicle:chronicle@tcp(chronicle-db:3306)/chronicle?parseTime=true
+      # -- Database (DB_PASSWORD must match MYSQL_PASSWORD below) --
+      - DB_HOST=chronicle-db
+      - DB_PORT=3306
+      - DB_USER=chronicle
+      - DB_PASSWORD=chronicle
+      - DB_NAME=chronicle
       - REDIS_URL=redis://chronicle-redis:6379
     depends_on:
       chronicle-db:

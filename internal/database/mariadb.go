@@ -21,7 +21,7 @@ import (
 // settings from the provided config. It pings the database to verify
 // connectivity before returning.
 func NewMariaDB(cfg config.DatabaseConfig) (*sql.DB, error) {
-	db, err := sql.Open("mysql", cfg.URL)
+	db, err := sql.Open("mysql", cfg.DSN())
 	if err != nil {
 		return nil, fmt.Errorf("opening mariadb connection: %w", err)
 	}
