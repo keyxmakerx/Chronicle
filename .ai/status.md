@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- Separate DB env vars for Cosmos Cloud compatibility
+2026-02-19 -- Add DATABASE_URL to docker-compose, special-char-safe DSN builder
 
 ## Current Phase
 **Phase 1: Foundation** -- Core infrastructure, auth, campaigns, SMTP, admin,
@@ -21,17 +21,17 @@ Next: @mentions, password reset, deploy testing on Cosmos Cloud.
 ## Last Session Summary
 
 ### Completed
-- **Separate DB env vars:** Replaced monolithic `DATABASE_URL` with individual
-  `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` env vars. Cosmos
-  Cloud auto-generates different random passwords for separate env vars, so
-  having the password embedded in `DATABASE_URL` caused it to drift from
-  `MYSQL_PASSWORD`. Now both are simple string vars that can be set to match.
-  `DATABASE_URL` still works as a fallback override for backwards compatibility.
+- **DATABASE_URL added to docker-compose.yml:** Active (not commented out) so
+  users with off-site databases have a single connection string to set.
+  `DATABASE_URL` takes precedence over individual `DB_*` vars when both are set.
+- **Special-char-safe DSN builder:** Replaced `fmt.Sprintf` DSN construction
+  with `mysql.Config{}.FormatDSN()` from go-sql-driver/mysql. This is the
+  driver's canonical method and safely handles passwords with special characters
+  (`@`, `:`, `(`, `)`, etc.) that would break manual string interpolation.
+- **Separate DB env vars:** (prior commit) Individual `DB_HOST`, `DB_PORT`,
+  `DB_USER`, `DB_PASSWORD`, `DB_NAME` for Cosmos Cloud compatibility.
 - **DB/Redis retry-with-backoff:** (prior commit) Eliminates crash-loop restarts.
 - **Real `/healthz` endpoint:** (prior commit) Pings DB + Redis, returns 503 when down.
-- **docker-compose.yml hardened:** All env values hardcoded. DB vars split out.
-- **`.golangci.yml` created:** Linter config with standard linters enabled.
-- **Test readiness audit passed:** 30 unit tests passing, CI pipeline verified.
 
 ### In Progress
 - Nothing currently in progress
@@ -40,11 +40,9 @@ Next: @mentions, password reset, deploy testing on Cosmos Cloud.
 - Nothing blocked
 
 ### Files Modified This Session
-- `internal/config/config.go` -- Separate DB env vars with DSN builder
-- `internal/database/mariadb.go` -- Use `cfg.DSN()` instead of `cfg.URL`
-- `docker-compose.yml` -- DB_* vars instead of DATABASE_URL
-- `.env.example` -- Updated with new DB vars
-- `.ai/status.md` -- Updated for separate DB env vars
+- `internal/config/config.go` -- DSN() now uses mysql.Config.FormatDSN()
+- `docker-compose.yml` -- Added DATABASE_URL env var (active)
+- `.ai/status.md` -- Updated
 
 ## Active Branch
 `claude/setup-ai-project-docs-LhvVz`
