@@ -94,6 +94,7 @@ type Campaign struct {
 	Name          string    `json:"name"`
 	Slug          string    `json:"slug"`
 	Description   *string   `json:"description,omitempty"`
+	IsPublic      bool      `json:"is_public"`
 	Settings      string    `json:"settings"`
 	BackdropPath  *string   `json:"backdrop_path,omitempty"`
 	SidebarConfig string    `json:"sidebar_config"`
@@ -221,6 +222,7 @@ type CreateCampaignRequest struct {
 type UpdateCampaignRequest struct {
 	Name        string `json:"name" form:"name"`
 	Description string `json:"description" form:"description"`
+	IsPublic    bool   `json:"is_public" form:"is_public"`
 }
 
 // AddMemberRequest holds the data for adding a member to a campaign.
@@ -257,6 +259,7 @@ type CreateCampaignInput struct {
 type UpdateCampaignInput struct {
 	Name        string
 	Description string
+	IsPublic    bool
 }
 
 // ListOptions holds pagination parameters for list queries.

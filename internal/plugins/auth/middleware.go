@@ -63,6 +63,29 @@ func handleUnauthenticated(c echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/login")
 }
 
+// OptionalAuth returns middleware that loads the session if a valid cookie
+// exists, but does NOT reject unauthenticated requests. Use this on routes
+// that should work both with and without authentication (e.g., public campaign
+// pages where logged-in users see more features than guests).
+func OptionalAuth(service AuthService) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			token := getSessionToken(c)
+			if token != "" {
+				session, err := service.ValidateSession(c.Request().Context(), token)
+				if err == nil {
+					c.Set(contextKeySession, session)
+					c.Set(contextKeyUserID, session.UserID)
+				} else {
+					clearSessionCookie(c)
+				}
+			}
+			// Proceed regardless of auth state.
+			return next(c)
+		}
+	}
+}
+
 // --- Exported getters for other plugins ---
 
 // GetSession retrieves the authenticated session from the Echo context.

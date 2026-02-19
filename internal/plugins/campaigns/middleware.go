@@ -69,6 +69,65 @@ func RequireCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 	}
 }
 
+// AllowPublicCampaignAccess is like RequireCampaignAccess but also allows
+// unauthenticated users to view public campaigns. Public visitors get
+// RolePlayer (read-only) so they can see non-private entities.
+//
+// Use this on view routes (/campaigns/:id, /campaigns/:id/entities, etc.).
+// Mutating routes should still use RequireCampaignAccess + RequireRole.
+func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			campaignID := c.Param("id")
+			if campaignID == "" {
+				return apperror.NewBadRequest("campaign ID is required")
+			}
+
+			campaign, err := service.GetByID(c.Request().Context(), campaignID)
+			if err != nil {
+				return err
+			}
+
+			session := auth.GetSession(c)
+
+			// Authenticated user — use normal membership logic.
+			if session != nil {
+				cc := &CampaignContext{
+					Campaign:    campaign,
+					IsSiteAdmin: session.IsAdmin,
+					MemberRole:  RoleNone,
+				}
+				member, err := service.GetMember(c.Request().Context(), campaignID, session.UserID)
+				if err == nil {
+					cc.MemberRole = member.Role
+				} else if session.IsAdmin {
+					cc.MemberRole = RoleNone
+				} else if !campaign.IsPublic {
+					return apperror.NewForbidden("you are not a member of this campaign")
+				} else {
+					// Authenticated non-member viewing public campaign.
+					cc.MemberRole = RolePlayer
+				}
+				c.Set(contextKeyCampaign, cc)
+				return next(c)
+			}
+
+			// Unauthenticated — only allow if campaign is public.
+			if !campaign.IsPublic {
+				return c.Redirect(302, "/login")
+			}
+
+			cc := &CampaignContext{
+				Campaign:    campaign,
+				MemberRole:  RolePlayer, // Read-only access.
+				IsSiteAdmin: false,
+			}
+			c.Set(contextKeyCampaign, cc)
+			return next(c)
+		}
+	}
+}
+
 // RequireRole returns middleware that checks the user's membership role
 // meets the minimum required level. Uses MemberRole (not admin bypass) so
 // that admins who joined as Player are treated as Players for content access.

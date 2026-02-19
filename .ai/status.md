@@ -8,39 +8,35 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-19 -- Security audit: comprehensive vulnerability fixes
+2026-02-19 -- Unified entity type config, color picker, public campaigns
 
 ## Current Phase
 **Phase 2: Media & UI** -- Building on the Phase 1 foundation. Media plugin
 for file uploads, security hardening, dynamic sidebar, entity image upload,
 UI quality improvements, sidebar customization (drag-to-reorder, hide/show
-entity types), and layout builder scaffold (two-column entity profile layout
-editor). Comprehensive security audit completed with 14 fixes across 14 files.
-All tests pass.
+entity types), layout builder scaffold, and public campaign support.
 
 ## Last Session Summary
 
 ### Completed
-- **Full codebase security audit:** Reviewed all 6 plugins, middleware, core
-  infrastructure, templates, and JS widgets for vulnerabilities and code quality.
-- **14 security fixes applied across 14 files:**
-  - CSRF timing attack fix (constant-time comparison)
-  - CSRF form field name mismatch (`_csrf` -> `csrf_token` in 2 templates)
-  - Deprecated X-XSS-Protection header disabled (set to "0")
-  - Health endpoint info leak fixed (generic error messages, server-side logging)
-  - SECRET_KEY validation (case-insensitive env check, 32-char minimum in prod)
-  - generateUUID error handling (panic on rand failure in 3 locations)
-  - Slug generation bounded loop (100 attempts + random fallback in 2 locations)
-  - FULLTEXT boolean mode operator stripping in entity search
-  - LIKE wildcard injection escaping in entity search
-  - Directory traversal prevention for entity image paths
-  - Last admin removal protection
-  - SMTP header injection prevention (from_address, from_name, subject)
-  - SMTP encryption mode and port range validation
-  - Media upload body size limit middleware
-- **Documentation fixes:** Updated Go version in tech-stack.md, added missing
-  API routes to api-routes.md (image upload, entity type layout endpoints).
-- **Bug fixes:**
+- **Unified entity type config widget:** Combined sidebar config + layout builder
+  into a single "Entity Types" section on the campaign settings page. One widget
+  handles drag-to-reorder, visibility toggles, color picker, and layout editing.
+  Replaces the two separate sidebar_config.js and layout_builder.js widgets.
+- **Entity type color picker:** Added native HTML5 color picker to the unified
+  widget. Color changes are persisted via PUT `/campaigns/:id/entity-types/:etid/color`
+  with hex validation in the service layer.
+- **Public campaign support (is_public flag):**
+  - Migration 000008: adds `is_public` boolean column to campaigns table.
+  - OptionalAuth middleware: loads session if cookie exists but doesn't reject guests.
+  - AllowPublicCampaignAccess middleware: lets unauthenticated visitors see public
+    campaigns with RolePlayer (read-only). Non-public campaigns redirect to /login.
+  - Campaign and entity view routes use public-capable middleware.
+  - Topbar shows "Log in / Sign up" for guests instead of user avatar/logout.
+  - Sidebar hides "Manage" section and "All Campaigns" for guests.
+  - Campaign picker dropdown only renders for authenticated users.
+  - Edit form has "Make this campaign public" checkbox.
+- **Bug fixes from prior session:**
   - `config.IsDevelopment()` now case-insensitive, also matches "dev"
   - Media upload: clean up thumbnails on disk when DB insert fails
 
@@ -50,43 +46,39 @@ All tests pass.
 ### Blocked
 - Nothing blocked
 
-### Known Security Items (Deferred -- Larger Changes)
-- **Stored XSS via entry_html:** entry_html is not rendered as raw HTML in
-  templates (TipTap uses ProseMirror JSON), but adding bluemonday sanitization
-  at storage time would provide defense-in-depth. Requires new dependency.
-- **CSP unsafe-eval/unsafe-inline:** Required by Alpine.js. Migrating to
-  Alpine.js CSP build would allow tightening the Content-Security-Policy.
-- **In-memory rate limiter:** Current rate limiter uses sync.Map (not Redis),
-  so limits don't persist across restarts or multiple instances. Fine for
-  single-instance deployments but should move to Redis for multi-instance.
-
 ### Files Modified This Session
-- `internal/middleware/csrf.go` -- Constant-time CSRF comparison
-- `internal/middleware/security.go` -- X-XSS-Protection set to "0"
-- `internal/app/routes.go` -- Health endpoint info leak fix, media route maxSize param
-- `internal/config/config.go` -- Case-insensitive env check, 32-char SECRET_KEY minimum
-- `internal/plugins/entities/service.go` -- generateUUID panic, slug bounds, path traversal
-- `internal/plugins/entities/repository.go` -- FULLTEXT operator stripping, LIKE escaping
-- `internal/plugins/campaigns/service.go` -- generateUUID panic, slug bounds
-- `internal/plugins/admin/handler.go` -- Last admin removal protection
-- `internal/plugins/auth/repository.go` -- CountAdmins interface + implementation
-- `internal/plugins/smtp/service.go` -- Header injection, validation hardening
-- `internal/plugins/smtp/settings.templ` -- CSRF field name fix
-- `internal/plugins/admin/campaigns.templ` -- CSRF field name fix
-- `internal/plugins/media/service.go` -- generateUUID panic fix
-- `internal/plugins/media/routes.go` -- Body size limit middleware
-- `.ai/tech-stack.md` -- Go version updated to 1.24+
-- `.ai/api-routes.md` -- Added missing image + layout API routes
+- `static/js/widgets/entity_type_config.js` -- New unified widget
+- `internal/plugins/entities/repository.go` -- UpdateColor method
+- `internal/plugins/entities/service.go` -- UpdateEntityTypeColor + hex validation
+- `internal/plugins/entities/handler.go` -- UpdateEntityTypeColor endpoint
+- `internal/plugins/entities/routes.go` -- Color route + public view routes
+- `internal/plugins/entities/service_test.go` -- Mock UpdateColor
+- `internal/plugins/campaigns/settings.templ` -- Unified entity type config section
+- `internal/plugins/campaigns/model.go` -- IsPublic field + request/input DTOs
+- `internal/plugins/campaigns/repository.go` -- All queries updated for is_public
+- `internal/plugins/campaigns/service.go` -- IsPublic wired into Update method
+- `internal/plugins/campaigns/middleware.go` -- AllowPublicCampaignAccess
+- `internal/plugins/campaigns/handler.go` -- IsPublic in Update handler
+- `internal/plugins/campaigns/routes.go` -- Public view routes
+- `internal/plugins/campaigns/form.templ` -- IsPublic checkbox on edit form
+- `internal/plugins/auth/middleware.go` -- OptionalAuth middleware
+- `internal/templates/layouts/app.templ` -- Guest-friendly topbar + sidebar
+- `internal/templates/layouts/data.go` -- IsAuthenticated context helper
+- `internal/templates/layouts/base.templ` -- entity_type_config.js script
+- `internal/app/routes.go` -- SetIsAuthenticated in LayoutInjector
+- `db/migrations/000008_campaign_public.up.sql` -- New migration
+- `db/migrations/000008_campaign_public.down.sql` -- Rollback migration
 
 ## Active Branch
 `claude/resume-previous-work-YqXiG`
 
 ## Next Session Should
-1. **@mentions** -- Search entities in editor, insert link, parse/render server-side
-2. **Password reset** -- Wire auth password reset with SMTP when configured
-3. **Entity relations** -- Bi-directional entity linking
-4. **Apply layout_json to entity show page** -- Render entity profiles using the layout config
-5. **Entity type CRUD** -- Let campaign owners add/edit/remove entity types
+1. **Admin notification system** -- Notification bell in topbar, admin alerts
+2. **Apply layout_json to entity show page** -- Render entity profiles using the layout config
+3. **@mentions** -- Search entities in editor, insert link, parse/render server-side
+4. **Password reset** -- Wire auth password reset with SMTP when configured
+5. **Entity relations** -- Bi-directional entity linking
+6. **Entity type CRUD** -- Let campaign owners add/edit/remove entity types
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

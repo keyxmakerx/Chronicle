@@ -143,6 +143,7 @@ func (a *App) RegisterRoutes() {
 	middleware.LayoutInjector = func(c echo.Context, ctx context.Context) context.Context {
 		// User info from auth session.
 		if session := auth.GetSession(c); session != nil {
+			ctx = layouts.SetIsAuthenticated(ctx, true)
 			ctx = layouts.SetUserName(ctx, session.Name)
 			ctx = layouts.SetUserEmail(ctx, session.Email)
 			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)

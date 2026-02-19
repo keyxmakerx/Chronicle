@@ -130,47 +130,49 @@ templ CampaignSidebarNav() {
 		All Entities
 	</a>
 
-	<!-- Campaign management -->
-	<div class="mt-4 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-		Manage
-	</div>
+	if IsAuthenticated(ctx) {
+		<!-- Campaign management (auth required) -->
+		<div class="mt-4 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+			Manage
+		</div>
 
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx))) }
-		class={ sidebarNavLink,
-			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))),
-			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))) }
-	>
-		<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
-		</svg>
-		Members
-	</a>
-
-	if GetCampaignRole(ctx) >= 3 {
 		<a
-			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx))) }
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx))) }
 			class={ sidebarNavLink,
-				templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))),
-				templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))) }
+				templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))),
+				templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))) }
 		>
 			<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
 			</svg>
-			Settings
+			Members
 		</a>
-	}
 
-	<!-- Back to campaigns list -->
-	<div class="mt-4 pt-3 border-t border-gray-700">
-		<a href="/campaigns" class={ sidebarNavLink, sidebarNavInactive }>
-			<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
-			</svg>
-			All Campaigns
-		</a>
-	</div>
+		if GetCampaignRole(ctx) >= 3 {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx))) }
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))) }
+			>
+				<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+				</svg>
+				Settings
+			</a>
+		}
+
+		<!-- Back to campaigns list -->
+		<div class="mt-4 pt-3 border-t border-gray-700">
+			<a href="/campaigns" class={ sidebarNavLink, sidebarNavInactive }>
+				<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
+				</svg>
+				All Campaigns
+			</a>
+		</div>
+	}
 }
 
 // DefaultSidebarNav renders generic navigation when not inside a campaign.
@@ -231,38 +233,45 @@ templ Topbar() {
 	<header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
 		<!-- Left: Campaign selector + Search -->
 		<div class="flex items-center space-x-4">
-			<!-- Campaign selector dropdown -->
-			<div x-data="{ open: false }" class="relative">
-				<button
-					@click="open = !open"
-					@click.outside="open = false"
-					class="flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
-				>
-					if InCampaign(ctx) {
-						<span class="truncate max-w-[180px]">{ GetCampaignName(ctx) }</span>
-					} else {
-						<span class="text-gray-500">Select Campaign</span>
-					}
-					<svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-					</svg>
-				</button>
-				<div
-					x-show="open"
-					x-transition:enter="transition ease-out duration-100"
-					x-transition:enter-start="opacity-0 scale-95"
-					x-transition:enter-end="opacity-100 scale-100"
-					x-transition:leave="transition ease-in duration-75"
-					x-transition:leave-start="opacity-100 scale-100"
-					x-transition:leave-end="opacity-0 scale-95"
-					class="absolute left-0 top-full mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden"
-					hx-get="/campaigns/picker"
-					hx-trigger="intersect once"
-					hx-swap="innerHTML"
-				>
-					<div class="px-4 py-3 text-sm text-gray-400">Loading...</div>
+			if IsAuthenticated(ctx) {
+				<!-- Campaign selector dropdown (authenticated users only) -->
+				<div x-data="{ open: false }" class="relative">
+					<button
+						@click="open = !open"
+						@click.outside="open = false"
+						class="flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+					>
+						if InCampaign(ctx) {
+							<span class="truncate max-w-[180px]">{ GetCampaignName(ctx) }</span>
+						} else {
+							<span class="text-gray-500">Select Campaign</span>
+						}
+						<svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+						</svg>
+					</button>
+					<div
+						x-show="open"
+						x-transition:enter="transition ease-out duration-100"
+						x-transition:enter-start="opacity-0 scale-95"
+						x-transition:enter-end="opacity-100 scale-100"
+						x-transition:leave="transition ease-in duration-75"
+						x-transition:leave-start="opacity-100 scale-100"
+						x-transition:leave-end="opacity-0 scale-95"
+						class="absolute left-0 top-full mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden"
+						hx-get="/campaigns/picker"
+						hx-trigger="intersect once"
+						hx-swap="innerHTML"
+					>
+						<div class="px-4 py-3 text-sm text-gray-400">Loading...</div>
+					</div>
 				</div>
-			</div>
+			} else if InCampaign(ctx) {
+				<!-- Static campaign name for guests -->
+				<span class="px-3 py-1.5 text-sm font-medium text-gray-700">
+					{ GetCampaignName(ctx) }
+				</span>
+			}
 
 			if InCampaign(ctx) {
 				<!-- Campaign-scoped search -->
@@ -285,35 +294,44 @@ templ Topbar() {
 			}
 		</div>
 
-		<!-- Right: User menu -->
+		<!-- Right: User menu or guest login links -->
 		<div class="flex items-center space-x-4">
-			if GetIsAdmin(ctx) {
-				<a href="/admin" class="text-sm text-gray-500 hover:text-gray-700 transition-colors">
-					Admin
-				</a>
-			}
+			if IsAuthenticated(ctx) {
+				if GetIsAdmin(ctx) {
+					<a href="/admin" class="text-sm text-gray-500 hover:text-gray-700 transition-colors">
+						Admin
+					</a>
+				}
 
-			<div class="flex items-center space-x-2">
-				<!-- User avatar placeholder -->
-				<div class="w-8 h-8 rounded-full bg-accent flex items-center justify-center">
-					<span class="text-xs font-medium text-white">
-						{ userInitials(ctx) }
+				<div class="flex items-center space-x-2">
+					<!-- User avatar placeholder -->
+					<div class="w-8 h-8 rounded-full bg-accent flex items-center justify-center">
+						<span class="text-xs font-medium text-white">
+							{ userInitials(ctx) }
+						</span>
+					</div>
+					<span class="text-sm font-medium text-gray-700">
+						{ GetUserName(ctx) }
 					</span>
 				</div>
-				<span class="text-sm font-medium text-gray-700">
-					{ GetUserName(ctx) }
-				</span>
-			</div>
 
-			<form method="POST" action="/logout" class="inline">
-				<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
-				<button
-					type="submit"
-					class="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-				>
-					Logout
-				</button>
-			</form>
+				<form method="POST" action="/logout" class="inline">
+					<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
+					<button
+						type="submit"
+						class="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+					>
+						Logout
+					</button>
+				</form>
+			} else {
+				<a href="/login" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors">
+					Log in
+				</a>
+				<a href="/register" class="btn-primary text-sm">
+					Sign up
+				</a>
+			}
 		</div>
 	</header>
 }

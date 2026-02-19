@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -36,6 +37,7 @@ type EntityService interface {
 	GetEntityTypeByID(ctx context.Context, id int) (*EntityType, error)
 	CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error)
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
+	UpdateEntityTypeColor(ctx context.Context, id int, color string) error
 
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
@@ -323,6 +325,18 @@ func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layo
 
 	slog.Info("entity type layout updated", slog.Int("entity_type_id", id))
 	return nil
+}
+
+// hexColorPattern validates CSS hex color values (#rgb or #rrggbb).
+var hexColorPattern = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
+
+// UpdateEntityTypeColor validates and persists a new color for an entity type.
+func (s *entityService) UpdateEntityTypeColor(ctx context.Context, id int, color string) error {
+	color = strings.TrimSpace(color)
+	if !hexColorPattern.MatchString(color) {
+		return apperror.NewBadRequest("color must be a valid hex value like #ff0000")
+	}
+	return s.types.UpdateColor(ctx, id, color)
 }
 
 // --- Seeder ---

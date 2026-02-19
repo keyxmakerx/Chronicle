@@ -127,6 +127,9 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] UI upgrade with Font Awesome icons
 - [x] Sidebar customization (campaign-level config, migration 000006)
 - [x] Layout builder scaffold (entity type layout_json, migration 000007)
+- [x] Unified entity type config widget (sidebar + layout + color in one UI)
+- [x] Entity type color picker (PUT color API + hex validation)
+- [x] Public campaign support (is_public flag, migration 000008, OptionalAuth)
 - [ ] Apply layout_json to entity show page rendering
 
 ### Phase 3 -- Permissions & Advanced Multi-User
