@@ -75,15 +75,12 @@ successfully. Next: @mentions, campaign selector, tests, deploy polish.
 
 ## Next Session Should
 1. **@mentions** -- Search entities, insert link, parse/render server-side
-2. **Campaign selector** -- Dropdown in topbar to switch between campaigns
-3. **Password reset** -- Wire auth password reset with SMTP when configured
-4. **Tests** -- Unit tests for entities service and repository
-5. **Tailwind CSS** -- Generate app.css (requires tailwindcss binary)
-6. **Vendor libraries** -- HTMX + Alpine.js (currently CDN)
+2. **Password reset** -- Wire auth password reset with SMTP when configured
+3. **Tests** -- Unit tests for entities service and repository
+4. **Tailwind CSS** -- Generate app.css (requires tailwindcss binary)
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
-- HTMX and Alpine.js are loaded from CDN -- should be vendored for self-hosted
 - Tailwind CSS output (`static/css/app.css`) doesn't exist yet -- needs
   `tailwindcss` binary to generate it
 - Templ generated files (`*_templ.go`) are gitignored, so `templ generate`
@@ -102,3 +99,4 @@ successfully. Next: @mentions, campaign selector, tests, deploy polish.
 - 2026-02-19: Entities plugin (CRUD, entity types, FULLTEXT search, privacy, dynamic fields)
 - 2026-02-19: UI & Layouts (dynamic sidebar, topbar, pagination, flash messages, error pages)
 - 2026-02-19: Editor widget (TipTap integration, boot.js auto-mounter, entry API)
+- 2026-02-19: Vendor HTMX + Alpine.js, campaign selector dropdown

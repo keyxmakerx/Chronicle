@@ -25,7 +25,7 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Create base Templ layouts (base, app, landing, error)
 - [x] Create migration 000001_create_users
 - [ ] Set up `air` hot reload for dev workflow
-- [ ] Vendor HTMX + Alpine.js (currently loaded from CDN)
+- [x] Vendor HTMX + Alpine.js (static/vendor/htmx.min.js, alpine.min.js)
 - [ ] Verify `make docker-up` -> `make dev` works end-to-end
 
 ### Priority 2 -- Auth Plugin (Must Do)
@@ -49,7 +49,7 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Ownership transfer flow (72h token, optional email)
 - [x] Campaign Templ pages (index, show, form, settings, members)
 - [x] Campaign sidebar navigation in app layout (entity types, members, settings)
-- [ ] Campaign selector dropdown in topbar
+- [x] Campaign selector dropdown in topbar
 
 ### Priority 3.5 -- SMTP Plugin
 - [x] SMTP settings singleton table (migration 000003)
@@ -93,7 +93,7 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Flash messages component (Alpine.js auto-dismiss, success/error)
 - [x] Pagination component (shared, HTMX-aware, used by campaigns + entities)
 - [x] LayoutInjector pattern (middleware.Render copies auth/campaign data to Go context)
-- [ ] Campaign selector dropdown in topbar
+- [x] Campaign selector dropdown in topbar (HTMX lazy-loaded, Alpine.js toggle)
 - [ ] Generate Tailwind CSS output (requires tailwindcss binary)
 
 ### Priority 7 -- Build & Deploy (Should Do)

@@ -47,6 +47,28 @@ func (h *Handler) Index(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, CampaignIndexPage(campaigns, total, opts, csrfToken))
 }
 
+// Picker returns an HTMX fragment listing the user's campaigns for the
+// topbar campaign selector dropdown. Loads lazily on dropdown open.
+func (h *Handler) Picker(c echo.Context) error {
+	userID := auth.GetUserID(c)
+
+	// Fetch all campaigns (up to 50 — most users have far fewer).
+	opts := DefaultListOptions()
+	opts.PerPage = 50
+	campaigns, _, err := h.service.List(c.Request().Context(), userID, opts)
+	if err != nil {
+		return err
+	}
+
+	// Get the current campaign ID (if any) to mark as active.
+	var activeCampaignID string
+	if cc := GetCampaignContext(c); cc != nil {
+		activeCampaignID = cc.Campaign.ID
+	}
+
+	return middleware.Render(c, http.StatusOK, CampaignPickerFragment(campaigns, activeCampaignID))
+}
+
 // NewForm renders the campaign creation form (GET /campaigns/new).
 func (h *Handler) NewForm(c echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)

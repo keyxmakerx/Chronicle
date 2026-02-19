@@ -1,0 +1,39 @@
+// picker.templ renders the campaign picker dropdown fragment.
+// Loaded lazily via HTMX when the dropdown is opened.
+
+package campaigns
+
+import "fmt"
+
+// CampaignPickerFragment renders the list of campaigns for the selector dropdown.
+templ CampaignPickerFragment(campaigns []Campaign, activeCampaignID string) {
+	if len(campaigns) == 0 {
+		<div class="px-4 py-3 text-sm text-gray-500">
+			No campaigns yet.
+			<a href="/campaigns/new" class="text-accent hover:underline">Create one</a>
+		</div>
+	} else {
+		for _, c := range campaigns {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", c.ID)) }
+				class={
+					"flex items-center px-4 py-2 text-sm transition-colors",
+					templ.KV("bg-accent/10 text-accent font-medium", c.ID == activeCampaignID),
+					templ.KV("text-gray-700 hover:bg-gray-100", c.ID != activeCampaignID),
+				}
+			>
+				<span class="truncate">{ c.Name }</span>
+				if c.ID == activeCampaignID {
+					<svg class="w-4 h-4 ml-auto shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+					</svg>
+				}
+			</a>
+		}
+		<div class="border-t border-gray-100">
+			<a href="/campaigns" class="flex items-center px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors">
+				All Campaigns
+			</a>
+		</div>
+	}
+}

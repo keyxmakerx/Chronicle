@@ -23,10 +23,9 @@ templ Base(title string) {
 	<body class="h-full bg-gray-50 text-gray-900 font-sans antialiased">
 		{ children... }
 
-		<!-- HTMX (loaded last for faster initial paint) -->
-		<!-- TODO: Vendor htmx and alpine when ready -->
-		<script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
-		<script src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
+		<!-- Vendored libraries (loaded last for faster initial paint) -->
+		<script src="/static/vendor/htmx.min.js" defer></script>
+		<script src="/static/vendor/alpine.min.js" defer></script>
 
 		<!-- Widget system: boot.js auto-mounts data-widget elements -->
 		<script src="/static/js/boot.js" defer></script>

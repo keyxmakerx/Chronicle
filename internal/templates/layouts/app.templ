@@ -224,8 +224,41 @@ templ entityTypeLink(slug string, label string, color string) {
 // and user menu.
 templ Topbar() {
 	<header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
-		<!-- Left: Breadcrumb + Search -->
+		<!-- Left: Campaign selector + Search -->
 		<div class="flex items-center space-x-4">
+			<!-- Campaign selector dropdown -->
+			<div x-data="{ open: false }" class="relative">
+				<button
+					@click="open = !open"
+					@click.outside="open = false"
+					class="flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+				>
+					if InCampaign(ctx) {
+						<span class="truncate max-w-[180px]">{ GetCampaignName(ctx) }</span>
+					} else {
+						<span class="text-gray-500">Select Campaign</span>
+					}
+					<svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+					</svg>
+				</button>
+				<div
+					x-show="open"
+					x-transition:enter="transition ease-out duration-100"
+					x-transition:enter-start="opacity-0 scale-95"
+					x-transition:enter-end="opacity-100 scale-100"
+					x-transition:leave="transition ease-in duration-75"
+					x-transition:leave-start="opacity-100 scale-100"
+					x-transition:leave-end="opacity-0 scale-95"
+					class="absolute left-0 top-full mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden"
+					hx-get="/campaigns/picker"
+					hx-trigger="intersect once"
+					hx-swap="innerHTML"
+				>
+					<div class="px-4 py-3 text-sm text-gray-400">Loading...</div>
+				</div>
+			</div>
+
 			if InCampaign(ctx) {
 				<!-- Campaign-scoped search -->
 				<div class="relative">

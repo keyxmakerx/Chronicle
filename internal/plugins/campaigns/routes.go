@@ -13,6 +13,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// Campaign list and creation require authentication only.
 	authed := e.Group("", auth.RequireAuth(authSvc))
 	authed.GET("/campaigns", h.Index)
+	authed.GET("/campaigns/picker", h.Picker) // HTMX fragment for topbar dropdown.
 	authed.GET("/campaigns/new", h.NewForm)
 	authed.POST("/campaigns", h.Create)
 

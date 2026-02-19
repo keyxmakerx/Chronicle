@@ -28,6 +28,7 @@
 | Method | Path | Handler | Min Role | Description |
 |--------|------|---------|----------|-------------|
 | GET | `/campaigns` | Index | Auth only | List user's campaigns |
+| GET | `/campaigns/picker` | Picker | Auth only | HTMX fragment for topbar campaign selector |
 | GET | `/campaigns/new` | NewForm | Auth only | Create campaign form |
 | POST | `/campaigns` | Create | Auth only | Create campaign |
 | GET | `/campaigns/:id` | Show | Player | Campaign dashboard |
