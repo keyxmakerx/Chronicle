@@ -45,7 +45,7 @@ func main() {
 	// Auto-apply pending migrations on every startup. Already-applied
 	// migrations are skipped. This eliminates the need to run migrate
 	// manually after deployment.
-	if err := database.RunMigrations(db, "db/migrations"); err != nil {
+	if err := database.RunMigrations(db, cfg.Database.DSN(), "db/migrations"); err != nil {
 		slog.Error("failed to run migrations", slog.Any("error", err))
 		os.Exit(1)
 	}
