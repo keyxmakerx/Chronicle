@@ -1,5 +1,5 @@
-// campaign_addons.templ renders the per-campaign addon settings page.
-// Campaign owners use this to enable/disable addons for their campaign.
+// campaign_addons.templ renders the per-campaign extension settings page.
+// Campaign owners use this to enable/disable extensions for their campaign.
 
 package addons
 
@@ -16,7 +16,7 @@ templ CampaignAddonsPageTempl(campaignID string, addons []CampaignAddon, csrfTok
 				<div>
 					<h1 class="text-2xl font-bold text-fg">Extensions</h1>
 					<p class="text-sm text-fg-secondary mt-1">
-						Enable or disable addons for this campaign.
+						Enable or disable extensions for this campaign.
 					</p>
 				</div>
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/edit", campaignID)) } class="btn-secondary text-sm">
@@ -97,7 +97,7 @@ templ CampaignAddonsListFragment(campaignID string, addons []CampaignAddon, csrf
 
 	if len(addons) == 0 {
 		<div class="card p-8 text-center">
-			<p class="text-fg-muted">No addons available yet.</p>
+			<p class="text-fg-muted">No extensions available yet.</p>
 		</div>
 	}
 }

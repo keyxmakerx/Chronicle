@@ -34,6 +34,10 @@ templ App(title string) {
 				</main>
 			</div>
 		</div>
+		<!-- Notes widget mount point (floating panel, bottom-right) -->
+		if InCampaign(ctx) && IsAuthenticated(ctx) {
+			@NotesWidget()
+		}
 	}
 }
 
@@ -185,17 +189,6 @@ templ AdminSidebarNav() {
 				Plugins
 			</a>
 			<a
-				href="/admin/modules"
-				class={ sidebarNavLink,
-					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/modules")),
-					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/modules")) }
-			>
-				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-					<i class="fa-solid fa-puzzle-piece text-xs"></i>
-				</span>
-				Modules
-			</a>
-			<a
 				href="/admin/addons"
 				class={ sidebarNavLink,
 					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/addons")),
@@ -204,7 +197,7 @@ templ AdminSidebarNav() {
 				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 					<i class="fa-solid fa-plug text-xs"></i>
 				</span>
-				Addons
+				Extensions
 			</a>
 			<a
 				href="/admin/api"
@@ -591,4 +584,28 @@ func userInitials(ctx context.Context) string {
 		return strings.ToUpper(name[:1])
 	}
 	return strings.ToUpper(string(parts[0][0]) + string(parts[len(parts)-1][0]))
+}
+
+// NotesWidget renders the mount point for the floating notes panel.
+// The campaign ID is passed as a data attribute; entity ID is auto-detected
+// from the URL by the JavaScript widget (pattern: /campaigns/:id/entities/:eid).
+templ NotesWidget() {
+	<div
+		data-widget="notes"
+		data-campaign-id={ GetCampaignID(ctx) }
+		data-entity-id={ extractEntityID(ctx) }
+	></div>
+}
+
+// extractEntityID extracts an entity ID from the current URL if we're on an
+// entity show/edit page. Returns "" if not on an entity page.
+func extractEntityID(ctx context.Context) string {
+	path := GetActivePath(ctx)
+	// Pattern: /campaigns/{id}/entities/{eid}[/...]
+	parts := strings.Split(path, "/")
+	// parts: ["", "campaigns", "{id}", "entities", "{eid}", ...]
+	if len(parts) >= 5 && parts[3] == "entities" && parts[4] != "new" && parts[4] != "search" && parts[4] != "" {
+		return parts[4]
+	}
+	return ""
 }

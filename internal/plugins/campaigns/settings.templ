@@ -6,7 +6,6 @@ package campaigns
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/keyxmakerx/chronicle/internal/modules"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -122,40 +121,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 				></div>
 			</div>
 
-			// Game modules available for this campaign.
-			<div class="card p-6 mb-6">
-				<h2 class="text-lg font-semibold text-fg mb-2">Game Modules</h2>
-				<p class="text-sm text-fg-secondary mb-4">
-					Content packs providing reference data, tooltips, and stat blocks. Modules are
-					managed by site administrators and can be enabled per campaign when available.
-				</p>
-				if len(modules.Registry()) > 0 {
-					<div class="space-y-2">
-						for _, mod := range modules.Registry() {
-							<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
-								<div class="flex items-center gap-3">
-									<span class="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
-										<i class={ "fa-solid " + mod.Icon + " text-accent text-sm" }></i>
-									</span>
-									<div>
-										<div class="text-sm font-medium text-fg">{ mod.Name }</div>
-										<div class="text-xs text-fg-muted">{ mod.Description }</div>
-									</div>
-								</div>
-								if mod.Status == modules.StatusAvailable {
-									<span class="badge-green text-xs">Available</span>
-								} else {
-									<span class="badge-gray text-xs">Coming Soon</span>
-								}
-							</div>
-						}
-					</div>
-				} else {
-					<p class="text-sm text-fg-muted italic">No modules registered yet.</p>
-				}
-			</div>
-
-			// Campaign extensions (addons).
+			// Campaign extensions.
 			<div class="card p-6 mb-6">
 				<div class="flex items-center justify-between mb-2">
 					<h2 class="text-lg font-semibold text-fg">Extensions</h2>
@@ -167,7 +133,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 					</a>
 				</div>
 				<p class="text-sm text-fg-secondary">
-					Enable or disable addons like game modules, widgets, and external integrations for this campaign.
+					Enable or disable extensions like game modules, widgets, and external integrations for this campaign.
 				</p>
 			</div>
 

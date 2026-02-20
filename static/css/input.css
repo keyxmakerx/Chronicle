@@ -364,6 +364,137 @@
   }
 }
 
+  /* --- Notes Widget --- */
+
+  /* Floating action button (bottom-right). */
+  .notes-fab {
+    @apply fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full
+           bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg
+           flex items-center justify-center cursor-pointer
+           transition-all duration-200 hover:scale-105;
+  }
+  .notes-fab-hidden {
+    @apply scale-0 opacity-0 pointer-events-none;
+  }
+
+  /* Panel container -- slides up from bottom-right. */
+  .notes-panel {
+    @apply fixed bottom-6 right-6 z-50 w-80 bg-surface rounded-xl
+           shadow-2xl border border-edge flex flex-col
+           transition-all duration-300 ease-out;
+    max-height: min(500px, calc(100vh - 6rem));
+  }
+  .notes-panel-hidden {
+    @apply opacity-0 scale-95 pointer-events-none translate-y-4;
+  }
+
+  /* Panel header. */
+  .notes-header {
+    @apply flex items-center justify-between px-4 py-3
+           border-b border-edge shrink-0;
+  }
+  .notes-header-title {
+    @apply text-sm font-semibold text-fg;
+  }
+  .notes-header-actions {
+    @apply flex items-center gap-1;
+  }
+
+  /* Tab bar. */
+  .notes-tabs {
+    @apply flex border-b border-edge shrink-0;
+  }
+  .notes-tab {
+    @apply flex-1 px-3 py-2 text-xs font-medium text-fg-secondary
+           hover:text-fg hover:bg-surface-alt transition-colors
+           cursor-pointer border-b-2 border-transparent;
+  }
+  .notes-tab-active {
+    @apply text-indigo-400 border-indigo-400;
+  }
+
+  /* Scrollable notes list. */
+  .notes-list {
+    @apply flex-1 overflow-y-auto p-3 space-y-2;
+    min-height: 120px;
+  }
+  .notes-empty {
+    @apply text-xs text-fg-secondary text-center py-8 italic;
+  }
+
+  /* Individual note card. */
+  .note-card {
+    @apply bg-surface-alt rounded-lg border border-edge p-3 text-xs;
+  }
+  .note-card.note-pinned {
+    @apply border-indigo-500/30;
+  }
+  .note-card-header {
+    @apply flex items-center justify-between gap-2 mb-2;
+  }
+  .note-title {
+    @apply font-medium text-fg truncate flex-1;
+  }
+  .note-title-input {
+    @apply flex-1 bg-transparent border-b border-edge text-fg text-xs
+           px-0 py-0.5 focus:outline-none focus:border-indigo-400;
+  }
+  .note-actions {
+    @apply flex items-center gap-0.5 shrink-0;
+  }
+  .note-btn {
+    @apply w-6 h-6 flex items-center justify-center rounded
+           text-fg-secondary hover:text-fg hover:bg-surface
+           transition-colors cursor-pointer text-[11px];
+  }
+
+  /* Card body. */
+  .note-card-body {
+    @apply space-y-2;
+  }
+  .note-text {
+    @apply text-fg-secondary whitespace-pre-wrap leading-relaxed;
+  }
+  .note-text-input {
+    @apply w-full bg-transparent border border-edge rounded px-2 py-1.5
+           text-fg text-xs resize-none focus:outline-none focus:border-indigo-400;
+    min-height: 48px;
+  }
+
+  /* Checklist items. */
+  .note-checklist {
+    @apply space-y-1;
+  }
+  .note-check-item {
+    @apply flex items-center gap-2 text-fg-secondary cursor-pointer;
+  }
+  .note-check-item.note-checked span {
+    @apply line-through opacity-50;
+  }
+  .note-checkbox {
+    @apply rounded border-gray-500 text-indigo-500 w-3.5 h-3.5
+           cursor-pointer shrink-0;
+  }
+  .note-check-text-input {
+    @apply flex-1 bg-transparent border-b border-transparent text-fg text-xs
+           px-0 py-0 focus:outline-none focus:border-edge;
+  }
+  .note-add-check-item {
+    @apply text-[10px] text-fg-secondary hover:text-fg
+           cursor-pointer pl-5 py-0.5 transition-colors;
+  }
+
+  /* Block add buttons. */
+  .note-add-block {
+    @apply flex items-center gap-1 pt-1 border-t border-edge/50 mt-2;
+  }
+  .note-add-block button {
+    @apply w-7 h-7 flex items-center justify-center rounded
+           text-fg-secondary hover:text-fg hover:bg-surface
+           transition-colors cursor-pointer;
+  }
+}
+
 /* --- Utility additions --- */
 @layer utilities {
   /* HTMX loading indicator */

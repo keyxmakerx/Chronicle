@@ -4,6 +4,7 @@
 package admin
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -20,6 +21,11 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 )
 
+// AddonCounter provides a count of registered addons for the admin dashboard.
+type AddonCounter interface {
+	CountAddons(ctx context.Context) (int, error)
+}
+
 // Handler handles admin dashboard HTTP requests. Depends on other plugins'
 // services via interfaces -- no direct repo access.
 type Handler struct {
@@ -30,6 +36,7 @@ type Handler struct {
 	mediaService    media.MediaService
 	maxUploadSize   int64
 	settingsService settings.SettingsService
+	addonCounter    AddonCounter
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
@@ -70,6 +77,11 @@ func (h *Handler) SetSettingsDeps(svc settings.SettingsService) {
 	h.settingsService = svc
 }
 
+// SetAddonCounter sets the addon counter for the dashboard extension count.
+func (h *Handler) SetAddonCounter(counter AddonCounter) {
+	h.addonCounter = counter
+}
+
 // --- Dashboard ---
 
 // Dashboard renders the admin overview page (GET /admin).
@@ -93,7 +105,12 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		}
 	}
 
-	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured))
+	var addonCount int
+	if h.addonCounter != nil {
+		addonCount, _ = h.addonCounter.CountAddons(ctx)
+	}
+
+	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured, addonCount))
 }
 
 // --- Users ---

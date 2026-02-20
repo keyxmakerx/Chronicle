@@ -8,12 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-20 -- Phase B features: discover page fix, template editor upgrades, field overrides, extension framework, sync API plugin, REST API v1 endpoints.
+2026-02-20 -- Terminology standardization (Addon → Extension in all user-facing UI).
 
 ## Current Phase
-**Phase B: COMPLETE.** Extension framework, Sync API management infrastructure, and
-REST API v1 endpoints all implemented. External clients can now authenticate with
-API keys and read/write campaign data via `/api/v1/` endpoints.
+**Phase C: IN PROGRESS.** Player Notes widget implemented. Terminology
+standardization completed — all user-facing "Addon" text → "Extension".
 
 ## What Was Built in Phase B (Summary)
 
@@ -75,6 +74,29 @@ API keys and read/write campaign data via `/api/v1/` endpoints.
 - Middleware chain: RequireAPIKey → RateLimit → RequireCampaignMatch → RequirePermission.
 - Privacy enforcement uses key owner's campaign role for entity visibility.
 
+### Player Notes Widget (Phase C)
+- **Migration 000017:** `notes` table (per-user, per-campaign, optional entity scoping).
+- **Migration 000018:** Activates `player-notes` addon from planned to active.
+- **Widget backend:** `internal/widgets/notes/` — model, repository, service, handler, routes.
+- **Widget frontend:** `static/js/widgets/notes.js` — floating panel (bottom-right),
+  tab system (This Page / All Notes), text blocks, interactive checklists.
+- **CSS:** Notes panel styles in `input.css` (fab button, panel, cards, checklists).
+- **Mount point:** Auto-rendered in app layout when user is in a campaign.
+- **API routes:** CRUD at `/campaigns/:id/notes`, checklist toggle, scope filtering.
+- **Addon integration:** Uses existing `player-notes` addon (disabled by default,
+  owner enables per-campaign via addons settings page).
+
+### Terminology Standardization (Phase C)
+- Two-tier user-facing model: **Plugins** (core, always-on) and **Extensions** (optional, toggleable).
+- Renamed all user-facing "Addon" → "Extension" in admin and campaign templates.
+- Admin dashboard: Removed separate "Modules" card, unified into "Extensions" card with count.
+- Admin sidebar: Removed "Modules" link, renamed "Addons" → "Extensions".
+- Campaign settings: Removed duplicate "Game Modules" section (modules in extensions system).
+- **Migration 000019:** Fixes addon table status mismatches (sync-api→active, game modules→planned,
+  dice-roller→planned, media-gallery→planned).
+- Internal Go code (types, function names, routes, DB tables) intentionally kept as `addon` —
+  only user-facing text was renamed.
+
 ### In Progress
 - Nothing currently in progress
 
@@ -86,14 +108,16 @@ API keys and read/write campaign data via `/api/v1/` endpoints.
 
 ## Next Session Should
 1. **Run `make templ`, `make tailwind`, and `make migrate-up`** before testing —
-   generated files are gitignored, migrations 000013-000016 need to be applied.
-2. **Attribute template editing in campaign settings** — Allow campaign owners
+   generated files are gitignored, migrations 000013-000019 need to be applied.
+2. **Docker rebuild:** `docker compose build --no-cache && docker compose up -d`
+   to pick up all changes (templ/tailwind/migrations handled automatically in build).
+3. **Extension-gated rendering:** Wire the notes widget mount point to check
+   `IsEnabledForCampaign("player-notes")` before rendering, so it respects the
+   per-campaign extension toggle. Currently renders for all campaigns.
+4. **Attribute template editing in campaign settings** — Allow campaign owners
    to edit entity type field definitions from a more accessible settings UI.
-3. **Player Notes block type** — New `player_notes` table, block type in template
-   editor, standalone notes pages per entity, scoped per user.
-4. **Tests** — Many plugins have zero tests. Priority: syncapi service (key
-   creation, authentication, bcrypt), addons service.
-5. **Foundry VTT companion module** — Documentation and example integration code.
+5. **Tests** — Many plugins have zero tests. Priority: syncapi service, addons,
+   notes widget service.
 6. **Grid/Table view toggle** on category dashboards.
 7. **Password reset** — Wire auth password reset with SMTP.
 8. **API enhancements** — Entity tags/relations in API responses, entry content
