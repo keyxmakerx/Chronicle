@@ -188,3 +188,11 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] Sync API plugin (migration 000016, model/repo/service/handler)
 - [x] Owner API key management (create/toggle/revoke, usage stats)
 - [x] Admin API monitoring dashboard (stats, charts, security events, IP blocklist, keys)
+
+### Phase C: Notes & Terminology (2026-02-20)
+- [x] Player Notes widget (migration 000017-000018, floating panel, checklists)
+- [x] Terminology standardization: all user-facing "Addon" → "Extension"
+- [x] Admin dashboard: removed "Modules" card, unified "Extensions" card with count
+- [x] Admin sidebar: removed "Modules" link, renamed "Addons" → "Extensions"
+- [x] Campaign settings: removed duplicate "Game Modules" section
+- [x] Migration 000019: fixed addon table status mismatches (sync-api, game modules, dice-roller, media-gallery)

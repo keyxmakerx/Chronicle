@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-20 -- Player Notes widget (floating Google Keep-style panel).
+2026-02-20 -- Terminology standardization (Addon → Extension in all user-facing UI).
 
 ## Current Phase
-**Phase C: IN PROGRESS.** Player Notes widget implemented. Architecture review
-confirmed extension terminology is consistent.
+**Phase C: IN PROGRESS.** Player Notes widget implemented. Terminology
+standardization completed — all user-facing "Addon" text → "Extension".
 
 ## What Was Built in Phase B (Summary)
 
@@ -86,10 +86,16 @@ confirmed extension terminology is consistent.
 - **Addon integration:** Uses existing `player-notes` addon (disabled by default,
   owner enables per-campaign via addons settings page).
 
-### Architecture Review
-- Confirmed three-tier extension model (Plugin/Module/Widget) is consistent.
-- Addon categories (module/widget/integration) map cleanly to architecture tiers.
-- No terminology conflicts found.
+### Terminology Standardization (Phase C)
+- Two-tier user-facing model: **Plugins** (core, always-on) and **Extensions** (optional, toggleable).
+- Renamed all user-facing "Addon" → "Extension" in admin and campaign templates.
+- Admin dashboard: Removed separate "Modules" card, unified into "Extensions" card with count.
+- Admin sidebar: Removed "Modules" link, renamed "Addons" → "Extensions".
+- Campaign settings: Removed duplicate "Game Modules" section (modules in extensions system).
+- **Migration 000019:** Fixes addon table status mismatches (sync-api→active, game modules→planned,
+  dice-roller→planned, media-gallery→planned).
+- Internal Go code (types, function names, routes, DB tables) intentionally kept as `addon` —
+  only user-facing text was renamed.
 
 ### In Progress
 - Nothing currently in progress
@@ -102,12 +108,12 @@ confirmed extension terminology is consistent.
 
 ## Next Session Should
 1. **Run `make templ`, `make tailwind`, and `make migrate-up`** before testing —
-   generated files are gitignored, migrations 000013-000018 need to be applied.
+   generated files are gitignored, migrations 000013-000019 need to be applied.
 2. **Docker rebuild:** `docker compose build --no-cache && docker compose up -d`
    to pick up all changes (templ/tailwind/migrations handled automatically in build).
-3. **Addon-gated rendering:** Wire the notes widget mount point to check
+3. **Extension-gated rendering:** Wire the notes widget mount point to check
    `IsEnabledForCampaign("player-notes")` before rendering, so it respects the
-   per-campaign addon toggle. Currently renders for all campaigns.
+   per-campaign extension toggle. Currently renders for all campaigns.
 4. **Attribute template editing in campaign settings** — Allow campaign owners
    to edit entity type field definitions from a more accessible settings UI.
 5. **Tests** — Many plugins have zero tests. Priority: syncapi service, addons,

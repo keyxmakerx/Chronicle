@@ -189,17 +189,6 @@ templ AdminSidebarNav() {
 				Plugins
 			</a>
 			<a
-				href="/admin/modules"
-				class={ sidebarNavLink,
-					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/modules")),
-					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/modules")) }
-			>
-				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-					<i class="fa-solid fa-puzzle-piece text-xs"></i>
-				</span>
-				Modules
-			</a>
-			<a
 				href="/admin/addons"
 				class={ sidebarNavLink,
 					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/addons")),
@@ -208,7 +197,7 @@ templ AdminSidebarNav() {
 				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 					<i class="fa-solid fa-plug text-xs"></i>
 				</span>
-				Addons
+				Extensions
 			</a>
 			<a
 				href="/admin/api"

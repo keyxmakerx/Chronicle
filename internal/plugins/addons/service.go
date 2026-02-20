@@ -16,6 +16,7 @@ import (
 // control which addons are enabled per campaign.
 type AddonService interface {
 	// Global registry (admin only).
+	CountAddons(ctx context.Context) (int, error)
 	List(ctx context.Context) ([]Addon, error)
 	GetByID(ctx context.Context, id int) (*Addon, error)
 	GetBySlug(ctx context.Context, slug string) (*Addon, error)
@@ -40,6 +41,11 @@ type addonService struct {
 // NewAddonService creates a new addon service.
 func NewAddonService(repo AddonRepository) AddonService {
 	return &addonService{repo: repo}
+}
+
+// CountAddons returns the total number of registered addons.
+func (s *addonService) CountAddons(ctx context.Context) (int, error) {
+	return s.repo.Count(ctx)
 }
 
 // List returns all registered addons.

@@ -230,6 +230,9 @@ func (a *App) RegisterRoutes() {
 	addons.RegisterAdminRoutes(adminGroup, addonHandler)
 	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)
 
+	// Wire addon count into admin dashboard for the Extensions stat card.
+	adminHandler.SetAddonCounter(addonService)
+
 	// Sync API plugin: external tool integration with API key auth,
 	// request logging, security monitoring, and admin dashboard.
 	syncRepo := syncapi.NewSyncAPIRepository(a.DB)

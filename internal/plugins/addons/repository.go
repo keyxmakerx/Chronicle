@@ -13,6 +13,7 @@ import (
 // AddonRepository defines the data access contract for addon operations.
 type AddonRepository interface {
 	// Global addon registry.
+	Count(ctx context.Context) (int, error)
 	List(ctx context.Context) ([]Addon, error)
 	FindByID(ctx context.Context, id int) (*Addon, error)
 	FindBySlug(ctx context.Context, slug string) (*Addon, error)
@@ -37,6 +38,13 @@ type addonRepository struct {
 // NewAddonRepository creates a new addon repository.
 func NewAddonRepository(db *sql.DB) AddonRepository {
 	return &addonRepository{db: db}
+}
+
+// Count returns the total number of registered addons.
+func (r *addonRepository) Count(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM addons`).Scan(&count)
+	return count, err
 }
 
 // List returns all registered addons ordered by category and name.
