@@ -15,9 +15,10 @@ These are the highest-priority items across all future phases. Pick from here.
 
 ### Phase B Follow-ups (Next Session)
 - [ ] Attribute template editing in campaign settings UI
-- [ ] Player Notes block type + standalone pages per entity
+- [x] Player Notes widget (floating panel, checklists, page/campaign scoping)
 - [x] REST API v1 endpoints (read/write campaign data via `/api/v1/`)
 - [x] API middleware (key auth, rate limiting, campaign match, permissions)
+- [ ] Notes addon-gated rendering (check IsEnabledForCampaign before mount)
 - [ ] Foundry VTT companion module documentation
 - [ ] API enhancements: entity tags/relations in responses, efficient sync pull
 

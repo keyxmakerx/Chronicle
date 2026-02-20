@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
+	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
@@ -247,6 +248,12 @@ func (a *App) RegisterRoutes() {
 	tagService := tags.NewTagService(tagRepo)
 	tagHandler := tags.NewHandler(tagService)
 	tags.RegisterRoutes(e, tagHandler, campaignService, authService)
+
+	// Notes widget: personal floating note-taking panel (Google Keep-style).
+	noteRepo := notes.NewNoteRepository(a.DB)
+	noteService := notes.NewNoteService(noteRepo)
+	noteHandler := notes.NewHandler(noteService)
+	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 
 	// Relations widget: bi-directional entity linking (create/list/delete).
 	relRepo := relations.NewRelationRepository(a.DB)
