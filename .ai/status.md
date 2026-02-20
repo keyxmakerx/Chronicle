@@ -8,12 +8,12 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-20 -- Phase B features: discover page fix, template editor upgrades, field overrides, extension framework, sync API plugin.
+2026-02-20 -- Phase B features: discover page fix, template editor upgrades, field overrides, extension framework, sync API plugin, REST API v1 endpoints.
 
 ## Current Phase
-**Phase B: COMPLETE.** Extension framework and Sync API plugin implemented. All
-Phase B features from the approved plan are done. Remaining Phase B items
-(player notes, attribute template editing) are queued for next session.
+**Phase B: COMPLETE.** Extension framework, Sync API management infrastructure, and
+REST API v1 endpoints all implemented. External clients can now authenticate with
+API keys and read/write campaign data via `/api/v1/` endpoints.
 
 ## What Was Built in Phase B (Summary)
 
@@ -63,6 +63,18 @@ Phase B features from the approved plan are done. Remaining Phase B items
 - Security event types: rate_limit, auth_failure, ip_blocked, key_expired, suspicious.
 - Wired into admin sidebar, admin dashboard, campaign settings.
 
+### REST API v1 Endpoints
+- **Middleware:** `RequireAPIKey` (Bearer token auth + bcrypt verify + IP check +
+  request logging), `RateLimit` (fixed-window per-minute), `RequireCampaignMatch`,
+  `RequirePermission` (read/write/sync).
+- **Read endpoints:** GET campaign info, list/get entity types, list/get entities
+  (with search, pagination, type filter, privacy enforcement).
+- **Write endpoints:** POST/PUT/DELETE entities, PUT fields-only update.
+- **Sync endpoint:** POST bidirectional sync — pull entities modified since timestamp,
+  push batch create/update/delete operations, returns server_time for next sync.
+- Middleware chain: RequireAPIKey → RateLimit → RequireCampaignMatch → RequirePermission.
+- Privacy enforcement uses key owner's campaign role for entity visibility.
+
 ### In Progress
 - Nothing currently in progress
 
@@ -79,15 +91,13 @@ Phase B features from the approved plan are done. Remaining Phase B items
    to edit entity type field definitions from a more accessible settings UI.
 3. **Player Notes block type** — New `player_notes` table, block type in template
    editor, standalone notes pages per entity, scoped per user.
-4. **Actual sync API endpoints** — The management infrastructure is built (keys,
-   logging, monitoring). Next step is the actual `/api/v1/` REST endpoints for
-   external clients to read/write campaign data.
-5. **Rate limiting middleware** — The per-key rate limits are configured but the
-   actual middleware to enforce them on `/api/v1/` routes needs to be implemented.
-6. **Tests** — Many plugins have zero tests. Priority: syncapi service (key
+4. **Tests** — Many plugins have zero tests. Priority: syncapi service (key
    creation, authentication, bcrypt), addons service.
-7. **Grid/Table view toggle** on category dashboards.
-8. **Password reset** — Wire auth password reset with SMTP.
+5. **Foundry VTT companion module** — Documentation and example integration code.
+6. **Grid/Table view toggle** on category dashboards.
+7. **Password reset** — Wire auth password reset with SMTP.
+8. **API enhancements** — Entity tags/relations in API responses, entry content
+   in sync, `modified_since` repository method for efficient sync pull.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -110,4 +120,4 @@ Phase B features from the approved plan are done. Remaining Phase B items
   drill-down sidebar, category dashboards, tighter cards
 - **2026-02-20: Phase B** — Discover page split, template editor block resizing &
   visibility, field overrides, extension framework (addons), sync API plugin with
-  admin/owner dashboards
+  admin/owner dashboards, REST API v1 endpoints (read/write/sync)

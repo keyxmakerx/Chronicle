@@ -42,3 +42,34 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 	cg.PUT("/api-keys/:keyID/toggle", h.ToggleKey, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/api-keys/:keyID", h.RevokeKey, campaigns.RequireRole(campaigns.RoleOwner))
 }
+
+// RegisterAPIRoutes adds the public REST API endpoints under /api/v1/.
+// All routes require API key authentication. Permission middleware enforces
+// read/write/sync access levels. Campaign match middleware ensures keys can
+// only access their scoped campaign.
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, syncSvc SyncAPIService) {
+	// API v1 group with key auth and rate limiting.
+	v1 := e.Group("/api/v1",
+		RequireAPIKey(syncSvc),
+		RateLimit(syncSvc),
+	)
+
+	// Campaign-scoped routes with campaign match enforcement.
+	cg := v1.Group("/campaigns/:id", RequireCampaignMatch())
+
+	// Read endpoints (require "read" permission).
+	cg.GET("", api.GetCampaign, RequirePermission(PermRead))
+	cg.GET("/entity-types", api.ListEntityTypes, RequirePermission(PermRead))
+	cg.GET("/entity-types/:typeID", api.GetEntityType, RequirePermission(PermRead))
+	cg.GET("/entities", api.ListEntities, RequirePermission(PermRead))
+	cg.GET("/entities/:entityID", api.GetEntity, RequirePermission(PermRead))
+
+	// Write endpoints (require "write" permission).
+	cg.POST("/entities", api.CreateEntity, RequirePermission(PermWrite))
+	cg.PUT("/entities/:entityID", api.UpdateEntity, RequirePermission(PermWrite))
+	cg.PUT("/entities/:entityID/fields", api.UpdateEntityFields, RequirePermission(PermWrite))
+	cg.DELETE("/entities/:entityID", api.DeleteEntity, RequirePermission(PermWrite))
+
+	// Sync endpoint (require "sync" permission).
+	cg.POST("/sync", api.Sync, RequirePermission(PermSync))
+}

@@ -16,9 +16,10 @@ These are the highest-priority items across all future phases. Pick from here.
 ### Phase B Follow-ups (Next Session)
 - [ ] Attribute template editing in campaign settings UI
 - [ ] Player Notes block type + standalone pages per entity
-- [ ] Actual `/api/v1/` sync API REST endpoints (read/write campaign data)
-- [ ] Rate limiting middleware for API endpoints (enforce per-key limits)
+- [x] REST API v1 endpoints (read/write campaign data via `/api/v1/`)
+- [x] API middleware (key auth, rate limiting, campaign match, permissions)
 - [ ] Foundry VTT companion module documentation
+- [ ] API enhancements: entity tags/relations in responses, efficient sync pull
 
 ### Testing (High Priority -- Many plugins have zero tests)
 - [x] Entity service unit tests (30 tests passing)
@@ -49,9 +50,11 @@ These are the highest-priority items across all future phases. Pick from here.
 - [ ] Draw Steel module
 
 ### API & Integrations
-- [ ] `/api/v1/` REST endpoints (campaign entities, types, fields read/write)
-- [ ] API key authentication middleware for `/api/v1/` routes
-- [ ] Rate limiting enforcement on API routes
+- [x] `/api/v1/` REST endpoints (campaign entities, types, fields read/write)
+- [x] API key authentication middleware for `/api/v1/` routes
+- [x] Rate limiting enforcement on API routes
+- [ ] API enhancements: `modified_since` repo method for efficient sync pull
+- [ ] API enhancements: tags/relations in API entity responses
 - [ ] Campaign export/import
 - [ ] Foundry VTT sync module (companion module)
 - [ ] AI integration endpoint

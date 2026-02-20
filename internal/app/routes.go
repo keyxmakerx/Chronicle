@@ -237,6 +237,11 @@ func (a *App) RegisterRoutes() {
 	syncapi.RegisterAdminRoutes(adminGroup, syncHandler)
 	syncapi.RegisterCampaignRoutes(e, syncHandler, campaignService, authService)
 
+	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
+	// Authenticates via API keys, not browser sessions.
+	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService)
+	syncapi.RegisterAPIRoutes(e, syncAPIHandler, syncService)
+
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
 	tagRepo := tags.NewTagRepository(a.DB)
 	tagService := tags.NewTagService(tagRepo)
@@ -331,7 +336,6 @@ func (a *App) RegisterRoutes() {
 	// dnd5eModule.RegisterRoutes(ref)
 
 	// --- API Routes ---
-	// REST API for external clients (Foundry VTT, etc.).
-	// api := e.Group("/api/v1")
-	// apiPlugin.RegisterRoutes(api)
+	// REST API v1 is registered above via syncapi.RegisterAPIRoutes().
+	// Endpoints: /api/v1/campaigns/:id/{entity-types,entities,sync}
 }

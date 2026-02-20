@@ -33,6 +33,7 @@ type SyncAPIService interface {
 
 	// Authentication.
 	AuthenticateKey(ctx context.Context, rawKey string) (*APIKey, error)
+	UpdateKeyLastUsed(ctx context.Context, id int, ip string) error
 
 	// Request logging.
 	LogRequest(ctx context.Context, log *APIRequestLog) error
@@ -221,6 +222,11 @@ func (s *syncAPIService) AuthenticateKey(ctx context.Context, rawKey string) (*A
 	}
 
 	return key, nil
+}
+
+// UpdateKeyLastUsed records the last-used timestamp and IP for an API key.
+func (s *syncAPIService) UpdateKeyLastUsed(ctx context.Context, id int, ip string) error {
+	return s.repo.UpdateKeyLastUsed(ctx, id, ip)
 }
 
 // --- Request Logging ---
