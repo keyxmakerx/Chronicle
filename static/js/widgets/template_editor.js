@@ -397,6 +397,7 @@ Chronicle.register('template-editor', {
 
     this.bindBlockDrag(el, block, rowIdx, colIdx, blockIdx);
     this.bindBlockDelete(el, rowIdx, colIdx, blockIdx);
+    this.bindBlockPreview(el, block);
 
     return el;
   },
@@ -427,6 +428,238 @@ Chronicle.register('template-editor', {
       this.markDirty();
       this.renderCanvas();
     });
+  },
+
+  /**
+   * Bind right-click context menu on a block to show a visual preview overlay.
+   * The preview shows a mock-up of how the block will look on an entity page.
+   */
+  bindBlockPreview(el, block) {
+    const editor = this;
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      editor.showBlockPreview(block, e.clientX, e.clientY);
+    });
+    // Also support click with a small preview icon.
+    const previewBtn = document.createElement('button');
+    previewBtn.className = 'te-preview-btn opacity-0 group-hover/block:opacity-100 text-gray-300 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all p-0.5 mr-1';
+    previewBtn.title = 'Preview appearance';
+    previewBtn.innerHTML = '<i class="fa-solid fa-eye text-xs"></i>';
+    previewBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rect = el.getBoundingClientRect();
+      editor.showBlockPreview(block, rect.left + rect.width / 2, rect.top);
+    });
+    // Insert before delete button.
+    const delBtn = el.querySelector('.te-block-del');
+    if (delBtn) {
+      delBtn.parentNode.insertBefore(previewBtn, delBtn);
+    }
+  },
+
+  /**
+   * Show a preview overlay for a block type, displaying a mock-up of
+   * how the block will render on an actual entity page.
+   */
+  showBlockPreview(block, x, y) {
+    // Remove any existing preview.
+    this.closeBlockPreview();
+
+    const bt = this.blockTypes.find(b => b.type === block.type) || { label: block.type, icon: 'fa-cube', desc: '' };
+
+    // Create overlay backdrop.
+    const backdrop = document.createElement('div');
+    backdrop.className = 'te-preview-backdrop';
+    backdrop.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.3);';
+    backdrop.addEventListener('click', () => this.closeBlockPreview());
+
+    // Create preview panel.
+    const panel = document.createElement('div');
+    panel.className = 'te-preview-panel';
+    panel.style.cssText = 'position:fixed;z-index:9999;background:var(--color-card-bg,#fff);border:1px solid var(--color-border,#e5e7eb);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.2);max-width:480px;width:90%;overflow:hidden;';
+
+    // Center the panel on screen.
+    panel.style.left = '50%';
+    panel.style.top = '50%';
+    panel.style.transform = 'translate(-50%, -50%)';
+
+    // Header.
+    const header = document.createElement('div');
+    header.style.cssText = 'padding:12px 16px;border-bottom:1px solid var(--color-border-light,#f3f4f6);display:flex;align-items:center;gap:8px;';
+    header.innerHTML = `
+      <i class="fa-solid ${bt.icon}" style="color:var(--color-text-muted);font-size:14px;"></i>
+      <span style="font-weight:600;font-size:14px;color:var(--color-text-primary);">${bt.label} Preview</span>
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--color-text-muted);padding:2px 8px;border-radius:4px;background:var(--color-bg-tertiary);">Mock preview</span>
+    `;
+
+    // Preview content area with highlighted border.
+    const content = document.createElement('div');
+    content.style.cssText = 'padding:16px;';
+
+    const preview = document.createElement('div');
+    preview.style.cssText = 'border:2px solid #6366f1;border-radius:8px;padding:16px;background:var(--color-bg-secondary,#fff);position:relative;';
+
+    // Highlight indicator.
+    const indicator = document.createElement('div');
+    indicator.style.cssText = 'position:absolute;top:-10px;left:12px;background:#6366f1;color:white;font-size:10px;font-weight:600;padding:1px 8px;border-radius:4px;';
+    indicator.textContent = bt.label;
+    preview.appendChild(indicator);
+
+    // Mock content based on block type.
+    preview.appendChild(this.createBlockMockup(block.type));
+
+    content.appendChild(preview);
+
+    // Footer with description.
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:12px 16px;border-top:1px solid var(--color-border-light,#f3f4f6);font-size:12px;color:var(--color-text-secondary);';
+    footer.textContent = bt.desc;
+
+    panel.appendChild(header);
+    panel.appendChild(content);
+    panel.appendChild(footer);
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(panel);
+
+    this._previewBackdrop = backdrop;
+    this._previewPanel = panel;
+
+    // Close on Escape.
+    this._previewEscHandler = (e) => {
+      if (e.key === 'Escape') this.closeBlockPreview();
+    };
+    document.addEventListener('keydown', this._previewEscHandler);
+  },
+
+  /** Close the block preview overlay. */
+  closeBlockPreview() {
+    if (this._previewBackdrop) {
+      this._previewBackdrop.remove();
+      this._previewBackdrop = null;
+    }
+    if (this._previewPanel) {
+      this._previewPanel.remove();
+      this._previewPanel = null;
+    }
+    if (this._previewEscHandler) {
+      document.removeEventListener('keydown', this._previewEscHandler);
+      this._previewEscHandler = null;
+    }
+  },
+
+  /** Create a static mockup of a block type for the preview overlay. */
+  createBlockMockup(type) {
+    const mock = document.createElement('div');
+    mock.style.color = 'var(--color-text-body,#374151)';
+
+    switch (type) {
+      case 'title':
+        mock.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-size:24px;font-weight:700;color:var(--color-text-primary,#111827);">Entity Name</div>
+            <div style="display:flex;gap:6px;">
+              <span style="padding:4px 12px;font-size:12px;background:var(--color-bg-tertiary);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text-secondary);">Edit</span>
+              <span style="padding:4px 12px;font-size:12px;background:#dc2626;color:white;border-radius:6px;">Delete</span>
+            </div>
+          </div>
+        `;
+        break;
+
+      case 'image':
+        mock.innerHTML = `
+          <div style="background:var(--color-bg-tertiary);border-radius:8px;height:140px;display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);">
+            <i class="fa-solid fa-image" style="font-size:32px;opacity:0.4;"></i>
+          </div>
+        `;
+        break;
+
+      case 'entry':
+        mock.innerHTML = `
+          <div style="border:1px solid var(--color-border);border-radius:8px;overflow:hidden;">
+            <div style="padding:8px 12px;border-bottom:1px solid var(--color-border-light);display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-secondary);">Entry</span>
+              <span style="font-size:11px;color:var(--color-text-muted);"><i class="fa-solid fa-pen" style="font-size:10px"></i> Edit</span>
+            </div>
+            <div style="padding:16px;font-size:13px;line-height:1.6;">
+              <p style="margin:0 0 8px;">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.</p>
+              <p style="margin:0;color:var(--color-text-secondary);">Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.</p>
+            </div>
+          </div>
+        `;
+        break;
+
+      case 'attributes':
+        var fieldMocks = this.fields.length > 0
+          ? this.fields.slice(0, 4).map(f => `
+              <div style="margin-bottom:8px;">
+                <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-secondary);">${f.label}</div>
+                <div style="font-size:13px;color:var(--color-text-primary);margin-top:2px;">${f.type === 'checkbox' ? 'Yes' : 'Sample value'}</div>
+              </div>
+            `).join('')
+          : `<div style="font-size:12px;color:var(--color-text-muted);">No fields defined</div>`;
+
+        mock.innerHTML = `
+          <div style="border:1px solid var(--color-border);border-radius:8px;padding:12px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-secondary);margin-bottom:10px;">Attributes</div>
+            ${fieldMocks}
+          </div>
+        `;
+        break;
+
+      case 'details':
+        mock.innerHTML = `
+          <div style="border:1px solid var(--color-border);border-radius:8px;padding:12px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+              <span style="padding:2px 10px;border-radius:999px;background:#6366f1;color:white;font-size:12px;font-weight:500;"><i class="fa-solid fa-user" style="font-size:10px;margin-right:4px;"></i> Character</span>
+              <span style="font-size:12px;color:var(--color-text-secondary);">Warrior</span>
+            </div>
+            <div style="border-top:1px solid var(--color-border-light);padding-top:8px;font-size:11px;color:var(--color-text-muted);">
+              <div>Created Jan 1, 2026</div>
+              <div>Updated Feb 20, 2026</div>
+            </div>
+          </div>
+        `;
+        break;
+
+      case 'tags':
+        mock.innerHTML = `
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            <span style="padding:2px 8px;border-radius:999px;font-size:11px;font-weight:500;background:#6366f122;color:#6366f1;">Important</span>
+            <span style="padding:2px 8px;border-radius:999px;font-size:11px;font-weight:500;background:#22c55e22;color:#22c55e;">Ally</span>
+            <span style="padding:2px 8px;border-radius:999px;font-size:11px;font-weight:500;background:#f4393e22;color:#f43f5e;">Villain</span>
+            <span style="padding:2px 8px;border-radius:999px;font-size:11px;font-weight:500;border:1px dashed var(--color-border);color:var(--color-text-muted);font-size:11px;"><i class="fa-solid fa-plus" style="font-size:9px"></i> Tag</span>
+          </div>
+        `;
+        break;
+
+      case 'relations':
+        mock.innerHTML = `
+          <div style="border:1px solid var(--color-border);border-radius:8px;overflow:hidden;">
+            <div style="padding:6px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-secondary);border-bottom:1px solid var(--color-border-light);">
+              <i class="fa-solid fa-link" style="font-size:9px"></i> Allied With
+            </div>
+            <div style="padding:8px 10px;display:flex;align-items:center;gap:6px;">
+              <span style="width:24px;height:24px;border-radius:50%;background:#22c55e;display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-user" style="font-size:10px;color:white;"></i></span>
+              <span style="font-size:13px;font-weight:500;color:var(--color-text-primary);">Another Entity</span>
+            </div>
+          </div>
+        `;
+        break;
+
+      case 'divider':
+        mock.innerHTML = `
+          <hr style="border:none;border-top:1px solid var(--color-border);margin:8px 0;" />
+        `;
+        break;
+
+      default:
+        mock.innerHTML = `<div style="font-size:13px;color:var(--color-text-muted);">Preview not available for this block type.</div>`;
+    }
+
+    return mock;
   },
 
   /**
@@ -476,6 +709,13 @@ Chronicle.register('template-editor', {
       this.layout.rows[rowIdx].columns[colIdx].blocks.splice(blockIdx, 1);
       this.markDirty();
       this.renderCanvas();
+    });
+
+    // Right-click preview for container blocks.
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.showBlockPreview(block, e.clientX, e.clientY);
     });
 
     return el;

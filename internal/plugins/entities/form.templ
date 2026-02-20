@@ -91,7 +91,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			</div>
 
 			<div>
-				<label for="type_label" class="block text-sm font-medium text-fg-body mb-1">Subtype Label (optional)</label>
+				<label for="type_label" class="block text-sm font-medium text-fg-body mb-1">Descriptor (optional)</label>
 				<input
 					type="text"
 					id="type_label"
@@ -100,7 +100,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 					placeholder="e.g., City, NPC, Artifact"
 					maxlength="100"
 				/>
-				<p class="mt-1 text-xs text-fg-secondary">A freeform label that appears alongside the type badge.</p>
+				<p class="mt-1 text-xs text-fg-secondary">A short descriptor shown next to the type badge, e.g. "City" for a Location or "Rogue" for a Character.</p>
 			</div>
 
 			<div class="flex items-center">
@@ -157,7 +157,7 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 			</div>
 
 			<div>
-				<label for="type_label" class="block text-sm font-medium text-fg-body mb-1">Subtype Label (optional)</label>
+				<label for="type_label" class="block text-sm font-medium text-fg-body mb-1">Descriptor (optional)</label>
 				<input
 					type="text"
 					id="type_label"

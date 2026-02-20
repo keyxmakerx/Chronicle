@@ -12,6 +12,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/modules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
@@ -334,4 +335,13 @@ func (h *Handler) DeleteMedia(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+}
+
+// --- Modules ---
+
+// Modules renders the module management page (GET /admin/modules).
+// Lists all registered game-system modules with their status.
+func (h *Handler) Modules(c echo.Context) error {
+	mods := modules.Registry()
+	return middleware.Render(c, http.StatusOK, AdminModulesPage(mods))
 }
