@@ -362,7 +362,6 @@
   .sidebar-peek:hover > nav {
     @apply opacity-50;
   }
-}
 
   /* --- Notes Widget --- */
 
@@ -486,7 +485,7 @@
 
   /* Block add buttons. */
   .note-add-block {
-    @apply flex items-center gap-1 pt-1 border-t border-edge/50 mt-2;
+    @apply flex items-center gap-1 pt-1 border-t border-edge-light mt-2;
   }
   .note-add-block button {
     @apply w-7 h-7 flex items-center justify-center rounded
