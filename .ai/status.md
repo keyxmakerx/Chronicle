@@ -8,104 +8,72 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-20 -- Competitor-inspired UI overhaul: terminology rename (Entity→Page, Entity Type→Category), drill-down sidebar, category dashboard pages, tighter card grid.
+2026-02-20 -- Phase B features: discover page fix, template editor upgrades, field overrides, extension framework, sync API plugin, REST API v1 endpoints.
 
 ## Current Phase
-**Phase 2: COMPLETE + Polish.** Media & UI work is done. Additional polish pass
-completed for dark mode, badge contrast, and admin/campaign settings UX.
+**Phase B: COMPLETE.** Extension framework, Sync API management infrastructure, and
+REST API v1 endpoints all implemented. External clients can now authenticate with
+API keys and read/write campaign data via `/api/v1/` endpoints.
 
-## What Was Built in Phase 2 (Summary)
+## What Was Built in Phase B (Summary)
 
-### Core Infrastructure Additions
-- **Semantic color system:** CSS custom properties (`--color-text-primary`, etc.)
-  with light/dark values on `:root` / `.dark`. Wired into Tailwind as utility
-  classes (`text-fg`, `bg-surface`, `border-edge`, etc.). Components auto-switch
-  without per-element `dark:` variants.
-- **Dark mode toggle:** Theme.js manages `localStorage` + `.dark` class on `<html>`.
-  Toggle button in sidebar. All templ files and CSS components use semantic tokens.
-- **Toast notification system:** `notifications.js` with `Chronicle.notify(msg, type)`
-  API. HTMX integration for auto error toasts. Wired into `base.templ`.
+### Discover Page Fix
+- Split monolithic landing into **DiscoverPublicPage** (Base layout, compact welcome
+  banner, campaign grid, signup CTA) and **DiscoverAuthPage** (App layout with sidebar).
+- **AboutPage** at `/about` — full marketing/welcome page.
+- Discover link added to both sidebar nav states (default + campaign).
+- `/` route uses `OptionalAuth` to serve appropriate layout based on session.
 
-### Plugins Built
-- **Media plugin:** File upload with thumbnails, magic byte validation, rate limiting.
-- **Audit plugin:** Campaign-scoped activity timeline with stats. Wired into entity,
-  campaign, and tag mutation handlers.
-- **Site settings plugin:** Global storage limits, per-user/campaign overrides,
-  combined Storage + Settings tabbed admin page.
-- **Admin modules page:** Module registry with D&D 5e, Pathfinder 2e, Draw Steel
-  entries. Card grid UI with status badges.
+### Template Editor Block Resizing
+- Added `minHeight` property to block config with presets: auto/sm/md/lg/xl.
+- Height dropdown in template editor renders as CSS `min-height` on entity profiles.
+- No migration needed — stored in existing `layout_json` on entity types.
 
-### Widgets Built
-- **Editor widget:** TipTap rich text with view/edit mode toggle (read-only default,
-  Edit/Done button), autosave, @mention search popup with keyboard navigation.
-- **Attributes widget:** Inline edit UI for all field types (text, number, url,
-  textarea, select, checkbox). Full-stack: JS widget + Go API + repo/service.
-- **Tag picker widget:** Search, create, assign tags on entity profile pages.
-  Tags display on entity list cards with batch fetch and colored chips.
-- **Relations widget:** Bi-directional entity linking with common relation types,
-  reverse auto-create, and deletion.
-- **Template editor:** Drag-and-drop visual page builder with two-column,
-  three-column, tabs, sections. Block preview overlay. Context menu.
-- **Entity tooltip:** Hover preview popover with image, type badge, excerpt, LRU cache.
+### Block-Level Visibility Controls
+- Added `visibility` property to block config: `everyone` (default) or `dm_only`.
+- DM-only blocks filtered at Go template render time based on campaign role.
+- Visual indicators: amber border + lock icon in editor, "DM Only" badge on profile.
 
-### Entity Enhancements
-- Entity type CRUD (create, edit, delete, icon/color/fields management)
-- Entity list page redesign (horizontal tabs, search bar, stats subtitle)
-- Entity image upload pipeline with upload/placeholder UI
-- Descriptor rename (Subtype Label -> Descriptor)
-- Dynamic sidebar with entity types from DB + count badges
-- Sidebar customization (drag-to-reorder, hide/show entity types per campaign)
-- Layout-driven entity profile pages (layout_json on entity types)
+### Per-Entity Attribute Overrides
+- **Migration 000014:** `field_overrides JSON` column on entities table.
+- `FieldOverrides` struct: Added (new fields), Hidden (hide type fields), Modified (label/type/options overrides).
+- `MergeFields()` function combines type-level and entity-level field definitions.
+- `GET /entities/:eid/fields` now returns effective fields + type_fields + field_overrides.
+- `PUT /entities/:eid/field-overrides` endpoint for saving overrides.
+- Attributes widget: gear icon opens customization panel (toggle visibility, add custom fields).
 
-### UI & Styling
-- Visual polish pass (gradient hero, icon cards, refined buttons/cards/inputs)
-- CSS component library (btn, card, input, table, badge, empty-state, stat-card)
-- All CSS components migrated to semantic tokens (no per-component `dark:`)
-- All 20+ templ files migrated to semantic color tokens
-- Public landing page with discoverable campaign cards
-- Collapsible admin sidebar with modules section
+### Extension Framework (Addons Plugin)
+- **Migration 000015:** `addons` and `campaign_addons` tables with 11 seeded defaults.
+- Full plugin: model, repository, service, handler, routes, templ templates.
+- **Admin page** (`/admin/addons`): Addon management with status controls, creation form.
+- **Campaign page** (`/campaigns/:id/addons/settings`): Per-campaign addon toggle (HTMX).
+- Grouped by category (module/widget/integration) with enable/disable buttons.
+- Wired into admin sidebar, admin dashboard, campaign settings.
 
-### Security
-- Comprehensive security audit (14 vulnerability fixes)
-- IDOR protection on all entity endpoints
-- HSTS security header
-- Rate limiting on auth + uploads
-- Storage limit enforcement in media upload handler
+### Sync API Plugin
+- **Migration 000016:** `api_keys`, `api_request_log`, `api_security_events`, `api_ip_blocklist`.
+- API key management: bcrypt-hashed, per-campaign, permissions (read/write/sync),
+  optional IP allowlist, rate limits, expiry.
+- **Owner dashboard** (`/campaigns/:id/api-keys`): Create/toggle/revoke keys,
+  usage stats, security notes.
+- **Admin monitoring dashboard** (`/admin/api`): Stats overview (8 cards),
+  request/security time series charts, top IPs/paths/keys tables,
+  security event table with resolve actions, IP blocklist management,
+  key oversight with activate/deactivate/revoke.
+- Security event types: rate_limit, auth_failure, ip_blocked, key_expired, suspicious.
+- Wired into admin sidebar, admin dashboard, campaign settings.
 
-### Phase 2 Polish (2026-02-20)
-- **Entity type badge contrast:** Luminance-based text color (white/dark) for
-  entity type badges in entity cards, profile pages, and tooltips. No more
-  white-on-white for light-colored entity types.
-- **Dark mode fix for entity type config widget:** Replaced hardcoded gray
-  Tailwind classes with semantic tokens (`text-fg-body`, `border-edge`,
-  `bg-surface-alt`, etc.) in `entity_type_config.js`.
-- **Merged campaign Edit + Settings:** Combined `/campaigns/:id/edit` and
-  `/campaigns/:id/settings` into a single unified settings page. Edit form is
-  now the top section of settings. Old `/edit` URL redirects to `/settings`.
-- **Game Modules in campaign settings:** Campaign owners can now see available
-  game modules (from the registry) in their campaign settings page.
-- **Admin plugins page:** New `/admin/plugins` page showing all registered
-  plugins with active/planned status, category grouping, and descriptions.
-  Plugin registry with 11 entries (8 active, 3 planned).
-
-### Phase 3: Competitor-Inspired UI Overhaul (2026-02-20)
-- **Terminology rename:** All user-facing labels changed from "Entity/Entity Type"
-  to "Page/Category". Go code and DB unchanged. Templates, breadcrumbs, buttons,
-  empty states, settings, and dashboard cards all updated.
-- **Drill-down sidebar:** iOS Settings-style push navigation. Clicking a category
-  slides the main nav left (10px peek), revealing a category-specific sub-panel
-  with search, "View All", and "New Page" links. CSS transforms + JS controller
-  (`sidebar_drill.js`). Peek zone has hover glow animation for back affordance.
-- **Category dashboard pages:** Each category gets a customizable landing page
-  with icon header, description, pinned pages section, tag filter bar,
-  grid/table view toggle, and tighter card grid. Replaces plain entity grid
-  when browsing a specific type.
-- **DB migration 000013:** Added `description` (TEXT) and `pinned_entity_ids`
-  (JSON) columns to entity_types table.
-- **Tighter card spacing:** Card padding, image height, and grid gaps reduced.
-  4-column grid on XL screens. Smaller type badges and tag chips.
-- **Service/repo updates:** `UpdateDashboard` method added to EntityTypeRepository
-  and EntityService interfaces. Handler for `PUT /entity-types/:etid/dashboard`.
+### REST API v1 Endpoints
+- **Middleware:** `RequireAPIKey` (Bearer token auth + bcrypt verify + IP check +
+  request logging), `RateLimit` (fixed-window per-minute), `RequireCampaignMatch`,
+  `RequirePermission` (read/write/sync).
+- **Read endpoints:** GET campaign info, list/get entity types, list/get entities
+  (with search, pagination, type filter, privacy enforcement).
+- **Write endpoints:** POST/PUT/DELETE entities, PUT fields-only update.
+- **Sync endpoint:** POST bidirectional sync — pull entities modified since timestamp,
+  push batch create/update/delete operations, returns server_time for next sync.
+- Middleware chain: RequireAPIKey → RateLimit → RequireCampaignMatch → RequirePermission.
+- Privacy enforcement uses key owner's campaign role for entity visibility.
 
 ### In Progress
 - Nothing currently in progress
@@ -117,19 +85,19 @@ completed for dark mode, badge contrast, and admin/campaign settings UX.
 `claude/explore-project-soSu8`
 
 ## Next Session Should
-1. **Run `make templ`, `make tailwind`, and `make migrate-up`** before testing --
-   generated files are gitignored, migration 000013 needs to be applied.
-2. **Grid/Table view toggle** -- Wire the toggle buttons on category dashboard to
-   switch between grid cards and a compact table view.
-3. **Sub-folder support** -- Use existing `parent_id` field to show parent/child
-   grouping on category dashboards with expand/collapse.
-4. **Settings consolidation** -- Move entity type management to a "Navigation &
-   Layout" section; add category page layout editor.
-5. **Persistent filters** -- Save filter state per category in localStorage.
-6. **Tests** -- Many plugins/widgets have no tests yet. Priority: entities service
-   (extend existing 30 tests), relations service, tags service, audit service.
-7. **Password reset** -- Wire auth password reset with SMTP when configured.
-8. **Map viewer** -- Leaflet.js map widget with entity pins.
+1. **Run `make templ`, `make tailwind`, and `make migrate-up`** before testing —
+   generated files are gitignored, migrations 000013-000016 need to be applied.
+2. **Attribute template editing in campaign settings** — Allow campaign owners
+   to edit entity type field definitions from a more accessible settings UI.
+3. **Player Notes block type** — New `player_notes` table, block type in template
+   editor, standalone notes pages per entity, scoped per user.
+4. **Tests** — Many plugins have zero tests. Priority: syncapi service (key
+   creation, authentication, bcrypt), addons service.
+5. **Foundry VTT companion module** — Documentation and example integration code.
+6. **Grid/Table view toggle** on category dashboards.
+7. **Password reset** — Wire auth password reset with SMTP.
+8. **API enhancements** — Entity tags/relations in API responses, entry content
+   in sync, `modified_since` repository method for efficient sync pull.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -139,12 +107,17 @@ completed for dark mode, badge contrast, and admin/campaign settings UX.
 - Tailwind standalone CLI (`tailwindcss`) is v3; do NOT use `npx @tailwindcss/cli` (v4 syntax)
 
 ## Completed Phases
-- **2026-02-19: Phase 0** -- Project scaffolding, AI docs, build config
-- **2026-02-19: Phase 1** -- Auth, campaigns, SMTP, admin, entities, editor, UI layouts,
+- **2026-02-19: Phase 0** — Project scaffolding, AI docs, build config
+- **2026-02-19: Phase 1** — Auth, campaigns, SMTP, admin, entities, editor, UI layouts,
   unit tests, Dockerfile, CI/CD, production deployment, auto-migrations
-- **2026-02-19 to 2026-02-20: Phase 2** -- Media plugin, security audit (14 fixes),
+- **2026-02-19 to 2026-02-20: Phase 2** — Media plugin, security audit (14 fixes),
   dynamic sidebar, entity images, sidebar customization, layout builder, entity type
   config/color picker, public campaigns, visual template editor, dark mode, tags,
   audit logging, site settings, tag picker, @mentions, entity tooltips, relations,
   entity type CRUD, visual polish, semantic color system, notifications, modules page,
   attributes widget, editor view/edit toggle, entity list redesign
+- **2026-02-20: Phase 3** — Competitor-inspired UI overhaul: Page/Category rename,
+  drill-down sidebar, category dashboards, tighter cards
+- **2026-02-20: Phase B** — Discover page split, template editor block resizing &
+  visibility, field overrides, extension framework (addons), sync API plugin with
+  admin/owner dashboards, REST API v1 endpoints (read/write/sync)

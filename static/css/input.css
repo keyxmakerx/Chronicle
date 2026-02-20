@@ -341,7 +341,6 @@
   .stat-card__desc {
     @apply text-xs text-fg-secondary;
   }
-}
 
   /* ---- Drill-Down Sidebar ---- */
 

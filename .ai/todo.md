@@ -13,8 +13,18 @@
 
 These are the highest-priority items across all future phases. Pick from here.
 
+### Phase B Follow-ups (Next Session)
+- [ ] Attribute template editing in campaign settings UI
+- [ ] Player Notes block type + standalone pages per entity
+- [x] REST API v1 endpoints (read/write campaign data via `/api/v1/`)
+- [x] API middleware (key auth, rate limiting, campaign match, permissions)
+- [ ] Foundry VTT companion module documentation
+- [ ] API enhancements: entity tags/relations in responses, efficient sync pull
+
 ### Testing (High Priority -- Many plugins have zero tests)
 - [x] Entity service unit tests (30 tests passing)
+- [ ] Sync API service tests (key creation, bcrypt auth, IP check)
+- [ ] Addons service tests (CRUD, campaign enable/disable)
 - [ ] Relations service tests (bi-directional create/delete, validation)
 - [ ] Tags service tests (CRUD, slug generation, diff-based assignment)
 - [ ] Audit service tests (pagination, validation, fire-and-forget)
@@ -28,24 +38,30 @@ These are the highest-priority items across all future phases. Pick from here.
 - [ ] 2FA/TOTP support
 - [ ] Per-entity permissions (view/edit per role/user)
 - [ ] Invite system (email invitations for campaigns)
+- [ ] Group-based visibility (beyond everyone/dm_only)
 
 ### Maps & Geography
 - [ ] Leaflet.js map viewer widget
 - [ ] Map pin CRUD with entity linking
 
 ### Game System Modules
-- [ ] D&D 5e module (SRD reference data, tooltips, pages) -- registry in `internal/modules/registry.go`
+- [ ] D&D 5e module (SRD reference data, tooltips, pages) — registry in `internal/modules/registry.go`
 - [ ] Pathfinder 2e module
 - [ ] Draw Steel module
 
 ### API & Integrations
-- [ ] REST API plugin with PASETO token auth
+- [x] `/api/v1/` REST endpoints (campaign entities, types, fields read/write)
+- [x] API key authentication middleware for `/api/v1/` routes
+- [x] Rate limiting enforcement on API routes
+- [ ] API enhancements: `modified_since` repo method for efficient sync pull
+- [ ] API enhancements: tags/relations in API entity responses
 - [ ] Campaign export/import
-- [ ] Foundry VTT sync module
+- [ ] Foundry VTT sync module (companion module)
 - [ ] AI integration endpoint
+- [ ] Webhook support for external event notifications
 
 ### UI & Navigation -- Phase 3 Follow-ups
-- [x] Terminology rename (Entity→Page, Entity Type→Category) -- UI labels only
+- [x] Terminology rename (Entity→Page, Entity Type→Category) — UI labels only
 - [x] Drill-down sidebar (iOS-style push navigation with peek)
 - [x] Category dashboard pages (header, description, pinned, grid view)
 - [x] Tighter card grid (4-col XL, reduced padding, compact badges)
@@ -151,3 +167,23 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] Merged campaign Edit + Settings into unified settings page
 - [x] Game Modules section in campaign settings (shows available modules)
 - [x] Admin plugins page (plugin registry, active/planned status, categories)
+
+### Phase 3: Competitor-Inspired UI Overhaul (2026-02-20)
+- [x] Terminology rename (Entity→Page, Entity Type→Category)
+- [x] Drill-down sidebar (iOS Settings-style push nav with peek)
+- [x] Category dashboard pages (customizable landing with pinned, tags, grid)
+- [x] DB migration 000013 (description + pinned_entity_ids on entity_types)
+- [x] Tighter card spacing (4-col XL, reduced padding, compact badges)
+
+### Phase B: Extensions & API (2026-02-20)
+- [x] Discover page split (DiscoverPublicPage + DiscoverAuthPage + AboutPage)
+- [x] Discover link in sidebar (authenticated users can browse public campaigns)
+- [x] Template editor block resizing (minHeight presets: auto/sm/md/lg/xl)
+- [x] Block-level visibility controls (everyone/dm_only with role-based filtering)
+- [x] Per-entity field overrides (migration 000014, MergeFields, customization panel)
+- [x] Extension framework — addons plugin (migration 000015, model/repo/service/handler)
+- [x] Admin addon management page with status controls + creation form
+- [x] Campaign addon settings with per-campaign toggle (HTMX)
+- [x] Sync API plugin (migration 000016, model/repo/service/handler)
+- [x] Owner API key management (create/toggle/revoke, usage stats)
+- [x] Admin API monitoring dashboard (stats, charts, security events, IP blocklist, keys)

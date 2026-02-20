@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -17,6 +18,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
+	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
@@ -169,16 +171,25 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
 
-	// Landing page -- registered after campaignService exists so we can
-	// fetch public campaigns for the discover section.
+	// Discover page (/) -- browse public campaigns. Uses OptionalAuth so
+	// authenticated users get the App layout with sidebar, while guests
+	// see a standalone page with signup CTA.
 	e.GET("/", func(c echo.Context) error {
-		publicCampaigns, err := campaignService.ListPublic(c.Request().Context(), 12)
+		publicCampaigns, err := campaignService.ListPublic(c.Request().Context(), 24)
 		if err != nil {
-			slog.Warn("failed to load public campaigns for landing page", slog.Any("error", err))
+			slog.Warn("failed to load public campaigns for discover page", slog.Any("error", err))
 			publicCampaigns = nil
 		}
-		return middleware.Render(c, http.StatusOK, pages.Landing(publicCampaigns))
-	})
+		if auth.GetSession(c) != nil {
+			return middleware.Render(c, http.StatusOK, pages.DiscoverAuthPage(publicCampaigns))
+		}
+		return middleware.Render(c, http.StatusOK, pages.DiscoverPublicPage(publicCampaigns))
+	}, auth.OptionalAuth(authService))
+
+	// About/Welcome page -- Chronicle marketing and feature highlights.
+	e.GET("/about", func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, pages.AboutPage())
+	}, auth.OptionalAuth(authService))
 
 	// Entity routes (campaign-scoped, registered after campaign service exists).
 	entityHandler := entities.NewHandler(entityService)
@@ -210,6 +221,26 @@ func (a *App) RegisterRoutes() {
 	// Wire dynamic storage limits into the media service so uploads
 	// respect per-user and per-campaign quotas from site settings.
 	mediaService.SetStorageLimiter(&storageLimiterAdapter{svc: settingsService})
+
+	// Addons plugin: extension framework with per-campaign enable/disable toggles.
+	addonRepo := addons.NewAddonRepository(a.DB)
+	addonService := addons.NewAddonService(addonRepo)
+	addonHandler := addons.NewHandler(addonService)
+	addons.RegisterAdminRoutes(adminGroup, addonHandler)
+	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)
+
+	// Sync API plugin: external tool integration with API key auth,
+	// request logging, security monitoring, and admin dashboard.
+	syncRepo := syncapi.NewSyncAPIRepository(a.DB)
+	syncService := syncapi.NewSyncAPIService(syncRepo)
+	syncHandler := syncapi.NewHandler(syncService)
+	syncapi.RegisterAdminRoutes(adminGroup, syncHandler)
+	syncapi.RegisterCampaignRoutes(e, syncHandler, campaignService, authService)
+
+	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
+	// Authenticates via API keys, not browser sessions.
+	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService)
+	syncapi.RegisterAPIRoutes(e, syncAPIHandler, syncService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
 	tagRepo := tags.NewTagRepository(a.DB)
@@ -305,7 +336,6 @@ func (a *App) RegisterRoutes() {
 	// dnd5eModule.RegisterRoutes(ref)
 
 	// --- API Routes ---
-	// REST API for external clients (Foundry VTT, etc.).
-	// api := e.Group("/api/v1")
-	// apiPlugin.RegisterRoutes(api)
+	// REST API v1 is registered above via syncapi.RegisterAPIRoutes().
+	// Endpoints: /api/v1/campaigns/:id/{entity-types,entities,sync}
 }

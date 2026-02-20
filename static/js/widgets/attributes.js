@@ -16,14 +16,20 @@
 Chronicle.register('attributes', {
   init: function (el, config) {
     var state = {
-      fields: [],       // Field definitions from entity type
-      fieldsData: {},   // Current field values
-      isEditing: false, // Whether the edit form is shown
+      fields: [],            // Effective (merged) field definitions
+      typeFields: [],        // Original type-level fields (for override reference)
+      fieldsData: {},        // Current field values
+      fieldOverrides: null,  // Per-entity overrides (added, hidden, modified)
+      isEditing: false,      // Whether the edit form is shown
+      isCustomizing: false,  // Whether the field override panel is shown
       isSaving: false,
       error: null
     };
 
     el._attributesState = state;
+
+    // Derive the overrides endpoint from the fields endpoint.
+    var overridesEndpoint = config.endpoint.replace(/\/fields$/, '/field-overrides');
 
     // Load field definitions and current values.
     var headers = { 'Accept': 'application/json' };
@@ -35,7 +41,9 @@ Chronicle.register('attributes', {
       })
       .then(function (data) {
         state.fields = data.fields || [];
+        state.typeFields = data.type_fields || data.fields || [];
         state.fieldsData = data.fields_data || {};
+        state.fieldOverrides = data.field_overrides || null;
         render();
       })
       .catch(function (err) {
@@ -68,6 +76,22 @@ Chronicle.register('attributes', {
       header.appendChild(title);
 
       if (config.editable) {
+        var btnGroup = document.createElement('div');
+        btnGroup.className = 'flex items-center gap-1.5';
+
+        // Gear icon for field customization (per-entity overrides).
+        var gearBtn = document.createElement('button');
+        gearBtn.type = 'button';
+        gearBtn.className = 'chronicle-editor__edit-btn';
+        gearBtn.title = 'Customize fields for this page';
+        gearBtn.innerHTML = '<i class="fa-solid fa-gear" style="font-size:11px"></i>';
+        gearBtn.addEventListener('click', function () {
+          state.isCustomizing = !state.isCustomizing;
+          state.isEditing = false;
+          render();
+        });
+        btnGroup.appendChild(gearBtn);
+
         var editBtn = document.createElement('button');
         editBtn.type = 'button';
 
@@ -82,10 +106,12 @@ Chronicle.register('attributes', {
           editBtn.innerHTML = '<i class="fa-solid fa-pen" style="font-size:11px"></i> Edit';
           editBtn.addEventListener('click', function () {
             state.isEditing = true;
+            state.isCustomizing = false;
             render();
           });
         }
-        header.appendChild(editBtn);
+        btnGroup.appendChild(editBtn);
+        header.appendChild(btnGroup);
       }
 
       card.appendChild(header);
@@ -102,7 +128,9 @@ Chronicle.register('attributes', {
       var content = document.createElement('div');
       content.className = 'space-y-3';
 
-      if (state.isEditing) {
+      if (state.isCustomizing) {
+        renderCustomizePanel(content);
+      } else if (state.isEditing) {
         renderEditForm(content);
       } else {
         renderReadOnly(content);
@@ -251,6 +279,179 @@ Chronicle.register('attributes', {
           container.appendChild(row);
         });
       });
+    }
+
+    // --- Customize panel (per-entity field overrides) ---
+
+    function renderCustomizePanel(container) {
+      var overrides = state.fieldOverrides || { added: [], hidden: [], modified: {} };
+
+      // Header.
+      var info = document.createElement('div');
+      info.className = 'text-xs mb-3';
+      info.style.color = 'var(--color-text-muted)';
+      info.textContent = 'Toggle fields on/off or add custom fields for this page only.';
+      container.appendChild(info);
+
+      // Toggle list for type-level fields.
+      var toggleLabel = document.createElement('div');
+      toggleLabel.className = 'text-[10px] font-semibold uppercase tracking-wider mb-1.5';
+      toggleLabel.style.color = 'var(--color-text-muted)';
+      toggleLabel.textContent = 'Category Fields';
+      container.appendChild(toggleLabel);
+
+      var hiddenSet = {};
+      (overrides.hidden || []).forEach(function (k) { hiddenSet[k] = true; });
+
+      state.typeFields.forEach(function (field) {
+        var row = document.createElement('div');
+        row.className = 'flex items-center justify-between py-1';
+
+        var lbl = document.createElement('span');
+        lbl.className = 'text-sm';
+        lbl.style.color = hiddenSet[field.key] ? 'var(--color-text-muted)' : 'var(--color-text-primary)';
+        lbl.textContent = field.label;
+        if (hiddenSet[field.key]) {
+          lbl.style.textDecoration = 'line-through';
+        }
+        row.appendChild(lbl);
+
+        var toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'text-xs px-2 py-0.5 rounded border';
+        if (hiddenSet[field.key]) {
+          toggle.textContent = 'Hidden';
+          toggle.style.color = 'var(--color-text-muted)';
+          toggle.style.borderColor = 'var(--color-border)';
+        } else {
+          toggle.textContent = 'Visible';
+          toggle.style.color = 'var(--color-accent)';
+          toggle.style.borderColor = 'var(--color-accent)';
+        }
+        toggle.addEventListener('click', function () {
+          if (hiddenSet[field.key]) {
+            delete hiddenSet[field.key];
+          } else {
+            hiddenSet[field.key] = true;
+          }
+          overrides.hidden = Object.keys(hiddenSet);
+          render();
+        });
+        row.appendChild(toggle);
+        container.appendChild(row);
+      });
+
+      // Added fields section.
+      var addedLabel = document.createElement('div');
+      addedLabel.className = 'text-[10px] font-semibold uppercase tracking-wider mb-1.5 mt-4';
+      addedLabel.style.color = 'var(--color-text-muted)';
+      addedLabel.textContent = 'Custom Fields (this page only)';
+      container.appendChild(addedLabel);
+
+      var addedFields = overrides.added || [];
+      addedFields.forEach(function (f, idx) {
+        var row = document.createElement('div');
+        row.className = 'flex items-center gap-2 mb-1';
+
+        var nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'input text-sm flex-1';
+        nameInput.placeholder = 'Field name';
+        nameInput.value = f.label || '';
+        nameInput.addEventListener('input', function () {
+          f.label = nameInput.value;
+          f.key = nameInput.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'custom_field';
+        });
+        row.appendChild(nameInput);
+
+        var typeSelect = document.createElement('select');
+        typeSelect.className = 'input text-sm w-24';
+        ['text', 'number', 'textarea', 'url', 'checkbox', 'select'].forEach(function (t) {
+          var opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+          if (f.type === t) opt.selected = true;
+          typeSelect.appendChild(opt);
+        });
+        typeSelect.addEventListener('change', function () { f.type = typeSelect.value; });
+        row.appendChild(typeSelect);
+
+        var delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'text-red-400 hover:text-red-600 text-xs p-1';
+        delBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        delBtn.addEventListener('click', function () {
+          addedFields.splice(idx, 1);
+          overrides.added = addedFields;
+          render();
+        });
+        row.appendChild(delBtn);
+
+        container.appendChild(row);
+      });
+
+      // Add field button.
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'text-xs text-accent hover:text-accent-hover mt-1';
+      addBtn.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Add Field';
+      addBtn.addEventListener('click', function () {
+        addedFields.push({ key: '', label: '', type: 'text', section: 'Custom' });
+        overrides.added = addedFields;
+        render();
+      });
+      container.appendChild(addBtn);
+
+      // Save button.
+      var saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'chronicle-editor__edit-btn chronicle-editor__edit-btn--done mt-4 w-full';
+      saveBtn.innerHTML = '<i class="fa-solid fa-check" style="font-size:11px"></i> Save Customizations';
+      saveBtn.addEventListener('click', function () {
+        saveOverrides(overrides);
+      });
+      container.appendChild(saveBtn);
+    }
+
+    function saveOverrides(overrides) {
+      if (state.isSaving) return;
+      state.isSaving = true;
+
+      var reqHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+      if (config.csrfToken) {
+        reqHeaders['X-CSRF-Token'] = config.csrfToken;
+      }
+
+      fetch(overridesEndpoint, {
+        method: 'PUT',
+        headers: reqHeaders,
+        credentials: 'same-origin',
+        body: JSON.stringify(overrides)
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('Failed to save overrides');
+          state.fieldOverrides = overrides;
+          state.isCustomizing = false;
+          state.isSaving = false;
+          // Reload to get merged fields.
+          return fetch(config.endpoint, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          state.fields = data.fields || [];
+          state.fieldsData = data.fields_data || {};
+          state.fieldOverrides = data.field_overrides || null;
+          render();
+        })
+        .catch(function (err) {
+          console.error('[attributes] Save overrides failed:', err);
+          state.error = 'Failed to save customizations.';
+          state.isSaving = false;
+          render();
+        });
     }
 
     // --- Save ---

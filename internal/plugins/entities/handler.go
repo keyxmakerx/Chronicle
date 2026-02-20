@@ -500,9 +500,20 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 		return err
 	}
 
+	// Merge type-level fields with per-entity overrides for effective field list.
+	effectiveFields := MergeFields(et.Fields, entity.FieldOverrides)
+
+	// Default to empty overrides so the frontend always gets a valid object.
+	overrides := entity.FieldOverrides
+	if overrides == nil {
+		overrides = &FieldOverrides{}
+	}
+
 	response := map[string]any{
-		"fields":      et.Fields,
-		"fields_data": entity.FieldsData,
+		"fields":          effectiveFields,
+		"fields_data":     entity.FieldsData,
+		"field_overrides": overrides,
+		"type_fields":     et.Fields,
 	}
 	return c.JSON(http.StatusOK, response)
 }
@@ -533,6 +544,39 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 	}
 
 	if err := h.service.UpdateFields(c.Request().Context(), entityID, body.FieldsData); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateFieldOverridesAPI saves per-entity field customizations (added, hidden,
+// modified fields) from the attributes widget's gear menu.
+// PUT /campaigns/:id/entities/:eid/field-overrides
+func (h *Handler) UpdateFieldOverridesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	entityID := c.Param("eid")
+
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var body FieldOverrides
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdateFieldOverrides(c.Request().Context(), entityID, &body); err != nil {
 		return err
 	}
 

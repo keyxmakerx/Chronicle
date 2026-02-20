@@ -156,6 +156,10 @@ func (m *mockEntityRepo) UpdateFields(ctx context.Context, id string, fieldsData
 	return nil
 }
 
+func (m *mockEntityRepo) UpdateFieldOverrides(ctx context.Context, id string, overrides *FieldOverrides) error {
+	return nil
+}
+
 func (m *mockEntityRepo) UpdateImage(ctx context.Context, id, imagePath string) error {
 	if m.updateImageFn != nil {
 		return m.updateImageFn(ctx, id, imagePath)

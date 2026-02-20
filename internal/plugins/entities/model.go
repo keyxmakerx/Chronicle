@@ -194,22 +194,23 @@ type FieldDefinition struct {
 // Entity represents a single worldbuilding object — a character, location,
 // item, or any other type defined in the campaign's entity types.
 type Entity struct {
-	ID           string         `json:"id"`
-	CampaignID   string         `json:"campaign_id"`
-	EntityTypeID int            `json:"entity_type_id"`
-	Name         string         `json:"name"`
-	Slug         string         `json:"slug"`
-	Entry        *string        `json:"entry,omitempty"`     // TipTap/ProseMirror JSON document.
-	EntryHTML    *string        `json:"entry_html,omitempty"` // Pre-rendered HTML from entry.
-	ImagePath    *string        `json:"image_path,omitempty"`
-	ParentID     *string        `json:"parent_id,omitempty"`
-	TypeLabel    *string        `json:"type_label,omitempty"` // Freeform subtype (e.g., "City" for a Location).
-	IsPrivate    bool           `json:"is_private"`
-	IsTemplate   bool           `json:"is_template"`
-	FieldsData   map[string]any `json:"fields_data"`
-	CreatedBy    string         `json:"created_by"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID             string          `json:"id"`
+	CampaignID     string          `json:"campaign_id"`
+	EntityTypeID   int             `json:"entity_type_id"`
+	Name           string          `json:"name"`
+	Slug           string          `json:"slug"`
+	Entry          *string         `json:"entry,omitempty"`     // TipTap/ProseMirror JSON document.
+	EntryHTML      *string         `json:"entry_html,omitempty"` // Pre-rendered HTML from entry.
+	ImagePath      *string         `json:"image_path,omitempty"`
+	ParentID       *string         `json:"parent_id,omitempty"`
+	TypeLabel      *string         `json:"type_label,omitempty"` // Freeform subtype (e.g., "City" for a Location).
+	IsPrivate      bool            `json:"is_private"`
+	IsTemplate     bool            `json:"is_template"`
+	FieldsData     map[string]any  `json:"fields_data"`
+	FieldOverrides *FieldOverrides `json:"field_overrides,omitempty"` // Per-entity field customizations.
+	CreatedBy      string          `json:"created_by"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
 
 	// Joined fields from entity_types (populated by repository queries).
 	TypeName  string `json:"type_name,omitempty"`
@@ -219,6 +220,62 @@ type Entity struct {
 
 	// Tags is populated at the handler level via batch fetch, not by the repository.
 	Tags []EntityTagInfo `json:"tags,omitempty"`
+}
+
+// FieldOverrides holds per-entity field customizations that override the
+// entity type's field template. This allows individual entities to add,
+// hide, or modify fields without affecting the entire category.
+type FieldOverrides struct {
+	Added    []FieldDefinition        `json:"added,omitempty"`    // Extra fields unique to this entity.
+	Hidden   []string                 `json:"hidden,omitempty"`   // Keys of type-level fields to hide.
+	Modified map[string]FieldOverride `json:"modified,omitempty"` // Per-field modifications keyed by field key.
+}
+
+// FieldOverride holds modifications to a single field (label, type, options).
+type FieldOverride struct {
+	Label   *string  `json:"label,omitempty"`
+	Type    *string  `json:"type,omitempty"`
+	Options []string `json:"options,omitempty"`
+}
+
+// MergeFields combines the entity type's field definitions with per-entity
+// overrides to produce the effective field list for rendering. Hidden fields
+// are removed, modified fields have their properties patched, and added fields
+// are appended at the end.
+func MergeFields(typeFields []FieldDefinition, overrides *FieldOverrides) []FieldDefinition {
+	if overrides == nil {
+		return typeFields
+	}
+
+	// Build hidden set.
+	hiddenSet := make(map[string]bool, len(overrides.Hidden))
+	for _, key := range overrides.Hidden {
+		hiddenSet[key] = true
+	}
+
+	// Filter and apply modifications.
+	result := make([]FieldDefinition, 0, len(typeFields))
+	for _, f := range typeFields {
+		if hiddenSet[f.Key] {
+			continue
+		}
+		if mod, ok := overrides.Modified[f.Key]; ok {
+			if mod.Label != nil {
+				f.Label = *mod.Label
+			}
+			if mod.Type != nil {
+				f.Type = *mod.Type
+			}
+			if mod.Options != nil {
+				f.Options = mod.Options
+			}
+		}
+		result = append(result, f)
+	}
+
+	// Append added fields.
+	result = append(result, overrides.Added...)
+	return result
 }
 
 // EntityTagInfo holds minimal tag display data for entity cards and lists.

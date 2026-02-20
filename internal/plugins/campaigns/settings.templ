@@ -155,6 +155,38 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 				}
 			</div>
 
+			// Campaign extensions (addons).
+			<div class="card p-6 mb-6">
+				<div class="flex items-center justify-between mb-2">
+					<h2 class="text-lg font-semibold text-fg">Extensions</h2>
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/addons/settings", cc.Campaign.ID)) }
+						class="text-sm link"
+					>
+						<i class="fa-solid fa-plug mr-1"></i> Manage Extensions
+					</a>
+				</div>
+				<p class="text-sm text-fg-secondary">
+					Enable or disable addons like game modules, widgets, and external integrations for this campaign.
+				</p>
+			</div>
+
+			// API Keys for external tool integration.
+			<div class="card p-6 mb-6">
+				<div class="flex items-center justify-between mb-2">
+					<h2 class="text-lg font-semibold text-fg">API Keys</h2>
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", cc.Campaign.ID)) }
+						class="text-sm link"
+					>
+						<i class="fa-solid fa-key mr-1"></i> Manage Keys
+					</a>
+				</div>
+				<p class="text-sm text-fg-secondary">
+					Create API keys for external tools like Foundry VTT to sync data with this campaign.
+				</p>
+			</div>
+
 			// Transfer ownership section.
 			<div class="card p-6 mb-6">
 				<h2 class="text-lg font-semibold text-fg mb-4">Transfer Ownership</h2>

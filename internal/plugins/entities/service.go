@@ -25,6 +25,7 @@ type EntityService interface {
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
 	UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error
 	UpdateFields(ctx context.Context, entityID string, fieldsData map[string]any) error
+	UpdateFieldOverrides(ctx context.Context, entityID string, overrides *FieldOverrides) error
 	UpdateImage(ctx context.Context, entityID, imagePath string) error
 	Delete(ctx context.Context, entityID string) error
 
@@ -218,6 +219,30 @@ func (s *entityService) UpdateFields(ctx context.Context, entityID string, field
 		return err
 	}
 	slog.Info("entity fields updated", slog.String("entity_id", entityID))
+	return nil
+}
+
+// UpdateFieldOverrides persists per-entity field customizations (added, hidden,
+// modified fields). Validates that added fields have required properties.
+func (s *entityService) UpdateFieldOverrides(ctx context.Context, entityID string, overrides *FieldOverrides) error {
+	if overrides != nil {
+		// Validate added fields have keys and labels.
+		for i, f := range overrides.Added {
+			if f.Key == "" {
+				return apperror.NewBadRequest(fmt.Sprintf("added field %d missing key", i))
+			}
+			if f.Label == "" {
+				return apperror.NewBadRequest(fmt.Sprintf("added field %d missing label", i))
+			}
+			if f.Type == "" {
+				overrides.Added[i].Type = "text"
+			}
+		}
+	}
+	if err := s.entities.UpdateFieldOverrides(ctx, entityID, overrides); err != nil {
+		return err
+	}
+	slog.Info("entity field overrides updated", slog.String("entity_id", entityID))
 	return nil
 }
 
