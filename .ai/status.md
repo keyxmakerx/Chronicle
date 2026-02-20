@@ -8,44 +8,64 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-20 -- Dark mode fixes, combined storage page, layout editor fixes
+2026-02-20 -- Semantic color system, dark mode fixes, editor toggle, attributes widget, notifications, modules page
 
 ## Current Phase
 **Phase 2: Media & UI** -- Building on the Phase 1 foundation. Media plugin
 for file uploads, security hardening, dynamic sidebar, entity image upload,
 UI quality improvements, sidebar customization, visual template editor for
 entity type page layouts, public campaign support, dark mode, tags, audit logging,
-entity relations, entity type management, @mentions, hover tooltips, and visual polish.
+entity relations, entity type management, @mentions, hover tooltips, visual polish,
+semantic color system, toast notifications, and admin modules page.
 
 ## Last Session Summary
 
 ### Completed
-- **Dark mode fixes across all admin pages:** Added `dark:` variants to
-  dashboard, users, campaigns, storage, and template editor pages. Fixed
-  black text on dark backgrounds throughout admin area.
+- **Semantic color system:** Created CSS custom properties for all colors
+  (`--color-text-primary`, `--color-bg-secondary`, etc.) with light/dark values
+  on `:root` / `.dark`. Wired into Tailwind as utility classes (`text-fg`,
+  `bg-surface`, `border-edge`, etc.) so components auto-switch without `dark:`.
 
-- **Combined Storage + Storage Settings page:** Merged the two separate
-  admin pages into a unified `/admin/storage` page with Alpine.js tabs
-  (Files | Limits & Overrides). Compact layout with less whitespace,
-  inline stats header, horizontal usage breakdown chips. Removed sidebar
-  "Storage Settings" link. Old `/admin/storage/settings` route redirects.
+- **Dark mode fix across ALL templ files:** Three background agents fixed 15+
+  templ files (campaigns, entities, error pages, pagination, SMTP settings) to
+  use semantic tokens or proper `dark:` variants. Eliminated black-on-black text.
 
-- **User/campaign dropdowns for storage overrides:** Replaced raw UUID
-  text inputs with `<select>` dropdowns populated from the database.
-  Admin users are greyed out (disabled) in the user dropdown. Uses
-  Alpine.js + fetch() for dynamic form submission.
+- **CSS component migration to semantic tokens:** Converted `.btn-secondary`,
+  `.btn-ghost`, `.card`, `.input`, `.link-muted`, `.badge-gray`, `.empty-state__*`,
+  `.table-header`, `.table-row`, `.chronicle-editor`, `.section-header`,
+  `.stat-card__*` to use semantic color tokens. No more per-component `dark:`.
 
-- **Template editor dark mode:** All dynamically created elements in
-  `template_editor.js` now have dark mode classes (palette, canvas,
-  blocks, containers, tabs, sections, sub-blocks, drop zones).
+- **Editor view/edit mode toggle:** TipTap editor now starts in read-only view
+  mode. Header bar with Edit/Done button. `enterEditMode()` shows toolbar,
+  enables editing, starts autosave. `exitEditMode()` saves and returns to view.
 
-- **Template editor palette drag fix:** Changed palette item
-  `effectAllowed` from `'copy'` to `'copyMove'` to resolve browser
-  drop rejection when drop zones use `dropEffect = 'move'`. Blocks
-  can now be added from the palette again.
+- **Entity list page redesign:** Changed from vertical sidebar filter to
+  horizontal tab navigation with search bar, stats subtitle, and plus icon
+  on create button. Better responsive layout.
 
-- **Alpine.js x-cloak CSS:** Added `[x-cloak] { display: none !important; }`
-  to prevent flash-of-unstyled-content on Alpine-managed tab panels.
+- **Attributes widget (full-stack):** New `attributes.js` widget with inline
+  edit UI for all field types (text, number, url, textarea, select, checkbox).
+  Added `GetFieldsAPI` / `UpdateFieldsAPI` handlers, `UpdateFields` repo/service
+  methods, and API routes.
+
+- **Descriptor rename:** Renamed "Subtype Label" to "Descriptor" with clearer
+  help text explaining the purpose (e.g., "City" for a Location).
+
+- **Template editor block preview overlay:** Right-click context menu and eye
+  icon button on blocks. Shows overlay with rendered mockup for all block types
+  (title, image, entry, attributes, details, tags, relations, divider).
+
+- **Toast notification system:** Created `notifications.js` with
+  `Chronicle.notify(message, type, opts)` API. Success/error/info/warning types
+  with slide-in animation. HTMX integration for auto error toasts on
+  `htmx:responseError` and `htmx:sendError`. Wired into `base.templ`.
+
+- **Admin modules management page:** Module registry (`internal/modules/registry.go`)
+  with D&D 5e, Pathfinder 2e, Draw Steel entries. Modules page with card grid UI,
+  status badges, content categories. Dashboard stat card and sidebar link added.
+
+- **Admin dashboard semantic tokens:** Migrated dashboard from hardcoded gray
+  classes to `text-fg`, `text-fg-secondary`, `text-fg-muted` semantic tokens.
 
 ### In Progress
 - Nothing currently in progress
@@ -54,17 +74,28 @@ entity relations, entity type management, @mentions, hover tooltips, and visual 
 - Nothing blocked
 
 ### Files Modified This Session
-- `internal/plugins/admin/handler.go` -- Added settingsService, StoragePageData struct, combined Storage handler
-- `internal/plugins/admin/storage.templ` -- Complete rewrite: combined page with tabs, dark mode, dropdowns
-- `internal/plugins/admin/dashboard.templ` -- Dark mode classes throughout
-- `internal/plugins/admin/users.templ` -- Dark mode classes throughout
-- `internal/plugins/admin/campaigns.templ` -- Dark mode classes throughout
-- `internal/plugins/settings/handler.go` -- Redirects to /admin/storage, simplified UpdateStorageSettings
-- `internal/plugins/entities/template_editor.templ` -- Dark mode on editor header
-- `internal/templates/layouts/app.templ` -- Removed Storage Settings sidebar link, updated Storage link matching
-- `internal/app/routes.go` -- Wire settingsService into admin handler
-- `static/js/widgets/template_editor.js` -- Dark mode on all elements, palette drag fix (effectAllowed)
-- `static/css/input.css` -- Added [x-cloak] CSS rule
+- `static/css/input.css` -- Semantic color variables, component token migration, editor/tab styles
+- `tailwind.config.js` -- Semantic token color definitions (fg, surface, page, edge)
+- `static/js/widgets/editor.js` -- View/edit mode toggle, header bar
+- `static/js/widgets/attributes.js` -- New widget (inline edit for entity custom fields)
+- `static/js/widgets/template_editor.js` -- Block preview overlay, context menu
+- `static/js/notifications.js` -- New toast notification system
+- `internal/modules/registry.go` -- New module registry
+- `internal/plugins/admin/modules.templ` -- New admin modules page template
+- `internal/plugins/admin/dashboard.templ` -- Modules card + semantic tokens
+- `internal/plugins/admin/handler.go` -- Modules handler method
+- `internal/plugins/admin/routes.go` -- Modules route
+- `internal/plugins/entities/index.templ` -- Horizontal tabs, search, stats redesign
+- `internal/plugins/entities/form.templ` -- Descriptor rename
+- `internal/plugins/entities/show.templ` -- Attributes widget mount point
+- `internal/plugins/entities/handler.go` -- GetFieldsAPI, UpdateFieldsAPI
+- `internal/plugins/entities/repository.go` -- UpdateFields
+- `internal/plugins/entities/service.go` -- UpdateFields
+- `internal/plugins/entities/service_test.go` -- Mock UpdateFields
+- `internal/plugins/entities/routes.go` -- Fields API routes
+- `internal/templates/layouts/base.templ` -- notifications.js + attributes.js script tags
+- `internal/templates/layouts/app.templ` -- Modules sidebar link
+- 15+ templ files fixed for dark mode by background agents
 
 ## Active Branch
 `claude/resume-previous-work-YqXiG`
@@ -75,13 +106,14 @@ entity relations, entity type management, @mentions, hover tooltips, and visual 
 3. **Map viewer** -- Leaflet.js map widget with entity pins
 4. **REST API** -- PASETO token auth for external integrations
 5. **Relation/tooltip tests** -- Table-driven unit tests for new services
-6. **Dark mode audit** -- Remaining pages (entity show, campaign settings, SMTP) may need dark: fixes
+6. **Module implementation** -- Start with D&D 5e SRD data loading and reference pages
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
 - Templ generated files (`*_templ.go`) are gitignored, so `templ generate`
   must run before build on a fresh clone
 - Tailwind CSS output (`static/css/app.css`) is gitignored, needs `make tailwind`
+- Tailwind standalone CLI (`tailwindcss`) is v3; do NOT use `npx @tailwindcss/cli` (v4 syntax)
 
 ## Recently Completed Milestones
 - 2026-02-19: Project scaffolding and three-tier AI documentation system
@@ -131,3 +163,13 @@ entity relations, entity type management, @mentions, hover tooltips, and visual 
 - 2026-02-20: Combined Storage + Storage Settings into unified tabbed page
 - 2026-02-20: User/campaign dropdowns for storage overrides (admins greyed out)
 - 2026-02-20: Fixed template editor palette drag (blocks can be added again)
+- 2026-02-20: Semantic color system with CSS custom properties + Tailwind tokens
+- 2026-02-20: Dark mode fix across all templ files (15+ files, 3 parallel agents)
+- 2026-02-20: CSS component migration to semantic tokens (no more per-component dark:)
+- 2026-02-20: Editor view/edit mode toggle (read-only default, Edit/Done button)
+- 2026-02-20: Entity list page redesign (horizontal tabs, search, stats)
+- 2026-02-20: Attributes widget (full-stack: JS widget + Go API + repo/service)
+- 2026-02-20: Descriptor rename (Subtype → Descriptor with help text)
+- 2026-02-20: Template editor block preview overlay (right-click + eye icon)
+- 2026-02-20: Toast notification system (Chronicle.notify API + HTMX integration)
+- 2026-02-20: Admin modules management page (registry, cards, dashboard, sidebar)
