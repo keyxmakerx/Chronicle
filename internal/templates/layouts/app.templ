@@ -29,7 +29,7 @@ templ App(title string) {
 				@FlashMessages()
 
 				<!-- Page content (scrollable) -->
-				<main class="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900" id="main-content">
+				<main class="flex-1 overflow-y-auto p-6 bg-surface" id="main-content">
 					{ children... }
 				</main>
 			</div>
@@ -335,7 +335,7 @@ templ entityTypeLink(slug string, label string, color string, icon string, count
 // Topbar renders the top navigation bar with search, campaign breadcrumb,
 // dark mode toggle, and user menu.
 templ Topbar() {
-	<header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shrink-0">
+	<header class="h-16 bg-surface border-b border-edge flex items-center justify-between px-6 shrink-0">
 		<!-- Left: Campaign selector + Search -->
 		<div class="flex items-center space-x-4">
 			if IsAuthenticated(ctx) {
@@ -344,12 +344,12 @@ templ Topbar() {
 					<button
 						@click="open = !open"
 						@click.outside="open = false"
-						class="flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+						class="flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium text-fg-body hover:bg-surface-alt transition-colors"
 					>
 						if InCampaign(ctx) {
 							<span class="truncate max-w-[180px]">{ GetCampaignName(ctx) }</span>
 						} else {
-							<span class="text-gray-500 dark:text-gray-400">Select Campaign</span>
+							<span class="text-fg-secondary">Select Campaign</span>
 						}
 						<svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -363,7 +363,7 @@ templ Topbar() {
 						x-transition:leave="transition ease-in duration-75"
 						x-transition:leave-start="opacity-100 scale-100"
 						x-transition:leave-end="opacity-0 scale-95"
-						class="absolute left-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden"
+						class="absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
 						hx-get="/campaigns/picker"
 						hx-trigger="intersect once"
 						hx-swap="innerHTML"
@@ -373,7 +373,7 @@ templ Topbar() {
 				</div>
 			} else if InCampaign(ctx) {
 				<!-- Static campaign name for guests -->
-				<span class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200">
+				<span class="px-3 py-1.5 text-sm font-medium text-fg-body">
 					{ GetCampaignName(ctx) }
 				</span>
 			}
@@ -404,7 +404,7 @@ templ Topbar() {
 			<!-- Dark mode toggle -->
 			<button
 				data-theme-toggle
-				class="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+				class="p-2 rounded-md text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors"
 				title="Toggle dark mode"
 			>
 				<!-- Sun icon (shown in dark mode — click to go light) -->
@@ -425,7 +425,7 @@ templ Topbar() {
 							{ userInitials(ctx) }
 						</span>
 					</div>
-					<span class="text-sm font-medium text-gray-700 dark:text-gray-200">
+					<span class="text-sm font-medium text-fg-body">
 						{ GetUserName(ctx) }
 					</span>
 				</div>
@@ -434,13 +434,13 @@ templ Topbar() {
 					<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
 					<button
 						type="submit"
-						class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+						class="text-sm text-fg-secondary hover:text-fg transition-colors"
 					>
 						Logout
 					</button>
 				</form>
 			} else {
-				<a href="/login" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors">
+				<a href="/login" class="text-sm font-medium text-accent hover:text-accent-hover transition-colors">
 					Log in
 				</a>
 				<a href="/register" class="btn-primary text-sm">

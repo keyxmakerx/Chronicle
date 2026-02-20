@@ -10,31 +10,31 @@ import (
 templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken string) {
 	@layouts.App("Users - Admin") {
 		<div class="max-w-4xl mx-auto space-y-6">
-			<h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Users ({ fmt.Sprintf("%d", total) })</h1>
+			<h1 class="text-2xl font-bold text-fg">Users ({ fmt.Sprintf("%d", total) })</h1>
 			<div class="card p-0 overflow-hidden">
 				<table class="w-full">
 					<thead>
-						<tr class="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-							<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
-							<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Email</th>
-							<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Role</th>
-							<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Joined</th>
-							<th class="text-right px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+						<tr class="bg-surface-alt border-b border-edge">
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Name</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Email</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Role</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Joined</th>
+							<th class="text-right px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Actions</th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+					<tbody class="divide-y divide-edge">
 						for _, user := range users {
-							<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-								<td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{ user.DisplayName }</td>
-								<td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{ user.Email }</td>
+							<tr class="hover:bg-surface-alt transition-colors">
+								<td class="px-4 py-3 text-sm font-medium text-fg">{ user.DisplayName }</td>
+								<td class="px-4 py-3 text-sm text-fg-secondary">{ user.Email }</td>
 								<td class="px-4 py-3">
 									if user.IsAdmin {
 										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent/10 text-accent">Admin</span>
 									} else {
-										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">User</span>
+										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-fg-secondary">User</span>
 									}
 								</td>
-								<td class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500">
+								<td class="px-4 py-3 text-sm text-fg-muted">
 									{ user.CreatedAt.Format("Jan 2, 2006") }
 								</td>
 								<td class="px-4 py-3 text-right">
@@ -43,7 +43,7 @@ templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken stri
 											hx-put={ fmt.Sprintf("/admin/users/%s/admin", user.ID) }
 											hx-confirm="Remove admin privileges from this user?"
 											hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-											class="text-sm text-red-600 hover:text-red-800 transition-colors"
+											class="text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
 										>
 											Remove Admin
 										</button>
@@ -74,9 +74,9 @@ templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken stri
 							Previous
 						</a>
 					} else {
-						<span class="btn text-sm text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50">Previous</span>
+						<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Previous</span>
 					}
-					<span class="text-sm text-gray-500 dark:text-gray-400">
+					<span class="text-sm text-fg-secondary">
 						Page { fmt.Sprintf("%d", page) } of { fmt.Sprintf("%d", (total+perPage-1)/perPage) }
 					</span>
 					if page*perPage < total {
@@ -87,7 +87,7 @@ templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken stri
 							Next
 						</a>
 					} else {
-						<span class="btn text-sm text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50">Next</span>
+						<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Next</span>
 					}
 				</div>
 			}

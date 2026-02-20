@@ -9,14 +9,14 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // LoginPage renders the full login page wrapped in the base layout.
 templ LoginPage(csrfToken, email, errMsg string) {
 	@layouts.Base("Login") {
-		<div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+		<div class="min-h-screen flex items-center justify-center bg-surface px-4">
 			<div class="w-full max-w-md">
 				<div class="text-center mb-8">
 					<a href="/" class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent/10 dark:bg-accent/20 mb-4">
 						<i class="fa-solid fa-book-open text-lg text-accent"></i>
 					</a>
-					<h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">Welcome back</h1>
-					<p class="text-gray-500 dark:text-gray-400 mt-2">Sign in to your Chronicle account</p>
+					<h1 class="text-3xl font-bold text-fg">Welcome back</h1>
+					<p class="text-fg-secondary mt-2">Sign in to your Chronicle account</p>
 				</div>
 				@LoginForm_(csrfToken, email, errMsg)
 			</div>
@@ -46,7 +46,7 @@ templ LoginForm_(csrfToken, email, errMsg string) {
 			}
 
 			<div>
-				<label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+				<label for="email" class="block text-sm font-medium text-fg-body mb-1.5">
 					Email
 				</label>
 				<input
@@ -63,7 +63,7 @@ templ LoginForm_(csrfToken, email, errMsg string) {
 			</div>
 
 			<div>
-				<label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+				<label for="password" class="block text-sm font-medium text-fg-body mb-1.5">
 					Password
 				</label>
 				<input
@@ -81,7 +81,7 @@ templ LoginForm_(csrfToken, email, errMsg string) {
 				Sign In
 			</button>
 
-			<p class="text-center text-sm text-gray-500 dark:text-gray-400">
+			<p class="text-center text-sm text-fg-secondary">
 				Don&apos;t have an account?
 				<a href="/register" class="text-accent hover:text-accent-hover font-medium">
 					Create one

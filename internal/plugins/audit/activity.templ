@@ -126,8 +126,8 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 			<!-- Page Header -->
 			<div class="flex items-center justify-between">
 				<div>
-					<h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Activity</h1>
-					<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Recent changes in { cc.Campaign.Name }</p>
+					<h1 class="text-2xl font-bold text-fg">Activity</h1>
+					<p class="text-sm text-fg-secondary mt-1">Recent changes in { cc.Campaign.Name }</p>
 				</div>
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
@@ -143,44 +143,44 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 					<!-- Total Entities -->
 					<div class="card">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Entities</p>
+							<p class="text-sm font-medium text-fg-secondary">Entities</p>
 							<span class="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
 								<svg class="w-4 h-4 text-indigo-500 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
 								</svg>
 							</span>
 						</div>
-						<p class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">{ fmt.Sprintf("%d", stats.TotalEntities) }</p>
+						<p class="text-2xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", stats.TotalEntities) }</p>
 					</div>
 					<!-- Word Count -->
 					<div class="card">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Words</p>
+							<p class="text-sm font-medium text-fg-secondary">Words</p>
 							<span class="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
 								<svg class="w-4 h-4 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
 								</svg>
 							</span>
 						</div>
-						<p class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">~{ formatWordCount(stats.TotalWords) }</p>
+						<p class="text-2xl font-bold text-fg mt-2">~{ formatWordCount(stats.TotalWords) }</p>
 					</div>
 					<!-- Active Editors -->
 					<div class="card">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Active Editors</p>
+							<p class="text-sm font-medium text-fg-secondary">Active Editors</p>
 							<span class="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
 								<svg class="w-4 h-4 text-emerald-500 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"></path>
 								</svg>
 							</span>
 						</div>
-						<p class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">{ fmt.Sprintf("%d", stats.ActiveEditors) }</p>
-						<p class="text-xs text-gray-400 dark:text-gray-500 mt-1">last 30 days</p>
+						<p class="text-2xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", stats.ActiveEditors) }</p>
+						<p class="text-xs text-fg-muted mt-1">last 30 days</p>
 					</div>
 					<!-- Last Edited -->
 					<div class="card">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Last Edited</p>
+							<p class="text-sm font-medium text-fg-secondary">Last Edited</p>
 							<span class="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
 								<svg class="w-4 h-4 text-amber-500 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -188,9 +188,9 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 							</span>
 						</div>
 						if stats.LastEditedAt != nil {
-							<p class="text-lg font-bold text-gray-900 dark:text-gray-100 mt-2">{ relativeTime(*stats.LastEditedAt) }</p>
+							<p class="text-lg font-bold text-fg mt-2">{ relativeTime(*stats.LastEditedAt) }</p>
 						} else {
-							<p class="text-lg font-medium text-gray-400 dark:text-gray-500 mt-2">No activity</p>
+							<p class="text-lg font-medium text-fg-muted mt-2">No activity</p>
 						}
 					</div>
 				</div>
@@ -198,29 +198,29 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 
 			<!-- Activity Timeline -->
 			<div>
-				<h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+				<h2 class="text-lg font-semibold text-fg mb-4">
 					Recent Activity
 					if total > 0 {
-						<span class="text-sm font-normal text-gray-400 dark:text-gray-500 ml-2">({ fmt.Sprintf("%d", total) } total)</span>
+						<span class="text-sm font-normal text-fg-muted ml-2">({ fmt.Sprintf("%d", total) } total)</span>
 					}
 				</h2>
 
 				if len(entries) == 0 {
 					<div class="card text-center py-12">
-						<svg class="w-12 h-12 text-gray-200 dark:text-gray-700 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="w-12 h-12 text-fg-muted mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
 						</svg>
-						<p class="text-sm text-gray-400 dark:text-gray-500">No activity recorded yet.</p>
-						<p class="text-xs text-gray-300 dark:text-gray-600 mt-1">Actions will appear here as members make changes.</p>
+						<p class="text-sm text-fg-muted">No activity recorded yet.</p>
+						<p class="text-xs text-fg-muted mt-1">Actions will appear here as members make changes.</p>
 					</div>
 				} else {
 					<div class="relative">
 						<!-- Timeline vertical line -->
-						<div class="absolute left-5 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700"></div>
+						<div class="absolute left-5 top-0 bottom-0 w-px bg-edge"></div>
 
 						<div class="space-y-1">
 							for _, entry := range entries {
-								<div class="relative flex items-start gap-4 py-3 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
+								<div class="relative flex items-start gap-4 py-3 px-2 rounded-lg hover:bg-surface-alt transition-colors group">
 									<!-- Timeline dot -->
 									<div class="relative z-10 flex-shrink-0">
 										<div class={ "w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white", actionColor(entry.Action) } title={ entry.UserName }>
@@ -231,24 +231,24 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 									<!-- Entry content -->
 									<div class="flex-1 min-w-0 pt-0.5">
 										<div class="flex items-baseline flex-wrap gap-x-1">
-											<span class="font-semibold text-sm text-gray-900 dark:text-gray-100">{ entry.UserName }</span>
-											<span class="text-sm text-gray-500 dark:text-gray-400">{ actionLabel(entry.Action) }</span>
+											<span class="font-semibold text-sm text-fg">{ entry.UserName }</span>
+											<span class="text-sm text-fg-secondary">{ actionLabel(entry.Action) }</span>
 											if entry.EntityName != "" && entry.EntityID != "" {
 												<a
 													href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", entry.CampaignID, entry.EntityID)) }
-													class="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline truncate max-w-[200px] inline-block align-bottom"
+													class="text-sm font-medium text-accent hover:text-accent-hover hover:underline truncate max-w-[200px] inline-block align-bottom"
 													title={ entry.EntityName }
 												>
 													{ entry.EntityName }
 												</a>
 											} else if entry.EntityName != "" {
-												<span class="text-sm font-medium text-gray-700 dark:text-gray-300">{ entry.EntityName }</span>
+												<span class="text-sm font-medium text-fg-body">{ entry.EntityName }</span>
 											}
 											if entry.EntityType != "" && entry.Action != ActionMemberJoined && entry.Action != ActionMemberLeft && entry.Action != ActionCampaignUpdated {
-												<span class="text-xs text-gray-400 dark:text-gray-500">({ entry.EntityType })</span>
+												<span class="text-xs text-fg-muted">({ entry.EntityType })</span>
 											}
 										</div>
-										<p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{ relativeTime(entry.CreatedAt) }</p>
+										<p class="text-xs text-fg-muted mt-0.5">{ relativeTime(entry.CreatedAt) }</p>
 									</div>
 								</div>
 							}
@@ -257,7 +257,7 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 
 					<!-- Pagination -->
 					if total > itemsPerPage {
-						<div class="flex justify-center items-center gap-4 mt-6 pt-4 border-t border-gray-100 dark:border-gray-800">
+						<div class="flex justify-center items-center gap-4 mt-6 pt-4 border-t border-edge">
 							if page > 1 {
 								<a
 									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/activity?page=%d", cc.Campaign.ID, page-1)) }
@@ -266,9 +266,9 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 									Previous
 								</a>
 							} else {
-								<span class="btn text-sm text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50">Previous</span>
+								<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Previous</span>
 							}
-							<span class="text-sm text-gray-500 dark:text-gray-400">
+							<span class="text-sm text-fg-secondary">
 								Page { fmt.Sprintf("%d", page) } of { fmt.Sprintf("%d", (total+itemsPerPage-1)/itemsPerPage) }
 							</span>
 							if page*itemsPerPage < total {
@@ -279,7 +279,7 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 									Next
 								</a>
 							} else {
-								<span class="btn text-sm text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50">Next</span>
+								<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Next</span>
 							}
 						</div>
 					}
