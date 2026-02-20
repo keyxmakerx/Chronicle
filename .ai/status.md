@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-20 -- Tag cards, @mentions, entity types, relations, tooltips, visual polish
+2026-02-20 -- Dark mode fixes, combined storage page, layout editor fixes
 
 ## Current Phase
 **Phase 2: Media & UI** -- Building on the Phase 1 foundation. Media plugin
@@ -20,44 +20,32 @@ entity relations, entity type management, @mentions, hover tooltips, and visual 
 ## Last Session Summary
 
 ### Completed
-- **Tag display on entity list cards:** Entity cards in grid view now show
-  colored tag chips. Uses `EntityTagFetcher` interface + adapter pattern to
-  batch-fetch tags via `GetEntityTagsBatch`. Graceful degradation if fetch fails.
+- **Dark mode fixes across all admin pages:** Added `dark:` variants to
+  dashboard, users, campaigns, storage, and template editor pages. Fixed
+  black text on dark backgrounds throughout admin area.
 
-- **@mentions in TipTap editor:** New `editor_mention.js` extension. Type `@`
-  in the editor to search entities via the existing search API (with Accept:
-  application/json content negotiation). Shows a dropdown popup with keyboard
-  navigation (arrows, Enter, Escape). Inserts styled mention links with
-  `data-mention-id` attributes. Debounced search, AbortController for clean
-  cancellation, dark mode support, XSS protection.
+- **Combined Storage + Storage Settings page:** Merged the two separate
+  admin pages into a unified `/admin/storage` page with Alpine.js tabs
+  (Files | Limits & Overrides). Compact layout with less whitespace,
+  inline stats header, horizontal usage breakdown chips. Removed sidebar
+  "Storage Settings" link. Old `/admin/storage/settings` route redirects.
 
-- **Entity type CRUD:** Campaign owners can create, edit, and delete entity
-  types. New service methods with validation (name, slug uniqueness, hex color).
-  New templ template with icon picker and color picker. New `entity_type_editor.js`
-  widget for inline editing with field management. Audit logged.
+- **User/campaign dropdowns for storage overrides:** Replaced raw UUID
+  text inputs with `<select>` dropdowns populated from the database.
+  Admin users are greyed out (disabled) in the user dropdown. Uses
+  Alpine.js + fetch() for dynamic form submission.
 
-- **Entity relations widget:** Bi-directional entity linking. Migration 000012
-  creates `entity_relations` table. New `internal/widgets/relations/` package
-  (model, repo, service, handler, routes). Auto-creates reverse relations.
-  Common types: allied with, enemy of, parent/child, member/contains, owns.
-  New `relations.js` frontend widget with grouped display and search to add.
+- **Template editor dark mode:** All dynamically created elements in
+  `template_editor.js` now have dark mode classes (palette, canvas,
+  blocks, containers, tabs, sections, sub-blocks, drop zones).
 
-- **Entity hover tooltip widget:** `entity_tooltip.js` shows preview popovers
-  on hover over elements with `data-entity-preview` attribute. Debounced (300ms),
-  client-side cache (LRU, 100 entries), smart positioning, dark mode, accessible.
-  New `PreviewAPI` endpoint returns name, type info, image, excerpt (150 chars).
-  Entity cards automatically have `data-entity-preview` attribute.
+- **Template editor palette drag fix:** Changed palette item
+  `effectAllowed` from `'copy'` to `'copyMove'` to resolve browser
+  drop rejection when drop zones use `dropEffect = 'move'`. Blocks
+  can now be added from the palette again.
 
-- **Visual polish pass (Kanka-inspired):**
-  - Landing page: dark gradient hero with radial accent glow, feature highlight
-    cards (Characters, Locations, Self-Hosted), proper footer
-  - Auth pages: branded logo mark, dark mode support, refined typography
-  - Campaign cards: accent gradient bar, book icon, public badge, lift-on-hover
-  - Campaign dashboard: icon cards (blue Members, indigo Entities, purple Types),
-    role badge pill, dark mode throughout
-  - CSS: rounded-xl cards with transitions, refined buttons with accent shadows,
-    ghost button variant, stat-card component, mention link styles, improved
-    inputs with accent ring focus
+- **Alpine.js x-cloak CSS:** Added `[x-cloak] { display: none !important; }`
+  to prevent flash-of-unstyled-content on Alpine-managed tab panels.
 
 ### In Progress
 - Nothing currently in progress
@@ -66,45 +54,28 @@ entity relations, entity type management, @mentions, hover tooltips, and visual 
 - Nothing blocked
 
 ### Files Modified This Session
-- `internal/plugins/entities/model.go` -- EntityTagInfo, EntityTagFetcher, Entity type CRUD DTOs
-- `internal/plugins/entities/handler.go` -- TagFetcher, PreviewAPI, EntityType CRUD, SearchAPI JSON support
-- `internal/plugins/entities/entity_card.templ` -- Tag chips, data-entity-preview attribute
-- `internal/plugins/entities/show.templ` -- blockRelations component, data-campaign-id on editor
-- `internal/plugins/entities/routes.go` -- PreviewAPI route, entity type CRUD routes
-- `internal/plugins/entities/service.go` -- CreateEntityType, UpdateEntityType, DeleteEntityType
-- `internal/plugins/entities/repository.go` -- Update, Delete, SlugExists, MaxSortOrder
-- `internal/plugins/entities/entity_types.templ` -- New: entity type management page
-- `internal/plugins/entities/service_test.go` -- Updated mocks
-- `internal/plugins/entities/search_results.templ` -- data-entity-preview on search results
-- `internal/plugins/audit/model.go` -- ActionEntityTypeCreated/Updated/Deleted
-- `internal/plugins/campaigns/campaign_card.templ` -- Accent bar, icon, public badge, dark mode
-- `internal/plugins/campaigns/show.templ` -- Icon cards, entity types link, role badge, dark mode
-- `internal/plugins/campaigns/settings.templ` -- "Manage Types" link
-- `internal/plugins/auth/login.templ` -- Branded logo, dark mode, refined styling
-- `internal/plugins/auth/register.templ` -- Branded logo, dark mode, refined styling
-- `internal/templates/layouts/base.templ` -- Script tags for new widgets
-- `internal/templates/pages/landing.templ` -- Gradient hero, feature cards, footer
-- `internal/app/routes.go` -- entityTagFetcherAdapter, relations widget wiring
-- `static/css/input.css` -- Refined buttons, cards, inputs, stat-card, mention styles
-- `static/js/widgets/editor.js` -- Mention extension integration
-- `static/js/widgets/editor_mention.js` -- New: @mention extension
-- `static/js/widgets/entity_tooltip.js` -- New: hover tooltip widget
-- `static/js/widgets/entity_type_editor.js` -- New: entity type inline editor
-- `static/js/widgets/relations.js` -- New: entity relations widget
-- `static/js/widgets/template_editor.js` -- Added relations block type
-- `internal/widgets/relations/` -- New: full relations widget (model, repo, service, handler, routes)
-- `db/migrations/000012_*` -- New: entity_relations table
+- `internal/plugins/admin/handler.go` -- Added settingsService, StoragePageData struct, combined Storage handler
+- `internal/plugins/admin/storage.templ` -- Complete rewrite: combined page with tabs, dark mode, dropdowns
+- `internal/plugins/admin/dashboard.templ` -- Dark mode classes throughout
+- `internal/plugins/admin/users.templ` -- Dark mode classes throughout
+- `internal/plugins/admin/campaigns.templ` -- Dark mode classes throughout
+- `internal/plugins/settings/handler.go` -- Redirects to /admin/storage, simplified UpdateStorageSettings
+- `internal/plugins/entities/template_editor.templ` -- Dark mode on editor header
+- `internal/templates/layouts/app.templ` -- Removed Storage Settings sidebar link, updated Storage link matching
+- `internal/app/routes.go` -- Wire settingsService into admin handler
+- `static/js/widgets/template_editor.js` -- Dark mode on all elements, palette drag fix (effectAllowed)
+- `static/css/input.css` -- Added [x-cloak] CSS rule
 
 ## Active Branch
 `claude/resume-previous-work-YqXiG`
 
 ## Next Session Should
 1. **Password reset** -- Wire auth password reset with SMTP when configured
-2. **Regenerate Tailwind CSS** -- Run `make tailwind` to include new classes
-3. **Entity nesting** -- Parent/child relationships for entity hierarchy
-4. **Map viewer** -- Leaflet.js map widget with entity pins
-5. **REST API** -- PASETO token auth for external integrations
-6. **Relation/tooltip tests** -- Table-driven unit tests for new services
+2. **Entity nesting** -- Parent/child relationships for entity hierarchy
+3. **Map viewer** -- Leaflet.js map widget with entity pins
+4. **REST API** -- PASETO token auth for external integrations
+5. **Relation/tooltip tests** -- Table-driven unit tests for new services
+6. **Dark mode audit** -- Remaining pages (entity show, campaign settings, SMTP) may need dark: fixes
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -156,3 +127,7 @@ entity relations, entity type management, @mentions, hover tooltips, and visual 
 - 2026-02-20: Entity relations widget (bi-directional linking, common types, reverse auto-create)
 - 2026-02-20: Entity type CRUD (create, edit, delete, icon/color/fields management)
 - 2026-02-20: Visual polish pass (gradient hero, icon cards, refined buttons/cards/inputs)
+- 2026-02-20: Dark mode fixes across all admin pages + template editor
+- 2026-02-20: Combined Storage + Storage Settings into unified tabbed page
+- 2026-02-20: User/campaign dropdowns for storage overrides (admins greyed out)
+- 2026-02-20: Fixed template editor palette drag (blocks can be added again)

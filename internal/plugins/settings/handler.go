@@ -12,6 +12,9 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
 
+// Ensure old template references are not needed since settings are now
+// rendered on the combined /admin/storage page.
+
 // Handler handles HTTP requests for site storage settings management.
 // All routes require site admin middleware.
 type Handler struct {
@@ -23,27 +26,10 @@ func NewHandler(service SettingsService) *Handler {
 	return &Handler{service: service}
 }
 
-// StorageSettings renders the admin storage settings page (GET /admin/storage/settings).
+// StorageSettings redirects to the combined storage page (GET /admin/storage/settings).
+// Settings are now shown on the unified /admin/storage page under the Limits tab.
 func (h *Handler) StorageSettings(c echo.Context) error {
-	ctx := c.Request().Context()
-
-	global, err := h.service.GetStorageLimits(ctx)
-	if err != nil {
-		return err
-	}
-
-	userLimits, err := h.service.ListUserLimits(ctx)
-	if err != nil {
-		return err
-	}
-
-	campaignLimits, err := h.service.ListCampaignLimits(ctx)
-	if err != nil {
-		return err
-	}
-
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, StorageSettingsPage(global, userLimits, campaignLimits, csrfToken, "", ""))
+	return c.Redirect(http.StatusSeeOther, "/admin/storage")
 }
 
 // UpdateStorageSettings saves global storage limits (POST /admin/storage/settings).
@@ -66,16 +52,8 @@ func (h *Handler) UpdateStorageSettings(c echo.Context) error {
 	}
 
 	if err := h.service.UpdateStorageLimits(ctx, limits); err != nil {
-		// Re-render the form with the error message.
-		global, _ := h.service.GetStorageLimits(ctx)
-		userLimits, _ := h.service.ListUserLimits(ctx)
-		campaignLimits, _ := h.service.ListCampaignLimits(ctx)
-		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "failed to save settings"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
-		return middleware.Render(c, http.StatusOK, StorageSettingsPage(global, userLimits, campaignLimits, csrfToken, errMsg, ""))
+		slog.Error("failed to update storage limits", slog.Any("error", err))
+		return err
 	}
 
 	slog.Info("storage limits updated",
@@ -83,16 +61,12 @@ func (h *Handler) UpdateStorageSettings(c echo.Context) error {
 		slog.Int64("max_upload", limits.MaxUploadSize),
 	)
 
-	// Re-render with success message.
-	global, _ := h.service.GetStorageLimits(ctx)
-	userLimits, _ := h.service.ListUserLimits(ctx)
-	campaignLimits, _ := h.service.ListCampaignLimits(ctx)
-	csrfToken := middleware.GetCSRFToken(c)
-
+	// Redirect back to the combined storage page.
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, StorageSettingsFormFragment(global, userLimits, campaignLimits, csrfToken, "", "Settings saved successfully"))
+		c.Response().Header().Set("HX-Redirect", "/admin/storage")
+		return c.NoContent(http.StatusNoContent)
 	}
-	return middleware.Render(c, http.StatusOK, StorageSettingsPage(global, userLimits, campaignLimits, csrfToken, "", "Settings saved successfully"))
+	return c.Redirect(http.StatusSeeOther, "/admin/storage")
 }
 
 // SetUserStorageLimit creates or updates a per-user storage override
@@ -133,10 +107,10 @@ func (h *Handler) SetUserStorageLimit(c echo.Context) error {
 	)
 
 	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage/settings")
+		c.Response().Header().Set("HX-Redirect", "/admin/storage")
 		return c.NoContent(http.StatusNoContent)
 	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage/settings")
+	return c.Redirect(http.StatusSeeOther, "/admin/storage")
 }
 
 // DeleteUserStorageLimit removes a per-user storage override
@@ -157,10 +131,10 @@ func (h *Handler) DeleteUserStorageLimit(c echo.Context) error {
 	)
 
 	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage/settings")
+		c.Response().Header().Set("HX-Redirect", "/admin/storage")
 		return c.NoContent(http.StatusNoContent)
 	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage/settings")
+	return c.Redirect(http.StatusSeeOther, "/admin/storage")
 }
 
 // SetCampaignStorageLimit creates or updates a per-campaign storage override
@@ -199,10 +173,10 @@ func (h *Handler) SetCampaignStorageLimit(c echo.Context) error {
 	)
 
 	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage/settings")
+		c.Response().Header().Set("HX-Redirect", "/admin/storage")
 		return c.NoContent(http.StatusNoContent)
 	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage/settings")
+	return c.Redirect(http.StatusSeeOther, "/admin/storage")
 }
 
 // DeleteCampaignStorageLimit removes a per-campaign storage override
@@ -223,8 +197,8 @@ func (h *Handler) DeleteCampaignStorageLimit(c echo.Context) error {
 	)
 
 	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage/settings")
+		c.Response().Header().Set("HX-Redirect", "/admin/storage")
 		return c.NoContent(http.StatusNoContent)
 	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage/settings")
+	return c.Redirect(http.StatusSeeOther, "/admin/storage")
 }

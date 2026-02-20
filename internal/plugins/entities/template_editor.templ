@@ -28,11 +28,11 @@ templ TemplateEditorPage(cc *campaigns.CampaignContext, et *EntityType, csrfToke
 	@layouts.App(fmt.Sprintf("Template: %s", et.Name)) {
 		<div class="h-full flex flex-col -m-6">
 			<!-- Editor header -->
-			<div class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+			<div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex items-center justify-between shrink-0">
 				<div class="flex items-center gap-3">
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) }
-						class="text-gray-400 hover:text-gray-600 transition-colors"
+						class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
 						title="Back to settings"
 					>
 						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -40,15 +40,15 @@ templ TemplateEditorPage(cc *campaigns.CampaignContext, et *EntityType, csrfToke
 						</svg>
 					</a>
 					<div>
-						<h1 class="text-lg font-semibold text-gray-900">
+						<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
 							<i class={ "fa-solid " + et.Icon, "mr-1" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
 							{ et.Name } Template
 						</h1>
-						<p class="text-xs text-gray-500">Drag blocks to design the { et.Name } page layout</p>
+						<p class="text-xs text-gray-500 dark:text-gray-400">Drag blocks to design the { et.Name } page layout</p>
 					</div>
 				</div>
 				<div class="flex items-center gap-2">
-					<span id="te-save-status" class="text-xs text-gray-400"></span>
+					<span id="te-save-status" class="text-xs text-gray-400 dark:text-gray-500"></span>
 					<button id="te-save-btn" class="btn-primary text-sm">Save Template</button>
 				</div>
 			</div>

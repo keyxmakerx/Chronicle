@@ -96,18 +96,18 @@ Chronicle.register('template-editor', {
   /** Create a draggable palette item for a block type definition. */
   createPaletteItem(bt) {
     const item = document.createElement('div');
-    item.className = 'flex items-center gap-2 px-3 py-2 mb-1 bg-white border border-gray-200 rounded-md cursor-grab hover:border-indigo-300 hover:shadow-sm transition-all text-sm';
+    item.className = 'flex items-center gap-2 px-3 py-2 mb-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md cursor-grab hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-sm transition-all text-sm';
     item.draggable = true;
     item.innerHTML = `
-      <i class="fa-solid ${bt.icon} w-4 text-gray-400 text-center"></i>
+      <i class="fa-solid ${bt.icon} w-4 text-gray-400 dark:text-gray-500 text-center"></i>
       <div>
-        <div class="font-medium text-gray-700">${bt.label}</div>
-        <div class="text-[10px] text-gray-400">${bt.desc}</div>
+        <div class="font-medium text-gray-700 dark:text-gray-200">${bt.label}</div>
+        <div class="text-[10px] text-gray-400 dark:text-gray-500">${bt.desc}</div>
       </div>
     `;
     item.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'palette', type: bt.type }));
-      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.effectAllowed = 'copyMove';
       item.classList.add('opacity-50');
     });
     item.addEventListener('dragend', () => {
@@ -144,9 +144,9 @@ Chronicle.register('template-editor', {
 
     // Palette panel.
     const palette = document.createElement('div');
-    palette.className = 'w-56 bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto shrink-0';
+    palette.className = 'w-56 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-4 overflow-y-auto shrink-0';
     palette.innerHTML = `
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Components</h3>
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Components</h3>
     `;
 
     // Separate content blocks from layout/container blocks for grouped display.
@@ -159,7 +159,7 @@ Chronicle.register('template-editor', {
 
     // Layout blocks section header.
     const layoutHeader = document.createElement('h3');
-    layoutHeader.className = 'text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3 mt-5';
+    layoutHeader.className = 'text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3 mt-5';
     layoutHeader.textContent = 'Layout Blocks';
     palette.appendChild(layoutHeader);
 
@@ -170,17 +170,17 @@ Chronicle.register('template-editor', {
     // Row presets section.
     const presetSection = document.createElement('div');
     presetSection.className = 'mt-6';
-    presetSection.innerHTML = '<h3 class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Row Layouts</h3>';
+    presetSection.innerHTML = '<h3 class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Row Layouts</h3>';
     this.colPresets.forEach(preset => {
       const btn = document.createElement('button');
-      btn.className = 'flex items-center gap-2 w-full px-3 py-2 mb-1 bg-white border border-gray-200 rounded-md hover:border-indigo-300 hover:shadow-sm transition-all text-sm text-left';
+      btn.className = 'flex items-center gap-2 w-full px-3 py-2 mb-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-sm transition-all text-sm text-left';
       const preview = preset.widths.map(w => {
         const pct = Math.round(w / 12 * 100);
-        return `<div class="h-3 bg-gray-300 rounded-sm" style="width:${pct}%"></div>`;
+        return `<div class="h-3 bg-gray-300 dark:bg-gray-500 rounded-sm" style="width:${pct}%"></div>`;
       }).join('<div class="w-0.5"></div>');
       btn.innerHTML = `
         <div class="flex gap-0.5 w-12 shrink-0">${preview}</div>
-        <span class="text-gray-700">${preset.label}</span>
+        <span class="text-gray-700 dark:text-gray-200">${preset.label}</span>
       `;
       btn.addEventListener('click', () => this.addRow(preset.widths));
       presetSection.appendChild(btn);
@@ -191,7 +191,7 @@ Chronicle.register('template-editor', {
 
     // Canvas area.
     const canvas = document.createElement('div');
-    canvas.className = 'flex-1 overflow-y-auto p-6 bg-gray-100';
+    canvas.className = 'flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900';
     this.canvas = canvas;
     this.renderCanvas();
     this.el.appendChild(canvas);
@@ -202,7 +202,7 @@ Chronicle.register('template-editor', {
 
     if (this.layout.rows.length === 0) {
       this.canvas.innerHTML = `
-        <div class="flex flex-col items-center justify-center h-full text-gray-400">
+        <div class="flex flex-col items-center justify-center h-full text-gray-400 dark:text-gray-500">
           <i class="fa-solid fa-table-cells-large text-4xl mb-3"></i>
           <p class="text-sm">Click a row layout on the left to get started</p>
         </div>
@@ -219,19 +219,19 @@ Chronicle.register('template-editor', {
       const toolbar = document.createElement('div');
       toolbar.className = 'flex items-center gap-2 mb-1 opacity-0 group-hover/row:opacity-100 transition-opacity';
       toolbar.innerHTML = `
-        <span class="text-[10px] text-gray-400 font-mono">Row ${rowIdx + 1}</span>
+        <span class="text-[10px] text-gray-400 dark:text-gray-500 font-mono">Row ${rowIdx + 1}</span>
         <div class="flex-1"></div>
       `;
 
       // Column layout picker for this row.
       this.colPresets.forEach(preset => {
         const btn = document.createElement('button');
-        btn.className = 'p-1 hover:bg-gray-200 rounded transition-colors';
+        btn.className = 'p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors';
         btn.title = preset.label;
         const isActive = JSON.stringify(row.columns.map(c => c.width)) === JSON.stringify(preset.widths);
         const preview = preset.widths.map(w => {
           const pct = Math.round(w / 12 * 100);
-          const color = isActive ? 'bg-indigo-400' : 'bg-gray-300';
+          const color = isActive ? 'bg-indigo-400' : 'bg-gray-300 dark:bg-gray-500';
           return `<div class="h-2 ${color} rounded-sm" style="width:${pct}%"></div>`;
         }).join('<div class="w-px"></div>');
         btn.innerHTML = `<div class="flex gap-px w-8">${preview}</div>`;
@@ -241,7 +241,7 @@ Chronicle.register('template-editor', {
 
       // Delete row button.
       const delBtn = document.createElement('button');
-      delBtn.className = 'p-1 text-gray-300 hover:text-red-500 transition-colors ml-1';
+      delBtn.className = 'p-1 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors ml-1';
       delBtn.title = 'Delete row';
       delBtn.innerHTML = '<i class="fa-solid fa-trash-can text-xs"></i>';
       delBtn.addEventListener('click', () => this.deleteRow(rowIdx));
@@ -250,7 +250,7 @@ Chronicle.register('template-editor', {
       // Move buttons.
       if (rowIdx > 0) {
         const upBtn = document.createElement('button');
-        upBtn.className = 'p-1 text-gray-300 hover:text-gray-600 transition-colors';
+        upBtn.className = 'p-1 text-gray-300 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-300 transition-colors';
         upBtn.title = 'Move up';
         upBtn.innerHTML = '<i class="fa-solid fa-chevron-up text-xs"></i>';
         upBtn.addEventListener('click', () => this.moveRow(rowIdx, -1));
@@ -258,7 +258,7 @@ Chronicle.register('template-editor', {
       }
       if (rowIdx < this.layout.rows.length - 1) {
         const downBtn = document.createElement('button');
-        downBtn.className = 'p-1 text-gray-300 hover:text-gray-600 transition-colors';
+        downBtn.className = 'p-1 text-gray-300 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-300 transition-colors';
         downBtn.title = 'Move down';
         downBtn.innerHTML = '<i class="fa-solid fa-chevron-down text-xs"></i>';
         downBtn.addEventListener('click', () => this.moveRow(rowIdx, 1));
@@ -274,13 +274,13 @@ Chronicle.register('template-editor', {
 
       row.columns.forEach((col, colIdx) => {
         const colEl = document.createElement('div');
-        colEl.className = 'te-column bg-white border-2 border-dashed border-gray-200 rounded-lg min-h-[80px] p-2 transition-colors relative';
+        colEl.className = 'te-column bg-white dark:bg-gray-800 border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-lg min-h-[80px] p-2 transition-colors relative';
         colEl.dataset.rowIdx = rowIdx;
         colEl.dataset.colIdx = colIdx;
 
         // Column header.
         const colHeader = document.createElement('div');
-        colHeader.className = 'text-[10px] text-gray-300 font-mono mb-1 px-1';
+        colHeader.className = 'text-[10px] text-gray-300 dark:text-gray-600 font-mono mb-1 px-1';
         colHeader.textContent = `${col.width}/12`;
         colEl.appendChild(colHeader);
 
@@ -383,14 +383,14 @@ Chronicle.register('template-editor', {
 
     const bt = this.blockTypes.find(b => b.type === block.type) || { label: block.type, icon: 'fa-cube' };
     const el = document.createElement('div');
-    el.className = 'te-block flex items-center gap-2 px-3 py-2 mb-1 bg-gray-50 border border-gray-200 rounded group/block cursor-grab hover:border-indigo-300 transition-colors';
+    el.className = 'te-block flex items-center gap-2 px-3 py-2 mb-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded group/block cursor-grab hover:border-indigo-300 dark:hover:border-indigo-500 transition-colors';
     el.draggable = true;
     el.dataset.blockIdx = blockIdx;
     el.innerHTML = `
-      <i class="fa-solid fa-grip-vertical text-gray-300 text-xs"></i>
-      <i class="fa-solid ${bt.icon} w-4 text-gray-400 text-center text-sm"></i>
-      <span class="text-sm font-medium text-gray-700 flex-1">${bt.label}</span>
-      <button class="te-block-del opacity-0 group-hover/block:opacity-100 text-gray-300 hover:text-red-500 transition-all p-0.5" title="Remove">
+      <i class="fa-solid fa-grip-vertical text-gray-300 dark:text-gray-500 text-xs"></i>
+      <i class="fa-solid ${bt.icon} w-4 text-gray-400 dark:text-gray-500 text-center text-sm"></i>
+      <span class="text-sm font-medium text-gray-700 dark:text-gray-200 flex-1">${bt.label}</span>
+      <button class="te-block-del opacity-0 group-hover/block:opacity-100 text-gray-300 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-all p-0.5" title="Remove">
         <i class="fa-solid fa-xmark text-xs"></i>
       </button>
     `;
@@ -437,17 +437,17 @@ Chronicle.register('template-editor', {
   renderContainerBlock(block, rowIdx, colIdx, blockIdx) {
     const bt = this.blockTypes.find(b => b.type === block.type) || { label: block.type, icon: 'fa-cube' };
     const el = document.createElement('div');
-    el.className = 'te-block te-container-block mb-1 border border-gray-300 rounded-lg bg-white overflow-hidden group/block';
+    el.className = 'te-block te-container-block mb-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 overflow-hidden group/block';
     el.draggable = true;
     el.dataset.blockIdx = blockIdx;
 
     // Container header bar with drag handle, label, config, and delete.
     const header = document.createElement('div');
-    header.className = 'flex items-center gap-2 px-3 py-2 bg-indigo-50 border-b border-indigo-100 cursor-grab';
+    header.className = 'flex items-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 border-b border-indigo-100 dark:border-indigo-800 cursor-grab';
     header.innerHTML = `
-      <i class="fa-solid fa-grip-vertical text-indigo-300 text-xs"></i>
-      <i class="fa-solid ${bt.icon} w-4 text-indigo-400 text-center text-sm"></i>
-      <span class="text-sm font-semibold text-indigo-700 flex-1">${bt.label}</span>
+      <i class="fa-solid fa-grip-vertical text-indigo-300 dark:text-indigo-600 text-xs"></i>
+      <i class="fa-solid ${bt.icon} w-4 text-indigo-400 dark:text-indigo-500 text-center text-sm"></i>
+      <span class="text-sm font-semibold text-indigo-700 dark:text-indigo-300 flex-1">${bt.label}</span>
     `;
 
     // Config controls specific to the container type (inserted into header).
@@ -457,7 +457,7 @@ Chronicle.register('template-editor', {
 
     // Delete button.
     const delBtn = document.createElement('button');
-    delBtn.className = 'te-block-del text-indigo-300 hover:text-red-500 transition-all p-0.5 ml-1';
+    delBtn.className = 'te-block-del text-indigo-300 dark:text-indigo-600 hover:text-red-500 dark:hover:text-red-400 transition-all p-0.5 ml-1';
     delBtn.title = 'Remove';
     delBtn.innerHTML = '<i class="fa-solid fa-xmark text-xs"></i>';
     configArea.appendChild(delBtn);
@@ -504,7 +504,7 @@ Chronicle.register('template-editor', {
   /** Width preset selector for two_column blocks. */
   renderTwoColConfig(container, block, rowIdx, colIdx, blockIdx) {
     const select = document.createElement('select');
-    select.className = 'text-xs border border-indigo-200 rounded px-1 py-0.5 bg-white text-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-400';
+    select.className = 'text-xs border border-indigo-200 dark:border-indigo-700 rounded px-1 py-0.5 bg-white dark:bg-gray-700 text-indigo-700 dark:text-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-400';
     select.title = 'Column widths';
     this.twoColPresets.forEach(preset => {
       const opt = document.createElement('option');
@@ -531,7 +531,7 @@ Chronicle.register('template-editor', {
   /** Tab management controls: add tab button. Rename/remove on individual tabs in body. */
   renderTabsConfig(container, block, rowIdx, colIdx, blockIdx) {
     const addBtn = document.createElement('button');
-    addBtn.className = 'text-xs text-indigo-500 hover:text-indigo-700 px-1.5 py-0.5 border border-indigo-200 rounded hover:bg-indigo-50 transition-colors';
+    addBtn.className = 'text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-1.5 py-0.5 border border-indigo-200 dark:border-indigo-700 rounded hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors';
     addBtn.title = 'Add tab';
     addBtn.innerHTML = '<i class="fa-solid fa-plus text-[10px]"></i> Tab';
     addBtn.addEventListener('click', (e) => {
@@ -550,7 +550,7 @@ Chronicle.register('template-editor', {
     const input = document.createElement('input');
     input.type = 'text';
     input.value = block.config.title || 'Section';
-    input.className = 'text-xs border border-indigo-200 rounded px-1.5 py-0.5 bg-white text-indigo-700 w-28 focus:outline-none focus:ring-1 focus:ring-indigo-400';
+    input.className = 'text-xs border border-indigo-200 dark:border-indigo-700 rounded px-1.5 py-0.5 bg-white dark:bg-gray-700 text-indigo-700 dark:text-indigo-300 w-28 focus:outline-none focus:ring-1 focus:ring-indigo-400';
     input.title = 'Section title';
     input.addEventListener('change', (e) => {
       e.stopPropagation();
@@ -563,8 +563,8 @@ Chronicle.register('template-editor', {
 
     const collapseBtn = document.createElement('button');
     const isCollapsed = block.config.collapsed;
-    collapseBtn.className = 'text-xs px-1.5 py-0.5 border border-indigo-200 rounded hover:bg-indigo-50 transition-colors ' +
-      (isCollapsed ? 'text-gray-400' : 'text-indigo-500');
+    collapseBtn.className = 'text-xs px-1.5 py-0.5 border border-indigo-200 dark:border-indigo-700 rounded hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors ' +
+      (isCollapsed ? 'text-gray-400 dark:text-gray-500' : 'text-indigo-500 dark:text-indigo-400');
     collapseBtn.title = isCollapsed ? 'Default: collapsed' : 'Default: expanded';
     collapseBtn.innerHTML = isCollapsed
       ? '<i class="fa-solid fa-chevron-right text-[10px]"></i>'
@@ -653,15 +653,15 @@ Chronicle.register('template-editor', {
 
     // Tab header bar.
     const tabBar = document.createElement('div');
-    tabBar.className = 'flex items-center border-b border-gray-200 mb-2 gap-0.5';
+    tabBar.className = 'flex items-center border-b border-gray-200 dark:border-gray-600 mb-2 gap-0.5';
 
     block.config.tabs.forEach((tab, tabIdx) => {
       const isActive = tabIdx === block.config._activeTab;
       const tabBtn = document.createElement('div');
       tabBtn.className = 'flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-t cursor-pointer border border-b-0 transition-colors ' +
         (isActive
-          ? 'bg-white text-indigo-700 border-gray-200 -mb-px'
-          : 'bg-gray-50 text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-100');
+          ? 'bg-white dark:bg-gray-800 text-indigo-700 dark:text-indigo-300 border-gray-200 dark:border-gray-600 -mb-px'
+          : 'bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600');
 
       // Editable tab label.
       const labelSpan = document.createElement('span');
@@ -688,7 +688,7 @@ Chronicle.register('template-editor', {
       // Remove tab button (only if more than one tab).
       if (block.config.tabs.length > 1) {
         const removeBtn = document.createElement('button');
-        removeBtn.className = 'text-gray-300 hover:text-red-500 transition-colors ml-1';
+        removeBtn.className = 'text-gray-300 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors ml-1';
         removeBtn.title = 'Remove tab';
         removeBtn.innerHTML = '<i class="fa-solid fa-xmark text-[10px]"></i>';
         removeBtn.addEventListener('click', (e) => {
@@ -725,12 +725,12 @@ Chronicle.register('template-editor', {
 
     // Section title preview.
     const titleBar = document.createElement('div');
-    titleBar.className = 'flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded mb-2 text-sm text-gray-600';
+    titleBar.className = 'flex items-center gap-2 px-2 py-1.5 bg-gray-50 dark:bg-gray-700 rounded mb-2 text-sm text-gray-600 dark:text-gray-300';
     const collapseIcon = block.config.collapsed ? 'fa-chevron-right' : 'fa-chevron-down';
     titleBar.innerHTML = `
-      <i class="fa-solid ${collapseIcon} text-xs text-gray-400"></i>
+      <i class="fa-solid ${collapseIcon} text-xs text-gray-400 dark:text-gray-500"></i>
       <span class="font-medium">${block.config.title || 'Section'}</span>
-      <span class="text-[10px] text-gray-400 ml-auto">${block.config.collapsed ? 'collapsed by default' : 'expanded by default'}</span>
+      <span class="text-[10px] text-gray-400 dark:text-gray-500 ml-auto">${block.config.collapsed ? 'collapsed by default' : 'expanded by default'}</span>
     `;
     body.appendChild(titleBar);
 
@@ -756,7 +756,7 @@ Chronicle.register('template-editor', {
    */
   createSubBlockZone(blocks, label, rowIdx, colIdx, blockIdx, slot) {
     const zone = document.createElement('div');
-    zone.className = 'te-subzone border-2 border-dashed border-gray-200 rounded min-h-[48px] p-1.5 transition-colors relative';
+    zone.className = 'te-subzone border-2 border-dashed border-gray-200 dark:border-gray-600 rounded min-h-[48px] p-1.5 transition-colors relative';
     zone.dataset.containerRow = rowIdx;
     zone.dataset.containerCol = colIdx;
     zone.dataset.containerBlock = blockIdx;
@@ -764,7 +764,7 @@ Chronicle.register('template-editor', {
 
     if (label) {
       const lbl = document.createElement('div');
-      lbl.className = 'text-[9px] text-gray-300 font-mono mb-0.5 px-0.5';
+      lbl.className = 'text-[9px] text-gray-300 dark:text-gray-600 font-mono mb-0.5 px-0.5';
       lbl.textContent = label;
       zone.appendChild(lbl);
     }
@@ -778,7 +778,7 @@ Chronicle.register('template-editor', {
     // Empty state hint.
     if (blocks.length === 0) {
       const hint = document.createElement('div');
-      hint.className = 'te-subzone-hint text-[10px] text-gray-300 text-center py-2 italic';
+      hint.className = 'te-subzone-hint text-[10px] text-gray-300 dark:text-gray-600 text-center py-2 italic';
       hint.textContent = 'Drop blocks here';
       zone.appendChild(hint);
     }
@@ -813,14 +813,14 @@ Chronicle.register('template-editor', {
   renderSubBlock(subBlock, rowIdx, colIdx, blockIdx, slot, subIdx) {
     const bt = this.blockTypes.find(b => b.type === subBlock.type) || { label: subBlock.type, icon: 'fa-cube' };
     const el = document.createElement('div');
-    el.className = 'te-sub-block flex items-center gap-1.5 px-2 py-1 mb-0.5 bg-gray-50 border border-gray-200 rounded text-xs group/sub cursor-grab hover:border-indigo-300 transition-colors';
+    el.className = 'te-sub-block flex items-center gap-1.5 px-2 py-1 mb-0.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded text-xs group/sub cursor-grab hover:border-indigo-300 dark:hover:border-indigo-500 transition-colors';
     el.draggable = true;
     el.dataset.subIdx = subIdx;
     el.innerHTML = `
-      <i class="fa-solid fa-grip-vertical text-gray-300 text-[10px]"></i>
-      <i class="fa-solid ${bt.icon} w-3 text-gray-400 text-center text-[10px]"></i>
-      <span class="font-medium text-gray-600 flex-1">${bt.label}</span>
-      <button class="te-sub-del opacity-0 group-hover/sub:opacity-100 text-gray-300 hover:text-red-500 transition-all p-0.5" title="Remove">
+      <i class="fa-solid fa-grip-vertical text-gray-300 dark:text-gray-500 text-[10px]"></i>
+      <i class="fa-solid ${bt.icon} w-3 text-gray-400 dark:text-gray-500 text-center text-[10px]"></i>
+      <span class="font-medium text-gray-600 dark:text-gray-300 flex-1">${bt.label}</span>
+      <button class="te-sub-del opacity-0 group-hover/sub:opacity-100 text-gray-300 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-all p-0.5" title="Remove">
         <i class="fa-solid fa-xmark text-[10px]"></i>
       </button>
     `;
@@ -1147,6 +1147,7 @@ if (!document.getElementById('te-styles')) {
     '.te-container-block .te-subzone { min-height: 36px; }',
     // Subtle background tint for container zones so they stand out from the column bg.
     '.te-container-block .te-subzone { background: rgba(249,250,251,0.5); }',
+    '.dark .te-container-block .te-subzone { background: rgba(55,65,81,0.3); }',
     // Hide the empty-state hint when a drop indicator is showing.
     '.te-subzone.border-indigo-400 .te-subzone-hint { display: none; }',
     // Prevent container block drag handle from interfering with child interactions.

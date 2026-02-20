@@ -204,6 +204,9 @@ func (a *App) RegisterRoutes() {
 	settingsHandler := settings.NewHandler(settingsService)
 	settings.RegisterRoutes(adminGroup, settingsHandler)
 
+	// Wire settings service into admin handler for the combined storage page.
+	adminHandler.SetSettingsDeps(settingsService)
+
 	// Wire dynamic storage limits into the media service so uploads
 	// respect per-user and per-campaign quotas from site settings.
 	mediaService.SetStorageLimiter(&storageLimiterAdapter{svc: settingsService})
