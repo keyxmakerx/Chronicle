@@ -335,6 +335,7 @@ type EntityRepository interface {
 	FindBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entity *Entity) error
 	UpdateEntry(ctx context.Context, id, entryJSON, entryHTML string) error
+	UpdateFields(ctx context.Context, id string, fieldsData map[string]any) error
 	UpdateImage(ctx context.Context, id, imagePath string) error
 	Delete(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
@@ -475,6 +476,28 @@ func (r *entityRepository) UpdateEntry(ctx context.Context, id, entryJSON, entry
 	result, err := r.db.ExecContext(ctx, query, entryJSON, entryHTML, id)
 	if err != nil {
 		return fmt.Errorf("updating entity entry: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
+// UpdateFields updates only the fields_data JSON column for an entity.
+// Used by the attributes widget to save individual field changes without
+// touching other entity properties.
+func (r *entityRepository) UpdateFields(ctx context.Context, id string, fieldsData map[string]any) error {
+	fieldsJSON, err := json.Marshal(fieldsData)
+	if err != nil {
+		return fmt.Errorf("marshaling fields_data: %w", err)
+	}
+
+	query := `UPDATE entities SET fields_data = ?, updated_at = NOW() WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, string(fieldsJSON), id)
+	if err != nil {
+		return fmt.Errorf("updating entity fields: %w", err)
 	}
 
 	rows, _ := result.RowsAffected()

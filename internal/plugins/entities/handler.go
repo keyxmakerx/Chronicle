@@ -455,6 +455,75 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// --- Fields API ---
+
+// GetFieldsAPI returns the entity's custom field values and type definitions.
+// GET /campaigns/:id/entities/:eid/fields
+func (h *Handler) GetFieldsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	entityID := c.Param("eid")
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+	if entity.IsPrivate && cc.MemberRole < campaigns.RoleScribe {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Look up the entity type to get field definitions.
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
+	if err != nil {
+		return err
+	}
+
+	response := map[string]any{
+		"fields":      et.Fields,
+		"fields_data": entity.FieldsData,
+	}
+	return c.JSON(http.StatusOK, response)
+}
+
+// UpdateFieldsAPI saves the entity's custom field values from the attributes widget.
+// PUT /campaigns/:id/entities/:eid/fields
+func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	entityID := c.Param("eid")
+
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var body struct {
+		FieldsData map[string]any `json:"fields_data"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdateFields(c.Request().Context(), entityID, body.FieldsData); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- Image API ---
 
 // UpdateImageAPI updates the entity's header image path.

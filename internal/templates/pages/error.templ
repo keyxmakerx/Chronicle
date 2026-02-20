@@ -12,7 +12,7 @@ import (
 // Shows a contextual title, the error message, and helpful navigation links.
 templ ErrorPage(statusCode int, message string) {
 	@layouts.Base(fmt.Sprintf("Error %d", statusCode)) {
-		<div class="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+		<div class="min-h-screen flex items-center justify-center bg-page px-4">
 			<div class="max-w-md w-full text-center">
 				<!-- Status code badge -->
 				<div class={ "inline-flex items-center justify-center w-20 h-20 rounded-full mb-6", errorBadgeColor(statusCode) }>
@@ -22,12 +22,12 @@ templ ErrorPage(statusCode int, message string) {
 				</div>
 
 				<!-- Title -->
-				<h1 class="text-2xl font-bold text-gray-900 mb-3">
+				<h1 class="text-2xl font-bold text-fg mb-3">
 					{ errorTitle(statusCode) }
 				</h1>
 
 				<!-- Message -->
-				<p class="text-gray-600 mb-8 leading-relaxed">
+				<p class="text-fg-body mb-8 leading-relaxed">
 					{ message }
 				</p>
 
@@ -49,7 +49,7 @@ templ ErrorPage(statusCode int, message string) {
 				</div>
 
 				<!-- Subtle help text -->
-				<p class="mt-8 text-xs text-gray-400">
+				<p class="mt-8 text-xs text-fg-muted">
 					if statusCode >= 500 {
 						If this keeps happening, please contact the server administrator.
 					} else if statusCode == 404 {

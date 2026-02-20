@@ -14,12 +14,12 @@ import (
 templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, csrfToken, errMsg string) {
 	@layouts.App("New Entity - " + cc.Campaign.Name) {
 		<div class="max-w-2xl mx-auto">
-			<nav class="text-sm text-gray-500 mb-4">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-gray-700">Entities</a>
+			<nav class="text-sm text-fg-secondary mb-4">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Entities</a>
 				<span class="mx-1">/</span>
-				<span class="text-gray-900">New</span>
+				<span class="text-fg">New</span>
 			</nav>
-			<h1 class="text-2xl font-bold text-gray-900 mb-6">Create Entity</h1>
+			<h1 class="text-2xl font-bold text-fg mb-6">Create Entity</h1>
 			@EntityCreateFormComponent(cc, entityTypes, preselect, csrfToken, errMsg)
 		</div>
 	}
@@ -29,14 +29,14 @@ templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, pre
 templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, entityTypes []EntityType, csrfToken, errMsg string) {
 	@layouts.App("Edit " + entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-2xl mx-auto">
-			<nav class="text-sm text-gray-500 mb-4">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-gray-700">Entities</a>
+			<nav class="text-sm text-fg-secondary mb-4">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Entities</a>
 				<span class="mx-1">/</span>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) } class="hover:text-gray-700">{ entity.Name }</a>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) } class="hover:text-fg-body">{ entity.Name }</a>
 				<span class="mx-1">/</span>
-				<span class="text-gray-900">Edit</span>
+				<span class="text-fg">Edit</span>
 			</nav>
-			<h1 class="text-2xl font-bold text-gray-900 mb-6">Edit { entity.Name }</h1>
+			<h1 class="text-2xl font-bold text-fg mb-6">Edit { entity.Name }</h1>
 			@EntityEditFormComponent(cc, entity, entityType, csrfToken, errMsg)
 		</div>
 	}
@@ -62,7 +62,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			}
 
 			<div>
-				<label for="entity_type_id" class="block text-sm font-medium text-gray-700 mb-1">Entity Type</label>
+				<label for="entity_type_id" class="block text-sm font-medium text-fg-body mb-1">Entity Type</label>
 				<select id="entity_type_id" name="entity_type_id" required class="input w-full">
 					<option value="">Select a type...</option>
 					for _, et := range entityTypes {
@@ -77,7 +77,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			</div>
 
 			<div>
-				<label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+				<label for="name" class="block text-sm font-medium text-fg-body mb-1">Name</label>
 				<input
 					type="text"
 					id="name"
@@ -91,7 +91,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			</div>
 
 			<div>
-				<label for="type_label" class="block text-sm font-medium text-gray-700 mb-1">Subtype Label (optional)</label>
+				<label for="type_label" class="block text-sm font-medium text-fg-body mb-1">Subtype Label (optional)</label>
 				<input
 					type="text"
 					id="type_label"
@@ -100,7 +100,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 					placeholder="e.g., City, NPC, Artifact"
 					maxlength="100"
 				/>
-				<p class="mt-1 text-xs text-gray-500">A freeform label that appears alongside the type badge.</p>
+				<p class="mt-1 text-xs text-fg-secondary">A freeform label that appears alongside the type badge.</p>
 			</div>
 
 			<div class="flex items-center">
@@ -110,9 +110,9 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 					id="is_private"
 					name="is_private"
 					value="true"
-					class="rounded border-gray-300 text-blue-600 mr-2"
+					class="rounded border-edge text-blue-600 mr-2"
 				/>
-				<label for="is_private" class="text-sm text-gray-700">Private (visible to GM only)</label>
+				<label for="is_private" class="text-sm text-fg-body">Private (visible to GM only)</label>
 			</div>
 
 			<div class="flex items-center space-x-4">
@@ -144,7 +144,7 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 			}
 
 			<div>
-				<label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+				<label for="name" class="block text-sm font-medium text-fg-body mb-1">Name</label>
 				<input
 					type="text"
 					id="name"
@@ -157,7 +157,7 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 			</div>
 
 			<div>
-				<label for="type_label" class="block text-sm font-medium text-gray-700 mb-1">Subtype Label (optional)</label>
+				<label for="type_label" class="block text-sm font-medium text-fg-body mb-1">Subtype Label (optional)</label>
 				<input
 					type="text"
 					id="type_label"
@@ -173,8 +173,8 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 
 			<!-- Dynamic fields from entity type -->
 			if entityType != nil && len(entityType.Fields) > 0 {
-				<fieldset class="space-y-4 pt-4 border-t border-gray-200">
-					<legend class="text-sm font-semibold text-gray-900">Type Fields</legend>
+				<fieldset class="space-y-4 pt-4 border-t border-edge">
+					<legend class="text-sm font-semibold text-fg">Type Fields</legend>
 					for _, field := range entityType.Fields {
 						@DynamicField(field, entity.FieldsData)
 					}
@@ -182,7 +182,7 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 			}
 
 			<div>
-				<label for="entry" class="block text-sm font-medium text-gray-700 mb-1">Entry Content</label>
+				<label for="entry" class="block text-sm font-medium text-fg-body mb-1">Entry Content</label>
 				<textarea
 					id="entry"
 					name="entry"
@@ -193,7 +193,7 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 						{ *entity.Entry }
 					}
 				</textarea>
-				<p class="mt-1 text-xs text-gray-500">Plain text for now. Rich text editor coming soon.</p>
+				<p class="mt-1 text-xs text-fg-secondary">Plain text for now. Rich text editor coming soon.</p>
 			</div>
 
 			<div class="flex items-center">
@@ -204,9 +204,9 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 					name="is_private"
 					value="true"
 					checked?={ entity.IsPrivate }
-					class="rounded border-gray-300 text-blue-600 mr-2"
+					class="rounded border-edge text-blue-600 mr-2"
 				/>
-				<label for="is_private" class="text-sm text-gray-700">Private (visible to GM only)</label>
+				<label for="is_private" class="text-sm text-fg-body">Private (visible to GM only)</label>
 			</div>
 
 			<div class="flex items-center space-x-4">
@@ -221,7 +221,7 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 // The current value is read from the entity's fields_data map.
 templ DynamicField(field FieldDefinition, fieldsData map[string]any) {
 	<div>
-		<label for={ "field_" + field.Key } class="block text-sm font-medium text-gray-700 mb-1">{ field.Label }</label>
+		<label for={ "field_" + field.Key } class="block text-sm font-medium text-fg-body mb-1">{ field.Label }</label>
 		if field.Type == "textarea" {
 			<textarea
 				id={ "field_" + field.Key }
@@ -250,7 +250,7 @@ templ DynamicField(field FieldDefinition, fieldsData map[string]any) {
 				name={ "field_" + field.Key }
 				value="true"
 				checked?={ fieldValueMatches(fieldsData, field.Key, "true") }
-				class="rounded border-gray-300 text-blue-600"
+				class="rounded border-edge text-blue-600"
 			/>
 		} else {
 			<input

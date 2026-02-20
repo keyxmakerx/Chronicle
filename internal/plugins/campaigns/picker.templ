@@ -8,7 +8,7 @@ import "fmt"
 // CampaignPickerFragment renders the list of campaigns for the selector dropdown.
 templ CampaignPickerFragment(campaigns []Campaign, activeCampaignID string) {
 	if len(campaigns) == 0 {
-		<div class="px-4 py-3 text-sm text-gray-500">
+		<div class="px-4 py-3 text-sm text-fg-secondary">
 			No campaigns yet.
 			<a href="/campaigns/new" class="text-accent hover:underline">Create one</a>
 		</div>
@@ -19,7 +19,7 @@ templ CampaignPickerFragment(campaigns []Campaign, activeCampaignID string) {
 				class={
 					"flex items-center px-4 py-2 text-sm transition-colors",
 					templ.KV("bg-accent/10 text-accent font-medium", c.ID == activeCampaignID),
-					templ.KV("text-gray-700 hover:bg-gray-100", c.ID != activeCampaignID),
+					templ.KV("text-fg-body hover:bg-surface-alt", c.ID != activeCampaignID),
 				}
 			>
 				<span class="truncate">{ c.Name }</span>
@@ -30,8 +30,8 @@ templ CampaignPickerFragment(campaigns []Campaign, activeCampaignID string) {
 				}
 			</a>
 		}
-		<div class="border-t border-gray-100">
-			<a href="/campaigns" class="flex items-center px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors">
+		<div class="border-t border-edge-light">
+			<a href="/campaigns" class="flex items-center px-4 py-2 text-sm text-fg-secondary hover:bg-surface-alt hover:text-fg-body transition-colors">
 				All Campaigns
 			</a>
 		</div>

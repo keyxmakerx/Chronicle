@@ -18,7 +18,7 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 	>
 		<!-- Image or placeholder header -->
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
-			<div class="h-36 bg-gray-100 overflow-hidden">
+			<div class="h-36 bg-surface-alt overflow-hidden">
 				<img
 					src={ fmt.Sprintf("/media/%s", *entity.ImagePath) }
 					alt={ entity.Name }
@@ -36,9 +36,9 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 		<!-- Card body -->
 		<div class="p-4">
 			<div class="flex items-start justify-between mb-2">
-				<h3 class="text-base font-semibold text-gray-900 truncate group-hover:text-accent transition-colors">{ entity.Name }</h3>
+				<h3 class="text-base font-semibold text-fg truncate group-hover:text-accent transition-colors">{ entity.Name }</h3>
 				if entity.IsPrivate && cc.MemberRole >= campaigns.RoleScribe {
-					<span class="text-gray-400 ml-2 shrink-0" title="Private (GM only)">
+					<span class="text-fg-muted ml-2 shrink-0" title="Private (GM only)">
 						<i class="fa-solid fa-lock text-xs"></i>
 					</span>
 				}
@@ -55,7 +55,7 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 					{ entity.TypeName }
 				</span>
 				if entity.TypeLabel != nil && *entity.TypeLabel != "" {
-					<span class="text-xs text-gray-500">{ *entity.TypeLabel }</span>
+					<span class="text-xs text-fg-secondary">{ *entity.TypeLabel }</span>
 				}
 			</div>
 

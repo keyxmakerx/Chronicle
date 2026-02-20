@@ -21,103 +21,126 @@ templ EntityIndexPage(cc *campaigns.CampaignContext, entities []Entity, entityTy
 // EntityListContent renders the entity list content (for HTMX partial swap).
 templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entityTypes []EntityType, counts map[int]int, total int, opts ListOptions, activeTypeID int, activeTypeSlug string, csrfToken string) {
 	<div id="entity-list">
-		<div class="flex items-center justify-between mb-6">
-			<h1 class="text-2xl font-bold text-gray-900">
-				if activeTypeSlug != "" {
-					for _, et := range entityTypes {
-						if et.Slug == activeTypeSlug {
-							{ et.NamePlural }
+		<!-- Page header with title, search, and create button -->
+		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">
+					if activeTypeSlug != "" {
+						for _, et := range entityTypes {
+							if et.Slug == activeTypeSlug {
+								{ et.NamePlural }
+							}
 						}
+					} else {
+						Entities
 					}
-				} else {
-					Entities
+				</h1>
+				<p class="text-sm text-fg-secondary mt-0.5">
+					{ fmt.Sprintf("%d", total) } total across { fmt.Sprintf("%d", len(entityTypes)) } types
+				</p>
+			</div>
+			<div class="flex items-center gap-3">
+				<!-- Quick search -->
+				<form
+					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID)) }
+					method="GET"
+					class="relative"
+				>
+					<input
+						type="text"
+						name="q"
+						placeholder="Search entities..."
+						class="input pl-9 pr-3 py-2 w-56"
+					/>
+					<i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-xs"></i>
+				</form>
+				if cc.MemberRole >= campaigns.RoleScribe {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
+						class="btn-primary"
+					><i class="fa-solid fa-plus mr-1.5 text-xs"></i> New Entity</a>
 				}
-			</h1>
-			if cc.MemberRole >= campaigns.RoleScribe {
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
-					class="btn-primary"
-				>New Entity</a>
-			}
+			</div>
 		</div>
 
-		<div class="flex gap-6">
-			<!-- Type filter sidebar -->
-			<div class="w-48 shrink-0">
-				<nav class="space-y-1">
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
-						class={ "flex items-center justify-between px-3 py-2 text-sm rounded-md transition-colors",
-							templ.KV("bg-gray-100 text-gray-900 font-medium", activeTypeID == 0 && activeTypeSlug == ""),
-							templ.KV("text-gray-600 hover:bg-gray-50 hover:text-gray-900", activeTypeID != 0 || activeTypeSlug != "") }
-						hx-get={ fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }
-						hx-target="#entity-list"
-						hx-swap="outerHTML"
-					>
-						<span>All</span>
-						<span class="text-xs text-gray-400">{ fmt.Sprintf("%d", total) }</span>
-					</a>
-					for _, et := range entityTypes {
-						if et.Enabled {
-							<a
-								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug + "s")) }
-								class={ "flex items-center justify-between px-3 py-2 text-sm rounded-md transition-colors",
-									templ.KV("bg-gray-100 text-gray-900 font-medium", activeTypeSlug == et.Slug || activeTypeID == et.ID),
-									templ.KV("text-gray-600 hover:bg-gray-50 hover:text-gray-900", activeTypeSlug != et.Slug && activeTypeID != et.ID) }
-								hx-get={ fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, et.ID) }
-								hx-target="#entity-list"
-								hx-swap="outerHTML"
-							>
-								<span class="flex items-center gap-2">
-									if et.Icon != "" {
-										<i class={ "fa-solid " + et.Icon, "text-xs w-3.5 text-center" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
-									} else {
-										<span class="w-2 h-2 rounded-full" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
-									}
-									{ et.NamePlural }
-								</span>
-								<span class="text-xs text-gray-400">{ fmt.Sprintf("%d", counts[et.ID]) }</span>
-							</a>
-						}
+		<!-- Type filter tabs (horizontal, scrollable on mobile) -->
+		<div class="mb-6 border-b border-edge">
+			<nav class="flex gap-1 overflow-x-auto pb-px -mb-px" role="tablist">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
+					class={ "entity-tab",
+						templ.KV("entity-tab--active", activeTypeID == 0 && activeTypeSlug == ""),
+						templ.KV("entity-tab--inactive", activeTypeID != 0 || activeTypeSlug != "") }
+					hx-get={ fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }
+					hx-target="#entity-list"
+					hx-swap="outerHTML"
+				>
+					<i class="fa-solid fa-globe text-xs opacity-60"></i>
+					<span>All</span>
+					<span class="entity-tab__count">{ fmt.Sprintf("%d", total) }</span>
+				</a>
+				for _, et := range entityTypes {
+					if et.Enabled {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug + "s")) }
+							class={ "entity-tab",
+								templ.KV("entity-tab--active", activeTypeSlug == et.Slug || activeTypeID == et.ID),
+								templ.KV("entity-tab--inactive", activeTypeSlug != et.Slug && activeTypeID != et.ID) }
+							hx-get={ fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, et.ID) }
+							hx-target="#entity-list"
+							hx-swap="outerHTML"
+						>
+							if et.Icon != "" {
+								<i class={ "fa-solid " + et.Icon, "text-xs" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
+							} else {
+								<span class="w-2 h-2 rounded-full shrink-0" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
+							}
+							<span>{ et.NamePlural }</span>
+							<span class="entity-tab__count">{ fmt.Sprintf("%d", counts[et.ID]) }</span>
+						</a>
 					}
-				</nav>
-			</div>
-
-			<!-- Entity grid -->
-			<div class="flex-1">
-				if len(entities) == 0 {
-					<div class="empty-state">
-						<div class="empty-state__icon">
-							<i class="fa-solid fa-scroll text-gray-400"></i>
-						</div>
-						<div class="empty-state__title">No entities found</div>
-						<div class="empty-state__description mb-4">
-							Start building your world by creating characters, locations, and more.
-						</div>
-						if cc.MemberRole >= campaigns.RoleScribe {
-							<a
-								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
-								class="btn-primary"
-							>Create Your First Entity</a>
-						}
-					</div>
-				} else {
-					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-						for _, entity := range entities {
-							@EntityCard(&entity, cc)
-						}
-					</div>
-
-					@components.Pagination(components.PaginationData{
-						CurrentPage: opts.Page,
-						PerPage:     opts.PerPage,
-						Total:       total,
-						BaseURL:     fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID),
-						ExtraParams: fmt.Sprintf("type=%d", activeTypeID),
-						HTMXTarget:  "#entity-list",
-					})
 				}
-			</div>
+			</nav>
+		</div>
+
+		<!-- Entity grid -->
+		<div>
+			if len(entities) == 0 {
+				<div class="empty-state">
+					<div class="empty-state__icon">
+						<i class="fa-solid fa-scroll text-fg-muted"></i>
+					</div>
+					<div class="empty-state__title">No entities found</div>
+					<div class="empty-state__description mb-4">
+						if activeTypeSlug != "" {
+							No entities of this type yet. Create one to get started.
+						} else {
+							Start building your world by creating characters, locations, and more.
+						}
+					</div>
+					if cc.MemberRole >= campaigns.RoleScribe {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
+							class="btn-primary"
+						><i class="fa-solid fa-plus mr-1.5 text-xs"></i> Create Your First Entity</a>
+					}
+				</div>
+			} else {
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+					for _, entity := range entities {
+						@EntityCard(&entity, cc)
+					}
+				</div>
+
+				@components.Pagination(components.PaginationData{
+					CurrentPage: opts.Page,
+					PerPage:     opts.PerPage,
+					Total:       total,
+					BaseURL:     fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID),
+					ExtraParams: fmt.Sprintf("type=%d", activeTypeID),
+					HTMXTarget:  "#entity-list",
+				})
+			}
 		</div>
 	</div>
 }

@@ -148,6 +148,10 @@ func (m *mockEntityRepo) UpdateEntry(ctx context.Context, id, entryJSON, entryHT
 	return nil
 }
 
+func (m *mockEntityRepo) UpdateFields(ctx context.Context, id string, fieldsData map[string]any) error {
+	return nil
+}
+
 func (m *mockEntityRepo) UpdateImage(ctx context.Context, id, imagePath string) error {
 	if m.updateImageFn != nil {
 		return m.updateImageFn(ctx, id, imagePath)
