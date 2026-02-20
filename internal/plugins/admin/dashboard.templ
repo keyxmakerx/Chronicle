@@ -70,6 +70,17 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 					<p class="text-3xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", len(modules.Registry())) }</p>
 					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage modules &rarr;</p>
 				</a>
+				<!-- Addons -->
+				<a href="/admin/addons" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-fg-secondary">Addons</p>
+						<span class="w-10 h-10 rounded-lg bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center">
+							<i class="fa-solid fa-plug text-teal-500"></i>
+						</span>
+					</div>
+					<p class="text-lg font-semibold text-fg mt-2">Extensions</p>
+					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage addons &rarr;</p>
+				</a>
 				<!-- SMTP -->
 				<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">
 					<div class="flex items-center justify-between">

@@ -377,6 +377,7 @@ type EntityRepository interface {
 	Update(ctx context.Context, entity *Entity) error
 	UpdateEntry(ctx context.Context, id, entryJSON, entryHTML string) error
 	UpdateFields(ctx context.Context, id string, fieldsData map[string]any) error
+	UpdateFieldOverrides(ctx context.Context, id string, overrides *FieldOverrides) error
 	UpdateImage(ctx context.Context, id, imagePath string) error
 	Delete(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
@@ -431,8 +432,8 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 func (r *entityRepository) FindByID(ctx context.Context, id string) (*Entity, error) {
 	query := `SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.created_by,
-	                 e.created_at, e.updated_at,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
@@ -445,8 +446,8 @@ func (r *entityRepository) FindByID(ctx context.Context, id string) (*Entity, er
 func (r *entityRepository) FindBySlug(ctx context.Context, campaignID, slug string) (*Entity, error) {
 	query := `SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.created_by,
-	                 e.created_at, e.updated_at,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
@@ -458,12 +459,12 @@ func (r *entityRepository) FindBySlug(ctx context.Context, campaignID, slug stri
 // scanEntity scans a single entity row with joined type fields.
 func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 	e := &Entity{}
-	var fieldsRaw []byte
+	var fieldsRaw, overridesRaw []byte
 	err := row.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
 		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.ParentID, &e.TypeLabel,
-		&e.IsPrivate, &e.IsTemplate, &fieldsRaw, &e.CreatedBy,
-		&e.CreatedAt, &e.UpdatedAt,
+		&e.IsPrivate, &e.IsTemplate, &fieldsRaw, &overridesRaw,
+		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -477,6 +478,12 @@ func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 	if len(fieldsRaw) > 0 {
 		if err := json.Unmarshal(fieldsRaw, &e.FieldsData); err != nil {
 			return nil, fmt.Errorf("unmarshaling fields data: %w", err)
+		}
+	}
+	if len(overridesRaw) > 0 {
+		e.FieldOverrides = &FieldOverrides{}
+		if err := json.Unmarshal(overridesRaw, e.FieldOverrides); err != nil {
+			return nil, fmt.Errorf("unmarshaling field overrides: %w", err)
 		}
 	}
 	return e, nil
@@ -539,6 +546,31 @@ func (r *entityRepository) UpdateFields(ctx context.Context, id string, fieldsDa
 	result, err := r.db.ExecContext(ctx, query, string(fieldsJSON), id)
 	if err != nil {
 		return fmt.Errorf("updating entity fields: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
+// UpdateFieldOverrides updates the per-entity field overrides JSON column.
+// Used by the attributes widget to save entity-specific field customizations.
+func (r *entityRepository) UpdateFieldOverrides(ctx context.Context, id string, overrides *FieldOverrides) error {
+	var overridesJSON any
+	if overrides != nil {
+		raw, err := json.Marshal(overrides)
+		if err != nil {
+			return fmt.Errorf("marshaling field_overrides: %w", err)
+		}
+		overridesJSON = string(raw)
+	}
+
+	query := `UPDATE entities SET field_overrides = ?, updated_at = NOW() WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, overridesJSON, id)
+	if err != nil {
+		return fmt.Errorf("updating entity field overrides: %w", err)
 	}
 
 	rows, _ := result.RowsAffected()
@@ -624,8 +656,8 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 	// Fetch page.
 	query := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.created_by,
-	                 e.created_at, e.updated_at,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
@@ -688,8 +720,8 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 	// Fetch page.
 	selectQuery := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.created_by,
-	                 e.created_at, e.updated_at,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
@@ -746,12 +778,12 @@ func (r *entityRepository) CountByType(ctx context.Context, campaignID string, r
 // scanEntityRow scans a single entity from a rows iterator.
 func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 	e := &Entity{}
-	var fieldsRaw []byte
+	var fieldsRaw, overridesRaw []byte
 	err := rows.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
 		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.ParentID, &e.TypeLabel,
-		&e.IsPrivate, &e.IsTemplate, &fieldsRaw, &e.CreatedBy,
-		&e.CreatedAt, &e.UpdatedAt,
+		&e.IsPrivate, &e.IsTemplate, &fieldsRaw, &overridesRaw,
+		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
 	if err != nil {
@@ -762,6 +794,12 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 	if len(fieldsRaw) > 0 {
 		if err := json.Unmarshal(fieldsRaw, &e.FieldsData); err != nil {
 			return nil, fmt.Errorf("unmarshaling fields data: %w", err)
+		}
+	}
+	if len(overridesRaw) > 0 {
+		e.FieldOverrides = &FieldOverrides{}
+		if err := json.Unmarshal(overridesRaw, e.FieldOverrides); err != nil {
+			return nil, fmt.Errorf("unmarshaling field overrides: %w", err)
 		}
 	}
 	return e, nil

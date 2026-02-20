@@ -58,8 +58,75 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 	}
 }
 
+// blockMinHeightStyle returns a CSS min-height value for a block based on its
+// config.minHeight setting. Returns empty string for "auto" or unset.
+func blockMinHeightStyle(block TemplateBlock) string {
+	h, ok := block.Config["minHeight"]
+	if !ok {
+		return ""
+	}
+	switch h {
+	case "sm":
+		return "min-height: 150px"
+	case "md":
+		return "min-height: 300px"
+	case "lg":
+		return "min-height: 500px"
+	case "xl":
+		return "min-height: 700px"
+	default:
+		return ""
+	}
+}
+
+// blockVisibility returns the visibility setting for a block ("everyone" or "dm_only").
+func blockVisibility(block TemplateBlock) string {
+	v, ok := block.Config["visibility"]
+	if !ok {
+		return "everyone"
+	}
+	s, _ := v.(string)
+	if s == "" {
+		return "everyone"
+	}
+	return s
+}
+
 // entityBlock dispatches to the correct block renderer based on block type.
+// Applies visibility filtering and optional min-height from block config.
 templ entityBlock(block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
+	// Skip dm_only blocks for non-owner users.
+	if blockVisibility(block) == "dm_only" && cc.MemberRole < campaigns.RoleOwner {
+		// Hidden from this user.
+	} else if blockMinHeightStyle(block) != "" {
+		<div style={ blockMinHeightStyle(block) }>
+			if blockVisibility(block) == "dm_only" {
+				<div class="relative">
+					<div class="absolute top-1 right-1 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-medium">
+						<i class="fa-solid fa-lock text-[9px]"></i> DM Only
+					</div>
+					@entityBlockInner(block, cc, entity, entityType, csrfToken)
+				</div>
+			} else {
+				@entityBlockInner(block, cc, entity, entityType, csrfToken)
+			}
+		</div>
+	} else {
+		if blockVisibility(block) == "dm_only" {
+			<div class="relative">
+				<div class="absolute top-1 right-1 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-medium">
+					<i class="fa-solid fa-lock text-[9px]"></i> DM Only
+				</div>
+				@entityBlockInner(block, cc, entity, entityType, csrfToken)
+			</div>
+		} else {
+			@entityBlockInner(block, cc, entity, entityType, csrfToken)
+		}
+	}
+}
+
+// entityBlockInner renders the actual block content without the height wrapper.
+templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
 	switch block.Type {
 		case "title":
 			@blockTitle(cc, entity, csrfToken)

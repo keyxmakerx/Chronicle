@@ -26,6 +26,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Fields API (JSON endpoints for attributes widget).
 	cg.GET("/entities/:eid/fields", h.GetFieldsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/entities/:eid/fields", h.UpdateFieldsAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/field-overrides", h.UpdateFieldOverridesAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Image API.
 	cg.PUT("/entities/:eid/image", h.UpdateImageAPI, campaigns.RequireRole(campaigns.RoleScribe))

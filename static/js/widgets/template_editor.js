@@ -70,6 +70,21 @@ Chronicle.register('template-editor', {
     { label: '3 Columns', widths: [4, 4, 4] },
   ],
 
+  /** Height presets for block minimum height control. */
+  heightPresets: [
+    { value: 'auto', label: 'Auto' },
+    { value: 'sm',   label: 'Small',  px: '150px' },
+    { value: 'md',   label: 'Medium', px: '300px' },
+    { value: 'lg',   label: 'Large',  px: '500px' },
+    { value: 'xl',   label: 'X-Large', px: '700px' },
+  ],
+
+  /** Visibility options for block access control. */
+  visibilityOptions: [
+    { value: 'everyone', label: 'Everyone',  icon: 'fa-globe' },
+    { value: 'dm_only',  label: 'DM Only',   icon: 'fa-lock' },
+  ],
+
   defaultLayout() {
     return {
       rows: [{
@@ -381,19 +396,69 @@ Chronicle.register('template-editor', {
       return this.renderContainerBlock(block, rowIdx, colIdx, blockIdx);
     }
 
+    // Ensure config exists.
+    if (!block.config) block.config = {};
+
     const bt = this.blockTypes.find(b => b.type === block.type) || { label: block.type, icon: 'fa-cube' };
     const el = document.createElement('div');
     el.className = 'te-block flex items-center gap-2 px-3 py-2 mb-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded group/block cursor-grab hover:border-indigo-300 dark:hover:border-indigo-500 transition-colors';
     el.draggable = true;
     el.dataset.blockIdx = blockIdx;
+
+    const curHeight = block.config.minHeight || 'auto';
+    const curVisibility = block.config.visibility || 'everyone';
+    const visIcon = curVisibility === 'dm_only' ? 'fa-lock' : '';
+
+    // DM-only blocks get a subtle red-ish border to stand out in the editor.
+    if (curVisibility === 'dm_only') {
+      el.classList.add('border-amber-400', 'dark:border-amber-600');
+    }
+
     el.innerHTML = `
       <i class="fa-solid fa-grip-vertical text-gray-300 dark:text-gray-500 text-xs"></i>
       <i class="fa-solid ${bt.icon} w-4 text-gray-400 dark:text-gray-500 text-center text-sm"></i>
       <span class="text-sm font-medium text-gray-700 dark:text-gray-200 flex-1">${bt.label}</span>
+      ${curVisibility === 'dm_only' ? '<i class="fa-solid fa-lock text-amber-500 text-[10px]" title="DM Only"></i>' : ''}
+      <select class="te-block-vis opacity-0 group-hover/block:opacity-100 text-[10px] bg-transparent text-gray-400 dark:text-gray-500 border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition-all" title="Visibility">
+        ${this.visibilityOptions.map(v => `<option value="${v.value}" ${v.value === curVisibility ? 'selected' : ''}>${v.label}</option>`).join('')}
+      </select>
+      <select class="te-block-height opacity-0 group-hover/block:opacity-100 text-[10px] bg-transparent text-gray-400 dark:text-gray-500 border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition-all" title="Block height">
+        ${this.heightPresets.map(h => `<option value="${h.value}" ${h.value === curHeight ? 'selected' : ''}>${h.label}</option>`).join('')}
+      </select>
       <button class="te-block-del opacity-0 group-hover/block:opacity-100 text-gray-300 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-all p-0.5" title="Remove">
         <i class="fa-solid fa-xmark text-xs"></i>
       </button>
     `;
+
+    // Bind visibility change.
+    const visSelect = el.querySelector('.te-block-vis');
+    visSelect.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const val = e.target.value;
+      if (val === 'everyone') {
+        delete block.config.visibility;
+      } else {
+        block.config.visibility = val;
+      }
+      this.markDirty();
+      this.renderCanvas();
+    });
+    visSelect.addEventListener('mousedown', (e) => e.stopPropagation());
+
+    // Bind height change.
+    const heightSelect = el.querySelector('.te-block-height');
+    heightSelect.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const val = e.target.value;
+      if (val === 'auto') {
+        delete block.config.minHeight;
+      } else {
+        block.config.minHeight = val;
+      }
+      this.markDirty();
+    });
+    // Prevent drag on select interaction.
+    heightSelect.addEventListener('mousedown', (e) => e.stopPropagation());
 
     this.bindBlockDrag(el, block, rowIdx, colIdx, blockIdx);
     this.bindBlockDelete(el, rowIdx, colIdx, blockIdx);

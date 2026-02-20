@@ -1,0 +1,150 @@
+// campaign_addons.templ renders the per-campaign addon settings page.
+// Campaign owners use this to enable/disable addons for their campaign.
+
+package addons
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CampaignAddonsPageTempl renders the full campaign addons settings page.
+templ CampaignAddonsPageTempl(campaignID string, addons []CampaignAddon, csrfToken string) {
+	@layouts.App("Extensions") {
+		<div class="max-w-3xl mx-auto space-y-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Extensions</h1>
+					<p class="text-sm text-fg-secondary mt-1">
+						Enable or disable addons for this campaign.
+					</p>
+				</div>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/edit", campaignID)) } class="btn-secondary text-sm">
+					Back to Settings
+				</a>
+			</div>
+
+			<div id="addons-list">
+				@CampaignAddonsListFragment(campaignID, addons, csrfToken)
+			</div>
+
+			// Info panel.
+			<div class="card p-6">
+				<div class="flex items-start gap-4">
+					<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-circle-info text-accent"></i>
+					</span>
+					<div>
+						<h3 class="text-sm font-semibold text-fg mb-1">About Extensions</h3>
+						<p class="text-sm text-fg-secondary leading-relaxed">
+							Extensions add new features to your campaign. Toggle them on or off at any time.
+							Disabling an extension does not delete its data — you can re-enable it later.
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// CampaignAddonsListFragment renders just the addon list (for HTMX swaps).
+templ CampaignAddonsListFragment(campaignID string, addons []CampaignAddon, csrfToken string) {
+	// Group by category.
+	if countCampaignAddonsByCategory(addons, CategoryModule) > 0 {
+		<div class="mb-6">
+			<h2 class="section-header mb-3">
+				<i class="fa-solid fa-book-open mr-2 text-fg-muted"></i>Game Modules
+			</h2>
+			<div class="space-y-2">
+				for _, a := range addons {
+					if a.AddonCategory == CategoryModule {
+						@campaignAddonRow(campaignID, a, csrfToken)
+					}
+				}
+			</div>
+		</div>
+	}
+
+	if countCampaignAddonsByCategory(addons, CategoryWidget) > 0 {
+		<div class="mb-6">
+			<h2 class="section-header mb-3">
+				<i class="fa-solid fa-puzzle-piece mr-2 text-fg-muted"></i>Widgets
+			</h2>
+			<div class="space-y-2">
+				for _, a := range addons {
+					if a.AddonCategory == CategoryWidget {
+						@campaignAddonRow(campaignID, a, csrfToken)
+					}
+				}
+			</div>
+		</div>
+	}
+
+	if countCampaignAddonsByCategory(addons, CategoryIntegration) > 0 {
+		<div class="mb-6">
+			<h2 class="section-header mb-3">
+				<i class="fa-solid fa-plug mr-2 text-fg-muted"></i>Integrations
+			</h2>
+			<div class="space-y-2">
+				for _, a := range addons {
+					if a.AddonCategory == CategoryIntegration {
+						@campaignAddonRow(campaignID, a, csrfToken)
+					}
+				}
+			</div>
+		</div>
+	}
+
+	if len(addons) == 0 {
+		<div class="card p-8 text-center">
+			<p class="text-fg-muted">No addons available yet.</p>
+		</div>
+	}
+}
+
+// campaignAddonRow renders a single addon toggle row.
+templ campaignAddonRow(campaignID string, a CampaignAddon, csrfToken string) {
+	<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
+		<div class="flex items-center gap-3">
+			<span class="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+				<i class={ "fa-solid " + a.AddonIcon + " text-accent text-sm" }></i>
+			</span>
+			<div>
+				<div class="text-sm font-medium text-fg">{ a.AddonName }</div>
+				<div class="text-xs text-fg-muted">{ a.AddonSlug }</div>
+			</div>
+		</div>
+		<form
+			method="POST"
+			hx-put={ fmt.Sprintf("/campaigns/%s/addons/%d/toggle", campaignID, a.AddonID) }
+			hx-target="#addons-list"
+			hx-swap="innerHTML"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			if a.Enabled {
+				<input type="hidden" name="action" value="disable"/>
+				<button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors">
+					<i class="fa-solid fa-check text-[10px]"></i>
+					Enabled
+				</button>
+			} else {
+				<input type="hidden" name="action" value="enable"/>
+				<button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-surface-alt text-fg-muted border border-edge hover:bg-accent/10 hover:text-accent transition-colors">
+					<i class="fa-solid fa-plus text-[10px]"></i>
+					Enable
+				</button>
+			}
+		</form>
+	</div>
+}
+
+// countCampaignAddonsByCategory counts addons with the given category.
+func countCampaignAddonsByCategory(addons []CampaignAddon, cat AddonCategory) int {
+	count := 0
+	for _, a := range addons {
+		if a.AddonCategory == cat {
+			count++
+		}
+	}
+	return count
+}
