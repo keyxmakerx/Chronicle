@@ -45,6 +45,8 @@ templ Base(title string) {
 
 		<!-- TipTap rich text editor (vendored bundle) -->
 		<script src="/static/vendor/tiptap-bundle.min.js" defer></script>
+		<!-- @mention extension must load before editor.js so Chronicle.MentionExtension is available -->
+		<script src="/static/js/widgets/editor_mention.js" defer></script>
 		<script src="/static/js/widgets/editor.js" defer></script>
 
 		<!-- Image upload widget -->
@@ -58,6 +60,15 @@ templ Base(title string) {
 
 		<!-- Tag picker widget (entity tag management) -->
 		<script src="/static/js/widgets/tag_picker.js" defer></script>
+
+		<!-- Entity tooltip widget (hover preview popover for entity links) -->
+		<script src="/static/js/widgets/entity_tooltip.js" defer></script>
+
+		<!-- Relations widget (bi-directional entity linking) -->
+		<script src="/static/js/widgets/relations.js" defer></script>
+
+		<!-- Entity type editor widget (inline edit for entity type management) -->
+		<script src="/static/js/widgets/entity_type_editor.js" defer></script>
 	</body>
 	</html>
 }

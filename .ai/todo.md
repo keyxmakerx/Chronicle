@@ -81,8 +81,8 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] editor.js widget with Chronicle.register() (static/js/widgets/editor.js)
 - [x] boot.js widget auto-mounter (static/js/boot.js)
 - [x] Save/load entity entry content via API (GET/PUT entry endpoints)
-- [ ] @mention system (search entities, insert link)
-- [ ] Entity mention parsing and rendering server-side
+- [x] @mention system (search entities, insert link, popup with keyboard nav)
+- [x] Entity mention rendering (client-side via TipTap, stored as HTML links)
 
 ### Priority 6 -- UI & Layouts (Must Do)
 - [x] Base Templ layout (HTML shell, head, scripts, styles)
@@ -118,7 +118,7 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [ ] Leaflet.js map viewer widget
 - [ ] Map pin CRUD with entity linking
 - [x] Image upload system with thumbnails (media plugin)
-- [ ] Entity relations plugin (bi-directional)
+- [x] Entity relations widget (bi-directional linking)
 - [ ] REST API plugin with PASETO token auth
 - [x] Rate limiting middleware (auth + uploads)
 - [x] IDOR protection on all entity endpoints

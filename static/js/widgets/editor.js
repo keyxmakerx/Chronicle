@@ -5,13 +5,19 @@
  * with data-widget="editor" and provides WYSIWYG editing with autosave.
  *
  * Configuration (via data-* attributes):
- *   data-endpoint   - API URL for loading/saving content (required)
- *   data-editable   - "true" to enable editing, "false" for read-only (default: false)
- *   data-autosave   - Autosave interval in seconds, 0 to disable (default: 30)
- *   data-csrf-token - CSRF token for PUT requests
+ *   data-endpoint    - API URL for loading/saving content (required)
+ *   data-campaign-id - Campaign ID for @mention entity search (required for mentions)
+ *   data-editable    - "true" to enable editing, "false" for read-only (default: false)
+ *   data-autosave    - Autosave interval in seconds, 0 to disable (default: 30)
+ *   data-csrf-token  - CSRF token for PUT requests
  *
  * Content is stored as ProseMirror JSON in the entity's `entry` column
  * and pre-rendered to HTML in `entry_html` for display performance.
+ *
+ * @mention support:
+ *   When editor_mention.js is loaded and a campaign ID is available,
+ *   typing @ in the editor triggers an entity search popup. Selecting
+ *   an entity inserts a styled mention link.
  */
 (function () {
   'use strict';
@@ -40,6 +46,7 @@
      */
     init: function (el, config) {
       var endpoint = config.endpoint;
+      var campaignId = config.campaignId || '';
       var editable = config.editable === true;
       var autosaveInterval = config.autosave || 30;
       var csrfToken = config.csrfToken || '';
@@ -79,18 +86,48 @@
         Underline,
       ];
 
+      // Build editor props. When mention extension is available and editor
+      // is editable, intercept keydown events to let the mention popup
+      // handle arrow keys, Enter, and Escape before ProseMirror processes them.
+      var editorProps = {
+        attributes: {
+          class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] p-4',
+        },
+      };
+
+      // We store a reference to the mention extension here so the keydown
+      // handler closure can access it. It will be set after editor creation.
+      var mentionExtRef = { current: null };
+
+      if (editable && campaignId && Chronicle.MentionExtension) {
+        editorProps.handleKeyDown = function (view, event) {
+          if (mentionExtRef.current) {
+            return mentionExtRef.current.onKeyDown(null, event);
+          }
+          return false;
+        };
+      }
+
       // Create TipTap editor instance.
       var editor = new Editor({
         element: contentEl,
         extensions: extensions,
         editable: editable,
         content: '<p></p>',
-        editorProps: {
-          attributes: {
-            class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] p-4',
-          },
-        },
+        editorProps: editorProps,
       });
+
+      // --- @Mention Extension ---
+      // Initialize mention support if the extension module is loaded and we
+      // have a campaign ID to search against. The mention extension hooks into
+      // editor events to detect the @ trigger and manage the popup lifecycle.
+      var mentionExt = null;
+      if (editable && campaignId && Chronicle.MentionExtension) {
+        mentionExt = Chronicle.MentionExtension({ campaignId: campaignId });
+        mentionExt.onCreate(editor);
+        // Set the ref so the editorProps.handleKeyDown closure can access it.
+        mentionExtRef.current = mentionExt;
+      }
 
       // Track state.
       var state = {
@@ -102,6 +139,7 @@
         saving: false,
         statusEl: statusEl,
         toolbar: toolbar,
+        mentionExt: mentionExt,
       };
 
       editors.set(el, state);
@@ -113,6 +151,17 @@
         });
         editor.on('transaction', function () {
           updateToolbarState(editor, toolbar);
+        });
+      }
+
+      // Wire mention extension into editor update events so it can
+      // detect the @ trigger and update the suggestion popup.
+      if (mentionExt) {
+        editor.on('update', function () {
+          mentionExt.onUpdate(editor);
+        });
+        editor.on('selectionUpdate', function () {
+          mentionExt.onUpdate(editor);
         });
       }
 
@@ -156,6 +205,11 @@
 
       if (state.autosaveTimer) {
         clearInterval(state.autosaveTimer);
+      }
+
+      // Clean up mention extension popup and listeners.
+      if (state.mentionExt) {
+        state.mentionExt.onDestroy();
       }
 
       if (state.editor) {

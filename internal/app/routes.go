@@ -19,6 +19,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
+	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
 
@@ -62,6 +63,29 @@ func (a *campaignAuditAdapter) LogEvent(ctx context.Context, campaignID, userID,
 		Action:     action,
 		Details:    details,
 	})
+}
+
+// entityTagFetcherAdapter wraps tags.TagService to implement the
+// entities.EntityTagFetcher interface for batch tag loading in list views.
+type entityTagFetcherAdapter struct {
+	svc tags.TagService
+}
+
+// GetEntityTagsBatch returns minimal tag info for multiple entities.
+func (a *entityTagFetcherAdapter) GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]entities.EntityTagInfo, error) {
+	tagsMap, err := a.svc.GetEntityTagsBatch(ctx, entityIDs)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string][]entities.EntityTagInfo, len(tagsMap))
+	for eid, tagList := range tagsMap {
+		infos := make([]entities.EntityTagInfo, len(tagList))
+		for i, t := range tagList {
+			infos[i] = entities.EntityTagInfo{Name: t.Name, Color: t.Color}
+		}
+		result[eid] = infos
+	}
+	return result, nil
 }
 
 // storageLimiterAdapter wraps settings.SettingsService to implement the
@@ -190,6 +214,12 @@ func (a *App) RegisterRoutes() {
 	tagHandler := tags.NewHandler(tagService)
 	tags.RegisterRoutes(e, tagHandler, campaignService, authService)
 
+	// Relations widget: bi-directional entity linking (create/list/delete).
+	relRepo := relations.NewRelationRepository(a.DB)
+	relService := relations.NewRelationService(relRepo)
+	relHandler := relations.NewHandler(relService)
+	relations.RegisterRoutes(e, relHandler, campaignService, authService)
+
 	// Audit plugin: campaign activity logging and history.
 	auditRepo := audit.NewAuditRepository(a.DB)
 	auditService := audit.NewAuditService(auditRepo)
@@ -198,6 +228,7 @@ func (a *App) RegisterRoutes() {
 
 	// Wire audit logging into mutation handlers so CRUD actions are recorded.
 	entityHandler.SetAuditService(auditService)
+	entityHandler.SetTagFetcher(&entityTagFetcherAdapter{svc: tagService})
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	tagHandler.SetAuditService(auditService)
 

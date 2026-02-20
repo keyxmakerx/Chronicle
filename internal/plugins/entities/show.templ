@@ -44,6 +44,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 					<div class="col-span-8 space-y-4">
 						@blockTitle(cc, entity, csrfToken)
 						@blockTags(cc, entity, csrfToken)
+						@blockRelations(cc, entity, csrfToken)
 						@blockEntry(cc, entity, csrfToken)
 					</div>
 					<div class="col-span-4 space-y-4">
@@ -72,6 +73,8 @@ templ entityBlock(block TemplateBlock, cc *campaigns.CampaignContext, entity *En
 			@blockDetails(entity)
 		case "tags":
 			@blockTags(cc, entity, csrfToken)
+		case "relations":
+			@blockRelations(cc, entity, csrfToken)
 		case "divider":
 			@blockDivider()
 	}
@@ -157,6 +160,7 @@ templ blockEntry(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 	<div
 		data-widget="editor"
 		data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/entry", cc.Campaign.ID, entity.ID) }
+		data-campaign-id={ cc.Campaign.ID }
 		if cc.MemberRole >= campaigns.RoleScribe {
 			data-editable="true"
 		}
@@ -222,6 +226,23 @@ templ blockTags(cc *campaigns.CampaignContext, entity *Entity, csrfToken string)
 		data-widget="tag-picker"
 		data-tags-endpoint={ fmt.Sprintf("/campaigns/%s/tags", cc.Campaign.ID) }
 		data-entity-tags-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/tags", cc.Campaign.ID, entity.ID) }
+		if cc.MemberRole >= campaigns.RoleScribe {
+			data-editable="true"
+		}
+		data-csrf-token={ csrfToken }
+	></div>
+}
+
+// blockRelations renders the entity relations widget mount point. The widget
+// displays bi-directional links to other entities, grouped by relation type,
+// with an "Add Relation" UI for users with Scribe+ permissions.
+templ blockRelations(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
+	<div
+		data-widget="relations"
+		data-relations-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/relations", cc.Campaign.ID, entity.ID) }
+		data-relation-types-endpoint={ fmt.Sprintf("/campaigns/%s/relation-types", cc.Campaign.ID) }
+		data-entity-search-endpoint={ fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID) }
+		data-campaign-url={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
 		if cc.MemberRole >= campaigns.RoleScribe {
 			data-editable="true"
 		}

@@ -36,6 +36,15 @@ const (
 	// ActionCampaignUpdated is logged when campaign settings are modified.
 	ActionCampaignUpdated = "campaign.updated"
 
+	// ActionEntityTypeCreated is logged when a new entity type is added to a campaign.
+	ActionEntityTypeCreated = "entity_type.created"
+
+	// ActionEntityTypeUpdated is logged when an entity type is modified.
+	ActionEntityTypeUpdated = "entity_type.updated"
+
+	// ActionEntityTypeDeleted is logged when an entity type is removed from a campaign.
+	ActionEntityTypeDeleted = "entity_type.deleted"
+
 	// ActionTagCreated is logged when a new tag is added to a campaign.
 	ActionTagCreated = "tag.created"
 

@@ -35,8 +35,16 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 
 			// Unified entity type customization: sidebar order, visibility, colors, and layouts.
 			<div class="card p-6 mb-6">
-				<h2 class="text-lg font-semibold text-gray-900 mb-2">Entity Types</h2>
-				<p class="text-sm text-gray-600 mb-4">
+				<div class="flex items-center justify-between mb-2">
+					<h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Entity Types</h2>
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
+						class="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+					>
+						<i class="fa-solid fa-cog mr-1"></i> Manage Types
+					</a>
+				</div>
+				<p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
 					Drag to reorder the sidebar, toggle visibility, click a color to change it,
 					and expand a type to customize its profile layout.
 				</p>

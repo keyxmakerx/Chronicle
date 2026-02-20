@@ -57,7 +57,7 @@ type TemplateColumn struct {
 
 // TemplateBlock is a content component placed inside a column.
 // Valid types: "title", "image", "entry", "attributes", "details", "tags",
-// "divider", "two_column", "three_column", "tabs", "section".
+// "relations", "divider", "two_column", "three_column", "tabs", "section".
 // Container types (two_column, three_column, tabs, section) hold sub-blocks
 // in their Config map -- see template_editor.js for the config schemas.
 type TemplateBlock struct {
@@ -214,6 +214,16 @@ type Entity struct {
 	TypeIcon  string `json:"type_icon,omitempty"`
 	TypeColor string `json:"type_color,omitempty"`
 	TypeSlug  string `json:"type_slug,omitempty"`
+
+	// Tags is populated at the handler level via batch fetch, not by the repository.
+	Tags []EntityTagInfo `json:"tags,omitempty"`
+}
+
+// EntityTagInfo holds minimal tag display data for entity cards and lists.
+// Avoids importing the tags widget package from the entities plugin.
+type EntityTagInfo struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
 }
 
 // --- Request DTOs (bound from HTTP requests) ---
@@ -274,6 +284,44 @@ func (o ListOptions) Offset() int {
 		o.Page = 1
 	}
 	return (o.Page - 1) * o.PerPage
+}
+
+// --- Entity Type Request DTOs ---
+
+// CreateEntityTypeRequest holds the data submitted by the entity type creation form.
+type CreateEntityTypeRequest struct {
+	Name       string `json:"name" form:"name"`
+	NamePlural string `json:"name_plural" form:"name_plural"`
+	Icon       string `json:"icon" form:"icon"`
+	Color      string `json:"color" form:"color"`
+}
+
+// UpdateEntityTypeRequest holds the data submitted by the entity type edit form.
+type UpdateEntityTypeRequest struct {
+	Name       string            `json:"name" form:"name"`
+	NamePlural string            `json:"name_plural" form:"name_plural"`
+	Icon       string            `json:"icon" form:"icon"`
+	Color      string            `json:"color" form:"color"`
+	Fields     []FieldDefinition `json:"fields"`
+}
+
+// --- Entity Type Service Input DTOs ---
+
+// CreateEntityTypeInput is the validated input for creating an entity type.
+type CreateEntityTypeInput struct {
+	Name       string
+	NamePlural string
+	Icon       string
+	Color      string
+}
+
+// UpdateEntityTypeInput is the validated input for updating an entity type.
+type UpdateEntityTypeInput struct {
+	Name       string
+	NamePlural string
+	Icon       string
+	Color      string
+	Fields     []FieldDefinition
 }
 
 // --- Slug Generation ---
