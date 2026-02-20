@@ -188,8 +188,8 @@ templ blockDetails(entity *Entity) {
 		<!-- Type badge -->
 		<div class="flex items-center gap-2 flex-wrap">
 			<span
-				class="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium text-white"
-				style={ fmt.Sprintf("background-color: %s", entity.TypeColor) }
+				class="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium"
+				style={ fmt.Sprintf("background-color: %s; color: %s", entity.TypeColor, contrastTextColor(entity.TypeColor)) }
 			>
 				if entity.TypeIcon != "" {
 					<i class={ fmt.Sprintf("fa-solid %s mr-1.5 text-xs", entity.TypeIcon) }></i>

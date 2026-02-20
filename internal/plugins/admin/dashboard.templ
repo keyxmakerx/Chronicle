@@ -48,6 +48,17 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 					<p class="text-xs text-fg-muted mt-1">{ fmt.Sprintf("%d", mediaFileCount) } files</p>
 					<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Manage storage &rarr;</p>
 				</a>
+				<!-- Plugins -->
+				<a href="/admin/plugins" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-fg-secondary">Plugins</p>
+						<span class="w-10 h-10 rounded-lg bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center">
+							<i class="fa-solid fa-cubes text-orange-500"></i>
+						</span>
+					</div>
+					<p class="text-3xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", countByStatus(PluginRegistry(), PluginActive)) }</p>
+					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage plugins &rarr;</p>
+				</a>
 				<!-- Modules -->
 				<a href="/admin/modules" class="card hover:shadow-md transition-shadow group">
 					<div class="flex items-center justify-between">

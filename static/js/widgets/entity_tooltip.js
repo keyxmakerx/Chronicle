@@ -40,7 +40,7 @@
       '.et-tooltip__name { font-size: 15px; font-weight: 600; color: #111827; margin: 0 0 6px 0; line-height: 1.3; display: flex; align-items: center; gap: 6px; }',
       '.dark .et-tooltip__name { color: #f3f4f6; }',
       '.et-tooltip__private { color: #9ca3af; font-size: 11px; }',
-      '.et-tooltip__badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; color: #ffffff; line-height: 18px; white-space: nowrap; }',
+      '.et-tooltip__badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; line-height: 18px; white-space: nowrap; }',
       '.et-tooltip__label { font-size: 12px; color: #6b7280; margin-left: 6px; }',
       '.dark .et-tooltip__label { color: #9ca3af; }',
       '.et-tooltip__type-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }',
@@ -150,7 +150,7 @@
 
     // Type badge row.
     html += '<div class="et-tooltip__type-row">';
-    html += '<span class="et-tooltip__badge" style="background-color: ' + escapeAttr(data.type_color) + '">';
+    html += '<span class="et-tooltip__badge" style="background-color: ' + escapeAttr(data.type_color) + '; color: ' + contrastTextColor(data.type_color) + '">';
     if (data.type_icon) {
       html += '<i class="fa-solid ' + escapeAttr(data.type_icon) + '" style="font-size:10px"></i> ';
     }
@@ -396,6 +396,25 @@
       .replace(/'/g, '&#39;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
+  }
+
+  /**
+   * Return a contrasting text color (hex) for the given background hex color.
+   * Uses ITU-R BT.709 perceived brightness formula.
+   * @param {string} hex - Background color (e.g., "#ff0000").
+   * @returns {string} "#ffffff" or "#1f2937".
+   */
+  function contrastTextColor(hex) {
+    hex = (hex || '').replace('#', '');
+    if (hex.length === 3) {
+      hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    }
+    if (hex.length !== 6) return '#ffffff';
+    var r = parseInt(hex.substring(0, 2), 16);
+    var g = parseInt(hex.substring(2, 4), 16);
+    var b = parseInt(hex.substring(4, 6), 16);
+    var luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+    return luminance > 186 ? '#1f2937' : '#ffffff';
   }
 
   // --- Widget Registration ---

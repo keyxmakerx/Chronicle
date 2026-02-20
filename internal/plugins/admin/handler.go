@@ -345,3 +345,11 @@ func (h *Handler) Modules(c echo.Context) error {
 	mods := modules.Registry()
 	return middleware.Render(c, http.StatusOK, AdminModulesPage(mods))
 }
+
+// --- Plugins ---
+
+// Plugins renders the plugin management page (GET /admin/plugins).
+// Lists all registered plugins with their status and category.
+func (h *Handler) Plugins(c echo.Context) error {
+	return middleware.Render(c, http.StatusOK, AdminPluginsPage(PluginRegistry()))
+}

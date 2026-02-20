@@ -132,3 +132,10 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] Collapsible admin sidebar with modules section
 - [x] Toast notification system (Chronicle.notify API + HTMX integration)
 - [x] Public campaign support (is_public flag, OptionalAuth)
+
+**Phase 2 Polish (2026-02-20):**
+- [x] Entity type badge contrast (luminance-based text color for light backgrounds)
+- [x] Dark mode fix for entity type config widget (semantic tokens)
+- [x] Merged campaign Edit + Settings into unified settings page
+- [x] Game Modules section in campaign settings (shows available modules)
+- [x] Admin plugins page (plugin registry, active/planned status, categories)

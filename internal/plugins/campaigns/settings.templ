@@ -6,6 +6,7 @@ package campaigns
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/modules"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -28,10 +29,75 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 			</div>
 
 			if errMsg != "" {
-				<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-6 text-sm" role="alert">
+				<div class="alert-error mb-6" role="alert">
 					{ errMsg }
 				</div>
 			}
+
+			// Campaign details (name, description, public toggle).
+			<div class="card p-6 mb-6">
+				<h2 class="text-lg font-semibold text-fg mb-4">Campaign Details</h2>
+				<form
+					method="POST"
+					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
+					hx-put={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
+					hx-target="#campaign-details-form"
+					hx-swap="outerHTML"
+					id="campaign-details-form"
+					class="space-y-4"
+				>
+					<input type="hidden" name="_method" value="PUT"/>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+
+					<div>
+						<label for="name" class="block text-sm font-medium text-fg-body mb-1">Campaign Name</label>
+						<input
+							type="text"
+							id="name"
+							name="name"
+							value={ cc.Campaign.Name }
+							required
+							class="input w-full"
+							maxlength="200"
+						/>
+					</div>
+
+					<div>
+						<label for="description" class="block text-sm font-medium text-fg-body mb-1">Description</label>
+						<textarea
+							id="description"
+							name="description"
+							class="input w-full h-24"
+							maxlength="5000"
+						>
+							if cc.Campaign.Description != nil {
+								{ *cc.Campaign.Description }
+							}
+						</textarea>
+					</div>
+
+					<div class="flex items-center">
+						<input
+							type="checkbox"
+							id="is_public"
+							name="is_public"
+							value="true"
+							if cc.Campaign.IsPublic {
+								checked
+							}
+							class="h-4 w-4 text-accent border-edge rounded focus:ring-accent"
+						/>
+						<label for="is_public" class="ml-2 block text-sm text-fg-body">
+							Make this campaign public
+						</label>
+					</div>
+					<p class="text-xs text-fg-secondary -mt-2 ml-6">Public campaigns can be viewed by anyone without logging in.</p>
+
+					<div class="flex justify-end">
+						<button type="submit" class="btn-primary text-sm">Save Changes</button>
+					</div>
+				</form>
+			</div>
 
 			// Unified entity type customization: sidebar order, visibility, colors, and layouts.
 			<div class="card p-6 mb-6">
@@ -54,6 +120,39 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 					data-layout-base={ fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID) }
 					data-entity-types={ entityTypesJSON(entityTypes) }
 				></div>
+			</div>
+
+			// Game modules available for this campaign.
+			<div class="card p-6 mb-6">
+				<h2 class="text-lg font-semibold text-fg mb-2">Game Modules</h2>
+				<p class="text-sm text-fg-secondary mb-4">
+					Content packs providing reference data, tooltips, and stat blocks. Modules are
+					managed by site administrators and can be enabled per campaign when available.
+				</p>
+				if len(modules.Registry()) > 0 {
+					<div class="space-y-2">
+						for _, mod := range modules.Registry() {
+							<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
+								<div class="flex items-center gap-3">
+									<span class="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+										<i class={ "fa-solid " + mod.Icon + " text-accent text-sm" }></i>
+									</span>
+									<div>
+										<div class="text-sm font-medium text-fg">{ mod.Name }</div>
+										<div class="text-xs text-fg-muted">{ mod.Description }</div>
+									</div>
+								</div>
+								if mod.Status == modules.StatusAvailable {
+									<span class="badge-green text-xs">Available</span>
+								} else {
+									<span class="badge-gray text-xs">Coming Soon</span>
+								}
+							</div>
+						}
+					</div>
+				} else {
+					<p class="text-sm text-fg-muted italic">No modules registered yet.</p>
+				}
 			</div>
 
 			// Transfer ownership section.

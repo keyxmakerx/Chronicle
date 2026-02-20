@@ -1,0 +1,126 @@
+// plugins.templ renders the admin plugin management page.
+// Shows all registered plugins with their status and category.
+
+package admin
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// AdminPluginsPage renders the plugins management page.
+templ AdminPluginsPage(plugins []PluginInfo) {
+	@layouts.App("Plugins - Admin") {
+		<div class="max-w-5xl mx-auto space-y-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Plugins</h1>
+					<p class="text-sm text-fg-secondary mt-1">
+						Feature applications that provide Chronicle's core functionality.
+					</p>
+				</div>
+				<div class="flex items-center gap-3">
+					@pluginStatusSummary(plugins)
+				</div>
+			</div>
+
+			// Active plugins.
+			<div>
+				<h2 class="section-header mb-3">Active</h2>
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+					for _, p := range plugins {
+						if p.Status == PluginActive {
+							@pluginCard(p)
+						}
+					}
+				</div>
+			</div>
+
+			// Planned plugins.
+			<div>
+				<h2 class="section-header mb-3">Planned</h2>
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+					for _, p := range plugins {
+						if p.Status == PluginPlanned {
+							@pluginCard(p)
+						}
+					}
+				</div>
+			</div>
+
+			// Info panel.
+			<div class="card p-6">
+				<div class="flex items-start gap-4">
+					<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-circle-info text-accent"></i>
+					</span>
+					<div>
+						<h3 class="text-sm font-semibold text-fg mb-1">About Plugins</h3>
+						<p class="text-sm text-fg-secondary leading-relaxed">
+							Plugins are the building blocks of Chronicle. Each plugin provides a distinct
+							feature set -- authentication, campaign management, entity editing, and so on.
+							Core plugins are always active and provide essential functionality.
+						</p>
+						<p class="text-sm text-fg-secondary leading-relaxed mt-2">
+							Planned plugins are on the roadmap and will appear here when ready. Custom
+							plugins can be developed by following the plugin architecture pattern.
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// pluginStatusSummary shows a count of active vs planned plugins.
+templ pluginStatusSummary(plugins []PluginInfo) {
+	<span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+		<i class="fa-solid fa-circle-check text-[10px]"></i>
+		{ fmt.Sprintf("%d", countByStatus(plugins, PluginActive)) } active
+	</span>
+	<span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-surface-alt text-fg-secondary">
+		<i class="fa-solid fa-clock text-[10px]"></i>
+		{ fmt.Sprintf("%d", countByStatus(plugins, PluginPlanned)) } planned
+	</span>
+}
+
+// pluginCard renders a single plugin as an informational card.
+templ pluginCard(p PluginInfo) {
+	<div class="card p-5 flex flex-col">
+		<div class="flex items-start justify-between mb-3">
+			<div class="flex items-center gap-3">
+				<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+					<i class={ "fa-solid " + p.Icon + " text-accent" }></i>
+				</span>
+				<div>
+					<h3 class="text-sm font-semibold text-fg">{ p.Name }</h3>
+					<p class="text-xs text-fg-muted">{ p.ID }</p>
+				</div>
+			</div>
+			if p.Status == PluginActive {
+				<span class="badge-green text-xs">Active</span>
+			} else {
+				<span class="badge-gray text-xs">Planned</span>
+			}
+		</div>
+		<p class="text-sm text-fg-secondary leading-relaxed flex-1 mb-3">
+			{ p.Description }
+		</p>
+		<div class="pt-3 border-t border-edge">
+			<span class="inline-flex items-center px-2 py-0.5 text-xs rounded-md bg-surface-alt text-fg-secondary">
+				{ p.Category }
+			</span>
+		</div>
+	</div>
+}
+
+// countByStatus counts plugins with the given status.
+func countByStatus(plugins []PluginInfo, status PluginStatus) int {
+	count := 0
+	for _, p := range plugins {
+		if p.Status == status {
+			count++
+		}
+	}
+	return count
+}

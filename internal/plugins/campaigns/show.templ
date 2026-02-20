@@ -40,14 +40,9 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfTok
 				</div>
 
 				if cc.MemberRole >= RoleOwner {
-					<div class="flex space-x-2">
-						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/edit", cc.Campaign.ID)) } class="btn-secondary text-sm">
-							<i class="fa-solid fa-pen mr-1.5 text-xs"></i> Edit
-						</a>
-						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
-							<i class="fa-solid fa-gear mr-1.5 text-xs"></i> Settings
-						</a>
-					</div>
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
+						<i class="fa-solid fa-gear mr-1.5 text-xs"></i> Settings
+					</a>
 				}
 			</div>
 
