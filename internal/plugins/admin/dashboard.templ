@@ -6,13 +6,13 @@ import (
 )
 
 // AdminDashboardPage renders the admin overview with high-level stats.
-templ AdminDashboardPage(userCount, campaignCount int, smtpConfigured bool) {
+templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool) {
 	@layouts.App("Admin Dashboard") {
-		<div class="max-w-4xl mx-auto space-y-6">
+		<div class="max-w-5xl mx-auto space-y-6">
 			<h1 class="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
 
 			<!-- Stats Cards -->
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 				<!-- Users -->
 				<a href="/admin/users" class="card hover:shadow-md transition-shadow group">
 					<div class="flex items-center justify-between">
@@ -34,6 +34,18 @@ templ AdminDashboardPage(userCount, campaignCount int, smtpConfigured bool) {
 					</div>
 					<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", campaignCount) }</p>
 					<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">Manage campaigns &rarr;</p>
+				</a>
+				<!-- Storage -->
+				<a href="/admin/storage" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-gray-500">Storage</p>
+						<span class="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center">
+							<i class="fa-solid fa-hard-drive text-indigo-500"></i>
+						</span>
+					</div>
+					<p class="text-2xl font-bold text-gray-900 mt-2">{ formatBytes(totalStorageBytes) }</p>
+					<p class="text-xs text-gray-400 mt-1">{ fmt.Sprintf("%d", mediaFileCount) } files</p>
+					<p class="text-xs text-gray-400 group-hover:text-accent transition-colors">Manage storage &rarr;</p>
 				</a>
 				<!-- SMTP -->
 				<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">

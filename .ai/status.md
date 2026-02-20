@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-20 -- Fix campaigns 500, move admin nav to main sidebar
+2026-02-20 -- Fix template editor save, drop indicators, admin storage page
 
 ## Current Phase
 **Phase 2: Media & UI** -- Building on the Phase 1 foundation. Media plugin
@@ -22,18 +22,27 @@ entity type page layouts, and public campaign support.
 - **Fixed campaigns 500 error:** `ListByUser` and `ListAll` in
   `campaigns/repository.go` selected `is_public` but were missing
   `&c.IsPublic` in their `Scan()` calls (11 columns, 10 destinations).
-- **Moved admin navigation to main sidebar:** Removed the separate admin
-  panel sidebar (`AdminLayout`/`adminNav` components in `nav.templ`).
-  Admin links (Dashboard, Users, All Campaigns, SMTP Settings) now appear
-  directly in the far-left sidebar under an "Admin" section, visible only
-  to site admins. Active-state highlighting uses the same pattern as other
-  sidebar links.
-- **Removed AdminLayout wrapper:** Admin templates (dashboard, users,
-  campaigns) now render directly into `layouts.App()` with a centered
-  `max-w-4xl` container instead of a two-column layout.
-- **Removed "Admin" link from topbar:** No longer needed since admin links
-  are in the sidebar.
-- **Cleaned up SMTP settings:** Removed "Back to Admin" breadcrumb link.
+- **Fixed template editor save:** Added missing `X-CSRF-Token` header to
+  the save `fetch()` call in `template_editor.js`. The CSRF middleware was
+  rejecting the PUT request with 403 because no token was sent.
+- **Added drag-and-drop indicators:** Template editor now shows an animated
+  indigo line between blocks when dragging, indicating exactly where the
+  block will be inserted. Uses `te-block` class for position tracking,
+  calculates insertion index from mouse Y position vs block midpoints, and
+  correctly adjusts the index when reordering within the same column.
+- **Admin storage management page:** New `/admin/storage` page with:
+  - Overview stats (total storage, file count, per-file upload limit)
+  - Usage type breakdown (entity images, attachments, avatars, backdrops)
+  - Rate limits & restrictions info panel
+  - Paginated file table with thumbnails, uploader name, delete action
+  - New `GetStorageStats()` and `ListAll()` repository methods with JOINs
+- **Storage in admin sidebar:** Added "Storage" link with hard-drive icon
+  to the admin section of the left sidebar, between "All Campaigns" and
+  "SMTP Settings".
+- **Dashboard storage card:** Admin dashboard now shows a 4th stat card
+  with total storage used and file count, linking to `/admin/storage`.
+- **Moved admin nav to main sidebar:** (from previous session) Admin links
+  appear directly in the far-left sidebar under an "Admin" section.
 
 ### In Progress
 - Nothing currently in progress
@@ -42,30 +51,15 @@ entity type page layouts, and public campaign support.
 - Nothing blocked
 
 ### Files Modified This Session
-- `internal/plugins/entities/model.go` -- New TemplateRow/Column/Block types, DefaultLayout(), ParseLayoutJSON()
-- `internal/plugins/entities/repository.go` -- ParseLayoutJSON in all scan locations
-- `internal/plugins/entities/service.go` -- Row/column/block validation for layout updates
-- `internal/plugins/entities/handler.go` -- TemplateEditor handler
-- `internal/plugins/entities/routes.go` -- Template editor route
-- `internal/plugins/entities/show.templ` -- Dynamic layout rendering with block components
-- `internal/plugins/entities/template_editor.templ` -- New template editor page
-- `static/js/widgets/template_editor.js` -- New drag-and-drop editor widget
-- `static/js/widgets/entity_type_config.js` -- Simplified (removed inline layout editing)
-- `internal/plugins/admin/dashboard.templ` -- Removed AdminLayout, uses max-w-4xl container
-- `internal/plugins/admin/users.templ` -- Removed AdminLayout
-- `internal/plugins/admin/campaigns.templ` -- Removed AdminLayout, fixed nesting
-- `internal/templates/layouts/app.templ` -- Admin links in sidebar, removed topbar Admin link
 - `internal/plugins/campaigns/repository.go` -- Added missing IsPublic to Scan calls
-- `internal/plugins/smtp/settings.templ` -- Removed Back to Admin link
-- Deleted: `internal/plugins/admin/nav.templ` (admin nav moved to main sidebar)
-- `internal/templates/layouts/base.templ` -- Added template_editor.js script tag
-- `tailwind.config.js` -- Added col-span safelist for dynamic grid
-- `internal/plugins/campaigns/service.go` -- IsPublic in Update
-- `internal/plugins/campaigns/form.templ` -- IsPublic checkbox
-- `internal/templates/layouts/data.go` -- IsAuthenticated context helper
-- `internal/templates/layouts/app.templ` -- Guest-friendly topbar/sidebar
-- `internal/app/routes.go` -- SetIsAuthenticated in LayoutInjector
-- Deleted: `static/js/widgets/layout_builder.js` (replaced by template_editor.js)
+- `static/js/widgets/template_editor.js` -- CSRF header, drop indicators, position-aware insertion
+- `internal/plugins/media/repository.go` -- StorageStats, AdminMediaFile types, GetStorageStats(), ListAll()
+- `internal/plugins/admin/handler.go` -- SetMediaDeps(), Storage(), DeleteMedia() handlers
+- `internal/plugins/admin/storage.templ` -- New storage management admin page
+- `internal/plugins/admin/dashboard.templ` -- Added storage stat card, 4-column grid
+- `internal/plugins/admin/routes.go` -- /admin/storage and /admin/media/:fileID routes
+- `internal/templates/layouts/app.templ` -- Storage link in admin sidebar
+- `internal/app/routes.go` -- Wire SetMediaDeps on admin handler
 
 ## Active Branch
 `claude/resume-previous-work-YqXiG`
@@ -111,3 +105,5 @@ entity type page layouts, and public campaign support.
 - 2026-02-19: Comprehensive security audit (14 vulnerability fixes across 14 files)
 - 2026-02-19: Unified entity type config, color picker, public campaigns
 - 2026-02-19: Visual template editor, layout-driven entity pages, admin nav with modules
+- 2026-02-20: Fix campaigns 500 error, move admin nav to sidebar
+- 2026-02-20: Fix template editor save, drop indicators, admin storage management page

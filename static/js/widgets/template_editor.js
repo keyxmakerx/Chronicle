@@ -3,6 +3,7 @@
  *
  * Visual drag-and-drop page template editor for entity types.
  * Uses a 12-column grid system with rows, columns, and blocks.
+ * Shows animated drop indicators between blocks during drag.
  *
  * Mount: data-widget="template-editor"
  * Config:
@@ -21,6 +22,9 @@ Chronicle.register('template-editor', {
     this.fields = JSON.parse(el.dataset.fields || '[]');
     this.layout = JSON.parse(el.dataset.layout || '{"rows":[]}');
     this.dirty = false;
+    // Track current drop indicator position.
+    this.dropIndicator = null;
+    this.dropTarget = null;
 
     // Ensure layout has rows.
     if (!this.layout.rows || this.layout.rows.length === 0) {
@@ -99,7 +103,10 @@ Chronicle.register('template-editor', {
         e.dataTransfer.effectAllowed = 'copy';
         item.classList.add('opacity-50');
       });
-      item.addEventListener('dragend', () => item.classList.remove('opacity-50'));
+      item.addEventListener('dragend', () => {
+        item.classList.remove('opacity-50');
+        this.clearDropIndicator();
+      });
       palette.appendChild(item);
     });
 
@@ -210,7 +217,7 @@ Chronicle.register('template-editor', {
 
       row.columns.forEach((col, colIdx) => {
         const colEl = document.createElement('div');
-        colEl.className = 'bg-white border-2 border-dashed border-gray-200 rounded-lg min-h-[80px] p-2 transition-colors';
+        colEl.className = 'te-column bg-white border-2 border-dashed border-gray-200 rounded-lg min-h-[80px] p-2 transition-colors relative';
         colEl.dataset.rowIdx = rowIdx;
         colEl.dataset.colIdx = colIdx;
 
@@ -220,27 +227,31 @@ Chronicle.register('template-editor', {
         colHeader.textContent = `${col.width}/12`;
         colEl.appendChild(colHeader);
 
-        // Render blocks.
+        // Render blocks with drop zones between them.
         col.blocks.forEach((block, blockIdx) => {
           const blockEl = this.renderBlock(block, rowIdx, colIdx, blockIdx);
           colEl.appendChild(blockEl);
         });
 
-        // Drop zone setup.
+        // Column-level drag events for drop position tracking.
         colEl.addEventListener('dragover', (e) => {
           e.preventDefault();
           e.dataTransfer.dropEffect = 'move';
-          colEl.classList.add('border-indigo-400', 'bg-indigo-50');
+          colEl.classList.add('border-indigo-400');
+          this.updateDropIndicator(e, colEl, rowIdx, colIdx);
         });
         colEl.addEventListener('dragleave', (e) => {
           if (!colEl.contains(e.relatedTarget)) {
-            colEl.classList.remove('border-indigo-400', 'bg-indigo-50');
+            colEl.classList.remove('border-indigo-400');
+            this.clearDropIndicator();
           }
         });
         colEl.addEventListener('drop', (e) => {
           e.preventDefault();
-          colEl.classList.remove('border-indigo-400', 'bg-indigo-50');
-          this.handleDrop(e, rowIdx, colIdx);
+          colEl.classList.remove('border-indigo-400');
+          const insertIdx = this.dropTarget ? this.dropTarget.insertIdx : col.blocks.length;
+          this.clearDropIndicator();
+          this.handleDrop(e, rowIdx, colIdx, insertIdx);
         });
 
         grid.appendChild(colEl);
@@ -251,11 +262,67 @@ Chronicle.register('template-editor', {
     });
   },
 
+  /** Compute where the drop indicator should appear based on mouse Y position. */
+  updateDropIndicator(e, colEl, rowIdx, colIdx) {
+    const blockEls = colEl.querySelectorAll('.te-block');
+    let insertIdx = blockEls.length; // Default: append at end.
+    let indicatorY = null;
+    let referenceEl = null;
+
+    for (let i = 0; i < blockEls.length; i++) {
+      const rect = blockEls[i].getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (e.clientY < midY) {
+        insertIdx = i;
+        referenceEl = blockEls[i];
+        break;
+      }
+    }
+
+    // Only update if position changed.
+    if (this.dropTarget &&
+        this.dropTarget.rowIdx === rowIdx &&
+        this.dropTarget.colIdx === colIdx &&
+        this.dropTarget.insertIdx === insertIdx) {
+      return;
+    }
+
+    this.clearDropIndicator();
+    this.dropTarget = { rowIdx, colIdx, insertIdx };
+
+    // Create the indicator line.
+    const indicator = document.createElement('div');
+    indicator.className = 'te-drop-indicator';
+    indicator.style.cssText = 'height: 3px; background: #6366f1; border-radius: 2px; margin: 2px 4px; transition: opacity 0.15s ease; opacity: 0; position: relative;';
+    // Animated glow effect.
+    indicator.innerHTML = '<div style="position:absolute;inset:-2px 0;background:#6366f1;opacity:0.2;border-radius:4px;animation:te-pulse 1s ease-in-out infinite"></div>';
+
+    if (referenceEl) {
+      colEl.insertBefore(indicator, referenceEl);
+    } else {
+      colEl.appendChild(indicator);
+    }
+
+    // Fade in.
+    requestAnimationFrame(() => { indicator.style.opacity = '1'; });
+    this.dropIndicator = indicator;
+  },
+
+  /** Remove the current drop indicator from the DOM. */
+  clearDropIndicator() {
+    if (this.dropIndicator && this.dropIndicator.parentNode) {
+      this.dropIndicator.remove();
+    }
+    this.dropIndicator = null;
+    this.dropTarget = null;
+  },
+
   renderBlock(block, rowIdx, colIdx, blockIdx) {
     const bt = this.blockTypes.find(b => b.type === block.type) || { label: block.type, icon: 'fa-cube' };
     const el = document.createElement('div');
-    el.className = 'flex items-center gap-2 px-3 py-2 mb-1 bg-gray-50 border border-gray-200 rounded group/block cursor-grab hover:border-indigo-300 transition-colors';
+    el.className = 'te-block flex items-center gap-2 px-3 py-2 mb-1 bg-gray-50 border border-gray-200 rounded group/block cursor-grab hover:border-indigo-300 transition-colors';
     el.draggable = true;
+    el.dataset.blockIdx = blockIdx;
     el.innerHTML = `
       <i class="fa-solid fa-grip-vertical text-gray-300 text-xs"></i>
       <i class="fa-solid ${bt.icon} w-4 text-gray-400 text-center text-sm"></i>
@@ -275,7 +342,10 @@ Chronicle.register('template-editor', {
       e.dataTransfer.effectAllowed = 'move';
       el.classList.add('opacity-50');
     });
-    el.addEventListener('dragend', () => el.classList.remove('opacity-50'));
+    el.addEventListener('dragend', () => {
+      el.classList.remove('opacity-50');
+      this.clearDropIndicator();
+    });
 
     // Delete block.
     el.querySelector('.te-block-del').addEventListener('click', (e) => {
@@ -288,21 +358,28 @@ Chronicle.register('template-editor', {
     return el;
   },
 
-  handleDrop(e, targetRowIdx, targetColIdx) {
+  handleDrop(e, targetRowIdx, targetColIdx, insertIdx) {
     let data;
     try {
       data = JSON.parse(e.dataTransfer.getData('text/plain'));
     } catch { return; }
 
     if (data.source === 'palette') {
-      // Add new block from palette.
+      // Add new block from palette at the indicated position.
       const block = { id: this.uid('blk'), type: data.type, config: {} };
-      this.layout.rows[targetRowIdx].columns[targetColIdx].blocks.push(block);
+      this.layout.rows[targetRowIdx].columns[targetColIdx].blocks.splice(insertIdx, 0, block);
     } else if (data.source === 'canvas') {
-      // Move existing block.
+      // Moving within the same column — adjust index if moving down.
+      const sameCol = data.rowIdx === targetRowIdx && data.colIdx === targetColIdx;
       const srcBlocks = this.layout.rows[data.rowIdx].columns[data.colIdx].blocks;
+      // Remove from source first.
       srcBlocks.splice(data.blockIdx, 1);
-      this.layout.rows[targetRowIdx].columns[targetColIdx].blocks.push(data.block);
+      // If same column and the source was above the target, adjust index.
+      let adjustedIdx = insertIdx;
+      if (sameCol && data.blockIdx < insertIdx) {
+        adjustedIdx--;
+      }
+      this.layout.rows[targetRowIdx].columns[targetColIdx].blocks.splice(adjustedIdx, 0, data.block);
     }
 
     this.markDirty();
@@ -311,7 +388,7 @@ Chronicle.register('template-editor', {
 
   addRow(widths) {
     const rowId = this.uid('row');
-    const columns = widths.map((w, i) => ({
+    const columns = widths.map((w) => ({
       id: this.uid('col'),
       width: w,
       blocks: [],
@@ -386,7 +463,10 @@ Chronicle.register('template-editor', {
     try {
       const res = await fetch(this.endpoint, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': this.csrfToken,
+        },
         body: JSON.stringify({ layout: this.layout }),
       });
 
@@ -412,3 +492,11 @@ Chronicle.register('template-editor', {
     }
   },
 });
+
+// Inject the pulse animation for drop indicators.
+if (!document.getElementById('te-styles')) {
+  const style = document.createElement('style');
+  style.id = 'te-styles';
+  style.textContent = `@keyframes te-pulse { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.4; } }`;
+  document.head.appendChild(style);
+}

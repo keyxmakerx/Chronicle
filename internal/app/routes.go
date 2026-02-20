@@ -127,8 +127,9 @@ func (a *App) RegisterRoutes() {
 	mediaHandler := media.NewHandler(mediaService)
 	media.RegisterRoutes(e, mediaHandler, authService, a.Config.Upload.MaxSize)
 
-	// Admin plugin: site-wide management (users, campaigns, SMTP settings).
+	// Admin plugin: site-wide management (users, campaigns, SMTP settings, storage).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
+	adminHandler.SetMediaDeps(mediaRepo, mediaService, a.Config.Upload.MaxSize)
 	admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
 
 	// Dashboard redirects to campaigns list for authenticated users.
