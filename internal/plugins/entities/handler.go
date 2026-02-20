@@ -503,10 +503,16 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 	// Merge type-level fields with per-entity overrides for effective field list.
 	effectiveFields := MergeFields(et.Fields, entity.FieldOverrides)
 
+	// Default to empty overrides so the frontend always gets a valid object.
+	overrides := entity.FieldOverrides
+	if overrides == nil {
+		overrides = &FieldOverrides{}
+	}
+
 	response := map[string]any{
 		"fields":          effectiveFields,
 		"fields_data":     entity.FieldsData,
-		"field_overrides": entity.FieldOverrides,
+		"field_overrides": overrides,
 		"type_fields":     et.Fields,
 	}
 	return c.JSON(http.StatusOK, response)

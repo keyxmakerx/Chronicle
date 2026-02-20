@@ -135,7 +135,10 @@ func (h *Handler) ToggleKey(c echo.Context) error {
 	}
 
 	cc := campaigns.GetCampaignContext(c)
-	if middleware.IsHTMX(c) && cc != nil {
+	if cc == nil {
+		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+	}
+	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID+"/api-keys")
 		return c.NoContent(http.StatusOK)
 	}
@@ -154,7 +157,10 @@ func (h *Handler) RevokeKey(c echo.Context) error {
 	}
 
 	cc := campaigns.GetCampaignContext(c)
-	if middleware.IsHTMX(c) && cc != nil {
+	if cc == nil {
+		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+	}
+	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID+"/api-keys")
 		return c.NoContent(http.StatusOK)
 	}

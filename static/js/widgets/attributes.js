@@ -360,7 +360,7 @@ Chronicle.register('attributes', {
         nameInput.value = f.label || '';
         nameInput.addEventListener('input', function () {
           f.label = nameInput.value;
-          f.key = nameInput.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+          f.key = nameInput.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'custom_field';
         });
         row.appendChild(nameInput);
 

@@ -100,28 +100,24 @@ templ entityBlock(block TemplateBlock, cc *campaigns.CampaignContext, entity *En
 		// Hidden from this user.
 	} else if blockMinHeightStyle(block) != "" {
 		<div style={ blockMinHeightStyle(block) }>
-			if blockVisibility(block) == "dm_only" {
-				<div class="relative">
-					<div class="absolute top-1 right-1 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-medium">
-						<i class="fa-solid fa-lock text-[9px]"></i> DM Only
-					</div>
-					@entityBlockInner(block, cc, entity, entityType, csrfToken)
-				</div>
-			} else {
-				@entityBlockInner(block, cc, entity, entityType, csrfToken)
-			}
+			@entityBlockWithBadge(block, cc, entity, entityType, csrfToken)
 		</div>
 	} else {
-		if blockVisibility(block) == "dm_only" {
-			<div class="relative">
-				<div class="absolute top-1 right-1 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-medium">
-					<i class="fa-solid fa-lock text-[9px]"></i> DM Only
-				</div>
-				@entityBlockInner(block, cc, entity, entityType, csrfToken)
+		@entityBlockWithBadge(block, cc, entity, entityType, csrfToken)
+	}
+}
+
+// entityBlockWithBadge renders the block content with an optional DM Only badge.
+templ entityBlockWithBadge(block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
+	if blockVisibility(block) == "dm_only" {
+		<div class="relative">
+			<div class="absolute top-1 right-1 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-medium">
+				<i class="fa-solid fa-lock text-[9px]"></i> DM Only
 			</div>
-		} else {
 			@entityBlockInner(block, cc, entity, entityType, csrfToken)
-		}
+		</div>
+	} else {
+		@entityBlockInner(block, cc, entity, entityType, csrfToken)
 	}
 }
 

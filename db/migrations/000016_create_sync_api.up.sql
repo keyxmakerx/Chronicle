@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS api_keys (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- API request log: records every API call for auditing and monitoring.
--- Partitioned by date for efficient cleanup of old entries.
+-- No foreign key to api_keys — logs are retained after key deletion for audit trail.
+-- Old entries can be cleaned up with periodic DELETE WHERE created_at < NOW() - INTERVAL 90 DAY.
 CREATE TABLE IF NOT EXISTS api_request_log (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY,
     api_key_id  INT          NOT NULL,                            -- Which key was used.
