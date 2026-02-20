@@ -1,6 +1,7 @@
 package syncapi
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -89,8 +90,10 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 			c.Set(apiKeyContextKey, key)
 
 			// Update last-used timestamp (fire-and-forget).
+			// Use background context since the request context may be cancelled
+			// before the goroutine completes.
 			go func() {
-				_ = service.UpdateKeyLastUsed(ctx, key.ID, ip)
+				_ = service.UpdateKeyLastUsed(context.Background(), key.ID, ip)
 			}()
 
 			// Execute the handler and log the request.
@@ -114,7 +117,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 				errMsg = &msg
 			}
 			go func() {
-				_ = service.LogRequest(ctx, &APIRequestLog{
+				_ = service.LogRequest(context.Background(), &APIRequestLog{
 					APIKeyID:     key.ID,
 					CampaignID:   key.CampaignID,
 					UserID:       key.UserID,
