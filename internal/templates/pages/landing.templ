@@ -3,20 +3,83 @@
 
 package pages
 
-import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+import (
+	"fmt"
+	"math"
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// relativeTime formats a time.Time as a human-readable relative string
+// (e.g., "2 hours ago", "3 days ago"). Used for campaign card timestamps.
+func relativeTime(t time.Time) string {
+	d := time.Since(t)
+
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		mins := int(math.Floor(d.Minutes()))
+		if mins == 1 {
+			return "1 minute ago"
+		}
+		return fmt.Sprintf("%d minutes ago", mins)
+	case d < 24*time.Hour:
+		hours := int(math.Floor(d.Hours()))
+		if hours == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", hours)
+	case d < 30*24*time.Hour:
+		days := int(math.Floor(d.Hours() / 24))
+		if days == 1 {
+			return "1 day ago"
+		}
+		return fmt.Sprintf("%d days ago", days)
+	case d < 365*24*time.Hour:
+		months := int(math.Floor(d.Hours() / 24 / 30))
+		if months == 1 {
+			return "1 month ago"
+		}
+		return fmt.Sprintf("%d months ago", months)
+	default:
+		years := int(math.Floor(d.Hours() / 24 / 365))
+		if years == 1 {
+			return "1 year ago"
+		}
+		return fmt.Sprintf("%d years ago", years)
+	}
+}
+
+// truncateDescription trims a description string to maxLen characters,
+// appending an ellipsis if truncated. Returns the empty string for nil input.
+func truncateDescription(desc *string, maxLen int) string {
+	if desc == nil || *desc == "" {
+		return ""
+	}
+	s := *desc
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
 
 // Landing renders the public landing page shown to unauthenticated users.
-templ Landing() {
+// When public campaigns are available, they are displayed below the hero section.
+templ Landing(publicCampaigns []campaigns.Campaign) {
 	@layouts.Base("Welcome") {
-		<div class="min-h-screen flex items-center justify-center px-4">
+		<!-- Hero section -->
+		<div class="flex items-center justify-center px-4 pt-16 pb-12 dark:bg-gray-950">
 			<div class="text-center max-w-xl">
 				<!-- Logo mark -->
-				<div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-accent/10 mb-6">
+				<div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-accent/10 dark:bg-accent/20 mb-6">
 					<i class="fa-solid fa-book-open text-2xl text-accent"></i>
 				</div>
 
-				<h1 class="text-5xl font-bold text-gray-900 tracking-tight mb-4">Chronicle</h1>
-				<p class="text-lg text-gray-500 mb-10 leading-relaxed max-w-md mx-auto">
+				<h1 class="text-5xl font-bold text-gray-900 dark:text-gray-100 tracking-tight mb-4">Chronicle</h1>
+				<p class="text-lg text-gray-500 dark:text-gray-400 mb-10 leading-relaxed max-w-md mx-auto">
 					A self-hosted worldbuilding platform for tabletop RPG campaigns.
 					Organize characters, locations, lore, and more.
 				</p>
@@ -25,10 +88,63 @@ templ Landing() {
 					<a href="/register" class="btn-secondary text-base px-6 py-2.5">Create Account</a>
 				</div>
 
-				<p class="mt-12 text-xs text-gray-400">
+				<p class="mt-12 text-xs text-gray-400 dark:text-gray-500">
 					Self-hosted &middot; Open source &middot; Your data, your server
 				</p>
 			</div>
 		</div>
+
+		<!-- Public campaigns section -->
+		<div class="max-w-6xl mx-auto px-4 pb-16 dark:bg-gray-950">
+			<div class="border-t border-gray-200 dark:border-gray-800 pt-12">
+				<h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-100 text-center mb-2">
+					Discover Public Campaigns
+				</h2>
+				<p class="text-sm text-gray-500 dark:text-gray-400 text-center mb-8">
+					Explore worlds created by the community
+				</p>
+
+				if len(publicCampaigns) == 0 {
+					<div class="text-center py-12">
+						<div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
+							<i class="fa-solid fa-compass text-gray-400 dark:text-gray-500"></i>
+						</div>
+						<p class="text-sm text-gray-400 dark:text-gray-500">
+							No public campaigns yet. Be the first to share your world!
+						</p>
+					</div>
+				} else {
+					<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+						for _, campaign := range publicCampaigns {
+							@landingCampaignCard(&campaign)
+						}
+					</div>
+				}
+			</div>
+		</div>
 	}
+}
+
+// landingCampaignCard renders a single campaign card for the public landing page.
+// Shows the campaign name, a truncated description, and relative last-updated time.
+templ landingCampaignCard(campaign *campaigns.Campaign) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", campaign.ID)) }
+		class="group block rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-sm hover:shadow-md hover:border-accent/40 dark:hover:border-accent/40 transition-all duration-200"
+	>
+		<h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-accent transition-colors">
+			{ campaign.Name }
+		</h3>
+		if truncateDescription(campaign.Description, 120) != "" {
+			<p class="mt-2 text-sm text-gray-600 dark:text-gray-400 line-clamp-3">
+				{ truncateDescription(campaign.Description, 120) }
+			</p>
+		} else {
+			<p class="mt-2 text-sm text-gray-400 dark:text-gray-500 italic">No description</p>
+		}
+		<div class="mt-4 flex items-center text-xs text-gray-400 dark:text-gray-500">
+			<i class="fa-regular fa-clock mr-1.5"></i>
+			Updated { relativeTime(campaign.UpdatedAt) }
+		</div>
+	</a>
 }

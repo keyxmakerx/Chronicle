@@ -10,13 +10,16 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
+	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
+	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
+	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
 
 // entityTypeListerAdapter wraps entities.EntityService to implement the
@@ -53,11 +56,6 @@ func (a *App) RegisterRoutes() {
 	e := a.Echo
 
 	// --- Public Routes (no auth required) ---
-
-	// Landing page.
-	e.GET("/", func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, pages.Landing())
-	})
 
 	// Health check endpoint for Docker/Cosmos health monitoring.
 	// Pings both MariaDB and Redis to report actual infrastructure health.
@@ -115,6 +113,17 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
 
+	// Landing page -- registered after campaignService exists so we can
+	// fetch public campaigns for the discover section.
+	e.GET("/", func(c echo.Context) error {
+		publicCampaigns, err := campaignService.ListPublic(c.Request().Context(), 12)
+		if err != nil {
+			slog.Warn("failed to load public campaigns for landing page", slog.Any("error", err))
+			publicCampaigns = nil
+		}
+		return middleware.Render(c, http.StatusOK, pages.Landing(publicCampaigns))
+	})
+
 	// Entity routes (campaign-scoped, registered after campaign service exists).
 	entityHandler := entities.NewHandler(entityService)
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
@@ -130,7 +139,26 @@ func (a *App) RegisterRoutes() {
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings, storage).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
 	adminHandler.SetMediaDeps(mediaRepo, mediaService, a.Config.Upload.MaxSize)
-	admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
+	adminGroup := admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
+
+	// Settings plugin: editable storage limits (global, per-user, per-campaign).
+	// Registers on the admin group since all settings routes require site admin.
+	settingsRepo := settings.NewSettingsRepository(a.DB)
+	settingsService := settings.NewSettingsService(settingsRepo)
+	settingsHandler := settings.NewHandler(settingsService)
+	settings.RegisterRoutes(adminGroup, settingsHandler)
+
+	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
+	tagRepo := tags.NewTagRepository(a.DB)
+	tagService := tags.NewTagService(tagRepo)
+	tagHandler := tags.NewHandler(tagService)
+	tags.RegisterRoutes(e, tagHandler, campaignService, authService)
+
+	// Audit plugin: campaign activity logging and history.
+	auditRepo := audit.NewAuditRepository(a.DB)
+	auditService := audit.NewAuditService(auditRepo)
+	auditHandler := audit.NewHandler(auditService)
+	audit.RegisterRoutes(e, auditHandler, campaignService, authService)
 
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {

@@ -122,6 +122,7 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Rate limiting middleware (auth + uploads)
 - [x] IDOR protection on all entity endpoints
 - [x] HSTS security header
+- [x] Site settings plugin (editable storage limits, per-user/campaign overrides)
 - [x] Dynamic sidebar with entity types from DB
 - [x] Entity image upload pipeline
 - [x] UI upgrade with Font Awesome icons
@@ -130,6 +131,7 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Unified entity type config widget (sidebar + layout + color in one UI)
 - [x] Entity type color picker (PUT color API + hex validation)
 - [x] Public campaign support (is_public flag, migration 000008, OptionalAuth)
+- [x] Public campaigns on landing page (ListPublic repo/service, campaign cards grid)
 - [x] Apply layout_json to entity show page rendering
 - [x] Visual template editor (drag-and-drop grid page builder)
 - [x] Admin panel sidebar nav with modules section

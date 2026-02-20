@@ -8,6 +8,8 @@
 // ============================================================================
 
 module.exports = {
+  // Toggle dark mode by adding/removing the "dark" class on <html>.
+  darkMode: 'class',
   content: [
     // Templ template files (primary source of Tailwind classes)
     "./internal/**/*.templ",

@@ -56,7 +56,10 @@ type TemplateColumn struct {
 }
 
 // TemplateBlock is a content component placed inside a column.
-// Valid types: "title", "image", "entry", "attributes", "details", "divider".
+// Valid types: "title", "image", "entry", "attributes", "details", "divider",
+// "two_column", "three_column", "tabs", "section".
+// Container types (two_column, three_column, tabs, section) hold sub-blocks
+// in their Config map -- see template_editor.js for the config schemas.
 type TemplateBlock struct {
 	ID     string         `json:"id"`
 	Type   string         `json:"type"`

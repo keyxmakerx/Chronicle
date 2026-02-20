@@ -14,9 +14,48 @@
 
 /* --- Custom Base Styles --- */
 @layer base {
+  /* --------------------------------------------------------------------------
+   * CSS Custom Properties for theming.
+   * Light mode values live on :root. Dark mode overrides live on .dark.
+   * Components can reference these variables for colours that respond to the
+   * active theme without needing per-component dark: overrides.
+   * ------------------------------------------------------------------------ */
+  :root {
+    --color-bg-primary:    #f9fafb;  /* gray-50  */
+    --color-bg-secondary:  #ffffff;
+    --color-bg-tertiary:   #f3f4f6;  /* gray-100 */
+    --color-text-primary:  #111827;  /* gray-900 */
+    --color-text-secondary:#6b7280;  /* gray-500 */
+    --color-text-muted:    #9ca3af;  /* gray-400 */
+    --color-border:        #e5e7eb;  /* gray-200 */
+    --color-border-light:  #f3f4f6;  /* gray-100 */
+    --color-card-bg:       #ffffff;
+    --color-input-bg:      #ffffff;
+    --color-input-border:  #d1d5db;  /* gray-300 */
+    --color-accent:        #6366f1;  /* indigo-500 */
+    --color-sidebar-bg:    #1a1c23;  /* always dark */
+  }
+
+  .dark {
+    --color-bg-primary:    #111827;  /* gray-900 */
+    --color-bg-secondary:  #1f2937;  /* gray-800 */
+    --color-bg-tertiary:   #374151;  /* gray-700 */
+    --color-text-primary:  #f9fafb;  /* gray-50  */
+    --color-text-secondary:#9ca3af;  /* gray-400 */
+    --color-text-muted:    #6b7280;  /* gray-500 */
+    --color-border:        #374151;  /* gray-700 */
+    --color-border-light:  #4b5563;  /* gray-600 */
+    --color-card-bg:       #1f2937;  /* gray-800 */
+    --color-input-bg:      #111827;  /* gray-900 */
+    --color-input-border:  #4b5563;  /* gray-600 */
+    --color-accent:        #6366f1;  /* indigo-500 -- same both modes */
+    --color-sidebar-bg:    #1a1c23;  /* always dark */
+  }
+
   /* Default body styling */
   body {
-    @apply bg-gray-50 text-gray-900 font-sans antialiased;
+    @apply bg-gray-50 text-gray-900 font-sans antialiased
+           dark:bg-gray-900 dark:text-gray-100;
   }
 
   /* Headings */
@@ -39,7 +78,8 @@
   }
   .btn-secondary {
     @apply btn bg-gray-200 text-gray-700 hover:bg-gray-300
-           focus:ring-gray-400;
+           focus:ring-gray-400
+           dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600;
   }
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700
@@ -52,7 +92,8 @@
 
   /* ---- Cards ---- */
   .card {
-    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-4;
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-4
+           dark:bg-gray-800 dark:border-gray-700;
   }
 
   /* ---- Form Inputs ---- */
@@ -60,10 +101,12 @@
     @apply w-full px-3 py-2 border border-gray-300 rounded-md text-sm
            bg-white text-gray-900 placeholder-gray-400
            focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent
-           transition-colors duration-150;
+           transition-colors duration-150
+           dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-500;
   }
   .input:disabled {
-    @apply bg-gray-100 text-gray-500 cursor-not-allowed;
+    @apply bg-gray-100 text-gray-500 cursor-not-allowed
+           dark:bg-gray-800 dark:text-gray-500;
   }
 
   /* ---- Links ---- */
@@ -71,7 +114,8 @@
     @apply text-accent hover:text-accent-hover transition-colors duration-150;
   }
   .link-muted {
-    @apply text-gray-500 hover:text-gray-700 transition-colors duration-150;
+    @apply text-gray-500 hover:text-gray-700 transition-colors duration-150
+           dark:text-gray-400 dark:hover:text-gray-200;
   }
   .link-danger {
     @apply text-red-600 hover:text-red-800 transition-colors duration-150;
@@ -85,19 +129,24 @@
     @apply badge bg-accent/10 text-accent;
   }
   .badge-gray {
-    @apply badge bg-gray-100 text-gray-600;
+    @apply badge bg-gray-100 text-gray-600
+           dark:bg-gray-700 dark:text-gray-300;
   }
   .badge-green {
-    @apply badge bg-green-100 text-green-700;
+    @apply badge bg-green-100 text-green-700
+           dark:bg-green-900/30 dark:text-green-400;
   }
   .badge-amber {
-    @apply badge bg-amber-100 text-amber-700;
+    @apply badge bg-amber-100 text-amber-700
+           dark:bg-amber-900/30 dark:text-amber-400;
   }
   .badge-red {
-    @apply badge bg-red-100 text-red-700;
+    @apply badge bg-red-100 text-red-700
+           dark:bg-red-900/30 dark:text-red-400;
   }
   .badge-blue {
-    @apply badge bg-blue-100 text-blue-700;
+    @apply badge bg-blue-100 text-blue-700
+           dark:bg-blue-900/30 dark:text-blue-400;
   }
 
   /* ---- Alerts ---- */
@@ -105,16 +154,20 @@
     @apply px-4 py-3 rounded-md text-sm;
   }
   .alert-error {
-    @apply alert bg-red-50 border border-red-200 text-red-700;
+    @apply alert bg-red-50 border border-red-200 text-red-700
+           dark:bg-red-900/20 dark:border-red-800 dark:text-red-400;
   }
   .alert-success {
-    @apply alert bg-green-50 border border-green-200 text-green-700;
+    @apply alert bg-green-50 border border-green-200 text-green-700
+           dark:bg-green-900/20 dark:border-green-800 dark:text-green-400;
   }
   .alert-warning {
-    @apply alert bg-amber-50 border border-amber-200 text-amber-700;
+    @apply alert bg-amber-50 border border-amber-200 text-amber-700
+           dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400;
   }
   .alert-info {
-    @apply alert bg-blue-50 border border-blue-200 text-blue-700;
+    @apply alert bg-blue-50 border border-blue-200 text-blue-700
+           dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400;
   }
 
   /* ---- Empty State ---- */
@@ -122,24 +175,30 @@
     @apply flex flex-col items-center justify-center py-12 px-4 text-center;
   }
   .empty-state__icon {
-    @apply w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4;
+    @apply w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4
+           dark:bg-gray-700;
   }
   .empty-state__title {
-    @apply text-lg font-semibold text-gray-900 mb-1;
+    @apply text-lg font-semibold text-gray-900 mb-1
+           dark:text-gray-100;
   }
   .empty-state__description {
-    @apply text-sm text-gray-500 max-w-sm;
+    @apply text-sm text-gray-500 max-w-sm
+           dark:text-gray-400;
   }
 
   /* ---- Tables ---- */
   .table-header {
-    @apply bg-gray-50 border-b border-gray-200;
+    @apply bg-gray-50 border-b border-gray-200
+           dark:bg-gray-800 dark:border-gray-700;
   }
   .table-header th {
-    @apply text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider;
+    @apply text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider
+           dark:text-gray-400;
   }
   .table-row {
-    @apply hover:bg-gray-50 transition-colors;
+    @apply hover:bg-gray-50 transition-colors
+           dark:hover:bg-gray-800;
   }
   .table-row td {
     @apply px-4 py-3;
@@ -148,16 +207,19 @@
   /* --- Chronicle Editor Widget --- */
 
   .chronicle-editor {
-    @apply border border-gray-200 rounded-lg bg-white overflow-hidden;
+    @apply border border-gray-200 rounded-lg bg-white overflow-hidden
+           dark:bg-gray-800 dark:border-gray-700;
   }
 
   .chronicle-editor__toolbar {
-    @apply flex items-center flex-wrap gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-gray-200;
+    @apply flex items-center flex-wrap gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-gray-200
+           dark:bg-gray-900 dark:border-gray-700;
   }
 
   .chronicle-editor__btn {
     @apply w-8 h-8 flex items-center justify-center rounded text-sm text-gray-600
-           hover:bg-gray-200 hover:text-gray-900 transition-colors;
+           hover:bg-gray-200 hover:text-gray-900 transition-colors
+           dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100;
   }
 
   .chronicle-editor__btn--active {
@@ -166,7 +228,8 @@
 
   .chronicle-editor__btn--save {
     @apply ml-auto px-3 py-1 w-auto text-xs font-semibold rounded-md
-           bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors;
+           bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors
+           dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600;
   }
 
   /* Highlight the save button when there are unsaved changes. */
@@ -175,7 +238,8 @@
   }
 
   .chronicle-editor__separator {
-    @apply w-px h-5 bg-gray-300 mx-1;
+    @apply w-px h-5 bg-gray-300 mx-1
+           dark:bg-gray-600;
   }
 
   .chronicle-editor__content .tiptap {
@@ -183,12 +247,14 @@
   }
 
   .chronicle-editor__content .tiptap p.is-editor-empty:first-child::before {
-    @apply text-gray-400 float-left h-0 pointer-events-none;
+    @apply text-gray-400 float-left h-0 pointer-events-none
+           dark:text-gray-500;
     content: attr(data-placeholder);
   }
 
   .chronicle-editor__status {
-    @apply px-3 py-1.5 text-xs border-t border-gray-100;
+    @apply px-3 py-1.5 text-xs border-t border-gray-100
+           dark:border-gray-700;
   }
   .chronicle-editor__status--saved { @apply text-green-600; }
   .chronicle-editor__status--saving { @apply text-gray-500; }

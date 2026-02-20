@@ -1,0 +1,290 @@
+// activity.templ renders the campaign activity page showing aggregate stats
+// and a chronological timeline of user actions within the campaign.
+
+package audit
+
+import (
+	"fmt"
+	"time"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// actionLabel returns a human-readable description for an audit action.
+func actionLabel(action string) string {
+	switch action {
+	case ActionEntityCreated:
+		return "created"
+	case ActionEntityUpdated:
+		return "updated"
+	case ActionEntityDeleted:
+		return "deleted"
+	case ActionMemberJoined:
+		return "joined the campaign"
+	case ActionMemberLeft:
+		return "left the campaign"
+	case ActionMemberRoleChanged:
+		return "changed role for"
+	case ActionCampaignUpdated:
+		return "updated campaign settings"
+	case ActionTagCreated:
+		return "created tag"
+	case ActionTagDeleted:
+		return "deleted tag"
+	default:
+		return action
+	}
+}
+
+// actionColor returns Tailwind color classes for an action's timeline dot.
+func actionColor(action string) string {
+	switch action {
+	case ActionEntityCreated:
+		return "bg-emerald-400 dark:bg-emerald-500"
+	case ActionEntityUpdated:
+		return "bg-blue-400 dark:bg-blue-500"
+	case ActionEntityDeleted:
+		return "bg-red-400 dark:bg-red-500"
+	case ActionMemberJoined:
+		return "bg-violet-400 dark:bg-violet-500"
+	case ActionMemberLeft:
+		return "bg-orange-400 dark:bg-orange-500"
+	case ActionMemberRoleChanged:
+		return "bg-amber-400 dark:bg-amber-500"
+	case ActionCampaignUpdated:
+		return "bg-indigo-400 dark:bg-indigo-500"
+	case ActionTagCreated:
+		return "bg-teal-400 dark:bg-teal-500"
+	case ActionTagDeleted:
+		return "bg-rose-400 dark:bg-rose-500"
+	default:
+		return "bg-gray-400 dark:bg-gray-500"
+	}
+}
+
+// relativeTime formats a timestamp as a human-readable relative time string.
+func relativeTime(t time.Time) string {
+	now := time.Now().UTC()
+	diff := now.Sub(t)
+
+	switch {
+	case diff < time.Minute:
+		return "just now"
+	case diff < time.Hour:
+		mins := int(diff.Minutes())
+		if mins == 1 {
+			return "1 minute ago"
+		}
+		return fmt.Sprintf("%d minutes ago", mins)
+	case diff < 24*time.Hour:
+		hours := int(diff.Hours())
+		if hours == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", hours)
+	case diff < 7*24*time.Hour:
+		days := int(diff.Hours() / 24)
+		if days == 1 {
+			return "1 day ago"
+		}
+		return fmt.Sprintf("%d days ago", days)
+	case diff < 30*24*time.Hour:
+		weeks := int(diff.Hours() / 24 / 7)
+		if weeks == 1 {
+			return "1 week ago"
+		}
+		return fmt.Sprintf("%d weeks ago", weeks)
+	default:
+		return t.Format("Jan 2, 2006")
+	}
+}
+
+// avatarInitial returns the first character of a name, uppercased, for
+// use as an avatar placeholder.
+func avatarInitial(name string) string {
+	if name == "" {
+		return "?"
+	}
+	return string([]rune(name)[0:1])
+}
+
+// formatWordCount formats a word count with thousands separators for display.
+func formatWordCount(words int64) string {
+	if words < 1000 {
+		return fmt.Sprintf("%d", words)
+	}
+	if words < 1000000 {
+		return fmt.Sprintf("%.1fK", float64(words)/1000)
+	}
+	return fmt.Sprintf("%.1fM", float64(words)/1000000)
+}
+
+// ActivityPage renders the campaign activity page with stats and timeline.
+templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries []AuditEntry, total, page, itemsPerPage int) {
+	@layouts.App(cc.Campaign.Name + " - Activity") {
+		<div class="max-w-4xl mx-auto space-y-6">
+			<!-- Page Header -->
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Activity</h1>
+					<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Recent changes in { cc.Campaign.Name }</p>
+				</div>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
+					class="btn-secondary text-sm"
+				>
+					Back
+				</a>
+			</div>
+
+			<!-- Campaign Stats -->
+			if stats != nil {
+				<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+					<!-- Total Entities -->
+					<div class="card">
+						<div class="flex items-center justify-between">
+							<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Entities</p>
+							<span class="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
+								<svg class="w-4 h-4 text-indigo-500 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+								</svg>
+							</span>
+						</div>
+						<p class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">{ fmt.Sprintf("%d", stats.TotalEntities) }</p>
+					</div>
+					<!-- Word Count -->
+					<div class="card">
+						<div class="flex items-center justify-between">
+							<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Words</p>
+							<span class="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+								<svg class="w-4 h-4 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+								</svg>
+							</span>
+						</div>
+						<p class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">~{ formatWordCount(stats.TotalWords) }</p>
+					</div>
+					<!-- Active Editors -->
+					<div class="card">
+						<div class="flex items-center justify-between">
+							<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Active Editors</p>
+							<span class="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
+								<svg class="w-4 h-4 text-emerald-500 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"></path>
+								</svg>
+							</span>
+						</div>
+						<p class="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">{ fmt.Sprintf("%d", stats.ActiveEditors) }</p>
+						<p class="text-xs text-gray-400 dark:text-gray-500 mt-1">last 30 days</p>
+					</div>
+					<!-- Last Edited -->
+					<div class="card">
+						<div class="flex items-center justify-between">
+							<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Last Edited</p>
+							<span class="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
+								<svg class="w-4 h-4 text-amber-500 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+								</svg>
+							</span>
+						</div>
+						if stats.LastEditedAt != nil {
+							<p class="text-lg font-bold text-gray-900 dark:text-gray-100 mt-2">{ relativeTime(*stats.LastEditedAt) }</p>
+						} else {
+							<p class="text-lg font-medium text-gray-400 dark:text-gray-500 mt-2">No activity</p>
+						}
+					</div>
+				</div>
+			}
+
+			<!-- Activity Timeline -->
+			<div>
+				<h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+					Recent Activity
+					if total > 0 {
+						<span class="text-sm font-normal text-gray-400 dark:text-gray-500 ml-2">({ fmt.Sprintf("%d", total) } total)</span>
+					}
+				</h2>
+
+				if len(entries) == 0 {
+					<div class="card text-center py-12">
+						<svg class="w-12 h-12 text-gray-200 dark:text-gray-700 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+						</svg>
+						<p class="text-sm text-gray-400 dark:text-gray-500">No activity recorded yet.</p>
+						<p class="text-xs text-gray-300 dark:text-gray-600 mt-1">Actions will appear here as members make changes.</p>
+					</div>
+				} else {
+					<div class="relative">
+						<!-- Timeline vertical line -->
+						<div class="absolute left-5 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700"></div>
+
+						<div class="space-y-1">
+							for _, entry := range entries {
+								<div class="relative flex items-start gap-4 py-3 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
+									<!-- Timeline dot -->
+									<div class="relative z-10 flex-shrink-0">
+										<div class={ "w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white", actionColor(entry.Action) } title={ entry.UserName }>
+											{ avatarInitial(entry.UserName) }
+										</div>
+									</div>
+
+									<!-- Entry content -->
+									<div class="flex-1 min-w-0 pt-0.5">
+										<div class="flex items-baseline flex-wrap gap-x-1">
+											<span class="font-semibold text-sm text-gray-900 dark:text-gray-100">{ entry.UserName }</span>
+											<span class="text-sm text-gray-500 dark:text-gray-400">{ actionLabel(entry.Action) }</span>
+											if entry.EntityName != "" && entry.EntityID != "" {
+												<a
+													href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", entry.CampaignID, entry.EntityID)) }
+													class="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline truncate max-w-[200px] inline-block align-bottom"
+													title={ entry.EntityName }
+												>
+													{ entry.EntityName }
+												</a>
+											} else if entry.EntityName != "" {
+												<span class="text-sm font-medium text-gray-700 dark:text-gray-300">{ entry.EntityName }</span>
+											}
+											if entry.EntityType != "" && entry.Action != ActionMemberJoined && entry.Action != ActionMemberLeft && entry.Action != ActionCampaignUpdated {
+												<span class="text-xs text-gray-400 dark:text-gray-500">({ entry.EntityType })</span>
+											}
+										</div>
+										<p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{ relativeTime(entry.CreatedAt) }</p>
+									</div>
+								</div>
+							}
+						</div>
+					</div>
+
+					<!-- Pagination -->
+					if total > itemsPerPage {
+						<div class="flex justify-center items-center gap-4 mt-6 pt-4 border-t border-gray-100 dark:border-gray-800">
+							if page > 1 {
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/activity?page=%d", cc.Campaign.ID, page-1)) }
+									class="btn-secondary text-sm"
+								>
+									Previous
+								</a>
+							} else {
+								<span class="btn text-sm text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50">Previous</span>
+							}
+							<span class="text-sm text-gray-500 dark:text-gray-400">
+								Page { fmt.Sprintf("%d", page) } of { fmt.Sprintf("%d", (total+itemsPerPage-1)/itemsPerPage) }
+							</span>
+							if page*itemsPerPage < total {
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/activity?page=%d", cc.Campaign.ID, page+1)) }
+									class="btn-secondary text-sm"
+								>
+									Next
+								</a>
+							} else {
+								<span class="btn text-sm text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50">Next</span>
+							}
+						</div>
+					}
+				}
+			</div>
+		</div>
+	}
+}

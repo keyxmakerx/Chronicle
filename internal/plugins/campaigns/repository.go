@@ -18,6 +18,7 @@ type CampaignRepository interface {
 	FindBySlug(ctx context.Context, slug string) (*Campaign, error)
 	ListByUser(ctx context.Context, userID string, opts ListOptions) ([]Campaign, int, error)
 	ListAll(ctx context.Context, opts ListOptions) ([]Campaign, int, error)
+	ListPublic(ctx context.Context, limit int) ([]Campaign, error)
 	Update(ctx context.Context, campaign *Campaign) error
 	Delete(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, slug string) (bool, error)
@@ -189,6 +190,34 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 		campaigns = append(campaigns, c)
 	}
 	return campaigns, total, rows.Err()
+}
+
+// ListPublic returns public campaigns ordered by most recently updated.
+// Used for the public landing page to showcase discoverable campaigns.
+func (r *campaignRepository) ListPublic(ctx context.Context, limit int) ([]Campaign, error) {
+	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, created_by, created_at, updated_at
+	          FROM campaigns WHERE is_public = 1
+	          ORDER BY updated_at DESC LIMIT ?`
+
+	rows, err := r.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("listing public campaigns: %w", err)
+	}
+	defer rows.Close()
+
+	var campaigns []Campaign
+	for rows.Next() {
+		var c Campaign
+		if err := rows.Scan(
+			&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
+			&c.Settings, &c.BackdropPath, &c.SidebarConfig,
+			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning public campaign row: %w", err)
+		}
+		campaigns = append(campaigns, c)
+	}
+	return campaigns, rows.Err()
 }
 
 // Update modifies an existing campaign's name, description, settings, and sidebar config.
