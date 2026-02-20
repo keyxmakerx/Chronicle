@@ -15,6 +15,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
+	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 )
 
@@ -27,6 +28,23 @@ type Handler struct {
 	mediaRepo       media.MediaRepository
 	mediaService    media.MediaService
 	maxUploadSize   int64
+	settingsService settings.SettingsService
+}
+
+// StoragePageData holds all data needed for the combined storage management page.
+type StoragePageData struct {
+	Stats          *media.StorageStats
+	Files          []media.AdminMediaFile
+	TotalFiles     int
+	Page           int
+	PerPage        int
+	MaxUploadSize  int64
+	Global         *settings.GlobalStorageLimits
+	UserLimits     []settings.UserStorageLimitWithName
+	CampaignLimits []settings.CampaignStorageLimitWithName
+	Users          []auth.User
+	Campaigns      []campaigns.Campaign
+	CSRFToken      string
 }
 
 // NewHandler creates a new admin handler.
@@ -44,6 +62,11 @@ func (h *Handler) SetMediaDeps(repo media.MediaRepository, svc media.MediaServic
 	h.mediaRepo = repo
 	h.mediaService = svc
 	h.maxUploadSize = maxUploadSize
+}
+
+// SetSettingsDeps sets the settings service for the combined storage page.
+func (h *Handler) SetSettingsDeps(svc settings.SettingsService) {
+	h.settingsService = svc
 }
 
 // --- Dashboard ---
@@ -230,7 +253,9 @@ func (h *Handler) LeaveCampaign(c echo.Context) error {
 
 // --- Storage ---
 
-// Storage renders the storage management page (GET /admin/storage).
+// Storage renders the combined storage management page (GET /admin/storage).
+// Loads storage stats, files, global settings, overrides, and user/campaign
+// lists for the dropdown selectors.
 func (h *Handler) Storage(c echo.Context) error {
 	if h.mediaRepo == nil {
 		return apperror.NewInternal(nil)
@@ -255,8 +280,36 @@ func (h *Handler) Storage(c echo.Context) error {
 		return err
 	}
 
+	// Load settings data for the combined page.
+	var global *settings.GlobalStorageLimits
+	var userLimits []settings.UserStorageLimitWithName
+	var campaignLimits []settings.CampaignStorageLimitWithName
+	if h.settingsService != nil {
+		global, _ = h.settingsService.GetStorageLimits(ctx)
+		userLimits, _ = h.settingsService.ListUserLimits(ctx)
+		campaignLimits, _ = h.settingsService.ListCampaignLimits(ctx)
+	}
+
+	// Load users and campaigns for override dropdowns.
+	allUsers, _, _ := h.authRepo.ListUsers(ctx, 0, 1000)
+	allCampaigns, _, _ := h.campaignService.ListAll(ctx, campaigns.ListOptions{Page: 1, PerPage: 1000})
+
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, AdminStoragePage(stats, files, total, page, perPage, h.maxUploadSize, csrfToken))
+	data := StoragePageData{
+		Stats:          stats,
+		Files:          files,
+		TotalFiles:     total,
+		Page:           page,
+		PerPage:        perPage,
+		MaxUploadSize:  h.maxUploadSize,
+		Global:         global,
+		UserLimits:     userLimits,
+		CampaignLimits: campaignLimits,
+		Users:          allUsers,
+		Campaigns:      allCampaigns,
+		CSRFToken:      csrfToken,
+	}
+	return middleware.Render(c, http.StatusOK, AdminStoragePage(data))
 }
 
 // DeleteMedia deletes a media file (DELETE /admin/media/:fileID).

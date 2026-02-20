@@ -304,4 +304,9 @@
   .htmx-request.htmx-indicator {
     @apply opacity-100;
   }
+
+  /* Alpine.js cloak — hide elements until Alpine initializes. */
+  [x-cloak] {
+    display: none !important;
+  }
 }

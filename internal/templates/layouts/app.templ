@@ -121,24 +121,13 @@ templ Sidebar() {
 					<a
 						href="/admin/storage"
 						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isExactPath(ctx, "/admin/storage")),
-							templ.KV(sidebarNavInactive, !isExactPath(ctx, "/admin/storage")) }
+							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/storage")),
+							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/storage")) }
 					>
 						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 							<i class="fa-solid fa-hard-drive text-xs"></i>
 						</span>
 						Storage
-					</a>
-					<a
-						href="/admin/storage/settings"
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/storage/settings")),
-							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/storage/settings")) }
-					>
-						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-							<i class="fa-solid fa-sliders text-xs"></i>
-						</span>
-						Storage Settings
 					</a>
 					<a
 						href="/admin/smtp"
