@@ -1,0 +1,365 @@
+// admin_dashboard.templ renders the admin API monitoring dashboard.
+// Shows real-time stats, request graphs, security events, IP blocklist,
+// and comprehensive key management for site administrators.
+
+package syncapi
+
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// timeSeriesJSON serializes time series data for Chart.js.
+func timeSeriesJSON(points []TimeSeriesPoint) string {
+	type chartPoint struct {
+		X string `json:"x"`
+		Y int64  `json:"y"`
+	}
+	var out []chartPoint
+	for _, p := range points {
+		out = append(out, chartPoint{X: p.Timestamp.Format("15:04"), Y: p.Count})
+	}
+	b, _ := json.Marshal(out)
+	return string(b)
+}
+
+// topEntriesJSON serializes top entries for charts.
+func topEntriesJSON(entries []TopEntry) string {
+	b, _ := json.Marshal(entries)
+	return string(b)
+}
+
+// AdminAPIDashboardTempl renders the full admin API monitoring dashboard.
+templ AdminAPIDashboardTempl(data AdminDashboardData) {
+	@layouts.App("API Monitor - Admin") {
+		<div class="max-w-7xl mx-auto space-y-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">API Monitor</h1>
+					<p class="text-sm text-fg-secondary mt-1">
+						Real-time monitoring, security events, and key management for the Sync API.
+					</p>
+				</div>
+				<div class="flex items-center gap-2">
+					<span class="text-xs text-fg-muted">Last 24 hours</span>
+					<button onclick="location.reload()" class="btn-secondary text-sm">
+						<i class="fa-solid fa-refresh mr-1"></i> Refresh
+					</button>
+				</div>
+			</div>
+
+			// Stats overview.
+			if data.Stats != nil {
+				<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+					@adminStatCard("Requests", fmt.Sprintf("%d", data.Stats.TotalRequests), "fa-arrow-right-arrow-left", "bg-blue-50 dark:bg-blue-900/30", "text-blue-500")
+					@adminStatCard("Errors", fmt.Sprintf("%d", data.Stats.TotalErrors), "fa-circle-exclamation", "bg-red-50 dark:bg-red-900/30", "text-red-500")
+					@adminStatCard("Unique IPs", fmt.Sprintf("%d", data.Stats.UniqueIPs), "fa-network-wired", "bg-purple-50 dark:bg-purple-900/30", "text-purple-500")
+					@adminStatCard("Active Keys", fmt.Sprintf("%d", data.Stats.ActiveKeys), "fa-key", "bg-emerald-50 dark:bg-emerald-900/30", "text-emerald-500")
+					@adminStatCard("Security Events", fmt.Sprintf("%d", data.Stats.SecurityEvents), "fa-shield-halved", "bg-amber-50 dark:bg-amber-900/30", "text-amber-500")
+					@adminStatCard("Unresolved", fmt.Sprintf("%d", data.Stats.UnresolvedEvents), "fa-triangle-exclamation", "bg-orange-50 dark:bg-orange-900/30", "text-orange-500")
+					@adminStatCard("Blocked IPs", fmt.Sprintf("%d", data.Stats.BlockedIPs), "fa-ban", "bg-red-50 dark:bg-red-900/30", "text-red-500")
+					@adminStatCard("Avg Latency", fmt.Sprintf("%dms", data.Stats.AvgResponseTimeMs), "fa-gauge-high", "bg-teal-50 dark:bg-teal-900/30", "text-teal-500")
+				</div>
+			}
+
+			// Charts row (request + security time series).
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+				<div class="card p-5">
+					<h3 class="text-sm font-semibold text-fg mb-3">Request Volume (24h)</h3>
+					<div class="h-48" id="request-chart"
+						data-points={ timeSeriesJSON(data.RequestSeries) }>
+						<canvas></canvas>
+					</div>
+				</div>
+				<div class="card p-5">
+					<h3 class="text-sm font-semibold text-fg mb-3">Security Events (24h)</h3>
+					<div class="h-48" id="security-chart"
+						data-points={ timeSeriesJSON(data.SecuritySeries) }>
+						<canvas></canvas>
+					</div>
+				</div>
+			</div>
+
+			// Top tables row.
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+				@topTable("Top IPs", "fa-network-wired", data.TopIPs)
+				@topTable("Top Endpoints", "fa-route", data.TopPaths)
+				@topTable("Top Keys", "fa-key", data.TopKeys)
+			</div>
+
+			// Security events.
+			<div class="card p-6">
+				<div class="flex items-center justify-between mb-4">
+					<h2 class="text-lg font-semibold text-fg">
+						<i class="fa-solid fa-shield-halved text-amber-500 mr-2"></i>
+						Recent Security Events
+					</h2>
+				</div>
+				if len(data.SecurityEvents) > 0 {
+					<div class="overflow-x-auto">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="text-left text-xs text-fg-muted uppercase tracking-wider border-b border-edge">
+									<th class="pb-2 pr-4">Type</th>
+									<th class="pb-2 pr-4">IP</th>
+									<th class="pb-2 pr-4">Time</th>
+									<th class="pb-2 pr-4">Status</th>
+									<th class="pb-2">Action</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-edge">
+								for _, e := range data.SecurityEvents {
+									<tr>
+										<td class="py-2 pr-4">
+											@securityEventBadge(e.EventType)
+										</td>
+										<td class="py-2 pr-4 font-mono text-xs">{ e.IPAddress }</td>
+										<td class="py-2 pr-4 text-xs text-fg-muted">{ e.CreatedAt.Format("Jan 2, 15:04:05") }</td>
+										<td class="py-2 pr-4">
+											if e.Resolved {
+												<span class="badge-green text-xs">Resolved</span>
+											} else {
+												<span class="badge-yellow text-xs">Open</span>
+											}
+										</td>
+										<td class="py-2">
+											if !e.Resolved {
+												<form method="POST" hx-put={ fmt.Sprintf("/admin/api/security/%d/resolve", e.ID) } class="inline">
+													<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+													<button type="submit" class="text-xs text-accent hover:underline">Resolve</button>
+												</form>
+											}
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				} else {
+					<p class="text-sm text-fg-muted italic">No security events in the last 24 hours.</p>
+				}
+			</div>
+
+			// IP Blocklist + API Keys side by side.
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+				// IP Blocklist.
+				<div class="card p-6">
+					<h2 class="text-lg font-semibold text-fg mb-4">
+						<i class="fa-solid fa-ban text-red-500 mr-2"></i>
+						IP Blocklist
+					</h2>
+					if len(data.IPBlocks) > 0 {
+						<div class="space-y-2 mb-4">
+							for _, b := range data.IPBlocks {
+								<div class="flex items-center justify-between p-3 rounded-lg bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800">
+									<div>
+										<span class="font-mono text-sm text-fg">{ b.IPAddress }</span>
+										if b.Reason != nil {
+											<p class="text-xs text-fg-muted">{ *b.Reason }</p>
+										}
+									</div>
+									<form method="POST" hx-delete={ fmt.Sprintf("/admin/api/ip-blocks/%d", b.ID) } class="inline">
+										<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+										<button type="submit" class="text-xs text-red-500 hover:text-red-600" title="Unblock">
+											<i class="fa-solid fa-unlock"></i> Unblock
+										</button>
+									</form>
+								</div>
+							}
+						</div>
+					} else {
+						<p class="text-sm text-fg-muted italic mb-4">No blocked IPs.</p>
+					}
+					// Add block form.
+					<form method="POST" action="/admin/api/ip-blocks" hx-post="/admin/api/ip-blocks" class="flex items-end gap-2">
+						<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+						<div class="flex-1">
+							<label class="block text-xs font-medium text-fg-body mb-1">IP Address</label>
+							<input type="text" name="ip_address" required class="input w-full text-sm" placeholder="1.2.3.4"/>
+						</div>
+						<div class="flex-1">
+							<label class="block text-xs font-medium text-fg-body mb-1">Reason</label>
+							<input type="text" name="reason" class="input w-full text-sm" placeholder="Suspicious activity"/>
+						</div>
+						<button type="submit" class="bg-red-600 text-white px-3 py-2 rounded-md text-sm hover:bg-red-700 transition-colors shrink-0">
+							Block
+						</button>
+					</form>
+				</div>
+
+				// API Keys overview.
+				<div class="card p-6">
+					<h2 class="text-lg font-semibold text-fg mb-4">
+						<i class="fa-solid fa-key text-accent mr-2"></i>
+						API Keys ({ fmt.Sprintf("%d", data.TotalKeys) })
+					</h2>
+					if len(data.APIKeys) > 0 {
+						<div class="space-y-2">
+							for _, k := range data.APIKeys {
+								<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
+									<div class="min-w-0">
+										<div class="text-sm font-medium text-fg truncate">{ k.Name }</div>
+										<div class="text-xs text-fg-muted">
+											<span class="font-mono">{ k.KeyPrefix }...</span>
+											<span class="mx-1">&middot;</span>
+											{ formatPermissions(k.Permissions) }
+										</div>
+									</div>
+									<div class="flex items-center gap-1 ml-2">
+										<form method="POST" hx-put={ fmt.Sprintf("/admin/api/keys/%d/toggle", k.ID) } class="inline">
+											<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+											if k.IsActive {
+												<input type="hidden" name="action" value="deactivate"/>
+												<button type="submit" class="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" title="Deactivate">
+													On
+												</button>
+											} else {
+												<input type="hidden" name="action" value="activate"/>
+												<button type="submit" class="text-xs px-2 py-1 rounded bg-surface-alt text-fg-muted border border-edge" title="Activate">
+													Off
+												</button>
+											}
+										</form>
+										<form method="POST" hx-delete={ fmt.Sprintf("/admin/api/keys/%d", k.ID) } hx-confirm="Revoke this API key?" class="inline">
+											<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+											<button type="submit" class="text-xs text-red-500 hover:text-red-600 px-1" title="Revoke">
+												<i class="fa-solid fa-trash"></i>
+											</button>
+										</form>
+									</div>
+								</div>
+							}
+						</div>
+					} else {
+						<p class="text-sm text-fg-muted italic">No API keys registered.</p>
+					}
+				</div>
+			</div>
+
+			// Reference info.
+			<div class="card p-6">
+				<div class="flex items-start gap-4">
+					<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-circle-info text-accent"></i>
+					</span>
+					<div>
+						<h3 class="text-sm font-semibold text-fg mb-1">Security Reference</h3>
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-fg-secondary leading-relaxed">
+							<div>
+								<p class="font-medium text-fg mb-1">Event Types</p>
+								<ul class="space-y-1 text-xs">
+									<li><strong>rate_limit</strong> — Client exceeded their per-minute request quota</li>
+									<li><strong>auth_failure</strong> — Invalid or missing API key</li>
+									<li><strong>ip_blocked</strong> — Request from a blocklisted IP</li>
+									<li><strong>key_expired</strong> — Attempt to use an expired key</li>
+									<li><strong>suspicious</strong> — Unusual pattern detected</li>
+								</ul>
+							</div>
+							<div>
+								<p class="font-medium text-fg mb-1">Recommended Actions</p>
+								<ul class="space-y-1 text-xs">
+									<li>Repeated auth failures from one IP: consider blocking</li>
+									<li>High rate limit hits: review client behavior or increase limit</li>
+									<li>Suspicious patterns: investigate and block if necessary</li>
+									<li>Expired keys with activity: notify the key owner</li>
+								</ul>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		// Chart initialization script.
+		<script>
+		document.addEventListener('DOMContentLoaded', function() {
+			// Simple bar chart rendering using CSS — no Chart.js dependency.
+			function renderMiniChart(containerId) {
+				const container = document.getElementById(containerId);
+				if (!container) return;
+				const points = JSON.parse(container.dataset.points || '[]');
+				if (points.length === 0) {
+					container.innerHTML = '<p class="text-sm text-fg-muted italic text-center pt-16">No data available</p>';
+					return;
+				}
+				const maxVal = Math.max(...points.map(p => p.y), 1);
+				const barWidth = Math.max(100 / points.length - 1, 2);
+				let html = '<div class="flex items-end h-full gap-px">';
+				points.forEach(p => {
+					const height = Math.max((p.y / maxVal) * 100, 2);
+					html += `<div class="flex-1 flex flex-col items-center justify-end h-full">
+						<div class="w-full bg-accent/70 rounded-t" style="height: ${height}%" title="${p.x}: ${p.y}"></div>
+						<span class="text-[9px] text-fg-muted mt-1 truncate w-full text-center">${p.x}</span>
+					</div>`;
+				});
+				html += '</div>';
+				container.innerHTML = html;
+			}
+			renderMiniChart('request-chart');
+			renderMiniChart('security-chart');
+		});
+		</script>
+	}
+}
+
+// adminStatCard renders a compact stat card.
+templ adminStatCard(label, value, icon, bgClass, iconColor string) {
+	<div class="card p-3 text-center">
+		<div class={ "w-8 h-8 rounded-lg mx-auto mb-1.5 flex items-center justify-center " + bgClass }>
+			<i class={ "fa-solid " + icon + " text-sm " + iconColor }></i>
+		</div>
+		<p class="text-lg font-bold text-fg">{ value }</p>
+		<p class="text-[10px] text-fg-muted">{ label }</p>
+	</div>
+}
+
+// topTable renders a ranked table of top entries.
+templ topTable(title, icon string, entries []TopEntry) {
+	<div class="card p-5">
+		<h3 class="text-sm font-semibold text-fg mb-3">
+			<i class={ "fa-solid " + icon + " text-fg-muted mr-1" }></i>
+			{ title }
+		</h3>
+		if len(entries) > 0 {
+			<div class="space-y-1.5">
+				for i, e := range entries {
+					<div class="flex items-center justify-between text-sm">
+						<span class="text-fg-secondary truncate">
+							<span class="text-xs text-fg-muted mr-1">{ fmt.Sprintf("%d.", i+1) }</span>
+							{ e.Label }
+						</span>
+						<span class="text-fg font-medium ml-2 shrink-0">{ fmt.Sprintf("%d", e.Count) }</span>
+					</div>
+				}
+			</div>
+		} else {
+			<p class="text-sm text-fg-muted italic">No data yet.</p>
+		}
+	</div>
+}
+
+// securityEventBadge renders a colored badge for the event type.
+templ securityEventBadge(eventType SecurityEventType) {
+	if eventType == EventRateLimit {
+		<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+			<i class="fa-solid fa-gauge-high mr-1 text-[10px]"></i>Rate Limit
+		</span>
+	} else if eventType == EventAuthFailure {
+		<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+			<i class="fa-solid fa-key mr-1 text-[10px]"></i>Auth Failure
+		</span>
+	} else if eventType == EventIPBlocked {
+		<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+			<i class="fa-solid fa-ban mr-1 text-[10px]"></i>IP Blocked
+		</span>
+	} else if eventType == EventKeyExpired {
+		<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+			<i class="fa-solid fa-clock mr-1 text-[10px]"></i>Key Expired
+		</span>
+	} else {
+		<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+			<i class="fa-solid fa-eye mr-1 text-[10px]"></i>Suspicious
+		</span>
+	}
+}

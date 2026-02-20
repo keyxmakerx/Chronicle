@@ -18,6 +18,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
+	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
@@ -227,6 +228,14 @@ func (a *App) RegisterRoutes() {
 	addonHandler := addons.NewHandler(addonService)
 	addons.RegisterAdminRoutes(adminGroup, addonHandler)
 	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)
+
+	// Sync API plugin: external tool integration with API key auth,
+	// request logging, security monitoring, and admin dashboard.
+	syncRepo := syncapi.NewSyncAPIRepository(a.DB)
+	syncService := syncapi.NewSyncAPIService(syncRepo)
+	syncHandler := syncapi.NewHandler(syncService)
+	syncapi.RegisterAdminRoutes(adminGroup, syncHandler)
+	syncapi.RegisterCampaignRoutes(e, syncHandler, campaignService, authService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
 	tagRepo := tags.NewTagRepository(a.DB)
