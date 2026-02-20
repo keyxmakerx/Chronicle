@@ -9,174 +9,126 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
-## Current Sprint: Phase 2 -- Media & UI
+## Next Up: Priority Tasks
 
-**Target:** Media plugin, security hardening, dynamic sidebar, entity image upload,
-UI quality improvements, sidebar customization, visual template editor, public
-campaigns, dark mode, tags, audit logging, entity relations, entity type management,
-@mentions, hover tooltips, and visual polish.
+These are the highest-priority items across all future phases. Pick from here.
 
-## Completed Sprint: Phase 1 -- Foundation
+### Testing (High Priority -- Many plugins have zero tests)
+- [x] Entity service unit tests (30 tests passing)
+- [ ] Relations service tests (bi-directional create/delete, validation)
+- [ ] Tags service tests (CRUD, slug generation, diff-based assignment)
+- [ ] Audit service tests (pagination, validation, fire-and-forget)
+- [ ] Campaigns service tests
+- [ ] Auth service tests
+- [ ] Media service tests (file validation, thumbnail generation)
+- [ ] Settings service tests (limit resolution, override priority)
 
-**Target:** Working CRUD app with auth, campaign management, entity editor with
-rich text, and basic Kanka-inspired UI. Deployable via Docker.
-
-### Priority 1 -- Core Infrastructure (Must Do First)
-- [x] Initialize Go module and install core dependencies
-- [x] Create `cmd/server/main.go` entry point with Echo server
-- [x] Create `internal/app/` -- App struct, dependency injection, route aggregation
-- [x] Create `internal/config/` -- ENV loading with sensible defaults
-- [x] Create `internal/database/` -- MariaDB connection pool + Redis client
-- [x] Create `internal/middleware/` -- logging, recovery, helpers (IsHTMX, Render)
-- [x] Create `internal/apperror/` -- domain error types
-- [x] Create base Templ layouts (base, app, landing, error)
-- [x] Create migration 000001_create_users
-- [ ] Set up `air` hot reload for dev workflow
-- [x] Vendor HTMX + Alpine.js (static/vendor/htmx.min.js, alpine.min.js)
-- [ ] Verify `make docker-up` -> `make dev` works end-to-end
-
-### Priority 2 -- Auth Plugin (Must Do)
-- [x] User MariaDB table (migration 000001)
-- [x] User model in `internal/plugins/auth/model.go`
-- [x] Registration handler + service + repository
-- [x] Login handler with argon2id password verification
-- [x] Session tokens stored in Redis (random hex tokens)
-- [x] Auth middleware (session validation, user context injection)
-- [x] Login/Register Templ pages with HTMX support
-- [x] Logout handler (destroy session)
-- [x] Security middleware (CSP, proxy trust, CORS, CSRF)
-- [x] RequireSiteAdmin middleware for admin routes
-- [x] ListUsers, UpdateIsAdmin, CountUsers for admin panel
-
-### Priority 3 -- Campaigns Plugin (Must Do)
-- [x] Campaign model and MariaDB tables (migration 000002)
-- [x] Campaign CRUD (create, list, show, edit, delete)
-- [x] Campaign membership with roles (Owner, Scribe, Player)
-- [x] RequireCampaignAccess + RequireRole middleware
-- [x] Ownership transfer flow (72h token, optional email)
-- [x] Campaign Templ pages (index, show, form, settings, members)
-- [x] Campaign sidebar navigation in app layout (entity types, members, settings)
-- [x] Campaign selector dropdown in topbar
-
-### Priority 3.5 -- SMTP Plugin
-- [x] SMTP settings singleton table (migration 000003)
-- [x] AES-256-GCM password encryption
-- [x] MailService interface (SendMail, IsConfigured)
-- [x] SMTP settings admin page with test connection
-- [x] SMTP password never returned to UI
-
-### Priority 3.5 -- Admin Plugin
-- [x] Admin dashboard with stats
-- [x] User management (list, toggle admin)
-- [x] Campaign management (list all, delete, join as role, leave)
-- [x] SMTP settings integration
+### Auth & Security
 - [ ] Password reset flow (requires SMTP, wire into auth)
-
-### Priority 4 -- Entities Plugin (Must Do)
-- [x] Entity types table with configurable fields (migration 000004)
-- [x] Default entity types seeded (Character, Location, Organization, Item, Note, Event)
-- [x] Entity CRUD (create, list, show, edit, delete)
-- [x] Entity list view (grid layout with type filter sidebar)
-- [x] Entity profile page (sidebar with fields + main content area)
-- [x] Entity search (MariaDB FULLTEXT + LIKE fallback)
-- [x] Shortcut routes (/characters, /locations, /organizations, /items, /notes, /events)
-- [x] Privacy filtering (is_private at SQL level, 404 for Players)
-- [x] EntityTypeSeeder wired into campaigns (seeds on campaign create)
-
-### Priority 5 -- Editor Widget (Must Do)
-- [x] TipTap vendored JS bundle (static/vendor/tiptap-bundle.min.js)
-- [x] editor.js widget with Chronicle.register() (static/js/widgets/editor.js)
-- [x] boot.js widget auto-mounter (static/js/boot.js)
-- [x] Save/load entity entry content via API (GET/PUT entry endpoints)
-- [x] @mention system (search entities, insert link, popup with keyboard nav)
-- [x] Entity mention rendering (client-side via TipTap, stored as HTML links)
-
-### Priority 6 -- UI & Layouts (Must Do)
-- [x] Base Templ layout (HTML shell, head, scripts, styles)
-- [x] App layout (authenticated -- sidebar + topbar + content area)
-- [x] Sidebar navigation (campaign entities, dynamic via context injection)
-- [x] Topbar (user avatar, admin link, campaign-scoped search, CSRF logout)
-- [x] Tailwind CSS config (dark sidebar, light content -- Kanka-inspired)
-- [x] Flash messages component (Alpine.js auto-dismiss, success/error)
-- [x] Pagination component (shared, HTMX-aware, used by campaigns + entities)
-- [x] LayoutInjector pattern (middleware.Render copies auth/campaign data to Go context)
-- [x] Campaign selector dropdown in topbar (HTMX lazy-loaded, Alpine.js toggle)
-- [x] Generate Tailwind CSS output (tailwindcss v3.4.17 standalone binary)
-
-### Priority 7 -- Build & Deploy (Should Do)
-- [x] Dockerfile builds successfully (multi-stage, Go 1.24, pinned Tailwind)
-- [ ] docker-compose.yml works for full stack (app + MariaDB + Redis)
-- [ ] GitHub Actions CI (build, lint, test)
-- [x] Basic health check endpoint (`/healthz`)
-
-### Priority 8 -- Nice to Have (Phase 1)
-- [x] Tags widget (tag CRUD, entity tagging)
-- [x] Tags frontend widget (tag picker on entity profile pages)
-- [ ] Entity nesting (parent/child relationships)
-- [ ] Entity posts (additional sections on entity profile)
-- [x] Image upload for entity headers
-- [x] Dark mode toggle
-
----
-
-## Future Sprints (Not Yet Planned in Detail)
-
-### Phase 2 -- Maps & Media
-- [ ] Leaflet.js map viewer widget
-- [ ] Map pin CRUD with entity linking
-- [x] Image upload system with thumbnails (media plugin)
-- [x] Entity relations widget (bi-directional linking, migration 000012)
-- [ ] REST API plugin with PASETO token auth
-- [x] Rate limiting middleware (auth + uploads)
-- [x] IDOR protection on all entity endpoints
-- [x] HSTS security header
-- [x] Site settings plugin (editable storage limits, per-user/campaign overrides)
-- [x] Dynamic sidebar with entity types from DB
-- [x] Entity image upload pipeline
-- [x] UI upgrade with Font Awesome icons
-- [x] Sidebar customization (campaign-level config, migration 000006)
-- [x] Layout builder scaffold (entity type layout_json, migration 000007)
-- [x] Unified entity type config widget (sidebar + layout + color in one UI)
-- [x] Entity type color picker (PUT color API + hex validation)
-- [x] Public campaign support (is_public flag, migration 000008, OptionalAuth)
-- [x] Public campaigns on landing page (ListPublic repo/service, campaign cards grid)
-- [x] Apply layout_json to entity show page rendering
-- [x] Visual template editor (drag-and-drop grid page builder)
-- [x] Admin panel sidebar nav with modules section
-- [x] Entity type CRUD (create, edit, delete with icon/color/fields management)
-- [x] Entity hover tooltip/popover (preview on hover, LRU cache, smart positioning)
-- [x] Tag display on entity list cards (batch fetch, colored chips)
-- [x] Visual polish pass (Kanka-inspired: gradient hero, icon cards, refined buttons/cards)
-
-### Phase 3 -- Permissions & Advanced Multi-User
+- [ ] 2FA/TOTP support
 - [ ] Per-entity permissions (view/edit per role/user)
 - [ ] Invite system (email invitations for campaigns)
-- [ ] 2FA/TOTP support
-- [x] Audit log (plugin + wired into handlers)
 
-### Phase 4 -- Game Systems & Advanced
-- [ ] D&D 5e module (SRD reference data, tooltips, pages)
-- [ ] Pathfinder module
+### Maps & Geography
+- [ ] Leaflet.js map viewer widget
+- [ ] Map pin CRUD with entity linking
+
+### Game System Modules
+- [ ] D&D 5e module (SRD reference data, tooltips, pages) -- registry in `internal/modules/registry.go`
+- [ ] Pathfinder 2e module
 - [ ] Draw Steel module
+
+### API & Integrations
+- [ ] REST API plugin with PASETO token auth
+- [ ] Campaign export/import
+- [ ] Foundry VTT sync module
+- [ ] AI integration endpoint
+
+### Entities -- Remaining Features
+- [ ] Entity nesting (parent/child relationships)
+- [ ] Entity posts (additional sections on entity profile)
+- [ ] Relations graph visualization widget
+
+### Infrastructure
+- [ ] docker-compose.yml full stack verification (app + MariaDB + Redis)
+- [ ] `air` hot reload setup for dev workflow
+- [ ] Verify `make docker-up` -> `make dev` works end-to-end
+
+### Future Plugins
 - [ ] Calendar plugin (custom months, days, moons)
 - [ ] Timeline plugin (eras, events, zoomable)
-- [ ] Relations graph visualization widget
-- [ ] Foundry VTT sync module
-- [ ] Campaign export/import
-- [ ] AI integration endpoint
 
 ---
 
 ## Completed Sprints
 
 ### Phase 0: Project Scaffolding (2026-02-19)
-- [x] Create AI documentation system (`.ai/` directory, 13 files)
-- [x] Create `CLAUDE.md` root context file (three-tier architecture)
-- [x] Create project directory skeleton (plugins, modules, widgets)
-- [x] Create plugin `.ai.md` files (auth, campaigns, entities)
-- [x] Create module `.ai.md` file (dnd5e)
-- [x] Create widget `.ai.md` file (editor)
-- [x] Create build configuration (Makefile, Dockerfile, docker-compose)
-- [x] Create `.gitignore` and `.env.example`
-- [x] Create `tailwind.config.js` and `static/css/input.css`
-- [x] Establish coding conventions and 8 architecture decisions
+- [x] AI documentation system (`.ai/` directory, 13 files)
+- [x] `CLAUDE.md` root context file
+- [x] Project directory skeleton (plugins, modules, widgets)
+- [x] Plugin/module/widget `.ai.md` files
+- [x] Build configuration (Makefile, Dockerfile, docker-compose)
+- [x] `.gitignore`, `.env.example`, `tailwind.config.js`
+- [x] Coding conventions and 8 architecture decisions (ADRs 001-008)
+
+### Phase 1: Foundation (2026-02-19)
+- [x] Core infrastructure (config, database, middleware, app, server)
+- [x] Auth plugin (register, login, logout, session management, argon2id)
+- [x] Campaigns plugin (CRUD, roles, membership, ownership transfer)
+- [x] SMTP plugin (AES-256-GCM encrypted password, STARTTLS/SSL, test)
+- [x] Admin plugin (dashboard, user management, campaign oversight)
+- [x] Entities plugin (CRUD, entity types, FULLTEXT search, privacy, dynamic fields)
+- [x] Editor widget (TipTap, boot.js auto-mounter, entry API)
+- [x] UI & Layouts (sidebar, topbar, pagination, flash messages, error pages)
+- [x] Vendor HTMX + Alpine.js, campaign selector dropdown
+- [x] CSS component library, landing page
+- [x] Entity service unit tests (30 tests)
+- [x] Dockerfile (multi-stage, Go 1.24, pinned Tailwind)
+- [x] CI/CD pipeline (GitHub Actions)
+- [x] Production deployment hardening
+- [x] Auto-migrations on startup, first-user-is-admin, /health alias
+
+### Phase 2: Media & UI (2026-02-19 to 2026-02-20)
+
+**Plugins:**
+- [x] Media plugin (upload, thumbnails, magic byte validation, rate limiting)
+- [x] Audit plugin (campaign activity timeline, stats, wired into handlers)
+- [x] Site settings plugin (storage limits, per-user/campaign overrides)
+- [x] Admin modules page (registry, card grid, status badges)
+
+**Widgets:**
+- [x] Editor view/edit toggle (read-only default, Edit/Done, autosave)
+- [x] @mention system (search popup, keyboard nav, styled links)
+- [x] Attributes widget (inline edit for all field types, full-stack)
+- [x] Tag picker widget (search, create, assign on entity profiles)
+- [x] Tag display on entity list cards (batch fetch, colored chips)
+- [x] Relations widget (bi-directional linking, common types, reverse auto-create)
+- [x] Template editor (drag-and-drop page builder, 2-col/3-col/tabs/sections, preview)
+- [x] Entity tooltip/popover (hover preview, LRU cache, smart positioning)
+
+**Entity enhancements:**
+- [x] Entity type CRUD (create, edit, delete, icon/color/fields management)
+- [x] Entity list redesign (horizontal tabs, search bar, stats)
+- [x] Entity image upload pipeline + UI
+- [x] Descriptor rename (Subtype Label -> Descriptor)
+- [x] Dynamic sidebar with entity types from DB + count badges
+- [x] Sidebar customization (drag-to-reorder, hide/show per campaign)
+- [x] Layout-driven entity profile pages (layout_json)
+
+**Security:**
+- [x] Comprehensive security audit (14 vulnerability fixes)
+- [x] IDOR protection on all entity endpoints
+- [x] HSTS security header
+- [x] Rate limiting (auth + uploads)
+- [x] Storage limit enforcement in media upload
+
+**UI & Styling:**
+- [x] Dark mode toggle (theme.js, localStorage, sidebar button)
+- [x] Semantic color system (CSS custom properties + Tailwind tokens)
+- [x] All templ files migrated to semantic color tokens (20+ files)
+- [x] All CSS components migrated to semantic tokens
+- [x] Visual polish pass (gradient hero, icon cards, refined buttons/cards)
+- [x] Public landing page with discoverable campaign cards
+- [x] Collapsible admin sidebar with modules section
+- [x] Toast notification system (Chronicle.notify API + HTMX integration)
+- [x] Public campaign support (is_public flag, OptionalAuth)
