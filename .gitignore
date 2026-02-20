@@ -8,6 +8,7 @@
 # --- Go ---
 # Compiled binary
 /chronicle
+/server
 *.exe
 *.exe~
 *.dll
