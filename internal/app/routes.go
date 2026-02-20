@@ -47,6 +47,38 @@ func (a *entityTypeListerAdapter) GetEntityTypesForSettings(ctx context.Context,
 	return result, nil
 }
 
+// campaignAuditAdapter wraps audit.AuditService to implement the
+// campaigns.AuditLogger interface without creating a circular import
+// (audit already imports campaigns for middleware).
+type campaignAuditAdapter struct {
+	svc audit.AuditService
+}
+
+// LogEvent records a campaign-scoped audit event.
+func (a *campaignAuditAdapter) LogEvent(ctx context.Context, campaignID, userID, action string, details map[string]any) error {
+	return a.svc.Log(ctx, &audit.AuditEntry{
+		CampaignID: campaignID,
+		UserID:     userID,
+		Action:     action,
+		Details:    details,
+	})
+}
+
+// storageLimiterAdapter wraps settings.SettingsService to implement the
+// media.StorageLimiter interface without creating a circular import.
+type storageLimiterAdapter struct {
+	svc settings.SettingsService
+}
+
+// GetEffectiveLimits resolves storage limits for a user+campaign context.
+func (a *storageLimiterAdapter) GetEffectiveLimits(ctx context.Context, userID, campaignID string) (int64, int64, int, error) {
+	limits, err := a.svc.GetEffectiveLimits(ctx, userID, campaignID)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return limits.MaxUploadSize, limits.MaxTotalStorage, limits.MaxFiles, nil
+}
+
 // RegisterRoutes sets up all application routes. It registers public routes
 // directly and delegates to each plugin's route registration function.
 //
@@ -148,6 +180,10 @@ func (a *App) RegisterRoutes() {
 	settingsHandler := settings.NewHandler(settingsService)
 	settings.RegisterRoutes(adminGroup, settingsHandler)
 
+	// Wire dynamic storage limits into the media service so uploads
+	// respect per-user and per-campaign quotas from site settings.
+	mediaService.SetStorageLimiter(&storageLimiterAdapter{svc: settingsService})
+
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
 	tagRepo := tags.NewTagRepository(a.DB)
 	tagService := tags.NewTagService(tagRepo)
@@ -159,6 +195,11 @@ func (a *App) RegisterRoutes() {
 	auditService := audit.NewAuditService(auditRepo)
 	auditHandler := audit.NewHandler(auditService)
 	audit.RegisterRoutes(e, auditHandler, campaignService, authService)
+
+	// Wire audit logging into mutation handlers so CRUD actions are recorded.
+	entityHandler.SetAuditService(auditService)
+	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
+	tagHandler.SetAuditService(auditService)
 
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {

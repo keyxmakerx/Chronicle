@@ -42,6 +42,7 @@ Chronicle.register('template-editor', {
     { type: 'entry',        label: 'Rich Text',     icon: 'fa-align-left',    desc: 'Main content editor' },
     { type: 'attributes',   label: 'Attributes',    icon: 'fa-list',          desc: 'Custom field values' },
     { type: 'details',      label: 'Details',       icon: 'fa-info-circle',   desc: 'Metadata and dates' },
+    { type: 'tags',         label: 'Tags',          icon: 'fa-tags',          desc: 'Tag picker widget' },
     { type: 'divider',      label: 'Divider',       icon: 'fa-minus',         desc: 'Horizontal separator' },
     { type: 'two_column',   label: '2 Columns',     icon: 'fa-columns',       desc: 'Side-by-side columns', container: true },
     { type: 'three_column', label: '3 Columns',     icon: 'fa-table-columns', desc: 'Three equal columns', container: true },

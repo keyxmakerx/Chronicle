@@ -2,24 +2,51 @@ package tags
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // Handler handles HTTP requests for tag operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service TagService
+	service  TagService
+	auditSvc audit.AuditService
 }
 
 // NewHandler creates a new tag handler backed by the given service.
 func NewHandler(service TagService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetAuditService sets the audit service for recording tag mutations.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetAuditService(svc audit.AuditService) {
+	h.auditSvc = svc
+}
+
+// logAudit fires a fire-and-forget audit entry. Errors are logged but
+// never block the primary operation.
+func (h *Handler) logAudit(c echo.Context, campaignID, action, tagName string) {
+	if h.auditSvc == nil {
+		return
+	}
+	userID := auth.GetUserID(c)
+	if err := h.auditSvc.Log(c.Request().Context(), &audit.AuditEntry{
+		CampaignID: campaignID,
+		UserID:     userID,
+		Action:     action,
+		Details:    map[string]any{"tag_name": tagName},
+	}); err != nil {
+		slog.Warn("audit log failed", slog.String("action", action), slog.Any("error", err))
+	}
 }
 
 // ListTags returns all tags for a campaign as JSON (GET /campaigns/:id/tags).
@@ -58,6 +85,8 @@ func (h *Handler) CreateTag(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionTagCreated, tag.Name)
 
 	return c.JSON(http.StatusCreated, tag)
 }
@@ -120,6 +149,8 @@ func (h *Handler) DeleteTag(c echo.Context) error {
 	if err := h.service.Delete(c.Request().Context(), tagID); err != nil {
 		return err
 	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionTagDeleted, existing.Name)
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }

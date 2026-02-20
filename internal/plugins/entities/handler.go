@@ -2,6 +2,7 @@ package entities
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -16,12 +18,38 @@ import (
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service EntityService
+	service  EntityService
+	auditSvc audit.AuditService
 }
 
 // NewHandler creates a new entity handler.
 func NewHandler(service EntityService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetAuditService sets the audit service for recording entity mutations.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetAuditService(svc audit.AuditService) {
+	h.auditSvc = svc
+}
+
+// logAudit fires a fire-and-forget audit entry. Errors are logged but
+// never block the primary operation.
+func (h *Handler) logAudit(c echo.Context, campaignID, action, entityID, entityName string) {
+	if h.auditSvc == nil {
+		return
+	}
+	userID := auth.GetUserID(c)
+	if err := h.auditSvc.Log(c.Request().Context(), &audit.AuditEntry{
+		CampaignID: campaignID,
+		UserID:     userID,
+		Action:     action,
+		EntityType: "entity",
+		EntityID:   entityID,
+		EntityName: entityName,
+	}); err != nil {
+		slog.Warn("audit log failed", slog.String("action", action), slog.Any("error", err))
+	}
 }
 
 // --- Entity CRUD ---
@@ -121,6 +149,8 @@ func (h *Handler) Create(c echo.Context) error {
 		}
 		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, csrfToken, errMsg))
 	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityCreated, entity.ID, entity.Name)
 
 	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entities/" + entity.ID
 	if middleware.IsHTMX(c) {
@@ -232,6 +262,8 @@ func (h *Handler) Update(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, EntityEditPage(cc, entity, entityType, entityTypes, csrfToken, errMsg))
 	}
 
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
+
 	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entities/" + entityID
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", redirectURL)
@@ -261,6 +293,8 @@ func (h *Handler) Delete(c echo.Context) error {
 	if err := h.service.Delete(c.Request().Context(), entityID); err != nil {
 		return err
 	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityDeleted, entityID, entity.Name)
 
 	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entities"
 	if middleware.IsHTMX(c) {
@@ -358,6 +392,8 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	if err := h.service.UpdateEntry(c.Request().Context(), entityID, body.Entry, body.EntryHTML); err != nil {
 		return err
 	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }

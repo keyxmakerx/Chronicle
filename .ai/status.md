@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-20 -- Dark mode, tags, audit log, site settings, public landing page, template editor
+2026-02-20 -- Audit wiring, storage limit enforcement, tag picker widget
 
 ## Current Phase
 **Phase 2: Media & UI** -- Building on the Phase 1 foundation. Media plugin
@@ -19,45 +19,27 @@ entity type page layouts, public campaign support, dark mode, tags, and audit lo
 ## Last Session Summary
 
 ### Completed
-- **Dark mode toggle:** Full dark mode system with FOUC prevention (inline script
-  in `<head>`), localStorage persistence, system preference fallback. Theme toggle
-  button in topbar with sun/moon icons. All layout components updated with `dark:`
-  variants. `static/js/theme.js` manages toggle/persistence/icon updates.
-- **Collapsible admin sidebar:** Admin section in left sidebar uses Alpine.js
-  `x-collapse` with localStorage-persisted open/closed state. Chevron rotates
-  to indicate state. Non-admin users never see the section (checked via `GetIsAdmin`).
-- **Tags widget plugin:** New `internal/widgets/tags/` widget with full
-  model/repository/service/handler/routes stack:
-  - Campaign-scoped tags with name, slug, hex color
-  - Entity-tag many-to-many join (entity_tags table)
-  - Diff-based `SetEntityTags` to minimize DB operations
-  - Batch loading (`GetEntityTagsBatch`) to avoid N+1 on list views
-  - Migration 000009 creates tags + entity_tags tables
-- **Audit log plugin:** New `internal/plugins/audit/` plugin:
-  - Records user actions (entity CRUD, membership, campaign settings, tags)
-  - Activity page for campaign owners with stats cards (entities, words, editors, last edit)
-  - Timeline view with color-coded action dots and relative timestamps
-  - Per-entity history endpoint for detailed change logs
-  - Migration 000010 creates audit_log table
-- **Site settings plugin:** New `internal/plugins/settings/` plugin:
-  - Global storage limits (max upload, per-user storage, per-campaign storage, file count, rate limit)
-  - Per-user storage overrides (NULL = inherit global)
-  - Per-campaign storage overrides (NULL = inherit user/global)
-  - Override resolution chain: per-campaign > per-user > global
-  - Admin settings page with global form, user/campaign override tables, info panel
-  - Migration 000011 creates site_settings, user_storage_limits, campaign_storage_limits
-- **Public landing page:** Landing page now shows discoverable public campaigns
-  in a responsive 3-column card grid with name, description, last updated time.
-  Added `ListPublic` method to campaigns repo/service.
-- **Enhanced template editor:** Added new block types beyond rows:
-  two-column, three-column, tabs, and section/accordion blocks with
-  configurable column widths and drag-and-drop support.
-- **Plugin wiring:** All new plugins wired in `app/routes.go`:
-  - Tags widget registered with campaign-scoped routes
-  - Audit plugin registered with campaign-scoped activity/history routes
-  - Settings plugin registered on admin group for storage settings
-  - Storage Settings link added to admin sidebar
-- **AI documentation:** Created `.ai.md` files for audit, settings, and tags plugins.
+- **Wired audit logging into handlers:** Entity, campaign, and tag handlers now
+  emit audit events after successful mutations. Entity handler fires
+  `entity.created`, `entity.updated`, `entity.deleted` on CRUD and entry saves.
+  Campaign handler fires `campaign.updated`, `member.joined`, `member.left`,
+  `member.role_changed`. Tag handler fires `tag.created`, `tag.deleted`.
+  Uses fire-and-forget pattern: audit failures are logged but never block.
+  Campaign handler uses `AuditLogger` interface + adapter to avoid circular import
+  (audit → campaigns import cycle).
+- **Wired storage limit enforcement in media uploads:** Media service now checks
+  dynamic storage limits from the settings plugin at upload time. Three checks:
+  per-file size limit (from settings), campaign total storage quota, and campaign
+  file count limit. New `StorageLimiter` interface in media package, implemented
+  via adapter wrapping `settings.SettingsService` in routes.go. New
+  `GetCampaignUsage()` repo method for quota checks. Graceful degradation: if
+  settings lookup fails, upload is allowed (logged warning).
+- **Tag picker widget:** New `static/js/widgets/tag_picker.js` with full
+  tag management UI. Shows entity tags as colored chips with remove buttons.
+  Dropdown with search/filter to add existing tags or create new ones inline.
+  Auto-mounted via boot.js on `data-widget="tag-picker"` elements. Added
+  `blockTags` component to entity show template (both in block dispatcher and
+  fallback layout). Tags block also available in template editor palette.
 
 ### In Progress
 - Nothing currently in progress
@@ -66,36 +48,28 @@ entity type page layouts, public campaign support, dark mode, tags, and audit lo
 - Nothing blocked
 
 ### Files Modified This Session
-- `internal/templates/layouts/base.templ` -- Theme init script, theme.js inclusion
-- `internal/templates/layouts/app.templ` -- Dark mode toggle, collapsible admin, storage settings link, activity log link
-- `static/js/theme.js` -- New: theme toggle module with localStorage persistence
-- `static/css/input.css` -- Dark mode CSS custom properties
-- `tailwind.config.js` -- darkMode: 'class'
-- `internal/widgets/tags/` -- New: model, repo, service, handler, routes (6 files)
-- `internal/plugins/audit/` -- New: model, repo, service, handler, routes, activity.templ (6 files)
-- `internal/plugins/settings/` -- New: model, repo, service, handler, routes, storage_settings.templ (6 files)
-- `internal/plugins/admin/routes.go` -- Returns admin group for settings plugin
-- `internal/plugins/campaigns/repository.go` -- Added ListPublic method
-- `internal/plugins/campaigns/service.go` -- Added ListPublic method
-- `internal/templates/pages/landing.templ` -- Rewrote with public campaigns grid
-- `internal/app/routes.go` -- Wired tags, audit, settings plugins; updated landing handler
-- `static/js/widgets/template_editor.js` -- Added two_column, three_column, tabs, section blocks
-- `db/migrations/000009_create_tags.up/down.sql` -- Tags and entity_tags tables
-- `db/migrations/000010_create_audit_log.up/down.sql` -- Audit log table
-- `db/migrations/000011_create_site_settings.up/down.sql` -- Site settings and override tables
+- `internal/plugins/entities/handler.go` -- Added auditSvc field, logAudit helper, audit calls after CRUD
+- `internal/plugins/campaigns/handler.go` -- Added AuditLogger interface, auditLogger field, audit calls
+- `internal/widgets/tags/handler.go` -- Added auditSvc field, logAudit helper, audit calls
+- `internal/plugins/media/service.go` -- Added StorageLimiter interface, checkQuotas method, SetStorageLimiter
+- `internal/plugins/media/repository.go` -- Added GetCampaignUsage method
+- `internal/plugins/entities/model.go` -- Added "tags" to valid block types comment
+- `internal/app/routes.go` -- Added campaignAuditAdapter, storageLimiterAdapter, wired all audit+limits
+- `internal/plugins/entities/show.templ` -- Added blockTags component, "tags" block type in dispatcher
+- `internal/templates/layouts/base.templ` -- Added tag_picker.js script tag
+- `static/js/widgets/tag_picker.js` -- New: tag picker widget (search, create, assign, remove)
+- `static/js/widgets/template_editor.js` -- Added "tags" block type to palette
 
 ## Active Branch
 `claude/resume-previous-work-YqXiG`
 
 ## Next Session Should
-1. **Wire audit logging calls** -- Other plugins should call AuditService.Log() on mutations
-2. **Wire storage limits** -- Media plugin should use GetEffectiveLimits at upload time
-3. **Frontend tag picker widget** -- JS widget for entity profile pages
-4. **@mentions** -- Search entities in editor, insert link, parse/render server-side
-5. **Password reset** -- Wire auth password reset with SMTP when configured
-6. **Entity relations** -- Bi-directional entity linking
-7. **Entity type CRUD** -- Let campaign owners add/edit/remove entity types
-8. **Regenerate Tailwind CSS** -- Run `make tailwind` to include new dark: and component classes
+1. **@mentions** -- Search entities in editor, insert link, parse/render server-side
+2. **Password reset** -- Wire auth password reset with SMTP when configured
+3. **Entity relations** -- Bi-directional entity linking
+4. **Entity type CRUD** -- Let campaign owners add/edit/remove entity types
+5. **Regenerate Tailwind CSS** -- Run `make tailwind` to include new dark: and component classes
+6. **Tag display on entity list cards** -- Show tag chips on entity cards in list view
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -138,3 +112,6 @@ entity type page layouts, public campaign support, dark mode, tags, and audit lo
 - 2026-02-20: Site settings plugin (editable storage limits, per-user/campaign overrides)
 - 2026-02-20: Public landing page with discoverable campaign cards
 - 2026-02-20: Enhanced template editor (two-column, three-column, tabs, sections)
+- 2026-02-20: Wired audit logging into entity, campaign, and tag mutation handlers
+- 2026-02-20: Wired storage limit enforcement into media upload handler
+- 2026-02-20: Tag picker widget (search, create, assign tags on entity profile pages)

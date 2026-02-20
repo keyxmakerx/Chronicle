@@ -103,11 +103,12 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Basic health check endpoint (`/healthz`)
 
 ### Priority 8 -- Nice to Have (Phase 1)
-- [ ] Tags widget (tag CRUD, entity tagging)
+- [x] Tags widget (tag CRUD, entity tagging)
+- [x] Tags frontend widget (tag picker on entity profile pages)
 - [ ] Entity nesting (parent/child relationships)
 - [ ] Entity posts (additional sections on entity profile)
 - [x] Image upload for entity headers
-- [ ] Dark mode toggle
+- [x] Dark mode toggle
 
 ---
 
@@ -140,7 +141,7 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [ ] Per-entity permissions (view/edit per role/user)
 - [ ] Invite system (email invitations for campaigns)
 - [ ] 2FA/TOTP support
-- [ ] Audit log
+- [x] Audit log (plugin + wired into handlers)
 
 ### Phase 4 -- Game Systems & Advanced
 - [ ] D&D 5e module (SRD reference data, tooltips, pages)

@@ -37,6 +37,10 @@ type MediaRepository interface {
 	ListByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error)
 	GetStorageStats(ctx context.Context) (*StorageStats, error)
 	ListAll(ctx context.Context, limit, offset int) ([]AdminMediaFile, int, error)
+
+	// GetCampaignUsage returns the total bytes and file count for a campaign.
+	// Used for storage quota enforcement at upload time.
+	GetCampaignUsage(ctx context.Context, campaignID string) (totalBytes int64, fileCount int, err error)
 }
 
 // mediaRepository implements MediaRepository with MariaDB queries.
@@ -240,4 +244,19 @@ func (r *mediaRepository) ListAll(ctx context.Context, limit, offset int) ([]Adm
 		files = append(files, f)
 	}
 	return files, total, rows.Err()
+}
+
+// GetCampaignUsage returns the total bytes stored and file count for a single
+// campaign. Returns 0, 0 if the campaign has no media files.
+func (r *mediaRepository) GetCampaignUsage(ctx context.Context, campaignID string) (int64, int, error) {
+	var totalBytes int64
+	var fileCount int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM media_files WHERE campaign_id = ?`,
+		campaignID,
+	).Scan(&fileCount, &totalBytes)
+	if err != nil {
+		return 0, 0, fmt.Errorf("querying campaign storage usage: %w", err)
+	}
+	return totalBytes, fileCount, nil
 }

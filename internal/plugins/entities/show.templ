@@ -43,6 +43,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				<div class="grid grid-cols-12 gap-6">
 					<div class="col-span-8 space-y-4">
 						@blockTitle(cc, entity, csrfToken)
+						@blockTags(cc, entity, csrfToken)
 						@blockEntry(cc, entity, csrfToken)
 					</div>
 					<div class="col-span-4 space-y-4">
@@ -69,6 +70,8 @@ templ entityBlock(block TemplateBlock, cc *campaigns.CampaignContext, entity *En
 			@blockAttributes(cc, entity, entityType, csrfToken)
 		case "details":
 			@blockDetails(entity)
+		case "tags":
+			@blockTags(cc, entity, csrfToken)
 		case "divider":
 			@blockDivider()
 	}
@@ -211,6 +214,19 @@ templ blockDetails(entity *Entity) {
 			<div>Updated { entity.UpdatedAt.Format("Jan 2, 2006") }</div>
 		</div>
 	</div>
+}
+
+// blockTags renders the tag picker widget mount point.
+templ blockTags(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
+	<div
+		data-widget="tag-picker"
+		data-tags-endpoint={ fmt.Sprintf("/campaigns/%s/tags", cc.Campaign.ID) }
+		data-entity-tags-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/tags", cc.Campaign.ID, entity.ID) }
+		if cc.MemberRole >= campaigns.RoleScribe {
+			data-editable="true"
+		}
+		data-csrf-token={ csrfToken }
+	></div>
 }
 
 // blockDivider renders a visual separator between content sections.
