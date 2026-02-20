@@ -13,12 +13,12 @@ import (
 templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-		class="card p-0 overflow-hidden hover:shadow-lg transition-shadow block group"
+		class="card p-0 overflow-hidden hover:shadow-md transition-shadow block group"
 		data-entity-preview={ fmt.Sprintf("/campaigns/%s/entities/%s/preview", cc.Campaign.ID, entity.ID) }
 	>
 		<!-- Image or placeholder header -->
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
-			<div class="h-36 bg-surface-alt overflow-hidden">
+			<div class="h-28 bg-surface-alt overflow-hidden">
 				<img
 					src={ fmt.Sprintf("/media/%s", *entity.ImagePath) }
 					alt={ entity.Name }
@@ -26,45 +26,45 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 				/>
 			</div>
 		} else {
-			<div class="h-20 flex items-center justify-center" style={ fmt.Sprintf("background-color: %s10", entity.TypeColor) }>
+			<div class="h-14 flex items-center justify-center" style={ fmt.Sprintf("background-color: %s10", entity.TypeColor) }>
 				if entity.TypeIcon != "" {
-					<i class={ "fa-solid " + entity.TypeIcon, "text-2xl opacity-30" } style={ fmt.Sprintf("color: %s", entity.TypeColor) }></i>
+					<i class={ "fa-solid " + entity.TypeIcon, "text-lg opacity-30" } style={ fmt.Sprintf("color: %s", entity.TypeColor) }></i>
 				}
 			</div>
 		}
 
 		<!-- Card body -->
-		<div class="p-4">
-			<div class="flex items-start justify-between mb-2">
-				<h3 class="text-base font-semibold text-fg truncate group-hover:text-accent transition-colors">{ entity.Name }</h3>
+		<div class="px-3 py-2.5">
+			<div class="flex items-start justify-between mb-1">
+				<h3 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">{ entity.Name }</h3>
 				if entity.IsPrivate && cc.MemberRole >= campaigns.RoleScribe {
-					<span class="text-fg-muted ml-2 shrink-0" title="Private (GM only)">
-						<i class="fa-solid fa-lock text-xs"></i>
+					<span class="text-fg-muted ml-1.5 shrink-0" title="Private (GM only)">
+						<i class="fa-solid fa-lock text-[10px]"></i>
 					</span>
 				}
 			</div>
 
-			<div class="flex items-center gap-2">
+			<div class="flex items-center gap-1.5">
 				<span
-					class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+					class="inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[11px] font-medium"
 					style={ fmt.Sprintf("background-color: %s; color: %s", entity.TypeColor, contrastTextColor(entity.TypeColor)) }
 				>
 					if entity.TypeIcon != "" {
-						<i class={ "fa-solid " + entity.TypeIcon, "text-[10px]" }></i>
+						<i class={ "fa-solid " + entity.TypeIcon, "text-[9px]" }></i>
 					}
 					{ entity.TypeName }
 				</span>
 				if entity.TypeLabel != nil && *entity.TypeLabel != "" {
-					<span class="text-xs text-fg-secondary">{ *entity.TypeLabel }</span>
+					<span class="text-[11px] text-fg-secondary truncate">{ *entity.TypeLabel }</span>
 				}
 			</div>
 
 			<!-- Tag chips -->
 			if len(entity.Tags) > 0 {
-				<div class="flex flex-wrap gap-1 mt-2">
+				<div class="flex flex-wrap gap-0.5 mt-1.5">
 					for _, tag := range entity.Tags {
 						<span
-							class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+							class="inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"
 							style={ fmt.Sprintf("background-color: %s22; color: %s", tag.Color, tag.Color) }
 						>
 							{ tag.Name }

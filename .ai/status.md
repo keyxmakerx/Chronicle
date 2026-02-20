@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-20 -- UI polish: badge contrast, dark mode fixes, merged settings, plugins page, modules in campaign settings.
+2026-02-20 -- Competitor-inspired UI overhaul: terminology rename (Entity→Page, Entity Type→Category), drill-down sidebar, category dashboard pages, tighter card grid.
 
 ## Current Phase
 **Phase 2: COMPLETE + Polish.** Media & UI work is done. Additional polish pass
@@ -88,6 +88,25 @@ completed for dark mode, badge contrast, and admin/campaign settings UX.
   plugins with active/planned status, category grouping, and descriptions.
   Plugin registry with 11 entries (8 active, 3 planned).
 
+### Phase 3: Competitor-Inspired UI Overhaul (2026-02-20)
+- **Terminology rename:** All user-facing labels changed from "Entity/Entity Type"
+  to "Page/Category". Go code and DB unchanged. Templates, breadcrumbs, buttons,
+  empty states, settings, and dashboard cards all updated.
+- **Drill-down sidebar:** iOS Settings-style push navigation. Clicking a category
+  slides the main nav left (10px peek), revealing a category-specific sub-panel
+  with search, "View All", and "New Page" links. CSS transforms + JS controller
+  (`sidebar_drill.js`). Peek zone has hover glow animation for back affordance.
+- **Category dashboard pages:** Each category gets a customizable landing page
+  with icon header, description, pinned pages section, tag filter bar,
+  grid/table view toggle, and tighter card grid. Replaces plain entity grid
+  when browsing a specific type.
+- **DB migration 000013:** Added `description` (TEXT) and `pinned_entity_ids`
+  (JSON) columns to entity_types table.
+- **Tighter card spacing:** Card padding, image height, and grid gaps reduced.
+  4-column grid on XL screens. Smaller type badges and tag chips.
+- **Service/repo updates:** `UpdateDashboard` method added to EntityTypeRepository
+  and EntityService interfaces. Handler for `PUT /entity-types/:etid/dashboard`.
+
 ### In Progress
 - Nothing currently in progress
 
@@ -98,16 +117,19 @@ completed for dark mode, badge contrast, and admin/campaign settings UX.
 `claude/explore-project-soSu8`
 
 ## Next Session Should
-1. **Run `make templ` and `make tailwind`** before testing -- generated files are gitignored.
-2. **Tests** -- Many plugins/widgets have no tests yet. Priority: entities service
+1. **Run `make templ`, `make tailwind`, and `make migrate-up`** before testing --
+   generated files are gitignored, migration 000013 needs to be applied.
+2. **Grid/Table view toggle** -- Wire the toggle buttons on category dashboard to
+   switch between grid cards and a compact table view.
+3. **Sub-folder support** -- Use existing `parent_id` field to show parent/child
+   grouping on category dashboards with expand/collapse.
+4. **Settings consolidation** -- Move entity type management to a "Navigation &
+   Layout" section; add category page layout editor.
+5. **Persistent filters** -- Save filter state per category in localStorage.
+6. **Tests** -- Many plugins/widgets have no tests yet. Priority: entities service
    (extend existing 30 tests), relations service, tags service, audit service.
-3. **Password reset** -- Wire auth password reset with SMTP when configured.
-4. **Entity nesting** -- Parent/child relationships for entity hierarchy.
-5. **Map viewer** -- Leaflet.js map widget with entity pins.
-6. **D&D 5e module** -- Start with SRD data loading and reference pages. Registry
-   already exists in `internal/modules/registry.go`.
-7. **REST API** -- PASETO token auth for external integrations.
-8. **docker-compose full stack** -- Verify app + MariaDB + Redis works end-to-end.
+7. **Password reset** -- Wire auth password reset with SMTP when configured.
+8. **Map viewer** -- Leaflet.js map widget with entity pins.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

@@ -23,6 +23,7 @@ type EntityTypeRepository interface {
 	Delete(ctx context.Context, id int) error
 	UpdateLayout(ctx context.Context, id int, layoutJSON string) error
 	UpdateColor(ctx context.Context, id int, color string) error
+	UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
 	MaxSortOrder(ctx context.Context, campaignID string) (int, error)
 	SeedDefaults(ctx context.Context, campaignID string) error
@@ -71,14 +72,17 @@ func (r *entityTypeRepository) Create(ctx context.Context, et *EntityType) error
 
 // FindByID retrieves an entity type by its auto-increment ID.
 func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color, fields, layout_json, sort_order, is_default, enabled
+	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
+	                 description, pinned_entity_ids,
+	                 fields, layout_json, sort_order, is_default, enabled
 	          FROM entity_types WHERE id = ?`
 
 	et := &EntityType{}
-	var fieldsRaw, layoutRaw []byte
+	var fieldsRaw, layoutRaw, pinnedRaw []byte
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-		&et.Icon, &et.Color, &fieldsRaw, &layoutRaw, &et.SortOrder,
+		&et.Icon, &et.Color, &et.Description, &pinnedRaw,
+		&fieldsRaw, &layoutRaw, &et.SortOrder,
 		&et.IsDefault, &et.Enabled,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -92,19 +96,25 @@ func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityTyp
 		return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 	}
 	et.Layout = ParseLayoutJSON(layoutRaw)
+	if len(pinnedRaw) > 0 {
+		json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs)
+	}
 	return et, nil
 }
 
 // FindBySlug retrieves an entity type by campaign ID and slug.
 func (r *entityTypeRepository) FindBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color, fields, layout_json, sort_order, is_default, enabled
+	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
+	                 description, pinned_entity_ids,
+	                 fields, layout_json, sort_order, is_default, enabled
 	          FROM entity_types WHERE campaign_id = ? AND slug = ?`
 
 	et := &EntityType{}
-	var fieldsRaw, layoutRaw []byte
+	var fieldsRaw, layoutRaw, pinnedRaw []byte
 	err := r.db.QueryRowContext(ctx, query, campaignID, slug).Scan(
 		&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-		&et.Icon, &et.Color, &fieldsRaw, &layoutRaw, &et.SortOrder,
+		&et.Icon, &et.Color, &et.Description, &pinnedRaw,
+		&fieldsRaw, &layoutRaw, &et.SortOrder,
 		&et.IsDefault, &et.Enabled,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -118,12 +128,17 @@ func (r *entityTypeRepository) FindBySlug(ctx context.Context, campaignID, slug 
 		return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 	}
 	et.Layout = ParseLayoutJSON(layoutRaw)
+	if len(pinnedRaw) > 0 {
+		json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs)
+	}
 	return et, nil
 }
 
 // ListByCampaign returns all entity types for a campaign, ordered by sort_order.
 func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID string) ([]EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color, fields, layout_json, sort_order, is_default, enabled
+	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
+	                 description, pinned_entity_ids,
+	                 fields, layout_json, sort_order, is_default, enabled
 	          FROM entity_types WHERE campaign_id = ? ORDER BY sort_order, name`
 
 	rows, err := r.db.QueryContext(ctx, query, campaignID)
@@ -135,10 +150,11 @@ func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID st
 	var types []EntityType
 	for rows.Next() {
 		var et EntityType
-		var fieldsRaw, layoutRaw []byte
+		var fieldsRaw, layoutRaw, pinnedRaw []byte
 		if err := rows.Scan(
 			&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-			&et.Icon, &et.Color, &fieldsRaw, &layoutRaw, &et.SortOrder,
+			&et.Icon, &et.Color, &et.Description, &pinnedRaw,
+			&fieldsRaw, &layoutRaw, &et.SortOrder,
 			&et.IsDefault, &et.Enabled,
 		); err != nil {
 			return nil, fmt.Errorf("scanning entity type row: %w", err)
@@ -147,6 +163,9 @@ func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID st
 			return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
 		}
 		et.Layout = ParseLayoutJSON(layoutRaw)
+		if len(pinnedRaw) > 0 {
+			json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs)
+		}
 		types = append(types, et)
 	}
 	return types, rows.Err()
@@ -178,6 +197,28 @@ func (r *entityTypeRepository) UpdateColor(ctx context.Context, id int, color st
 	)
 	if err != nil {
 		return fmt.Errorf("updating entity type color: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("entity type not found")
+	}
+	return nil
+}
+
+// UpdateDashboard updates the category dashboard fields (description and pinned
+// entity IDs) for an entity type.
+func (r *entityTypeRepository) UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error {
+	pinnedJSON, err := json.Marshal(pinnedIDs)
+	if err != nil {
+		return fmt.Errorf("marshaling pinned IDs: %w", err)
+	}
+
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE entity_types SET description = ?, pinned_entity_ids = ? WHERE id = ?`,
+		description, pinnedJSON, id,
+	)
+	if err != nil {
+		return fmt.Errorf("updating entity type dashboard: %w", err)
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {

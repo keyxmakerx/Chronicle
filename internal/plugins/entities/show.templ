@@ -16,7 +16,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 		<div class="max-w-6xl mx-auto">
 			<!-- Breadcrumb -->
 			<nav class="text-sm text-fg-secondary mb-4">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Entities</a>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>
 				if entity.TypeSlug != "" {
 					<span class="mx-1">/</span>
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%ss", cc.Campaign.ID, entity.TypeSlug)) } class="hover:text-fg-body">{ entity.TypeName }s</a>

@@ -1,0 +1,203 @@
+// category_dashboard.templ renders the category landing page with a customizable
+// header, tag filters, pinned pages, sub-folder groups, and a grid/table view
+// of all pages in the category. This replaces the plain entity grid when
+// browsing a specific entity type.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CategoryDashboardPage renders the full category dashboard.
+templ CategoryDashboardPage(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string) {
+	@layouts.App(et.NamePlural + " - " + cc.Campaign.Name) {
+		@CategoryDashboardContent(cc, et, entities, counts, total, opts, csrfToken)
+	}
+}
+
+// CategoryDashboardContent renders the category dashboard (for HTMX partial swap).
+templ CategoryDashboardContent(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string) {
+	<div id="entity-list">
+		<!-- Category header -->
+		<div class="mb-5">
+			<div class="flex items-center justify-between mb-2">
+				<div class="flex items-center gap-3">
+					<span
+						class="w-10 h-10 rounded-lg flex items-center justify-center"
+						style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+					>
+						if et.Icon != "" {
+							<i class={ "fa-solid " + et.Icon, "text-lg" }></i>
+						}
+					</span>
+					<div>
+						<h1 class="text-2xl font-bold text-fg">{ et.NamePlural }</h1>
+						<p class="text-sm text-fg-secondary">
+							{ fmt.Sprintf("%d", total) }
+							if total == 1 {
+								page
+							} else {
+								pages
+							}
+						</p>
+					</div>
+				</div>
+				<div class="flex items-center gap-2">
+					if cc.MemberRole >= campaigns.RoleScribe {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID)) }
+							class="btn-primary text-sm"
+						>
+							<i class="fa-solid fa-plus mr-1.5 text-xs"></i> New Page
+						</a>
+					}
+				</div>
+			</div>
+
+			<!-- Category description (editable rich text) -->
+			if et.Description != nil && *et.Description != "" {
+				<div class="text-sm text-fg-body mt-2 max-w-3xl">
+					{ *et.Description }
+				</div>
+			}
+		</div>
+
+		<!-- Tag filter bar + View toggle -->
+		<div class="flex items-center justify-between mb-4 border-b border-edge pb-3">
+			<div class="flex items-center gap-2 overflow-x-auto">
+				<!-- Quick search within category -->
+				<div class="relative">
+					<input
+						type="text"
+						placeholder={ fmt.Sprintf("Search %s...", et.NamePlural) }
+						class="input pl-8 pr-3 py-1.5 w-48 text-sm"
+						hx-get={ fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, et.ID) }
+						hx-trigger="keyup changed delay:300ms"
+						hx-target="#entity-list"
+						hx-swap="outerHTML"
+						name="q"
+						autocomplete="off"
+					/>
+					<i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-muted text-xs pointer-events-none"></i>
+				</div>
+			</div>
+
+			<!-- Grid/Table toggle -->
+			<div class="flex items-center gap-1 bg-surface-alt rounded-md p-0.5">
+				<button
+					class="px-2 py-1 rounded text-xs font-medium bg-surface text-fg shadow-sm"
+					title="Grid view"
+				>
+					<i class="fa-solid fa-grid-2 text-[11px]"></i>
+				</button>
+				<button
+					class="px-2 py-1 rounded text-xs font-medium text-fg-muted hover:text-fg transition-colors"
+					title="Table view"
+				>
+					<i class="fa-solid fa-list text-[11px]"></i>
+				</button>
+			</div>
+		</div>
+
+		<!-- Pinned pages -->
+		if len(et.PinnedEntityIDs) > 0 {
+			<div class="mb-5">
+				<div class="flex items-center gap-2 mb-2">
+					<i class="fa-solid fa-thumbtack text-xs text-fg-muted"></i>
+					<span class="text-xs font-semibold uppercase tracking-wider text-fg-secondary">Pinned</span>
+				</div>
+				<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+					for _, entity := range entities {
+						if isPinned(entity.ID, et.PinnedEntityIDs) {
+							@PinnedCard(&entity, cc)
+						}
+					}
+				</div>
+			</div>
+		}
+
+		<!-- All pages grid -->
+		<div>
+			if len(entities) == 0 {
+				<div class="empty-state">
+					<div class="empty-state__icon">
+						if et.Icon != "" {
+							<i class={ "fa-solid " + et.Icon, "text-fg-muted" }></i>
+						} else {
+							<i class="fa-solid fa-scroll text-fg-muted"></i>
+						}
+					</div>
+					<div class="empty-state__title">No { et.NamePlural } yet</div>
+					<div class="empty-state__description mb-4">
+						Create your first page in this category to get started.
+					</div>
+					if cc.MemberRole >= campaigns.RoleScribe {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID)) }
+							class="btn-primary"
+						>
+							<i class="fa-solid fa-plus mr-1.5 text-xs"></i> Create { et.Name }
+						</a>
+					}
+				</div>
+			} else {
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+					for _, entity := range entities {
+						@EntityCard(&entity, cc)
+					}
+				</div>
+
+				@components.Pagination(components.PaginationData{
+					CurrentPage: opts.Page,
+					PerPage:     opts.PerPage,
+					Total:       total,
+					BaseURL:     fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID),
+					ExtraParams: fmt.Sprintf("type=%d", et.ID),
+					HTMXTarget:  "#entity-list",
+				})
+			}
+		</div>
+	</div>
+}
+
+// PinnedCard renders a compact card for pinned pages at the top of the dashboard.
+templ PinnedCard(entity *Entity, cc *campaigns.CampaignContext) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+		class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-alt hover:bg-surface border border-edge-light hover:border-edge transition-colors group"
+	>
+		if entity.ImagePath != nil && *entity.ImagePath != "" {
+			<img
+				src={ fmt.Sprintf("/media/%s", *entity.ImagePath) }
+				alt={ entity.Name }
+				class="w-8 h-8 rounded object-cover shrink-0"
+			/>
+		} else {
+			<span
+				class="w-8 h-8 rounded flex items-center justify-center shrink-0"
+				style={ fmt.Sprintf("background-color: %s15; color: %s", entity.TypeColor, entity.TypeColor) }
+			>
+				if entity.TypeIcon != "" {
+					<i class={ "fa-solid " + entity.TypeIcon, "text-xs" }></i>
+				}
+			</span>
+		}
+		<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">
+			{ entity.Name }
+		</span>
+	</a>
+}
+
+// isPinned checks if an entity ID is in the pinned list.
+func isPinned(entityID string, pinnedIDs []string) bool {
+	for _, id := range pinnedIDs {
+		if id == entityID {
+			return true
+		}
+	}
+	return false
+}

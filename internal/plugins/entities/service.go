@@ -42,6 +42,7 @@ type EntityService interface {
 	DeleteEntityType(ctx context.Context, id int) error
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
 	UpdateEntityTypeColor(ctx context.Context, id int, color string) error
+	UpdateEntityTypeDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error
 
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
@@ -583,6 +584,15 @@ func (s *entityService) UpdateEntityTypeColor(ctx context.Context, id int, color
 		return apperror.NewBadRequest("color must be a valid hex value like #ff0000")
 	}
 	return s.types.UpdateColor(ctx, id, color)
+}
+
+// UpdateEntityTypeDashboard updates the category dashboard description and
+// pinned page IDs for an entity type.
+func (s *entityService) UpdateEntityTypeDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error {
+	if pinnedIDs == nil {
+		pinnedIDs = []string{}
+	}
+	return s.types.UpdateDashboard(ctx, id, description, pinnedIDs)
 }
 
 // --- Seeder ---

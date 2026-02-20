@@ -343,6 +343,28 @@
   }
 }
 
+  /* ---- Drill-Down Sidebar ---- */
+
+  /* When the main panel is in "peek" mode (drilled into a category), it
+     becomes a narrow strip. Pointer events pass through except on the strip
+     itself, which acts as a back button. A subtle glow on hover signals
+     interactivity. */
+  .sidebar-peek {
+    @apply cursor-pointer;
+    pointer-events: auto;
+  }
+  .sidebar-peek:hover {
+    box-shadow: inset -4px 0 12px -4px rgba(99, 102, 241, 0.3);
+  }
+  /* Dim content when peeking to reinforce it's a "back" affordance */
+  .sidebar-peek > nav {
+    @apply opacity-30 pointer-events-none;
+  }
+  .sidebar-peek:hover > nav {
+    @apply opacity-50;
+  }
+}
+
 /* --- Utility additions --- */
 @layer utilities {
   /* HTMX loading indicator */
