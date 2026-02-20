@@ -28,6 +28,7 @@ type CampaignService interface {
 	GetBySlug(ctx context.Context, slug string) (*Campaign, error)
 	List(ctx context.Context, userID string, opts ListOptions) ([]Campaign, int, error)
 	ListAll(ctx context.Context, opts ListOptions) ([]Campaign, int, error)
+	ListPublic(ctx context.Context, limit int) ([]Campaign, error)
 	Update(ctx context.Context, campaignID string, input UpdateCampaignInput) (*Campaign, error)
 	Delete(ctx context.Context, campaignID string) error
 	CountAll(ctx context.Context) (int, error)
@@ -181,6 +182,15 @@ func (s *campaignService) ListAll(ctx context.Context, opts ListOptions) ([]Camp
 		opts.Page = 1
 	}
 	return s.repo.ListAll(ctx, opts)
+}
+
+// ListPublic returns public campaigns for the landing page. Clamps the limit
+// to a sane range to prevent abuse via URL parameter manipulation.
+func (s *campaignService) ListPublic(ctx context.Context, limit int) ([]Campaign, error) {
+	if limit < 1 || limit > 50 {
+		limit = 12
+	}
+	return s.repo.ListPublic(ctx, limit)
 }
 
 // Update modifies a campaign's name and description.

@@ -23,6 +23,13 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
+// StorageLimiter resolves effective storage limits for quota enforcement at
+// upload time. Implemented by the settings plugin via an adapter in routes.go.
+// When nil, only the static maxSize check applies.
+type StorageLimiter interface {
+	GetEffectiveLimits(ctx context.Context, userID, campaignID string) (maxUploadSize, maxTotalStorage int64, maxFiles int, err error)
+}
+
 // MediaService handles business logic for media file operations.
 type MediaService interface {
 	Upload(ctx context.Context, input UploadInput) (*MediaFile, error)
@@ -30,13 +37,15 @@ type MediaService interface {
 	Delete(ctx context.Context, id string) error
 	FilePath(file *MediaFile) string
 	ThumbnailPath(file *MediaFile, size string) string
+	SetStorageLimiter(limiter StorageLimiter)
 }
 
 // mediaService implements MediaService.
 type mediaService struct {
 	repo      MediaRepository
-	mediaPath string // Root directory for file storage.
-	maxSize   int64  // Maximum file size in bytes.
+	mediaPath string         // Root directory for file storage.
+	maxSize   int64          // Maximum file size in bytes (static fallback).
+	limiter   StorageLimiter // Dynamic storage limits from settings plugin. May be nil.
 }
 
 // NewMediaService creates a new media service.
@@ -48,6 +57,12 @@ func NewMediaService(repo MediaRepository, mediaPath string, maxSize int64) Medi
 	}
 }
 
+// SetStorageLimiter sets the dynamic storage limiter for quota enforcement.
+// Called after all plugins are wired to avoid initialization order issues.
+func (s *mediaService) SetStorageLimiter(limiter StorageLimiter) {
+	s.limiter = limiter
+}
+
 // Upload validates, stores, and records a new media file.
 func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFile, error) {
 	// Validate MIME type.
@@ -55,9 +70,17 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		return nil, apperror.NewBadRequest("unsupported file type: " + input.MimeType)
 	}
 
-	// Validate file size.
-	if input.FileSize > s.maxSize {
-		return nil, apperror.NewBadRequest(fmt.Sprintf("file too large; maximum size is %d MB", s.maxSize/(1024*1024)))
+	// Validate file size against static limit (fallback).
+	maxUpload := s.maxSize
+	if input.FileSize > maxUpload {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("file too large; maximum size is %d MB", maxUpload/(1024*1024)))
+	}
+
+	// Enforce dynamic storage limits from site settings if available.
+	if s.limiter != nil {
+		if err := s.checkQuotas(ctx, input); err != nil {
+			return nil, err
+		}
 	}
 
 	// Validate magic bytes match declared MIME type.
@@ -135,6 +158,51 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		slog.Int64("size", input.FileSize),
 	)
 	return file, nil
+}
+
+// checkQuotas enforces dynamic storage limits from the settings plugin.
+// Checks per-file size, campaign storage total, and campaign file count.
+// Returns a user-facing error if any quota would be exceeded. A limit of 0
+// means unlimited (no cap enforced).
+func (s *mediaService) checkQuotas(ctx context.Context, input UploadInput) error {
+	maxUpload, maxStorage, maxFiles, err := s.limiter.GetEffectiveLimits(ctx, input.UploadedBy, input.CampaignID)
+	if err != nil {
+		// Quota lookup failure should not block uploads -- log and allow.
+		slog.Warn("failed to resolve storage limits, allowing upload",
+			slog.String("user_id", input.UploadedBy),
+			slog.String("campaign_id", input.CampaignID),
+			slog.Any("error", err),
+		)
+		return nil
+	}
+
+	// Per-file size limit from settings (overrides static maxSize).
+	if maxUpload > 0 && input.FileSize > maxUpload {
+		return apperror.NewBadRequest(fmt.Sprintf("file too large; maximum size is %d MB", maxUpload/(1024*1024)))
+	}
+
+	// Campaign-scoped limits only apply if the upload is associated with a campaign.
+	if input.CampaignID == "" {
+		return nil
+	}
+
+	usedBytes, fileCount, err := s.repo.GetCampaignUsage(ctx, input.CampaignID)
+	if err != nil {
+		slog.Warn("failed to query campaign usage, allowing upload",
+			slog.String("campaign_id", input.CampaignID),
+			slog.Any("error", err),
+		)
+		return nil
+	}
+
+	if maxStorage > 0 && usedBytes+input.FileSize > maxStorage {
+		return apperror.NewBadRequest("campaign storage quota exceeded")
+	}
+	if maxFiles > 0 && fileCount+1 > maxFiles {
+		return apperror.NewBadRequest("campaign file count limit reached")
+	}
+
+	return nil
 }
 
 // GetByID retrieves a media file by ID.

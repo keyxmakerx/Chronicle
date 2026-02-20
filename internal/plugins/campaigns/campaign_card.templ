@@ -8,16 +8,36 @@ import "fmt"
 templ CampaignCard(campaign *Campaign) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", campaign.ID)) }
-		class="card p-6 hover:shadow-lg transition-shadow block"
+		class="card p-0 overflow-hidden hover:shadow-md hover:-translate-y-0.5 block group"
 	>
-		<h3 class="text-lg font-semibold text-gray-900 mb-2">{ campaign.Name }</h3>
-		if campaign.Description != nil && *campaign.Description != "" {
-			<p class="text-sm text-gray-600 line-clamp-3">{ *campaign.Description }</p>
-		} else {
-			<p class="text-sm text-gray-400 italic">No description</p>
-		}
-		<div class="mt-4 text-xs text-gray-400">
-			{ campaign.UpdatedAt.Format("Jan 2, 2006") }
+		<!-- Accent bar -->
+		<div class="h-1.5 bg-gradient-to-r from-accent to-indigo-400"></div>
+
+		<div class="p-5">
+			<div class="flex items-start gap-3">
+				<div class="w-10 h-10 rounded-lg bg-accent/10 dark:bg-accent/20 flex items-center justify-center shrink-0">
+					<i class="fa-solid fa-book-open text-accent"></i>
+				</div>
+				<div class="min-w-0 flex-1">
+					<h3 class="text-base font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-accent transition-colors">{ campaign.Name }</h3>
+					if campaign.Description != nil && *campaign.Description != "" {
+						<p class="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">{ *campaign.Description }</p>
+					} else {
+						<p class="text-sm text-gray-400 dark:text-gray-500 italic mt-1">No description</p>
+					}
+				</div>
+			</div>
+
+			<div class="mt-4 flex items-center text-xs text-gray-400 dark:text-gray-500">
+				<i class="fa-regular fa-clock mr-1.5"></i>
+				{ campaign.UpdatedAt.Format("Jan 2, 2006") }
+				if campaign.IsPublic {
+					<span class="ml-auto inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+						<i class="fa-solid fa-globe text-[10px]"></i>
+						Public
+					</span>
+				}
+			</div>
 		</div>
 	</a>
 }

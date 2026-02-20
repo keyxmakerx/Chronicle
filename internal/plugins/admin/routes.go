@@ -10,7 +10,8 @@ import (
 // RegisterRoutes sets up all admin routes on the given Echo instance.
 // Creates a /admin group with auth + site admin middleware, then registers
 // sub-routes for dashboard, users, campaigns, and SMTP settings.
-func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtpHandler *smtp.Handler) {
+// Returns the admin group so other plugins can register additional admin routes.
+func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtpHandler *smtp.Handler) *echo.Group {
 	admin := e.Group("/admin",
 		auth.RequireAuth(authService),
 		auth.RequireSiteAdmin(),
@@ -37,4 +38,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	if smtpHandler != nil {
 		smtp.RegisterRoutes(admin, smtpHandler)
 	}
+
+	return admin
 }

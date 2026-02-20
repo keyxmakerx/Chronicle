@@ -19,8 +19,12 @@ type EntityTypeRepository interface {
 	FindByID(ctx context.Context, id int) (*EntityType, error)
 	FindBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]EntityType, error)
+	Update(ctx context.Context, et *EntityType) error
+	Delete(ctx context.Context, id int) error
 	UpdateLayout(ctx context.Context, id int, layoutJSON string) error
 	UpdateColor(ctx context.Context, id int, color string) error
+	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
+	MaxSortOrder(ctx context.Context, campaignID string) (int, error)
 	SeedDefaults(ctx context.Context, campaignID string) error
 }
 
@@ -180,6 +184,74 @@ func (r *entityTypeRepository) UpdateColor(ctx context.Context, id int, color st
 		return apperror.NewNotFound("entity type not found")
 	}
 	return nil
+}
+
+// Update modifies an existing entity type's name, slug, icon, color, and fields.
+func (r *entityTypeRepository) Update(ctx context.Context, et *EntityType) error {
+	fieldsJSON, err := json.Marshal(et.Fields)
+	if err != nil {
+		return fmt.Errorf("marshaling fields: %w", err)
+	}
+
+	query := `UPDATE entity_types SET name = ?, name_plural = ?, slug = ?, icon = ?, color = ?, fields = ?
+	          WHERE id = ?`
+
+	result, err := r.db.ExecContext(ctx, query,
+		et.Name, et.NamePlural, et.Slug, et.Icon, et.Color, fieldsJSON, et.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("updating entity type: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("entity type not found")
+	}
+	return nil
+}
+
+// Delete removes an entity type by ID.
+func (r *entityTypeRepository) Delete(ctx context.Context, id int) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM entity_types WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("deleting entity type: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("entity type not found")
+	}
+	return nil
+}
+
+// SlugExists returns true if an entity type with the given slug exists in the campaign.
+func (r *entityTypeRepository) SlugExists(ctx context.Context, campaignID, slug string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM entity_types WHERE campaign_id = ? AND slug = ?)`,
+		campaignID, slug,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("checking entity type slug existence: %w", err)
+	}
+	return exists, nil
+}
+
+// MaxSortOrder returns the highest sort_order value for entity types in a campaign.
+// Returns 0 if the campaign has no entity types.
+func (r *entityTypeRepository) MaxSortOrder(ctx context.Context, campaignID string) (int, error) {
+	var maxOrder sql.NullInt64
+	err := r.db.QueryRowContext(ctx,
+		`SELECT MAX(sort_order) FROM entity_types WHERE campaign_id = ?`,
+		campaignID,
+	).Scan(&maxOrder)
+	if err != nil {
+		return 0, fmt.Errorf("querying max sort order: %w", err)
+	}
+	if !maxOrder.Valid {
+		return 0, nil
+	}
+	return int(maxOrder.Int64), nil
 }
 
 // defaultEntityTypes defines the entity types seeded when a campaign is created.

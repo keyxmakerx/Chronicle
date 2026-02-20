@@ -14,7 +14,7 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfTok
 		<div class="max-w-4xl mx-auto">
 			// Pending transfer banner for the target user.
 			if transfer != nil {
-				<div class="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md mb-6 text-sm">
+				<div class="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg mb-6 text-sm dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-400">
 					<strong>Ownership transfer pending.</strong>
 					if cc.MemberRole == RoleOwner {
 						You have initiated a transfer. The new owner must accept it.
@@ -25,48 +25,74 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfTok
 							hx-post={ fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID) }
 						>
 							<input type="hidden" name="csrf_token" value={ csrfToken }/>
-							<button type="submit" class="underline text-yellow-900 hover:text-yellow-700 ml-2">Cancel transfer</button>
+							<button type="submit" class="underline text-yellow-900 dark:text-yellow-300 hover:text-yellow-700 ml-2">Cancel transfer</button>
 						</form>
 					}
 				</div>
 			}
 
-			<div class="flex items-center justify-between mb-6">
+			<div class="flex items-center justify-between mb-8">
 				<div>
-					<h1 class="text-3xl font-bold text-gray-900">{ cc.Campaign.Name }</h1>
+					<h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">{ cc.Campaign.Name }</h1>
 					if cc.Campaign.Description != nil && *cc.Campaign.Description != "" {
-						<p class="text-gray-600 mt-2">{ *cc.Campaign.Description }</p>
+						<p class="text-gray-500 dark:text-gray-400 mt-2 max-w-2xl">{ *cc.Campaign.Description }</p>
 					}
 				</div>
 
 				if cc.MemberRole >= RoleOwner {
 					<div class="flex space-x-2">
-						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/edit", cc.Campaign.ID)) } class="btn-secondary text-sm">Edit</a>
-						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">Settings</a>
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/edit", cc.Campaign.ID)) } class="btn-secondary text-sm">
+							<i class="fa-solid fa-pen mr-1.5 text-xs"></i> Edit
+						</a>
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
+							<i class="fa-solid fa-gear mr-1.5 text-xs"></i> Settings
+						</a>
 					</div>
 				}
 			</div>
 
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="card p-6 hover:shadow-lg transition-shadow block">
-					<h3 class="font-semibold text-gray-900 mb-2">Members</h3>
-					<p class="text-sm text-gray-600">View and manage campaign members</p>
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="card p-6 hover:shadow-md hover:-translate-y-0.5 block group">
+					<div class="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-3">
+						<i class="fa-solid fa-users text-blue-600 dark:text-blue-400"></i>
+					</div>
+					<h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1 group-hover:text-accent transition-colors">Members</h3>
+					<p class="text-sm text-gray-500 dark:text-gray-400">View and manage campaign members</p>
 				</a>
 
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="card p-6 hover:shadow-lg transition-shadow block">
-					<h3 class="font-semibold text-gray-900 mb-2">Entities</h3>
-					<p class="text-sm text-gray-600">Characters, locations, items, and more</p>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="card p-6 hover:shadow-md hover:-translate-y-0.5 block group">
+					<div class="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center mb-3">
+						<i class="fa-solid fa-scroll text-indigo-600 dark:text-indigo-400"></i>
+					</div>
+					<h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1 group-hover:text-accent transition-colors">Entities</h3>
+					<p class="text-sm text-gray-500 dark:text-gray-400">Characters, locations, items, and more</p>
 				</a>
 
-				<div class="card p-6 opacity-50">
-					<h3 class="font-semibold text-gray-900 mb-2">Maps</h3>
-					<p class="text-sm text-gray-400">Coming soon</p>
-				</div>
+				if cc.MemberRole >= RoleOwner {
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="card p-6 hover:shadow-md hover:-translate-y-0.5 block group">
+						<div class="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center mb-3">
+							<i class="fa-solid fa-layer-group text-purple-600 dark:text-purple-400"></i>
+						</div>
+						<h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1 group-hover:text-accent transition-colors">Entity Types</h3>
+						<p class="text-sm text-gray-500 dark:text-gray-400">Manage custom entity categories and fields</p>
+					</a>
+				} else {
+					<div class="card p-6 opacity-40">
+						<div class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center mb-3">
+							<i class="fa-solid fa-map text-gray-400"></i>
+						</div>
+						<h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Maps</h3>
+						<p class="text-sm text-gray-400 dark:text-gray-500">Coming soon</p>
+					</div>
+				}
 			</div>
 
-			<div class="mt-6 text-xs text-gray-400">
-				Your role: <span class="font-medium">{ cc.MemberRole.DisplayName() }</span>
-				&middot; Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }
+			<div class="mt-8 flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500">
+				<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-medium">
+					<i class="fa-solid fa-user-shield text-[10px]"></i>
+					{ cc.MemberRole.DisplayName() }
+				</span>
+				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
 			</div>
 		</div>
 	}

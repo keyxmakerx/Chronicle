@@ -1,27 +1,72 @@
 package entities
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// EntityTagFetcher retrieves tags for entities in batch. Defined here to avoid
+// importing the tags widget package, keeping plugins loosely coupled via interfaces.
+type EntityTagFetcher interface {
+	GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]EntityTagInfo, error)
+}
+
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service EntityService
+	service    EntityService
+	auditSvc   audit.AuditService
+	tagFetcher EntityTagFetcher
 }
 
 // NewHandler creates a new entity handler.
 func NewHandler(service EntityService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetAuditService sets the audit service for recording entity mutations.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetAuditService(svc audit.AuditService) {
+	h.auditSvc = svc
+}
+
+// SetTagFetcher sets the tag fetcher for populating entity tags in list views.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetTagFetcher(f EntityTagFetcher) {
+	h.tagFetcher = f
+}
+
+// logAudit fires a fire-and-forget audit entry. Errors are logged but
+// never block the primary operation.
+func (h *Handler) logAudit(c echo.Context, campaignID, action, entityID, entityName string) {
+	if h.auditSvc == nil {
+		return
+	}
+	userID := auth.GetUserID(c)
+	if err := h.auditSvc.Log(c.Request().Context(), &audit.AuditEntry{
+		CampaignID: campaignID,
+		UserID:     userID,
+		Action:     action,
+		EntityType: "entity",
+		EntityID:   entityID,
+		EntityName: entityName,
+	}); err != nil {
+		slog.Warn("audit log failed", slog.String("action", action), slog.Any("error", err))
+	}
 }
 
 // --- Entity CRUD ---
@@ -62,6 +107,23 @@ func (h *Handler) Index(c echo.Context) error {
 	entities, total, err := h.service.List(c.Request().Context(), campaignID, typeID, role, opts)
 	if err != nil {
 		return err
+	}
+
+	// Batch-fetch tags for all entities in the list to show chips on cards.
+	if h.tagFetcher != nil && len(entities) > 0 {
+		entityIDs := make([]string, len(entities))
+		for i := range entities {
+			entityIDs[i] = entities[i].ID
+		}
+		if tagsMap, err := h.tagFetcher.GetEntityTagsBatch(c.Request().Context(), entityIDs); err == nil {
+			for i := range entities {
+				if t, ok := tagsMap[entities[i].ID]; ok {
+					entities[i].Tags = t
+				}
+			}
+		} else {
+			slog.Warn("failed to batch-fetch entity tags for list", slog.Any("error", err))
+		}
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
@@ -121,6 +183,8 @@ func (h *Handler) Create(c echo.Context) error {
 		}
 		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, csrfToken, errMsg))
 	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityCreated, entity.ID, entity.Name)
 
 	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entities/" + entity.ID
 	if middleware.IsHTMX(c) {
@@ -232,6 +296,8 @@ func (h *Handler) Update(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, EntityEditPage(cc, entity, entityType, entityTypes, csrfToken, errMsg))
 	}
 
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
+
 	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entities/" + entityID
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", redirectURL)
@@ -262,6 +328,8 @@ func (h *Handler) Delete(c echo.Context) error {
 		return err
 	}
 
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityDeleted, entityID, entity.Name)
+
 	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entities"
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", redirectURL)
@@ -271,6 +339,8 @@ func (h *Handler) Delete(c echo.Context) error {
 }
 
 // SearchAPI handles entity search requests (GET /campaigns/:id/entities/search).
+// Returns HTML fragments for HTMX callers and JSON for API callers (e.g., the
+// @mention widget) based on the Accept header.
 func (h *Handler) SearchAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -284,12 +354,33 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	opts := DefaultListOptions()
 	opts.PerPage = 20
 
+	// Check if the caller wants JSON (used by the editor @mention widget).
+	wantsJSON := strings.Contains(c.Request().Header.Get("Accept"), "application/json")
+
 	results, total, err := h.service.Search(c.Request().Context(), cc.Campaign.ID, query, typeID, role, opts)
 	if err != nil {
 		if _, ok := err.(*apperror.AppError); ok {
+			if wantsJSON {
+				return c.JSON(http.StatusOK, map[string]any{"results": []any{}, "total": 0})
+			}
 			return middleware.Render(c, http.StatusOK, SearchResultsFragment(nil, 0, cc))
 		}
 		return err
+	}
+
+	if wantsJSON {
+		items := make([]map[string]string, len(results))
+		for i, e := range results {
+			items[i] = map[string]string{
+				"id":         e.ID,
+				"name":       e.Name,
+				"type_name":  e.TypeName,
+				"type_icon":  e.TypeIcon,
+				"type_color": e.TypeColor,
+				"url":        fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, e.ID),
+			}
+		}
+		return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total})
 	}
 
 	return middleware.Render(c, http.StatusOK, SearchResultsFragment(results, total, cc))
@@ -359,6 +450,8 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 		return err
 	}
 
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
+
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -394,6 +487,247 @@ func (h *Handler) UpdateImageAPI(c echo.Context) error {
 		return err
 	}
 
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// --- Preview API ---
+
+// htmlTagPattern matches HTML tags for stripping in entry excerpts.
+var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
+
+// PreviewAPI returns minimal entity data for tooltip/popover display.
+// Designed to be lightweight and cacheable. Returns JSON with name, type info,
+// image, excerpt, and privacy status.
+// GET /campaigns/:id/entities/:eid/preview
+func (h *Handler) PreviewAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	entityID := c.Param("eid")
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+
+	// IDOR protection: verify entity belongs to the campaign in the URL.
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Privacy check: private entities return 404 for Players.
+	if entity.IsPrivate && cc.MemberRole < campaigns.RoleScribe {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Look up the entity type for icon, color, and name.
+	entityType, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
+	if err != nil {
+		return apperror.NewInternal(nil)
+	}
+
+	// Build an excerpt from entry_html: strip HTML tags, truncate to ~150 chars.
+	var entryExcerpt string
+	if entity.EntryHTML != nil && *entity.EntryHTML != "" {
+		plain := htmlTagPattern.ReplaceAllString(*entity.EntryHTML, "")
+		plain = strings.Join(strings.Fields(plain), " ") // Normalize whitespace.
+		if len(plain) > 150 {
+			// Truncate at word boundary.
+			truncated := plain[:150]
+			if idx := strings.LastIndex(truncated, " "); idx > 100 {
+				truncated = truncated[:idx]
+			}
+			entryExcerpt = truncated + "..."
+		} else {
+			entryExcerpt = plain
+		}
+	}
+
+	// Resolve image path to a full URL for the tooltip.
+	var imagePath string
+	if entity.ImagePath != nil && *entity.ImagePath != "" {
+		imagePath = fmt.Sprintf("/media/%s", *entity.ImagePath)
+	}
+
+	// Resolve type label.
+	var typeLabel string
+	if entity.TypeLabel != nil {
+		typeLabel = *entity.TypeLabel
+	}
+
+	// Set cache headers: short-lived cache for fast repeated hovers.
+	c.Response().Header().Set("Cache-Control", "private, max-age=60")
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"name":          entity.Name,
+		"type_name":     entityType.Name,
+		"type_icon":     entityType.Icon,
+		"type_color":    entityType.Color,
+		"image_path":    imagePath,
+		"type_label":    typeLabel,
+		"is_private":    entity.IsPrivate,
+		"entry_excerpt": entryExcerpt,
+	})
+}
+
+// --- Entity Type CRUD ---
+
+// EntityTypesPage renders the entity type management page.
+// GET /campaigns/:id/entity-types
+func (h *Handler) EntityTypesPage(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	entityTypes, err := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	// Get entity counts per type so we can show usage and protect used types.
+	role := int(cc.MemberRole)
+	counts, _ := h.service.CountByType(c.Request().Context(), cc.Campaign.ID, role)
+
+	csrfToken := middleware.GetCSRFToken(c)
+
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK,
+			EntityTypeListContent(cc, entityTypes, counts, csrfToken))
+	}
+	return middleware.Render(c, http.StatusOK,
+		EntityTypesManagePage(cc, entityTypes, counts, csrfToken, ""))
+}
+
+// CreateEntityType processes the entity type creation form.
+// POST /campaigns/:id/entity-types
+func (h *Handler) CreateEntityType(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	var req CreateEntityTypeRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+
+	input := CreateEntityTypeInput{
+		Name:       req.Name,
+		NamePlural: req.NamePlural,
+		Icon:       req.Icon,
+		Color:      req.Color,
+	}
+
+	et, err := h.service.CreateEntityType(c.Request().Context(), cc.Campaign.ID, input)
+	if err != nil {
+		entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
+		counts, _ := h.service.CountByType(c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole))
+		csrfToken := middleware.GetCSRFToken(c)
+		errMsg := "failed to create entity type"
+		if appErr, ok := err.(*apperror.AppError); ok {
+			errMsg = appErr.Message
+		}
+		return middleware.Render(c, http.StatusOK,
+			EntityTypesManagePage(cc, entityTypes, counts, csrfToken, errMsg))
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityTypeCreated, strconv.Itoa(et.ID), et.Name)
+
+	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entity-types"
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", redirectURL)
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, redirectURL)
+}
+
+// UpdateEntityTypeAPI updates an entity type.
+// PUT /campaigns/:id/entity-types/:etid
+func (h *Handler) UpdateEntityTypeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	// IDOR protection: verify entity type belongs to this campaign.
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	var body UpdateEntityTypeRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	input := UpdateEntityTypeInput{
+		Name:       body.Name,
+		NamePlural: body.NamePlural,
+		Icon:       body.Icon,
+		Color:      body.Color,
+		Fields:     body.Fields,
+	}
+
+	updated, err := h.service.UpdateEntityType(c.Request().Context(), etID, input)
+	if err != nil {
+		if appErr, ok := err.(*apperror.AppError); ok {
+			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
+		}
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityTypeUpdated, strconv.Itoa(etID), updated.Name)
+
+	return c.JSON(http.StatusOK, updated)
+}
+
+// DeleteEntityType removes an entity type.
+// DELETE /campaigns/:id/entity-types/:etid
+func (h *Handler) DeleteEntityType(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	// IDOR protection: verify entity type belongs to this campaign.
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	if err := h.service.DeleteEntityType(c.Request().Context(), etID); err != nil {
+		if appErr, ok := err.(*apperror.AppError); ok {
+			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
+		}
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityTypeDeleted, strconv.Itoa(etID), et.Name)
+
+	// HTMX: redirect to entity types page after deletion.
+	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entity-types"
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", redirectURL)
+		return c.NoContent(http.StatusNoContent)
+	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 

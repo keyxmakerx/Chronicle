@@ -29,7 +29,7 @@ templ App(title string) {
 				@FlashMessages()
 
 				<!-- Page content (scrollable) -->
-				<main class="flex-1 overflow-y-auto p-6" id="main-content">
+				<main class="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900" id="main-content">
 					{ children... }
 				</main>
 			</div>
@@ -65,67 +65,94 @@ templ Sidebar() {
 			}
 		</nav>
 
-		<!-- Admin section (site admins only) -->
+		<!-- Admin section (site admins only) — collapsible -->
 		if GetIsAdmin(ctx) {
-			<div class="border-t border-gray-700 py-4">
-				<div class="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-					Admin
+			<div
+				x-data="{ open: localStorage.getItem('chronicle-admin-nav') !== 'collapsed' }"
+				class="border-t border-gray-700"
+			>
+				<button
+					@click="open = !open; localStorage.setItem('chronicle-admin-nav', open ? 'open' : 'collapsed')"
+					class="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+				>
+					<span>Admin</span>
+					<svg
+						class="w-3 h-3 transition-transform duration-200"
+						:class="open ? 'rotate-0' : '-rotate-90'"
+						fill="none" stroke="currentColor" viewBox="0 0 24 24"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+					</svg>
+				</button>
+				<div x-show="open" x-collapse>
+					<a
+						href="/admin"
+						class={ sidebarNavLink,
+							templ.KV(sidebarNavActive, isExactPath(ctx, "/admin")),
+							templ.KV(sidebarNavInactive, !isExactPath(ctx, "/admin")) }
+					>
+						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+							<i class="fa-solid fa-gauge text-xs"></i>
+						</span>
+						Dashboard
+					</a>
+					<a
+						href="/admin/users"
+						class={ sidebarNavLink,
+							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/users")),
+							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/users")) }
+					>
+						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+							<i class="fa-solid fa-users text-xs"></i>
+						</span>
+						Users
+					</a>
+					<a
+						href="/admin/campaigns"
+						class={ sidebarNavLink,
+							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/campaigns")),
+							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/campaigns")) }
+					>
+						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+							<i class="fa-solid fa-book-open text-xs"></i>
+						</span>
+						All Campaigns
+					</a>
+					<a
+						href="/admin/storage"
+						class={ sidebarNavLink,
+							templ.KV(sidebarNavActive, isExactPath(ctx, "/admin/storage")),
+							templ.KV(sidebarNavInactive, !isExactPath(ctx, "/admin/storage")) }
+					>
+						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+							<i class="fa-solid fa-hard-drive text-xs"></i>
+						</span>
+						Storage
+					</a>
+					<a
+						href="/admin/storage/settings"
+						class={ sidebarNavLink,
+							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/storage/settings")),
+							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/storage/settings")) }
+					>
+						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+							<i class="fa-solid fa-sliders text-xs"></i>
+						</span>
+						Storage Settings
+					</a>
+					<a
+						href="/admin/smtp"
+						class={ sidebarNavLink,
+							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/smtp")),
+							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/smtp")) }
+					>
+						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+							<i class="fa-solid fa-envelope text-xs"></i>
+						</span>
+						SMTP Settings
+					</a>
+					<div class="pb-2"></div>
 				</div>
-				<a
-					href="/admin"
-					class={ sidebarNavLink,
-						templ.KV(sidebarNavActive, isExactPath(ctx, "/admin")),
-						templ.KV(sidebarNavInactive, !isExactPath(ctx, "/admin")) }
-				>
-					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-						<i class="fa-solid fa-gauge text-xs"></i>
-					</span>
-					Dashboard
-				</a>
-				<a
-					href="/admin/users"
-					class={ sidebarNavLink,
-						templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/users")),
-						templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/users")) }
-				>
-					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-						<i class="fa-solid fa-users text-xs"></i>
-					</span>
-					Users
-				</a>
-				<a
-					href="/admin/campaigns"
-					class={ sidebarNavLink,
-						templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/campaigns")),
-						templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/campaigns")) }
-				>
-					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-						<i class="fa-solid fa-book-open text-xs"></i>
-					</span>
-					All Campaigns
-				</a>
-				<a
-					href="/admin/storage"
-					class={ sidebarNavLink,
-						templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/storage")),
-						templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/storage")) }
-				>
-					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-						<i class="fa-solid fa-hard-drive text-xs"></i>
-					</span>
-					Storage
-				</a>
-				<a
-					href="/admin/smtp"
-					class={ sidebarNavLink,
-						templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/smtp")),
-						templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/smtp")) }
-				>
-					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-						<i class="fa-solid fa-envelope text-xs"></i>
-					</span>
-					SMTP Settings
-				</a>
 			</div>
 		}
 
@@ -205,6 +232,18 @@ templ CampaignSidebarNav() {
 
 		if GetCampaignRole(ctx) >= 3 {
 			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/activity", GetCampaignID(ctx))) }
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/activity", GetCampaignID(ctx)))),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/activity", GetCampaignID(ctx)))) }
+			>
+				<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+				</svg>
+				Activity Log
+			</a>
+
+			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx))) }
 				class={ sidebarNavLink,
 					templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))),
@@ -283,9 +322,9 @@ templ entityTypeLink(slug string, label string, color string, icon string, count
 }
 
 // Topbar renders the top navigation bar with search, campaign breadcrumb,
-// and user menu.
+// dark mode toggle, and user menu.
 templ Topbar() {
-	<header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
+	<header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shrink-0">
 		<!-- Left: Campaign selector + Search -->
 		<div class="flex items-center space-x-4">
 			if IsAuthenticated(ctx) {
@@ -294,12 +333,12 @@ templ Topbar() {
 					<button
 						@click="open = !open"
 						@click.outside="open = false"
-						class="flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+						class="flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
 					>
 						if InCampaign(ctx) {
 							<span class="truncate max-w-[180px]">{ GetCampaignName(ctx) }</span>
 						} else {
-							<span class="text-gray-500">Select Campaign</span>
+							<span class="text-gray-500 dark:text-gray-400">Select Campaign</span>
 						}
 						<svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -313,7 +352,7 @@ templ Topbar() {
 						x-transition:leave="transition ease-in duration-75"
 						x-transition:leave-start="opacity-100 scale-100"
 						x-transition:leave-end="opacity-0 scale-95"
-						class="absolute left-0 top-full mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden"
+						class="absolute left-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden"
 						hx-get="/campaigns/picker"
 						hx-trigger="intersect once"
 						hx-swap="innerHTML"
@@ -323,7 +362,7 @@ templ Topbar() {
 				</div>
 			} else if InCampaign(ctx) {
 				<!-- Static campaign name for guests -->
-				<span class="px-3 py-1.5 text-sm font-medium text-gray-700">
+				<span class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200">
 					{ GetCampaignName(ctx) }
 				</span>
 			}
@@ -349,8 +388,24 @@ templ Topbar() {
 			}
 		</div>
 
-		<!-- Right: User menu or guest login links -->
-		<div class="flex items-center space-x-4">
+		<!-- Right: Dark mode toggle + User menu -->
+		<div class="flex items-center space-x-3">
+			<!-- Dark mode toggle -->
+			<button
+				data-theme-toggle
+				class="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+				title="Toggle dark mode"
+			>
+				<!-- Sun icon (shown in dark mode — click to go light) -->
+				<svg class="w-5 h-5 theme-icon-light hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+				</svg>
+				<!-- Moon icon (shown in light mode — click to go dark) -->
+				<svg class="w-5 h-5 theme-icon-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+				</svg>
+			</button>
+
 			if IsAuthenticated(ctx) {
 				<div class="flex items-center space-x-2">
 					<!-- User avatar placeholder -->
@@ -359,7 +414,7 @@ templ Topbar() {
 							{ userInitials(ctx) }
 						</span>
 					</div>
-					<span class="text-sm font-medium text-gray-700">
+					<span class="text-sm font-medium text-gray-700 dark:text-gray-200">
 						{ GetUserName(ctx) }
 					</span>
 				</div>
@@ -368,13 +423,13 @@ templ Topbar() {
 					<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
 					<button
 						type="submit"
-						class="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+						class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
 					>
 						Logout
 					</button>
 				</form>
 			} else {
-				<a href="/login" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors">
+				<a href="/login" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors">
 					Log in
 				</a>
 				<a href="/register" class="btn-primary text-sm">
@@ -394,10 +449,10 @@ templ FlashMessages() {
 			x-show="show"
 			x-init="setTimeout(() => show = false, 5000)"
 			x-transition
-			class="mx-6 mt-4 px-4 py-3 rounded-md bg-green-50 border border-green-200 text-green-800 text-sm flex items-center justify-between"
+			class="mx-6 mt-4 px-4 py-3 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-400 text-sm flex items-center justify-between"
 		>
 			<span>{ msg }</span>
-			<button @click="show = false" class="text-green-600 hover:text-green-800 ml-4">&times;</button>
+			<button @click="show = false" class="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 ml-4">&times;</button>
 		</div>
 	}
 	if msg := GetFlashError(ctx); msg != "" {
@@ -406,10 +461,10 @@ templ FlashMessages() {
 			x-show="show"
 			x-init="setTimeout(() => show = false, 8000)"
 			x-transition
-			class="mx-6 mt-4 px-4 py-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-sm flex items-center justify-between"
+			class="mx-6 mt-4 px-4 py-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-400 text-sm flex items-center justify-between"
 		>
 			<span>{ msg }</span>
-			<button @click="show = false" class="text-red-600 hover:text-red-800 ml-4">&times;</button>
+			<button @click="show = false" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 ml-4">&times;</button>
 		</div>
 	}
 }

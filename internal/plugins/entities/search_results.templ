@@ -18,6 +18,7 @@ templ SearchResultsFragment(results []Entity, total int, cc *campaigns.CampaignC
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
 					class="flex items-center px-4 py-2 hover:bg-gray-50 text-sm transition-colors"
+					data-entity-preview={ fmt.Sprintf("/campaigns/%s/entities/%s/preview", cc.Campaign.ID, entity.ID) }
 				>
 					<span
 						class="w-2 h-2 rounded-full mr-3 shrink-0"

@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -28,11 +29,18 @@ type SettingsEntityType struct {
 	Color      string `json:"color"`
 }
 
+// AuditLogger records audit events for campaign-scoped actions. Defined here
+// as an interface to avoid circular imports with the audit plugin.
+type AuditLogger interface {
+	LogEvent(ctx context.Context, campaignID, userID, action string, details map[string]any) error
+}
+
 // Handler handles HTTP requests for campaign operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
 	service      CampaignService
 	entityLister EntityTypeLister
+	auditLogger  AuditLogger
 }
 
 // NewHandler creates a new campaign handler.
@@ -44,6 +52,24 @@ func NewHandler(service CampaignService) *Handler {
 // Called after both plugins are wired to avoid circular dependencies.
 func (h *Handler) SetEntityLister(lister EntityTypeLister) {
 	h.entityLister = lister
+}
+
+// SetAuditLogger sets the audit logger for recording campaign mutations.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetAuditLogger(logger AuditLogger) {
+	h.auditLogger = logger
+}
+
+// logAudit fires a fire-and-forget audit entry. Errors are logged but
+// never block the primary operation.
+func (h *Handler) logAudit(c echo.Context, campaignID, action string, details map[string]any) {
+	if h.auditLogger == nil {
+		return
+	}
+	userID := auth.GetUserID(c)
+	if err := h.auditLogger.LogEvent(c.Request().Context(), campaignID, userID, action, details); err != nil {
+		slog.Warn("audit log failed", slog.String("action", action), slog.Any("error", err))
+	}
 }
 
 // --- Campaign CRUD ---
@@ -185,6 +211,8 @@ func (h *Handler) Update(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, CampaignEditPage(cc.Campaign, csrfToken, errMsg))
 	}
 
+	h.logAudit(c, cc.Campaign.ID, "campaign.updated", nil)
+
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID)
 		return c.NoContent(http.StatusNoContent)
@@ -314,6 +342,11 @@ func (h *Handler) AddMember(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, CampaignMembersPage(cc, members, csrfToken, errMsg))
 	}
 
+	h.logAudit(c, cc.Campaign.ID, "member.joined", map[string]any{
+		"email": req.Email,
+		"role":  req.Role,
+	})
+
 	// Refresh the member list.
 	members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)
@@ -341,6 +374,10 @@ func (h *Handler) RemoveMember(c echo.Context) error {
 		}
 		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, errMsg))
 	}
+
+	h.logAudit(c, cc.Campaign.ID, "member.left", map[string]any{
+		"target_user_id": targetUserID,
+	})
 
 	members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)
@@ -374,6 +411,11 @@ func (h *Handler) UpdateRole(c echo.Context) error {
 		}
 		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, errMsg))
 	}
+
+	h.logAudit(c, cc.Campaign.ID, "member.role_changed", map[string]any{
+		"target_user_id": targetUserID,
+		"new_role":       req.Role,
+	})
 
 	members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)

@@ -9,7 +9,14 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
-## Current Sprint: Phase 1 -- Foundation
+## Current Sprint: Phase 2 -- Media & UI
+
+**Target:** Media plugin, security hardening, dynamic sidebar, entity image upload,
+UI quality improvements, sidebar customization, visual template editor, public
+campaigns, dark mode, tags, audit logging, entity relations, entity type management,
+@mentions, hover tooltips, and visual polish.
+
+## Completed Sprint: Phase 1 -- Foundation
 
 **Target:** Working CRUD app with auth, campaign management, entity editor with
 rich text, and basic Kanka-inspired UI. Deployable via Docker.
@@ -81,8 +88,8 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] editor.js widget with Chronicle.register() (static/js/widgets/editor.js)
 - [x] boot.js widget auto-mounter (static/js/boot.js)
 - [x] Save/load entity entry content via API (GET/PUT entry endpoints)
-- [ ] @mention system (search entities, insert link)
-- [ ] Entity mention parsing and rendering server-side
+- [x] @mention system (search entities, insert link, popup with keyboard nav)
+- [x] Entity mention rendering (client-side via TipTap, stored as HTML links)
 
 ### Priority 6 -- UI & Layouts (Must Do)
 - [x] Base Templ layout (HTML shell, head, scripts, styles)
@@ -103,11 +110,12 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Basic health check endpoint (`/healthz`)
 
 ### Priority 8 -- Nice to Have (Phase 1)
-- [ ] Tags widget (tag CRUD, entity tagging)
+- [x] Tags widget (tag CRUD, entity tagging)
+- [x] Tags frontend widget (tag picker on entity profile pages)
 - [ ] Entity nesting (parent/child relationships)
 - [ ] Entity posts (additional sections on entity profile)
 - [x] Image upload for entity headers
-- [ ] Dark mode toggle
+- [x] Dark mode toggle
 
 ---
 
@@ -117,11 +125,12 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [ ] Leaflet.js map viewer widget
 - [ ] Map pin CRUD with entity linking
 - [x] Image upload system with thumbnails (media plugin)
-- [ ] Entity relations plugin (bi-directional)
+- [x] Entity relations widget (bi-directional linking, migration 000012)
 - [ ] REST API plugin with PASETO token auth
 - [x] Rate limiting middleware (auth + uploads)
 - [x] IDOR protection on all entity endpoints
 - [x] HSTS security header
+- [x] Site settings plugin (editable storage limits, per-user/campaign overrides)
 - [x] Dynamic sidebar with entity types from DB
 - [x] Entity image upload pipeline
 - [x] UI upgrade with Font Awesome icons
@@ -130,15 +139,20 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Unified entity type config widget (sidebar + layout + color in one UI)
 - [x] Entity type color picker (PUT color API + hex validation)
 - [x] Public campaign support (is_public flag, migration 000008, OptionalAuth)
+- [x] Public campaigns on landing page (ListPublic repo/service, campaign cards grid)
 - [x] Apply layout_json to entity show page rendering
 - [x] Visual template editor (drag-and-drop grid page builder)
 - [x] Admin panel sidebar nav with modules section
+- [x] Entity type CRUD (create, edit, delete with icon/color/fields management)
+- [x] Entity hover tooltip/popover (preview on hover, LRU cache, smart positioning)
+- [x] Tag display on entity list cards (batch fetch, colored chips)
+- [x] Visual polish pass (Kanka-inspired: gradient hero, icon cards, refined buttons/cards)
 
 ### Phase 3 -- Permissions & Advanced Multi-User
 - [ ] Per-entity permissions (view/edit per role/user)
 - [ ] Invite system (email invitations for campaigns)
 - [ ] 2FA/TOTP support
-- [ ] Audit log
+- [x] Audit log (plugin + wired into handlers)
 
 ### Phase 4 -- Game Systems & Advanced
 - [ ] D&D 5e module (SRD reference data, tooltips, pages)

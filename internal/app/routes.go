@@ -10,13 +10,17 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
+	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
+	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
+	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
+	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
 
 // entityTypeListerAdapter wraps entities.EntityService to implement the
@@ -44,6 +48,61 @@ func (a *entityTypeListerAdapter) GetEntityTypesForSettings(ctx context.Context,
 	return result, nil
 }
 
+// campaignAuditAdapter wraps audit.AuditService to implement the
+// campaigns.AuditLogger interface without creating a circular import
+// (audit already imports campaigns for middleware).
+type campaignAuditAdapter struct {
+	svc audit.AuditService
+}
+
+// LogEvent records a campaign-scoped audit event.
+func (a *campaignAuditAdapter) LogEvent(ctx context.Context, campaignID, userID, action string, details map[string]any) error {
+	return a.svc.Log(ctx, &audit.AuditEntry{
+		CampaignID: campaignID,
+		UserID:     userID,
+		Action:     action,
+		Details:    details,
+	})
+}
+
+// entityTagFetcherAdapter wraps tags.TagService to implement the
+// entities.EntityTagFetcher interface for batch tag loading in list views.
+type entityTagFetcherAdapter struct {
+	svc tags.TagService
+}
+
+// GetEntityTagsBatch returns minimal tag info for multiple entities.
+func (a *entityTagFetcherAdapter) GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]entities.EntityTagInfo, error) {
+	tagsMap, err := a.svc.GetEntityTagsBatch(ctx, entityIDs)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string][]entities.EntityTagInfo, len(tagsMap))
+	for eid, tagList := range tagsMap {
+		infos := make([]entities.EntityTagInfo, len(tagList))
+		for i, t := range tagList {
+			infos[i] = entities.EntityTagInfo{Name: t.Name, Color: t.Color}
+		}
+		result[eid] = infos
+	}
+	return result, nil
+}
+
+// storageLimiterAdapter wraps settings.SettingsService to implement the
+// media.StorageLimiter interface without creating a circular import.
+type storageLimiterAdapter struct {
+	svc settings.SettingsService
+}
+
+// GetEffectiveLimits resolves storage limits for a user+campaign context.
+func (a *storageLimiterAdapter) GetEffectiveLimits(ctx context.Context, userID, campaignID string) (int64, int64, int, error) {
+	limits, err := a.svc.GetEffectiveLimits(ctx, userID, campaignID)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return limits.MaxUploadSize, limits.MaxTotalStorage, limits.MaxFiles, nil
+}
+
 // RegisterRoutes sets up all application routes. It registers public routes
 // directly and delegates to each plugin's route registration function.
 //
@@ -53,11 +112,6 @@ func (a *App) RegisterRoutes() {
 	e := a.Echo
 
 	// --- Public Routes (no auth required) ---
-
-	// Landing page.
-	e.GET("/", func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, pages.Landing())
-	})
 
 	// Health check endpoint for Docker/Cosmos health monitoring.
 	// Pings both MariaDB and Redis to report actual infrastructure health.
@@ -115,6 +169,17 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
 
+	// Landing page -- registered after campaignService exists so we can
+	// fetch public campaigns for the discover section.
+	e.GET("/", func(c echo.Context) error {
+		publicCampaigns, err := campaignService.ListPublic(c.Request().Context(), 12)
+		if err != nil {
+			slog.Warn("failed to load public campaigns for landing page", slog.Any("error", err))
+			publicCampaigns = nil
+		}
+		return middleware.Render(c, http.StatusOK, pages.Landing(publicCampaigns))
+	})
+
 	// Entity routes (campaign-scoped, registered after campaign service exists).
 	entityHandler := entities.NewHandler(entityService)
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
@@ -130,7 +195,42 @@ func (a *App) RegisterRoutes() {
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings, storage).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
 	adminHandler.SetMediaDeps(mediaRepo, mediaService, a.Config.Upload.MaxSize)
-	admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
+	adminGroup := admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
+
+	// Settings plugin: editable storage limits (global, per-user, per-campaign).
+	// Registers on the admin group since all settings routes require site admin.
+	settingsRepo := settings.NewSettingsRepository(a.DB)
+	settingsService := settings.NewSettingsService(settingsRepo)
+	settingsHandler := settings.NewHandler(settingsService)
+	settings.RegisterRoutes(adminGroup, settingsHandler)
+
+	// Wire dynamic storage limits into the media service so uploads
+	// respect per-user and per-campaign quotas from site settings.
+	mediaService.SetStorageLimiter(&storageLimiterAdapter{svc: settingsService})
+
+	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
+	tagRepo := tags.NewTagRepository(a.DB)
+	tagService := tags.NewTagService(tagRepo)
+	tagHandler := tags.NewHandler(tagService)
+	tags.RegisterRoutes(e, tagHandler, campaignService, authService)
+
+	// Relations widget: bi-directional entity linking (create/list/delete).
+	relRepo := relations.NewRelationRepository(a.DB)
+	relService := relations.NewRelationService(relRepo)
+	relHandler := relations.NewHandler(relService)
+	relations.RegisterRoutes(e, relHandler, campaignService, authService)
+
+	// Audit plugin: campaign activity logging and history.
+	auditRepo := audit.NewAuditRepository(a.DB)
+	auditService := audit.NewAuditService(auditRepo)
+	auditHandler := audit.NewHandler(auditService)
+	audit.RegisterRoutes(e, auditHandler, campaignService, authService)
+
+	// Wire audit logging into mutation handlers so CRUD actions are recorded.
+	entityHandler.SetAuditService(auditService)
+	entityHandler.SetTagFetcher(&entityTagFetcherAdapter{svc: tagService})
+	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
+	tagHandler.SetAuditService(auditService)
 
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {

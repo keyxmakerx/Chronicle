@@ -35,10 +35,16 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Owner routes.
 	cg.DELETE("/entities/:eid", h.Delete, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Entity type management (Owner only).
+	cg.GET("/entity-types", h.EntityTypesPage, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/entity-types", h.CreateEntityType, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/entity-types/:etid", h.UpdateEntityTypeAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.DELETE("/entity-types/:etid", h.DeleteEntityType, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Template editor (Owner only).
 	cg.GET("/entity-types/:etid/template", h.TemplateEditor, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// Entity type API (Owner only).
+	// Entity type layout/color API (Owner only).
 	cg.GET("/entity-types/:etid/layout", h.GetEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/layout", h.UpdateEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/color", h.UpdateEntityTypeColor, campaigns.RequireRole(campaigns.RoleOwner))
@@ -52,6 +58,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/entities", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/entities/search", h.SearchAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/entities/:eid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Shortcut routes: /campaigns/:id/characters -> entities filtered by type.
 	shortcuts := []struct {

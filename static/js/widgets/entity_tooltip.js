@@ -1,0 +1,475 @@
+/**
+ * entity_tooltip.js -- Chronicle Entity Tooltip/Popover Widget
+ *
+ * Provides hover tooltips for entity references throughout the app.
+ * Shows entity name, type badge, image thumbnail, and entry excerpt
+ * when the user hovers over any element with a `data-entity-preview`
+ * attribute (whose value is the preview API URL).
+ *
+ * Two usage modes:
+ *   1. Auto-mounted by boot.js on elements with data-widget="entity-tooltip"
+ *      (scans children for data-entity-preview elements).
+ *   2. Global helper: Chronicle.tooltip.attach(element, previewURL) for
+ *      other widgets to programmatically attach tooltips.
+ *
+ * Features:
+ *   - Debounced hover (300ms) to avoid API spam
+ *   - Client-side LRU cache (max 100 entries)
+ *   - Smart positioning (above or below, avoids viewport overflow)
+ *   - Touch support (long press to show, tap elsewhere to dismiss)
+ *   - Dark mode support via .dark class on <html>
+ *   - Accessible: role="tooltip", aria-describedby
+ *   - Inline CSS injected once (no Tailwind dependency)
+ */
+(function () {
+  'use strict';
+
+  // --- Scoped Styles (injected once) ---
+
+  if (!document.getElementById('entity-tooltip-styles')) {
+    var style = document.createElement('style');
+    style.id = 'entity-tooltip-styles';
+    style.textContent = [
+      '.et-tooltip { position: fixed; z-index: 9999; width: 300px; max-width: 90vw; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); overflow: hidden; pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity 150ms ease, transform 150ms ease; font-family: Inter, system-ui, -apple-system, sans-serif; }',
+      '.et-tooltip--visible { opacity: 1; transform: translateY(0); pointer-events: auto; }',
+      '.et-tooltip--above { transform: translateY(-4px); }',
+      '.et-tooltip--above.et-tooltip--visible { transform: translateY(0); }',
+      '.dark .et-tooltip { background: #1f2937; border-color: #374151; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }',
+      '.et-tooltip__image { width: 100%; height: 120px; object-fit: cover; display: block; }',
+      '.et-tooltip__body { padding: 12px; }',
+      '.et-tooltip__name { font-size: 15px; font-weight: 600; color: #111827; margin: 0 0 6px 0; line-height: 1.3; display: flex; align-items: center; gap: 6px; }',
+      '.dark .et-tooltip__name { color: #f3f4f6; }',
+      '.et-tooltip__private { color: #9ca3af; font-size: 11px; }',
+      '.et-tooltip__badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; color: #ffffff; line-height: 18px; white-space: nowrap; }',
+      '.et-tooltip__label { font-size: 12px; color: #6b7280; margin-left: 6px; }',
+      '.dark .et-tooltip__label { color: #9ca3af; }',
+      '.et-tooltip__type-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }',
+      '.et-tooltip__excerpt { font-size: 13px; line-height: 1.5; color: #4b5563; margin: 0; }',
+      '.dark .et-tooltip__excerpt { color: #d1d5db; }',
+      '.et-tooltip__footer { padding: 8px 12px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; }',
+      '.dark .et-tooltip__footer { border-top-color: #374151; color: #6b7280; }',
+      '.et-tooltip__loading { padding: 20px; text-align: center; font-size: 13px; color: #9ca3af; }'
+    ].join('\n');
+    document.head.appendChild(style);
+  }
+
+  // --- LRU Cache ---
+
+  var MAX_CACHE = 100;
+  var cache = {};
+  var cacheOrder = []; // Most recently used at the end.
+
+  /**
+   * Retrieve a cached preview, promoting it to most-recently-used.
+   * @param {string} url - Preview API URL.
+   * @returns {Object|null} Cached preview data or null.
+   */
+  function cacheGet(url) {
+    if (!(url in cache)) return null;
+    // Promote to end (most recent).
+    var idx = cacheOrder.indexOf(url);
+    if (idx !== -1) cacheOrder.splice(idx, 1);
+    cacheOrder.push(url);
+    return cache[url];
+  }
+
+  /**
+   * Store a preview in the cache, evicting the oldest entry if at capacity.
+   * @param {string} url - Preview API URL.
+   * @param {Object} data - Preview response data.
+   */
+  function cacheSet(url, data) {
+    if (url in cache) {
+      var idx = cacheOrder.indexOf(url);
+      if (idx !== -1) cacheOrder.splice(idx, 1);
+    } else if (cacheOrder.length >= MAX_CACHE) {
+      // Evict least recently used.
+      var oldest = cacheOrder.shift();
+      delete cache[oldest];
+    }
+    cache[url] = data;
+    cacheOrder.push(url);
+  }
+
+  // --- Tooltip Singleton ---
+
+  var tooltipEl = null;    // The tooltip DOM element (created lazily).
+  var activeTarget = null; // Currently hovered trigger element.
+  var hoverTimer = null;   // Debounce timer for showing.
+  var hideTimer = null;    // Delay timer for hiding.
+  var touchTimer = null;   // Long-press timer for touch.
+  var tooltipIdCounter = 0;
+
+  /**
+   * Create the singleton tooltip element if it doesn't exist.
+   * @returns {HTMLElement}
+   */
+  function ensureTooltip() {
+    if (tooltipEl) return tooltipEl;
+    tooltipEl = document.createElement('div');
+    tooltipEl.className = 'et-tooltip';
+    tooltipEl.setAttribute('role', 'tooltip');
+    tooltipEl.id = 'entity-tooltip-' + (++tooltipIdCounter);
+    tooltipEl.style.display = 'none';
+    document.body.appendChild(tooltipEl);
+
+    // Allow hovering over the tooltip itself without dismissing it.
+    tooltipEl.addEventListener('mouseenter', function () {
+      clearTimeout(hideTimer);
+    });
+    tooltipEl.addEventListener('mouseleave', function () {
+      hideTooltip();
+    });
+
+    return tooltipEl;
+  }
+
+  /**
+   * Render the tooltip content from preview data.
+   * @param {Object} data - Preview API response.
+   * @param {string} entityURL - URL to the entity page.
+   */
+  function renderTooltip(data, entityURL) {
+    var tip = ensureTooltip();
+    var html = '';
+
+    // Image thumbnail.
+    if (data.image_path) {
+      html += '<img class="et-tooltip__image" src="' + escapeAttr(data.image_path) + '" alt="' + escapeAttr(data.name) + '" />';
+    }
+
+    html += '<div class="et-tooltip__body">';
+
+    // Entity name with optional private indicator.
+    html += '<div class="et-tooltip__name">';
+    html += escapeHtml(data.name);
+    if (data.is_private) {
+      html += ' <span class="et-tooltip__private" title="Private"><i class="fa-solid fa-lock"></i></span>';
+    }
+    html += '</div>';
+
+    // Type badge row.
+    html += '<div class="et-tooltip__type-row">';
+    html += '<span class="et-tooltip__badge" style="background-color: ' + escapeAttr(data.type_color) + '">';
+    if (data.type_icon) {
+      html += '<i class="fa-solid ' + escapeAttr(data.type_icon) + '" style="font-size:10px"></i> ';
+    }
+    html += escapeHtml(data.type_name);
+    html += '</span>';
+    if (data.type_label) {
+      html += '<span class="et-tooltip__label">' + escapeHtml(data.type_label) + '</span>';
+    }
+    html += '</div>';
+
+    // Entry excerpt.
+    if (data.entry_excerpt) {
+      html += '<p class="et-tooltip__excerpt">' + escapeHtml(data.entry_excerpt) + '</p>';
+    }
+
+    html += '</div>';
+
+    // Footer with "Click to view" hint.
+    html += '<div class="et-tooltip__footer">Click to view &rarr;</div>';
+
+    tip.innerHTML = html;
+  }
+
+  /**
+   * Position the tooltip near the target element using smart placement.
+   * Prefers below the element; flips above if insufficient space below.
+   * @param {HTMLElement} target - The trigger element.
+   */
+  function positionTooltip(target) {
+    var tip = ensureTooltip();
+    var rect = target.getBoundingClientRect();
+    var tipRect = tip.getBoundingClientRect();
+    var gap = 8;
+    var viewW = window.innerWidth;
+    var viewH = window.innerHeight;
+
+    // Determine vertical placement: prefer below, flip above if no room.
+    var placeAbove = false;
+    var top;
+    if (rect.bottom + gap + tipRect.height > viewH && rect.top - gap - tipRect.height > 0) {
+      // Not enough room below, but enough above.
+      placeAbove = true;
+      top = rect.top - tipRect.height - gap;
+    } else {
+      top = rect.bottom + gap;
+    }
+
+    // Horizontal: center on the target, but clamp to viewport.
+    var left = rect.left + (rect.width / 2) - (tipRect.width / 2);
+    if (left < 8) left = 8;
+    if (left + tipRect.width > viewW - 8) left = viewW - 8 - tipRect.width;
+
+    tip.style.top = top + 'px';
+    tip.style.left = left + 'px';
+
+    tip.classList.toggle('et-tooltip--above', placeAbove);
+  }
+
+  /**
+   * Show the tooltip for a target element with the given preview URL.
+   * Fetches data if not cached, then renders and positions.
+   * @param {HTMLElement} target - The trigger element.
+   * @param {string} previewURL - The preview API endpoint.
+   */
+  function showTooltip(target, previewURL) {
+    if (!previewURL) return;
+    activeTarget = target;
+
+    var tip = ensureTooltip();
+    tip.style.display = 'block';
+    tip.classList.remove('et-tooltip--visible');
+
+    // Set ARIA attributes on the trigger.
+    target.setAttribute('aria-describedby', tip.id);
+
+    var cached = cacheGet(previewURL);
+    if (cached) {
+      renderTooltip(cached, target.getAttribute('href') || '#');
+      // Position after render (need dimensions).
+      requestAnimationFrame(function () {
+        positionTooltip(target);
+        tip.classList.add('et-tooltip--visible');
+      });
+      return;
+    }
+
+    // Show loading state.
+    tip.innerHTML = '<div class="et-tooltip__loading">Loading...</div>';
+    requestAnimationFrame(function () {
+      positionTooltip(target);
+      tip.classList.add('et-tooltip--visible');
+    });
+
+    // Fetch preview data.
+    fetch(previewURL, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin'
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Preview fetch failed: ' + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        cacheSet(previewURL, data);
+        // Only render if this target is still the active one.
+        if (activeTarget === target) {
+          renderTooltip(data, target.getAttribute('href') || '#');
+          requestAnimationFrame(function () {
+            positionTooltip(target);
+          });
+        }
+      })
+      .catch(function () {
+        // Silently fail: hide tooltip if fetch fails.
+        if (activeTarget === target) {
+          hideTooltip();
+        }
+      });
+  }
+
+  /**
+   * Hide the tooltip and clean up ARIA attributes.
+   */
+  function hideTooltip() {
+    clearTimeout(hoverTimer);
+    clearTimeout(hideTimer);
+    clearTimeout(touchTimer);
+
+    if (tooltipEl) {
+      tooltipEl.classList.remove('et-tooltip--visible');
+      // Wait for fade-out transition before hiding.
+      setTimeout(function () {
+        if (tooltipEl && !tooltipEl.classList.contains('et-tooltip--visible')) {
+          tooltipEl.style.display = 'none';
+        }
+      }, 160);
+    }
+
+    if (activeTarget) {
+      activeTarget.removeAttribute('aria-describedby');
+      activeTarget = null;
+    }
+  }
+
+  // --- Event Delegation (mouse) ---
+
+  /**
+   * Find the closest ancestor (or self) with data-entity-preview.
+   * @param {HTMLElement} el
+   * @returns {HTMLElement|null}
+   */
+  function findPreviewTrigger(el) {
+    return el.closest ? el.closest('[data-entity-preview]') : null;
+  }
+
+  // Use event delegation on the document for efficiency.
+  document.addEventListener('mouseover', function (e) {
+    var trigger = findPreviewTrigger(e.target);
+    if (!trigger) return;
+
+    // If we're already showing for this trigger, skip.
+    if (activeTarget === trigger) {
+      clearTimeout(hideTimer);
+      return;
+    }
+
+    // Clear any pending show/hide.
+    clearTimeout(hoverTimer);
+    clearTimeout(hideTimer);
+
+    // Debounce: wait 300ms before fetching/showing.
+    hoverTimer = setTimeout(function () {
+      var url = trigger.getAttribute('data-entity-preview');
+      showTooltip(trigger, url);
+    }, 300);
+  });
+
+  document.addEventListener('mouseout', function (e) {
+    var trigger = findPreviewTrigger(e.target);
+    if (!trigger) return;
+
+    clearTimeout(hoverTimer);
+
+    // Small delay before hiding so user can move mouse to tooltip.
+    hideTimer = setTimeout(function () {
+      hideTooltip();
+    }, 100);
+  });
+
+  // --- Event Delegation (touch) ---
+
+  document.addEventListener('touchstart', function (e) {
+    var trigger = findPreviewTrigger(e.target);
+    if (!trigger) {
+      // Touch outside: dismiss any visible tooltip.
+      if (activeTarget) hideTooltip();
+      return;
+    }
+
+    // Long press: show tooltip after 500ms.
+    clearTimeout(touchTimer);
+    touchTimer = setTimeout(function () {
+      e.preventDefault();
+      var url = trigger.getAttribute('data-entity-preview');
+      showTooltip(trigger, url);
+    }, 500);
+  }, { passive: false });
+
+  document.addEventListener('touchend', function () {
+    clearTimeout(touchTimer);
+  });
+
+  document.addEventListener('touchmove', function () {
+    clearTimeout(touchTimer);
+  });
+
+  // --- Dismiss on Escape and Scroll ---
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && activeTarget) {
+      hideTooltip();
+    }
+  });
+
+  // Dismiss on any scroll (window or scrollable ancestor).
+  window.addEventListener('scroll', function () {
+    if (activeTarget) hideTooltip();
+  }, true); // Capture phase to catch all scrollable elements.
+
+  // --- Utility ---
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function escapeAttr(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  // --- Widget Registration ---
+
+  // Register as a widget so boot.js can mount it on container elements.
+  // When mounted, it does nothing extra beyond what event delegation already
+  // handles -- but this allows explicit scoping and lifecycle management.
+  Chronicle.register('entity-tooltip', {
+    init: function (el, config) {
+      // Nothing to do: event delegation on document handles everything.
+      // This registration exists so other code can explicitly place a
+      // data-widget="entity-tooltip" container to signal intent.
+      el._entityTooltipInit = true;
+    },
+    destroy: function (el) {
+      delete el._entityTooltipInit;
+    }
+  });
+
+  // --- Global Helper API ---
+
+  // Expose a global helper so other widgets (e.g., editor, relation lists)
+  // can programmatically attach tooltip behavior to dynamic elements.
+  Chronicle.tooltip = {
+    /**
+     * Attach tooltip behavior to an element.
+     * Sets the data-entity-preview attribute so event delegation picks it up.
+     *
+     * @param {HTMLElement} element - The element to make hoverable.
+     * @param {string} previewURL - The entity preview API URL.
+     */
+    attach: function (element, previewURL) {
+      if (element && previewURL) {
+        element.setAttribute('data-entity-preview', previewURL);
+      }
+    },
+
+    /**
+     * Detach tooltip behavior from an element.
+     *
+     * @param {HTMLElement} element - The element to clean up.
+     */
+    detach: function (element) {
+      if (element) {
+        element.removeAttribute('data-entity-preview');
+        if (activeTarget === element) {
+          hideTooltip();
+        }
+      }
+    },
+
+    /**
+     * Manually show the tooltip for an element.
+     *
+     * @param {HTMLElement} element - The trigger element.
+     * @param {string} previewURL - The entity preview API URL.
+     */
+    show: function (element, previewURL) {
+      showTooltip(element, previewURL);
+    },
+
+    /**
+     * Manually hide the tooltip.
+     */
+    hide: function () {
+      hideTooltip();
+    },
+
+    /**
+     * Clear the preview cache (useful after entity edits).
+     */
+    clearCache: function () {
+      cache = {};
+      cacheOrder = [];
+    }
+  };
+})();

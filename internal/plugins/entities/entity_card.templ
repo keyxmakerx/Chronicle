@@ -14,6 +14,7 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
 		class="card p-0 overflow-hidden hover:shadow-lg transition-shadow block group"
+		data-entity-preview={ fmt.Sprintf("/campaigns/%s/entities/%s/preview", cc.Campaign.ID, entity.ID) }
 	>
 		<!-- Image or placeholder header -->
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
@@ -57,6 +58,20 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 					<span class="text-xs text-gray-500">{ *entity.TypeLabel }</span>
 				}
 			</div>
+
+			<!-- Tag chips -->
+			if len(entity.Tags) > 0 {
+				<div class="flex flex-wrap gap-1 mt-2">
+					for _, tag := range entity.Tags {
+						<span
+							class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+							style={ fmt.Sprintf("background-color: %s22; color: %s", tag.Color, tag.Color) }
+						>
+							{ tag.Name }
+						</span>
+					}
+				</div>
+			}
 		</div>
 	</a>
 }

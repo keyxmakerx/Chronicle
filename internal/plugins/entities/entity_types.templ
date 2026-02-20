@@ -1,0 +1,272 @@
+// entity_types.templ renders the entity type management page where campaign
+// owners can create, edit, and delete entity types.
+
+package entities
+
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// commonIcons is a curated list of Font Awesome solid icons for the icon picker.
+var commonIcons = []string{
+	"fa-user", "fa-users", "fa-map-pin", "fa-building", "fa-box", "fa-sticky-note",
+	"fa-calendar", "fa-crown", "fa-shield", "fa-scroll", "fa-book", "fa-star",
+	"fa-flag", "fa-landmark", "fa-globe", "fa-mountain", "fa-tree", "fa-water",
+	"fa-fire", "fa-bolt", "fa-gem", "fa-skull", "fa-dragon", "fa-hat-wizard",
+	"fa-dungeon", "fa-chess-rook", "fa-hand-fist", "fa-wand-sparkles",
+	"fa-circle", "fa-heart", "fa-swords", "fa-compass", "fa-anchor",
+	"fa-feather", "fa-paw", "fa-horse", "fa-ghost", "fa-flask",
+}
+
+// EntityTypesManagePage renders the full entity type management page.
+templ EntityTypesManagePage(cc *campaigns.CampaignContext, entityTypes []EntityType, counts map[int]int, csrfToken, errMsg string) {
+	@layouts.App(cc.Campaign.Name + " - Entity Types") {
+		<div class="max-w-4xl mx-auto">
+			<div class="flex items-center justify-between mb-6">
+				<div>
+					<h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Entity Types</h1>
+					<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+						Manage the categories of entities in your campaign.
+					</p>
+				</div>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) }
+					class="btn-secondary text-sm"
+				>Back to Settings</a>
+			</div>
+
+			if errMsg != "" {
+				<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-md mb-6 text-sm" role="alert">
+					{ errMsg }
+				</div>
+			}
+
+			@EntityTypeListContent(cc, entityTypes, counts, csrfToken)
+		</div>
+	}
+}
+
+// EntityTypeListContent renders the entity type list and create form (for HTMX partial swap).
+templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityType, counts map[int]int, csrfToken string) {
+	<div id="entity-type-list">
+		// Create new entity type form.
+		<div class="card p-6 mb-6">
+			<h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Add Entity Type</h2>
+			<form
+				method="POST"
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
+				hx-post={ fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID) }
+				class="space-y-4"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<div>
+						<label for="et-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+						<input
+							type="text"
+							id="et-name"
+							name="name"
+							required
+							class="input w-full"
+							placeholder="e.g., Faction"
+							maxlength="100"
+						/>
+					</div>
+					<div>
+						<label for="et-name-plural" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Plural Name</label>
+						<input
+							type="text"
+							id="et-name-plural"
+							name="name_plural"
+							class="input w-full"
+							placeholder="e.g., Factions (auto-generated if blank)"
+							maxlength="100"
+						/>
+					</div>
+				</div>
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<div>
+						<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Icon</label>
+						<div class="flex flex-wrap gap-2 p-3 border border-gray-200 dark:border-gray-700 rounded-md max-h-32 overflow-y-auto bg-white dark:bg-gray-800">
+							for i, icon := range commonIcons {
+								<label class="cursor-pointer" title={ icon }>
+									<input
+										type="radio"
+										name="icon"
+										value={ icon }
+										class="peer sr-only"
+										if i == 0 {
+											checked
+										}
+									/>
+									<span class="inline-flex items-center justify-center w-8 h-8 rounded border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/30 peer-checked:text-blue-600 dark:peer-checked:text-blue-400 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
+										<i class={ "fa-solid " + icon, "text-sm" }></i>
+									</span>
+								</label>
+							}
+						</div>
+					</div>
+					<div>
+						<label for="et-color" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Color</label>
+						<div class="flex items-center gap-3">
+							<input
+								type="color"
+								id="et-color"
+								name="color"
+								value="#6b7280"
+								class="w-10 h-10 rounded border border-gray-200 dark:border-gray-700 cursor-pointer"
+							/>
+							<span class="text-sm text-gray-500 dark:text-gray-400">Pick a color for this entity type</span>
+						</div>
+					</div>
+				</div>
+				<div class="flex justify-end">
+					<button type="submit" class="btn-primary">
+						<i class="fa-solid fa-plus mr-1"></i> Add Entity Type
+					</button>
+				</div>
+			</form>
+		</div>
+
+		// Existing entity types list.
+		<div class="space-y-3">
+			for _, et := range entityTypes {
+				@EntityTypeCard(cc, &et, counts[et.ID], csrfToken)
+			}
+		</div>
+
+		if len(entityTypes) == 0 {
+			<div class="empty-state">
+				<div class="empty-state__icon">
+					<i class="fa-solid fa-shapes text-gray-400"></i>
+				</div>
+				<div class="empty-state__title">No entity types</div>
+				<div class="empty-state__description">
+					Create your first entity type to start organizing your world.
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// EntityTypeCard renders a single entity type row with edit/delete actions.
+templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount int, csrfToken string) {
+	<div
+		class="card p-4"
+		id={ fmt.Sprintf("et-card-%d", et.ID) }
+		x-data="{ editing: false, deleting: false }"
+	>
+		// Display mode.
+		<div x-show="!editing" class="flex items-center justify-between">
+			<div class="flex items-center gap-3">
+				<div
+					class="w-10 h-10 rounded-lg flex items-center justify-center"
+					style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+				>
+					<i class={ "fa-solid " + et.Icon }></i>
+				</div>
+				<div>
+					<div class="font-medium text-gray-900 dark:text-gray-100">{ et.Name }</div>
+					<div class="text-xs text-gray-500 dark:text-gray-400">
+						{ et.NamePlural } &middot; { strconv.Itoa(entityCount) } entities
+						if et.IsDefault {
+							&middot; <span class="text-blue-600 dark:text-blue-400">default</span>
+						}
+					</div>
+				</div>
+			</div>
+			<div class="flex items-center gap-2">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types/%d/template", cc.Campaign.ID, et.ID)) }
+					class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+					title="Edit page layout"
+				>
+					<i class="fa-solid fa-table-columns mr-1"></i> Layout
+				</a>
+				<button
+					@click="editing = true"
+					class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+					title="Edit entity type"
+				>
+					<i class="fa-solid fa-pencil mr-1"></i> Edit
+				</button>
+				if entityCount == 0 {
+					<button
+						@click="deleting = true"
+						class="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+						title="Delete entity type"
+					>
+						<i class="fa-solid fa-trash mr-1"></i> Delete
+					</button>
+				} else {
+					<span
+						class="text-xs text-gray-300 dark:text-gray-600 px-2 py-1 cursor-not-allowed"
+						title={ fmt.Sprintf("Cannot delete: %d entities use this type", entityCount) }
+					>
+						<i class="fa-solid fa-trash mr-1"></i> Delete
+					</span>
+				}
+			</div>
+		</div>
+
+		// Edit mode (inline).
+		<div x-show="editing" x-cloak class="space-y-4">
+			<div class="flex items-center justify-between mb-2">
+				<h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Edit { et.Name }</h3>
+				<button @click="editing = false" class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">Cancel</button>
+			</div>
+			<div
+				data-widget="entity-type-editor"
+				data-entity-type-id={ strconv.Itoa(et.ID) }
+				data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d", cc.Campaign.ID, et.ID) }
+				data-name={ et.Name }
+				data-name-plural={ et.NamePlural }
+				data-icon={ et.Icon }
+				data-color={ et.Color }
+				data-fields={ entityTypeFieldsJSON(et.Fields) }
+				data-csrf-token={ csrfToken }
+			>
+				// JS widget will render the edit form here.
+				<div class="text-sm text-gray-500 dark:text-gray-400">Loading editor...</div>
+			</div>
+		</div>
+
+		// Delete confirmation.
+		<div x-show="deleting" x-cloak class="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-md border border-red-200 dark:border-red-800">
+			<p class="text-sm text-red-700 dark:text-red-400 mb-3">
+				Are you sure you want to delete <strong>{ et.Name }</strong>? This cannot be undone.
+			</p>
+			<div class="flex items-center gap-2">
+				<button
+					hx-delete={ fmt.Sprintf("/campaigns/%s/entity-types/%d", cc.Campaign.ID, et.ID) }
+					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token": "%s"}`, csrfToken) }
+					class="bg-red-600 text-white px-3 py-1.5 rounded text-sm hover:bg-red-700 transition-colors"
+				>
+					Yes, Delete
+				</button>
+				<button
+					@click="deleting = false"
+					class="btn-secondary text-sm"
+				>
+					Cancel
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// entityTypeFieldsJSON serializes field definitions to JSON for the edit widget.
+func entityTypeFieldsJSON(fields []FieldDefinition) string {
+	if fields == nil {
+		return "[]"
+	}
+	b, err := json.Marshal(fields)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}

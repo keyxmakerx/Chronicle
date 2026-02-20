@@ -36,6 +36,9 @@ type EntityService interface {
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	GetEntityTypeByID(ctx context.Context, id int) (*EntityType, error)
 	CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error)
+	CreateEntityType(ctx context.Context, campaignID string, input CreateEntityTypeInput) (*EntityType, error)
+	UpdateEntityType(ctx context.Context, id int, input UpdateEntityTypeInput) (*EntityType, error)
+	DeleteEntityType(ctx context.Context, id int) error
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
 	UpdateEntityTypeColor(ctx context.Context, id int, color string) error
 
@@ -279,6 +282,207 @@ func (s *entityService) GetEntityTypeByID(ctx context.Context, id int) (*EntityT
 // CountByType returns entity counts per entity type for sidebar badges.
 func (s *entityService) CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error) {
 	return s.entities.CountByType(ctx, campaignID, role)
+}
+
+// --- Entity Type CRUD ---
+
+// maxEntityTypeSlugAttempts caps slug deduplication iterations for entity types.
+const maxEntityTypeSlugAttempts = 100
+
+// CreateEntityType validates input and creates a new entity type in a campaign.
+func (s *entityService) CreateEntityType(ctx context.Context, campaignID string, input CreateEntityTypeInput) (*EntityType, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return nil, apperror.NewBadRequest("entity type name is required")
+	}
+	if len(name) > 100 {
+		return nil, apperror.NewBadRequest("entity type name must be at most 100 characters")
+	}
+
+	namePlural := strings.TrimSpace(input.NamePlural)
+	if namePlural == "" {
+		// Auto-pluralize by appending "s" if not provided.
+		namePlural = name + "s"
+	}
+	if len(namePlural) > 100 {
+		return nil, apperror.NewBadRequest("entity type plural name must be at most 100 characters")
+	}
+
+	icon := strings.TrimSpace(input.Icon)
+	if icon == "" {
+		icon = "fa-circle" // Default icon.
+	}
+
+	color := strings.TrimSpace(input.Color)
+	if color == "" {
+		color = "#6b7280" // Default gray.
+	}
+	if !hexColorPattern.MatchString(color) {
+		return nil, apperror.NewBadRequest("color must be a valid hex value like #ff0000")
+	}
+
+	// Generate a unique slug scoped to the campaign.
+	slug, err := s.generateEntityTypeSlug(ctx, campaignID, name)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("generating entity type slug: %w", err))
+	}
+
+	// Get the next sort order.
+	maxOrder, err := s.types.MaxSortOrder(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("querying max sort order: %w", err))
+	}
+
+	et := &EntityType{
+		CampaignID: campaignID,
+		Slug:       slug,
+		Name:       name,
+		NamePlural: namePlural,
+		Icon:       icon,
+		Color:      color,
+		Fields:     []FieldDefinition{},
+		Layout:     DefaultLayout(),
+		SortOrder:  maxOrder + 1,
+		IsDefault:  false,
+		Enabled:    true,
+	}
+
+	if err := s.types.Create(ctx, et); err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("creating entity type: %w", err))
+	}
+
+	slog.Info("entity type created",
+		slog.Int("entity_type_id", et.ID),
+		slog.String("campaign_id", campaignID),
+		slog.String("slug", et.Slug),
+		slog.String("name", name),
+	)
+
+	return et, nil
+}
+
+// UpdateEntityType validates input and updates an existing entity type.
+func (s *entityService) UpdateEntityType(ctx context.Context, id int, input UpdateEntityTypeInput) (*EntityType, error) {
+	et, err := s.types.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return nil, apperror.NewBadRequest("entity type name is required")
+	}
+	if len(name) > 100 {
+		return nil, apperror.NewBadRequest("entity type name must be at most 100 characters")
+	}
+
+	namePlural := strings.TrimSpace(input.NamePlural)
+	if namePlural == "" {
+		namePlural = name + "s"
+	}
+	if len(namePlural) > 100 {
+		return nil, apperror.NewBadRequest("entity type plural name must be at most 100 characters")
+	}
+
+	icon := strings.TrimSpace(input.Icon)
+	if icon == "" {
+		icon = "fa-circle"
+	}
+
+	color := strings.TrimSpace(input.Color)
+	if color == "" {
+		color = et.Color // Keep existing color if not provided.
+	}
+	if !hexColorPattern.MatchString(color) {
+		return nil, apperror.NewBadRequest("color must be a valid hex value like #ff0000")
+	}
+
+	// Regenerate slug if name changed.
+	if name != et.Name {
+		slug, err := s.generateEntityTypeSlug(ctx, et.CampaignID, name)
+		if err != nil {
+			return nil, apperror.NewInternal(fmt.Errorf("generating entity type slug: %w", err))
+		}
+		et.Slug = slug
+	}
+
+	et.Name = name
+	et.NamePlural = namePlural
+	et.Icon = icon
+	et.Color = color
+
+	// Update fields if provided.
+	if input.Fields != nil {
+		et.Fields = input.Fields
+	}
+
+	if err := s.types.Update(ctx, et); err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("updating entity type: %w", err))
+	}
+
+	slog.Info("entity type updated",
+		slog.Int("entity_type_id", et.ID),
+		slog.String("name", name),
+	)
+
+	return et, nil
+}
+
+// DeleteEntityType removes an entity type if no entities reference it.
+func (s *entityService) DeleteEntityType(ctx context.Context, id int) error {
+	et, err := s.types.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Check if any entities use this type. Count with max permission (Owner=3)
+	// to include private entities in the check.
+	counts, err := s.entities.CountByType(ctx, et.CampaignID, 3)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("counting entities by type: %w", err))
+	}
+
+	if count, ok := counts[id]; ok && count > 0 {
+		return apperror.NewConflict(fmt.Sprintf("cannot delete entity type: %d entities still use it", count))
+	}
+
+	if err := s.types.Delete(ctx, id); err != nil {
+		return apperror.NewInternal(fmt.Errorf("deleting entity type: %w", err))
+	}
+
+	slog.Info("entity type deleted",
+		slog.Int("entity_type_id", id),
+		slog.String("campaign_id", et.CampaignID),
+		slog.String("name", et.Name),
+	)
+
+	return nil
+}
+
+// generateEntityTypeSlug creates a unique slug for an entity type within a campaign.
+// If the base slug is taken, appends -2, -3, etc. After maxEntityTypeSlugAttempts,
+// falls back to a random suffix.
+func (s *entityService) generateEntityTypeSlug(ctx context.Context, campaignID, name string) (string, error) {
+	base := Slugify(name)
+	slug := base
+
+	for i := 2; i < maxEntityTypeSlugAttempts+2; i++ {
+		exists, err := s.types.SlugExists(ctx, campaignID, slug)
+		if err != nil {
+			return "", fmt.Errorf("checking entity type slug: %w", err)
+		}
+		if !exists {
+			return slug, nil
+		}
+		slug = fmt.Sprintf("%s-%d", base, i)
+	}
+
+	// Fallback: append random suffix to guarantee uniqueness.
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating random slug suffix: %w", err)
+	}
+	return fmt.Sprintf("%s-%s", base, hex.EncodeToString(b)), nil
 }
 
 // Layout validation limits.

@@ -18,6 +18,10 @@ type mockEntityTypeRepo struct {
 	updateLayoutFn   func(ctx context.Context, id int, layoutJSON string) error
 	seedDefaultsFn   func(ctx context.Context, campaignID string) error
 	createFn         func(ctx context.Context, et *EntityType) error
+	updateFn         func(ctx context.Context, et *EntityType) error
+	deleteFn         func(ctx context.Context, id int) error
+	slugExistsFn     func(ctx context.Context, campaignID, slug string) (bool, error)
+	maxSortOrderFn   func(ctx context.Context, campaignID string) (int, error)
 }
 
 func (m *mockEntityTypeRepo) Create(ctx context.Context, et *EntityType) error {
@@ -64,6 +68,34 @@ func (m *mockEntityTypeRepo) SeedDefaults(ctx context.Context, campaignID string
 		return m.seedDefaultsFn(ctx, campaignID)
 	}
 	return nil
+}
+
+func (m *mockEntityTypeRepo) Update(ctx context.Context, et *EntityType) error {
+	if m.updateFn != nil {
+		return m.updateFn(ctx, et)
+	}
+	return nil
+}
+
+func (m *mockEntityTypeRepo) Delete(ctx context.Context, id int) error {
+	if m.deleteFn != nil {
+		return m.deleteFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockEntityTypeRepo) SlugExists(ctx context.Context, campaignID, slug string) (bool, error) {
+	if m.slugExistsFn != nil {
+		return m.slugExistsFn(ctx, campaignID, slug)
+	}
+	return false, nil
+}
+
+func (m *mockEntityTypeRepo) MaxSortOrder(ctx context.Context, campaignID string) (int, error) {
+	if m.maxSortOrderFn != nil {
+		return m.maxSortOrderFn(ctx, campaignID)
+	}
+	return 0, nil
 }
 
 // mockEntityRepo implements EntityRepository for testing.
