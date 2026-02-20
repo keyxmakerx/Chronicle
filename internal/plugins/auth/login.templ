@@ -9,11 +9,14 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // LoginPage renders the full login page wrapped in the base layout.
 templ LoginPage(csrfToken, email, errMsg string) {
 	@layouts.Base("Login") {
-		<div class="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+		<div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
 			<div class="w-full max-w-md">
 				<div class="text-center mb-8">
-					<h1 class="text-3xl font-bold text-gray-900">Chronicle</h1>
-					<p class="text-gray-600 mt-2">Sign in to your account</p>
+					<a href="/" class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent/10 dark:bg-accent/20 mb-4">
+						<i class="fa-solid fa-book-open text-lg text-accent"></i>
+					</a>
+					<h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">Welcome back</h1>
+					<p class="text-gray-500 dark:text-gray-400 mt-2">Sign in to your Chronicle account</p>
 				</div>
 				@LoginForm_(csrfToken, email, errMsg)
 			</div>
@@ -27,7 +30,7 @@ templ LoginPage(csrfToken, email, errMsg string) {
 templ LoginForm_(csrfToken, email, errMsg string) {
 	<div id="login-form">
 		<form
-			class="card p-8 space-y-6"
+			class="card p-8 space-y-5"
 			method="POST"
 			action="/login"
 			hx-post="/login"
@@ -37,13 +40,13 @@ templ LoginForm_(csrfToken, email, errMsg string) {
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
 
 			if errMsg != "" {
-				<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
+				<div class="alert-error" role="alert">
 					{ errMsg }
 				</div>
 			}
 
 			<div>
-				<label for="email" class="block text-sm font-medium text-gray-700 mb-1">
+				<label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
 					Email
 				</label>
 				<input
@@ -60,7 +63,7 @@ templ LoginForm_(csrfToken, email, errMsg string) {
 			</div>
 
 			<div>
-				<label for="password" class="block text-sm font-medium text-gray-700 mb-1">
+				<label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
 					Password
 				</label>
 				<input
@@ -74,14 +77,14 @@ templ LoginForm_(csrfToken, email, errMsg string) {
 				/>
 			</div>
 
-			<button type="submit" class="btn-primary w-full">
+			<button type="submit" class="btn-primary w-full py-2.5">
 				Sign In
 			</button>
 
-			<p class="text-center text-sm text-gray-600">
-				Don't have an account?
+			<p class="text-center text-sm text-gray-500 dark:text-gray-400">
+				Don&apos;t have an account?
 				<a href="/register" class="text-accent hover:text-accent-hover font-medium">
-					Register
+					Create one
 				</a>
 			</p>
 		</form>

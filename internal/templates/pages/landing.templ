@@ -70,32 +70,59 @@ func truncateDescription(desc *string, maxLen int) string {
 // When public campaigns are available, they are displayed below the hero section.
 templ Landing(publicCampaigns []campaigns.Campaign) {
 	@layouts.Base("Welcome") {
-		<!-- Hero section -->
-		<div class="flex items-center justify-center px-4 pt-16 pb-12 dark:bg-gray-950">
-			<div class="text-center max-w-xl">
-				<!-- Logo mark -->
-				<div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-accent/10 dark:bg-accent/20 mb-6">
-					<i class="fa-solid fa-book-open text-2xl text-accent"></i>
-				</div>
+		<!-- Hero section with gradient background -->
+		<div class="relative overflow-hidden">
+			<div class="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-indigo-950"></div>
+			<div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(99,102,241,0.15),transparent_60%)]"></div>
+			<div class="relative flex items-center justify-center px-4 pt-20 pb-16">
+				<div class="text-center max-w-2xl">
+					<!-- Logo mark -->
+					<div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/10 mb-8">
+						<i class="fa-solid fa-book-open text-2xl text-indigo-400"></i>
+					</div>
 
-				<h1 class="text-5xl font-bold text-gray-900 dark:text-gray-100 tracking-tight mb-4">Chronicle</h1>
-				<p class="text-lg text-gray-500 dark:text-gray-400 mb-10 leading-relaxed max-w-md mx-auto">
-					A self-hosted worldbuilding platform for tabletop RPG campaigns.
-					Organize characters, locations, lore, and more.
-				</p>
-				<div class="flex items-center justify-center gap-4">
-					<a href="/login" class="btn-primary text-base px-6 py-2.5">Sign In</a>
-					<a href="/register" class="btn-secondary text-base px-6 py-2.5">Create Account</a>
+					<h1 class="text-5xl sm:text-6xl font-bold text-white tracking-tight mb-5">Chronicle</h1>
+					<p class="text-lg text-gray-300 mb-10 leading-relaxed max-w-lg mx-auto">
+						A self-hosted worldbuilding platform for tabletop RPG campaigns.
+						Organize characters, locations, lore, and more.
+					</p>
+					<div class="flex items-center justify-center gap-4">
+						<a href="/register" class="btn-primary text-base px-8 py-3 shadow-lg shadow-accent/30">Get Started</a>
+						<a href="/login" class="btn text-base px-8 py-3 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm border border-white/20">Sign In</a>
+					</div>
 				</div>
+			</div>
+		</div>
 
-				<p class="mt-12 text-xs text-gray-400 dark:text-gray-500">
-					Self-hosted &middot; Open source &middot; Your data, your server
-				</p>
+		<!-- Feature highlights -->
+		<div class="max-w-5xl mx-auto px-4 -mt-8 relative z-10 pb-16">
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+				<div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200/80 dark:border-gray-700/80 p-6 text-center">
+					<div class="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center mx-auto mb-3">
+						<i class="fa-solid fa-users text-indigo-600 dark:text-indigo-400"></i>
+					</div>
+					<h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Characters & NPCs</h3>
+					<p class="text-xs text-gray-500 dark:text-gray-400">Rich profiles with custom fields, images, and relationships</p>
+				</div>
+				<div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200/80 dark:border-gray-700/80 p-6 text-center">
+					<div class="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-3">
+						<i class="fa-solid fa-map-location-dot text-emerald-600 dark:text-emerald-400"></i>
+					</div>
+					<h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Locations & Lore</h3>
+					<p class="text-xs text-gray-500 dark:text-gray-400">Build interconnected worlds with rich text and media</p>
+				</div>
+				<div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200/80 dark:border-gray-700/80 p-6 text-center">
+					<div class="w-10 h-10 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center mx-auto mb-3">
+						<i class="fa-solid fa-shield-halved text-amber-600 dark:text-amber-400"></i>
+					</div>
+					<h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Self-Hosted</h3>
+					<p class="text-xs text-gray-500 dark:text-gray-400">Your data stays on your server, always under your control</p>
+				</div>
 			</div>
 		</div>
 
 		<!-- Public campaigns section -->
-		<div class="max-w-6xl mx-auto px-4 pb-16 dark:bg-gray-950">
+		<div class="max-w-6xl mx-auto px-4 pb-20">
 			<div class="border-t border-gray-200 dark:border-gray-800 pt-12">
 				<h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-100 text-center mb-2">
 					Discover Public Campaigns
@@ -122,6 +149,13 @@ templ Landing(publicCampaigns []campaigns.Campaign) {
 				}
 			</div>
 		</div>
+
+		<!-- Footer -->
+		<footer class="border-t border-gray-200 dark:border-gray-800 py-8 text-center">
+			<p class="text-xs text-gray-400 dark:text-gray-500">
+				Chronicle &middot; Self-hosted &middot; Open source &middot; Your data, your server
+			</p>
+		</footer>
 	}
 }
 
