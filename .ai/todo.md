@@ -9,7 +9,14 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
-## Current Sprint: Phase 1 -- Foundation
+## Current Sprint: Phase 2 -- Media & UI
+
+**Target:** Media plugin, security hardening, dynamic sidebar, entity image upload,
+UI quality improvements, sidebar customization, visual template editor, public
+campaigns, dark mode, tags, audit logging, entity relations, entity type management,
+@mentions, hover tooltips, and visual polish.
+
+## Completed Sprint: Phase 1 -- Foundation
 
 **Target:** Working CRUD app with auth, campaign management, entity editor with
 rich text, and basic Kanka-inspired UI. Deployable via Docker.
@@ -118,7 +125,7 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [ ] Leaflet.js map viewer widget
 - [ ] Map pin CRUD with entity linking
 - [x] Image upload system with thumbnails (media plugin)
-- [x] Entity relations widget (bi-directional linking)
+- [x] Entity relations widget (bi-directional linking, migration 000012)
 - [ ] REST API plugin with PASETO token auth
 - [x] Rate limiting middleware (auth + uploads)
 - [x] IDOR protection on all entity endpoints
@@ -136,6 +143,10 @@ rich text, and basic Kanka-inspired UI. Deployable via Docker.
 - [x] Apply layout_json to entity show page rendering
 - [x] Visual template editor (drag-and-drop grid page builder)
 - [x] Admin panel sidebar nav with modules section
+- [x] Entity type CRUD (create, edit, delete with icon/color/fields management)
+- [x] Entity hover tooltip/popover (preview on hover, LRU cache, smart positioning)
+- [x] Tag display on entity list cards (batch fetch, colored chips)
+- [x] Visual polish pass (Kanka-inspired: gradient hero, icon cards, refined buttons/cards)
 
 ### Phase 3 -- Permissions & Advanced Multi-User
 - [ ] Per-entity permissions (view/edit per role/user)
