@@ -130,6 +130,17 @@ templ Sidebar() {
 						Storage
 					</a>
 					<a
+						href="/admin/modules"
+						class={ sidebarNavLink,
+							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/modules")),
+							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/modules")) }
+					>
+						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+							<i class="fa-solid fa-puzzle-piece text-xs"></i>
+						</span>
+						Modules
+					</a>
+					<a
 						href="/admin/smtp"
 						class={ sidebarNavLink,
 							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/smtp")),

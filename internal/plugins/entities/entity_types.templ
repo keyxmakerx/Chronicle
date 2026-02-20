@@ -28,8 +28,8 @@ templ EntityTypesManagePage(cc *campaigns.CampaignContext, entityTypes []EntityT
 		<div class="max-w-4xl mx-auto">
 			<div class="flex items-center justify-between mb-6">
 				<div>
-					<h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Entity Types</h1>
-					<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+					<h1 class="text-2xl font-bold text-fg">Entity Types</h1>
+					<p class="text-sm text-fg-secondary mt-1">
 						Manage the categories of entities in your campaign.
 					</p>
 				</div>
@@ -55,7 +55,7 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 	<div id="entity-type-list">
 		// Create new entity type form.
 		<div class="card p-6 mb-6">
-			<h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Add Entity Type</h2>
+			<h2 class="text-lg font-semibold text-fg mb-4">Add Entity Type</h2>
 			<form
 				method="POST"
 				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
@@ -65,7 +65,7 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 				<input type="hidden" name="csrf_token" value={ csrfToken }/>
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 					<div>
-						<label for="et-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+						<label for="et-name" class="block text-sm font-medium text-fg-body mb-1">Name</label>
 						<input
 							type="text"
 							id="et-name"
@@ -77,7 +77,7 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 						/>
 					</div>
 					<div>
-						<label for="et-name-plural" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Plural Name</label>
+						<label for="et-name-plural" class="block text-sm font-medium text-fg-body mb-1">Plural Name</label>
 						<input
 							type="text"
 							id="et-name-plural"
@@ -90,8 +90,8 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 				</div>
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 					<div>
-						<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Icon</label>
-						<div class="flex flex-wrap gap-2 p-3 border border-gray-200 dark:border-gray-700 rounded-md max-h-32 overflow-y-auto bg-white dark:bg-gray-800">
+						<label class="block text-sm font-medium text-fg-body mb-1">Icon</label>
+						<div class="flex flex-wrap gap-2 p-3 border border-edge rounded-md max-h-32 overflow-y-auto bg-surface">
 							for i, icon := range commonIcons {
 								<label class="cursor-pointer" title={ icon }>
 									<input
@@ -103,7 +103,7 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 											checked
 										}
 									/>
-									<span class="inline-flex items-center justify-center w-8 h-8 rounded border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/30 peer-checked:text-blue-600 dark:peer-checked:text-blue-400 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
+									<span class="inline-flex items-center justify-center w-8 h-8 rounded border border-edge text-fg-secondary peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/30 peer-checked:text-blue-600 dark:peer-checked:text-blue-400 hover:border-edge transition-colors">
 										<i class={ "fa-solid " + icon, "text-sm" }></i>
 									</span>
 								</label>
@@ -111,16 +111,16 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 						</div>
 					</div>
 					<div>
-						<label for="et-color" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Color</label>
+						<label for="et-color" class="block text-sm font-medium text-fg-body mb-1">Color</label>
 						<div class="flex items-center gap-3">
 							<input
 								type="color"
 								id="et-color"
 								name="color"
 								value="#6b7280"
-								class="w-10 h-10 rounded border border-gray-200 dark:border-gray-700 cursor-pointer"
+								class="w-10 h-10 rounded border border-edge cursor-pointer"
 							/>
-							<span class="text-sm text-gray-500 dark:text-gray-400">Pick a color for this entity type</span>
+							<span class="text-sm text-fg-secondary">Pick a color for this entity type</span>
 						</div>
 					</div>
 				</div>
@@ -142,7 +142,7 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 		if len(entityTypes) == 0 {
 			<div class="empty-state">
 				<div class="empty-state__icon">
-					<i class="fa-solid fa-shapes text-gray-400"></i>
+					<i class="fa-solid fa-shapes text-fg-muted"></i>
 				</div>
 				<div class="empty-state__title">No entity types</div>
 				<div class="empty-state__description">
@@ -170,8 +170,8 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 					<i class={ "fa-solid " + et.Icon }></i>
 				</div>
 				<div>
-					<div class="font-medium text-gray-900 dark:text-gray-100">{ et.Name }</div>
-					<div class="text-xs text-gray-500 dark:text-gray-400">
+					<div class="font-medium text-fg">{ et.Name }</div>
+					<div class="text-xs text-fg-secondary">
 						{ et.NamePlural } &middot; { strconv.Itoa(entityCount) } entities
 						if et.IsDefault {
 							&middot; <span class="text-blue-600 dark:text-blue-400">default</span>
@@ -182,14 +182,14 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 			<div class="flex items-center gap-2">
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types/%d/template", cc.Campaign.ID, et.ID)) }
-					class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+					class="text-xs text-fg-secondary hover:text-fg px-2 py-1 rounded hover:bg-surface-alt transition-colors"
 					title="Edit page layout"
 				>
 					<i class="fa-solid fa-table-columns mr-1"></i> Layout
 				</a>
 				<button
 					@click="editing = true"
-					class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+					class="text-xs text-fg-secondary hover:text-fg px-2 py-1 rounded hover:bg-surface-alt transition-colors"
 					title="Edit entity type"
 				>
 					<i class="fa-solid fa-pencil mr-1"></i> Edit
@@ -204,7 +204,7 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 					</button>
 				} else {
 					<span
-						class="text-xs text-gray-300 dark:text-gray-600 px-2 py-1 cursor-not-allowed"
+						class="text-xs text-fg-faint px-2 py-1 cursor-not-allowed"
 						title={ fmt.Sprintf("Cannot delete: %d entities use this type", entityCount) }
 					>
 						<i class="fa-solid fa-trash mr-1"></i> Delete
@@ -216,8 +216,8 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 		// Edit mode (inline).
 		<div x-show="editing" x-cloak class="space-y-4">
 			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Edit { et.Name }</h3>
-				<button @click="editing = false" class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">Cancel</button>
+				<h3 class="text-sm font-semibold text-fg">Edit { et.Name }</h3>
+				<button @click="editing = false" class="text-xs text-fg-secondary hover:text-fg">Cancel</button>
 			</div>
 			<div
 				data-widget="entity-type-editor"
@@ -231,7 +231,7 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 				data-csrf-token={ csrfToken }
 			>
 				// JS widget will render the edit form here.
-				<div class="text-sm text-gray-500 dark:text-gray-400">Loading editor...</div>
+				<div class="text-sm text-fg-secondary">Loading editor...</div>
 			</div>
 		</div>
 

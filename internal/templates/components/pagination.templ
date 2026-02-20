@@ -75,10 +75,10 @@ templ Pagination(data PaginationData) {
 					Previous
 				</a>
 			} else {
-				<span class="btn text-sm text-gray-300 cursor-not-allowed">Previous</span>
+				<span class="btn text-sm text-fg-faint cursor-not-allowed">Previous</span>
 			}
 
-			<span class="text-sm text-gray-500">
+			<span class="text-sm text-fg-secondary">
 				Page { fmt.Sprintf("%d", data.CurrentPage) } of { fmt.Sprintf("%d", data.TotalPages()) }
 			</span>
 
@@ -95,7 +95,7 @@ templ Pagination(data PaginationData) {
 					Next
 				</a>
 			} else {
-				<span class="btn text-sm text-gray-300 cursor-not-allowed">Next</span>
+				<span class="btn text-sm text-fg-faint cursor-not-allowed">Next</span>
 			}
 		</div>
 	}

@@ -12,7 +12,7 @@ import (
 templ CampaignNewPage(csrfToken, name, errMsg string) {
 	@layouts.App("New Campaign") {
 		<div class="max-w-2xl mx-auto">
-			<h1 class="text-2xl font-bold text-gray-900 mb-6">Create Campaign</h1>
+			<h1 class="text-2xl font-bold text-fg mb-6">Create Campaign</h1>
 			@CampaignFormComponent(csrfToken, nil, &CreateCampaignRequest{Name: name}, errMsg)
 		</div>
 	}
@@ -22,7 +22,7 @@ templ CampaignNewPage(csrfToken, name, errMsg string) {
 templ CampaignEditPage(campaign *Campaign, csrfToken, errMsg string) {
 	@layouts.App("Edit " + campaign.Name) {
 		<div class="max-w-2xl mx-auto">
-			<h1 class="text-2xl font-bold text-gray-900 mb-6">Edit Campaign</h1>
+			<h1 class="text-2xl font-bold text-fg mb-6">Edit Campaign</h1>
 			@CampaignFormComponent(csrfToken, campaign, nil, errMsg)
 		</div>
 	}
@@ -51,7 +51,7 @@ templ CampaignFormComponent(csrfToken string, campaign *Campaign, req *CreateCam
 				}
 
 				<div>
-					<label for="name" class="block text-sm font-medium text-gray-700 mb-1">Campaign Name</label>
+					<label for="name" class="block text-sm font-medium text-fg-body mb-1">Campaign Name</label>
 					<input
 						type="text"
 						id="name"
@@ -64,7 +64,7 @@ templ CampaignFormComponent(csrfToken string, campaign *Campaign, req *CreateCam
 				</div>
 
 				<div>
-					<label for="description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+					<label for="description" class="block text-sm font-medium text-fg-body mb-1">Description</label>
 					<textarea
 						id="description"
 						name="description"
@@ -86,13 +86,13 @@ templ CampaignFormComponent(csrfToken string, campaign *Campaign, req *CreateCam
 						if campaign.IsPublic {
 							checked
 						}
-						class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+						class="h-4 w-4 text-indigo-600 border-edge rounded focus:ring-indigo-500"
 					/>
-					<label for="is_public" class="ml-2 block text-sm text-gray-700">
+					<label for="is_public" class="ml-2 block text-sm text-fg-body">
 						Make this campaign public
 					</label>
 				</div>
-				<p class="text-xs text-gray-500 -mt-4 ml-6">Public campaigns can be viewed by anyone without logging in.</p>
+				<p class="text-xs text-fg-secondary -mt-4 ml-6">Public campaigns can be viewed by anyone without logging in.</p>
 
 				<div class="flex items-center space-x-4">
 					<button type="submit" class="btn-primary">Save Changes</button>
@@ -117,7 +117,7 @@ templ CampaignFormComponent(csrfToken string, campaign *Campaign, req *CreateCam
 				}
 
 				<div>
-					<label for="name" class="block text-sm font-medium text-gray-700 mb-1">Campaign Name</label>
+					<label for="name" class="block text-sm font-medium text-fg-body mb-1">Campaign Name</label>
 					<input
 						type="text"
 						id="name"
@@ -134,7 +134,7 @@ templ CampaignFormComponent(csrfToken string, campaign *Campaign, req *CreateCam
 				</div>
 
 				<div>
-					<label for="description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+					<label for="description" class="block text-sm font-medium text-fg-body mb-1">Description</label>
 					<textarea
 						id="description"
 						name="description"

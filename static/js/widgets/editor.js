@@ -41,13 +41,18 @@
     /**
      * Initialize the editor widget on a DOM element.
      *
+     * The editor starts in read-only "view" mode by default, even when the
+     * user has edit permissions. An "Edit" button lets them enter edit mode
+     * which reveals the toolbar and enables typing. This prevents accidental
+     * edits and provides a cleaner reading experience.
+     *
      * @param {HTMLElement} el - Mount point element.
      * @param {Object} config - Parsed data-* attributes.
      */
     init: function (el, config) {
       var endpoint = config.endpoint;
       var campaignId = config.campaignId || '';
-      var editable = config.editable === true;
+      var canEdit = config.editable === true; // user has permission to edit
       var autosaveInterval = config.autosave || 30;
       var csrfToken = config.csrfToken || '';
 
@@ -55,19 +60,31 @@
       el.innerHTML = '';
       el.classList.add('chronicle-editor');
 
+      // Header bar with title and edit/done toggle (visible when user can edit).
+      var headerEl = null;
+      if (canEdit) {
+        headerEl = document.createElement('div');
+        headerEl.className = 'chronicle-editor__header';
+        el.appendChild(headerEl);
+        renderHeader(headerEl, false);
+      }
+
       var toolbar = null;
       var contentEl = document.createElement('div');
       contentEl.className = 'chronicle-editor__content';
 
       var statusEl = document.createElement('div');
       statusEl.className = 'chronicle-editor__status';
+      statusEl.style.display = 'none'; // hidden in view mode
 
-      if (editable) {
+      // Toolbar is created but hidden until edit mode is activated.
+      if (canEdit) {
         toolbar = createToolbar();
+        toolbar.style.display = 'none'; // hidden in view mode
         el.appendChild(toolbar);
       }
       el.appendChild(contentEl);
-      if (editable) {
+      if (canEdit) {
         el.appendChild(statusEl);
       }
 
@@ -80,7 +97,7 @@
           placeholder: 'Begin writing your entry...',
         }),
         Link.configure({
-          openOnClick: !editable,
+          openOnClick: true, // always clickable in view mode, reconfigured in edit mode
           HTMLAttributes: { class: 'text-accent hover:underline' },
         }),
         Underline,
@@ -91,7 +108,7 @@
       // handle arrow keys, Enter, and Escape before ProseMirror processes them.
       var editorProps = {
         attributes: {
-          class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] p-4',
+          class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] p-4 text-fg-body',
         },
       };
 
@@ -99,7 +116,7 @@
       // handler closure can access it. It will be set after editor creation.
       var mentionExtRef = { current: null };
 
-      if (editable && campaignId && Chronicle.MentionExtension) {
+      if (canEdit && campaignId && Chronicle.MentionExtension) {
         editorProps.handleKeyDown = function (view, event) {
           if (mentionExtRef.current) {
             return mentionExtRef.current.onKeyDown(null, event);
@@ -108,11 +125,11 @@
         };
       }
 
-      // Create TipTap editor instance.
+      // Create TipTap editor instance -- always starts read-only.
       var editor = new Editor({
         element: contentEl,
         extensions: extensions,
-        editable: editable,
+        editable: false, // start in view mode
         content: '<p></p>',
         editorProps: editorProps,
       });
@@ -122,7 +139,7 @@
       // have a campaign ID to search against. The mention extension hooks into
       // editor events to detect the @ trigger and manage the popup lifecycle.
       var mentionExt = null;
-      if (editable && campaignId && Chronicle.MentionExtension) {
+      if (canEdit && campaignId && Chronicle.MentionExtension) {
         mentionExt = Chronicle.MentionExtension({ campaignId: campaignId });
         mentionExt.onCreate(editor);
         // Set the ref so the editorProps.handleKeyDown closure can access it.
@@ -139,13 +156,18 @@
         saving: false,
         statusEl: statusEl,
         toolbar: toolbar,
+        headerEl: headerEl,
         mentionExt: mentionExt,
+        canEdit: canEdit,
+        isEditing: false, // tracks current edit mode state
+        el: el,
+        autosaveInterval: autosaveInterval,
       };
 
       editors.set(el, state);
 
       // Update toolbar active states on selection change.
-      if (editable && toolbar) {
+      if (canEdit && toolbar) {
         editor.on('selectionUpdate', function () {
           updateToolbarState(editor, toolbar);
         });
@@ -166,21 +188,13 @@
       }
 
       // Track changes for autosave and highlight the save button.
-      if (editable) {
+      if (canEdit) {
         editor.on('update', function () {
+          if (!state.isEditing) return; // ignore updates during content loading
           state.dirty = true;
           setStatus(statusEl, 'unsaved');
           updateSaveButton(toolbar, true);
         });
-
-        // Set up autosave interval.
-        if (autosaveInterval > 0) {
-          state.autosaveTimer = setInterval(function () {
-            if (state.dirty && !state.saving) {
-              saveContent(state);
-            }
-          }, autosaveInterval * 1000);
-        }
       }
 
       // Load initial content from API.
@@ -219,6 +233,121 @@
       editors.delete(el);
     },
   });
+
+  // --- Edit Mode Toggle ---
+
+  /**
+   * Render the editor header bar with Edit/Done button.
+   * @param {HTMLElement} headerEl - Header container.
+   * @param {boolean} isEditing - Whether the editor is in edit mode.
+   */
+  function renderHeader(headerEl, isEditing) {
+    headerEl.innerHTML = '';
+
+    var label = document.createElement('span');
+    label.className = 'chronicle-editor__header-label';
+    label.textContent = 'Entry';
+    headerEl.appendChild(label);
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+
+    if (isEditing) {
+      btn.className = 'chronicle-editor__edit-btn chronicle-editor__edit-btn--done';
+      btn.innerHTML = '<i class="fa-solid fa-check" style="font-size:11px"></i> Done';
+      btn.title = 'Exit edit mode';
+    } else {
+      btn.className = 'chronicle-editor__edit-btn';
+      btn.innerHTML = '<i class="fa-solid fa-pen" style="font-size:11px"></i> Edit';
+      btn.title = 'Enter edit mode';
+    }
+
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      var el = headerEl.closest('.chronicle-editor');
+      var state = editors.get(el);
+      if (!state) return;
+
+      if (state.isEditing) {
+        exitEditMode(state);
+      } else {
+        enterEditMode(state);
+      }
+    });
+
+    headerEl.appendChild(btn);
+  }
+
+  /**
+   * Enter edit mode: show toolbar, enable editing, start autosave.
+   */
+  function enterEditMode(state) {
+    state.isEditing = true;
+    state.editor.setEditable(true);
+
+    // Show toolbar and status bar.
+    if (state.toolbar) {
+      state.toolbar.style.display = '';
+    }
+    if (state.statusEl) {
+      state.statusEl.style.display = '';
+    }
+
+    // Update header to show "Done" button.
+    if (state.headerEl) {
+      renderHeader(state.headerEl, true);
+    }
+
+    // Add editing visual cue.
+    state.el.classList.add('chronicle-editor--editing');
+
+    // Start autosave timer.
+    if (state.autosaveInterval > 0) {
+      state.autosaveTimer = setInterval(function () {
+        if (state.dirty && !state.saving) {
+          saveContent(state);
+        }
+      }, state.autosaveInterval * 1000);
+    }
+
+    // Focus the editor.
+    state.editor.commands.focus('end');
+  }
+
+  /**
+   * Exit edit mode: save changes, hide toolbar, make read-only.
+   */
+  function exitEditMode(state) {
+    // Save any unsaved changes first.
+    if (state.dirty && !state.saving) {
+      saveContent(state);
+    }
+
+    state.isEditing = false;
+    state.editor.setEditable(false);
+
+    // Hide toolbar and status bar.
+    if (state.toolbar) {
+      state.toolbar.style.display = 'none';
+    }
+    if (state.statusEl) {
+      state.statusEl.style.display = 'none';
+    }
+
+    // Update header to show "Edit" button.
+    if (state.headerEl) {
+      renderHeader(state.headerEl, false);
+    }
+
+    // Remove editing visual cue.
+    state.el.classList.remove('chronicle-editor--editing');
+
+    // Stop autosave timer.
+    if (state.autosaveTimer) {
+      clearInterval(state.autosaveTimer);
+      state.autosaveTimer = null;
+    }
+  }
 
   // --- Toolbar ---
 

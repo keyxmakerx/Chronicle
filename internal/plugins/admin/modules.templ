@@ -1,0 +1,133 @@
+// modules.templ renders the admin module management page.
+// Shows all registered game-system modules with their status and metadata.
+
+package admin
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/modules"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"strings"
+)
+
+// AdminModulesPage renders the modules management page.
+templ AdminModulesPage(mods []modules.ModuleInfo) {
+	@layouts.App("Modules - Admin") {
+		<div class="max-w-5xl mx-auto space-y-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Modules</h1>
+					<p class="text-sm text-fg-secondary mt-1">
+						Game system content packs providing reference data, tooltips, and stat blocks.
+					</p>
+				</div>
+				<span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-surface-alt text-fg-secondary">
+					<i class="fa-solid fa-puzzle-piece"></i>
+					{ fmt.Sprintf("%d", len(mods)) } modules
+				</span>
+			</div>
+
+			<!-- Module Cards -->
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+				for _, mod := range mods {
+					@moduleCard(mod)
+				}
+			</div>
+
+			<!-- Info Panel -->
+			<div class="card p-6">
+				<div class="flex items-start gap-4">
+					<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-circle-info text-accent"></i>
+					</span>
+					<div>
+						<h3 class="text-sm font-semibold text-fg mb-1">About Modules</h3>
+						<p class="text-sm text-fg-secondary leading-relaxed">
+							Modules are optional game system content packs that can be enabled per campaign.
+							They provide read-only reference content like spell descriptions, monster stat blocks,
+							and item properties. Content is served as tooltips on hover and as dedicated reference pages.
+						</p>
+						<p class="text-sm text-fg-secondary leading-relaxed mt-2">
+							Once a module is available, campaign owners can enable it from their campaign settings.
+							Modules never modify campaign data — they only provide reference lookups.
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// moduleCard renders a single module as an informational card.
+templ moduleCard(mod modules.ModuleInfo) {
+	<div class="card p-6 flex flex-col">
+		<!-- Header -->
+		<div class="flex items-start justify-between mb-3">
+			<div class="flex items-center gap-3">
+				<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+					<i class={ "fa-solid " + mod.Icon + " text-accent" }></i>
+				</span>
+				<div>
+					<h3 class="text-sm font-semibold text-fg">{ mod.Name }</h3>
+					<p class="text-xs text-fg-muted">{ mod.ID }</p>
+				</div>
+			</div>
+			@moduleStatusBadge(mod.Status)
+		</div>
+
+		<!-- Description -->
+		<p class="text-sm text-fg-secondary leading-relaxed flex-1 mb-4">
+			{ mod.Description }
+		</p>
+
+		<!-- Categories -->
+		if len(mod.Categories) > 0 {
+			<div class="pt-3 border-t border-edge">
+				<p class="text-xs font-medium text-fg-muted uppercase tracking-wider mb-2">Content</p>
+				<div class="flex flex-wrap gap-1.5">
+					for _, cat := range mod.Categories {
+						<span class="inline-flex items-center px-2 py-0.5 text-xs rounded-md bg-surface-alt text-fg-secondary">
+							{ cat }
+						</span>
+					}
+				</div>
+			</div>
+		}
+
+		<!-- Version / Status footer -->
+		<div class="pt-3 mt-3 border-t border-edge flex items-center justify-between">
+			if mod.Version != "" {
+				<span class="text-xs text-fg-muted">v{ mod.Version }</span>
+			} else {
+				<span class="text-xs text-fg-muted italic">Not yet released</span>
+			}
+			if mod.Status == modules.StatusAvailable {
+				<span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+					<i class="fa-solid fa-check mr-1"></i>Ready
+				</span>
+			} else {
+				<span class="text-xs text-fg-muted">
+					<i class="fa-solid fa-clock mr-1"></i>In development
+				</span>
+			}
+		</div>
+	</div>
+}
+
+// moduleStatusBadge renders a colored badge for the module's implementation status.
+templ moduleStatusBadge(status modules.Status) {
+	if status == modules.StatusAvailable {
+		<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+			Available
+		</span>
+	} else {
+		<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-surface-alt text-fg-muted">
+			Coming Soon
+		</span>
+	}
+}
+
+// formatCategories joins categories with commas for display.
+func formatCategories(cats []string) string {
+	return strings.Join(cats, ", ")
+}

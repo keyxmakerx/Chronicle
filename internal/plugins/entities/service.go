@@ -24,6 +24,7 @@ type EntityService interface {
 	GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
 	UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error
+	UpdateFields(ctx context.Context, entityID string, fieldsData map[string]any) error
 	UpdateImage(ctx context.Context, entityID, imagePath string) error
 	Delete(ctx context.Context, entityID string) error
 
@@ -203,6 +204,19 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 		return err
 	}
 	slog.Info("entity entry updated", slog.String("entity_id", entityID))
+	return nil
+}
+
+// UpdateFields updates only the entity's custom field values. Used by the
+// attributes widget to persist inline field edits.
+func (s *entityService) UpdateFields(ctx context.Context, entityID string, fieldsData map[string]any) error {
+	if fieldsData == nil {
+		fieldsData = make(map[string]any)
+	}
+	if err := s.entities.UpdateFields(ctx, entityID, fieldsData); err != nil {
+		return err
+	}
+	slog.Info("entity fields updated", slog.String("entity_id", entityID))
 	return nil
 }
 

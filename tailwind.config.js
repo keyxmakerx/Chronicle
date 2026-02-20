@@ -5,6 +5,12 @@
 // ============================================================================
 // Uses the standalone Tailwind CSS CLI (no Node.js).
 // Content paths point to Templ files and Go template strings.
+//
+// Semantic color tokens:
+//   text-fg, text-fg-body, text-fg-secondary, text-fg-muted, text-fg-faint
+//   bg-surface, bg-surface-alt, bg-page
+//   border-edge, border-edge-light
+//   These auto-switch between light/dark via CSS custom properties.
 // ============================================================================
 
 module.exports = {
@@ -36,6 +42,33 @@ module.exports = {
           DEFAULT: '#6366f1',  // Indigo-500
           hover: '#4f46e5',    // Indigo-600
           light: '#a5b4fc',    // Indigo-300
+        },
+
+        // ── Semantic theme tokens ──────────────────────────────
+        // These reference CSS custom properties that flip for dark mode.
+        // Usage: text-fg, bg-surface, border-edge, etc.
+        // No `dark:` prefix needed — colours auto-switch.
+
+        // Foreground / text
+        fg: {
+          DEFAULT: 'var(--color-text-primary)',       // headings, main text
+          body:    'var(--color-text-body)',           // body text, values
+          secondary: 'var(--color-text-secondary)',   // labels, descriptions
+          muted:   'var(--color-text-muted)',          // hints, timestamps
+          faint:   'var(--color-text-faint)',          // disabled, placeholders
+        },
+
+        // Background surfaces
+        surface: {
+          DEFAULT: 'var(--color-card-bg)',             // card / panel bg
+          alt:     'var(--color-bg-tertiary)',          // alt rows, hover bg
+        },
+        page:      'var(--color-bg-primary)',           // main page bg
+
+        // Borders and dividers
+        edge: {
+          DEFAULT: 'var(--color-border)',               // standard borders
+          light:   'var(--color-border-light)',          // subtle dividers
         },
       },
       // Use Inter as the default font

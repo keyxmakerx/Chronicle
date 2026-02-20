@@ -19,16 +19,16 @@ templ CampaignCard(campaign *Campaign) {
 					<i class="fa-solid fa-book-open text-accent"></i>
 				</div>
 				<div class="min-w-0 flex-1">
-					<h3 class="text-base font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-accent transition-colors">{ campaign.Name }</h3>
+					<h3 class="text-base font-semibold text-fg truncate group-hover:text-accent transition-colors">{ campaign.Name }</h3>
 					if campaign.Description != nil && *campaign.Description != "" {
-						<p class="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">{ *campaign.Description }</p>
+						<p class="text-sm text-fg-secondary line-clamp-2 mt-1">{ *campaign.Description }</p>
 					} else {
-						<p class="text-sm text-gray-400 dark:text-gray-500 italic mt-1">No description</p>
+						<p class="text-sm text-fg-muted italic mt-1">No description</p>
 					}
 				</div>
 			</div>
 
-			<div class="mt-4 flex items-center text-xs text-gray-400 dark:text-gray-500">
+			<div class="mt-4 flex items-center text-xs text-fg-muted">
 				<i class="fa-regular fa-clock mr-1.5"></i>
 				{ campaign.UpdatedAt.Format("Jan 2, 2006") }
 				if campaign.IsPublic {

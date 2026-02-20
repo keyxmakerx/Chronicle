@@ -40,6 +40,9 @@ templ Base(title string) {
 		<script src="/static/vendor/htmx.min.js" defer></script>
 		<script src="/static/vendor/alpine.min.js" defer></script>
 
+		<!-- Toast notification system (before widgets so they can use Chronicle.notify) -->
+		<script src="/static/js/notifications.js" defer></script>
+
 		<!-- Widget system: boot.js auto-mounts data-widget elements -->
 		<script src="/static/js/boot.js" defer></script>
 
@@ -69,6 +72,9 @@ templ Base(title string) {
 
 		<!-- Entity type editor widget (inline edit for entity type management) -->
 		<script src="/static/js/widgets/entity_type_editor.js" defer></script>
+
+		<!-- Attributes widget (inline edit for entity custom fields) -->
+		<script src="/static/js/widgets/attributes.js" defer></script>
 	</body>
 	</html>
 }

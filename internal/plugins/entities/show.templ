@@ -15,14 +15,14 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-6xl mx-auto">
 			<!-- Breadcrumb -->
-			<nav class="text-sm text-gray-500 mb-4">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-gray-700">Entities</a>
+			<nav class="text-sm text-fg-secondary mb-4">
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Entities</a>
 				if entity.TypeSlug != "" {
 					<span class="mx-1">/</span>
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%ss", cc.Campaign.ID, entity.TypeSlug)) } class="hover:text-gray-700">{ entity.TypeName }s</a>
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%ss", cc.Campaign.ID, entity.TypeSlug)) } class="hover:text-fg-body">{ entity.TypeName }s</a>
 				}
 				<span class="mx-1">/</span>
-				<span class="text-gray-900">{ entity.Name }</span>
+				<span class="text-fg">{ entity.Name }</span>
 			</nav>
 
 			<!-- Dynamic layout from entity type template -->
@@ -83,7 +83,7 @@ templ entityBlock(block TemplateBlock, cc *campaigns.CampaignContext, entity *En
 // blockTitle renders the entity name heading with edit/delete actions.
 templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	<div class="flex items-center justify-between">
-		<h1 class="text-3xl font-bold text-gray-900">{ entity.Name }</h1>
+		<h1 class="text-3xl font-bold text-fg">{ entity.Name }</h1>
 		if cc.MemberRole >= campaigns.RoleScribe {
 			<div class="flex space-x-2">
 				<a
@@ -133,20 +133,20 @@ templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 		} else {
 			if cc.MemberRole >= campaigns.RoleScribe {
 				<div
-					class="w-full h-40 bg-gray-50 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
+					class="w-full h-40 bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface-alt transition-colors"
 					data-widget="image-upload"
 					data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
 					data-upload-url="/media/upload"
 					data-csrf-token={ csrfToken }
 				>
-					<svg class="w-8 h-8 text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg class="w-8 h-8 text-fg-faint mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
 					</svg>
-					<span class="text-xs text-gray-400">Add Image</span>
+					<span class="text-xs text-fg-muted">Add Image</span>
 				</div>
 			} else {
-				<div class="w-full h-40 bg-gray-50 flex items-center justify-center">
-					<svg class="w-12 h-12 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<div class="w-full h-40 bg-surface-alt flex items-center justify-center">
+					<svg class="w-12 h-12 text-fg-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
 					</svg>
 				</div>
@@ -169,23 +169,17 @@ templ blockEntry(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 	></div>
 }
 
-// blockAttributes renders the entity type's custom fields with their values.
+// blockAttributes renders the attributes widget. Loads field definitions from
+// the entity type and current values from the entity, with inline edit support.
 templ blockAttributes(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
-	if entityType != nil && len(entityType.Fields) > 0 {
-		<div class="card p-4">
-			<h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Attributes</h3>
-			<div class="space-y-3">
-				for _, field := range entityType.Fields {
-					if val, ok := entity.FieldsData[field.Key]; ok && val != nil && val != "" {
-						<div>
-							<dt class="text-xs font-medium text-gray-500 uppercase tracking-wider">{ field.Label }</dt>
-							<dd class="text-sm text-gray-900 mt-0.5">{ fmt.Sprintf("%v", val) }</dd>
-						</div>
-					}
-				}
-			</div>
-		</div>
-	}
+	<div
+		data-widget="attributes"
+		data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/fields", cc.Campaign.ID, entity.ID) }
+		if cc.MemberRole >= campaigns.RoleScribe {
+			data-editable="true"
+		}
+		data-csrf-token={ csrfToken }
+	></div>
 }
 
 // blockDetails renders type badge, privacy indicator, and metadata timestamps.
@@ -203,17 +197,17 @@ templ blockDetails(entity *Entity) {
 				{ entity.TypeName }
 			</span>
 			if entity.TypeLabel != nil && *entity.TypeLabel != "" {
-				<span class="text-sm text-gray-500">{ *entity.TypeLabel }</span>
+				<span class="text-sm text-fg-secondary">{ *entity.TypeLabel }</span>
 			}
 			if entity.IsPrivate {
-				<span class="text-gray-400" title="Private (GM only)">
+				<span class="text-fg-muted" title="Private (GM only)">
 					<i class="fa-solid fa-lock text-xs"></i>
 				</span>
 			}
 		</div>
 
 		<!-- Metadata -->
-		<div class="pt-2 border-t border-gray-100 text-xs text-gray-400 space-y-1">
+		<div class="pt-2 border-t border-edge-light text-xs text-fg-muted space-y-1">
 			<div>Created { entity.CreatedAt.Format("Jan 2, 2006") }</div>
 			<div>Updated { entity.UpdatedAt.Format("Jan 2, 2006") }</div>
 		</div>
@@ -252,5 +246,5 @@ templ blockRelations(cc *campaigns.CampaignContext, entity *Entity, csrfToken st
 
 // blockDivider renders a visual separator between content sections.
 templ blockDivider() {
-	<hr class="border-gray-200 my-2"/>
+	<hr class="border-edge my-2"/>
 }

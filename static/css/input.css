@@ -21,12 +21,14 @@
    * active theme without needing per-component dark: overrides.
    * ------------------------------------------------------------------------ */
   :root {
-    --color-bg-primary:    #f9fafb;  /* gray-50  */
-    --color-bg-secondary:  #ffffff;
-    --color-bg-tertiary:   #f3f4f6;  /* gray-100 */
-    --color-text-primary:  #111827;  /* gray-900 */
-    --color-text-secondary:#6b7280;  /* gray-500 */
-    --color-text-muted:    #9ca3af;  /* gray-400 */
+    --color-bg-primary:    #f9fafb;  /* gray-50  -- page background */
+    --color-bg-secondary:  #ffffff;  /* white    -- card/panel surface */
+    --color-bg-tertiary:   #f3f4f6;  /* gray-100 -- alt rows, hover */
+    --color-text-primary:  #111827;  /* gray-900 -- headings */
+    --color-text-body:     #374151;  /* gray-700 -- body text */
+    --color-text-secondary:#6b7280;  /* gray-500 -- labels */
+    --color-text-muted:    #9ca3af;  /* gray-400 -- hints, timestamps */
+    --color-text-faint:    #d1d5db;  /* gray-300 -- disabled, very subtle */
     --color-border:        #e5e7eb;  /* gray-200 */
     --color-border-light:  #f3f4f6;  /* gray-100 */
     --color-card-bg:       #ffffff;
@@ -41,8 +43,10 @@
     --color-bg-secondary:  #1f2937;  /* gray-800 */
     --color-bg-tertiary:   #374151;  /* gray-700 */
     --color-text-primary:  #f9fafb;  /* gray-50  */
+    --color-text-body:     #d1d5db;  /* gray-300 */
     --color-text-secondary:#9ca3af;  /* gray-400 */
     --color-text-muted:    #6b7280;  /* gray-500 */
+    --color-text-faint:    #4b5563;  /* gray-600 */
     --color-border:        #374151;  /* gray-700 */
     --color-border-light:  #4b5563;  /* gray-600 */
     --color-card-bg:       #1f2937;  /* gray-800 */
@@ -52,10 +56,11 @@
     --color-sidebar-bg:    #1a1c23;  /* always dark */
   }
 
-  /* Default body styling */
+  /* Default body styling -- uses semantic vars so no dark: overrides needed */
   body {
-    @apply bg-gray-50 text-gray-900 font-sans antialiased
-           dark:bg-gray-900 dark:text-gray-100;
+    @apply font-sans antialiased;
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
   }
 
   /* Headings */
@@ -77,18 +82,16 @@
            focus:ring-accent shadow-sm hover:shadow-md hover:shadow-accent/20;
   }
   .btn-secondary {
-    @apply btn bg-white text-gray-700 hover:bg-gray-50
-           border border-gray-300 focus:ring-gray-400
-           dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600
-           dark:border-gray-600;
+    @apply btn bg-surface text-fg-body hover:bg-surface-alt
+           border border-edge focus:ring-gray-400;
   }
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700
            focus:ring-red-500 shadow-sm hover:shadow-md hover:shadow-red-500/20;
   }
   .btn-ghost {
-    @apply btn bg-transparent text-gray-600 hover:bg-gray-100
-           border-none dark:text-gray-400 dark:hover:bg-gray-700;
+    @apply btn bg-transparent text-fg-secondary hover:bg-surface-alt
+           border-none;
   }
   .btn:disabled,
   .btn[disabled] {
@@ -97,22 +100,25 @@
 
   /* ---- Cards ---- */
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-200/80 p-4
-           transition-all duration-200
-           dark:bg-gray-800 dark:border-gray-700/80;
+    @apply bg-surface rounded-xl shadow-sm border border-edge p-4
+           transition-all duration-200;
   }
 
   /* ---- Form Inputs ---- */
   .input {
-    @apply w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm
-           bg-white text-gray-900 placeholder-gray-400
+    @apply w-full px-3 py-2.5 rounded-lg text-sm
            focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent
-           transition-all duration-200
-           dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-500;
+           transition-all duration-200;
+    background-color: var(--color-input-bg);
+    border: 1px solid var(--color-input-border);
+    color: var(--color-text-primary);
+  }
+  .input::placeholder {
+    color: var(--color-text-muted);
   }
   .input:disabled {
-    @apply bg-gray-100 text-gray-500 cursor-not-allowed
-           dark:bg-gray-800 dark:text-gray-500;
+    @apply opacity-60 cursor-not-allowed;
+    background-color: var(--color-bg-tertiary);
   }
 
   /* ---- Links ---- */
@@ -120,8 +126,7 @@
     @apply text-accent hover:text-accent-hover transition-colors duration-150;
   }
   .link-muted {
-    @apply text-gray-500 hover:text-gray-700 transition-colors duration-150
-           dark:text-gray-400 dark:hover:text-gray-200;
+    @apply text-fg-secondary hover:text-fg transition-colors duration-150;
   }
   .link-danger {
     @apply text-red-600 hover:text-red-800 transition-colors duration-150;
@@ -135,8 +140,7 @@
     @apply badge bg-accent/10 text-accent;
   }
   .badge-gray {
-    @apply badge bg-gray-100 text-gray-600
-           dark:bg-gray-700 dark:text-gray-300;
+    @apply badge bg-surface-alt text-fg-secondary;
   }
   .badge-green {
     @apply badge bg-green-100 text-green-700
@@ -181,30 +185,24 @@
     @apply flex flex-col items-center justify-center py-12 px-4 text-center;
   }
   .empty-state__icon {
-    @apply w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4
-           dark:bg-gray-700;
+    @apply w-12 h-12 rounded-full bg-surface-alt flex items-center justify-center mb-4;
   }
   .empty-state__title {
-    @apply text-lg font-semibold text-gray-900 mb-1
-           dark:text-gray-100;
+    @apply text-lg font-semibold text-fg mb-1;
   }
   .empty-state__description {
-    @apply text-sm text-gray-500 max-w-sm
-           dark:text-gray-400;
+    @apply text-sm text-fg-secondary max-w-sm;
   }
 
   /* ---- Tables ---- */
   .table-header {
-    @apply bg-gray-50 border-b border-gray-200
-           dark:bg-gray-800 dark:border-gray-700;
+    @apply bg-surface-alt border-b border-edge;
   }
   .table-header th {
-    @apply text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider
-           dark:text-gray-400;
+    @apply text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider;
   }
   .table-row {
-    @apply hover:bg-gray-50 transition-colors
-           dark:hover:bg-gray-800;
+    @apply hover:bg-surface-alt transition-colors;
   }
   .table-row td {
     @apply px-4 py-3;
@@ -213,19 +211,17 @@
   /* --- Chronicle Editor Widget --- */
 
   .chronicle-editor {
-    @apply border border-gray-200 rounded-lg bg-white overflow-hidden
-           dark:bg-gray-800 dark:border-gray-700;
+    @apply border border-edge rounded-lg bg-surface overflow-hidden;
   }
 
   .chronicle-editor__toolbar {
-    @apply flex items-center flex-wrap gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-gray-200
-           dark:bg-gray-900 dark:border-gray-700;
+    @apply flex items-center flex-wrap gap-0.5 px-2 py-1.5 border-b border-edge;
+    background-color: var(--color-bg-tertiary);
   }
 
   .chronicle-editor__btn {
-    @apply w-8 h-8 flex items-center justify-center rounded text-sm text-gray-600
-           hover:bg-gray-200 hover:text-gray-900 transition-colors
-           dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100;
+    @apply w-8 h-8 flex items-center justify-center rounded text-sm
+           text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors;
   }
 
   .chronicle-editor__btn--active {
@@ -234,8 +230,7 @@
 
   .chronicle-editor__btn--save {
     @apply ml-auto px-3 py-1 w-auto text-xs font-semibold rounded-md
-           bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors
-           dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600;
+           bg-surface-alt text-fg-secondary hover:text-fg transition-colors;
   }
 
   /* Highlight the save button when there are unsaved changes. */
@@ -244,26 +239,46 @@
   }
 
   .chronicle-editor__separator {
-    @apply w-px h-5 bg-gray-300 mx-1
-           dark:bg-gray-600;
+    @apply w-px h-5 mx-1;
+    background-color: var(--color-border);
+  }
+
+  /* Editor header bar (contains "Entry" label and Edit/Done toggle) */
+  .chronicle-editor__header {
+    @apply flex items-center justify-between px-3 py-2 border-b border-edge-light;
+  }
+  .chronicle-editor__header-label {
+    @apply text-xs font-semibold uppercase tracking-wider text-fg-secondary;
+  }
+  .chronicle-editor__edit-btn {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium
+           rounded-md transition-colors cursor-pointer
+           text-fg-secondary hover:text-fg hover:bg-surface-alt;
+  }
+  .chronicle-editor__edit-btn--done {
+    @apply text-accent hover:text-accent-hover hover:bg-accent/10;
+  }
+
+  /* Editing mode visual cue — subtle left accent border */
+  .chronicle-editor--editing {
+    @apply ring-2 ring-accent/20;
   }
 
   .chronicle-editor__content .tiptap {
     @apply min-h-[200px] p-4 focus:outline-none;
+    color: var(--color-text-body);
   }
 
   .chronicle-editor__content .tiptap p.is-editor-empty:first-child::before {
-    @apply text-gray-400 float-left h-0 pointer-events-none
-           dark:text-gray-500;
+    @apply text-fg-muted float-left h-0 pointer-events-none;
     content: attr(data-placeholder);
   }
 
   .chronicle-editor__status {
-    @apply px-3 py-1.5 text-xs border-t border-gray-100
-           dark:border-gray-700;
+    @apply px-3 py-1.5 text-xs border-t border-edge-light;
   }
   .chronicle-editor__status--saved { @apply text-green-600; }
-  .chronicle-editor__status--saving { @apply text-gray-500; }
+  .chronicle-editor__status--saving { @apply text-fg-muted; }
   .chronicle-editor__status--unsaved { @apply text-amber-600; }
   .chronicle-editor__status--error { @apply text-red-600; }
 
@@ -272,10 +287,44 @@
     @apply text-accent font-medium no-underline hover:underline;
   }
 
+  /* ---- Prose styling for dark mode ---- */
+  .chronicle-editor__content .tiptap h1,
+  .chronicle-editor__content .tiptap h2,
+  .chronicle-editor__content .tiptap h3 {
+    color: var(--color-text-primary);
+  }
+  .chronicle-editor__content .tiptap blockquote {
+    border-left-color: var(--color-border);
+    color: var(--color-text-secondary);
+  }
+  .chronicle-editor__content .tiptap code {
+    color: var(--color-text-body);
+  }
+  .chronicle-editor__content .tiptap hr {
+    border-color: var(--color-border-light);
+  }
+
+  /* ---- Entity Type Tabs (entity list page filter) ---- */
+  .entity-tab {
+    @apply inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium
+           whitespace-nowrap border-b-2 transition-colors cursor-pointer;
+  }
+  .entity-tab--active {
+    @apply text-accent border-accent;
+  }
+  .entity-tab--inactive {
+    @apply text-fg-secondary border-transparent hover:text-fg hover:border-edge;
+  }
+  .entity-tab__count {
+    @apply text-[11px] font-normal text-fg-muted ml-0.5;
+  }
+  .entity-tab--active .entity-tab__count {
+    @apply text-accent/70;
+  }
+
   /* ---- Section Headers ---- */
   .section-header {
-    @apply text-xs font-semibold uppercase tracking-wider text-gray-500
-           dark:text-gray-400;
+    @apply text-xs font-semibold uppercase tracking-wider text-fg-secondary;
   }
 
   /* ---- Stat Cards (Dashboard) ---- */
@@ -287,10 +336,10 @@
     @apply w-12 h-12 rounded-xl flex items-center justify-center mb-3;
   }
   .stat-card__label {
-    @apply text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1;
+    @apply text-sm font-semibold text-fg mb-1;
   }
   .stat-card__desc {
-    @apply text-xs text-gray-500 dark:text-gray-400;
+    @apply text-xs text-fg-secondary;
   }
 }
 
