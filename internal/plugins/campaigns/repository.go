@@ -148,7 +148,7 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 	for rows.Next() {
 		var c Campaign
 		if err := rows.Scan(
-			&c.ID, &c.Name, &c.Slug, &c.Description,
+			&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
 			&c.Settings, &c.BackdropPath, &c.SidebarConfig,
 			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
@@ -180,7 +180,7 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 	for rows.Next() {
 		var c Campaign
 		if err := rows.Scan(
-			&c.ID, &c.Name, &c.Slug, &c.Description,
+			&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
 			&c.Settings, &c.BackdropPath, &c.SidebarConfig,
 			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
