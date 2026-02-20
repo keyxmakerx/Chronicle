@@ -264,7 +264,7 @@ templ CampaignSidebarNav() {
 	</div>
 
 	for _, et := range GetEntityTypes(ctx) {
-		@entityTypeLink(et.Slug+"s", et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID))
+		@entityTypeLink(et.Slug, et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID))
 	}
 
 	<!-- All pages link -->

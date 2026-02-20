@@ -66,24 +66,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/entities/:eid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
-	// Shortcut routes: /campaigns/:id/characters -> entities filtered by type.
-	shortcuts := []struct {
-		path string
-		slug string
-	}{
-		{"/characters", "character"},
-		{"/locations", "location"},
-		{"/organizations", "organization"},
-		{"/items", "item"},
-		{"/notes", "note"},
-		{"/events", "event"},
-	}
-
-	for _, sc := range shortcuts {
-		slug := sc.slug // Capture for closure.
-		pub.GET(sc.path, func(c echo.Context) error {
-			c.Set("entity_type_slug", slug)
-			return h.Index(c)
-		}, campaigns.RequireRole(campaigns.RolePlayer))
-	}
+	// Dynamic category route: resolves any entity type slug to a category
+	// dashboard. Echo's router gives static segments (entities, settings, etc.)
+	// priority over this parameter route, so it only catches actual type slugs.
+	pub.GET("/:typeSlug", func(c echo.Context) error {
+		c.Set("entity_type_slug", c.Param("typeSlug"))
+		return h.Index(c)
+	}, campaigns.RequireRole(campaigns.RolePlayer))
 }
