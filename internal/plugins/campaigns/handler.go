@@ -146,7 +146,7 @@ func (h *Handler) Create(c echo.Context) error {
 			errMsg = appErr.Message
 		}
 		if middleware.IsHTMX(c) {
-			return middleware.Render(c, http.StatusOK, CampaignFormComponent(csrfToken, nil, &req, errMsg))
+			return middleware.Render(c, http.StatusOK, CampaignCreateForm(csrfToken, &req, errMsg))
 		}
 		return middleware.Render(c, http.StatusOK, CampaignNewPage(csrfToken, req.Name, errMsg))
 	}
