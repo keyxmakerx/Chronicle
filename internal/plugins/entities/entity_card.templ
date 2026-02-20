@@ -46,8 +46,8 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 
 			<div class="flex items-center gap-2">
 				<span
-					class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white"
-					style={ fmt.Sprintf("background-color: %s", entity.TypeColor) }
+					class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+					style={ fmt.Sprintf("background-color: %s; color: %s", entity.TypeColor, contrastTextColor(entity.TypeColor)) }
 				>
 					if entity.TypeIcon != "" {
 						<i class={ "fa-solid " + entity.TypeIcon, "text-[10px]" }></i>

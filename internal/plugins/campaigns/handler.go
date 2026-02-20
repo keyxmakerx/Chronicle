@@ -146,7 +146,7 @@ func (h *Handler) Create(c echo.Context) error {
 			errMsg = appErr.Message
 		}
 		if middleware.IsHTMX(c) {
-			return middleware.Render(c, http.StatusOK, CampaignFormComponent(csrfToken, nil, &req, errMsg))
+			return middleware.Render(c, http.StatusOK, CampaignCreateForm(csrfToken, &req, errMsg))
 		}
 		return middleware.Render(c, http.StatusOK, CampaignNewPage(csrfToken, req.Name, errMsg))
 	}
@@ -172,15 +172,14 @@ func (h *Handler) Show(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, CampaignShowPage(cc, transfer, csrfToken))
 }
 
-// EditForm renders the campaign edit form (GET /campaigns/:id/edit).
+// EditForm redirects to the unified settings page (GET /campaigns/:id/edit).
+// Kept for backward compatibility with bookmarks and links.
 func (h *Handler) EditForm(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewInternal(nil)
 	}
-
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, CampaignEditPage(cc.Campaign, csrfToken, ""))
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
 // Update processes the campaign edit form (PUT /campaigns/:id).
@@ -203,21 +202,26 @@ func (h *Handler) Update(c echo.Context) error {
 
 	_, err := h.service.Update(c.Request().Context(), cc.Campaign.ID, input)
 	if err != nil {
-		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := "failed to update campaign"
 		if appErr, ok := err.(*apperror.AppError); ok {
 			errMsg = appErr.Message
 		}
-		return middleware.Render(c, http.StatusOK, CampaignEditPage(cc.Campaign, csrfToken, errMsg))
+		csrfToken := middleware.GetCSRFToken(c)
+		transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
+		var entityTypes []SettingsEntityType
+		if h.entityLister != nil {
+			entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
+		}
+		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, errMsg))
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.updated", nil)
 
 	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID)
+		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID+"/settings")
 		return c.NoContent(http.StatusNoContent)
 	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID)
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
 // Delete removes a campaign (DELETE /campaigns/:id).

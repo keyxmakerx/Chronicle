@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-20 -- Phase 2 complete. Full dark mode, semantic color system, all UI widgets, notifications, modules page.
+2026-02-20 -- UI polish: badge contrast, dark mode fixes, merged settings, plugins page, modules in campaign settings.
 
 ## Current Phase
-**Phase 2: COMPLETE.** All planned Media & UI work is done. Next phase should
-focus on permissions, game system modules, or maps/API.
+**Phase 2: COMPLETE + Polish.** Media & UI work is done. Additional polish pass
+completed for dark mode, badge contrast, and admin/campaign settings UX.
 
 ## What Was Built in Phase 2 (Summary)
 
@@ -72,6 +72,22 @@ focus on permissions, game system modules, or maps/API.
 - Rate limiting on auth + uploads
 - Storage limit enforcement in media upload handler
 
+### Phase 2 Polish (2026-02-20)
+- **Entity type badge contrast:** Luminance-based text color (white/dark) for
+  entity type badges in entity cards, profile pages, and tooltips. No more
+  white-on-white for light-colored entity types.
+- **Dark mode fix for entity type config widget:** Replaced hardcoded gray
+  Tailwind classes with semantic tokens (`text-fg-body`, `border-edge`,
+  `bg-surface-alt`, etc.) in `entity_type_config.js`.
+- **Merged campaign Edit + Settings:** Combined `/campaigns/:id/edit` and
+  `/campaigns/:id/settings` into a single unified settings page. Edit form is
+  now the top section of settings. Old `/edit` URL redirects to `/settings`.
+- **Game Modules in campaign settings:** Campaign owners can now see available
+  game modules (from the registry) in their campaign settings page.
+- **Admin plugins page:** New `/admin/plugins` page showing all registered
+  plugins with active/planned status, category grouping, and descriptions.
+  Plugin registry with 11 entries (8 active, 3 planned).
+
 ### In Progress
 - Nothing currently in progress
 
@@ -79,7 +95,7 @@ focus on permissions, game system modules, or maps/API.
 - Nothing blocked
 
 ## Active Branch
-`claude/resume-previous-work-YqXiG`
+`claude/explore-project-soSu8`
 
 ## Next Session Should
 1. **Run `make templ` and `make tailwind`** before testing -- generated files are gitignored.

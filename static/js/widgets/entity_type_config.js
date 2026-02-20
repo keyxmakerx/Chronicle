@@ -108,7 +108,7 @@
           var hidden = isHidden(t.id);
 
           // Main row.
-          html += '<div class="et-config-item border border-gray-200 rounded-md' +
+          html += '<div class="et-config-item border border-edge rounded-md' +
             (hidden ? ' opacity-50' : '') +
             '" data-type-id="' + t.id + '">';
 
@@ -116,11 +116,11 @@
           html += '<div class="et-config-header flex items-center px-3 py-2.5 cursor-grab select-none" draggable="true">';
 
           // Drag handle.
-          html += '<span class="drag-handle mr-2.5 text-gray-300 hover:text-gray-500"><i class="fa-solid fa-grip-vertical text-xs"></i></span>';
+          html += '<span class="drag-handle mr-2.5 text-fg-faint hover:text-fg-muted"><i class="fa-solid fa-grip-vertical text-xs"></i></span>';
 
           // Color swatch (clickable).
           html += '<label class="relative mr-2.5 cursor-pointer" title="Change color">';
-          html += '<span class="w-4 h-4 rounded-full block border border-gray-300" style="background-color: ' + escapeAttr(t.color || '#6b7280') + '"></span>';
+          html += '<span class="w-4 h-4 rounded-full block border border-edge" style="background-color: ' + escapeAttr(t.color || '#6b7280') + '"></span>';
           html += '<input type="color" class="color-picker absolute inset-0 w-full h-full opacity-0 cursor-pointer" data-type-id="' + t.id + '" value="' + escapeAttr(t.color || '#6b7280') + '"/>';
           html += '</label>';
 
@@ -130,17 +130,17 @@
           html += '</span>';
 
           // Name.
-          html += '<span class="flex-1 text-sm font-medium text-gray-700">' + escapeHtml(t.name_plural || t.name) + '</span>';
+          html += '<span class="flex-1 text-sm font-medium text-fg-body">' + escapeHtml(t.name_plural || t.name) + '</span>';
 
           // Template editor link.
-          html += '<a href="' + escapeAttr(layoutBase) + '/' + t.id + '/template" class="p-1 mr-1.5 text-xs rounded hover:bg-gray-100 transition-colors" title="Edit page template">';
-          html += '<i class="fa-solid fa-table-cells-large text-gray-400"></i>';
+          html += '<a href="' + escapeAttr(layoutBase) + '/' + t.id + '/template" class="p-1 mr-1.5 text-xs rounded hover:bg-surface-alt transition-colors" title="Edit page template">';
+          html += '<i class="fa-solid fa-table-cells-large text-fg-muted"></i>';
           html += '</a>';
 
           // Visibility toggle.
-          html += '<button type="button" class="toggle-visibility p-1 text-xs rounded hover:bg-gray-100 transition-colors" data-type-id="' + t.id + '" title="' +
+          html += '<button type="button" class="toggle-visibility p-1 text-xs rounded hover:bg-surface-alt transition-colors" data-type-id="' + t.id + '" title="' +
             (hidden ? 'Show in sidebar' : 'Hide from sidebar') + '">';
-          html += '<i class="fa-solid ' + (hidden ? 'fa-eye-slash text-gray-400' : 'fa-eye text-gray-600') + '"></i>';
+          html += '<i class="fa-solid ' + (hidden ? 'fa-eye-slash text-fg-muted' : 'fa-eye text-fg-secondary') + '"></i>';
           html += '</button>';
 
           html += '</div>'; // end header
@@ -148,7 +148,7 @@
         });
 
         html += '</div>'; // end list
-        html += '<p class="text-xs text-gray-400 mt-3">Drag to reorder sidebar. Click the color circle to change. Click <i class="fa-solid fa-table-cells-large text-xs"></i> to design page template.</p>';
+        html += '<p class="text-xs text-fg-muted mt-3">Drag to reorder sidebar. Click the color circle to change. Click <i class="fa-solid fa-table-cells-large text-xs"></i> to design page template.</p>';
 
         el.innerHTML = html;
         bindEvents();

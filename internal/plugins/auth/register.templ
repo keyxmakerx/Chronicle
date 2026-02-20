@@ -9,14 +9,14 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // RegisterPage renders the full registration page wrapped in the base layout.
 templ RegisterPage(csrfToken string, req *RegisterRequest, errMsg string) {
 	@layouts.Base("Register") {
-		<div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-12">
+		<div class="min-h-screen flex items-center justify-center bg-surface px-4 py-12">
 			<div class="w-full max-w-md">
 				<div class="text-center mb-8">
 					<a href="/" class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent/10 dark:bg-accent/20 mb-4">
 						<i class="fa-solid fa-book-open text-lg text-accent"></i>
 					</a>
-					<h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">Get started</h1>
-					<p class="text-gray-500 dark:text-gray-400 mt-2">Create your Chronicle account</p>
+					<h1 class="text-3xl font-bold text-fg">Get started</h1>
+					<p class="text-fg-secondary mt-2">Create your Chronicle account</p>
 				</div>
 				@RegisterFormComponent(csrfToken, req, errMsg)
 			</div>
@@ -45,7 +45,7 @@ templ RegisterFormComponent(csrfToken string, req *RegisterRequest, errMsg strin
 			}
 
 			<div>
-				<label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+				<label for="email" class="block text-sm font-medium text-fg-body mb-1.5">
 					Email
 				</label>
 				<input
@@ -64,7 +64,7 @@ templ RegisterFormComponent(csrfToken string, req *RegisterRequest, errMsg strin
 			</div>
 
 			<div>
-				<label for="display_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+				<label for="display_name" class="block text-sm font-medium text-fg-body mb-1.5">
 					Display Name
 				</label>
 				<input
@@ -84,7 +84,7 @@ templ RegisterFormComponent(csrfToken string, req *RegisterRequest, errMsg strin
 			</div>
 
 			<div>
-				<label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+				<label for="password" class="block text-sm font-medium text-fg-body mb-1.5">
 					Password
 				</label>
 				<input
@@ -98,11 +98,11 @@ templ RegisterFormComponent(csrfToken string, req *RegisterRequest, errMsg strin
 					minlength="8"
 					maxlength="128"
 				/>
-				<p class="text-xs text-gray-400 dark:text-gray-500 mt-1.5">At least 8 characters</p>
+				<p class="text-xs text-fg-muted mt-1.5">At least 8 characters</p>
 			</div>
 
 			<div>
-				<label for="confirm" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+				<label for="confirm" class="block text-sm font-medium text-fg-body mb-1.5">
 					Confirm Password
 				</label>
 				<input
@@ -120,7 +120,7 @@ templ RegisterFormComponent(csrfToken string, req *RegisterRequest, errMsg strin
 				Create Account
 			</button>
 
-			<p class="text-center text-sm text-gray-500 dark:text-gray-400">
+			<p class="text-center text-sm text-fg-secondary">
 				Already have an account?
 				<a href="/login" class="text-accent hover:text-accent-hover font-medium">
 					Sign in

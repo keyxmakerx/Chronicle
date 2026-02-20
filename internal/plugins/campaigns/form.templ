@@ -1,10 +1,10 @@
-// form.templ renders the create/edit campaign form. Shared between
-// the create and edit pages with HTMX partial swap on validation error.
+// form.templ renders the campaign creation form with HTMX partial swap
+// on validation error. Campaign editing is now handled by the unified
+// settings page (settings.templ).
 
 package campaigns
 
 import (
-	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -13,146 +13,66 @@ templ CampaignNewPage(csrfToken, name, errMsg string) {
 	@layouts.App("New Campaign") {
 		<div class="max-w-2xl mx-auto">
 			<h1 class="text-2xl font-bold text-fg mb-6">Create Campaign</h1>
-			@CampaignFormComponent(csrfToken, nil, &CreateCampaignRequest{Name: name}, errMsg)
+			@CampaignCreateForm(csrfToken, &CreateCampaignRequest{Name: name}, errMsg)
 		</div>
 	}
 }
 
-// CampaignEditPage renders the full campaign edit page.
-templ CampaignEditPage(campaign *Campaign, csrfToken, errMsg string) {
-	@layouts.App("Edit " + campaign.Name) {
-		<div class="max-w-2xl mx-auto">
-			<h1 class="text-2xl font-bold text-fg mb-6">Edit Campaign</h1>
-			@CampaignFormComponent(csrfToken, campaign, nil, errMsg)
-		</div>
-	}
-}
-
-// CampaignFormComponent renders the campaign form. If campaign is non-nil,
-// renders in edit mode; otherwise in create mode.
-templ CampaignFormComponent(csrfToken string, campaign *Campaign, req *CreateCampaignRequest, errMsg string) {
+// CampaignCreateForm renders the campaign creation form.
+templ CampaignCreateForm(csrfToken string, req *CreateCampaignRequest, errMsg string) {
 	<div id="campaign-form">
-		if campaign != nil {
-			<form
-				class="card p-8 space-y-6"
-				method="POST"
-				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", campaign.ID)) }
-				hx-put={ fmt.Sprintf("/campaigns/%s", campaign.ID) }
-				hx-target="#campaign-form"
-				hx-swap="outerHTML"
-			>
-				<input type="hidden" name="_method" value="PUT"/>
-				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+		<form
+			class="card p-8 space-y-6"
+			method="POST"
+			action="/campaigns"
+			hx-post="/campaigns"
+			hx-target="#campaign-form"
+			hx-swap="outerHTML"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
 
-				if errMsg != "" {
-					<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
-						{ errMsg }
-					</div>
-				}
-
-				<div>
-					<label for="name" class="block text-sm font-medium text-fg-body mb-1">Campaign Name</label>
-					<input
-						type="text"
-						id="name"
-						name="name"
-						value={ campaign.Name }
-						required
-						class="input w-full"
-						maxlength="200"
-					/>
+			if errMsg != "" {
+				<div class="alert-error" role="alert">
+					{ errMsg }
 				</div>
+			}
 
-				<div>
-					<label for="description" class="block text-sm font-medium text-fg-body mb-1">Description</label>
-					<textarea
-						id="description"
-						name="description"
-						class="input w-full h-32"
-						maxlength="5000"
-					>
-						if campaign.Description != nil {
-							{ *campaign.Description }
-						}
-					</textarea>
-				</div>
+			<div>
+				<label for="name" class="block text-sm font-medium text-fg-body mb-1">Campaign Name</label>
+				<input
+					type="text"
+					id="name"
+					name="name"
+					if req != nil {
+						value={ req.Name }
+					}
+					required
+					autofocus
+					class="input w-full"
+					placeholder="The Lost Mines of Phandelver"
+					maxlength="200"
+				/>
+			</div>
 
-				<div class="flex items-center">
-					<input
-						type="checkbox"
-						id="is_public"
-						name="is_public"
-						value="true"
-						if campaign.IsPublic {
-							checked
-						}
-						class="h-4 w-4 text-indigo-600 border-edge rounded focus:ring-indigo-500"
-					/>
-					<label for="is_public" class="ml-2 block text-sm text-fg-body">
-						Make this campaign public
-					</label>
-				</div>
-				<p class="text-xs text-fg-secondary -mt-4 ml-6">Public campaigns can be viewed by anyone without logging in.</p>
+			<div>
+				<label for="description" class="block text-sm font-medium text-fg-body mb-1">Description</label>
+				<textarea
+					id="description"
+					name="description"
+					class="input w-full h-32"
+					placeholder="A brief description of your campaign world..."
+					maxlength="5000"
+				>
+					if req != nil {
+						{ req.Description }
+					}
+				</textarea>
+			</div>
 
-				<div class="flex items-center space-x-4">
-					<button type="submit" class="btn-primary">Save Changes</button>
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", campaign.ID)) } class="btn-secondary">Cancel</a>
-				</div>
-			</form>
-		} else {
-			<form
-				class="card p-8 space-y-6"
-				method="POST"
-				action="/campaigns"
-				hx-post="/campaigns"
-				hx-target="#campaign-form"
-				hx-swap="outerHTML"
-			>
-				<input type="hidden" name="csrf_token" value={ csrfToken }/>
-
-				if errMsg != "" {
-					<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
-						{ errMsg }
-					</div>
-				}
-
-				<div>
-					<label for="name" class="block text-sm font-medium text-fg-body mb-1">Campaign Name</label>
-					<input
-						type="text"
-						id="name"
-						name="name"
-						if req != nil {
-							value={ req.Name }
-						}
-						required
-						autofocus
-						class="input w-full"
-						placeholder="The Lost Mines of Phandelver"
-						maxlength="200"
-					/>
-				</div>
-
-				<div>
-					<label for="description" class="block text-sm font-medium text-fg-body mb-1">Description</label>
-					<textarea
-						id="description"
-						name="description"
-						class="input w-full h-32"
-						placeholder="A brief description of your campaign world..."
-						maxlength="5000"
-					>
-						if req != nil {
-							{ req.Description }
-						}
-					</textarea>
-				</div>
-
-				<div class="flex items-center space-x-4">
-					<button type="submit" class="btn-primary">Create Campaign</button>
-					<a href="/campaigns" class="btn-secondary">Cancel</a>
-				</div>
-			</form>
-		}
+			<div class="flex items-center space-x-4">
+				<button type="submit" class="btn-primary">Create Campaign</button>
+				<a href="/campaigns" class="btn-secondary">Cancel</a>
+			</div>
+		</form>
 	</div>
 }
