@@ -90,14 +90,20 @@ func (h *Handler) Index(c echo.Context) error {
 	// Resolve entity type filter from shortcut route or query param.
 	var typeID int
 	var activeTypeSlug string
+	var activeEntityType *EntityType
 	if slug, ok := c.Get("entity_type_slug").(string); ok && slug != "" {
 		activeTypeSlug = slug
 		et, err := h.service.GetEntityTypeBySlug(c.Request().Context(), campaignID, slug)
 		if err == nil {
 			typeID = et.ID
+			activeEntityType = et
 		}
 	} else if tid, _ := strconv.Atoi(c.QueryParam("type")); tid > 0 {
 		typeID = tid
+		et, err := h.service.GetEntityTypeByID(c.Request().Context(), tid)
+		if err == nil {
+			activeEntityType = et
+		}
 	}
 
 	// Fetch entity types for sidebar filter and counts.
@@ -128,6 +134,17 @@ func (h *Handler) Index(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 
+	// When viewing a specific category (type), render the category dashboard.
+	if activeEntityType != nil {
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK,
+				CategoryDashboardContent(cc, activeEntityType, entities, counts, total, opts, csrfToken))
+		}
+		return middleware.Render(c, http.StatusOK,
+			CategoryDashboardPage(cc, activeEntityType, entities, counts, total, opts, csrfToken))
+	}
+
+	// Otherwise render the "All Pages" grid.
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK,
 			EntityListContent(cc, entities, entityTypes, counts, total, opts, typeID, activeTypeSlug, csrfToken))
@@ -927,6 +944,44 @@ func (h *Handler) UpdateEntityTypeColor(c echo.Context) error {
 	}
 
 	if err := h.service.UpdateEntityTypeColor(c.Request().Context(), etID, body.Color); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateEntityTypeDashboard updates the category dashboard description and pinned pages
+// (PUT /campaigns/:id/entity-types/:etid/dashboard).
+func (h *Handler) UpdateEntityTypeDashboard(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	// IDOR protection: ensure entity type belongs to this campaign.
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	var body struct {
+		Description     *string  `json:"description"`
+		PinnedEntityIDs []string `json:"pinned_entity_ids"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdateEntityTypeDashboard(c.Request().Context(), etID, body.Description, body.PinnedEntityIDs); err != nil {
 		return err
 	}
 

@@ -44,8 +44,20 @@ These are the highest-priority items across all future phases. Pick from here.
 - [ ] Foundry VTT sync module
 - [ ] AI integration endpoint
 
+### UI & Navigation -- Phase 3 Follow-ups
+- [x] Terminology rename (Entity→Page, Entity Type→Category) -- UI labels only
+- [x] Drill-down sidebar (iOS-style push navigation with peek)
+- [x] Category dashboard pages (header, description, pinned, grid view)
+- [x] Tighter card grid (4-col XL, reduced padding, compact badges)
+- [x] DB migration 000013 (description + pinned_entity_ids on entity_types)
+- [ ] Grid/Table view toggle (wire toggle buttons on category dashboard)
+- [ ] Sub-folder support (parent_id tree view on category dashboard)
+- [ ] Settings consolidation (Navigation & Layout section)
+- [ ] Persistent filters per category (localStorage)
+- [ ] Quick Links / Bookmarks in sidebar
+
 ### Entities -- Remaining Features
-- [ ] Entity nesting (parent/child relationships)
+- [ ] Entity nesting (parent/child relationships, tree view on dashboard)
 - [ ] Entity posts (additional sections on entity profile)
 - [ ] Relations graph visualization widget
 

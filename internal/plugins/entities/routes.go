@@ -48,10 +48,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Template editor (Owner only).
 	cg.GET("/entity-types/:etid/template", h.TemplateEditor, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// Entity type layout/color API (Owner only).
+	// Entity type layout/color/dashboard API (Owner only).
 	cg.GET("/entity-types/:etid/layout", h.GetEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/layout", h.UpdateEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/color", h.UpdateEntityTypeColor, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/entity-types/:etid/dashboard", h.UpdateEntityTypeDashboard, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Public-capable view routes: use AllowPublicCampaignAccess so that
 	// public campaigns can be browsed without logging in.

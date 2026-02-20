@@ -20,18 +20,20 @@ import (
 // Location). Each campaign has its own set of entity types with configurable
 // fields that drive dynamic form rendering and profile display.
 type EntityType struct {
-	ID         int               `json:"id"`
-	CampaignID string            `json:"campaign_id"`
-	Slug       string            `json:"slug"`
-	Name       string            `json:"name"`
-	NamePlural string            `json:"name_plural"`
-	Icon       string            `json:"icon"`
-	Color      string            `json:"color"`
-	Fields     []FieldDefinition `json:"fields"`
-	Layout     EntityTypeLayout  `json:"layout"`
-	SortOrder  int               `json:"sort_order"`
-	IsDefault  bool              `json:"is_default"`
-	Enabled    bool              `json:"enabled"`
+	ID              int               `json:"id"`
+	CampaignID      string            `json:"campaign_id"`
+	Slug            string            `json:"slug"`
+	Name            string            `json:"name"`
+	NamePlural      string            `json:"name_plural"`
+	Icon            string            `json:"icon"`
+	Color           string            `json:"color"`
+	Description     *string           `json:"description,omitempty"`     // Rich text shown on category dashboard.
+	PinnedEntityIDs []string          `json:"pinned_entity_ids,omitempty"` // Entity IDs pinned to dashboard top.
+	Fields          []FieldDefinition `json:"fields"`
+	Layout          EntityTypeLayout  `json:"layout"`
+	SortOrder       int               `json:"sort_order"`
+	IsDefault       bool              `json:"is_default"`
+	Enabled         bool              `json:"enabled"`
 }
 
 // EntityTypeLayout describes the profile page layout for entities of this type.

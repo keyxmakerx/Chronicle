@@ -102,17 +102,17 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 			// Unified entity type customization: sidebar order, visibility, colors, and layouts.
 			<div class="card p-6 mb-6">
 				<div class="flex items-center justify-between mb-2">
-					<h2 class="text-lg font-semibold text-fg">Entity Types</h2>
+					<h2 class="text-lg font-semibold text-fg">Categories</h2>
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
 						class="text-sm link"
 					>
-						<i class="fa-solid fa-cog mr-1"></i> Manage Types
+						<i class="fa-solid fa-cog mr-1"></i> Manage Categories
 					</a>
 				</div>
 				<p class="text-sm text-fg-secondary mb-4">
 					Drag to reorder the sidebar, toggle visibility, click a color to change it,
-					and expand a type to customize its profile layout.
+					and expand a category to customize its profile layout.
 				</p>
 				<div
 					data-widget="entity-type-config"
@@ -205,7 +205,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 			<div class="card p-6 border-red-200 dark:border-red-800">
 				<h2 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-4">Danger Zone</h2>
 				<p class="text-sm text-fg-secondary mb-4">
-					Deleting a campaign is permanent and cannot be undone. All entities,
+					Deleting a campaign is permanent and cannot be undone. All pages,
 					maps, and other data will be destroyed.
 				</p>
 				<form

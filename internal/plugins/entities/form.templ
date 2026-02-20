@@ -12,14 +12,14 @@ import (
 
 // EntityNewPage renders the full entity creation page.
 templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, csrfToken, errMsg string) {
-	@layouts.App("New Entity - " + cc.Campaign.Name) {
+	@layouts.App("New Page - " + cc.Campaign.Name) {
 		<div class="max-w-2xl mx-auto">
 			<nav class="text-sm text-fg-secondary mb-4">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Entities</a>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>
 				<span class="mx-1">/</span>
 				<span class="text-fg">New</span>
 			</nav>
-			<h1 class="text-2xl font-bold text-fg mb-6">Create Entity</h1>
+			<h1 class="text-2xl font-bold text-fg mb-6">Create Page</h1>
 			@EntityCreateFormComponent(cc, entityTypes, preselect, csrfToken, errMsg)
 		</div>
 	}
@@ -30,7 +30,7 @@ templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 	@layouts.App("Edit " + entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-2xl mx-auto">
 			<nav class="text-sm text-fg-secondary mb-4">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Entities</a>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>
 				<span class="mx-1">/</span>
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) } class="hover:text-fg-body">{ entity.Name }</a>
 				<span class="mx-1">/</span>
@@ -62,9 +62,9 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			}
 
 			<div>
-				<label for="entity_type_id" class="block text-sm font-medium text-fg-body mb-1">Entity Type</label>
+				<label for="entity_type_id" class="block text-sm font-medium text-fg-body mb-1">Category</label>
 				<select id="entity_type_id" name="entity_type_id" required class="input w-full">
-					<option value="">Select a type...</option>
+					<option value="">Select a category...</option>
 					for _, et := range entityTypes {
 						if et.Enabled {
 							<option
@@ -116,7 +116,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			</div>
 
 			<div class="flex items-center space-x-4">
-				<button type="submit" class="btn-primary">Create Entity</button>
+				<button type="submit" class="btn-primary">Create Page</button>
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="btn-secondary">Cancel</a>
 			</div>
 		</form>

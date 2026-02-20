@@ -29,7 +29,7 @@ templ App(title string) {
 				@FlashMessages()
 
 				<!-- Page content (scrollable) -->
-				<main class="flex-1 overflow-y-auto p-6 bg-surface" id="main-content">
+				<main class="flex-1 overflow-y-auto px-5 py-4 bg-surface" id="main-content">
 					{ children... }
 				</main>
 			</div>
@@ -38,7 +38,7 @@ templ App(title string) {
 }
 
 // sidebarNavLink is the CSS class set for sidebar navigation links.
-var sidebarNavLink = "flex items-center px-4 py-2 text-sm transition-colors"
+var sidebarNavLink = "flex items-center px-4 py-2 text-sm transition-colors group"
 
 // sidebarNavActive is appended for the currently active navigation link.
 var sidebarNavActive = "bg-sidebar-hover text-sidebar-active"
@@ -46,134 +46,169 @@ var sidebarNavActive = "bg-sidebar-hover text-sidebar-active"
 // sidebarNavInactive is the default state for non-active navigation links.
 var sidebarNavInactive = "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active"
 
-// Sidebar renders the left navigation bar. When inside a campaign context
-// (set by RequireCampaignAccess middleware), it shows campaign entity type
-// links. Otherwise, it shows generic navigation.
+// Sidebar renders the left navigation bar with drill-down support. When inside
+// a campaign, category links trigger a slide animation that reveals a
+// category-specific sub-nav panel (managed by sidebar_drill.js).
 templ Sidebar() {
-	<aside class="w-64 bg-sidebar-bg text-sidebar-text flex flex-col shrink-0">
+	<aside id="sidebar" class="w-64 bg-sidebar-bg text-sidebar-text flex flex-col shrink-0 overflow-hidden">
 		<!-- Logo / Brand -->
-		<a href="/campaigns" class="h-16 flex items-center px-4 border-b border-gray-700 hover:bg-sidebar-hover transition-colors">
+		<a href="/campaigns" class="h-16 flex items-center px-4 border-b border-gray-700 hover:bg-sidebar-hover transition-colors shrink-0">
 			<span class="text-xl font-bold text-white tracking-tight">Chronicle</span>
 		</a>
 
-		<!-- Navigation links -->
-		<nav class="flex-1 py-4 overflow-y-auto">
-			if InCampaign(ctx) {
-				@CampaignSidebarNav()
-			} else {
-				@DefaultSidebarNav()
-			}
-		</nav>
+		<!-- Drill-down slider: two panels side-by-side, translated via JS -->
+		<div id="sidebar-slider" class="flex-1 flex min-h-0 transition-transform duration-300 ease-in-out" style="transform: translateX(0)">
+			<!-- Panel 1: Main navigation -->
+			<div id="sidebar-main" class="w-64 shrink-0 flex flex-col min-h-0">
+				<nav class="flex-1 py-4 overflow-y-auto">
+					if InCampaign(ctx) {
+						@CampaignSidebarNav()
+					} else {
+						@DefaultSidebarNav()
+					}
+				</nav>
 
-		<!-- Admin section (site admins only) — collapsible -->
-		if GetIsAdmin(ctx) {
-			<div
-				x-data="{ open: localStorage.getItem('chronicle-admin-nav') !== 'collapsed' }"
-				class="border-t border-gray-700"
-			>
-				<button
-					@click="open = !open; localStorage.setItem('chronicle-admin-nav', open ? 'open' : 'collapsed')"
-					class="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
-				>
-					<span>Admin</span>
-					<svg
-						class="w-3 h-3 transition-transform duration-200"
-						:class="open ? 'rotate-0' : '-rotate-90'"
-						fill="none" stroke="currentColor" viewBox="0 0 24 24"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-					</svg>
-				</button>
-				<div x-show="open" x-collapse>
-					<a
-						href="/admin"
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isExactPath(ctx, "/admin")),
-							templ.KV(sidebarNavInactive, !isExactPath(ctx, "/admin")) }
-					>
-						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-							<i class="fa-solid fa-gauge text-xs"></i>
-						</span>
-						Dashboard
-					</a>
-					<a
-						href="/admin/users"
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/users")),
-							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/users")) }
-					>
-						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-							<i class="fa-solid fa-users text-xs"></i>
-						</span>
-						Users
-					</a>
-					<a
-						href="/admin/campaigns"
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/campaigns")),
-							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/campaigns")) }
-					>
-						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-							<i class="fa-solid fa-book-open text-xs"></i>
-						</span>
-						All Campaigns
-					</a>
-					<a
-						href="/admin/storage"
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/storage")),
-							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/storage")) }
-					>
-						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-							<i class="fa-solid fa-hard-drive text-xs"></i>
-						</span>
-						Storage
-					</a>
-					<a
-						href="/admin/plugins"
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/plugins")),
-							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/plugins")) }
-					>
-						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-							<i class="fa-solid fa-cubes text-xs"></i>
-						</span>
-						Plugins
-					</a>
-					<a
-						href="/admin/modules"
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/modules")),
-							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/modules")) }
-					>
-						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-							<i class="fa-solid fa-puzzle-piece text-xs"></i>
-						</span>
-						Modules
-					</a>
-					<a
-						href="/admin/smtp"
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/smtp")),
-							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/smtp")) }
-					>
-						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-							<i class="fa-solid fa-envelope text-xs"></i>
-						</span>
-						SMTP Settings
-					</a>
-					<div class="pb-2"></div>
+				<!-- Admin section (site admins only) — collapsible -->
+				if GetIsAdmin(ctx) {
+					@AdminSidebarNav()
+				}
+
+				<!-- Sidebar footer -->
+				<div class="p-4 border-t border-gray-700 shrink-0">
+					<div class="text-xs text-gray-600">
+						Chronicle v0.1.0
+					</div>
 				</div>
 			</div>
-		}
 
-		<!-- Sidebar footer -->
-		<div class="p-4 border-t border-gray-700">
-			<div class="text-xs text-gray-600">
-				Chronicle v0.1.0
+			<!-- Panel 2: Category sub-nav (populated by sidebar_drill.js) -->
+			<div id="sidebar-category" class="w-64 shrink-0 flex flex-col min-h-0">
+				<!-- Back button / peek zone -->
+				<div id="sidebar-back" class="flex items-center px-4 py-3 border-b border-gray-700 cursor-pointer hover:bg-sidebar-hover transition-colors shrink-0">
+					<svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+					</svg>
+					<span class="text-sm text-gray-400">Back</span>
+				</div>
+
+				<!-- Category header (icon + name) -->
+				<div id="sidebar-cat-header" class="px-4 py-3 border-b border-gray-700/50 shrink-0">
+					<div class="flex items-center gap-2">
+						<span id="sidebar-cat-icon" class="w-6 h-6 rounded flex items-center justify-center"></span>
+						<span id="sidebar-cat-name" class="text-base font-semibold text-white truncate"></span>
+					</div>
+					<span id="sidebar-cat-count" class="text-xs text-gray-500 mt-0.5 block"></span>
+				</div>
+
+				<!-- Category nav content (scrollable) -->
+				<nav id="sidebar-cat-nav" class="flex-1 py-3 overflow-y-auto">
+					<!-- Populated by sidebar_drill.js -->
+				</nav>
 			</div>
 		</div>
 	</aside>
+}
+
+// AdminSidebarNav renders the collapsible admin navigation section.
+templ AdminSidebarNav() {
+	<div
+		x-data="{ open: localStorage.getItem('chronicle-admin-nav') !== 'collapsed' }"
+		class="border-t border-gray-700 shrink-0"
+	>
+		<button
+			@click="open = !open; localStorage.setItem('chronicle-admin-nav', open ? 'open' : 'collapsed')"
+			class="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+		>
+			<span>Admin</span>
+			<svg
+				class="w-3 h-3 transition-transform duration-200"
+				:class="open ? 'rotate-0' : '-rotate-90'"
+				fill="none" stroke="currentColor" viewBox="0 0 24 24"
+			>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+			</svg>
+		</button>
+		<div x-show="open" x-collapse>
+			<a
+				href="/admin"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isExactPath(ctx, "/admin")),
+					templ.KV(sidebarNavInactive, !isExactPath(ctx, "/admin")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-gauge text-xs"></i>
+				</span>
+				Dashboard
+			</a>
+			<a
+				href="/admin/users"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/users")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/users")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-users text-xs"></i>
+				</span>
+				Users
+			</a>
+			<a
+				href="/admin/campaigns"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/campaigns")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/campaigns")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-book-open text-xs"></i>
+				</span>
+				All Campaigns
+			</a>
+			<a
+				href="/admin/storage"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/storage")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/storage")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-hard-drive text-xs"></i>
+				</span>
+				Storage
+			</a>
+			<a
+				href="/admin/plugins"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/plugins")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/plugins")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-cubes text-xs"></i>
+				</span>
+				Plugins
+			</a>
+			<a
+				href="/admin/modules"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/modules")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/modules")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-puzzle-piece text-xs"></i>
+				</span>
+				Modules
+			</a>
+			<a
+				href="/admin/smtp"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/smtp")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/smtp")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-envelope text-xs"></i>
+				</span>
+				SMTP Settings
+			</a>
+			<div class="pb-2"></div>
+		</div>
+	</div>
 }
 
 // CampaignSidebarNav renders campaign-scoped navigation with entity type links.
@@ -201,16 +236,16 @@ templ CampaignSidebarNav() {
 		Dashboard
 	</a>
 
-	<!-- Entity type links (dynamically rendered from DB) -->
+	<!-- Category links (dynamically rendered from DB) -->
 	<div class="mt-4 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-		Entities
+		Categories
 	</div>
 
 	for _, et := range GetEntityTypes(ctx) {
 		@entityTypeLink(et.Slug+"s", et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID))
 	}
 
-	<!-- All entities link -->
+	<!-- All pages link -->
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
 		class={ sidebarNavLink,
@@ -220,7 +255,7 @@ templ CampaignSidebarNav() {
 		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 			<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
 		</span>
-		All Entities
+		All Pages
 	</a>
 
 	if IsAuthenticated(ctx) {
@@ -310,13 +345,22 @@ templ DefaultSidebarNav() {
 }
 
 // entityTypeLink renders a single entity type navigation link in the sidebar.
-// Uses a Font Awesome icon with the entity type's theme color.
+// Uses a Font Awesome icon with the entity type's theme color. Includes data
+// attributes for the drill-down sidebar JS to populate the category sub-panel.
 templ entityTypeLink(slug string, label string, color string, icon string, count int) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug)) }
-		class={ sidebarNavLink,
+		class={ "sidebar-category-link", sidebarNavLink,
 			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))),
 			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))) }
+		data-cat-slug={ slug }
+		data-cat-label={ label }
+		data-cat-color={ color }
+		data-cat-icon={ icon }
+		data-cat-count={ strconv.Itoa(count) }
+		data-cat-url={ fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug) }
+		data-cat-new-url={ fmt.Sprintf("/campaigns/%s/entities/new", GetCampaignID(ctx)) }
+		data-campaign-id={ GetCampaignID(ctx) }
 	>
 		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 			if icon != "" {
@@ -329,6 +373,10 @@ templ entityTypeLink(slug string, label string, color string, icon string, count
 		if count > 0 {
 			<span class="ml-auto text-xs text-gray-500">{ strconv.Itoa(count) }</span>
 		}
+		<!-- Drill-down chevron -->
+		<svg class="w-3 h-3 ml-1 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+		</svg>
 	</a>
 }
 

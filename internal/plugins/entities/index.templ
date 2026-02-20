@@ -32,11 +32,11 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 							}
 						}
 					} else {
-						Entities
+						All Pages
 					}
 				</h1>
 				<p class="text-sm text-fg-secondary mt-0.5">
-					{ fmt.Sprintf("%d", total) } total across { fmt.Sprintf("%d", len(entityTypes)) } types
+					{ fmt.Sprintf("%d", total) } total across { fmt.Sprintf("%d", len(entityTypes)) } categories
 				</p>
 			</div>
 			<div class="flex items-center gap-3">
@@ -49,7 +49,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 					<input
 						type="text"
 						name="q"
-						placeholder="Search entities..."
+						placeholder="Search pages..."
 						class="input pl-9 pr-3 py-2 w-56"
 					/>
 					<i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-xs"></i>
@@ -58,7 +58,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
 						class="btn-primary"
-					><i class="fa-solid fa-plus mr-1.5 text-xs"></i> New Entity</a>
+					><i class="fa-solid fa-plus mr-1.5 text-xs"></i> New Page</a>
 				}
 			</div>
 		</div>
@@ -110,10 +110,10 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 					<div class="empty-state__icon">
 						<i class="fa-solid fa-scroll text-fg-muted"></i>
 					</div>
-					<div class="empty-state__title">No entities found</div>
+					<div class="empty-state__title">No pages found</div>
 					<div class="empty-state__description mb-4">
 						if activeTypeSlug != "" {
-							No entities of this type yet. Create one to get started.
+							No pages in this category yet. Create one to get started.
 						} else {
 							Start building your world by creating characters, locations, and more.
 						}
@@ -122,11 +122,11 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
 							class="btn-primary"
-						><i class="fa-solid fa-plus mr-1.5 text-xs"></i> Create Your First Entity</a>
+						><i class="fa-solid fa-plus mr-1.5 text-xs"></i> Create Your First Page</a>
 					}
 				</div>
 			} else {
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
 					for _, entity := range entities {
 						@EntityCard(&entity, cc)
 					}
