@@ -29,6 +29,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.POST("/campaigns/:id/join", h.JoinCampaign)
 	admin.DELETE("/campaigns/:id/leave", h.LeaveCampaign)
 
+	// Storage management.
+	admin.GET("/storage", h.Storage)
+	admin.DELETE("/media/:fileID", h.DeleteMedia)
+
 	// SMTP settings (delegates to SMTP plugin handler).
 	if smtpHandler != nil {
 		smtp.RegisterRoutes(admin, smtpHandler)

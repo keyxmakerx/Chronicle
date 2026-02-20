@@ -9,10 +9,9 @@ import (
 // AdminCampaignsPage renders the campaign management page with all campaigns.
 templ AdminCampaignsPage(allCampaigns []campaigns.Campaign, total, page, perPage int, csrfToken string) {
 	@layouts.App("Campaigns - Admin") {
-		@AdminLayout("Campaigns", "campaigns") {
-			<div class="space-y-6">
-				<h1 class="text-2xl font-bold text-gray-900">All Campaigns ({ fmt.Sprintf("%d", total) })</h1>
-				<div class="card p-0 overflow-hidden">
+		<div class="max-w-4xl mx-auto space-y-6">
+			<h1 class="text-2xl font-bold text-gray-900">All Campaigns ({ fmt.Sprintf("%d", total) })</h1>
+			<div class="card p-0 overflow-hidden">
 				<table class="w-full">
 					<thead>
 						<tr class="bg-gray-50 border-b border-gray-200">
@@ -108,7 +107,6 @@ templ AdminCampaignsPage(allCampaigns []campaigns.Campaign, total, page, perPage
 					}
 				</div>
 			}
-			</div>
-		}
+		</div>
 	}
 }

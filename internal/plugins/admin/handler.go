@@ -14,6 +14,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 )
 
@@ -23,6 +24,9 @@ type Handler struct {
 	authRepo        auth.UserRepository
 	campaignService campaigns.CampaignService
 	smtpService     smtp.SMTPService
+	mediaRepo       media.MediaRepository
+	mediaService    media.MediaService
+	maxUploadSize   int64
 }
 
 // NewHandler creates a new admin handler.
@@ -32,6 +36,14 @@ func NewHandler(authRepo auth.UserRepository, campaignService campaigns.Campaign
 		campaignService: campaignService,
 		smtpService:     smtpService,
 	}
+}
+
+// SetMediaDeps sets the media dependencies for the storage admin page.
+// Called after media plugin is wired to avoid constructor bloat.
+func (h *Handler) SetMediaDeps(repo media.MediaRepository, svc media.MediaService, maxUploadSize int64) {
+	h.mediaRepo = repo
+	h.mediaService = svc
+	h.maxUploadSize = maxUploadSize
 }
 
 // --- Dashboard ---
@@ -48,7 +60,16 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		smtpConfigured = h.smtpService.IsConfigured(ctx)
 	}
 
-	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, smtpConfigured))
+	var mediaFileCount int
+	var totalStorageBytes int64
+	if h.mediaRepo != nil {
+		if stats, err := h.mediaRepo.GetStorageStats(ctx); err == nil {
+			mediaFileCount = stats.TotalFiles
+			totalStorageBytes = stats.TotalBytes
+		}
+	}
+
+	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured))
 }
 
 // --- Users ---
@@ -205,4 +226,59 @@ func (h *Handler) LeaveCampaign(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/campaigns")
+}
+
+// --- Storage ---
+
+// Storage renders the storage management page (GET /admin/storage).
+func (h *Handler) Storage(c echo.Context) error {
+	if h.mediaRepo == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	ctx := c.Request().Context()
+
+	stats, err := h.mediaRepo.GetStorageStats(ctx)
+	if err != nil {
+		return err
+	}
+
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	if page < 1 {
+		page = 1
+	}
+	perPage := 25
+	offset := (page - 1) * perPage
+
+	files, total, err := h.mediaRepo.ListAll(ctx, perPage, offset)
+	if err != nil {
+		return err
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, AdminStoragePage(stats, files, total, page, perPage, h.maxUploadSize, csrfToken))
+}
+
+// DeleteMedia deletes a media file (DELETE /admin/media/:fileID).
+func (h *Handler) DeleteMedia(c echo.Context) error {
+	if h.mediaService == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	fileID := c.Param("fileID")
+
+	if err := h.mediaService.Delete(c.Request().Context(), fileID); err != nil {
+		return err
+	}
+
+	slog.Info("admin deleted media file",
+		slog.String("file_id", fileID),
+		slog.String("by", auth.GetUserID(c)),
+	)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/admin/storage")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/storage")
 }

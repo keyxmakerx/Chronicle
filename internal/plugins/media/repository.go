@@ -10,12 +10,33 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
+// StorageStats holds aggregate storage statistics for the admin dashboard.
+type StorageStats struct {
+	TotalFiles  int              // Total number of media files.
+	TotalBytes  int64            // Total storage used in bytes.
+	ByUsageType map[string]UsageTypeStats // Breakdown by usage type.
+}
+
+// UsageTypeStats holds per-usage-type counts and sizes.
+type UsageTypeStats struct {
+	Count int   `json:"count"`
+	Bytes int64 `json:"bytes"`
+}
+
+// AdminMediaFile extends MediaFile with uploader display name for admin views.
+type AdminMediaFile struct {
+	MediaFile
+	UploaderName string
+}
+
 // MediaRepository defines the data access contract for media file operations.
 type MediaRepository interface {
 	Create(ctx context.Context, file *MediaFile) error
 	FindByID(ctx context.Context, id string) (*MediaFile, error)
 	Delete(ctx context.Context, id string) error
 	ListByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error)
+	GetStorageStats(ctx context.Context) (*StorageStats, error)
+	ListAll(ctx context.Context, limit, offset int) ([]AdminMediaFile, int, error)
 }
 
 // mediaRepository implements MediaRepository with MariaDB queries.
@@ -129,6 +150,86 @@ func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string,
 			&f.CreatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning media file row: %w", err)
+		}
+		f.ThumbnailPaths = make(map[string]string)
+		if thumbJSON != "" && thumbJSON != "{}" {
+			if err := json.Unmarshal([]byte(thumbJSON), &f.ThumbnailPaths); err != nil {
+				return nil, 0, fmt.Errorf("unmarshaling thumbnail paths: %w", err)
+			}
+		}
+		files = append(files, f)
+	}
+	return files, total, rows.Err()
+}
+
+// GetStorageStats returns aggregate storage statistics across all media files.
+func (r *mediaRepository) GetStorageStats(ctx context.Context) (*StorageStats, error) {
+	stats := &StorageStats{
+		ByUsageType: make(map[string]UsageTypeStats),
+	}
+
+	// Overall totals.
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM media_files`,
+	).Scan(&stats.TotalFiles, &stats.TotalBytes)
+	if err != nil {
+		return nil, fmt.Errorf("querying storage totals: %w", err)
+	}
+
+	// Breakdown by usage type.
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT usage_type, COUNT(*), COALESCE(SUM(file_size), 0)
+		 FROM media_files GROUP BY usage_type`)
+	if err != nil {
+		return nil, fmt.Errorf("querying usage type stats: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var usageType string
+		var ut UsageTypeStats
+		if err := rows.Scan(&usageType, &ut.Count, &ut.Bytes); err != nil {
+			return nil, fmt.Errorf("scanning usage type row: %w", err)
+		}
+		stats.ByUsageType[usageType] = ut
+	}
+	return stats, rows.Err()
+}
+
+// ListAll returns all media files with uploader names, ordered by most recent.
+func (r *mediaRepository) ListAll(ctx context.Context, limit, offset int) ([]AdminMediaFile, int, error) {
+	var total int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM media_files`,
+	).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("counting all media files: %w", err)
+	}
+
+	query := `SELECT m.id, m.campaign_id, m.uploaded_by, m.filename, m.original_name,
+	                 m.mime_type, m.file_size, m.usage_type, m.thumbnail_paths, m.created_at,
+	                 COALESCE(u.display_name, 'Unknown')
+	          FROM media_files m
+	          LEFT JOIN users u ON m.uploaded_by = u.id
+	          ORDER BY m.created_at DESC LIMIT ? OFFSET ?`
+
+	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("listing all media files: %w", err)
+	}
+	defer rows.Close()
+
+	var files []AdminMediaFile
+	for rows.Next() {
+		var f AdminMediaFile
+		var thumbJSON string
+		if err := rows.Scan(
+			&f.ID, &f.CampaignID, &f.UploadedBy,
+			&f.Filename, &f.OriginalName, &f.MimeType,
+			&f.FileSize, &f.UsageType, &thumbJSON,
+			&f.CreatedAt, &f.UploaderName,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scanning admin media file row: %w", err)
 		}
 		f.ThumbnailPaths = make(map[string]string)
 		if thumbJSON != "" && thumbJSON != "{}" {

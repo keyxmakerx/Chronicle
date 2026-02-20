@@ -1,0 +1,268 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/media"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// formatBytes converts bytes to a human-readable string (KB, MB, GB).
+func formatBytes(b int64) string {
+	switch {
+	case b >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(b)/float64(1<<30))
+	case b >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(b)/float64(1<<20))
+	case b >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(b)/float64(1<<10))
+	default:
+		return fmt.Sprintf("%d B", b)
+	}
+}
+
+// usageLabel returns a human-readable label for a usage type.
+func usageLabel(t string) string {
+	switch t {
+	case "entity_image":
+		return "Entity Images"
+	case "attachment":
+		return "Attachments"
+	case "avatar":
+		return "Avatars"
+	case "backdrop":
+		return "Backdrops"
+	default:
+		return t
+	}
+}
+
+// usageIcon returns a Font Awesome icon class for a usage type.
+func usageIcon(t string) string {
+	switch t {
+	case "entity_image":
+		return "fa-image"
+	case "attachment":
+		return "fa-paperclip"
+	case "avatar":
+		return "fa-user-circle"
+	case "backdrop":
+		return "fa-panorama"
+	default:
+		return "fa-file"
+	}
+}
+
+// usageColor returns a Tailwind color class for a usage type.
+func usageColor(t string) string {
+	switch t {
+	case "entity_image":
+		return "text-blue-500 bg-blue-50"
+	case "attachment":
+		return "text-purple-500 bg-purple-50"
+	case "avatar":
+		return "text-emerald-500 bg-emerald-50"
+	case "backdrop":
+		return "text-amber-500 bg-amber-50"
+	default:
+		return "text-gray-500 bg-gray-50"
+	}
+}
+
+// AdminStoragePage renders the storage management admin page.
+templ AdminStoragePage(stats *media.StorageStats, files []media.AdminMediaFile, total, page, perPage int, maxUploadSize int64, csrfToken string) {
+	@layouts.App("Storage - Admin") {
+		<div class="max-w-5xl mx-auto space-y-6">
+			<div class="flex items-center justify-between">
+				<h1 class="text-2xl font-bold text-gray-900">Storage Management</h1>
+				<div class="text-sm text-gray-500">
+					Max upload: <span class="font-medium text-gray-700">{ formatBytes(maxUploadSize) }</span>
+				</div>
+			</div>
+
+			<!-- Overview Stats -->
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+				<!-- Total Storage -->
+				<div class="card">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-gray-500">Total Storage Used</p>
+						<span class="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center">
+							<i class="fa-solid fa-hard-drive text-indigo-500"></i>
+						</span>
+					</div>
+					<p class="text-3xl font-bold text-gray-900 mt-2">{ formatBytes(stats.TotalBytes) }</p>
+				</div>
+				<!-- Total Files -->
+				<div class="card">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-gray-500">Total Files</p>
+						<span class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+							<i class="fa-solid fa-photo-film text-blue-500"></i>
+						</span>
+					</div>
+					<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", stats.TotalFiles) }</p>
+				</div>
+				<!-- Upload Limit -->
+				<div class="card">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-gray-500">Per-File Limit</p>
+						<span class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+							<i class="fa-solid fa-arrow-up-from-bracket text-emerald-500"></i>
+						</span>
+					</div>
+					<p class="text-3xl font-bold text-gray-900 mt-2">{ formatBytes(maxUploadSize) }</p>
+					<p class="text-xs text-gray-400 mt-1">Set via MAX_UPLOAD_SIZE env var</p>
+				</div>
+			</div>
+
+			<!-- Usage Type Breakdown -->
+			if len(stats.ByUsageType) > 0 {
+				<div class="card">
+					<h2 class="text-sm font-semibold text-gray-700 mb-4">Storage by Type</h2>
+					<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+						for usageType, ut := range stats.ByUsageType {
+							<div class="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
+								<span class={ "w-9 h-9 rounded-lg flex items-center justify-center shrink-0", usageColor(usageType) }>
+									<i class={ "fa-solid " + usageIcon(usageType), "text-sm" }></i>
+								</span>
+								<div class="min-w-0">
+									<p class="text-xs font-medium text-gray-500 truncate">{ usageLabel(usageType) }</p>
+									<p class="text-sm font-bold text-gray-900">{ fmt.Sprintf("%d", ut.Count) } files</p>
+									<p class="text-xs text-gray-400">{ formatBytes(ut.Bytes) }</p>
+								</div>
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			<!-- Rate Limits Info -->
+			<div class="card border-l-4 border-l-amber-400">
+				<div class="flex items-start gap-3">
+					<i class="fa-solid fa-shield-halved text-amber-500 mt-0.5"></i>
+					<div>
+						<h3 class="text-sm font-semibold text-gray-700">Rate Limits & Restrictions</h3>
+						<ul class="mt-2 space-y-1 text-sm text-gray-500">
+							<li><span class="font-medium text-gray-700">30 uploads/min</span> per IP address</li>
+							<li><span class="font-medium text-gray-700">{ formatBytes(maxUploadSize) }</span> maximum file size</li>
+							<li><span class="font-medium text-gray-700">Allowed types:</span> JPEG, PNG, WebP, GIF</li>
+							<li><span class="font-medium text-gray-700">Magic byte validation</span> prevents MIME spoofing</li>
+						</ul>
+						<p class="mt-2 text-xs text-gray-400">
+							Adjust limits via environment variables: MAX_UPLOAD_SIZE (bytes), MEDIA_PATH (storage directory)
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Files Table -->
+			<div>
+				<h2 class="text-lg font-semibold text-gray-900 mb-3">All Files ({ fmt.Sprintf("%d", total) })</h2>
+				if total == 0 {
+					<div class="card text-center py-8">
+						<i class="fa-solid fa-folder-open text-3xl text-gray-200 mb-2"></i>
+						<p class="text-sm text-gray-400">No files uploaded yet.</p>
+					</div>
+				} else {
+					<div class="card p-0 overflow-hidden">
+						<table class="w-full">
+							<thead>
+								<tr class="bg-gray-50 border-b border-gray-200">
+									<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">File</th>
+									<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+									<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Size</th>
+									<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Uploaded By</th>
+									<th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+									<th class="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-gray-100">
+								for _, f := range files {
+									<tr class="hover:bg-gray-50 transition-colors">
+										<td class="px-4 py-3">
+											<div class="flex items-center gap-2">
+												if f.IsImage() {
+													<img
+														src={ fmt.Sprintf("/media/%s/thumb/300", f.ID) }
+														alt={ f.OriginalName }
+														class="w-8 h-8 rounded object-cover bg-gray-100"
+													/>
+												} else {
+													<div class="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
+														<i class="fa-solid fa-file text-gray-300 text-xs"></i>
+													</div>
+												}
+												<div class="min-w-0">
+													<p class="text-sm font-medium text-gray-700 truncate max-w-[200px]" title={ f.OriginalName }>
+														{ f.OriginalName }
+													</p>
+													<p class="text-[10px] text-gray-400 font-mono">{ f.ID[:8] }...</p>
+												</div>
+											</div>
+										</td>
+										<td class="px-4 py-3">
+											<span class={ "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", usageColor(f.UsageType) }>
+												<i class={ "fa-solid " + usageIcon(f.UsageType), "text-[10px]" }></i>
+												{ usageLabel(f.UsageType) }
+											</span>
+										</td>
+										<td class="px-4 py-3 text-sm text-gray-500">{ formatBytes(f.FileSize) }</td>
+										<td class="px-4 py-3 text-sm text-gray-500">{ f.UploaderName }</td>
+										<td class="px-4 py-3 text-sm text-gray-400">{ f.CreatedAt.Format("Jan 2, 2006") }</td>
+										<td class="px-4 py-3 text-right">
+											<div class="flex items-center justify-end gap-2">
+												<a
+													href={ templ.SafeURL(fmt.Sprintf("/media/%s", f.ID)) }
+													target="_blank"
+													class="text-sm text-accent hover:text-accent-hover transition-colors"
+												>
+													View
+												</a>
+												<button
+													hx-delete={ fmt.Sprintf("/admin/media/%s", f.ID) }
+													hx-confirm={ fmt.Sprintf("Delete '%s'? This cannot be undone.", f.OriginalName) }
+													hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+													class="text-sm text-red-600 hover:text-red-800 transition-colors"
+												>
+													Delete
+												</button>
+											</div>
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+
+					<!-- Pagination -->
+					if total > perPage {
+						<div class="flex justify-center items-center gap-4 mt-6">
+							if page > 1 {
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/admin/storage?page=%d", page-1)) }
+									class="btn-secondary text-sm"
+								>
+									Previous
+								</a>
+							} else {
+								<span class="btn text-sm text-gray-300 cursor-not-allowed opacity-50">Previous</span>
+							}
+							<span class="text-sm text-gray-500">
+								Page { fmt.Sprintf("%d", page) } of { fmt.Sprintf("%d", (total+perPage-1)/perPage) }
+							</span>
+							if page*perPage < total {
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/admin/storage?page=%d", page+1)) }
+									class="btn-secondary text-sm"
+								>
+									Next
+								</a>
+							} else {
+								<span class="btn text-sm text-gray-300 cursor-not-allowed opacity-50">Next</span>
+							}
+						</div>
+					}
+				}
+			</div>
+		</div>
+	}
+}

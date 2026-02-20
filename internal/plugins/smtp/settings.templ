@@ -9,14 +9,11 @@ import (
 templ SMTPSettingsPage(settings *SMTPSettings, csrfToken, errMsg string) {
 	@layouts.App("SMTP Settings - Admin") {
 		<div class="max-w-2xl mx-auto">
-			<div class="flex justify-between items-center mb-6">
-				<div>
-					<h1 class="text-2xl font-bold text-gray-900">SMTP Settings</h1>
-					<p class="text-sm text-gray-500 mt-1">
-						Configure outbound email for password resets and campaign transfer notifications.
-					</p>
-				</div>
-				<a href="/admin" class="text-sm text-gray-500 hover:text-gray-700 transition-colors">Back to Admin</a>
+			<div class="mb-6">
+				<h1 class="text-2xl font-bold text-gray-900">SMTP Settings</h1>
+				<p class="text-sm text-gray-500 mt-1">
+					Configure outbound email for password resets and campaign transfer notifications.
+				</p>
 			</div>
 			<div id="smtp-form-container">
 				@SMTPFormComponent(settings, csrfToken, errMsg, "")

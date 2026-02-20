@@ -65,17 +65,72 @@ templ Sidebar() {
 			}
 		</nav>
 
+		<!-- Admin section (site admins only) -->
+		if GetIsAdmin(ctx) {
+			<div class="border-t border-gray-700 py-4">
+				<div class="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+					Admin
+				</div>
+				<a
+					href="/admin"
+					class={ sidebarNavLink,
+						templ.KV(sidebarNavActive, isExactPath(ctx, "/admin")),
+						templ.KV(sidebarNavInactive, !isExactPath(ctx, "/admin")) }
+				>
+					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+						<i class="fa-solid fa-gauge text-xs"></i>
+					</span>
+					Dashboard
+				</a>
+				<a
+					href="/admin/users"
+					class={ sidebarNavLink,
+						templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/users")),
+						templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/users")) }
+				>
+					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+						<i class="fa-solid fa-users text-xs"></i>
+					</span>
+					Users
+				</a>
+				<a
+					href="/admin/campaigns"
+					class={ sidebarNavLink,
+						templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/campaigns")),
+						templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/campaigns")) }
+				>
+					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+						<i class="fa-solid fa-book-open text-xs"></i>
+					</span>
+					All Campaigns
+				</a>
+				<a
+					href="/admin/storage"
+					class={ sidebarNavLink,
+						templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/storage")),
+						templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/storage")) }
+				>
+					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+						<i class="fa-solid fa-hard-drive text-xs"></i>
+					</span>
+					Storage
+				</a>
+				<a
+					href="/admin/smtp"
+					class={ sidebarNavLink,
+						templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/smtp")),
+						templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/smtp")) }
+				>
+					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+						<i class="fa-solid fa-envelope text-xs"></i>
+					</span>
+					SMTP Settings
+				</a>
+			</div>
+		}
+
 		<!-- Sidebar footer -->
 		<div class="p-4 border-t border-gray-700">
-			if GetIsAdmin(ctx) {
-				<a href="/admin" class="flex items-center text-xs text-gray-500 hover:text-gray-300 transition-colors mb-2">
-					<svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-					</svg>
-					Admin
-				</a>
-			}
 			<div class="text-xs text-gray-600">
 				Chronicle v0.1.0
 			</div>
@@ -297,12 +352,6 @@ templ Topbar() {
 		<!-- Right: User menu or guest login links -->
 		<div class="flex items-center space-x-4">
 			if IsAuthenticated(ctx) {
-				if GetIsAdmin(ctx) {
-					<a href="/admin" class="text-sm text-gray-500 hover:text-gray-700 transition-colors">
-						Admin
-					</a>
-				}
-
 				<div class="flex items-center space-x-2">
 					<!-- User avatar placeholder -->
 					<div class="w-8 h-8 rounded-full bg-accent flex items-center justify-center">

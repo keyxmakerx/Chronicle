@@ -6,53 +6,63 @@ import (
 )
 
 // AdminDashboardPage renders the admin overview with high-level stats.
-templ AdminDashboardPage(userCount, campaignCount int, smtpConfigured bool) {
+templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool) {
 	@layouts.App("Admin Dashboard") {
-		@AdminLayout("Admin Dashboard", "dashboard") {
-			<div class="space-y-6">
-				<h1 class="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+		<div class="max-w-5xl mx-auto space-y-6">
+			<h1 class="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
 
-				<!-- Stats Cards -->
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-					<!-- Users -->
-					<a href="/admin/users" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-gray-500">Total Users</p>
-							<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
-								<i class="fa-solid fa-users text-accent"></i>
-							</span>
-						</div>
-						<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", userCount) }</p>
-						<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">Manage users &rarr;</p>
-					</a>
-					<!-- Campaigns -->
-					<a href="/admin/campaigns" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-gray-500">Total Campaigns</p>
-							<span class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
-								<i class="fa-solid fa-book-open text-blue-500"></i>
-							</span>
-						</div>
-						<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", campaignCount) }</p>
-						<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">Manage campaigns &rarr;</p>
-					</a>
-					<!-- SMTP -->
-					<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-gray-500">SMTP Status</p>
-							<span class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
-								<i class="fa-solid fa-envelope text-emerald-500"></i>
-							</span>
-						</div>
-						if smtpConfigured {
-							<p class="text-lg font-semibold text-emerald-600 mt-2">Configured</p>
-						} else {
-							<p class="text-lg font-semibold text-amber-600 mt-2">Not Configured</p>
-						}
-						<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">SMTP settings &rarr;</p>
-					</a>
-				</div>
+			<!-- Stats Cards -->
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+				<!-- Users -->
+				<a href="/admin/users" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-gray-500">Total Users</p>
+						<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+							<i class="fa-solid fa-users text-accent"></i>
+						</span>
+					</div>
+					<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", userCount) }</p>
+					<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">Manage users &rarr;</p>
+				</a>
+				<!-- Campaigns -->
+				<a href="/admin/campaigns" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-gray-500">Total Campaigns</p>
+						<span class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+							<i class="fa-solid fa-book-open text-blue-500"></i>
+						</span>
+					</div>
+					<p class="text-3xl font-bold text-gray-900 mt-2">{ fmt.Sprintf("%d", campaignCount) }</p>
+					<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">Manage campaigns &rarr;</p>
+				</a>
+				<!-- Storage -->
+				<a href="/admin/storage" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-gray-500">Storage</p>
+						<span class="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center">
+							<i class="fa-solid fa-hard-drive text-indigo-500"></i>
+						</span>
+					</div>
+					<p class="text-2xl font-bold text-gray-900 mt-2">{ formatBytes(totalStorageBytes) }</p>
+					<p class="text-xs text-gray-400 mt-1">{ fmt.Sprintf("%d", mediaFileCount) } files</p>
+					<p class="text-xs text-gray-400 group-hover:text-accent transition-colors">Manage storage &rarr;</p>
+				</a>
+				<!-- SMTP -->
+				<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-gray-500">SMTP Status</p>
+						<span class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+							<i class="fa-solid fa-envelope text-emerald-500"></i>
+						</span>
+					</div>
+					if smtpConfigured {
+						<p class="text-lg font-semibold text-emerald-600 mt-2">Configured</p>
+					} else {
+						<p class="text-lg font-semibold text-amber-600 mt-2">Not Configured</p>
+					}
+					<p class="text-xs text-gray-400 mt-1 group-hover:text-accent transition-colors">SMTP settings &rarr;</p>
+				</a>
 			</div>
-		}
+		</div>
 	}
 }
