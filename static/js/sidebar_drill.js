@@ -103,7 +103,10 @@
    * @param {boolean} [instant] - If true, skip the animation (initial load).
    */
   function drillIn(link, instant) {
-    if (!slider) return;
+    if (!slider) {
+      console.warn('[sidebar_drill] drillIn: slider is null');
+      return;
+    }
 
     var slug = link.getAttribute('data-cat-slug') || '';
     var label = link.getAttribute('data-cat-label') || '';
@@ -133,11 +136,16 @@
       catNav.innerHTML = buildCategoryNav(catUrl, newUrl, label, color, icon, campaignId, slug);
     }
 
-    // Slide the panels.
+    // Slide the panels using pixel value (avoid calc inside translate3d).
+    // 16rem = 256px, minus PEEK_PX = 246px offset.
+    var offset = -(256 - PEEK_PX);
     if (instant) {
       slider.style.transition = 'none';
     }
-    slider.style.transform = 'translate3d(calc(-16rem + ' + PEEK_PX + 'px), 0, 0)';
+    console.log('[sidebar_drill] drillIn: before transform =', slider.style.transform);
+    slider.style.transform = 'translate3d(' + offset + 'px, 0px, 0px)';
+    console.log('[sidebar_drill] drillIn: after transform =', slider.style.transform);
+    console.log('[sidebar_drill] drillIn: computed =', getComputedStyle(slider).transform);
 
     if (instant) {
       // Force reflow then restore transition.
