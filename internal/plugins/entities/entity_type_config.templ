@@ -1,0 +1,307 @@
+// entity_type_config.templ renders the unified entity type configuration page.
+// Tabs: Layout (template editor), Attributes (field definitions), Dashboard
+// (description + pinned pages), and Nav Panel (icon/color/name + sidebar).
+//
+// This page consolidates the template editor, entity type editing, and
+// dashboard settings into a single tabbed interface for campaign owners.
+
+package entities
+
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// EntityTypeConfigPage renders the unified configuration page for an entity type.
+templ EntityTypeConfigPage(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
+	@layouts.App(fmt.Sprintf("Configure: %s", et.NamePlural)) {
+		<div class="h-full flex flex-col -mx-5 -my-4" x-data="{ tab: 'layout' }">
+			<!-- Header -->
+			<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
+				<div class="flex items-center gap-3">
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
+						class="text-fg-muted hover:text-fg transition-colors"
+						title="Back to categories"
+					>
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+						</svg>
+					</a>
+					<div class="flex items-center gap-2">
+						<div
+							class="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
+							style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+						>
+							<i class={ "fa-solid " + et.Icon }></i>
+						</div>
+						<div>
+							<h1 class="text-base font-semibold text-fg">{ et.NamePlural }</h1>
+							<p class="text-[11px] text-fg-secondary">Category Configuration</p>
+						</div>
+					</div>
+				</div>
+				<!-- Save status (used by template editor tab) -->
+				<div class="flex items-center gap-2">
+					<span id="te-save-status" class="text-xs text-fg-muted" x-show="tab === 'layout'"></span>
+					<button id="te-save-btn" class="btn-primary text-sm" x-show="tab === 'layout'">Save Layout</button>
+				</div>
+			</div>
+
+			<!-- Tab bar -->
+			<div class="bg-surface border-b border-edge px-6 flex gap-0 shrink-0">
+				<button
+					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+					:class="tab === 'layout' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
+					@click="tab = 'layout'"
+				>
+					<i class="fa-solid fa-table-columns mr-1.5 text-xs"></i> Layout
+				</button>
+				<button
+					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+					:class="tab === 'attributes' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
+					@click="tab = 'attributes'"
+				>
+					<i class="fa-solid fa-sliders mr-1.5 text-xs"></i> Attributes
+				</button>
+				<button
+					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+					:class="tab === 'dashboard' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
+					@click="tab = 'dashboard'"
+				>
+					<i class="fa-solid fa-grip mr-1.5 text-xs"></i> Dashboard
+				</button>
+				<button
+					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+					:class="tab === 'nav' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
+					@click="tab = 'nav'"
+				>
+					<i class="fa-solid fa-bars mr-1.5 text-xs"></i> Nav Panel
+				</button>
+			</div>
+
+			<!-- Tab content -->
+			<div class="flex-1 overflow-hidden">
+				<!-- Layout tab: mounts the existing template editor widget -->
+				<div x-show="tab === 'layout'" x-cloak class="h-full"
+					data-widget="template-editor"
+					data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/layout", cc.Campaign.ID, et.ID) }
+					data-layout={ layoutJSON(et) }
+					data-fields={ fieldsJSON(et) }
+					data-entity-type-name={ et.Name }
+					data-csrf-token={ csrfToken }
+				></div>
+
+				<!-- Attributes tab: field definitions editor -->
+				<div x-show="tab === 'attributes'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-6">
+						@attributesTab(cc, et, csrfToken)
+					</div>
+				</div>
+
+				<!-- Dashboard tab: description and pinned pages -->
+				<div x-show="tab === 'dashboard'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-6">
+						@dashboardTab(cc, et, csrfToken)
+					</div>
+				</div>
+
+				<!-- Nav Panel tab: icon, color, name, sidebar position -->
+				<div x-show="tab === 'nav'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-6">
+						@navPanelTab(cc, et, csrfToken)
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// attributesTab renders the field definitions editor for this entity type.
+templ attributesTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
+	<div class="space-y-6">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Attributes</h2>
+			<p class="text-sm text-fg-secondary">
+				Define the fields that appear on every { et.Name } page. Players fill these in per-entity.
+			</p>
+		</div>
+
+		<!-- Mount the entity-type-editor widget for field management -->
+		<div
+			data-widget="entity-type-editor"
+			data-entity-type-id={ fmt.Sprintf("%d", et.ID) }
+			data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d", cc.Campaign.ID, et.ID) }
+			data-name={ et.Name }
+			data-name-plural={ et.NamePlural }
+			data-icon={ et.Icon }
+			data-color={ et.Color }
+			data-fields={ entityTypeFieldsJSON(et.Fields) }
+			data-csrf-token={ csrfToken }
+			data-fields-only="true"
+		>
+			<div class="text-sm text-fg-secondary">Loading field editor...</div>
+		</div>
+	</div>
+}
+
+// dashboardTab renders the category dashboard configuration.
+templ dashboardTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
+	<div class="space-y-6">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Dashboard Settings</h2>
+			<p class="text-sm text-fg-secondary">
+				Configure the { et.NamePlural } category landing page.
+			</p>
+		</div>
+
+		<!-- Description -->
+		<div class="card p-5 space-y-3">
+			<h3 class="text-sm font-semibold text-fg">Description</h3>
+			<p class="text-xs text-fg-secondary">
+				Rich text shown at the top of the { et.NamePlural } category page.
+			</p>
+			<div
+				data-widget="editor"
+				data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/dashboard", cc.Campaign.ID, et.ID) }
+				data-field="description"
+				data-content={ safeDescription(et) }
+				data-csrf-token={ csrfToken }
+				data-placeholder={ fmt.Sprintf("Describe the %s category...", et.NamePlural) }
+			>
+				<div class="text-sm text-fg-secondary">Loading editor...</div>
+			</div>
+		</div>
+
+		<!-- Pinned entities -->
+		<div class="card p-5 space-y-3">
+			<h3 class="text-sm font-semibold text-fg">Pinned Pages</h3>
+			<p class="text-xs text-fg-secondary">
+				Pages pinned to the top of the category dashboard for quick access.
+			</p>
+			<div class="text-xs text-fg-muted italic py-4 text-center">
+				Pinned pages can be managed from the { et.NamePlural } category page.
+			</div>
+		</div>
+	</div>
+}
+
+// navPanelTab renders the nav panel / sidebar configuration.
+templ navPanelTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
+	<div class="space-y-6">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Nav Panel</h2>
+			<p class="text-sm text-fg-secondary">
+				How { et.NamePlural } appears in the sidebar navigation.
+			</p>
+		</div>
+
+		<!-- Appearance -->
+		<div class="card p-5 space-y-4">
+			<h3 class="text-sm font-semibold text-fg">Appearance</h3>
+
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Name</label>
+					<input
+						type="text"
+						value={ et.Name }
+						class="input w-full text-sm"
+						data-field="name"
+						id="nav-name"
+					/>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Plural Name</label>
+					<input
+						type="text"
+						value={ et.NamePlural }
+						class="input w-full text-sm"
+						data-field="name_plural"
+						id="nav-name-plural"
+					/>
+				</div>
+			</div>
+
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Icon</label>
+					<div class="flex flex-wrap gap-2 p-3 border border-edge rounded-md max-h-32 overflow-y-auto bg-surface">
+						for _, icon := range commonIcons {
+							<label class="cursor-pointer" title={ icon }>
+								<input
+									type="radio"
+									name="nav_icon"
+									value={ icon }
+									class="peer sr-only"
+									if icon == et.Icon {
+										checked
+									}
+								/>
+								<span class="inline-flex items-center justify-center w-8 h-8 rounded border border-edge text-fg-secondary peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:text-accent hover:border-edge transition-colors">
+									<i class={ "fa-solid " + icon, "text-sm" }></i>
+								</span>
+							</label>
+						}
+					</div>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Color</label>
+					<div class="flex items-center gap-3">
+						<input
+							type="color"
+							name="nav_color"
+							value={ et.Color }
+							class="w-10 h-10 rounded border border-edge cursor-pointer"
+							id="nav-color"
+						/>
+						<span class="text-xs text-fg-secondary">Used for icon tinting and accent highlights</span>
+					</div>
+				</div>
+			</div>
+
+			<div class="flex justify-end pt-2">
+				<button
+					class="btn-primary text-sm"
+					hx-put={ fmt.Sprintf("/campaigns/%s/entity-types/%d", cc.Campaign.ID, et.ID) }
+					hx-include="#nav-name, #nav-name-plural, #nav-color, [name='nav_icon']:checked"
+					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token": "%s"}`, csrfToken) }
+					hx-swap="none"
+				>
+					Save Changes
+				</button>
+			</div>
+		</div>
+
+		<!-- Sidebar position info -->
+		<div class="card p-5 space-y-3">
+			<h3 class="text-sm font-semibold text-fg">Sidebar Position</h3>
+			<p class="text-xs text-fg-secondary">
+				Category order and visibility in the sidebar can be configured in
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) }
+					class="text-accent hover:underline"
+				>Campaign Settings</a>.
+			</p>
+		</div>
+	</div>
+}
+
+// safeDescription returns the entity type's description as a safe string for the editor widget.
+func safeDescription(et *EntityType) string {
+	if et.Description == nil {
+		return ""
+	}
+	return *et.Description
+}
+
+// pinnedJSON serializes pinned entity IDs to JSON for the widget.
+func pinnedJSON(et *EntityType) string {
+	if et.PinnedEntityIDs == nil {
+		return "[]"
+	}
+	b, _ := json.Marshal(et.PinnedEntityIDs)
+	return string(b)
+}

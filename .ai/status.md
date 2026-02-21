@@ -8,11 +8,13 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-20 -- Terminology standardization (Addon → Extension in all user-facing UI).
+2026-02-21 -- Notes widget overhaul, addon gating, unified entity type config page,
+sidebar drill-down fix.
 
 ## Current Phase
-**Phase C: IN PROGRESS.** Player Notes widget implemented. Terminology
-standardization completed — all user-facing "Addon" text → "Extension".
+**Phase C: IN PROGRESS.** Notes widget overhauled with quick-capture UX.
+Unified entity type configuration page consolidates Layout, Attributes,
+Dashboard, and Nav Panel tabs.
 
 ## What Was Built in Phase B (Summary)
 
@@ -97,8 +99,36 @@ standardization completed — all user-facing "Addon" text → "Extension".
 - Internal Go code (types, function names, routes, DB tables) intentionally kept as `addon` —
   only user-facing text was renamed.
 
+### Sidebar Drill-Down Fix
+- Root cause: click events bubbled from category links to mainPanel handler,
+  which immediately called drillOut(). Fixed with e.stopPropagation().
+- Switched from calc() to pixel values in translate3d for reliability.
+- Added CSS rules for peek mode: flex-direction: row-reverse on nav links,
+  text-align: right on nav content (so icons/text visible in 10px peek strip).
+
+### Notes Widget Addon Gating
+- Added `SetEnabledAddons` / `IsAddonEnabled` context helpers in layouts/data.go.
+- LayoutInjector queries AddonService.ListForCampaign and populates enabled slugs.
+- NotesWidget only renders when `player-notes` addon is enabled per campaign.
+
+### Notes Widget Quick-Capture Overhaul
+- Panel opens with always-visible quick-add input at top, auto-focused.
+- Type + Enter = instant note creation (no extra clicks).
+- Dual mode: "This Page" (auto on entity pages) vs "All Notes" (campaign-wide).
+- Responsive sizing: full-width bottom sheet on mobile, 320px on medium, 400px on large.
+- Removed separate "+" button; quick-add bar replaces it.
+
+### Unified Entity Type Configuration Page
+- New route: `/campaigns/:id/entity-types/:etid/config`
+- Tabbed interface (Alpine.js): Layout, Attributes, Dashboard, Nav Panel.
+- Layout tab embeds the existing template-editor drag-and-drop widget.
+- Attributes tab mounts entity-type-editor widget (field-only mode).
+- Dashboard tab has description editor + pinned pages reference.
+- Nav Panel tab has icon picker, color picker, name/plural name editing.
+- Entity type cards on management page updated: "Configure" link → config page.
+
 ### In Progress
-- Nothing currently in progress
+- Dashboard layout configurability (campaign main dashboard + category dashboards)
 
 ### Blocked
 - Nothing blocked
@@ -107,21 +137,21 @@ standardization completed — all user-facing "Addon" text → "Extension".
 `claude/explore-project-soSu8`
 
 ## Next Session Should
-1. **Run `make templ`, `make tailwind`, and `make migrate-up`** before testing —
-   generated files are gitignored, migrations 000013-000019 need to be applied.
-2. **Docker rebuild:** `docker compose build --no-cache && docker compose up -d`
+1. **Docker rebuild:** `docker compose build --no-cache && docker compose up -d`
    to pick up all changes (templ/tailwind/migrations handled automatically in build).
-3. **Extension-gated rendering:** Wire the notes widget mount point to check
-   `IsEnabledForCampaign("player-notes")` before rendering, so it respects the
-   per-campaign extension toggle. Currently renders for all campaigns.
-4. **Attribute template editing in campaign settings** — Allow campaign owners
-   to edit entity type field definitions from a more accessible settings UI.
-5. **Tests** — Many plugins have zero tests. Priority: syncapi service, addons,
+2. **Test the sidebar drill-down** — verify panel slides on category click
+   and the peek strip shows faded icons on the right edge.
+3. **Test notes widget** — enable player-notes addon for a campaign, verify
+   quick-add input works, responsive sizing on different viewports.
+4. **Test config page** — navigate to Categories → Configure → verify all
+   four tabs render correctly (Layout loads template editor widget).
+5. **Dashboard layout configurability** — add `dashboard_layout` JSON column
+   to campaigns table, create dashboard editor widget, make campaign and
+   category dashboards owner-configurable.
+6. **Tests** — Many plugins have zero tests. Priority: syncapi service, addons,
    notes widget service.
-6. **Grid/Table view toggle** on category dashboards.
-7. **Password reset** — Wire auth password reset with SMTP.
-8. **API enhancements** — Entity tags/relations in API responses, entry content
-   in sync, `modified_since` repository method for efficient sync pull.
+7. **Grid/Table view toggle** on category dashboards.
+8. **Password reset** — Wire auth password reset with SMTP.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

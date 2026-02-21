@@ -865,6 +865,8 @@ func (h *Handler) DeleteEntityType(c echo.Context) error {
 
 // TemplateEditor renders the visual template editor for an entity type.
 // GET /campaigns/:id/entity-types/:etid/template
+// Kept for backward compatibility; redirects are not needed since the
+// config page embeds the same template-editor widget.
 func (h *Handler) TemplateEditor(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -887,6 +889,33 @@ func (h *Handler) TemplateEditor(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, TemplateEditorPage(cc, et, csrfToken))
+}
+
+// EntityTypeConfig renders the unified entity type configuration page.
+// Tabs: Layout, Attributes, Dashboard, Nav Panel.
+// GET /campaigns/:id/entity-types/:etid/config
+func (h *Handler) EntityTypeConfig(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, EntityTypeConfigPage(cc, et, csrfToken))
 }
 
 // --- Layout API ---

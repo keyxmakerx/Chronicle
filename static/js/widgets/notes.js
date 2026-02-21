@@ -1,15 +1,17 @@
 /**
  * notes.js -- Floating Notes Panel Widget
  *
- * Google Keep-style note-taking panel that floats in the bottom-right corner
- * of campaign pages. Supports page-specific notes and campaign-wide notes,
- * with text blocks and interactive checklists.
+ * Quick-capture note-taking panel with two modes:
+ *   - "Page" mode: auto-selected when on an entity page, shows notes for that page.
+ *   - "All" mode: campaign-wide notes, always available.
+ *
+ * Quick capture: panel opens with a text input already focused. Type and hit
+ * Enter to create a note instantly — no extra clicks needed.
  *
  * Mount: <div data-widget="notes" data-campaign-id="..." data-entity-id="...">
  *
  * The widget is fully self-contained: it creates its own DOM, fetches data
- * from the API, and manages state internally. The mount element is used only
- * as an anchor point — the panel is positioned fixed.
+ * from the API, and manages state internally.
  */
 Chronicle.register('notes', {
   /**
@@ -55,22 +57,19 @@ Chronicle.register('notes', {
     // Cache panel elements.
     var headerTitle = panel.querySelector('.notes-header-title');
     var closeBtn = panel.querySelector('.notes-close');
-    var addBtn = panel.querySelector('.notes-add');
     var tabBtns = panel.querySelectorAll('.notes-tab');
+    var quickInput = panel.querySelector('.notes-quick-input');
     var notesList = panel.querySelector('.notes-list');
 
     // --- Event Handlers ---
 
     fab.addEventListener('click', function () {
-      state.open = !state.open;
-      if (state.open) {
-        panel.classList.remove('notes-panel-hidden');
-        fab.classList.add('notes-fab-hidden');
-        loadNotes();
-      } else {
-        panel.classList.add('notes-panel-hidden');
-        fab.classList.remove('notes-fab-hidden');
-      }
+      state.open = true;
+      panel.classList.remove('notes-panel-hidden');
+      fab.classList.add('notes-fab-hidden');
+      loadNotes();
+      // Auto-focus the quick input so user can start typing immediately.
+      setTimeout(function () { if (quickInput) quickInput.focus(); }, 100);
     });
 
     closeBtn.addEventListener('click', function () {
@@ -79,9 +78,18 @@ Chronicle.register('notes', {
       fab.classList.remove('notes-fab-hidden');
     });
 
-    addBtn.addEventListener('click', function () {
-      createNote();
-    });
+    // Quick-add: Enter creates note instantly.
+    if (quickInput) {
+      quickInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          var text = quickInput.value.trim();
+          if (!text) return;
+          quickInput.value = '';
+          quickCreateNote(text);
+        }
+      });
+    }
 
     // Tab switching.
     tabBtns.forEach(function (btn) {
@@ -89,6 +97,7 @@ Chronicle.register('notes', {
         state.tab = btn.getAttribute('data-tab');
         tabBtns.forEach(function (b) { b.classList.remove('notes-tab-active'); });
         btn.classList.add('notes-tab-active');
+        updateQuickPlaceholder();
         renderNotes();
       });
     });
@@ -99,7 +108,7 @@ Chronicle.register('notes', {
       return '/campaigns/' + campaignId + '/notes' + (path || '');
     }
 
-    function headers() {
+    function apiHeaders() {
       return {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -112,12 +121,12 @@ Chronicle.register('notes', {
       renderNotes();
 
       var promises = [
-        fetch(apiUrl('?scope=all'), { headers: headers() }).then(function (r) { return r.json(); })
+        fetch(apiUrl('?scope=all'), { headers: apiHeaders() }).then(function (r) { return r.json(); })
       ];
 
       if (entityId) {
         promises.push(
-          fetch(apiUrl('?scope=entity&entity_id=' + entityId), { headers: headers() }).then(function (r) { return r.json(); })
+          fetch(apiUrl('?scope=entity&entity_id=' + entityId), { headers: apiHeaders() }).then(function (r) { return r.json(); })
         );
       }
 
@@ -134,6 +143,32 @@ Chronicle.register('notes', {
       });
     }
 
+    /** Quick-create: one-step note from the quick-add input. */
+    function quickCreateNote(text) {
+      var isPageNote = state.tab === 'page' && entityId;
+      var body = {
+        title: text,
+        content: [{ type: 'text', value: '' }]
+      };
+      if (isPageNote) {
+        body.entityId = entityId;
+      }
+
+      fetch(apiUrl(), {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify(body)
+      }).then(function (r) { return r.json(); })
+        .then(function (note) {
+          if (isPageNote) {
+            state.pageNotes.unshift(note);
+          }
+          state.notes.unshift(note);
+          renderNotes();
+        });
+    }
+
+    /** Full create with editing mode (from + button). */
     function createNote() {
       var isPageNote = state.tab === 'page' && entityId;
       var body = {
@@ -146,7 +181,7 @@ Chronicle.register('notes', {
 
       fetch(apiUrl(), {
         method: 'POST',
-        headers: headers(),
+        headers: apiHeaders(),
         body: JSON.stringify(body)
       }).then(function (r) { return r.json(); })
         .then(function (note) {
@@ -156,7 +191,6 @@ Chronicle.register('notes', {
           state.notes.unshift(note);
           state.editingId = note.id;
           renderNotes();
-          // Focus the title input of the new note.
           var titleInput = notesList.querySelector('.note-card[data-id="' + note.id + '"] .note-title-input');
           if (titleInput) titleInput.focus();
         });
@@ -165,7 +199,7 @@ Chronicle.register('notes', {
     function updateNote(id, data) {
       return fetch(apiUrl('/' + id), {
         method: 'PUT',
-        headers: headers(),
+        headers: apiHeaders(),
         body: JSON.stringify(data)
       }).then(function (r) { return r.json(); })
         .then(function (updated) {
@@ -177,7 +211,7 @@ Chronicle.register('notes', {
     function deleteNote(id) {
       fetch(apiUrl('/' + id), {
         method: 'DELETE',
-        headers: headers()
+        headers: apiHeaders()
       }).then(function () {
         state.notes = state.notes.filter(function (n) { return n.id !== id; });
         state.pageNotes = state.pageNotes.filter(function (n) { return n.id !== id; });
@@ -189,7 +223,7 @@ Chronicle.register('notes', {
     function toggleCheck(noteId, blockIdx, itemIdx) {
       fetch(apiUrl('/' + noteId + '/toggle'), {
         method: 'POST',
-        headers: headers(),
+        headers: apiHeaders(),
         body: JSON.stringify({ blockIndex: blockIdx, itemIndex: itemIdx })
       }).then(function (r) { return r.json(); })
         .then(function (updated) {
@@ -204,6 +238,13 @@ Chronicle.register('notes', {
     }
 
     // --- Rendering ---
+
+    function updateQuickPlaceholder() {
+      if (!quickInput) return;
+      quickInput.placeholder = state.tab === 'page'
+        ? 'Quick note for this page...'
+        : 'Quick note...';
+    }
 
     function renderNotes() {
       var list = state.tab === 'page' ? state.pageNotes : state.notes;
@@ -230,7 +271,6 @@ Chronicle.register('notes', {
       });
       notesList.innerHTML = html;
 
-      // Bind card events.
       bindCardEvents();
     }
 
@@ -351,7 +391,7 @@ Chronicle.register('notes', {
 
       // Checkbox toggle (works in both view and edit modes).
       notesList.querySelectorAll('.note-checkbox').forEach(function (cb) {
-        cb.addEventListener('change', function (e) {
+        cb.addEventListener('change', function () {
           var card = cb.closest('.note-card');
           var noteId = card.getAttribute('data-id');
           var bIdx = parseInt(cb.getAttribute('data-block'), 10);
@@ -369,13 +409,11 @@ Chronicle.register('notes', {
           var bIdx = parseInt(btn.getAttribute('data-block'), 10);
           var note = findNote(noteId);
           if (note && note.content[bIdx] && note.content[bIdx].type === 'checklist') {
-            // Save current state first.
             saveEditingNote(card, noteId);
             note = findNote(noteId);
             note.content[bIdx].items.push({ text: '', checked: false });
             updateNote(noteId, { content: note.content }).then(function () {
               renderNotes();
-              // Focus the new item input.
               var inputs = notesList.querySelectorAll('.note-card[data-id="' + noteId + '"] .note-check-text-input[data-block="' + bIdx + '"]');
               if (inputs.length) inputs[inputs.length - 1].focus();
             });
@@ -418,20 +456,16 @@ Chronicle.register('notes', {
       });
     }
 
-    /**
-     * Read all editing inputs from a card and save to the API.
-     */
+    /** Read all editing inputs from a card and save to the API. */
     function saveEditingNote(card, noteId) {
       var note = findNote(noteId);
       if (!note) return;
 
-      // Title.
       var titleInput = card.querySelector('.note-title-input');
       if (titleInput) {
         note.title = titleInput.value.trim() || 'Untitled';
       }
 
-      // Text blocks.
       card.querySelectorAll('.note-text-input').forEach(function (ta) {
         var bIdx = parseInt(ta.getAttribute('data-block'), 10);
         if (note.content[bIdx]) {
@@ -439,7 +473,6 @@ Chronicle.register('notes', {
         }
       });
 
-      // Checklist text inputs.
       card.querySelectorAll('.note-check-text-input').forEach(function (inp) {
         var bIdx = parseInt(inp.getAttribute('data-block'), 10);
         var iIdx = parseInt(inp.getAttribute('data-item'), 10);
@@ -461,27 +494,34 @@ Chronicle.register('notes', {
       return null;
     }
 
-    // --- Helpers ---
+    // --- Panel HTML ---
 
-    function buildPanelHTML(entityId) {
+    function buildPanelHTML(eid) {
       var tabsHtml = '';
-      if (entityId) {
+      if (eid) {
         tabsHtml = '<div class="notes-tabs">' +
           '<button class="notes-tab notes-tab-active" data-tab="page">This Page</button>' +
           '<button class="notes-tab" data-tab="all">All Notes</button>' +
           '</div>';
       }
 
+      var quickPlaceholder = eid ? 'Quick note for this page...' : 'Quick note...';
+
       return '<div class="notes-header">' +
-        '<span class="notes-header-title">' + (entityId ? 'Page Notes' : 'All Notes') + '</span>' +
+        '<span class="notes-header-title">' + (eid ? 'Page Notes' : 'All Notes') + '</span>' +
         '<div class="notes-header-actions">' +
-        '<button class="note-btn notes-add" title="New note"><i class="fa-solid fa-plus"></i></button>' +
         '<button class="note-btn notes-close" title="Close"><i class="fa-solid fa-xmark"></i></button>' +
         '</div>' +
         '</div>' +
         tabsHtml +
+        '<div class="notes-quick-add">' +
+        '<i class="fa-solid fa-plus text-[10px] text-fg-muted"></i>' +
+        '<input type="text" class="notes-quick-input" placeholder="' + escapeAttr(quickPlaceholder) + '" autocomplete="off">' +
+        '</div>' +
         '<div class="notes-list"></div>';
     }
+
+    // --- Helpers ---
 
     function escapeHtml(text) {
       var div = document.createElement('div');

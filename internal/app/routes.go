@@ -329,6 +329,17 @@ func (a *App) RegisterRoutes() {
 			if counts, err := entityService.CountByType(reqCtx, cc.Campaign.ID, int(cc.MemberRole)); err == nil {
 				ctx = layouts.SetEntityCounts(ctx, counts)
 			}
+
+			// Enabled addons for conditional widget rendering.
+			if campaignAddons, err := addonService.ListForCampaign(reqCtx, cc.Campaign.ID); err == nil {
+				enabledSlugs := make(map[string]bool)
+				for _, ca := range campaignAddons {
+					if ca.Enabled {
+						enabledSlugs[ca.AddonSlug] = true
+					}
+				}
+				ctx = layouts.SetEnabledAddons(ctx, enabledSlugs)
+			}
 		}
 
 		// CSRF token for forms.
