@@ -185,6 +185,9 @@ func (a *App) RegisterRoutes() {
 	smtpService := smtp.NewSMTPService(smtpRepo, a.Config.Auth.SecretKey)
 	smtpHandler := smtp.NewHandler(smtpService)
 
+	// Wire SMTP into auth service for password reset emails.
+	auth.ConfigureMailSender(authService, smtpService, a.Config.BaseURL)
+
 	// Entities plugin: entity types + entity CRUD (must be created before
 	// campaigns so we can pass EntityService as the EntityTypeSeeder).
 	entityTypeRepo := entities.NewEntityTypeRepository(a.DB)
