@@ -24,6 +24,7 @@ const (
 	keyActivePath    ctxKey = "layout_active_path"
 	keyEntityTypes   ctxKey = "layout_entity_types"
 	keyEntityCounts  ctxKey = "layout_entity_counts"
+	keyEnabledAddons ctxKey = "layout_enabled_addons"
 )
 
 // SidebarEntityType holds the minimum entity type info needed for sidebar
@@ -249,4 +250,17 @@ func GetEntityCount(ctx context.Context, typeID int) int {
 		return 0
 	}
 	return counts[typeID]
+}
+
+// --- Enabled Addons (for conditional widget rendering) ---
+
+// SetEnabledAddons stores the set of addon slugs enabled for the current campaign.
+func SetEnabledAddons(ctx context.Context, slugs map[string]bool) context.Context {
+	return context.WithValue(ctx, keyEnabledAddons, slugs)
+}
+
+// IsAddonEnabled checks whether an addon is enabled for the current campaign.
+func IsAddonEnabled(ctx context.Context, slug string) bool {
+	addons, _ := ctx.Value(keyEnabledAddons).(map[string]bool)
+	return addons[slug]
 }

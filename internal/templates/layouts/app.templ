@@ -34,8 +34,9 @@ templ App(title string) {
 				</main>
 			</div>
 		</div>
-		<!-- Notes widget mount point (floating panel, bottom-right) -->
-		if InCampaign(ctx) && IsAuthenticated(ctx) {
+		<!-- Notes widget mount point (floating panel, bottom-right).
+		     Gated behind the "player-notes" addon — off by default. -->
+		if InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "player-notes") {
 			@NotesWidget()
 		}
 	}
