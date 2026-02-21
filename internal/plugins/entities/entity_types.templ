@@ -181,16 +181,16 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 			</div>
 			<div class="flex items-center gap-2">
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types/%d/template", cc.Campaign.ID, et.ID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types/%d/config", cc.Campaign.ID, et.ID)) }
 					class="text-xs text-fg-secondary hover:text-fg px-2 py-1 rounded hover:bg-surface-alt transition-colors"
-					title="Edit page layout"
+					title="Configure this category"
 				>
-					<i class="fa-solid fa-table-columns mr-1"></i> Layout
+					<i class="fa-solid fa-gear mr-1"></i> Configure
 				</a>
 				<button
 					@click="editing = true"
 					class="text-xs text-fg-secondary hover:text-fg px-2 py-1 rounded hover:bg-surface-alt transition-colors"
-					title="Edit category"
+					title="Quick edit"
 				>
 					<i class="fa-solid fa-pencil mr-1"></i> Edit
 				</button>
