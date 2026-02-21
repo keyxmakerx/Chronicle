@@ -400,12 +400,35 @@
     @apply scale-0 opacity-0 pointer-events-none;
   }
 
-  /* Panel container -- slides up from bottom-right. */
+  /* Panel container -- slides up from bottom-right.
+     Responsive: 320px on medium, 400px on large, full-width on mobile. */
   .notes-panel {
-    @apply fixed bottom-6 right-6 z-50 w-80 bg-surface rounded-xl
+    @apply fixed z-50 bg-surface rounded-xl
            shadow-2xl border border-edge flex flex-col
            transition-all duration-300 ease-out;
-    max-height: min(500px, calc(100vh - 6rem));
+    /* Mobile: full-width bottom sheet */
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: 60vh;
+    border-radius: 0.75rem 0.75rem 0 0;
+  }
+  @media (min-width: 640px) {
+    .notes-panel {
+      bottom: 1.5rem;
+      right: 1.5rem;
+      left: auto;
+      width: 20rem; /* 320px */
+      max-height: min(500px, calc(100vh - 6rem));
+      border-radius: 0.75rem;
+    }
+  }
+  @media (min-width: 1280px) {
+    .notes-panel {
+      width: 25rem; /* 400px */
+      max-height: min(600px, 70vh);
+    }
   }
   .notes-panel-hidden {
     @apply opacity-0 scale-95 pointer-events-none translate-y-4;
@@ -434,6 +457,20 @@
   }
   .notes-tab-active {
     @apply text-indigo-400 border-indigo-400;
+  }
+
+  /* Quick-add input bar -- always visible at top of panel. */
+  .notes-quick-add {
+    @apply flex items-center gap-2 px-3 py-2.5 border-b border-edge shrink-0;
+  }
+  .notes-quick-input {
+    @apply flex-1 bg-transparent text-fg text-xs
+           px-0 py-0 focus:outline-none;
+    border: none;
+    outline: none;
+  }
+  .notes-quick-input::placeholder {
+    @apply text-fg-muted;
   }
 
   /* Scrollable notes list. */
