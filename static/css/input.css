@@ -372,12 +372,19 @@
   .sidebar-peek:hover {
     box-shadow: inset -4px 0 12px -4px rgba(99, 102, 241, 0.3);
   }
-  /* Dim content when peeking to reinforce it's a "back" affordance */
+  /* Dim content when peeking to reinforce it's a "back" affordance.
+     Right-align everything so text/icons crowd toward the visible 10px
+     strip on the right edge of the panel. */
   .sidebar-peek > nav {
     @apply opacity-30 pointer-events-none;
+    text-align: right;
   }
   .sidebar-peek:hover > nav {
     @apply opacity-50;
+  }
+  /* Flip flex links so icon sits at the right edge (most visible). */
+  .sidebar-peek > nav a {
+    flex-direction: row-reverse;
   }
 
   /* --- Notes Widget --- */
