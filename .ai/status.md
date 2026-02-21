@@ -127,8 +127,25 @@ Dashboard, and Nav Panel tabs.
 - Nav Panel tab has icon picker, color picker, name/plural name editing.
 - Entity type cards on management page updated: "Configure" link → config page.
 
+### Notes Panel Resize + Taller Default
+- Default sizes bumped: mobile 75vh, medium 340×520px, large 400×600px.
+- Drag-to-resize handle on top-left corner (min 280×300px).
+- Dimensions persist in localStorage (`chronicle_notes_size`).
+- Desktop-only restore; mobile always uses full-width bottom sheet.
+
+### Entity Type Editor Fields-Only Mode
+- `data-fields-only="true"` hides name/icon/color sections.
+- Used by Attributes tab on unified config page.
+- Save sends original name/icon/color from data attrs alongside updated fields.
+
+### Campaign Dashboard Enhancement
+- Category quick-nav grid with entity type icons, colors, and page counts.
+- Reads from layout context (GetEntityTypes/GetEntityCount) — zero new queries.
+- Responsive: 2–5 columns depending on viewport.
+- Quick actions row tightened to horizontal icon+text layout.
+
 ### In Progress
-- Dashboard layout configurability (campaign main dashboard + category dashboards)
+- Nothing currently in progress
 
 ### Blocked
 - Nothing blocked
