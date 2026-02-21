@@ -66,6 +66,7 @@
     links.forEach(function (link) {
       link.addEventListener('click', function (e) {
         e.preventDefault();
+        e.stopPropagation(); // Prevent bubbling to mainPanel (which would drillOut).
         console.log('[sidebar_drill] click: ' + link.getAttribute('data-cat-slug'));
         drillIn(link);
       });
@@ -142,10 +143,7 @@
     if (instant) {
       slider.style.transition = 'none';
     }
-    console.log('[sidebar_drill] drillIn: before transform =', slider.style.transform);
     slider.style.transform = 'translate3d(' + offset + 'px, 0px, 0px)';
-    console.log('[sidebar_drill] drillIn: after transform =', slider.style.transform);
-    console.log('[sidebar_drill] drillIn: computed =', getComputedStyle(slider).transform);
 
     if (instant) {
       // Force reflow then restore transition.
