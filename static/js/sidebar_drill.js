@@ -18,6 +18,8 @@
 (function () {
   'use strict';
 
+  console.log('[sidebar_drill] script loaded, readyState=' + document.readyState);
+
   var PEEK_PX = 10;
 
   /** @type {HTMLElement|null} */
@@ -53,13 +55,18 @@
     catNav = document.getElementById('sidebar-cat-nav');
     mainPanel = document.getElementById('sidebar-main');
 
-    if (!slider || !backBtn) return;
+    if (!slider || !backBtn) {
+      console.warn('[sidebar_drill] init aborted: slider=' + !!slider + ', backBtn=' + !!backBtn);
+      return;
+    }
 
     // Bind category links.
     var links = document.querySelectorAll('.sidebar-category-link');
+    console.log('[sidebar_drill] init: found ' + links.length + ' category links');
     links.forEach(function (link) {
       link.addEventListener('click', function (e) {
         e.preventDefault();
+        console.log('[sidebar_drill] click: ' + link.getAttribute('data-cat-slug'));
         drillIn(link);
       });
     });
