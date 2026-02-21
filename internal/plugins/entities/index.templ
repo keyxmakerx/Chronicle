@@ -19,8 +19,13 @@ templ EntityIndexPage(cc *campaigns.CampaignContext, entities []Entity, entityTy
 }
 
 // EntityListContent renders the entity list content (for HTMX partial swap).
+// Includes grid/table view toggle with Alpine.js and localStorage persistence.
 templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entityTypes []EntityType, counts map[int]int, total int, opts ListOptions, activeTypeID int, activeTypeSlug string, csrfToken string) {
-	<div id="entity-list">
+	<div
+		id="entity-list"
+		x-data="{ view: localStorage.getItem('chronicle_entities_view') || 'grid' }"
+		x-effect="localStorage.setItem('chronicle_entities_view', view)"
+	>
 		<!-- Page header with title, search, and create button -->
 		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
 			<div>
@@ -54,6 +59,27 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 					/>
 					<i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-xs"></i>
 				</form>
+
+				<!-- Grid/Table toggle -->
+				<div class="flex items-center gap-1 bg-surface-alt rounded-md p-0.5">
+					<button
+						@click="view = 'grid'"
+						:class="view === 'grid' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg transition-colors'"
+						class="px-2 py-1 rounded text-xs font-medium"
+						title="Grid view"
+					>
+						<i class="fa-solid fa-grid-2 text-[11px]"></i>
+					</button>
+					<button
+						@click="view = 'table'"
+						:class="view === 'table' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg transition-colors'"
+						class="px-2 py-1 rounded text-xs font-medium"
+						title="Table view"
+					>
+						<i class="fa-solid fa-list text-[11px]"></i>
+					</button>
+				</div>
+
 				if cc.MemberRole >= campaigns.RoleScribe {
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", cc.Campaign.ID)) }
@@ -103,7 +129,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 			</nav>
 		</div>
 
-		<!-- Entity grid -->
+		<!-- Entity content area -->
 		<div>
 			if len(entities) == 0 {
 				<div class="empty-state">
@@ -126,10 +152,39 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 					}
 				</div>
 			} else {
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-					for _, entity := range entities {
-						@EntityCard(&entity, cc)
-					}
+				<!-- Grid view -->
+				<div x-show="view === 'grid'" x-cloak>
+					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+						for _, entity := range entities {
+							@EntityCard(&entity, cc)
+						}
+					</div>
+				</div>
+
+				<!-- Table view -->
+				<div x-show="view === 'table'" x-cloak>
+					<div class="card overflow-hidden">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="border-b border-edge bg-surface-alt">
+									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Name</th>
+									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider hidden sm:table-cell">Category</th>
+									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider hidden md:table-cell">Tags</th>
+									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider hidden lg:table-cell">Updated</th>
+									if cc.MemberRole >= campaigns.RoleScribe {
+										<th class="text-center px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider w-16">
+											<i class="fa-solid fa-lock text-[10px]" title="Visibility"></i>
+										</th>
+									}
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-edge">
+								for _, entity := range entities {
+									@EntityTableRow(&entity, cc)
+								}
+							</tbody>
+						</table>
+					</div>
 				</div>
 
 				@components.Pagination(components.PaginationData{
