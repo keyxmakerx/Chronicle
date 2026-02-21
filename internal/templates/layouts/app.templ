@@ -64,7 +64,7 @@ templ Sidebar() {
 		<div class="flex-1 overflow-hidden relative min-h-0">
 			<!-- Drill-down slider: absolutely positioned, 32rem wide (2 panels).
 			     translateX shifts which panel is visible in the 16rem viewport. -->
-			<div id="sidebar-slider" class="absolute inset-y-0 left-0 w-[32rem] flex will-change-transform transition-transform duration-300 ease-in-out" style="transform: translate3d(0,0,0)">
+			<div id="sidebar-slider" class="flex transition-transform duration-300 ease-in-out" style="position:absolute;top:0;bottom:0;left:0;width:32rem;will-change:transform;transform:translate3d(0,0,0)">
 				<!-- Panel 1: Main navigation -->
 				<div id="sidebar-main" class="w-64 shrink-0 flex flex-col min-h-0 h-full">
 					<nav class="flex-1 py-4 overflow-y-auto">
