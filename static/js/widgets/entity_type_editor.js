@@ -58,71 +58,78 @@
       // Track selected icon.
       var selectedIcon = currentIcon;
 
+      // When data-fields-only is set, only show the field management section
+      // (used on the unified config page where name/icon/color live in Nav Panel tab).
+      var fieldsOnly = el.getAttribute('data-fields-only') === 'true';
+
       // Build the editor UI.
       el.innerHTML = '';
 
-      // Name fields row.
-      var nameRow = document.createElement('div');
-      nameRow.className = 'grid grid-cols-1 md:grid-cols-2 gap-4 mb-4';
+      var colorInput = null;
 
-      var nameField = createInput('Name', 'et-edit-name', currentName, 'Name');
-      var pluralField = createInput('Plural Name', 'et-edit-plural', currentNamePlural, 'Plural name');
-      nameRow.appendChild(nameField);
-      nameRow.appendChild(pluralField);
-      el.appendChild(nameRow);
+      if (!fieldsOnly) {
+        // Name fields row.
+        var nameRow = document.createElement('div');
+        nameRow.className = 'grid grid-cols-1 md:grid-cols-2 gap-4 mb-4';
 
-      // Icon + color row.
-      var iconColorRow = document.createElement('div');
-      iconColorRow.className = 'grid grid-cols-1 md:grid-cols-2 gap-4 mb-4';
+        var nameField = createInput('Name', 'et-edit-name', currentName, 'Name');
+        var pluralField = createInput('Plural Name', 'et-edit-plural', currentNamePlural, 'Plural name');
+        nameRow.appendChild(nameField);
+        nameRow.appendChild(pluralField);
+        el.appendChild(nameRow);
 
-      // Icon picker.
-      var iconContainer = document.createElement('div');
-      var iconLabel = document.createElement('label');
-      iconLabel.className = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1';
-      iconLabel.textContent = 'Icon';
-      iconContainer.appendChild(iconLabel);
+        // Icon + color row.
+        var iconColorRow = document.createElement('div');
+        iconColorRow.className = 'grid grid-cols-1 md:grid-cols-2 gap-4 mb-4';
 
-      var iconGrid = document.createElement('div');
-      iconGrid.className = 'flex flex-wrap gap-1.5 p-2 border border-gray-200 dark:border-gray-700 rounded-md max-h-28 overflow-y-auto bg-white dark:bg-gray-800';
+        // Icon picker.
+        var iconContainer = document.createElement('div');
+        var iconLabel = document.createElement('label');
+        iconLabel.className = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1';
+        iconLabel.textContent = 'Icon';
+        iconContainer.appendChild(iconLabel);
 
-      ICONS.forEach(function (icon) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'inline-flex items-center justify-center w-7 h-7 rounded border text-sm transition-colors ' +
-          (icon === selectedIcon
-            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-            : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600');
-        btn.title = icon;
-        btn.innerHTML = '<i class="fa-solid ' + icon + '"></i>';
-        btn.addEventListener('click', function () {
-          selectedIcon = icon;
-          // Update visual state.
-          iconGrid.querySelectorAll('button').forEach(function (b) {
-            b.className = 'inline-flex items-center justify-center w-7 h-7 rounded border text-sm transition-colors border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600';
+        var iconGrid = document.createElement('div');
+        iconGrid.className = 'flex flex-wrap gap-1.5 p-2 border border-gray-200 dark:border-gray-700 rounded-md max-h-28 overflow-y-auto bg-white dark:bg-gray-800';
+
+        ICONS.forEach(function (icon) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'inline-flex items-center justify-center w-7 h-7 rounded border text-sm transition-colors ' +
+            (icon === selectedIcon
+              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+              : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600');
+          btn.title = icon;
+          btn.innerHTML = '<i class="fa-solid ' + icon + '"></i>';
+          btn.addEventListener('click', function () {
+            selectedIcon = icon;
+            iconGrid.querySelectorAll('button').forEach(function (b) {
+              b.className = 'inline-flex items-center justify-center w-7 h-7 rounded border text-sm transition-colors border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600';
+            });
+            btn.className = 'inline-flex items-center justify-center w-7 h-7 rounded border text-sm transition-colors border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
           });
-          btn.className = 'inline-flex items-center justify-center w-7 h-7 rounded border text-sm transition-colors border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
+          iconGrid.appendChild(btn);
         });
-        iconGrid.appendChild(btn);
-      });
 
-      iconContainer.appendChild(iconGrid);
-      iconColorRow.appendChild(iconContainer);
+        iconContainer.appendChild(iconGrid);
+        iconColorRow.appendChild(iconContainer);
 
-      // Color picker.
-      var colorContainer = document.createElement('div');
-      var colorLabel = document.createElement('label');
-      colorLabel.className = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1';
-      colorLabel.textContent = 'Color';
-      colorContainer.appendChild(colorLabel);
+        // Color picker.
+        var colorContainer = document.createElement('div');
+        var colorLabel = document.createElement('label');
+        colorLabel.className = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1';
+        colorLabel.textContent = 'Color';
+        colorContainer.appendChild(colorLabel);
 
-      var colorInput = document.createElement('input');
-      colorInput.type = 'color';
-      colorInput.value = currentColor;
-      colorInput.className = 'w-10 h-10 rounded border border-gray-200 dark:border-gray-700 cursor-pointer';
-      colorContainer.appendChild(colorInput);
+        colorInput = document.createElement('input');
+        colorInput.type = 'color';
+        colorInput.value = currentColor;
+        colorInput.className = 'w-10 h-10 rounded border border-gray-200 dark:border-gray-700 cursor-pointer';
+        colorContainer.appendChild(colorInput);
 
-      iconColorRow.appendChild(colorContainer);
-      el.appendChild(iconColorRow);
+        iconColorRow.appendChild(colorContainer);
+        el.appendChild(iconColorRow);
+      }
 
       // Fields management section.
       var fieldsSection = document.createElement('div');
@@ -268,26 +275,41 @@
       statusSpan.className = 'text-xs text-gray-500 dark:text-gray-400';
 
       saveBtn.addEventListener('click', function () {
-        var nameInput = el.querySelector('#et-edit-name');
-        var pluralInput = el.querySelector('#et-edit-plural');
-
-        if (!nameInput.value.trim()) {
-          statusSpan.textContent = 'Name is required';
-          statusSpan.className = 'text-xs text-red-500';
-          return;
-        }
-
         saveBtn.disabled = true;
         statusSpan.textContent = 'Saving...';
         statusSpan.className = 'text-xs text-gray-500 dark:text-gray-400';
 
-        var payload = {
-          name: nameInput.value.trim(),
-          name_plural: pluralInput.value.trim(),
-          icon: selectedIcon,
-          color: colorInput.value,
-          fields: fields.filter(function (f) { return f.key && f.label; })
-        };
+        var payload;
+
+        if (fieldsOnly) {
+          // Fields-only mode: send only fields, plus required name/icon/color
+          // from data attributes so the backend doesn't reject the request.
+          payload = {
+            name: currentName,
+            name_plural: currentNamePlural,
+            icon: currentIcon,
+            color: currentColor,
+            fields: fields.filter(function (f) { return f.key && f.label; })
+          };
+        } else {
+          var nameInput = el.querySelector('#et-edit-name');
+          var pluralInput = el.querySelector('#et-edit-plural');
+
+          if (!nameInput.value.trim()) {
+            statusSpan.textContent = 'Name is required';
+            statusSpan.className = 'text-xs text-red-500';
+            saveBtn.disabled = false;
+            return;
+          }
+
+          payload = {
+            name: nameInput.value.trim(),
+            name_plural: pluralInput.value.trim(),
+            icon: selectedIcon,
+            color: colorInput.value,
+            fields: fields.filter(function (f) { return f.key && f.label; })
+          };
+        }
 
         fetch(endpoint, {
           method: 'PUT',
@@ -308,10 +330,13 @@
         .then(function () {
           statusSpan.textContent = 'Saved!';
           statusSpan.className = 'text-xs text-green-600 dark:text-green-400';
-          // Reload the page to reflect changes.
-          setTimeout(function () {
-            window.location.reload();
-          }, 500);
+          saveBtn.disabled = false;
+          if (!fieldsOnly) {
+            // Reload the page to reflect name/icon/color changes in the card list.
+            setTimeout(function () {
+              window.location.reload();
+            }, 500);
+          }
         })
         .catch(function (err) {
           statusSpan.textContent = err.message;

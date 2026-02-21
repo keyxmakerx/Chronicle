@@ -21,6 +21,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	e.GET("/register", h.RegisterForm)
 	e.POST("/register", h.Register, middleware.RateLimit(5, time.Minute))
 
+	// Password reset (public, rate-limited to prevent abuse).
+	e.GET("/forgot-password", h.ForgotPasswordForm)
+	e.POST("/forgot-password", h.ForgotPassword, middleware.RateLimit(3, time.Minute))
+	e.GET("/reset-password", h.ResetPasswordForm)
+	e.POST("/reset-password", h.ResetPassword, middleware.RateLimit(3, time.Minute))
+
 	// Logout requires an active session.
 	e.POST("/logout", h.Logout)
 }

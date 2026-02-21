@@ -51,6 +51,34 @@ func (a *entityTypeListerAdapter) GetEntityTypesForSettings(ctx context.Context,
 	return result, nil
 }
 
+// recentEntityListerAdapter wraps entities.EntityService to implement the
+// campaigns.RecentEntityLister interface without creating a circular import.
+type recentEntityListerAdapter struct {
+	svc entities.EntityService
+}
+
+// ListRecentForDashboard returns recently updated entities formatted for the dashboard.
+func (a *recentEntityListerAdapter) ListRecentForDashboard(ctx context.Context, campaignID string, role int, limit int) ([]campaigns.RecentEntity, error) {
+	ents, err := a.svc.ListRecent(ctx, campaignID, role, limit)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]campaigns.RecentEntity, len(ents))
+	for i, e := range ents {
+		result[i] = campaigns.RecentEntity{
+			ID:        e.ID,
+			Name:      e.Name,
+			TypeName:  e.TypeName,
+			TypeIcon:  e.TypeIcon,
+			TypeColor: e.TypeColor,
+			ImagePath: e.ImagePath,
+			IsPrivate: e.IsPrivate,
+			UpdatedAt: e.UpdatedAt,
+		}
+	}
+	return result, nil
+}
+
 // campaignAuditAdapter wraps audit.AuditService to implement the
 // campaigns.AuditLogger interface without creating a circular import
 // (audit already imports campaigns for middleware).
@@ -157,6 +185,9 @@ func (a *App) RegisterRoutes() {
 	smtpService := smtp.NewSMTPService(smtpRepo, a.Config.Auth.SecretKey)
 	smtpHandler := smtp.NewHandler(smtpService)
 
+	// Wire SMTP into auth service for password reset emails.
+	auth.ConfigureMailSender(authService, smtpService, a.Config.BaseURL)
+
 	// Entities plugin: entity types + entity CRUD (must be created before
 	// campaigns so we can pass EntityService as the EntityTypeSeeder).
 	entityTypeRepo := entities.NewEntityTypeRepository(a.DB)
@@ -170,6 +201,7 @@ func (a *App) RegisterRoutes() {
 	campaignService := campaigns.NewCampaignService(campaignRepo, userFinder, smtpService, entityService, a.Config.BaseURL)
 	campaignHandler := campaigns.NewHandler(campaignService)
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
+	campaignHandler.SetRecentEntityLister(&recentEntityListerAdapter{svc: entityService})
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
 
 	// Discover page (/) -- browse public campaigns. Uses OptionalAuth so

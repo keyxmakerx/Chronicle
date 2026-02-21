@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
@@ -25,6 +26,12 @@ const sessionKeyPrefix = "session:"
 // 32 bytes = 256 bits of entropy, hex-encoded to 64 characters.
 const sessionTokenBytes = 32
 
+// resetTokenBytes is the number of random bytes in a password reset token.
+const resetTokenBytes = 32
+
+// resetTokenExpiry is how long a password reset link stays valid.
+const resetTokenExpiry = 1 * time.Hour
+
 // argon2id parameters tuned for a self-hosted application running on
 // modest hardware (2-4 CPU cores, 2-4 GB RAM). These follow OWASP
 // recommendations for argon2id: memory=64MB, iterations=3, parallelism=4.
@@ -36,6 +43,13 @@ const (
 	argonSaltLen = 16
 )
 
+// MailSender sends email for password reset and other auth-related flows.
+// Matches smtp.MailService to avoid importing the smtp package directly.
+type MailSender interface {
+	SendMail(ctx context.Context, to []string, subject, body string) error
+	IsConfigured(ctx context.Context) bool
+}
+
 // AuthService defines the business logic contract for authentication.
 // Handlers call these methods -- they never touch the repository directly.
 type AuthService interface {
@@ -43,12 +57,19 @@ type AuthService interface {
 	Login(ctx context.Context, input LoginInput) (token string, user *User, err error)
 	ValidateSession(ctx context.Context, token string) (*Session, error)
 	DestroySession(ctx context.Context, token string) error
+
+	// Password reset flow.
+	InitiatePasswordReset(ctx context.Context, email string) error
+	ValidateResetToken(ctx context.Context, token string) (email string, err error)
+	ResetPassword(ctx context.Context, token, newPassword string) error
 }
 
 // authService implements AuthService with argon2id hashing and Redis sessions.
 type authService struct {
 	repo       UserRepository
 	redis      *redis.Client
+	mail       MailSender
+	baseURL    string
 	sessionTTL time.Duration
 }
 
@@ -58,6 +79,15 @@ func NewAuthService(repo UserRepository, rdb *redis.Client, sessionTTL time.Dura
 		repo:       repo,
 		redis:      rdb,
 		sessionTTL: sessionTTL,
+	}
+}
+
+// ConfigureMailSender wires a mail sender into the auth service for password
+// reset emails. Called from routes.go after both services are initialized.
+func ConfigureMailSender(svc AuthService, mail MailSender, baseURL string) {
+	if s, ok := svc.(*authService); ok {
+		s.mail = mail
+		s.baseURL = baseURL
 	}
 }
 
@@ -211,6 +241,127 @@ func (s *authService) createSession(ctx context.Context, user *User) (string, er
 	}
 
 	return token, nil
+}
+
+// --- Password Reset ---
+
+// InitiatePasswordReset generates a reset token, stores its hash in the DB,
+// and sends a reset link via email. Always returns nil to avoid leaking whether
+// the email exists (timing-safe: we always do the same work).
+func (s *authService) InitiatePasswordReset(ctx context.Context, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+
+	// Look up user. If not found, log and return nil (don't reveal existence).
+	user, err := s.repo.FindByEmail(ctx, email)
+	if err != nil {
+		slog.Debug("password reset requested for unknown email", slog.String("email", email))
+		return nil
+	}
+
+	// Generate a random token and hash it for storage.
+	tokenBytes := make([]byte, resetTokenBytes)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return apperror.NewInternal(fmt.Errorf("generating reset token: %w", err))
+	}
+	plainToken := hex.EncodeToString(tokenBytes)
+	tokenHash := hashToken(plainToken)
+	expiresAt := time.Now().UTC().Add(resetTokenExpiry)
+
+	// Store hashed token in DB.
+	if err := s.repo.CreateResetToken(ctx, user.ID, user.Email, tokenHash, expiresAt); err != nil {
+		return apperror.NewInternal(fmt.Errorf("storing reset token: %w", err))
+	}
+
+	// Send the email with the plaintext token in the link.
+	if s.mail != nil && s.mail.IsConfigured(ctx) {
+		link := fmt.Sprintf("%s/reset-password?token=%s", s.baseURL, plainToken)
+		body := fmt.Sprintf(
+			"A password reset was requested for your Chronicle account.\n\n"+
+				"Click the link below to set a new password:\n%s\n\n"+
+				"This link expires in 1 hour. If you did not request this, you can safely ignore this email.",
+			link,
+		)
+		if err := s.mail.SendMail(ctx, []string{user.Email}, "Password Reset — Chronicle", body); err != nil {
+			slog.Warn("failed to send password reset email",
+				slog.String("email", user.Email),
+				slog.Any("error", err),
+			)
+		}
+	} else {
+		slog.Warn("SMTP not configured; password reset email not sent",
+			slog.String("email", user.Email),
+			slog.String("token", plainToken),
+		)
+	}
+
+	slog.Info("password reset initiated",
+		slog.String("user_id", user.ID),
+		slog.String("email", user.Email),
+	)
+
+	return nil
+}
+
+// ValidateResetToken checks that a reset token is valid, unused, and unexpired.
+// Returns the associated email address on success.
+func (s *authService) ValidateResetToken(ctx context.Context, token string) (string, error) {
+	tokenHash := hashToken(token)
+
+	_, email, expiresAt, usedAt, err := s.repo.FindResetToken(ctx, tokenHash)
+	if err != nil {
+		return "", apperror.NewBadRequest("invalid or expired reset link")
+	}
+	if usedAt != nil {
+		return "", apperror.NewBadRequest("this reset link has already been used")
+	}
+	if time.Now().UTC().After(expiresAt) {
+		return "", apperror.NewBadRequest("this reset link has expired")
+	}
+
+	return email, nil
+}
+
+// ResetPassword validates the token, hashes the new password, updates the
+// user's password, and marks the token as used.
+func (s *authService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	tokenHash := hashToken(token)
+
+	userID, _, expiresAt, usedAt, err := s.repo.FindResetToken(ctx, tokenHash)
+	if err != nil {
+		return apperror.NewBadRequest("invalid or expired reset link")
+	}
+	if usedAt != nil {
+		return apperror.NewBadRequest("this reset link has already been used")
+	}
+	if time.Now().UTC().After(expiresAt) {
+		return apperror.NewBadRequest("this reset link has expired")
+	}
+
+	// Hash the new password.
+	hash, err := hashPassword(newPassword)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("hashing new password: %w", err))
+	}
+
+	// Update password in DB.
+	if err := s.repo.UpdatePassword(ctx, userID, hash); err != nil {
+		return apperror.NewInternal(fmt.Errorf("updating password: %w", err))
+	}
+
+	// Mark token as used so it can't be reused.
+	if err := s.repo.MarkResetTokenUsed(ctx, tokenHash); err != nil {
+		slog.Warn("failed to mark reset token as used", slog.Any("error", err))
+	}
+
+	slog.Info("password reset completed", slog.String("user_id", userID))
+	return nil
+}
+
+// hashToken returns the hex-encoded SHA-256 hash of a plaintext token.
+// We store the hash in the DB so a DB leak doesn't expose valid tokens.
+func hashToken(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
 }
 
 // --- Password Hashing (argon2id) ---

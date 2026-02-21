@@ -7,6 +7,7 @@ package entities
 
 import (
 	"fmt"
+	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -20,8 +21,13 @@ templ CategoryDashboardPage(cc *campaigns.CampaignContext, et *EntityType, entit
 }
 
 // CategoryDashboardContent renders the category dashboard (for HTMX partial swap).
+// Uses Alpine.js to toggle between grid and table views with localStorage persistence.
 templ CategoryDashboardContent(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string) {
-	<div id="entity-list">
+	<div
+		id="entity-list"
+		x-data={ fmt.Sprintf("{ view: localStorage.getItem('chronicle_cat_view_%d') || 'grid' }", et.ID) }
+		x-effect={ fmt.Sprintf("localStorage.setItem('chronicle_cat_view_%d', view)", et.ID) }
+	>
 		<!-- Category header -->
 		<div class="mb-5">
 			<div class="flex items-center justify-between mb-2">
@@ -89,13 +95,17 @@ templ CategoryDashboardContent(cc *campaigns.CampaignContext, et *EntityType, en
 			<!-- Grid/Table toggle -->
 			<div class="flex items-center gap-1 bg-surface-alt rounded-md p-0.5">
 				<button
-					class="px-2 py-1 rounded text-xs font-medium bg-surface text-fg shadow-sm"
+					@click="view = 'grid'"
+					:class="view === 'grid' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg transition-colors'"
+					class="px-2 py-1 rounded text-xs font-medium"
 					title="Grid view"
 				>
 					<i class="fa-solid fa-grid-2 text-[11px]"></i>
 				</button>
 				<button
-					class="px-2 py-1 rounded text-xs font-medium text-fg-muted hover:text-fg transition-colors"
+					@click="view = 'table'"
+					:class="view === 'table' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg transition-colors'"
+					class="px-2 py-1 rounded text-xs font-medium"
 					title="Table view"
 				>
 					<i class="fa-solid fa-list text-[11px]"></i>
@@ -120,7 +130,7 @@ templ CategoryDashboardContent(cc *campaigns.CampaignContext, et *EntityType, en
 			</div>
 		}
 
-		<!-- All pages grid -->
+		<!-- Entity content area -->
 		<div>
 			if len(entities) == 0 {
 				<div class="empty-state">
@@ -145,10 +155,39 @@ templ CategoryDashboardContent(cc *campaigns.CampaignContext, et *EntityType, en
 					}
 				</div>
 			} else {
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-					for _, entity := range entities {
-						@EntityCard(&entity, cc)
-					}
+				<!-- Grid view -->
+				<div x-show="view === 'grid'" x-cloak>
+					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+						for _, entity := range entities {
+							@EntityCard(&entity, cc)
+						}
+					</div>
+				</div>
+
+				<!-- Table view -->
+				<div x-show="view === 'table'" x-cloak>
+					<div class="card overflow-hidden">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="border-b border-edge bg-surface-alt">
+									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Name</th>
+									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider hidden sm:table-cell">Type</th>
+									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider hidden md:table-cell">Tags</th>
+									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider hidden lg:table-cell">Updated</th>
+									if cc.MemberRole >= campaigns.RoleScribe {
+										<th class="text-center px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider w-16">
+											<i class="fa-solid fa-lock text-[10px]" title="Visibility"></i>
+										</th>
+									}
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-edge">
+								for _, entity := range entities {
+									@EntityTableRow(&entity, cc)
+								}
+							</tbody>
+						</table>
+					</div>
 				</div>
 
 				@components.Pagination(components.PaginationData{
@@ -192,6 +231,86 @@ templ PinnedCard(entity *Entity, cc *campaigns.CampaignContext) {
 	</a>
 }
 
+// EntityTableRow renders a single row in the table view. Shows entity name with
+// image/icon, category type badge, tags, relative update time, and privacy indicator.
+// Reused by both category dashboard and all-pages list.
+templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
+	<tr class="hover:bg-surface-alt/50 transition-colors group">
+		<td class="px-4 py-2.5">
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+				class="flex items-center gap-2.5 group/link"
+			>
+				if entity.ImagePath != nil && *entity.ImagePath != "" {
+					<img
+						src={ fmt.Sprintf("/media/%s", *entity.ImagePath) }
+						alt={ entity.Name }
+						class="w-8 h-8 rounded object-cover shrink-0"
+					/>
+				} else {
+					<span
+						class="w-8 h-8 rounded flex items-center justify-center shrink-0"
+						style={ fmt.Sprintf("background-color: %s15; color: %s", entity.TypeColor, entity.TypeColor) }
+					>
+						if entity.TypeIcon != "" {
+							<i class={ "fa-solid " + entity.TypeIcon, "text-xs" }></i>
+						}
+					</span>
+				}
+				<div class="min-w-0">
+					<span class="font-medium text-fg group-hover/link:text-accent transition-colors truncate block">
+						{ entity.Name }
+					</span>
+					if entity.TypeLabel != nil && *entity.TypeLabel != "" {
+						<span class="text-[11px] text-fg-muted truncate block">{ *entity.TypeLabel }</span>
+					}
+				</div>
+			</a>
+		</td>
+		<td class="px-4 py-2.5 hidden sm:table-cell">
+			<span
+				class="inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[11px] font-medium"
+				style={ fmt.Sprintf("background-color: %s20; color: %s", entity.TypeColor, entity.TypeColor) }
+			>
+				if entity.TypeIcon != "" {
+					<i class={ "fa-solid " + entity.TypeIcon, "text-[9px]" }></i>
+				}
+				{ entity.TypeName }
+			</span>
+		</td>
+		<td class="px-4 py-2.5 hidden md:table-cell">
+			if len(entity.Tags) > 0 {
+				<div class="flex flex-wrap gap-1">
+					for _, tag := range entity.Tags {
+						<span
+							class="inline-flex items-center px-1.5 py-px rounded-full text-[10px] font-medium"
+							style={ fmt.Sprintf("background-color: %s22; color: %s", tag.Color, tag.Color) }
+						>
+							{ tag.Name }
+						</span>
+					}
+				</div>
+			} else {
+				<span class="text-fg-muted text-xs">—</span>
+			}
+		</td>
+		<td class="px-4 py-2.5 hidden lg:table-cell">
+			<span class="text-xs text-fg-secondary" title={ entity.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
+				{ relativeTime(entity.UpdatedAt) }
+			</span>
+		</td>
+		if cc.MemberRole >= campaigns.RoleScribe {
+			<td class="px-4 py-2.5 text-center">
+				if entity.IsPrivate {
+					<span class="text-amber-500 dark:text-amber-400" title="Private (DM only)">
+						<i class="fa-solid fa-lock text-[10px]"></i>
+					</span>
+				}
+			</td>
+		}
+	</tr>
+}
+
 // isPinned checks if an entity ID is in the pinned list.
 func isPinned(entityID string, pinnedIDs []string) bool {
 	for _, id := range pinnedIDs {
@@ -200,4 +319,33 @@ func isPinned(entityID string, pinnedIDs []string) bool {
 		}
 	}
 	return false
+}
+
+// relativeTime returns a human-friendly relative time string (e.g., "2h ago", "3d ago").
+func relativeTime(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		m := int(d.Minutes())
+		if m == 1 {
+			return "1m ago"
+		}
+		return fmt.Sprintf("%dm ago", m)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		if h == 1 {
+			return "1h ago"
+		}
+		return fmt.Sprintf("%dh ago", h)
+	case d < 30*24*time.Hour:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "1d ago"
+		}
+		return fmt.Sprintf("%dd ago", days)
+	default:
+		return t.Format("Jan 2, 2006")
+	}
 }

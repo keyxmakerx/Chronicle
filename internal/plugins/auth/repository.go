@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -17,6 +18,12 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*User, error)
 	EmailExists(ctx context.Context, email string) (bool, error)
 	UpdateLastLogin(ctx context.Context, id string) error
+
+	// Password reset.
+	UpdatePassword(ctx context.Context, userID, passwordHash string) error
+	CreateResetToken(ctx context.Context, userID, email, tokenHash string, expiresAt time.Time) error
+	FindResetToken(ctx context.Context, tokenHash string) (userID, email string, expiresAt time.Time, usedAt *time.Time, err error)
+	MarkResetTokenUsed(ctx context.Context, tokenHash string) error
 
 	// Admin operations.
 	ListUsers(ctx context.Context, offset, limit int) ([]User, int, error)
@@ -211,4 +218,60 @@ func (r *userRepository) CountAdmins(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("counting admins: %w", err)
 	}
 	return count, nil
+}
+
+// --- Password Reset ---
+
+// UpdatePassword sets a new password hash for a user.
+func (r *userRepository) UpdatePassword(ctx context.Context, userID, passwordHash string) error {
+	query := `UPDATE users SET password_hash = ? WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, passwordHash, userID)
+	if err != nil {
+		return fmt.Errorf("updating password: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return apperror.NewNotFound("user not found")
+	}
+	return nil
+}
+
+// CreateResetToken inserts a new password reset token. The tokenHash is
+// SHA-256(plaintext_token) — plaintext is never stored.
+func (r *userRepository) CreateResetToken(ctx context.Context, userID, email, tokenHash string, expiresAt time.Time) error {
+	query := `INSERT INTO password_reset_tokens (user_id, email, token_hash, expires_at)
+	          VALUES (?, ?, ?, ?)`
+	_, err := r.db.ExecContext(ctx, query, userID, email, tokenHash, expiresAt)
+	if err != nil {
+		return fmt.Errorf("creating reset token: %w", err)
+	}
+	return nil
+}
+
+// FindResetToken looks up a reset token by its hash. Returns the associated
+// user ID, email, expiry, and used_at (nil if unused).
+func (r *userRepository) FindResetToken(ctx context.Context, tokenHash string) (string, string, time.Time, *time.Time, error) {
+	query := `SELECT user_id, email, expires_at, used_at
+	          FROM password_reset_tokens WHERE token_hash = ?`
+	var userID, email string
+	var expiresAt time.Time
+	var usedAt *time.Time
+	err := r.db.QueryRowContext(ctx, query, tokenHash).Scan(&userID, &email, &expiresAt, &usedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", time.Time{}, nil, apperror.NewNotFound("invalid or expired reset token")
+	}
+	if err != nil {
+		return "", "", time.Time{}, nil, fmt.Errorf("finding reset token: %w", err)
+	}
+	return userID, email, expiresAt, usedAt, nil
+}
+
+// MarkResetTokenUsed stamps the used_at column so the token can't be reused.
+func (r *userRepository) MarkResetTokenUsed(ctx context.Context, tokenHash string) error {
+	query := `UPDATE password_reset_tokens SET used_at = NOW() WHERE token_hash = ?`
+	_, err := r.db.ExecContext(ctx, query, tokenHash)
+	if err != nil {
+		return fmt.Errorf("marking reset token used: %w", err)
+	}
+	return nil
 }

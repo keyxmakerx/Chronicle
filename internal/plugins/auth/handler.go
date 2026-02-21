@@ -34,7 +34,14 @@ func (h *Handler) LoginForm(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", ""))
+
+	// Show success banner after password reset.
+	var successMsg string
+	if c.QueryParam("reset") == "success" {
+		successMsg = "Your password has been reset. You can now sign in."
+	}
+
+	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", "", successMsg))
 }
 
 // Login processes the login form submission (POST /login).
@@ -61,7 +68,7 @@ func (h *Handler) Login(c echo.Context) error {
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, LoginForm_(csrfToken, req.Email, errMsg))
 		}
-		return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, req.Email, errMsg))
+		return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, req.Email, errMsg, ""))
 	}
 
 	// Set the session cookie.
@@ -162,6 +169,100 @@ func (h *Handler) Logout(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.Redirect(http.StatusSeeOther, "/login")
+}
+
+// --- Password Reset ---
+
+// ForgotPasswordForm renders the forgot password page (GET /forgot-password).
+func (h *Handler) ForgotPasswordForm(c echo.Context) error {
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, ForgotPasswordPage(csrfToken, "", ""))
+}
+
+// ForgotPassword processes the forgot password form (POST /forgot-password).
+// Always shows a success message to avoid leaking whether the email exists.
+func (h *Handler) ForgotPassword(c echo.Context) error {
+	email := c.FormValue("email")
+	if email == "" {
+		csrfToken := middleware.GetCSRFToken(c)
+		return middleware.Render(c, http.StatusOK, ForgotPasswordPage(csrfToken, "", "email is required"))
+	}
+
+	// Initiate reset (fire-and-forget — always returns nil to avoid leaking info).
+	_ = h.service.InitiatePasswordReset(c.Request().Context(), email)
+
+	csrfToken := middleware.GetCSRFToken(c)
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, ForgotPasswordSent(csrfToken, email))
+	}
+	return middleware.Render(c, http.StatusOK, ForgotPasswordSentPage(csrfToken, email))
+}
+
+// ResetPasswordForm renders the reset password page (GET /reset-password?token=...).
+func (h *Handler) ResetPasswordForm(c echo.Context) error {
+	token := c.QueryParam("token")
+	if token == "" {
+		return c.Redirect(http.StatusSeeOther, "/forgot-password")
+	}
+
+	// Validate the token to show an error early if it's invalid/expired.
+	email, err := h.service.ValidateResetToken(c.Request().Context(), token)
+	if err != nil {
+		csrfToken := middleware.GetCSRFToken(c)
+		errMsg := "invalid or expired reset link"
+		if appErr, ok := err.(*apperror.AppError); ok {
+			errMsg = appErr.Message
+		}
+		return middleware.Render(c, http.StatusOK, ResetPasswordPage(csrfToken, token, email, errMsg))
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, ResetPasswordPage(csrfToken, token, email, ""))
+}
+
+// ResetPassword processes the new password form (POST /reset-password).
+func (h *Handler) ResetPassword(c echo.Context) error {
+	token := c.FormValue("token")
+	password := c.FormValue("password")
+	confirm := c.FormValue("confirm")
+
+	if token == "" {
+		return c.Redirect(http.StatusSeeOther, "/forgot-password")
+	}
+
+	// Validate passwords.
+	if password == "" {
+		csrfToken := middleware.GetCSRFToken(c)
+		return middleware.Render(c, http.StatusOK, ResetPasswordPage(csrfToken, token, "", "password is required"))
+	}
+	if len(password) < 8 {
+		csrfToken := middleware.GetCSRFToken(c)
+		return middleware.Render(c, http.StatusOK, ResetPasswordPage(csrfToken, token, "", "password must be at least 8 characters"))
+	}
+	if len(password) > 128 {
+		csrfToken := middleware.GetCSRFToken(c)
+		return middleware.Render(c, http.StatusOK, ResetPasswordPage(csrfToken, token, "", "password must be at most 128 characters"))
+	}
+	if password != confirm {
+		csrfToken := middleware.GetCSRFToken(c)
+		return middleware.Render(c, http.StatusOK, ResetPasswordPage(csrfToken, token, "", "passwords do not match"))
+	}
+
+	if err := h.service.ResetPassword(c.Request().Context(), token, password); err != nil {
+		csrfToken := middleware.GetCSRFToken(c)
+		errMsg := "failed to reset password"
+		if appErr, ok := err.(*apperror.AppError); ok {
+			errMsg = appErr.Message
+		}
+		return middleware.Render(c, http.StatusOK, ResetPasswordPage(csrfToken, token, "", errMsg))
+	}
+
+	// Success — redirect to login with a flash message.
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/login?reset=success")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/login?reset=success")
 }
 
 // --- Cookie helpers ---
