@@ -449,7 +449,8 @@
   }
   .notes-resize-handle::after {
     content: '';
-    @apply absolute rounded-full bg-fg-muted/30;
+    @apply absolute rounded-full;
+    background-color: color-mix(in srgb, var(--color-text-muted) 30%, transparent);
     top: 5px;
     left: 5px;
     width: 8px;
@@ -457,7 +458,7 @@
     transition: background-color 0.15s;
   }
   .notes-resize-handle:hover::after {
-    @apply bg-fg-muted/60;
+    background-color: color-mix(in srgb, var(--color-text-muted) 60%, transparent);
   }
 
   /* Panel header. */
