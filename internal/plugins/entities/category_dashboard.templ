@@ -235,7 +235,7 @@ templ PinnedCard(entity *Entity, cc *campaigns.CampaignContext) {
 // image/icon, category type badge, tags, relative update time, and privacy indicator.
 // Reused by both category dashboard and all-pages list.
 templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
-	<tr class="hover:bg-surface-alt/50 transition-colors group">
+	<tr class="hover:bg-surface-alt transition-colors group">
 		<td class="px-4 py-2.5">
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
