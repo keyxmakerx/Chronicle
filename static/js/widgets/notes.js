@@ -54,6 +54,89 @@ Chronicle.register('notes', {
     el.appendChild(fab);
     el.appendChild(panel);
 
+    // --- Saved size (localStorage) ---
+    var STORAGE_KEY = 'chronicle_notes_size';
+
+    function restoreSize() {
+      try {
+        var saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (saved && saved.w && saved.h) {
+          panel.style.width = saved.w + 'px';
+          panel.style.height = saved.h + 'px';
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    function saveSize() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          w: panel.offsetWidth,
+          h: panel.offsetHeight
+        }));
+      } catch (e) { /* ignore */ }
+    }
+
+    // Apply saved size on desktop only (mobile uses full-width).
+    if (window.innerWidth >= 640) restoreSize();
+
+    // --- Resize handle ---
+    var resizeHandle = panel.querySelector('.notes-resize-handle');
+    if (resizeHandle) {
+      var resizing = false;
+      var startX, startY, startW, startH;
+
+      resizeHandle.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        resizing = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startW = panel.offsetWidth;
+        startH = panel.offsetHeight;
+        document.body.style.userSelect = 'none';
+      });
+
+      document.addEventListener('mousemove', function (e) {
+        if (!resizing) return;
+        // Dragging top-left corner: moving left increases width, moving up increases height.
+        var newW = Math.max(280, startW - (e.clientX - startX));
+        var newH = Math.max(300, startH - (e.clientY - startY));
+        panel.style.width = newW + 'px';
+        panel.style.height = newH + 'px';
+      });
+
+      document.addEventListener('mouseup', function () {
+        if (!resizing) return;
+        resizing = false;
+        document.body.style.userSelect = '';
+        saveSize();
+      });
+
+      // Touch support for mobile resize (if ever used on tablet).
+      resizeHandle.addEventListener('touchstart', function (e) {
+        var touch = e.touches[0];
+        resizing = true;
+        startX = touch.clientX;
+        startY = touch.clientY;
+        startW = panel.offsetWidth;
+        startH = panel.offsetHeight;
+      }, { passive: true });
+
+      document.addEventListener('touchmove', function (e) {
+        if (!resizing) return;
+        var touch = e.touches[0];
+        var newW = Math.max(280, startW - (touch.clientX - startX));
+        var newH = Math.max(300, startH - (touch.clientY - startY));
+        panel.style.width = newW + 'px';
+        panel.style.height = newH + 'px';
+      }, { passive: true });
+
+      document.addEventListener('touchend', function () {
+        if (!resizing) return;
+        resizing = false;
+        saveSize();
+      });
+    }
+
     // Cache panel elements.
     var headerTitle = panel.querySelector('.notes-header-title');
     var closeBtn = panel.querySelector('.notes-close');
@@ -68,7 +151,6 @@ Chronicle.register('notes', {
       panel.classList.remove('notes-panel-hidden');
       fab.classList.add('notes-fab-hidden');
       loadNotes();
-      // Auto-focus the quick input so user can start typing immediately.
       setTimeout(function () { if (quickInput) quickInput.focus(); }, 100);
     });
 
@@ -507,7 +589,8 @@ Chronicle.register('notes', {
 
       var quickPlaceholder = eid ? 'Quick note for this page...' : 'Quick note...';
 
-      return '<div class="notes-header">' +
+      return '<div class="notes-resize-handle" title="Drag to resize"></div>' +
+        '<div class="notes-header">' +
         '<span class="notes-header-title">' + (eid ? 'Page Notes' : 'All Notes') + '</span>' +
         '<div class="notes-header-actions">' +
         '<button class="note-btn notes-close" title="Close"><i class="fa-solid fa-xmark"></i></button>' +
