@@ -1,17 +1,18 @@
 // show.templ renders the campaign dashboard page showing campaign details,
-// quick links, category quick-nav with counts, and a pending transfer banner
-// if applicable.
+// quick links, category quick-nav with counts, recent pages, and a pending
+// transfer banner if applicable.
 
 package campaigns
 
 import (
 	"fmt"
 	"strconv"
+	"time"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // CampaignShowPage renders the campaign dashboard.
-templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfToken string) {
+templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentEntities []RecentEntity, csrfToken string) {
 	@layouts.App(cc.Campaign.Name) {
 		<div class="max-w-5xl mx-auto">
 			// Pending transfer banner for the target user.
@@ -132,6 +133,26 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfTok
 				</div>
 			}
 
+			<!-- Recently updated pages -->
+			if len(recentEntities) > 0 {
+				<div class="mb-8">
+					<div class="flex items-center justify-between mb-3">
+						<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">Recently Updated</h2>
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
+							class="text-xs text-accent hover:underline"
+						>
+							View all
+						</a>
+					</div>
+					<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+						for _, re := range recentEntities {
+							@RecentEntityCard(cc, &re)
+						}
+					</div>
+				</div>
+			}
+
 			<!-- Footer meta -->
 			<div class="flex items-center gap-3 text-xs text-fg-muted">
 				<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
@@ -141,5 +162,84 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfTok
 				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
 			</div>
 		</div>
+	}
+}
+
+// RecentEntityCard renders a compact card for a recently updated entity.
+templ RecentEntityCard(cc *CampaignContext, re *RecentEntity) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, re.ID)) }
+		class="card p-0 overflow-hidden hover:shadow-md transition-shadow block group"
+	>
+		if re.ImagePath != nil && *re.ImagePath != "" {
+			<div class="h-20 bg-surface-alt overflow-hidden">
+				<img
+					src={ fmt.Sprintf("/media/%s", *re.ImagePath) }
+					alt={ re.Name }
+					class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+				/>
+			</div>
+		} else {
+			<div class="h-10 flex items-center justify-center" style={ fmt.Sprintf("background-color: %s10", re.TypeColor) }>
+				if re.TypeIcon != "" {
+					<i class={ "fa-solid " + re.TypeIcon, "text-sm opacity-30" } style={ fmt.Sprintf("color: %s", re.TypeColor) }></i>
+				}
+			</div>
+		}
+		<div class="px-3 py-2">
+			<div class="flex items-center justify-between gap-1.5 mb-0.5">
+				<h3 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">
+					{ re.Name }
+				</h3>
+				if re.IsPrivate && cc.MemberRole >= RoleScribe {
+					<span class="text-fg-muted shrink-0" title="Private (DM only)">
+						<i class="fa-solid fa-lock text-[9px]"></i>
+					</span>
+				}
+			</div>
+			<div class="flex items-center justify-between gap-2">
+				<span
+					class="inline-flex items-center gap-1 px-1.5 py-px rounded-full text-[10px] font-medium"
+					style={ fmt.Sprintf("background-color: %s20; color: %s", re.TypeColor, re.TypeColor) }
+				>
+					if re.TypeIcon != "" {
+						<i class={ "fa-solid " + re.TypeIcon, "text-[8px]" }></i>
+					}
+					{ re.TypeName }
+				</span>
+				<span class="text-[10px] text-fg-muted" title={ re.UpdatedAt.Format("Jan 2, 2006 3:04 PM") }>
+					{ dashboardRelativeTime(re.UpdatedAt) }
+				</span>
+			</div>
+		</div>
+	</a>
+}
+
+// dashboardRelativeTime returns a human-friendly relative time for the dashboard.
+func dashboardRelativeTime(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		m := int(d.Minutes())
+		if m == 1 {
+			return "1m ago"
+		}
+		return fmt.Sprintf("%dm ago", m)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		if h == 1 {
+			return "1h ago"
+		}
+		return fmt.Sprintf("%dh ago", h)
+	case d < 30*24*time.Hour:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "1d ago"
+		}
+		return fmt.Sprintf("%dd ago", days)
+	default:
+		return t.Format("Jan 2")
 	}
 }

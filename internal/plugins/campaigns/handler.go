@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -29,6 +30,24 @@ type SettingsEntityType struct {
 	Color      string `json:"color"`
 }
 
+// RecentEntityLister returns recently updated entities for the campaign dashboard.
+// Avoids importing the entities package directly.
+type RecentEntityLister interface {
+	ListRecentForDashboard(ctx context.Context, campaignID string, role int, limit int) ([]RecentEntity, error)
+}
+
+// RecentEntity is a minimal entity representation for the dashboard recent pages section.
+type RecentEntity struct {
+	ID        string
+	Name      string
+	TypeName  string
+	TypeIcon  string
+	TypeColor string
+	ImagePath *string
+	IsPrivate bool
+	UpdatedAt time.Time
+}
+
 // AuditLogger records audit events for campaign-scoped actions. Defined here
 // as an interface to avoid circular imports with the audit plugin.
 type AuditLogger interface {
@@ -40,6 +59,7 @@ type AuditLogger interface {
 type Handler struct {
 	service      CampaignService
 	entityLister EntityTypeLister
+	recentLister RecentEntityLister
 	auditLogger  AuditLogger
 }
 
@@ -52,6 +72,12 @@ func NewHandler(service CampaignService) *Handler {
 // Called after both plugins are wired to avoid circular dependencies.
 func (h *Handler) SetEntityLister(lister EntityTypeLister) {
 	h.entityLister = lister
+}
+
+// SetRecentEntityLister sets the recent entity lister for the dashboard.
+// Called after both plugins are wired to avoid circular dependencies.
+func (h *Handler) SetRecentEntityLister(lister RecentEntityLister) {
+	h.recentLister = lister
 }
 
 // SetAuditLogger sets the audit logger for recording campaign mutations.
@@ -168,8 +194,16 @@ func (h *Handler) Show(c echo.Context) error {
 	// Check for pending transfer to show banner.
 	transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
 
+	// Fetch recently updated pages for the dashboard.
+	var recentEntities []RecentEntity
+	if h.recentLister != nil {
+		recentEntities, _ = h.recentLister.ListRecentForDashboard(
+			c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole), 8,
+		)
+	}
+
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, CampaignShowPage(cc, transfer, csrfToken))
+	return middleware.Render(c, http.StatusOK, CampaignShowPage(cc, transfer, recentEntities, csrfToken))
 }
 
 // EditForm redirects to the unified settings page (GET /campaigns/:id/edit).

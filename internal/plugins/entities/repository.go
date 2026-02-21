@@ -392,6 +392,10 @@ type EntityRepository interface {
 
 	// CountByType returns entity counts per type for the sidebar badges.
 	CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error)
+
+	// ListRecent returns the N most recently updated entities for a campaign,
+	// ordered by updated_at DESC. Used for the campaign dashboard "recent pages" section.
+	ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error)
 }
 
 // entityRepository implements EntityRepository with MariaDB queries.
@@ -773,6 +777,45 @@ func (r *entityRepository) CountByType(ctx context.Context, campaignID string, r
 		counts[typeID] = count
 	}
 	return counts, rows.Err()
+}
+
+// ListRecent returns the most recently updated entities for a campaign,
+// ordered by updated_at DESC. Respects privacy filtering based on role.
+func (r *entityRepository) ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error) {
+	where := "WHERE e.campaign_id = ?"
+	args := []any{campaignID}
+
+	if role < 2 {
+		where += " AND e.is_private = false"
+	}
+
+	query := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
+	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.created_by, e.created_at, e.updated_at,
+	                 et.name, et.icon, et.color, et.slug
+	          FROM entities e
+	          INNER JOIN entity_types et ON et.id = e.entity_type_id
+	          %s
+	          ORDER BY e.updated_at DESC
+	          LIMIT ?`, where)
+
+	args = append(args, limit)
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing recent entities: %w", err)
+	}
+	defer rows.Close()
+
+	var entities []Entity
+	for rows.Next() {
+		e, err := r.scanEntityRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		entities = append(entities, *e)
+	}
+	return entities, rows.Err()
 }
 
 // scanEntityRow scans a single entity from a rows iterator.

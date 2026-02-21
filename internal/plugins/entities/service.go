@@ -31,6 +31,7 @@ type EntityService interface {
 
 	// Listing and search
 	List(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
+	ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error)
 	Search(ctx context.Context, campaignID, query string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
 
 	// Entity types
@@ -285,6 +286,14 @@ func (s *entityService) List(ctx context.Context, campaignID string, typeID int,
 		opts.Page = 1
 	}
 	return s.entities.ListByCampaign(ctx, campaignID, typeID, role, opts)
+}
+
+// ListRecent returns the most recently updated entities for a campaign dashboard.
+func (s *entityService) ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error) {
+	if limit < 1 || limit > 20 {
+		limit = 8
+	}
+	return s.entities.ListRecent(ctx, campaignID, role, limit)
 }
 
 // Search performs a text search on entity names with a minimum query length.
