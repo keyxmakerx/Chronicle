@@ -342,6 +342,23 @@
     @apply text-xs text-fg-secondary;
   }
 
+  /* ---- Admin Sidebar Collapse (slide, not fade) ---- */
+
+  /* Uses the CSS grid-rows trick to animate height to/from zero. The outer
+     div toggles between 0fr (collapsed) and 1fr (expanded). The inner div
+     has overflow:hidden so content doesn't leak during the transition. */
+  .admin-slide {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 200ms ease-out;
+  }
+  .admin-slide.expanded {
+    grid-template-rows: 1fr;
+  }
+  .admin-slide > div {
+    overflow: hidden;
+  }
+
   /* ---- Drill-Down Sidebar ---- */
 
   /* When the main panel is in "peek" mode (drilled into a category), it

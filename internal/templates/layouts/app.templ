@@ -54,60 +54,64 @@ var sidebarNavInactive = "text-sidebar-text hover:bg-sidebar-hover hover:text-si
 // a campaign, category links trigger a slide animation that reveals a
 // category-specific sub-nav panel (managed by sidebar_drill.js).
 templ Sidebar() {
-	<aside id="sidebar" class="w-64 bg-sidebar-bg text-sidebar-text flex flex-col shrink-0 overflow-hidden">
+	<aside id="sidebar" class="w-64 bg-sidebar-bg text-sidebar-text flex flex-col shrink-0">
 		<!-- Logo / Brand -->
 		<a href="/campaigns" class="h-16 flex items-center px-4 border-b border-gray-700 hover:bg-sidebar-hover transition-colors shrink-0">
 			<span class="text-xl font-bold text-white tracking-tight">Chronicle</span>
 		</a>
 
-		<!-- Drill-down slider: two panels side-by-side, translated via JS -->
-		<div id="sidebar-slider" class="flex-1 flex min-h-0 w-[32rem] transition-transform duration-300 ease-in-out" style="transform: translateX(0)">
-			<!-- Panel 1: Main navigation -->
-			<div id="sidebar-main" class="w-64 shrink-0 flex flex-col min-h-0">
-				<nav class="flex-1 py-4 overflow-y-auto">
-					if InCampaign(ctx) {
-						@CampaignSidebarNav()
-					} else {
-						@DefaultSidebarNav()
+		<!-- Overflow wrapper: clips the sliding panels at 16rem -->
+		<div class="flex-1 overflow-hidden relative min-h-0">
+			<!-- Drill-down slider: absolutely positioned, 32rem wide (2 panels).
+			     translateX shifts which panel is visible in the 16rem viewport. -->
+			<div id="sidebar-slider" class="absolute inset-y-0 left-0 w-[32rem] flex will-change-transform transition-transform duration-300 ease-in-out" style="transform: translate3d(0,0,0)">
+				<!-- Panel 1: Main navigation -->
+				<div id="sidebar-main" class="w-64 shrink-0 flex flex-col min-h-0 h-full">
+					<nav class="flex-1 py-4 overflow-y-auto">
+						if InCampaign(ctx) {
+							@CampaignSidebarNav()
+						} else {
+							@DefaultSidebarNav()
+						}
+					</nav>
+
+					<!-- Admin section (site admins only) — collapsible -->
+					if GetIsAdmin(ctx) {
+						@AdminSidebarNav()
 					}
-				</nav>
 
-				<!-- Admin section (site admins only) — collapsible -->
-				if GetIsAdmin(ctx) {
-					@AdminSidebarNav()
-				}
-
-				<!-- Sidebar footer -->
-				<div class="p-4 border-t border-gray-700 shrink-0">
-					<div class="text-xs text-gray-600">
-						Chronicle v0.1.0
+					<!-- Sidebar footer -->
+					<div class="p-4 border-t border-gray-700 shrink-0">
+						<div class="text-xs text-gray-600">
+							Chronicle v0.1.0
+						</div>
 					</div>
 				</div>
-			</div>
 
-			<!-- Panel 2: Category sub-nav (populated by sidebar_drill.js) -->
-			<div id="sidebar-category" class="w-64 shrink-0 flex flex-col min-h-0">
-				<!-- Back button / peek zone -->
-				<div id="sidebar-back" class="flex items-center px-4 py-3 border-b border-gray-700 cursor-pointer hover:bg-sidebar-hover transition-colors shrink-0">
-					<svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-					</svg>
-					<span class="text-sm text-gray-400">Back</span>
-				</div>
-
-				<!-- Category header (icon + name) -->
-				<div id="sidebar-cat-header" class="px-4 py-3 border-b border-gray-700/50 shrink-0">
-					<div class="flex items-center gap-2">
-						<span id="sidebar-cat-icon" class="w-6 h-6 rounded flex items-center justify-center"></span>
-						<span id="sidebar-cat-name" class="text-base font-semibold text-white truncate"></span>
+				<!-- Panel 2: Category sub-nav (populated by sidebar_drill.js) -->
+				<div id="sidebar-category" class="w-64 shrink-0 flex flex-col min-h-0 h-full">
+					<!-- Back button / peek zone -->
+					<div id="sidebar-back" class="flex items-center px-4 py-3 border-b border-gray-700 cursor-pointer hover:bg-sidebar-hover transition-colors shrink-0">
+						<svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+						</svg>
+						<span class="text-sm text-gray-400">Back</span>
 					</div>
-					<span id="sidebar-cat-count" class="text-xs text-gray-500 mt-0.5 block"></span>
-				</div>
 
-				<!-- Category nav content (scrollable) -->
-				<nav id="sidebar-cat-nav" class="flex-1 py-3 overflow-y-auto">
-					<!-- Populated by sidebar_drill.js -->
-				</nav>
+					<!-- Category header (icon + name) -->
+					<div id="sidebar-cat-header" class="px-4 py-3 border-b border-gray-700/50 shrink-0">
+						<div class="flex items-center gap-2">
+							<span id="sidebar-cat-icon" class="w-6 h-6 rounded flex items-center justify-center"></span>
+							<span id="sidebar-cat-name" class="text-base font-semibold text-white truncate"></span>
+						</div>
+						<span id="sidebar-cat-count" class="text-xs text-gray-500 mt-0.5 block"></span>
+					</div>
+
+					<!-- Category nav content (scrollable) -->
+					<nav id="sidebar-cat-nav" class="flex-1 py-3 overflow-y-auto">
+						<!-- Populated by sidebar_drill.js -->
+					</nav>
+				</div>
 			</div>
 		</div>
 	</aside>
@@ -132,7 +136,8 @@ templ AdminSidebarNav() {
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
 			</svg>
 		</button>
-		<div x-show="open" x-transition>
+		<div class="admin-slide" :class="open && 'expanded'">
+			<div>
 			<a
 				href="/admin"
 				class={ sidebarNavLink,
@@ -222,6 +227,7 @@ templ AdminSidebarNav() {
 				SMTP Settings
 			</a>
 			<div class="pb-2"></div>
+			</div>
 		</div>
 	</div>
 }

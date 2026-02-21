@@ -137,7 +137,7 @@
     if (instant) {
       slider.style.transition = 'none';
     }
-    slider.style.transform = 'translateX(calc(-16rem + ' + PEEK_PX + 'px))';
+    slider.style.transform = 'translate3d(calc(-16rem + ' + PEEK_PX + 'px), 0, 0)';
 
     if (instant) {
       // Force reflow then restore transition.
@@ -159,7 +159,7 @@
 
     isDrilled = false;
     activeSlug = null;
-    slider.style.transform = 'translateX(0)';
+    slider.style.transform = 'translate3d(0, 0, 0)';
 
     if (mainPanel) {
       mainPanel.classList.remove('sidebar-peek');
