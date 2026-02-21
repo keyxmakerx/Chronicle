@@ -8,8 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-21 -- Notes widget overhaul, addon gating, unified entity type config page,
-sidebar drill-down fix.
+2026-02-21 -- Grid/table view toggle, recent pages dashboard, password reset flow.
 
 ## Current Phase
 **Phase C: IN PROGRESS.** Notes widget overhauled with quick-capture UX.
@@ -144,6 +143,43 @@ Dashboard, and Nav Panel tabs.
 - Responsive: 2–5 columns depending on viewport.
 - Quick actions row tightened to horizontal icon+text layout.
 
+### Grid/Table View Toggle
+- Alpine.js-powered toggle on category dashboards and All Pages list.
+- Per-category localStorage persistence (`chronicle_cat_view_{id}`).
+- Table view: name with image/icon, category type badge, tags, relative time, privacy.
+- Shared `EntityTableRow` templ component used by both views.
+- `relativeTime()` helper for human-friendly timestamps (1m ago, 3d ago).
+
+### Recent Pages on Campaign Dashboard
+- New `ListRecent` repository method: `ORDER BY updated_at DESC LIMIT ?`.
+- `RecentEntityLister` interface on campaigns handler (avoids circular imports).
+- Adapter in routes.go bridges entities.EntityService → campaigns.RecentEntity.
+- Dashboard shows 8 most recent pages in a 4-column grid with type badge + timestamp.
+
+### Password Reset Flow
+- **Migration 000020:** `password_reset_tokens` table with SHA-256 hashed tokens.
+- Repository: `UpdatePassword`, `CreateResetToken`, `FindResetToken`, `MarkResetTokenUsed`.
+- Service: `InitiatePasswordReset` (generates token, sends email via SMTP),
+  `ValidateResetToken`, `ResetPassword`. Always returns nil on unknown emails
+  to prevent enumeration. Tokens expire in 1 hour, single-use.
+- Handler: `GET/POST /forgot-password`, `GET/POST /reset-password` with 3/min rate limit.
+- Templates: `forgot_password.templ` (request form + sent confirmation),
+  `reset_password.templ` (new password form with expired/used token error states).
+- Login page: "Forgot password?" link, green success banner after reset.
+- `ConfigureMailSender()` wires SMTP into auth service in routes.go.
+
+### Unit Test Coverage
+- **Auth service:** 26 tests — Register, Login helpers, password hashing, password
+  reset flow (initiate/validate/reset), token hashing, UUID generation.
+- **Addons service:** 28 tests — CRUD, validation, slug uniqueness, enable/disable
+  for campaigns, status transitions, input trimming.
+- **Notes widget service:** 28 tests — Create/Update/Delete, title validation &
+  defaults, checklist toggle (bounds, type, toggle logic), list queries, ID generation.
+- **Syncapi service:** 31 tests — Key creation (validation, bcrypt, defaults),
+  authentication (prefix lookup, bcrypt verify, deactivated, expired), activate/
+  deactivate/revoke, IP blocking, non-critical logging, default limits, model methods.
+- **Entities service:** Existing 20+ tests, updated mock for ListRecent interface.
+
 ### In Progress
 - Nothing currently in progress
 
@@ -165,10 +201,6 @@ Dashboard, and Nav Panel tabs.
 5. **Dashboard layout configurability** — add `dashboard_layout` JSON column
    to campaigns table, create dashboard editor widget, make campaign and
    category dashboards owner-configurable.
-6. **Tests** — Many plugins have zero tests. Priority: syncapi service, addons,
-   notes widget service.
-7. **Grid/Table view toggle** on category dashboards.
-8. **Password reset** — Wire auth password reset with SMTP.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

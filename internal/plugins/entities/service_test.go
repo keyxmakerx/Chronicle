@@ -202,6 +202,10 @@ func (m *mockEntityRepo) CountByType(ctx context.Context, campaignID string, rol
 	return nil, nil
 }
 
+func (m *mockEntityRepo) ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error) {
+	return nil, nil
+}
+
 // --- Test Helpers ---
 
 func newTestService(entityRepo *mockEntityRepo, typeRepo *mockEntityTypeRepo) EntityService {
