@@ -67,6 +67,10 @@ func (m *mockEntityTypeRepo) UpdateDashboard(ctx context.Context, id int, descri
 	return nil
 }
 
+func (m *mockEntityTypeRepo) UpdateDashboardLayout(ctx context.Context, id int, layoutJSON *string) error {
+	return nil
+}
+
 func (m *mockEntityTypeRepo) SeedDefaults(ctx context.Context, campaignID string) error {
 	if m.seedDefaultsFn != nil {
 		return m.seedDefaultsFn(ctx, campaignID)

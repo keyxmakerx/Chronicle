@@ -1,0 +1,277 @@
+// category_blocks.templ provides the block rendering components for custom
+// category dashboard layouts. Each block type maps to a templ component that
+// receives the category context and renders appropriate content.
+//
+// Block types: category_header, pinned_pages, entity_grid, text_block,
+// recent_pages, search_bar. Unknown block types are silently skipped.
+
+package entities
+
+import (
+	"fmt"
+	"sort"
+	"time"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// CategoryBlockSwitch dispatches a dashboard block to the appropriate render
+// component based on its type. Unknown types are silently skipped.
+templ CategoryBlockSwitch(cc *campaigns.CampaignContext, et *EntityType, block campaigns.DashboardBlock, entities []Entity, total int) {
+	switch block.Type {
+		case "category_header":
+			@catHeader(cc, et, total)
+		case "pinned_pages":
+			@catPinnedPages(cc, et, entities)
+		case "entity_grid":
+			@catEntityGrid(cc, et, entities, block.Config)
+		case "text_block":
+			@catTextBlock(block.Config)
+		case "recent_pages":
+			@catRecentPages(cc, entities, block.Config)
+		case "search_bar":
+			@catSearchBar(cc, et)
+	}
+}
+
+// catHeader renders the category name, icon, entity count, and description.
+templ catHeader(cc *campaigns.CampaignContext, et *EntityType, total int) {
+	<div class="mb-5">
+		<div class="flex items-center justify-between mb-2">
+			<div class="flex items-center gap-3">
+				<span
+					class="w-10 h-10 rounded-lg flex items-center justify-center"
+					style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+				>
+					if et.Icon != "" {
+						<i class={ "fa-solid " + et.Icon, "text-lg" }></i>
+					}
+				</span>
+				<div>
+					<h1 class="text-2xl font-bold text-fg">{ et.NamePlural }</h1>
+					<p class="text-sm text-fg-secondary">
+						{ fmt.Sprintf("%d", total) }
+						if total == 1 {
+							page
+						} else {
+							pages
+						}
+					</p>
+				</div>
+			</div>
+			<div class="flex items-center gap-2">
+				if cc.MemberRole >= campaigns.RoleScribe {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID)) }
+						class="btn-primary text-sm"
+					>
+						<i class="fa-solid fa-plus mr-1.5 text-xs"></i> New Page
+					</a>
+				}
+			</div>
+		</div>
+		if et.Description != nil && *et.Description != "" {
+			<div class="text-sm text-fg-body mt-2 max-w-3xl">
+				{ *et.Description }
+			</div>
+		}
+	</div>
+}
+
+// catPinnedPages renders pinned entity cards at the top of the category dashboard.
+templ catPinnedPages(cc *campaigns.CampaignContext, et *EntityType, entities []Entity) {
+	if len(et.PinnedEntityIDs) > 0 {
+		<div class="mb-5">
+			<div class="flex items-center gap-2 mb-2">
+				<i class="fa-solid fa-thumbtack text-xs text-fg-muted"></i>
+				<span class="text-xs font-semibold uppercase tracking-wider text-fg-secondary">Pinned</span>
+			</div>
+			<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+				for _, entity := range entities {
+					if isPinned(entity.ID, et.PinnedEntityIDs) {
+						@PinnedCard(&entity, cc)
+					}
+				}
+			</div>
+		</div>
+	}
+}
+
+// catEntityGrid renders all entities in a responsive card grid.
+templ catEntityGrid(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, config map[string]any) {
+	if len(entities) == 0 {
+		<div class="empty-state">
+			<div class="empty-state__icon">
+				if et.Icon != "" {
+					<i class={ "fa-solid " + et.Icon, "text-fg-muted" }></i>
+				} else {
+					<i class="fa-solid fa-scroll text-fg-muted"></i>
+				}
+			</div>
+			<div class="empty-state__title">No { et.NamePlural } yet</div>
+			<div class="empty-state__description mb-4">
+				Create your first page in this category to get started.
+			</div>
+			if cc.MemberRole >= campaigns.RoleScribe {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", cc.Campaign.ID, et.ID)) }
+					class="btn-primary"
+				>
+					<i class="fa-solid fa-plus mr-1.5 text-xs"></i> Create { et.Name }
+				</a>
+			}
+		</div>
+	} else {
+		<div class={ catGridClass(config) }>
+			for _, entity := range entities {
+				@EntityCard(&entity, cc)
+			}
+		</div>
+	}
+}
+
+// catTextBlock renders custom HTML content from the block config.
+templ catTextBlock(config map[string]any) {
+	if content, ok := config["content"].(string); ok && content != "" {
+		<div class="prose prose-sm max-w-none text-fg-body">
+			@templ.Raw(content)
+		</div>
+	}
+}
+
+// catRecentPages renders the most recently updated entities in this category.
+templ catRecentPages(cc *campaigns.CampaignContext, entities []Entity, config map[string]any) {
+	<div>
+		<div class="flex items-center gap-2 mb-3">
+			<i class="fa-solid fa-clock text-xs text-fg-muted"></i>
+			<span class="text-xs font-semibold uppercase tracking-wider text-fg-secondary">Recent Pages</span>
+		</div>
+		if len(entities) > 0 {
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+				for _, entity := range limitCatRecent(entities, config) {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+						class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-alt hover:bg-surface border border-edge-light hover:border-edge transition-colors group"
+					>
+						if entity.ImagePath != nil && *entity.ImagePath != "" {
+							<img
+								src={ fmt.Sprintf("/media/%s", *entity.ImagePath) }
+								alt={ entity.Name }
+								class="w-8 h-8 rounded object-cover shrink-0"
+							/>
+						} else {
+							<span
+								class="w-8 h-8 rounded flex items-center justify-center shrink-0"
+								style={ fmt.Sprintf("background-color: %s15; color: %s", entity.TypeColor, entity.TypeColor) }
+							>
+								if entity.TypeIcon != "" {
+									<i class={ "fa-solid " + entity.TypeIcon, "text-xs" }></i>
+								}
+							</span>
+						}
+						<div class="min-w-0 flex-1">
+							<span class="text-sm font-medium text-fg truncate block group-hover:text-accent transition-colors">
+								{ entity.Name }
+							</span>
+							<span class="text-[10px] text-fg-muted">
+								{ catRelativeTime(entity.UpdatedAt) }
+							</span>
+						</div>
+					</a>
+				}
+			</div>
+		} else {
+			<p class="text-sm text-fg-muted italic">No pages in this category yet.</p>
+		}
+	</div>
+}
+
+// catSearchBar renders a search input for filtering entities within this category.
+templ catSearchBar(cc *campaigns.CampaignContext, et *EntityType) {
+	<div class="relative">
+		<input
+			type="text"
+			placeholder={ fmt.Sprintf("Search %s...", et.NamePlural) }
+			class="input pl-8 pr-3 py-1.5 w-full text-sm"
+			hx-get={ fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, et.ID) }
+			hx-trigger="keyup changed delay:300ms"
+			hx-target="#entity-list"
+			hx-swap="outerHTML"
+			name="q"
+			autocomplete="off"
+		/>
+		<i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-muted text-xs pointer-events-none"></i>
+	</div>
+}
+
+// catColSpan returns the Tailwind CSS class for a 12-column grid span.
+func catColSpan(width int) string {
+	if width < 1 {
+		width = 1
+	}
+	if width > 12 {
+		width = 12
+	}
+	classes := [13]string{
+		"",
+		"col-span-1", "col-span-2", "col-span-3", "col-span-4",
+		"col-span-5", "col-span-6", "col-span-7", "col-span-8",
+		"col-span-9", "col-span-10", "col-span-11", "col-span-12",
+	}
+	return classes[width]
+}
+
+// catGridClass returns responsive grid classes for the entity card grid.
+func catGridClass(config map[string]any) string {
+	// Default responsive grid.
+	return "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"
+}
+
+// limitCatRecent returns entities sorted by updated_at (newest first), limited
+// to the configured count. Defaults to 8 if not configured.
+func limitCatRecent(entities []Entity, config map[string]any) []Entity {
+	limit := 8
+	if l, ok := config["limit"].(float64); ok && int(l) > 0 {
+		limit = int(l)
+	}
+
+	// Sort a copy by updated_at descending.
+	sorted := make([]Entity, len(entities))
+	copy(sorted, entities)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].UpdatedAt.After(sorted[j].UpdatedAt)
+	})
+
+	if len(sorted) > limit {
+		sorted = sorted[:limit]
+	}
+	return sorted
+}
+
+// catRelativeTime returns a human-friendly relative time string.
+func catRelativeTime(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		m := int(d.Minutes())
+		if m == 1 {
+			return "1m ago"
+		}
+		return fmt.Sprintf("%dm ago", m)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		if h == 1 {
+			return "1h ago"
+		}
+		return fmt.Sprintf("%dh ago", h)
+	case d < 30*24*time.Hour:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "1d ago"
+		}
+		return fmt.Sprintf("%dd ago", days)
+	default:
+		return t.Format("Jan 2")
+	}
+}

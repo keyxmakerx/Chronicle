@@ -21,7 +21,7 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] Admin panel flickering fix (x-cloak)
 - [x] Sidebar debug log cleanup
 - [x] Dashboard Editor (Sprint 2: migration 000021, dashboard_editor.js, block rendering)
-- [ ] Category Dashboards (Sprint 3: per-category layout editor)
+- [x] Category Dashboards (Sprint 3: per-category layout editor)
 - [ ] Player Notes Overhaul (Sprint 4: locking, rich text, versions, shared, template block)
 - [ ] hx-boost sidebar navigation (Sprint 5: prevent full page reloads)
 - [ ] "View as player" toggle (Sprint 5)
@@ -240,3 +240,14 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] `show.templ` refactored: custom layout → 12-col grid render, NULL → hardcoded default
 - [x] Customize page Dashboard tab mounts dashboard-editor widget
 - [x] dashColSpan, dashGridClass, limitRecentEntities helper functions
+
+### Phase D Sprint 3: Category Dashboards (2026-02-22)
+- [x] `dashboard_editor.js` parameterized with `data-block-types` attribute for custom palettes
+- [x] EntityType model: `DashboardLayout *string` field + `ParseCategoryDashboardLayout()` method
+- [x] Repository: all entity type queries include `dashboard_layout`, `UpdateDashboardLayout()` method
+- [x] Service: `GetCategoryDashboardLayout`, `UpdateCategoryDashboardLayout` (validation), `ResetCategoryDashboardLayout`
+- [x] Handler + routes: GET/PUT/DELETE `/entity-types/:etid/dashboard-layout` (owner-only)
+- [x] New block type constants: `category_header`, `entity_grid`, `search_bar` in campaigns/model.go
+- [x] `category_blocks.templ`: CategoryBlockSwitch + 6 category block components
+- [x] `category_dashboard.templ`: conditional render from custom layout or hardcoded default
+- [x] Customize page Category Dashboards tab: Alpine.js category selector + dashboard-editor per category

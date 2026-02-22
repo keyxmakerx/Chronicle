@@ -256,25 +256,35 @@ func (c *Campaign) ParseDashboardLayout() *DashboardLayout {
 }
 
 // Supported dashboard block types. Each maps to a Templ component that knows
-// how to render the block with its config.
+// how to render the block with its config. Used by both campaign and category
+// dashboard editors.
 const (
+	// Campaign dashboard blocks.
 	BlockWelcomeBanner = "welcome_banner" // Campaign name + description hero.
 	BlockCategoryGrid  = "category_grid"  // Quick-nav grid of entity types.
 	BlockRecentPages   = "recent_pages"   // Recently updated entities.
 	BlockEntityList    = "entity_list"    // Filtered entity list by category.
 	BlockTextBlock     = "text_block"     // Custom rich text / markdown.
 	BlockPinnedPages   = "pinned_pages"   // Pinned entities grid.
+
+	// Category dashboard blocks.
+	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
+	BlockEntityGrid     = "entity_grid"     // All entities in category as card grid.
+	BlockSearchBar      = "search_bar"      // Search input for filtering within category.
 )
 
 // ValidBlockTypes is the set of supported dashboard block types. Used for
-// validation when saving layouts.
+// validation when saving layouts (both campaign and category dashboards).
 var ValidBlockTypes = map[string]bool{
-	BlockWelcomeBanner: true,
-	BlockCategoryGrid:  true,
-	BlockRecentPages:   true,
-	BlockEntityList:    true,
-	BlockTextBlock:     true,
-	BlockPinnedPages:   true,
+	BlockWelcomeBanner:  true,
+	BlockCategoryGrid:   true,
+	BlockRecentPages:    true,
+	BlockEntityList:     true,
+	BlockTextBlock:      true,
+	BlockPinnedPages:    true,
+	BlockCategoryHeader: true,
+	BlockEntityGrid:     true,
+	BlockSearchBar:      true,
 }
 
 // --- Cross-Plugin Interfaces ---

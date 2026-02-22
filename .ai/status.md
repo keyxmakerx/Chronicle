@@ -8,14 +8,14 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-22 -- Phase D Sprint 2: Dashboard Editor complete.
+2026-02-22 -- Phase D Sprint 3: Category Dashboards complete.
 
 ## Current Phase
 **Phase D: IN PROGRESS.** Campaign Customization Hub at `/campaigns/:id/customize`
 with Navigation, Dashboard, Categories, and Category Dashboards tabs. Settings
-page cleaned up (no more entity-type-config duplication). Custom sidebar sections
-and links editor wired up. Dashboard editor widget live — campaign owners can
-build custom dashboard layouts with drag-and-drop blocks.
+page cleaned up. Custom sidebar sections/links editor wired up. Dashboard editor
+widget live for both campaign and per-category dashboards — owners can build
+custom layouts with drag-and-drop blocks.
 
 ## What Was Built in Phase B (Summary)
 
@@ -207,8 +207,19 @@ build custom dashboard layouts with drag-and-drop blocks.
 - Customize page: Dashboard tab now mounts dashboard-editor widget.
 - Helper functions: dashColSpan (col-span CSS), dashGridClass (responsive grid), limitRecentEntities (configurable limit), dashboardRelativeTime.
 
+### Phase D Sprint 3: Category Dashboards (2026-02-22)
+- `dashboard_editor.js` parameterized with `data-block-types` attribute for custom palettes.
+- EntityType model: added `DashboardLayout *string` field + `ParseCategoryDashboardLayout()` method.
+- Repository: all entity type queries updated for `dashboard_layout` column, `UpdateDashboardLayout()` method.
+- Service: `GetCategoryDashboardLayout`, `UpdateCategoryDashboardLayout` (validation), `ResetCategoryDashboardLayout`.
+- Handler + routes: GET/PUT/DELETE `/campaigns/:id/entity-types/:etid/dashboard-layout` (owner-only).
+- 3 new block type constants: `category_header`, `entity_grid`, `search_bar` (+ reuses `pinned_pages`, `text_block`, `recent_pages`).
+- `category_blocks.templ`: CategoryBlockSwitch + 6 category block components.
+- `category_dashboard.templ`: conditional render — custom layout (12-col grid) or hardcoded default.
+- Customize page: Category Dashboards tab — Alpine.js category selector + dashboard-editor widget per category.
+
 ### In Progress
-- Phase D Sprint 3: Category Dashboards (next)
+- Phase D Sprint 4: Player Notes Overhaul (next)
 
 ### Blocked
 - Nothing blocked
@@ -217,13 +228,11 @@ build custom dashboard layouts with drag-and-drop blocks.
 `claude/review-project-foundation-8rzHX`
 
 ## Next Session Should
-1. **Sprint 3:** Category Dashboards — Per-category dashboard editor in Customize
-   tab, category-specific block types, conditional render with fallback to default.
-2. **Sprint 4:** Player Notes Overhaul — Migration 000022, edit locking backend
+1. **Sprint 4:** Player Notes Overhaul — Migration 000022, edit locking backend
    (pessimistic), rich text integration (TipTap), shared notes, version history,
    template block mount.
-3. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle, testing.
-4. **QoL:** Quick Search (Ctrl+K), Entity Nesting, Inline Secrets, Breadcrumbs.
+2. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle, testing.
+3. **QoL:** Quick Search (Ctrl+K), Entity Nesting, Inline Secrets, Breadcrumbs.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

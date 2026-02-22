@@ -58,6 +58,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/entity-types/:etid/color", h.UpdateEntityTypeColor, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/dashboard", h.UpdateEntityTypeDashboard, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Category dashboard layout API (Owner only).
+	cg.GET("/entity-types/:etid/dashboard-layout", h.GetCategoryDashboardLayout, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/entity-types/:etid/dashboard-layout", h.UpdateCategoryDashboardLayout, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.DELETE("/entity-types/:etid/dashboard-layout", h.ResetCategoryDashboardLayout, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Public-capable view routes: use AllowPublicCampaignAccess so that
 	// public campaigns can be browsed without logging in.
 	pub := e.Group("/campaigns/:id",

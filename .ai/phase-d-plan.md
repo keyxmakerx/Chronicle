@@ -585,9 +585,9 @@ This prevents the element from being visible until Alpine.js has initialized and
 6. ~~**Dashboard block rendering** — Templ components for 6 block types (`dashboard_blocks.templ`)~~
 7. ~~**Campaign dashboard renders from layout** — Fallback to hardcoded default (`show.templ`)~~
 
-### Sprint 3: Category Dashboards
-8. **Category dashboard editor** — In the "Category Dashboards" tab (reuses dashboard_editor.js)
-9. **Category dashboard renders from layout** — Fallback to hardcoded default
+### Sprint 3: Category Dashboards — ✅ DONE
+8. ~~**Category dashboard editor** — Alpine.js category selector + dashboard-editor widget per category~~
+9. ~~**Category dashboard renders from layout** — Fallback to hardcoded default (`category_dashboard.templ`)~~
 
 ### Sprint 4: Player Notes Overhaul
 10. **Migration 000022** — Notes collaboration columns + note_versions table

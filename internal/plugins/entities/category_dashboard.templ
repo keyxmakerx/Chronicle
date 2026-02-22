@@ -21,8 +21,37 @@ templ CategoryDashboardPage(cc *campaigns.CampaignContext, et *EntityType, entit
 }
 
 // CategoryDashboardContent renders the category dashboard (for HTMX partial swap).
-// Uses Alpine.js to toggle between grid and table views with localStorage persistence.
+// Checks for a custom dashboard layout JSON; if present, renders the custom layout
+// using category block components. Otherwise falls back to the hardcoded default.
 templ CategoryDashboardContent(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string) {
+	if layout := et.ParseCategoryDashboardLayout(); layout != nil {
+		@customCategoryDashboard(cc, et, layout, entities, total)
+	} else {
+		@defaultCategoryDashboard(cc, et, entities, counts, total, opts, csrfToken)
+	}
+}
+
+// customCategoryDashboard renders a category dashboard from a custom layout JSON.
+// Uses the same 12-column grid system as campaign dashboards.
+templ customCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, layout *campaigns.DashboardLayout, entities []Entity, total int) {
+	<div id="entity-list">
+		for _, row := range layout.Rows {
+			<div class="grid grid-cols-12 gap-4 mb-4">
+				for _, col := range row.Columns {
+					<div class={ catColSpan(col.Width) }>
+						for _, block := range col.Blocks {
+							@CategoryBlockSwitch(cc, et, block, entities, total)
+						}
+					</div>
+				}
+			</div>
+		}
+	</div>
+}
+
+// defaultCategoryDashboard renders the original hardcoded category dashboard
+// with header, search, pinned pages, grid/table toggle, and pagination.
+templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string) {
 	<div
 		id="entity-list"
 		x-data={ fmt.Sprintf("{ view: localStorage.getItem('chronicle_cat_view_%d') || 'grid' }", et.ID) }

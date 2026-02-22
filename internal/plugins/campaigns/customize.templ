@@ -220,14 +220,15 @@ templ categoriesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 	</div>
 }
 
-// categoryDashboardsTab renders a picker for per-category dashboard customization.
-// The full editor will be built in Sprint 3.
+// categoryDashboardsTab renders a category selector and mounts a dashboard editor
+// widget for the selected category. Uses Alpine.js to switch between categories.
 templ categoryDashboardsTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
 	<div class="space-y-6">
 		<div>
 			<h2 class="text-lg font-semibold text-fg mb-1">Category Dashboards</h2>
 			<p class="text-sm text-fg-secondary">
 				Customize the landing page for each entity category.
+				Select a category below, then drag blocks to build its dashboard.
 			</p>
 		</div>
 
@@ -237,32 +238,52 @@ templ categoryDashboardsTab(cc *CampaignContext, entityTypes []SettingsEntityTyp
 				<p class="text-sm text-fg-secondary">No categories yet. Create categories first to customize their dashboards.</p>
 			</div>
 		} else {
-			<div class="grid gap-3">
-				for _, et := range entityTypes {
-					<div class="card p-4 flex items-center gap-4">
-						<div
-							class="w-10 h-10 rounded-lg flex items-center justify-center text-sm shrink-0"
-							style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+			<div x-data={ fmt.Sprintf("{ selectedCategory: %d }", entityTypes[0].ID) }>
+				<!-- Category selector -->
+				<div class="flex flex-wrap gap-2 mb-5">
+					for _, et := range entityTypes {
+						<button
+							type="button"
+							class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm"
+							:class={ fmt.Sprintf("selectedCategory === %d ? 'border-accent bg-accent/10 text-accent font-medium' : 'border-edge bg-surface hover:border-accent/30 text-fg-secondary'", et.ID) }
+							@click={ fmt.Sprintf("selectedCategory = %d", et.ID) }
 						>
-							if et.Icon != "" {
-								<i class={ "fa-solid " + et.Icon }></i>
-							} else {
-								<i class="fa-solid fa-file"></i>
-							}
-						</div>
-						<div class="flex-1 min-w-0">
-							<div class="text-sm font-medium text-fg">{ et.NamePlural }</div>
-							<div class="text-xs text-fg-secondary">Using default dashboard layout</div>
-						</div>
-						<div class="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-md text-xs font-medium">
-							<i class="fa-solid fa-wrench"></i>
-							Coming soon
-						</div>
+							<span
+								class="w-6 h-6 rounded flex items-center justify-center text-[10px] shrink-0"
+								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+							>
+								if et.Icon != "" {
+									<i class={ "fa-solid " + et.Icon }></i>
+								} else {
+									<i class="fa-solid fa-file"></i>
+								}
+							</span>
+							{ et.NamePlural }
+						</button>
+					}
+				</div>
+
+				<!-- Dashboard editor for each category (conditionally shown) -->
+				for _, et := range entityTypes {
+					<div x-show={ fmt.Sprintf("selectedCategory === %d", et.ID) } x-cloak>
+						<div
+							data-widget="dashboard-editor"
+							data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/dashboard-layout", cc.Campaign.ID, et.ID) }
+							data-campaign-id={ cc.Campaign.ID }
+							data-csrf-token={ csrfToken }
+							data-block-types={ categoryBlockTypesJSON() }
+						></div>
 					</div>
 				}
 			</div>
 		}
 	</div>
+}
+
+// categoryBlockTypesJSON returns the JSON for the category-specific block palette
+// used by the dashboard editor widget.
+func categoryBlockTypesJSON() string {
+	return `[{"type":"category_header","label":"Category Header","icon":"fa-heading","desc":"Category name, icon & description"},{"type":"pinned_pages","label":"Pinned Pages","icon":"fa-thumbtack","desc":"Pinned entity cards"},{"type":"entity_grid","label":"Entity Grid","icon":"fa-grid-2","desc":"All entities as card grid"},{"type":"recent_pages","label":"Recent Pages","icon":"fa-clock","desc":"Recently updated entities"},{"type":"text_block","label":"Text Block","icon":"fa-align-left","desc":"Custom rich text / HTML"},{"type":"search_bar","label":"Search Bar","icon":"fa-magnifying-glass","desc":"Search within this category"}]`
 }
 
 // customizeEntityTypesJSON serializes entity types to JSON for the customize page widgets.

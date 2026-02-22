@@ -7,15 +7,17 @@
  *
  * Mount: data-widget="dashboard-editor"
  * Config:
- *   data-endpoint   - GET/PUT/DELETE endpoint for dashboard layout JSON
+ *   data-endpoint    - GET/PUT/DELETE endpoint for dashboard layout JSON
  *   data-campaign-id - Campaign UUID
  *   data-csrf-token  - CSRF token
+ *   data-block-types - (optional) JSON array of block type objects to override palette
  */
 (function () {
   'use strict';
 
-  /** Supported dashboard block types shown in the palette. */
-  var BLOCK_TYPES = [
+  /** Default block types for campaign dashboards. Can be overridden per-widget
+   *  via the data-block-types attribute for category dashboards. */
+  var DEFAULT_BLOCK_TYPES = [
     { type: 'welcome_banner', label: 'Welcome Banner', icon: 'fa-flag',       desc: 'Campaign name & description' },
     { type: 'category_grid',  label: 'Category Grid',  icon: 'fa-grid-2',     desc: 'Quick-nav entity type grid' },
     { type: 'recent_pages',   label: 'Recent Pages',   icon: 'fa-clock',      desc: 'Recently updated entities' },
@@ -66,6 +68,17 @@
       this.layout = null; // null = default layout in use
       this.dirty = false;
       this.dragState = null; // { type, blockType } or { type, rowIdx, colIdx, blockIdx }
+
+      // Allow per-widget block palette override (e.g., category dashboards).
+      if (config.blockTypes) {
+        try {
+          this.blockTypes = JSON.parse(config.blockTypes);
+        } catch (e) {
+          this.blockTypes = DEFAULT_BLOCK_TYPES;
+        }
+      } else {
+        this.blockTypes = DEFAULT_BLOCK_TYPES;
+      }
 
       this.load();
     },
@@ -188,7 +201,7 @@
       h += '<div class="col-span-3">';
       h += '<div class="card p-3 space-y-2 sticky top-4">';
       h += '<h4 class="text-xs font-semibold text-fg-secondary uppercase tracking-wider mb-2">Blocks</h4>';
-      BLOCK_TYPES.forEach(function (bt) {
+      self.blockTypes.forEach(function (bt) {
         h += '<div class="palette-block flex items-center gap-2 px-2 py-1.5 rounded border border-edge bg-surface-raised cursor-grab hover:border-accent/50 transition-colors text-sm" draggable="true" data-block-type="' + bt.type + '">';
         h += '<i class="fa-solid ' + bt.icon + ' text-xs text-fg-muted w-4 text-center"></i>';
         h += '<div>';
@@ -283,7 +296,7 @@
      * Render a single block inside a column.
      */
     renderBlock: function (block, rowIdx, colIdx, blockIdx) {
-      var bt = BLOCK_TYPES.find(function (b) { return b.type === block.type; });
+      var bt = this.blockTypes.find(function (b) { return b.type === block.type; });
       var label = bt ? bt.label : block.type;
       var icon = bt ? bt.icon : 'fa-puzzle-piece';
 
@@ -522,7 +535,6 @@
     configBlock: function (rowIdx, colIdx, blockIdx) {
       if (!this.layout) return;
       var block = this.layout.rows[rowIdx].columns[colIdx].blocks[blockIdx];
-      var bt = BLOCK_TYPES.find(function (b) { return b.type === block.type; });
       var cfg = block.config || {};
 
       switch (block.type) {
@@ -569,6 +581,18 @@
             }
             this.dirty = true;
             this.render();
+          }
+          break;
+
+        case 'entity_grid':
+          var gridCols = prompt('Number of columns (2-6):', cfg.columns || '4');
+          if (gridCols !== null) {
+            var gc = parseInt(gridCols);
+            if (gc >= 1 && gc <= 12) {
+              block.config.columns = gc;
+              this.dirty = true;
+              this.render();
+            }
           }
           break;
 

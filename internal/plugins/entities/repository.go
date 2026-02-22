@@ -24,6 +24,7 @@ type EntityTypeRepository interface {
 	UpdateLayout(ctx context.Context, id int, layoutJSON string) error
 	UpdateColor(ctx context.Context, id int, color string) error
 	UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error
+	UpdateDashboardLayout(ctx context.Context, id int, layoutJSON *string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
 	MaxSortOrder(ctx context.Context, campaignID string) (int, error)
 	SeedDefaults(ctx context.Context, campaignID string) error
@@ -73,7 +74,7 @@ func (r *entityTypeRepository) Create(ctx context.Context, et *EntityType) error
 // FindByID retrieves an entity type by its auto-increment ID.
 func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityType, error) {
 	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
-	                 description, pinned_entity_ids,
+	                 description, pinned_entity_ids, dashboard_layout,
 	                 fields, layout_json, sort_order, is_default, enabled
 	          FROM entity_types WHERE id = ?`
 
@@ -81,7 +82,7 @@ func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityTyp
 	var fieldsRaw, layoutRaw, pinnedRaw []byte
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-		&et.Icon, &et.Color, &et.Description, &pinnedRaw,
+		&et.Icon, &et.Color, &et.Description, &pinnedRaw, &et.DashboardLayout,
 		&fieldsRaw, &layoutRaw, &et.SortOrder,
 		&et.IsDefault, &et.Enabled,
 	)
@@ -105,7 +106,7 @@ func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityTyp
 // FindBySlug retrieves an entity type by campaign ID and slug.
 func (r *entityTypeRepository) FindBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error) {
 	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
-	                 description, pinned_entity_ids,
+	                 description, pinned_entity_ids, dashboard_layout,
 	                 fields, layout_json, sort_order, is_default, enabled
 	          FROM entity_types WHERE campaign_id = ? AND slug = ?`
 
@@ -113,7 +114,7 @@ func (r *entityTypeRepository) FindBySlug(ctx context.Context, campaignID, slug 
 	var fieldsRaw, layoutRaw, pinnedRaw []byte
 	err := r.db.QueryRowContext(ctx, query, campaignID, slug).Scan(
 		&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-		&et.Icon, &et.Color, &et.Description, &pinnedRaw,
+		&et.Icon, &et.Color, &et.Description, &pinnedRaw, &et.DashboardLayout,
 		&fieldsRaw, &layoutRaw, &et.SortOrder,
 		&et.IsDefault, &et.Enabled,
 	)
@@ -137,7 +138,7 @@ func (r *entityTypeRepository) FindBySlug(ctx context.Context, campaignID, slug 
 // ListByCampaign returns all entity types for a campaign, ordered by sort_order.
 func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID string) ([]EntityType, error) {
 	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
-	                 description, pinned_entity_ids,
+	                 description, pinned_entity_ids, dashboard_layout,
 	                 fields, layout_json, sort_order, is_default, enabled
 	          FROM entity_types WHERE campaign_id = ? ORDER BY sort_order, name`
 
@@ -153,7 +154,7 @@ func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID st
 		var fieldsRaw, layoutRaw, pinnedRaw []byte
 		if err := rows.Scan(
 			&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-			&et.Icon, &et.Color, &et.Description, &pinnedRaw,
+			&et.Icon, &et.Color, &et.Description, &pinnedRaw, &et.DashboardLayout,
 			&fieldsRaw, &layoutRaw, &et.SortOrder,
 			&et.IsDefault, &et.Enabled,
 		); err != nil {
@@ -219,6 +220,23 @@ func (r *entityTypeRepository) UpdateDashboard(ctx context.Context, id int, desc
 	)
 	if err != nil {
 		return fmt.Errorf("updating entity type dashboard: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("entity type not found")
+	}
+	return nil
+}
+
+// UpdateDashboardLayout updates the dashboard_layout JSON for an entity type.
+// Pass nil to reset to the default layout.
+func (r *entityTypeRepository) UpdateDashboardLayout(ctx context.Context, id int, layoutJSON *string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE entity_types SET dashboard_layout = ? WHERE id = ?`,
+		layoutJSON, id,
+	)
+	if err != nil {
+		return fmt.Errorf("updating entity type dashboard layout: %w", err)
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
