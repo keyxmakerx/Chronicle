@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // EntityService handles business logic for entity operations.
@@ -45,6 +46,11 @@ type EntityService interface {
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
 	UpdateEntityTypeColor(ctx context.Context, id int, color string) error
 	UpdateEntityTypeDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error
+
+	// Category dashboard layout
+	GetCategoryDashboardLayout(ctx context.Context, id int) (*string, error)
+	UpdateCategoryDashboardLayout(ctx context.Context, id int, layoutJSON string) error
+	ResetCategoryDashboardLayout(ctx context.Context, id int) error
 
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
@@ -627,6 +633,55 @@ func (s *entityService) UpdateEntityTypeDashboard(ctx context.Context, id int, d
 		pinnedIDs = []string{}
 	}
 	return s.types.UpdateDashboard(ctx, id, description, pinnedIDs)
+}
+
+// GetCategoryDashboardLayout returns the raw dashboard_layout JSON for an
+// entity type. Returns nil when the type uses the default layout.
+func (s *entityService) GetCategoryDashboardLayout(ctx context.Context, id int) (*string, error) {
+	et, err := s.types.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return et.DashboardLayout, nil
+}
+
+// UpdateCategoryDashboardLayout validates and saves a custom dashboard layout
+// for an entity type. Same validation rules as campaign dashboard layouts.
+func (s *entityService) UpdateCategoryDashboardLayout(ctx context.Context, id int, layoutJSON string) error {
+	var layout campaigns.DashboardLayout
+	if err := json.Unmarshal([]byte(layoutJSON), &layout); err != nil {
+		return apperror.NewBadRequest("invalid dashboard layout JSON")
+	}
+
+	// Validate structure.
+	if len(layout.Rows) > 50 {
+		return apperror.NewBadRequest("dashboard layout cannot exceed 50 rows")
+	}
+	for _, row := range layout.Rows {
+		blockCount := 0
+		for _, col := range row.Columns {
+			if col.Width < 1 || col.Width > 12 {
+				return apperror.NewBadRequest("column width must be between 1 and 12")
+			}
+			blockCount += len(col.Blocks)
+			for _, block := range col.Blocks {
+				if !campaigns.ValidBlockTypes[block.Type] {
+					return apperror.NewBadRequest(fmt.Sprintf("invalid block type: %s", block.Type))
+				}
+			}
+		}
+		if blockCount > 20 {
+			return apperror.NewBadRequest("a row cannot have more than 20 blocks")
+		}
+	}
+
+	return s.types.UpdateDashboardLayout(ctx, id, &layoutJSON)
+}
+
+// ResetCategoryDashboardLayout removes the custom dashboard layout for an
+// entity type, reverting it to the hardcoded default.
+func (s *entityService) ResetCategoryDashboardLayout(ctx context.Context, id int) error {
+	return s.types.UpdateDashboardLayout(ctx, id, nil)
 }
 
 // --- Seeder ---

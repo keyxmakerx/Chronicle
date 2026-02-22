@@ -42,10 +42,16 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.PUT("", h.Update, RequireRole(RoleOwner))
 	cg.DELETE("", h.Delete, RequireRole(RoleOwner))
 	cg.GET("/settings", h.Settings, RequireRole(RoleOwner))
+	cg.GET("/customize", h.Customize, RequireRole(RoleOwner))
 
 	// Sidebar config API (Owner only).
 	cg.GET("/sidebar-config", h.GetSidebarConfig, RequireRole(RoleOwner))
 	cg.PUT("/sidebar-config", h.UpdateSidebarConfig, RequireRole(RoleOwner))
+
+	// Dashboard layout API (Owner only).
+	cg.GET("/dashboard-layout", h.GetDashboardLayout, RequireRole(RoleOwner))
+	cg.PUT("/dashboard-layout", h.UpdateDashboardLayout, RequireRole(RoleOwner))
+	cg.DELETE("/dashboard-layout", h.ResetDashboardLayout, RequireRole(RoleOwner))
 
 	// Member management (Owner only).
 	cg.POST("/members", h.AddMember, RequireRole(RoleOwner))

@@ -90,22 +90,23 @@ func (r Role) IsValid() bool {
 
 // Campaign represents a top-level worldbuilding container.
 type Campaign struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Slug          string    `json:"slug"`
-	Description   *string   `json:"description,omitempty"`
-	IsPublic      bool      `json:"is_public"`
-	Settings      string    `json:"settings"`
-	BackdropPath  *string   `json:"backdrop_path,omitempty"`
-	SidebarConfig string    `json:"sidebar_config"`
-	CreatedBy     string    `json:"created_by"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Slug            string    `json:"slug"`
+	Description     *string   `json:"description,omitempty"`
+	IsPublic        bool      `json:"is_public"`
+	Settings        string    `json:"settings"`
+	BackdropPath    *string   `json:"backdrop_path,omitempty"`
+	SidebarConfig   string    `json:"sidebar_config"`
+	DashboardLayout *string   `json:"dashboard_layout,omitempty"` // JSON layout; nil = use hardcoded default.
+	CreatedBy       string    `json:"created_by"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // SidebarConfig holds campaign-level sidebar customization settings.
-// Stored as JSON in campaigns.sidebar_config. Controls entity type ordering
-// and visibility in the sidebar navigation.
+// Stored as JSON in campaigns.sidebar_config. Controls entity type ordering,
+// visibility, and custom navigation elements in the sidebar.
 type SidebarConfig struct {
 	// EntityTypeOrder is an ordered list of entity type IDs controlling
 	// sidebar display order. Types not listed appear at the end.
@@ -114,6 +115,33 @@ type SidebarConfig struct {
 	// HiddenTypeIDs is a set of entity type IDs that should not appear
 	// in the sidebar. Hidden types are still accessible via the All Entities page.
 	HiddenTypeIDs []int `json:"hidden_type_ids,omitempty"`
+
+	// CustomSections are labeled dividers that appear between entity type
+	// groups in the sidebar. Each section appears after the entity type
+	// referenced by its After field.
+	CustomSections []NavSection `json:"custom_sections,omitempty"`
+
+	// CustomLinks are additional navigation items in the sidebar. They can
+	// be internal (relative URL) or external (absolute URL) links.
+	CustomLinks []NavLink `json:"custom_links,omitempty"`
+}
+
+// NavSection represents a labeled divider in the sidebar navigation.
+// Renders as a section header between entity type groups.
+type NavSection struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	After string `json:"after"` // Entity type ID this appears after ("" = top).
+}
+
+// NavLink represents a custom link in the sidebar navigation.
+type NavLink struct {
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	URL      string `json:"url"`
+	Icon     string `json:"icon"`    // FontAwesome icon class (e.g. "fa-globe").
+	Section  string `json:"section"` // NavSection ID this belongs to ("" = top level).
+	Position int    `json:"position"`
 }
 
 // ParseSidebarConfig parses the campaign's sidebar_config JSON into a
@@ -176,6 +204,87 @@ type OwnershipTransfer struct {
 	Token      string    `json:"-"` // Never expose in JSON.
 	ExpiresAt  time.Time `json:"expires_at"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+// --- Dashboard Layout Types ---
+
+// DashboardLayout defines a configurable dashboard using a row/column/block
+// grid system inspired by Kanka. Stored as JSON in the dashboard_layout column
+// of campaigns (and entity_types for category dashboards). NULL means "use the
+// hardcoded default dashboard".
+type DashboardLayout struct {
+	Rows []DashboardRow `json:"rows"`
+}
+
+// DashboardRow is a horizontal row in the dashboard grid.
+type DashboardRow struct {
+	ID      string            `json:"id"`
+	Columns []DashboardColumn `json:"columns"`
+}
+
+// DashboardColumn is a column within a row. Width is 1-12 (12-column grid).
+type DashboardColumn struct {
+	ID     string           `json:"id"`
+	Width  int              `json:"width"` // 1-12 grid units.
+	Blocks []DashboardBlock `json:"blocks"`
+}
+
+// DashboardBlock is a single content block within a column.
+// The Type field determines which Templ component renders it.
+// Config holds type-specific options (e.g. limit, entity_type_id).
+type DashboardBlock struct {
+	ID     string         `json:"id"`
+	Type   string         `json:"type"`
+	Config map[string]any `json:"config,omitempty"`
+}
+
+// ParseDashboardLayout parses the campaign's dashboard_layout JSON into a
+// DashboardLayout struct. Returns nil if the column is NULL (use default).
+func (c *Campaign) ParseDashboardLayout() *DashboardLayout {
+	if c.DashboardLayout == nil || *c.DashboardLayout == "" {
+		return nil
+	}
+	var layout DashboardLayout
+	if err := json.Unmarshal([]byte(*c.DashboardLayout), &layout); err != nil {
+		slog.Warn("failed to parse dashboard layout, using default",
+			slog.String("campaign_id", c.ID),
+			slog.String("error", err.Error()),
+		)
+		return nil
+	}
+	return &layout
+}
+
+// Supported dashboard block types. Each maps to a Templ component that knows
+// how to render the block with its config. Used by both campaign and category
+// dashboard editors.
+const (
+	// Campaign dashboard blocks.
+	BlockWelcomeBanner = "welcome_banner" // Campaign name + description hero.
+	BlockCategoryGrid  = "category_grid"  // Quick-nav grid of entity types.
+	BlockRecentPages   = "recent_pages"   // Recently updated entities.
+	BlockEntityList    = "entity_list"    // Filtered entity list by category.
+	BlockTextBlock     = "text_block"     // Custom rich text / markdown.
+	BlockPinnedPages   = "pinned_pages"   // Pinned entities grid.
+
+	// Category dashboard blocks.
+	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
+	BlockEntityGrid     = "entity_grid"     // All entities in category as card grid.
+	BlockSearchBar      = "search_bar"      // Search input for filtering within category.
+)
+
+// ValidBlockTypes is the set of supported dashboard block types. Used for
+// validation when saving layouts (both campaign and category dashboards).
+var ValidBlockTypes = map[string]bool{
+	BlockWelcomeBanner:  true,
+	BlockCategoryGrid:   true,
+	BlockRecentPages:    true,
+	BlockEntityList:     true,
+	BlockTextBlock:      true,
+	BlockPinnedPages:    true,
+	BlockCategoryHeader: true,
+	BlockEntityGrid:     true,
+	BlockSearchBar:      true,
 }
 
 // --- Cross-Plugin Interfaces ---
@@ -243,8 +352,10 @@ type TransferOwnershipRequest struct {
 
 // UpdateSidebarConfigRequest holds the data for updating sidebar configuration.
 type UpdateSidebarConfigRequest struct {
-	EntityTypeOrder []int `json:"entity_type_order"`
-	HiddenTypeIDs   []int `json:"hidden_type_ids"`
+	EntityTypeOrder []int        `json:"entity_type_order"`
+	HiddenTypeIDs   []int        `json:"hidden_type_ids"`
+	CustomSections  []NavSection `json:"custom_sections,omitempty"`
+	CustomLinks     []NavLink    `json:"custom_links,omitempty"`
 }
 
 // --- Service Input DTOs ---

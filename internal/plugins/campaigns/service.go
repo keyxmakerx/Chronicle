@@ -50,6 +50,11 @@ type CampaignService interface {
 	UpdateSidebarConfig(ctx context.Context, campaignID string, config SidebarConfig) error
 	GetSidebarConfig(ctx context.Context, campaignID string) (*SidebarConfig, error)
 
+	// Dashboard layout
+	UpdateDashboardLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error
+	GetDashboardLayout(ctx context.Context, campaignID string) (*DashboardLayout, error)
+	ResetDashboardLayout(ctx context.Context, campaignID string) error
+
 	// Admin operations
 	ForceTransferOwnership(ctx context.Context, campaignID, newOwnerID string) error
 	AdminAddMember(ctx context.Context, campaignID, userID string, role Role) error
@@ -539,6 +544,83 @@ func (s *campaignService) GetSidebarConfig(ctx context.Context, campaignID strin
 	}
 	cfg := campaign.ParseSidebarConfig()
 	return &cfg, nil
+}
+
+// --- Dashboard Layout ---
+
+// maxDashboardRows caps the number of rows in a dashboard layout to prevent
+// abuse via oversized JSON payloads.
+const maxDashboardRows = 50
+
+// maxDashboardBlocksPerRow caps the total number of blocks per row.
+const maxDashboardBlocksPerRow = 20
+
+// UpdateDashboardLayout validates and saves a dashboard layout for a campaign.
+func (s *campaignService) UpdateDashboardLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error {
+	if layout == nil {
+		// Reset to default.
+		return s.repo.UpdateDashboardLayout(ctx, campaignID, nil)
+	}
+
+	if len(layout.Rows) > maxDashboardRows {
+		return apperror.NewBadRequest("dashboard layout has too many rows")
+	}
+
+	// Validate block types and column widths.
+	for _, row := range layout.Rows {
+		totalWidth := 0
+		blockCount := 0
+		for _, col := range row.Columns {
+			if col.Width < 1 || col.Width > 12 {
+				return apperror.NewBadRequest("column width must be between 1 and 12")
+			}
+			totalWidth += col.Width
+			blockCount += len(col.Blocks)
+			for _, block := range col.Blocks {
+				if !ValidBlockTypes[block.Type] {
+					return apperror.NewBadRequest(fmt.Sprintf("unsupported block type: %s", block.Type))
+				}
+			}
+		}
+		if totalWidth > 12 {
+			return apperror.NewBadRequest("row column widths exceed 12")
+		}
+		if blockCount > maxDashboardBlocksPerRow {
+			return apperror.NewBadRequest("too many blocks in a single row")
+		}
+	}
+
+	layoutJSON, err := json.Marshal(layout)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling dashboard layout: %w", err))
+	}
+
+	s2 := string(layoutJSON)
+	if err := s.repo.UpdateDashboardLayout(ctx, campaignID, &s2); err != nil {
+		return err
+	}
+
+	slog.Info("dashboard layout updated", slog.String("campaign_id", campaignID))
+	return nil
+}
+
+// GetDashboardLayout returns the parsed dashboard layout for a campaign.
+// Returns nil if no custom layout is set (use default).
+func (s *campaignService) GetDashboardLayout(ctx context.Context, campaignID string) (*DashboardLayout, error) {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return campaign.ParseDashboardLayout(), nil
+}
+
+// ResetDashboardLayout removes the custom dashboard layout, reverting to default.
+func (s *campaignService) ResetDashboardLayout(ctx context.Context, campaignID string) error {
+	if err := s.repo.UpdateDashboardLayout(ctx, campaignID, nil); err != nil {
+		return err
+	}
+	slog.Info("dashboard layout reset to default", slog.String("campaign_id", campaignID))
+	return nil
 }
 
 // --- Admin Operations ---

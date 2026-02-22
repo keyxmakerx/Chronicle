@@ -98,27 +98,19 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 				</form>
 			</div>
 
-			// Unified entity type customization: sidebar order, visibility, colors, and layouts.
+			// Appearance & Layout -- links to the Customize page which owns all
+			// sidebar ordering, dashboard layout, and category configuration.
 			<div class="card p-6 mb-6">
-				<div class="flex items-center justify-between mb-2">
-					<h2 class="text-lg font-semibold text-fg">Categories</h2>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
-						class="text-sm link"
-					>
-						<i class="fa-solid fa-cog mr-1"></i> Manage Categories
-					</a>
-				</div>
-				<p class="text-sm text-fg-secondary mb-4">
-					Drag to reorder the sidebar, toggle visibility, click a color to change it,
-					and expand a category to customize its profile layout.
+				<h2 class="text-lg font-semibold text-fg mb-2">Appearance &amp; Layout</h2>
+				<p class="text-sm text-fg-secondary mb-3">
+					Customize sidebar navigation, dashboard layout, and category settings.
 				</p>
-				<div
-					data-widget="entity-type-config"
-					data-sidebar-endpoint={ fmt.Sprintf("/campaigns/%s/sidebar-config", cc.Campaign.ID) }
-					data-layout-base={ fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID) }
-					data-entity-types={ entityTypesJSON(entityTypes) }
-				></div>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) }
+					class="btn-primary text-sm inline-flex items-center gap-1.5"
+				>
+					<i class="fa-solid fa-paintbrush text-xs"></i> Open Customization Hub
+				</a>
 			</div>
 
 			// Campaign extensions.

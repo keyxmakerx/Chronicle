@@ -1,0 +1,196 @@
+// dashboard_blocks.templ defines Templ components for each dashboard block type.
+// Called from the campaign show page when a custom dashboard_layout JSON is set.
+// Each block receives the campaign context and its config map for customization.
+//
+// Block types:
+//   welcome_banner — Campaign name + description hero section
+//   category_grid  — Quick-nav grid of entity types with counts
+//   recent_pages   — Recently updated entities (configurable limit)
+//   entity_list    — Filtered entity list by category
+//   text_block     — Custom rich text / HTML content
+//   pinned_pages   — Hand-picked entity cards (placeholder for now)
+
+package campaigns
+
+import (
+	"fmt"
+	"strconv"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// DashboardBlockSwitch renders the appropriate block component based on block type.
+// Unknown types are silently skipped. This is the dispatch point called from the
+// custom dashboard layout renderer.
+templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEntities []RecentEntity) {
+	switch block.Type {
+		case "welcome_banner":
+			@dashWelcomeBanner(cc)
+		case "category_grid":
+			@dashCategoryGrid(cc, block.Config)
+		case "recent_pages":
+			@dashRecentPages(cc, block.Config, recentEntities)
+		case "entity_list":
+			@dashEntityList(cc, block.Config)
+		case "text_block":
+			@dashTextBlock(block.Config)
+		case "pinned_pages":
+			@dashPinnedPages(cc, block.Config)
+	}
+}
+
+// dashWelcomeBanner renders the campaign name and description as a hero section.
+templ dashWelcomeBanner(cc *CampaignContext) {
+	<div class="card p-6">
+		<h1 class="text-2xl font-bold text-fg mb-1">{ cc.Campaign.Name }</h1>
+		if cc.Campaign.Description != nil && *cc.Campaign.Description != "" {
+			<p class="text-fg-secondary mt-2 max-w-2xl">{ *cc.Campaign.Description }</p>
+		}
+	</div>
+}
+
+// dashCategoryGrid renders a quick-nav grid of entity types with counts.
+// Config: columns (int, default 4).
+templ dashCategoryGrid(cc *CampaignContext, config map[string]any) {
+	if len(layouts.GetEntityTypes(ctx)) > 0 {
+		<div>
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-3">Categories</h2>
+			<div class={ dashGridClass(config) }>
+				for _, et := range layouts.GetEntityTypes(ctx) {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
+						class="card px-4 py-3 hover:shadow-md hover:-translate-y-0.5 block group"
+					>
+						<div class="flex items-center gap-2.5 mb-1">
+							<span
+								class="w-7 h-7 rounded flex items-center justify-center shrink-0 text-sm"
+								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+							>
+								if et.Icon != "" {
+									<i class={ "fa-solid " + et.Icon }></i>
+								}
+							</span>
+							<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
+						</div>
+						<div class="pl-[2.375rem] text-xs text-fg-muted">
+							{ strconv.Itoa(layouts.GetEntityCount(ctx, et.ID)) } pages
+						</div>
+					</a>
+				}
+			</div>
+		</div>
+	}
+}
+
+// dashRecentPages renders recently updated entities in a card grid.
+// Config: limit (int, default 8).
+templ dashRecentPages(cc *CampaignContext, config map[string]any, recentEntities []RecentEntity) {
+	if len(recentEntities) > 0 {
+		<div>
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">Recently Updated</h2>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					View all
+				</a>
+			</div>
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+				for _, re := range limitRecentEntities(recentEntities, config) {
+					@RecentEntityCard(cc, &re)
+				}
+			</div>
+		</div>
+	}
+}
+
+// dashEntityList renders a filtered entity list for a specific category.
+// Config: entity_type_id (string), limit (int, default 8).
+templ dashEntityList(cc *CampaignContext, config map[string]any) {
+	<div class="card p-4">
+		<div class="flex items-center gap-2 mb-2">
+			<i class="fa-solid fa-list text-xs text-fg-muted"></i>
+			<span class="text-sm font-semibold text-fg">Entity List</span>
+		</div>
+		<p class="text-xs text-fg-secondary">
+			Filtered entity list block. Content will be loaded dynamically.
+		</p>
+	</div>
+}
+
+// dashTextBlock renders custom HTML content.
+// Config: content (string).
+templ dashTextBlock(config map[string]any) {
+	<div class="card p-4 prose prose-sm dark:prose-invert max-w-none">
+		if content, ok := config["content"].(string); ok && content != "" {
+			@templ.Raw(content)
+		} else {
+			<p class="text-fg-muted text-sm italic">Empty text block</p>
+		}
+	</div>
+}
+
+// dashPinnedPages renders a grid of hand-picked entity cards.
+// Config: entity_ids ([]string). For now, shows a placeholder.
+templ dashPinnedPages(cc *CampaignContext, config map[string]any) {
+	<div class="card p-4">
+		<div class="flex items-center gap-2 mb-2">
+			<i class="fa-solid fa-thumbtack text-xs text-fg-muted"></i>
+			<span class="text-sm font-semibold text-fg">Pinned Pages</span>
+		</div>
+		<p class="text-xs text-fg-secondary">
+			Pinned pages block. Select specific entities to feature here.
+		</p>
+	</div>
+}
+
+// dashGridClass returns the CSS grid class for the category grid based on config.
+func dashGridClass(config map[string]any) string {
+	cols := 4
+	if v, ok := config["columns"]; ok {
+		switch c := v.(type) {
+		case float64:
+			cols = int(c)
+		case int:
+			cols = c
+		}
+	}
+	if cols < 2 {
+		cols = 2
+	}
+	if cols > 6 {
+		cols = 6
+	}
+	switch cols {
+	case 2:
+		return "grid grid-cols-2 gap-3"
+	case 3:
+		return "grid grid-cols-2 sm:grid-cols-3 gap-3"
+	case 5:
+		return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"
+	case 6:
+		return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3"
+	default: // 4
+		return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"
+	}
+}
+
+// limitRecentEntities returns a slice of recent entities limited by the block config.
+func limitRecentEntities(entities []RecentEntity, config map[string]any) []RecentEntity {
+	limit := 8
+	if v, ok := config["limit"]; ok {
+		switch l := v.(type) {
+		case float64:
+			limit = int(l)
+		case int:
+			limit = l
+		}
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > len(entities) {
+		limit = len(entities)
+	}
+	return entities[:limit]
+}

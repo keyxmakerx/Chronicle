@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -1055,6 +1056,106 @@ func (h *Handler) UpdateEntityTypeDashboard(c echo.Context) error {
 	}
 
 	if err := h.service.UpdateEntityTypeDashboard(c.Request().Context(), etID, body.Description, body.PinnedEntityIDs); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// GetCategoryDashboardLayout returns the dashboard layout JSON for an entity type
+// (GET /campaigns/:id/entity-types/:etid/dashboard-layout).
+func (h *Handler) GetCategoryDashboardLayout(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	// IDOR protection: ensure entity type belongs to this campaign.
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	layoutJSON, err := h.service.GetCategoryDashboardLayout(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	// Return null JSON when no custom layout is saved.
+	if layoutJSON == nil {
+		return c.JSONBlob(http.StatusOK, []byte("null"))
+	}
+	return c.JSONBlob(http.StatusOK, []byte(*layoutJSON))
+}
+
+// UpdateCategoryDashboardLayout saves a custom dashboard layout for an entity type
+// (PUT /campaigns/:id/entity-types/:etid/dashboard-layout).
+func (h *Handler) UpdateCategoryDashboardLayout(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	// Read raw JSON body.
+	body, err := io.ReadAll(io.LimitReader(c.Request().Body, 1<<20)) // 1 MB max
+	if err != nil {
+		return apperror.NewBadRequest("failed to read request body")
+	}
+
+	layoutJSON := string(body)
+	if err := h.service.UpdateCategoryDashboardLayout(c.Request().Context(), etID, layoutJSON); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// ResetCategoryDashboardLayout removes the custom dashboard layout for an entity type,
+// reverting to the hardcoded default (DELETE /campaigns/:id/entity-types/:etid/dashboard-layout).
+func (h *Handler) ResetCategoryDashboardLayout(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	if err := h.service.ResetCategoryDashboardLayout(c.Request().Context(), etID); err != nil {
 		return err
 	}
 

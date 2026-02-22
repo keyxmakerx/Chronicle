@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // --- Domain Models ---
@@ -29,11 +31,26 @@ type EntityType struct {
 	Color           string            `json:"color"`
 	Description     *string           `json:"description,omitempty"`     // Rich text shown on category dashboard.
 	PinnedEntityIDs []string          `json:"pinned_entity_ids,omitempty"` // Entity IDs pinned to dashboard top.
+	DashboardLayout *string           `json:"dashboard_layout,omitempty"` // JSON layout; nil = use hardcoded default.
 	Fields          []FieldDefinition `json:"fields"`
 	Layout          EntityTypeLayout  `json:"layout"`
 	SortOrder       int               `json:"sort_order"`
 	IsDefault       bool              `json:"is_default"`
 	Enabled         bool              `json:"enabled"`
+}
+
+// ParseCategoryDashboardLayout parses the entity type's dashboard_layout JSON
+// into a campaigns.DashboardLayout struct. Returns nil if the column is NULL
+// (use hardcoded default category dashboard).
+func (et *EntityType) ParseCategoryDashboardLayout() *campaigns.DashboardLayout {
+	if et.DashboardLayout == nil || *et.DashboardLayout == "" {
+		return nil
+	}
+	var layout campaigns.DashboardLayout
+	if err := json.Unmarshal([]byte(*et.DashboardLayout), &layout); err != nil {
+		return nil
+	}
+	return &layout
 }
 
 // EntityTypeLayout describes the profile page layout for entities of this type.

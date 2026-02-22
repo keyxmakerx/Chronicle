@@ -24,7 +24,9 @@ const (
 	keyActivePath    ctxKey = "layout_active_path"
 	keyEntityTypes   ctxKey = "layout_entity_types"
 	keyEntityCounts  ctxKey = "layout_entity_counts"
-	keyEnabledAddons ctxKey = "layout_enabled_addons"
+	keyEnabledAddons   ctxKey = "layout_enabled_addons"
+	keyCustomSections  ctxKey = "layout_custom_sections"
+	keyCustomLinks     ctxKey = "layout_custom_links"
 )
 
 // SidebarEntityType holds the minimum entity type info needed for sidebar
@@ -263,4 +265,45 @@ func SetEnabledAddons(ctx context.Context, slugs map[string]bool) context.Contex
 func IsAddonEnabled(ctx context.Context, slug string) bool {
 	addons, _ := ctx.Value(keyEnabledAddons).(map[string]bool)
 	return addons[slug]
+}
+
+// --- Custom Sidebar Navigation (sections + links) ---
+
+// SidebarSection represents a custom section header/divider in the sidebar.
+// Defined here to avoid importing the campaigns package.
+type SidebarSection struct {
+	ID    string
+	Label string
+	After string // Entity type ID (as string) this appears after; "" = top.
+}
+
+// SidebarLink represents a custom link in the sidebar navigation.
+type SidebarLink struct {
+	ID      string
+	Label   string
+	URL     string
+	Icon    string // FontAwesome icon class (e.g. "fa-globe").
+	Section string // SidebarSection ID this belongs to; "" = top level.
+}
+
+// SetCustomSections stores custom sidebar sections in context.
+func SetCustomSections(ctx context.Context, sections []SidebarSection) context.Context {
+	return context.WithValue(ctx, keyCustomSections, sections)
+}
+
+// GetCustomSections returns custom sidebar sections from context.
+func GetCustomSections(ctx context.Context) []SidebarSection {
+	sections, _ := ctx.Value(keyCustomSections).([]SidebarSection)
+	return sections
+}
+
+// SetCustomLinks stores custom sidebar links in context.
+func SetCustomLinks(ctx context.Context, links []SidebarLink) context.Context {
+	return context.WithValue(ctx, keyCustomLinks, links)
+}
+
+// GetCustomLinks returns custom sidebar links from context.
+func GetCustomLinks(ctx context.Context) []SidebarLink {
+	links, _ := ctx.Value(keyCustomLinks).([]SidebarLink)
+	return links
 }
