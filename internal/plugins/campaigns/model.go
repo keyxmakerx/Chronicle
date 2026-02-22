@@ -104,8 +104,8 @@ type Campaign struct {
 }
 
 // SidebarConfig holds campaign-level sidebar customization settings.
-// Stored as JSON in campaigns.sidebar_config. Controls entity type ordering
-// and visibility in the sidebar navigation.
+// Stored as JSON in campaigns.sidebar_config. Controls entity type ordering,
+// visibility, and custom navigation elements in the sidebar.
 type SidebarConfig struct {
 	// EntityTypeOrder is an ordered list of entity type IDs controlling
 	// sidebar display order. Types not listed appear at the end.
@@ -114,6 +114,33 @@ type SidebarConfig struct {
 	// HiddenTypeIDs is a set of entity type IDs that should not appear
 	// in the sidebar. Hidden types are still accessible via the All Entities page.
 	HiddenTypeIDs []int `json:"hidden_type_ids,omitempty"`
+
+	// CustomSections are labeled dividers that appear between entity type
+	// groups in the sidebar. Each section appears after the entity type
+	// referenced by its After field.
+	CustomSections []NavSection `json:"custom_sections,omitempty"`
+
+	// CustomLinks are additional navigation items in the sidebar. They can
+	// be internal (relative URL) or external (absolute URL) links.
+	CustomLinks []NavLink `json:"custom_links,omitempty"`
+}
+
+// NavSection represents a labeled divider in the sidebar navigation.
+// Renders as a section header between entity type groups.
+type NavSection struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	After string `json:"after"` // Entity type ID this appears after ("" = top).
+}
+
+// NavLink represents a custom link in the sidebar navigation.
+type NavLink struct {
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	URL      string `json:"url"`
+	Icon     string `json:"icon"`    // FontAwesome icon class (e.g. "fa-globe").
+	Section  string `json:"section"` // NavSection ID this belongs to ("" = top level).
+	Position int    `json:"position"`
 }
 
 // ParseSidebarConfig parses the campaign's sidebar_config JSON into a
@@ -243,8 +270,10 @@ type TransferOwnershipRequest struct {
 
 // UpdateSidebarConfigRequest holds the data for updating sidebar configuration.
 type UpdateSidebarConfigRequest struct {
-	EntityTypeOrder []int `json:"entity_type_order"`
-	HiddenTypeIDs   []int `json:"hidden_type_ids"`
+	EntityTypeOrder []int        `json:"entity_type_order"`
+	HiddenTypeIDs   []int        `json:"hidden_type_ids"`
+	CustomSections  []NavSection `json:"custom_sections,omitempty"`
+	CustomLinks     []NavLink    `json:"custom_links,omitempty"`
 }
 
 // --- Service Input DTOs ---

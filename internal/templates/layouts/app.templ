@@ -137,7 +137,7 @@ templ AdminSidebarNav() {
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
 			</svg>
 		</button>
-		<div class="admin-slide" :class="open && 'expanded'">
+		<div class="admin-slide" :class="open && 'expanded'" x-cloak>
 			<div>
 			<a
 				href="/admin"
@@ -309,6 +309,18 @@ templ CampaignSidebarNav() {
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
 				</svg>
 				Activity Log
+			</a>
+
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx))) }
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx)))),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx)))) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-paintbrush text-xs"></i>
+				</span>
+				Customize
 			</a>
 
 			<a

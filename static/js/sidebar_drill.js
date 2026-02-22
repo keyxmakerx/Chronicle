@@ -18,8 +18,6 @@
 (function () {
   'use strict';
 
-  console.log('[sidebar_drill] script loaded, readyState=' + document.readyState);
-
   var PEEK_PX = 10;
 
   /** @type {HTMLElement|null} */
@@ -62,12 +60,10 @@
 
     // Bind category links.
     var links = document.querySelectorAll('.sidebar-category-link');
-    console.log('[sidebar_drill] init: found ' + links.length + ' category links');
     links.forEach(function (link) {
       link.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation(); // Prevent bubbling to mainPanel (which would drillOut).
-        console.log('[sidebar_drill] click: ' + link.getAttribute('data-cat-slug'));
         drillIn(link);
       });
     });

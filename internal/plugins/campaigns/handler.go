@@ -297,6 +297,27 @@ func (h *Handler) Settings(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, ""))
 }
 
+// --- Customization Hub ---
+
+// Customize renders the Campaign Customization Hub (GET /campaigns/:id/customize).
+// Owners use this page to control navigation, dashboards, and category layouts.
+func (h *Handler) Customize(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+
+	// Fetch entity types for the categories tabs and navigation editor.
+	var entityTypes []SettingsEntityType
+	if h.entityLister != nil {
+		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
+	}
+
+	return middleware.Render(c, http.StatusOK, CustomizePage(cc, entityTypes, csrfToken))
+}
+
 // --- Sidebar Config API ---
 
 // GetSidebarConfig returns the sidebar configuration as JSON (GET /campaigns/:id/sidebar-config).
@@ -329,6 +350,8 @@ func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
 	config := SidebarConfig{
 		EntityTypeOrder: req.EntityTypeOrder,
 		HiddenTypeIDs:   req.HiddenTypeIDs,
+		CustomSections:  req.CustomSections,
+		CustomLinks:     req.CustomLinks,
 	}
 
 	if err := h.service.UpdateSidebarConfig(c.Request().Context(), cc.Campaign.ID, config); err != nil {

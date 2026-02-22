@@ -281,9 +281,9 @@ templ navPanelTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken strin
 			<p class="text-xs text-fg-secondary">
 				Category order and visibility in the sidebar can be configured in
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) }
 					class="text-accent hover:underline"
-				>Campaign Settings</a>.
+				>Campaign Customization</a>.
 			</p>
 		</div>
 	</div>
