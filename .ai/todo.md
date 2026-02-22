@@ -13,12 +13,21 @@
 
 These are the highest-priority items across all future phases. Pick from here.
 
-### Phase B Follow-ups (Next Session)
+### Phase D: Campaign Customization Hub (Active)
+- [x] Campaign Customization Hub page shell (4 tabs, owner-only route)
+- [x] Navigation tab (sidebar config widget + custom sections/links editor)
+- [x] Settings cleanup (removed Categories duplication, added Customize link)
+- [x] Custom sections/links sidebar rendering (context helpers + app.templ)
+- [x] Admin panel flickering fix (x-cloak)
+- [x] Sidebar debug log cleanup
+- [ ] Dashboard Editor (Sprint 2: migration 000021, dashboard_editor.js, block rendering)
+- [ ] Category Dashboards (Sprint 3: per-category layout editor)
+- [ ] Player Notes Overhaul (Sprint 4: locking, rich text, versions, shared, template block)
+- [ ] hx-boost sidebar navigation (Sprint 5: prevent full page reloads)
+- [ ] "View as player" toggle (Sprint 5)
+
+### Phase B Follow-ups
 - [ ] Attribute template editing in campaign settings UI
-- [x] Player Notes widget (floating panel, checklists, page/campaign scoping)
-- [x] REST API v1 endpoints (read/write campaign data via `/api/v1/`)
-- [x] API middleware (key auth, rate limiting, campaign match, permissions)
-- [ ] Notes addon-gated rendering (check IsEnabledForCampaign before mount)
 - [ ] Foundry VTT companion module documentation
 - [ ] API enhancements: entity tags/relations in responses, efficient sync pull
 
@@ -196,3 +205,17 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] Admin sidebar: removed "Modules" link, renamed "Addons" → "Extensions"
 - [x] Campaign settings: removed duplicate "Game Modules" section
 - [x] Migration 000019: fixed addon table status mismatches (sync-api, game modules, dice-roller, media-gallery)
+
+### Phase D Sprint 1 + 1.5: Customization Hub (2026-02-22)
+- [x] Admin panel flickering fix (x-cloak on admin-slide div)
+- [x] Sidebar debug log cleanup (removed 3 console.log from sidebar_drill.js)
+- [x] Campaign Customization Hub page (`/campaigns/:id/customize`, 4 tabs)
+- [x] Navigation tab with sidebar config widget + custom sections/links editor
+- [x] Categories tab with entity type grid linking to per-type config pages
+- [x] Dashboard + Category Dashboards tabs with "coming soon" placeholders
+- [x] Sidebar "Customize" link (paintbrush icon, owner-only)
+- [x] Settings page: replaced duplicated Categories section with link card
+- [x] New widget: `sidebar_nav_editor.js` (custom sections + links CRUD)
+- [x] Context helpers: SidebarSection/SidebarLink types, Set/Get functions in data.go
+- [x] Custom nav items rendered in sidebar (sections as headers, links with icons)
+- [x] External link detection (target="_blank" + arrow icon for https:// URLs)

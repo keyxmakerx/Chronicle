@@ -355,6 +355,22 @@ func (a *App) RegisterRoutes() {
 				sidebarTypes = layouts.SortSidebarTypes(sidebarTypes, sidebarCfg.EntityTypeOrder, sidebarCfg.HiddenTypeIDs)
 
 				ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
+
+				// Pass custom nav sections and links for sidebar rendering.
+				if len(sidebarCfg.CustomSections) > 0 {
+					secs := make([]layouts.SidebarSection, len(sidebarCfg.CustomSections))
+					for i, s := range sidebarCfg.CustomSections {
+						secs[i] = layouts.SidebarSection{ID: s.ID, Label: s.Label, After: s.After}
+					}
+					ctx = layouts.SetCustomSections(ctx, secs)
+				}
+				if len(sidebarCfg.CustomLinks) > 0 {
+					lnks := make([]layouts.SidebarLink, len(sidebarCfg.CustomLinks))
+					for i, l := range sidebarCfg.CustomLinks {
+						lnks[i] = layouts.SidebarLink{ID: l.ID, Label: l.Label, URL: l.URL, Icon: l.Icon, Section: l.Section}
+					}
+					ctx = layouts.SetCustomLinks(ctx, lnks)
+				}
 			}
 
 			// Entity counts per type for sidebar badges.

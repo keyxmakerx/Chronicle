@@ -8,12 +8,13 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-21 -- Grid/table view toggle, recent pages dashboard, password reset flow.
+2026-02-22 -- Phase D Sprint 1 + 1.5: Campaign Customization Hub, settings cleanup.
 
 ## Current Phase
-**Phase C: IN PROGRESS.** Notes widget overhauled with quick-capture UX.
-Unified entity type configuration page consolidates Layout, Attributes,
-Dashboard, and Nav Panel tabs.
+**Phase D: IN PROGRESS.** Campaign Customization Hub at `/campaigns/:id/customize`
+with Navigation, Dashboard, Categories, and Category Dashboards tabs. Settings
+page cleaned up (no more entity-type-config duplication). Custom sidebar sections
+and links editor wired up.
 
 ## What Was Built in Phase B (Summary)
 
@@ -180,27 +181,38 @@ Dashboard, and Nav Panel tabs.
   deactivate/revoke, IP blocking, non-critical logging, default limits, model methods.
 - **Entities service:** Existing 20+ tests, updated mock for ListRecent interface.
 
+### Phase D Sprint 1 + 1.5 (2026-02-22)
+- Campaign Customization Hub page (`/campaigns/:id/customize`) with 4 tabs.
+- Navigation tab: sidebar config widget + custom sections/links editor widget.
+- Categories tab: entity type grid with links to per-type config pages.
+- Dashboard + Category Dashboards tabs: "coming soon" placeholders.
+- Settings page: replaced duplicated Categories section with link to Customize.
+- Sidebar: "Customize" link (paintbrush icon, owner-only) between Activity Log and Settings.
+- Custom nav sections and links render in the actual sidebar.
+- New widget: `sidebar_nav_editor.js` (CRUD for custom sections + links).
+- Context helpers: `SetCustomSections/GetCustomSections`, `SetCustomLinks/GetCustomLinks`.
+- Admin panel flickering fix: `x-cloak` on admin-slide div.
+- Sidebar debug logs: removed 3 `console.log()` from `sidebar_drill.js`.
+
 ### In Progress
-- Nothing currently in progress
+- Phase D Sprint 2: Dashboard Editor (migration, widget, block rendering)
 
 ### Blocked
 - Nothing blocked
 
 ## Active Branch
-`claude/explore-project-soSu8`
+`claude/review-project-foundation-8rzHX`
 
 ## Next Session Should
-1. **Docker rebuild:** `docker compose build --no-cache && docker compose up -d`
-   to pick up all changes (templ/tailwind/migrations handled automatically in build).
-2. **Test the sidebar drill-down** — verify panel slides on category click
-   and the peek strip shows faded icons on the right edge.
-3. **Test notes widget** — enable player-notes addon for a campaign, verify
-   quick-add input works, responsive sizing on different viewports.
-4. **Test config page** — navigate to Categories → Configure → verify all
-   four tabs render correctly (Layout loads template editor widget).
-5. **Dashboard layout configurability** — add `dashboard_layout` JSON column
-   to campaigns table, create dashboard editor widget, make campaign and
-   category dashboards owner-configurable.
+1. **Sprint 2:** Dashboard Editor — Migration 000021 (`dashboard_layout` JSON on
+   campaigns + entity_types), `dashboard_editor.js` widget, Templ components for
+   each block type, campaign dashboard conditional render from layout JSON.
+2. **Sprint 3:** Category Dashboards — Category dashboard editor, category-specific
+   blocks, conditional render with fallback to hardcoded default.
+3. **Sprint 4:** Player Notes Overhaul — Migration 000022, edit locking backend
+   (pessimistic), rich text integration (TipTap), shared notes, version history,
+   template block mount.
+4. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle, testing.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

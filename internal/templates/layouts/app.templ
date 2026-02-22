@@ -280,6 +280,28 @@ templ CampaignSidebarNav() {
 		All Pages
 	</a>
 
+	<!-- Custom sidebar sections and links (from sidebar_config JSON) -->
+	if len(GetCustomSections(ctx)) > 0 || len(GetCustomLinks(ctx)) > 0 {
+		// Top-level custom links (not assigned to any section).
+		for _, link := range GetCustomLinks(ctx) {
+			if link.Section == "" {
+				@customNavLink(link)
+			}
+		}
+
+		// Custom sections with their assigned links.
+		for _, section := range GetCustomSections(ctx) {
+			<div class="mt-4 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+				{ section.Label }
+			</div>
+			for _, link := range GetCustomLinks(ctx) {
+				if link.Section == section.ID {
+					@customNavLink(link)
+				}
+			}
+		}
+	}
+
 	if IsAuthenticated(ctx) {
 		<!-- Campaign management (auth required) -->
 		<div class="mt-4 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -429,6 +451,31 @@ templ entityTypeLink(slug string, label string, color string, icon string, count
 		<svg class="w-3 h-3 ml-1 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
 		</svg>
+	</a>
+}
+
+// customNavLink renders a single custom link in the sidebar. Used for owner-
+// defined links from the Customization Hub's navigation editor.
+templ customNavLink(link SidebarLink) {
+	<a
+		href={ templ.SafeURL(link.URL) }
+		class={ sidebarNavLink, sidebarNavInactive }
+		if isExternalURL(link.URL) {
+			target="_blank"
+			rel="noopener noreferrer"
+		}
+	>
+		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+			if link.Icon != "" {
+				<i class={ "fa-solid " + link.Icon, "text-xs text-gray-400" }></i>
+			} else {
+				<i class="fa-solid fa-link text-xs text-gray-400"></i>
+			}
+		</span>
+		{ link.Label }
+		if isExternalURL(link.URL) {
+			<i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-gray-500 ml-auto"></i>
+		}
 	</a>
 }
 
@@ -589,6 +636,13 @@ func isExactPath(ctx context.Context, path string) bool {
 func isPathPrefix(ctx context.Context, prefix string) bool {
 	active := GetActivePath(ctx)
 	return active == prefix || strings.HasPrefix(active, prefix+"/")
+}
+
+// isExternalURL returns true if the URL starts with http:// or https://,
+// indicating it points to an external site. Used to add target="_blank" and
+// an external-link icon.
+func isExternalURL(url string) bool {
+	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
 }
 
 // userInitials returns the first two initials of the user's display name

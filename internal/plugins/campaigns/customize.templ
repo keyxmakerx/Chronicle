@@ -128,7 +128,7 @@ templ navigationTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 			></div>
 		</div>
 
-		<!-- Custom sections and links (Sprint 1 placeholder, wired in later) -->
+		<!-- Custom sections and links editor widget -->
 		<div class="card p-5 space-y-3">
 			<h3 class="text-sm font-semibold text-fg">Custom Sections &amp; Links</h3>
 			<p class="text-xs text-fg-secondary">
@@ -139,15 +139,7 @@ templ navigationTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 				data-endpoint={ fmt.Sprintf("/campaigns/%s/sidebar-config", cc.Campaign.ID) }
 				data-campaign-id={ cc.Campaign.ID }
 				data-csrf-token={ csrfToken }
-			>
-				<div class="py-6 text-center">
-					<i class="fa-solid fa-plus-circle text-2xl text-fg-muted mb-2"></i>
-					<p class="text-sm text-fg-muted">Custom sections and links coming soon.</p>
-					<p class="text-xs text-fg-secondary mt-1">
-						You'll be able to add section dividers, custom page links, and external URLs.
-					</p>
-				</div>
-			</div>
+			></div>
 		</div>
 	</div>
 }

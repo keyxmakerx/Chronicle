@@ -565,10 +565,19 @@ This prevents the element from being visible until Alpine.js has initialized and
 
 ## Implementation Order
 
-### Sprint 1: Quick Wins
-1. **Admin flickering fix** (x-cloak + CSS) — 1 file change
-2. **Customization hub route + page shell** — New templ page with 4 empty tabs
-3. **Navigation tab** — Move sidebar config widget into hub, extend with sections/links
+### Sprint 1: Quick Wins (DONE)
+1. ~~Admin flickering fix (x-cloak + CSS)~~
+2. ~~Customization hub route + page shell — 4 tabs~~
+3. ~~Navigation tab — Sidebar config widget mounted~~
+4. ~~Sidebar debug logs removed (3 console.log calls)~~
+5. ~~Customize link added to sidebar (owner-only, paintbrush icon)~~
+
+### Sprint 1.5: Settings Cleanup + Nav Polish (DONE)
+6. ~~Settings page: replaced Categories section with Customize link card~~
+7. ~~New `sidebar_nav_editor.js` widget for custom sections + links CRUD~~
+8. ~~Custom sections/links rendered in sidebar (context helpers + app.templ)~~
+9. ~~External URL detection for custom links (target="_blank" + arrow icon)~~
+10. ~~Widget registered in base.templ asset pipeline~~
 
 ### Sprint 2: Dashboard Editor
 4. **Migration 000021** — `dashboard_layout` on campaigns + entity_types
