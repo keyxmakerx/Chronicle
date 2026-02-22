@@ -361,6 +361,59 @@ func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// --- Dashboard Layout ---
+
+// GetDashboardLayout returns the current dashboard layout as JSON (GET /campaigns/:id/dashboard-layout).
+// Returns null if no custom layout is set (meaning the default is in use).
+func (h *Handler) GetDashboardLayout(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	layout, err := h.service.GetDashboardLayout(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, layout)
+}
+
+// UpdateDashboardLayout saves a new dashboard layout (PUT /campaigns/:id/dashboard-layout).
+func (h *Handler) UpdateDashboardLayout(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	var layout DashboardLayout
+	if err := json.NewDecoder(c.Request().Body).Decode(&layout); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdateDashboardLayout(c.Request().Context(), cc.Campaign.ID, &layout); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "dashboard_layout_updated", nil)
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// ResetDashboardLayout removes the custom dashboard layout (DELETE /campaigns/:id/dashboard-layout).
+func (h *Handler) ResetDashboardLayout(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	if err := h.service.ResetDashboardLayout(c.Request().Context(), cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "dashboard_layout_reset", nil)
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- Members ---
 
 // Members renders the member list page (GET /campaigns/:id/members).

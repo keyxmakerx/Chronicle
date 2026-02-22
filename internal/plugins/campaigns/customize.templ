@@ -144,29 +144,24 @@ templ navigationTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 	</div>
 }
 
-// dashboardEditorTab renders the campaign dashboard layout editor placeholder.
-// The full drag-and-drop editor will be built in Sprint 2.
+// dashboardEditorTab renders the campaign dashboard layout editor with a
+// drag-and-drop block builder. Mounts the dashboard-editor widget.
 templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 	<div class="space-y-6">
 		<div>
 			<h2 class="text-lg font-semibold text-fg mb-1">Campaign Dashboard</h2>
 			<p class="text-sm text-fg-secondary">
 				Customize the layout of your campaign's main dashboard page.
+				Add rows, drag blocks from the palette into columns, and save.
 			</p>
 		</div>
 
-		<div class="card p-8 text-center">
-			<i class="fa-solid fa-grip text-3xl text-fg-muted mb-3"></i>
-			<h3 class="text-base font-semibold text-fg mb-2">Dashboard Editor</h3>
-			<p class="text-sm text-fg-secondary max-w-md mx-auto">
-				Drag-and-drop dashboard blocks to create your ideal campaign landing page.
-				Choose from welcome banners, category grids, recent pages, and more.
-			</p>
-			<div class="mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-md text-xs font-medium">
-				<i class="fa-solid fa-wrench"></i>
-				Coming in the next update
-			</div>
-		</div>
+		<div
+			data-widget="dashboard-editor"
+			data-endpoint={ fmt.Sprintf("/campaigns/%s/dashboard-layout", cc.Campaign.ID) }
+			data-campaign-id={ cc.Campaign.ID }
+			data-csrf-token={ csrfToken }
+		></div>
 	</div>
 }
 

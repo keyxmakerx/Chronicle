@@ -8,13 +8,14 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-22 -- Phase D Sprint 1 + 1.5: Campaign Customization Hub, settings cleanup.
+2026-02-22 -- Phase D Sprint 2: Dashboard Editor complete.
 
 ## Current Phase
 **Phase D: IN PROGRESS.** Campaign Customization Hub at `/campaigns/:id/customize`
 with Navigation, Dashboard, Categories, and Category Dashboards tabs. Settings
 page cleaned up (no more entity-type-config duplication). Custom sidebar sections
-and links editor wired up.
+and links editor wired up. Dashboard editor widget live — campaign owners can
+build custom dashboard layouts with drag-and-drop blocks.
 
 ## What Was Built in Phase B (Summary)
 
@@ -194,8 +195,20 @@ and links editor wired up.
 - Admin panel flickering fix: `x-cloak` on admin-slide div.
 - Sidebar debug logs: removed 3 `console.log()` from `sidebar_drill.js`.
 
+### Phase D Sprint 2: Dashboard Editor (2026-02-22)
+- Migration 000021: `dashboard_layout JSON DEFAULT NULL` on campaigns + entity_types.
+- Dashboard layout types: DashboardLayout/Row/Column/Block in model.go.
+- Repository: all campaign queries updated for dashboard_layout column, UpdateDashboardLayout method.
+- Service: UpdateDashboardLayout (validation: max 50 rows, max 20 blocks/row, widths 1-12, valid block types), GetDashboardLayout, ResetDashboardLayout.
+- Handler: GET/PUT/DELETE `/campaigns/:id/dashboard-layout` (owner-only).
+- Widget: `dashboard_editor.js` — drag-and-drop layout builder with palette (6 block types), row presets (full/half/thirds/quarter/sidebar), block config dialogs, save/reset.
+- Templ: `dashboard_blocks.templ` — DashboardBlockSwitch + 6 block components (welcome_banner, category_grid, recent_pages, entity_list, text_block, pinned_pages).
+- Show page: `show.templ` refactored — ParseDashboardLayout() → customDashboard (12-col grid) or defaultDashboard (hardcoded original).
+- Customize page: Dashboard tab now mounts dashboard-editor widget.
+- Helper functions: dashColSpan (col-span CSS), dashGridClass (responsive grid), limitRecentEntities (configurable limit), dashboardRelativeTime.
+
 ### In Progress
-- Phase D Sprint 2: Dashboard Editor (migration, widget, block rendering)
+- Phase D Sprint 3: Category Dashboards (next)
 
 ### Blocked
 - Nothing blocked
@@ -204,15 +217,13 @@ and links editor wired up.
 `claude/review-project-foundation-8rzHX`
 
 ## Next Session Should
-1. **Sprint 2:** Dashboard Editor — Migration 000021 (`dashboard_layout` JSON on
-   campaigns + entity_types), `dashboard_editor.js` widget, Templ components for
-   each block type, campaign dashboard conditional render from layout JSON.
-2. **Sprint 3:** Category Dashboards — Category dashboard editor, category-specific
-   blocks, conditional render with fallback to hardcoded default.
-3. **Sprint 4:** Player Notes Overhaul — Migration 000022, edit locking backend
+1. **Sprint 3:** Category Dashboards — Per-category dashboard editor in Customize
+   tab, category-specific block types, conditional render with fallback to default.
+2. **Sprint 4:** Player Notes Overhaul — Migration 000022, edit locking backend
    (pessimistic), rich text integration (TipTap), shared notes, version history,
    template block mount.
-4. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle, testing.
+3. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle, testing.
+4. **QoL:** Quick Search (Ctrl+K), Entity Nesting, Inline Secrets, Breadcrumbs.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

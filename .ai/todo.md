@@ -20,31 +20,33 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] Custom sections/links sidebar rendering (context helpers + app.templ)
 - [x] Admin panel flickering fix (x-cloak)
 - [x] Sidebar debug log cleanup
-- [ ] Dashboard Editor (Sprint 2: migration 000021, dashboard_editor.js, block rendering)
+- [x] Dashboard Editor (Sprint 2: migration 000021, dashboard_editor.js, block rendering)
 - [ ] Category Dashboards (Sprint 3: per-category layout editor)
 - [ ] Player Notes Overhaul (Sprint 4: locking, rich text, versions, shared, template block)
 - [ ] hx-boost sidebar navigation (Sprint 5: prevent full page reloads)
 - [ ] "View as player" toggle (Sprint 5)
 
 ### Phase B Follow-ups
+- [x] Notes addon-gated rendering (IsAddonEnabled context check)
 - [ ] Attribute template editing in campaign settings UI
 - [ ] Foundry VTT companion module documentation
 - [ ] API enhancements: entity tags/relations in responses, efficient sync pull
 
 ### Testing (High Priority -- Many plugins have zero tests)
 - [x] Entity service unit tests (30 tests passing)
-- [ ] Sync API service tests (key creation, bcrypt auth, IP check)
-- [ ] Addons service tests (CRUD, campaign enable/disable)
+- [x] Sync API service tests (31 tests — key creation, bcrypt auth, IP check)
+- [x] Addons service tests (28 tests — CRUD, campaign enable/disable)
+- [x] Auth service tests (26 tests — register, password hashing, reset flow)
+- [x] Notes widget service tests (28 tests — CRUD, checklists, scoping)
+- [ ] Campaigns service tests
 - [ ] Relations service tests (bi-directional create/delete, validation)
 - [ ] Tags service tests (CRUD, slug generation, diff-based assignment)
 - [ ] Audit service tests (pagination, validation, fire-and-forget)
-- [ ] Campaigns service tests
-- [ ] Auth service tests
 - [ ] Media service tests (file validation, thumbnail generation)
 - [ ] Settings service tests (limit resolution, override priority)
 
 ### Auth & Security
-- [ ] Password reset flow (requires SMTP, wire into auth)
+- [x] Password reset flow (migration 000020, forgot/reset pages, SMTP integration)
 - [ ] 2FA/TOTP support
 - [ ] Per-entity permissions (view/edit per role/user)
 - [ ] Invite system (email invitations for campaigns)
@@ -76,11 +78,17 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] Category dashboard pages (header, description, pinned, grid view)
 - [x] Tighter card grid (4-col XL, reduced padding, compact badges)
 - [x] DB migration 000013 (description + pinned_entity_ids on entity_types)
-- [ ] Grid/Table view toggle (wire toggle buttons on category dashboard)
+- [x] Grid/Table view toggle (Alpine.js toggle + localStorage + EntityTableRow component)
 - [ ] Sub-folder support (parent_id tree view on category dashboard)
-- [ ] Settings consolidation (Navigation & Layout section)
+- [x] Settings consolidation (Customize page replaces scattered config)
 - [ ] Persistent filters per category (localStorage)
-- [ ] Quick Links / Bookmarks in sidebar
+- [x] Quick Links / Bookmarks in sidebar (custom sections/links via sidebar_nav_editor)
+
+### QoL Features (Identified from Competitive Research)
+- [ ] Quick search (Ctrl+K) — global search modal for entities, categories, notes
+- [ ] Entity nesting (parent_id + tree view + breadcrumbs + "Create sub-page")
+- [ ] Inline secrets / GM-only text (TipTap extension, server-side filtering)
+- [ ] Breadcrumb navigation (Campaign > Category > Entity in topbar)
 
 ### Entities -- Remaining Features
 - [ ] Entity nesting (parent/child relationships, tree view on dashboard)
@@ -219,3 +227,16 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] Context helpers: SidebarSection/SidebarLink types, Set/Get functions in data.go
 - [x] Custom nav items rendered in sidebar (sections as headers, links with icons)
 - [x] External link detection (target="_blank" + arrow icon for https:// URLs)
+
+### Phase D Sprint 2: Dashboard Editor (2026-02-22)
+- [x] Migration 000021: `dashboard_layout JSON DEFAULT NULL` on campaigns + entity_types
+- [x] Dashboard layout Go types (DashboardLayout, DashboardRow, DashboardColumn, DashboardBlock)
+- [x] ParseDashboardLayout() method + ValidBlockTypes map + block type constants
+- [x] Repository: all queries include dashboard_layout, UpdateDashboardLayout method
+- [x] Service: UpdateDashboardLayout (validation), GetDashboardLayout, ResetDashboardLayout
+- [x] Handler + routes: GET/PUT/DELETE `/campaigns/:id/dashboard-layout` (owner-only)
+- [x] `dashboard_editor.js` widget (drag-and-drop, 6 block types, row presets, config dialogs)
+- [x] `dashboard_blocks.templ` (DashboardBlockSwitch + 6 block components)
+- [x] `show.templ` refactored: custom layout → 12-col grid render, NULL → hardcoded default
+- [x] Customize page Dashboard tab mounts dashboard-editor widget
+- [x] dashColSpan, dashGridClass, limitRecentEntities helper functions

@@ -11,7 +11,9 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// CampaignShowPage renders the campaign dashboard.
+// CampaignShowPage renders the campaign dashboard. If the campaign has a custom
+// dashboard_layout JSON set, renders from that layout. Otherwise falls back to
+// the hardcoded default dashboard.
 templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentEntities []RecentEntity, csrfToken string) {
 	@layouts.App(cc.Campaign.Name) {
 		<div class="max-w-5xl mx-auto">
@@ -34,132 +36,161 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 				</div>
 			}
 
-			<!-- Campaign header -->
-			<div class="flex items-center justify-between mb-8">
-				<div>
-					<h1 class="text-3xl font-bold text-fg">{ cc.Campaign.Name }</h1>
-					if cc.Campaign.Description != nil && *cc.Campaign.Description != "" {
-						<p class="text-fg-secondary mt-2 max-w-2xl">{ *cc.Campaign.Description }</p>
-					}
-				</div>
-
-				if cc.MemberRole >= RoleOwner {
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
-						<i class="fa-solid fa-gear mr-1.5 text-xs"></i> Settings
-					</a>
-				}
-			</div>
-
-			<!-- Quick actions row -->
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
-					<div class="flex items-center gap-3">
-						<div class="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
-							<i class="fa-solid fa-scroll text-indigo-600 dark:text-indigo-400"></i>
-						</div>
-						<div>
-							<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">All Pages</h3>
-							<p class="text-xs text-fg-secondary">Browse all pages</p>
-						</div>
-					</div>
-				</a>
-
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
-					<div class="flex items-center gap-3">
-						<div class="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
-							<i class="fa-solid fa-users text-blue-600 dark:text-blue-400"></i>
-						</div>
-						<div>
-							<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">Members</h3>
-							<p class="text-xs text-fg-secondary">View campaign members</p>
-						</div>
-					</div>
-				</a>
-
-				if cc.MemberRole >= RoleOwner {
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
-						<div class="flex items-center gap-3">
-							<div class="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
-								<i class="fa-solid fa-layer-group text-purple-600 dark:text-purple-400"></i>
-							</div>
-							<div>
-								<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">Categories</h3>
-								<p class="text-xs text-fg-secondary">Manage page types &amp; layouts</p>
-							</div>
-						</div>
-					</a>
-				} else {
-					<div class="card p-5 opacity-40">
-						<div class="flex items-center gap-3">
-							<div class="w-10 h-10 rounded-lg bg-surface-alt flex items-center justify-center shrink-0">
-								<i class="fa-solid fa-map text-fg-muted"></i>
-							</div>
-							<div>
-								<h3 class="font-semibold text-fg">Maps</h3>
-								<p class="text-xs text-fg-muted">Coming soon</p>
-							</div>
-						</div>
-					</div>
-				}
-			</div>
-
-			<!-- Category quick-nav: entity types with counts -->
-			if len(layouts.GetEntityTypes(ctx)) > 0 {
-				<div class="mb-8">
-					<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-3">Categories</h2>
-					<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-						for _, et := range layouts.GetEntityTypes(ctx) {
-							<a
-								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
-								class="card px-4 py-3 hover:shadow-md hover:-translate-y-0.5 block group"
-							>
-								<div class="flex items-center gap-2.5 mb-1">
-									<span
-										class="w-7 h-7 rounded flex items-center justify-center shrink-0 text-sm"
-										style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-									>
-										if et.Icon != "" {
-											<i class={ "fa-solid " + et.Icon }></i>
-										}
-									</span>
-									<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
-								</div>
-								<div class="pl-[2.375rem] text-xs text-fg-muted">
-									{ strconv.Itoa(layouts.GetEntityCount(ctx, et.ID)) } pages
-								</div>
-							</a>
-						}
-					</div>
-				</div>
-			}
-
-			<!-- Recently updated pages -->
-			if len(recentEntities) > 0 {
-				<div class="mb-8">
-					<div class="flex items-center justify-between mb-3">
-						<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">Recently Updated</h2>
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
-							class="text-xs text-accent hover:underline"
-						>
-							View all
-						</a>
-					</div>
-					<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-						for _, re := range recentEntities {
-							@RecentEntityCard(cc, &re)
-						}
-					</div>
-				</div>
+			// Render from custom layout or fall back to hardcoded default.
+			if layout := cc.Campaign.ParseDashboardLayout(); layout != nil {
+				@customDashboard(cc, layout, recentEntities)
+			} else {
+				@defaultDashboard(cc, recentEntities, csrfToken)
 			}
 
 			<!-- Footer meta -->
-			<div class="flex items-center gap-3 text-xs text-fg-muted">
+			<div class="flex items-center gap-3 text-xs text-fg-muted mt-8">
 				<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
 					<i class="fa-solid fa-user-shield text-[10px]"></i>
 					{ cc.MemberRole.DisplayName() }
 				</span>
 				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
+			</div>
+		</div>
+	}
+}
+
+// customDashboard renders the campaign dashboard from a custom DashboardLayout
+// JSON. Iterates rows → columns → blocks, using a 12-column CSS grid.
+templ customDashboard(cc *CampaignContext, layout *DashboardLayout, recentEntities []RecentEntity) {
+	<div class="space-y-6">
+		for _, row := range layout.Rows {
+			<div class="grid grid-cols-12 gap-4">
+				for _, col := range row.Columns {
+					<div class={ dashColSpan(col.Width) }>
+						for _, block := range col.Blocks {
+							@DashboardBlockSwitch(cc, block, recentEntities)
+						}
+					</div>
+				}
+			</div>
+		}
+	</div>
+}
+
+// defaultDashboard renders the original hardcoded campaign dashboard (the fallback
+// when dashboard_layout is NULL).
+templ defaultDashboard(cc *CampaignContext, recentEntities []RecentEntity, csrfToken string) {
+	<!-- Campaign header -->
+	<div class="flex items-center justify-between mb-8">
+		<div>
+			<h1 class="text-3xl font-bold text-fg">{ cc.Campaign.Name }</h1>
+			if cc.Campaign.Description != nil && *cc.Campaign.Description != "" {
+				<p class="text-fg-secondary mt-2 max-w-2xl">{ *cc.Campaign.Description }</p>
+			}
+		</div>
+
+		if cc.MemberRole >= RoleOwner {
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
+				<i class="fa-solid fa-gear mr-1.5 text-xs"></i> Settings
+			</a>
+		}
+	</div>
+
+	<!-- Quick actions row -->
+	<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+			<div class="flex items-center gap-3">
+				<div class="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
+					<i class="fa-solid fa-scroll text-indigo-600 dark:text-indigo-400"></i>
+				</div>
+				<div>
+					<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">All Pages</h3>
+					<p class="text-xs text-fg-secondary">Browse all pages</p>
+				</div>
+			</div>
+		</a>
+
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+			<div class="flex items-center gap-3">
+				<div class="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+					<i class="fa-solid fa-users text-blue-600 dark:text-blue-400"></i>
+				</div>
+				<div>
+					<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">Members</h3>
+					<p class="text-xs text-fg-secondary">View campaign members</p>
+				</div>
+			</div>
+		</a>
+
+		if cc.MemberRole >= RoleOwner {
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+				<div class="flex items-center gap-3">
+					<div class="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-layer-group text-purple-600 dark:text-purple-400"></i>
+					</div>
+					<div>
+						<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">Categories</h3>
+						<p class="text-xs text-fg-secondary">Manage page types &amp; layouts</p>
+					</div>
+				</div>
+			</a>
+		} else {
+			<div class="card p-5 opacity-40">
+				<div class="flex items-center gap-3">
+					<div class="w-10 h-10 rounded-lg bg-surface-alt flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-map text-fg-muted"></i>
+					</div>
+					<div>
+						<h3 class="font-semibold text-fg">Maps</h3>
+						<p class="text-xs text-fg-muted">Coming soon</p>
+					</div>
+				</div>
+			</div>
+		}
+	</div>
+
+	<!-- Category quick-nav: entity types with counts -->
+	if len(layouts.GetEntityTypes(ctx)) > 0 {
+		<div class="mb-8">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-3">Categories</h2>
+			<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+				for _, et := range layouts.GetEntityTypes(ctx) {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
+						class="card px-4 py-3 hover:shadow-md hover:-translate-y-0.5 block group"
+					>
+						<div class="flex items-center gap-2.5 mb-1">
+							<span
+								class="w-7 h-7 rounded flex items-center justify-center shrink-0 text-sm"
+								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+							>
+								if et.Icon != "" {
+									<i class={ "fa-solid " + et.Icon }></i>
+								}
+							</span>
+							<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
+						</div>
+						<div class="pl-[2.375rem] text-xs text-fg-muted">
+							{ strconv.Itoa(layouts.GetEntityCount(ctx, et.ID)) } pages
+						</div>
+					</a>
+				}
+			</div>
+		</div>
+	}
+
+	<!-- Recently updated pages -->
+	if len(recentEntities) > 0 {
+		<div class="mb-8">
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">Recently Updated</h2>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					View all
+				</a>
+			</div>
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+				for _, re := range recentEntities {
+					@RecentEntityCard(cc, &re)
+				}
 			</div>
 		</div>
 	}
@@ -242,4 +273,32 @@ func dashboardRelativeTime(t time.Time) string {
 	default:
 		return t.Format("Jan 2")
 	}
+}
+
+// dashColSpan returns the Tailwind CSS class for a 12-column grid span.
+// Used by customDashboard to set column widths from the layout JSON.
+func dashColSpan(width int) string {
+	if width < 1 {
+		width = 1
+	}
+	if width > 12 {
+		width = 12
+	}
+	// Tailwind requires full class names (no interpolation), so map explicitly.
+	classes := [13]string{
+		"",               // 0 (unused)
+		"col-span-1",    // 1
+		"col-span-2",    // 2
+		"col-span-3",    // 3
+		"col-span-4",    // 4
+		"col-span-5",    // 5
+		"col-span-6",    // 6
+		"col-span-7",    // 7
+		"col-span-8",    // 8
+		"col-span-9",    // 9
+		"col-span-10",   // 10
+		"col-span-11",   // 11
+		"col-span-12",   // 12
+	}
+	return classes[width]
 }

@@ -41,6 +41,10 @@ type CampaignRepository interface {
 	// UpdateSidebarConfig updates only the sidebar_config JSON column.
 	UpdateSidebarConfig(ctx context.Context, campaignID, configJSON string) error
 
+	// UpdateDashboardLayout updates only the dashboard_layout JSON column.
+	// Pass nil to revert to the hardcoded default dashboard.
+	UpdateDashboardLayout(ctx context.Context, campaignID string, layoutJSON *string) error
+
 	// TransferOwnership atomically transfers campaign ownership from one user
 	// to another within a database transaction.
 	TransferOwnership(ctx context.Context, campaignID, fromUserID, toUserID string) error
@@ -64,12 +68,12 @@ func NewCampaignRepository(db *sql.DB) CampaignRepository {
 
 // Create inserts a new campaign row.
 func (r *campaignRepository) Create(ctx context.Context, campaign *Campaign) error {
-	query := `INSERT INTO campaigns (id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, created_by, created_at, updated_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO campaigns (id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, created_by, created_at, updated_at)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query,
 		campaign.ID, campaign.Name, campaign.Slug, campaign.Description, campaign.IsPublic,
-		campaign.Settings, campaign.BackdropPath, campaign.SidebarConfig,
+		campaign.Settings, campaign.BackdropPath, campaign.SidebarConfig, campaign.DashboardLayout,
 		campaign.CreatedBy, campaign.CreatedAt, campaign.UpdatedAt,
 	)
 	if err != nil {
@@ -80,13 +84,13 @@ func (r *campaignRepository) Create(ctx context.Context, campaign *Campaign) err
 
 // FindByID retrieves a campaign by its UUID.
 func (r *campaignRepository) FindByID(ctx context.Context, id string) (*Campaign, error) {
-	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, created_by, created_at, updated_at
+	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, created_by, created_at, updated_at
 	          FROM campaigns WHERE id = ?`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
-		&c.Settings, &c.BackdropPath, &c.SidebarConfig,
+		&c.Settings, &c.BackdropPath, &c.SidebarConfig, &c.DashboardLayout,
 		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -100,13 +104,13 @@ func (r *campaignRepository) FindByID(ctx context.Context, id string) (*Campaign
 
 // FindBySlug retrieves a campaign by its URL slug.
 func (r *campaignRepository) FindBySlug(ctx context.Context, slug string) (*Campaign, error) {
-	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, created_by, created_at, updated_at
+	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, created_by, created_at, updated_at
 	          FROM campaigns WHERE slug = ?`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, slug).Scan(
 		&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
-		&c.Settings, &c.BackdropPath, &c.SidebarConfig,
+		&c.Settings, &c.BackdropPath, &c.SidebarConfig, &c.DashboardLayout,
 		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -131,7 +135,7 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 	}
 
 	query := `SELECT c.id, c.name, c.slug, c.description, c.is_public,
-	                 c.settings, c.backdrop_path, c.sidebar_config,
+	                 c.settings, c.backdrop_path, c.sidebar_config, c.dashboard_layout,
 	                 c.created_by, c.created_at, c.updated_at
 	          FROM campaigns c
 	          INNER JOIN campaign_members cm ON cm.campaign_id = c.id
@@ -150,7 +154,7 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 		var c Campaign
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
-			&c.Settings, &c.BackdropPath, &c.SidebarConfig,
+			&c.Settings, &c.BackdropPath, &c.SidebarConfig, &c.DashboardLayout,
 			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning campaign row: %w", err)
@@ -168,7 +172,7 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 		return nil, 0, fmt.Errorf("counting all campaigns: %w", err)
 	}
 
-	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, created_by, created_at, updated_at
+	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, created_by, created_at, updated_at
 	          FROM campaigns ORDER BY updated_at DESC LIMIT ? OFFSET ?`
 
 	rows, err := r.db.QueryContext(ctx, query, opts.PerPage, opts.Offset())
@@ -182,7 +186,7 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 		var c Campaign
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
-			&c.Settings, &c.BackdropPath, &c.SidebarConfig,
+			&c.Settings, &c.BackdropPath, &c.SidebarConfig, &c.DashboardLayout,
 			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning campaign row: %w", err)
@@ -195,7 +199,7 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 // ListPublic returns public campaigns ordered by most recently updated.
 // Used for the public landing page to showcase discoverable campaigns.
 func (r *campaignRepository) ListPublic(ctx context.Context, limit int) ([]Campaign, error) {
-	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, created_by, created_at, updated_at
+	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, created_by, created_at, updated_at
 	          FROM campaigns WHERE is_public = 1
 	          ORDER BY updated_at DESC LIMIT ?`
 
@@ -210,7 +214,7 @@ func (r *campaignRepository) ListPublic(ctx context.Context, limit int) ([]Campa
 		var c Campaign
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
-			&c.Settings, &c.BackdropPath, &c.SidebarConfig,
+			&c.Settings, &c.BackdropPath, &c.SidebarConfig, &c.DashboardLayout,
 			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning public campaign row: %w", err)
@@ -285,6 +289,23 @@ func (r *campaignRepository) UpdateSidebarConfig(ctx context.Context, campaignID
 	)
 	if err != nil {
 		return fmt.Errorf("updating sidebar config: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("campaign not found")
+	}
+	return nil
+}
+
+// UpdateDashboardLayout updates only the dashboard_layout JSON for a campaign.
+// Pass nil to revert to the hardcoded default dashboard.
+func (r *campaignRepository) UpdateDashboardLayout(ctx context.Context, campaignID string, layoutJSON *string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaigns SET dashboard_layout = ?, updated_at = NOW() WHERE id = ?`,
+		layoutJSON, campaignID,
+	)
+	if err != nil {
+		return fmt.Errorf("updating dashboard layout: %w", err)
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {

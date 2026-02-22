@@ -579,11 +579,11 @@ This prevents the element from being visible until Alpine.js has initialized and
 9. ~~External URL detection for custom links (target="_blank" + arrow icon)~~
 10. ~~Widget registered in base.templ asset pipeline~~
 
-### Sprint 2: Dashboard Editor
-4. **Migration 000021** — `dashboard_layout` on campaigns + entity_types
-5. **Dashboard editor widget** — New JS widget (based on template_editor.js patterns)
-6. **Dashboard block rendering** — Templ components for each block type
-7. **Campaign dashboard renders from layout** — Fallback to hardcoded default
+### Sprint 2: Dashboard Editor — ✅ DONE
+4. ~~**Migration 000021** — `dashboard_layout` on campaigns + entity_types~~
+5. ~~**Dashboard editor widget** — New JS widget (`dashboard_editor.js`, drag-and-drop)~~
+6. ~~**Dashboard block rendering** — Templ components for 6 block types (`dashboard_blocks.templ`)~~
+7. ~~**Campaign dashboard renders from layout** — Fallback to hardcoded default (`show.templ`)~~
 
 ### Sprint 3: Category Dashboards
 8. **Category dashboard editor** — In the "Category Dashboards" tab (reuses dashboard_editor.js)
