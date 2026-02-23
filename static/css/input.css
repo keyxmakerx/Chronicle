@@ -370,17 +370,18 @@
     pointer-events: auto;
   }
   .sidebar-peek:hover {
-    box-shadow: inset -4px 0 12px -4px rgba(99, 102, 241, 0.3);
+    box-shadow: inset -4px 0 12px -4px rgba(99, 102, 241, 0.4);
   }
   /* Dim content when peeking to reinforce it's a "back" affordance.
      Right-align everything so text/icons crowd toward the visible 10px
-     strip on the right edge of the panel. */
+     strip on the right edge of the panel. Opacity must be high enough
+     that icons/text are still visible on the dark sidebar background. */
   .sidebar-peek > nav {
-    @apply opacity-30 pointer-events-none;
+    @apply opacity-60 pointer-events-none;
     text-align: right;
   }
   .sidebar-peek:hover > nav {
-    @apply opacity-50;
+    @apply opacity-80;
   }
   /* Flip flex links so icon sits at the right edge (most visible). */
   .sidebar-peek > nav a {

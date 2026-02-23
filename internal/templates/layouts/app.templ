@@ -16,12 +16,26 @@ import "strings"
 // topbar. The main content area is where page-specific content goes.
 templ App(title string) {
 	@Base(title) {
-		<div class="flex h-screen overflow-hidden">
+		<div class="flex h-screen overflow-hidden" x-data="{ sidebarOpen: false }">
+			<!-- Mobile backdrop -->
+			<div
+				x-show="sidebarOpen"
+				x-transition:enter="transition-opacity ease-linear duration-300"
+				x-transition:enter-start="opacity-0"
+				x-transition:enter-end="opacity-100"
+				x-transition:leave="transition-opacity ease-linear duration-300"
+				x-transition:leave-start="opacity-100"
+				x-transition:leave-end="opacity-0"
+				@click="sidebarOpen = false"
+				class="fixed inset-0 z-30 bg-black/50 md:hidden"
+				x-cloak
+			></div>
+
 			<!-- Sidebar -->
 			@Sidebar()
 
 			<!-- Main content area -->
-			<div class="flex-1 flex flex-col overflow-hidden">
+			<div class="flex-1 flex flex-col overflow-hidden min-w-0">
 				<!-- Topbar -->
 				@Topbar()
 
@@ -55,7 +69,13 @@ var sidebarNavInactive = "text-sidebar-text hover:bg-sidebar-hover hover:text-si
 // a campaign, category links trigger a slide animation that reveals a
 // category-specific sub-nav panel (managed by sidebar_drill.js).
 templ Sidebar() {
-	<aside id="sidebar" class="w-64 bg-sidebar-bg text-sidebar-text flex flex-col shrink-0">
+	<aside
+		id="sidebar"
+		class="fixed inset-y-0 left-0 z-40 w-64 bg-sidebar-bg text-sidebar-text flex flex-col
+		       -translate-x-full transition-transform duration-300 ease-in-out
+		       md:static md:z-auto md:shrink-0"
+		:class="sidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'"
+	>
 		<!-- Logo / Brand -->
 		<a href="/campaigns" class="h-16 flex items-center px-4 border-b border-gray-700 hover:bg-sidebar-hover transition-colors shrink-0">
 			<span class="text-xl font-bold text-white tracking-tight">Chronicle</span>
@@ -482,9 +502,17 @@ templ customNavLink(link SidebarLink) {
 // Topbar renders the top navigation bar with search, campaign breadcrumb,
 // dark mode toggle, and user menu.
 templ Topbar() {
-	<header class="h-16 bg-surface border-b border-edge flex items-center justify-between px-6 shrink-0">
-		<!-- Left: Campaign selector + Search -->
-		<div class="flex items-center space-x-4">
+	<header class="h-16 bg-surface border-b border-edge flex items-center justify-between px-3 md:px-6 shrink-0">
+		<!-- Left: Hamburger + Campaign selector + Search -->
+		<div class="flex items-center space-x-2 md:space-x-4 min-w-0">
+			<!-- Mobile hamburger -->
+			<button
+				@click="sidebarOpen = !sidebarOpen"
+				class="p-2 -ml-1 rounded-md text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors md:hidden shrink-0"
+				title="Toggle menu"
+			>
+				<i class="fa-solid fa-bars text-lg"></i>
+			</button>
 			if IsAuthenticated(ctx) {
 				<!-- Campaign selector dropdown (authenticated users only) -->
 				<div x-data="{ open: false }" class="relative">
@@ -526,8 +554,8 @@ templ Topbar() {
 			}
 
 			if InCampaign(ctx) {
-				<!-- Campaign-scoped search -->
-				<div class="relative">
+				<!-- Campaign-scoped search (hidden on small screens) -->
+				<div class="relative hidden lg:block">
 					<input
 						type="search"
 						placeholder={ fmt.Sprintf("Search in %s...", GetCampaignName(ctx)) }
@@ -547,7 +575,7 @@ templ Topbar() {
 		</div>
 
 		<!-- Right: Dark mode toggle + User menu -->
-		<div class="flex items-center space-x-3">
+		<div class="flex items-center space-x-2 md:space-x-3 shrink-0">
 			<!-- Dark mode toggle -->
 			<button
 				data-theme-toggle
@@ -572,7 +600,7 @@ templ Topbar() {
 							{ userInitials(ctx) }
 						</span>
 					</div>
-					<span class="text-sm font-medium text-fg-body">
+					<span class="text-sm font-medium text-fg-body hidden md:inline">
 						{ GetUserName(ctx) }
 					</span>
 				</div>
