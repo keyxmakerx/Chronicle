@@ -1,14 +1,13 @@
 // entity_type_config.templ renders the unified entity type configuration page.
-// Tabs: Layout (template editor), Attributes (field definitions), Dashboard
-// (description + pinned pages), and Nav Panel (icon/color/name + sidebar).
+// Tabs: Layout (template editor), Attributes (field definitions), and
+// Nav Panel (icon/color/name + sidebar).
 //
-// This page consolidates the template editor, entity type editing, and
-// dashboard settings into a single tabbed interface for campaign owners.
+// Dashboard settings (description, pinned pages, custom layout) are managed
+// in the Campaign Customization Hub's "Category Dashboards" tab.
 
 package entities
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -68,13 +67,6 @@ templ EntityTypeConfigPage(cc *campaigns.CampaignContext, et *EntityType, csrfTo
 				</button>
 				<button
 					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
-					:class="tab === 'dashboard' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
-					@click="tab = 'dashboard'"
-				>
-					<i class="fa-solid fa-grip mr-1.5 text-xs"></i> Dashboard
-				</button>
-				<button
-					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
 					:class="tab === 'nav' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
 					@click="tab = 'nav'"
 				>
@@ -98,13 +90,6 @@ templ EntityTypeConfigPage(cc *campaigns.CampaignContext, et *EntityType, csrfTo
 				<div x-show="tab === 'attributes'" x-cloak class="h-full overflow-y-auto">
 					<div class="max-w-3xl mx-auto px-6 py-6">
 						@attributesTab(cc, et, csrfToken)
-					</div>
-				</div>
-
-				<!-- Dashboard tab: description and pinned pages -->
-				<div x-show="tab === 'dashboard'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-6">
-						@dashboardTab(cc, et, csrfToken)
 					</div>
 				</div>
 
@@ -143,47 +128,6 @@ templ attributesTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken str
 			data-fields-only="true"
 		>
 			<div class="text-sm text-fg-secondary">Loading field editor...</div>
-		</div>
-	</div>
-}
-
-// dashboardTab renders the category dashboard configuration.
-templ dashboardTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
-	<div class="space-y-6">
-		<div>
-			<h2 class="text-lg font-semibold text-fg mb-1">Dashboard Settings</h2>
-			<p class="text-sm text-fg-secondary">
-				Configure the { et.NamePlural } category landing page.
-			</p>
-		</div>
-
-		<!-- Description -->
-		<div class="card p-5 space-y-3">
-			<h3 class="text-sm font-semibold text-fg">Description</h3>
-			<p class="text-xs text-fg-secondary">
-				Rich text shown at the top of the { et.NamePlural } category page.
-			</p>
-			<div
-				data-widget="editor"
-				data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/dashboard", cc.Campaign.ID, et.ID) }
-				data-field="description"
-				data-content={ safeDescription(et) }
-				data-csrf-token={ csrfToken }
-				data-placeholder={ fmt.Sprintf("Describe the %s category...", et.NamePlural) }
-			>
-				<div class="text-sm text-fg-secondary">Loading editor...</div>
-			</div>
-		</div>
-
-		<!-- Pinned entities -->
-		<div class="card p-5 space-y-3">
-			<h3 class="text-sm font-semibold text-fg">Pinned Pages</h3>
-			<p class="text-xs text-fg-secondary">
-				Pages pinned to the top of the category dashboard for quick access.
-			</p>
-			<div class="text-xs text-fg-muted italic py-4 text-center">
-				Pinned pages can be managed from the { et.NamePlural } category page.
-			</div>
 		</div>
 	</div>
 }
@@ -287,21 +231,4 @@ templ navPanelTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken strin
 			</p>
 		</div>
 	</div>
-}
-
-// safeDescription returns the entity type's description as a safe string for the editor widget.
-func safeDescription(et *EntityType) string {
-	if et.Description == nil {
-		return ""
-	}
-	return *et.Description
-}
-
-// pinnedJSON serializes pinned entity IDs to JSON for the widget.
-func pinnedJSON(et *EntityType) string {
-	if et.PinnedEntityIDs == nil {
-		return "[]"
-	}
-	b, _ := json.Marshal(et.PinnedEntityIDs)
-	return string(b)
 }

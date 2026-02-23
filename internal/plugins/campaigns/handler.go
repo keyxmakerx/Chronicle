@@ -21,13 +21,15 @@ type EntityTypeLister interface {
 	GetEntityTypesForSettings(ctx context.Context, campaignID string) ([]SettingsEntityType, error)
 }
 
-// SettingsEntityType is a minimal entity type representation for the settings page.
+// SettingsEntityType is a minimal entity type representation for the settings
+// and customization pages. Includes Description for the Category Dashboards tab.
 type SettingsEntityType struct {
-	ID         int    `json:"id"`
-	Name       string `json:"name"`
-	NamePlural string `json:"name_plural"`
-	Icon       string `json:"icon"`
-	Color      string `json:"color"`
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	NamePlural  string  `json:"name_plural"`
+	Icon        string  `json:"icon"`
+	Color       string  `json:"color"`
+	Description *string `json:"description,omitempty"`
 }
 
 // RecentEntityLister returns recently updated entities for the campaign dashboard.

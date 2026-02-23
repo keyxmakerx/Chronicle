@@ -41,11 +41,12 @@ func (a *entityTypeListerAdapter) GetEntityTypesForSettings(ctx context.Context,
 	result := make([]campaigns.SettingsEntityType, len(etypes))
 	for i, et := range etypes {
 		result[i] = campaigns.SettingsEntityType{
-			ID:         et.ID,
-			Name:       et.Name,
-			NamePlural: et.NamePlural,
-			Icon:       et.Icon,
-			Color:      et.Color,
+			ID:          et.ID,
+			Name:        et.Name,
+			NamePlural:  et.NamePlural,
+			Icon:        et.Icon,
+			Color:       et.Color,
+			Description: et.Description,
 		}
 	}
 	return result, nil
