@@ -8,7 +8,9 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-23 -- Phase D Sprint 3.5: Page Layouts tab added to Customization Hub.
+2026-02-23 -- Competitive analysis and roadmap brainstorm session. Created `.ai/roadmap.md`
+with full feature inventory organized by architectural tier (Core/Plugin/Module/Widget/External),
+competitive analysis vs WorldAnvil/Kanka/LegendKeeper, and revised priority phases E-K.
 
 ## Current Phase
 **Phase D: IN PROGRESS.** Campaign Customization Hub at `/campaigns/:id/customize`
@@ -236,12 +238,28 @@ lazy-loaded template-editor widget.
 ## Active Branch
 `claude/review-project-foundation-8rzHX`
 
+## Competitive Analysis & Roadmap
+Created `.ai/roadmap.md` with comprehensive comparison vs WorldAnvil, Kanka, and
+LegendKeeper. Key findings:
+- Chronicle is ahead on page layout editor, dashboards, self-hosting, and modern stack
+- Critical gaps: Quick Search (Ctrl+K), entity hierarchy, calendar, maps, inline secrets
+- Calendar is identified as a DIRE NEED — Kanka's is the gold standard
+- API technical documentation needed for Foundry VTT integration
+- Foundry VTT module planned in phases: notes sync → calendar sync → actor sync
+- Features organized by tier: Core, Plugin, Module, Widget, External
+- Revised priority phases: D (finishing) → E (UX) → F (calendar/time) → G (maps) →
+  H (secrets) → I (integrations) → J (visualization) → K (delight)
+
 ## Next Session Should
 1. **Sprint 4:** Player Notes Overhaul — Migration 000022, edit locking backend
    (pessimistic), rich text integration (TipTap), shared notes, version history,
    template block mount.
-2. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle, testing.
-3. **QoL:** Quick Search (Ctrl+K), Entity Nesting, Inline Secrets, Breadcrumbs.
+2. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle,
+   widget lifecycle audit.
+3. **Phase E:** Quick Search (Ctrl+K), Entity Nesting (parent_id UI), Backlinks,
+   API documentation.
+4. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
+   See `.ai/roadmap.md` for full data model and implementation plan.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
