@@ -370,17 +370,18 @@
     pointer-events: auto;
   }
   .sidebar-peek:hover {
-    box-shadow: inset -4px 0 12px -4px rgba(99, 102, 241, 0.3);
+    box-shadow: inset -4px 0 12px -4px rgba(99, 102, 241, 0.4);
   }
   /* Dim content when peeking to reinforce it's a "back" affordance.
      Right-align everything so text/icons crowd toward the visible 10px
-     strip on the right edge of the panel. */
+     strip on the right edge of the panel. Opacity must be high enough
+     that icons/text are still visible on the dark sidebar background. */
   .sidebar-peek > nav {
-    @apply opacity-30 pointer-events-none;
+    @apply opacity-60 pointer-events-none;
     text-align: right;
   }
   .sidebar-peek:hover > nav {
-    @apply opacity-50;
+    @apply opacity-80;
   }
   /* Flip flex links so icon sits at the right edge (most visible). */
   .sidebar-peek > nav a {
@@ -461,10 +462,17 @@
     background-color: color-mix(in srgb, var(--color-text-muted) 60%, transparent);
   }
 
+  /* Text size presets -- applied via modifier class on the panel.
+     Default is "md" (14px). Users toggle S/M/L via the settings gear;
+     choice persists in localStorage. */
+  .notes-panel                  { --notes-font: 0.875rem; }  /* md: 14px */
+  .notes-panel.notes-size-sm    { --notes-font: 0.75rem;  }  /* sm: 12px */
+  .notes-panel.notes-size-lg    { --notes-font: 1rem;     }  /* lg: 16px */
+
   /* Panel header. */
   .notes-header {
     @apply flex items-center justify-between px-4 py-3
-           border-b border-edge shrink-0;
+           border-b border-edge shrink-0 relative;
   }
   .notes-header-title {
     @apply text-sm font-semibold text-fg;
@@ -491,8 +499,9 @@
     @apply flex items-center gap-2 px-3 py-2.5 border-b border-edge shrink-0;
   }
   .notes-quick-input {
-    @apply flex-1 bg-transparent text-fg text-xs
+    @apply flex-1 bg-transparent text-fg
            px-0 py-0 focus:outline-none;
+    font-size: var(--notes-font);
     border: none;
     outline: none;
   }
@@ -511,7 +520,8 @@
 
   /* Individual note card. */
   .note-card {
-    @apply bg-surface-alt rounded-lg border border-edge p-3 text-xs;
+    @apply bg-surface-alt rounded-lg border border-edge p-3;
+    font-size: var(--notes-font);
   }
   .note-card.note-pinned {
     @apply border-indigo-500/30;
@@ -523,8 +533,9 @@
     @apply font-medium text-fg truncate flex-1;
   }
   .note-title-input {
-    @apply flex-1 bg-transparent border-b border-edge text-fg text-xs
+    @apply flex-1 bg-transparent border-b border-edge text-fg
            px-0 py-0.5 focus:outline-none focus:border-indigo-400;
+    font-size: inherit;
   }
   .note-actions {
     @apply flex items-center gap-0.5 shrink-0;
@@ -544,7 +555,8 @@
   }
   .note-text-input {
     @apply w-full bg-transparent border border-edge rounded px-2 py-1.5
-           text-fg text-xs resize-none focus:outline-none focus:border-indigo-400;
+           text-fg resize-none focus:outline-none focus:border-indigo-400;
+    font-size: inherit;
     min-height: 48px;
   }
 
@@ -563,8 +575,9 @@
            cursor-pointer shrink-0;
   }
   .note-check-text-input {
-    @apply flex-1 bg-transparent border-b border-transparent text-fg text-xs
+    @apply flex-1 bg-transparent border-b border-transparent text-fg
            px-0 py-0 focus:outline-none focus:border-edge;
+    font-size: inherit;
   }
   .note-add-check-item {
     @apply text-[10px] text-fg-secondary hover:text-fg
@@ -579,6 +592,31 @@
     @apply w-7 h-7 flex items-center justify-center rounded
            text-fg-secondary hover:text-fg hover:bg-surface
            transition-colors cursor-pointer;
+  }
+
+  /* Settings popover -- opens below the header bar. */
+  .notes-settings-popover {
+    @apply absolute right-3 bg-surface border border-edge
+           rounded-lg shadow-lg px-3 py-2.5 z-10;
+    top: calc(100% + 4px);
+  }
+  .notes-settings-hidden {
+    @apply hidden;
+  }
+  .notes-settings-label {
+    @apply text-xs text-fg-secondary font-medium mb-1.5;
+  }
+  .notes-settings-sizes {
+    @apply flex gap-1;
+  }
+  .notes-size-opt {
+    @apply px-3 py-1 text-xs rounded border border-edge
+           text-fg-secondary hover:text-fg hover:bg-surface-alt
+           cursor-pointer transition-colors text-center font-medium;
+  }
+  .notes-size-opt-active {
+    @apply bg-indigo-600 text-white border-indigo-600
+           hover:bg-indigo-500 hover:text-white;
   }
 }
 

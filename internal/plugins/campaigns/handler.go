@@ -32,6 +32,27 @@ type SettingsEntityType struct {
 	Description *string `json:"description,omitempty"`
 }
 
+// EntityTypeLayoutFetcher fetches a single entity type's full layout and field
+// data for the page layout editor. Avoids importing the entities package directly.
+type EntityTypeLayoutFetcher interface {
+	GetEntityTypeForLayoutEditor(ctx context.Context, entityTypeID int) (*LayoutEditorEntityType, error)
+}
+
+// LayoutEditorEntityType holds the entity type data needed to mount the
+// template-editor widget in the Customization Hub's Page Layouts tab.
+// LayoutJSON and FieldsJSON are pre-serialized so templates can emit them
+// directly as data attributes.
+type LayoutEditorEntityType struct {
+	ID         int
+	CampaignID string
+	Name       string
+	NamePlural string
+	Icon       string
+	Color      string
+	LayoutJSON string
+	FieldsJSON string
+}
+
 // RecentEntityLister returns recently updated entities for the campaign dashboard.
 // Avoids importing the entities package directly.
 type RecentEntityLister interface {
@@ -59,10 +80,11 @@ type AuditLogger interface {
 // Handler handles HTTP requests for campaign operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service      CampaignService
-	entityLister EntityTypeLister
-	recentLister RecentEntityLister
-	auditLogger  AuditLogger
+	service       CampaignService
+	entityLister  EntityTypeLister
+	layoutFetcher EntityTypeLayoutFetcher
+	recentLister  RecentEntityLister
+	auditLogger   AuditLogger
 }
 
 // NewHandler creates a new campaign handler.
@@ -74,6 +96,12 @@ func NewHandler(service CampaignService) *Handler {
 // Called after both plugins are wired to avoid circular dependencies.
 func (h *Handler) SetEntityLister(lister EntityTypeLister) {
 	h.entityLister = lister
+}
+
+// SetLayoutFetcher sets the entity type layout fetcher for the Page Layouts tab.
+// Called after both plugins are wired to avoid circular dependencies.
+func (h *Handler) SetLayoutFetcher(fetcher EntityTypeLayoutFetcher) {
+	h.layoutFetcher = fetcher
 }
 
 // SetRecentEntityLister sets the recent entity lister for the dashboard.
@@ -318,6 +346,39 @@ func (h *Handler) Customize(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, CustomizePage(cc, entityTypes, csrfToken))
+}
+
+// LayoutEditorFragment returns an HTMX fragment containing the template-editor
+// widget for a specific entity type. Used by the Page Layouts tab in the
+// Customization Hub to lazy-load editors one category at a time.
+// GET /campaigns/:id/customize/layout-editor/:etid
+func (h *Handler) LayoutEditorFragment(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	if h.layoutFetcher == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	et, err := h.layoutFetcher.GetEntityTypeForLayoutEditor(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	// IDOR protection: verify entity type belongs to this campaign.
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, LayoutEditorFragment(cc, et, csrfToken))
 }
 
 // --- Sidebar Config API ---

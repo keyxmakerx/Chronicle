@@ -439,7 +439,10 @@ Chronicle.register('attributes', {
           // Reload to get merged fields.
           return fetch(config.endpoint, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
         })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          if (!r.ok) throw new Error('Failed to reload fields');
+          return r.json();
+        })
         .then(function (data) {
           state.fields = data.fields || [];
           state.fieldsData = data.fields_data || {};

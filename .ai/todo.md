@@ -12,8 +12,10 @@
 ## Next Up: Priority Tasks
 
 These are the highest-priority items across all future phases. Pick from here.
+For the full competitive analysis and architectural breakdown of each feature,
+see `.ai/roadmap.md`.
 
-### Phase D: Campaign Customization Hub (Active)
+### Phase D: Campaign Customization Hub (Active -- Finishing)
 - [x] Campaign Customization Hub page shell (4 tabs, owner-only route)
 - [x] Navigation tab (sidebar config widget + custom sections/links editor)
 - [x] Settings cleanup (removed Categories duplication, added Customize link)
@@ -22,15 +24,59 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] Sidebar debug log cleanup
 - [x] Dashboard Editor (Sprint 2: migration 000021, dashboard_editor.js, block rendering)
 - [x] Category Dashboards (Sprint 3: per-category layout editor)
+- [x] Page Layouts tab (Sprint 3.5: HTMX lazy-loaded template-editor in Customize hub)
 - [ ] Player Notes Overhaul (Sprint 4: locking, rich text, versions, shared, template block)
 - [ ] hx-boost sidebar navigation (Sprint 5: prevent full page reloads)
 - [ ] "View as player" toggle (Sprint 5)
+- [ ] Widget lifecycle audit (check all widgets for missing destroy() cleanup)
 
-### Phase B Follow-ups
-- [x] Notes addon-gated rendering (IsAddonEnabled context check)
-- [ ] Attribute template editing in campaign settings UI
-- [ ] Foundry VTT companion module documentation
-- [ ] API enhancements: entity tags/relations in responses, efficient sync pull
+### Phase E: Core UX & Discovery (Next)
+- [ ] Quick search (Ctrl+K) — global search modal for entities, categories, notes (CRITICAL)
+- [ ] Entity hierarchy (parent_id UI + tree view + breadcrumbs + "Create sub-page") (CRITICAL)
+- [ ] Backlinks / "Referenced by" on entity profiles (@mention reverse refs)
+- [ ] API technical documentation (OpenAPI spec or handwritten reference) (HIGH)
+- [ ] Keyboard shortcuts beyond Ctrl+K (Ctrl+N, Ctrl+E, Ctrl+S)
+
+### Phase F: Calendar & Time (DIRE NEED)
+- [ ] Calendar plugin (custom months, weekdays, moons, seasons, eras, events, entity linking)
+- [ ] Calendar UI (monthly grid, year overview, moon phases, "today" marker)
+- [ ] Calendar dashboard block ("Upcoming events")
+- [ ] Timeline view (chronological event display, may be calendar view mode)
+- [ ] Calendar API endpoints (for Foundry VTT sync)
+
+### Phase G: Maps & Geography
+- [ ] Maps plugin Phase 1 (Leaflet.js, image upload, pins, entity linking, DM-only pins)
+- [ ] Maps plugin Phase 2 (layers, marker groups, privacy, nested maps)
+
+### Phase H: Secrets & Permissions
+- [ ] Inline secrets / GM-only text (TipTap extension, server-side filtering)
+- [ ] Per-entity permissions (view/edit per role/user)
+- [ ] Campaign export/import (JSON bundle for backup/migration)
+- [ ] Group-based visibility (beyond everyone/dm_only)
+
+### Phase I: External Integrations
+- [ ] Foundry VTT sync module Phase 1 (notes/journal sync via REST API)
+- [ ] Foundry VTT sync module Phase 2 (calendar sync with Calendaria/Simple Calendar)
+- [ ] D&D 5e module (SRD reference data, tooltips, pages)
+- [ ] API enhancements: tags/relations in responses, efficient `modified_since` sync pull
+- [ ] Webhook support for external event notifications
+
+### Phase J: Visualization & Play
+- [ ] Relations graph visualization widget (D3.js/Cytoscape.js)
+- [ ] Sessions plugin (session CRUD, linked entities, reports)
+- [ ] Dice roller widget (floating panel, expression parser)
+- [ ] Entity sub-notes/posts (sub-documents with separate visibility)
+
+### Phase K: Delight & Polish
+- [ ] Auto-linking in editor (LegendKeeper-style entity name detection)
+- [ ] Guided worldbuilding prompts per entity type (WorldAnvil-style)
+- [ ] Role-aware dashboards (different views per campaign role)
+- [ ] Entity type template library (genre presets for new campaigns)
+- [ ] Saved filters / smart lists (filter presets as sidebar links)
+- [ ] Bulk entity operations (multi-select for batch tag/move/delete)
+- [ ] Whiteboards / freeform canvas (Tldraw/Excalidraw)
+- [ ] Richer entity tooltips (image + attributes + excerpt)
+- [ ] Persistent filters per category (localStorage)
 
 ### Testing (High Priority -- Many plugins have zero tests)
 - [x] Entity service unit tests (30 tests passing)
@@ -38,71 +84,31 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] Addons service tests (28 tests — CRUD, campaign enable/disable)
 - [x] Auth service tests (26 tests — register, password hashing, reset flow)
 - [x] Notes widget service tests (28 tests — CRUD, checklists, scoping)
-- [ ] Campaigns service tests
+- [ ] Campaigns service tests (HIGHEST PRIORITY — most critical untested code)
 - [ ] Relations service tests (bi-directional create/delete, validation)
 - [ ] Tags service tests (CRUD, slug generation, diff-based assignment)
 - [ ] Audit service tests (pagination, validation, fire-and-forget)
 - [ ] Media service tests (file validation, thumbnail generation)
 - [ ] Settings service tests (limit resolution, override priority)
+- [ ] Widget lifecycle audit (destroy methods, event listener leaks)
+- [ ] HTMX fragment edge cases (CSRF propagation, double-init, nested targets)
+- [ ] Plugin/addon system stress test (JS load failures, boot.js resilience)
 
 ### Auth & Security
 - [x] Password reset flow (migration 000020, forgot/reset pages, SMTP integration)
 - [ ] 2FA/TOTP support
-- [ ] Per-entity permissions (view/edit per role/user)
 - [ ] Invite system (email invitations for campaigns)
-- [ ] Group-based visibility (beyond everyone/dm_only)
-
-### Maps & Geography
-- [ ] Leaflet.js map viewer widget
-- [ ] Map pin CRUD with entity linking
+- [ ] Concurrent editing safeguards (optimistic concurrency → pessimistic locking)
 
 ### Game System Modules
 - [ ] D&D 5e module (SRD reference data, tooltips, pages) — registry in `internal/modules/registry.go`
 - [ ] Pathfinder 2e module
 - [ ] Draw Steel module
 
-### API & Integrations
-- [x] `/api/v1/` REST endpoints (campaign entities, types, fields read/write)
-- [x] API key authentication middleware for `/api/v1/` routes
-- [x] Rate limiting enforcement on API routes
-- [ ] API enhancements: `modified_since` repo method for efficient sync pull
-- [ ] API enhancements: tags/relations in API entity responses
-- [ ] Campaign export/import
-- [ ] Foundry VTT sync module (companion module)
-- [ ] AI integration endpoint
-- [ ] Webhook support for external event notifications
-
-### UI & Navigation -- Phase 3 Follow-ups
-- [x] Terminology rename (Entity→Page, Entity Type→Category) — UI labels only
-- [x] Drill-down sidebar (iOS-style push navigation with peek)
-- [x] Category dashboard pages (header, description, pinned, grid view)
-- [x] Tighter card grid (4-col XL, reduced padding, compact badges)
-- [x] DB migration 000013 (description + pinned_entity_ids on entity_types)
-- [x] Grid/Table view toggle (Alpine.js toggle + localStorage + EntityTableRow component)
-- [ ] Sub-folder support (parent_id tree view on category dashboard)
-- [x] Settings consolidation (Customize page replaces scattered config)
-- [ ] Persistent filters per category (localStorage)
-- [x] Quick Links / Bookmarks in sidebar (custom sections/links via sidebar_nav_editor)
-
-### QoL Features (Identified from Competitive Research)
-- [ ] Quick search (Ctrl+K) — global search modal for entities, categories, notes
-- [ ] Entity nesting (parent_id + tree view + breadcrumbs + "Create sub-page")
-- [ ] Inline secrets / GM-only text (TipTap extension, server-side filtering)
-- [ ] Breadcrumb navigation (Campaign > Category > Entity in topbar)
-
-### Entities -- Remaining Features
-- [ ] Entity nesting (parent/child relationships, tree view on dashboard)
-- [ ] Entity posts (additional sections on entity profile)
-- [ ] Relations graph visualization widget
-
 ### Infrastructure
 - [ ] docker-compose.yml full stack verification (app + MariaDB + Redis)
 - [ ] `air` hot reload setup for dev workflow
 - [ ] Verify `make docker-up` -> `make dev` works end-to-end
-
-### Future Plugins
-- [ ] Calendar plugin (custom months, days, moons)
-- [ ] Timeline plugin (eras, events, zoomable)
 
 ---
 
@@ -251,3 +257,15 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] `category_blocks.templ`: CategoryBlockSwitch + 6 category block components
 - [x] `category_dashboard.templ`: conditional render from custom layout or hardcoded default
 - [x] Customize page Category Dashboards tab: Alpine.js category selector + dashboard-editor per category
+
+### Phase D Sprint 3.5: Page Layouts Tab (2026-02-23)
+- [x] `template_editor.js`: `destroy()` method for HTMX lifecycle cleanup
+- [x] `template_editor.js`: scoped `findSaveBtn()`/`findSaveStatus()` helpers (fragment + fallback)
+- [x] `EntityTypeLayoutFetcher` interface + `LayoutEditorEntityType` struct in campaigns/handler.go
+- [x] `LayoutEditorFragment` handler (GET `/customize/layout-editor/:etid`, IDOR protection)
+- [x] Route registration in campaigns/routes.go (owner-only)
+- [x] Customize page: fifth "Page Layouts" tab button + tab content panel
+- [x] `pageLayoutsTab` component: category selector + HTMX lazy-load triggers
+- [x] `LayoutEditorFragment` templ component: scoped save controls + template-editor mount
+- [x] `entityTypeLayoutFetcherAdapter` in app/routes.go (bridges entities service → campaigns handler)
+- [x] Entity type config page: back button → `/campaigns/:id/customize`

@@ -1,6 +1,7 @@
 // customize.templ renders the Campaign Customization Hub -- a centralized page
 // for campaign owners to control navigation, dashboards, entity templates, and
-// category layouts. Tabs: Navigation, Dashboard, Categories, Category Dashboards.
+// category layouts. Tabs: Navigation, Dashboard, Categories, Category Dashboards,
+// Page Layouts.
 //
 // Route: GET /campaigns/:id/customize
 // Permission: RoleOwner only.
@@ -65,6 +66,13 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 				>
 					<i class="fa-solid fa-table-columns mr-1.5 text-xs"></i> Category Dashboards
 				</button>
+				<button
+					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+					:class="tab === 'page-layouts' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
+					@click="tab = 'page-layouts'"
+				>
+					<i class="fa-solid fa-layer-group mr-1.5 text-xs"></i> Page Layouts
+				</button>
 			</div>
 
 			<!-- Tab content -->
@@ -95,6 +103,11 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 					<div class="max-w-3xl mx-auto px-6 py-6">
 						@categoryDashboardsTab(cc, entityTypes, csrfToken)
 					</div>
+				</div>
+
+				<!-- Page Layouts tab: per-category template editor, lazy-loaded via HTMX -->
+				<div x-show="tab === 'page-layouts'" x-cloak class="h-full overflow-hidden">
+					@pageLayoutsTab(cc, entityTypes, csrfToken)
 				</div>
 			</div>
 		</div>
@@ -347,4 +360,102 @@ func catDescJS(desc *string) string {
 // used by the dashboard editor widget.
 func categoryBlockTypesJSON() string {
 	return `[{"type":"category_header","label":"Category Header","icon":"fa-heading","desc":"Category name, icon & description"},{"type":"pinned_pages","label":"Pinned Pages","icon":"fa-thumbtack","desc":"Pinned entity cards"},{"type":"entity_grid","label":"Entity Grid","icon":"fa-grid-2","desc":"All entities as card grid"},{"type":"recent_pages","label":"Recent Pages","icon":"fa-clock","desc":"Recently updated entities"},{"type":"text_block","label":"Text Block","icon":"fa-align-left","desc":"Custom rich text / HTML"},{"type":"search_bar","label":"Search Bar","icon":"fa-magnifying-glass","desc":"Search within this category"}]`
+}
+
+// pageLayoutsTab renders the page layout editor tab. Shows category selector
+// buttons that lazy-load the template-editor widget via HTMX. Only one editor
+// is mounted at a time to keep things lightweight.
+templ pageLayoutsTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
+	if len(entityTypes) == 0 {
+		<div class="px-6 py-6">
+			<div class="max-w-3xl mx-auto">
+				<div class="card p-8 text-center">
+					<i class="fa-solid fa-layer-group text-3xl text-fg-muted mb-3"></i>
+					<p class="text-sm text-fg-secondary">No categories yet. Create categories first to customize their page layouts.</p>
+				</div>
+			</div>
+		</div>
+	} else {
+		<div class="h-full flex flex-col">
+			<div class="px-6 pt-4 pb-2 shrink-0">
+				<div class="max-w-3xl mx-auto">
+					<div class="mb-1">
+						<h2 class="text-lg font-semibold text-fg mb-1">Page Layouts</h2>
+						<p class="text-sm text-fg-secondary">
+							Design the profile page layout for each entity category using drag-and-drop blocks.
+						</p>
+					</div>
+					<!-- Category selector buttons with HTMX triggers -->
+					<div class="flex flex-wrap gap-2 mt-3" x-data="{ selected: 0 }">
+						for _, et := range entityTypes {
+							<button
+								type="button"
+								class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm"
+								:class={ fmt.Sprintf("selected === %d ? 'border-accent bg-accent/10 text-accent font-medium' : 'border-edge bg-surface hover:border-accent/30 text-fg-secondary'", et.ID) }
+								@click={ fmt.Sprintf("selected = %d", et.ID) }
+								hx-get={ fmt.Sprintf("/campaigns/%s/customize/layout-editor/%d", cc.Campaign.ID, et.ID) }
+								hx-target="#layout-editor-container"
+								hx-swap="innerHTML"
+							>
+								<span
+									class="w-6 h-6 rounded flex items-center justify-center text-[10px] shrink-0"
+									style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+								>
+									if et.Icon != "" {
+										<i class={ "fa-solid " + et.Icon }></i>
+									} else {
+										<i class="fa-solid fa-file"></i>
+									}
+								</span>
+								{ et.NamePlural }
+							</button>
+						}
+					</div>
+				</div>
+			</div>
+			<!-- Container for the lazy-loaded template editor -->
+			<div id="layout-editor-container" class="flex-1 overflow-hidden">
+				<div class="h-full flex items-center justify-center text-fg-secondary text-sm">
+					<div class="text-center">
+						<i class="fa-solid fa-layer-group text-2xl text-fg-muted mb-2"></i>
+						<p>Select a category above to edit its page layout.</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// LayoutEditorFragment renders the template-editor widget mount for a single
+// entity type. Returned as an HTMX fragment in the Page Layouts tab. Includes
+// its own save button so the widget can find it via scoped lookup.
+templ LayoutEditorFragment(cc *CampaignContext, et *LayoutEditorEntityType, csrfToken string) {
+	<div data-te-container class="h-full flex flex-col">
+		<!-- Save controls inside the fragment for scoped binding -->
+		<div class="flex items-center justify-between px-4 py-2 bg-surface border-b border-edge shrink-0">
+			<div class="flex items-center gap-2">
+				<div
+					class="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
+					style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+				>
+					<i class={ "fa-solid " + et.Icon }></i>
+				</div>
+				<span class="text-sm font-medium text-fg">{ et.Name } Page Layout</span>
+			</div>
+			<div class="flex items-center gap-2">
+				<span id="te-save-status" class="text-xs text-fg-muted"></span>
+				<button id="te-save-btn" class="btn-primary text-sm">Save Layout</button>
+			</div>
+		</div>
+		<!-- Template editor widget mount -->
+		<div
+			class="flex-1 overflow-hidden"
+			data-widget="template-editor"
+			data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/layout", cc.Campaign.ID, et.ID) }
+			data-layout={ et.LayoutJSON }
+			data-fields={ et.FieldsJSON }
+			data-entity-type-name={ et.Name }
+			data-csrf-token={ csrfToken }
+		></div>
+	</div>
 }

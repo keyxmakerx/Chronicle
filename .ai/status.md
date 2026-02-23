@@ -8,14 +8,17 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-22 -- Phase D Sprint 3: Category Dashboards complete.
+2026-02-23 -- Competitive analysis and roadmap brainstorm session. Created `.ai/roadmap.md`
+with full feature inventory organized by architectural tier (Core/Plugin/Module/Widget/External),
+competitive analysis vs WorldAnvil/Kanka/LegendKeeper, and revised priority phases E-K.
 
 ## Current Phase
 **Phase D: IN PROGRESS.** Campaign Customization Hub at `/campaigns/:id/customize`
-with Navigation, Dashboard, Categories, and Category Dashboards tabs. Settings
-page cleaned up. Custom sidebar sections/links editor wired up. Dashboard editor
-widget live for both campaign and per-category dashboards — owners can build
-custom layouts with drag-and-drop blocks.
+with Navigation, Dashboard, Categories, Category Dashboards, and Page Layouts tabs.
+Settings page cleaned up. Custom sidebar sections/links editor wired up. Dashboard
+editor widget live for both campaign and per-category dashboards. Page Layouts tab
+lets owners edit entity type page templates directly from the hub via HTMX
+lazy-loaded template-editor widget.
 
 ## What Was Built in Phase B (Summary)
 
@@ -218,6 +221,14 @@ custom layouts with drag-and-drop blocks.
 - `category_dashboard.templ`: conditional render — custom layout (12-col grid) or hardcoded default.
 - Customize page: Category Dashboards tab — Alpine.js category selector + dashboard-editor widget per category.
 
+### Phase D Sprint 3.5: Page Layouts Tab (2026-02-23)
+- Fifth "Page Layouts" tab in Customization Hub for editing entity type page templates.
+- HTMX lazy-loading: category selector buttons fetch template-editor fragment on demand.
+- `EntityTypeLayoutFetcher` cross-plugin interface + adapter (same pattern as EntityTypeLister).
+- `template_editor.js`: added `destroy()` method for HTMX lifecycle cleanup, scoped
+  `findSaveBtn()`/`findSaveStatus()` helpers for fragment-embedded save controls.
+- Entity type config page back button now returns to Customization Hub.
+
 ### In Progress
 - Phase D Sprint 4: Player Notes Overhaul (next)
 
@@ -227,12 +238,28 @@ custom layouts with drag-and-drop blocks.
 ## Active Branch
 `claude/review-project-foundation-8rzHX`
 
+## Competitive Analysis & Roadmap
+Created `.ai/roadmap.md` with comprehensive comparison vs WorldAnvil, Kanka, and
+LegendKeeper. Key findings:
+- Chronicle is ahead on page layout editor, dashboards, self-hosting, and modern stack
+- Critical gaps: Quick Search (Ctrl+K), entity hierarchy, calendar, maps, inline secrets
+- Calendar is identified as a DIRE NEED — Kanka's is the gold standard
+- API technical documentation needed for Foundry VTT integration
+- Foundry VTT module planned in phases: notes sync → calendar sync → actor sync
+- Features organized by tier: Core, Plugin, Module, Widget, External
+- Revised priority phases: D (finishing) → E (UX) → F (calendar/time) → G (maps) →
+  H (secrets) → I (integrations) → J (visualization) → K (delight)
+
 ## Next Session Should
 1. **Sprint 4:** Player Notes Overhaul — Migration 000022, edit locking backend
    (pessimistic), rich text integration (TipTap), shared notes, version history,
    template block mount.
-2. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle, testing.
-3. **QoL:** Quick Search (Ctrl+K), Entity Nesting, Inline Secrets, Breadcrumbs.
+2. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle,
+   widget lifecycle audit.
+3. **Phase E:** Quick Search (Ctrl+K), Entity Nesting (parent_id UI), Backlinks,
+   API documentation.
+4. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
+   See `.ai/roadmap.md` for full data model and implementation plan.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

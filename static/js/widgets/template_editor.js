@@ -1363,27 +1363,43 @@ Chronicle.register('template-editor', {
     this.renderCanvas();
   },
 
+  // Find the save button, scoping to the nearest [data-te-container] first
+  // so HTMX-swapped fragments use their own button rather than a stale global.
+  findSaveBtn() {
+    const container = this.el.closest('[data-te-container]');
+    return (container && container.querySelector('#te-save-btn'))
+        || document.getElementById('te-save-btn');
+  },
+
+  // Find the save status element with the same scoping strategy.
+  findSaveStatus() {
+    const container = this.el.closest('[data-te-container]');
+    return (container && container.querySelector('#te-save-status'))
+        || document.getElementById('te-save-status');
+  },
+
   markDirty() {
     this.dirty = true;
-    const status = document.getElementById('te-save-status');
+    const status = this.findSaveStatus();
     if (status) status.textContent = 'Unsaved changes';
-    const btn = document.getElementById('te-save-btn');
+    const btn = this.findSaveBtn();
     if (btn) btn.classList.add('animate-pulse');
   },
 
   bindSave() {
-    const btn = document.getElementById('te-save-btn');
+    const btn = this.findSaveBtn();
     if (btn) {
       btn.addEventListener('click', () => this.save());
     }
 
-    // Ctrl+S / Cmd+S shortcut.
-    document.addEventListener('keydown', (e) => {
+    // Ctrl+S / Cmd+S shortcut. Store reference for cleanup in destroy().
+    this.keydownHandler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         this.save();
       }
-    });
+    };
+    document.addEventListener('keydown', this.keydownHandler);
   },
 
   /**
@@ -1399,8 +1415,8 @@ Chronicle.register('template-editor', {
   },
 
   async save() {
-    const btn = document.getElementById('te-save-btn');
-    const status = document.getElementById('te-save-status');
+    const btn = this.findSaveBtn();
+    const status = this.findSaveStatus();
     if (btn) {
       btn.disabled = true;
       btn.textContent = 'Saving...';
@@ -1439,6 +1455,19 @@ Chronicle.register('template-editor', {
         btn.textContent = 'Save Template';
       }
     }
+  },
+
+  // Clean up when HTMX swaps this widget out (called by boot.js destroyElement).
+  destroy(el) {
+    if (this.keydownHandler) {
+      document.removeEventListener('keydown', this.keydownHandler);
+      this.keydownHandler = null;
+    }
+    el.innerHTML = '';
+    this.layout = null;
+    this.canvas = null;
+    this.fields = null;
+    this.el = null;
   },
 });
 

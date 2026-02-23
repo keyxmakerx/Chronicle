@@ -54,8 +54,10 @@ Chronicle.register('notes', {
     el.appendChild(fab);
     el.appendChild(panel);
 
-    // --- Saved size (localStorage) ---
+    // --- Saved preferences (localStorage) ---
     var STORAGE_KEY = 'chronicle_notes_size';
+    var STORAGE_TEXT_SIZE = 'chronicle_notes_text_size';
+    var TEXT_SIZE_DEFAULT = 'md';
 
     function restoreSize() {
       try {
@@ -78,6 +80,31 @@ Chronicle.register('notes', {
 
     // Apply saved size on desktop only (mobile uses full-width).
     if (window.innerWidth >= 640) restoreSize();
+
+    /** Restore and apply the saved text size preference. */
+    function restoreTextSize() {
+      try {
+        var saved = localStorage.getItem(STORAGE_TEXT_SIZE);
+        if (saved && (saved === 'sm' || saved === 'md' || saved === 'lg')) {
+          applyTextSize(saved);
+          return;
+        }
+      } catch (e) { /* ignore */ }
+      applyTextSize(TEXT_SIZE_DEFAULT);
+    }
+
+    /** Apply a text size class to the panel and update the settings UI. */
+    function applyTextSize(size) {
+      panel.classList.remove('notes-size-sm', 'notes-size-md', 'notes-size-lg');
+      panel.classList.add('notes-size-' + size);
+      // Update the active state on the size option buttons.
+      panel.querySelectorAll('.notes-size-opt').forEach(function (btn) {
+        btn.classList.toggle('notes-size-opt-active', btn.getAttribute('data-size') === size);
+      });
+      try { localStorage.setItem(STORAGE_TEXT_SIZE, size); } catch (e) { /* ignore */ }
+    }
+
+    restoreTextSize();
 
     // --- Resize handle ---
     var resizeHandle = panel.querySelector('.notes-resize-handle');
@@ -183,6 +210,33 @@ Chronicle.register('notes', {
         renderNotes();
       });
     });
+
+    // Settings gear -- toggle popover.
+    var settingsBtn = panel.querySelector('.notes-settings-btn');
+    var settingsPopover = panel.querySelector('.notes-settings-popover');
+    if (settingsBtn && settingsPopover) {
+      settingsBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        settingsPopover.classList.toggle('notes-settings-hidden');
+      });
+
+      // Size option buttons.
+      settingsPopover.querySelectorAll('.notes-size-opt').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          applyTextSize(btn.getAttribute('data-size'));
+        });
+      });
+
+      // Close popover when clicking outside.
+      document.addEventListener('click', function (e) {
+        if (!settingsPopover.classList.contains('notes-settings-hidden') &&
+            !settingsPopover.contains(e.target) &&
+            e.target !== settingsBtn && !settingsBtn.contains(e.target)) {
+          settingsPopover.classList.add('notes-settings-hidden');
+        }
+      });
+    }
 
     // --- API Functions ---
 
@@ -593,7 +647,16 @@ Chronicle.register('notes', {
         '<div class="notes-header">' +
         '<span class="notes-header-title">' + (eid ? 'Page Notes' : 'All Notes') + '</span>' +
         '<div class="notes-header-actions">' +
+        '<button class="note-btn notes-settings-btn" title="Settings"><i class="fa-solid fa-gear"></i></button>' +
         '<button class="note-btn notes-close" title="Close"><i class="fa-solid fa-xmark"></i></button>' +
+        '</div>' +
+        '<div class="notes-settings-popover notes-settings-hidden">' +
+        '<div class="notes-settings-label">Text Size</div>' +
+        '<div class="notes-settings-sizes">' +
+        '<button class="notes-size-opt" data-size="sm">S</button>' +
+        '<button class="notes-size-opt" data-size="md">M</button>' +
+        '<button class="notes-size-opt" data-size="lg">L</button>' +
+        '</div>' +
         '</div>' +
         '</div>' +
         tabsHtml +

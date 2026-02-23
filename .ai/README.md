@@ -36,6 +36,7 @@ re-reading every source file in the project.
 | `api-routes.md` | Semi-static | Complete route table with handler mappings | Adding or modifying endpoints |
 | `glossary.md` | Static | TTRPG and Chronicle-specific terminology | Understanding domain concepts |
 | `troubleshooting.md` | Semi-static | Known gotchas and their solutions | Debugging non-obvious issues |
+| `roadmap.md` | Semi-static | Competitive analysis (WorldAnvil/Kanka/LegendKeeper), feature brainstorm organized by tier (Core/Plugin/Module/Widget/External), priority phases, Foundry VTT integration plans | Planning features, understanding competitive landscape, checking priorities |
 
 ## Category Definitions
 
