@@ -8,14 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-22 -- Phase D Sprint 3: Category Dashboards complete.
+2026-02-23 -- Phase D Sprint 3.5: Page Layouts tab added to Customization Hub.
 
 ## Current Phase
 **Phase D: IN PROGRESS.** Campaign Customization Hub at `/campaigns/:id/customize`
-with Navigation, Dashboard, Categories, and Category Dashboards tabs. Settings
-page cleaned up. Custom sidebar sections/links editor wired up. Dashboard editor
-widget live for both campaign and per-category dashboards — owners can build
-custom layouts with drag-and-drop blocks.
+with Navigation, Dashboard, Categories, Category Dashboards, and Page Layouts tabs.
+Settings page cleaned up. Custom sidebar sections/links editor wired up. Dashboard
+editor widget live for both campaign and per-category dashboards. Page Layouts tab
+lets owners edit entity type page templates directly from the hub via HTMX
+lazy-loaded template-editor widget.
 
 ## What Was Built in Phase B (Summary)
 
@@ -217,6 +218,14 @@ custom layouts with drag-and-drop blocks.
 - `category_blocks.templ`: CategoryBlockSwitch + 6 category block components.
 - `category_dashboard.templ`: conditional render — custom layout (12-col grid) or hardcoded default.
 - Customize page: Category Dashboards tab — Alpine.js category selector + dashboard-editor widget per category.
+
+### Phase D Sprint 3.5: Page Layouts Tab (2026-02-23)
+- Fifth "Page Layouts" tab in Customization Hub for editing entity type page templates.
+- HTMX lazy-loading: category selector buttons fetch template-editor fragment on demand.
+- `EntityTypeLayoutFetcher` cross-plugin interface + adapter (same pattern as EntityTypeLister).
+- `template_editor.js`: added `destroy()` method for HTMX lifecycle cleanup, scoped
+  `findSaveBtn()`/`findSaveStatus()` helpers for fragment-embedded save controls.
+- Entity type config page back button now returns to Customization Hub.
 
 ### In Progress
 - Phase D Sprint 4: Player Notes Overhaul (next)

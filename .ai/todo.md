@@ -22,6 +22,7 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] Sidebar debug log cleanup
 - [x] Dashboard Editor (Sprint 2: migration 000021, dashboard_editor.js, block rendering)
 - [x] Category Dashboards (Sprint 3: per-category layout editor)
+- [x] Page Layouts tab (Sprint 3.5: HTMX lazy-loaded template-editor in Customize hub)
 - [ ] Player Notes Overhaul (Sprint 4: locking, rich text, versions, shared, template block)
 - [ ] hx-boost sidebar navigation (Sprint 5: prevent full page reloads)
 - [ ] "View as player" toggle (Sprint 5)
@@ -251,3 +252,15 @@ These are the highest-priority items across all future phases. Pick from here.
 - [x] `category_blocks.templ`: CategoryBlockSwitch + 6 category block components
 - [x] `category_dashboard.templ`: conditional render from custom layout or hardcoded default
 - [x] Customize page Category Dashboards tab: Alpine.js category selector + dashboard-editor per category
+
+### Phase D Sprint 3.5: Page Layouts Tab (2026-02-23)
+- [x] `template_editor.js`: `destroy()` method for HTMX lifecycle cleanup
+- [x] `template_editor.js`: scoped `findSaveBtn()`/`findSaveStatus()` helpers (fragment + fallback)
+- [x] `EntityTypeLayoutFetcher` interface + `LayoutEditorEntityType` struct in campaigns/handler.go
+- [x] `LayoutEditorFragment` handler (GET `/customize/layout-editor/:etid`, IDOR protection)
+- [x] Route registration in campaigns/routes.go (owner-only)
+- [x] Customize page: fifth "Page Layouts" tab button + tab content panel
+- [x] `pageLayoutsTab` component: category selector + HTMX lazy-load triggers
+- [x] `LayoutEditorFragment` templ component: scoped save controls + template-editor mount
+- [x] `entityTypeLayoutFetcherAdapter` in app/routes.go (bridges entities service → campaigns handler)
+- [x] Entity type config page: back button → `/campaigns/:id/customize`

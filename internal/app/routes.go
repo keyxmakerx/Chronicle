@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -78,6 +79,34 @@ func (a *recentEntityListerAdapter) ListRecentForDashboard(ctx context.Context, 
 		}
 	}
 	return result, nil
+}
+
+// entityTypeLayoutFetcherAdapter wraps entities.EntityService to implement the
+// campaigns.EntityTypeLayoutFetcher interface. Fetches a single entity type
+// with pre-serialized layout and fields JSON for the page layout editor.
+type entityTypeLayoutFetcherAdapter struct {
+	svc entities.EntityService
+}
+
+// GetEntityTypeForLayoutEditor returns entity type data formatted for the
+// template-editor widget mount. Layout and fields are pre-serialized to JSON.
+func (a *entityTypeLayoutFetcherAdapter) GetEntityTypeForLayoutEditor(ctx context.Context, entityTypeID int) (*campaigns.LayoutEditorEntityType, error) {
+	et, err := a.svc.GetEntityTypeByID(ctx, entityTypeID)
+	if err != nil {
+		return nil, err
+	}
+	layoutJSON, _ := json.Marshal(et.Layout)
+	fieldsJSON, _ := json.Marshal(et.Fields)
+	return &campaigns.LayoutEditorEntityType{
+		ID:         et.ID,
+		CampaignID: et.CampaignID,
+		Name:       et.Name,
+		NamePlural: et.NamePlural,
+		Icon:       et.Icon,
+		Color:      et.Color,
+		LayoutJSON: string(layoutJSON),
+		FieldsJSON: string(fieldsJSON),
+	}, nil
 }
 
 // campaignAuditAdapter wraps audit.AuditService to implement the
@@ -202,6 +231,7 @@ func (a *App) RegisterRoutes() {
 	campaignService := campaigns.NewCampaignService(campaignRepo, userFinder, smtpService, entityService, a.Config.BaseURL)
 	campaignHandler := campaigns.NewHandler(campaignService)
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
+	campaignHandler.SetLayoutFetcher(&entityTypeLayoutFetcherAdapter{svc: entityService})
 	campaignHandler.SetRecentEntityLister(&recentEntityListerAdapter{svc: entityService})
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
 
