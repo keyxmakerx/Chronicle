@@ -8,7 +8,6 @@
 package campaigns
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -77,7 +76,7 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 					</div>
 				</div>
 
-				<!-- Dashboard tab: campaign dashboard layout editor (future Sprint 2) -->
+				<!-- Dashboard tab: campaign dashboard layout editor -->
 				<div x-show="tab === 'dashboard'" x-cloak class="h-full overflow-y-auto">
 					<div class="max-w-3xl mx-auto px-6 py-6">
 						@dashboardEditorTab(cc, csrfToken)
@@ -91,7 +90,7 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 					</div>
 				</div>
 
-				<!-- Category Dashboards tab: per-category landing page editor (future Sprint 3) -->
+				<!-- Category Dashboards tab: per-category description + layout editor -->
 				<div x-show="tab === 'category-dashboards'" x-cloak class="h-full overflow-y-auto">
 					<div class="max-w-3xl mx-auto px-6 py-6">
 						@categoryDashboardsTab(cc, entityTypes, csrfToken)
@@ -220,15 +219,15 @@ templ categoriesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 	</div>
 }
 
-// categoryDashboardsTab renders a category selector and mounts a dashboard editor
-// widget for the selected category. Uses Alpine.js to switch between categories.
+// categoryDashboardsTab renders a category selector with description settings
+// and a dashboard layout editor for the selected category.
 templ categoryDashboardsTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
 	<div class="space-y-6">
 		<div>
 			<h2 class="text-lg font-semibold text-fg mb-1">Category Dashboards</h2>
 			<p class="text-sm text-fg-secondary">
-				Customize the landing page for each entity category.
-				Select a category below, then drag blocks to build its dashboard.
+				Customize the landing page for each entity category. Set a description
+				and build a custom block layout.
 			</p>
 		</div>
 
@@ -263,9 +262,47 @@ templ categoryDashboardsTab(cc *CampaignContext, entityTypes []SettingsEntityTyp
 					}
 				</div>
 
-				<!-- Dashboard editor for each category (conditionally shown) -->
+				<!-- Settings + layout editor for each category (conditionally shown) -->
 				for _, et := range entityTypes {
-					<div x-show={ fmt.Sprintf("selectedCategory === %d", et.ID) } x-cloak>
+					<div x-show={ fmt.Sprintf("selectedCategory === %d", et.ID) } x-cloak class="space-y-5">
+						<!-- Description -->
+						<div
+							class="card p-4 space-y-2"
+							x-data={ fmt.Sprintf("{ desc: %s, saving: false, saved: false }", catDescJS(et.Description)) }
+						>
+							<h3 class="text-sm font-semibold text-fg">Description</h3>
+							<p class="text-xs text-fg-secondary">
+								Short text shown at the top of the { et.NamePlural } landing page.
+							</p>
+							<textarea
+								class="input w-full text-sm h-20 resize-y"
+								x-model="desc"
+								placeholder={ fmt.Sprintf("Describe the %s category...", et.NamePlural) }
+								maxlength="2000"
+							></textarea>
+							<div class="flex items-center justify-end gap-2 mt-2">
+								<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
+								<button
+									type="button"
+									class="btn-primary text-xs px-3 py-1.5"
+									:disabled="saving"
+									@click={ fmt.Sprintf(`
+										saving = true; saved = false;
+										fetch('/campaigns/%s/entity-types/%d/dashboard', {
+											method: 'PUT',
+											headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+											credentials: 'same-origin',
+											body: JSON.stringify({ description: desc, pinned_entity_ids: [] })
+										}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
+									`, cc.Campaign.ID, et.ID, csrfToken) }
+								>
+									<span x-show="!saving">Save Description</span>
+									<span x-show="saving">Saving...</span>
+								</button>
+							</div>
+						</div>
+
+						<!-- Layout editor -->
 						<div
 							data-widget="dashboard-editor"
 							data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/dashboard-layout", cc.Campaign.ID, et.ID) }
@@ -280,17 +317,34 @@ templ categoryDashboardsTab(cc *CampaignContext, entityTypes []SettingsEntityTyp
 	</div>
 }
 
+// catDescJS returns a JS-safe quoted string for initializing Alpine.js x-data.
+func catDescJS(desc *string) string {
+	if desc == nil || *desc == "" {
+		return "''"
+	}
+	// Escape single quotes and newlines for safe embedding in JS string.
+	s := *desc
+	result := "'"
+	for _, c := range s {
+		switch c {
+		case '\'':
+			result += "\\'"
+		case '\\':
+			result += "\\\\"
+		case '\n':
+			result += "\\n"
+		case '\r':
+			result += "\\r"
+		default:
+			result += string(c)
+		}
+	}
+	result += "'"
+	return result
+}
+
 // categoryBlockTypesJSON returns the JSON for the category-specific block palette
 // used by the dashboard editor widget.
 func categoryBlockTypesJSON() string {
 	return `[{"type":"category_header","label":"Category Header","icon":"fa-heading","desc":"Category name, icon & description"},{"type":"pinned_pages","label":"Pinned Pages","icon":"fa-thumbtack","desc":"Pinned entity cards"},{"type":"entity_grid","label":"Entity Grid","icon":"fa-grid-2","desc":"All entities as card grid"},{"type":"recent_pages","label":"Recent Pages","icon":"fa-clock","desc":"Recently updated entities"},{"type":"text_block","label":"Text Block","icon":"fa-align-left","desc":"Custom rich text / HTML"},{"type":"search_bar","label":"Search Bar","icon":"fa-magnifying-glass","desc":"Search within this category"}]`
-}
-
-// customizeEntityTypesJSON serializes entity types to JSON for the customize page widgets.
-func customizeEntityTypesJSON(types []SettingsEntityType) string {
-	b, err := json.Marshal(types)
-	if err != nil {
-		return "[]"
-	}
-	return string(b)
 }

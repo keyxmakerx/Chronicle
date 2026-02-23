@@ -10,13 +10,15 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// timeSeriesJSON serializes time series data for Chart.js.
+// timeSeriesJSON serializes time series data for the mini bar charts.
+// Returns "[]" (not "null") when points is nil or empty, so the JS
+// parser always gets a valid array.
 func timeSeriesJSON(points []TimeSeriesPoint) string {
 	type chartPoint struct {
 		X string `json:"x"`
 		Y int64  `json:"y"`
 	}
-	var out []chartPoint
+	out := make([]chartPoint, 0, len(points))
 	for _, p := range points {
 		out = append(out, chartPoint{X: p.Timestamp.Format("15:04"), Y: p.Count})
 	}
@@ -25,7 +27,11 @@ func timeSeriesJSON(points []TimeSeriesPoint) string {
 }
 
 // topEntriesJSON serializes top entries for charts.
+// Returns "[]" when entries is nil so JSON.parse always gets an array.
 func topEntriesJSON(entries []TopEntry) string {
+	if entries == nil {
+		return "[]"
+	}
 	b, _ := json.Marshal(entries)
 	return string(b)
 }
