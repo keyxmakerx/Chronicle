@@ -362,30 +362,34 @@
   /* ---- Drill-Down Sidebar ---- */
 
   /* When the main panel is in "peek" mode (drilled into a category), it
-     becomes a narrow strip. Pointer events pass through except on the strip
-     itself, which acts as a back button. A subtle glow on hover signals
-     interactivity. */
+     becomes a narrow strip (~36px). Content fades in via a gradient mask
+     so the last letter or two of nav items are visible, creating a
+     "hiding behind the panel" effect. Clicking the strip drills back out. */
   .sidebar-peek {
     @apply cursor-pointer;
     pointer-events: auto;
   }
   .sidebar-peek:hover {
-    box-shadow: inset -4px 0 12px -4px rgba(99, 102, 241, 0.4);
+    box-shadow: inset -4px 0 16px -4px rgba(99, 102, 241, 0.5);
   }
-  /* Dim content when peeking to reinforce it's a "back" affordance.
-     Right-align everything so text/icons crowd toward the visible 10px
-     strip on the right edge of the panel. Opacity must be high enough
-     that icons/text are still visible on the dark sidebar background. */
+  /* Gradient mask: content fades from transparent (left / screen edge) to
+     opaque (right / adjacent to the drilled-in panel). Icons and a letter
+     or two of text peek through, giving the visual hint of hidden content. */
   .sidebar-peek > nav {
-    @apply opacity-60 pointer-events-none;
+    @apply pointer-events-none;
     text-align: right;
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 70%);
+    mask-image: linear-gradient(to right, transparent 0%, black 70%);
   }
   .sidebar-peek:hover > nav {
-    @apply opacity-80;
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 50%);
+    mask-image: linear-gradient(to right, transparent 0%, black 50%);
   }
-  /* Flip flex links so icon sits at the right edge (most visible). */
+  /* Flip flex links so icon sits at the right edge (most visible).
+     Reduce right padding so content sits closer to the visible strip. */
   .sidebar-peek > nav a {
     flex-direction: row-reverse;
+    padding-right: 6px;
   }
 
   /* --- Notes Widget --- */
