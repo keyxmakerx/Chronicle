@@ -296,6 +296,9 @@ func (a *App) RegisterRoutes() {
 	// Wire addon count into admin dashboard for the Extensions stat card.
 	adminHandler.SetAddonCounter(addonService)
 
+	// Wire addon checker into entity handler for conditional attributes rendering.
+	entityHandler.SetAddonChecker(addonService)
+
 	// Security admin: event logging, session management, user account actions.
 	securityRepo := admin.NewSecurityEventRepository(a.DB)
 	securityService := admin.NewSecurityService(securityRepo, authRepo, authService)
