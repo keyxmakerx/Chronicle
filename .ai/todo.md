@@ -298,3 +298,12 @@ see `.ai/roadmap.md`.
 - [x] Reuses existing `/campaigns/:id/entities/search` JSON endpoint
 - [x] Topbar trigger button replaces inline HTMX search input (responsive, all screen sizes)
 - [x] Closes on Escape, backdrop click, and `chronicle:navigated` event
+
+### Phase E Sprint 2: Customization Hub Rework (2026-02-24)
+- [x] Consolidated 5 tabs → 4 tabs (Dashboard, Categories, Page Templates, Navigation)
+- [x] Categories tab: HTMX lazy-loads identity + attributes + category dashboard per category
+- [x] New endpoint: `GET /entity-types/:etid/customize` (HTMX fragment in entities plugin)
+- [x] Identity save uses Alpine.js + fetch() with JSON (fixed broken HTMX form submission)
+- [x] Attributes (entity-type-editor fields-only) now embedded in Categories tab
+- [x] Entity types management page back link updated to Customize
+- [x] Bug fix: Nav Panel tab identity save on entity type config page (same HTMX→JSON fix)

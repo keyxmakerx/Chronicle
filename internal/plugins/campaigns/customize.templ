@@ -1,7 +1,15 @@
 // customize.templ renders the Campaign Customization Hub -- a centralized page
-// for campaign owners to control navigation, dashboards, entity templates, and
-// category layouts. Tabs: Navigation, Dashboard, Categories, Category Dashboards,
-// Page Layouts.
+// for campaign owners to control dashboards, categories, page templates, and
+// sidebar navigation.
+//
+// Tabs:
+//   1. Dashboard     — Campaign dashboard layout editor (drag-and-drop blocks).
+//   2. Categories    — Per-category settings: identity, attributes, and category
+//                      dashboard. Content lazy-loaded via HTMX from the entities
+//                      plugin (one fragment per selected category).
+//   3. Page Templates — Per-category page template editor (template-editor widget,
+//                      lazy-loaded via HTMX).
+//   4. Navigation    — Sidebar ordering/visibility + custom sections & links.
 //
 // Route: GET /campaigns/:id/customize
 // Permission: RoleOwner only.
@@ -16,7 +24,7 @@ import (
 // CustomizePage renders the Campaign Customization Hub with tabbed interface.
 templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
 	@layouts.App(cc.Campaign.Name + " - Customize") {
-		<div class="h-full flex flex-col -mx-5 -my-4" x-data="{ tab: 'navigation' }">
+		<div class="h-full flex flex-col -mx-5 -my-4" x-data="{ tab: 'dashboard' }">
 			<!-- Header -->
 			<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
 				<div class="flex items-center gap-3">
@@ -31,59 +39,45 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 					</a>
 					<div>
 						<h1 class="text-base font-semibold text-fg">Campaign Customization</h1>
-						<p class="text-[11px] text-fg-secondary">Personalize navigation, dashboards, and layouts</p>
+						<p class="text-[11px] text-fg-secondary">Dashboards, categories, page templates, and navigation</p>
 					</div>
 				</div>
 			</div>
 
 			<!-- Tab bar -->
-			<div class="bg-surface border-b border-edge px-6 flex gap-0 shrink-0">
+			<div class="bg-surface border-b border-edge px-6 flex gap-0 shrink-0 overflow-x-auto">
 				<button
-					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
-					:class="tab === 'navigation' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
-					@click="tab = 'navigation'"
-				>
-					<i class="fa-solid fa-bars mr-1.5 text-xs"></i> Navigation
-				</button>
-				<button
-					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
 					:class="tab === 'dashboard' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
 					@click="tab = 'dashboard'"
 				>
 					<i class="fa-solid fa-grip mr-1.5 text-xs"></i> Dashboard
 				</button>
 				<button
-					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
 					:class="tab === 'categories' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
 					@click="tab = 'categories'"
 				>
 					<i class="fa-solid fa-folder-open mr-1.5 text-xs"></i> Categories
 				</button>
 				<button
-					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
-					:class="tab === 'category-dashboards' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
-					@click="tab = 'category-dashboards'"
+					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+					:class="tab === 'page-templates' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
+					@click="tab = 'page-templates'"
 				>
-					<i class="fa-solid fa-table-columns mr-1.5 text-xs"></i> Category Dashboards
+					<i class="fa-solid fa-layer-group mr-1.5 text-xs"></i> Page Templates
 				</button>
 				<button
-					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
-					:class="tab === 'page-layouts' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
-					@click="tab = 'page-layouts'"
+					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+					:class="tab === 'navigation' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
+					@click="tab = 'navigation'"
 				>
-					<i class="fa-solid fa-layer-group mr-1.5 text-xs"></i> Page Layouts
+					<i class="fa-solid fa-bars mr-1.5 text-xs"></i> Navigation
 				</button>
 			</div>
 
 			<!-- Tab content -->
 			<div class="flex-1 overflow-hidden">
-				<!-- Navigation tab: sidebar ordering, visibility, custom sections/links -->
-				<div x-show="tab === 'navigation'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-6">
-						@navigationTab(cc, entityTypes, csrfToken)
-					</div>
-				</div>
-
 				<!-- Dashboard tab: campaign dashboard layout editor -->
 				<div x-show="tab === 'dashboard'" x-cloak class="h-full overflow-y-auto">
 					<div class="max-w-3xl mx-auto px-6 py-6">
@@ -91,23 +85,172 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 					</div>
 				</div>
 
-				<!-- Categories tab: entity type management grid -->
+				<!-- Categories tab: per-category config (identity, attributes, dashboard) -->
 				<div x-show="tab === 'categories'" x-cloak class="h-full overflow-y-auto">
 					<div class="max-w-3xl mx-auto px-6 py-6">
 						@categoriesTab(cc, entityTypes, csrfToken)
 					</div>
 				</div>
 
-				<!-- Category Dashboards tab: per-category description + layout editor -->
-				<div x-show="tab === 'category-dashboards'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-6">
-						@categoryDashboardsTab(cc, entityTypes, csrfToken)
-					</div>
+				<!-- Page Templates tab: per-category template editor, lazy-loaded via HTMX -->
+				<div x-show="tab === 'page-templates'" x-cloak class="h-full overflow-hidden">
+					@pageTemplatesTab(cc, entityTypes, csrfToken)
 				</div>
 
-				<!-- Page Layouts tab: per-category template editor, lazy-loaded via HTMX -->
-				<div x-show="tab === 'page-layouts'" x-cloak class="h-full overflow-hidden">
-					@pageLayoutsTab(cc, entityTypes, csrfToken)
+				<!-- Navigation tab: sidebar ordering, visibility, custom sections/links -->
+				<div x-show="tab === 'navigation'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-6">
+						@navigationTab(cc, entityTypes, csrfToken)
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// dashboardEditorTab renders the campaign dashboard layout editor with a
+// drag-and-drop block builder. Mounts the dashboard-editor widget.
+templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
+	<div class="space-y-6">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Campaign Dashboard</h2>
+			<p class="text-sm text-fg-secondary">
+				Customize the layout of your campaign's main dashboard page.
+				Add rows, drag blocks from the palette into columns, and save.
+			</p>
+		</div>
+
+		<div
+			data-widget="dashboard-editor"
+			data-endpoint={ fmt.Sprintf("/campaigns/%s/dashboard-layout", cc.Campaign.ID) }
+			data-campaign-id={ cc.Campaign.ID }
+			data-csrf-token={ csrfToken }
+		></div>
+	</div>
+}
+
+// categoriesTab renders a unified category management interface. A selector
+// at the top picks the category; HTMX lazy-loads identity, attributes, and
+// category dashboard configuration from the entities plugin.
+templ categoriesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
+	<div class="space-y-6">
+		<div class="flex items-center justify-between">
+			<div>
+				<h2 class="text-lg font-semibold text-fg mb-1">Categories</h2>
+				<p class="text-sm text-fg-secondary">
+					Configure identity, attributes, and dashboard for each category.
+				</p>
+			</div>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
+				class="btn-secondary text-sm"
+			>
+				<i class="fa-solid fa-plus mr-1.5"></i> Manage Categories
+			</a>
+		</div>
+
+		if len(entityTypes) == 0 {
+			<div class="card p-8 text-center">
+				<i class="fa-solid fa-folder-open text-3xl text-fg-muted mb-3"></i>
+				<p class="text-sm text-fg-secondary">No categories yet. Create one to get started.</p>
+			</div>
+		} else {
+			<!-- Category selector -->
+			<div class="flex flex-wrap gap-2" x-data="{ selected: 0 }">
+				for _, et := range entityTypes {
+					<button
+						type="button"
+						class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm"
+						:class={ fmt.Sprintf("selected === %d ? 'border-accent bg-accent/10 text-accent font-medium' : 'border-edge bg-surface hover:border-accent/30 text-fg-secondary'", et.ID) }
+						@click={ fmt.Sprintf("selected = %d", et.ID) }
+						hx-get={ fmt.Sprintf("/campaigns/%s/entity-types/%d/customize", cc.Campaign.ID, et.ID) }
+						hx-target="#category-config-container"
+						hx-swap="innerHTML"
+					>
+						<span
+							class="w-6 h-6 rounded flex items-center justify-center text-[10px] shrink-0"
+							style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+						>
+							if et.Icon != "" {
+								<i class={ "fa-solid " + et.Icon }></i>
+							} else {
+								<i class="fa-solid fa-file"></i>
+							}
+						</span>
+						{ et.NamePlural }
+					</button>
+				}
+			</div>
+
+			<!-- Lazy-loaded category config container -->
+			<div id="category-config-container">
+				<div class="card p-8 text-center">
+					<i class="fa-solid fa-hand-pointer text-2xl text-fg-muted mb-2"></i>
+					<p class="text-sm text-fg-secondary">Select a category above to configure it.</p>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// pageTemplatesTab renders the page template editor tab. Shows category selector
+// buttons that lazy-load the template-editor widget via HTMX. Only one editor
+// is mounted at a time to keep things lightweight.
+templ pageTemplatesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
+	if len(entityTypes) == 0 {
+		<div class="px-6 py-6">
+			<div class="max-w-3xl mx-auto">
+				<div class="card p-8 text-center">
+					<i class="fa-solid fa-layer-group text-3xl text-fg-muted mb-3"></i>
+					<p class="text-sm text-fg-secondary">No categories yet. Create categories first to customize their page templates.</p>
+				</div>
+			</div>
+		</div>
+	} else {
+		<div class="h-full flex flex-col">
+			<div class="px-6 pt-4 pb-2 shrink-0">
+				<div class="max-w-3xl mx-auto">
+					<div class="mb-1">
+						<h2 class="text-lg font-semibold text-fg mb-1">Page Templates</h2>
+						<p class="text-sm text-fg-secondary">
+							Design the profile page layout for each category using drag-and-drop blocks.
+						</p>
+					</div>
+					<!-- Category selector buttons with HTMX triggers -->
+					<div class="flex flex-wrap gap-2 mt-3" x-data="{ selected: 0 }">
+						for _, et := range entityTypes {
+							<button
+								type="button"
+								class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm"
+								:class={ fmt.Sprintf("selected === %d ? 'border-accent bg-accent/10 text-accent font-medium' : 'border-edge bg-surface hover:border-accent/30 text-fg-secondary'", et.ID) }
+								@click={ fmt.Sprintf("selected = %d", et.ID) }
+								hx-get={ fmt.Sprintf("/campaigns/%s/customize/layout-editor/%d", cc.Campaign.ID, et.ID) }
+								hx-target="#layout-editor-container"
+								hx-swap="innerHTML"
+							>
+								<span
+									class="w-6 h-6 rounded flex items-center justify-center text-[10px] shrink-0"
+									style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+								>
+									if et.Icon != "" {
+										<i class={ "fa-solid " + et.Icon }></i>
+									} else {
+										<i class="fa-solid fa-file"></i>
+									}
+								</span>
+								{ et.NamePlural }
+							</button>
+						}
+					</div>
+				</div>
+			</div>
+			<!-- Container for the lazy-loaded template editor -->
+			<div id="layout-editor-container" class="flex-1 overflow-hidden">
+				<div class="h-full flex items-center justify-center text-fg-secondary text-sm">
+					<div class="text-center">
+						<i class="fa-solid fa-layer-group text-2xl text-fg-muted mb-2"></i>
+						<p>Select a category above to edit its page template.</p>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -156,278 +299,8 @@ templ navigationTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 	</div>
 }
 
-// dashboardEditorTab renders the campaign dashboard layout editor with a
-// drag-and-drop block builder. Mounts the dashboard-editor widget.
-templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
-	<div class="space-y-6">
-		<div>
-			<h2 class="text-lg font-semibold text-fg mb-1">Campaign Dashboard</h2>
-			<p class="text-sm text-fg-secondary">
-				Customize the layout of your campaign's main dashboard page.
-				Add rows, drag blocks from the palette into columns, and save.
-			</p>
-		</div>
-
-		<div
-			data-widget="dashboard-editor"
-			data-endpoint={ fmt.Sprintf("/campaigns/%s/dashboard-layout", cc.Campaign.ID) }
-			data-campaign-id={ cc.Campaign.ID }
-			data-csrf-token={ csrfToken }
-		></div>
-	</div>
-}
-
-// categoriesTab renders the entity type management grid. Shows all entity types
-// with links to their individual configuration pages.
-templ categoriesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
-	<div class="space-y-6">
-		<div class="flex items-center justify-between">
-			<div>
-				<h2 class="text-lg font-semibold text-fg mb-1">Categories</h2>
-				<p class="text-sm text-fg-secondary">
-					Manage entity types and their page templates, attributes, and dashboard settings.
-				</p>
-			</div>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
-				class="btn-primary text-sm"
-			>
-				<i class="fa-solid fa-plus mr-1.5"></i> New Category
-			</a>
-		</div>
-
-		if len(entityTypes) == 0 {
-			<div class="card p-8 text-center">
-				<i class="fa-solid fa-folder-open text-3xl text-fg-muted mb-3"></i>
-				<p class="text-sm text-fg-secondary">No categories yet. Create one to get started.</p>
-			</div>
-		} else {
-			<div class="grid gap-3">
-				for _, et := range entityTypes {
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types/%d/config", cc.Campaign.ID, et.ID)) }
-						class="card p-4 flex items-center gap-4 hover:border-accent/30 transition-colors group"
-					>
-						<div
-							class="w-10 h-10 rounded-lg flex items-center justify-center text-sm shrink-0"
-							style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-						>
-							if et.Icon != "" {
-								<i class={ "fa-solid " + et.Icon }></i>
-							} else {
-								<i class="fa-solid fa-file"></i>
-							}
-						</div>
-						<div class="flex-1 min-w-0">
-							<div class="text-sm font-medium text-fg group-hover:text-accent transition-colors">{ et.NamePlural }</div>
-							<div class="text-xs text-fg-secondary">{ et.Name }</div>
-						</div>
-						<div class="text-fg-muted group-hover:text-accent transition-colors">
-							<i class="fa-solid fa-chevron-right text-xs"></i>
-						</div>
-					</a>
-				}
-			</div>
-		}
-	</div>
-}
-
-// categoryDashboardsTab renders a category selector with description settings
-// and a dashboard layout editor for the selected category.
-templ categoryDashboardsTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
-	<div class="space-y-6">
-		<div>
-			<h2 class="text-lg font-semibold text-fg mb-1">Category Dashboards</h2>
-			<p class="text-sm text-fg-secondary">
-				Customize the landing page for each entity category. Set a description
-				and build a custom block layout.
-			</p>
-		</div>
-
-		if len(entityTypes) == 0 {
-			<div class="card p-8 text-center">
-				<i class="fa-solid fa-table-columns text-3xl text-fg-muted mb-3"></i>
-				<p class="text-sm text-fg-secondary">No categories yet. Create categories first to customize their dashboards.</p>
-			</div>
-		} else {
-			<div x-data={ fmt.Sprintf("{ selectedCategory: %d }", entityTypes[0].ID) }>
-				<!-- Category selector -->
-				<div class="flex flex-wrap gap-2 mb-5">
-					for _, et := range entityTypes {
-						<button
-							type="button"
-							class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm"
-							:class={ fmt.Sprintf("selectedCategory === %d ? 'border-accent bg-accent/10 text-accent font-medium' : 'border-edge bg-surface hover:border-accent/30 text-fg-secondary'", et.ID) }
-							@click={ fmt.Sprintf("selectedCategory = %d", et.ID) }
-						>
-							<span
-								class="w-6 h-6 rounded flex items-center justify-center text-[10px] shrink-0"
-								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-							>
-								if et.Icon != "" {
-									<i class={ "fa-solid " + et.Icon }></i>
-								} else {
-									<i class="fa-solid fa-file"></i>
-								}
-							</span>
-							{ et.NamePlural }
-						</button>
-					}
-				</div>
-
-				<!-- Settings + layout editor for each category (conditionally shown) -->
-				for _, et := range entityTypes {
-					<div x-show={ fmt.Sprintf("selectedCategory === %d", et.ID) } x-cloak class="space-y-5">
-						<!-- Description -->
-						<div
-							class="card p-4 space-y-2"
-							x-data={ fmt.Sprintf("{ desc: %s, saving: false, saved: false }", catDescJS(et.Description)) }
-						>
-							<h3 class="text-sm font-semibold text-fg">Description</h3>
-							<p class="text-xs text-fg-secondary">
-								Short text shown at the top of the { et.NamePlural } landing page.
-							</p>
-							<textarea
-								class="input w-full text-sm h-20 resize-y"
-								x-model="desc"
-								placeholder={ fmt.Sprintf("Describe the %s category...", et.NamePlural) }
-								maxlength="2000"
-							></textarea>
-							<div class="flex items-center justify-end gap-2 mt-2">
-								<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
-								<button
-									type="button"
-									class="btn-primary text-xs px-3 py-1.5"
-									:disabled="saving"
-									@click={ fmt.Sprintf(`
-										saving = true; saved = false;
-										fetch('/campaigns/%s/entity-types/%d/dashboard', {
-											method: 'PUT',
-											headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-											credentials: 'same-origin',
-											body: JSON.stringify({ description: desc, pinned_entity_ids: [] })
-										}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
-									`, cc.Campaign.ID, et.ID, csrfToken) }
-								>
-									<span x-show="!saving">Save Description</span>
-									<span x-show="saving">Saving...</span>
-								</button>
-							</div>
-						</div>
-
-						<!-- Layout editor -->
-						<div
-							data-widget="dashboard-editor"
-							data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/dashboard-layout", cc.Campaign.ID, et.ID) }
-							data-campaign-id={ cc.Campaign.ID }
-							data-csrf-token={ csrfToken }
-							data-block-types={ categoryBlockTypesJSON() }
-						></div>
-					</div>
-				}
-			</div>
-		}
-	</div>
-}
-
-// catDescJS returns a JS-safe quoted string for initializing Alpine.js x-data.
-func catDescJS(desc *string) string {
-	if desc == nil || *desc == "" {
-		return "''"
-	}
-	// Escape single quotes and newlines for safe embedding in JS string.
-	s := *desc
-	result := "'"
-	for _, c := range s {
-		switch c {
-		case '\'':
-			result += "\\'"
-		case '\\':
-			result += "\\\\"
-		case '\n':
-			result += "\\n"
-		case '\r':
-			result += "\\r"
-		default:
-			result += string(c)
-		}
-	}
-	result += "'"
-	return result
-}
-
-// categoryBlockTypesJSON returns the JSON for the category-specific block palette
-// used by the dashboard editor widget.
-func categoryBlockTypesJSON() string {
-	return `[{"type":"category_header","label":"Category Header","icon":"fa-heading","desc":"Category name, icon & description"},{"type":"pinned_pages","label":"Pinned Pages","icon":"fa-thumbtack","desc":"Pinned entity cards"},{"type":"entity_grid","label":"Entity Grid","icon":"fa-grid-2","desc":"All entities as card grid"},{"type":"recent_pages","label":"Recent Pages","icon":"fa-clock","desc":"Recently updated entities"},{"type":"text_block","label":"Text Block","icon":"fa-align-left","desc":"Custom rich text / HTML"},{"type":"search_bar","label":"Search Bar","icon":"fa-magnifying-glass","desc":"Search within this category"}]`
-}
-
-// pageLayoutsTab renders the page layout editor tab. Shows category selector
-// buttons that lazy-load the template-editor widget via HTMX. Only one editor
-// is mounted at a time to keep things lightweight.
-templ pageLayoutsTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
-	if len(entityTypes) == 0 {
-		<div class="px-6 py-6">
-			<div class="max-w-3xl mx-auto">
-				<div class="card p-8 text-center">
-					<i class="fa-solid fa-layer-group text-3xl text-fg-muted mb-3"></i>
-					<p class="text-sm text-fg-secondary">No categories yet. Create categories first to customize their page layouts.</p>
-				</div>
-			</div>
-		</div>
-	} else {
-		<div class="h-full flex flex-col">
-			<div class="px-6 pt-4 pb-2 shrink-0">
-				<div class="max-w-3xl mx-auto">
-					<div class="mb-1">
-						<h2 class="text-lg font-semibold text-fg mb-1">Page Layouts</h2>
-						<p class="text-sm text-fg-secondary">
-							Design the profile page layout for each entity category using drag-and-drop blocks.
-						</p>
-					</div>
-					<!-- Category selector buttons with HTMX triggers -->
-					<div class="flex flex-wrap gap-2 mt-3" x-data="{ selected: 0 }">
-						for _, et := range entityTypes {
-							<button
-								type="button"
-								class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm"
-								:class={ fmt.Sprintf("selected === %d ? 'border-accent bg-accent/10 text-accent font-medium' : 'border-edge bg-surface hover:border-accent/30 text-fg-secondary'", et.ID) }
-								@click={ fmt.Sprintf("selected = %d", et.ID) }
-								hx-get={ fmt.Sprintf("/campaigns/%s/customize/layout-editor/%d", cc.Campaign.ID, et.ID) }
-								hx-target="#layout-editor-container"
-								hx-swap="innerHTML"
-							>
-								<span
-									class="w-6 h-6 rounded flex items-center justify-center text-[10px] shrink-0"
-									style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-								>
-									if et.Icon != "" {
-										<i class={ "fa-solid " + et.Icon }></i>
-									} else {
-										<i class="fa-solid fa-file"></i>
-									}
-								</span>
-								{ et.NamePlural }
-							</button>
-						}
-					</div>
-				</div>
-			</div>
-			<!-- Container for the lazy-loaded template editor -->
-			<div id="layout-editor-container" class="flex-1 overflow-hidden">
-				<div class="h-full flex items-center justify-center text-fg-secondary text-sm">
-					<div class="text-center">
-						<i class="fa-solid fa-layer-group text-2xl text-fg-muted mb-2"></i>
-						<p>Select a category above to edit its page layout.</p>
-					</div>
-				</div>
-			</div>
-		</div>
-	}
-}
-
 // LayoutEditorFragment renders the template-editor widget mount for a single
-// entity type. Returned as an HTMX fragment in the Page Layouts tab. Includes
+// entity type. Returned as an HTMX fragment in the Page Templates tab. Includes
 // its own save button so the widget can find it via scoped lookup.
 templ LayoutEditorFragment(cc *CampaignContext, et *LayoutEditorEntityType, csrfToken string) {
 	<div data-te-container class="h-full flex flex-col">
@@ -440,7 +313,7 @@ templ LayoutEditorFragment(cc *CampaignContext, et *LayoutEditorEntityType, csrf
 				>
 					<i class={ "fa-solid " + et.Icon }></i>
 				</div>
-				<span class="text-sm font-medium text-fg">{ et.Name } Page Layout</span>
+				<span class="text-sm font-medium text-fg">{ et.Name } Page Template</span>
 			</div>
 			<div class="flex items-center gap-2">
 				<span id="te-save-status" class="text-xs text-fg-muted"></span>
