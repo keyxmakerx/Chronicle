@@ -58,8 +58,8 @@ templ App(title string) {
 			</div>
 		</div>
 		<!-- Notes widget mount point (floating panel, bottom-right).
-		     Gated behind the "player-notes" addon — off by default. -->
-		if InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "player-notes") {
+		     Gated behind the "notes" addon — off by default. -->
+		if InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes") {
 			@NotesWidget()
 		}
 	}
@@ -74,9 +74,9 @@ var sidebarNavActive = "bg-sidebar-hover text-sidebar-active"
 // sidebarNavInactive is the default state for non-active navigation links.
 var sidebarNavInactive = "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active"
 
-// Sidebar renders the left navigation bar with drill-down support. When inside
-// a campaign, category links trigger a slide animation that reveals a
-// category-specific sub-nav panel (managed by sidebar_drill.js).
+// Sidebar renders the left navigation bar with drill-down support. Organized
+// into distinct zones so that global nav, manage, and admin sections remain
+// static while only the categories area participates in the drill-down.
 templ Sidebar() {
 	<aside
 		id="sidebar"
@@ -90,58 +90,185 @@ templ Sidebar() {
 			<span class="text-xl font-bold text-white tracking-tight">Chronicle</span>
 		</a>
 
-		<!-- Overflow wrapper: clips the sliding panels at 16rem -->
-		<div class="flex-1 overflow-hidden relative min-h-0">
-			<!-- Drill-down slider: absolutely positioned, 32rem wide (2 panels).
-			     translateX shifts which panel is visible in the 16rem viewport. -->
-			<div id="sidebar-slider" class="flex transition-transform duration-300 ease-in-out" style="position:absolute;top:0;bottom:0;left:0;width:32rem;will-change:transform;transform:translate3d(0,0,0)">
-				<!-- Panel 1: Main navigation -->
-				<div id="sidebar-main" class="w-64 shrink-0 flex flex-col min-h-0 h-full">
-					<nav class="flex-1 py-4 overflow-y-auto" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
-						if InCampaign(ctx) {
-							@CampaignSidebarNav()
-						} else {
-							@DefaultSidebarNav()
-						}
-					</nav>
+		if InCampaign(ctx) {
+			<!-- Zone 1: Global nav (static, always visible) -->
+			<div class="shrink-0 pt-3 pb-1 border-b border-gray-700/50" hx-boost="false">
+				<a href="/campaigns" class={ sidebarNavLink, sidebarNavInactive }>
+					<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
+					</svg>
+					All Campaigns
+				</a>
+				<a href="/" class={ sidebarNavLink, sidebarNavInactive }>
+					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+						<i class="fa-solid fa-compass text-xs"></i>
+					</span>
+					Discover
+				</a>
+			</div>
 
-					<!-- Admin section (site admins only) — collapsible -->
-					if GetIsAdmin(ctx) {
-						@AdminSidebarNav()
-					}
-
-					<!-- Sidebar footer -->
-					<div class="p-4 border-t border-gray-700 shrink-0">
-						<div class="text-xs text-gray-600">
-							Chronicle v0.1.0
-						</div>
+			<!-- Zone 2: Campaign context area (scrollable middle) -->
+			<div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+				<!-- Campaign header + Dashboard (static within zone) -->
+				<div class="shrink-0 pt-3" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+					<div class="px-4 mb-1">
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
+							class="text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+						>
+							{ GetCampaignName(ctx) }
+						</a>
 					</div>
-				</div>
-
-				<!-- Panel 2: Category sub-nav (populated by sidebar_drill.js) -->
-				<div id="sidebar-category" class="w-64 shrink-0 flex flex-col min-h-0 h-full">
-					<!-- Back button / peek zone -->
-					<div id="sidebar-back" class="flex items-center px-4 py-3 border-b border-gray-700 cursor-pointer hover:bg-sidebar-hover transition-colors shrink-0">
-						<svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
+						class={ sidebarNavLink,
+							templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))),
+							templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))) }
+					>
+						<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
 						</svg>
-						<span class="text-sm text-gray-400">Back</span>
-					</div>
-
-					<!-- Category header (icon + name) -->
-					<div id="sidebar-cat-header" class="px-4 py-3 border-b border-gray-700/50 shrink-0">
-						<div class="flex items-center gap-2">
-							<span id="sidebar-cat-icon" class="w-6 h-6 rounded flex items-center justify-center"></span>
-							<span id="sidebar-cat-name" class="text-base font-semibold text-white truncate"></span>
-						</div>
-						<span id="sidebar-cat-count" class="text-xs text-gray-500 mt-0.5 block"></span>
-					</div>
-
-					<!-- Category nav content (scrollable) -->
-					<nav id="sidebar-cat-nav" class="flex-1 py-3 overflow-y-auto">
-						<!-- Populated by sidebar_drill.js -->
-					</nav>
+						Dashboard
+					</a>
 				</div>
+
+				<!-- Categories drill-down zone: only this area transforms -->
+				<div id="sidebar-categories-zone" class="flex-1 overflow-hidden relative min-h-0">
+					<!-- Main category list (collapses to icon-only when drilled) -->
+					<div id="sidebar-cat-list" class="h-full overflow-y-auto py-2 transition-all duration-300 ease-in-out" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+						<div class="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
+							Categories
+						</div>
+						for _, et := range GetEntityTypes(ctx) {
+							@entityTypeLink(et.Slug, et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID))
+						}
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
+							</span>
+							<span class="flex-1">All Pages</span>
+						</a>
+						<!-- Custom sidebar sections and links -->
+						if len(GetCustomSections(ctx)) > 0 || len(GetCustomLinks(ctx)) > 0 {
+							for _, link := range GetCustomLinks(ctx) {
+								if link.Section == "" {
+									@customNavLink(link)
+								}
+							}
+							for _, section := range GetCustomSections(ctx) {
+								<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
+									{ section.Label }
+								</div>
+								for _, link := range GetCustomLinks(ctx) {
+									if link.Section == section.ID {
+										@customNavLink(link)
+									}
+								}
+							}
+						}
+					</div>
+
+					<!-- Category sub-panel (overlay, slides in from right) -->
+					<div id="sidebar-category" class="absolute inset-0 bg-sidebar-bg transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+						<!-- Back button -->
+						<div id="sidebar-back" class="flex items-center px-4 py-3 border-b border-gray-700 cursor-pointer hover:bg-sidebar-hover transition-colors shrink-0">
+							<svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+							</svg>
+							<span class="text-sm text-gray-400">Back</span>
+						</div>
+						<!-- Category header (icon + name) -->
+						<div id="sidebar-cat-header" class="px-4 py-3 border-b border-gray-700/50 shrink-0">
+							<div class="flex items-center gap-2">
+								<span id="sidebar-cat-icon" class="w-6 h-6 rounded flex items-center justify-center"></span>
+								<span id="sidebar-cat-name" class="text-base font-semibold text-white truncate"></span>
+							</div>
+							<span id="sidebar-cat-count" class="text-xs text-gray-500 mt-0.5 block"></span>
+						</div>
+						<!-- Category nav content (scrollable) -->
+						<nav id="sidebar-cat-nav" class="flex-1 py-3 overflow-y-auto">
+							<!-- Populated by sidebar_drill.js -->
+						</nav>
+					</div>
+				</div>
+			</div>
+
+			<!-- Zone 3: Manage section (static, campaign-scoped, owner only) -->
+			if IsAuthenticated(ctx) {
+				<div class="shrink-0 border-t border-gray-700 py-1" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+					<div class="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+						Manage
+					</div>
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx))) }
+						class={ sidebarNavLink,
+							templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))),
+							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))) }
+					>
+						<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+						</svg>
+						Members
+					</a>
+					if GetCampaignRole(ctx) >= 3 {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/activity", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/activity", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/activity", GetCampaignID(ctx)))) }
+						>
+							<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+							</svg>
+							Activity Log
+						</a>
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx)))) }
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-paintbrush text-xs"></i>
+							</span>
+							Customize
+						</a>
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))) }
+						>
+							<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+							</svg>
+							Settings
+						</a>
+					}
+				</div>
+			}
+		} else {
+			<!-- Non-campaign sidebar: simple navigation -->
+			<nav class="flex-1 py-4 overflow-y-auto" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+				@DefaultSidebarNav()
+			</nav>
+		}
+
+		<!-- Zone 4: Admin section (site admins only, static, collapsible) -->
+		if GetIsAdmin(ctx) {
+			@AdminSidebarNav()
+		}
+
+		<!-- Sidebar footer -->
+		<div class="p-4 border-t border-gray-700 shrink-0">
+			<div class="text-xs text-gray-600">
+				Chronicle v0.1.0
 			</div>
 		</div>
 	</aside>
@@ -273,149 +400,8 @@ templ AdminSidebarNav() {
 	</div>
 }
 
-// CampaignSidebarNav renders campaign-scoped navigation with entity type links.
-templ CampaignSidebarNav() {
-	<!-- Campaign header -->
-	<div class="px-4 mb-1">
-		<a
-			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
-			class="text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
-		>
-			{ GetCampaignName(ctx) }
-		</a>
-	</div>
-
-	<!-- Campaign dashboard -->
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
-		class={ sidebarNavLink,
-			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))),
-			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))) }
-	>
-		<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-		</svg>
-		Dashboard
-	</a>
-
-	<!-- Category links (dynamically rendered from DB) -->
-	<div class="mt-4 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-		Categories
-	</div>
-
-	for _, et := range GetEntityTypes(ctx) {
-		@entityTypeLink(et.Slug, et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID))
-	}
-
-	<!-- All pages link -->
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
-		class={ sidebarNavLink,
-			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
-			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
-	>
-		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-			<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
-		</span>
-		All Pages
-	</a>
-
-	<!-- Custom sidebar sections and links (from sidebar_config JSON) -->
-	if len(GetCustomSections(ctx)) > 0 || len(GetCustomLinks(ctx)) > 0 {
-		// Top-level custom links (not assigned to any section).
-		for _, link := range GetCustomLinks(ctx) {
-			if link.Section == "" {
-				@customNavLink(link)
-			}
-		}
-
-		// Custom sections with their assigned links.
-		for _, section := range GetCustomSections(ctx) {
-			<div class="mt-4 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-				{ section.Label }
-			</div>
-			for _, link := range GetCustomLinks(ctx) {
-				if link.Section == section.ID {
-					@customNavLink(link)
-				}
-			}
-		}
-	}
-
-	if IsAuthenticated(ctx) {
-		<!-- Campaign management (auth required) -->
-		<div class="mt-4 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-			Manage
-		</div>
-
-		<a
-			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx))) }
-			class={ sidebarNavLink,
-				templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))),
-				templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))) }
-		>
-			<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
-			</svg>
-			Members
-		</a>
-
-		if GetCampaignRole(ctx) >= 3 {
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/activity", GetCampaignID(ctx))) }
-				class={ sidebarNavLink,
-					templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/activity", GetCampaignID(ctx)))),
-					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/activity", GetCampaignID(ctx)))) }
-			>
-				<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
-				</svg>
-				Activity Log
-			</a>
-
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx))) }
-				class={ sidebarNavLink,
-					templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx)))),
-					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx)))) }
-			>
-				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-					<i class="fa-solid fa-paintbrush text-xs"></i>
-				</span>
-				Customize
-			</a>
-
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx))) }
-				class={ sidebarNavLink,
-					templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))),
-					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))) }
-			>
-				<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-				</svg>
-				Settings
-			</a>
-		}
-
-		<!-- Back to campaigns list + discover (full reload — leaves campaign context) -->
-		<div class="mt-4 pt-3 border-t border-gray-700">
-			<a href="/campaigns" hx-boost="false" class={ sidebarNavLink, sidebarNavInactive }>
-				<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
-				</svg>
-				All Campaigns
-			</a>
-			<a href="/" hx-boost="false" class={ sidebarNavLink, sidebarNavInactive }>
-				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-					<i class="fa-solid fa-compass text-xs"></i>
-				</span>
-				Discover
-			</a>
-		</div>
-	}
-}
+// CampaignSidebarNav is no longer used — its content has been inlined into
+// the zone-based Sidebar() layout for proper drill-down isolation.
 
 // DefaultSidebarNav renders generic navigation when not inside a campaign.
 templ DefaultSidebarNav() {

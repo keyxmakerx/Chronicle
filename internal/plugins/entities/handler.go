@@ -26,12 +26,19 @@ type EntityTagFetcher interface {
 	GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]EntityTagInfo, error)
 }
 
+// AddonChecker is a narrow interface for checking whether an addon is enabled
+// for a campaign. Satisfied by addons.AddonService.
+type AddonChecker interface {
+	IsEnabledForCampaign(ctx context.Context, campaignID string, addonSlug string) (bool, error)
+}
+
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
 	service    EntityService
 	auditSvc   audit.AuditService
 	tagFetcher EntityTagFetcher
+	addonSvc   AddonChecker
 }
 
 // NewHandler creates a new entity handler.
@@ -43,6 +50,12 @@ func NewHandler(service EntityService) *Handler {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetAuditService(svc audit.AuditService) {
 	h.auditSvc = svc
+}
+
+// SetAddonChecker sets the addon checker for conditional feature rendering.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetAddonChecker(svc AddonChecker) {
+	h.addonSvc = svc
 }
 
 // SetTagFetcher sets the tag fetcher for populating entity tags in list views.
@@ -256,8 +269,19 @@ func (h *Handler) Show(c echo.Context) error {
 	children, _ := h.service.GetChildren(c.Request().Context(), entity.ID, int(cc.MemberRole))
 	backlinks, _ := h.service.GetBacklinks(c.Request().Context(), entity.ID, int(cc.MemberRole))
 
+	// Check if the "attributes" addon is enabled for this campaign.
+	// Defaults to true (show attributes) if addon checker is not wired or
+	// the addon hasn't been explicitly disabled.
+	showAttributes := true
+	if h.addonSvc != nil {
+		enabled, err := h.addonSvc.IsEnabledForCampaign(c.Request().Context(), cc.Campaign.ID, "attributes")
+		if err == nil {
+			showAttributes = enabled
+		}
+	}
+
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, backlinks, csrfToken))
+	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, backlinks, showAttributes, csrfToken))
 }
 
 // EditForm renders the entity edit form (GET /campaigns/:id/entities/:eid/edit).
@@ -1031,6 +1055,34 @@ func (h *Handler) EntityTypeCustomizeFragment(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, EntityTypeCustomizeFragmentTmpl(cc, et, csrfToken))
+}
+
+// EntityTypeAttributesFragment returns an HTMX fragment for the Customization
+// Hub's Extensions tab. Contains just the attribute field editor for a single
+// entity type.
+// GET /campaigns/:id/entity-types/:etid/attributes-fragment
+func (h *Handler) EntityTypeAttributesFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, EntityTypeAttributesFragmentTmpl(cc, et, csrfToken))
 }
 
 // --- Layout API ---

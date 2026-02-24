@@ -11,7 +11,8 @@ import (
 )
 
 // EntityShowPage renders the entity profile page driven by the entity type layout.
-templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, backlinks []Entity, csrfToken string) {
+// showAttributes controls whether the attributes block is rendered (based on addon state).
+templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, backlinks []Entity, showAttributes bool, csrfToken string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-6xl mx-auto">
 			<!-- Breadcrumb with ancestor chain -->
@@ -37,7 +38,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 						for _, col := range row.Columns {
 							<div class={ fmt.Sprintf("col-span-%d space-y-4", col.Width) }>
 								for _, block := range col.Blocks {
-									@entityBlock(block, cc, entity, entityType, csrfToken)
+									@entityBlock(block, cc, entity, entityType, showAttributes, csrfToken)
 								}
 							</div>
 						}
@@ -54,7 +55,9 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 					</div>
 					<div class="col-span-4 space-y-4">
 						@blockImage(cc, entity, csrfToken)
-						@blockAttributes(cc, entity, entityType, csrfToken)
+						if showAttributes {
+							@blockAttributes(cc, entity, entityType, csrfToken)
+						}
 						@blockDetails(entity)
 					</div>
 				</div>
@@ -108,10 +111,12 @@ func blockVisibility(block TemplateBlock) string {
 }
 
 // entityBlock dispatches to the correct block renderer based on block type.
-// Applies visibility filtering and optional min-height from block config.
-templ entityBlock(block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
-	// Skip dm_only blocks for non-owner users.
-	if blockVisibility(block) == "dm_only" && cc.MemberRole < campaigns.RoleOwner {
+// Applies visibility filtering, addon checks, and optional min-height from block config.
+templ entityBlock(block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, showAttributes bool, csrfToken string) {
+	// Skip attributes block when the addon is disabled for this campaign.
+	if block.Type == "attributes" && !showAttributes {
+		// Attributes addon disabled — skip this block.
+	} else if blockVisibility(block) == "dm_only" && cc.MemberRole < campaigns.RoleOwner {
 		// Hidden from this user.
 	} else if blockMinHeightStyle(block) != "" {
 		<div style={ blockMinHeightStyle(block) }>

@@ -1,27 +1,27 @@
 /**
- * sidebar_drill.js -- Drill-Down Sidebar Navigation
+ * sidebar_drill.js -- Drill-Down Sidebar Navigation (Overlay Approach)
  *
- * Implements the iOS-style "push" navigation for the sidebar. Clicking a
- * category link in the main panel slides both panels left, revealing the
- * category sub-panel. The main panel peeks from the left edge (~36px) with
- * a gradient fade and hover glow to indicate it's clickable. Clicking the
- * peek or the back button slides everything back.
+ * When a category link is clicked, the category sub-panel slides in from the
+ * right as an overlay (paper effect) while the main category list collapses
+ * to icon-only mode with a gradient shadow. The Manage, Admin, Dashboard,
+ * and global nav sections remain completely static.
  *
  * Architecture:
- *   #sidebar-slider is a flex row holding two w-64 panels.
- *   Drill-in: translateX(calc(-16rem + 36px)) — main panel peeks 36px.
- *   Drill-out: translateX(0) — main panel fully visible.
+ *   #sidebar-categories-zone is a relative-positioned container.
+ *   #sidebar-cat-list holds category links (collapses to icon-only).
+ *   #sidebar-category is an absolute overlay that slides in from the right.
  *
- * The category sub-panel is populated dynamically from data-cat-* attributes
- * on the clicked category link, so no extra API call is needed.
+ *   Drill-in: #sidebar-category gets .sidebar-cat-active (translateX(0)),
+ *             #sidebar-cat-list gets .sidebar-icon-only (hides text, shows icons).
+ *   Drill-out: classes removed, everything restores.
  */
 (function () {
   'use strict';
 
-  var PEEK_PX = 36;
-
   /** @type {HTMLElement|null} */
-  var slider = null;
+  var catList = null;
+  /** @type {HTMLElement|null} */
+  var catPanel = null;
   /** @type {HTMLElement|null} */
   var backBtn = null;
   /** @type {HTMLElement|null} */
@@ -32,8 +32,6 @@
   var catCount = null;
   /** @type {HTMLElement|null} */
   var catNav = null;
-  /** @type {HTMLElement|null} */
-  var mainPanel = null;
 
   /** Whether the sidebar is currently drilled into a category. */
   var isDrilled = false;
@@ -45,25 +43,24 @@
    * Initialize the drill-down sidebar on DOMContentLoaded.
    */
   function init() {
-    slider = document.getElementById('sidebar-slider');
+    catList = document.getElementById('sidebar-cat-list');
+    catPanel = document.getElementById('sidebar-category');
     backBtn = document.getElementById('sidebar-back');
     catIcon = document.getElementById('sidebar-cat-icon');
     catName = document.getElementById('sidebar-cat-name');
     catCount = document.getElementById('sidebar-cat-count');
     catNav = document.getElementById('sidebar-cat-nav');
-    mainPanel = document.getElementById('sidebar-main');
 
-    if (!slider || !backBtn) {
-      console.warn('[sidebar_drill] init aborted: slider=' + !!slider + ', backBtn=' + !!backBtn);
+    if (!catList || !catPanel || !backBtn) {
       return;
     }
 
     // Bind category links.
-    var links = document.querySelectorAll('.sidebar-category-link');
+    var links = catList.querySelectorAll('.sidebar-category-link');
     links.forEach(function (link) {
       link.addEventListener('click', function (e) {
         e.preventDefault();
-        e.stopPropagation(); // Prevent bubbling to mainPanel (which would drillOut).
+        e.stopPropagation();
         drillIn(link);
       });
     });
@@ -73,16 +70,14 @@
       drillOut();
     });
 
-    // Make the main panel peek area clickable to go back.
-    if (mainPanel) {
-      mainPanel.addEventListener('click', function (e) {
-        if (isDrilled) {
-          e.preventDefault();
-          e.stopPropagation();
-          drillOut();
-        }
-      });
-    }
+    // Make the icon-only category list clickable to go back.
+    catList.addEventListener('click', function (e) {
+      if (isDrilled) {
+        e.preventDefault();
+        e.stopPropagation();
+        drillOut();
+      }
+    });
 
     // Check if the current URL matches a category and auto-drill.
     var currentPath = window.location.pathname;
@@ -95,15 +90,12 @@
   }
 
   /**
-   * Drill into a category sub-panel.
+   * Drill into a category sub-panel (overlay approach).
    * @param {HTMLElement} link - The category link that was clicked.
    * @param {boolean} [instant] - If true, skip the animation (initial load).
    */
   function drillIn(link, instant) {
-    if (!slider) {
-      console.warn('[sidebar_drill] drillIn: slider is null');
-      return;
-    }
+    if (!catList || !catPanel) return;
 
     var slug = link.getAttribute('data-cat-slug') || '';
     var label = link.getAttribute('data-cat-label') || '';
@@ -133,39 +125,40 @@
       catNav.innerHTML = buildCategoryNav(catUrl, newUrl, label, color, icon, campaignId, slug);
     }
 
-    // Slide the panels using pixel value (avoid calc inside translate3d).
-    // 16rem = 256px, minus PEEK_PX = 220px offset.
-    var offset = -(256 - PEEK_PX);
+    // Skip animation on initial page load.
     if (instant) {
-      slider.style.transition = 'none';
-    }
-    slider.style.transform = 'translate3d(' + offset + 'px, 0px, 0px)';
-
-    if (instant) {
-      // Force reflow then restore transition.
-      slider.offsetHeight; // eslint-disable-line no-unused-expressions
-      slider.style.transition = '';
+      catPanel.style.transition = 'none';
+      catList.style.transition = 'none';
     }
 
-    // Add peek interaction class to main panel.
-    if (mainPanel) {
-      mainPanel.classList.add('sidebar-peek');
+    // Collapse category list to icon-only mode.
+    catList.classList.add('sidebar-icon-only');
+
+    // Slide the overlay panel in from the right.
+    catPanel.classList.add('sidebar-cat-active');
+
+    if (instant) {
+      // Force reflow then restore transitions.
+      catPanel.offsetHeight; // eslint-disable-line no-unused-expressions
+      catPanel.style.transition = '';
+      catList.style.transition = '';
     }
   }
 
   /**
-   * Drill out back to the main navigation.
+   * Drill out back to the main category list.
    */
   function drillOut() {
-    if (!slider) return;
+    if (!catList || !catPanel) return;
 
     isDrilled = false;
     activeSlug = null;
-    slider.style.transform = 'translate3d(0, 0, 0)';
 
-    if (mainPanel) {
-      mainPanel.classList.remove('sidebar-peek');
-    }
+    // Remove icon-only mode from category list.
+    catList.classList.remove('sidebar-icon-only');
+
+    // Slide the overlay panel back out.
+    catPanel.classList.remove('sidebar-cat-active');
   }
 
   /**
@@ -216,7 +209,7 @@
     // Section header for recent pages.
     html += '<div class="px-4 mt-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">Recent</div>';
 
-    // Placeholder for recent pages (loaded via HTMX or populated later).
+    // Placeholder for recent pages.
     html += '<div id="sidebar-cat-recent" class="text-xs text-gray-500 px-4 py-2 italic">' +
       'Visit "View All" to browse pages' +
       '</div>';

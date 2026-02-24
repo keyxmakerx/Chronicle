@@ -142,6 +142,15 @@ func TestIsInstalled(t *testing.T) {
 	if !IsInstalled("sync-api") {
 		t.Error("expected sync-api to be installed")
 	}
+	if !IsInstalled("notes") {
+		t.Error("expected notes to be installed")
+	}
+	if IsInstalled("player-notes") {
+		t.Error("expected player-notes to NOT be installed (planned, no backing code yet)")
+	}
+	if !IsInstalled("attributes") {
+		t.Error("expected attributes to be installed")
+	}
 	if IsInstalled("dice-roller") {
 		t.Error("expected dice-roller to NOT be installed")
 	}

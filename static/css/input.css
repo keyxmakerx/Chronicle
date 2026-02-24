@@ -394,42 +394,71 @@
     transform: translateX(0) !important;
   }
 
-  /* ---- Drill-Down Sidebar ---- */
+  /* ---- Drill-Down Sidebar (Overlay + Icon-Only) ---- */
 
-  /* When the main panel is in "peek" mode (drilled into a category), it
-     becomes a narrow strip (~36px). Content fades in via a gradient mask
-     so the last letter or two of nav items are visible, creating a
-     "hiding behind the panel" effect. Clicking the strip drills back out. */
-  .sidebar-peek {
+  /* When drilled into a category, the main category list collapses to
+     show only icons. A gradient shadow is cast over the icon strip to
+     create the impression that the overlay panel is casting a shadow. */
+
+  /* Icon-only mode: hide text labels, section headers, counts, chevrons.
+     Keep only the icon spans visible. The list becomes a narrow icon strip. */
+  .sidebar-icon-only {
     @apply cursor-pointer;
+    width: 48px !important;
+    overflow: hidden !important;
     pointer-events: auto;
   }
-  .sidebar-peek:hover {
-    box-shadow: inset -2px 0 6px -2px rgba(255, 255, 255, 0.08);
-  }
-  /* Gradient mask: content fades from transparent (left / screen edge) to
-     opaque (right / adjacent to the drilled-in panel). Text labels peek
-     through, giving the visual hint of hidden content. */
-  .sidebar-peek > nav {
-    @apply pointer-events-none;
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 60%);
-    mask-image: linear-gradient(to right, transparent 0%, black 60%);
-  }
-  .sidebar-peek:hover > nav {
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 40%);
-    mask-image: linear-gradient(to right, transparent 0%, black 40%);
-  }
-  /* Hide icons, counts, chevrons, and section headers in peek mode
-     — only text labels peek through. Text may be a direct text node
-     (Dashboard, Members) or a span.flex-1 (entity type labels). */
-  .sidebar-peek > nav a > span:not(.flex-1),
-  .sidebar-peek > nav a > svg,
-  .sidebar-peek > nav > div {
+
+  /* Hide text, counts, chevrons, section headers in icon-only mode. */
+  .sidebar-icon-only a > span.flex-1,
+  .sidebar-icon-only a > svg:not(.sidebar-icon-only-keep),
+  .sidebar-icon-only a > span.ml-auto,
+  .sidebar-icon-only a > svg.ml-1,
+  .sidebar-icon-only > .sidebar-cat-list-label {
     display: none;
   }
-  /* Tighten right padding so text sits closer to the visible edge. */
-  .sidebar-peek > nav a {
-    padding-right: 8px;
+
+  /* Compact link padding for icon strip. */
+  .sidebar-icon-only a {
+    padding-left: 12px;
+    padding-right: 12px;
+    justify-content: center;
+  }
+
+  /* Icons should center in the narrow strip. */
+  .sidebar-icon-only a > span:first-child {
+    margin-right: 0;
+  }
+
+  /* Gradient shadow overlay: gives the "paper casting shadow" effect
+     over the collapsed icon strip. Uses a pseudo-element for the shadow. */
+  .sidebar-icon-only::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    background: linear-gradient(to left, rgba(0, 0, 0, 0.35), transparent);
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* Hover glow on icon strip to indicate it's clickable. */
+  .sidebar-icon-only:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+  }
+
+  /* Category overlay panel: slides in from the right with paper effect. */
+  #sidebar-category {
+    z-index: 10;
+  }
+
+  /* Active state: panel is visible (slides from translateX(100%) to 0). */
+  #sidebar-category.sidebar-cat-active {
+    transform: translateX(0);
+    /* Paper shadow on left edge — looks like the panel is layered on top. */
+    box-shadow: -6px 0 16px -4px rgba(0, 0, 0, 0.4);
   }
 
   /* --- Notes Widget --- */

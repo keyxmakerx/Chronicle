@@ -87,16 +87,14 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 
 			<!-- Tab content -->
 			<div class="flex-1 overflow-hidden">
-				<!-- Dashboard tab: campaign dashboard layout editor -->
-				<div x-show="tab === 'dashboard'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-4">
-						@dashboardEditorTab(cc, csrfToken)
-					</div>
+				<!-- Dashboard tab: campaign dashboard layout editor (full-page) -->
+				<div x-show="tab === 'dashboard'" x-cloak class="h-full overflow-hidden">
+					@dashboardEditorTab(cc, csrfToken)
 				</div>
 
-				<!-- Categories tab: per-category config (identity, attributes, dashboard) -->
+				<!-- Categories tab: per-category config (identity + dashboard, 2-column) -->
 				<div x-show="tab === 'categories'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-4">
+					<div class="max-w-5xl mx-auto px-6 py-4">
 						@categoriesTab(cc, entityTypes, csrfToken)
 					</div>
 				</div>
@@ -113,10 +111,10 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 					</div>
 				</div>
 
-				<!-- Extensions tab: enable/disable campaign addons -->
+				<!-- Extensions tab: enable/disable campaign addons + attributes editor -->
 				<div x-show="tab === 'extensions'" x-cloak class="h-full overflow-y-auto">
 					<div class="max-w-3xl mx-auto px-6 py-4">
-						@extensionsTab(cc)
+						@extensionsTab(cc, entityTypes, csrfToken)
 					</div>
 				</div>
 			</div>
@@ -125,22 +123,26 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 }
 
 // dashboardEditorTab renders the campaign dashboard layout editor with a
-// drag-and-drop block builder. Mounts the dashboard-editor widget.
+// drag-and-drop block builder. Uses full-page flex layout so the editor
+// fills all available vertical space (matching Page Templates tab pattern).
 templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
-	<div class="space-y-4">
-		<div>
-			<h2 class="text-base font-semibold text-fg mb-0.5">Campaign Dashboard</h2>
-			<p class="text-xs text-fg-secondary">
-				Customize the layout of your campaign's main dashboard page.
-			</p>
+	<div class="h-full flex flex-col">
+		<div class="px-6 pt-4 pb-2 shrink-0">
+			<div class="max-w-3xl mx-auto">
+				<h2 class="text-base font-semibold text-fg mb-0.5">Campaign Dashboard</h2>
+				<p class="text-xs text-fg-secondary">
+					Customize the layout of your campaign's main dashboard page.
+				</p>
+			</div>
 		</div>
-
-		<div
-			data-widget="dashboard-editor"
-			data-endpoint={ fmt.Sprintf("/campaigns/%s/dashboard-layout", cc.Campaign.ID) }
-			data-campaign-id={ cc.Campaign.ID }
-			data-csrf-token={ csrfToken }
-		></div>
+		<div class="flex-1 overflow-y-auto px-6 py-2">
+			<div
+				data-widget="dashboard-editor"
+				data-endpoint={ fmt.Sprintf("/campaigns/%s/dashboard-layout", cc.Campaign.ID) }
+				data-campaign-id={ cc.Campaign.ID }
+				data-csrf-token={ csrfToken }
+			></div>
+		</div>
 	</div>
 }
 
@@ -316,8 +318,10 @@ templ navigationTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 
 // extensionsTab renders the addon/extension management interface. The addon
 // list is lazy-loaded via HTMX from the addons plugin fragment endpoint.
-templ extensionsTab(cc *CampaignContext) {
-	<div class="space-y-4">
+// Also includes the Attributes field editor (per-category), which is managed
+// as a formal addon.
+templ extensionsTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
+	<div class="space-y-6">
 		<div>
 			<h2 class="text-base font-semibold text-fg mb-0.5">Extensions</h2>
 			<p class="text-xs text-fg-secondary">
@@ -325,6 +329,7 @@ templ extensionsTab(cc *CampaignContext) {
 			</p>
 		</div>
 
+		<!-- Addon toggle list (lazy-loaded from addons plugin) -->
 		<div
 			id="addons-list"
 			hx-get={ fmt.Sprintf("/campaigns/%s/addons/fragment", cc.Campaign.ID) }
@@ -335,6 +340,55 @@ templ extensionsTab(cc *CampaignContext) {
 				<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Loading extensions...
 			</div>
 		</div>
+
+		<!-- Attributes field editor (per-category) -->
+		if len(entityTypes) > 0 {
+			<div class="border-t border-edge pt-6">
+				<div class="flex items-center gap-2 mb-1">
+					<i class="fa-solid fa-sliders text-sm text-accent"></i>
+					<h3 class="text-sm font-semibold text-fg">Attributes</h3>
+				</div>
+				<p class="text-xs text-fg-secondary mb-3">
+					Define the custom fields that appear on entity pages for each category.
+					Toggle the Attributes extension above to show or hide them.
+				</p>
+
+				<!-- Category selector for attributes editor -->
+				<div class="flex flex-wrap gap-2 mb-3" x-data="{ attrCat: 0 }">
+					for _, et := range entityTypes {
+						<button
+							type="button"
+							class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm"
+							:class={ fmt.Sprintf("attrCat === %d ? 'border-accent bg-accent/10 text-accent font-medium' : 'border-edge bg-surface hover:border-accent/30 text-fg-secondary'", et.ID) }
+							@click={ fmt.Sprintf("attrCat = %d", et.ID) }
+							hx-get={ fmt.Sprintf("/campaigns/%s/entity-types/%d/attributes-fragment", cc.Campaign.ID, et.ID) }
+							hx-target="#attributes-editor-container"
+							hx-swap="innerHTML"
+						>
+							<span
+								class="w-6 h-6 rounded flex items-center justify-center text-[10px] shrink-0"
+								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+							>
+								if et.Icon != "" {
+									<i class={ "fa-solid " + et.Icon }></i>
+								} else {
+									<i class="fa-solid fa-file"></i>
+								}
+							</span>
+							{ et.NamePlural }
+						</button>
+					}
+				</div>
+
+				<!-- Lazy-loaded attributes editor container -->
+				<div id="attributes-editor-container">
+					<div class="card p-4 text-center text-sm text-fg-secondary">
+						<i class="fa-solid fa-hand-pointer text-lg text-fg-muted mb-2"></i>
+						<p>Select a category above to configure its attributes.</p>
+					</div>
+				</div>
+			</div>
+		}
 	</div>
 }
 
