@@ -405,9 +405,10 @@
   .sidebar-icon-only {
     @apply cursor-pointer;
     position: relative;
-    width: 48px !important;
+    width: 32px !important;
     overflow: hidden !important;
     pointer-events: auto;
+    border-top: 1px solid rgba(107, 114, 128, 0.3);
   }
 
   /* Hide text, counts, chevrons, section headers in icon-only mode. */
@@ -421,8 +422,8 @@
 
   /* Compact link padding for icon strip. */
   .sidebar-icon-only a {
-    padding-left: 12px;
-    padding-right: 12px;
+    padding-left: 8px;
+    padding-right: 8px;
     justify-content: center;
   }
 
@@ -439,7 +440,7 @@
     top: 0;
     right: 0;
     bottom: 0;
-    width: 16px;
+    width: 32px;
     background: linear-gradient(to left, rgba(0, 0, 0, 0.35), transparent);
     pointer-events: none;
     z-index: 5;
