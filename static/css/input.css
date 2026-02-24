@@ -404,6 +404,7 @@
      Keep only the icon spans visible. The list becomes a narrow icon strip. */
   .sidebar-icon-only {
     @apply cursor-pointer;
+    position: relative;
     width: 48px !important;
     overflow: hidden !important;
     pointer-events: auto;
