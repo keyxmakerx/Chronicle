@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-24 -- Phase E: Extension bug fix, Entity Hierarchy, Editor Insert Menu, Backlinks, Entity Preview Tooltip.
+2026-02-24 -- Sidebar drill-down rework, extension fixes, customize page restructure.
 
 ## Current Phase
-**Phase E: Core UX & Discovery.** Quick Search, Customize page rework, Extensions tab,
-Entity Hierarchy, and extension enable bug fix all complete.
+**Phase E: Core UX & Discovery.** Sidebar drill-down reworked with overlay approach,
+customize page restructured, attributes addon formalized, player-notes extension fixed.
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
@@ -115,6 +115,38 @@ Entity Hierarchy, and extension enable bug fix all complete.
   `auth/model.go`, `auth/service.go`, `auth/handler.go`, `auth/repository.go`,
   `layouts/app.templ`, `app/routes.go`.
 
+### Sidebar Drill-Down Rework — COMPLETE
+- **Zone-based layout**: Sidebar reorganized into 4 zones: global nav (top),
+  campaign context with drill-down (middle), manage (bottom), admin (bottom).
+- **Static sections**: Manage, Admin, Dashboard, All Campaigns, and Discover
+  remain fixed during category drill-down — only categories area transforms.
+- **Overlay approach**: Replaced 2-panel slider with absolute-positioned overlay
+  that slides from right with paper-style box-shadow effect.
+- **Icon-only collapse**: When drilled in, categories collapse to 48px icon strip
+  with gradient shadow pseudo-element for depth effect.
+- **Files**: `app.templ` (sidebar restructure), `sidebar_drill.js` (overlay logic),
+  `input.css` (replaced `.sidebar-peek` with `.sidebar-icon-only` + `.sidebar-cat-active`).
+
+### Customize Page Restructure — COMPLETE
+- **Dashboard tab**: Now uses full-page flex layout matching Page Templates tab.
+  Header text constrained to `max-w-3xl`, editor fills remaining space.
+- **Categories tab**: 2-column desktop layout (identity left `md:w-80`, category
+  dashboard right `flex-1`). Stacks on mobile. Attributes card removed.
+  Width expanded to `max-w-5xl` for 2-column room.
+- **Files**: `customize.templ` (dashboard/categories/extensions tabs),
+  `entity_type_config.templ` (category fragment restructure).
+
+### Extensions — Player Notes & Attributes — COMPLETE
+- **Player notes fix**: Added `"player-notes": true` to `installedAddons` map.
+  Was missing, preventing admin activation and campaign enable.
+- **Attributes addon**: Migration 000025 registers "attributes" addon in DB.
+  Added to `installedAddons`. New `EntityTypeAttributesFragmentTmpl` template
+  and `EntityTypeAttributesFragment` handler for HTMX lazy-loading.
+  Extensions tab shows category selector that loads field editor per category.
+- **Entity show**: Respects attributes addon enabled state. `AddonChecker`
+  interface on Handler, wired via `SetAddonChecker()` in routes.go.
+- **Tests**: Updated `TestIsInstalled` for both new addons. All 32+ addon tests pass.
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -122,7 +154,7 @@ Entity Hierarchy, and extension enable bug fix all complete.
 - Nothing blocked
 
 ## Active Branch
-`claude/security-audit-WRELc`
+`claude/fix-navbar-swiping-SZHP0`
 
 ## Competitive Analysis & Roadmap
 Created `.ai/roadmap.md` with comprehensive comparison vs WorldAnvil, Kanka, and
