@@ -62,6 +62,24 @@ Entity Hierarchy, and extension enable bug fix all complete.
 - `entityTreeLevel` recursive templ component: collapsible nodes with expand/collapse chevrons,
   entity icon/name links, privacy indicators, child count badges, indented border-left nesting.
 
+### Editor Insert Menu — COMPLETE
+- Added `+` button to editor toolbar that opens a dropdown with discoverable insertions.
+- Menu items: Mention Entity (Type @), Insert Link, Horizontal Rule (---),
+  Blockquote (>), Code Block (```). Each shows shortcut hint.
+- "Mention Entity" inserts `@` at cursor and triggers the mention popup.
+- "Insert Link" prompts for URL and wraps selection or inserts link text.
+- Extensible for future features (secrets, embeds, etc.).
+- Files: `editor.js` (createInsertMenu, executeInsert), `input.css` (dropdown styles).
+
+### Backlinks / "Referenced by" — COMPLETE
+- **Repository**: `FindBacklinks()` searches `entry_html` for `data-mention-id="<entityID>"`
+  pattern using LIKE query. Returns up to 50 results, respects privacy by role.
+- **Service**: `GetBacklinks()` delegates to repo with error wrapping.
+- **Handler**: `Show()` fetches backlinks and passes to template.
+- **Template**: `blockBacklinks` component renders a "Referenced by" section with
+  entity type icon/name chips, styled as pill links. Only shown when backlinks exist.
+- **Tests**: 1 new test (TestGetBacklinks_DelegatesToRepo). All 39 entity tests pass.
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -84,8 +102,8 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Phase E continued:** Backlinks / "Referenced by" on entity profiles (@mention
-   reverse refs), API technical documentation (OpenAPI spec or handwritten reference).
+1. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference),
+   keyboard shortcuts beyond Ctrl+K (Ctrl+N new entity, Ctrl+E edit, Ctrl+S save).
 2. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
    See `.ai/roadmap.md` for full data model and implementation plan.
 3. **Handler-level "view as player":** Extend toggle to filter is_private entities

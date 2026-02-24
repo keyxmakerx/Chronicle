@@ -250,12 +250,14 @@ func (h *Handler) Show(c echo.Context) error {
 		return apperror.NewInternal(nil)
 	}
 
-	// Fetch ancestor chain for breadcrumbs and children for sub-page listing.
+	// Fetch ancestor chain for breadcrumbs, children for sub-page listing,
+	// and backlinks for "Referenced by" section.
 	ancestors, _ := h.service.GetAncestors(c.Request().Context(), entity.ID)
 	children, _ := h.service.GetChildren(c.Request().Context(), entity.ID, int(cc.MemberRole))
+	backlinks, _ := h.service.GetBacklinks(c.Request().Context(), entity.ID, int(cc.MemberRole))
 
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, csrfToken))
+	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, backlinks, csrfToken))
 }
 
 // EditForm renders the entity edit form (GET /campaigns/:id/entities/:eid/edit).

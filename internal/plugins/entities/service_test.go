@@ -122,6 +122,7 @@ type mockEntityRepo struct {
 	findChildrenFn   func(ctx context.Context, parentID string, role int) ([]Entity, error)
 	findAncestorsFn  func(ctx context.Context, entityID string) ([]Entity, error)
 	updateParentFn   func(ctx context.Context, entityID string, parentID *string) error
+	findBacklinksFn  func(ctx context.Context, entityID string, role int) ([]Entity, error)
 }
 
 func (m *mockEntityRepo) Create(ctx context.Context, entity *Entity) error {
@@ -232,6 +233,13 @@ func (m *mockEntityRepo) UpdateParent(ctx context.Context, entityID string, pare
 		return m.updateParentFn(ctx, entityID, parentID)
 	}
 	return nil
+}
+
+func (m *mockEntityRepo) FindBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error) {
+	if m.findBacklinksFn != nil {
+		return m.findBacklinksFn(ctx, entityID, role)
+	}
+	return nil, nil
 }
 
 // --- Test Helpers ---
@@ -1011,6 +1019,27 @@ func TestGetAncestors_DelegatesToRepo(t *testing.T) {
 	}
 	if len(ancestors) != 2 {
 		t.Errorf("expected 2 ancestors, got %d", len(ancestors))
+	}
+}
+
+func TestGetBacklinks_DelegatesToRepo(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findBacklinksFn: func(ctx context.Context, entityID string, role int) ([]Entity, error) {
+			return []Entity{
+				{ID: "ref-1", Name: "Referrer One"},
+				{ID: "ref-2", Name: "Referrer Two"},
+				{ID: "ref-3", Name: "Referrer Three"},
+			}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+	backlinks, err := svc.GetBacklinks(context.Background(), "target-entity", 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(backlinks) != 3 {
+		t.Errorf("expected 3 backlinks, got %d", len(backlinks))
 	}
 }
 

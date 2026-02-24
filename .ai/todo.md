@@ -34,7 +34,8 @@ see `.ai/roadmap.md`.
 - [x] Quick search (Ctrl+K) — global search modal for entities (CRITICAL)
 - [x] Entity hierarchy (parent_id UI + tree view + breadcrumbs + "Create sub-page") (CRITICAL)
 - [x] Extension enable bug fix (installed addons registry, service-layer validation)
-- [ ] Backlinks / "Referenced by" on entity profiles (@mention reverse refs)
+- [x] Editor Insert menu (+ dropdown for discoverable @mention, link, blockquote, code, hr)
+- [x] Backlinks / "Referenced by" on entity profiles (@mention reverse refs)
 - [ ] API technical documentation (OpenAPI spec or handwritten reference) (HIGH)
 - [ ] Keyboard shortcuts beyond Ctrl+K (Ctrl+N, Ctrl+E, Ctrl+S)
 
@@ -325,3 +326,12 @@ see `.ai/roadmap.md`.
 - [x] Sprint 6 (Profile UI): Ancestor chain breadcrumbs, blockChildren component with sub-page cards grid, "Create sub-page" button
 - [x] Sprint 7 (Tree view): Grid/Table/Tree toggle on category dashboard, EntityTreeNode struct, buildEntityTree() from flat list, recursive entityTreeLevel templ component with collapsible nodes
 - [x] 8 new entity hierarchy tests, all passing
+
+### Phase E Sprint 8: Editor Insert Menu + Backlinks (2026-02-24)
+- [x] Editor Insert menu: `+` toolbar dropdown with Mention Entity, Insert Link, Horizontal Rule, Blockquote, Code Block items with shortcut hints
+- [x] "Mention Entity" inserts `@` at cursor and triggers mention popup; "Insert Link" prompts for URL
+- [x] CSS: `.chronicle-editor__insert-*` styles (dropdown, items, hints, icons)
+- [x] Backlinks: `FindBacklinks()` repo method searches `entry_html` for `data-mention-id` pattern (LIKE query, limit 50, privacy filter)
+- [x] `GetBacklinks()` service method, handler Show() fetches backlinks
+- [x] `blockBacklinks` templ component: "Referenced by" section with entity type icon/name pill links
+- [x] 1 new backlinks test (TestGetBacklinks_DelegatesToRepo), all 39 entity tests pass

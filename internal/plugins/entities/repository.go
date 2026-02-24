@@ -424,6 +424,10 @@ type EntityRepository interface {
 
 	// UpdateParent sets or clears an entity's parent_id.
 	UpdateParent(ctx context.Context, entityID string, parentID *string) error
+
+	// FindBacklinks returns entities whose entry_html contains a @mention link
+	// pointing to the given entity. Respects privacy filtering by role.
+	FindBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error)
 }
 
 // entityRepository implements EntityRepository with MariaDB queries.
@@ -944,6 +948,47 @@ func (r *entityRepository) UpdateParent(ctx context.Context, entityID string, pa
 		return apperror.NewNotFound("entity not found")
 	}
 	return nil
+}
+
+// FindBacklinks returns entities that mention the given entity via @mention links
+// in their entry_html. Searches for the data-mention-id="<entityID>" attribute
+// pattern. Respects privacy (role < 2 excludes private entities).
+func (r *entityRepository) FindBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error) {
+	where := `WHERE e.entry_html LIKE ? AND e.id != ?`
+	// Pattern: search for the mention data attribute containing the entity ID.
+	pattern := `%data-mention-id="` + entityID + `"%`
+	args := []any{pattern, entityID}
+
+	if role < 2 {
+		where += " AND e.is_private = false"
+	}
+
+	query := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
+	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.created_by, e.created_at, e.updated_at,
+	                 et.name, et.icon, et.color, et.slug
+	          FROM entities e
+	          INNER JOIN entity_types et ON et.id = e.entity_type_id
+	          %s
+	          ORDER BY e.name
+	          LIMIT 50`, where)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("finding backlinks: %w", err)
+	}
+	defer rows.Close()
+
+	var entities []Entity
+	for rows.Next() {
+		e, err := r.scanEntityRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		entities = append(entities, *e)
+	}
+	return entities, rows.Err()
 }
 
 // scanEntityRow scans a single entity from a rows iterator.

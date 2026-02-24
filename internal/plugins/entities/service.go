@@ -34,6 +34,9 @@ type EntityService interface {
 	GetChildren(ctx context.Context, entityID string, role int) ([]Entity, error)
 	GetAncestors(ctx context.Context, entityID string) ([]Entity, error)
 
+	// Backlinks
+	GetBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error)
+
 	// Listing and search
 	List(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
 	ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error)
@@ -268,6 +271,16 @@ func (s *entityService) GetAncestors(ctx context.Context, entityID string) ([]En
 		return nil, apperror.NewInternal(fmt.Errorf("finding ancestors: %w", err))
 	}
 	return ancestors, nil
+}
+
+// GetBacklinks returns entities that reference the given entity via @mention
+// links in their entry content. Respects privacy by role.
+func (s *entityService) GetBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error) {
+	backlinks, err := s.entities.FindBacklinks(ctx, entityID, role)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("finding backlinks: %w", err))
+	}
+	return backlinks, nil
 }
 
 // UpdateEntry updates only the entry content for an entity. Used by the

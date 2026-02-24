@@ -423,6 +423,12 @@
       executeCommand(state.editor, cmd);
     });
 
+    // --- Insert menu (+ button with dropdown for discoverable features) ---
+    var insertSep = document.createElement('span');
+    insertSep.className = 'chronicle-editor__separator';
+    toolbar.appendChild(insertSep);
+    toolbar.appendChild(createInsertMenu());
+
     // Separator before save button.
     var saveSep = document.createElement('span');
     saveSep.className = 'chronicle-editor__separator';
@@ -438,6 +444,143 @@
     toolbar.appendChild(saveBtn);
 
     return toolbar;
+  }
+
+  /**
+   * Create the Insert menu -- a "+" dropdown that surfaces discoverable
+   * editor features like @mentions, links, and horizontal rules. Users who
+   * know the keyboard shortcuts can type them directly; this menu is for
+   * those who don't.
+   * @returns {HTMLElement}
+   */
+  function createInsertMenu() {
+    var wrapper = document.createElement('div');
+    wrapper.className = 'chronicle-editor__insert-menu';
+
+    // Trigger button.
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'chronicle-editor__btn chronicle-editor__insert-trigger';
+    trigger.innerHTML = '<i class="fa-solid fa-plus" style="font-size:11px"></i>';
+    trigger.title = 'Insert...';
+    wrapper.appendChild(trigger);
+
+    // Dropdown panel (hidden by default).
+    var dropdown = document.createElement('div');
+    dropdown.className = 'chronicle-editor__insert-dropdown';
+    dropdown.style.display = 'none';
+
+    // Menu items: each has an action key, icon, label, and shortcut hint.
+    var items = [
+      { action: 'mention',        icon: 'fa-at',              label: 'Mention Entity',  hint: 'Type @' },
+      { action: 'link',           icon: 'fa-link',            label: 'Insert Link',     hint: '' },
+      { action: 'horizontalRule', icon: 'fa-minus',           label: 'Horizontal Rule', hint: '---' },
+      { action: 'blockquote',     icon: 'fa-quote-left',      label: 'Blockquote',      hint: '>' },
+      { action: 'code',           icon: 'fa-code',            label: 'Code Block',      hint: '```' },
+    ];
+
+    items.forEach(function (item) {
+      var row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'chronicle-editor__insert-item';
+      row.setAttribute('data-insert', item.action);
+
+      row.innerHTML =
+        '<i class="fa-solid ' + item.icon + ' chronicle-editor__insert-icon"></i>' +
+        '<span class="chronicle-editor__insert-label">' + item.label + '</span>' +
+        (item.hint ? '<kbd class="chronicle-editor__insert-hint">' + item.hint + '</kbd>' : '');
+
+      dropdown.appendChild(row);
+    });
+
+    wrapper.appendChild(dropdown);
+
+    // Toggle dropdown on trigger click.
+    trigger.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var isOpen = dropdown.style.display !== 'none';
+      dropdown.style.display = isOpen ? 'none' : '';
+      trigger.classList.toggle('chronicle-editor__btn--active', !isOpen);
+    });
+
+    // Handle item clicks.
+    dropdown.addEventListener('click', function (e) {
+      var row = e.target.closest('[data-insert]');
+      if (!row) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      var action = row.getAttribute('data-insert');
+      var el = wrapper.closest('.chronicle-editor');
+      var state = editors.get(el);
+      if (!state || !state.editor) return;
+
+      executeInsert(state, action);
+
+      // Close dropdown.
+      dropdown.style.display = 'none';
+      trigger.classList.remove('chronicle-editor__btn--active');
+    });
+
+    // Close dropdown when clicking outside.
+    document.addEventListener('click', function (e) {
+      if (!wrapper.contains(e.target)) {
+        dropdown.style.display = 'none';
+        trigger.classList.remove('chronicle-editor__btn--active');
+      }
+    });
+
+    return wrapper;
+  }
+
+  /**
+   * Execute an insert menu action. For mention, inserts @ at cursor to trigger
+   * the mention popup. For others, delegates to standard TipTap commands.
+   */
+  function executeInsert(state, action) {
+    var editor = state.editor;
+
+    switch (action) {
+      case 'mention':
+        // Insert @ character at cursor position to trigger the mention popup.
+        // The mention extension watches for @ and opens the search dropdown.
+        editor.chain().focus().insertContent('@').run();
+        // Manually nudge the mention extension to check for the trigger.
+        if (state.mentionExt) {
+          state.mentionExt.onUpdate(editor);
+        }
+        break;
+
+      case 'link':
+        // Prompt for URL and insert/update link on current selection.
+        var url = prompt('Enter URL:');
+        if (url) {
+          // If there's a text selection, wrap it as a link. Otherwise insert the URL as text.
+          if (editor.state.selection.empty) {
+            editor.chain().focus().insertContent(
+              '<a href="' + url + '">' + url + '</a>'
+            ).run();
+          } else {
+            editor.chain().focus().setLink({ href: url }).run();
+          }
+        } else {
+          editor.chain().focus().run();
+        }
+        break;
+
+      case 'horizontalRule':
+        editor.chain().focus().setHorizontalRule().run();
+        break;
+
+      case 'blockquote':
+        editor.chain().focus().toggleBlockquote().run();
+        break;
+
+      case 'code':
+        editor.chain().focus().toggleCodeBlock().run();
+        break;
+    }
   }
 
   /**

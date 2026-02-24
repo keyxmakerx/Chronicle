@@ -11,7 +11,7 @@ import (
 )
 
 // EntityShowPage renders the entity profile page driven by the entity type layout.
-templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, csrfToken string) {
+templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, backlinks []Entity, csrfToken string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-6xl mx-auto">
 			<!-- Breadcrumb with ancestor chain -->
@@ -63,6 +63,11 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			// Children section: shown below the layout if this entity has children.
 			if len(children) > 0 || cc.MemberRole >= campaigns.RoleScribe {
 				@blockChildren(cc, entity, children)
+			}
+
+			// Backlinks: entities that reference this one via @mentions.
+			if len(backlinks) > 0 {
+				@blockBacklinks(cc, backlinks)
 			}
 		</div>
 	}
@@ -384,5 +389,40 @@ templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []En
 		} else {
 			<p class="text-sm text-fg-muted">No sub-pages yet.</p>
 		}
+	</div>
+}
+
+// blockBacklinks renders the "Referenced by" section showing entities that
+// link to this one via @mentions in their entry content.
+templ blockBacklinks(cc *campaigns.CampaignContext, backlinks []Entity) {
+	<div class="mt-8">
+		<div class="flex items-center gap-2 mb-3">
+			<i class="fa-solid fa-arrow-left text-xs text-fg-muted"></i>
+			<h2 class="text-lg font-semibold text-fg">
+				Referenced by
+				<span class="text-sm font-normal text-fg-muted ml-1">({ fmt.Sprintf("%d", len(backlinks)) })</span>
+			</h2>
+		</div>
+		<div class="flex flex-wrap gap-2">
+			for _, bl := range backlinks {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, bl.ID)) }
+					class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-alt hover:bg-surface border border-edge-light hover:border-edge transition-colors group"
+				>
+					<span
+						class="w-6 h-6 rounded flex items-center justify-center shrink-0"
+						style={ fmt.Sprintf("background-color: %s20; color: %s", bl.TypeColor, bl.TypeColor) }
+					>
+						if bl.TypeIcon != "" {
+							<i class={ "fa-solid " + bl.TypeIcon, "text-[10px]" }></i>
+						}
+					</span>
+					<span class="text-sm font-medium text-fg group-hover:text-accent transition-colors">
+						{ bl.Name }
+					</span>
+					<span class="text-[10px] text-fg-muted">{ bl.TypeName }</span>
+				</a>
+			}
+		</div>
 	</div>
 }

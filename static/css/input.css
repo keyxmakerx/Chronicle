@@ -243,6 +243,33 @@
     background-color: var(--color-border);
   }
 
+  /* Insert menu (+ dropdown for discoverable features) */
+  .chronicle-editor__insert-menu {
+    @apply relative;
+  }
+  .chronicle-editor__insert-trigger {
+    @apply text-accent/70 hover:text-accent;
+  }
+  .chronicle-editor__insert-dropdown {
+    @apply absolute top-full left-0 mt-1 w-56 py-1 rounded-lg shadow-lg border border-edge z-50;
+    background-color: var(--color-bg-primary);
+  }
+  .chronicle-editor__insert-item {
+    @apply w-full flex items-center gap-2.5 px-3 py-2 text-sm text-fg
+           hover:bg-surface-alt transition-colors cursor-pointer text-left;
+  }
+  .chronicle-editor__insert-icon {
+    @apply w-4 text-center text-fg-muted text-xs;
+  }
+  .chronicle-editor__insert-label {
+    @apply flex-1;
+  }
+  .chronicle-editor__insert-hint {
+    @apply text-[10px] text-fg-muted px-1.5 py-0.5 rounded;
+    background-color: var(--color-bg-tertiary);
+    font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+
   /* Editor header bar (contains "Entry" label and Edit/Done toggle) */
   .chronicle-editor__header {
     @apply flex items-center justify-between px-3 py-2 border-b border-edge-light;
