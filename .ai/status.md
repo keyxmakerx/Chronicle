@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-24 -- Sidebar drill-down rework, extension fixes, customize page restructure.
+2026-02-24 -- Sidebar drill-down rework, extension fixes, customize page restructure, notes addon rename.
 
 ## Current Phase
 **Phase E: Core UX & Discovery.** Sidebar drill-down reworked with overlay approach,
-customize page restructured, attributes addon formalized, player-notes extension fixed.
+customize page restructured, attributes addon formalized, notes addon renamed from player-notes.
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
@@ -136,16 +136,19 @@ customize page restructured, attributes addon formalized, player-notes extension
 - **Files**: `customize.templ` (dashboard/categories/extensions tabs),
   `entity_type_config.templ` (category fragment restructure).
 
-### Extensions — Player Notes & Attributes — COMPLETE
-- **Player notes fix**: Added `"player-notes": true` to `installedAddons` map.
-  Was missing, preventing admin activation and campaign enable.
+### Extensions — Notes, Player Notes & Attributes — COMPLETE
+- **Notes addon rename**: Migration 000026 renames "player-notes" to "notes" (the
+  floating notebook widget). "player-notes" re-added as separate planned addon for
+  future entity-page collaborative notes with real-time editing.
+- **installedAddons**: `"notes"` and `"attributes"` are installed; `"player-notes"`
+  is planned (not installed, no backing code yet).
 - **Attributes addon**: Migration 000025 registers "attributes" addon in DB.
   Added to `installedAddons`. New `EntityTypeAttributesFragmentTmpl` template
   and `EntityTypeAttributesFragment` handler for HTMX lazy-loading.
   Extensions tab shows category selector that loads field editor per category.
 - **Entity show**: Respects attributes addon enabled state. `AddonChecker`
   interface on Handler, wired via `SetAddonChecker()` in routes.go.
-- **Tests**: Updated `TestIsInstalled` for both new addons. All 32+ addon tests pass.
+- **Tests**: Updated `TestIsInstalled` for both addons. All 32+ addon tests pass.
 
 ### In Progress
 - Nothing currently in progress.
