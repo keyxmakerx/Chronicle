@@ -914,7 +914,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	)
 	SELECT a.id, a.campaign_id, a.entity_type_id, a.name, a.slug,
 	       a.entry, a.entry_html, a.image_path, a.parent_id, a.type_label,
-	       a.is_private, a.is_template, a.fields_data, a.field_overrides,
+	       a.is_private, a.is_template, a.fields_data, a.field_overrides, a.popup_config,
 	       a.created_by, a.created_at, a.updated_at,
 	       et.name, et.icon, et.color, et.slug
 	FROM ancestors a

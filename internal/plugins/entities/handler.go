@@ -717,7 +717,8 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	}
 
 	// Build attributes list: field label + value pairs for the first few fields.
-	var attributes []map[string]string
+	// Initialize to empty slice so JSON serializes as [] instead of null.
+	attributes := make([]map[string]string, 0)
 	if cfg.ShowAttributes && entityType != nil {
 		effectiveFields := MergeFields(entityType.Fields, entity.FieldOverrides)
 		for _, fd := range effectiveFields {

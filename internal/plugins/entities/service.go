@@ -288,10 +288,7 @@ func (s *entityService) GetBacklinks(ctx context.Context, entityID string, role 
 
 // UpdatePopupConfig updates the entity's hover preview tooltip configuration.
 func (s *entityService) UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error {
-	if err := s.entities.UpdatePopupConfig(ctx, entityID, config); err != nil {
-		return err
-	}
-	return nil
+	return s.entities.UpdatePopupConfig(ctx, entityID, config)
 }
 
 // UpdateEntry updates only the entry content for an entity. Used by the

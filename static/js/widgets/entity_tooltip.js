@@ -2,9 +2,18 @@
  * entity_tooltip.js -- Chronicle Entity Tooltip/Popover Widget
  *
  * Provides hover tooltips for entity references throughout the app.
- * Shows entity name, type badge, image thumbnail, and entry excerpt
- * when the user hovers over any element with a `data-entity-preview`
- * attribute (whose value is the preview API URL).
+ * When the user hovers over any element with a `data-entity-preview`
+ * attribute (whose value is the preview API URL), a floating card shows:
+ *
+ *   - Gradient-bordered image (entity type color -> purple) with
+ *     attributes side-by-side when both are present
+ *   - Type badge, optional descriptor, privacy indicator
+ *   - Entity name
+ *   - Up to 5 key-value attribute pairs from the entity's custom fields
+ *   - Entry excerpt (first ~150 chars, 3-line clamp)
+ *
+ * Content is controlled per-entity via popup_config (showImage,
+ * showAttributes, showEntry). Layout adapts dynamically.
  *
  * Two usage modes:
  *   1. Auto-mounted by boot.js on elements with data-widget="entity-tooltip"

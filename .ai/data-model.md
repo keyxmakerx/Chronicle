@@ -112,7 +112,7 @@ User --< CampaignMember >-- Campaign
 | enabled | BOOLEAN | DEFAULT true | |
 | UNIQUE(campaign_id, slug) | | | |
 
-### entities (implemented -- migrations 000004, 000014)
+### entities (implemented -- migrations 000004, 000014, 000023)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | CHAR(36) | PK | UUID |
@@ -129,6 +129,7 @@ User --< CampaignMember >-- Campaign
 | is_template | BOOLEAN | DEFAULT false | |
 | fields_data | JSON | DEFAULT '{}' | Type-specific field values |
 | field_overrides | JSON | DEFAULT NULL | Per-entity field customization (added 000014) |
+| popup_config | JSON | DEFAULT NULL | Hover preview toggle config (added 000023) |
 | created_by | CHAR(36) | FK -> users.id | |
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
@@ -359,3 +360,4 @@ User --< CampaignMember >-- Campaign
 | 20 | 000020_password_reset_tokens | Password reset tokens table | 2026-02-22 |
 | 21 | 000021_dashboard_layouts | dashboard_layout on campaigns + entity_types | 2026-02-22 |
 | 22 | 000022_notes_collaboration | Shared notes, locking, versions (is_shared, locked_by/at, entry/entry_html, note_versions) | 2026-02-24 |
+| 23 | 000023_entity_popup_config | popup_config JSON on entities for hover preview settings | 2026-02-24 |
