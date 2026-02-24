@@ -242,6 +242,10 @@ func (m *mockEntityRepo) FindBacklinks(ctx context.Context, entityID string, rol
 	return nil, nil
 }
 
+func (m *mockEntityRepo) UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error {
+	return nil
+}
+
 // --- Test Helpers ---
 
 func newTestService(entityRepo *mockEntityRepo, typeRepo *mockEntityTypeRepo) EntityService {

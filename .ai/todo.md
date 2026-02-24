@@ -335,3 +335,13 @@ see `.ai/roadmap.md`.
 - [x] `GetBacklinks()` service method, handler Show() fetches backlinks
 - [x] `blockBacklinks` templ component: "Referenced by" section with entity type icon/name pill links
 - [x] 1 new backlinks test (TestGetBacklinks_DelegatesToRepo), all 39 entity tests pass
+
+### Phase E Sprint 9: Entity Preview Tooltip + Popup Config (2026-02-24)
+- [x] Migration 000023: `popup_config` JSON column on entities table
+- [x] `PopupConfig` struct (ShowImage, ShowAttributes, ShowEntry) + `EffectivePopupConfig()` default
+- [x] All 9 entity SELECT queries updated to include `popup_config`, `scanEntityRow` updated
+- [x] `UpdatePopupConfig()` repo + service + `PUT /entities/:eid/popup-config` handler + route
+- [x] Enhanced `PreviewAPI` to include up to 5 attributes (key-value pairs) and respect popup_config
+- [x] Enhanced `entity_tooltip.js`: gradient-bordered image, side-by-side layout (image + attrs), entry excerpt, dynamic layout adaptation
+- [x] "Hover Preview Settings" collapsible section on entity edit form with Alpine.js auto-save
+- [x] All tests pass (40 entity tests including backlinks)

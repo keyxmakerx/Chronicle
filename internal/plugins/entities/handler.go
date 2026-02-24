@@ -660,9 +660,8 @@ func (h *Handler) UpdateImageAPI(c echo.Context) error {
 // htmlTagPattern matches HTML tags for stripping in entry excerpts.
 var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
 
-// PreviewAPI returns minimal entity data for tooltip/popover display.
-// Designed to be lightweight and cacheable. Returns JSON with name, type info,
-// image, excerpt, and privacy status.
+// PreviewAPI returns entity data for tooltip/popover display, respecting the
+// entity's popup_config to control which sections are included.
 // GET /campaigns/:id/entities/:eid/preview
 func (h *Handler) PreviewAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -686,15 +685,17 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
-	// Look up the entity type for icon, color, and name.
+	// Look up the entity type for icon, color, name, and field definitions.
 	entityType, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
 	if err != nil {
 		return apperror.NewInternal(nil)
 	}
 
+	cfg := entity.EffectivePopupConfig()
+
 	// Build an excerpt from entry_html: strip HTML tags, truncate to ~150 chars.
 	var entryExcerpt string
-	if entity.EntryHTML != nil && *entity.EntryHTML != "" {
+	if cfg.ShowEntry && entity.EntryHTML != nil && *entity.EntryHTML != "" {
 		plain := htmlTagPattern.ReplaceAllString(*entity.EntryHTML, "")
 		plain = strings.Join(strings.Fields(plain), " ") // Normalize whitespace.
 		if len(plain) > 150 {
@@ -709,10 +710,29 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 		}
 	}
 
-	// Resolve image path to a full URL for the tooltip.
+	// Resolve image path when popup config allows it.
 	var imagePath string
-	if entity.ImagePath != nil && *entity.ImagePath != "" {
+	if cfg.ShowImage && entity.ImagePath != nil && *entity.ImagePath != "" {
 		imagePath = fmt.Sprintf("/media/%s", *entity.ImagePath)
+	}
+
+	// Build attributes list: field label + value pairs for the first few fields.
+	var attributes []map[string]string
+	if cfg.ShowAttributes && entityType != nil {
+		effectiveFields := MergeFields(entityType.Fields, entity.FieldOverrides)
+		for _, fd := range effectiveFields {
+			val, ok := entity.FieldsData[fd.Key]
+			if !ok || val == nil || fmt.Sprintf("%v", val) == "" {
+				continue
+			}
+			attributes = append(attributes, map[string]string{
+				"label": fd.Label,
+				"value": fmt.Sprintf("%v", val),
+			})
+			if len(attributes) >= 5 {
+				break // Limit to 5 attributes in tooltip.
+			}
+		}
 	}
 
 	// Resolve type label.
@@ -733,7 +753,38 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 		"type_label":    typeLabel,
 		"is_private":    entity.IsPrivate,
 		"entry_excerpt": entryExcerpt,
+		"attributes":    attributes,
 	})
+}
+
+// UpdatePopupConfigAPI saves the entity's hover preview tooltip configuration.
+// PUT /campaigns/:id/entities/:eid/popup-config
+func (h *Handler) UpdatePopupConfigAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	entityID := c.Param("eid")
+
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var body PopupConfig
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdatePopupConfig(c.Request().Context(), entityID, &body); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // --- Entity Type CRUD ---

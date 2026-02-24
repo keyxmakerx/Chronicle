@@ -225,6 +225,7 @@ type Entity struct {
 	IsTemplate     bool            `json:"is_template"`
 	FieldsData     map[string]any  `json:"fields_data"`
 	FieldOverrides *FieldOverrides `json:"field_overrides,omitempty"` // Per-entity field customizations.
+	PopupConfig    *PopupConfig    `json:"popup_config,omitempty"`    // Controls hover tooltip content.
 	CreatedBy      string          `json:"created_by"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
@@ -253,6 +254,32 @@ type FieldOverride struct {
 	Label   *string  `json:"label,omitempty"`
 	Type    *string  `json:"type,omitempty"`
 	Options []string `json:"options,omitempty"`
+}
+
+// PopupConfig controls what appears in the entity hover preview tooltip.
+// When nil, all available sections are shown (image, attributes, entry excerpt).
+type PopupConfig struct {
+	ShowImage      bool `json:"showImage"`
+	ShowAttributes bool `json:"showAttributes"`
+	ShowEntry      bool `json:"showEntry"`
+}
+
+// DefaultPopupConfig returns the default popup configuration showing everything.
+func DefaultPopupConfig() *PopupConfig {
+	return &PopupConfig{
+		ShowImage:      true,
+		ShowAttributes: true,
+		ShowEntry:      true,
+	}
+}
+
+// EffectivePopupConfig returns the entity's popup config, falling back to
+// defaults if not configured.
+func (e *Entity) EffectivePopupConfig() *PopupConfig {
+	if e.PopupConfig != nil {
+		return e.PopupConfig
+	}
+	return DefaultPopupConfig()
 }
 
 // MergeFields combines the entity type's field definitions with per-entity

@@ -80,6 +80,20 @@ Entity Hierarchy, and extension enable bug fix all complete.
   entity type icon/name chips, styled as pill links. Only shown when backlinks exist.
 - **Tests**: 1 new test (TestGetBacklinks_DelegatesToRepo). All 39 entity tests pass.
 
+### Entity Preview Tooltip Enhancement — COMPLETE
+- **Migration 000023**: Added `popup_config` JSON column to entities table.
+- **Model**: `PopupConfig` struct with `ShowImage`, `ShowAttributes`, `ShowEntry` booleans.
+  `EffectivePopupConfig()` returns entity config or defaults (all true).
+- **Preview API**: Enhanced `GET /entities/:eid/preview` to include attributes (up to 5
+  key-value pairs from entity type fields) and respect popup_config visibility toggles.
+- **Popup Config API**: New `PUT /entities/:eid/popup-config` saves per-entity preview settings.
+- **Tooltip Widget**: Enhanced `entity_tooltip.js` with side-by-side layout (gradient-bordered
+  image on left + type badge/name/attributes on right), entry excerpt below, dynamic layout
+  adapting based on available data.
+- **Edit Form**: "Hover Preview Settings" collapsible section with checkboxes for
+  Show Image / Show Attributes / Show Entry. Auto-saves via API with inline status feedback.
+  Clears tooltip cache after save so changes are immediately visible.
+
 ### In Progress
 - Nothing currently in progress.
 

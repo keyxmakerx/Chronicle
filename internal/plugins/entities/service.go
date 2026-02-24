@@ -37,6 +37,9 @@ type EntityService interface {
 	// Backlinks
 	GetBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error)
 
+	// Popup preview config
+	UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error
+
 	// Listing and search
 	List(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
 	ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error)
@@ -281,6 +284,14 @@ func (s *entityService) GetBacklinks(ctx context.Context, entityID string, role 
 		return nil, apperror.NewInternal(fmt.Errorf("finding backlinks: %w", err))
 	}
 	return backlinks, nil
+}
+
+// UpdatePopupConfig updates the entity's hover preview tooltip configuration.
+func (s *entityService) UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error {
+	if err := s.entities.UpdatePopupConfig(ctx, entityID, config); err != nil {
+		return err
+	}
+	return nil
 }
 
 // UpdateEntry updates only the entry content for an entity. Used by the

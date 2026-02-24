@@ -428,6 +428,9 @@ type EntityRepository interface {
 	// FindBacklinks returns entities whose entry_html contains a @mention link
 	// pointing to the given entity. Respects privacy filtering by role.
 	FindBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error)
+
+	// UpdatePopupConfig persists the entity's hover preview configuration.
+	UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error
 }
 
 // entityRepository implements EntityRepository with MariaDB queries.
@@ -468,7 +471,7 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 func (r *entityRepository) FindByID(ctx context.Context, id string) (*Entity, error) {
 	query := `SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug
 	          FROM entities e
@@ -482,7 +485,7 @@ func (r *entityRepository) FindByID(ctx context.Context, id string) (*Entity, er
 func (r *entityRepository) FindBySlug(ctx context.Context, campaignID, slug string) (*Entity, error) {
 	query := `SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug
 	          FROM entities e
@@ -692,7 +695,7 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 	// Fetch page.
 	query := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug
 	          FROM entities e
@@ -756,7 +759,7 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 	// Fetch page.
 	selectQuery := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug
 	          FROM entities e
@@ -823,7 +826,7 @@ func (r *entityRepository) ListRecent(ctx context.Context, campaignID string, ro
 
 	query := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug
 	          FROM entities e
@@ -862,7 +865,7 @@ func (r *entityRepository) FindChildren(ctx context.Context, parentID string, ro
 
 	query := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug
 	          FROM entities e
@@ -894,7 +897,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	query := `WITH RECURSIVE ancestors AS (
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	           e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	           e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	           e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.created_at, e.updated_at,
 	           1 AS depth
 	    FROM entities e
@@ -902,7 +905,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	    UNION ALL
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	           e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	           e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	           e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.created_at, e.updated_at,
 	           a.depth + 1
 	    FROM entities e
@@ -965,7 +968,7 @@ func (r *entityRepository) FindBacklinks(ctx context.Context, entityID string, r
 
 	query := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides,
+	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug
 	          FROM entities e
@@ -991,14 +994,38 @@ func (r *entityRepository) FindBacklinks(ctx context.Context, entityID string, r
 	return entities, rows.Err()
 }
 
+// UpdatePopupConfig persists the entity's hover preview configuration as JSON.
+func (r *entityRepository) UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error {
+	var configJSON []byte
+	var err error
+	if config != nil {
+		configJSON, err = json.Marshal(config)
+		if err != nil {
+			return fmt.Errorf("marshaling popup config: %w", err)
+		}
+	}
+
+	query := `UPDATE entities SET popup_config = ?, updated_at = NOW() WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, configJSON, entityID)
+	if err != nil {
+		return fmt.Errorf("updating popup config: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
 // scanEntityRow scans a single entity from a rows iterator.
 func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 	e := &Entity{}
-	var fieldsRaw, overridesRaw []byte
+	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := rows.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
 		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.ParentID, &e.TypeLabel,
-		&e.IsPrivate, &e.IsTemplate, &fieldsRaw, &overridesRaw,
+		&e.IsPrivate, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
@@ -1016,6 +1043,12 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 		e.FieldOverrides = &FieldOverrides{}
 		if err := json.Unmarshal(overridesRaw, e.FieldOverrides); err != nil {
 			return nil, fmt.Errorf("unmarshaling field overrides: %w", err)
+		}
+	}
+	if len(popupRaw) > 0 {
+		e.PopupConfig = &PopupConfig{}
+		if err := json.Unmarshal(popupRaw, e.PopupConfig); err != nil {
+			return nil, fmt.Errorf("unmarshaling popup config: %w", err)
 		}
 	}
 	return e, nil
