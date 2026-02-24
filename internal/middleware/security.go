@@ -17,8 +17,13 @@ func SecurityHeaders() echo.MiddlewareFunc {
 
 			// Content-Security-Policy: restrict what resources the browser can load.
 			// 'self' allows resources from the same origin only.
-			// 'unsafe-inline' is needed for Alpine.js x-* attributes and inline styles.
-			// 'unsafe-eval' is needed for Alpine.js expressions.
+			//
+			// SECURITY TRADEOFF: 'unsafe-inline' and 'unsafe-eval' are required by
+			// Alpine.js (x-* attribute expressions). This weakens XSS protection since
+			// inline scripts can execute. Mitigated by server-side HTML sanitization
+			// (bluemonday) on all user-generated content. Future improvement: migrate
+			// to nonce-based CSP or replace Alpine.js with a CSP-compatible alternative.
+			//
 			// Google Fonts + Font Awesome CDN are explicitly allowed.
 			h.Set("Content-Security-Policy",
 				"default-src 'self'; "+

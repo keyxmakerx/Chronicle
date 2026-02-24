@@ -159,8 +159,10 @@ func (r *userRepository) ListUsers(ctx context.Context, offset, limit int) ([]Us
 		return nil, 0, fmt.Errorf("counting users: %w", err)
 	}
 
-	query := `SELECT id, email, display_name, password_hash, avatar_path,
-	                 is_admin, totp_secret, totp_enabled, created_at, last_login_at
+	// Deliberately exclude password_hash and totp_secret from this query.
+	// Admin list views don't need sensitive credential data.
+	query := `SELECT id, email, display_name, avatar_path,
+	                 is_admin, totp_enabled, created_at, last_login_at
 	          FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?`
 
 	rows, err := r.db.QueryContext(ctx, query, limit, offset)
@@ -173,8 +175,8 @@ func (r *userRepository) ListUsers(ctx context.Context, offset, limit int) ([]Us
 	for rows.Next() {
 		var u User
 		if err := rows.Scan(
-			&u.ID, &u.Email, &u.DisplayName, &u.PasswordHash, &u.AvatarPath,
-			&u.IsAdmin, &u.TOTPSecret, &u.TOTPEnabled, &u.CreatedAt, &u.LastLoginAt,
+			&u.ID, &u.Email, &u.DisplayName, &u.AvatarPath,
+			&u.IsAdmin, &u.TOTPEnabled, &u.CreatedAt, &u.LastLoginAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning user row: %w", err)
 		}

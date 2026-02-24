@@ -22,6 +22,10 @@ import (
 // sessionKeyPrefix is the Redis key prefix for session data.
 const sessionKeyPrefix = "session:"
 
+// userSessionsKeyPrefix is the Redis key prefix for the set of session tokens
+// belonging to a user. Used to invalidate all sessions on password reset.
+const userSessionsKeyPrefix = "user_sessions:"
+
 // sessionTokenBytes is the number of random bytes in a session token.
 // 32 bytes = 256 bits of entropy, hex-encoded to 64 characters.
 const sessionTokenBytes = 32
@@ -204,8 +208,18 @@ func (s *authService) ValidateSession(ctx context.Context, token string) (*Sessi
 }
 
 // DestroySession removes a session from Redis, effectively logging the user out.
+// Also removes the token from the user's session tracking set.
 func (s *authService) DestroySession(ctx context.Context, token string) error {
 	key := sessionKeyPrefix + token
+
+	// Look up the session to get the user ID for set cleanup.
+	data, err := s.redis.Get(ctx, key).Bytes()
+	if err == nil {
+		var session Session
+		if jsonErr := json.Unmarshal(data, &session); jsonErr == nil {
+			s.redis.SRem(ctx, userSessionsKeyPrefix+session.UserID, token)
+		}
+	}
 
 	if err := s.redis.Del(ctx, key).Err(); err != nil {
 		return apperror.NewInternal(fmt.Errorf("deleting session from Redis: %w", err))
@@ -239,6 +253,12 @@ func (s *authService) createSession(ctx context.Context, user *User) (string, er
 	if err := s.redis.Set(ctx, key, data, s.sessionTTL).Err(); err != nil {
 		return "", fmt.Errorf("storing session in Redis: %w", err)
 	}
+
+	// Track this session token in the user's session set so we can invalidate
+	// all sessions on password reset. The set has the same TTL as the session.
+	userSetKey := userSessionsKeyPrefix + user.ID
+	s.redis.SAdd(ctx, userSetKey, token)
+	s.redis.Expire(ctx, userSetKey, s.sessionTTL)
 
 	return token, nil
 }
@@ -288,9 +308,8 @@ func (s *authService) InitiatePasswordReset(ctx context.Context, email string) e
 			)
 		}
 	} else {
-		slog.Warn("SMTP not configured; password reset email not sent",
+		slog.Warn("SMTP not configured; password reset email not sent — user will not receive the reset link",
 			slog.String("email", user.Email),
-			slog.String("token", plainToken),
 		)
 	}
 
@@ -353,6 +372,10 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 		slog.Warn("failed to mark reset token as used", slog.Any("error", err))
 	}
 
+	// Invalidate all existing sessions for this user. If an attacker stole a
+	// session, the legitimate user resetting their password revokes the attacker's access.
+	s.destroyUserSessions(ctx, userID)
+
 	slog.Info("password reset completed", slog.String("user_id", userID))
 	return nil
 }
@@ -362,6 +385,36 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 func hashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
+}
+
+// destroyUserSessions removes all active sessions for a user from Redis.
+// Called on password reset to invalidate any compromised sessions.
+func (s *authService) destroyUserSessions(ctx context.Context, userID string) {
+	if s.redis == nil {
+		return
+	}
+
+	userSetKey := userSessionsKeyPrefix + userID
+	tokens, err := s.redis.SMembers(ctx, userSetKey).Result()
+	if err != nil {
+		slog.Warn("failed to list user sessions for invalidation",
+			slog.String("user_id", userID),
+			slog.Any("error", err),
+		)
+		return
+	}
+
+	for _, token := range tokens {
+		s.redis.Del(ctx, sessionKeyPrefix+token)
+	}
+	s.redis.Del(ctx, userSetKey)
+
+	if len(tokens) > 0 {
+		slog.Info("invalidated user sessions on password reset",
+			slog.String("user_id", userID),
+			slog.Int("session_count", len(tokens)),
+		)
+	}
 }
 
 // --- Password Hashing (argon2id) ---

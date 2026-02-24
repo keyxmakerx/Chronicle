@@ -16,6 +16,11 @@ import (
 // oversized payloads are rejected before being read into memory.
 func RegisterRoutes(e *echo.Echo, h *Handler, authSvc auth.AuthService, maxUploadSize int64) {
 	// Public route: serve media files with cache headers.
+	// SECURITY NOTE: Media files are served without authentication, relying on
+	// UUID-based unguessability (122 bits of entropy). This is a deliberate
+	// tradeoff: adding auth here would break image loading on public campaign
+	// pages for non-logged-in users. If you need stricter access control for
+	// private campaign media, add auth middleware and check campaign membership.
 	e.GET("/media/:id", h.Serve)
 	e.GET("/media/:id/thumb/:size", h.ServeThumbnail)
 

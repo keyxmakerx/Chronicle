@@ -3,6 +3,7 @@ package syncapi
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -251,16 +252,18 @@ func strPtr(s string) *string {
 }
 
 // isIPAllowed checks if an IP is in the allowlist.
-// Supports exact match; CIDR matching can be added later.
+// Supports exact match and proper CIDR notation (e.g., "192.168.1.0/24").
 func isIPAllowed(ip string, allowlist []string) bool {
+	parsedIP := net.ParseIP(ip)
 	for _, allowed := range allowlist {
+		// Try exact match first.
 		if allowed == ip {
 			return true
 		}
-		// Simple prefix match for /24 style ranges.
-		if strings.HasSuffix(allowed, ".0/24") {
-			prefix := strings.TrimSuffix(allowed, "0/24")
-			if strings.HasPrefix(ip, prefix) {
+		// Try proper CIDR matching using the standard library.
+		if strings.Contains(allowed, "/") {
+			_, network, err := net.ParseCIDR(allowed)
+			if err == nil && parsedIP != nil && network.Contains(parsedIP) {
 				return true
 			}
 		}

@@ -99,6 +99,26 @@ func NewInternal(err error) *AppError {
 	}
 }
 
+// SafeMessage returns the client-safe error message from an error. If the
+// error is an AppError, returns its Message field (which is safe to expose).
+// For any other error type, returns a generic message to prevent leaking
+// internal details like table names, query structure, or stack traces.
+func SafeMessage(err error) string {
+	if appErr, ok := err.(*AppError); ok {
+		return appErr.Message
+	}
+	return "an unexpected error occurred"
+}
+
+// SafeCode returns the HTTP status code from an AppError, or 500 for
+// any other error type.
+func SafeCode(err error) int {
+	if appErr, ok := err.(*AppError); ok {
+		return appErr.Code
+	}
+	return http.StatusInternalServerError
+}
+
 // NewValidation creates a 422 Unprocessable Entity error for validation failures.
 func NewValidation(message string) *AppError {
 	return &AppError{
