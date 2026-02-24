@@ -121,7 +121,7 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 				</div>
 			</div>
 
-			<!-- Grid/Table toggle -->
+			<!-- Grid/Table/Tree toggle -->
 			<div class="flex items-center gap-1 bg-surface-alt rounded-md p-0.5">
 				<button
 					@click="view = 'grid'"
@@ -138,6 +138,14 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 					title="Table view"
 				>
 					<i class="fa-solid fa-list text-[11px]"></i>
+				</button>
+				<button
+					@click="view = 'tree'"
+					:class="view === 'tree' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg transition-colors'"
+					class="px-2 py-1 rounded text-xs font-medium"
+					title="Tree view"
+				>
+					<i class="fa-solid fa-folder-tree text-[11px]"></i>
 				</button>
 			</div>
 		</div>
@@ -216,6 +224,13 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 								}
 							</tbody>
 						</table>
+					</div>
+				</div>
+
+				<!-- Tree view -->
+				<div x-show="view === 'tree'" x-cloak>
+					<div class="card p-4">
+						@entityTreeLevel(cc, buildEntityTree(entities), 0)
 					</div>
 				</div>
 
@@ -348,6 +363,107 @@ func isPinned(entityID string, pinnedIDs []string) bool {
 		}
 	}
 	return false
+}
+
+// EntityTreeNode represents an entity with its children for tree rendering.
+type EntityTreeNode struct {
+	Entity   Entity
+	Children []EntityTreeNode
+}
+
+// buildEntityTree builds a tree structure from a flat entity list using parent_id.
+// Root entities (parent_id IS NULL) are top-level. Children are nested under their parents.
+func buildEntityTree(entities []Entity) []EntityTreeNode {
+	// Index entities by ID.
+	byID := make(map[string]*EntityTreeNode, len(entities))
+	for i := range entities {
+		byID[entities[i].ID] = &EntityTreeNode{Entity: entities[i]}
+	}
+
+	// Build tree: attach children to parents.
+	var roots []EntityTreeNode
+	for i := range entities {
+		node := byID[entities[i].ID]
+		if entities[i].ParentID != nil {
+			if parent, ok := byID[*entities[i].ParentID]; ok {
+				parent.Children = append(parent.Children, *node)
+				continue
+			}
+		}
+		// No parent or parent not in this page → treat as root.
+		roots = append(roots, *node)
+	}
+	return roots
+}
+
+// entityTreeLevel renders one level of the entity tree with indentation.
+templ entityTreeLevel(cc *campaigns.CampaignContext, nodes []EntityTreeNode, depth int) {
+	if len(nodes) == 0 {
+		<p class="text-sm text-fg-muted">No pages in this category.</p>
+	} else {
+		<ul class={ "space-y-0.5", templ.KV("pl-5 border-l border-edge-light", depth > 0) }>
+			for _, node := range nodes {
+				<li
+					x-data="{ expanded: true }"
+				>
+					<div class="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-surface-alt transition-colors group">
+						// Expand/collapse toggle (only if has children).
+						if len(node.Children) > 0 {
+							<button
+								type="button"
+								@click="expanded = !expanded"
+								class="w-5 h-5 flex items-center justify-center text-fg-muted hover:text-fg transition-colors shrink-0"
+							>
+								<i
+									class="fa-solid fa-chevron-right text-[10px] transition-transform duration-150"
+									:class="expanded ? 'rotate-90' : ''"
+								></i>
+							</button>
+						} else {
+							<span class="w-5 h-5 shrink-0"></span>
+						}
+
+						// Entity icon.
+						<span
+							class="w-6 h-6 rounded flex items-center justify-center shrink-0"
+							style={ fmt.Sprintf("background-color: %s20; color: %s", node.Entity.TypeColor, node.Entity.TypeColor) }
+						>
+							if node.Entity.TypeIcon != "" {
+								<i class={ "fa-solid " + node.Entity.TypeIcon, "text-[10px]" }></i>
+							}
+						</span>
+
+						// Entity link.
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, node.Entity.ID)) }
+							class="text-sm font-medium text-fg group-hover:text-accent transition-colors truncate"
+						>
+							{ node.Entity.Name }
+						</a>
+
+						if node.Entity.TypeLabel != nil && *node.Entity.TypeLabel != "" {
+							<span class="text-xs text-fg-muted hidden sm:inline">{ *node.Entity.TypeLabel }</span>
+						}
+
+						if node.Entity.IsPrivate {
+							<i class="fa-solid fa-lock text-[10px] text-fg-muted ml-auto shrink-0" title="Private"></i>
+						}
+
+						if len(node.Children) > 0 {
+							<span class="text-[10px] text-fg-muted ml-auto">{ fmt.Sprintf("%d", len(node.Children)) }</span>
+						}
+					</div>
+
+					// Render children recursively.
+					if len(node.Children) > 0 {
+						<div x-show="expanded" x-collapse>
+							@entityTreeLevel(cc, node.Children, depth+1)
+						</div>
+					}
+				</li>
+			}
+		</ul>
+	}
 }
 
 // relativeTime returns a human-friendly relative time string (e.g., "2h ago", "3d ago").

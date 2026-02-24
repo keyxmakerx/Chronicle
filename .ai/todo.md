@@ -32,8 +32,10 @@ see `.ai/roadmap.md`.
 
 ### Phase E: Core UX & Discovery (Active)
 - [x] Quick search (Ctrl+K) — global search modal for entities (CRITICAL)
-- [ ] Entity hierarchy (parent_id UI + tree view + breadcrumbs + "Create sub-page") (CRITICAL)
-- [ ] Backlinks / "Referenced by" on entity profiles (@mention reverse refs)
+- [x] Entity hierarchy (parent_id UI + tree view + breadcrumbs + "Create sub-page") (CRITICAL)
+- [x] Extension enable bug fix (installed addons registry, service-layer validation)
+- [x] Editor Insert menu (+ dropdown for discoverable @mention, link, blockquote, code, hr)
+- [x] Backlinks / "Referenced by" on entity profiles (@mention reverse refs)
 - [ ] API technical documentation (OpenAPI spec or handwritten reference) (HIGH)
 - [ ] Keyboard shortcuts beyond Ctrl+K (Ctrl+N, Ctrl+E, Ctrl+S)
 
@@ -307,3 +309,39 @@ see `.ai/roadmap.md`.
 - [x] Attributes (entity-type-editor fields-only) now embedded in Categories tab
 - [x] Entity types management page back link updated to Customize
 - [x] Bug fix: Nav Panel tab identity save on entity type config page (same HTMX→JSON fix)
+
+### Phase E Sprint 3: Extension Enable Bug Fix (2026-02-24)
+- [x] `installedAddons` registry in addons/service.go (map of slugs with real code)
+- [x] `IsInstalled()` exported function for cross-package use
+- [x] `UpdateStatus()` blocks activating uninstalled addons
+- [x] `EnableForCampaign()` blocks enabling uninstalled addons
+- [x] `List()` and `ListForCampaign()` annotate `Installed bool` field
+- [x] Admin UI: disabled activate button + "Not installed" label for uninstalled addons
+- [x] Campaign UI: "Coming Soon" badge for uninstalled addons
+- [x] 5 new addon service tests, all 32 pass
+
+### Phase E Sprint 4-7: Entity Hierarchy (2026-02-24)
+- [x] Sprint 4 (Data plumbing): ParentID in DTOs, FindChildren/FindAncestors/UpdateParent repo methods, recursive CTE for ancestors, parent validation in Create/Update with circular ref detection
+- [x] Sprint 5 (Form UI): Alpine.js parent selector with async search, ?parent_id= pre-fill, edit form pre-population
+- [x] Sprint 6 (Profile UI): Ancestor chain breadcrumbs, blockChildren component with sub-page cards grid, "Create sub-page" button
+- [x] Sprint 7 (Tree view): Grid/Table/Tree toggle on category dashboard, EntityTreeNode struct, buildEntityTree() from flat list, recursive entityTreeLevel templ component with collapsible nodes
+- [x] 8 new entity hierarchy tests, all passing
+
+### Phase E Sprint 8: Editor Insert Menu + Backlinks (2026-02-24)
+- [x] Editor Insert menu: `+` toolbar dropdown with Mention Entity, Insert Link, Horizontal Rule, Blockquote, Code Block items with shortcut hints
+- [x] "Mention Entity" inserts `@` at cursor and triggers mention popup; "Insert Link" prompts for URL
+- [x] CSS: `.chronicle-editor__insert-*` styles (dropdown, items, hints, icons)
+- [x] Backlinks: `FindBacklinks()` repo method searches `entry_html` for `data-mention-id` pattern (LIKE query, limit 50, privacy filter)
+- [x] `GetBacklinks()` service method, handler Show() fetches backlinks
+- [x] `blockBacklinks` templ component: "Referenced by" section with entity type icon/name pill links
+- [x] 1 new backlinks test (TestGetBacklinks_DelegatesToRepo), all 39 entity tests pass
+
+### Phase E Sprint 9: Entity Preview Tooltip + Popup Config (2026-02-24)
+- [x] Migration 000023: `popup_config` JSON column on entities table
+- [x] `PopupConfig` struct (ShowImage, ShowAttributes, ShowEntry) + `EffectivePopupConfig()` default
+- [x] All 9 entity SELECT queries updated to include `popup_config`, `scanEntityRow` updated
+- [x] `UpdatePopupConfig()` repo + service + `PUT /entities/:eid/popup-config` handler + route
+- [x] Enhanced `PreviewAPI` to include up to 5 attributes (key-value pairs) and respect popup_config
+- [x] Enhanced `entity_tooltip.js`: gradient-bordered image, side-by-side layout (image + attrs), entry excerpt, dynamic layout adaptation
+- [x] "Hover Preview Settings" collapsible section on entity edit form with Alpine.js auto-save
+- [x] All tests pass (40 entity tests including backlinks)

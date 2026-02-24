@@ -1,15 +1,17 @@
 // customize.templ renders the Campaign Customization Hub -- a centralized page
-// for campaign owners to control dashboards, categories, page templates, and
-// sidebar navigation.
+// for campaign owners to control dashboards, categories, page templates,
+// sidebar navigation, and campaign extensions.
 //
 // Tabs:
-//   1. Dashboard     — Campaign dashboard layout editor (drag-and-drop blocks).
-//   2. Categories    — Per-category settings: identity, attributes, and category
-//                      dashboard. Content lazy-loaded via HTMX from the entities
-//                      plugin (one fragment per selected category).
+//   1. Dashboard      — Campaign dashboard layout editor (drag-and-drop blocks).
+//   2. Categories     — Per-category settings: identity, attributes, and category
+//                       dashboard. Content lazy-loaded via HTMX from the entities
+//                       plugin (one fragment per selected category).
 //   3. Page Templates — Per-category page template editor (template-editor widget,
-//                      lazy-loaded via HTMX).
-//   4. Navigation    — Sidebar ordering/visibility + custom sections & links.
+//                       lazy-loaded via HTMX).
+//   4. Extensions     — Enable/disable campaign addons (modules, widgets,
+//                       integrations). Lazy-loaded via HTMX from the addons plugin.
+//   5. Navigation     — Sidebar ordering/visibility + custom sections & links.
 //
 // Route: GET /campaigns/:id/customize
 // Permission: RoleOwner only.
@@ -39,7 +41,7 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 					</a>
 					<div>
 						<h1 class="text-base font-semibold text-fg">Campaign Customization</h1>
-						<p class="text-[11px] text-fg-secondary">Dashboards, categories, page templates, and navigation</p>
+						<p class="text-[11px] text-fg-secondary">Dashboards, categories, templates, navigation, and extensions</p>
 					</div>
 				</div>
 			</div>
@@ -74,20 +76,27 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 				>
 					<i class="fa-solid fa-bars mr-1.5 text-xs"></i> Navigation
 				</button>
+				<button
+					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+					:class="tab === 'extensions' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
+					@click="tab = 'extensions'"
+				>
+					<i class="fa-solid fa-plug mr-1.5 text-xs"></i> Extensions
+				</button>
 			</div>
 
 			<!-- Tab content -->
 			<div class="flex-1 overflow-hidden">
 				<!-- Dashboard tab: campaign dashboard layout editor -->
 				<div x-show="tab === 'dashboard'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-6">
+					<div class="max-w-3xl mx-auto px-6 py-4">
 						@dashboardEditorTab(cc, csrfToken)
 					</div>
 				</div>
 
 				<!-- Categories tab: per-category config (identity, attributes, dashboard) -->
 				<div x-show="tab === 'categories'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-6">
+					<div class="max-w-3xl mx-auto px-6 py-4">
 						@categoriesTab(cc, entityTypes, csrfToken)
 					</div>
 				</div>
@@ -99,8 +108,15 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 
 				<!-- Navigation tab: sidebar ordering, visibility, custom sections/links -->
 				<div x-show="tab === 'navigation'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-6">
+					<div class="max-w-3xl mx-auto px-6 py-4">
 						@navigationTab(cc, entityTypes, csrfToken)
+					</div>
+				</div>
+
+				<!-- Extensions tab: enable/disable campaign addons -->
+				<div x-show="tab === 'extensions'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-4">
+						@extensionsTab(cc)
 					</div>
 				</div>
 			</div>
@@ -111,12 +127,11 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 // dashboardEditorTab renders the campaign dashboard layout editor with a
 // drag-and-drop block builder. Mounts the dashboard-editor widget.
 templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
-	<div class="space-y-6">
+	<div class="space-y-4">
 		<div>
-			<h2 class="text-lg font-semibold text-fg mb-1">Campaign Dashboard</h2>
-			<p class="text-sm text-fg-secondary">
+			<h2 class="text-base font-semibold text-fg mb-0.5">Campaign Dashboard</h2>
+			<p class="text-xs text-fg-secondary">
 				Customize the layout of your campaign's main dashboard page.
-				Add rows, drag blocks from the palette into columns, and save.
 			</p>
 		</div>
 
@@ -133,11 +148,11 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 // at the top picks the category; HTMX lazy-loads identity, attributes, and
 // category dashboard configuration from the entities plugin.
 templ categoriesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
-	<div class="space-y-6">
+	<div class="space-y-4">
 		<div class="flex items-center justify-between">
 			<div>
-				<h2 class="text-lg font-semibold text-fg mb-1">Categories</h2>
-				<p class="text-sm text-fg-secondary">
+				<h2 class="text-base font-semibold text-fg mb-0.5">Categories</h2>
+				<p class="text-xs text-fg-secondary">
 					Configure identity, attributes, and dashboard for each category.
 				</p>
 			</div>
@@ -150,8 +165,8 @@ templ categoriesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 		</div>
 
 		if len(entityTypes) == 0 {
-			<div class="card p-8 text-center">
-				<i class="fa-solid fa-folder-open text-3xl text-fg-muted mb-3"></i>
+			<div class="card p-6 text-center">
+				<i class="fa-solid fa-folder-open text-2xl text-fg-muted mb-2"></i>
 				<p class="text-sm text-fg-secondary">No categories yet. Create one to get started.</p>
 			</div>
 		} else {
@@ -184,8 +199,8 @@ templ categoriesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 
 			<!-- Lazy-loaded category config container -->
 			<div id="category-config-container">
-				<div class="card p-8 text-center">
-					<i class="fa-solid fa-hand-pointer text-2xl text-fg-muted mb-2"></i>
+				<div class="card p-6 text-center">
+					<i class="fa-solid fa-hand-pointer text-xl text-fg-muted mb-2"></i>
 					<p class="text-sm text-fg-secondary">Select a category above to configure it.</p>
 				</div>
 			</div>
@@ -211,8 +226,8 @@ templ pageTemplatesTab(cc *CampaignContext, entityTypes []SettingsEntityType, cs
 			<div class="px-6 pt-4 pb-2 shrink-0">
 				<div class="max-w-3xl mx-auto">
 					<div class="mb-1">
-						<h2 class="text-lg font-semibold text-fg mb-1">Page Templates</h2>
-						<p class="text-sm text-fg-secondary">
+						<h2 class="text-base font-semibold text-fg mb-0.5">Page Templates</h2>
+						<p class="text-xs text-fg-secondary">
 							Design the profile page layout for each category using drag-and-drop blocks.
 						</p>
 					</div>
@@ -261,11 +276,11 @@ templ pageTemplatesTab(cc *CampaignContext, entityTypes []SettingsEntityType, cs
 // sidebar config widget (reorder, hide/show entity types) plus new controls
 // for custom sections and links.
 templ navigationTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
-	<div class="space-y-6">
+	<div class="space-y-4">
 		<div>
-			<h2 class="text-lg font-semibold text-fg mb-1">Sidebar Navigation</h2>
-			<p class="text-sm text-fg-secondary">
-				Drag to reorder categories, toggle visibility, and add custom sections or links to the sidebar.
+			<h2 class="text-base font-semibold text-fg mb-0.5">Sidebar Navigation</h2>
+			<p class="text-xs text-fg-secondary">
+				Drag to reorder categories, toggle visibility, and add custom sections or links.
 			</p>
 		</div>
 
@@ -295,6 +310,30 @@ templ navigationTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 				data-campaign-id={ cc.Campaign.ID }
 				data-csrf-token={ csrfToken }
 			></div>
+		</div>
+	</div>
+}
+
+// extensionsTab renders the addon/extension management interface. The addon
+// list is lazy-loaded via HTMX from the addons plugin fragment endpoint.
+templ extensionsTab(cc *CampaignContext) {
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-base font-semibold text-fg mb-0.5">Extensions</h2>
+			<p class="text-xs text-fg-secondary">
+				Enable or disable extensions for this campaign. Disabling an extension does not delete its data.
+			</p>
+		</div>
+
+		<div
+			id="addons-list"
+			hx-get={ fmt.Sprintf("/campaigns/%s/addons/fragment", cc.Campaign.ID) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+		>
+			<div class="text-sm text-fg-secondary text-center py-6">
+				<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Loading extensions...
+			</div>
 		</div>
 	</div>
 }

@@ -8,48 +8,91 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-24 -- Phase E: Quick Search + Customization Hub rework.
+2026-02-24 -- Phase E: Extension bug fix, Entity Hierarchy, Editor Insert Menu, Backlinks, Entity Preview Tooltip.
 
 ## Current Phase
-**Phase E: Core UX & Discovery.** Quick Search and Customize page rework complete.
+**Phase E: Core UX & Discovery.** Quick Search, Customize page rework, Extensions tab,
+Entity Hierarchy, and extension enable bug fix all complete.
 
-## Phase E: Core UX & Discovery (2026-02-24)
+## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
-### Quick Search (Ctrl+K) — COMPLETE
-- **`static/js/search_modal.js`**: Standalone JS module (not a widget — global scope).
-  Opens centered modal overlay with search input, result list, keyboard hints.
-- **Keyboard shortcut**: Ctrl+K / Cmd+K opens/closes modal. Escape closes.
-- **Search**: Uses existing `GET /campaigns/:id/entities/search?q=...` JSON endpoint
-  (Accept: application/json). 200ms debounce, AbortController for in-flight cancellation.
-- **Results**: Entity type icon + color, entity name, type name. Mouse hover and
-  arrow keys for navigation, Enter to open, click to navigate.
-- **Topbar**: Replaced inline HTMX search input with a trigger button that calls
-  `Chronicle.openSearch()`. Shows search icon, "Search..." label, and Cmd+K kbd hint.
-  Works on all screen sizes (responsive).
-- **Campaign-scoped**: Extracts campaign ID from URL; modal only opens when in a
-  campaign context (pattern: /campaigns/:id/...).
-- **Cleanup**: Closes on `chronicle:navigated` (hx-boost navigation).
-- **Script loaded**: Added to `base.templ` after all widget scripts.
+### Extension Enable Bug Fix — COMPLETE
+- **Root cause**: Admin panel allowed activating planned addons (Calendar, Maps, Dice Roller)
+  that have no backing code. Once activated, campaign owners could "enable" them — nothing
+  would happen because the code doesn't exist.
+- **Fix**: Added `installedAddons` registry in `service.go` — a `map[string]bool` listing
+  slugs with real backing code (currently only `"sync-api"`).
+- **Service layer**: `UpdateStatus()` blocks activating uninstalled addons. `EnableForCampaign()`
+  blocks enabling uninstalled addons. `List()` and `ListForCampaign()` annotate `Installed` field.
+- **Admin UI**: Uninstalled addons show "Not installed" label and disabled activate button.
+- **Campaign UI**: Uninstalled addons show "Coming Soon" badge instead of enable/disable toggle.
+- **Model**: Added `Installed bool` to both `Addon` and `CampaignAddon` structs (not persisted).
+- **Tests**: 5 new tests (TestIsInstalled, TestUpdateStatus_ActivateInstalled,
+  TestUpdateStatus_ActivateUninstalled, TestEnableForCampaign_NotInstalled,
+  TestListForCampaign_AnnotatesInstalled). All 32 addon tests pass.
 
-### Customization Hub Rework — COMPLETE
-- **Old structure (5 tabs)**: Navigation, Dashboard, Categories (link grid), Category
-  Dashboards, Page Layouts. Categories tab was just links to a separate config page.
-  Category Dashboards and Page Layouts duplicated entity type config functionality.
-  Attribute field editor was missing entirely.
-- **New structure (4 tabs)**:
-  1. **Dashboard** — Campaign dashboard editor (unchanged).
-  2. **Categories** — Category selector → HTMX lazy-loads identity, attributes, and
-     category dashboard for the selected category. Inline editing via Alpine.js + fetch.
-  3. **Page Templates** — Category selector → HTMX lazy-loads template-editor (renamed).
-  4. **Navigation** — Sidebar ordering + custom links (unchanged).
-- **New endpoint**: `GET /campaigns/:id/entity-types/:etid/customize` returns an HTMX
-  fragment with Identity card (name/icon/color), Attributes card (entity-type-editor
-  fields-only), and Category Dashboard card (description + dashboard-editor widget).
-- **Bug fix**: Entity type config page Nav Panel tab used HTMX `hx-put` + `hx-include`
-  to send form data, but handler expected JSON. Switched to Alpine.js + fetch() with
-  proper JSON body. Same pattern used in new Categories tab identity card.
-- **Back link fix**: Entity types management page now links "Back to Customize" instead
-  of "Back to Settings".
+### Entity Hierarchy — COMPLETE (4 Sprints)
+
+**Sprint 1: Data Plumbing**
+- Added `ParentID` to `CreateEntityRequest`, `UpdateEntityRequest`, `CreateEntityInput`,
+  `UpdateEntityInput` in `model.go`.
+- Added `FindChildren`, `FindAncestors`, `UpdateParent` to `EntityRepository` interface.
+- `FindAncestors` uses recursive CTE with depth limit of 20.
+- Service: parent validation (exists, same campaign, no self-reference, circular reference
+  detection by walking ancestor chain of proposed parent).
+- 8 new hierarchy tests, all passing.
+
+**Sprint 2: Parent Selector on Forms**
+- `form.templ`: Added `parentSelector` component — Alpine.js searchable dropdown using
+  existing entity search endpoint (`Accept: application/json` header).
+- Pre-fill parent from `?parent_id=` query param ("Create sub-page" flow).
+- Edit form pre-populates current parent with "Clear" button.
+- `EntityNewPage` and `EntityEditPage` accept `parentEntity *Entity` parameter.
+
+**Sprint 3: Breadcrumbs + Children + Create Sub-page**
+- `show.templ`: Breadcrumb now shows ancestor chain (furthest first, immediate parent last).
+  Each ancestor is a clickable link.
+- `blockChildren` component: sub-pages section with card grid + "Create sub-page" button
+  linking to `/campaigns/:id/entities/new?parent_id=:eid&type=:typeID`.
+- Handler `Show()` fetches ancestors via `GetAncestors()` and children via `GetChildren()`.
+
+**Sprint 4: Tree View on Category Dashboard**
+- `category_dashboard.templ`: Third view toggle (grid/table/tree) with localStorage persistence.
+- `EntityTreeNode` struct + `buildEntityTree()` builds tree from flat entity list using parent_id.
+- `entityTreeLevel` recursive templ component: collapsible nodes with expand/collapse chevrons,
+  entity icon/name links, privacy indicators, child count badges, indented border-left nesting.
+
+### Editor Insert Menu — COMPLETE
+- Added `+` button to editor toolbar that opens a dropdown with discoverable insertions.
+- Menu items: Mention Entity (Type @), Insert Link, Horizontal Rule (---),
+  Blockquote (>), Code Block (```). Each shows shortcut hint.
+- "Mention Entity" inserts `@` at cursor and triggers the mention popup.
+- "Insert Link" prompts for URL and wraps selection or inserts link text.
+- Extensible for future features (secrets, embeds, etc.).
+- Files: `editor.js` (createInsertMenu, executeInsert), `input.css` (dropdown styles).
+
+### Backlinks / "Referenced by" — COMPLETE
+- **Repository**: `FindBacklinks()` searches `entry_html` for `data-mention-id="<entityID>"`
+  pattern using LIKE query. Returns up to 50 results, respects privacy by role.
+- **Service**: `GetBacklinks()` delegates to repo with error wrapping.
+- **Handler**: `Show()` fetches backlinks and passes to template.
+- **Template**: `blockBacklinks` component renders a "Referenced by" section with
+  entity type icon/name chips, styled as pill links. Only shown when backlinks exist.
+- **Tests**: 1 new test (TestGetBacklinks_DelegatesToRepo). All 39 entity tests pass.
+
+### Entity Preview Tooltip Enhancement — COMPLETE
+- **Migration 000023**: Added `popup_config` JSON column to entities table.
+- **Model**: `PopupConfig` struct with `ShowImage`, `ShowAttributes`, `ShowEntry` booleans.
+  `EffectivePopupConfig()` returns entity config or defaults (all true).
+- **Preview API**: Enhanced `GET /entities/:eid/preview` to include attributes (up to 5
+  key-value pairs from entity type fields) and respect popup_config visibility toggles.
+- **Popup Config API**: New `PUT /entities/:eid/popup-config` saves per-entity preview settings.
+- **Tooltip Widget**: Enhanced `entity_tooltip.js` with side-by-side layout (gradient-bordered
+  image on left + type badge/name/attributes on right), entry excerpt below, dynamic layout
+  adapting based on available data.
+- **Edit Form**: "Hover Preview Settings" collapsible section with checkboxes for
+  Show Image / Show Attributes / Show Entry. Auto-saves via API with inline status feedback.
+  Clears tooltip cache after save so changes are immediately visible.
 
 ### In Progress
 - Nothing currently in progress.
@@ -73,8 +116,8 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Phase E continued:** Entity Nesting (parent_id + tree UI + breadcrumbs),
-   Backlinks ("Referenced by" on entity profiles), API documentation.
+1. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference),
+   keyboard shortcuts beyond Ctrl+K (Ctrl+N new entity, Ctrl+E edit, Ctrl+S save).
 2. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
    See `.ai/roadmap.md` for full data model and implementation plan.
 3. **Handler-level "view as player":** Extend toggle to filter is_private entities

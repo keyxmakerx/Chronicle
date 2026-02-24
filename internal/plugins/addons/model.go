@@ -35,6 +35,7 @@ type Addon struct {
 	Icon         string         `json:"icon"`
 	Author       *string        `json:"author,omitempty"`
 	ConfigSchema map[string]any `json:"config_schema,omitempty"` // JSON schema for addon-specific config.
+	Installed    bool           `json:"installed"`                // Whether backing code exists (set by service, not persisted).
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 }
@@ -55,6 +56,7 @@ type CampaignAddon struct {
 	AddonIcon     string        `json:"addon_icon,omitempty"`
 	AddonCategory AddonCategory `json:"addon_category,omitempty"`
 	AddonStatus   AddonStatus   `json:"addon_status,omitempty"`
+	Installed     bool          `json:"installed"` // Whether backing code exists (set by service, not persisted).
 }
 
 // CreateAddonInput is the validated input for registering a new addon.

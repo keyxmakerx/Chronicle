@@ -136,6 +136,20 @@ func assertAppError(t *testing.T, err error, expectedCode int) {
 	}
 }
 
+// --- IsInstalled Tests ---
+
+func TestIsInstalled(t *testing.T) {
+	if !IsInstalled("sync-api") {
+		t.Error("expected sync-api to be installed")
+	}
+	if IsInstalled("dice-roller") {
+		t.Error("expected dice-roller to NOT be installed")
+	}
+	if IsInstalled("") {
+		t.Error("expected empty slug to NOT be installed")
+	}
+}
+
 // --- Create Tests ---
 
 func TestCreate_Success(t *testing.T) {
@@ -435,6 +449,40 @@ func TestUpdateStatus_Success(t *testing.T) {
 	}
 }
 
+func TestUpdateStatus_ActivateInstalled(t *testing.T) {
+	var capturedStatus AddonStatus
+	repo := &mockAddonRepo{
+		findByIDFn: func(ctx context.Context, id int) (*Addon, error) {
+			return &Addon{ID: id, Slug: "sync-api", Status: StatusPlanned}, nil
+		},
+		updateStatusFn: func(ctx context.Context, id int, status AddonStatus) error {
+			capturedStatus = status
+			return nil
+		},
+	}
+
+	svc := NewAddonService(repo)
+	err := svc.UpdateStatus(context.Background(), 1, StatusActive)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedStatus != StatusActive {
+		t.Errorf("expected active, got %s", capturedStatus)
+	}
+}
+
+func TestUpdateStatus_ActivateUninstalled(t *testing.T) {
+	repo := &mockAddonRepo{
+		findByIDFn: func(ctx context.Context, id int) (*Addon, error) {
+			return &Addon{ID: id, Slug: "dice-roller", Status: StatusPlanned}, nil
+		},
+	}
+
+	svc := NewAddonService(repo)
+	err := svc.UpdateStatus(context.Background(), 1, StatusActive)
+	assertAppError(t, err, 400)
+}
+
 func TestUpdateStatus_InvalidStatus(t *testing.T) {
 	svc := NewAddonService(&mockAddonRepo{})
 	err := svc.UpdateStatus(context.Background(), 1, AddonStatus("bogus"))
@@ -481,7 +529,7 @@ func TestEnableForCampaign_Success(t *testing.T) {
 	var capturedAddonID int
 	repo := &mockAddonRepo{
 		findByIDFn: func(ctx context.Context, id int) (*Addon, error) {
-			return &Addon{ID: id, Slug: "notes", Status: StatusActive}, nil
+			return &Addon{ID: id, Slug: "sync-api", Status: StatusActive}, nil // sync-api is installed.
 		},
 		enableForCampaignFn: func(ctx context.Context, campaignID string, addonID int, userID string) error {
 			capturedCampaignID = campaignID
@@ -501,6 +549,18 @@ func TestEnableForCampaign_Success(t *testing.T) {
 	if capturedAddonID != 5 {
 		t.Errorf("expected addon ID 5, got %d", capturedAddonID)
 	}
+}
+
+func TestEnableForCampaign_NotInstalled(t *testing.T) {
+	repo := &mockAddonRepo{
+		findByIDFn: func(ctx context.Context, id int) (*Addon, error) {
+			return &Addon{ID: id, Slug: "dice-roller", Status: StatusActive}, nil // Not in installedAddons.
+		},
+	}
+
+	svc := NewAddonService(repo)
+	err := svc.EnableForCampaign(context.Background(), "camp-1", 5, "user-1")
+	assertAppError(t, err, 400)
 }
 
 func TestEnableForCampaign_NotActive(t *testing.T) {
@@ -566,8 +626,8 @@ func TestList_Success(t *testing.T) {
 	repo := &mockAddonRepo{
 		listFn: func(ctx context.Context) ([]Addon, error) {
 			return []Addon{
-				{ID: 1, Slug: "notes", Name: "Player Notes"},
-				{ID: 2, Slug: "dice", Name: "Dice Roller"},
+				{ID: 1, Slug: "sync-api", Name: "Sync API"},
+				{ID: 2, Slug: "dice-roller", Name: "Dice Roller"},
 			}, nil
 		},
 	}
@@ -579,6 +639,35 @@ func TestList_Success(t *testing.T) {
 	}
 	if len(addons) != 2 {
 		t.Errorf("expected 2 addons, got %d", len(addons))
+	}
+	if !addons[0].Installed {
+		t.Error("expected sync-api to be marked as installed")
+	}
+	if addons[1].Installed {
+		t.Error("expected dice-roller to NOT be marked as installed")
+	}
+}
+
+func TestListForCampaign_AnnotatesInstalled(t *testing.T) {
+	repo := &mockAddonRepo{
+		listForCampaignFn: func(ctx context.Context, campaignID string) ([]CampaignAddon, error) {
+			return []CampaignAddon{
+				{AddonID: 1, AddonSlug: "sync-api", AddonName: "Sync API"},
+				{AddonID: 2, AddonSlug: "calendar", AddonName: "Calendar"},
+			}, nil
+		},
+	}
+
+	svc := NewAddonService(repo)
+	addons, err := svc.ListForCampaign(context.Background(), "camp-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !addons[0].Installed {
+		t.Error("expected sync-api to be marked as installed")
+	}
+	if addons[1].Installed {
+		t.Error("expected calendar to NOT be marked as installed")
 	}
 }
 

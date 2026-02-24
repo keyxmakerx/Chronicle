@@ -158,10 +158,10 @@ func catDescJS(desc *string) string {
 // Hub's Categories tab. Contains identity settings, attribute field definitions
 // editor, and category dashboard settings for a single entity type.
 templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
-	<div class="space-y-6">
+	<div class="space-y-4">
 		<!-- Identity -->
 		<div
-			class="card p-5 space-y-4"
+			class="card p-4 space-y-3"
 			x-data={ fmt.Sprintf("{ saving: false, saved: false, etName: '%s', etNamePlural: '%s', etIcon: '%s', etColor: '%s' }", jsEsc(et.Name), jsEsc(et.NamePlural), jsEsc(et.Icon), jsEsc(et.Color)) }
 		>
 			<div class="flex items-center justify-between">
@@ -244,7 +244,7 @@ templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityT
 		</div>
 
 		<!-- Attributes / Field Definitions -->
-		<div class="card p-5 space-y-3">
+		<div class="card p-4 space-y-2">
 			<h3 class="text-sm font-semibold text-fg">Attributes</h3>
 			<p class="text-xs text-fg-secondary">
 				Define the fields that appear on every { et.Name } page.
@@ -266,7 +266,7 @@ templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityT
 		</div>
 
 		<!-- Category Dashboard -->
-		<div class="card p-5 space-y-3">
+		<div class="card p-4 space-y-2">
 			<h3 class="text-sm font-semibold text-fg">Category Dashboard</h3>
 			<p class="text-xs text-fg-secondary">
 				Description and layout for the { et.NamePlural } landing page.

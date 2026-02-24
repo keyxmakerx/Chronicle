@@ -153,6 +153,7 @@ templ addonStatusSummary(addons []Addon) {
 }
 
 // adminAddonCard renders a single addon card with status controls.
+// Uninstalled addons show a disabled activate button with a tooltip.
 templ adminAddonCard(a Addon, csrfToken string) {
 	<div class="card p-5 flex flex-col">
 		<div class="flex items-start justify-between mb-3">
@@ -161,7 +162,12 @@ templ adminAddonCard(a Addon, csrfToken string) {
 					<i class={ "fa-solid " + a.Icon + " text-accent" }></i>
 				</span>
 				<div>
-					<h3 class="text-sm font-semibold text-fg">{ a.Name }</h3>
+					<div class="flex items-center gap-2">
+						<h3 class="text-sm font-semibold text-fg">{ a.Name }</h3>
+						if !a.Installed {
+							<span class="text-[10px] font-medium text-fg-muted bg-surface-alt px-1.5 py-0.5 rounded">Not installed</span>
+						}
+					</div>
 					<p class="text-xs text-fg-muted">{ a.Slug }</p>
 				</div>
 			</div>
@@ -184,13 +190,19 @@ templ adminAddonCard(a Addon, csrfToken string) {
 			<div class="flex items-center gap-1">
 				// Status change buttons.
 				if a.Status != StatusActive {
-					<form method="POST" hx-put={ fmt.Sprintf("/admin/addons/%d/status", a.ID) } class="inline">
-						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<input type="hidden" name="status" value="active"/>
-						<button type="submit" class="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300" title="Activate">
+					if a.Installed {
+						<form method="POST" hx-put={ fmt.Sprintf("/admin/addons/%d/status", a.ID) } class="inline">
+							<input type="hidden" name="csrf_token" value={ csrfToken }/>
+							<input type="hidden" name="status" value="active"/>
+							<button type="submit" class="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300" title="Activate">
+								<i class="fa-solid fa-check"></i>
+							</button>
+						</form>
+					} else {
+						<span class="text-xs text-fg-muted cursor-not-allowed opacity-50" title="Code not installed — cannot activate">
 							<i class="fa-solid fa-check"></i>
-						</button>
-					</form>
+						</span>
+					}
 				}
 				if a.Status != StatusDeprecated {
 					<form method="POST" hx-put={ fmt.Sprintf("/admin/addons/%d/status", a.ID) } class="inline">

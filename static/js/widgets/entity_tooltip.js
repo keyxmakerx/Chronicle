@@ -2,9 +2,18 @@
  * entity_tooltip.js -- Chronicle Entity Tooltip/Popover Widget
  *
  * Provides hover tooltips for entity references throughout the app.
- * Shows entity name, type badge, image thumbnail, and entry excerpt
- * when the user hovers over any element with a `data-entity-preview`
- * attribute (whose value is the preview API URL).
+ * When the user hovers over any element with a `data-entity-preview`
+ * attribute (whose value is the preview API URL), a floating card shows:
+ *
+ *   - Gradient-bordered image (entity type color -> purple) with
+ *     attributes side-by-side when both are present
+ *   - Type badge, optional descriptor, privacy indicator
+ *   - Entity name
+ *   - Up to 5 key-value attribute pairs from the entity's custom fields
+ *   - Entry excerpt (first ~150 chars, 3-line clamp)
+ *
+ * Content is controlled per-entity via popup_config (showImage,
+ * showAttributes, showEntry). Layout adapts dynamically.
  *
  * Two usage modes:
  *   1. Auto-mounted by boot.js on elements with data-widget="entity-tooltip"
@@ -30,23 +39,37 @@
     var style = document.createElement('style');
     style.id = 'entity-tooltip-styles';
     style.textContent = [
-      '.et-tooltip { position: fixed; z-index: 9999; width: 300px; max-width: 90vw; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); overflow: hidden; pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity 150ms ease, transform 150ms ease; font-family: Inter, system-ui, -apple-system, sans-serif; }',
+      '.et-tooltip { position: fixed; z-index: 9999; width: 320px; max-width: 90vw; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); overflow: hidden; pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity 150ms ease, transform 150ms ease; font-family: Inter, system-ui, -apple-system, sans-serif; }',
       '.et-tooltip--visible { opacity: 1; transform: translateY(0); pointer-events: auto; }',
       '.et-tooltip--above { transform: translateY(-4px); }',
       '.et-tooltip--above.et-tooltip--visible { transform: translateY(0); }',
       '.dark .et-tooltip { background: #1f2937; border-color: #374151; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }',
-      '.et-tooltip__image { width: 100%; height: 120px; object-fit: cover; display: block; }',
-      '.et-tooltip__body { padding: 12px; }',
-      '.et-tooltip__name { font-size: 15px; font-weight: 600; color: #111827; margin: 0 0 6px 0; line-height: 1.3; display: flex; align-items: center; gap: 6px; }',
+      /* Content area with image + attributes side by side */
+      '.et-tooltip__content { display: flex; gap: 12px; padding: 12px; }',
+      '.et-tooltip__content--no-image { display: block; padding: 12px; }',
+      /* Gradient-bordered image */
+      '.et-tooltip__image-wrap { flex-shrink: 0; width: 76px; height: 76px; padding: 2px; border-radius: 10px; background: linear-gradient(135deg, var(--et-color, #6366f1), #a855f7); }',
+      '.et-tooltip__image { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 8px; }',
+      '.et-tooltip__info { flex: 1; min-width: 0; }',
+      '.et-tooltip__body { padding: 0 12px; }',
+      '.et-tooltip__name { font-size: 15px; font-weight: 600; color: #111827; margin: 0 0 4px 0; line-height: 1.3; display: flex; align-items: center; gap: 6px; }',
       '.dark .et-tooltip__name { color: #f3f4f6; }',
       '.et-tooltip__private { color: #9ca3af; font-size: 11px; }',
-      '.et-tooltip__badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; line-height: 18px; white-space: nowrap; }',
-      '.et-tooltip__label { font-size: 12px; color: #6b7280; margin-left: 6px; }',
+      '.et-tooltip__badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 10px; font-weight: 500; line-height: 16px; white-space: nowrap; }',
+      '.et-tooltip__label { font-size: 11px; color: #6b7280; margin-left: 4px; }',
       '.dark .et-tooltip__label { color: #9ca3af; }',
-      '.et-tooltip__type-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }',
-      '.et-tooltip__excerpt { font-size: 13px; line-height: 1.5; color: #4b5563; margin: 0; }',
+      '.et-tooltip__type-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }',
+      /* Attributes key-value list */
+      '.et-tooltip__attrs { margin-top: 4px; }',
+      '.et-tooltip__attr { display: flex; gap: 6px; font-size: 11px; line-height: 1.6; }',
+      '.et-tooltip__attr-label { color: #9ca3af; flex-shrink: 0; }',
+      '.dark .et-tooltip__attr-label { color: #6b7280; }',
+      '.et-tooltip__attr-value { color: #374151; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      '.dark .et-tooltip__attr-value { color: #d1d5db; }',
+      /* Excerpt */
+      '.et-tooltip__excerpt { font-size: 12px; line-height: 1.5; color: #4b5563; margin: 0; padding: 0 12px 10px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }',
       '.dark .et-tooltip__excerpt { color: #d1d5db; }',
-      '.et-tooltip__footer { padding: 8px 12px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; }',
+      '.et-tooltip__footer { padding: 6px 12px; border-top: 1px solid #f3f4f6; font-size: 10px; color: #9ca3af; }',
       '.dark .et-tooltip__footer { border-top-color: #374151; color: #6b7280; }',
       '.et-tooltip__loading { padding: 20px; text-align: center; font-size: 13px; color: #9ca3af; }'
     ].join('\n');
@@ -132,41 +155,63 @@
   function renderTooltip(data, entityURL) {
     var tip = ensureTooltip();
     var html = '';
+    var hasImage = data.image_path && data.image_path !== '';
+    var hasAttrs = data.attributes && data.attributes.length > 0;
+    var hasExcerpt = data.entry_excerpt && data.entry_excerpt !== '';
 
-    // Image thumbnail.
-    if (data.image_path) {
+    // Set the entity type color as a CSS custom property for the gradient border.
+    tip.style.setProperty('--et-color', data.type_color || '#6366f1');
+
+    // Content area: image (with gradient border) + info side by side.
+    html += '<div class="' + (hasImage ? 'et-tooltip__content' : 'et-tooltip__content--no-image') + '">';
+
+    if (hasImage) {
+      html += '<div class="et-tooltip__image-wrap">';
       html += '<img class="et-tooltip__image" src="' + escapeAttr(data.image_path) + '" alt="' + escapeAttr(data.name) + '" />';
+      html += '</div>';
     }
 
-    html += '<div class="et-tooltip__body">';
-
-    // Entity name with optional private indicator.
-    html += '<div class="et-tooltip__name">';
-    html += escapeHtml(data.name);
-    if (data.is_private) {
-      html += ' <span class="et-tooltip__private" title="Private"><i class="fa-solid fa-lock"></i></span>';
-    }
-    html += '</div>';
+    html += '<div class="et-tooltip__info">';
 
     // Type badge row.
     html += '<div class="et-tooltip__type-row">';
     html += '<span class="et-tooltip__badge" style="background-color: ' + escapeAttr(data.type_color) + '; color: ' + contrastTextColor(data.type_color) + '">';
     if (data.type_icon) {
-      html += '<i class="fa-solid ' + escapeAttr(data.type_icon) + '" style="font-size:10px"></i> ';
+      html += '<i class="fa-solid ' + escapeAttr(data.type_icon) + '" style="font-size:9px"></i> ';
     }
     html += escapeHtml(data.type_name);
     html += '</span>';
     if (data.type_label) {
       html += '<span class="et-tooltip__label">' + escapeHtml(data.type_label) + '</span>';
     }
+    if (data.is_private) {
+      html += ' <span class="et-tooltip__private" title="Private"><i class="fa-solid fa-lock" style="font-size:9px"></i></span>';
+    }
     html += '</div>';
 
-    // Entry excerpt.
-    if (data.entry_excerpt) {
-      html += '<p class="et-tooltip__excerpt">' + escapeHtml(data.entry_excerpt) + '</p>';
+    // Entity name.
+    html += '<div class="et-tooltip__name">' + escapeHtml(data.name) + '</div>';
+
+    // Attributes (key-value pairs, up to 5).
+    if (hasAttrs) {
+      html += '<div class="et-tooltip__attrs">';
+      for (var i = 0; i < data.attributes.length; i++) {
+        var attr = data.attributes[i];
+        html += '<div class="et-tooltip__attr">';
+        html += '<span class="et-tooltip__attr-label">' + escapeHtml(attr.label) + '</span>';
+        html += '<span class="et-tooltip__attr-value">' + escapeHtml(attr.value) + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
     }
 
-    html += '</div>';
+    html += '</div>'; // end .et-tooltip__info
+    html += '</div>'; // end .et-tooltip__content
+
+    // Entry excerpt below the content area.
+    if (hasExcerpt) {
+      html += '<p class="et-tooltip__excerpt">' + escapeHtml(data.entry_excerpt) + '</p>';
+    }
 
     // Footer with "Click to view" hint.
     html += '<div class="et-tooltip__footer">Click to view &rarr;</div>';

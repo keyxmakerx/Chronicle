@@ -108,17 +108,21 @@ func (m *mockEntityTypeRepo) MaxSortOrder(ctx context.Context, campaignID string
 
 // mockEntityRepo implements EntityRepository for testing.
 type mockEntityRepo struct {
-	createFn        func(ctx context.Context, entity *Entity) error
-	findByIDFn      func(ctx context.Context, id string) (*Entity, error)
-	findBySlugFn    func(ctx context.Context, campaignID, slug string) (*Entity, error)
-	updateFn        func(ctx context.Context, entity *Entity) error
-	updateEntryFn   func(ctx context.Context, id, entryJSON, entryHTML string) error
-	updateImageFn   func(ctx context.Context, id, imagePath string) error
-	deleteFn        func(ctx context.Context, id string) error
-	slugExistsFn    func(ctx context.Context, campaignID, slug string) (bool, error)
+	createFn         func(ctx context.Context, entity *Entity) error
+	findByIDFn       func(ctx context.Context, id string) (*Entity, error)
+	findBySlugFn     func(ctx context.Context, campaignID, slug string) (*Entity, error)
+	updateFn         func(ctx context.Context, entity *Entity) error
+	updateEntryFn    func(ctx context.Context, id, entryJSON, entryHTML string) error
+	updateImageFn    func(ctx context.Context, id, imagePath string) error
+	deleteFn         func(ctx context.Context, id string) error
+	slugExistsFn     func(ctx context.Context, campaignID, slug string) (bool, error)
 	listByCampaignFn func(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
-	searchFn        func(ctx context.Context, campaignID, query string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
-	countByTypeFn   func(ctx context.Context, campaignID string, role int) (map[int]int, error)
+	searchFn         func(ctx context.Context, campaignID, query string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
+	countByTypeFn    func(ctx context.Context, campaignID string, role int) (map[int]int, error)
+	findChildrenFn   func(ctx context.Context, parentID string, role int) ([]Entity, error)
+	findAncestorsFn  func(ctx context.Context, entityID string) ([]Entity, error)
+	updateParentFn   func(ctx context.Context, entityID string, parentID *string) error
+	findBacklinksFn  func(ctx context.Context, entityID string, role int) ([]Entity, error)
 }
 
 func (m *mockEntityRepo) Create(ctx context.Context, entity *Entity) error {
@@ -208,6 +212,38 @@ func (m *mockEntityRepo) CountByType(ctx context.Context, campaignID string, rol
 
 func (m *mockEntityRepo) ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error) {
 	return nil, nil
+}
+
+func (m *mockEntityRepo) FindChildren(ctx context.Context, parentID string, role int) ([]Entity, error) {
+	if m.findChildrenFn != nil {
+		return m.findChildrenFn(ctx, parentID, role)
+	}
+	return nil, nil
+}
+
+func (m *mockEntityRepo) FindAncestors(ctx context.Context, entityID string) ([]Entity, error) {
+	if m.findAncestorsFn != nil {
+		return m.findAncestorsFn(ctx, entityID)
+	}
+	return nil, nil
+}
+
+func (m *mockEntityRepo) UpdateParent(ctx context.Context, entityID string, parentID *string) error {
+	if m.updateParentFn != nil {
+		return m.updateParentFn(ctx, entityID, parentID)
+	}
+	return nil
+}
+
+func (m *mockEntityRepo) FindBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error) {
+	if m.findBacklinksFn != nil {
+		return m.findBacklinksFn(ctx, entityID, role)
+	}
+	return nil, nil
+}
+
+func (m *mockEntityRepo) UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error {
+	return nil
 }
 
 // --- Test Helpers ---
@@ -796,4 +832,222 @@ func TestDefaultListOptions(t *testing.T) {
 	if opts.PerPage != 24 {
 		t.Errorf("expected default per_page 24, got %d", opts.PerPage)
 	}
+}
+
+// --- Hierarchy Tests ---
+
+func TestCreate_WithParent(t *testing.T) {
+	parentID := "parent-123"
+	var capturedEntity *Entity
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(ctx context.Context, id string) (*Entity, error) {
+			if id == parentID {
+				return &Entity{ID: parentID, CampaignID: "camp-1", Name: "Parent"}, nil
+			}
+			return nil, apperror.NewNotFound("not found")
+		},
+		createFn: func(ctx context.Context, entity *Entity) error {
+			capturedEntity = entity
+			return nil
+		},
+	}
+	typeRepo := &mockEntityTypeRepo{
+		findByIDFn: func(ctx context.Context, id int) (*EntityType, error) {
+			return &EntityType{ID: 1, CampaignID: "camp-1", Slug: "character"}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, typeRepo)
+	_, err := svc.Create(context.Background(), "camp-1", "user-1", CreateEntityInput{
+		Name:         "Child Entity",
+		EntityTypeID: 1,
+		ParentID:     parentID,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedEntity.ParentID == nil || *capturedEntity.ParentID != parentID {
+		t.Errorf("expected parent_id %s, got %v", parentID, capturedEntity.ParentID)
+	}
+}
+
+func TestCreate_WithParentNotFound(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(ctx context.Context, id string) (*Entity, error) {
+			return nil, apperror.NewNotFound("not found")
+		},
+	}
+	typeRepo := &mockEntityTypeRepo{
+		findByIDFn: func(ctx context.Context, id int) (*EntityType, error) {
+			return &EntityType{ID: 1, CampaignID: "camp-1", Slug: "character"}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, typeRepo)
+	_, err := svc.Create(context.Background(), "camp-1", "user-1", CreateEntityInput{
+		Name:         "Child",
+		EntityTypeID: 1,
+		ParentID:     "nonexistent",
+	})
+	assertAppError(t, err, 400)
+}
+
+func TestCreate_WithParentWrongCampaign(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(ctx context.Context, id string) (*Entity, error) {
+			return &Entity{ID: id, CampaignID: "other-campaign", Name: "Parent"}, nil
+		},
+	}
+	typeRepo := &mockEntityTypeRepo{
+		findByIDFn: func(ctx context.Context, id int) (*EntityType, error) {
+			return &EntityType{ID: 1, CampaignID: "camp-1", Slug: "character"}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, typeRepo)
+	_, err := svc.Create(context.Background(), "camp-1", "user-1", CreateEntityInput{
+		Name:         "Child",
+		EntityTypeID: 1,
+		ParentID:     "parent-in-other-campaign",
+	})
+	assertAppError(t, err, 400)
+}
+
+func TestCreate_NoParent(t *testing.T) {
+	var capturedEntity *Entity
+	entityRepo := &mockEntityRepo{
+		createFn: func(ctx context.Context, entity *Entity) error {
+			capturedEntity = entity
+			return nil
+		},
+	}
+	typeRepo := &mockEntityTypeRepo{
+		findByIDFn: func(ctx context.Context, id int) (*EntityType, error) {
+			return &EntityType{ID: 1, CampaignID: "camp-1", Slug: "character"}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, typeRepo)
+	_, err := svc.Create(context.Background(), "camp-1", "user-1", CreateEntityInput{
+		Name:         "Standalone",
+		EntityTypeID: 1,
+		ParentID:     "", // Empty = no parent.
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedEntity.ParentID != nil {
+		t.Errorf("expected nil parent_id, got %v", capturedEntity.ParentID)
+	}
+}
+
+func TestUpdate_SelfParent(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(ctx context.Context, id string) (*Entity, error) {
+			return &Entity{ID: "ent-1", CampaignID: "camp-1", Name: "Old Name"}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+	_, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{
+		Name:     "Updated",
+		ParentID: "ent-1", // Self-reference.
+	})
+	assertAppError(t, err, 400)
+}
+
+func TestUpdate_CircularParent(t *testing.T) {
+	// Entity A -> set parent to B, but B is a child of A (B's ancestor is A).
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(ctx context.Context, id string) (*Entity, error) {
+			switch id {
+			case "ent-A":
+				return &Entity{ID: "ent-A", CampaignID: "camp-1", Name: "A"}, nil
+			case "ent-B":
+				return &Entity{ID: "ent-B", CampaignID: "camp-1", Name: "B", ParentID: strPtr("ent-A")}, nil
+			default:
+				return nil, apperror.NewNotFound("not found")
+			}
+		},
+		findAncestorsFn: func(ctx context.Context, entityID string) ([]Entity, error) {
+			// B's ancestor chain: [A] (B -> A).
+			if entityID == "ent-B" {
+				return []Entity{{ID: "ent-A", Name: "A"}}, nil
+			}
+			return nil, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+	_, err := svc.Update(context.Background(), "ent-A", UpdateEntityInput{
+		Name:     "A",
+		ParentID: "ent-B", // Would create A -> B -> A cycle.
+	})
+	assertAppError(t, err, 400)
+}
+
+func TestGetChildren_DelegatesToRepo(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findChildrenFn: func(ctx context.Context, parentID string, role int) ([]Entity, error) {
+			return []Entity{
+				{ID: "child-1", Name: "Child 1"},
+				{ID: "child-2", Name: "Child 2"},
+			}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+	children, err := svc.GetChildren(context.Background(), "parent-1", 3)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(children) != 2 {
+		t.Errorf("expected 2 children, got %d", len(children))
+	}
+}
+
+func TestGetAncestors_DelegatesToRepo(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findAncestorsFn: func(ctx context.Context, entityID string) ([]Entity, error) {
+			return []Entity{
+				{ID: "parent", Name: "Parent"},
+				{ID: "grandparent", Name: "Grandparent"},
+			}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+	ancestors, err := svc.GetAncestors(context.Background(), "child-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ancestors) != 2 {
+		t.Errorf("expected 2 ancestors, got %d", len(ancestors))
+	}
+}
+
+func TestGetBacklinks_DelegatesToRepo(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findBacklinksFn: func(ctx context.Context, entityID string, role int) ([]Entity, error) {
+			return []Entity{
+				{ID: "ref-1", Name: "Referrer One"},
+				{ID: "ref-2", Name: "Referrer Two"},
+				{ID: "ref-3", Name: "Referrer Three"},
+			}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+	backlinks, err := svc.GetBacklinks(context.Background(), "target-entity", 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(backlinks) != 3 {
+		t.Errorf("expected 3 backlinks, got %d", len(backlinks))
+	}
+}
+
+// strPtr returns a pointer to the given string.
+func strPtr(s string) *string {
+	return &s
 }

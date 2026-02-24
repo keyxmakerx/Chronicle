@@ -11,7 +11,7 @@ import (
 )
 
 // EntityNewPage renders the full entity creation page.
-templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, csrfToken, errMsg string) {
+templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, parentEntity *Entity, csrfToken, errMsg string) {
 	@layouts.App("New Page - " + cc.Campaign.Name) {
 		<div class="max-w-2xl mx-auto">
 			<nav class="text-sm text-fg-secondary mb-4">
@@ -20,13 +20,13 @@ templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, pre
 				<span class="text-fg">New</span>
 			</nav>
 			<h1 class="text-2xl font-bold text-fg mb-6">Create Page</h1>
-			@EntityCreateFormComponent(cc, entityTypes, preselect, csrfToken, errMsg)
+			@EntityCreateFormComponent(cc, entityTypes, preselect, parentEntity, csrfToken, errMsg)
 		</div>
 	}
 }
 
 // EntityEditPage renders the full entity edit page.
-templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, entityTypes []EntityType, csrfToken, errMsg string) {
+templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, entityTypes []EntityType, parentEntity *Entity, csrfToken, errMsg string) {
 	@layouts.App("Edit " + entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-2xl mx-auto">
 			<nav class="text-sm text-fg-secondary mb-4">
@@ -37,13 +37,13 @@ templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				<span class="text-fg">Edit</span>
 			</nav>
 			<h1 class="text-2xl font-bold text-fg mb-6">Edit { entity.Name }</h1>
-			@EntityEditFormComponent(cc, entity, entityType, csrfToken, errMsg)
+			@EntityEditFormComponent(cc, entity, entityType, parentEntity, csrfToken, errMsg)
 		</div>
 	}
 }
 
 // EntityCreateFormComponent renders the entity creation form.
-templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, csrfToken, errMsg string) {
+templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, parentEntity *Entity, csrfToken, errMsg string) {
 	<div id="entity-form">
 		<form
 			class="card p-8 space-y-6"
@@ -103,6 +103,8 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 				<p class="mt-1 text-xs text-fg-secondary">A short descriptor shown next to the type badge, e.g. "City" for a Location or "Rogue" for a Character.</p>
 			</div>
 
+			@parentSelector(cc.Campaign.ID, parentEntity)
+
 			<div class="flex items-center">
 				<input type="hidden" name="is_private" value="false"/>
 				<input
@@ -124,7 +126,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 }
 
 // EntityEditFormComponent renders the entity edit form with dynamic fields.
-templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken, errMsg string) {
+templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, parentEntity *Entity, csrfToken, errMsg string) {
 	<div id="entity-form">
 		<form
 			class="card p-8 space-y-6"
@@ -171,6 +173,8 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 				/>
 			</div>
 
+			@parentSelector(cc.Campaign.ID, parentEntity)
+
 			<!-- Dynamic fields from entity type -->
 			if entityType != nil && len(entityType.Fields) > 0 {
 				<fieldset class="space-y-4 pt-4 border-t border-edge">
@@ -208,6 +212,9 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 				/>
 				<label for="is_private" class="text-sm text-fg-body">Private (visible to GM only)</label>
 			</div>
+
+			<!-- Popup Preview Config: controls what appears in the hover tooltip -->
+			@popupConfigSection(cc, entity)
 
 			<div class="flex items-center space-x-4">
 				<button type="submit" class="btn-primary">Save Changes</button>
@@ -266,6 +273,108 @@ templ DynamicField(field FieldDefinition, fieldsData map[string]any) {
 	</div>
 }
 
+// parentSelector renders a searchable parent entity picker. Uses Alpine.js
+// for client-side search with the existing entity search JSON endpoint.
+templ parentSelector(campaignID string, parentEntity *Entity) {
+	<div
+		x-data={ fmt.Sprintf(`{
+			open: false,
+			query: '',
+			results: [],
+			selectedID: '%s',
+			selectedName: '%s',
+			loading: false,
+			async search() {
+				if (this.query.length < 2) { this.results = []; return; }
+				this.loading = true;
+				try {
+					const resp = await fetch('/campaigns/%s/entities/search?q=' + encodeURIComponent(this.query), {
+						headers: { 'Accept': 'application/json' }
+					});
+					if (resp.ok) { const data = await resp.json(); this.results = data.results || []; }
+				} finally { this.loading = false; }
+			},
+			select(entity) {
+				this.selectedID = entity.id;
+				this.selectedName = entity.name;
+				this.query = '';
+				this.results = [];
+				this.open = false;
+			},
+			clear() {
+				this.selectedID = '';
+				this.selectedName = '';
+				this.query = '';
+				this.results = [];
+			}
+		}`, parentSelectorID(parentEntity), parentSelectorName(parentEntity), campaignID) }
+		class="relative"
+	>
+		<label class="block text-sm font-medium text-fg-body mb-1">Parent Page (optional)</label>
+		<input type="hidden" name="parent_id" x-bind:value="selectedID"/>
+
+		<!-- Selected parent display -->
+		<div x-show="selectedID" class="flex items-center gap-2 p-2 rounded-md bg-surface-alt border border-edge">
+			<span class="text-sm text-fg" x-text="selectedName"></span>
+			<button type="button" @click="clear()" class="ml-auto text-xs text-fg-muted hover:text-red-500 transition-colors" title="Remove parent">
+				<i class="fa-solid fa-xmark"></i>
+			</button>
+		</div>
+
+		<!-- Search input (shown when no parent selected) -->
+		<div x-show="!selectedID">
+			<input
+				type="text"
+				x-model="query"
+				@input.debounce.300ms="search()"
+				@focus="open = true"
+				@click.outside="open = false"
+				class="input w-full"
+				placeholder="Search for a parent page..."
+			/>
+
+			<!-- Dropdown results -->
+			<div
+				x-show="open && (results.length > 0 || loading)"
+				x-cloak
+				class="absolute z-20 mt-1 w-full bg-surface border border-edge rounded-lg shadow-lg max-h-48 overflow-y-auto"
+			>
+				<template x-if="loading">
+					<div class="px-3 py-2 text-xs text-fg-muted">Searching...</div>
+				</template>
+				<template x-for="entity in results" x-bind:key="entity.id">
+					<button
+						type="button"
+						@click="select(entity)"
+						class="w-full px-3 py-2 text-left text-sm text-fg hover:bg-surface-alt transition-colors flex items-center gap-2"
+					>
+						<span class="truncate" x-text="entity.name"></span>
+						<span class="text-xs text-fg-muted ml-auto" x-text="entity.type_name"></span>
+					</button>
+				</template>
+			</div>
+		</div>
+
+		<p class="mt-1 text-xs text-fg-secondary">Nest this page under another page to create a hierarchy.</p>
+	</div>
+}
+
+// parentSelectorID returns the parent entity ID for the selector, or empty string.
+func parentSelectorID(parent *Entity) string {
+	if parent != nil {
+		return parent.ID
+	}
+	return ""
+}
+
+// parentSelectorName returns the parent entity name for the selector, or empty string.
+func parentSelectorName(parent *Entity) string {
+	if parent != nil {
+		return parent.Name
+	}
+	return ""
+}
+
 // fieldInputType maps field definition types to HTML input types.
 func fieldInputType(t string) string {
 	switch t {
@@ -285,4 +394,91 @@ func fieldValueMatches(fieldsData map[string]any, key, expected string) bool {
 		return false
 	}
 	return fmt.Sprintf("%v", val) == expected
+}
+
+// popupConfigBool returns true/false string for Alpine.js data binding.
+func popupConfigBool(entity *Entity, field string) string {
+	cfg := entity.EffectivePopupConfig()
+	switch field {
+	case "showImage":
+		if cfg.ShowImage {
+			return "true"
+		}
+	case "showAttributes":
+		if cfg.ShowAttributes {
+			return "true"
+		}
+	case "showEntry":
+		if cfg.ShowEntry {
+			return "true"
+		}
+	}
+	return "false"
+}
+
+// popupConfigSection renders the "Hover Preview" settings with toggle
+// checkboxes for image, attributes, and entry excerpt. Saves via API.
+templ popupConfigSection(cc *campaigns.CampaignContext, entity *Entity) {
+	<fieldset
+		class="pt-4 border-t border-edge space-y-3"
+		x-data={ fmt.Sprintf(`{
+			open: false,
+			showImage: %s,
+			showAttributes: %s,
+			showEntry: %s,
+			saving: false,
+			saved: false,
+			async save() {
+				this.saving = true;
+				this.saved = false;
+				try {
+					const resp = await fetch('/campaigns/%s/entities/%s/popup-config', {
+						method: 'PUT',
+						headers: {
+							'Content-Type': 'application/json',
+							'X-CSRF-Token': document.querySelector('input[name=csrf_token]').value
+						},
+						credentials: 'same-origin',
+						body: JSON.stringify({
+							showImage: this.showImage,
+							showAttributes: this.showAttributes,
+							showEntry: this.showEntry
+						})
+					});
+					if (resp.ok) {
+						this.saved = true;
+						if (window.Chronicle && Chronicle.tooltip) { Chronicle.tooltip.clearCache(); }
+						setTimeout(() => this.saved = false, 2000);
+					}
+				} finally { this.saving = false; }
+			}
+		}`, popupConfigBool(entity, "showImage"), popupConfigBool(entity, "showAttributes"), popupConfigBool(entity, "showEntry"), cc.Campaign.ID, entity.ID) }
+	>
+		<button type="button" @click="open = !open" class="flex items-center gap-2 text-sm font-semibold text-fg w-full text-left">
+			<i class="fa-solid fa-chevron-right text-[10px] text-fg-muted transition-transform" x-bind:class="open && 'rotate-90'"></i>
+			Hover Preview Settings
+		</button>
+
+		<div x-show="open" x-cloak class="space-y-2 pl-5">
+			<p class="text-xs text-fg-secondary mb-3">Choose what appears when someone hovers over an @mention of this entity.</p>
+
+			<label class="flex items-center gap-2 cursor-pointer">
+				<input type="checkbox" x-model="showImage" @change="save()" class="rounded border-edge text-blue-600"/>
+				<span class="text-sm text-fg-body">Show image</span>
+			</label>
+			<label class="flex items-center gap-2 cursor-pointer">
+				<input type="checkbox" x-model="showAttributes" @change="save()" class="rounded border-edge text-blue-600"/>
+				<span class="text-sm text-fg-body">Show attributes</span>
+			</label>
+			<label class="flex items-center gap-2 cursor-pointer">
+				<input type="checkbox" x-model="showEntry" @change="save()" class="rounded border-edge text-blue-600"/>
+				<span class="text-sm text-fg-body">Show entry excerpt</span>
+			</label>
+
+			<div class="text-xs h-4 mt-1">
+				<span x-show="saving" class="text-fg-muted">Saving...</span>
+				<span x-show="saved" class="text-green-600">Saved</span>
+			</div>
+		</div>
+	</fieldset>
 }
