@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-24 -- Phase E: Extension bug fix, Entity Hierarchy (all 4 sprints complete).
+2026-02-24 -- Phase E: Extension bug fix, Entity Hierarchy, Editor Insert Menu, Backlinks, Entity Preview Tooltip.
 
 ## Current Phase
 **Phase E: Core UX & Discovery.** Quick Search, Customize page rework, Extensions tab,
