@@ -6,7 +6,7 @@ import (
 )
 
 // AdminDashboardPage renders the admin overview with high-level stats.
-templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool, addonCount int) {
+templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool, addonCount int, securityStats *SecurityStats) {
 	@layouts.App("Admin Dashboard") {
 		<div class="max-w-5xl mx-auto space-y-6">
 			<h1 class="text-2xl font-bold text-fg">Admin Dashboard</h1>
@@ -79,6 +79,23 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 					</div>
 					<p class="text-lg font-semibold text-fg mt-2">API Monitor</p>
 					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">View dashboard &rarr;</p>
+				</a>
+				<!-- Security -->
+				<a href="/admin/security" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-fg-secondary">Security</p>
+						<span class="w-10 h-10 rounded-lg bg-red-50 dark:bg-red-900/30 flex items-center justify-center">
+							<i class="fa-solid fa-shield-halved text-red-500"></i>
+						</span>
+					</div>
+					if securityStats != nil && securityStats.FailedLogins24h > 0 {
+						<p class="text-lg font-semibold text-red-600 dark:text-red-400 mt-2">{ fmt.Sprintf("%d", securityStats.FailedLogins24h) } failed login(s)</p>
+						<p class="text-xs text-fg-muted mt-1">in last 24 hours</p>
+					} else {
+						<p class="text-lg font-semibold text-emerald-600 dark:text-emerald-400 mt-2">All Clear</p>
+						<p class="text-xs text-fg-muted mt-1">No failed logins (24h)</p>
+					}
+					<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Security dashboard &rarr;</p>
 				</a>
 				<!-- SMTP -->
 				<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">

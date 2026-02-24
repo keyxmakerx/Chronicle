@@ -66,6 +66,10 @@ type AuthService interface {
 	InitiatePasswordReset(ctx context.Context, email string) error
 	ValidateResetToken(ctx context.Context, token string) (email string, err error)
 	ResetPassword(ctx context.Context, token, newPassword string) error
+
+	// Admin session management.
+	ListAllSessions(ctx context.Context) ([]SessionInfo, error)
+	DestroyAllUserSessions(ctx context.Context, userID string) (int, error)
 }
 
 // authService implements AuthService with argon2id hashing and Redis sessions.
@@ -159,13 +163,18 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (string, *Use
 		return "", nil, apperror.NewInternal(fmt.Errorf("finding user: %w", err))
 	}
 
+	// Block disabled accounts from logging in.
+	if user.IsDisabled {
+		return "", nil, apperror.NewForbidden("your account has been disabled")
+	}
+
 	// Verify the password against the stored argon2id hash.
 	if !verifyPassword(input.Password, user.PasswordHash) {
 		return "", nil, apperror.NewUnauthorized("invalid email or password")
 	}
 
-	// Create a new session in Redis.
-	token, err := s.createSession(ctx, user)
+	// Create a new session in Redis with client metadata.
+	token, err := s.createSession(ctx, user, input.IP, input.UserAgent)
 	if err != nil {
 		return "", nil, apperror.NewInternal(fmt.Errorf("creating session: %w", err))
 	}
@@ -229,8 +238,9 @@ func (s *authService) DestroySession(ctx context.Context, token string) error {
 }
 
 // createSession generates a random session token, stores the session data in
-// Redis with the configured TTL, and returns the token.
-func (s *authService) createSession(ctx context.Context, user *User) (string, error) {
+// Redis with the configured TTL, and returns the token. IP and userAgent are
+// stored alongside the session for the admin active sessions view.
+func (s *authService) createSession(ctx context.Context, user *User, ip, userAgent string) (string, error) {
 	token, err := generateSessionToken()
 	if err != nil {
 		return "", fmt.Errorf("generating session token: %w", err)
@@ -241,6 +251,8 @@ func (s *authService) createSession(ctx context.Context, user *User) (string, er
 		Email:     user.Email,
 		Name:      user.DisplayName,
 		IsAdmin:   user.IsAdmin,
+		IP:        ip,
+		UserAgent: userAgent,
 		CreatedAt: time.Now().UTC(),
 	}
 
@@ -261,6 +273,88 @@ func (s *authService) createSession(ctx context.Context, user *User) (string, er
 	s.redis.Expire(ctx, userSetKey, s.sessionTTL)
 
 	return token, nil
+}
+
+// --- Admin Session Management ---
+
+// ListAllSessions scans Redis for all active sessions and returns them with
+// metadata. Used by the admin security dashboard. Suitable for self-hosted
+// instances with modest user counts (typically < 1000 sessions).
+func (s *authService) ListAllSessions(ctx context.Context) ([]SessionInfo, error) {
+	if s.redis == nil {
+		return nil, nil
+	}
+
+	var sessions []SessionInfo
+	var cursor uint64
+	for {
+		keys, nextCursor, err := s.redis.Scan(ctx, cursor, sessionKeyPrefix+"*", 100).Result()
+		if err != nil {
+			return nil, apperror.NewInternal(fmt.Errorf("scanning sessions: %w", err))
+		}
+
+		for _, key := range keys {
+			token := strings.TrimPrefix(key, sessionKeyPrefix)
+
+			data, err := s.redis.Get(ctx, key).Bytes()
+			if err != nil {
+				continue // Session expired between scan and get.
+			}
+
+			var session Session
+			if err := json.Unmarshal(data, &session); err != nil {
+				continue
+			}
+
+			ttl, _ := s.redis.TTL(ctx, key).Result()
+
+			hint := token
+			if len(hint) > 8 {
+				hint = hint[:8]
+			}
+
+			sessions = append(sessions, SessionInfo{
+				Token:     token,
+				TokenHint: hint,
+				UserID:    session.UserID,
+				Email:     session.Email,
+				Name:      session.Name,
+				IsAdmin:   session.IsAdmin,
+				IP:        session.IP,
+				UserAgent: session.UserAgent,
+				CreatedAt: session.CreatedAt,
+				TTL:       ttl,
+			})
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return sessions, nil
+}
+
+// DestroyAllUserSessions removes all active sessions for a user from Redis.
+// Returns the number of sessions destroyed. Used by admin force-logout.
+func (s *authService) DestroyAllUserSessions(ctx context.Context, userID string) (int, error) {
+	if s.redis == nil {
+		return 0, nil
+	}
+
+	userSetKey := userSessionsKeyPrefix + userID
+	tokens, err := s.redis.SMembers(ctx, userSetKey).Result()
+	if err != nil {
+		return 0, apperror.NewInternal(fmt.Errorf("listing user sessions: %w", err))
+	}
+
+	for _, token := range tokens {
+		s.redis.Del(ctx, sessionKeyPrefix+token)
+	}
+	s.redis.Del(ctx, userSetKey)
+
+	return len(tokens), nil
 }
 
 // --- Password Reset ---
