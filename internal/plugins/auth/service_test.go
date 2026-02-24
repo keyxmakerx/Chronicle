@@ -26,6 +26,7 @@ type mockUserRepo struct {
 	updateIsAdminFn      func(ctx context.Context, id string, isAdmin bool) error
 	countUsersFn         func(ctx context.Context) (int, error)
 	countAdminsFn        func(ctx context.Context) (int, error)
+	updateIsDisabledFn   func(ctx context.Context, id string, isDisabled bool) error
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, user *User) error {
@@ -117,6 +118,13 @@ func (m *mockUserRepo) CountAdmins(ctx context.Context) (int, error) {
 		return m.countAdminsFn(ctx)
 	}
 	return 0, nil
+}
+
+func (m *mockUserRepo) UpdateIsDisabled(ctx context.Context, id string, isDisabled bool) error {
+	if m.updateIsDisabledFn != nil {
+		return m.updateIsDisabledFn(ctx, id, isDisabled)
+	}
+	return nil
 }
 
 // --- Mock Mail Sender ---
