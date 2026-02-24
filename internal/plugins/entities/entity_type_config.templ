@@ -104,6 +104,223 @@ templ EntityTypeConfigPage(cc *campaigns.CampaignContext, et *EntityType, csrfTo
 	}
 }
 
+// jsEsc escapes a string for safe embedding in a JS single-quoted string literal.
+func jsEsc(s string) string {
+	result := ""
+	for _, c := range s {
+		switch c {
+		case '\'':
+			result += "\\'"
+		case '\\':
+			result += "\\\\"
+		case '\n':
+			result += "\\n"
+		case '\r':
+			result += "\\r"
+		default:
+			result += string(c)
+		}
+	}
+	return result
+}
+
+// categoryDashboardBlockTypes returns the block palette JSON for category dashboards.
+func categoryDashboardBlockTypes() string {
+	return `[{"type":"category_header","label":"Category Header","icon":"fa-heading","desc":"Category name, icon & description"},{"type":"pinned_pages","label":"Pinned Pages","icon":"fa-thumbtack","desc":"Pinned entity cards"},{"type":"entity_grid","label":"Entity Grid","icon":"fa-grid-2","desc":"All entities as card grid"},{"type":"recent_pages","label":"Recent Pages","icon":"fa-clock","desc":"Recently updated entities"},{"type":"text_block","label":"Text Block","icon":"fa-align-left","desc":"Custom rich text / HTML"},{"type":"search_bar","label":"Search Bar","icon":"fa-magnifying-glass","desc":"Search within this category"}]`
+}
+
+// catDescJS returns a JS-safe quoted string for initializing Alpine.js x-data.
+func catDescJS(desc *string) string {
+	if desc == nil || *desc == "" {
+		return "''"
+	}
+	s := *desc
+	result := "'"
+	for _, c := range s {
+		switch c {
+		case '\'':
+			result += "\\'"
+		case '\\':
+			result += "\\\\"
+		case '\n':
+			result += "\\n"
+		case '\r':
+			result += "\\r"
+		default:
+			result += string(c)
+		}
+	}
+	result += "'"
+	return result
+}
+
+// EntityTypeCustomizeFragmentTmpl renders the HTMX fragment for the Customization
+// Hub's Categories tab. Contains identity settings, attribute field definitions
+// editor, and category dashboard settings for a single entity type.
+templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
+	<div class="space-y-6">
+		<!-- Identity -->
+		<div
+			class="card p-5 space-y-4"
+			x-data={ fmt.Sprintf("{ saving: false, saved: false, etName: '%s', etNamePlural: '%s', etIcon: '%s', etColor: '%s' }", jsEsc(et.Name), jsEsc(et.NamePlural), jsEsc(et.Icon), jsEsc(et.Color)) }
+		>
+			<div class="flex items-center justify-between">
+				<div>
+					<h3 class="text-sm font-semibold text-fg">Identity</h3>
+					<p class="text-xs text-fg-secondary">Name, icon, and color for this category.</p>
+				</div>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types/%d/config", cc.Campaign.ID, et.ID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					Full config <i class="fa-solid fa-arrow-right text-[9px] ml-0.5"></i>
+				</a>
+			</div>
+
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Name</label>
+					<input type="text" x-model="etName" class="input w-full text-sm"/>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Plural Name</label>
+					<input type="text" x-model="etNamePlural" class="input w-full text-sm"/>
+				</div>
+			</div>
+
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Icon</label>
+					<div class="flex flex-wrap gap-2 p-3 border border-edge rounded-md max-h-32 overflow-y-auto bg-surface">
+						for _, icon := range commonIcons {
+							<label class="cursor-pointer" title={ icon }>
+								<input
+									type="radio"
+									:name={ fmt.Sprintf("'cust_icon_%d'", et.ID) }
+									value={ icon }
+									class="peer sr-only"
+									x-model="etIcon"
+								/>
+								<span class="inline-flex items-center justify-center w-8 h-8 rounded border border-edge text-fg-secondary peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:text-accent hover:border-edge transition-colors">
+									<i class={ "fa-solid " + icon, "text-sm" }></i>
+								</span>
+							</label>
+						}
+					</div>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Color</label>
+					<div class="flex items-center gap-3">
+						<input
+							type="color"
+							x-model="etColor"
+							class="w-10 h-10 rounded border border-edge cursor-pointer"
+						/>
+						<span class="text-xs text-fg-secondary">Icon tinting and accent highlights</span>
+					</div>
+				</div>
+			</div>
+
+			<div class="flex items-center justify-end gap-2 pt-2">
+				<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false;
+						fetch('/campaigns/%s/entity-types/%d', {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+							credentials: 'same-origin',
+							body: JSON.stringify({ name: etName, name_plural: etNamePlural, icon: etIcon, color: etColor })
+						}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
+					`, cc.Campaign.ID, et.ID, csrfToken) }
+				>
+					<span x-show="!saving">Save Identity</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+
+		<!-- Attributes / Field Definitions -->
+		<div class="card p-5 space-y-3">
+			<h3 class="text-sm font-semibold text-fg">Attributes</h3>
+			<p class="text-xs text-fg-secondary">
+				Define the fields that appear on every { et.Name } page.
+			</p>
+			<div
+				data-widget="entity-type-editor"
+				data-entity-type-id={ fmt.Sprintf("%d", et.ID) }
+				data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d", cc.Campaign.ID, et.ID) }
+				data-name={ et.Name }
+				data-name-plural={ et.NamePlural }
+				data-icon={ et.Icon }
+				data-color={ et.Color }
+				data-fields={ entityTypeFieldsJSON(et.Fields) }
+				data-csrf-token={ csrfToken }
+				data-fields-only="true"
+			>
+				<div class="text-sm text-fg-secondary">Loading field editor...</div>
+			</div>
+		</div>
+
+		<!-- Category Dashboard -->
+		<div class="card p-5 space-y-3">
+			<h3 class="text-sm font-semibold text-fg">Category Dashboard</h3>
+			<p class="text-xs text-fg-secondary">
+				Description and layout for the { et.NamePlural } landing page.
+			</p>
+
+			<!-- Description -->
+			<div
+				x-data={ fmt.Sprintf("{ desc: %s, saving: false, saved: false }", catDescJS(et.Description)) }
+				class="space-y-2"
+			>
+				<label class="block text-xs font-medium text-fg-body">Description</label>
+				<textarea
+					class="input w-full text-sm h-20 resize-y"
+					x-model="desc"
+					placeholder={ fmt.Sprintf("Describe the %s category...", et.NamePlural) }
+					maxlength="2000"
+				></textarea>
+				<div class="flex items-center justify-end gap-2">
+					<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
+					<button
+						type="button"
+						class="btn-secondary text-xs px-3 py-1.5"
+						:disabled="saving"
+						@click={ fmt.Sprintf(`
+							saving = true; saved = false;
+							fetch('/campaigns/%s/entity-types/%d/dashboard', {
+								method: 'PUT',
+								headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+								credentials: 'same-origin',
+								body: JSON.stringify({ description: desc, pinned_entity_ids: [] })
+							}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
+						`, cc.Campaign.ID, et.ID, csrfToken) }
+					>
+						<span x-show="!saving">Save Description</span>
+						<span x-show="saving">Saving...</span>
+					</button>
+				</div>
+			</div>
+
+			<!-- Dashboard layout editor -->
+			<div class="pt-3 border-t border-edge-light">
+				<label class="block text-xs font-medium text-fg-body mb-2">Dashboard Blocks</label>
+				<div
+					data-widget="dashboard-editor"
+					data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/dashboard-layout", cc.Campaign.ID, et.ID) }
+					data-campaign-id={ cc.Campaign.ID }
+					data-csrf-token={ csrfToken }
+					data-block-types={ categoryDashboardBlockTypes() }
+				></div>
+			</div>
+		</div>
+	</div>
+}
+
 // attributesTab renders the field definitions editor for this entity type.
 templ attributesTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
 	<div class="space-y-6">
@@ -143,29 +360,20 @@ templ navPanelTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken strin
 		</div>
 
 		<!-- Appearance -->
-		<div class="card p-5 space-y-4">
+		<div
+			class="card p-5 space-y-4"
+			x-data={ fmt.Sprintf("{ saving: false, saved: false, etName: '%s', etNamePlural: '%s', etIcon: '%s', etColor: '%s' }", jsEsc(et.Name), jsEsc(et.NamePlural), jsEsc(et.Icon), jsEsc(et.Color)) }
+		>
 			<h3 class="text-sm font-semibold text-fg">Appearance</h3>
 
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Name</label>
-					<input
-						type="text"
-						value={ et.Name }
-						class="input w-full text-sm"
-						data-field="name"
-						id="nav-name"
-					/>
+					<input type="text" x-model="etName" class="input w-full text-sm"/>
 				</div>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Plural Name</label>
-					<input
-						type="text"
-						value={ et.NamePlural }
-						class="input w-full text-sm"
-						data-field="name_plural"
-						id="nav-name-plural"
-					/>
+					<input type="text" x-model="etNamePlural" class="input w-full text-sm"/>
 				</div>
 			</div>
 
@@ -180,9 +388,7 @@ templ navPanelTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken strin
 									name="nav_icon"
 									value={ icon }
 									class="peer sr-only"
-									if icon == et.Icon {
-										checked
-									}
+									x-model="etIcon"
 								/>
 								<span class="inline-flex items-center justify-center w-8 h-8 rounded border border-edge text-fg-secondary peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:text-accent hover:border-edge transition-colors">
 									<i class={ "fa-solid " + icon, "text-sm" }></i>
@@ -196,25 +402,32 @@ templ navPanelTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken strin
 					<div class="flex items-center gap-3">
 						<input
 							type="color"
-							name="nav_color"
-							value={ et.Color }
+							x-model="etColor"
 							class="w-10 h-10 rounded border border-edge cursor-pointer"
-							id="nav-color"
 						/>
 						<span class="text-xs text-fg-secondary">Used for icon tinting and accent highlights</span>
 					</div>
 				</div>
 			</div>
 
-			<div class="flex justify-end pt-2">
+			<div class="flex items-center justify-end gap-2 pt-2">
+				<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
 				<button
+					type="button"
 					class="btn-primary text-sm"
-					hx-put={ fmt.Sprintf("/campaigns/%s/entity-types/%d", cc.Campaign.ID, et.ID) }
-					hx-include="#nav-name, #nav-name-plural, #nav-color, [name='nav_icon']:checked"
-					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token": "%s"}`, csrfToken) }
-					hx-swap="none"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false;
+						fetch('/campaigns/%s/entity-types/%d', {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+							credentials: 'same-origin',
+							body: JSON.stringify({ name: etName, name_plural: etNamePlural, icon: etIcon, color: etColor })
+						}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
+					`, cc.Campaign.ID, et.ID, csrfToken) }
 				>
-					Save Changes
+					<span x-show="!saving">Save Changes</span>
+					<span x-show="saving">Saving...</span>
 				</button>
 			</div>
 		</div>

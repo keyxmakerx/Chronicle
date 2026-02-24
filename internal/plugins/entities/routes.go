@@ -51,6 +51,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 
 	// Unified entity type configuration (Owner only).
 	cg.GET("/entity-types/:etid/config", h.EntityTypeConfig, campaigns.RequireRole(campaigns.RoleOwner))
+	// Customize Hub fragment: identity + attributes + category dashboard for one entity type.
+	cg.GET("/entity-types/:etid/customize", h.EntityTypeCustomizeFragment, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Entity type layout/color/dashboard API (Owner only).
 	cg.GET("/entity-types/:etid/layout", h.GetEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))

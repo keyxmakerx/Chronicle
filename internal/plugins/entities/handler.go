@@ -919,6 +919,34 @@ func (h *Handler) EntityTypeConfig(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, EntityTypeConfigPage(cc, et, csrfToken))
 }
 
+// EntityTypeCustomizeFragment returns an HTMX fragment for the Customization
+// Hub's Categories tab. Contains identity settings, attribute field editor,
+// and category dashboard editor for a single entity type.
+// GET /campaigns/:id/entity-types/:etid/customize
+func (h *Handler) EntityTypeCustomizeFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	etID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	et, err := h.service.GetEntityTypeByID(c.Request().Context(), etID)
+	if err != nil {
+		return err
+	}
+
+	if et.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, EntityTypeCustomizeFragmentTmpl(cc, et, csrfToken))
+}
+
 // --- Layout API ---
 
 // GetEntityTypeLayout returns the entity type's layout as JSON.

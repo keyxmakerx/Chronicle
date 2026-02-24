@@ -34,9 +34,9 @@ templ EntityTypesManagePage(cc *campaigns.CampaignContext, entityTypes []EntityT
 					</p>
 				</div>
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) }
 					class="btn-secondary text-sm"
-				>Back to Settings</a>
+				>Back to Customize</a>
 			</div>
 
 			if errMsg != "" {

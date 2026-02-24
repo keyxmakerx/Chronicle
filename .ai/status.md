@@ -8,10 +8,10 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-24 -- Phase E: Quick Search (Ctrl+K) modal implemented.
+2026-02-24 -- Phase E: Quick Search + Customization Hub rework.
 
 ## Current Phase
-**Phase E: Core UX & Discovery.** Quick Search complete. Entity hierarchy next.
+**Phase E: Core UX & Discovery.** Quick Search and Customize page rework complete.
 
 ## Phase E: Core UX & Discovery (2026-02-24)
 
@@ -30,6 +30,26 @@
   campaign context (pattern: /campaigns/:id/...).
 - **Cleanup**: Closes on `chronicle:navigated` (hx-boost navigation).
 - **Script loaded**: Added to `base.templ` after all widget scripts.
+
+### Customization Hub Rework — COMPLETE
+- **Old structure (5 tabs)**: Navigation, Dashboard, Categories (link grid), Category
+  Dashboards, Page Layouts. Categories tab was just links to a separate config page.
+  Category Dashboards and Page Layouts duplicated entity type config functionality.
+  Attribute field editor was missing entirely.
+- **New structure (4 tabs)**:
+  1. **Dashboard** — Campaign dashboard editor (unchanged).
+  2. **Categories** — Category selector → HTMX lazy-loads identity, attributes, and
+     category dashboard for the selected category. Inline editing via Alpine.js + fetch.
+  3. **Page Templates** — Category selector → HTMX lazy-loads template-editor (renamed).
+  4. **Navigation** — Sidebar ordering + custom links (unchanged).
+- **New endpoint**: `GET /campaigns/:id/entity-types/:etid/customize` returns an HTMX
+  fragment with Identity card (name/icon/color), Attributes card (entity-type-editor
+  fields-only), and Category Dashboard card (description + dashboard-editor widget).
+- **Bug fix**: Entity type config page Nav Panel tab used HTMX `hx-put` + `hx-include`
+  to send form data, but handler expected JSON. Switched to Alpine.js + fetch() with
+  proper JSON body. Same pattern used in new Categories tab identity card.
+- **Back link fix**: Entity types management page now links "Back to Customize" instead
+  of "Back to Settings".
 
 ### In Progress
 - Nothing currently in progress.
