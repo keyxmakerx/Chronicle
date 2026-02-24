@@ -14,10 +14,14 @@ import (
 // This callback pattern avoids the middleware package importing any plugin types.
 var LayoutInjector func(echo.Context, context.Context) context.Context
 
-// IsHTMX returns true if the current request was initiated by HTMX.
-// Handlers use this to decide whether to return a fragment or full page.
+// IsHTMX returns true if the current request was initiated by HTMX and is NOT
+// a boosted navigation. Boosted requests (hx-boost="true") behave like normal
+// page navigations — they expect full page responses so hx-select can extract
+// the target element. Handlers use this to decide whether to return a fragment
+// or full page.
 func IsHTMX(c echo.Context) bool {
-	return c.Request().Header.Get("HX-Request") == "true"
+	return c.Request().Header.Get("HX-Request") == "true" &&
+		c.Request().Header.Get("HX-Boosted") != "true"
 }
 
 // Render writes a Templ component to the response with the given status code.

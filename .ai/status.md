@@ -8,10 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-24 -- Phase E: Quick Search + Customization Hub rework.
+2026-02-24 -- Phase E: Quick Search, Customization Hub rework, Extensions tab, bugfixes.
 
 ## Current Phase
-**Phase E: Core UX & Discovery.** Quick Search and Customize page rework complete.
+**Phase E: Core UX & Discovery.** Quick Search, Customize page rework, Extensions tab,
+hx-boost bugfix, and whitespace polish complete.
 
 ## Phase E: Core UX & Discovery (2026-02-24)
 
@@ -36,20 +37,39 @@
   Dashboards, Page Layouts. Categories tab was just links to a separate config page.
   Category Dashboards and Page Layouts duplicated entity type config functionality.
   Attribute field editor was missing entirely.
-- **New structure (4 tabs)**:
+- **New structure (5 tabs)**:
   1. **Dashboard** — Campaign dashboard editor (unchanged).
   2. **Categories** — Category selector → HTMX lazy-loads identity, attributes, and
      category dashboard for the selected category. Inline editing via Alpine.js + fetch.
   3. **Page Templates** — Category selector → HTMX lazy-loads template-editor (renamed).
-  4. **Navigation** — Sidebar ordering + custom links (unchanged).
-- **New endpoint**: `GET /campaigns/:id/entity-types/:etid/customize` returns an HTMX
-  fragment with Identity card (name/icon/color), Attributes card (entity-type-editor
-  fields-only), and Category Dashboard card (description + dashboard-editor widget).
+  4. **Extensions** — Campaign addon management (enable/disable modules, widgets,
+     integrations). Lazy-loaded via HTMX from addons plugin fragment endpoint.
+  5. **Navigation** — Sidebar ordering + custom links (unchanged).
+- **New endpoints**:
+  - `GET /campaigns/:id/entity-types/:etid/customize` — HTMX fragment with Identity,
+    Attributes, and Category Dashboard cards.
+  - `GET /campaigns/:id/addons/fragment` — HTMX fragment for addon list with toggles.
 - **Bug fix**: Entity type config page Nav Panel tab used HTMX `hx-put` + `hx-include`
   to send form data, but handler expected JSON. Switched to Alpine.js + fetch() with
   proper JSON body. Same pattern used in new Categories tab identity card.
 - **Back link fix**: Entity types management page now links "Back to Customize" instead
   of "Back to Settings".
+
+### hx-boost Navigation Fix — COMPLETE
+- **Root cause**: `middleware.IsHTMX()` returned true for boosted requests (links inside
+  `hx-boost="true"` containers). Handlers returned fragments, but `hx-select="#main-content"`
+  couldn't find `#main-content` in the fragment response. Result: blank pages on sidebar
+  navigation clicks.
+- **Fix**: `IsHTMX()` now checks `HX-Boosted` header. Boosted requests get full page
+  responses so `hx-select` can extract the target element. Fixes ALL boosted links
+  app-wide, not just the "My Campaigns" page.
+- **File**: `internal/middleware/helpers.go` — single-line change to the condition.
+
+### Whitespace Polish — COMPLETE
+- Reduced vertical padding and spacing across all Customization Hub tabs.
+- Tab headings: `text-lg` → `text-base`, descriptions: `text-sm` → `text-xs`.
+- Outer padding: `py-6` → `py-4`. Inner gaps: `space-y-6` → `space-y-4`.
+- Category fragment cards: `p-5` → `p-4`, inner gaps tightened.
 
 ### In Progress
 - Nothing currently in progress.
