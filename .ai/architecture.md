@@ -129,6 +129,13 @@ chronicle/
 │   │   │   ├── .ai.md
 │   │   │   ├── handler.go            #   API: save/load content
 │   │   │   └── templates/
+│   │   ├── notes/                    #   Floating notes panel (full backend)
+│   │   │   ├── .ai.md
+│   │   │   ├── model.go              #   Note, NoteVersion, Block structs
+│   │   │   ├── repository.go         #   CRUD + locking + versions SQL
+│   │   │   ├── service.go            #   Business logic + snapshots
+│   │   │   ├── handler.go            #   13 HTTP endpoints
+│   │   │   └── routes.go
 │   │   ├── title/                    #   Page title component
 │   │   ├── tags/                     #   Tag picker/display
 │   │   ├── attributes/               #   Dynamic key-value field editor
