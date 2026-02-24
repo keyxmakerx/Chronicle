@@ -48,11 +48,14 @@ func (s *addonService) CountAddons(ctx context.Context) (int, error) {
 	return s.repo.Count(ctx)
 }
 
-// List returns all registered addons.
+// List returns all registered addons with installation status annotated.
 func (s *addonService) List(ctx context.Context) ([]Addon, error) {
 	addons, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("listing addons: %w", err))
+	}
+	for i := range addons {
+		addons[i].Installed = IsInstalled(addons[i].Slug)
 	}
 	return addons, nil
 }
@@ -87,6 +90,18 @@ var validStatuses = map[AddonStatus]bool{
 	StatusActive:     true,
 	StatusPlanned:    true,
 	StatusDeprecated: true,
+}
+
+// installedAddons lists addon slugs that have real backing code in the
+// codebase. Only installed addons can be activated by admins or enabled
+// by campaign owners. Update this set as new addons are built.
+var installedAddons = map[string]bool{
+	"sync-api": true,
+}
+
+// IsInstalled reports whether an addon slug has backing code in the codebase.
+func IsInstalled(slug string) bool {
+	return installedAddons[slug]
 }
 
 // Create registers a new addon in the global registry.
@@ -181,11 +196,24 @@ func (s *addonService) Delete(ctx context.Context, id int) error {
 	return nil
 }
 
-// UpdateStatus changes an addon's lifecycle status.
+// UpdateStatus changes an addon's lifecycle status. Activating an addon
+// requires its code to be installed — uninstalled addons cannot be active.
 func (s *addonService) UpdateStatus(ctx context.Context, id int, status AddonStatus) error {
 	if !validStatuses[status] {
 		return apperror.NewBadRequest("invalid addon status")
 	}
+
+	// Block activating addons that have no backing code.
+	if status == StatusActive {
+		addon, err := s.repo.FindByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if !IsInstalled(addon.Slug) {
+			return apperror.NewBadRequest("cannot activate: extension code is not installed")
+		}
+	}
+
 	if err := s.repo.UpdateStatus(ctx, id, status); err != nil {
 		return err
 	}
@@ -196,24 +224,31 @@ func (s *addonService) UpdateStatus(ctx context.Context, id int, status AddonSta
 	return nil
 }
 
-// ListForCampaign returns all active addons with their per-campaign enabled state.
+// ListForCampaign returns all active addons with their per-campaign enabled
+// state and installation status annotated.
 func (s *addonService) ListForCampaign(ctx context.Context, campaignID string) ([]CampaignAddon, error) {
 	addons, err := s.repo.ListForCampaign(ctx, campaignID)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("listing campaign addons: %w", err))
+	}
+	for i := range addons {
+		addons[i].Installed = IsInstalled(addons[i].AddonSlug)
 	}
 	return addons, nil
 }
 
 // EnableForCampaign enables an addon for a campaign.
 func (s *addonService) EnableForCampaign(ctx context.Context, campaignID string, addonID int, userID string) error {
-	// Verify addon exists and is active.
+	// Verify addon exists, is active, and has backing code.
 	addon, err := s.repo.FindByID(ctx, addonID)
 	if err != nil {
 		return err
 	}
 	if addon.Status != StatusActive {
 		return apperror.NewBadRequest("only active addons can be enabled")
+	}
+	if !IsInstalled(addon.Slug) {
+		return apperror.NewBadRequest("cannot enable: extension code is not installed")
 	}
 
 	if err := s.repo.EnableForCampaign(ctx, campaignID, addonID, userID); err != nil {

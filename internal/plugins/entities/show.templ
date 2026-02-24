@@ -11,15 +11,20 @@ import (
 )
 
 // EntityShowPage renders the entity profile page driven by the entity type layout.
-templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
+templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, csrfToken string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-6xl mx-auto">
-			<!-- Breadcrumb -->
+			<!-- Breadcrumb with ancestor chain -->
 			<nav class="text-sm text-fg-secondary mb-4">
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>
 				if entity.TypeSlug != "" {
 					<span class="mx-1">/</span>
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%ss", cc.Campaign.ID, entity.TypeSlug)) } class="hover:text-fg-body">{ entity.TypeName }s</a>
+				}
+				// Ancestors: furthest first, immediate parent last.
+				for i := len(ancestors) - 1; i >= 0; i-- {
+					<span class="mx-1">/</span>
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, ancestors[i].ID)) } class="hover:text-fg-body">{ ancestors[i].Name }</a>
 				}
 				<span class="mx-1">/</span>
 				<span class="text-fg">{ entity.Name }</span>
@@ -53,6 +58,11 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 						@blockDetails(entity)
 					</div>
 				</div>
+			}
+
+			// Children section: shown below the layout if this entity has children.
+			if len(children) > 0 || cc.MemberRole >= campaigns.RoleScribe {
+				@blockChildren(cc, entity, children)
 			}
 		</div>
 	}
@@ -310,4 +320,69 @@ templ blockRelations(cc *campaigns.CampaignContext, entity *Entity, csrfToken st
 // blockDivider renders a visual separator between content sections.
 templ blockDivider() {
 	<hr class="border-edge my-2"/>
+}
+
+// blockChildren renders a sub-pages section showing direct children of this entity,
+// plus a "Create sub-page" button for users with write access.
+templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []Entity) {
+	<div class="mt-8">
+		<div class="flex items-center justify-between mb-4">
+			<h2 class="text-lg font-semibold text-fg">
+				Sub-pages
+				if len(children) > 0 {
+					<span class="text-sm font-normal text-fg-muted ml-1">({ fmt.Sprintf("%d", len(children)) })</span>
+				}
+			</h2>
+			if cc.MemberRole >= campaigns.RoleScribe {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?parent_id=%s&type=%d", cc.Campaign.ID, entity.ID, entity.EntityTypeID)) }
+					class="btn-secondary text-sm"
+				>
+					<i class="fa-solid fa-plus mr-1.5 text-xs"></i>
+					Create sub-page
+				</a>
+			}
+		</div>
+		if len(children) > 0 {
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+				for _, child := range children {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, child.ID)) }
+						class="card p-4 hover:bg-surface-alt transition-colors group"
+					>
+						<div class="flex items-center gap-3">
+							if child.ImagePath != nil && *child.ImagePath != "" {
+								<img
+									src={ fmt.Sprintf("/media/%s", *child.ImagePath) }
+									alt={ child.Name }
+									class="w-10 h-10 rounded-lg object-cover shrink-0"
+								/>
+							} else {
+								<span
+									class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+									style={ fmt.Sprintf("background-color: %s20", child.TypeColor) }
+								>
+									<i class={ fmt.Sprintf("fa-solid %s text-sm", child.TypeIcon) } style={ fmt.Sprintf("color: %s", child.TypeColor) }></i>
+								</span>
+							}
+							<div class="min-w-0">
+								<div class="text-sm font-medium text-fg group-hover:text-accent transition-colors truncate">{ child.Name }</div>
+								<div class="text-xs text-fg-muted">
+									{ child.TypeName }
+									if child.TypeLabel != nil && *child.TypeLabel != "" {
+										<span class="mx-1">·</span>{ *child.TypeLabel }
+									}
+								</div>
+							</div>
+							if child.IsPrivate {
+								<i class="fa-solid fa-lock text-xs text-fg-muted ml-auto shrink-0" title="Private"></i>
+							}
+						</div>
+					</a>
+				}
+			</div>
+		} else {
+			<p class="text-sm text-fg-muted">No sub-pages yet.</p>
+		}
+	</div>
 }

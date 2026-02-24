@@ -11,7 +11,7 @@ import (
 )
 
 // EntityNewPage renders the full entity creation page.
-templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, csrfToken, errMsg string) {
+templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, parentEntity *Entity, csrfToken, errMsg string) {
 	@layouts.App("New Page - " + cc.Campaign.Name) {
 		<div class="max-w-2xl mx-auto">
 			<nav class="text-sm text-fg-secondary mb-4">
@@ -20,13 +20,13 @@ templ EntityNewPage(cc *campaigns.CampaignContext, entityTypes []EntityType, pre
 				<span class="text-fg">New</span>
 			</nav>
 			<h1 class="text-2xl font-bold text-fg mb-6">Create Page</h1>
-			@EntityCreateFormComponent(cc, entityTypes, preselect, csrfToken, errMsg)
+			@EntityCreateFormComponent(cc, entityTypes, preselect, parentEntity, csrfToken, errMsg)
 		</div>
 	}
 }
 
 // EntityEditPage renders the full entity edit page.
-templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, entityTypes []EntityType, csrfToken, errMsg string) {
+templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, entityTypes []EntityType, parentEntity *Entity, csrfToken, errMsg string) {
 	@layouts.App("Edit " + entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-2xl mx-auto">
 			<nav class="text-sm text-fg-secondary mb-4">
@@ -37,13 +37,13 @@ templ EntityEditPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				<span class="text-fg">Edit</span>
 			</nav>
 			<h1 class="text-2xl font-bold text-fg mb-6">Edit { entity.Name }</h1>
-			@EntityEditFormComponent(cc, entity, entityType, csrfToken, errMsg)
+			@EntityEditFormComponent(cc, entity, entityType, parentEntity, csrfToken, errMsg)
 		</div>
 	}
 }
 
 // EntityCreateFormComponent renders the entity creation form.
-templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, csrfToken, errMsg string) {
+templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []EntityType, preselect int, parentEntity *Entity, csrfToken, errMsg string) {
 	<div id="entity-form">
 		<form
 			class="card p-8 space-y-6"
@@ -103,6 +103,8 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 				<p class="mt-1 text-xs text-fg-secondary">A short descriptor shown next to the type badge, e.g. "City" for a Location or "Rogue" for a Character.</p>
 			</div>
 
+			@parentSelector(cc.Campaign.ID, parentEntity)
+
 			<div class="flex items-center">
 				<input type="hidden" name="is_private" value="false"/>
 				<input
@@ -124,7 +126,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 }
 
 // EntityEditFormComponent renders the entity edit form with dynamic fields.
-templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken, errMsg string) {
+templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, parentEntity *Entity, csrfToken, errMsg string) {
 	<div id="entity-form">
 		<form
 			class="card p-8 space-y-6"
@@ -170,6 +172,8 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 					maxlength="100"
 				/>
 			</div>
+
+			@parentSelector(cc.Campaign.ID, parentEntity)
 
 			<!-- Dynamic fields from entity type -->
 			if entityType != nil && len(entityType.Fields) > 0 {
@@ -264,6 +268,108 @@ templ DynamicField(field FieldDefinition, fieldsData map[string]any) {
 			/>
 		}
 	</div>
+}
+
+// parentSelector renders a searchable parent entity picker. Uses Alpine.js
+// for client-side search with the existing entity search JSON endpoint.
+templ parentSelector(campaignID string, parentEntity *Entity) {
+	<div
+		x-data={ fmt.Sprintf(`{
+			open: false,
+			query: '',
+			results: [],
+			selectedID: '%s',
+			selectedName: '%s',
+			loading: false,
+			async search() {
+				if (this.query.length < 2) { this.results = []; return; }
+				this.loading = true;
+				try {
+					const resp = await fetch('/campaigns/%s/entities/search?q=' + encodeURIComponent(this.query), {
+						headers: { 'Accept': 'application/json' }
+					});
+					if (resp.ok) { const data = await resp.json(); this.results = data.results || []; }
+				} finally { this.loading = false; }
+			},
+			select(entity) {
+				this.selectedID = entity.id;
+				this.selectedName = entity.name;
+				this.query = '';
+				this.results = [];
+				this.open = false;
+			},
+			clear() {
+				this.selectedID = '';
+				this.selectedName = '';
+				this.query = '';
+				this.results = [];
+			}
+		}`, parentSelectorID(parentEntity), parentSelectorName(parentEntity), campaignID) }
+		class="relative"
+	>
+		<label class="block text-sm font-medium text-fg-body mb-1">Parent Page (optional)</label>
+		<input type="hidden" name="parent_id" x-bind:value="selectedID"/>
+
+		<!-- Selected parent display -->
+		<div x-show="selectedID" class="flex items-center gap-2 p-2 rounded-md bg-surface-alt border border-edge">
+			<span class="text-sm text-fg" x-text="selectedName"></span>
+			<button type="button" @click="clear()" class="ml-auto text-xs text-fg-muted hover:text-red-500 transition-colors" title="Remove parent">
+				<i class="fa-solid fa-xmark"></i>
+			</button>
+		</div>
+
+		<!-- Search input (shown when no parent selected) -->
+		<div x-show="!selectedID">
+			<input
+				type="text"
+				x-model="query"
+				@input.debounce.300ms="search()"
+				@focus="open = true"
+				@click.outside="open = false"
+				class="input w-full"
+				placeholder="Search for a parent page..."
+			/>
+
+			<!-- Dropdown results -->
+			<div
+				x-show="open && (results.length > 0 || loading)"
+				x-cloak
+				class="absolute z-20 mt-1 w-full bg-surface border border-edge rounded-lg shadow-lg max-h-48 overflow-y-auto"
+			>
+				<template x-if="loading">
+					<div class="px-3 py-2 text-xs text-fg-muted">Searching...</div>
+				</template>
+				<template x-for="entity in results" x-bind:key="entity.id">
+					<button
+						type="button"
+						@click="select(entity)"
+						class="w-full px-3 py-2 text-left text-sm text-fg hover:bg-surface-alt transition-colors flex items-center gap-2"
+					>
+						<span class="truncate" x-text="entity.name"></span>
+						<span class="text-xs text-fg-muted ml-auto" x-text="entity.type_name"></span>
+					</button>
+				</template>
+			</div>
+		</div>
+
+		<p class="mt-1 text-xs text-fg-secondary">Nest this page under another page to create a hierarchy.</p>
+	</div>
+}
+
+// parentSelectorID returns the parent entity ID for the selector, or empty string.
+func parentSelectorID(parent *Entity) string {
+	if parent != nil {
+		return parent.ID
+	}
+	return ""
+}
+
+// parentSelectorName returns the parent entity name for the selector, or empty string.
+func parentSelectorName(parent *Entity) string {
+	if parent != nil {
+		return parent.Name
+	}
+	return ""
 }
 
 // fieldInputType maps field definition types to HTML input types.

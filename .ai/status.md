@@ -8,68 +8,59 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-24 -- Phase E: Quick Search, Customization Hub rework, Extensions tab, bugfixes.
+2026-02-24 -- Phase E: Extension bug fix, Entity Hierarchy (all 4 sprints complete).
 
 ## Current Phase
 **Phase E: Core UX & Discovery.** Quick Search, Customize page rework, Extensions tab,
-hx-boost bugfix, and whitespace polish complete.
+Entity Hierarchy, and extension enable bug fix all complete.
 
-## Phase E: Core UX & Discovery (2026-02-24)
+## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
-### Quick Search (Ctrl+K) — COMPLETE
-- **`static/js/search_modal.js`**: Standalone JS module (not a widget — global scope).
-  Opens centered modal overlay with search input, result list, keyboard hints.
-- **Keyboard shortcut**: Ctrl+K / Cmd+K opens/closes modal. Escape closes.
-- **Search**: Uses existing `GET /campaigns/:id/entities/search?q=...` JSON endpoint
-  (Accept: application/json). 200ms debounce, AbortController for in-flight cancellation.
-- **Results**: Entity type icon + color, entity name, type name. Mouse hover and
-  arrow keys for navigation, Enter to open, click to navigate.
-- **Topbar**: Replaced inline HTMX search input with a trigger button that calls
-  `Chronicle.openSearch()`. Shows search icon, "Search..." label, and Cmd+K kbd hint.
-  Works on all screen sizes (responsive).
-- **Campaign-scoped**: Extracts campaign ID from URL; modal only opens when in a
-  campaign context (pattern: /campaigns/:id/...).
-- **Cleanup**: Closes on `chronicle:navigated` (hx-boost navigation).
-- **Script loaded**: Added to `base.templ` after all widget scripts.
+### Extension Enable Bug Fix — COMPLETE
+- **Root cause**: Admin panel allowed activating planned addons (Calendar, Maps, Dice Roller)
+  that have no backing code. Once activated, campaign owners could "enable" them — nothing
+  would happen because the code doesn't exist.
+- **Fix**: Added `installedAddons` registry in `service.go` — a `map[string]bool` listing
+  slugs with real backing code (currently only `"sync-api"`).
+- **Service layer**: `UpdateStatus()` blocks activating uninstalled addons. `EnableForCampaign()`
+  blocks enabling uninstalled addons. `List()` and `ListForCampaign()` annotate `Installed` field.
+- **Admin UI**: Uninstalled addons show "Not installed" label and disabled activate button.
+- **Campaign UI**: Uninstalled addons show "Coming Soon" badge instead of enable/disable toggle.
+- **Model**: Added `Installed bool` to both `Addon` and `CampaignAddon` structs (not persisted).
+- **Tests**: 5 new tests (TestIsInstalled, TestUpdateStatus_ActivateInstalled,
+  TestUpdateStatus_ActivateUninstalled, TestEnableForCampaign_NotInstalled,
+  TestListForCampaign_AnnotatesInstalled). All 32 addon tests pass.
 
-### Customization Hub Rework — COMPLETE
-- **Old structure (5 tabs)**: Navigation, Dashboard, Categories (link grid), Category
-  Dashboards, Page Layouts. Categories tab was just links to a separate config page.
-  Category Dashboards and Page Layouts duplicated entity type config functionality.
-  Attribute field editor was missing entirely.
-- **New structure (5 tabs)**:
-  1. **Dashboard** — Campaign dashboard editor (unchanged).
-  2. **Categories** — Category selector → HTMX lazy-loads identity, attributes, and
-     category dashboard for the selected category. Inline editing via Alpine.js + fetch.
-  3. **Page Templates** — Category selector → HTMX lazy-loads template-editor (renamed).
-  4. **Extensions** — Campaign addon management (enable/disable modules, widgets,
-     integrations). Lazy-loaded via HTMX from addons plugin fragment endpoint.
-  5. **Navigation** — Sidebar ordering + custom links (unchanged).
-- **New endpoints**:
-  - `GET /campaigns/:id/entity-types/:etid/customize` — HTMX fragment with Identity,
-    Attributes, and Category Dashboard cards.
-  - `GET /campaigns/:id/addons/fragment` — HTMX fragment for addon list with toggles.
-- **Bug fix**: Entity type config page Nav Panel tab used HTMX `hx-put` + `hx-include`
-  to send form data, but handler expected JSON. Switched to Alpine.js + fetch() with
-  proper JSON body. Same pattern used in new Categories tab identity card.
-- **Back link fix**: Entity types management page now links "Back to Customize" instead
-  of "Back to Settings".
+### Entity Hierarchy — COMPLETE (4 Sprints)
 
-### hx-boost Navigation Fix — COMPLETE
-- **Root cause**: `middleware.IsHTMX()` returned true for boosted requests (links inside
-  `hx-boost="true"` containers). Handlers returned fragments, but `hx-select="#main-content"`
-  couldn't find `#main-content` in the fragment response. Result: blank pages on sidebar
-  navigation clicks.
-- **Fix**: `IsHTMX()` now checks `HX-Boosted` header. Boosted requests get full page
-  responses so `hx-select` can extract the target element. Fixes ALL boosted links
-  app-wide, not just the "My Campaigns" page.
-- **File**: `internal/middleware/helpers.go` — single-line change to the condition.
+**Sprint 1: Data Plumbing**
+- Added `ParentID` to `CreateEntityRequest`, `UpdateEntityRequest`, `CreateEntityInput`,
+  `UpdateEntityInput` in `model.go`.
+- Added `FindChildren`, `FindAncestors`, `UpdateParent` to `EntityRepository` interface.
+- `FindAncestors` uses recursive CTE with depth limit of 20.
+- Service: parent validation (exists, same campaign, no self-reference, circular reference
+  detection by walking ancestor chain of proposed parent).
+- 8 new hierarchy tests, all passing.
 
-### Whitespace Polish — COMPLETE
-- Reduced vertical padding and spacing across all Customization Hub tabs.
-- Tab headings: `text-lg` → `text-base`, descriptions: `text-sm` → `text-xs`.
-- Outer padding: `py-6` → `py-4`. Inner gaps: `space-y-6` → `space-y-4`.
-- Category fragment cards: `p-5` → `p-4`, inner gaps tightened.
+**Sprint 2: Parent Selector on Forms**
+- `form.templ`: Added `parentSelector` component — Alpine.js searchable dropdown using
+  existing entity search endpoint (`Accept: application/json` header).
+- Pre-fill parent from `?parent_id=` query param ("Create sub-page" flow).
+- Edit form pre-populates current parent with "Clear" button.
+- `EntityNewPage` and `EntityEditPage` accept `parentEntity *Entity` parameter.
+
+**Sprint 3: Breadcrumbs + Children + Create Sub-page**
+- `show.templ`: Breadcrumb now shows ancestor chain (furthest first, immediate parent last).
+  Each ancestor is a clickable link.
+- `blockChildren` component: sub-pages section with card grid + "Create sub-page" button
+  linking to `/campaigns/:id/entities/new?parent_id=:eid&type=:typeID`.
+- Handler `Show()` fetches ancestors via `GetAncestors()` and children via `GetChildren()`.
+
+**Sprint 4: Tree View on Category Dashboard**
+- `category_dashboard.templ`: Third view toggle (grid/table/tree) with localStorage persistence.
+- `EntityTreeNode` struct + `buildEntityTree()` builds tree from flat entity list using parent_id.
+- `entityTreeLevel` recursive templ component: collapsible nodes with expand/collapse chevrons,
+  entity icon/name links, privacy indicators, child count badges, indented border-left nesting.
 
 ### In Progress
 - Nothing currently in progress.
@@ -93,8 +84,8 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Phase E continued:** Entity Nesting (parent_id + tree UI + breadcrumbs),
-   Backlinks ("Referenced by" on entity profiles), API documentation.
+1. **Phase E continued:** Backlinks / "Referenced by" on entity profiles (@mention
+   reverse refs), API technical documentation (OpenAPI spec or handwritten reference).
 2. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
    See `.ai/roadmap.md` for full data model and implementation plan.
 3. **Handler-level "view as player":** Extend toggle to filter is_private entities

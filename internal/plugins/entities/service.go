@@ -30,6 +30,10 @@ type EntityService interface {
 	UpdateImage(ctx context.Context, entityID, imagePath string) error
 	Delete(ctx context.Context, entityID string) error
 
+	// Hierarchy
+	GetChildren(ctx context.Context, entityID string, role int) ([]Entity, error)
+	GetAncestors(ctx context.Context, entityID string) ([]Entity, error)
+
 	// Listing and search
 	List(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
 	ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error)
@@ -104,6 +108,19 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		typeLabelPtr = &typeLabel
 	}
 
+	// Validate parent if specified.
+	var parentIDPtr *string
+	if pid := strings.TrimSpace(input.ParentID); pid != "" {
+		parent, err := s.entities.FindByID(ctx, pid)
+		if err != nil {
+			return nil, apperror.NewBadRequest("parent entity not found")
+		}
+		if parent.CampaignID != campaignID {
+			return nil, apperror.NewBadRequest("parent entity does not belong to this campaign")
+		}
+		parentIDPtr = &pid
+	}
+
 	fieldsData := input.FieldsData
 	if fieldsData == nil {
 		fieldsData = make(map[string]any)
@@ -115,6 +132,7 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		EntityTypeID: input.EntityTypeID,
 		Name:         name,
 		Slug:         slug,
+		ParentID:     parentIDPtr,
 		TypeLabel:    typeLabelPtr,
 		IsPrivate:    input.IsPrivate,
 		IsTemplate:   false,
@@ -182,6 +200,35 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		entity.TypeLabel = nil
 	}
 
+	// Validate and update parent_id.
+	pid := strings.TrimSpace(input.ParentID)
+	if pid != "" {
+		if pid == entityID {
+			return nil, apperror.NewBadRequest("an entity cannot be its own parent")
+		}
+		parent, err := s.entities.FindByID(ctx, pid)
+		if err != nil {
+			return nil, apperror.NewBadRequest("parent entity not found")
+		}
+		if parent.CampaignID != entity.CampaignID {
+			return nil, apperror.NewBadRequest("parent entity does not belong to this campaign")
+		}
+		// Check for circular reference: the proposed parent must not be
+		// a descendant of this entity.
+		ancestors, err := s.entities.FindAncestors(ctx, pid)
+		if err != nil {
+			return nil, apperror.NewInternal(fmt.Errorf("checking ancestors: %w", err))
+		}
+		for _, a := range ancestors {
+			if a.ID == entityID {
+				return nil, apperror.NewBadRequest("circular reference: the selected parent is a descendant of this entity")
+			}
+		}
+		entity.ParentID = &pid
+	} else {
+		entity.ParentID = nil
+	}
+
 	// Update entry content if provided.
 	entry := strings.TrimSpace(input.Entry)
 	if entry != "" {
@@ -201,6 +248,26 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 	}
 
 	return entity, nil
+}
+
+// --- Hierarchy ---
+
+// GetChildren returns the direct children of an entity, respecting privacy.
+func (s *entityService) GetChildren(ctx context.Context, entityID string, role int) ([]Entity, error) {
+	children, err := s.entities.FindChildren(ctx, entityID, role)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("finding children: %w", err))
+	}
+	return children, nil
+}
+
+// GetAncestors returns the ancestor chain from immediate parent to root.
+func (s *entityService) GetAncestors(ctx context.Context, entityID string) ([]Entity, error) {
+	ancestors, err := s.entities.FindAncestors(ctx, entityID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("finding ancestors: %w", err))
+	}
+	return ancestors, nil
 }
 
 // UpdateEntry updates only the entry content for an entity. Used by the

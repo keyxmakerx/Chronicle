@@ -165,7 +165,16 @@ func (h *Handler) NewForm(c echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
 	preselect, _ := strconv.Atoi(c.QueryParam("type"))
 
-	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, csrfToken, ""))
+	// Pre-fill parent if ?parent_id= is set (from "Create sub-page" button).
+	var parentEntity *Entity
+	if parentID := c.QueryParam("parent_id"); parentID != "" {
+		parent, err := h.service.GetByID(c.Request().Context(), parentID)
+		if err == nil && parent.CampaignID == cc.Campaign.ID {
+			parentEntity = parent
+		}
+	}
+
+	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, parentEntity, csrfToken, ""))
 }
 
 // Create processes the entity creation form (POST /campaigns/:id/entities).
@@ -187,6 +196,7 @@ func (h *Handler) Create(c echo.Context) error {
 		Name:         req.Name,
 		EntityTypeID: req.EntityTypeID,
 		TypeLabel:    req.TypeLabel,
+		ParentID:     req.ParentID,
 		IsPrivate:    req.IsPrivate,
 		FieldsData:   fieldsData,
 	}
@@ -199,7 +209,7 @@ func (h *Handler) Create(c echo.Context) error {
 		if appErr, ok := err.(*apperror.AppError); ok {
 			errMsg = appErr.Message
 		}
-		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, csrfToken, errMsg))
+		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, nil, csrfToken, errMsg))
 	}
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityCreated, entity.ID, entity.Name)
@@ -240,8 +250,12 @@ func (h *Handler) Show(c echo.Context) error {
 		return apperror.NewInternal(nil)
 	}
 
+	// Fetch ancestor chain for breadcrumbs and children for sub-page listing.
+	ancestors, _ := h.service.GetAncestors(c.Request().Context(), entity.ID)
+	children, _ := h.service.GetChildren(c.Request().Context(), entity.ID, int(cc.MemberRole))
+
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, csrfToken))
+	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, csrfToken))
 }
 
 // EditForm renders the entity edit form (GET /campaigns/:id/entities/:eid/edit).
@@ -266,7 +280,16 @@ func (h *Handler) EditForm(c echo.Context) error {
 	entityType, _ := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
 	csrfToken := middleware.GetCSRFToken(c)
 
-	return middleware.Render(c, http.StatusOK, EntityEditPage(cc, entity, entityType, entityTypes, csrfToken, ""))
+	// Fetch parent entity for pre-fill in the parent selector.
+	var parentEntity *Entity
+	if entity.ParentID != nil {
+		parent, err := h.service.GetByID(c.Request().Context(), *entity.ParentID)
+		if err == nil {
+			parentEntity = parent
+		}
+	}
+
+	return middleware.Render(c, http.StatusOK, EntityEditPage(cc, entity, entityType, entityTypes, parentEntity, csrfToken, ""))
 }
 
 // Update processes the entity edit form (PUT /campaigns/:id/entities/:eid).
@@ -297,6 +320,7 @@ func (h *Handler) Update(c echo.Context) error {
 	input := UpdateEntityInput{
 		Name:       req.Name,
 		TypeLabel:  req.TypeLabel,
+		ParentID:   req.ParentID,
 		IsPrivate:  req.IsPrivate,
 		Entry:      req.Entry,
 		FieldsData: fieldsData,
@@ -311,7 +335,15 @@ func (h *Handler) Update(c echo.Context) error {
 		if appErr, ok := err.(*apperror.AppError); ok {
 			errMsg = appErr.Message
 		}
-		return middleware.Render(c, http.StatusOK, EntityEditPage(cc, entity, entityType, entityTypes, csrfToken, errMsg))
+		// Fetch parent for re-rendering form.
+		var parentEntity *Entity
+		if entity.ParentID != nil {
+			parent, pErr := h.service.GetByID(c.Request().Context(), *entity.ParentID)
+			if pErr == nil {
+				parentEntity = parent
+			}
+		}
+		return middleware.Render(c, http.StatusOK, EntityEditPage(cc, entity, entityType, entityTypes, parentEntity, csrfToken, errMsg))
 	}
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)

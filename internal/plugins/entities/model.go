@@ -309,6 +309,7 @@ type CreateEntityRequest struct {
 	Name         string `json:"name" form:"name"`
 	EntityTypeID int    `json:"entity_type_id" form:"entity_type_id"`
 	TypeLabel    string `json:"type_label" form:"type_label"`
+	ParentID     string `json:"parent_id" form:"parent_id"`
 	IsPrivate    bool   `json:"is_private" form:"is_private"`
 }
 
@@ -316,6 +317,7 @@ type CreateEntityRequest struct {
 type UpdateEntityRequest struct {
 	Name      string `json:"name" form:"name"`
 	TypeLabel string `json:"type_label" form:"type_label"`
+	ParentID  string `json:"parent_id" form:"parent_id"`
 	IsPrivate bool   `json:"is_private" form:"is_private"`
 	Entry     string `json:"entry" form:"entry"`
 }
@@ -327,6 +329,7 @@ type CreateEntityInput struct {
 	Name         string
 	EntityTypeID int
 	TypeLabel    string
+	ParentID     string // Empty string = no parent.
 	IsPrivate    bool
 	FieldsData   map[string]any
 }
@@ -335,6 +338,7 @@ type CreateEntityInput struct {
 type UpdateEntityInput struct {
 	Name       string
 	TypeLabel  string
+	ParentID   string // Empty string = clear parent.
 	IsPrivate  bool
 	Entry      string
 	ImagePath  string

@@ -102,39 +102,53 @@ templ CampaignAddonsListFragment(campaignID string, addons []CampaignAddon, csrf
 	}
 }
 
-// campaignAddonRow renders a single addon toggle row.
+// campaignAddonRow renders a single addon toggle row. Uninstalled addons
+// show a "Coming Soon" badge instead of the enable/disable toggle.
 templ campaignAddonRow(campaignID string, a CampaignAddon, csrfToken string) {
 	<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
 		<div class="flex items-center gap-3">
-			<span class="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
-				<i class={ "fa-solid " + a.AddonIcon + " text-accent text-sm" }></i>
+			<span class={ "w-8 h-8 rounded-lg flex items-center justify-center",
+				templ.KV("bg-accent/10", a.Installed),
+				templ.KV("bg-surface-alt", !a.Installed) }>
+				<i class={ "fa-solid " + a.AddonIcon + " text-sm",
+					templ.KV("text-accent", a.Installed),
+					templ.KV("text-fg-muted", !a.Installed) }></i>
 			</span>
 			<div>
-				<div class="text-sm font-medium text-fg">{ a.AddonName }</div>
+				<div class={ "text-sm font-medium",
+					templ.KV("text-fg", a.Installed),
+					templ.KV("text-fg-muted", !a.Installed) }>{ a.AddonName }</div>
 				<div class="text-xs text-fg-muted">{ a.AddonSlug }</div>
 			</div>
 		</div>
-		<form
-			method="POST"
-			hx-put={ fmt.Sprintf("/campaigns/%s/addons/%d/toggle", campaignID, a.AddonID) }
-			hx-target="#addons-list"
-			hx-swap="innerHTML"
-		>
-			<input type="hidden" name="csrf_token" value={ csrfToken }/>
-			if a.Enabled {
-				<input type="hidden" name="action" value="disable"/>
-				<button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors">
-					<i class="fa-solid fa-check text-[10px]"></i>
-					Enabled
-				</button>
-			} else {
-				<input type="hidden" name="action" value="enable"/>
-				<button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-surface-alt text-fg-muted border border-edge hover:bg-accent/10 hover:text-accent transition-colors">
-					<i class="fa-solid fa-plus text-[10px]"></i>
-					Enable
-				</button>
-			}
-		</form>
+		if a.Installed {
+			<form
+				method="POST"
+				hx-put={ fmt.Sprintf("/campaigns/%s/addons/%d/toggle", campaignID, a.AddonID) }
+				hx-target="#addons-list"
+				hx-swap="innerHTML"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				if a.Enabled {
+					<input type="hidden" name="action" value="disable"/>
+					<button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors">
+						<i class="fa-solid fa-check text-[10px]"></i>
+						Enabled
+					</button>
+				} else {
+					<input type="hidden" name="action" value="enable"/>
+					<button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-surface-alt text-fg-muted border border-edge hover:bg-accent/10 hover:text-accent transition-colors">
+						<i class="fa-solid fa-plus text-[10px]"></i>
+						Enable
+					</button>
+				}
+			</form>
+		} else {
+			<span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-surface-alt text-fg-muted border border-edge cursor-default">
+				<i class="fa-solid fa-clock text-[10px]"></i>
+				Coming Soon
+			</span>
+		}
 	</div>
 }
 
