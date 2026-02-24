@@ -378,26 +378,31 @@
     pointer-events: auto;
   }
   .sidebar-peek:hover {
-    box-shadow: inset -4px 0 16px -4px rgba(99, 102, 241, 0.5);
+    box-shadow: inset -2px 0 6px -2px rgba(255, 255, 255, 0.08);
   }
   /* Gradient mask: content fades from transparent (left / screen edge) to
-     opaque (right / adjacent to the drilled-in panel). Icons and a letter
-     or two of text peek through, giving the visual hint of hidden content. */
+     opaque (right / adjacent to the drilled-in panel). Text labels peek
+     through, giving the visual hint of hidden content. */
   .sidebar-peek > nav {
     @apply pointer-events-none;
-    text-align: right;
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 70%);
-    mask-image: linear-gradient(to right, transparent 0%, black 70%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 60%);
+    mask-image: linear-gradient(to right, transparent 0%, black 60%);
   }
   .sidebar-peek:hover > nav {
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 50%);
-    mask-image: linear-gradient(to right, transparent 0%, black 50%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 40%);
+    mask-image: linear-gradient(to right, transparent 0%, black 40%);
   }
-  /* Flip flex links so icon sits at the right edge (most visible).
-     Reduce right padding so content sits closer to the visible strip. */
+  /* Hide icons, counts, chevrons, and section headers in peek mode
+     — only text labels peek through. Text may be a direct text node
+     (Dashboard, Members) or a span.flex-1 (entity type labels). */
+  .sidebar-peek > nav a > span:not(.flex-1),
+  .sidebar-peek > nav a > svg,
+  .sidebar-peek > nav > div {
+    display: none;
+  }
+  /* Tighten right padding so text sits closer to the visible edge. */
   .sidebar-peek > nav a {
-    flex-direction: row-reverse;
-    padding-right: 6px;
+    padding-right: 8px;
   }
 
   /* --- Notes Widget --- */
