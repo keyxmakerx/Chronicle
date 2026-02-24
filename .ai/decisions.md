@@ -299,3 +299,63 @@ are "fields", "entry", or "posts". Client-side two-column drag-and-drop widget.
 - Sections validated server-side (valid types, valid columns, unique keys).
 - Default layout auto-generated from field definitions when empty.
 - Entity show page must read layout_json to render the profile (not yet wired).
+
+---
+
+## ADR-013: Pessimistic Locking for Shared Notes
+
+**Date:** 2026-02-24
+**Status:** Accepted
+
+**Context:** Shared notes can be edited by any campaign member. Without
+concurrency control, two users editing the same note simultaneously would
+overwrite each other's changes (last-write-wins).
+
+**Decision:** Pessimistic edit locking with 5-minute auto-expiry. When a user
+starts editing a shared note, the client acquires a lock via `POST /lock`.
+While held, the lock is kept alive with a 2-minute heartbeat interval. Stale
+locks (older than 5 minutes without heartbeat) are automatically reclaimed
+by the lock acquisition query. Campaign owners can force-unlock any note.
+
+**Alternatives Considered:**
+- Optimistic concurrency (version counter + conflict detection): more complex
+  client-side merge resolution. Notes panel is a lightweight widget, not a
+  full collaborative editor -- pessimistic locking is simpler and sufficient.
+- Real-time collaborative editing (CRDT/OT): massive complexity for a notes
+  sidebar. This is Google Docs-level infra; overkill for a notes widget.
+- No locking: acceptable for private notes (single user), but shared notes
+  need protection against concurrent edits.
+
+**Consequences:**
+- Only one user can edit a shared note at a time.
+- Lock state stored in the notes table itself (locked_by, locked_at columns).
+- Stale locks self-heal via age check in the acquisition query.
+- Private (non-shared) notes skip locking entirely -- only the owner edits them.
+- 5-minute timeout is generous enough for slow typists but prevents abandoned locks.
+
+---
+
+## ADR-014: Snapshot-on-Save Version History for Notes
+
+**Date:** 2026-02-24
+**Status:** Accepted
+
+**Context:** Users need to recover previous versions of notes, especially
+when shared notes are edited by multiple people.
+
+**Decision:** Create a version snapshot before every content-changing operation
+(Update and RestoreVersion). Snapshots store title, content blocks, entry JSON,
+and entry HTML. Maximum 50 versions per note, oldest auto-pruned. Version
+creation errors are swallowed -- version tracking is non-critical.
+
+**Alternatives Considered:**
+- Changelog-style diffs: more storage-efficient but requires complex diff/merge
+  to reconstruct a version. Snapshots are simpler and notes are small.
+- Event sourcing: overkill. Notes are not high-frequency write targets.
+- No version history: risky with shared editing. Users expect undo capability.
+
+**Consequences:**
+- Every update creates a version row -- storage grows linearly but is bounded at 50.
+- Auto-pruning runs after every version creation (DELETE subquery).
+- Restore is a two-step operation: snapshot current state, then apply old version.
+- Version errors don't block the save operation (swallowed with `_ = err`).

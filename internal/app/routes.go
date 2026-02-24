@@ -352,6 +352,7 @@ func (a *App) RegisterRoutes() {
 		// User info from auth session.
 		if session := auth.GetSession(c); session != nil {
 			ctx = layouts.SetIsAuthenticated(ctx, true)
+			ctx = layouts.SetUserID(ctx, session.UserID)
 			ctx = layouts.SetUserName(ctx, session.Name)
 			ctx = layouts.SetUserEmail(ctx, session.Email)
 			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)
@@ -361,7 +362,20 @@ func (a *App) RegisterRoutes() {
 		if cc := campaigns.GetCampaignContext(c); cc != nil {
 			ctx = layouts.SetCampaignID(ctx, cc.Campaign.ID)
 			ctx = layouts.SetCampaignName(ctx, cc.Campaign.Name)
-			ctx = layouts.SetCampaignRole(ctx, int(cc.MemberRole))
+
+			// "View as player" override: when an owner has the toggle active,
+			// templates see RolePlayer instead of RoleOwner. Access control
+			// (RequireRole middleware) still uses the actual cc.MemberRole.
+			effectiveRole := int(cc.MemberRole)
+			isOwner := cc.MemberRole >= campaigns.RoleOwner
+			ctx = layouts.SetIsOwner(ctx, isOwner)
+			if isOwner {
+				if cookie, err := c.Cookie("chronicle_view_as_player"); err == nil && cookie.Value == "1" {
+					effectiveRole = int(campaigns.RolePlayer)
+					ctx = layouts.SetViewingAsPlayer(ctx, true)
+				}
+			}
+			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 
 			// Entity types for dynamic sidebar rendering.
 			// Use the request context (not the enriched ctx) since service calls
@@ -404,8 +418,9 @@ func (a *App) RegisterRoutes() {
 				}
 			}
 
-			// Entity counts per type for sidebar badges.
-			if counts, err := entityService.CountByType(reqCtx, cc.Campaign.ID, int(cc.MemberRole)); err == nil {
+			// Entity counts per type for sidebar badges (use effectiveRole so
+			// "view as player" mode hides private entity counts).
+			if counts, err := entityService.CountByType(reqCtx, cc.Campaign.ID, effectiveRole); err == nil {
 				ctx = layouts.SetEntityCounts(ctx, counts)
 			}
 

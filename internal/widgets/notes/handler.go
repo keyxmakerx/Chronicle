@@ -23,6 +23,7 @@ func NewHandler(service NoteService) *Handler {
 }
 
 // List returns notes for the current user in the campaign (GET /campaigns/:id/notes).
+// Returns own notes + shared notes from other users.
 // Supports ?scope=all (default), ?scope=campaign (campaign-wide only),
 // and ?scope=entity&entity_id=<eid> (entity-scoped).
 func (h *Handler) List(c echo.Context) error {
@@ -81,6 +82,7 @@ func (h *Handler) Create(c echo.Context) error {
 }
 
 // Update modifies an existing note (PUT /campaigns/:id/notes/:noteId).
+// Access: note owner OR any campaign member if the note is shared.
 func (h *Handler) Update(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -89,12 +91,11 @@ func (h *Handler) Update(c echo.Context) error {
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
 
-	// Verify ownership before updating.
 	existing, err := h.service.GetByID(c.Request().Context(), noteID)
 	if err != nil {
 		return err
 	}
-	if existing.UserID != userID || existing.CampaignID != cc.Campaign.ID {
+	if !canAccessNote(existing, userID, cc.Campaign.ID) {
 		return apperror.NewNotFound("note not found")
 	}
 
@@ -103,7 +104,13 @@ func (h *Handler) Update(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	note, err := h.service.Update(c.Request().Context(), noteID, req)
+	// Only the owner can change shared/pinned status.
+	if existing.UserID != userID {
+		req.IsShared = nil
+		req.Pinned = nil
+	}
+
+	note, err := h.service.Update(c.Request().Context(), noteID, userID, req)
 	if err != nil {
 		return err
 	}
@@ -112,6 +119,7 @@ func (h *Handler) Update(c echo.Context) error {
 }
 
 // Delete removes a note (DELETE /campaigns/:id/notes/:noteId).
+// Only the note owner can delete.
 func (h *Handler) Delete(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -120,7 +128,6 @@ func (h *Handler) Delete(c echo.Context) error {
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
 
-	// Verify ownership before deleting.
 	existing, err := h.service.GetByID(c.Request().Context(), noteID)
 	if err != nil {
 		return err
@@ -145,12 +152,11 @@ func (h *Handler) ToggleCheck(c echo.Context) error {
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
 
-	// Verify ownership.
 	existing, err := h.service.GetByID(c.Request().Context(), noteID)
 	if err != nil {
 		return err
 	}
-	if existing.UserID != userID || existing.CampaignID != cc.Campaign.ID {
+	if !canAccessNote(existing, userID, cc.Campaign.ID) {
 		return apperror.NewNotFound("note not found")
 	}
 
@@ -165,4 +171,179 @@ func (h *Handler) ToggleCheck(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, note)
+}
+
+// Lock acquires the edit lock on a shared note (POST /campaigns/:id/notes/:noteId/lock).
+func (h *Handler) Lock(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+	userID := auth.GetUserID(c)
+	noteID := c.Param("noteId")
+
+	existing, err := h.service.GetByID(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	if !canAccessNote(existing, userID, cc.Campaign.ID) {
+		return apperror.NewNotFound("note not found")
+	}
+
+	note, err := h.service.AcquireLock(c.Request().Context(), noteID, userID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, note)
+}
+
+// Unlock releases the edit lock (POST /campaigns/:id/notes/:noteId/unlock).
+func (h *Handler) Unlock(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+	userID := auth.GetUserID(c)
+	noteID := c.Param("noteId")
+
+	existing, err := h.service.GetByID(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	if !canAccessNote(existing, userID, cc.Campaign.ID) {
+		return apperror.NewNotFound("note not found")
+	}
+
+	if err := h.service.ReleaseLock(c.Request().Context(), noteID, userID); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// Heartbeat keeps the edit lock alive (POST /campaigns/:id/notes/:noteId/heartbeat).
+func (h *Handler) Heartbeat(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+	userID := auth.GetUserID(c)
+	noteID := c.Param("noteId")
+
+	existing, err := h.service.GetByID(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	if !canAccessNote(existing, userID, cc.Campaign.ID) {
+		return apperror.NewNotFound("note not found")
+	}
+
+	if err := h.service.Heartbeat(c.Request().Context(), noteID, userID); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// ForceUnlock releases any user's lock (POST /campaigns/:id/notes/:noteId/force-unlock).
+// Requires campaign owner role.
+func (h *Handler) ForceUnlock(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+	noteID := c.Param("noteId")
+
+	if cc.MemberRole < campaigns.RoleOwner {
+		return apperror.NewForbidden("only campaign owners can force-unlock notes")
+	}
+
+	if err := h.service.ForceReleaseLock(c.Request().Context(), noteID); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// ListVersions returns version history (GET /campaigns/:id/notes/:noteId/versions).
+func (h *Handler) ListVersions(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+	userID := auth.GetUserID(c)
+	noteID := c.Param("noteId")
+
+	existing, err := h.service.GetByID(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	if !canAccessNote(existing, userID, cc.Campaign.ID) {
+		return apperror.NewNotFound("note not found")
+	}
+
+	versions, err := h.service.ListVersions(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	if versions == nil {
+		versions = []NoteVersion{}
+	}
+	return c.JSON(http.StatusOK, versions)
+}
+
+// GetVersion returns a specific version (GET /campaigns/:id/notes/:noteId/versions/:vid).
+func (h *Handler) GetVersion(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+	userID := auth.GetUserID(c)
+	noteID := c.Param("noteId")
+	versionID := c.Param("vid")
+
+	existing, err := h.service.GetByID(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	if !canAccessNote(existing, userID, cc.Campaign.ID) {
+		return apperror.NewNotFound("note not found")
+	}
+
+	version, err := h.service.GetVersion(c.Request().Context(), versionID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, version)
+}
+
+// RestoreVersion reverts a note to a previous version
+// (POST /campaigns/:id/notes/:noteId/versions/:vid/restore).
+func (h *Handler) RestoreVersion(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(nil)
+	}
+	userID := auth.GetUserID(c)
+	noteID := c.Param("noteId")
+	versionID := c.Param("vid")
+
+	existing, err := h.service.GetByID(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	if !canAccessNote(existing, userID, cc.Campaign.ID) {
+		return apperror.NewNotFound("note not found")
+	}
+
+	note, err := h.service.RestoreVersion(c.Request().Context(), noteID, versionID, userID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, note)
+}
+
+// canAccessNote checks if a user can access a note: owner or shared member.
+func canAccessNote(note *Note, userID, campaignID string) bool {
+	if note.CampaignID != campaignID {
+		return false
+	}
+	return note.UserID == userID || note.IsShared
 }

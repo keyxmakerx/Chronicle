@@ -359,33 +359,45 @@
     overflow: hidden;
   }
 
+  /* ---- Mobile Sidebar Toggle ---- */
+  /* Uses !important to override the static -translate-x-full class,
+     which Tailwind generates AFTER translate-x-0 in the stylesheet
+     (breaking normal class-order specificity). */
+  .sidebar-mobile-open {
+    transform: translateX(0) !important;
+  }
+
   /* ---- Drill-Down Sidebar ---- */
 
   /* When the main panel is in "peek" mode (drilled into a category), it
-     becomes a narrow strip. Pointer events pass through except on the strip
-     itself, which acts as a back button. A subtle glow on hover signals
-     interactivity. */
+     becomes a narrow strip (~36px). Content fades in via a gradient mask
+     so the last letter or two of nav items are visible, creating a
+     "hiding behind the panel" effect. Clicking the strip drills back out. */
   .sidebar-peek {
     @apply cursor-pointer;
     pointer-events: auto;
   }
   .sidebar-peek:hover {
-    box-shadow: inset -4px 0 12px -4px rgba(99, 102, 241, 0.4);
+    box-shadow: inset -4px 0 16px -4px rgba(99, 102, 241, 0.5);
   }
-  /* Dim content when peeking to reinforce it's a "back" affordance.
-     Right-align everything so text/icons crowd toward the visible 10px
-     strip on the right edge of the panel. Opacity must be high enough
-     that icons/text are still visible on the dark sidebar background. */
+  /* Gradient mask: content fades from transparent (left / screen edge) to
+     opaque (right / adjacent to the drilled-in panel). Icons and a letter
+     or two of text peek through, giving the visual hint of hidden content. */
   .sidebar-peek > nav {
-    @apply opacity-60 pointer-events-none;
+    @apply pointer-events-none;
     text-align: right;
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 70%);
+    mask-image: linear-gradient(to right, transparent 0%, black 70%);
   }
   .sidebar-peek:hover > nav {
-    @apply opacity-80;
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 50%);
+    mask-image: linear-gradient(to right, transparent 0%, black 50%);
   }
-  /* Flip flex links so icon sits at the right edge (most visible). */
+  /* Flip flex links so icon sits at the right edge (most visible).
+     Reduce right padding so content sits closer to the visible strip. */
   .sidebar-peek > nav a {
     flex-direction: row-reverse;
+    padding-right: 6px;
   }
 
   /* --- Notes Widget --- */
@@ -617,6 +629,69 @@
   .notes-size-opt-active {
     @apply bg-indigo-600 text-white border-indigo-600
            hover:bg-indigo-500 hover:text-white;
+  }
+
+  /* Shared note styling -- subtle left accent. */
+  .note-card.note-shared {
+    @apply border-l-2 border-l-indigo-500/50;
+  }
+  .note-shared-badge {
+    @apply inline-flex items-center justify-center w-5 h-5 rounded
+           text-indigo-400 opacity-70;
+  }
+  .note-lock-badge {
+    @apply inline-flex items-center justify-center w-5 h-5 rounded
+           text-amber-400 opacity-80;
+  }
+
+  /* Lock error toast -- slides in from bottom of panel. */
+  .notes-lock-toast {
+    @apply absolute bottom-3 left-3 right-3 bg-red-600/90 text-white
+           text-xs font-medium px-3 py-2 rounded-lg text-center z-20;
+    animation: notesToastIn 0.2s ease-out;
+  }
+  @keyframes notesToastIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Rich text (entryHtml) display inside note cards. */
+  .note-entry-html {
+    @apply text-fg-secondary leading-relaxed;
+    font-size: var(--notes-font);
+  }
+  .note-entry-html p { @apply mb-1; }
+  .note-entry-html ul { @apply list-disc pl-4 mb-1; }
+  .note-entry-html ol { @apply list-decimal pl-4 mb-1; }
+  .note-entry-html strong { @apply font-semibold; }
+  .note-entry-html em { @apply italic; }
+  .note-entry-html a { @apply text-indigo-400 hover:underline; }
+
+  /* Version history sub-panel. */
+  .notes-versions-header {
+    @apply flex items-center gap-2 px-1 py-2 border-b border-edge mb-2;
+  }
+  .notes-versions-title {
+    @apply text-sm font-medium text-fg truncate;
+  }
+  .notes-versions-list {
+    @apply space-y-1;
+  }
+  .notes-version-item {
+    @apply flex items-center justify-between gap-2 px-2 py-2
+           rounded hover:bg-surface-alt transition-colors;
+  }
+  .notes-version-info {
+    @apply flex flex-col gap-0.5 min-w-0 flex-1;
+  }
+  .notes-version-title {
+    @apply text-xs font-medium text-fg truncate;
+  }
+  .notes-version-date {
+    @apply text-[10px] text-fg-muted;
+  }
+  .notes-version-restore {
+    @apply shrink-0;
   }
 }
 

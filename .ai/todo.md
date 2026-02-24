@@ -25,13 +25,13 @@ see `.ai/roadmap.md`.
 - [x] Dashboard Editor (Sprint 2: migration 000021, dashboard_editor.js, block rendering)
 - [x] Category Dashboards (Sprint 3: per-category layout editor)
 - [x] Page Layouts tab (Sprint 3.5: HTMX lazy-loaded template-editor in Customize hub)
-- [ ] Player Notes Overhaul (Sprint 4: locking, rich text, versions, shared, template block)
-- [ ] hx-boost sidebar navigation (Sprint 5: prevent full page reloads)
-- [ ] "View as player" toggle (Sprint 5)
-- [ ] Widget lifecycle audit (check all widgets for missing destroy() cleanup)
+- [x] Player Notes Overhaul (Sprint 4: locking, rich text, versions, shared notes)
+- [x] hx-boost sidebar navigation (Sprint 5: prevent full page reloads)
+- [x] "View as player" toggle (Sprint 5)
+- [x] Widget lifecycle audit (check all widgets for missing destroy() cleanup)
 
-### Phase E: Core UX & Discovery (Next)
-- [ ] Quick search (Ctrl+K) — global search modal for entities, categories, notes (CRITICAL)
+### Phase E: Core UX & Discovery (Active)
+- [x] Quick search (Ctrl+K) — global search modal for entities (CRITICAL)
 - [ ] Entity hierarchy (parent_id UI + tree view + breadcrumbs + "Create sub-page") (CRITICAL)
 - [ ] Backlinks / "Referenced by" on entity profiles (@mention reverse refs)
 - [ ] API technical documentation (OpenAPI spec or handwritten reference) (HIGH)
@@ -90,7 +90,7 @@ see `.ai/roadmap.md`.
 - [ ] Audit service tests (pagination, validation, fire-and-forget)
 - [ ] Media service tests (file validation, thumbnail generation)
 - [ ] Settings service tests (limit resolution, override priority)
-- [ ] Widget lifecycle audit (destroy methods, event listener leaks)
+- [x] Widget lifecycle audit (destroy methods, event listener leaks)
 - [ ] HTMX fragment edge cases (CSRF propagation, double-init, nested targets)
 - [ ] Plugin/addon system stress test (JS load failures, boot.js resilience)
 
@@ -98,7 +98,7 @@ see `.ai/roadmap.md`.
 - [x] Password reset flow (migration 000020, forgot/reset pages, SMTP integration)
 - [ ] 2FA/TOTP support
 - [ ] Invite system (email invitations for campaigns)
-- [ ] Concurrent editing safeguards (optimistic concurrency → pessimistic locking)
+- [x] Concurrent editing safeguards (pessimistic locking on shared notes, Sprint 4)
 
 ### Game System Modules
 - [ ] D&D 5e module (SRD reference data, tooltips, pages) — registry in `internal/modules/registry.go`
@@ -269,3 +269,32 @@ see `.ai/roadmap.md`.
 - [x] `LayoutEditorFragment` templ component: scoped save controls + template-editor mount
 - [x] `entityTypeLayoutFetcherAdapter` in app/routes.go (bridges entities service → campaigns handler)
 - [x] Entity type config page: back button → `/campaigns/:id/customize`
+
+### Phase D Sprint 4: Player Notes Overhaul (2026-02-24)
+- [x] Migration 000022: `is_shared`, `last_edited_by`, `locked_by`, `locked_at`, `entry`, `entry_html` columns + `note_versions` table
+- [x] Shared notes: `is_shared` toggle, campaign-wide visibility, share badge, access control
+- [x] Pessimistic edit locking: 5-min auto-expiry, stale reclamation, heartbeat, force-unlock
+- [x] Version history: snapshot-on-save, max 50 with auto-prune, restore with pre-snapshot
+- [x] Rich text: `entry` (ProseMirror JSON) + `entry_html` (pre-rendered) dual storage
+- [x] Layout data: `SetUserID`/`GetUserID` context helpers, `data-user-id` on widget mount
+- [x] Backend: model, repository, service, handler, routes updated; 8 new API endpoints
+- [x] Frontend: notes.js with lock/unlock flow, heartbeat, share toggle, version panel, lock toast
+- [x] CSS: shared note accent, lock/shared badges, toast animation, rich text styles, version list
+- [x] Tests: all 28 service tests pass, mock updated with new repo methods
+
+### Phase D Sprint 5: Polish (2026-02-24)
+- [x] hx-boost sidebar navigation: `hx-boost="true"` on sidebar nav + admin links, `hx-select="#main-content"` for partial swaps
+- [x] Active link highlighting via `updateSidebarActiveLinks()` in boot.js (longest-prefix-match)
+- [x] `hx-boost="false"` on category links, custom links, context-switching links
+- [x] `chronicle:navigated` event for Alpine.js mobile sidebar close + sidebar_drill.js panel close
+- [x] Widget lifecycle: tag_picker closeHandler leak fix, image_upload destroy method, notes entity ID sync
+- [x] "View as player" toggle: cookie-based, LayoutInjector role override, topbar button, banner
+- [x] Context helpers: `SetViewingAsPlayer`/`IsViewingAsPlayer`, `SetIsOwner`/`IsOwner`
+- [x] Toggle endpoint: `POST /campaigns/:id/toggle-view-mode` (owner-only, HX-Refresh response)
+
+### Phase E Sprint 1: Quick Search (2026-02-24)
+- [x] Quick Search (Ctrl+K / Cmd+K) — `search_modal.js` standalone module
+- [x] Centered modal overlay with debounced search, keyboard navigation, mouse hover
+- [x] Reuses existing `/campaigns/:id/entities/search` JSON endpoint
+- [x] Topbar trigger button replaces inline HTMX search input (responsive, all screen sizes)
+- [x] Closes on Escape, backdrop click, and `chronicle:navigated` event

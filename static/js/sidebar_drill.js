@@ -3,13 +3,13 @@
  *
  * Implements the iOS-style "push" navigation for the sidebar. Clicking a
  * category link in the main panel slides both panels left, revealing the
- * category sub-panel. The main panel peeks from the left edge (~10px) with
- * a hover animation to indicate it's clickable. Clicking the peek or the
- * back button slides everything back.
+ * category sub-panel. The main panel peeks from the left edge (~36px) with
+ * a gradient fade and hover glow to indicate it's clickable. Clicking the
+ * peek or the back button slides everything back.
  *
  * Architecture:
  *   #sidebar-slider is a flex row holding two w-64 panels.
- *   Drill-in: translateX(calc(-16rem + 10px)) — main panel peeks 10px.
+ *   Drill-in: translateX(calc(-16rem + 36px)) — main panel peeks 36px.
  *   Drill-out: translateX(0) — main panel fully visible.
  *
  * The category sub-panel is populated dynamically from data-cat-* attributes
@@ -18,7 +18,7 @@
 (function () {
   'use strict';
 
-  var PEEK_PX = 10;
+  var PEEK_PX = 36;
 
   /** @type {HTMLElement|null} */
   var slider = null;
@@ -134,7 +134,7 @@
     }
 
     // Slide the panels using pixel value (avoid calc inside translate3d).
-    // 16rem = 256px, minus PEEK_PX = 246px offset.
+    // 16rem = 256px, minus PEEK_PX = 220px offset.
     var offset = -(256 - PEEK_PX);
     if (instant) {
       slider.style.transition = 'none';
@@ -241,6 +241,14 @@
       return { '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;' }[c];
     });
   }
+
+  // Close drill-down after hx-boost navigation (user navigated away from
+  // the category context via a boosted sidebar link like Dashboard or Members).
+  window.addEventListener('chronicle:navigated', function () {
+    if (isDrilled) {
+      drillOut();
+    }
+  });
 
   // Initialize when DOM is ready.
   if (document.readyState === 'loading') {

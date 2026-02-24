@@ -8,235 +8,37 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-23 -- Competitive analysis and roadmap brainstorm session. Created `.ai/roadmap.md`
-with full feature inventory organized by architectural tier (Core/Plugin/Module/Widget/External),
-competitive analysis vs WorldAnvil/Kanka/LegendKeeper, and revised priority phases E-K.
+2026-02-24 -- Phase E: Quick Search (Ctrl+K) modal implemented.
 
 ## Current Phase
-**Phase D: IN PROGRESS.** Campaign Customization Hub at `/campaigns/:id/customize`
-with Navigation, Dashboard, Categories, Category Dashboards, and Page Layouts tabs.
-Settings page cleaned up. Custom sidebar sections/links editor wired up. Dashboard
-editor widget live for both campaign and per-category dashboards. Page Layouts tab
-lets owners edit entity type page templates directly from the hub via HTMX
-lazy-loaded template-editor widget.
+**Phase E: Core UX & Discovery.** Quick Search complete. Entity hierarchy next.
 
-## What Was Built in Phase B (Summary)
+## Phase E: Core UX & Discovery (2026-02-24)
 
-### Discover Page Fix
-- Split monolithic landing into **DiscoverPublicPage** (Base layout, compact welcome
-  banner, campaign grid, signup CTA) and **DiscoverAuthPage** (App layout with sidebar).
-- **AboutPage** at `/about` — full marketing/welcome page.
-- Discover link added to both sidebar nav states (default + campaign).
-- `/` route uses `OptionalAuth` to serve appropriate layout based on session.
-
-### Template Editor Block Resizing
-- Added `minHeight` property to block config with presets: auto/sm/md/lg/xl.
-- Height dropdown in template editor renders as CSS `min-height` on entity profiles.
-- No migration needed — stored in existing `layout_json` on entity types.
-
-### Block-Level Visibility Controls
-- Added `visibility` property to block config: `everyone` (default) or `dm_only`.
-- DM-only blocks filtered at Go template render time based on campaign role.
-- Visual indicators: amber border + lock icon in editor, "DM Only" badge on profile.
-
-### Per-Entity Attribute Overrides
-- **Migration 000014:** `field_overrides JSON` column on entities table.
-- `FieldOverrides` struct: Added (new fields), Hidden (hide type fields), Modified (label/type/options overrides).
-- `MergeFields()` function combines type-level and entity-level field definitions.
-- `GET /entities/:eid/fields` now returns effective fields + type_fields + field_overrides.
-- `PUT /entities/:eid/field-overrides` endpoint for saving overrides.
-- Attributes widget: gear icon opens customization panel (toggle visibility, add custom fields).
-
-### Extension Framework (Addons Plugin)
-- **Migration 000015:** `addons` and `campaign_addons` tables with 11 seeded defaults.
-- Full plugin: model, repository, service, handler, routes, templ templates.
-- **Admin page** (`/admin/addons`): Addon management with status controls, creation form.
-- **Campaign page** (`/campaigns/:id/addons/settings`): Per-campaign addon toggle (HTMX).
-- Grouped by category (module/widget/integration) with enable/disable buttons.
-- Wired into admin sidebar, admin dashboard, campaign settings.
-
-### Sync API Plugin
-- **Migration 000016:** `api_keys`, `api_request_log`, `api_security_events`, `api_ip_blocklist`.
-- API key management: bcrypt-hashed, per-campaign, permissions (read/write/sync),
-  optional IP allowlist, rate limits, expiry.
-- **Owner dashboard** (`/campaigns/:id/api-keys`): Create/toggle/revoke keys,
-  usage stats, security notes.
-- **Admin monitoring dashboard** (`/admin/api`): Stats overview (8 cards),
-  request/security time series charts, top IPs/paths/keys tables,
-  security event table with resolve actions, IP blocklist management,
-  key oversight with activate/deactivate/revoke.
-- Security event types: rate_limit, auth_failure, ip_blocked, key_expired, suspicious.
-- Wired into admin sidebar, admin dashboard, campaign settings.
-
-### REST API v1 Endpoints
-- **Middleware:** `RequireAPIKey` (Bearer token auth + bcrypt verify + IP check +
-  request logging), `RateLimit` (fixed-window per-minute), `RequireCampaignMatch`,
-  `RequirePermission` (read/write/sync).
-- **Read endpoints:** GET campaign info, list/get entity types, list/get entities
-  (with search, pagination, type filter, privacy enforcement).
-- **Write endpoints:** POST/PUT/DELETE entities, PUT fields-only update.
-- **Sync endpoint:** POST bidirectional sync — pull entities modified since timestamp,
-  push batch create/update/delete operations, returns server_time for next sync.
-- Middleware chain: RequireAPIKey → RateLimit → RequireCampaignMatch → RequirePermission.
-- Privacy enforcement uses key owner's campaign role for entity visibility.
-
-### Player Notes Widget (Phase C)
-- **Migration 000017:** `notes` table (per-user, per-campaign, optional entity scoping).
-- **Migration 000018:** Activates `player-notes` addon from planned to active.
-- **Widget backend:** `internal/widgets/notes/` — model, repository, service, handler, routes.
-- **Widget frontend:** `static/js/widgets/notes.js` — floating panel (bottom-right),
-  tab system (This Page / All Notes), text blocks, interactive checklists.
-- **CSS:** Notes panel styles in `input.css` (fab button, panel, cards, checklists).
-- **Mount point:** Auto-rendered in app layout when user is in a campaign.
-- **API routes:** CRUD at `/campaigns/:id/notes`, checklist toggle, scope filtering.
-- **Addon integration:** Uses existing `player-notes` addon (disabled by default,
-  owner enables per-campaign via addons settings page).
-
-### Terminology Standardization (Phase C)
-- Two-tier user-facing model: **Plugins** (core, always-on) and **Extensions** (optional, toggleable).
-- Renamed all user-facing "Addon" → "Extension" in admin and campaign templates.
-- Admin dashboard: Removed separate "Modules" card, unified into "Extensions" card with count.
-- Admin sidebar: Removed "Modules" link, renamed "Addons" → "Extensions".
-- Campaign settings: Removed duplicate "Game Modules" section (modules in extensions system).
-- **Migration 000019:** Fixes addon table status mismatches (sync-api→active, game modules→planned,
-  dice-roller→planned, media-gallery→planned).
-- Internal Go code (types, function names, routes, DB tables) intentionally kept as `addon` —
-  only user-facing text was renamed.
-
-### Sidebar Drill-Down Fix
-- Root cause: click events bubbled from category links to mainPanel handler,
-  which immediately called drillOut(). Fixed with e.stopPropagation().
-- Switched from calc() to pixel values in translate3d for reliability.
-- Added CSS rules for peek mode: flex-direction: row-reverse on nav links,
-  text-align: right on nav content (so icons/text visible in 10px peek strip).
-
-### Notes Widget Addon Gating
-- Added `SetEnabledAddons` / `IsAddonEnabled` context helpers in layouts/data.go.
-- LayoutInjector queries AddonService.ListForCampaign and populates enabled slugs.
-- NotesWidget only renders when `player-notes` addon is enabled per campaign.
-
-### Notes Widget Quick-Capture Overhaul
-- Panel opens with always-visible quick-add input at top, auto-focused.
-- Type + Enter = instant note creation (no extra clicks).
-- Dual mode: "This Page" (auto on entity pages) vs "All Notes" (campaign-wide).
-- Responsive sizing: full-width bottom sheet on mobile, 320px on medium, 400px on large.
-- Removed separate "+" button; quick-add bar replaces it.
-
-### Unified Entity Type Configuration Page
-- New route: `/campaigns/:id/entity-types/:etid/config`
-- Tabbed interface (Alpine.js): Layout, Attributes, Dashboard, Nav Panel.
-- Layout tab embeds the existing template-editor drag-and-drop widget.
-- Attributes tab mounts entity-type-editor widget (field-only mode).
-- Dashboard tab has description editor + pinned pages reference.
-- Nav Panel tab has icon picker, color picker, name/plural name editing.
-- Entity type cards on management page updated: "Configure" link → config page.
-
-### Notes Panel Resize + Taller Default
-- Default sizes bumped: mobile 75vh, medium 340×520px, large 400×600px.
-- Drag-to-resize handle on top-left corner (min 280×300px).
-- Dimensions persist in localStorage (`chronicle_notes_size`).
-- Desktop-only restore; mobile always uses full-width bottom sheet.
-
-### Entity Type Editor Fields-Only Mode
-- `data-fields-only="true"` hides name/icon/color sections.
-- Used by Attributes tab on unified config page.
-- Save sends original name/icon/color from data attrs alongside updated fields.
-
-### Campaign Dashboard Enhancement
-- Category quick-nav grid with entity type icons, colors, and page counts.
-- Reads from layout context (GetEntityTypes/GetEntityCount) — zero new queries.
-- Responsive: 2–5 columns depending on viewport.
-- Quick actions row tightened to horizontal icon+text layout.
-
-### Grid/Table View Toggle
-- Alpine.js-powered toggle on category dashboards and All Pages list.
-- Per-category localStorage persistence (`chronicle_cat_view_{id}`).
-- Table view: name with image/icon, category type badge, tags, relative time, privacy.
-- Shared `EntityTableRow` templ component used by both views.
-- `relativeTime()` helper for human-friendly timestamps (1m ago, 3d ago).
-
-### Recent Pages on Campaign Dashboard
-- New `ListRecent` repository method: `ORDER BY updated_at DESC LIMIT ?`.
-- `RecentEntityLister` interface on campaigns handler (avoids circular imports).
-- Adapter in routes.go bridges entities.EntityService → campaigns.RecentEntity.
-- Dashboard shows 8 most recent pages in a 4-column grid with type badge + timestamp.
-
-### Password Reset Flow
-- **Migration 000020:** `password_reset_tokens` table with SHA-256 hashed tokens.
-- Repository: `UpdatePassword`, `CreateResetToken`, `FindResetToken`, `MarkResetTokenUsed`.
-- Service: `InitiatePasswordReset` (generates token, sends email via SMTP),
-  `ValidateResetToken`, `ResetPassword`. Always returns nil on unknown emails
-  to prevent enumeration. Tokens expire in 1 hour, single-use.
-- Handler: `GET/POST /forgot-password`, `GET/POST /reset-password` with 3/min rate limit.
-- Templates: `forgot_password.templ` (request form + sent confirmation),
-  `reset_password.templ` (new password form with expired/used token error states).
-- Login page: "Forgot password?" link, green success banner after reset.
-- `ConfigureMailSender()` wires SMTP into auth service in routes.go.
-
-### Unit Test Coverage
-- **Auth service:** 26 tests — Register, Login helpers, password hashing, password
-  reset flow (initiate/validate/reset), token hashing, UUID generation.
-- **Addons service:** 28 tests — CRUD, validation, slug uniqueness, enable/disable
-  for campaigns, status transitions, input trimming.
-- **Notes widget service:** 28 tests — Create/Update/Delete, title validation &
-  defaults, checklist toggle (bounds, type, toggle logic), list queries, ID generation.
-- **Syncapi service:** 31 tests — Key creation (validation, bcrypt, defaults),
-  authentication (prefix lookup, bcrypt verify, deactivated, expired), activate/
-  deactivate/revoke, IP blocking, non-critical logging, default limits, model methods.
-- **Entities service:** Existing 20+ tests, updated mock for ListRecent interface.
-
-### Phase D Sprint 1 + 1.5 (2026-02-22)
-- Campaign Customization Hub page (`/campaigns/:id/customize`) with 4 tabs.
-- Navigation tab: sidebar config widget + custom sections/links editor widget.
-- Categories tab: entity type grid with links to per-type config pages.
-- Dashboard + Category Dashboards tabs: "coming soon" placeholders.
-- Settings page: replaced duplicated Categories section with link to Customize.
-- Sidebar: "Customize" link (paintbrush icon, owner-only) between Activity Log and Settings.
-- Custom nav sections and links render in the actual sidebar.
-- New widget: `sidebar_nav_editor.js` (CRUD for custom sections + links).
-- Context helpers: `SetCustomSections/GetCustomSections`, `SetCustomLinks/GetCustomLinks`.
-- Admin panel flickering fix: `x-cloak` on admin-slide div.
-- Sidebar debug logs: removed 3 `console.log()` from `sidebar_drill.js`.
-
-### Phase D Sprint 2: Dashboard Editor (2026-02-22)
-- Migration 000021: `dashboard_layout JSON DEFAULT NULL` on campaigns + entity_types.
-- Dashboard layout types: DashboardLayout/Row/Column/Block in model.go.
-- Repository: all campaign queries updated for dashboard_layout column, UpdateDashboardLayout method.
-- Service: UpdateDashboardLayout (validation: max 50 rows, max 20 blocks/row, widths 1-12, valid block types), GetDashboardLayout, ResetDashboardLayout.
-- Handler: GET/PUT/DELETE `/campaigns/:id/dashboard-layout` (owner-only).
-- Widget: `dashboard_editor.js` — drag-and-drop layout builder with palette (6 block types), row presets (full/half/thirds/quarter/sidebar), block config dialogs, save/reset.
-- Templ: `dashboard_blocks.templ` — DashboardBlockSwitch + 6 block components (welcome_banner, category_grid, recent_pages, entity_list, text_block, pinned_pages).
-- Show page: `show.templ` refactored — ParseDashboardLayout() → customDashboard (12-col grid) or defaultDashboard (hardcoded original).
-- Customize page: Dashboard tab now mounts dashboard-editor widget.
-- Helper functions: dashColSpan (col-span CSS), dashGridClass (responsive grid), limitRecentEntities (configurable limit), dashboardRelativeTime.
-
-### Phase D Sprint 3: Category Dashboards (2026-02-22)
-- `dashboard_editor.js` parameterized with `data-block-types` attribute for custom palettes.
-- EntityType model: added `DashboardLayout *string` field + `ParseCategoryDashboardLayout()` method.
-- Repository: all entity type queries updated for `dashboard_layout` column, `UpdateDashboardLayout()` method.
-- Service: `GetCategoryDashboardLayout`, `UpdateCategoryDashboardLayout` (validation), `ResetCategoryDashboardLayout`.
-- Handler + routes: GET/PUT/DELETE `/campaigns/:id/entity-types/:etid/dashboard-layout` (owner-only).
-- 3 new block type constants: `category_header`, `entity_grid`, `search_bar` (+ reuses `pinned_pages`, `text_block`, `recent_pages`).
-- `category_blocks.templ`: CategoryBlockSwitch + 6 category block components.
-- `category_dashboard.templ`: conditional render — custom layout (12-col grid) or hardcoded default.
-- Customize page: Category Dashboards tab — Alpine.js category selector + dashboard-editor widget per category.
-
-### Phase D Sprint 3.5: Page Layouts Tab (2026-02-23)
-- Fifth "Page Layouts" tab in Customization Hub for editing entity type page templates.
-- HTMX lazy-loading: category selector buttons fetch template-editor fragment on demand.
-- `EntityTypeLayoutFetcher` cross-plugin interface + adapter (same pattern as EntityTypeLister).
-- `template_editor.js`: added `destroy()` method for HTMX lifecycle cleanup, scoped
-  `findSaveBtn()`/`findSaveStatus()` helpers for fragment-embedded save controls.
-- Entity type config page back button now returns to Customization Hub.
+### Quick Search (Ctrl+K) — COMPLETE
+- **`static/js/search_modal.js`**: Standalone JS module (not a widget — global scope).
+  Opens centered modal overlay with search input, result list, keyboard hints.
+- **Keyboard shortcut**: Ctrl+K / Cmd+K opens/closes modal. Escape closes.
+- **Search**: Uses existing `GET /campaigns/:id/entities/search?q=...` JSON endpoint
+  (Accept: application/json). 200ms debounce, AbortController for in-flight cancellation.
+- **Results**: Entity type icon + color, entity name, type name. Mouse hover and
+  arrow keys for navigation, Enter to open, click to navigate.
+- **Topbar**: Replaced inline HTMX search input with a trigger button that calls
+  `Chronicle.openSearch()`. Shows search icon, "Search..." label, and Cmd+K kbd hint.
+  Works on all screen sizes (responsive).
+- **Campaign-scoped**: Extracts campaign ID from URL; modal only opens when in a
+  campaign context (pattern: /campaigns/:id/...).
+- **Cleanup**: Closes on `chronicle:navigated` (hx-boost navigation).
+- **Script loaded**: Added to `base.templ` after all widget scripts.
 
 ### In Progress
-- Phase D Sprint 4: Player Notes Overhaul (next)
+- Nothing currently in progress.
 
 ### Blocked
 - Nothing blocked
 
 ## Active Branch
-`claude/review-project-foundation-8rzHX`
+`claude/document-architecture-tiers-yuIuH`
 
 ## Competitive Analysis & Roadmap
 Created `.ai/roadmap.md` with comprehensive comparison vs WorldAnvil, Kanka, and
@@ -247,19 +49,16 @@ LegendKeeper. Key findings:
 - API technical documentation needed for Foundry VTT integration
 - Foundry VTT module planned in phases: notes sync → calendar sync → actor sync
 - Features organized by tier: Core, Plugin, Module, Widget, External
-- Revised priority phases: D (finishing) → E (UX) → F (calendar/time) → G (maps) →
+- Revised priority phases: D (complete) → E (UX) → F (calendar/time) → G (maps) →
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Sprint 4:** Player Notes Overhaul — Migration 000022, edit locking backend
-   (pessimistic), rich text integration (TipTap), shared notes, version history,
-   template block mount.
-2. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle,
-   widget lifecycle audit.
-3. **Phase E:** Quick Search (Ctrl+K), Entity Nesting (parent_id UI), Backlinks,
-   API documentation.
-4. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
+1. **Phase E continued:** Entity Nesting (parent_id + tree UI + breadcrumbs),
+   Backlinks ("Referenced by" on entity profiles), API documentation.
+2. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
    See `.ai/roadmap.md` for full data model and implementation plan.
+3. **Handler-level "view as player":** Extend toggle to filter is_private entities
+   at repository level (currently template-only).
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -283,3 +82,8 @@ LegendKeeper. Key findings:
 - **2026-02-20: Phase B** — Discover page split, template editor block resizing &
   visibility, field overrides, extension framework (addons), sync API plugin with
   admin/owner dashboards, REST API v1 endpoints (read/write/sync)
+- **2026-02-20: Phase C** — Player notes widget, terminology standardization
+- **2026-02-22 to 2026-02-24: Phase D** — Customization Hub (sidebar config, custom
+  nav, dashboard editor, category dashboards, page layouts tab), Player Notes Overhaul
+  (shared notes, edit locking, version history, rich text), Sprint 5 polish (hx-boost
+  sidebar, widget lifecycle, "view as player" toggle)

@@ -181,6 +181,82 @@
     }
   });
 
+  // --- Sidebar Active Link Highlighting (for hx-boost navigation) ---
+  // When hx-boost swaps only #main-content, the sidebar is NOT re-rendered.
+  // Active/inactive CSS classes on sidebar links must be updated client-side
+  // after the URL changes. Uses longest-prefix-match to highlight the most
+  // specific matching link.
+
+  var ACTIVE_CLASSES = ['bg-sidebar-hover', 'text-sidebar-active'];
+  var INACTIVE_CLASSES = ['text-sidebar-text', 'hover:bg-sidebar-hover', 'hover:text-sidebar-active'];
+
+  /**
+   * Update sidebar navigation link active/inactive CSS classes
+   * based on the current URL path.
+   */
+  function updateSidebarActiveLinks() {
+    var path = window.location.pathname;
+    var sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    // Collect all nav links (skip category drill-down links).
+    var links = sidebar.querySelectorAll('a');
+    var candidates = [];
+
+    for (var i = 0; i < links.length; i++) {
+      var link = links[i];
+      var href = link.getAttribute('href');
+      if (!href) continue;
+      // Only process styled nav links (those with active or inactive classes).
+      if (!link.classList.contains('text-sidebar-text') &&
+          !link.classList.contains('text-sidebar-active')) continue;
+      // Skip category drill-down links (handled by sidebar_drill.js).
+      if (link.classList.contains('sidebar-category-link')) continue;
+
+      candidates.push({ el: link, href: href });
+    }
+
+    // Find the longest matching href (most specific match wins).
+    var bestHref = null;
+    var bestLen = -1;
+    for (var j = 0; j < candidates.length; j++) {
+      var h = candidates[j].href;
+      if (path === h || path.indexOf(h + '/') === 0) {
+        if (h.length > bestLen) {
+          bestLen = h.length;
+          bestHref = h;
+        }
+      }
+    }
+
+    // Apply active/inactive classes.
+    for (var k = 0; k < candidates.length; k++) {
+      var c = candidates[k];
+      var isActive = (c.href === bestHref);
+      var m;
+
+      if (isActive) {
+        for (m = 0; m < INACTIVE_CLASSES.length; m++) c.el.classList.remove(INACTIVE_CLASSES[m]);
+        for (m = 0; m < ACTIVE_CLASSES.length; m++) c.el.classList.add(ACTIVE_CLASSES[m]);
+      } else {
+        for (m = 0; m < ACTIVE_CLASSES.length; m++) c.el.classList.remove(ACTIVE_CLASSES[m]);
+        for (m = 0; m < INACTIVE_CLASSES.length; m++) c.el.classList.add(INACTIVE_CLASSES[m]);
+      }
+    }
+  }
+
+  // Update sidebar active links after hx-boost pushes a new URL.
+  // Also close mobile sidebar and notify Alpine.js components.
+  document.addEventListener('htmx:pushedIntoHistory', function () {
+    updateSidebarActiveLinks();
+    window.dispatchEvent(new CustomEvent('chronicle:navigated'));
+  });
+
+  // Also handle browser back/forward navigation.
+  window.addEventListener('popstate', function () {
+    requestAnimationFrame(updateSidebarActiveLinks);
+  });
+
   // Expose mount/destroy for manual use if needed.
   Chronicle.mountWidgets = mountWidgets;
   Chronicle.destroyWidget = destroyElement;

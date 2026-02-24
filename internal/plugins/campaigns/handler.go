@@ -477,6 +477,67 @@ func (h *Handler) ResetDashboardLayout(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// --- View As Player Toggle ---
+
+// viewAsPlayerCookie is the cookie name for the "view as player" display toggle.
+const viewAsPlayerCookie = "chronicle_view_as_player"
+
+// ToggleViewAsPlayer toggles the "view as player" cookie for campaign owners
+// (POST /campaigns/:id/toggle-view-mode). When active, templates render as
+// if the owner has the Player role -- hiding owner-only UI and private entities.
+// This is a display-only toggle; the owner retains actual ownership for access control.
+func (h *Handler) ToggleViewAsPlayer(c echo.Context) error {
+	// Read current cookie state and toggle.
+	viewing := false
+	if cookie, err := c.Cookie(viewAsPlayerCookie); err == nil && cookie.Value == "1" {
+		viewing = true
+	}
+
+	req := c.Request()
+	secure := req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https"
+
+	if viewing {
+		// Clear the cookie.
+		c.SetCookie(&http.Cookie{
+			Name:     viewAsPlayerCookie,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   secure,
+			MaxAge:   -1,
+		})
+	} else {
+		// Set the cookie.
+		c.SetCookie(&http.Cookie{
+			Name:     viewAsPlayerCookie,
+			Value:    "1",
+			Path:     "/",
+			HttpOnly: false, // JS reads this for toggle state indicator.
+			Secure:   secure,
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   30 * 24 * 60 * 60, // 30 days.
+		})
+	}
+
+	// HTMX: tell the client to do a full page refresh to re-render everything.
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Refresh", "true")
+		return c.NoContent(http.StatusNoContent)
+	}
+
+	// Regular request: redirect back to the current page.
+	referer := req.Header.Get("Referer")
+	if referer == "" {
+		cc := GetCampaignContext(c)
+		if cc != nil {
+			referer = "/campaigns/" + cc.Campaign.ID
+		} else {
+			referer = "/campaigns"
+		}
+	}
+	return c.Redirect(http.StatusSeeOther, referer)
+}
+
 // --- Members ---
 
 // Members renders the member list page (GET /campaigns/:id/members).

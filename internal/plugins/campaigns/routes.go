@@ -54,6 +54,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.PUT("/dashboard-layout", h.UpdateDashboardLayout, RequireRole(RoleOwner))
 	cg.DELETE("/dashboard-layout", h.ResetDashboardLayout, RequireRole(RoleOwner))
 
+	// "View as player" display toggle (Owner only).
+	cg.POST("/toggle-view-mode", h.ToggleViewAsPlayer, RequireRole(RoleOwner))
+
 	// Member management (Owner only).
 	cg.POST("/members", h.AddMember, RequireRole(RoleOwner))
 	cg.DELETE("/members/:uid", h.RemoveMember, RequireRole(RoleOwner))
