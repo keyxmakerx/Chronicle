@@ -58,8 +58,8 @@ templ App(title string) {
 			</div>
 		</div>
 		<!-- Notes widget mount point (floating panel, bottom-right).
-		     Gated behind the "player-notes" addon — off by default. -->
-		if InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "player-notes") {
+		     Gated behind the "notes" addon — off by default. -->
+		if InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes") {
 			@NotesWidget()
 		}
 	}

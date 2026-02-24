@@ -96,9 +96,9 @@ var validStatuses = map[AddonStatus]bool{
 // codebase. Only installed addons can be activated by admins or enabled
 // by campaign owners. Update this set as new addons are built.
 var installedAddons = map[string]bool{
-	"sync-api":     true,
-	"player-notes": true,
-	"attributes":   true,
+	"sync-api":   true,
+	"notes":      true,
+	"attributes": true,
 }
 
 // IsInstalled reports whether an addon slug has backing code in the codebase.
