@@ -25,9 +25,11 @@ const (
 	keyActivePath    ctxKey = "layout_active_path"
 	keyEntityTypes   ctxKey = "layout_entity_types"
 	keyEntityCounts  ctxKey = "layout_entity_counts"
-	keyEnabledAddons   ctxKey = "layout_enabled_addons"
-	keyCustomSections  ctxKey = "layout_custom_sections"
-	keyCustomLinks     ctxKey = "layout_custom_links"
+	keyEnabledAddons     ctxKey = "layout_enabled_addons"
+	keyCustomSections    ctxKey = "layout_custom_sections"
+	keyCustomLinks       ctxKey = "layout_custom_links"
+	keyViewingAsPlayer   ctxKey = "layout_viewing_as_player"
+	keyIsOwner           ctxKey = "layout_is_owner"
 )
 
 // SidebarEntityType holds the minimum entity type info needed for sidebar
@@ -318,4 +320,31 @@ func SetCustomLinks(ctx context.Context, links []SidebarLink) context.Context {
 func GetCustomLinks(ctx context.Context) []SidebarLink {
 	links, _ := ctx.Value(keyCustomLinks).([]SidebarLink)
 	return links
+}
+
+// --- View As Player (owner preview toggle) ---
+
+// SetViewingAsPlayer marks whether the owner is currently in "view as player" mode.
+func SetViewingAsPlayer(ctx context.Context, viewing bool) context.Context {
+	return context.WithValue(ctx, keyViewingAsPlayer, viewing)
+}
+
+// IsViewingAsPlayer returns true if the owner has toggled "view as player" mode.
+func IsViewingAsPlayer(ctx context.Context) bool {
+	viewing, _ := ctx.Value(keyViewingAsPlayer).(bool)
+	return viewing
+}
+
+// SetIsOwner stores whether the user's actual campaign role is Owner.
+// This is separate from GetCampaignRole because "view as player" overrides
+// GetCampaignRole to RolePlayer, but the toggle button must still render.
+func SetIsOwner(ctx context.Context, isOwner bool) context.Context {
+	return context.WithValue(ctx, keyIsOwner, isOwner)
+}
+
+// IsOwner returns true if the user's actual campaign role is Owner,
+// regardless of the "view as player" display override.
+func IsOwner(ctx context.Context) bool {
+	isOwner, _ := ctx.Value(keyIsOwner).(bool)
+	return isOwner
 }

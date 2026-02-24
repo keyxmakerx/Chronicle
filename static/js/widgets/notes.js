@@ -965,10 +965,45 @@ Chronicle.register('notes', {
       });
     }
 
+    // --- hx-boost navigation sync ---
+    // The notes widget is outside #main-content, so it persists across
+    // boosted navigations. Detect entity context changes and re-mount
+    // with the correct entity ID when the URL changes.
+    function onNavigated() {
+      var newEntityId = extractEntityIdFromUrl();
+      if (newEntityId !== entityId) {
+        // Update the data attribute so re-mount picks up the new entity.
+        if (newEntityId) {
+          el.setAttribute('data-entity-id', newEntityId);
+        } else {
+          el.removeAttribute('data-entity-id');
+        }
+        // Destroy and re-create the widget with the new entity context.
+        Chronicle.destroyWidget(el);
+        Chronicle.mountWidgets(el.parentElement || document);
+      }
+    }
+
+    /**
+     * Extract entity ID from the current URL.
+     * Matches /campaigns/{id}/entities/{eid}[/...].
+     */
+    function extractEntityIdFromUrl() {
+      var parts = window.location.pathname.split('/');
+      if (parts.length >= 5 && parts[3] === 'entities' &&
+          parts[4] !== 'new' && parts[4] !== 'search' && parts[4] !== '') {
+        return parts[4];
+      }
+      return '';
+    }
+
+    window.addEventListener('chronicle:navigated', onNavigated);
+
     // Store references for cleanup.
     el._notesState = state;
     el._notesFab = fab;
     el._notesPanel = panel;
+    el._notesNavHandler = onNavigated;
   },
 
   /**
@@ -976,6 +1011,11 @@ Chronicle.register('notes', {
    * @param {HTMLElement} el - Mount point element.
    */
   destroy: function (el) {
+    // Remove hx-boost navigation handler.
+    if (el._notesNavHandler) {
+      window.removeEventListener('chronicle:navigated', el._notesNavHandler);
+      delete el._notesNavHandler;
+    }
     // Release any held lock and stop heartbeat.
     if (el._notesState) {
       if (el._notesState.lockHeartbeatTimer) {

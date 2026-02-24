@@ -92,5 +92,9 @@ Chronicle.register('image-upload', {
           fileInput.value = '';
         });
     });
+  },
+
+  destroy: function (el) {
+    el.innerHTML = '';
   }
 });

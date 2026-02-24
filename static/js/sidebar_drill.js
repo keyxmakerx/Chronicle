@@ -242,6 +242,14 @@
     });
   }
 
+  // Close drill-down after hx-boost navigation (user navigated away from
+  // the category context via a boosted sidebar link like Dashboard or Members).
+  window.addEventListener('chronicle:navigated', function () {
+    if (isDrilled) {
+      drillOut();
+    }
+  });
+
   // Initialize when DOM is ready.
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

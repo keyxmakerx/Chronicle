@@ -26,9 +26,9 @@ see `.ai/roadmap.md`.
 - [x] Category Dashboards (Sprint 3: per-category layout editor)
 - [x] Page Layouts tab (Sprint 3.5: HTMX lazy-loaded template-editor in Customize hub)
 - [x] Player Notes Overhaul (Sprint 4: locking, rich text, versions, shared notes)
-- [ ] hx-boost sidebar navigation (Sprint 5: prevent full page reloads)
-- [ ] "View as player" toggle (Sprint 5)
-- [ ] Widget lifecycle audit (check all widgets for missing destroy() cleanup)
+- [x] hx-boost sidebar navigation (Sprint 5: prevent full page reloads)
+- [x] "View as player" toggle (Sprint 5)
+- [x] Widget lifecycle audit (check all widgets for missing destroy() cleanup)
 
 ### Phase E: Core UX & Discovery (Next)
 - [ ] Quick search (Ctrl+K) — global search modal for entities, categories, notes (CRITICAL)
@@ -90,7 +90,7 @@ see `.ai/roadmap.md`.
 - [ ] Audit service tests (pagination, validation, fire-and-forget)
 - [ ] Media service tests (file validation, thumbnail generation)
 - [ ] Settings service tests (limit resolution, override priority)
-- [ ] Widget lifecycle audit (destroy methods, event listener leaks)
+- [x] Widget lifecycle audit (destroy methods, event listener leaks)
 - [ ] HTMX fragment edge cases (CSRF propagation, double-init, nested targets)
 - [ ] Plugin/addon system stress test (JS load failures, boot.js resilience)
 
@@ -281,3 +281,13 @@ see `.ai/roadmap.md`.
 - [x] Frontend: notes.js with lock/unlock flow, heartbeat, share toggle, version panel, lock toast
 - [x] CSS: shared note accent, lock/shared badges, toast animation, rich text styles, version list
 - [x] Tests: all 28 service tests pass, mock updated with new repo methods
+
+### Phase D Sprint 5: Polish (2026-02-24)
+- [x] hx-boost sidebar navigation: `hx-boost="true"` on sidebar nav + admin links, `hx-select="#main-content"` for partial swaps
+- [x] Active link highlighting via `updateSidebarActiveLinks()` in boot.js (longest-prefix-match)
+- [x] `hx-boost="false"` on category links, custom links, context-switching links
+- [x] `chronicle:navigated` event for Alpine.js mobile sidebar close + sidebar_drill.js panel close
+- [x] Widget lifecycle: tag_picker closeHandler leak fix, image_upload destroy method, notes entity ID sync
+- [x] "View as player" toggle: cookie-based, LayoutInjector role override, topbar button, banner
+- [x] Context helpers: `SetViewingAsPlayer`/`IsViewingAsPlayer`, `SetIsOwner`/`IsOwner`
+- [x] Toggle endpoint: `POST /campaigns/:id/toggle-view-mode` (owner-only, HX-Refresh response)

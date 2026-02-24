@@ -16,7 +16,7 @@ import "strings"
 // topbar. The main content area is where page-specific content goes.
 templ App(title string) {
 	@Base(title) {
-		<div class="flex h-screen overflow-hidden" x-data="{ sidebarOpen: false }">
+		<div class="flex h-screen overflow-hidden" x-data="{ sidebarOpen: false }" @chronicle:navigated.window="sidebarOpen = false">
 			<!-- Mobile backdrop -->
 			<div
 				x-show="sidebarOpen"
@@ -38,6 +38,15 @@ templ App(title string) {
 			<div class="flex-1 flex flex-col overflow-hidden min-w-0">
 				<!-- Topbar -->
 				@Topbar()
+
+				<!-- "View as player" banner -->
+				if IsViewingAsPlayer(ctx) {
+					<div class="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-300">
+						<i class="fa-solid fa-eye-slash mr-1"></i>
+						Viewing as player
+						<span class="text-amber-400/70 ml-1">— owner-only content is hidden</span>
+					</div>
+				}
 
 				<!-- Flash messages -->
 				@FlashMessages()
@@ -88,7 +97,7 @@ templ Sidebar() {
 			<div id="sidebar-slider" class="flex transition-transform duration-300 ease-in-out" style="position:absolute;top:0;bottom:0;left:0;width:32rem;will-change:transform;transform:translate3d(0,0,0)">
 				<!-- Panel 1: Main navigation -->
 				<div id="sidebar-main" class="w-64 shrink-0 flex flex-col min-h-0 h-full">
-					<nav class="flex-1 py-4 overflow-y-auto">
+					<nav class="flex-1 py-4 overflow-y-auto" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
 						if InCampaign(ctx) {
 							@CampaignSidebarNav()
 						} else {
@@ -158,7 +167,7 @@ templ AdminSidebarNav() {
 			</svg>
 		</button>
 		<div class="admin-slide" :class="open && 'expanded'" x-cloak>
-			<div>
+			<div hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
 			<a
 				href="/admin"
 				class={ sidebarNavLink,
@@ -379,15 +388,15 @@ templ CampaignSidebarNav() {
 			</a>
 		}
 
-		<!-- Back to campaigns list + discover -->
+		<!-- Back to campaigns list + discover (full reload — leaves campaign context) -->
 		<div class="mt-4 pt-3 border-t border-gray-700">
-			<a href="/campaigns" class={ sidebarNavLink, sidebarNavInactive }>
+			<a href="/campaigns" hx-boost="false" class={ sidebarNavLink, sidebarNavInactive }>
 				<svg class="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
 				</svg>
 				All Campaigns
 			</a>
-			<a href="/" class={ sidebarNavLink, sidebarNavInactive }>
+			<a href="/" hx-boost="false" class={ sidebarNavLink, sidebarNavInactive }>
 				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 					<i class="fa-solid fa-compass text-xs"></i>
 				</span>
@@ -444,6 +453,7 @@ templ DefaultSidebarNav() {
 templ entityTypeLink(slug string, label string, color string, icon string, count int) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug)) }
+		hx-boost="false"
 		class={ "sidebar-category-link", sidebarNavLink,
 			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))),
 			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))) }
@@ -479,6 +489,7 @@ templ entityTypeLink(slug string, label string, color string, icon string, count
 templ customNavLink(link SidebarLink) {
 	<a
 		href={ templ.SafeURL(link.URL) }
+		hx-boost="false"
 		class={ sidebarNavLink, sidebarNavInactive }
 		if isExternalURL(link.URL) {
 			target="_blank"
@@ -591,6 +602,22 @@ templ Topbar() {
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
 				</svg>
 			</button>
+
+			<!-- View as player toggle (campaign owners only) -->
+			if InCampaign(ctx) && IsOwner(ctx) {
+				<button
+					hx-post={ "/campaigns/" + GetCampaignID(ctx) + "/toggle-view-mode" }
+					hx-headers={ `{"X-CSRF-Token":"` + GetCSRFToken(ctx) + `"}` }
+					class={
+						"p-2 rounded-md transition-colors",
+						templ.KV("bg-amber-500/20 text-amber-400 hover:bg-amber-500/30", IsViewingAsPlayer(ctx)),
+						templ.KV("text-fg-secondary hover:bg-surface-alt hover:text-fg", !IsViewingAsPlayer(ctx)),
+					}
+					title={ func() string { if IsViewingAsPlayer(ctx) { return "Viewing as player — click to return to owner view" }; return "View as player" }() }
+				>
+					<i class={ "fa-solid fa-eye text-sm", templ.KV("fa-eye-slash", IsViewingAsPlayer(ctx)), templ.KV("fa-eye", !IsViewingAsPlayer(ctx)) }></i>
+				</button>
+			}
 
 			if IsAuthenticated(ctx) {
 				<div class="flex items-center space-x-2">

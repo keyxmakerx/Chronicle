@@ -227,9 +227,14 @@ Chronicle.register('tag-picker', {
       if (!el.contains(e.target)) {
         state.isOpen = false;
         document.removeEventListener('click', closeHandler);
+        el._tagPickerCloseHandler = null;
         render();
       }
     }
+
+    // Store reference so destroy() can remove it if the widget is
+    // torn down while the dropdown is still open.
+    el._tagPickerCloseHandler = closeHandler;
 
     function filteredTags() {
       var term = state.search.toLowerCase();
@@ -329,6 +334,11 @@ Chronicle.register('tag-picker', {
   },
 
   destroy: function (el) {
+    // Remove click-outside handler if dropdown was open during destroy.
+    if (el._tagPickerCloseHandler) {
+      document.removeEventListener('click', el._tagPickerCloseHandler);
+      delete el._tagPickerCloseHandler;
+    }
     el.innerHTML = '';
     delete el._tagPickerState;
   }
