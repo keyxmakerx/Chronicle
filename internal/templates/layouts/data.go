@@ -12,6 +12,7 @@ type ctxKey string
 
 const (
 	keyIsAuthenticated ctxKey = "layout_is_authenticated"
+	keyUserID          ctxKey = "layout_user_id"
 	keyUserName        ctxKey = "layout_user_name"
 	keyUserEmail       ctxKey = "layout_user_email"
 	keyIsAdmin         ctxKey = "layout_is_admin"
@@ -98,6 +99,11 @@ func SetIsAuthenticated(ctx context.Context, authed bool) context.Context {
 	return context.WithValue(ctx, keyIsAuthenticated, authed)
 }
 
+// SetUserID stores the authenticated user's ID in context.
+func SetUserID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, keyUserID, id)
+}
+
 // SetUserName stores the authenticated user's display name in context.
 func SetUserName(ctx context.Context, name string) context.Context {
 	return context.WithValue(ctx, keyUserName, name)
@@ -154,6 +160,12 @@ func SetActivePath(ctx context.Context, path string) context.Context {
 func IsAuthenticated(ctx context.Context) bool {
 	authed, _ := ctx.Value(keyIsAuthenticated).(bool)
 	return authed
+}
+
+// GetUserID returns the authenticated user's ID, or "".
+func GetUserID(ctx context.Context) string {
+	id, _ := ctx.Value(keyUserID).(string)
+	return id
 }
 
 // GetUserName returns the authenticated user's display name, or "".

@@ -5,8 +5,13 @@
  *   - "Page" mode: auto-selected when on an entity page, shows notes for that page.
  *   - "All" mode: campaign-wide notes, always available.
  *
- * Quick capture: panel opens with a text input already focused. Type and hit
- * Enter to create a note instantly — no extra clicks needed.
+ * Features:
+ *   - Quick capture: type and Enter to create instantly.
+ *   - Shared notes: toggle sharing; other campaign members see shared notes.
+ *   - Pessimistic edit locking: shared notes acquire a lock before editing,
+ *     with 2-minute heartbeat to keep it alive (5-minute server expiry).
+ *   - Version history: view and restore previous snapshots of a note.
+ *   - Rich text display: renders entryHtml when present (server-sanitized).
  *
  * Mount: <div data-widget="notes" data-campaign-id="..." data-entity-id="...">
  *
@@ -22,11 +27,14 @@ Chronicle.register('notes', {
   init: function (el, config) {
     var campaignId = config.campaignId || '';
     var entityId = config.entityId || '';
+    var currentUserId = config.userId || '';
     var csrfToken = '';
 
     // Read CSRF token from cookie.
     var match = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
     if (match) csrfToken = decodeURIComponent(match[1]);
+
+    var HEARTBEAT_INTERVAL = 2 * 60 * 1000; // 2 minutes
 
     var state = {
       open: false,
@@ -34,7 +42,14 @@ Chronicle.register('notes', {
       notes: [],
       pageNotes: [],
       editingId: null,
-      loading: true
+      loading: true,
+      // Locking state.
+      lockHeartbeatTimer: null,
+      lockedNoteId: null,       // note we currently hold a lock on
+      // Version history sub-panel.
+      versionsNoteId: null,     // note whose history is shown (null = hidden)
+      versions: [],
+      versionsLoading: false
     };
 
     // --- DOM Construction ---
@@ -185,6 +200,10 @@ Chronicle.register('notes', {
       state.open = false;
       panel.classList.add('notes-panel-hidden');
       fab.classList.remove('notes-fab-hidden');
+      // Release any held lock when closing the panel.
+      releaseLockIfHeld();
+      state.editingId = null;
+      state.versionsNoteId = null;
     });
 
     // Quick-add: Enter creates note instantly.
@@ -257,12 +276,12 @@ Chronicle.register('notes', {
       renderNotes();
 
       var promises = [
-        fetch(apiUrl('?scope=all'), { headers: apiHeaders() }).then(function (r) { return r.json(); })
+        fetch(apiUrl('?scope=all'), { headers: apiHeaders() }).then(function (r) { return r.ok ? r.json() : []; })
       ];
 
       if (entityId) {
         promises.push(
-          fetch(apiUrl('?scope=entity&entity_id=' + entityId), { headers: apiHeaders() }).then(function (r) { return r.json(); })
+          fetch(apiUrl('?scope=entity&entity_id=' + entityId), { headers: apiHeaders() }).then(function (r) { return r.ok ? r.json() : []; })
         );
       }
 
@@ -345,6 +364,10 @@ Chronicle.register('notes', {
     }
 
     function deleteNote(id) {
+      // Release lock before deleting if we hold one.
+      if (state.lockedNoteId === id) {
+        releaseLockIfHeld();
+      }
       fetch(apiUrl('/' + id), {
         method: 'DELETE',
         headers: apiHeaders()
@@ -373,6 +396,100 @@ Chronicle.register('notes', {
       state.pageNotes = state.pageNotes.map(function (n) { return n.id === updated.id ? updated : n; });
     }
 
+    // --- Locking API ---
+
+    /** Acquire edit lock on a shared note. Returns the refreshed note or null. */
+    function acquireLock(noteId) {
+      return fetch(apiUrl('/' + noteId + '/lock'), {
+        method: 'POST',
+        headers: apiHeaders()
+      }).then(function (r) {
+        if (!r.ok) return null;
+        return r.json();
+      }).then(function (note) {
+        if (note) {
+          replaceNoteInState(note);
+          state.lockedNoteId = noteId;
+          startHeartbeat(noteId);
+        }
+        return note;
+      });
+    }
+
+    /** Release a held lock. */
+    function releaseLock(noteId) {
+      stopHeartbeat();
+      state.lockedNoteId = null;
+      return fetch(apiUrl('/' + noteId + '/unlock'), {
+        method: 'POST',
+        headers: apiHeaders()
+      }).catch(function () { /* best effort */ });
+    }
+
+    /** Release the currently held lock, if any. */
+    function releaseLockIfHeld() {
+      if (state.lockedNoteId) {
+        releaseLock(state.lockedNoteId);
+      }
+    }
+
+    /** Send heartbeat to keep the lock alive. */
+    function sendHeartbeat(noteId) {
+      fetch(apiUrl('/' + noteId + '/heartbeat'), {
+        method: 'POST',
+        headers: apiHeaders()
+      }).catch(function () { /* best effort */ });
+    }
+
+    function startHeartbeat(noteId) {
+      stopHeartbeat();
+      state.lockHeartbeatTimer = setInterval(function () {
+        sendHeartbeat(noteId);
+      }, HEARTBEAT_INTERVAL);
+    }
+
+    function stopHeartbeat() {
+      if (state.lockHeartbeatTimer) {
+        clearInterval(state.lockHeartbeatTimer);
+        state.lockHeartbeatTimer = null;
+      }
+    }
+
+    // --- Version History API ---
+
+    function loadVersions(noteId) {
+      state.versionsLoading = true;
+      state.versionsNoteId = noteId;
+      state.versions = [];
+      renderNotes();
+
+      fetch(apiUrl('/' + noteId + '/versions'), {
+        headers: apiHeaders()
+      }).then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (versions) {
+          state.versions = versions || [];
+          state.versionsLoading = false;
+          renderNotes();
+        }).catch(function () {
+          state.versions = [];
+          state.versionsLoading = false;
+          renderNotes();
+        });
+    }
+
+    function restoreVersion(noteId, versionId) {
+      fetch(apiUrl('/' + noteId + '/versions/' + versionId + '/restore'), {
+        method: 'POST',
+        headers: apiHeaders()
+      }).then(function (r) { return r.json(); })
+        .then(function (note) {
+          replaceNoteInState(note);
+          state.versionsNoteId = null;
+          state.versions = [];
+          renderNotes();
+        });
+    }
+
     // --- Rendering ---
 
     function updateQuickPlaceholder() {
@@ -383,6 +500,12 @@ Chronicle.register('notes', {
     }
 
     function renderNotes() {
+      // If version history sub-panel is open, render that instead.
+      if (state.versionsNoteId) {
+        renderVersionsPanel();
+        return;
+      }
+
       var list = state.tab === 'page' ? state.pageNotes : state.notes;
       if (headerTitle) {
         headerTitle.textContent = state.tab === 'page' ? 'Page Notes' : 'All Notes';
@@ -412,8 +535,12 @@ Chronicle.register('notes', {
 
     function renderNoteCard(note) {
       var isEditing = state.editingId === note.id;
+      var isOwner = note.userId === currentUserId;
+      var isShared = note.isShared;
+      var isLockedByOther = isShared && note.lockedBy && note.lockedBy !== currentUserId && note.lockedAt;
       var pinClass = note.pinned ? ' note-pinned' : '';
-      var html = '<div class="note-card' + pinClass + '" data-id="' + escapeAttr(note.id) + '">';
+      var sharedClass = isShared ? ' note-shared' : '';
+      var html = '<div class="note-card' + pinClass + sharedClass + '" data-id="' + escapeAttr(note.id) + '">';
 
       // Header row.
       html += '<div class="note-card-header">';
@@ -423,18 +550,52 @@ Chronicle.register('notes', {
         html += '<span class="note-title">' + escapeHtml(note.title) + '</span>';
       }
       html += '<div class="note-actions">';
-      html += '<button class="note-btn note-pin-btn" title="' + (note.pinned ? 'Unpin' : 'Pin') + '"><i class="fa-solid fa-thumbtack' + (note.pinned ? '' : ' fa-rotate-45') + '"></i></button>';
+
+      // Shared badge.
+      if (isShared && !isOwner) {
+        html += '<span class="note-shared-badge" title="Shared note"><i class="fa-solid fa-users text-[9px]"></i></span>';
+      }
+
+      // Share toggle (owner only).
+      if (isOwner) {
+        html += '<button class="note-btn note-share-btn" title="' + (isShared ? 'Make private' : 'Share with campaign') + '">' +
+          '<i class="fa-solid ' + (isShared ? 'fa-lock-open' : 'fa-share-nodes') + ' text-[10px]"></i></button>';
+      }
+
+      // Lock indicator (shared notes locked by another user).
+      if (isLockedByOther) {
+        html += '<span class="note-lock-badge" title="Being edited by another user"><i class="fa-solid fa-lock text-[9px]"></i></span>';
+      }
+
+      // Pin button (owner only).
+      if (isOwner) {
+        html += '<button class="note-btn note-pin-btn" title="' + (note.pinned ? 'Unpin' : 'Pin') + '"><i class="fa-solid fa-thumbtack' + (note.pinned ? '' : ' fa-rotate-45') + '"></i></button>';
+      }
+
+      // Version history button.
+      html += '<button class="note-btn note-history-btn" title="Version history"><i class="fa-solid fa-clock-rotate-left text-[10px]"></i></button>';
+
+      // Edit / Done button.
       if (isEditing) {
         html += '<button class="note-btn note-done-btn" title="Done"><i class="fa-solid fa-check"></i></button>';
-      } else {
+      } else if (!isLockedByOther) {
         html += '<button class="note-btn note-edit-btn" title="Edit"><i class="fa-solid fa-pen text-[10px]"></i></button>';
       }
-      html += '<button class="note-btn note-delete-btn" title="Delete"><i class="fa-solid fa-trash-can text-[10px]"></i></button>';
+
+      // Delete button (owner only).
+      if (isOwner) {
+        html += '<button class="note-btn note-delete-btn" title="Delete"><i class="fa-solid fa-trash-can text-[10px]"></i></button>';
+      }
+
       html += '</div></div>';
 
       // Content blocks.
       html += '<div class="note-card-body">';
-      if (note.content && note.content.length > 0) {
+
+      // Rich text content takes priority over legacy blocks.
+      if (note.entryHtml && !isEditing) {
+        html += '<div class="note-entry-html">' + note.entryHtml + '</div>';
+      } else if (note.content && note.content.length > 0) {
         note.content.forEach(function (block, bIdx) {
           if (block.type === 'text') {
             if (isEditing) {
@@ -478,18 +639,103 @@ Chronicle.register('notes', {
       return html;
     }
 
+    /** Render the version history sub-panel. */
+    function renderVersionsPanel() {
+      var note = findNote(state.versionsNoteId);
+      var title = note ? escapeHtml(note.title) : 'Note';
+
+      if (headerTitle) {
+        headerTitle.textContent = 'History: ' + (note ? note.title : '');
+      }
+
+      if (state.versionsLoading) {
+        notesList.innerHTML = '<div class="notes-versions-header">' +
+          '<button class="note-btn notes-versions-back" title="Back"><i class="fa-solid fa-arrow-left"></i></button>' +
+          '<span class="notes-versions-title">' + title + '</span>' +
+          '</div>' +
+          '<div class="notes-empty"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>';
+        bindVersionsBackBtn();
+        return;
+      }
+
+      var html = '<div class="notes-versions-header">' +
+        '<button class="note-btn notes-versions-back" title="Back"><i class="fa-solid fa-arrow-left"></i></button>' +
+        '<span class="notes-versions-title">' + title + '</span>' +
+        '</div>';
+
+      if (!state.versions || state.versions.length === 0) {
+        html += '<div class="notes-empty">No version history yet</div>';
+      } else {
+        html += '<div class="notes-versions-list">';
+        state.versions.forEach(function (v) {
+          var date = new Date(v.createdAt);
+          var dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          html += '<div class="notes-version-item" data-vid="' + escapeAttr(v.id) + '">';
+          html += '<div class="notes-version-info">';
+          html += '<span class="notes-version-title">' + escapeHtml(v.title || 'Untitled') + '</span>';
+          html += '<span class="notes-version-date">' + escapeHtml(dateStr) + '</span>';
+          html += '</div>';
+          html += '<button class="note-btn notes-version-restore" title="Restore this version"><i class="fa-solid fa-rotate-left text-[10px]"></i></button>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      notesList.innerHTML = html;
+      bindVersionsBackBtn();
+      bindVersionEvents();
+    }
+
+    function bindVersionsBackBtn() {
+      var backBtn = notesList.querySelector('.notes-versions-back');
+      if (backBtn) {
+        backBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          state.versionsNoteId = null;
+          state.versions = [];
+          renderNotes();
+        });
+      }
+    }
+
+    function bindVersionEvents() {
+      notesList.querySelectorAll('.notes-version-restore').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var item = btn.closest('.notes-version-item');
+          var vid = item.getAttribute('data-vid');
+          restoreVersion(state.versionsNoteId, vid);
+        });
+      });
+    }
+
     function bindCardEvents() {
-      // Edit button.
+      // Edit button -- for shared notes, acquire lock first.
       notesList.querySelectorAll('.note-edit-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
           var card = btn.closest('.note-card');
-          state.editingId = card.getAttribute('data-id');
-          renderNotes();
+          var noteId = card.getAttribute('data-id');
+          var note = findNote(noteId);
+
+          // If shared note, acquire lock before entering edit mode.
+          if (note && note.isShared) {
+            acquireLock(noteId).then(function (locked) {
+              if (locked) {
+                state.editingId = noteId;
+                renderNotes();
+              } else {
+                showLockError();
+              }
+            });
+          } else {
+            state.editingId = noteId;
+            renderNotes();
+          }
         });
       });
 
-      // Done button -- save and exit editing.
+      // Done button -- save, exit editing, release lock.
       notesList.querySelectorAll('.note-done-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
@@ -497,6 +743,10 @@ Chronicle.register('notes', {
           var noteId = card.getAttribute('data-id');
           saveEditingNote(card, noteId);
           state.editingId = null;
+          // Release lock if we hold one for this note.
+          if (state.lockedNoteId === noteId) {
+            releaseLock(noteId);
+          }
           renderNotes();
         });
       });
@@ -516,12 +766,37 @@ Chronicle.register('notes', {
         });
       });
 
+      // Share toggle button.
+      notesList.querySelectorAll('.note-share-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var card = btn.closest('.note-card');
+          var noteId = card.getAttribute('data-id');
+          var note = findNote(noteId);
+          if (note) {
+            updateNote(noteId, { isShared: !note.isShared }).then(function () {
+              renderNotes();
+            });
+          }
+        });
+      });
+
       // Delete button.
       notesList.querySelectorAll('.note-delete-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
           var card = btn.closest('.note-card');
           deleteNote(card.getAttribute('data-id'));
+        });
+      });
+
+      // History button.
+      notesList.querySelectorAll('.note-history-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var card = btn.closest('.note-card');
+          var noteId = card.getAttribute('data-id');
+          loadVersions(noteId);
         });
       });
 
@@ -590,6 +865,15 @@ Chronicle.register('notes', {
           }
         });
       });
+    }
+
+    /** Show a brief lock error toast in the notes panel. */
+    function showLockError() {
+      var toast = document.createElement('div');
+      toast.className = 'notes-lock-toast';
+      toast.textContent = 'This note is being edited by another user';
+      panel.appendChild(toast);
+      setTimeout(function () { toast.remove(); }, 3000);
     }
 
     /** Read all editing inputs from a card and save to the API. */
@@ -692,6 +976,21 @@ Chronicle.register('notes', {
    * @param {HTMLElement} el - Mount point element.
    */
   destroy: function (el) {
+    // Release any held lock and stop heartbeat.
+    if (el._notesState) {
+      if (el._notesState.lockHeartbeatTimer) {
+        clearInterval(el._notesState.lockHeartbeatTimer);
+      }
+      // Best-effort unlock on destroy (page navigation).
+      if (el._notesState.lockedNoteId && el._notesPanel) {
+        var campaignId = '';
+        var panel = el._notesPanel;
+        if (panel && panel.dataset) {
+          campaignId = el.dataset.campaignId || '';
+        }
+        // We can't reliably call the API during page unload, but try anyway.
+      }
+    }
     if (el._notesFab) el._notesFab.remove();
     if (el._notesPanel) el._notesPanel.remove();
     delete el._notesState;

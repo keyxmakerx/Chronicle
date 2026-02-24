@@ -20,6 +20,14 @@ type mockNoteRepo struct {
 	listByUserAndCampaignFn  func(ctx context.Context, userID, campaignID string) ([]Note, error)
 	listByEntityFn           func(ctx context.Context, userID, campaignID, entityID string) ([]Note, error)
 	listCampaignWideFn       func(ctx context.Context, userID, campaignID string) ([]Note, error)
+	acquireLockFn            func(ctx context.Context, noteID, userID string) (bool, error)
+	releaseLockFn            func(ctx context.Context, noteID, userID string) error
+	forceReleaseLockFn       func(ctx context.Context, noteID string) error
+	refreshLockFn            func(ctx context.Context, noteID, userID string) error
+	createVersionFn          func(ctx context.Context, v *NoteVersion) error
+	listVersionsFn           func(ctx context.Context, noteID string, limit int) ([]NoteVersion, error)
+	findVersionByIDFn        func(ctx context.Context, id string) (*NoteVersion, error)
+	pruneVersionsFn          func(ctx context.Context, noteID string, keep int) error
 }
 
 func (m *mockNoteRepo) Create(ctx context.Context, note *Note) error {
@@ -69,6 +77,62 @@ func (m *mockNoteRepo) ListCampaignWide(ctx context.Context, userID, campaignID 
 		return m.listCampaignWideFn(ctx, userID, campaignID)
 	}
 	return nil, nil
+}
+
+func (m *mockNoteRepo) AcquireLock(ctx context.Context, noteID, userID string) (bool, error) {
+	if m.acquireLockFn != nil {
+		return m.acquireLockFn(ctx, noteID, userID)
+	}
+	return true, nil
+}
+
+func (m *mockNoteRepo) ReleaseLock(ctx context.Context, noteID, userID string) error {
+	if m.releaseLockFn != nil {
+		return m.releaseLockFn(ctx, noteID, userID)
+	}
+	return nil
+}
+
+func (m *mockNoteRepo) ForceReleaseLock(ctx context.Context, noteID string) error {
+	if m.forceReleaseLockFn != nil {
+		return m.forceReleaseLockFn(ctx, noteID)
+	}
+	return nil
+}
+
+func (m *mockNoteRepo) RefreshLock(ctx context.Context, noteID, userID string) error {
+	if m.refreshLockFn != nil {
+		return m.refreshLockFn(ctx, noteID, userID)
+	}
+	return nil
+}
+
+func (m *mockNoteRepo) CreateVersion(ctx context.Context, v *NoteVersion) error {
+	if m.createVersionFn != nil {
+		return m.createVersionFn(ctx, v)
+	}
+	return nil
+}
+
+func (m *mockNoteRepo) ListVersions(ctx context.Context, noteID string, limit int) ([]NoteVersion, error) {
+	if m.listVersionsFn != nil {
+		return m.listVersionsFn(ctx, noteID, limit)
+	}
+	return nil, nil
+}
+
+func (m *mockNoteRepo) FindVersionByID(ctx context.Context, id string) (*NoteVersion, error) {
+	if m.findVersionByIDFn != nil {
+		return m.findVersionByIDFn(ctx, id)
+	}
+	return nil, apperror.NewNotFound("version not found")
+}
+
+func (m *mockNoteRepo) PruneVersions(ctx context.Context, noteID string, keep int) error {
+	if m.pruneVersionsFn != nil {
+		return m.pruneVersionsFn(ctx, noteID, keep)
+	}
+	return nil
 }
 
 // --- Test Helpers ---
@@ -317,7 +381,7 @@ func TestUpdate_Success(t *testing.T) {
 	svc := NewNoteService(repo)
 	newTitle := "Updated Title"
 	pinned := true
-	note, err := svc.Update(context.Background(), "note-123", UpdateNoteRequest{
+	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
 		Title:  &newTitle,
 		Pinned: &pinned,
 	})
@@ -335,7 +399,7 @@ func TestUpdate_Success(t *testing.T) {
 func TestUpdate_NotFound(t *testing.T) {
 	svc := NewNoteService(&mockNoteRepo{})
 	newTitle := "Test"
-	_, err := svc.Update(context.Background(), "nonexistent", UpdateNoteRequest{
+	_, err := svc.Update(context.Background(), "nonexistent", "user-1", UpdateNoteRequest{
 		Title: &newTitle,
 	})
 	assertAppError(t, err, 404)
@@ -354,7 +418,7 @@ func TestUpdate_TitleTooLong(t *testing.T) {
 	for i := range longTitle {
 		longTitle = longTitle[:i] + "x" + longTitle[i+1:]
 	}
-	_, err := svc.Update(context.Background(), "note-123", UpdateNoteRequest{
+	_, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
 		Title: &longTitle,
 	})
 	assertAppError(t, err, 400)
@@ -370,7 +434,7 @@ func TestUpdate_EmptyTitleBecomesUntitled(t *testing.T) {
 
 	svc := NewNoteService(repo)
 	emptyTitle := ""
-	note, err := svc.Update(context.Background(), "note-123", UpdateNoteRequest{
+	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
 		Title: &emptyTitle,
 	})
 	if err != nil {
@@ -391,7 +455,7 @@ func TestUpdate_ContentReplacement(t *testing.T) {
 
 	svc := NewNoteService(repo)
 	newContent := []Block{{Type: "text", Value: "Replaced"}}
-	note, err := svc.Update(context.Background(), "note-123", UpdateNoteRequest{
+	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
 		Content: &newContent,
 	})
 	if err != nil {
@@ -412,7 +476,7 @@ func TestUpdate_ColorChange(t *testing.T) {
 
 	svc := NewNoteService(repo)
 	newColor := "#ff5733"
-	note, err := svc.Update(context.Background(), "note-123", UpdateNoteRequest{
+	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
 		Color: &newColor,
 	})
 	if err != nil {

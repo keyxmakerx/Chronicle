@@ -352,6 +352,7 @@ func (a *App) RegisterRoutes() {
 		// User info from auth session.
 		if session := auth.GetSession(c); session != nil {
 			ctx = layouts.SetIsAuthenticated(ctx, true)
+			ctx = layouts.SetUserID(ctx, session.UserID)
 			ctx = layouts.SetUserName(ctx, session.Name)
 			ctx = layouts.SetUserEmail(ctx, session.Email)
 			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)

@@ -8,17 +8,12 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-23 -- Competitive analysis and roadmap brainstorm session. Created `.ai/roadmap.md`
-with full feature inventory organized by architectural tier (Core/Plugin/Module/Widget/External),
-competitive analysis vs WorldAnvil/Kanka/LegendKeeper, and revised priority phases E-K.
+2026-02-24 -- Sprint 4: Player Notes Overhaul. Full backend + frontend for shared
+notes, pessimistic edit locking, version history, and rich text display support.
 
 ## Current Phase
-**Phase D: IN PROGRESS.** Campaign Customization Hub at `/campaigns/:id/customize`
-with Navigation, Dashboard, Categories, Category Dashboards, and Page Layouts tabs.
-Settings page cleaned up. Custom sidebar sections/links editor wired up. Dashboard
-editor widget live for both campaign and per-category dashboards. Page Layouts tab
-lets owners edit entity type page templates directly from the hub via HTMX
-lazy-loaded template-editor widget.
+**Phase D: IN PROGRESS.** Sprint 4 (Player Notes Overhaul) complete. Sprint 5
+(Polish) next.
 
 ## What Was Built in Phase B (Summary)
 
@@ -229,14 +224,41 @@ lazy-loaded template-editor widget.
   `findSaveBtn()`/`findSaveStatus()` helpers for fragment-embedded save controls.
 - Entity type config page back button now returns to Customization Hub.
 
+### Phase D Sprint 4: Player Notes Overhaul (2026-02-24)
+- **Migration 000022:** Added collaboration columns to notes table: `is_shared`,
+  `last_edited_by`, `locked_by`, `locked_at`, `entry` (JSON), `entry_html` (TEXT).
+  Created `note_versions` table with FK cascade delete + indexes.
+- **Shared notes:** `is_shared` flag allows campaign members to see/edit shared notes.
+  Share toggle button in UI (owner only). Shared badge on other users' shared notes.
+  List queries return `user_id = ? OR is_shared = TRUE`.
+- **Pessimistic edit locking:** 5-minute auto-expiry with stale lock reclamation.
+  `AcquireLock`, `ReleaseLock`, `ForceReleaseLock` (owner override), `RefreshLock`
+  (heartbeat). Widget acquires lock before editing shared notes, sends 2-minute
+  heartbeat, releases on done/close. Lock indicator shown when another user holds lock.
+- **Version history:** Snapshot-on-save pattern — every Update/RestoreVersion creates
+  a version snapshot. `MaxVersionsPerNote = 50`, oldest pruned automatically.
+  Version history sub-panel with back navigation and one-click restore.
+- **Rich text support:** `entry` (ProseMirror JSON) + `entry_html` (pre-rendered HTML)
+  dual storage. Widget displays `entryHtml` in view mode when present.
+- **Layout data:** Added `SetUserID`/`GetUserID` to layout context, wired in
+  LayoutInjector, passed as `data-user-id` on notes widget mount point.
+- **Backend:** model.go, repository.go, service.go, handler.go, routes.go all updated.
+  Handler enforces: only owner can delete/pin/change sharing. Non-owners can edit
+  shared note content but not metadata. ForceUnlock requires campaign owner role.
+- **Frontend:** notes.js updated with lock/unlock flow, heartbeat timer, share toggle,
+  version history panel, lock error toast, rich text display.
+- **CSS:** Shared note accent, lock/shared badges, lock toast animation, rich text
+  styles, version history list styles.
+- **Tests:** All 28 service tests pass. Mock updated with all new repo methods.
+
 ### In Progress
-- Phase D Sprint 4: Player Notes Overhaul (next)
+- Phase D Sprint 5: Polish (next)
 
 ### Blocked
 - Nothing blocked
 
 ## Active Branch
-`claude/review-project-foundation-8rzHX`
+`claude/document-architecture-tiers-yuIuH`
 
 ## Competitive Analysis & Roadmap
 Created `.ai/roadmap.md` with comprehensive comparison vs WorldAnvil, Kanka, and
@@ -251,14 +273,11 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Sprint 4:** Player Notes Overhaul — Migration 000022, edit locking backend
-   (pessimistic), rich text integration (TipTap), shared notes, version history,
-   template block mount.
-2. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle,
+1. **Sprint 5:** Polish — hx-boost sidebar navigation, "View as player" toggle,
    widget lifecycle audit.
-3. **Phase E:** Quick Search (Ctrl+K), Entity Nesting (parent_id UI), Backlinks,
+2. **Phase E:** Quick Search (Ctrl+K), Entity Nesting (parent_id UI), Backlinks,
    API documentation.
-4. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
+3. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
    See `.ai/roadmap.md` for full data model and implementation plan.
 
 ## Known Issues Right Now
