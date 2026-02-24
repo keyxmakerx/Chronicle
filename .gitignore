@@ -52,6 +52,9 @@ Thumbs.db
 # --- Docker ---
 # Don't ignore docker-compose.yml or Dockerfile (those are tracked)
 
+# --- Node (Tailwind CLI & plugins) ---
+node_modules/
+
 # --- Temporary / Build ---
 tmp/
 dist/
