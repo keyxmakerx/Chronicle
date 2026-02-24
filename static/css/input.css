@@ -359,6 +359,14 @@
     overflow: hidden;
   }
 
+  /* ---- Mobile Sidebar Toggle ---- */
+  /* Uses !important to override the static -translate-x-full class,
+     which Tailwind generates AFTER translate-x-0 in the stylesheet
+     (breaking normal class-order specificity). */
+  .sidebar-mobile-open {
+    transform: translateX(0) !important;
+  }
+
   /* ---- Drill-Down Sidebar ---- */
 
   /* When the main panel is in "peek" mode (drilled into a category), it
