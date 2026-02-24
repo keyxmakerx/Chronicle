@@ -8,57 +8,31 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-24 -- Sprint 5: Polish. hx-boost sidebar navigation, "View as player"
-toggle, widget lifecycle cleanup.
+2026-02-24 -- Phase E: Quick Search (Ctrl+K) modal implemented.
 
 ## Current Phase
-**Phase D: COMPLETE.** Sprint 5 (Polish) wraps up Phase D. Phase E next.
+**Phase E: Core UX & Discovery.** Quick Search complete. Entity hierarchy next.
 
-## Sprint 5: Polish (2026-02-24)
+## Phase E: Core UX & Discovery (2026-02-24)
 
-### hx-boost Sidebar Navigation
-- Added `hx-boost="true" hx-target="#main-content" hx-select="#main-content"
-  hx-swap="innerHTML show:window:top"` to the sidebar `<nav>` and admin sidebar.
-- Category drill-down links, custom links, and context-switching links ("All
-  Campaigns", "Discover") have `hx-boost="false"` to prevent incorrect swaps.
-- **boot.js** active link highlighting: `updateSidebarActiveLinks()` uses
-  longest-prefix-match to determine which sidebar link should be active after
-  a boosted navigation. Listens for `htmx:pushedIntoHistory` and `popstate`.
-- **Mobile sidebar auto-close:** Dispatches `chronicle:navigated` custom event
-  that the Alpine.js layout component catches to close the mobile sidebar.
-- **sidebar_drill.js** closes drill-down panel on `chronicle:navigated`.
-
-### Widget Lifecycle Cleanup
-- **tag_picker.js**: Fixed `closeHandler` leak — stores reference on element,
-  removed in `destroy()` if dropdown was open during teardown.
-- **image_upload.js**: Added `destroy()` method for clean teardown.
-- **notes.js**: Added `chronicle:navigated` listener to detect entity context
-  changes during hx-boost navigation. Destroys and re-mounts the widget with
-  the correct `data-entity-id` when the URL changes. Handler reference stored
-  and cleaned up in `destroy()`.
-- **entity_tooltip.js / editor.js / editor_mention.js**: Confirmed as false
-  positives — global event delegation and Ctrl+S handler are by design.
-
-### "View as Player" Toggle
-- **Cookie-based toggle**: `chronicle_view_as_player` cookie — no session or
-  Redis changes needed. LayoutInjector reads cookie and overrides template role.
-- **LayoutInjector**: When owner has toggle active, `GetCampaignRole(ctx)` returns
-  `RolePlayer` instead of `RoleOwner`. New `IsOwner(ctx)` always returns actual
-  ownership for toggle button rendering. Entity counts also use effective role.
-- **Topbar button**: Eye/eye-slash icon, amber highlight when active, HTMX POST
-  to toggle endpoint with `HX-Refresh: true` for full re-render.
-- **Banner**: Amber notification bar below topbar: "Viewing as player — owner-only
-  content is hidden."
-- **Endpoint**: `POST /campaigns/:id/toggle-view-mode` (owner-only). Toggles cookie,
-  returns HTMX refresh or redirect.
-- **Context helpers**: `SetViewingAsPlayer`/`IsViewingAsPlayer`, `SetIsOwner`/`IsOwner`
-  in `internal/templates/layouts/data.go`.
-- **Phase 1 scope**: Template-level visibility only (sidebar links, dashboard blocks,
-  entity counts, DM-only sections). Handler-level privacy filtering (is_private
-  entities in lists) is a future enhancement.
+### Quick Search (Ctrl+K) — COMPLETE
+- **`static/js/search_modal.js`**: Standalone JS module (not a widget — global scope).
+  Opens centered modal overlay with search input, result list, keyboard hints.
+- **Keyboard shortcut**: Ctrl+K / Cmd+K opens/closes modal. Escape closes.
+- **Search**: Uses existing `GET /campaigns/:id/entities/search?q=...` JSON endpoint
+  (Accept: application/json). 200ms debounce, AbortController for in-flight cancellation.
+- **Results**: Entity type icon + color, entity name, type name. Mouse hover and
+  arrow keys for navigation, Enter to open, click to navigate.
+- **Topbar**: Replaced inline HTMX search input with a trigger button that calls
+  `Chronicle.openSearch()`. Shows search icon, "Search..." label, and Cmd+K kbd hint.
+  Works on all screen sizes (responsive).
+- **Campaign-scoped**: Extracts campaign ID from URL; modal only opens when in a
+  campaign context (pattern: /campaigns/:id/...).
+- **Cleanup**: Closes on `chronicle:navigated` (hx-boost navigation).
+- **Script loaded**: Added to `base.templ` after all widget scripts.
 
 ### In Progress
-- Nothing — Sprint 5 complete.
+- Nothing currently in progress.
 
 ### Blocked
 - Nothing blocked
@@ -79,8 +53,8 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Phase E:** Quick Search (Ctrl+K), Entity Nesting (parent_id UI), Backlinks,
-   API documentation.
+1. **Phase E continued:** Entity Nesting (parent_id + tree UI + breadcrumbs),
+   Backlinks ("Referenced by" on entity profiles), API documentation.
 2. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
    See `.ai/roadmap.md` for full data model and implementation plan.
 3. **Handler-level "view as player":** Extend toggle to filter is_private entities

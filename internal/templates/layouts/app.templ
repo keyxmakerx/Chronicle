@@ -565,23 +565,20 @@ templ Topbar() {
 			}
 
 			if InCampaign(ctx) {
-				<!-- Campaign-scoped search (hidden on small screens) -->
-				<div class="relative hidden lg:block">
-					<input
-						type="search"
-						placeholder={ fmt.Sprintf("Search in %s...", GetCampaignName(ctx)) }
-						class="input w-72 pl-9"
-						name="q"
-						hx-get={ fmt.Sprintf("/campaigns/%s/entities/search", GetCampaignID(ctx)) }
-						hx-trigger="keyup changed delay:300ms"
-						hx-target="#search-results"
-						autocomplete="off"
-					/>
-					<svg class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<!-- Quick search trigger (opens Ctrl+K modal) -->
+				<button
+					onclick="Chronicle.openSearch()"
+					class="flex items-center gap-2 px-3 py-1.5 rounded-md border border-edge text-sm text-fg-muted hover:text-fg hover:border-fg-muted transition-colors"
+					title="Quick search (Ctrl+K)"
+				>
+					<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
 					</svg>
-					<div id="search-results" class="absolute top-full left-0 w-full mt-1 z-50"></div>
-				</div>
+					<span class="hidden sm:inline">Search...</span>
+					<kbd class="hidden md:inline-flex items-center text-[10px] border border-edge rounded px-1.5 py-0.5 font-mono text-fg-muted">
+						<span class="text-[9px] mr-0.5">&#8984;</span>K
+					</kbd>
+				</button>
 			}
 		</div>
 

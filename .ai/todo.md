@@ -30,8 +30,8 @@ see `.ai/roadmap.md`.
 - [x] "View as player" toggle (Sprint 5)
 - [x] Widget lifecycle audit (check all widgets for missing destroy() cleanup)
 
-### Phase E: Core UX & Discovery (Next)
-- [ ] Quick search (Ctrl+K) — global search modal for entities, categories, notes (CRITICAL)
+### Phase E: Core UX & Discovery (Active)
+- [x] Quick search (Ctrl+K) — global search modal for entities (CRITICAL)
 - [ ] Entity hierarchy (parent_id UI + tree view + breadcrumbs + "Create sub-page") (CRITICAL)
 - [ ] Backlinks / "Referenced by" on entity profiles (@mention reverse refs)
 - [ ] API technical documentation (OpenAPI spec or handwritten reference) (HIGH)
@@ -291,3 +291,10 @@ see `.ai/roadmap.md`.
 - [x] "View as player" toggle: cookie-based, LayoutInjector role override, topbar button, banner
 - [x] Context helpers: `SetViewingAsPlayer`/`IsViewingAsPlayer`, `SetIsOwner`/`IsOwner`
 - [x] Toggle endpoint: `POST /campaigns/:id/toggle-view-mode` (owner-only, HX-Refresh response)
+
+### Phase E Sprint 1: Quick Search (2026-02-24)
+- [x] Quick Search (Ctrl+K / Cmd+K) — `search_modal.js` standalone module
+- [x] Centered modal overlay with debounced search, keyboard navigation, mouse hover
+- [x] Reuses existing `/campaigns/:id/entities/search` JSON endpoint
+- [x] Topbar trigger button replaces inline HTMX search input (responsive, all screen sizes)
+- [x] Closes on Escape, backdrop click, and `chronicle:navigated` event
