@@ -296,6 +296,15 @@ func (a *App) RegisterRoutes() {
 	// Wire addon count into admin dashboard for the Extensions stat card.
 	adminHandler.SetAddonCounter(addonService)
 
+	// Security admin: event logging, session management, user account actions.
+	securityRepo := admin.NewSecurityEventRepository(a.DB)
+	securityService := admin.NewSecurityService(securityRepo, authRepo, authService)
+	adminHandler.SetSecurityService(securityService)
+
+	// Wire security event logging into the auth handler so logins, logouts,
+	// failed attempts, and password resets are recorded automatically.
+	authHandler.SetSecurityLogger(securityService)
+
 	// Sync API plugin: external tool integration with API key auth,
 	// request logging, security monitoring, and admin dashboard.
 	syncRepo := syncapi.NewSyncAPIRepository(a.DB)

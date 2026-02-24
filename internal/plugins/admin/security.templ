@@ -1,0 +1,358 @@
+package admin
+
+import (
+	"fmt"
+	"strings"
+	"time"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// timeAgo returns a human-readable relative time string.
+func timeAgo(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		m := int(d.Minutes())
+		if m == 1 {
+			return "1 minute ago"
+		}
+		return fmt.Sprintf("%d minutes ago", m)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		if h == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", h)
+	default:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "1 day ago"
+		}
+		return fmt.Sprintf("%d days ago", days)
+	}
+}
+
+// shortUA extracts a short browser/client label from a User-Agent string.
+func shortUA(ua string) string {
+	if ua == "" {
+		return "Unknown"
+	}
+	// Simple extraction: look for known browser names.
+	switch {
+	case strings.Contains(ua, "Firefox"):
+		return "Firefox"
+	case strings.Contains(ua, "Edg/"):
+		return "Edge"
+	case strings.Contains(ua, "Chrome"):
+		return "Chrome"
+	case strings.Contains(ua, "Safari"):
+		return "Safari"
+	case strings.Contains(ua, "curl"):
+		return "curl"
+	default:
+		if len(ua) > 30 {
+			return ua[:30] + "..."
+		}
+		return ua
+	}
+}
+
+// AdminSecurityPage renders the security dashboard with stats, event log,
+// and active sessions management.
+templ AdminSecurityPage(data SecurityPageData) {
+	@layouts.App("Security - Admin") {
+		<div class="max-w-6xl mx-auto space-y-8">
+			<div class="flex items-center justify-between">
+				<h1 class="text-2xl font-bold text-fg">Security Dashboard</h1>
+			</div>
+
+			<!-- Stats Cards -->
+			if data.Stats != nil {
+				@securityStatsCards(data.Stats)
+			}
+
+			<!-- Active Sessions -->
+			<div class="space-y-4">
+				<h2 class="text-lg font-semibold text-fg flex items-center gap-2">
+					<i class="fa-solid fa-tower-broadcast text-accent"></i>
+					Active Sessions
+					<span class="text-sm font-normal text-fg-muted">({ fmt.Sprintf("%d", len(data.Sessions)) })</span>
+				</h2>
+				@activeSessionsTable(data.Sessions, data.CSRFToken)
+			</div>
+
+			<!-- Security Event Log -->
+			<div class="space-y-4">
+				<div class="flex items-center justify-between">
+					<h2 class="text-lg font-semibold text-fg flex items-center gap-2">
+						<i class="fa-solid fa-shield-halved text-accent"></i>
+						Security Event Log
+						<span class="text-sm font-normal text-fg-muted">({ fmt.Sprintf("%d", data.TotalEvents) } total)</span>
+					</h2>
+					<!-- Event type filter -->
+					<div class="flex items-center gap-2">
+						<select
+							onchange="window.location.href='/admin/security?type='+this.value"
+							class="text-sm rounded-lg border border-edge bg-surface px-3 py-1.5 text-fg"
+						>
+							<option value="" selected?={ data.EventFilter == "" }>All Events</option>
+							<option value="login.success" selected?={ data.EventFilter == "login.success" }>Logins</option>
+							<option value="login.failed" selected?={ data.EventFilter == "login.failed" }>Failed Logins</option>
+							<option value="logout" selected?={ data.EventFilter == "logout" }>Logouts</option>
+							<option value="password.reset_initiated" selected?={ data.EventFilter == "password.reset_initiated" }>Password Resets</option>
+							<option value="admin.privilege_changed" selected?={ data.EventFilter == "admin.privilege_changed" }>Admin Changes</option>
+							<option value="admin.user_disabled" selected?={ data.EventFilter == "admin.user_disabled" }>User Disabled</option>
+							<option value="admin.user_enabled" selected?={ data.EventFilter == "admin.user_enabled" }>User Enabled</option>
+							<option value="admin.session_terminated" selected?={ data.EventFilter == "admin.session_terminated" }>Session Terminated</option>
+							<option value="admin.force_logout" selected?={ data.EventFilter == "admin.force_logout" }>Force Logout</option>
+						</select>
+					</div>
+				</div>
+				@securityEventLog(data.Events, data.TotalEvents, data.Page, data.PerPage, data.EventFilter)
+			</div>
+		</div>
+	}
+}
+
+// securityStatsCards renders the top-level security statistics.
+templ securityStatsCards(stats *SecurityStats) {
+	<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+		<!-- Active Sessions -->
+		<div class="card text-center">
+			<div class="w-8 h-8 mx-auto rounded-lg bg-accent/10 flex items-center justify-center mb-2">
+				<i class="fa-solid fa-tower-broadcast text-accent text-sm"></i>
+			</div>
+			<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", stats.ActiveSessions) }</p>
+			<p class="text-xs text-fg-muted mt-1">Active Sessions</p>
+		</div>
+		<!-- Successful Logins (24h) -->
+		<div class="card text-center">
+			<div class="w-8 h-8 mx-auto rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center mb-2">
+				<i class="fa-solid fa-right-to-bracket text-emerald-500 text-sm"></i>
+			</div>
+			<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", stats.SuccessfulLogins24h) }</p>
+			<p class="text-xs text-fg-muted mt-1">Logins (24h)</p>
+		</div>
+		<!-- Failed Logins (24h) -->
+		<div class="card text-center">
+			<div class={ "w-8 h-8 mx-auto rounded-lg flex items-center justify-center mb-2",
+				templ.KV("bg-red-50 dark:bg-red-900/30", stats.FailedLogins24h > 0),
+				templ.KV("bg-surface-alt", stats.FailedLogins24h == 0) }>
+				<i class={ "fa-solid fa-triangle-exclamation text-sm",
+					templ.KV("text-red-500", stats.FailedLogins24h > 0),
+					templ.KV("text-fg-muted", stats.FailedLogins24h == 0) }></i>
+			</div>
+			<p class={ "text-2xl font-bold",
+				templ.KV("text-red-600 dark:text-red-400", stats.FailedLogins24h > 0),
+				templ.KV("text-fg", stats.FailedLogins24h == 0) }>{ fmt.Sprintf("%d", stats.FailedLogins24h) }</p>
+			<p class="text-xs text-fg-muted mt-1">Failed Logins (24h)</p>
+		</div>
+		<!-- Unique IPs (24h) -->
+		<div class="card text-center">
+			<div class="w-8 h-8 mx-auto rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-2">
+				<i class="fa-solid fa-globe text-blue-500 text-sm"></i>
+			</div>
+			<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", stats.UniqueIPs24h) }</p>
+			<p class="text-xs text-fg-muted mt-1">Unique IPs (24h)</p>
+		</div>
+		<!-- Total Events -->
+		<div class="card text-center">
+			<div class="w-8 h-8 mx-auto rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center mb-2">
+				<i class="fa-solid fa-list-check text-purple-500 text-sm"></i>
+			</div>
+			<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", stats.TotalEvents) }</p>
+			<p class="text-xs text-fg-muted mt-1">Total Events</p>
+		</div>
+		<!-- Disabled Users -->
+		<div class="card text-center">
+			<div class={ "w-8 h-8 mx-auto rounded-lg flex items-center justify-center mb-2",
+				templ.KV("bg-amber-50 dark:bg-amber-900/30", stats.DisabledUsers > 0),
+				templ.KV("bg-surface-alt", stats.DisabledUsers == 0) }>
+				<i class={ "fa-solid fa-user-slash text-sm",
+					templ.KV("text-amber-500", stats.DisabledUsers > 0),
+					templ.KV("text-fg-muted", stats.DisabledUsers == 0) }></i>
+			</div>
+			<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", stats.DisabledUsers) }</p>
+			<p class="text-xs text-fg-muted mt-1">Disabled Users</p>
+		</div>
+	</div>
+}
+
+// activeSessionsTable renders the list of active sessions with actions.
+templ activeSessionsTable(sessions []auth.SessionInfo, csrfToken string) {
+	<div class="card p-0 overflow-hidden">
+		if len(sessions) == 0 {
+			<div class="px-4 py-8 text-center text-fg-muted">
+				<i class="fa-solid fa-tower-broadcast text-2xl mb-2 block"></i>
+				<p>No active sessions</p>
+			</div>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="w-full">
+					<thead>
+						<tr class="bg-surface-alt border-b border-edge">
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">User</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">IP Address</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Client</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Created</th>
+							<th class="text-right px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Actions</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-edge">
+						for _, s := range sessions {
+							<tr class="hover:bg-surface-alt transition-colors">
+								<td class="px-4 py-3">
+									<div class="flex flex-col">
+										<span class="text-sm font-medium text-fg">{ s.Name }</span>
+										<span class="text-xs text-fg-muted">{ s.Email }</span>
+									</div>
+								</td>
+								<td class="px-4 py-3">
+									<code class="text-xs bg-surface-alt px-1.5 py-0.5 rounded text-fg-secondary">{ s.IP }</code>
+									if s.IP == "" {
+										<span class="text-xs text-fg-muted italic">not tracked</span>
+									}
+								</td>
+								<td class="px-4 py-3 text-sm text-fg-secondary" title={ s.UserAgent }>
+									{ shortUA(s.UserAgent) }
+								</td>
+								<td class="px-4 py-3 text-sm text-fg-muted" title={ s.CreatedAt.Format("2006-01-02 15:04:05 UTC") }>
+									{ timeAgo(s.CreatedAt) }
+								</td>
+								<td class="px-4 py-3 text-right">
+									<button
+										hx-delete={ fmt.Sprintf("/admin/security/sessions/%s", s.Token) }
+										hx-confirm="Terminate this session? The user will be logged out."
+										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+										class="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+									>
+										Terminate
+									</button>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}
+
+// securityEventLog renders the paginated security event list.
+templ securityEventLog(events []SecurityEvent, total, page, perPage int, eventFilter string) {
+	<div class="card p-0 overflow-hidden">
+		if len(events) == 0 {
+			<div class="px-4 py-8 text-center text-fg-muted">
+				<i class="fa-solid fa-shield-halved text-2xl mb-2 block"></i>
+				<p>No security events recorded yet</p>
+			</div>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="w-full">
+					<thead>
+						<tr class="bg-surface-alt border-b border-edge">
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Event</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">User</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">IP Address</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Details</th>
+							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Time</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-edge">
+						for _, e := range events {
+							<tr class="hover:bg-surface-alt transition-colors">
+								<td class="px-4 py-3">
+									<div class="flex items-center gap-2">
+										<i class={ EventTypeIcon(e.EventType) }></i>
+										<span class="text-sm font-medium text-fg">{ EventTypeLabel(e.EventType) }</span>
+									</div>
+								</td>
+								<td class="px-4 py-3">
+									if e.UserName != "" {
+										<span class="text-sm text-fg-secondary">{ e.UserName }</span>
+									} else if e.UserID != "" {
+										<span class="text-xs text-fg-muted font-mono">{ e.UserID[:8] }...</span>
+									} else {
+										<span class="text-xs text-fg-muted italic">-</span>
+									}
+									if e.ActorName != "" {
+										<span class="text-xs text-fg-muted block">by { e.ActorName }</span>
+									}
+								</td>
+								<td class="px-4 py-3">
+									if e.IPAddress != "" {
+										<code class="text-xs bg-surface-alt px-1.5 py-0.5 rounded text-fg-secondary">{ e.IPAddress }</code>
+									} else {
+										<span class="text-xs text-fg-muted">-</span>
+									}
+								</td>
+								<td class="px-4 py-3 text-sm text-fg-muted">
+									@eventDetails(e)
+								</td>
+								<td class="px-4 py-3 text-sm text-fg-muted" title={ e.CreatedAt.Format("2006-01-02 15:04:05 UTC") }>
+									{ timeAgo(e.CreatedAt) }
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+
+	<!-- Pagination -->
+	if total > perPage {
+		<div class="flex justify-center items-center gap-4 mt-4">
+			if page > 1 {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/admin/security?page=%d&type=%s", page-1, eventFilter)) }
+					class="btn-secondary text-sm"
+				>
+					Previous
+				</a>
+			} else {
+				<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Previous</span>
+			}
+			<span class="text-sm text-fg-secondary">
+				Page { fmt.Sprintf("%d", page) } of { fmt.Sprintf("%d", (total+perPage-1)/perPage) }
+			</span>
+			if page*perPage < total {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/admin/security?page=%d&type=%s", page+1, eventFilter)) }
+					class="btn-secondary text-sm"
+				>
+					Next
+				</a>
+			} else {
+				<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Next</span>
+			}
+		</div>
+	}
+}
+
+// eventDetails renders contextual detail text for a security event.
+templ eventDetails(e SecurityEvent) {
+	switch e.EventType {
+		case EventLoginFailed:
+			if email, ok := e.Details["email"]; ok {
+				<span>Attempted: { fmt.Sprintf("%v", email) }</span>
+			}
+		case EventAdminPrivilegeChanged:
+			if action, ok := e.Details["action"]; ok {
+				<span>Admin { fmt.Sprintf("%v", action) }</span>
+			}
+		case EventForceLogout:
+			if count, ok := e.Details["sessions_destroyed"]; ok {
+				<span>{ fmt.Sprintf("%v", count) } session(s) destroyed</span>
+			}
+		case EventSessionTerminated:
+			if hint, ok := e.Details["token_hint"]; ok {
+				<span>Token: { fmt.Sprintf("%v", hint) }...</span>
+			}
+		default:
+			<span>-</span>
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // NoteService defines the business logic contract for notes.
@@ -114,7 +115,8 @@ func (s *noteService) Update(ctx context.Context, id, userID string, req UpdateN
 		note.Entry = req.Entry
 	}
 	if req.EntryHTML != nil {
-		note.EntryHTML = req.EntryHTML
+		sanitized := sanitize.HTML(*req.EntryHTML)
+		note.EntryHTML = &sanitized
 	}
 	if req.Color != nil {
 		note.Color = *req.Color
@@ -243,11 +245,17 @@ func (s *noteService) RestoreVersion(ctx context.Context, noteID, versionID, use
 	// Snapshot current state before restoring.
 	s.createVersionSnapshot(ctx, note, userID)
 
-	// Apply the version's content.
+	// Apply the version's content. Sanitize restored HTML in case the version
+	// was created before HTML sanitization was enforced.
 	note.Title = version.Title
 	note.Content = version.Content
 	note.Entry = version.Entry
-	note.EntryHTML = version.EntryHTML
+	if version.EntryHTML != nil {
+		sanitized := sanitize.HTML(*version.EntryHTML)
+		note.EntryHTML = &sanitized
+	} else {
+		note.EntryHTML = nil
+	}
 	note.LastEditedBy = &userID
 
 	if err := s.repo.Update(ctx, note); err != nil {

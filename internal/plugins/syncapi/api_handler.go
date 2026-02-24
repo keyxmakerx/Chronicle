@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -221,7 +222,7 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 		FieldsData:   req.FieldsData,
 	})
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
 	}
 
 	return c.JSON(http.StatusCreated, entity)
@@ -264,7 +265,7 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 		FieldsData: req.FieldsData,
 	})
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
 	}
 
 	return c.JSON(http.StatusOK, updated)
@@ -296,7 +297,7 @@ func (h *APIHandler) UpdateEntityFields(c echo.Context) error {
 	}
 
 	if err := h.entitySvc.UpdateFields(ctx, entityID, req.FieldsData); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -443,7 +444,7 @@ func (h *APIHandler) Sync(c echo.Context) error {
 			})
 			if err != nil {
 				result.Status = "error"
-				result.Error = err.Error()
+				result.Error = apperror.SafeMessage(err)
 			} else {
 				result.Status = "ok"
 				result.EntityID = entity.ID
@@ -465,7 +466,7 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				})
 				if err != nil {
 					result.Status = "error"
-					result.Error = err.Error()
+					result.Error = apperror.SafeMessage(err)
 				} else {
 					result.Status = "ok"
 				}
@@ -480,7 +481,7 @@ func (h *APIHandler) Sync(c echo.Context) error {
 			} else {
 				if err := h.entitySvc.Delete(ctx, change.EntityID); err != nil {
 					result.Status = "error"
-					result.Error = err.Error()
+					result.Error = apperror.SafeMessage(err)
 				} else {
 					result.Status = "ok"
 				}

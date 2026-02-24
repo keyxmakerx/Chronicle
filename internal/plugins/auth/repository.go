@@ -28,6 +28,7 @@ type UserRepository interface {
 	// Admin operations.
 	ListUsers(ctx context.Context, offset, limit int) ([]User, int, error)
 	UpdateIsAdmin(ctx context.Context, id string, isAdmin bool) error
+	UpdateIsDisabled(ctx context.Context, id string, isDisabled bool) error
 	CountUsers(ctx context.Context) (int, error)
 	CountAdmins(ctx context.Context) (int, error)
 }
@@ -66,7 +67,7 @@ func (r *userRepository) Create(ctx context.Context, user *User) error {
 // Returns apperror.NotFound if no user exists with this ID.
 func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error) {
 	query := `SELECT id, email, display_name, password_hash, avatar_path,
-	                 is_admin, totp_secret, totp_enabled, created_at, last_login_at
+	                 is_admin, is_disabled, totp_secret, totp_enabled, created_at, last_login_at
 	          FROM users WHERE id = ?`
 
 	user := &User{}
@@ -77,6 +78,7 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error)
 		&user.PasswordHash,
 		&user.AvatarPath,
 		&user.IsAdmin,
+		&user.IsDisabled,
 		&user.TOTPSecret,
 		&user.TOTPEnabled,
 		&user.CreatedAt,
@@ -96,7 +98,7 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error)
 // Returns apperror.NotFound if no user exists with this email.
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
 	query := `SELECT id, email, display_name, password_hash, avatar_path,
-	                 is_admin, totp_secret, totp_enabled, created_at, last_login_at
+	                 is_admin, is_disabled, totp_secret, totp_enabled, created_at, last_login_at
 	          FROM users WHERE email = ?`
 
 	user := &User{}
@@ -107,6 +109,7 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (*User, 
 		&user.PasswordHash,
 		&user.AvatarPath,
 		&user.IsAdmin,
+		&user.IsDisabled,
 		&user.TOTPSecret,
 		&user.TOTPEnabled,
 		&user.CreatedAt,
@@ -159,8 +162,10 @@ func (r *userRepository) ListUsers(ctx context.Context, offset, limit int) ([]Us
 		return nil, 0, fmt.Errorf("counting users: %w", err)
 	}
 
-	query := `SELECT id, email, display_name, password_hash, avatar_path,
-	                 is_admin, totp_secret, totp_enabled, created_at, last_login_at
+	// Deliberately exclude password_hash and totp_secret from this query.
+	// Admin list views don't need sensitive credential data.
+	query := `SELECT id, email, display_name, avatar_path,
+	                 is_admin, is_disabled, totp_enabled, created_at, last_login_at
 	          FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?`
 
 	rows, err := r.db.QueryContext(ctx, query, limit, offset)
@@ -173,8 +178,8 @@ func (r *userRepository) ListUsers(ctx context.Context, offset, limit int) ([]Us
 	for rows.Next() {
 		var u User
 		if err := rows.Scan(
-			&u.ID, &u.Email, &u.DisplayName, &u.PasswordHash, &u.AvatarPath,
-			&u.IsAdmin, &u.TOTPSecret, &u.TOTPEnabled, &u.CreatedAt, &u.LastLoginAt,
+			&u.ID, &u.Email, &u.DisplayName, &u.AvatarPath,
+			&u.IsAdmin, &u.IsDisabled, &u.TOTPEnabled, &u.CreatedAt, &u.LastLoginAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning user row: %w", err)
 		}
@@ -191,6 +196,24 @@ func (r *userRepository) UpdateIsAdmin(ctx context.Context, id string, isAdmin b
 	result, err := r.db.ExecContext(ctx, query, isAdmin, id)
 	if err != nil {
 		return fmt.Errorf("updating is_admin: %w", err)
+	}
+
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return apperror.NewNotFound("user not found")
+	}
+
+	return nil
+}
+
+// UpdateIsDisabled sets or clears the is_disabled flag for a user. Disabled
+// users cannot log in and their active sessions are invalidated separately.
+func (r *userRepository) UpdateIsDisabled(ctx context.Context, id string, isDisabled bool) error {
+	query := `UPDATE users SET is_disabled = ? WHERE id = ?`
+
+	result, err := r.db.ExecContext(ctx, query, isDisabled, id)
+	if err != nil {
+		return fmt.Errorf("updating is_disabled: %w", err)
 	}
 
 	n, _ := result.RowsAffected()

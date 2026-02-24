@@ -40,6 +40,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	// Plugin management.
 	admin.GET("/plugins", h.Plugins)
 
+	// Security dashboard.
+	admin.GET("/security", h.Security)
+	admin.DELETE("/security/sessions/:token", h.TerminateSession)
+	admin.POST("/security/users/:id/force-logout", h.ForceLogoutUser)
+	admin.PUT("/security/users/:id/disable", h.DisableUser)
+	admin.PUT("/security/users/:id/enable", h.EnableUser)
+
 	// SMTP settings (delegates to SMTP plugin handler).
 	if smtpHandler != nil {
 		smtp.RegisterRoutes(admin, smtpHandler)

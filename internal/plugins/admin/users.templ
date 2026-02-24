@@ -28,7 +28,9 @@ templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken stri
 								<td class="px-4 py-3 text-sm font-medium text-fg">{ user.DisplayName }</td>
 								<td class="px-4 py-3 text-sm text-fg-secondary">{ user.Email }</td>
 								<td class="px-4 py-3">
-									if user.IsAdmin {
+									if user.IsDisabled {
+										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400">Disabled</span>
+									} else if user.IsAdmin {
 										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent/10 text-accent">Admin</span>
 									} else {
 										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-fg-secondary">User</span>
@@ -37,7 +39,7 @@ templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken stri
 								<td class="px-4 py-3 text-sm text-fg-muted">
 									{ user.CreatedAt.Format("Jan 2, 2006") }
 								</td>
-								<td class="px-4 py-3 text-right">
+								<td class="px-4 py-3 text-right space-x-2">
 									if user.IsAdmin {
 										<button
 											hx-put={ fmt.Sprintf("/admin/users/%s/admin", user.ID) }
@@ -57,6 +59,36 @@ templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken stri
 											Make Admin
 										</button>
 									}
+									if !user.IsAdmin {
+										if user.IsDisabled {
+											<button
+												hx-put={ fmt.Sprintf("/admin/security/users/%s/enable", user.ID) }
+												hx-confirm="Re-enable this user account?"
+												hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+												class="text-sm text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+											>
+												Enable
+											</button>
+										} else {
+											<button
+												hx-put={ fmt.Sprintf("/admin/security/users/%s/disable", user.ID) }
+												hx-confirm="Disable this user account? They will be immediately logged out."
+												hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+												class="text-sm text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 transition-colors"
+											>
+												Disable
+											</button>
+										}
+									}
+									<button
+										hx-post={ fmt.Sprintf("/admin/security/users/%s/force-logout", user.ID) }
+										hx-confirm="Force logout all sessions for this user?"
+										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+										class="text-sm text-fg-muted hover:text-fg transition-colors"
+										title="Force logout all sessions"
+									>
+										<i class="fa-solid fa-power-off"></i>
+									</button>
 								</td>
 							</tr>
 						}

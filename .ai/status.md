@@ -94,6 +94,27 @@ Entity Hierarchy, and extension enable bug fix all complete.
   Show Image / Show Attributes / Show Entry. Auto-saves via API with inline status feedback.
   Clears tooltip cache after save so changes are immediately visible.
 
+### Admin Security Dashboard — COMPLETE
+- **Migration 000024**: `security_events` table + `is_disabled` column on users table.
+- **Security Event Logging**: Site-wide event log tracking logins (success/failed), logouts,
+  password resets (initiated/completed), admin privilege changes, user disable/enable,
+  session terminations, and force logouts.
+- **Active Sessions View**: Admin can see all active sessions (user, IP, client, created time)
+  with ability to terminate individual sessions.
+- **User Account Disable**: Admin can disable user accounts (blocks login, destroys all sessions).
+  Disabled users see "your account has been disabled" on login attempt. Cannot disable admins.
+- **Force Logout**: Admin can force-logout all sessions for any user.
+- **Session IP/UA Tracking**: Login sessions now record client IP and User-Agent for the
+  active sessions view and security event context.
+- **Dashboard Integration**: Security card on admin dashboard shows failed login count (24h).
+  Security nav link added to admin sidebar.
+- **Auth Integration**: Auth handler fires security events on login success/failure, logout,
+  password reset initiation/completion. Login checks is_disabled before password verification.
+- **Files**: `security_model.go`, `security_repository.go`, `security_service.go`,
+  `security.templ` (new). Modified: `handler.go`, `routes.go`, `dashboard.templ`, `users.templ`,
+  `auth/model.go`, `auth/service.go`, `auth/handler.go`, `auth/repository.go`,
+  `layouts/app.templ`, `app/routes.go`.
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -101,7 +122,7 @@ Entity Hierarchy, and extension enable bug fix all complete.
 - Nothing blocked
 
 ## Active Branch
-`claude/document-architecture-tiers-yuIuH`
+`claude/security-audit-WRELc`
 
 ## Competitive Analysis & Roadmap
 Created `.ai/roadmap.md` with comprehensive comparison vs WorldAnvil, Kanka, and

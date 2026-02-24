@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -38,6 +39,14 @@ func CORS(cfg CORSConfig) echo.MiddlewareFunc {
 			allowAll = true
 		}
 		originSet[o] = true
+	}
+
+	// SECURITY: Wildcard origin with credentials is a dangerous misconfiguration.
+	// It allows any website to make authenticated requests to the API. Refuse to
+	// send credentials when the origin is a wildcard.
+	if allowAll && cfg.AllowCredentials {
+		slog.Warn("CORS misconfiguration: AllowedOrigins=['*'] with AllowCredentials=true is insecure — credentials will NOT be sent for wildcard origins. Specify explicit origins instead.")
+		cfg.AllowCredentials = false
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {

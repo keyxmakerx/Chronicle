@@ -24,15 +24,17 @@ services:
       - "8080:8080"
     restart: unless-stopped
     environment:
-      # -- Customize these for your deployment --
+      # -- SECURITY: You MUST change these before deploying --
       - ENV=production
       - PORT=8080
       - BASE_URL=http://localhost:8080
-      - SECRET_KEY=CHANGE-ME-run-openssl-rand-base64-32
+      # REQUIRED: Generate a unique key: openssl rand -base64 32
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set — run: openssl rand -base64 32}
       # -- Database (DB_PASSWORD must match MYSQL_PASSWORD below) --
       - DB_HOST=chronicle-db:3306
       - DB_USER=chronicle
-      - DB_PASSWORD=chronicle
+      # REQUIRED: Change this password and match MYSQL_PASSWORD below.
+      - DB_PASSWORD=${DB_PASSWORD:-chronicle}
       - DB_NAME=chronicle
       - REDIS_URL=redis://chronicle-redis:6379
     depends_on:
@@ -51,10 +53,11 @@ services:
     container_name: chronicle-db
     restart: unless-stopped
     environment:
-      - MYSQL_ROOT_PASSWORD=rootsecret
+      # REQUIRED: Change these passwords before deploying.
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootsecret}
       - MYSQL_DATABASE=chronicle
       - MYSQL_USER=chronicle
-      - MYSQL_PASSWORD=chronicle
+      - MYSQL_PASSWORD=${DB_PASSWORD:-chronicle}
     volumes:
       - chronicle-dbdata:/var/lib/mysql
     healthcheck:

@@ -19,6 +19,7 @@ type User struct {
 	PasswordHash string     `json:"-"` // Never expose in JSON responses.
 	AvatarPath   *string    `json:"avatar_path,omitempty"`
 	IsAdmin      bool       `json:"is_admin"`
+	IsDisabled   bool       `json:"is_disabled"`
 	TOTPSecret   *string    `json:"-"` // Never expose.
 	TOTPEnabled  bool       `json:"totp_enabled"`
 	CreatedAt    time.Time  `json:"created_at"`
@@ -52,8 +53,10 @@ type RegisterInput struct {
 
 // LoginInput is the validated input for authenticating a user.
 type LoginInput struct {
-	Email    string
-	Password string
+	Email     string
+	Password  string
+	IP        string // Client IP for session tracking.
+	UserAgent string // Client User-Agent for session tracking.
 }
 
 // --- Session ---
@@ -65,5 +68,21 @@ type Session struct {
 	Email     string    `json:"email"`
 	Name      string    `json:"name"`
 	IsAdmin   bool      `json:"is_admin"`
+	IP        string    `json:"ip,omitempty"`
+	UserAgent string    `json:"user_agent,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// SessionInfo extends Session with metadata for the admin active sessions view.
+type SessionInfo struct {
+	Token     string        `json:"-"`          // Full token (for termination). Never expose in UI.
+	TokenHint string        `json:"token_hint"` // First 8 chars for display.
+	UserID    string        `json:"user_id"`
+	Email     string        `json:"email"`
+	Name      string        `json:"name"`
+	IsAdmin   bool          `json:"is_admin"`
+	IP        string        `json:"ip"`
+	UserAgent string        `json:"user_agent"`
+	CreatedAt time.Time     `json:"created_at"`
+	TTL       time.Duration `json:"ttl"` // Remaining time-to-live.
 }

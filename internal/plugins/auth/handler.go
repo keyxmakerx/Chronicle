@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -12,16 +13,28 @@ import (
 // sessionCookieName is the HTTP cookie used to store the session token.
 const sessionCookieName = "chronicle_session"
 
+// SecurityEventLogger records security events for the admin security dashboard.
+// Implemented by the admin security service; wired after both are initialized.
+type SecurityEventLogger interface {
+	LogEvent(ctx context.Context, eventType, userID, actorID, ip, userAgent string, details map[string]any) error
+}
+
 // Handler handles HTTP requests for authentication (login, register, logout).
 // Handlers are thin: they bind the request, call the service, and render the
 // response. No business logic lives here.
 type Handler struct {
-	service AuthService
+	service        AuthService
+	securityLogger SecurityEventLogger
 }
 
 // NewHandler creates a new auth handler with the given service.
 func NewHandler(service AuthService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetSecurityLogger wires a security event logger for recording auth events.
+func (h *Handler) SetSecurityLogger(logger SecurityEventLogger) {
+	h.securityLogger = logger
 }
 
 // LoginForm renders the login page (GET /login).
@@ -51,13 +64,21 @@ func (h *Handler) Login(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
+	ip := c.RealIP()
+	ua := c.Request().UserAgent()
+
 	input := LoginInput{
-		Email:    req.Email,
-		Password: req.Password,
+		Email:     req.Email,
+		Password:  req.Password,
+		IP:        ip,
+		UserAgent: ua,
 	}
 
-	token, _, err := h.service.Login(c.Request().Context(), input)
+	token, user, err := h.service.Login(c.Request().Context(), input)
 	if err != nil {
+		// Log failed login attempt as a security event.
+		h.logSecurityEvent(c.Request().Context(), "login.failed", "", "", ip, ua, map[string]any{"email": req.Email})
+
 		// On failure, re-render the login form with the error message.
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := "invalid email or password"
@@ -70,6 +91,9 @@ func (h *Handler) Login(c echo.Context) error {
 		}
 		return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, req.Email, errMsg, ""))
 	}
+
+	// Log successful login as a security event.
+	h.logSecurityEvent(c.Request().Context(), "login.success", user.ID, "", ip, ua, nil)
 
 	// Set the session cookie.
 	setSessionCookie(c, token)
@@ -133,8 +157,10 @@ func (h *Handler) Register(c echo.Context) error {
 
 	// Auto-login after successful registration.
 	loginInput := LoginInput{
-		Email:    req.Email,
-		Password: req.Password,
+		Email:     req.Email,
+		Password:  req.Password,
+		IP:        c.RealIP(),
+		UserAgent: c.Request().UserAgent(),
 	}
 
 	token, _, err := h.service.Login(c.Request().Context(), loginInput)
@@ -156,6 +182,10 @@ func (h *Handler) Register(c echo.Context) error {
 func (h *Handler) Logout(c echo.Context) error {
 	token := getSessionToken(c)
 	if token != "" {
+		// Capture session info before destroying for the security log.
+		if session, err := h.service.ValidateSession(c.Request().Context(), token); err == nil {
+			h.logSecurityEvent(c.Request().Context(), "logout", session.UserID, "", c.RealIP(), c.Request().UserAgent(), nil)
+		}
 		// Destroy the session in Redis. Ignore errors -- the cookie
 		// will be cleared regardless.
 		_ = h.service.DestroySession(c.Request().Context(), token)
@@ -190,6 +220,8 @@ func (h *Handler) ForgotPassword(c echo.Context) error {
 
 	// Initiate reset (fire-and-forget — always returns nil to avoid leaking info).
 	_ = h.service.InitiatePasswordReset(c.Request().Context(), email)
+
+	h.logSecurityEvent(c.Request().Context(), "password.reset_initiated", "", "", c.RealIP(), c.Request().UserAgent(), map[string]any{"email": email})
 
 	csrfToken := middleware.GetCSRFToken(c)
 	if middleware.IsHTMX(c) {
@@ -257,12 +289,22 @@ func (h *Handler) ResetPassword(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, ResetPasswordPage(csrfToken, token, "", errMsg))
 	}
 
+	h.logSecurityEvent(c.Request().Context(), "password.reset_completed", "", "", c.RealIP(), c.Request().UserAgent(), nil)
+
 	// Success — redirect to login with a flash message.
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", "/login?reset=success")
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.Redirect(http.StatusSeeOther, "/login?reset=success")
+}
+
+// logSecurityEvent fires a security event if a logger is wired. Fire-and-forget
+// so auth operations are never blocked by logging failures.
+func (h *Handler) logSecurityEvent(ctx context.Context, eventType, userID, actorID, ip, userAgent string, details map[string]any) {
+	if h.securityLogger != nil {
+		_ = h.securityLogger.LogEvent(ctx, eventType, userID, actorID, ip, userAgent, details)
+	}
 }
 
 // --- Cookie helpers ---

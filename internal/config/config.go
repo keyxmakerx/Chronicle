@@ -170,6 +170,10 @@ func Load() (*Config, error) {
 		if len(cfg.Auth.SecretKey) < 32 {
 			return nil, fmt.Errorf("SECRET_KEY must be at least 32 characters in production")
 		}
+		// Warn loudly about default credentials that should have been changed.
+		if cfg.Database.Password == "chronicle" {
+			fmt.Println("⚠ SECURITY WARNING: DB_PASSWORD is set to the default value 'chronicle'. Change it before exposing this instance to the internet.")
+		}
 	}
 
 	// Provide a dev-only default secret so local dev works without .env.

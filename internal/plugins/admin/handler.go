@@ -37,6 +37,7 @@ type Handler struct {
 	maxUploadSize   int64
 	settingsService settings.SettingsService
 	addonCounter    AddonCounter
+	securityService SecurityService
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
@@ -82,6 +83,11 @@ func (h *Handler) SetAddonCounter(counter AddonCounter) {
 	h.addonCounter = counter
 }
 
+// SetSecurityService wires the security service for the security dashboard.
+func (h *Handler) SetSecurityService(svc SecurityService) {
+	h.securityService = svc
+}
+
 // --- Dashboard ---
 
 // Dashboard renders the admin overview page (GET /admin).
@@ -110,7 +116,12 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		addonCount, _ = h.addonCounter.CountAddons(ctx)
 	}
 
-	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured, addonCount))
+	var securityStats *SecurityStats
+	if h.securityService != nil {
+		securityStats, _ = h.securityService.GetStats(ctx)
+	}
+
+	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured, addonCount, securityStats))
 }
 
 // --- Users ---
@@ -171,6 +182,17 @@ func (h *Handler) ToggleAdmin(c echo.Context) error {
 		slog.Bool("new_state", newState),
 		slog.String("by", currentUserID),
 	)
+
+	// Log the privilege change as a security event.
+	if h.securityService != nil {
+		action := "granted"
+		if !newState {
+			action = "revoked"
+		}
+		_ = h.securityService.LogEvent(c.Request().Context(), EventAdminPrivilegeChanged,
+			targetID, currentUserID, c.RealIP(), c.Request().UserAgent(),
+			map[string]any{"action": action, "target_name": user.DisplayName})
+	}
 
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", "/admin/users")
@@ -369,4 +391,176 @@ func (h *Handler) Modules(c echo.Context) error {
 // Lists all registered plugins with their status and category.
 func (h *Handler) Plugins(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, AdminPluginsPage(PluginRegistry()))
+}
+
+// --- Security ---
+
+// Security renders the security dashboard page (GET /admin/security).
+func (h *Handler) Security(c echo.Context) error {
+	if h.securityService == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	ctx := c.Request().Context()
+
+	stats, _ := h.securityService.GetStats(ctx)
+
+	// Load recent security events (first page).
+	eventType := c.QueryParam("type")
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	if page < 1 {
+		page = 1
+	}
+
+	events, totalEvents, _ := h.securityService.ListEvents(ctx, eventType, page)
+
+	// Load active sessions.
+	sessions, _ := h.securityService.GetActiveSessions(ctx)
+
+	csrfToken := middleware.GetCSRFToken(c)
+
+	data := SecurityPageData{
+		Stats:       stats,
+		Events:      events,
+		TotalEvents: totalEvents,
+		EventFilter: eventType,
+		Page:        page,
+		PerPage:     securityPerPage,
+		Sessions:    sessions,
+		CSRFToken:   csrfToken,
+	}
+
+	return middleware.Render(c, http.StatusOK, AdminSecurityPage(data))
+}
+
+// TerminateSession destroys a specific session (DELETE /admin/security/sessions/:token).
+func (h *Handler) TerminateSession(c echo.Context) error {
+	if h.securityService == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	token := c.Param("token")
+	currentUserID := auth.GetUserID(c)
+
+	if err := h.securityService.TerminateSession(c.Request().Context(), token); err != nil {
+		return err
+	}
+
+	_ = h.securityService.LogEvent(c.Request().Context(), EventSessionTerminated,
+		"", currentUserID, c.RealIP(), c.Request().UserAgent(),
+		map[string]any{"token_hint": token[:8]})
+
+	slog.Info("admin terminated session",
+		slog.String("by", currentUserID),
+	)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/admin/security")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/security")
+}
+
+// ForceLogoutUser destroys all sessions for a user (POST /admin/security/users/:id/force-logout).
+func (h *Handler) ForceLogoutUser(c echo.Context) error {
+	if h.securityService == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	targetID := c.Param("id")
+	currentUserID := auth.GetUserID(c)
+
+	count, err := h.securityService.ForceLogoutUser(c.Request().Context(), targetID)
+	if err != nil {
+		return err
+	}
+
+	_ = h.securityService.LogEvent(c.Request().Context(), EventForceLogout,
+		targetID, currentUserID, c.RealIP(), c.Request().UserAgent(),
+		map[string]any{"sessions_destroyed": count})
+
+	slog.Info("admin force-logged out user",
+		slog.String("target_user", targetID),
+		slog.Int("sessions_destroyed", count),
+		slog.String("by", currentUserID),
+	)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/admin/security")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/security")
+}
+
+// DisableUser disables a user account (PUT /admin/security/users/:id/disable).
+func (h *Handler) DisableUser(c echo.Context) error {
+	if h.securityService == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	targetID := c.Param("id")
+	currentUserID := auth.GetUserID(c)
+
+	// Prevent admins from disabling themselves.
+	if targetID == currentUserID {
+		return apperror.NewBadRequest("cannot disable your own account")
+	}
+
+	if err := h.securityService.DisableUser(c.Request().Context(), targetID); err != nil {
+		return err
+	}
+
+	_ = h.securityService.LogEvent(c.Request().Context(), EventUserDisabled,
+		targetID, currentUserID, c.RealIP(), c.Request().UserAgent(), nil)
+
+	slog.Info("admin disabled user",
+		slog.String("target_user", targetID),
+		slog.String("by", currentUserID),
+	)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/admin/security")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/security")
+}
+
+// EnableUser re-enables a disabled user account (PUT /admin/security/users/:id/enable).
+func (h *Handler) EnableUser(c echo.Context) error {
+	if h.securityService == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	targetID := c.Param("id")
+	currentUserID := auth.GetUserID(c)
+
+	if err := h.securityService.EnableUser(c.Request().Context(), targetID); err != nil {
+		return err
+	}
+
+	_ = h.securityService.LogEvent(c.Request().Context(), EventUserEnabled,
+		targetID, currentUserID, c.RealIP(), c.Request().UserAgent(), nil)
+
+	slog.Info("admin enabled user",
+		slog.String("target_user", targetID),
+		slog.String("by", currentUserID),
+	)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/admin/security")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/security")
+}
+
+// SecurityPageData holds all data needed for the security dashboard page.
+type SecurityPageData struct {
+	Stats       *SecurityStats
+	Events      []SecurityEvent
+	TotalEvents int
+	EventFilter string
+	Page        int
+	PerPage     int
+	Sessions    []auth.SessionInfo
+	CSRFToken   string
 }

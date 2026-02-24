@@ -13,6 +13,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // EntityService handles business logic for entity operations.
@@ -235,12 +236,12 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		entity.ParentID = nil
 	}
 
-	// Update entry content if provided.
+	// Update entry content if provided. Sanitize HTML to prevent stored XSS.
 	entry := strings.TrimSpace(input.Entry)
 	if entry != "" {
 		entity.Entry = &entry
-		// TODO: Render entry JSON to HTML when editor widget is implemented.
-		entity.EntryHTML = &entry
+		sanitized := sanitize.HTML(entry)
+		entity.EntryHTML = &sanitized
 	}
 
 	if input.FieldsData != nil {
@@ -293,10 +294,13 @@ func (s *entityService) UpdatePopupConfig(ctx context.Context, entityID string, 
 
 // UpdateEntry updates only the entry content for an entity. Used by the
 // editor widget's autosave to persist content without a full entity update.
+// The entryHTML is sanitized with bluemonday before storage to prevent stored XSS.
 func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error {
 	if strings.TrimSpace(entryJSON) == "" {
 		return apperror.NewBadRequest("entry content is required")
 	}
+	// Sanitize HTML to strip dangerous content (script tags, event handlers, etc.).
+	entryHTML = sanitize.HTML(entryHTML)
 	if err := s.entities.UpdateEntry(ctx, entityID, entryJSON, entryHTML); err != nil {
 		return err
 	}
