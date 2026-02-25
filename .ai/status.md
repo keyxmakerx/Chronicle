@@ -8,12 +8,12 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-25 -- Sidebar overlay fix (icon strip visible, top border, tightened width),
-categories layout made dynamic, notes addon rename finalized.
+2026-02-25 -- Calendar plugin Sprint 1 complete (model, repo, service, handler,
+routes, templates, migration). Keyboard shortcuts added. Sidebar polish finalized.
 
 ## Current Phase
-**Phase E → F transition.** Phase E nearly complete (keyboard shortcuts remaining).
-Starting Phase F: Calendar plugin (dire need).
+**Phase F: Calendar & Time.** Sprint 1 complete — calendar CRUD, monthly grid,
+events, moons, date advancement. Sprint 2 next: settings UI, event form, sidebar link.
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
@@ -151,6 +151,27 @@ Starting Phase F: Calendar plugin (dire need).
   interface on Handler, wired via `SetAddonChecker()` in routes.go.
 - **Tests**: Updated `TestIsInstalled` for both addons. All 32+ addon tests pass.
 
+### Keyboard Shortcuts — COMPLETE
+- Global shortcuts: Ctrl+N (new entity), Ctrl+E (edit entity), Ctrl+S (save).
+- IIFE pattern matching `search_modal.js`. Suppresses shortcuts in inputs (except Ctrl+S).
+- Save priority: `#te-save-btn` → `.chronicle-editor__btn--save.has-changes` → `form .btn-primary` → `chronicle:save` event.
+- Files: `static/js/keyboard_shortcuts.js`, `base.templ` (script tag).
+
+### Calendar Plugin Sprint 1 — COMPLETE
+- **Migration 000027**: 6 tables (`calendars`, `calendar_months`, `calendar_weekdays`,
+  `calendar_moons`, `calendar_seasons`, `calendar_events`). Registers "calendar" addon.
+- **Model**: Domain types + DTOs. `Moon.MoonPhase()` and `MoonPhaseName()` for phase
+  calculation. `Calendar.YearLength()` sums month days.
+- **Repository**: Full CRUD, transactional bulk-update for sub-resources, event listing
+  with recurring event support and role-based visibility filtering.
+- **Service**: Validation, one-calendar-per-campaign, date advancement with month/year rollover.
+- **Handler**: Setup page (create form), monthly grid view, API endpoints for settings/events/advance.
+  Seeds 12 default months (30 days) and 7 default weekdays on create.
+- **Templates**: `CalendarSetupPage`, `CalendarPage`, monthly grid with weekday headers,
+  day cells, event chips, moon phase icons, month navigation.
+- **Routes**: Owner (create, settings, advance), scribe (events), public (view).
+- **Wiring**: Added to `app/routes.go` and `installedAddons` registry.
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -173,11 +194,11 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference),
-   keyboard shortcuts beyond Ctrl+K (Ctrl+N new entity, Ctrl+E edit, Ctrl+S save).
-2. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
-   See `.ai/roadmap.md` for full data model and implementation plan.
-3. **Handler-level "view as player":** Extend toggle to filter is_private entities
+1. **Calendar Sprint 2:** Settings configuration UI (months/weekdays/moons editor forms),
+   event creation/edit form template, sidebar link to calendar page.
+2. **Calendar Sprint 3:** Dashboard block ("Upcoming events"), timeline view.
+3. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference).
+4. **Handler-level "view as player":** Extend toggle to filter is_private entities
    at repository level (currently template-only).
 
 ## Known Issues Right Now

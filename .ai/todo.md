@@ -37,11 +37,14 @@ see `.ai/roadmap.md`.
 - [x] Editor Insert menu (+ dropdown for discoverable @mention, link, blockquote, code, hr)
 - [x] Backlinks / "Referenced by" on entity profiles (@mention reverse refs)
 - [ ] API technical documentation (OpenAPI spec or handwritten reference) (HIGH)
-- [ ] Keyboard shortcuts beyond Ctrl+K (Ctrl+N, Ctrl+E, Ctrl+S)
+- [x] Keyboard shortcuts beyond Ctrl+K (Ctrl+N, Ctrl+E, Ctrl+S)
 
-### Phase F: Calendar & Time (DIRE NEED)
-- [ ] Calendar plugin (custom months, weekdays, moons, seasons, eras, events, entity linking)
-- [ ] Calendar UI (monthly grid, year overview, moon phases, "today" marker)
+### Phase F: Calendar & Time
+- [x] Calendar plugin Sprint 1 (model, repo, service, handler, routes, templates, migration 000027)
+- [x] Calendar monthly grid UI (weekday headers, day cells, event chips, moon phases, "today" marker)
+- [ ] Calendar settings UI (months/weekdays/moons editor forms in templ)
+- [ ] Calendar event creation/edit form template
+- [ ] Calendar sidebar link
 - [ ] Calendar dashboard block ("Upcoming events")
 - [ ] Timeline view (chronological event display, may be calendar view mode)
 - [ ] Calendar API endpoints (for Foundry VTT sync)
