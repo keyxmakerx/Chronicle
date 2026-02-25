@@ -94,7 +94,7 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 
 				<!-- Categories tab: per-category config (identity + dashboard, 2-column) -->
 				<div x-show="tab === 'categories'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-5xl mx-auto px-6 py-4">
+					<div class="px-6 py-4">
 						@categoriesTab(cc, entityTypes, csrfToken)
 					</div>
 				</div>

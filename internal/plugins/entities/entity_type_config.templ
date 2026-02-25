@@ -159,9 +159,9 @@ func catDescJS(desc *string) string {
 // left, category dashboard settings on the right. Stacks vertically on mobile.
 // Attributes have been moved to the Extensions tab as a toggleable addon.
 templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
-	<div class="flex flex-col md:flex-row gap-4">
+	<div class="flex flex-col lg:flex-row gap-4">
 		<!-- Left column: Identity (icon, color, name) -->
-		<div class="md:w-80 shrink-0">
+		<div class="lg:w-1/3 lg:max-w-sm shrink-0">
 			<div
 				class="card p-4 space-y-3"
 				x-data={ fmt.Sprintf("{ saving: false, saved: false, etName: '%s', etNamePlural: '%s', etIcon: '%s', etColor: '%s' }", jsEsc(et.Name), jsEsc(et.NamePlural), jsEsc(et.Icon), jsEsc(et.Color)) }
