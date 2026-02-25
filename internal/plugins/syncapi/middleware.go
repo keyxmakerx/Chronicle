@@ -87,6 +87,30 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 				return echo.NewHTTPError(http.StatusForbidden, "ip address not allowed for this key")
 			}
 
+			// Device fingerprint enforcement: if the client sends X-Device-Fingerprint,
+			// auto-bind on first use; reject mismatches on subsequent requests.
+			// This ensures a key can only be used by a single registered device.
+			deviceFP := c.Request().Header.Get("X-Device-Fingerprint")
+			if deviceFP != "" {
+				if key.DeviceFingerprint == nil {
+					// First use — bind the device.
+					go func() {
+						_ = service.BindDevice(context.Background(), key.ID, deviceFP)
+					}()
+				} else if *key.DeviceFingerprint != deviceFP {
+					// Device mismatch — reject.
+					service.LogSecurityEvent(ctx, &SecurityEvent{
+						EventType:  EventSuspicious,
+						APIKeyID:   &key.ID,
+						CampaignID: &key.CampaignID,
+						IPAddress:  ip,
+						UserAgent:  strPtr(c.Request().UserAgent()),
+						Details:    map[string]any{"reason": "device fingerprint mismatch"},
+					})
+					return echo.NewHTTPError(http.StatusForbidden, "device not authorized for this key")
+				}
+			}
+
 			// Store the key in context for downstream handlers.
 			c.Set(apiKeyContextKey, key)
 

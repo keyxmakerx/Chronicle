@@ -8,12 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-25 -- Calendar plugin Sprint 1 complete (model, repo, service, handler,
-routes, templates, migration). Keyboard shortcuts added. Sidebar polish finalized.
+2026-02-25 -- Calendar plugin Sprint 2 complete. Leap years, multi-day events,
+seasons with colors, event categories, calendar settings UI (5-tab page), event
+creation modal, entity-event reverse lookup, sync API calendar endpoints, device
+fingerprint binding for API keys.
 
 ## Current Phase
-**Phase F: Calendar & Time.** Sprint 1 complete — calendar CRUD, monthly grid,
-events, moons, date advancement. Sprint 2 next: settings UI, event form, sidebar link.
+**Phase F: Calendar & Time.** Sprint 2 complete — Calendaria feature parity, settings
+UI, sync API integration, device fingerprint binding. Sprint 3 next: dashboard block,
+timeline view, sidebar link.
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
@@ -172,6 +175,29 @@ events, moons, date advancement. Sprint 2 next: settings UI, event form, sidebar
 - **Routes**: Owner (create, settings, advance), scribe (events), public (view).
 - **Wiring**: Added to `app/routes.go` and `installedAddons` registry.
 
+### Calendar Plugin Sprint 2 — COMPLETE
+- **Migration 000028**: Leap year fields (`leap_year_every`, `leap_year_offset` on calendars,
+  `leap_year_days` on months), season `color`, event end dates (`end_year`, `end_month`,
+  `end_day`), event `category`, device fingerprint (`device_fingerprint`, `device_bound_at`
+  on api_keys).
+- **Leap years**: `IsLeapYear()`, `YearLengthForYear()`, `MonthDays()` all account for
+  per-month leap year extra days. `AdvanceDate` is leap-year-aware.
+- **Seasons**: `Color` field, `ContainsDate()` with wrap-around support, `SeasonForDate()`
+  method, season color borders on calendar day cells.
+- **Events**: Multi-day events (EndYear/EndMonth/EndDay), event categories (holiday, battle,
+  quest, birthday, festival, travel, custom) with category icons.
+- **Calendar settings page**: 5-tab page (General, Months, Weekdays, Moons, Seasons) with
+  Alpine.js list management, JSON serialization for x-data attributes, fetch-based saves.
+  Accessible via gear icon on calendar header (Owner only).
+- **Event creation modal**: Alpine.js + fetch form with name, description, date, visibility,
+  category, entity link, recurring flag. Quick-add button on day cell hover.
+- **Entity-event reverse lookup**: HTMX lazy-loaded section on entity show pages. Calendar
+  plugin serves fragment at `GET /calendar/entity-events/:eid`.
+- **Sync API calendar endpoints**: Full REST API for external tools (Foundry VTT). GET/POST/
+  PUT/DELETE for calendar, events, months, weekdays, moons. Advance date endpoint.
+- **Device fingerprint binding**: Auto-bind on first `X-Device-Fingerprint` header, reject
+  mismatches with 403 + security event logging. `BindDevice`/`UnbindDevice` on service.
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -194,9 +220,9 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Calendar Sprint 2:** Settings configuration UI (months/weekdays/moons editor forms),
-   event creation/edit form template, sidebar link to calendar page.
-2. **Calendar Sprint 3:** Dashboard block ("Upcoming events"), timeline view.
+1. **Calendar Sprint 3:** Dashboard block ("Upcoming events"), timeline view, sidebar link.
+2. **Calendar Sprint 4:** Event edit modal (reuse creation modal with pre-fill), event
+   delete confirmation, drag-and-drop event rescheduling.
 3. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference).
 4. **Handler-level "view as player":** Extend toggle to filter is_private entities
    at repository level (currently template-only).

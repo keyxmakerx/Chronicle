@@ -17,21 +17,30 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
 
-	// Calendar setup + creation (Owner only).
+	// Calendar setup + creation + deletion (Owner only).
 	cg.POST("/calendar", h.CreateCalendar, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.DELETE("/calendar", h.DeleteCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// Calendar settings page (Owner only).
+	cg.GET("/calendar/settings", h.ShowSettings, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Calendar settings API (Owner only).
 	cg.PUT("/calendar/settings", h.UpdateCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendar/months", h.UpdateMonthsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendar/weekdays", h.UpdateWeekdaysAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendar/moons", h.UpdateMoonsAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/calendar/seasons", h.UpdateSeasonsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Advance date (Owner only — GMs advance time during play).
 	cg.POST("/calendar/advance", h.AdvanceDateAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Events CRUD (Scribe+ can create/edit, Owner can delete).
 	cg.POST("/calendar/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/calendar/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/calendar/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// Entity-linked events fragment (Player+ — loaded on entity show pages).
+	cg.GET("/calendar/entity-events/:eid", h.EntityEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Public-capable view: calendar page viewable by players and public campaigns.
 	pub := e.Group("/campaigns/:id",

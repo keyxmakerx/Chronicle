@@ -1,0 +1,590 @@
+// calendar_settings.templ renders the calendar settings page with tabs for
+// general settings, months, weekdays, moons, and seasons. Each tab uses
+// Alpine.js for client-side list management and fetch-based saves.
+
+package calendar
+
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CalendarSettingsPage renders the full settings page for calendar owners.
+templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	@layouts.App("Calendar Settings - " + cc.Campaign.Name) {
+		<div class="h-full flex flex-col -mx-5 -my-4" x-data="{ tab: 'general' }">
+			<!-- Header -->
+			<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
+				<div class="flex items-center gap-3">
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+						class="text-fg-muted hover:text-fg transition-colors"
+					>
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+						</svg>
+					</a>
+					<div>
+						<h1 class="text-base font-semibold text-fg">Calendar Settings</h1>
+						<p class="text-[11px] text-fg-secondary">{ cal.Name }</p>
+					</div>
+				</div>
+			</div>
+			<!-- Tab bar -->
+			<div class="bg-surface border-b border-edge px-6 flex gap-0 shrink-0 overflow-x-auto">
+				@settingsTab("general", "fa-solid fa-gear", "General")
+				@settingsTab("months", "fa-solid fa-calendar", "Months")
+				@settingsTab("weekdays", "fa-solid fa-calendar-week", "Weekdays")
+				@settingsTab("moons", "fa-solid fa-moon", "Moons")
+				@settingsTab("seasons", "fa-solid fa-leaf", "Seasons")
+			</div>
+			<!-- Tab content -->
+			<div class="flex-1 overflow-hidden">
+				<div x-show="tab === 'general'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-6">
+						@generalSettingsTab(cc, cal, csrfToken)
+					</div>
+				</div>
+				<div x-show="tab === 'months'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-6">
+						@monthsSettingsTab(cc, cal, csrfToken)
+					</div>
+				</div>
+				<div x-show="tab === 'weekdays'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-6">
+						@weekdaysSettingsTab(cc, cal, csrfToken)
+					</div>
+				</div>
+				<div x-show="tab === 'moons'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-6">
+						@moonsSettingsTab(cc, cal, csrfToken)
+					</div>
+				</div>
+				<div x-show="tab === 'seasons'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-6">
+						@seasonsSettingsTab(cc, cal, csrfToken)
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// CalendarSettingsFragment renders just the settings content for HTMX swaps.
+templ CalendarSettingsFragment(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	@generalSettingsTab(cc, cal, csrfToken)
+}
+
+// settingsTab renders a single tab button.
+templ settingsTab(name, icon, label string) {
+	<button
+		class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+		:class={ fmt.Sprintf("tab === '%s' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'", name) }
+		@click={ fmt.Sprintf("tab = '%s'", name) }
+	>
+		<i class={ icon, "mr-1.5 text-xs" }></i> { label }
+	</button>
+}
+
+// generalSettingsTab renders the general settings form (name, epoch, leap year).
+templ generalSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	<div class="space-y-6">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">General Settings</h2>
+			<p class="text-sm text-fg-secondary">Calendar name, epoch, current date, and leap year configuration.</p>
+		</div>
+		<div
+			class="card p-6 space-y-4"
+			x-data={ generalSettingsData(cal) }
+		>
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1">Calendar Name</label>
+				<input type="text" x-model="name" class="input w-full" maxlength="200"/>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1">Epoch Name</label>
+				<input type="text" x-model="epochName" class="input w-full" maxlength="100" placeholder="e.g. DR, Age of Fire"/>
+				<p class="text-xs text-fg-muted mt-1">Displayed after the year (e.g. "1492 DR").</p>
+			</div>
+			<div class="grid grid-cols-3 gap-3">
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Current Year</label>
+					<input type="number" x-model.number="currentYear" class="input w-full"/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Current Month</label>
+					<input type="number" x-model.number="currentMonth" class="input w-full" min="1"/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Current Day</label>
+					<input type="number" x-model.number="currentDay" class="input w-full" min="1"/>
+				</div>
+			</div>
+			<div class="grid grid-cols-2 gap-3">
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Leap Year Every</label>
+					<input type="number" x-model.number="leapYearEvery" class="input w-full" min="0"/>
+					<p class="text-xs text-fg-muted mt-1">0 = no leap years</p>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Leap Year Offset</label>
+					<input type="number" x-model.number="leapYearOffset" class="input w-full" min="0"/>
+					<p class="text-xs text-fg-muted mt-1">Year offset for leap year cycle</p>
+				</div>
+			</div>
+			<div class="flex items-center justify-end gap-2 pt-2 border-t border-edge">
+				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
+				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false; error = '';
+						fetch('/campaigns/%s/calendar/settings', {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+							credentials: 'same-origin',
+							body: JSON.stringify({
+								name: name, epoch_name: epochName || null, description: null,
+								current_year: currentYear, current_month: currentMonth, current_day: currentDay,
+								leap_year_every: leapYearEvery, leap_year_offset: leapYearOffset
+							})
+						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
+						.catch(e => { error = e.message; })
+						.finally(() => { saving = false; })
+					`, cc.Campaign.ID, csrfToken) }
+				>
+					<span x-show="!saving">Save Settings</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// monthsSettingsTab renders the months editor with add/remove/reorder.
+templ monthsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Months</h2>
+			<p class="text-sm text-fg-secondary">
+				Define the months in your calendar year. Changes are saved all at once.
+			</p>
+		</div>
+		<div x-data={ monthsData(cal.Months) }>
+			<!-- Month list -->
+			<div class="space-y-2 mb-4">
+				<template x-for="(m, i) in months" :key="i">
+					<div class="card p-3 flex items-center gap-3">
+						<div class="flex flex-col gap-0.5">
+							<button
+								type="button"
+								class="text-[10px] text-fg-muted hover:text-fg"
+								@click="if(i>0){[months[i],months[i-1]]=[months[i-1],months[i]]}"
+								:disabled="i === 0"
+							>
+								<i class="fa-solid fa-chevron-up"></i>
+							</button>
+							<button
+								type="button"
+								class="text-[10px] text-fg-muted hover:text-fg"
+								@click="if(i<months.length-1){[months[i],months[i+1]]=[months[i+1],months[i]]}"
+								:disabled="i === months.length - 1"
+							>
+								<i class="fa-solid fa-chevron-down"></i>
+							</button>
+						</div>
+						<div class="flex-1 grid grid-cols-12 gap-2 items-center">
+							<input type="text" x-model="m.name" class="input text-sm col-span-4" placeholder="Month name"/>
+							<div class="col-span-2">
+								<input type="number" x-model.number="m.days" class="input text-sm w-full" min="1" placeholder="Days"/>
+							</div>
+							<div class="col-span-2">
+								<input type="number" x-model.number="m.leap_year_days" class="input text-sm w-full" min="0" placeholder="Leap"/>
+							</div>
+							<div class="col-span-3 flex items-center gap-2">
+								<label class="flex items-center gap-1.5 text-xs text-fg-secondary cursor-pointer">
+									<input type="checkbox" x-model="m.is_intercalary" class="rounded"/>
+									Intercalary
+								</label>
+							</div>
+							<div class="col-span-1 text-right">
+								<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="months.splice(i, 1)">
+									<i class="fa-solid fa-trash-can"></i>
+								</button>
+							</div>
+						</div>
+					</div>
+				</template>
+			</div>
+			<!-- Add month -->
+			<button
+				type="button"
+				class="btn-secondary text-sm w-full"
+				@click="months.push({ name: 'New Month', days: 30, is_intercalary: false, leap_year_days: 0 })"
+			>
+				<i class="fa-solid fa-plus mr-1"></i> Add Month
+			</button>
+			<!-- Save -->
+			<div class="flex items-center justify-end gap-2 mt-4">
+				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
+				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false; error = '';
+						const payload = months.map((m, i) => ({
+							name: m.name, days: m.days, sort_order: i,
+							is_intercalary: m.is_intercalary, leap_year_days: m.leap_year_days || 0
+						}));
+						fetch('/campaigns/%s/calendar/months', {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+							credentials: 'same-origin',
+							body: JSON.stringify(payload)
+						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
+						.catch(e => { error = e.message; })
+						.finally(() => { saving = false; })
+					`, cc.Campaign.ID, csrfToken) }
+				>
+					<span x-show="!saving">Save All Months</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// weekdaysSettingsTab renders the weekdays editor.
+templ weekdaysSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Weekdays</h2>
+			<p class="text-sm text-fg-secondary">
+				Define the days of the week. The calendar grid uses these as column headers.
+			</p>
+		</div>
+		<div x-data={ weekdaysData(cal.Weekdays) }>
+			<div class="space-y-2 mb-4">
+				<template x-for="(w, i) in weekdays" :key="i">
+					<div class="card p-3 flex items-center gap-3">
+						<div class="flex flex-col gap-0.5">
+							<button type="button" class="text-[10px] text-fg-muted hover:text-fg" @click="if(i>0){[weekdays[i],weekdays[i-1]]=[weekdays[i-1],weekdays[i]]}" :disabled="i === 0">
+								<i class="fa-solid fa-chevron-up"></i>
+							</button>
+							<button type="button" class="text-[10px] text-fg-muted hover:text-fg" @click="if(i<weekdays.length-1){[weekdays[i],weekdays[i+1]]=[weekdays[i+1],weekdays[i]]}" :disabled="i === weekdays.length - 1">
+								<i class="fa-solid fa-chevron-down"></i>
+							</button>
+						</div>
+						<input type="text" x-model="w.name" class="input text-sm flex-1" placeholder="Day name"/>
+						<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="weekdays.splice(i, 1)">
+							<i class="fa-solid fa-trash-can"></i>
+						</button>
+					</div>
+				</template>
+			</div>
+			<button type="button" class="btn-secondary text-sm w-full" @click="weekdays.push({ name: 'New Day' })">
+				<i class="fa-solid fa-plus mr-1"></i> Add Weekday
+			</button>
+			<div class="flex items-center justify-end gap-2 mt-4">
+				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
+				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false; error = '';
+						const payload = weekdays.map((w, i) => ({ name: w.name, sort_order: i }));
+						fetch('/campaigns/%s/calendar/weekdays', {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+							credentials: 'same-origin',
+							body: JSON.stringify(payload)
+						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
+						.catch(e => { error = e.message; })
+						.finally(() => { saving = false; })
+					`, cc.Campaign.ID, csrfToken) }
+				>
+					<span x-show="!saving">Save All Weekdays</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// moonsSettingsTab renders the moons editor.
+templ moonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Moons</h2>
+			<p class="text-sm text-fg-secondary">
+				Add moons with cycle lengths for phase tracking. Phase icons display on the calendar.
+			</p>
+		</div>
+		<div x-data={ moonsData(cal.Moons) }>
+			<div class="space-y-2 mb-4">
+				<template x-for="(m, i) in moons" :key="i">
+					<div class="card p-3 space-y-2">
+						<div class="flex items-center justify-between">
+							<span class="text-sm font-medium text-fg" x-text="m.name || 'Unnamed Moon'"></span>
+							<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="moons.splice(i, 1)">
+								<i class="fa-solid fa-trash-can"></i>
+							</button>
+						</div>
+						<div class="grid grid-cols-4 gap-2">
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Name</label>
+								<input type="text" x-model="m.name" class="input text-sm w-full" placeholder="Moon name"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Cycle (days)</label>
+								<input type="number" x-model.number="m.cycle_days" class="input text-sm w-full" min="1" step="0.1"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Phase Offset</label>
+								<input type="number" x-model.number="m.phase_offset" class="input text-sm w-full" step="0.1"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Color</label>
+								<input type="color" x-model="m.color" class="input w-full h-[34px]"/>
+							</div>
+						</div>
+					</div>
+				</template>
+			</div>
+			<button
+				type="button"
+				class="btn-secondary text-sm w-full"
+				@click="moons.push({ name: 'New Moon', cycle_days: 29.5, phase_offset: 0, color: '#c0c0c0' })"
+			>
+				<i class="fa-solid fa-plus mr-1"></i> Add Moon
+			</button>
+			<div class="flex items-center justify-end gap-2 mt-4">
+				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
+				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false; error = '';
+						const payload = moons.map(m => ({
+							name: m.name, cycle_days: m.cycle_days, phase_offset: m.phase_offset, color: m.color
+						}));
+						fetch('/campaigns/%s/calendar/moons', {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+							credentials: 'same-origin',
+							body: JSON.stringify(payload)
+						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
+						.catch(e => { error = e.message; })
+						.finally(() => { saving = false; })
+					`, cc.Campaign.ID, csrfToken) }
+				>
+					<span x-show="!saving">Save All Moons</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// seasonsSettingsTab renders the seasons editor.
+templ seasonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Seasons</h2>
+			<p class="text-sm text-fg-secondary">
+				Define seasons with date ranges and colors. Colors display as borders on calendar day cells.
+			</p>
+		</div>
+		<div x-data={ seasonsData(cal.Seasons) }>
+			<div class="space-y-2 mb-4">
+				<template x-for="(s, i) in seasons" :key="i">
+					<div class="card p-3 space-y-2">
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-2">
+								<span class="w-3 h-3 rounded-full" :style="'background:' + s.color"></span>
+								<span class="text-sm font-medium text-fg" x-text="s.name || 'Unnamed Season'"></span>
+							</div>
+							<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="seasons.splice(i, 1)">
+								<i class="fa-solid fa-trash-can"></i>
+							</button>
+						</div>
+						<div class="grid grid-cols-6 gap-2">
+							<div class="col-span-2">
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Name</label>
+								<input type="text" x-model="s.name" class="input text-sm w-full" placeholder="Season name"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Start Month</label>
+								<input type="number" x-model.number="s.start_month" class="input text-sm w-full" min="1"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Start Day</label>
+								<input type="number" x-model.number="s.start_day" class="input text-sm w-full" min="1"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">End Month</label>
+								<input type="number" x-model.number="s.end_month" class="input text-sm w-full" min="1"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">End Day</label>
+								<input type="number" x-model.number="s.end_day" class="input text-sm w-full" min="1"/>
+							</div>
+						</div>
+						<div class="grid grid-cols-6 gap-2">
+							<div class="col-span-2">
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Color</label>
+								<input type="color" x-model="s.color" class="input w-full h-[34px]"/>
+							</div>
+							<div class="col-span-4">
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Description</label>
+								<input type="text" x-model="s.description" class="input text-sm w-full" placeholder="Optional description"/>
+							</div>
+						</div>
+					</div>
+				</template>
+			</div>
+			<button
+				type="button"
+				class="btn-secondary text-sm w-full"
+				@click="seasons.push({ name: 'New Season', start_month: 1, start_day: 1, end_month: 3, end_day: 30, color: '#22c55e', description: '' })"
+			>
+				<i class="fa-solid fa-plus mr-1"></i> Add Season
+			</button>
+			<div class="flex items-center justify-end gap-2 mt-4">
+				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
+				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false; error = '';
+						const payload = seasons.map(s => ({
+							name: s.name, start_month: s.start_month, start_day: s.start_day,
+							end_month: s.end_month, end_day: s.end_day, color: s.color,
+							description: s.description || null
+						}));
+						fetch('/campaigns/%s/calendar/seasons', {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+							credentials: 'same-origin',
+							body: JSON.stringify(payload)
+						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
+						.catch(e => { error = e.message; })
+						.finally(() => { saving = false; })
+					`, cc.Campaign.ID, csrfToken) }
+				>
+					<span x-show="!saving">Save All Seasons</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// --- Helper functions for JSON serialization into x-data attributes ---
+
+// generalSettingsData returns the Alpine.js x-data JSON string for general settings.
+func generalSettingsData(cal *Calendar) string {
+	epoch := ""
+	if cal.EpochName != nil {
+		epoch = *cal.EpochName
+	}
+	return fmt.Sprintf(`{
+		saving: false, saved: false, error: '',
+		name: %s, epochName: %s,
+		currentYear: %d, currentMonth: %d, currentDay: %d,
+		leapYearEvery: %d, leapYearOffset: %d
+	}`,
+		jsStr(cal.Name), jsStr(epoch),
+		cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay,
+		cal.LeapYearEvery, cal.LeapYearOffset,
+	)
+}
+
+// monthsData returns the Alpine.js x-data JSON for the months list.
+func monthsData(months []Month) string {
+	type mItem struct {
+		Name          string `json:"name"`
+		Days          int    `json:"days"`
+		IsIntercalary bool   `json:"is_intercalary"`
+		LeapYearDays  int    `json:"leap_year_days"`
+	}
+	items := make([]mItem, len(months))
+	for i, m := range months {
+		items[i] = mItem{Name: m.Name, Days: m.Days, IsIntercalary: m.IsIntercalary, LeapYearDays: m.LeapYearDays}
+	}
+	b, _ := json.Marshal(items)
+	return fmt.Sprintf("{ months: %s, saving: false, saved: false, error: '' }", string(b))
+}
+
+// weekdaysData returns the Alpine.js x-data JSON for the weekdays list.
+func weekdaysData(weekdays []Weekday) string {
+	type wItem struct {
+		Name string `json:"name"`
+	}
+	items := make([]wItem, len(weekdays))
+	for i, w := range weekdays {
+		items[i] = wItem{Name: w.Name}
+	}
+	b, _ := json.Marshal(items)
+	return fmt.Sprintf("{ weekdays: %s, saving: false, saved: false, error: '' }", string(b))
+}
+
+// moonsData returns the Alpine.js x-data JSON for the moons list.
+func moonsData(moons []Moon) string {
+	type moonItem struct {
+		Name        string  `json:"name"`
+		CycleDays   float64 `json:"cycle_days"`
+		PhaseOffset float64 `json:"phase_offset"`
+		Color       string  `json:"color"`
+	}
+	items := make([]moonItem, len(moons))
+	for i, m := range moons {
+		items[i] = moonItem{Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset, Color: m.Color}
+	}
+	b, _ := json.Marshal(items)
+	return fmt.Sprintf("{ moons: %s, saving: false, saved: false, error: '' }", string(b))
+}
+
+// seasonsData returns the Alpine.js x-data JSON for the seasons list.
+func seasonsData(seasons []Season) string {
+	type sItem struct {
+		Name        string `json:"name"`
+		StartMonth  int    `json:"start_month"`
+		StartDay    int    `json:"start_day"`
+		EndMonth    int    `json:"end_month"`
+		EndDay      int    `json:"end_day"`
+		Color       string `json:"color"`
+		Description string `json:"description"`
+	}
+	items := make([]sItem, len(seasons))
+	for i, s := range seasons {
+		desc := ""
+		if s.Description != nil {
+			desc = *s.Description
+		}
+		items[i] = sItem{
+			Name: s.Name, StartMonth: s.StartMonth, StartDay: s.StartDay,
+			EndMonth: s.EndMonth, EndDay: s.EndDay, Color: s.Color, Description: desc,
+		}
+	}
+	b, _ := json.Marshal(items)
+	return fmt.Sprintf("{ seasons: %s, saving: false, saved: false, error: '' }", string(b))
+}
+
+// jsStr JSON-encodes a string for safe embedding in JavaScript.
+func jsStr(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}

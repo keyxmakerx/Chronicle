@@ -219,6 +219,14 @@ func (m *mockSyncAPIRepo) GetCampaignStats(ctx context.Context, campaignID strin
 	return &APIStats{}, nil
 }
 
+func (m *mockSyncAPIRepo) BindDevice(ctx context.Context, keyID int, fingerprint string, boundAt time.Time) error {
+	return nil
+}
+
+func (m *mockSyncAPIRepo) UnbindDevice(ctx context.Context, keyID int) error {
+	return nil
+}
+
 // --- Test Helpers ---
 
 // assertAppError checks that err is an *apperror.AppError with the expected code.

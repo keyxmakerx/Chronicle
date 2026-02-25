@@ -22,6 +22,7 @@ type CalendarService interface {
 	// Calendar CRUD.
 	CreateCalendar(ctx context.Context, campaignID string, input CreateCalendarInput) (*Calendar, error)
 	GetCalendar(ctx context.Context, campaignID string) (*Calendar, error)
+	GetCalendarByID(ctx context.Context, calendarID string) (*Calendar, error)
 	UpdateCalendar(ctx context.Context, calendarID string, input UpdateCalendarInput) error
 	DeleteCalendar(ctx context.Context, calendarID string) error
 
@@ -37,6 +38,7 @@ type CalendarService interface {
 	UpdateEvent(ctx context.Context, eventID string, input UpdateEventInput) error
 	DeleteEvent(ctx context.Context, eventID string) error
 	ListEventsForMonth(ctx context.Context, calendarID string, year, month int, role int) ([]Event, error)
+	ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error)
 
 	// Date helpers.
 	AdvanceDate(ctx context.Context, calendarID string, days int) error
@@ -71,14 +73,16 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 	}
 
 	cal := &Calendar{
-		ID:           generateID(),
-		CampaignID:   campaignID,
-		Name:         input.Name,
-		Description:  input.Description,
-		EpochName:    input.EpochName,
-		CurrentYear:  input.CurrentYear,
-		CurrentMonth: 1,
-		CurrentDay:   1,
+		ID:             generateID(),
+		CampaignID:     campaignID,
+		Name:           input.Name,
+		Description:    input.Description,
+		EpochName:      input.EpochName,
+		CurrentYear:    input.CurrentYear,
+		CurrentMonth:   1,
+		CurrentDay:     1,
+		LeapYearEvery:  input.LeapYearEvery,
+		LeapYearOffset: input.LeapYearOffset,
 	}
 
 	if err := s.repo.Create(ctx, cal); err != nil {
@@ -96,8 +100,24 @@ func (s *calendarService) GetCalendar(ctx context.Context, campaignID string) (*
 	if cal == nil {
 		return nil, nil
 	}
+	return s.eagerLoad(ctx, cal)
+}
 
-	// Eager-load sub-resources.
+// GetCalendarByID returns a calendar by ID with all sub-resources loaded.
+func (s *calendarService) GetCalendarByID(ctx context.Context, calendarID string) (*Calendar, error) {
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return nil, fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return nil, nil
+	}
+	return s.eagerLoad(ctx, cal)
+}
+
+// eagerLoad populates all sub-resources on a calendar.
+func (s *calendarService) eagerLoad(ctx context.Context, cal *Calendar) (*Calendar, error) {
+	var err error
 	if cal.Months, err = s.repo.GetMonths(ctx, cal.ID); err != nil {
 		return nil, fmt.Errorf("get months: %w", err)
 	}
@@ -129,6 +149,8 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID string,
 	cal.CurrentYear = input.CurrentYear
 	cal.CurrentMonth = input.CurrentMonth
 	cal.CurrentDay = input.CurrentDay
+	cal.LeapYearEvery = input.LeapYearEvery
+	cal.LeapYearOffset = input.LeapYearOffset
 
 	if err := s.repo.Update(ctx, cal); err != nil {
 		return fmt.Errorf("update calendar: %w", err)
@@ -152,6 +174,9 @@ func (s *calendarService) SetMonths(ctx context.Context, calendarID string, mont
 		}
 		if m.Days < 1 || m.Days > 400 {
 			return apperror.NewValidation(fmt.Sprintf("month %q: days must be between 1 and 400", m.Name))
+		}
+		if m.LeapYearDays < 0 {
+			return apperror.NewValidation(fmt.Sprintf("month %q: leap_year_days cannot be negative", m.Name))
 		}
 	}
 	return s.repo.SetMonths(ctx, calendarID, months)
@@ -214,9 +239,13 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID string, in
 		Year:           input.Year,
 		Month:          input.Month,
 		Day:            input.Day,
+		EndYear:        input.EndYear,
+		EndMonth:       input.EndMonth,
+		EndDay:         input.EndDay,
 		IsRecurring:    input.IsRecurring,
 		RecurrenceType: input.RecurrenceType,
 		Visibility:     input.Visibility,
+		Category:       input.Category,
 		CreatedBy:      &input.CreatedBy,
 	}
 
@@ -254,9 +283,13 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 	evt.Year = input.Year
 	evt.Month = input.Month
 	evt.Day = input.Day
+	evt.EndYear = input.EndYear
+	evt.EndMonth = input.EndMonth
+	evt.EndDay = input.EndDay
 	evt.IsRecurring = input.IsRecurring
 	evt.RecurrenceType = input.RecurrenceType
 	evt.Visibility = input.Visibility
+	evt.Category = input.Category
 
 	return s.repo.UpdateEvent(ctx, evt)
 }
@@ -271,8 +304,13 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID str
 	return s.repo.ListEventsForMonth(ctx, calendarID, year, month, role)
 }
 
+// ListEventsForEntity returns all events linked to a specific entity.
+func (s *calendarService) ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error) {
+	return s.repo.ListEventsForEntity(ctx, entityID, role)
+}
+
 // AdvanceDate moves the current date forward by the given number of days,
-// rolling over months and years as needed.
+// rolling over months and years as needed. Accounts for leap years.
 func (s *calendarService) AdvanceDate(ctx context.Context, calendarID string, days int) error {
 	cal, err := s.repo.GetByID(ctx, calendarID)
 	if err != nil {
@@ -290,13 +328,17 @@ func (s *calendarService) AdvanceDate(ctx context.Context, calendarID string, da
 		return apperror.NewValidation("calendar has no months configured")
 	}
 
+	// Attach months to calendar for leap year calculations.
+	cal.Months = months
+
 	day := cal.CurrentDay
 	monthIdx := cal.CurrentMonth - 1 // 0-indexed
 	year := cal.CurrentYear
 
 	for i := 0; i < days; i++ {
 		day++
-		if monthIdx >= 0 && monthIdx < len(months) && day > months[monthIdx].Days {
+		maxDays := cal.MonthDays(monthIdx, year)
+		if monthIdx >= 0 && monthIdx < len(months) && day > maxDays {
 			day = 1
 			monthIdx++
 			if monthIdx >= len(months) {

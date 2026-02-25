@@ -23,8 +23,10 @@ type APIKey struct {
 	UserID      string             `json:"user_id"`
 	CampaignID  string             `json:"campaign_id"`
 	Permissions []APIKeyPermission `json:"permissions"`
-	IPAllowlist []string           `json:"ip_allowlist,omitempty"`
-	RateLimit   int                `json:"rate_limit"`              // Requests per minute.
+	IPAllowlist       []string           `json:"ip_allowlist,omitempty"`
+	DeviceFingerprint *string            `json:"device_fingerprint,omitempty"`
+	DeviceBoundAt     *time.Time         `json:"device_bound_at,omitempty"`
+	RateLimit         int                `json:"rate_limit"`              // Requests per minute.
 	IsActive    bool               `json:"is_active"`
 	LastUsedAt  *time.Time         `json:"last_used_at,omitempty"`
 	LastUsedIP  *string            `json:"last_used_ip,omitempty"`

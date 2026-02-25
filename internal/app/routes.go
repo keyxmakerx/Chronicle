@@ -317,10 +317,18 @@ func (a *App) RegisterRoutes() {
 	syncapi.RegisterAdminRoutes(adminGroup, syncHandler)
 	syncapi.RegisterCampaignRoutes(e, syncHandler, campaignService, authService)
 
+	// Calendar plugin: custom fantasy calendar with months, moons, events.
+	// Created early so the sync API can reference calendarService.
+	calendarRepo := calendar.NewCalendarRepository(a.DB)
+	calendarService := calendar.NewCalendarService(calendarRepo)
+	calendarHandler := calendar.NewHandler(calendarService)
+	calendar.RegisterRoutes(e, calendarHandler, campaignService, authService)
+
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService)
-	syncapi.RegisterAPIRoutes(e, syncAPIHandler, syncService)
+	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService)
+	syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, syncService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
 	tagRepo := tags.NewTagRepository(a.DB)
@@ -339,12 +347,6 @@ func (a *App) RegisterRoutes() {
 	relService := relations.NewRelationService(relRepo)
 	relHandler := relations.NewHandler(relService)
 	relations.RegisterRoutes(e, relHandler, campaignService, authService)
-
-	// Calendar plugin: custom fantasy calendar with months, moons, events.
-	calendarRepo := calendar.NewCalendarRepository(a.DB)
-	calendarService := calendar.NewCalendarService(calendarRepo)
-	calendarHandler := calendar.NewHandler(calendarService)
-	calendar.RegisterRoutes(e, calendarHandler, campaignService, authService)
 
 	// Audit plugin: campaign activity logging and history.
 	auditRepo := audit.NewAuditRepository(a.DB)

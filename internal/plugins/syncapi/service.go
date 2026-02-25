@@ -34,6 +34,8 @@ type SyncAPIService interface {
 	// Authentication.
 	AuthenticateKey(ctx context.Context, rawKey string) (*APIKey, error)
 	UpdateKeyLastUsed(ctx context.Context, id int, ip string) error
+	BindDevice(ctx context.Context, keyID int, fingerprint string) error
+	UnbindDevice(ctx context.Context, keyID int) error
 
 	// Request logging.
 	LogRequest(ctx context.Context, log *APIRequestLog) error
@@ -227,6 +229,23 @@ func (s *syncAPIService) AuthenticateKey(ctx context.Context, rawKey string) (*A
 // UpdateKeyLastUsed records the last-used timestamp and IP for an API key.
 func (s *syncAPIService) UpdateKeyLastUsed(ctx context.Context, id int, ip string) error {
 	return s.repo.UpdateKeyLastUsed(ctx, id, ip)
+}
+
+// BindDevice records a device fingerprint on an API key. Once bound, only
+// requests from this device are accepted. The fingerprint is a client-provided
+// opaque string (typically a hash of hardware/software identifiers).
+func (s *syncAPIService) BindDevice(ctx context.Context, keyID int, fingerprint string) error {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" {
+		return apperror.NewBadRequest("device fingerprint is required")
+	}
+	now := time.Now().UTC()
+	return s.repo.BindDevice(ctx, keyID, fingerprint, now)
+}
+
+// UnbindDevice removes device binding from an API key, allowing re-registration.
+func (s *syncAPIService) UnbindDevice(ctx context.Context, keyID int) error {
+	return s.repo.UnbindDevice(ctx, keyID)
 }
 
 // --- Request Logging ---

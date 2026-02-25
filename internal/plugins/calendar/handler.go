@@ -62,13 +62,14 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 
 	data := CalendarViewData{
-		Calendar:     cal,
-		Year:         year,
-		MonthIndex:   month,
-		Events:       events,
-		CampaignID:   cc.Campaign.ID,
-		IsOwner:      cc.MemberRole >= campaigns.RoleOwner,
-		CSRFToken:    middleware.GetCSRFToken(c),
+		Calendar:   cal,
+		Year:       year,
+		MonthIndex: month,
+		Events:     events,
+		CampaignID: cc.Campaign.ID,
+		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
+		CSRFToken:  middleware.GetCSRFToken(c),
 	}
 
 	if c.Request().Header.Get("HX-Request") != "" {
@@ -155,24 +156,28 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 	}
 
 	var req struct {
-		Name         string  `json:"name"`
-		Description  *string `json:"description"`
-		EpochName    *string `json:"epoch_name"`
-		CurrentYear  int     `json:"current_year"`
-		CurrentMonth int     `json:"current_month"`
-		CurrentDay   int     `json:"current_day"`
+		Name           string  `json:"name"`
+		Description    *string `json:"description"`
+		EpochName      *string `json:"epoch_name"`
+		CurrentYear    int     `json:"current_year"`
+		CurrentMonth   int     `json:"current_month"`
+		CurrentDay     int     `json:"current_day"`
+		LeapYearEvery  int     `json:"leap_year_every"`
+		LeapYearOffset int     `json:"leap_year_offset"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 	}
 
 	return h.svc.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
-		Name:         req.Name,
-		Description:  req.Description,
-		EpochName:    req.EpochName,
-		CurrentYear:  req.CurrentYear,
-		CurrentMonth: req.CurrentMonth,
-		CurrentDay:   req.CurrentDay,
+		Name:           req.Name,
+		Description:    req.Description,
+		EpochName:      req.EpochName,
+		CurrentYear:    req.CurrentYear,
+		CurrentMonth:   req.CurrentMonth,
+		CurrentDay:     req.CurrentDay,
+		LeapYearEvery:  req.LeapYearEvery,
+		LeapYearOffset: req.LeapYearOffset,
 	})
 }
 
@@ -251,9 +256,13 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		Year           int     `json:"year"`
 		Month          int     `json:"month"`
 		Day            int     `json:"day"`
+		EndYear        *int    `json:"end_year"`
+		EndMonth       *int    `json:"end_month"`
+		EndDay         *int    `json:"end_day"`
 		IsRecurring    bool    `json:"is_recurring"`
 		RecurrenceType *string `json:"recurrence_type"`
 		Visibility     string  `json:"visibility"`
+		Category       *string `json:"category"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
@@ -262,7 +271,6 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 	// Get user ID from session context.
 	userID := ""
 	if session := c.Get("session"); session != nil {
-		// Session is set by auth middleware.
 		if s, ok := session.(interface{ GetUserID() string }); ok {
 			userID = s.GetUserID()
 		}
@@ -275,9 +283,13 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		Year:           req.Year,
 		Month:          req.Month,
 		Day:            req.Day,
+		EndYear:        req.EndYear,
+		EndMonth:       req.EndMonth,
+		EndDay:         req.EndDay,
 		IsRecurring:    req.IsRecurring,
 		RecurrenceType: req.RecurrenceType,
 		Visibility:     req.Visibility,
+		Category:       req.Category,
 		CreatedBy:      userID,
 	})
 	if err != nil {
@@ -285,6 +297,48 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, evt)
+}
+
+// UpdateEventAPI updates an existing event.
+// PUT /campaigns/:id/calendar/events/:eid
+func (h *Handler) UpdateEventAPI(c echo.Context) error {
+	ctx := c.Request().Context()
+	eventID := c.Param("eid")
+
+	var req struct {
+		Name           string  `json:"name"`
+		Description    *string `json:"description"`
+		EntityID       *string `json:"entity_id"`
+		Year           int     `json:"year"`
+		Month          int     `json:"month"`
+		Day            int     `json:"day"`
+		EndYear        *int    `json:"end_year"`
+		EndMonth       *int    `json:"end_month"`
+		EndDay         *int    `json:"end_day"`
+		IsRecurring    bool    `json:"is_recurring"`
+		RecurrenceType *string `json:"recurrence_type"`
+		Visibility     string  `json:"visibility"`
+		Category       *string `json:"category"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	return h.svc.UpdateEvent(ctx, eventID, UpdateEventInput{
+		Name:           req.Name,
+		Description:    req.Description,
+		EntityID:       req.EntityID,
+		Year:           req.Year,
+		Month:          req.Month,
+		Day:            req.Day,
+		EndYear:        req.EndYear,
+		EndMonth:       req.EndMonth,
+		EndDay:         req.EndDay,
+		IsRecurring:    req.IsRecurring,
+		RecurrenceType: req.RecurrenceType,
+		Visibility:     req.Visibility,
+		Category:       req.Category,
+	})
 }
 
 // DeleteEventAPI deletes an event.
@@ -297,6 +351,64 @@ func (h *Handler) DeleteEventAPI(c echo.Context) error {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
+}
+
+// UpdateSeasonsAPI replaces all seasons.
+// PUT /campaigns/:id/calendar/seasons
+func (h *Handler) UpdateSeasonsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var seasons []Season
+	if err := c.Bind(&seasons); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	return h.svc.SetSeasons(ctx, cal.ID, seasons)
+}
+
+// DeleteCalendarAPI removes the calendar and all its data.
+// DELETE /campaigns/:id/calendar
+func (h *Handler) DeleteCalendarAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	if err := h.svc.DeleteCalendar(ctx, cal.ID); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+// ShowSettings renders the calendar settings page.
+// GET /campaigns/:id/calendar/settings
+func (h *Handler) ShowSettings(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	if cal == nil {
+		return c.Redirect(http.StatusSeeOther,
+			fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID))
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	if c.Request().Header.Get("HX-Request") != "" {
+		return middleware.Render(c, http.StatusOK, CalendarSettingsFragment(cc, cal, csrfToken))
+	}
+	return middleware.Render(c, http.StatusOK, CalendarSettingsPage(cc, cal, csrfToken))
 }
 
 // AdvanceDateAPI moves the current date forward by N days.
@@ -323,6 +435,35 @@ func (h *Handler) AdvanceDateAPI(c echo.Context) error {
 	return h.svc.AdvanceDate(ctx, cal.ID, req.Days)
 }
 
+// EntityEventsFragment returns a small HTMX fragment listing calendar events
+// linked to a specific entity. Loaded lazily from entity show pages.
+// GET /campaigns/:id/calendar/entity-events/:eid
+func (h *Handler) EntityEventsFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	entityID := c.Param("eid")
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	if cal == nil {
+		// No calendar = no events section.
+		return c.NoContent(http.StatusOK)
+	}
+
+	role := int(cc.MemberRole)
+	events, err := h.svc.ListEventsForEntity(ctx, entityID, role)
+	if err != nil {
+		return err
+	}
+	if len(events) == 0 {
+		return c.NoContent(http.StatusOK)
+	}
+
+	return middleware.Render(c, http.StatusOK, EntityEventsSection(cc, cal, events))
+}
+
 // CalendarViewData holds all data needed to render the calendar grid.
 type CalendarViewData struct {
 	Calendar   *Calendar
@@ -331,6 +472,7 @@ type CalendarViewData struct {
 	Events     []Event
 	CampaignID string
 	IsOwner    bool
+	IsScribe   bool
 	CSRFToken  string
 }
 
@@ -341,6 +483,17 @@ func (d CalendarViewData) CurrentMonthDef() *Month {
 		return &d.Calendar.Months[idx]
 	}
 	return nil
+}
+
+// CurrentMonthDays returns the number of days in the current month,
+// accounting for leap years.
+func (d CalendarViewData) CurrentMonthDays() int {
+	return d.Calendar.MonthDays(d.MonthIndex-1, d.Year)
+}
+
+// CurrentSeason returns the season for a given day in the current month, or nil.
+func (d CalendarViewData) CurrentSeason(day int) *Season {
+	return d.Calendar.SeasonForDate(d.MonthIndex, day)
 }
 
 // PrevMonth returns year, month for the previous month (wrapping at year boundary).
