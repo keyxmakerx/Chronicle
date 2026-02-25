@@ -19,6 +19,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
@@ -338,6 +339,12 @@ func (a *App) RegisterRoutes() {
 	relService := relations.NewRelationService(relRepo)
 	relHandler := relations.NewHandler(relService)
 	relations.RegisterRoutes(e, relHandler, campaignService, authService)
+
+	// Calendar plugin: custom fantasy calendar with months, moons, events.
+	calendarRepo := calendar.NewCalendarRepository(a.DB)
+	calendarService := calendar.NewCalendarService(calendarRepo)
+	calendarHandler := calendar.NewHandler(calendarService)
+	calendar.RegisterRoutes(e, calendarHandler, campaignService, authService)
 
 	// Audit plugin: campaign activity logging and history.
 	auditRepo := audit.NewAuditRepository(a.DB)

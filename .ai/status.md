@@ -8,11 +8,12 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-24 -- Sidebar drill-down rework, extension fixes, customize page restructure, notes addon rename.
+2026-02-25 -- Sidebar overlay fix (icon strip visible, top border, tightened width),
+categories layout made dynamic, notes addon rename finalized.
 
 ## Current Phase
-**Phase E: Core UX & Discovery.** Sidebar drill-down reworked with overlay approach,
-customize page restructured, attributes addon formalized, notes addon renamed from player-notes.
+**Phase E → F transition.** Phase E nearly complete (keyboard shortcuts remaining).
+Starting Phase F: Calendar plugin (dire need).
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 

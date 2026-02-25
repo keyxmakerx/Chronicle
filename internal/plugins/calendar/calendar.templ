@@ -1,0 +1,284 @@
+// calendar.templ renders the calendar UI: setup page, monthly grid view,
+// and event display. The grid uses a CSS grid matching the weekday count.
+
+package calendar
+
+import (
+	"fmt"
+	"strconv"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CalendarSetupPage renders the initial setup when no calendar exists yet.
+templ CalendarSetupPage(cc *campaigns.CampaignContext, csrfToken string) {
+	@layouts.App("Calendar - Setup") {
+		<div class="max-w-lg mx-auto py-12">
+			@calendarSetupForm(cc, csrfToken)
+		</div>
+	}
+}
+
+// CalendarSetupFragment renders the setup form as an HTMX fragment.
+templ CalendarSetupFragment(cc *campaigns.CampaignContext, csrfToken string) {
+	<div class="max-w-lg mx-auto py-12">
+		@calendarSetupForm(cc, csrfToken)
+	</div>
+}
+
+// calendarSetupForm renders the form to create a new calendar.
+templ calendarSetupForm(cc *campaigns.CampaignContext, csrfToken string) {
+	<div class="card p-8 text-center space-y-6">
+		<div>
+			<i class="fa-solid fa-calendar-days text-4xl text-accent mb-3"></i>
+			<h1 class="text-xl font-bold text-fg">Create Your Calendar</h1>
+			<p class="text-sm text-fg-secondary mt-1">
+				Set up a custom calendar for your world with unique months, weekdays, moons, and more.
+			</p>
+		</div>
+		<form
+			method="POST"
+			action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+			class="space-y-4 text-left"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1">Calendar Name</label>
+				<input type="text" name="name" value="Campaign Calendar" class="input w-full" placeholder="e.g. The Reckoning of Ages"/>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1">Epoch / Era Name</label>
+				<input type="text" name="epoch_name" class="input w-full" placeholder="e.g. DR, Age of Fire, Third Era"/>
+				<p class="text-xs text-fg-muted mt-1">Optional. Displayed after the year number (e.g. "1492 DR").</p>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1">Starting Year</label>
+				<input type="number" name="start_year" value="1" class="input w-full"/>
+			</div>
+			<div class="pt-2">
+				<button type="submit" class="btn-primary w-full">
+					<i class="fa-solid fa-plus mr-2"></i> Create Calendar
+				</button>
+				<p class="text-xs text-fg-muted mt-2 text-center">
+					You can customize months, weekdays, and moons after creation.
+				</p>
+			</div>
+		</form>
+	</div>
+}
+
+// CalendarPage renders the full calendar page with monthly grid.
+templ CalendarPage(cc *campaigns.CampaignContext, data CalendarViewData) {
+	@layouts.App(data.Calendar.Name) {
+		<div class="h-full flex flex-col -mx-5 -my-4">
+			@calendarHeader(cc, data)
+			<div class="flex-1 overflow-y-auto px-6 py-4">
+				@calendarGrid(cc, data)
+			</div>
+		</div>
+	}
+}
+
+// CalendarGridFragment renders just the grid area for HTMX swaps.
+templ CalendarGridFragment(cc *campaigns.CampaignContext, data CalendarViewData) {
+	@calendarHeader(cc, data)
+	<div class="flex-1 overflow-y-auto px-6 py-4">
+		@calendarGrid(cc, data)
+	</div>
+}
+
+// calendarHeader renders the month/year navigation and current date info.
+templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
+	<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
+		<div class="flex items-center gap-4">
+			<!-- Prev/Next month navigation -->
+			<div class="flex items-center gap-1">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", data.CampaignID, prevYear(data), prevMonth(data))) }
+					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+					title="Previous month"
+				>
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+					</svg>
+				</a>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", data.CampaignID, nextYear(data), nextMonth(data))) }
+					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+					title="Next month"
+				>
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+					</svg>
+				</a>
+			</div>
+			<!-- Month name + year -->
+			<div>
+				<h1 class="text-lg font-semibold text-fg">
+					if data.CurrentMonthDef() != nil {
+						{ data.CurrentMonthDef().Name }
+					}
+					{ " " }
+					{ strconv.Itoa(data.Year) }
+					if data.Calendar.EpochName != nil && *data.Calendar.EpochName != "" {
+						{ " " + *data.Calendar.EpochName }
+					}
+				</h1>
+			</div>
+		</div>
+		<div class="flex items-center gap-3">
+			<!-- "Today" button to jump to current date -->
+			if data.Year != data.Calendar.CurrentYear || data.MonthIndex != data.Calendar.CurrentMonth {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) }
+					class="btn-secondary text-xs"
+				>
+					<i class="fa-solid fa-crosshairs mr-1"></i> Today
+				</a>
+			}
+			<!-- Moon phases for today -->
+			if len(data.Calendar.Moons) > 0 {
+				<div class="flex items-center gap-2">
+					for _, moon := range data.Calendar.Moons {
+						<span
+							class="text-xs text-fg-secondary"
+							title={ fmt.Sprintf("%s: %s", moon.Name, moon.MoonPhaseName(data.AbsoluteDay(data.Calendar.CurrentDay))) }
+						>
+							{ moonPhaseIcon(moon.MoonPhase(data.AbsoluteDay(data.Calendar.CurrentDay))) }
+						</span>
+					}
+				</div>
+			}
+		</div>
+	</div>
+}
+
+// calendarGrid renders the weekday headers and day cells.
+templ calendarGrid(cc *campaigns.CampaignContext, data CalendarViewData) {
+	if data.CurrentMonthDef() == nil {
+		<div class="card p-6 text-center text-fg-secondary">
+			<p>No months configured. Add months in calendar settings.</p>
+		</div>
+	} else {
+		<div
+			class="grid gap-px bg-edge rounded-lg overflow-hidden"
+			style={ fmt.Sprintf("grid-template-columns: repeat(%d, minmax(0, 1fr))", data.Calendar.WeekLength()) }
+		>
+			<!-- Weekday headers -->
+			for _, wd := range data.Calendar.Weekdays {
+				<div class="bg-surface-alt px-2 py-2 text-center text-xs font-semibold text-fg-secondary uppercase tracking-wider">
+					{ wd.Name }
+				</div>
+			}
+			<!-- Empty cells before day 1 -->
+			for i := 0; i < data.StartWeekdayOffset(); i++ {
+				<div class="bg-surface min-h-[80px]"></div>
+			}
+			<!-- Day cells -->
+			for day := 1; day <= data.CurrentMonthDef().Days; day++ {
+				@dayCell(data, day)
+			}
+			<!-- Trailing empty cells to complete the last row -->
+			for i := 0; i < trailingCells(data); i++ {
+				<div class="bg-surface min-h-[80px]"></div>
+			}
+		</div>
+	}
+}
+
+// dayCell renders a single day in the calendar grid.
+templ dayCell(data CalendarViewData, day int) {
+	<div class={
+		"bg-surface min-h-[80px] p-1.5 relative group",
+		templ.KV("ring-2 ring-inset ring-accent/40", data.IsToday(day)),
+	}>
+		<!-- Day number -->
+		<div class="flex items-center justify-between mb-1">
+			<span class={
+				"text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
+				templ.KV("bg-accent text-white", data.IsToday(day)),
+				templ.KV("text-fg-body", !data.IsToday(day)),
+			}>
+				{ strconv.Itoa(day) }
+			</span>
+		</div>
+		<!-- Events for this day -->
+		for _, evt := range data.EventsForDay(day) {
+			<div
+				class={
+					"text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-default",
+					templ.KV("bg-accent/15 text-accent", evt.Visibility == "everyone"),
+					templ.KV("bg-amber-500/15 text-amber-400", evt.Visibility == "dm_only"),
+				}
+				title={ evt.Name }
+			>
+				if evt.EntityID != nil && evt.EntityIcon != "" {
+					<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
+				}
+				{ evt.Name }
+			</div>
+		}
+	</div>
+}
+
+// Helper functions for template navigation.
+
+func prevYear(d CalendarViewData) int {
+	y, _ := d.PrevMonth()
+	return y
+}
+
+func prevMonth(d CalendarViewData) int {
+	_, m := d.PrevMonth()
+	return m
+}
+
+func nextYear(d CalendarViewData) int {
+	y, _ := d.NextMonth()
+	return y
+}
+
+func nextMonth(d CalendarViewData) int {
+	_, m := d.NextMonth()
+	return m
+}
+
+// trailingCells calculates empty cells needed to complete the last row.
+func trailingCells(d CalendarViewData) int {
+	wl := d.Calendar.WeekLength()
+	if wl == 0 {
+		return 0
+	}
+	md := d.CurrentMonthDef()
+	if md == nil {
+		return 0
+	}
+	totalCells := d.StartWeekdayOffset() + md.Days
+	remainder := totalCells % wl
+	if remainder == 0 {
+		return 0
+	}
+	return wl - remainder
+}
+
+// moonPhaseIcon returns a unicode moon phase character based on phase value (0-1).
+func moonPhaseIcon(phase float64) string {
+	switch {
+	case phase < 0.125:
+		return "\U0001F311" // New moon
+	case phase < 0.25:
+		return "\U0001F312" // Waxing crescent
+	case phase < 0.375:
+		return "\U0001F313" // First quarter
+	case phase < 0.5:
+		return "\U0001F314" // Waxing gibbous
+	case phase < 0.625:
+		return "\U0001F315" // Full moon
+	case phase < 0.75:
+		return "\U0001F316" // Waning gibbous
+	case phase < 0.875:
+		return "\U0001F317" // Last quarter
+	default:
+		return "\U0001F318" // Waning crescent
+	}
+}
