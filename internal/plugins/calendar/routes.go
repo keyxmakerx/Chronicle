@@ -42,10 +42,14 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Entity-linked events fragment (Player+ — loaded on entity show pages).
 	cg.GET("/calendar/entity-events/:eid", h.EntityEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
 
-	// Public-capable view: calendar page viewable by players and public campaigns.
+	// Upcoming events fragment (Player+ — loaded by dashboard block).
+	cg.GET("/calendar/upcoming", h.UpcomingEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Public-capable views: calendar grid + timeline viewable by players and public campaigns.
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 	)
 	pub.GET("/calendar", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendar/timeline", h.ShowTimeline, campaigns.RequireRole(campaigns.RolePlayer))
 }

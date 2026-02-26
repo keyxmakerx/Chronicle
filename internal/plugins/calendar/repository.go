@@ -39,6 +39,7 @@ type CalendarRepository interface {
 	ListEventsForMonth(ctx context.Context, calendarID string, year, month int, role int) ([]Event, error)
 	ListEventsForYear(ctx context.Context, calendarID string, year int, role int) ([]Event, error)
 	ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error)
+	ListUpcomingEvents(ctx context.Context, calendarID string, year, month, day int, role int, limit int) ([]Event, error)
 }
 
 // calendarRepo is the MariaDB implementation of CalendarRepository.
@@ -420,6 +421,49 @@ func (r *calendarRepo) ListEventsForEntity(ctx context.Context, entityID string,
 		ORDER BY e.year, e.month, e.day`, visFilter)
 
 	rows, err := r.db.QueryContext(ctx, query, entityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanEvents(rows)
+}
+
+// ListUpcomingEvents returns events on or after the given date, ordered
+// chronologically. Includes recurring yearly events for upcoming months.
+func (r *calendarRepo) ListUpcomingEvents(ctx context.Context, calendarID string, year, month, day int, role int, limit int) ([]Event, error) {
+	visFilter := "AND e.visibility = 'everyone'"
+	if role >= 3 {
+		visFilter = ""
+	}
+
+	query := fmt.Sprintf(`
+		SELECT `+eventCols+`
+		FROM calendar_events e `+eventJoins+`
+		WHERE e.calendar_id = ?
+		  AND (
+		    (e.is_recurring = 0 AND (
+		      e.year > ? OR
+		      (e.year = ? AND e.month > ?) OR
+		      (e.year = ? AND e.month = ? AND e.day >= ?)
+		    ))
+		    OR (e.is_recurring = 1 AND e.recurrence_type = 'yearly' AND (
+		      e.month > ? OR (e.month = ? AND e.day >= ?)
+		    ))
+		  )
+		  %s
+		ORDER BY
+		  CASE WHEN e.is_recurring = 1 THEN e.month ELSE e.month END,
+		  CASE WHEN e.is_recurring = 1 THEN e.day ELSE e.day END,
+		  e.year, e.name
+		LIMIT ?`, visFilter)
+
+	rows, err := r.db.QueryContext(ctx, query,
+		calendarID,
+		year, year, month, year, month, day,
+		month, month, day,
+		limit,
+	)
 	if err != nil {
 		return nil, err
 	}

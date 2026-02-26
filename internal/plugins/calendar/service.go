@@ -39,6 +39,8 @@ type CalendarService interface {
 	DeleteEvent(ctx context.Context, eventID string) error
 	ListEventsForMonth(ctx context.Context, calendarID string, year, month int, role int) ([]Event, error)
 	ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error)
+	ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int) ([]Event, error)
+	ListEventsForYear(ctx context.Context, calendarID string, year int, role int) ([]Event, error)
 
 	// Date helpers.
 	AdvanceDate(ctx context.Context, calendarID string, days int) error
@@ -307,6 +309,30 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID str
 // ListEventsForEntity returns all events linked to a specific entity.
 func (s *calendarService) ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error) {
 	return s.repo.ListEventsForEntity(ctx, entityID, role)
+}
+
+// ListEventsForYear returns all events for a given year.
+func (s *calendarService) ListEventsForYear(ctx context.Context, calendarID string, year int, role int) ([]Event, error) {
+	return s.repo.ListEventsForYear(ctx, calendarID, year, role)
+}
+
+// ListUpcomingEvents returns the next N events from the calendar's current date.
+// Fetches the calendar to determine the current date, then delegates to the repo.
+func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int) ([]Event, error) {
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return nil, fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return nil, nil
+	}
+	if limit < 1 {
+		limit = 5
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	return s.repo.ListUpcomingEvents(ctx, calendarID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, role, limit)
 }
 
 // AdvanceDate moves the current date forward by the given number of days,

@@ -35,6 +35,8 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashTextBlock(block.Config)
 		case "pinned_pages":
 			@dashPinnedPages(cc, block.Config)
+		case "calendar_preview":
+			@dashCalendarPreview(cc, block.Config)
 	}
 }
 
@@ -142,6 +144,54 @@ templ dashPinnedPages(cc *CampaignContext, config map[string]any) {
 			Pinned pages block. Select specific entities to feature here.
 		</p>
 	</div>
+}
+
+// dashCalendarPreview renders a card that lazy-loads upcoming calendar events.
+// Config: limit (int, default 5). Uses HTMX to fetch from the calendar plugin.
+templ dashCalendarPreview(cc *CampaignContext, config map[string]any) {
+	if layouts.IsAddonEnabled(ctx, "calendar") {
+		<div>
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+					<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
+				</h2>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					View calendar
+				</a>
+			</div>
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendar/upcoming?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
+				hx-trigger="intersect once"
+				hx-swap="innerHTML"
+				class="card divide-y divide-edge min-h-[60px]"
+			>
+				<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+			</div>
+		</div>
+	}
+}
+
+// dashCalendarLimit extracts the event limit from block config (default 5).
+func dashCalendarLimit(config map[string]any) int {
+	limit := 5
+	if v, ok := config["limit"]; ok {
+		switch l := v.(type) {
+		case float64:
+			limit = int(l)
+		case int:
+			limit = l
+		}
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	return limit
 }
 
 // dashGridClass returns the CSS grid class for the category grid based on config.

@@ -8,15 +8,13 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-25 -- Calendar plugin Sprint 2 complete. Leap years, multi-day events,
-seasons with colors, event categories, calendar settings UI (5-tab page), event
-creation modal, entity-event reverse lookup, sync API calendar endpoints, device
-fingerprint binding for API keys.
+2026-02-26 -- Calendar plugin Sprint 3 complete. Sidebar link, upcoming events
+dashboard block (HTMX lazy-loaded), timeline view with month grouping and year
+navigation, view toggle between grid and timeline on calendar header.
 
 ## Current Phase
-**Phase F: Calendar & Time.** Sprint 2 complete — Calendaria feature parity, settings
-UI, sync API integration, device fingerprint binding. Sprint 3 next: dashboard block,
-timeline view, sidebar link.
+**Phase F: Calendar & Time.** Sprint 3 complete — sidebar link, dashboard block,
+timeline view. Sprint 4 next: event edit modal, event delete confirmation.
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
@@ -198,6 +196,24 @@ timeline view, sidebar link.
 - **Device fingerprint binding**: Auto-bind on first `X-Device-Fingerprint` header, reject
   mismatches with 403 + security event logging. `BindDevice`/`UnbindDevice` on service.
 
+### Calendar Plugin Sprint 3 — COMPLETE
+- **Sidebar link**: Calendar icon link in Zone 2 (campaign context), between Dashboard
+  and Categories. Gated behind `IsAddonEnabled(ctx, "calendar")`, active state highlighting.
+- **Dashboard block**: `calendar_preview` block type for campaign dashboard editor. HTMX
+  lazy-loaded from `GET /calendar/upcoming?limit=N`. Shows current date, season, and
+  upcoming events with category icons, entity links, and date formatting.
+- **Timeline view**: `GET /calendar/timeline?year=N` chronological event list grouped by
+  month. Year navigation, view toggle between grid and timeline on calendar header.
+  Timeline events show description, entity link, multi-day range, visibility badges.
+- **New service methods**: `ListUpcomingEvents()`, `ListEventsForYear()` on service interface.
+- **New repo method**: `ListUpcomingEvents()` with combined date comparison + recurring
+  event handling.
+- **Files**: `app.templ` (sidebar link), `campaigns/model.go` + `dashboard_blocks.templ`
+  (block type), `dashboard_editor.js` (palette), `calendar/handler.go` (2 new handlers +
+  TimelineViewData), `calendar/service.go` (2 new methods), `calendar/repository.go`
+  (ListUpcomingEvents query), `calendar/calendar.templ` (5 new components),
+  `calendar/routes.go` (2 new routes).
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -220,11 +236,10 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Calendar Sprint 3:** Dashboard block ("Upcoming events"), timeline view, sidebar link.
-2. **Calendar Sprint 4:** Event edit modal (reuse creation modal with pre-fill), event
+1. **Calendar Sprint 4:** Event edit modal (reuse creation modal with pre-fill), event
    delete confirmation, drag-and-drop event rescheduling.
-3. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference).
-4. **Handler-level "view as player":** Extend toggle to filter is_private entities
+2. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference).
+3. **Handler-level "view as player":** Extend toggle to filter is_private entities
    at repository level (currently template-only).
 
 ## Known Issues Right Now

@@ -48,9 +48,9 @@ see `.ai/roadmap.md`.
 - [x] Calendar API endpoints for Foundry VTT sync (full REST API in sync plugin)
 - [x] Device fingerprint binding for API keys (single-device lock)
 - [x] Entity-event reverse lookup (HTMX lazy-loaded section on entity pages)
-- [ ] Calendar sidebar link
-- [ ] Calendar dashboard block ("Upcoming events")
-- [ ] Timeline view (chronological event display, may be calendar view mode)
+- [x] Calendar sidebar link
+- [x] Calendar dashboard block ("Upcoming events")
+- [x] Timeline view (chronological event display, month-grouped, year nav, view toggle)
 - [ ] Event edit modal (reuse creation modal with pre-fill)
 - [ ] Event delete confirmation UI
 

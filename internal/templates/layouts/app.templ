@@ -130,6 +130,19 @@ templ Sidebar() {
 						</svg>
 						Dashboard
 					</a>
+					if IsAddonEnabled(ctx, "calendar") {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/calendar", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/calendar", GetCampaignID(ctx)))) }
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-calendar-days text-xs"></i>
+							</span>
+							Calendar
+						</a>
+					}
 				</div>
 
 				<!-- Categories drill-down zone: only this area transforms -->

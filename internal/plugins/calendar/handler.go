@@ -464,6 +464,86 @@ func (h *Handler) EntityEventsFragment(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, EntityEventsSection(cc, cal, events))
 }
 
+// UpcomingEventsFragment returns an HTMX fragment with upcoming calendar events.
+// Used by the calendar_preview dashboard block via lazy-loading.
+// GET /campaigns/:id/calendar/upcoming
+func (h *Handler) UpcomingEventsFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	if cal == nil {
+		return middleware.Render(c, http.StatusOK, UpcomingEventsEmpty())
+	}
+
+	limit := 5
+	if q := c.QueryParam("limit"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil && v >= 1 && v <= 20 {
+			limit = v
+		}
+	}
+
+	role := int(cc.MemberRole)
+	events, err := h.svc.ListUpcomingEvents(ctx, cal.ID, limit, role)
+	if err != nil {
+		return err
+	}
+
+	return middleware.Render(c, http.StatusOK, UpcomingEventsBlock(cc, cal, events))
+}
+
+// ShowTimeline renders the timeline (list) view of calendar events.
+// GET /campaigns/:id/calendar/timeline
+func (h *Handler) ShowTimeline(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	if cal == nil {
+		csrfToken := middleware.GetCSRFToken(c)
+		if c.Request().Header.Get("HX-Request") != "" {
+			return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
+		}
+		return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
+	}
+
+	// Default to current year, allow override via query param.
+	year := cal.CurrentYear
+	if q := c.QueryParam("year"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil {
+			year = v
+		}
+	}
+
+	role := int(cc.MemberRole)
+	events, err := h.svc.ListEventsForYear(ctx, cal.ID, year, role)
+	if err != nil {
+		return err
+	}
+
+	data := TimelineViewData{
+		Calendar:   cal,
+		Year:       year,
+		Events:     events,
+		CampaignID: cc.Campaign.ID,
+		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
+		CSRFToken:  middleware.GetCSRFToken(c),
+	}
+
+	if c.Request().Header.Get("HX-Request") != "" {
+		return middleware.Render(c, http.StatusOK, TimelineFragment(cc, data))
+	}
+	return middleware.Render(c, http.StatusOK, TimelinePage(cc, data))
+}
+
 // CalendarViewData holds all data needed to render the calendar grid.
 type CalendarViewData struct {
 	Calendar   *Calendar
@@ -566,4 +646,50 @@ func (d CalendarViewData) WeekdayIndex(day int) int {
 // of the current month in the grid.
 func (d CalendarViewData) StartWeekdayOffset() int {
 	return d.WeekdayIndex(1)
+}
+
+// TimelineViewData holds data for the chronological timeline view.
+type TimelineViewData struct {
+	Calendar   *Calendar
+	Year       int
+	Events     []Event
+	CampaignID string
+	IsOwner    bool
+	IsScribe   bool
+	CSRFToken  string
+}
+
+// MonthName returns the month name for a 1-based month index.
+func (d TimelineViewData) MonthName(month int) string {
+	if month >= 1 && month <= len(d.Calendar.Months) {
+		return d.Calendar.Months[month-1].Name
+	}
+	return fmt.Sprintf("Month %d", month)
+}
+
+// EventsByMonth groups events by their month index for timeline rendering.
+func (d TimelineViewData) EventsByMonth() []TimelineMonth {
+	monthMap := make(map[int][]Event)
+	for _, evt := range d.Events {
+		monthMap[evt.Month] = append(monthMap[evt.Month], evt)
+	}
+	// Produce ordered slice.
+	var result []TimelineMonth
+	for m := 1; m <= len(d.Calendar.Months); m++ {
+		if events, ok := monthMap[m]; ok {
+			result = append(result, TimelineMonth{
+				Index:  m,
+				Name:   d.Calendar.Months[m-1].Name,
+				Events: events,
+			})
+		}
+	}
+	return result
+}
+
+// TimelineMonth groups events under a month header for timeline display.
+type TimelineMonth struct {
+	Index  int
+	Name   string
+	Events []Event
 }

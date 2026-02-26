@@ -23,7 +23,8 @@
     { type: 'recent_pages',   label: 'Recent Pages',   icon: 'fa-clock',      desc: 'Recently updated entities' },
     { type: 'entity_list',    label: 'Entity List',     icon: 'fa-list',       desc: 'Filtered list by category' },
     { type: 'text_block',     label: 'Text Block',      icon: 'fa-align-left', desc: 'Custom rich text / HTML' },
-    { type: 'pinned_pages',   label: 'Pinned Pages',    icon: 'fa-thumbtack',  desc: 'Hand-picked entity cards' }
+    { type: 'pinned_pages',   label: 'Pinned Pages',    icon: 'fa-thumbtack',  desc: 'Hand-picked entity cards' },
+    { type: 'calendar_preview', label: 'Calendar',     icon: 'fa-calendar-days', desc: 'Upcoming calendar events' }
   ];
 
   /** Column layout presets for adding new rows. */
