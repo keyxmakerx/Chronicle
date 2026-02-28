@@ -1,5 +1,5 @@
 // Package addons manages the extension framework — installable addons
-// (modules, widgets, integrations) with per-campaign enable/disable controls.
+// (plugins, modules, widgets, integrations) with per-campaign enable/disable controls.
 // Admin manages the global addon registry; campaign owners toggle addons per campaign.
 package addons
 
@@ -12,6 +12,7 @@ const (
 	CategoryModule      AddonCategory = "module"
 	CategoryWidget      AddonCategory = "widget"
 	CategoryIntegration AddonCategory = "integration"
+	CategoryPlugin      AddonCategory = "plugin"
 )
 
 // AddonStatus tracks the lifecycle state of an addon.

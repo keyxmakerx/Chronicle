@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS map_markers (
     INDEX idx_markers_entity (entity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Register the maps addon so campaign owners can enable it.
-INSERT INTO addons (slug, name, description, version, category, status, icon, author)
-VALUES ('maps', 'Maps', 'Interactive maps with pin markers, entity linking, and DM-only visibility. Upload world, region, city, or dungeon maps.', '0.1.0', 'plugin', 'active', 'fa-map', 'Chronicle');
+-- Update the maps addon from planned/widget to active/plugin now that
+-- the backing code is implemented. Row was seeded in migration 000015.
+-- The 'plugin' ENUM value was added in migration 000027.
+UPDATE addons
+SET category    = 'plugin',
+    status      = 'active',
+    description = 'Interactive maps with pin markers, entity linking, and DM-only visibility. Upload world, region, city, or dungeon maps.'
+WHERE slug = 'maps';

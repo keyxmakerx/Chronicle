@@ -8,15 +8,31 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-28 -- Documentation audit complete. All `.ai/` files updated to reflect
-Calendar Plugin (Sprints 1-4), Maps Plugin Phase 1, and Inline Secrets (Phase H).
-New files: `calendar/.ai.md`. Updated: `data-model.md` (migrations 24-29, 12 new
-tables), `architecture.md` (directory structure), `tech-stack.md` (Leaflet active),
-`decisions.md` (ADR-015 maps, ADR-016 secrets), `editor/.ai.md` (secret mark).
+2026-02-28 -- Fixed migration crash (Error 1265) caused by invalid ENUM value
+`'plugin'` in migrations 000027/000029. Added `plugin` to addons.category ENUM,
+changed INSERTs to UPDATEs (rows already seeded in 000015), added migration
+validation tests, documented in ADR-017.
 
 ## Current Phase
 **Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit
 complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
+
+### Migration ENUM Bug Fix — COMPLETE
+- **Root cause**: Migrations 000027 (calendar) and 000029 (maps) used `INSERT INTO
+  addons ... category='plugin'` but `'plugin'` was not in the ENUM. Secondary issue:
+  slugs 'calendar' and 'maps' already existed from migration 000015's seed data,
+  causing duplicate key conflicts hidden behind the ENUM error.
+- **Fix**: Migration 000027 now ALTERs the ENUM to add `'plugin'` before any
+  INSERT/UPDATE. Both 000027 and 000029 use UPDATE (not INSERT) to modify existing
+  addon rows. Down migrations revert to original 000015 values instead of deleting.
+- **Go code**: Added `CategoryPlugin` constant to `model.go`, added `'plugin'` to
+  `validCategories` in `service.go`.
+- **Safeguards**: Created `internal/database/migrate_test.go` with tests that scan
+  migration SQL for invalid ENUM values. Added Migration Safety Rules to conventions.
+  Added protective comments to migration 000015. Recorded ADR-017.
+- **Files changed**: `000027_calendar_plugin.{up,down}.sql`,
+  `000029_maps_plugin.{up,down}.sql`, `000015_create_addons.up.sql` (comment),
+  `addons/model.go`, `addons/service.go`, `database/migrate_test.go` (new).
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
