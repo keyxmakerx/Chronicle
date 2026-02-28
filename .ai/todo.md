@@ -55,7 +55,7 @@ see `.ai/roadmap.md`.
 - [x] Event delete confirmation UI (in-modal confirmation overlay)
 
 ### Phase G: Maps & Geography
-- [ ] Maps plugin Phase 1 (Leaflet.js, image upload, pins, entity linking, DM-only pins)
+- [x] Maps plugin Phase 1 (Leaflet.js, image upload, pins, entity linking, DM-only pins, drag-and-drop)
 - [ ] Maps plugin Phase 2 (layers, marker groups, privacy, nested maps)
 
 ### Phase H: Secrets & Permissions

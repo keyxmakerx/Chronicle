@@ -20,6 +20,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
+	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
@@ -323,6 +324,12 @@ func (a *App) RegisterRoutes() {
 	calendarService := calendar.NewCalendarService(calendarRepo)
 	calendarHandler := calendar.NewHandler(calendarService)
 	calendar.RegisterRoutes(e, calendarHandler, campaignService, authService)
+
+	// Maps plugin: interactive maps with Leaflet.js, pin markers, entity linking.
+	mapsRepo := maps.NewMapRepository(a.DB)
+	mapsService := maps.NewMapService(mapsRepo)
+	mapsHandler := maps.NewHandler(mapsService)
+	maps.RegisterRoutes(e, mapsHandler, campaignService, authService)
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.

@@ -8,12 +8,13 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-28 -- Calendar plugin Sprint 4 complete. Event edit modal (dual-purpose
-create/edit), event delete with confirmation, clickable event chips in grid.
+2026-02-28 -- Maps plugin Phase 1 complete. Leaflet.js viewer, multi-map per
+campaign, pin markers with drag-and-drop, entity linking, DM-only visibility,
+map image upload via media plugin.
 
 ## Current Phase
-**Phase F: Calendar & Time.** Sprint 4 complete — event edit + delete. Calendar
-feature-complete for MVP. Next: Phase G (Maps) or Phase E (API docs).
+**Phase G: Maps & Geography.** Phase 1 complete — full maps plugin. Phase 2 next:
+layers, marker groups, nested maps. Or move to Phase E (API docs).
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
@@ -225,6 +226,26 @@ feature-complete for MVP. Next: Phase G (Maps) or Phase E (API docs).
   DELETE request sent on confirm, page reloads on success.
 - **Helper function**: `derefStr()` for safe nil string pointer dereferencing in templates.
 
+### Maps Plugin Phase 1 — COMPLETE
+- **Migration 000029**: `maps` table (id, campaign_id, name, description, image_id FK,
+  image_width, image_height, sort_order) + `map_markers` table (id, map_id, name,
+  description, x/y percentage coords, icon, color, entity_id FK, visibility, created_by).
+  Addon registered as `maps` in addons table.
+- **Model**: Map, Marker structs with DTOs. MapViewData, MapListData for templates.
+- **Repository**: Full CRUD for maps and markers. Entity LEFT JOIN for display data.
+  Visibility filtering by role (role >= 3 sees dm_only).
+- **Service**: Validation, default icon/color, coordinate clamping (0-100), CRUD.
+- **Handler**: Index (map list), Show (Leaflet viewer), CRUD APIs for maps and markers.
+  Form-based map creation + JSON APIs.
+- **Templates**: Map list page with card grid + create modal. Leaflet.js map viewer
+  with CRS.Simple for image overlay. Marker create/edit modal with icon picker,
+  color picker, visibility, entity linking. Map settings modal with image upload.
+  Delete confirmation for markers (in-modal) and maps (confirm dialog).
+- **Leaflet features**: Draggable markers (Scribe+) with silent PUT on dragend.
+  Place mode (crosshair cursor, click to place). Tooltip on hover, popup for players.
+  DM-only markers hidden from players via server-side filtering.
+- **Wiring**: Added to `installedAddons`, `app/routes.go`, sidebar nav, admin plugin registry.
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -247,12 +268,12 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Phase G: Maps plugin** — Leaflet.js, image upload, pins, entity linking, DM-only pins.
-2. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference).
-3. **Handler-level "view as player":** Extend toggle to filter is_private entities
+1. **Maps Phase 2 (optional):** Layers, marker groups, nested maps, fog of war.
+2. **Phase H: Secrets & Permissions** — Inline secrets, per-entity permissions.
+3. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference).
+4. **Handler-level "view as player":** Extend toggle to filter is_private entities
    at repository level (currently template-only).
-4. **Calendar polish (optional):** Drag-and-drop event rescheduling, entity search
-   in event modal (replace raw ID input with typeahead).
+5. **UX polish:** Entity search typeahead for calendar event + map marker entity linking.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

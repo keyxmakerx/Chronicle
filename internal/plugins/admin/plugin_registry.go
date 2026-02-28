@@ -109,7 +109,7 @@ func PluginRegistry() []PluginInfo {
 			Name:        "Maps",
 			Description: "Interactive map viewer with entity pins and region overlays using Leaflet.js.",
 			Icon:        "fa-map",
-			Status:      PluginPlanned,
+			Status:      PluginActive,
 			Category:    "Content",
 		},
 		{
