@@ -8,13 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-28 -- Phase H started: inline secrets (GM-only text). TipTap secret mark
-extension, server-side stripping for non-scribe users, CSS styling with eye-slash
-indicator.
+2026-02-28 -- Documentation audit complete. All `.ai/` files updated to reflect
+Calendar Plugin (Sprints 1-4), Maps Plugin Phase 1, and Inline Secrets (Phase H).
+New files: `calendar/.ai.md`. Updated: `data-model.md` (migrations 24-29, 12 new
+tables), `architecture.md` (directory structure), `tech-stack.md` (Leaflet active),
+`decisions.md` (ADR-015 maps, ADR-016 secrets), `editor/.ai.md` (secret mark).
 
 ## Current Phase
-**Phase H: Secrets & Permissions.** Inline secrets complete. Next: per-entity
-permissions, campaign export/import, or Maps Phase 2.
+**Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit
+complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
@@ -258,6 +260,21 @@ permissions, campaign export/import, or Maps Phase 2.
 - **Sanitizer whitelist**: `data-secret` attribute allowed on `<span>` in bluemonday policy.
 - **CSS styling**: Amber background tint, dashed bottom border, eye-slash pseudo-element
   indicator. Visible to owners/scribes, invisible to players (server-stripped).
+
+### Documentation Audit — COMPLETE
+- **calendar/.ai.md**: Created missing plugin documentation (architecture, data model,
+  routes, design decisions, sync API integration).
+- **data-model.md**: Added migrations 24-29 (security_events, attributes addon,
+  notes addon rename, 6 calendar tables, maps + map_markers). Updated ER diagram
+  and indexes section.
+- **architecture.md**: Updated directory structure with calendar plugin, maps plugin,
+  sanitize package, new JS files (editor_secret, keyboard_shortcuts, search_modal,
+  sidebar_drill, dashboard_editor, sidebar_nav_editor, notes). Updated plugin list.
+- **tech-stack.md**: Leaflet.js marked as active (was "Phase 2").
+- **decisions.md**: ADR-015 (Maps with percentage coords + Leaflet CRS.Simple),
+  ADR-016 (Inline secrets via TipTap Mark extension).
+- **editor/.ai.md**: Added editor_secret.js to files table, secret mark to current
+  state checklist, inline secrets documentation to notes section.
 
 ### In Progress
 - Nothing currently in progress.

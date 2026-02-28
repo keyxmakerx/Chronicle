@@ -359,3 +359,68 @@ creation errors are swallowed -- version tracking is non-critical.
 - Auto-pruning runs after every version creation (DELETE subquery).
 - Restore is a two-step operation: snapshot current state, then apply old version.
 - Version errors don't block the save operation (swallowed with `_ = err`).
+
+---
+
+## ADR-015: Maps with Percentage Coordinates and Leaflet CRS.Simple
+
+**Date:** 2026-02-28
+**Status:** Accepted
+
+**Context:** Maps plugin needs to display pin markers on uploaded background images.
+Markers must be positioned relative to the image, independent of actual pixel resolution.
+
+**Decision:** Store marker coordinates as percentages (0-100 for both X and Y).
+Use Leaflet.js with CRS.Simple to create a non-geographic coordinate system where
+the image is overlaid. Leaflet converts percentage coords to pixel space at render
+time based on image dimensions stored on the map record.
+
+Multiple maps per campaign (unlike calendar's 1:1). Maps are listed on an index page.
+
+**Alternatives Considered:**
+- Pixel coordinates: breaks when image is resized or replaced with different resolution.
+- Geographic coordinates (lat/lng): adds complexity for fantasy maps with no real-world
+  mapping. CRS.Simple avoids this entirely.
+- Canvas-based rendering: more work, less accessible, no built-in panning/zooming.
+
+**Consequences:**
+- Markers are resolution-independent. Image can be swapped with different sizes.
+- Leaflet loaded from CDN per-page (not globally) to avoid loading JS on non-map pages.
+- Image dimensions (width/height) must be stored on the map record for coordinate space.
+- Draggable markers use silent PUT on dragend -- no save button needed.
+
+---
+
+## ADR-016: Inline Secrets via TipTap Mark Extension
+
+**Date:** 2026-02-28
+**Status:** Accepted
+
+**Context:** GMs need to write inline secret text within entity entries that only
+they and scribes can see. Players should never receive the secret content -- it must
+be stripped server-side, not just hidden with CSS.
+
+**Decision:** Create a TipTap `secret` mark that renders as
+`<span data-secret="true" class="chronicle-secret">`. Since the vendored TipTap
+bundle doesn't export the raw `Mark` class, extend `TipTap.Underline` (which IS a
+Mark subclass) and override name, parseHTML, renderHTML, commands, and shortcuts.
+
+Server-side stripping in `internal/sanitize/`:
+- `StripSecretsHTML()` -- regex strips `<span data-secret>...</span>` from HTML.
+- `StripSecretsJSON()` -- recursive tree walk removes text nodes with `secret` mark
+  from ProseMirror JSON.
+
+Applied in `GetEntry` handler when `role < RoleScribe`.
+
+**Alternatives Considered:**
+- CSS-only hiding: insecure -- HTML still sent to client, visible in DevTools.
+- Separate "GM notes" field: less flexible than inline secrets mixed with regular text.
+- Build custom TipTap bundle with Mark export: adds Node.js build step, breaks
+  vendored-only constraint.
+
+**Consequences:**
+- Secret content never reaches players (server-stripped from both JSON and HTML).
+- Mark extension uses Underline.extend() hack -- works but is coupled to Underline
+  being present in the bundle.
+- Bluemonday whitelist updated to allow `data-secret` on `<span>`.
+- CSS shows amber background + eye-slash indicator for owners/scribes in edit mode.
