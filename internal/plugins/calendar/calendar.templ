@@ -78,7 +78,7 @@ templ CalendarPage(cc *campaigns.CampaignContext, data CalendarViewData) {
 			</div>
 		</div>
 		if data.IsScribe {
-			@eventCreateModal(data)
+			@eventModal(data)
 		}
 	}
 }
@@ -261,49 +261,83 @@ templ dayCell(data CalendarViewData, day int) {
 		</div>
 		<!-- Events for this day -->
 		for _, evt := range data.EventsForDay(day) {
-			<div
-				class={
-					"text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-default",
-					templ.KV("bg-accent/15 text-accent", evt.Visibility == "everyone"),
-					templ.KV("bg-amber-500/15 text-amber-400", evt.Visibility == "dm_only"),
-				}
-				title={ eventTooltip(evt) }
-			>
-				if evt.EntityID != nil && evt.EntityIcon != "" {
-					<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
-				}
-				if evt.Category != nil && *evt.Category != "" {
-					<span class="opacity-60">{ categoryIcon(*evt.Category) }</span>
-					{ " " }
-				}
-				{ evt.Name }
-			</div>
+			if data.IsScribe {
+				<button
+					class={
+						"w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-pointer hover:ring-1 hover:ring-accent/30",
+						templ.KV("bg-accent/15 text-accent", evt.Visibility == "everyone"),
+						templ.KV("bg-amber-500/15 text-amber-400", evt.Visibility == "dm_only"),
+					}
+					title={ eventTooltip(evt) }
+					data-event-id={ evt.ID }
+					data-event-name={ evt.Name }
+					data-event-description={ derefStr(evt.Description) }
+					data-event-year={ strconv.Itoa(evt.Year) }
+					data-event-month={ strconv.Itoa(evt.Month) }
+					data-event-day={ strconv.Itoa(evt.Day) }
+					data-event-visibility={ evt.Visibility }
+					data-event-category={ derefStr(evt.Category) }
+					data-event-recurring={ strconv.FormatBool(evt.IsRecurring) }
+					data-event-entity-id={ derefStr(evt.EntityID) }
+					onclick="openEditEventModal(this)"
+				>
+					if evt.EntityID != nil && evt.EntityIcon != "" {
+						<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
+					}
+					if evt.Category != nil && *evt.Category != "" {
+						<span class="opacity-60">{ categoryIcon(*evt.Category) }</span>
+						{ " " }
+					}
+					{ evt.Name }
+				</button>
+			} else {
+				<div
+					class={
+						"text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-default",
+						templ.KV("bg-accent/15 text-accent", evt.Visibility == "everyone"),
+						templ.KV("bg-amber-500/15 text-amber-400", evt.Visibility == "dm_only"),
+					}
+					title={ eventTooltip(evt) }
+				>
+					if evt.EntityID != nil && evt.EntityIcon != "" {
+						<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
+					}
+					if evt.Category != nil && *evt.Category != "" {
+						<span class="opacity-60">{ categoryIcon(*evt.Category) }</span>
+						{ " " }
+					}
+					{ evt.Name }
+				</div>
+			}
 		}
 	</div>
 }
 
-// eventCreateModal renders the Alpine.js-powered event creation modal.
-templ eventCreateModal(data CalendarViewData) {
+// eventModal renders the Alpine.js-powered event create/edit modal.
+// In create mode, it POSTs a new event. In edit mode, it PUTs updates
+// and offers a delete button with confirmation.
+templ eventModal(data CalendarViewData) {
 	<div
 		id="event-modal"
 		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-		onclick="if(event.target===this)this.classList.add('hidden')"
+		onclick="if(event.target===this)closeEventModal()"
 	>
-		<div class="card p-6 w-full max-w-md space-y-4" x-data="{ loading: false }">
+		<div class="card p-6 w-full max-w-md space-y-4">
 			<div class="flex items-center justify-between">
-				<h2 class="text-lg font-semibold text-fg">New Event</h2>
-				<button class="text-fg-muted hover:text-fg" onclick="document.getElementById('event-modal').classList.add('hidden')">
+				<h2 id="evt-modal-title" class="text-lg font-semibold text-fg">New Event</h2>
+				<button class="text-fg-muted hover:text-fg" onclick="closeEventModal()">
 					<i class="fa-solid fa-xmark"></i>
 				</button>
 			</div>
-			<form id="event-create-form" class="space-y-3">
+			<form id="event-form" class="space-y-3">
+				<input type="hidden" name="event_id" id="evt-id" value=""/>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Name</label>
-					<input type="text" name="name" class="input w-full" required placeholder="Event name"/>
+					<input type="text" name="name" id="evt-name" class="input w-full" required placeholder="Event name"/>
 				</div>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Description</label>
-					<textarea name="description" class="input w-full" rows="2" placeholder="Optional description"></textarea>
+					<textarea name="description" id="evt-description" class="input w-full" rows="2" placeholder="Optional description"></textarea>
 				</div>
 				<div class="grid grid-cols-3 gap-2">
 					<div>
@@ -322,14 +356,14 @@ templ eventCreateModal(data CalendarViewData) {
 				<div class="grid grid-cols-2 gap-2">
 					<div>
 						<label class="block text-xs font-medium text-fg-body mb-1">Visibility</label>
-						<select name="visibility" class="input w-full">
+						<select name="visibility" id="evt-visibility" class="input w-full">
 							<option value="everyone">Everyone</option>
 							<option value="dm_only">DM Only</option>
 						</select>
 					</div>
 					<div>
 						<label class="block text-xs font-medium text-fg-body mb-1">Category</label>
-						<select name="category" class="input w-full">
+						<select name="category" id="evt-category" class="input w-full">
 							<option value="">None</option>
 							<option value="holiday">Holiday</option>
 							<option value="battle">Battle</option>
@@ -343,72 +377,199 @@ templ eventCreateModal(data CalendarViewData) {
 				</div>
 				<div class="flex items-center gap-3">
 					<label class="flex items-center gap-2 text-xs text-fg-body">
-						<input type="checkbox" name="is_recurring" class="rounded"/>
+						<input type="checkbox" name="is_recurring" id="evt-recurring" class="rounded"/>
 						Recurring yearly
 					</label>
 				</div>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Link Entity (ID)</label>
-					<input type="text" name="entity_id" class="input w-full" placeholder="Optional entity ID"/>
+					<input type="text" name="entity_id" id="evt-entity-id" class="input w-full" placeholder="Optional entity ID"/>
 				</div>
-				<div class="flex justify-end gap-2 pt-2">
-					<button type="button" class="btn-secondary text-xs" onclick="document.getElementById('event-modal').classList.add('hidden')">
-						Cancel
-					</button>
-					<button type="submit" class="btn-primary text-xs" x-bind:disabled="loading">
-						<i class="fa-solid fa-plus mr-1"></i> Create Event
-					</button>
+				<div class="flex items-center justify-between pt-2">
+					<!-- Delete button (edit mode only) -->
+					<div id="evt-delete-zone" class="hidden">
+						<button
+							type="button"
+							id="evt-delete-btn"
+							class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded transition-colors"
+							onclick="showDeleteConfirm()"
+						>
+							<i class="fa-solid fa-trash mr-1"></i> Delete
+						</button>
+					</div>
+					<div id="evt-delete-spacer"></div>
+					<div class="flex gap-2">
+						<button type="button" class="btn-secondary text-xs" onclick="closeEventModal()">
+							Cancel
+						</button>
+						<button type="submit" id="evt-submit-btn" class="btn-primary text-xs">
+							<i class="fa-solid fa-plus mr-1" id="evt-submit-icon"></i>
+							<span id="evt-submit-text">Create Event</span>
+						</button>
+					</div>
 				</div>
 			</form>
+			<!-- Delete confirmation overlay -->
+			<div id="evt-delete-confirm" class="hidden">
+				<div class="border-t border-edge pt-4 mt-2">
+					<div class="flex items-center gap-2 mb-3">
+						<i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+						<span class="text-sm font-medium text-fg">Delete this event?</span>
+					</div>
+					<p class="text-xs text-fg-secondary mb-3">This action cannot be undone.</p>
+					<div class="flex justify-end gap-2">
+						<button type="button" class="btn-secondary text-xs" onclick="hideDeleteConfirm()">
+							Cancel
+						</button>
+						<button type="button" class="text-xs px-3 py-1.5 rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors" onclick="deleteEvent()">
+							<i class="fa-solid fa-trash mr-1"></i> Delete Event
+						</button>
+					</div>
+				</div>
+			</div>
 			<script>
-				document.getElementById('event-create-form').addEventListener('submit', async function(e) {
-					e.preventDefault();
-					const form = e.target;
-					const fd = new FormData(form);
-					const body = {
-						name: fd.get('name'),
-						year: parseInt(fd.get('year')),
-						month: parseInt(fd.get('month')),
-						day: parseInt(fd.get('day')),
-						visibility: fd.get('visibility'),
-						is_recurring: fd.has('is_recurring'),
-						recurrence_type: fd.has('is_recurring') ? 'yearly' : null,
-					};
-					const desc = fd.get('description');
-					if (desc) body.description = desc;
-					const cat = fd.get('category');
-					if (cat) body.category = cat;
-					const eid = fd.get('entity_id');
-					if (eid) body.entity_id = eid;
+				(function() {
+					var form = document.getElementById('event-form');
+					var campaignID = window.location.pathname.split('/')[2];
 
-					const campaignID = window.location.pathname.split('/')[2];
-					const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-					const headers = { 'Content-Type': 'application/json' };
-					if (csrfMeta) headers['X-CSRF-Token'] = csrfMeta.content;
-
-					try {
-						const resp = await fetch('/campaigns/' + campaignID + '/calendar/events', {
-							method: 'POST', headers, body: JSON.stringify(body),
-						});
-						if (resp.ok) {
-							document.getElementById('event-modal').classList.add('hidden');
-							form.reset();
-							window.location.reload();
-						} else {
-							const data = await resp.json().catch(() => ({}));
-							alert(data.message || 'Failed to create event');
-						}
-					} catch (err) {
-						alert('Network error: ' + err.message);
+					function getHeaders() {
+						var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+						var headers = { 'Content-Type': 'application/json' };
+						if (csrfMeta) headers['X-CSRF-Token'] = csrfMeta.content;
+						return headers;
 					}
-				});
 
-				function openEventModal(year, month, day) {
-					document.getElementById('evt-year').value = year;
-					document.getElementById('evt-month').value = month;
-					document.getElementById('evt-day').value = day;
-					document.getElementById('event-modal').classList.remove('hidden');
-				}
+					function isEditMode() {
+						return document.getElementById('evt-id').value !== '';
+					}
+
+					// Form submit — create or update based on event ID presence.
+					form.addEventListener('submit', async function(e) {
+						e.preventDefault();
+						var fd = new FormData(form);
+						var body = {
+							name: fd.get('name'),
+							year: parseInt(fd.get('year')),
+							month: parseInt(fd.get('month')),
+							day: parseInt(fd.get('day')),
+							visibility: fd.get('visibility'),
+							is_recurring: fd.has('is_recurring'),
+							recurrence_type: fd.has('is_recurring') ? 'yearly' : null,
+						};
+						var desc = fd.get('description');
+						if (desc) body.description = desc;
+						var cat = fd.get('category');
+						if (cat) body.category = cat;
+						var eid = fd.get('entity_id');
+						if (eid) body.entity_id = eid;
+
+						var eventID = fd.get('event_id');
+						var url, method;
+						if (eventID) {
+							url = '/campaigns/' + campaignID + '/calendar/events/' + eventID;
+							method = 'PUT';
+						} else {
+							url = '/campaigns/' + campaignID + '/calendar/events';
+							method = 'POST';
+						}
+
+						try {
+							var resp = await fetch(url, {
+								method: method, headers: getHeaders(), body: JSON.stringify(body),
+							});
+							if (resp.ok) {
+								closeEventModal();
+								window.location.reload();
+							} else {
+								var data = await resp.json().catch(function() { return {}; });
+								alert(data.message || 'Failed to save event');
+							}
+						} catch (err) {
+							alert('Network error: ' + err.message);
+						}
+					});
+
+					// Open modal in create mode with a pre-set date.
+					window.openEventModal = function(year, month, day) {
+						resetEventModal();
+						document.getElementById('evt-year').value = year;
+						document.getElementById('evt-month').value = month;
+						document.getElementById('evt-day').value = day;
+						document.getElementById('event-modal').classList.remove('hidden');
+					};
+
+					// Open modal in edit mode, reading data-event-* attributes from the chip.
+					window.openEditEventModal = function(el) {
+						resetEventModal();
+						document.getElementById('evt-id').value = el.dataset.eventId;
+						document.getElementById('evt-name').value = el.dataset.eventName || '';
+						document.getElementById('evt-description').value = el.dataset.eventDescription || '';
+						document.getElementById('evt-year').value = el.dataset.eventYear || '';
+						document.getElementById('evt-month').value = el.dataset.eventMonth || '';
+						document.getElementById('evt-day').value = el.dataset.eventDay || '';
+						document.getElementById('evt-visibility').value = el.dataset.eventVisibility || 'everyone';
+						document.getElementById('evt-category').value = el.dataset.eventCategory || '';
+						document.getElementById('evt-recurring').checked = el.dataset.eventRecurring === 'true';
+						document.getElementById('evt-entity-id').value = el.dataset.eventEntityId || '';
+
+						// Switch to edit mode UI.
+						document.getElementById('evt-modal-title').textContent = 'Edit Event';
+						document.getElementById('evt-submit-icon').className = 'fa-solid fa-check mr-1';
+						document.getElementById('evt-submit-text').textContent = 'Save Changes';
+						document.getElementById('evt-delete-zone').classList.remove('hidden');
+						document.getElementById('evt-delete-spacer').classList.add('hidden');
+						document.getElementById('event-modal').classList.remove('hidden');
+					};
+
+					// Close the modal and reset state.
+					window.closeEventModal = function() {
+						document.getElementById('event-modal').classList.add('hidden');
+						hideDeleteConfirm();
+					};
+
+					// Reset modal to create mode defaults.
+					function resetEventModal() {
+						form.reset();
+						document.getElementById('evt-id').value = '';
+						document.getElementById('evt-modal-title').textContent = 'New Event';
+						document.getElementById('evt-submit-icon').className = 'fa-solid fa-plus mr-1';
+						document.getElementById('evt-submit-text').textContent = 'Create Event';
+						document.getElementById('evt-delete-zone').classList.add('hidden');
+						document.getElementById('evt-delete-spacer').classList.remove('hidden');
+						hideDeleteConfirm();
+					}
+
+					// Delete confirmation flow.
+					window.showDeleteConfirm = function() {
+						document.getElementById('evt-delete-confirm').classList.remove('hidden');
+						form.classList.add('hidden');
+					};
+
+					window.hideDeleteConfirm = function() {
+						document.getElementById('evt-delete-confirm').classList.add('hidden');
+						form.classList.remove('hidden');
+					};
+
+					window.deleteEvent = async function() {
+						var eventID = document.getElementById('evt-id').value;
+						if (!eventID) return;
+
+						try {
+							var resp = await fetch('/campaigns/' + campaignID + '/calendar/events/' + eventID, {
+								method: 'DELETE', headers: getHeaders(),
+							});
+							if (resp.ok) {
+								closeEventModal();
+								window.location.reload();
+							} else {
+								var data = await resp.json().catch(function() { return {}; });
+								alert(data.message || 'Failed to delete event');
+							}
+						} catch (err) {
+							alert('Network error: ' + err.message);
+						}
+					};
+				})();
 			</script>
 		</div>
 	</div>
@@ -748,6 +909,14 @@ templ timelineEvent(cc *campaigns.CampaignContext, cal *Calendar, evt Event) {
 			</div>
 		</div>
 	</div>
+}
+
+// derefStr safely dereferences a *string, returning "" for nil.
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // formatCurrentDate returns a formatted string of the calendar's current date.

@@ -51,8 +51,8 @@ see `.ai/roadmap.md`.
 - [x] Calendar sidebar link
 - [x] Calendar dashboard block ("Upcoming events")
 - [x] Timeline view (chronological event display, month-grouped, year nav, view toggle)
-- [ ] Event edit modal (reuse creation modal with pre-fill)
-- [ ] Event delete confirmation UI
+- [x] Event edit modal (dual-purpose create/edit, clickable event chips, data attributes)
+- [x] Event delete confirmation UI (in-modal confirmation overlay)
 
 ### Phase G: Maps & Geography
 - [ ] Maps plugin Phase 1 (Leaflet.js, image upload, pins, entity linking, DM-only pins)

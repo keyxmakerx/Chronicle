@@ -8,13 +8,12 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-26 -- Calendar plugin Sprint 3 complete. Sidebar link, upcoming events
-dashboard block (HTMX lazy-loaded), timeline view with month grouping and year
-navigation, view toggle between grid and timeline on calendar header.
+2026-02-28 -- Calendar plugin Sprint 4 complete. Event edit modal (dual-purpose
+create/edit), event delete with confirmation, clickable event chips in grid.
 
 ## Current Phase
-**Phase F: Calendar & Time.** Sprint 3 complete — sidebar link, dashboard block,
-timeline view. Sprint 4 next: event edit modal, event delete confirmation.
+**Phase F: Calendar & Time.** Sprint 4 complete — event edit + delete. Calendar
+feature-complete for MVP. Next: Phase G (Maps) or Phase E (API docs).
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
@@ -214,6 +213,18 @@ timeline view. Sprint 4 next: event edit modal, event delete confirmation.
   (ListUpcomingEvents query), `calendar/calendar.templ` (5 new components),
   `calendar/routes.go` (2 new routes).
 
+### Calendar Plugin Sprint 4 — COMPLETE
+- **Dual-purpose event modal**: Transformed create-only modal into create/edit modal.
+  Hidden `event_id` field triggers PUT (edit) vs POST (create). Title, submit button
+  text/icon dynamically switch between modes.
+- **Clickable event chips**: Scribe+ users see event chips as `<button>` elements with
+  `data-event-*` attributes. Clicking opens the edit modal pre-filled with all event fields.
+  Players still see static `<div>` chips.
+- **Delete with confirmation**: Delete button visible only in edit mode. Clicking shows
+  a confirmation overlay within the modal (hides the form, shows warning + confirm/cancel).
+  DELETE request sent on confirm, page reloads on success.
+- **Helper function**: `derefStr()` for safe nil string pointer dereferencing in templates.
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -236,11 +247,12 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Calendar Sprint 4:** Event edit modal (reuse creation modal with pre-fill), event
-   delete confirmation, drag-and-drop event rescheduling.
+1. **Phase G: Maps plugin** — Leaflet.js, image upload, pins, entity linking, DM-only pins.
 2. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference).
 3. **Handler-level "view as player":** Extend toggle to filter is_private entities
    at repository level (currently template-only).
+4. **Calendar polish (optional):** Drag-and-drop event rescheduling, entity search
+   in event modal (replace raw ID input with typeahead).
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
