@@ -392,7 +392,7 @@ func (h *APIHandler) Sync(c echo.Context) error {
 	}
 
 	// Reject oversized sync batches to prevent memory/CPU exhaustion.
-	const maxSyncChanges = 500
+	const maxSyncChanges = 2000
 	if len(req.Changes) > maxSyncChanges {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			fmt.Sprintf("too many changes; maximum is %d per request", maxSyncChanges))

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
@@ -83,9 +84,14 @@ func (a *App) setupMiddleware() {
 
 	// Global request body size limit -- prevents memory exhaustion from
 	// oversized payloads on non-upload endpoints. The media upload endpoint
-	// has its own separate body limit middleware. 2 MB is generous for JSON
-	// API requests, form submissions, and HTMX fragments.
-	a.Echo.Use(echomw.BodyLimit("2M"))
+	// has its own per-route body limit based on the configured max upload size,
+	// so we skip this global limit for that path.
+	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
+		Limit: "2M",
+		Skipper: func(c echo.Context) bool {
+			return strings.HasPrefix(c.Request().URL.Path, "/media/upload")
+		},
+	}))
 
 	// Request logging -- log every request with method, path, status, latency.
 	a.Echo.Use(middleware.RequestLogger())
