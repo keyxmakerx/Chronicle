@@ -133,18 +133,9 @@ func (a *App) errorHandler(err error, c echo.Context) {
 	if errors.As(err, &appErr) {
 		code = appErr.Code
 		message = appErr.Message
-
-		// Log internal errors with the underlying cause.
-		if appErr.Internal != nil {
-			slog.Error("internal error",
-				slog.String("type", appErr.Type),
-				slog.String("message", appErr.Message),
-				slog.Any("internal", appErr.Internal),
-				slog.String("path", c.Request().URL.Path),
-			)
-		}
 	} else {
-		// Check for Echo's built-in HTTP errors (e.g., 404 from router).
+		// Check for Echo's built-in HTTP errors (e.g., 404 from router,
+		// panic recovery).
 		var echoErr *echo.HTTPError
 		if errors.As(err, &echoErr) {
 			code = echoErr.Code
@@ -153,13 +144,20 @@ func (a *App) errorHandler(err error, c echo.Context) {
 			} else {
 				message = defaultErrorMessage(code)
 			}
-		} else {
-			// Truly unexpected error -- log it.
-			slog.Error("unhandled error",
-				slog.Any("error", err),
-				slog.String("path", c.Request().URL.Path),
-			)
 		}
+	}
+
+	// Always log server errors (5xx) so silent failures are visible.
+	// Previously, AppError with Internal==nil and echo.HTTPError from
+	// panic recovery were both swallowed with no log output.
+	if code >= http.StatusInternalServerError {
+		slog.Error("server error",
+			slog.Int("code", code),
+			slog.String("message", message),
+			slog.Any("error", err),
+			slog.String("path", c.Request().URL.Path),
+			slog.String("method", c.Request().Method),
+		)
 	}
 
 	// API requests always get JSON.
