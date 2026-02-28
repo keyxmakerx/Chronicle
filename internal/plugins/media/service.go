@@ -248,8 +248,23 @@ func (s *mediaService) ThumbnailPath(file *MediaFile, size string) string {
 	return s.FilePath(file)
 }
 
+// maxImageDimension is the maximum width or height in pixels for uploaded images.
+// Images larger than this are rejected to prevent decompression bomb attacks
+// (e.g., a tiny PNG that decompresses to gigabytes in memory).
+const maxImageDimension = 10000
+
 // generateThumbnail creates a resized copy of an image.
 func (s *mediaService) generateThumbnail(data []byte, dir, id, ext string, maxDim int) (string, error) {
+	// Check image dimensions before full decode to prevent decompression bombs.
+	// DecodeConfig reads only the header, using minimal memory.
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return "", fmt.Errorf("reading image config: %w", err)
+	}
+	if cfg.Width > maxImageDimension || cfg.Height > maxImageDimension {
+		return "", fmt.Errorf("image too large: %dx%d exceeds %d limit", cfg.Width, cfg.Height, maxImageDimension)
+	}
+
 	src, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return "", fmt.Errorf("decoding image: %w", err)

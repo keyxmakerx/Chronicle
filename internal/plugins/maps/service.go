@@ -4,9 +4,18 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"regexp"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
+
+// iconPattern validates FontAwesome icon class names to prevent XSS injection
+// via the icon field which is rendered into HTML attributes.
+var iconPattern = regexp.MustCompile(`^fa-[a-z0-9-]+$`)
+
+// colorPattern validates hex color values to prevent XSS injection via the
+// color field which is rendered into CSS style attributes.
+var colorPattern = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
 // generateID creates a random UUID v4 string.
 func generateID() string {
@@ -151,6 +160,14 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 		input.Color = "#3b82f6"
 	}
 
+	// Validate icon and color to prevent XSS (these are rendered into HTML).
+	if !iconPattern.MatchString(input.Icon) {
+		return nil, apperror.NewValidation("icon must be a valid FontAwesome class name (e.g., fa-map-pin)")
+	}
+	if !colorPattern.MatchString(input.Color) {
+		return nil, apperror.NewValidation("color must be a valid hex color (e.g., #3b82f6)")
+	}
+
 	mk := &Marker{
 		ID:         generateID(),
 		MapID:      input.MapID,
@@ -197,6 +214,14 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	}
 	if input.X < 0 || input.X > 100 || input.Y < 0 || input.Y > 100 {
 		return apperror.NewValidation("marker coordinates must be 0-100")
+	}
+
+	// Validate icon and color to prevent XSS (these are rendered into HTML).
+	if input.Icon != "" && !iconPattern.MatchString(input.Icon) {
+		return apperror.NewValidation("icon must be a valid FontAwesome class name")
+	}
+	if input.Color != "" && !colorPattern.MatchString(input.Color) {
+		return apperror.NewValidation("color must be a valid hex color")
 	}
 
 	mk.Name = input.Name

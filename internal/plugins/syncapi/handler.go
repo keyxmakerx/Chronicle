@@ -116,14 +116,25 @@ func (h *Handler) CreateKey(c echo.Context) error {
 
 // ToggleKey handles PUT /campaigns/:id/api-keys/:keyID/toggle.
 func (h *Handler) ToggleKey(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+	}
+
 	keyID, err := strconv.Atoi(c.Param("keyID"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid key ID")
 	}
 
-	action := c.FormValue("action")
 	ctx := c.Request().Context()
 
+	// IDOR protection: verify key belongs to this campaign.
+	key, err := h.service.GetKey(ctx, keyID)
+	if err != nil || key.CampaignID != cc.Campaign.ID {
+		return echo.NewHTTPError(http.StatusNotFound, "api key not found")
+	}
+
+	action := c.FormValue("action")
 	if action == "activate" {
 		if err := h.service.ActivateKey(ctx, keyID); err != nil {
 			return err
@@ -134,10 +145,6 @@ func (h *Handler) ToggleKey(c echo.Context) error {
 		}
 	}
 
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
-	}
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID+"/api-keys")
 		return c.NoContent(http.StatusOK)
@@ -147,19 +154,28 @@ func (h *Handler) ToggleKey(c echo.Context) error {
 
 // RevokeKey handles DELETE /campaigns/:id/api-keys/:keyID.
 func (h *Handler) RevokeKey(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+	}
+
 	keyID, err := strconv.Atoi(c.Param("keyID"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid key ID")
 	}
 
-	if err := h.service.RevokeKey(c.Request().Context(), keyID); err != nil {
+	ctx := c.Request().Context()
+
+	// IDOR protection: verify key belongs to this campaign.
+	key, err := h.service.GetKey(ctx, keyID)
+	if err != nil || key.CampaignID != cc.Campaign.ID {
+		return echo.NewHTTPError(http.StatusNotFound, "api key not found")
+	}
+
+	if err := h.service.RevokeKey(ctx, keyID); err != nil {
 		return err
 	}
 
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
-	}
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID+"/api-keys")
 		return c.NoContent(http.StatusOK)

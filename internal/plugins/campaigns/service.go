@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // transferTokenBytes is the number of random bytes in a transfer token.
@@ -576,9 +577,15 @@ func (s *campaignService) UpdateDashboardLayout(ctx context.Context, campaignID 
 			}
 			totalWidth += col.Width
 			blockCount += len(col.Blocks)
-			for _, block := range col.Blocks {
+			for i, block := range col.Blocks {
 				if !ValidBlockTypes[block.Type] {
 					return apperror.NewBadRequest(fmt.Sprintf("unsupported block type: %s", block.Type))
+				}
+				// Sanitize text_block content to prevent stored XSS via templ.Raw().
+				if block.Type == "text_block" {
+					if content, ok := block.Config["content"].(string); ok {
+						col.Blocks[i].Config["content"] = sanitize.HTML(content)
+					}
 				}
 			}
 		}

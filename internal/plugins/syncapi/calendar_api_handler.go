@@ -118,11 +118,24 @@ func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
 // GET /api/v1/campaigns/:id/calendar/events/:eventID
 func (h *CalendarAPIHandler) GetEvent(c echo.Context) error {
 	eventID := c.Param("eventID")
+	campaignID := c.Param("id")
 	ctx := c.Request().Context()
 
 	evt, err := h.calendarSvc.GetEvent(ctx, eventID)
 	if err != nil {
 		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+	}
+
+	// IDOR protection: verify event belongs to this campaign's calendar.
+	cal, err := h.calendarSvc.GetCalendarByID(ctx, evt.CalendarID)
+	if err != nil || cal == nil || cal.CampaignID != campaignID {
+		return echo.NewHTTPError(http.StatusNotFound, "event not found")
+	}
+
+	// Visibility check: dm_only events require owner-level role.
+	role := h.resolveRole(c)
+	if evt.Visibility == "dm_only" && role < 3 {
+		return echo.NewHTTPError(http.StatusNotFound, "event not found")
 	}
 
 	return c.JSON(http.StatusOK, evt)
@@ -212,7 +225,18 @@ type apiUpdateEventRequest struct {
 // PUT /api/v1/campaigns/:id/calendar/events/:eventID
 func (h *CalendarAPIHandler) UpdateEvent(c echo.Context) error {
 	eventID := c.Param("eventID")
+	campaignID := c.Param("id")
 	ctx := c.Request().Context()
+
+	// IDOR protection: verify event belongs to this campaign's calendar.
+	evt, err := h.calendarSvc.GetEvent(ctx, eventID)
+	if err != nil {
+		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+	}
+	cal, err := h.calendarSvc.GetCalendarByID(ctx, evt.CalendarID)
+	if err != nil || cal == nil || cal.CampaignID != campaignID {
+		return echo.NewHTTPError(http.StatusNotFound, "event not found")
+	}
 
 	var req apiUpdateEventRequest
 	if err := c.Bind(&req); err != nil {
@@ -244,7 +268,18 @@ func (h *CalendarAPIHandler) UpdateEvent(c echo.Context) error {
 // DELETE /api/v1/campaigns/:id/calendar/events/:eventID
 func (h *CalendarAPIHandler) DeleteEvent(c echo.Context) error {
 	eventID := c.Param("eventID")
+	campaignID := c.Param("id")
 	ctx := c.Request().Context()
+
+	// IDOR protection: verify event belongs to this campaign's calendar.
+	evt, err := h.calendarSvc.GetEvent(ctx, eventID)
+	if err != nil {
+		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+	}
+	cal, err := h.calendarSvc.GetCalendarByID(ctx, evt.CalendarID)
+	if err != nil || cal == nil || cal.CampaignID != campaignID {
+		return echo.NewHTTPError(http.StatusNotFound, "event not found")
+	}
 
 	if err := h.calendarSvc.DeleteEvent(ctx, eventID); err != nil {
 		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))

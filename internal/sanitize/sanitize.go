@@ -33,9 +33,13 @@ func getPolicy() *bluemonday.Policy {
 		// which uses classes for text alignment, code blocks, etc.
 		policy.AllowAttrs("class").Globally()
 
-		// Allow style attribute on spans for inline formatting from the editor
-		// (e.g., text color, background color).
-		policy.AllowAttrs("style").OnElements("span", "p", "div", "td", "th")
+		// Allow style attribute with a whitelist of safe CSS properties.
+		// Restricts to formatting-only properties to prevent CSS-based attacks
+		// (e.g., position/overlay abuse, content exfiltration via background-image).
+		policy.AllowStyles("color", "background-color", "text-align",
+			"font-weight", "font-style", "text-decoration",
+			"font-size", "line-height", "margin", "padding",
+		).OnElements("span", "p", "div", "td", "th")
 
 		// Allow table elements for rich text tables.
 		policy.AllowElements("table", "thead", "tbody", "tfoot", "tr", "td", "th", "colgroup", "col", "caption")

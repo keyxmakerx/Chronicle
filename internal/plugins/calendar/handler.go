@@ -299,11 +299,33 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 	return c.JSON(http.StatusCreated, evt)
 }
 
+// requireEventInCampaign fetches an event and verifies its calendar belongs to
+// the given campaign. Returns 404 for cross-campaign IDOR attempts.
+func (h *Handler) requireEventInCampaign(c echo.Context, eventID, campaignID string) (*Event, error) {
+	ctx := c.Request().Context()
+	evt, err := h.svc.GetEvent(ctx, eventID)
+	if err != nil {
+		return nil, err
+	}
+	// Verify event's calendar belongs to this campaign.
+	cal, err := h.svc.GetCalendarByID(ctx, evt.CalendarID)
+	if err != nil || cal == nil || cal.CampaignID != campaignID {
+		return nil, echo.NewHTTPError(http.StatusNotFound, "event not found")
+	}
+	return evt, nil
+}
+
 // UpdateEventAPI updates an existing event.
 // PUT /campaigns/:id/calendar/events/:eid
 func (h *Handler) UpdateEventAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	eventID := c.Param("eid")
+
+	// IDOR protection: verify event belongs to this campaign's calendar.
+	if _, err := h.requireEventInCampaign(c, eventID, cc.Campaign.ID); err != nil {
+		return err
+	}
 
 	var req struct {
 		Name           string  `json:"name"`
@@ -344,8 +366,14 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 // DeleteEventAPI deletes an event.
 // DELETE /campaigns/:id/calendar/events/:eid
 func (h *Handler) DeleteEventAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	eventID := c.Param("eid")
+
+	// IDOR protection: verify event belongs to this campaign's calendar.
+	if _, err := h.requireEventInCampaign(c, eventID, cc.Campaign.ID); err != nil {
+		return err
+	}
 
 	if err := h.svc.DeleteEvent(ctx, eventID); err != nil {
 		return err

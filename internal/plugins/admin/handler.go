@@ -177,6 +177,18 @@ func (h *Handler) ToggleAdmin(c echo.Context) error {
 		return err
 	}
 
+	// Invalidate all sessions for the target user so the privilege change
+	// takes effect immediately. Without this, a revoked admin retains stale
+	// IsAdmin=true in their Redis session until it expires.
+	if h.securityService != nil {
+		if count, err := h.securityService.ForceLogoutUser(c.Request().Context(), targetID); err == nil && count > 0 {
+			slog.Info("invalidated sessions after admin toggle",
+				slog.String("target_user", targetID),
+				slog.Int("session_count", count),
+			)
+		}
+	}
+
 	slog.Info("admin toggled",
 		slog.String("target_user", targetID),
 		slog.Bool("new_state", newState),

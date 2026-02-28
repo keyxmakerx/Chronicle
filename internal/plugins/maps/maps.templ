@@ -232,6 +232,17 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 			var leafletMarkers = {};
 			var placingMode = false;
 
+			// Escape helpers to prevent XSS when building HTML strings from
+			// user-supplied marker data (name, description, icon, color).
+			function escapeHtml(s) {
+				if (!s) return '';
+				return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+			}
+			function escapeAttr(s) {
+				if (!s) return '';
+				return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+			}
+
 			// Render all existing markers.
 			markers.forEach(function(mk) { addMarkerToMap(mk); });
 
@@ -242,15 +253,15 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 
 				var icon = L.divIcon({
 					className: 'chronicle-marker',
-					html: '<div style="color:' + mk.color + ';font-size:20px;text-shadow:0 1px 3px rgba(0,0,0,0.5);"><i class="fa-solid ' + mk.icon + '"></i></div>',
+					html: '<div style="color:' + escapeAttr(mk.color) + ';font-size:20px;text-shadow:0 1px 3px rgba(0,0,0,0.5);"><i class="fa-solid ' + escapeAttr(mk.icon) + '"></i></div>',
 					iconSize: [24, 24],
 					iconAnchor: [12, 24],
 				});
 
 				var lm = L.marker([lat, lng], { icon: icon, draggable: isScribe }).addTo(map);
 
-				// Tooltip with marker name.
-				lm.bindTooltip(mk.name, { direction: 'top', offset: [0, -24] });
+				// Tooltip with marker name (escaped to prevent HTML injection).
+				lm.bindTooltip(escapeHtml(mk.name), { direction: 'top', offset: [0, -24] });
 
 				// Click to open edit modal (Scribe+).
 				if (isScribe) {
@@ -267,11 +278,11 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 						updateMarkerPosition(mk);
 					});
 				} else {
-					// Players: show popup with name + description.
-					var popupContent = '<strong>' + mk.name + '</strong>';
-					if (mk.description) popupContent += '<br><span class="text-xs">' + mk.description + '</span>';
+					// Players: show popup with name + description (all user data escaped).
+					var popupContent = '<strong>' + escapeHtml(mk.name) + '</strong>';
+					if (mk.description) popupContent += '<br><span class="text-xs">' + escapeHtml(mk.description) + '</span>';
 					if (mk.entity_name) {
-						popupContent += '<br><a href="/campaigns/' + campaignID + '/entities/' + mk.entity_id + '" class="text-accent text-xs hover:underline">' + mk.entity_name + '</a>';
+						popupContent += '<br><a href="/campaigns/' + escapeAttr(campaignID) + '/entities/' + escapeAttr(mk.entity_id) + '" class="text-accent text-xs hover:underline">' + escapeHtml(mk.entity_name) + '</a>';
 					}
 					lm.bindPopup(popupContent);
 				}

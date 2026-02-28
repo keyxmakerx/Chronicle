@@ -45,20 +45,48 @@ func (h *Handler) Index(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, MapListPage(cc, data))
 }
 
+// requireMapInCampaign fetches a map by ID and verifies it belongs to the
+// given campaign. Returns 404 if not found or if the map's campaign_id does
+// not match, preventing cross-campaign IDOR attacks.
+func (h *Handler) requireMapInCampaign(c echo.Context, mapID, campaignID string) (*Map, error) {
+	m, err := h.svc.GetMap(c.Request().Context(), mapID)
+	if err != nil {
+		return nil, err
+	}
+	if m.CampaignID != campaignID {
+		return nil, echo.NewHTTPError(http.StatusNotFound, "map not found")
+	}
+	return m, nil
+}
+
+// requireMarkerInCampaign fetches a marker and verifies its parent map belongs
+// to the given campaign. Returns 404 for cross-campaign IDOR attempts.
+func (h *Handler) requireMarkerInCampaign(c echo.Context, markerID, campaignID string) (*Marker, error) {
+	mk, err := h.svc.GetMarker(c.Request().Context(), markerID)
+	if err != nil {
+		return nil, err
+	}
+	// Verify the marker's parent map belongs to the correct campaign.
+	m, err := h.svc.GetMap(c.Request().Context(), mk.MapID)
+	if err != nil || m.CampaignID != campaignID {
+		return nil, echo.NewHTTPError(http.StatusNotFound, "marker not found")
+	}
+	return mk, nil
+}
+
 // Show renders a single map with its markers in a Leaflet.js viewer.
 // GET /campaigns/:id/maps/:mid
 func (h *Handler) Show(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	ctx := c.Request().Context()
 	mapID := c.Param("mid")
 
-	m, err := h.svc.GetMap(ctx, mapID)
+	m, err := h.requireMapInCampaign(c, mapID, cc.Campaign.ID)
 	if err != nil {
 		return err
 	}
 
 	role := int(cc.MemberRole)
-	markers, err := h.svc.ListMarkers(ctx, mapID, role)
+	markers, err := h.svc.ListMarkers(c.Request().Context(), mapID, role)
 	if err != nil {
 		return err
 	}
@@ -140,8 +168,14 @@ func (h *Handler) CreateMapForm(c echo.Context) error {
 // UpdateMapAPI updates a map's metadata.
 // PUT /campaigns/:id/maps/:mid
 func (h *Handler) UpdateMapAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	mapID := c.Param("mid")
+
+	// IDOR protection: verify map belongs to this campaign.
+	if _, err := h.requireMapInCampaign(c, mapID, cc.Campaign.ID); err != nil {
+		return err
+	}
 
 	var req struct {
 		Name        string  `json:"name"`
@@ -166,8 +200,14 @@ func (h *Handler) UpdateMapAPI(c echo.Context) error {
 // DeleteMapAPI deletes a map and all its markers.
 // DELETE /campaigns/:id/maps/:mid
 func (h *Handler) DeleteMapAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	mapID := c.Param("mid")
+
+	// IDOR protection: verify map belongs to this campaign.
+	if _, err := h.requireMapInCampaign(c, mapID, cc.Campaign.ID); err != nil {
+		return err
+	}
 
 	if err := h.svc.DeleteMap(ctx, mapID); err != nil {
 		return err
@@ -178,8 +218,14 @@ func (h *Handler) DeleteMapAPI(c echo.Context) error {
 // CreateMarkerAPI places a new marker on a map.
 // POST /campaigns/:id/maps/:mid/markers
 func (h *Handler) CreateMarkerAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	mapID := c.Param("mid")
+
+	// IDOR protection: verify map belongs to this campaign.
+	if _, err := h.requireMapInCampaign(c, mapID, cc.Campaign.ID); err != nil {
+		return err
+	}
 
 	var req struct {
 		Name        string  `json:"name"`
@@ -225,8 +271,14 @@ func (h *Handler) CreateMarkerAPI(c echo.Context) error {
 // UpdateMarkerAPI updates an existing marker.
 // PUT /campaigns/:id/maps/:mid/markers/:mkid
 func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	markerID := c.Param("mkid")
+
+	// IDOR protection: verify marker's parent map belongs to this campaign.
+	if _, err := h.requireMarkerInCampaign(c, markerID, cc.Campaign.ID); err != nil {
+		return err
+	}
 
 	var req struct {
 		Name        string  `json:"name"`
@@ -257,8 +309,14 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 // DeleteMarkerAPI deletes a marker.
 // DELETE /campaigns/:id/maps/:mid/markers/:mkid
 func (h *Handler) DeleteMarkerAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	markerID := c.Param("mkid")
+
+	// IDOR protection: verify marker's parent map belongs to this campaign.
+	if _, err := h.requireMarkerInCampaign(c, markerID, cc.Campaign.ID); err != nil {
+		return err
+	}
 
 	if err := h.svc.DeleteMarker(ctx, markerID); err != nil {
 		return err
