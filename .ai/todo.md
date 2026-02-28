@@ -59,7 +59,7 @@ see `.ai/roadmap.md`.
 - [ ] Maps plugin Phase 2 (layers, marker groups, privacy, nested maps)
 
 ### Phase H: Secrets & Permissions
-- [ ] Inline secrets / GM-only text (TipTap extension, server-side filtering)
+- [x] Inline secrets / GM-only text (TipTap secret mark, server-side stripping, CSS styling)
 - [ ] Per-entity permissions (view/edit per role/user)
 - [ ] Campaign export/import (JSON bundle for backup/migration)
 - [ ] Group-based visibility (beyond everyone/dm_only)

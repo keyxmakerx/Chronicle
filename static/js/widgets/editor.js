@@ -103,6 +103,11 @@
         Underline,
       ];
 
+      // Add inline secrets mark if extension is loaded.
+      if (Chronicle.SecretMark) {
+        extensions.push(Chronicle.SecretMark);
+      }
+
       // Build editor props. When mention extension is available and editor
       // is editable, intercept keydown events to let the mention popup
       // handle arrow keys, Enter, and Escape before ProseMirror processes them.
@@ -366,6 +371,7 @@
         { cmd: 'italic', icon: 'I', title: 'Italic (Ctrl+I)', style: 'font-style:italic' },
         { cmd: 'underline', icon: 'U', title: 'Underline (Ctrl+U)', style: 'text-decoration:underline' },
         { cmd: 'strike', icon: 'S', title: 'Strikethrough', style: 'text-decoration:line-through' },
+        { cmd: 'secret', icon: '<i class="fa-solid fa-eye-slash" style="font-size:11px"></i>', title: 'GM Secret (Ctrl+Shift+S)' },
       ],
       // Block formatting
       [
@@ -594,6 +600,7 @@
       case 'italic': chain.toggleItalic().run(); break;
       case 'underline': chain.toggleUnderline().run(); break;
       case 'strike': chain.toggleStrike().run(); break;
+      case 'secret': if (editor.commands.toggleSecret) editor.commands.toggleSecret(); break;
       case 'heading1': chain.toggleHeading({ level: 1 }).run(); break;
       case 'heading2': chain.toggleHeading({ level: 2 }).run(); break;
       case 'heading3': chain.toggleHeading({ level: 3 }).run(); break;
@@ -626,6 +633,7 @@
         case 'italic': active = editor.isActive('italic'); break;
         case 'underline': active = editor.isActive('underline'); break;
         case 'strike': active = editor.isActive('strike'); break;
+        case 'secret': active = editor.isActive('secret'); break;
         case 'heading1': active = editor.isActive('heading', { level: 1 }); break;
         case 'heading2': active = editor.isActive('heading', { level: 2 }); break;
         case 'heading3': active = editor.isActive('heading', { level: 3 }); break;

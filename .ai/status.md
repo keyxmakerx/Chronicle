@@ -8,13 +8,13 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-28 -- Maps plugin Phase 1 complete. Leaflet.js viewer, multi-map per
-campaign, pin markers with drag-and-drop, entity linking, DM-only visibility,
-map image upload via media plugin.
+2026-02-28 -- Phase H started: inline secrets (GM-only text). TipTap secret mark
+extension, server-side stripping for non-scribe users, CSS styling with eye-slash
+indicator.
 
 ## Current Phase
-**Phase G: Maps & Geography.** Phase 1 complete — full maps plugin. Phase 2 next:
-layers, marker groups, nested maps. Or move to Phase E (API docs).
+**Phase H: Secrets & Permissions.** Inline secrets complete. Next: per-entity
+permissions, campaign export/import, or Maps Phase 2.
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
@@ -246,6 +246,19 @@ layers, marker groups, nested maps. Or move to Phase E (API docs).
   DM-only markers hidden from players via server-side filtering.
 - **Wiring**: Added to `installedAddons`, `app/routes.go`, sidebar nav, admin plugin registry.
 
+### Phase H: Inline Secrets — COMPLETE
+- **TipTap secret mark**: `editor_secret.js` creates a `secret` mark via
+  `TipTap.Underline.extend()`. Renders as `<span data-secret="true" class="chronicle-secret">`.
+  Keyboard shortcut: `Ctrl+Shift+S`. Toolbar button with eye-slash icon.
+- **Editor integration**: SecretMark added to extensions array. Toolbar button in
+  text formatting group. Active state tracking. Insert via toolbar or keyboard shortcut.
+- **Server-side stripping**: `sanitize.StripSecretsHTML()` regex-strips secret spans from
+  HTML. `sanitize.StripSecretsJSON()` walks ProseMirror JSON tree and removes text nodes
+  with secret marks. Applied in `GetEntry` handler when `role < RoleScribe`.
+- **Sanitizer whitelist**: `data-secret` attribute allowed on `<span>` in bluemonday policy.
+- **CSS styling**: Amber background tint, dashed bottom border, eye-slash pseudo-element
+  indicator. Visible to owners/scribes, invisible to players (server-stripped).
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -268,8 +281,9 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Maps Phase 2 (optional):** Layers, marker groups, nested maps, fog of war.
-2. **Phase H: Secrets & Permissions** — Inline secrets, per-entity permissions.
+1. **Phase H continued:** Per-entity permissions (view/edit per role/user), group-based
+   visibility (beyond everyone/dm_only), campaign export/import.
+2. **Maps Phase 2 (optional):** Layers, marker groups, nested maps, fog of war.
 3. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference).
 4. **Handler-level "view as player":** Extend toggle to filter is_private entities
    at repository level (currently template-only).

@@ -5,6 +5,8 @@
 package sanitize
 
 import (
+	"encoding/json"
+	"regexp"
 	"sync"
 
 	"github.com/microcosm-cc/bluemonday"
@@ -41,6 +43,9 @@ func getPolicy() *bluemonday.Policy {
 
 		// Allow data attributes used by the editor for various features.
 		policy.AllowAttrs("data-type").OnElements("div", "span")
+
+		// Allow inline secrets (GM-only text wrapped in <span data-secret>).
+		policy.AllowAttrs("data-secret").OnElements("span")
 	})
 	return policy
 }
@@ -57,4 +62,87 @@ func HTML(input string) string {
 		return ""
 	}
 	return getPolicy().Sanitize(input)
+}
+
+// secretSpanRe matches <span data-secret="true" ...>...</span> including nested tags.
+// Uses a non-greedy match with a lookahead for the closing tag.
+var secretSpanRe = regexp.MustCompile(`<span[^>]*\bdata-secret\b[^>]*>.*?</span>`)
+
+// StripSecretsHTML removes all <span data-secret>...</span> elements from HTML,
+// used to hide GM-only inline secrets from players.
+func StripSecretsHTML(html string) string {
+	if html == "" {
+		return ""
+	}
+	return secretSpanRe.ReplaceAllString(html, "")
+}
+
+// StripSecretsJSON removes text nodes marked with the "secret" mark from
+// ProseMirror JSON content. Returns the modified JSON string. If the input
+// is not valid ProseMirror JSON, it is returned unchanged.
+func StripSecretsJSON(jsonStr string) string {
+	if jsonStr == "" {
+		return ""
+	}
+
+	var doc map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &doc); err != nil {
+		return jsonStr
+	}
+
+	stripSecretNodes(doc)
+
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return jsonStr
+	}
+	return string(out)
+}
+
+// stripSecretNodes recursively walks ProseMirror JSON and removes text nodes
+// that carry a "secret" mark.
+func stripSecretNodes(node map[string]interface{}) {
+	content, ok := node["content"].([]interface{})
+	if !ok {
+		return
+	}
+
+	var filtered []interface{}
+	for _, child := range content {
+		childMap, ok := child.(map[string]interface{})
+		if !ok {
+			filtered = append(filtered, child)
+			continue
+		}
+
+		// Check if this is a text node with a "secret" mark.
+		if childMap["type"] == "text" {
+			if hasSecretMark(childMap) {
+				continue // strip this text node
+			}
+		}
+
+		// Recurse into child nodes.
+		stripSecretNodes(childMap)
+		filtered = append(filtered, childMap)
+	}
+	node["content"] = filtered
+}
+
+// hasSecretMark returns true if a ProseMirror node has a mark of type "secret".
+func hasSecretMark(node map[string]interface{}) bool {
+	marks, ok := node["marks"].([]interface{})
+	if !ok {
+		return false
+	}
+	for _, m := range marks {
+		markMap, ok := m.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if markMap["type"] == "secret" {
+			return true
+		}
+	}
+	return false
 }
