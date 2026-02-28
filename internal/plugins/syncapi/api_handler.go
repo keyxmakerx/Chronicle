@@ -1,6 +1,7 @@
 package syncapi
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -388,6 +389,13 @@ func (h *APIHandler) Sync(c echo.Context) error {
 	var req syncRequest
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	// Reject oversized sync batches to prevent memory/CPU exhaustion.
+	const maxSyncChanges = 500
+	if len(req.Changes) > maxSyncChanges {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			fmt.Sprintf("too many changes; maximum is %d per request", maxSyncChanges))
 	}
 
 	serverTime := time.Now().UTC()

@@ -101,10 +101,18 @@ func (h *Handler) Serve(c echo.Context) error {
 	return c.File(filePath)
 }
 
+// allowedThumbSizes restricts thumbnail size parameter to known values,
+// preventing the size from being used as an arbitrary map key.
+var allowedThumbSizes = map[string]bool{"300": true, "800": true}
+
 // ServeThumbnail serves a thumbnail of a media file (GET /media/:id/thumb/:size).
 func (h *Handler) ServeThumbnail(c echo.Context) error {
 	fileID := c.Param("id")
 	size := c.Param("size")
+
+	if !allowedThumbSizes[size] {
+		return apperror.NewBadRequest("invalid thumbnail size")
+	}
 
 	file, err := h.service.GetByID(c.Request().Context(), fileID)
 	if err != nil {

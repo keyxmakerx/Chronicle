@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	echomw "github.com/labstack/echo/v4/middleware"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -79,6 +80,12 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client) *App {
 func (a *App) setupMiddleware() {
 	// Panic recovery -- must be outermost to catch panics from all other middleware.
 	a.Echo.Use(middleware.Recovery())
+
+	// Global request body size limit -- prevents memory exhaustion from
+	// oversized payloads on non-upload endpoints. The media upload endpoint
+	// has its own separate body limit middleware. 2 MB is generous for JSON
+	// API requests, form submissions, and HTMX fragments.
+	a.Echo.Use(echomw.BodyLimit("2M"))
 
 	// Request logging -- log every request with method, path, status, latency.
 	a.Echo.Use(middleware.RequestLogger())
