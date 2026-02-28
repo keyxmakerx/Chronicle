@@ -281,8 +281,21 @@ func (h *Handler) Show(c echo.Context) error {
 		}
 	}
 
+	// Check if the "calendar" addon is enabled — gates the lazy-loaded
+	// entity-events fragment. Without this gate, the HTMX request to the
+	// calendar endpoint would fire unconditionally, and any error (auth
+	// mismatch, missing calendar, etc.) would trigger HX-Retarget:body
+	// in the error handler, replacing the entire entity page.
+	showCalendar := false
+	if h.addonSvc != nil {
+		enabled, err := h.addonSvc.IsEnabledForCampaign(c.Request().Context(), cc.Campaign.ID, "calendar")
+		if err == nil {
+			showCalendar = enabled
+		}
+	}
+
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, backlinks, showAttributes, csrfToken))
+	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, backlinks, showAttributes, showCalendar, csrfToken))
 }
 
 // EditForm renders the entity edit form (GET /campaigns/:id/entities/:eid/edit).

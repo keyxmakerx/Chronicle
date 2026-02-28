@@ -12,7 +12,9 @@ import (
 
 // EntityShowPage renders the entity profile page driven by the entity type layout.
 // showAttributes controls whether the attributes block is rendered (based on addon state).
-templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, backlinks []Entity, showAttributes bool, csrfToken string) {
+// showCalendar gates the lazy-loaded calendar events section to prevent HTMX errors
+// from replacing the page body via HX-Retarget when the calendar addon is not enabled.
+templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, backlinks []Entity, showAttributes bool, showCalendar bool, csrfToken string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-6xl mx-auto">
 			<!-- Breadcrumb with ancestor chain -->
@@ -74,11 +76,14 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			}
 
 			// Calendar events linked to this entity (lazy-loaded from calendar plugin).
-			<div
-				hx-get={ fmt.Sprintf("/campaigns/%s/calendar/entity-events/%s", cc.Campaign.ID, entity.ID) }
-				hx-trigger="load"
-				hx-swap="innerHTML"
-			></div>
+			// Only rendered when the calendar addon is enabled for this campaign.
+			if showCalendar {
+				<div
+					hx-get={ fmt.Sprintf("/campaigns/%s/calendar/entity-events/%s", cc.Campaign.ID, entity.ID) }
+					hx-trigger="load"
+					hx-swap="innerHTML"
+				></div>
+			}
 		</div>
 	}
 }
