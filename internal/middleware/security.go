@@ -27,9 +27,9 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			// Google Fonts + Font Awesome CDN are explicitly allowed.
 			h.Set("Content-Security-Policy",
 				"default-src 'self'; "+
-					"script-src 'self' 'unsafe-inline' 'unsafe-eval'; "+
-					"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "+
-					"img-src 'self' data: blob:; "+
+					"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "+
+					"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://unpkg.com; "+
+					"img-src 'self' data: blob: https://unpkg.com; "+
 					"font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "+
 					"connect-src 'self'; "+
 					"frame-ancestors 'none'; "+

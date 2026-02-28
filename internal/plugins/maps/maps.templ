@@ -1,0 +1,742 @@
+// maps.templ renders the maps UI: map list page, Leaflet.js map viewer,
+// marker creation/editing modals. Leaflet CSS+JS are loaded inline on
+// the map viewer page to avoid bloating other pages.
+
+package maps
+
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// MapListPage renders the full map list page.
+templ MapListPage(cc *campaigns.CampaignContext, data MapListData) {
+	@layouts.App("Maps") {
+		@mapListContent(cc, data)
+	}
+}
+
+// MapListFragment renders the map list as an HTMX fragment.
+templ MapListFragment(cc *campaigns.CampaignContext, data MapListData) {
+	@mapListContent(cc, data)
+}
+
+// mapListContent renders the map list body.
+templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
+	<div class="max-w-4xl mx-auto py-6 px-4">
+		<div class="flex items-center justify-between mb-6">
+			<div>
+				<h1 class="text-xl font-bold text-fg">Maps</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					if len(data.Maps) == 0 {
+						No maps yet. Create one to get started.
+					} else {
+						{ fmt.Sprintf("%d map(s)", len(data.Maps)) }
+					}
+				</p>
+			</div>
+			if data.IsOwner {
+				<button
+					class="btn-primary text-sm"
+					onclick="document.getElementById('create-map-modal').classList.remove('hidden')"
+				>
+					<i class="fa-solid fa-plus mr-1"></i> New Map
+				</button>
+			}
+		</div>
+		if len(data.Maps) > 0 {
+			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+				for _, m := range data.Maps {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", data.CampaignID, m.ID)) }
+						class="card p-4 hover:ring-2 hover:ring-accent/30 transition-all group"
+					>
+						if m.HasImage() {
+							<div class="aspect-video bg-surface-alt rounded-md mb-3 overflow-hidden">
+								<img
+									src={ fmt.Sprintf("/media/%s", *m.ImageID) }
+									alt={ m.Name }
+									class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+								/>
+							</div>
+						} else {
+							<div class="aspect-video bg-surface-alt rounded-md mb-3 flex items-center justify-center">
+								<i class="fa-solid fa-map text-3xl text-fg-muted"></i>
+							</div>
+						}
+						<h3 class="text-sm font-semibold text-fg truncate">{ m.Name }</h3>
+						if m.Description != nil && *m.Description != "" {
+							<p class="text-xs text-fg-secondary mt-1 line-clamp-2">{ *m.Description }</p>
+						}
+					</a>
+				}
+			</div>
+		} else {
+			<div class="card p-12 text-center">
+				<i class="fa-solid fa-map text-4xl text-fg-muted mb-4"></i>
+				<p class="text-fg-secondary">No maps yet.</p>
+				if data.IsOwner {
+					<p class="text-sm text-fg-muted mt-2">Click "New Map" to create your first map.</p>
+				}
+			</div>
+		}
+		if data.IsOwner {
+			@createMapModal(data)
+		}
+	</div>
+}
+
+// createMapModal renders the form to create a new map.
+templ createMapModal(data MapListData) {
+	<div
+		id="create-map-modal"
+		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick="if(event.target===this)this.classList.add('hidden')"
+	>
+		<div class="card p-6 w-full max-w-md space-y-4">
+			<div class="flex items-center justify-between">
+				<h2 class="text-lg font-semibold text-fg">New Map</h2>
+				<button class="text-fg-muted hover:text-fg" onclick="document.getElementById('create-map-modal').classList.add('hidden')">
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+			<form
+				method="POST"
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/new", data.CampaignID)) }
+				class="space-y-3"
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Map Name</label>
+					<input type="text" name="name" class="input w-full" required placeholder="e.g. World Map, City of Neverwinter"/>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Description</label>
+					<textarea name="description" class="input w-full" rows="2" placeholder="Optional description"></textarea>
+				</div>
+				<div class="flex justify-end gap-2 pt-2">
+					<button type="button" class="btn-secondary text-xs" onclick="document.getElementById('create-map-modal').classList.add('hidden')">
+						Cancel
+					</button>
+					<button type="submit" class="btn-primary text-xs">
+						<i class="fa-solid fa-plus mr-1"></i> Create Map
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+}
+
+// MapShowPage renders the full map viewer page with Leaflet.
+templ MapShowPage(cc *campaigns.CampaignContext, data MapViewData) {
+	@layouts.App(data.Map.Name) {
+		@mapShowContent(cc, data)
+	}
+}
+
+// MapShowFragment renders the map viewer as an HTMX fragment.
+templ MapShowFragment(cc *campaigns.CampaignContext, data MapViewData) {
+	@mapShowContent(cc, data)
+}
+
+// mapShowContent renders the Leaflet map viewer with markers and controls.
+templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
+	<!-- Leaflet CSS + JS (loaded only on map pages) -->
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+	<div class="h-full flex flex-col -mx-5 -my-4">
+		<!-- Map header with name, back link, and controls -->
+		<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
+			<div class="flex items-center gap-3">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", data.CampaignID)) }
+					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+					title="Back to maps"
+				>
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+					</svg>
+				</a>
+				<div>
+					<h1 class="text-lg font-semibold text-fg">{ data.Map.Name }</h1>
+					if data.Map.Description != nil && *data.Map.Description != "" {
+						<p class="text-xs text-fg-muted">{ *data.Map.Description }</p>
+					}
+				</div>
+			</div>
+			<div class="flex items-center gap-2">
+				if data.IsScribe {
+					<button
+						id="place-marker-btn"
+						class="btn-secondary text-xs"
+						onclick="togglePlaceMode()"
+					>
+						<i class="fa-solid fa-map-pin mr-1"></i> Place Marker
+					</button>
+				}
+				if data.IsScribe {
+					<button
+						class="btn-secondary text-xs"
+						onclick="document.getElementById('map-settings-modal').classList.remove('hidden')"
+					>
+						<i class="fa-solid fa-gear"></i>
+					</button>
+				}
+			</div>
+		</div>
+
+		<!-- Map container (fills remaining space) -->
+		<div id="map-container" class="flex-1 relative bg-surface-alt"></div>
+	</div>
+
+	if data.IsScribe {
+		@markerModal(data)
+		@mapSettingsModal(data)
+	}
+
+	<!-- Map initialization script -->
+	<script>
+		(function() {
+			var campaignID = window.location.pathname.split('/')[2];
+			var mapID = { templ.JSONString(data.Map.ID) };
+			var imageID = { templ.JSONString(derefStr(data.Map.ImageID)) };
+			var imageW = { templ.JSONString(fmt.Sprintf("%d", data.Map.ImageWidth)) };
+			var imageH = { templ.JSONString(fmt.Sprintf("%d", data.Map.ImageHeight)) };
+			var isScribe = { templ.JSONString(fmt.Sprintf("%t", data.IsScribe)) } === "true";
+			var markersJSON = { templ.JSONString(mustMarshalMarkers(data.Markers)) };
+			var markers = JSON.parse(markersJSON);
+
+			var w = parseInt(imageW) || 1000;
+			var h = parseInt(imageH) || 1000;
+
+			// Create Leaflet map with CRS.Simple for image overlay.
+			var map = L.map('map-container', {
+				crs: L.CRS.Simple,
+				minZoom: -3,
+				maxZoom: 3,
+				zoomSnap: 0.25,
+				attributionControl: false,
+			});
+
+			// Set image bounds and add overlay if image exists.
+			var bounds = [[0, 0], [h, w]];
+			if (imageID) {
+				L.imageOverlay('/media/' + imageID, bounds).addTo(map);
+			}
+			map.fitBounds(bounds);
+
+			// Track placed Leaflet markers by ID for removal/update.
+			var leafletMarkers = {};
+			var placingMode = false;
+
+			// Escape helpers to prevent XSS when building HTML strings from
+			// user-supplied marker data (name, description, icon, color).
+			function escapeHtml(s) {
+				if (!s) return '';
+				return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+			}
+			function escapeAttr(s) {
+				if (!s) return '';
+				return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+			}
+
+			// Render all existing markers.
+			markers.forEach(function(mk) { addMarkerToMap(mk); });
+
+			function addMarkerToMap(mk) {
+				// Convert percentage coords (0-100) to pixel coords.
+				var lat = h - (mk.y / 100) * h;
+				var lng = (mk.x / 100) * w;
+
+				var icon = L.divIcon({
+					className: 'chronicle-marker',
+					html: '<div style="color:' + escapeAttr(mk.color) + ';font-size:20px;text-shadow:0 1px 3px rgba(0,0,0,0.5);"><i class="fa-solid ' + escapeAttr(mk.icon) + '"></i></div>',
+					iconSize: [24, 24],
+					iconAnchor: [12, 24],
+				});
+
+				var lm = L.marker([lat, lng], { icon: icon, draggable: isScribe }).addTo(map);
+
+				// Tooltip with marker name (escaped to prevent HTML injection).
+				lm.bindTooltip(escapeHtml(mk.name), { direction: 'top', offset: [0, -24] });
+
+				// Click to open edit modal (Scribe+).
+				if (isScribe) {
+					lm.on('click', function() { openEditMarker(mk); });
+					lm.on('dragend', function(e) {
+						var pos = e.target.getLatLng();
+						var newX = (pos.lng / w) * 100;
+						var newY = ((h - pos.lat) / h) * 100;
+						// Clamp to 0-100.
+						newX = Math.max(0, Math.min(100, newX));
+						newY = Math.max(0, Math.min(100, newY));
+						mk.x = newX;
+						mk.y = newY;
+						updateMarkerPosition(mk);
+					});
+				} else {
+					// Players: show popup with name + description (all user data escaped).
+					var popupContent = '<strong>' + escapeHtml(mk.name) + '</strong>';
+					if (mk.description) popupContent += '<br><span class="text-xs">' + escapeHtml(mk.description) + '</span>';
+					if (mk.entity_name) {
+						popupContent += '<br><a href="/campaigns/' + escapeAttr(campaignID) + '/entities/' + escapeAttr(mk.entity_id) + '" class="text-accent text-xs hover:underline">' + escapeHtml(mk.entity_name) + '</a>';
+					}
+					lm.bindPopup(popupContent);
+				}
+
+				leafletMarkers[mk.id] = lm;
+			}
+
+			// Place mode: click on map to create a marker at that position.
+			window.togglePlaceMode = function() {
+				placingMode = !placingMode;
+				var btn = document.getElementById('place-marker-btn');
+				if (placingMode) {
+					btn.classList.remove('btn-secondary');
+					btn.classList.add('btn-primary');
+					document.getElementById('map-container').style.cursor = 'crosshair';
+				} else {
+					btn.classList.remove('btn-primary');
+					btn.classList.add('btn-secondary');
+					document.getElementById('map-container').style.cursor = '';
+				}
+			};
+
+			map.on('click', function(e) {
+				if (!placingMode || !isScribe) return;
+
+				var x = (e.latlng.lng / w) * 100;
+				var y = ((h - e.latlng.lat) / h) * 100;
+				x = Math.max(0, Math.min(100, x));
+				y = Math.max(0, Math.min(100, y));
+
+				// Open create marker modal with coordinates pre-filled.
+				openCreateMarker(x, y);
+				togglePlaceMode();
+			});
+
+			function getHeaders() {
+				var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+				var headers = { 'Content-Type': 'application/json' };
+				if (csrfMeta) headers['X-CSRF-Token'] = csrfMeta.content;
+				return headers;
+			}
+
+			// Create marker modal handlers.
+			window.openCreateMarker = function(x, y) {
+				resetMarkerModal();
+				document.getElementById('mk-x').value = x.toFixed(2);
+				document.getElementById('mk-y').value = y.toFixed(2);
+				document.getElementById('marker-modal').classList.remove('hidden');
+			};
+
+			window.openEditMarker = function(mk) {
+				resetMarkerModal();
+				document.getElementById('mk-id').value = mk.id;
+				document.getElementById('mk-name').value = mk.name || '';
+				document.getElementById('mk-description').value = mk.description || '';
+				document.getElementById('mk-x').value = mk.x.toFixed(2);
+				document.getElementById('mk-y').value = mk.y.toFixed(2);
+				document.getElementById('mk-icon').value = mk.icon || 'fa-map-pin';
+				document.getElementById('mk-color').value = mk.color || '#3b82f6';
+				document.getElementById('mk-visibility').value = mk.visibility || 'everyone';
+				document.getElementById('mk-entity-id').value = mk.entity_id || '';
+
+				document.getElementById('mk-modal-title').textContent = 'Edit Marker';
+				document.getElementById('mk-submit-icon').className = 'fa-solid fa-check mr-1';
+				document.getElementById('mk-submit-text').textContent = 'Save Changes';
+				document.getElementById('mk-delete-zone').classList.remove('hidden');
+				document.getElementById('marker-modal').classList.remove('hidden');
+			};
+
+			window.closeMarkerModal = function() {
+				document.getElementById('marker-modal').classList.add('hidden');
+				hideMarkerDeleteConfirm();
+			};
+
+			function resetMarkerModal() {
+				var form = document.getElementById('marker-form');
+				form.reset();
+				document.getElementById('mk-id').value = '';
+				document.getElementById('mk-icon').value = 'fa-map-pin';
+				document.getElementById('mk-color').value = '#3b82f6';
+				document.getElementById('mk-modal-title').textContent = 'New Marker';
+				document.getElementById('mk-submit-icon').className = 'fa-solid fa-plus mr-1';
+				document.getElementById('mk-submit-text').textContent = 'Create Marker';
+				document.getElementById('mk-delete-zone').classList.add('hidden');
+				hideMarkerDeleteConfirm();
+			}
+
+			// Form submit — create or update.
+			document.getElementById('marker-form').addEventListener('submit', async function(e) {
+				e.preventDefault();
+				var fd = new FormData(e.target);
+				var body = {
+					name: fd.get('name'),
+					x: parseFloat(fd.get('x')),
+					y: parseFloat(fd.get('y')),
+					icon: fd.get('icon') || 'fa-map-pin',
+					color: fd.get('color') || '#3b82f6',
+					visibility: fd.get('visibility') || 'everyone',
+				};
+				var desc = fd.get('description');
+				if (desc) body.description = desc;
+				var eid = fd.get('entity_id');
+				if (eid) body.entity_id = eid;
+
+				var markerID = fd.get('marker_id');
+				var url, method;
+				if (markerID) {
+					url = '/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + markerID;
+					method = 'PUT';
+				} else {
+					url = '/campaigns/' + campaignID + '/maps/' + mapID + '/markers';
+					method = 'POST';
+				}
+
+				try {
+					var resp = await fetch(url, {
+						method: method, headers: getHeaders(), body: JSON.stringify(body),
+					});
+					if (resp.ok) {
+						closeMarkerModal();
+						window.location.reload();
+					} else {
+						var data = await resp.json().catch(function() { return {}; });
+						alert(data.message || 'Failed to save marker');
+					}
+				} catch (err) {
+					alert('Network error: ' + err.message);
+				}
+			});
+
+			// Drag-end position update (silent PUT).
+			async function updateMarkerPosition(mk) {
+				try {
+					await fetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, {
+						method: 'PUT',
+						headers: getHeaders(),
+						body: JSON.stringify({
+							name: mk.name, description: mk.description || null,
+							x: mk.x, y: mk.y,
+							icon: mk.icon, color: mk.color,
+							visibility: mk.visibility,
+							entity_id: mk.entity_id || null,
+						}),
+					});
+				} catch (err) {
+					console.error('Failed to save marker position:', err);
+				}
+			}
+
+			// Delete confirmation.
+			window.showMarkerDeleteConfirm = function() {
+				document.getElementById('mk-delete-confirm').classList.remove('hidden');
+				document.getElementById('marker-form').classList.add('hidden');
+			};
+
+			window.hideMarkerDeleteConfirm = function() {
+				document.getElementById('mk-delete-confirm').classList.add('hidden');
+				document.getElementById('marker-form').classList.remove('hidden');
+			};
+
+			window.deleteMarker = async function() {
+				var markerID = document.getElementById('mk-id').value;
+				if (!markerID) return;
+
+				try {
+					var resp = await fetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + markerID, {
+						method: 'DELETE', headers: getHeaders(),
+					});
+					if (resp.ok) {
+						closeMarkerModal();
+						window.location.reload();
+					} else {
+						var data = await resp.json().catch(function() { return {}; });
+						alert(data.message || 'Failed to delete marker');
+					}
+				} catch (err) {
+					alert('Network error: ' + err.message);
+				}
+			};
+
+			// Map settings: image upload + name/description.
+			window.saveMapSettings = async function() {
+				var name = document.getElementById('ms-name').value;
+				var desc = document.getElementById('ms-description').value;
+				var imgID = document.getElementById('ms-image-id').value;
+				var imgW = parseInt(document.getElementById('ms-image-width').value) || 0;
+				var imgH = parseInt(document.getElementById('ms-image-height').value) || 0;
+
+				var body = { name: name, image_width: imgW, image_height: imgH };
+				if (desc) body.description = desc;
+				if (imgID) body.image_id = imgID;
+
+				try {
+					var resp = await fetch('/campaigns/' + campaignID + '/maps/' + mapID, {
+						method: 'PUT', headers: getHeaders(), body: JSON.stringify(body),
+					});
+					if (resp.ok) {
+						document.getElementById('map-settings-modal').classList.add('hidden');
+						window.location.reload();
+					} else {
+						var data = await resp.json().catch(function() { return {}; });
+						alert(data.message || 'Failed to save settings');
+					}
+				} catch (err) {
+					alert('Network error: ' + err.message);
+				}
+			};
+
+			// Image upload handler for map settings.
+			window.uploadMapImage = async function(input) {
+				if (!input.files || !input.files[0]) return;
+				var file = input.files[0];
+				var fd = new FormData();
+				fd.append('file', file);
+				fd.append('campaign_id', campaignID);
+				fd.append('usage_type', 'attachment');
+
+				var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+				var headers = {};
+				if (csrfMeta) headers['X-CSRF-Token'] = csrfMeta.content;
+
+				try {
+					var resp = await fetch('/media/upload', {
+						method: 'POST', headers: headers, body: fd,
+					});
+					if (resp.ok) {
+						var data = await resp.json();
+						document.getElementById('ms-image-id').value = data.id;
+						document.getElementById('ms-image-preview').src = data.url;
+						document.getElementById('ms-image-preview').classList.remove('hidden');
+						// Read natural image dimensions for coordinate mapping.
+						var img = new Image();
+						img.onload = function() {
+							document.getElementById('ms-image-width').value = img.naturalWidth;
+							document.getElementById('ms-image-height').value = img.naturalHeight;
+						};
+						img.src = data.url;
+					} else {
+						alert('Upload failed');
+					}
+				} catch (err) {
+					alert('Upload error: ' + err.message);
+				}
+			};
+
+			// Delete map.
+			window.deleteMap = async function() {
+				if (!confirm('Delete this map and all its markers? This cannot be undone.')) return;
+				try {
+					var resp = await fetch('/campaigns/' + campaignID + '/maps/' + mapID, {
+						method: 'DELETE', headers: getHeaders(),
+					});
+					if (resp.ok) {
+						window.location.href = '/campaigns/' + campaignID + '/maps';
+					} else {
+						alert('Failed to delete map');
+					}
+				} catch (err) {
+					alert('Network error: ' + err.message);
+				}
+			};
+		})();
+	</script>
+
+	<!-- Minimal CSS for Leaflet marker icons -->
+	<style>
+		.chronicle-marker { background: none !important; border: none !important; }
+	</style>
+}
+
+// markerModal renders the create/edit marker modal.
+templ markerModal(data MapViewData) {
+	<div
+		id="marker-modal"
+		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick="if(event.target===this)closeMarkerModal()"
+	>
+		<div class="card p-6 w-full max-w-md space-y-4">
+			<div class="flex items-center justify-between">
+				<h2 id="mk-modal-title" class="text-lg font-semibold text-fg">New Marker</h2>
+				<button class="text-fg-muted hover:text-fg" onclick="closeMarkerModal()">
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+			<form id="marker-form" class="space-y-3">
+				<input type="hidden" name="marker_id" id="mk-id" value=""/>
+				<input type="hidden" name="x" id="mk-x" value="50"/>
+				<input type="hidden" name="y" id="mk-y" value="50"/>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Name</label>
+					<input type="text" name="name" id="mk-name" class="input w-full" required placeholder="Marker name"/>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Description</label>
+					<textarea name="description" id="mk-description" class="input w-full" rows="2" placeholder="Optional description"></textarea>
+				</div>
+				<div class="grid grid-cols-2 gap-2">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Icon</label>
+						<select name="icon" id="mk-icon" class="input w-full">
+							<option value="fa-map-pin">Pin</option>
+							<option value="fa-location-dot">Location</option>
+							<option value="fa-city">City</option>
+							<option value="fa-mountain">Mountain</option>
+							<option value="fa-tree">Forest</option>
+							<option value="fa-water">Water</option>
+							<option value="fa-dungeon">Dungeon</option>
+							<option value="fa-landmark">Landmark</option>
+							<option value="fa-house">House</option>
+							<option value="fa-castle">Castle</option>
+							<option value="fa-skull">Danger</option>
+							<option value="fa-star">Star</option>
+							<option value="fa-flag">Flag</option>
+							<option value="fa-campground">Camp</option>
+							<option value="fa-anchor">Port</option>
+							<option value="fa-cross">Temple</option>
+							<option value="fa-shop">Shop</option>
+							<option value="fa-gem">Treasure</option>
+						</select>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Color</label>
+						<input type="color" name="color" id="mk-color" class="input w-full h-9" value="#3b82f6"/>
+					</div>
+				</div>
+				<div class="grid grid-cols-2 gap-2">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Visibility</label>
+						<select name="visibility" id="mk-visibility" class="input w-full">
+							<option value="everyone">Everyone</option>
+							<option value="dm_only">DM Only</option>
+						</select>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Link Entity (ID)</label>
+						<input type="text" name="entity_id" id="mk-entity-id" class="input w-full" placeholder="Optional"/>
+					</div>
+				</div>
+				<div class="flex items-center justify-between pt-2">
+					<div id="mk-delete-zone" class="hidden">
+						<button
+							type="button"
+							class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded transition-colors"
+							onclick="showMarkerDeleteConfirm()"
+						>
+							<i class="fa-solid fa-trash mr-1"></i> Delete
+						</button>
+					</div>
+					<div></div>
+					<div class="flex gap-2">
+						<button type="button" class="btn-secondary text-xs" onclick="closeMarkerModal()">
+							Cancel
+						</button>
+						<button type="submit" id="mk-submit-btn" class="btn-primary text-xs">
+							<i class="fa-solid fa-plus mr-1" id="mk-submit-icon"></i>
+							<span id="mk-submit-text">Create Marker</span>
+						</button>
+					</div>
+				</div>
+			</form>
+			<!-- Delete confirmation -->
+			<div id="mk-delete-confirm" class="hidden">
+				<div class="border-t border-edge pt-4 mt-2">
+					<div class="flex items-center gap-2 mb-3">
+						<i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+						<span class="text-sm font-medium text-fg">Delete this marker?</span>
+					</div>
+					<p class="text-xs text-fg-secondary mb-3">This action cannot be undone.</p>
+					<div class="flex justify-end gap-2">
+						<button type="button" class="btn-secondary text-xs" onclick="hideMarkerDeleteConfirm()">
+							Cancel
+						</button>
+						<button type="button" class="text-xs px-3 py-1.5 rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors" onclick="deleteMarker()">
+							<i class="fa-solid fa-trash mr-1"></i> Delete
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// mapSettingsModal renders the map settings/image upload modal.
+templ mapSettingsModal(data MapViewData) {
+	<div
+		id="map-settings-modal"
+		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick="if(event.target===this)this.classList.add('hidden')"
+	>
+		<div class="card p-6 w-full max-w-md space-y-4">
+			<div class="flex items-center justify-between">
+				<h2 class="text-lg font-semibold text-fg">Map Settings</h2>
+				<button class="text-fg-muted hover:text-fg" onclick="document.getElementById('map-settings-modal').classList.add('hidden')">
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+			<div class="space-y-3">
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Map Name</label>
+					<input type="text" id="ms-name" class="input w-full" value={ data.Map.Name }/>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Description</label>
+					<textarea id="ms-description" class="input w-full" rows="2">{ derefStr(data.Map.Description) }</textarea>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Map Image</label>
+					<input type="hidden" id="ms-image-id" value={ derefStr(data.Map.ImageID) }/>
+					<input type="hidden" id="ms-image-width" value={ fmt.Sprintf("%d", data.Map.ImageWidth) }/>
+					<input type="hidden" id="ms-image-height" value={ fmt.Sprintf("%d", data.Map.ImageHeight) }/>
+					if data.Map.HasImage() {
+						<img id="ms-image-preview" src={ fmt.Sprintf("/media/%s", *data.Map.ImageID) } class="w-full rounded-md mb-2 max-h-48 object-contain bg-surface-alt"/>
+					} else {
+						<img id="ms-image-preview" src="" class="hidden w-full rounded-md mb-2 max-h-48 object-contain bg-surface-alt"/>
+					}
+					<input
+						type="file"
+						accept="image/*"
+						class="input w-full text-xs"
+						onchange="uploadMapImage(this)"
+					/>
+					<p class="text-xs text-fg-muted mt-1">Upload a map image (JPEG, PNG, WebP). Image dimensions set the coordinate space.</p>
+				</div>
+				<div class="flex items-center justify-between pt-2">
+					<button type="button" class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded transition-colors" onclick="deleteMap()">
+						<i class="fa-solid fa-trash mr-1"></i> Delete Map
+					</button>
+					<div class="flex gap-2">
+						<button type="button" class="btn-secondary text-xs" onclick="document.getElementById('map-settings-modal').classList.add('hidden')">
+							Cancel
+						</button>
+						<button type="button" class="btn-primary text-xs" onclick="saveMapSettings()">
+							<i class="fa-solid fa-check mr-1"></i> Save
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// derefStr safely dereferences a *string, returning "" for nil.
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// mustMarshalMarkers serializes markers to JSON for the JS initialization.
+func mustMarshalMarkers(markers []Marker) string {
+	b, err := json.Marshal(markers)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}

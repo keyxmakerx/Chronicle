@@ -265,7 +265,8 @@ const (
 	BlockRecentPages   = "recent_pages"   // Recently updated entities.
 	BlockEntityList    = "entity_list"    // Filtered entity list by category.
 	BlockTextBlock     = "text_block"     // Custom rich text / markdown.
-	BlockPinnedPages   = "pinned_pages"   // Pinned entities grid.
+	BlockPinnedPages     = "pinned_pages"     // Pinned entities grid.
+	BlockCalendarPreview = "calendar_preview" // Upcoming calendar events.
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -281,8 +282,9 @@ var ValidBlockTypes = map[string]bool{
 	BlockRecentPages:    true,
 	BlockEntityList:     true,
 	BlockTextBlock:      true,
-	BlockPinnedPages:    true,
-	BlockCategoryHeader: true,
+	BlockPinnedPages:     true,
+	BlockCalendarPreview: true,
+	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
 	BlockSearchBar:      true,
 }

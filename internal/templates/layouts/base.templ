@@ -53,6 +53,8 @@ templ Base(title string) {
 		<script src="/static/vendor/tiptap-bundle.min.js" defer></script>
 		<!-- @mention extension must load before editor.js so Chronicle.MentionExtension is available -->
 		<script src="/static/js/widgets/editor_mention.js" defer></script>
+		<!-- Inline secrets mark (GM-only text, must load before editor.js) -->
+		<script src="/static/js/widgets/editor_secret.js" defer></script>
 		<script src="/static/js/widgets/editor.js" defer></script>
 
 		<!-- Image upload widget -->
@@ -90,6 +92,9 @@ templ Base(title string) {
 
 		<!-- Quick Search modal (Ctrl+K / Cmd+K) -->
 		<script src="/static/js/search_modal.js" defer></script>
+
+		<!-- Global keyboard shortcuts (Ctrl+N, Ctrl+E, Ctrl+S) -->
+		<script src="/static/js/keyboard_shortcuts.js" defer></script>
 	</body>
 	</html>
 }

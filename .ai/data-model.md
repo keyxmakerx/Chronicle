@@ -17,7 +17,16 @@ User --< CampaignMember >-- Campaign
          |                      +--< Entity --< EntityPost
          |                      |       |---< EntityTag >-- Tag
          |                      |       |---< EntityRelation
+         |                      |       |---< CalendarEvent (via entity_id)
+         |                      |       |---< MapMarker (via entity_id)
+         |                      +--< Calendar --< CalendarMonth
+         |                      |       |---< CalendarWeekday
+         |                      |       |---< CalendarMoon
+         |                      |       |---< CalendarSeason
+         |                      |       |---< CalendarEvent
+         |                      +--< Map --< MapMarker
          |                      +--< AuditLog
+         |                      +--< SecurityEvent (site-wide)
          |                      +--< Addon --< CampaignAddon
          |                      +--< ApiKey --< ApiRequestLog
          +--< PasswordResetToken
@@ -313,6 +322,129 @@ User --< CampaignMember >-- Campaign
 | max_upload_size | BIGINT | NULL | Override |
 | max_total_storage | BIGINT | NULL | Override |
 
+### security_events (implemented -- migration 000024)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| event_type | VARCHAR(50) | NOT NULL | login.success, login.failed, admin.*, etc. |
+| user_id | CHAR(36) | NULL | NULL for failed logins with unknown email |
+| actor_id | CHAR(36) | NULL | Admin who initiated action |
+| ip_address | VARCHAR(45) | NOT NULL, DEFAULT '' | Client IP |
+| user_agent | TEXT | NULL | |
+| details | JSON | NULL | Flexible metadata |
+| created_at | DATETIME | NOT NULL | |
+
+### calendars (implemented -- migrations 000027, 000028)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | VARCHAR(36) | PK | UUID |
+| campaign_id | VARCHAR(36) | UNIQUE, FK -> campaigns.id ON DELETE CASCADE | One per campaign |
+| name | VARCHAR(255) | NOT NULL, DEFAULT 'Campaign Calendar' | |
+| description | TEXT | NULL | |
+| epoch_name | VARCHAR(100) | NULL | e.g., "Third Age" |
+| current_year | INT | NOT NULL, DEFAULT 1 | In-game year |
+| current_month | INT | NOT NULL, DEFAULT 1 | In-game month |
+| current_day | INT | NOT NULL, DEFAULT 1 | In-game day |
+| leap_year_every | INT | NOT NULL, DEFAULT 0 | 0 = no leap years (added 000028) |
+| leap_year_offset | INT | NOT NULL, DEFAULT 0 | Offset for calculation (added 000028) |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+
+### calendar_months (implemented -- migrations 000027, 000028)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| calendar_id | VARCHAR(36) | FK -> calendars.id ON DELETE CASCADE | |
+| name | VARCHAR(100) | NOT NULL | e.g., "Winterveil" |
+| days | INT | NOT NULL, DEFAULT 30 | |
+| sort_order | INT | NOT NULL, DEFAULT 0 | |
+| is_intercalary | TINYINT(1) | NOT NULL, DEFAULT 0 | Festival/leap month |
+| leap_year_days | INT | NOT NULL, DEFAULT 0 | Extra days in leap years (added 000028) |
+
+### calendar_weekdays (implemented -- migration 000027)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| calendar_id | VARCHAR(36) | FK -> calendars.id ON DELETE CASCADE | |
+| name | VARCHAR(100) | NOT NULL | |
+| sort_order | INT | NOT NULL, DEFAULT 0 | |
+
+### calendar_moons (implemented -- migration 000027)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| calendar_id | VARCHAR(36) | FK -> calendars.id ON DELETE CASCADE | |
+| name | VARCHAR(100) | NOT NULL | |
+| cycle_days | FLOAT | NOT NULL, DEFAULT 29.5 | Lunar cycle length |
+| phase_offset | FLOAT | NOT NULL, DEFAULT 0 | Phase offset |
+| color | VARCHAR(7) | NOT NULL, DEFAULT '#c0c0c0' | |
+
+### calendar_seasons (implemented -- migrations 000027, 000028)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| calendar_id | VARCHAR(36) | FK -> calendars.id ON DELETE CASCADE | |
+| name | VARCHAR(100) | NOT NULL | |
+| start_month | INT | NOT NULL | |
+| start_day | INT | NOT NULL | |
+| end_month | INT | NOT NULL | |
+| end_day | INT | NOT NULL | |
+| description | TEXT | NULL | |
+| color | VARCHAR(7) | NOT NULL, DEFAULT '#6b7280' | Visual indicator (added 000028) |
+
+### calendar_events (implemented -- migrations 000027, 000028)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | VARCHAR(36) | PK | UUID |
+| calendar_id | VARCHAR(36) | FK -> calendars.id ON DELETE CASCADE | |
+| entity_id | VARCHAR(36) | NULL, FK -> entities.id ON DELETE SET NULL | |
+| name | VARCHAR(255) | NOT NULL | |
+| description | TEXT | NULL | |
+| year | INT | NOT NULL | |
+| month | INT | NOT NULL | |
+| day | INT | NOT NULL | |
+| end_year | INT | NULL | Multi-day event end (added 000028) |
+| end_month | INT | NULL | (added 000028) |
+| end_day | INT | NULL | (added 000028) |
+| is_recurring | TINYINT(1) | NOT NULL, DEFAULT 0 | |
+| recurrence_type | VARCHAR(20) | NULL | yearly, monthly |
+| visibility | VARCHAR(20) | NOT NULL, DEFAULT 'everyone' | |
+| category | VARCHAR(50) | NULL | holiday, battle, quest, etc. (added 000028) |
+| created_by | VARCHAR(36) | NULL | |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+
+### maps (implemented -- migration 000029)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | VARCHAR(36) | PK | UUID |
+| campaign_id | VARCHAR(36) | FK -> campaigns.id ON DELETE CASCADE | |
+| name | VARCHAR(255) | NOT NULL | |
+| description | TEXT | NULL | |
+| image_id | VARCHAR(36) | NULL, FK -> media_files.id ON DELETE SET NULL | Background image |
+| image_width | INT | NOT NULL, DEFAULT 0 | |
+| image_height | INT | NOT NULL, DEFAULT 0 | |
+| sort_order | INT | NOT NULL, DEFAULT 0 | |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+
+### map_markers (implemented -- migration 000029)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | VARCHAR(36) | PK | UUID |
+| map_id | VARCHAR(36) | FK -> maps.id ON DELETE CASCADE | |
+| name | VARCHAR(255) | NOT NULL | |
+| description | TEXT | NULL | |
+| x | DOUBLE | NOT NULL, DEFAULT 50 | Percentage 0-100 |
+| y | DOUBLE | NOT NULL, DEFAULT 50 | Percentage 0-100 |
+| icon | VARCHAR(100) | NOT NULL, DEFAULT 'fa-map-pin' | FA icon class |
+| color | VARCHAR(7) | NOT NULL, DEFAULT '#3b82f6' | Hex color |
+| entity_id | VARCHAR(36) | NULL, FK -> entities.id ON DELETE SET NULL | |
+| visibility | VARCHAR(20) | NOT NULL, DEFAULT 'everyone' | everyone or dm_only |
+| created_by | VARCHAR(36) | NULL | |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+
 ## MariaDB-Specific Notes
 
 - **JSON columns:** MariaDB validates JSON on write. Use `JSON_EXTRACT()` for
@@ -333,6 +465,15 @@ User --< CampaignMember >-- Campaign
 - `tags`: UNIQUE on (campaign_id, slug)
 - `notes`: INDEX on (locked_by, locked_at), INDEX on (campaign_id, is_shared)
 - `note_versions`: INDEX on (note_id, created_at DESC)
+- `security_events`: INDEX on (event_type, created_at DESC), (user_id, created_at DESC), (ip_address, created_at DESC), (created_at DESC), (actor_id, created_at DESC)
+- `calendars`: UNIQUE on campaign_id
+- `calendar_months`: INDEX on (calendar_id, sort_order)
+- `calendar_weekdays`: INDEX on (calendar_id, sort_order)
+- `calendar_moons`: INDEX on calendar_id
+- `calendar_seasons`: INDEX on calendar_id
+- `calendar_events`: INDEX on (calendar_id, year, month, day), INDEX on entity_id
+- `maps`: INDEX on (campaign_id, sort_order)
+- `map_markers`: INDEX on map_id, INDEX on entity_id
 
 ## Migration Log
 
@@ -361,3 +502,9 @@ User --< CampaignMember >-- Campaign
 | 21 | 000021_dashboard_layouts | dashboard_layout on campaigns + entity_types | 2026-02-22 |
 | 22 | 000022_notes_collaboration | Shared notes, locking, versions (is_shared, locked_by/at, entry/entry_html, note_versions) | 2026-02-24 |
 | 23 | 000023_entity_popup_config | popup_config JSON on entities for hover preview settings | 2026-02-24 |
+| 24 | 000024_security_admin | security_events table + users.is_disabled column | 2026-02-25 |
+| 25 | 000025_attributes_addon | Registers "attributes" addon in addons table | 2026-02-25 |
+| 26 | 000026_rename_notes_addon | Renames "player-notes" to "notes", adds new "player-notes" planned addon | 2026-02-25 |
+| 27 | 000027_calendar_plugin | Calendar tables (calendars, months, weekdays, moons, seasons, events) + addon | 2026-02-25 |
+| 28 | 000028_calendar_v2_device_fingerprint | Leap years, event end dates, season colors, event categories, device fingerprint on api_keys | 2026-02-25 |
+| 29 | 000029_maps_plugin | Maps + map_markers tables + addon registration | 2026-02-28 |

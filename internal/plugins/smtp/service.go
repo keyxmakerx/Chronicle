@@ -229,7 +229,17 @@ func (s *smtpService) UpdateSettings(ctx context.Context, req UpdateSMTPRequest)
 		Enabled:     req.Enabled,
 	}
 
-	if row.Port <= 0 || row.Port > 65535 {
+	// Validate SMTP host to prevent SSRF attacks (connecting to internal
+	// infrastructure via the SMTP test/send functionality).
+	if row.Host != "" {
+		if err := validateSMTPHost(row.Host); err != nil {
+			return err
+		}
+	}
+
+	// Restrict SMTP port to standard mail ports.
+	validPorts := map[int]bool{25: true, 465: true, 587: true, 2525: true}
+	if !validPorts[row.Port] {
 		row.Port = 587
 	}
 	if row.FromName == "" {
@@ -365,4 +375,45 @@ func (s *smtpService) testSSL(addr, host, username, password string) error {
 	}
 
 	return client.Quit()
+}
+
+// validateSMTPHost rejects SMTP hosts that resolve to private/reserved IP
+// addresses to prevent SSRF attacks. An admin configuring SMTP to point at
+// internal infrastructure (Redis, DB, metadata endpoints) could probe or
+// attack internal services.
+func validateSMTPHost(host string) error {
+	// Reject obvious internal hostnames.
+	lower := strings.ToLower(host)
+	if lower == "localhost" || strings.HasSuffix(lower, ".local") ||
+		lower == "host.docker.internal" || lower == "kubernetes.default" {
+		return apperror.NewBadRequest("SMTP host cannot be a local/internal address")
+	}
+
+	// Resolve the hostname and check all resulting IPs.
+	ips, err := net.LookupHost(host)
+	if err != nil {
+		// DNS resolution failed — might be a typo. Allow the user to save
+		// but they'll get a connection error when testing/sending.
+		return nil
+	}
+
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			continue
+		}
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return apperror.NewBadRequest(fmt.Sprintf(
+				"SMTP host %q resolves to private/reserved IP %s; use a public mail server",
+				host, ipStr,
+			))
+		}
+		// Block AWS/cloud metadata endpoint (169.254.169.254).
+		if ipStr == "169.254.169.254" {
+			return apperror.NewBadRequest("SMTP host resolves to a cloud metadata endpoint")
+		}
+	}
+
+	return nil
 }

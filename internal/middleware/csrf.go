@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 )
@@ -41,6 +42,13 @@ func CSRF() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			req := c.Request()
+
+			// Skip CSRF for API routes. They use Bearer token authentication
+			// (not cookies), so they are not vulnerable to CSRF attacks. External
+			// clients (Foundry VTT) cannot obtain a CSRF cookie.
+			if strings.HasPrefix(req.URL.Path, "/api/") {
+				return next(c)
+			}
 
 			// Ensure a CSRF token cookie exists.
 			cookie, err := req.Cookie(csrfCookieName)

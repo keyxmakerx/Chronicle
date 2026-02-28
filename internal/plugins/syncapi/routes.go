@@ -47,7 +47,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 // All routes require API key authentication. Permission middleware enforces
 // read/write/sync access levels. Campaign match middleware ensures keys can
 // only access their scoped campaign.
-func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, syncSvc SyncAPIService) {
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, syncSvc SyncAPIService) {
 	// API v1 group with key auth and rate limiting.
 	v1 := e.Group("/api/v1",
 		RequireAPIKey(syncSvc),
@@ -64,11 +64,27 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, syncSvc SyncAPIService) {
 	cg.GET("/entities", api.ListEntities, RequirePermission(PermRead))
 	cg.GET("/entities/:entityID", api.GetEntity, RequirePermission(PermRead))
 
+	// Calendar read endpoints (require "read" permission).
+	cg.GET("/calendar", calAPI.GetCalendar, RequirePermission(PermRead))
+	cg.GET("/calendar/date", calAPI.GetCurrentDate, RequirePermission(PermRead))
+	cg.GET("/calendar/events", calAPI.ListEvents, RequirePermission(PermRead))
+	cg.GET("/calendar/events/:eventID", calAPI.GetEvent, RequirePermission(PermRead))
+
 	// Write endpoints (require "write" permission).
 	cg.POST("/entities", api.CreateEntity, RequirePermission(PermWrite))
 	cg.PUT("/entities/:entityID", api.UpdateEntity, RequirePermission(PermWrite))
 	cg.PUT("/entities/:entityID/fields", api.UpdateEntityFields, RequirePermission(PermWrite))
 	cg.DELETE("/entities/:entityID", api.DeleteEntity, RequirePermission(PermWrite))
+
+	// Calendar write endpoints (require "write" permission).
+	cg.POST("/calendar/events", calAPI.CreateEvent, RequirePermission(PermWrite))
+	cg.PUT("/calendar/events/:eventID", calAPI.UpdateEvent, RequirePermission(PermWrite))
+	cg.DELETE("/calendar/events/:eventID", calAPI.DeleteEvent, RequirePermission(PermWrite))
+	cg.PUT("/calendar/settings", calAPI.UpdateCalendarSettings, RequirePermission(PermWrite))
+	cg.PUT("/calendar/months", calAPI.UpdateMonths, RequirePermission(PermWrite))
+	cg.PUT("/calendar/weekdays", calAPI.UpdateWeekdays, RequirePermission(PermWrite))
+	cg.PUT("/calendar/moons", calAPI.UpdateMoons, RequirePermission(PermWrite))
+	cg.POST("/calendar/advance", calAPI.AdvanceDate, RequirePermission(PermWrite))
 
 	// Sync endpoint (require "sync" permission).
 	cg.POST("/sync", api.Sync, RequirePermission(PermSync))

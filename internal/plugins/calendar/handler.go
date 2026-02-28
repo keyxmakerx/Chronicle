@@ -1,0 +1,723 @@
+package calendar
+
+import (
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/labstack/echo/v4"
+
+	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// Handler processes HTTP requests for the calendar plugin.
+type Handler struct {
+	svc CalendarService
+}
+
+// NewHandler creates a new calendar Handler.
+func NewHandler(svc CalendarService) *Handler {
+	return &Handler{svc: svc}
+}
+
+// Show renders the calendar page (monthly grid view).
+// GET /campaigns/:id/calendar
+func (h *Handler) Show(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	// If no calendar exists, show setup page.
+	if cal == nil {
+		csrfToken := middleware.GetCSRFToken(c)
+		if c.Request().Header.Get("HX-Request") != "" {
+			return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
+		}
+		return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
+	}
+
+	// Parse optional year/month query params, default to current date.
+	year := cal.CurrentYear
+	month := cal.CurrentMonth
+	if q := c.QueryParam("year"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil {
+			year = v
+		}
+	}
+	if q := c.QueryParam("month"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil && v >= 1 && v <= len(cal.Months) {
+			month = v
+		}
+	}
+
+	role := int(cc.MemberRole)
+	events, err := h.svc.ListEventsForMonth(ctx, cal.ID, year, month, role)
+	if err != nil {
+		return err
+	}
+
+	data := CalendarViewData{
+		Calendar:   cal,
+		Year:       year,
+		MonthIndex: month,
+		Events:     events,
+		CampaignID: cc.Campaign.ID,
+		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
+		CSRFToken:  middleware.GetCSRFToken(c),
+	}
+
+	if c.Request().Header.Get("HX-Request") != "" {
+		return middleware.Render(c, http.StatusOK, CalendarGridFragment(cc, data))
+	}
+	return middleware.Render(c, http.StatusOK, CalendarPage(cc, data))
+}
+
+// CreateCalendar handles calendar creation from the setup form.
+// POST /campaigns/:id/calendar
+func (h *Handler) CreateCalendar(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	name := c.FormValue("name")
+	if name == "" {
+		name = "Campaign Calendar"
+	}
+	epochName := c.FormValue("epoch_name")
+	startYear, _ := strconv.Atoi(c.FormValue("start_year"))
+	if startYear == 0 {
+		startYear = 1
+	}
+
+	var epoch *string
+	if epochName != "" {
+		epoch = &epochName
+	}
+
+	cal, err := h.svc.CreateCalendar(ctx, cc.Campaign.ID, CreateCalendarInput{
+		Name:        name,
+		EpochName:   epoch,
+		CurrentYear: startYear,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Seed default months (12 months, 30 days each) and weekdays (7 days).
+	defaultMonths := []MonthInput{
+		{Name: "Month 1", Days: 30, SortOrder: 0},
+		{Name: "Month 2", Days: 30, SortOrder: 1},
+		{Name: "Month 3", Days: 30, SortOrder: 2},
+		{Name: "Month 4", Days: 30, SortOrder: 3},
+		{Name: "Month 5", Days: 30, SortOrder: 4},
+		{Name: "Month 6", Days: 30, SortOrder: 5},
+		{Name: "Month 7", Days: 30, SortOrder: 6},
+		{Name: "Month 8", Days: 30, SortOrder: 7},
+		{Name: "Month 9", Days: 30, SortOrder: 8},
+		{Name: "Month 10", Days: 30, SortOrder: 9},
+		{Name: "Month 11", Days: 30, SortOrder: 10},
+		{Name: "Month 12", Days: 30, SortOrder: 11},
+	}
+	if err := h.svc.SetMonths(ctx, cal.ID, defaultMonths); err != nil {
+		return err
+	}
+
+	defaultWeekdays := []WeekdayInput{
+		{Name: "Day 1", SortOrder: 0},
+		{Name: "Day 2", SortOrder: 1},
+		{Name: "Day 3", SortOrder: 2},
+		{Name: "Day 4", SortOrder: 3},
+		{Name: "Day 5", SortOrder: 4},
+		{Name: "Day 6", SortOrder: 5},
+		{Name: "Day 7", SortOrder: 6},
+	}
+	if err := h.svc.SetWeekdays(ctx, cal.ID, defaultWeekdays); err != nil {
+		return err
+	}
+
+	return c.Redirect(http.StatusSeeOther,
+		fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID))
+}
+
+// UpdateCalendarAPI updates calendar settings.
+// PUT /campaigns/:id/calendar/settings
+func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var req struct {
+		Name           string  `json:"name"`
+		Description    *string `json:"description"`
+		EpochName      *string `json:"epoch_name"`
+		CurrentYear    int     `json:"current_year"`
+		CurrentMonth   int     `json:"current_month"`
+		CurrentDay     int     `json:"current_day"`
+		LeapYearEvery  int     `json:"leap_year_every"`
+		LeapYearOffset int     `json:"leap_year_offset"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	return h.svc.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
+		Name:           req.Name,
+		Description:    req.Description,
+		EpochName:      req.EpochName,
+		CurrentYear:    req.CurrentYear,
+		CurrentMonth:   req.CurrentMonth,
+		CurrentDay:     req.CurrentDay,
+		LeapYearEvery:  req.LeapYearEvery,
+		LeapYearOffset: req.LeapYearOffset,
+	})
+}
+
+// UpdateMonthsAPI replaces all months.
+// PUT /campaigns/:id/calendar/months
+func (h *Handler) UpdateMonthsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var months []MonthInput
+	if err := c.Bind(&months); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	return h.svc.SetMonths(ctx, cal.ID, months)
+}
+
+// UpdateWeekdaysAPI replaces all weekdays.
+// PUT /campaigns/:id/calendar/weekdays
+func (h *Handler) UpdateWeekdaysAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var weekdays []WeekdayInput
+	if err := c.Bind(&weekdays); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	return h.svc.SetWeekdays(ctx, cal.ID, weekdays)
+}
+
+// UpdateMoonsAPI replaces all moons.
+// PUT /campaigns/:id/calendar/moons
+func (h *Handler) UpdateMoonsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var moons []MoonInput
+	if err := c.Bind(&moons); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	return h.svc.SetMoons(ctx, cal.ID, moons)
+}
+
+// CreateEventAPI creates a new event.
+// POST /campaigns/:id/calendar/events
+func (h *Handler) CreateEventAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var req struct {
+		Name           string  `json:"name"`
+		Description    *string `json:"description"`
+		EntityID       *string `json:"entity_id"`
+		Year           int     `json:"year"`
+		Month          int     `json:"month"`
+		Day            int     `json:"day"`
+		EndYear        *int    `json:"end_year"`
+		EndMonth       *int    `json:"end_month"`
+		EndDay         *int    `json:"end_day"`
+		IsRecurring    bool    `json:"is_recurring"`
+		RecurrenceType *string `json:"recurrence_type"`
+		Visibility     string  `json:"visibility"`
+		Category       *string `json:"category"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	// Get user ID from session context.
+	userID := ""
+	if session := c.Get("session"); session != nil {
+		if s, ok := session.(interface{ GetUserID() string }); ok {
+			userID = s.GetUserID()
+		}
+	}
+
+	evt, err := h.svc.CreateEvent(ctx, cal.ID, CreateEventInput{
+		Name:           req.Name,
+		Description:    req.Description,
+		EntityID:       req.EntityID,
+		Year:           req.Year,
+		Month:          req.Month,
+		Day:            req.Day,
+		EndYear:        req.EndYear,
+		EndMonth:       req.EndMonth,
+		EndDay:         req.EndDay,
+		IsRecurring:    req.IsRecurring,
+		RecurrenceType: req.RecurrenceType,
+		Visibility:     req.Visibility,
+		Category:       req.Category,
+		CreatedBy:      userID,
+	})
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusCreated, evt)
+}
+
+// requireEventInCampaign fetches an event and verifies its calendar belongs to
+// the given campaign. Returns 404 for cross-campaign IDOR attempts.
+func (h *Handler) requireEventInCampaign(c echo.Context, eventID, campaignID string) (*Event, error) {
+	ctx := c.Request().Context()
+	evt, err := h.svc.GetEvent(ctx, eventID)
+	if err != nil {
+		return nil, err
+	}
+	// Verify event's calendar belongs to this campaign.
+	cal, err := h.svc.GetCalendarByID(ctx, evt.CalendarID)
+	if err != nil || cal == nil || cal.CampaignID != campaignID {
+		return nil, echo.NewHTTPError(http.StatusNotFound, "event not found")
+	}
+	return evt, nil
+}
+
+// UpdateEventAPI updates an existing event.
+// PUT /campaigns/:id/calendar/events/:eid
+func (h *Handler) UpdateEventAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	eventID := c.Param("eid")
+
+	// IDOR protection: verify event belongs to this campaign's calendar.
+	if _, err := h.requireEventInCampaign(c, eventID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	var req struct {
+		Name           string  `json:"name"`
+		Description    *string `json:"description"`
+		EntityID       *string `json:"entity_id"`
+		Year           int     `json:"year"`
+		Month          int     `json:"month"`
+		Day            int     `json:"day"`
+		EndYear        *int    `json:"end_year"`
+		EndMonth       *int    `json:"end_month"`
+		EndDay         *int    `json:"end_day"`
+		IsRecurring    bool    `json:"is_recurring"`
+		RecurrenceType *string `json:"recurrence_type"`
+		Visibility     string  `json:"visibility"`
+		Category       *string `json:"category"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	return h.svc.UpdateEvent(ctx, eventID, UpdateEventInput{
+		Name:           req.Name,
+		Description:    req.Description,
+		EntityID:       req.EntityID,
+		Year:           req.Year,
+		Month:          req.Month,
+		Day:            req.Day,
+		EndYear:        req.EndYear,
+		EndMonth:       req.EndMonth,
+		EndDay:         req.EndDay,
+		IsRecurring:    req.IsRecurring,
+		RecurrenceType: req.RecurrenceType,
+		Visibility:     req.Visibility,
+		Category:       req.Category,
+	})
+}
+
+// DeleteEventAPI deletes an event.
+// DELETE /campaigns/:id/calendar/events/:eid
+func (h *Handler) DeleteEventAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	eventID := c.Param("eid")
+
+	// IDOR protection: verify event belongs to this campaign's calendar.
+	if _, err := h.requireEventInCampaign(c, eventID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	if err := h.svc.DeleteEvent(ctx, eventID); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+// UpdateSeasonsAPI replaces all seasons.
+// PUT /campaigns/:id/calendar/seasons
+func (h *Handler) UpdateSeasonsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var seasons []Season
+	if err := c.Bind(&seasons); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	return h.svc.SetSeasons(ctx, cal.ID, seasons)
+}
+
+// DeleteCalendarAPI removes the calendar and all its data.
+// DELETE /campaigns/:id/calendar
+func (h *Handler) DeleteCalendarAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	if err := h.svc.DeleteCalendar(ctx, cal.ID); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+// ShowSettings renders the calendar settings page.
+// GET /campaigns/:id/calendar/settings
+func (h *Handler) ShowSettings(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	if cal == nil {
+		return c.Redirect(http.StatusSeeOther,
+			fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID))
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	if c.Request().Header.Get("HX-Request") != "" {
+		return middleware.Render(c, http.StatusOK, CalendarSettingsFragment(cc, cal, csrfToken))
+	}
+	return middleware.Render(c, http.StatusOK, CalendarSettingsPage(cc, cal, csrfToken))
+}
+
+// AdvanceDateAPI moves the current date forward by N days.
+// POST /campaigns/:id/calendar/advance
+func (h *Handler) AdvanceDateAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var req struct {
+		Days int `json:"days"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+	if req.Days < 1 || req.Days > 3650 {
+		return echo.NewHTTPError(http.StatusBadRequest, "days must be between 1 and 3650")
+	}
+
+	return h.svc.AdvanceDate(ctx, cal.ID, req.Days)
+}
+
+// EntityEventsFragment returns a small HTMX fragment listing calendar events
+// linked to a specific entity. Loaded lazily from entity show pages.
+// GET /campaigns/:id/calendar/entity-events/:eid
+func (h *Handler) EntityEventsFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	entityID := c.Param("eid")
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	if cal == nil {
+		// No calendar = no events section.
+		return c.NoContent(http.StatusOK)
+	}
+
+	role := int(cc.MemberRole)
+	events, err := h.svc.ListEventsForEntity(ctx, entityID, role)
+	if err != nil {
+		return err
+	}
+	if len(events) == 0 {
+		return c.NoContent(http.StatusOK)
+	}
+
+	return middleware.Render(c, http.StatusOK, EntityEventsSection(cc, cal, events))
+}
+
+// UpcomingEventsFragment returns an HTMX fragment with upcoming calendar events.
+// Used by the calendar_preview dashboard block via lazy-loading.
+// GET /campaigns/:id/calendar/upcoming
+func (h *Handler) UpcomingEventsFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	if cal == nil {
+		return middleware.Render(c, http.StatusOK, UpcomingEventsEmpty())
+	}
+
+	limit := 5
+	if q := c.QueryParam("limit"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil && v >= 1 && v <= 20 {
+			limit = v
+		}
+	}
+
+	role := int(cc.MemberRole)
+	events, err := h.svc.ListUpcomingEvents(ctx, cal.ID, limit, role)
+	if err != nil {
+		return err
+	}
+
+	return middleware.Render(c, http.StatusOK, UpcomingEventsBlock(cc, cal, events))
+}
+
+// ShowTimeline renders the timeline (list) view of calendar events.
+// GET /campaigns/:id/calendar/timeline
+func (h *Handler) ShowTimeline(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	if cal == nil {
+		csrfToken := middleware.GetCSRFToken(c)
+		if c.Request().Header.Get("HX-Request") != "" {
+			return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
+		}
+		return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
+	}
+
+	// Default to current year, allow override via query param.
+	year := cal.CurrentYear
+	if q := c.QueryParam("year"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil {
+			year = v
+		}
+	}
+
+	role := int(cc.MemberRole)
+	events, err := h.svc.ListEventsForYear(ctx, cal.ID, year, role)
+	if err != nil {
+		return err
+	}
+
+	data := TimelineViewData{
+		Calendar:   cal,
+		Year:       year,
+		Events:     events,
+		CampaignID: cc.Campaign.ID,
+		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
+		CSRFToken:  middleware.GetCSRFToken(c),
+	}
+
+	if c.Request().Header.Get("HX-Request") != "" {
+		return middleware.Render(c, http.StatusOK, TimelineFragment(cc, data))
+	}
+	return middleware.Render(c, http.StatusOK, TimelinePage(cc, data))
+}
+
+// CalendarViewData holds all data needed to render the calendar grid.
+type CalendarViewData struct {
+	Calendar   *Calendar
+	Year       int
+	MonthIndex int // 1-based month index
+	Events     []Event
+	CampaignID string
+	IsOwner    bool
+	IsScribe   bool
+	CSRFToken  string
+}
+
+// CurrentMonthDef returns the month definition for the current view month.
+func (d CalendarViewData) CurrentMonthDef() *Month {
+	idx := d.MonthIndex - 1
+	if idx >= 0 && idx < len(d.Calendar.Months) {
+		return &d.Calendar.Months[idx]
+	}
+	return nil
+}
+
+// CurrentMonthDays returns the number of days in the current month,
+// accounting for leap years.
+func (d CalendarViewData) CurrentMonthDays() int {
+	return d.Calendar.MonthDays(d.MonthIndex-1, d.Year)
+}
+
+// CurrentSeason returns the season for a given day in the current month, or nil.
+func (d CalendarViewData) CurrentSeason(day int) *Season {
+	return d.Calendar.SeasonForDate(d.MonthIndex, day)
+}
+
+// PrevMonth returns year, month for the previous month (wrapping at year boundary).
+func (d CalendarViewData) PrevMonth() (int, int) {
+	m := d.MonthIndex - 1
+	y := d.Year
+	if m < 1 {
+		m = len(d.Calendar.Months)
+		y--
+	}
+	return y, m
+}
+
+// NextMonth returns year, month for the next month (wrapping at year boundary).
+func (d CalendarViewData) NextMonth() (int, int) {
+	m := d.MonthIndex + 1
+	y := d.Year
+	if m > len(d.Calendar.Months) {
+		m = 1
+		y++
+	}
+	return y, m
+}
+
+// EventsForDay returns events that fall on the given day.
+func (d CalendarViewData) EventsForDay(day int) []Event {
+	var result []Event
+	for _, e := range d.Events {
+		if e.Day == day {
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
+// IsToday returns true if the given day/month/year matches the calendar's current date.
+func (d CalendarViewData) IsToday(day int) bool {
+	return d.Year == d.Calendar.CurrentYear &&
+		d.MonthIndex == d.Calendar.CurrentMonth &&
+		day == d.Calendar.CurrentDay
+}
+
+// AbsoluteDay calculates the total days from year 0 for moon phase computation.
+func (d CalendarViewData) AbsoluteDay(day int) int {
+	yearLength := d.Calendar.YearLength()
+	total := d.Year * yearLength
+	// Add days from months before current month.
+	for i := 0; i < d.MonthIndex-1 && i < len(d.Calendar.Months); i++ {
+		total += d.Calendar.Months[i].Days
+	}
+	total += day
+	return total
+}
+
+// WeekdayIndex returns the weekday index (0-based) for a given day in the current month/year.
+func (d CalendarViewData) WeekdayIndex(day int) int {
+	wl := d.Calendar.WeekLength()
+	if wl == 0 {
+		return 0
+	}
+	absDay := d.AbsoluteDay(day)
+	idx := absDay % wl
+	if idx < 0 {
+		idx += wl
+	}
+	return idx
+}
+
+// StartWeekdayOffset returns how many blank cells to render before day 1
+// of the current month in the grid.
+func (d CalendarViewData) StartWeekdayOffset() int {
+	return d.WeekdayIndex(1)
+}
+
+// TimelineViewData holds data for the chronological timeline view.
+type TimelineViewData struct {
+	Calendar   *Calendar
+	Year       int
+	Events     []Event
+	CampaignID string
+	IsOwner    bool
+	IsScribe   bool
+	CSRFToken  string
+}
+
+// MonthName returns the month name for a 1-based month index.
+func (d TimelineViewData) MonthName(month int) string {
+	if month >= 1 && month <= len(d.Calendar.Months) {
+		return d.Calendar.Months[month-1].Name
+	}
+	return fmt.Sprintf("Month %d", month)
+}
+
+// EventsByMonth groups events by their month index for timeline rendering.
+func (d TimelineViewData) EventsByMonth() []TimelineMonth {
+	monthMap := make(map[int][]Event)
+	for _, evt := range d.Events {
+		monthMap[evt.Month] = append(monthMap[evt.Month], evt)
+	}
+	// Produce ordered slice.
+	var result []TimelineMonth
+	for m := 1; m <= len(d.Calendar.Months); m++ {
+		if events, ok := monthMap[m]; ok {
+			result = append(result, TimelineMonth{
+				Index:  m,
+				Name:   d.Calendar.Months[m-1].Name,
+				Events: events,
+			})
+		}
+	}
+	return result
+}
+
+// TimelineMonth groups events under a month header for timeline display.
+type TimelineMonth struct {
+	Index  int
+	Name   string
+	Events []Event
+}

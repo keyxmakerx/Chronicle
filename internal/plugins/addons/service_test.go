@@ -662,7 +662,7 @@ func TestListForCampaign_AnnotatesInstalled(t *testing.T) {
 		listForCampaignFn: func(ctx context.Context, campaignID string) ([]CampaignAddon, error) {
 			return []CampaignAddon{
 				{AddonID: 1, AddonSlug: "sync-api", AddonName: "Sync API"},
-				{AddonID: 2, AddonSlug: "calendar", AddonName: "Calendar"},
+				{AddonID: 2, AddonSlug: "dice-roller", AddonName: "Dice Roller"},
 			}, nil
 		},
 	}

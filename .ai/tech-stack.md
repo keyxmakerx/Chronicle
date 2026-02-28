@@ -24,7 +24,7 @@
 | Library | Version | Role |
 |---------|---------|------|
 | TipTap | 2.x | Rich text editor widget |
-| Leaflet.js | 1.9.x | Interactive maps (Phase 2) |
+| Leaflet.js | 1.9.x | Interactive maps (CDN-loaded per-page) |
 | Font Awesome | 6 Free | UI icons |
 | RPG Awesome | latest | TTRPG-themed icons |
 | Inter | latest | UI font (self-hosted) |

@@ -19,6 +19,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
+	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
@@ -316,10 +318,24 @@ func (a *App) RegisterRoutes() {
 	syncapi.RegisterAdminRoutes(adminGroup, syncHandler)
 	syncapi.RegisterCampaignRoutes(e, syncHandler, campaignService, authService)
 
+	// Calendar plugin: custom fantasy calendar with months, moons, events.
+	// Created early so the sync API can reference calendarService.
+	calendarRepo := calendar.NewCalendarRepository(a.DB)
+	calendarService := calendar.NewCalendarService(calendarRepo)
+	calendarHandler := calendar.NewHandler(calendarService)
+	calendar.RegisterRoutes(e, calendarHandler, campaignService, authService)
+
+	// Maps plugin: interactive maps with Leaflet.js, pin markers, entity linking.
+	mapsRepo := maps.NewMapRepository(a.DB)
+	mapsService := maps.NewMapService(mapsRepo)
+	mapsHandler := maps.NewHandler(mapsService)
+	maps.RegisterRoutes(e, mapsHandler, campaignService, authService)
+
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService)
-	syncapi.RegisterAPIRoutes(e, syncAPIHandler, syncService)
+	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService)
+	syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, syncService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
 	tagRepo := tags.NewTagRepository(a.DB)

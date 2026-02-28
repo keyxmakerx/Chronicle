@@ -1,0 +1,953 @@
+// calendar.templ renders the calendar UI: setup page, monthly grid view,
+// event creation modal, and event display. The grid uses a CSS grid matching
+// the weekday count. Season colors are displayed as subtle backgrounds on day cells.
+
+package calendar
+
+import (
+	"fmt"
+	"strconv"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CalendarSetupPage renders the initial setup when no calendar exists yet.
+templ CalendarSetupPage(cc *campaigns.CampaignContext, csrfToken string) {
+	@layouts.App("Calendar - Setup") {
+		<div class="max-w-lg mx-auto py-12">
+			@calendarSetupForm(cc, csrfToken)
+		</div>
+	}
+}
+
+// CalendarSetupFragment renders the setup form as an HTMX fragment.
+templ CalendarSetupFragment(cc *campaigns.CampaignContext, csrfToken string) {
+	<div class="max-w-lg mx-auto py-12">
+		@calendarSetupForm(cc, csrfToken)
+	</div>
+}
+
+// calendarSetupForm renders the form to create a new calendar.
+templ calendarSetupForm(cc *campaigns.CampaignContext, csrfToken string) {
+	<div class="card p-8 text-center space-y-6">
+		<div>
+			<i class="fa-solid fa-calendar-days text-4xl text-accent mb-3"></i>
+			<h1 class="text-xl font-bold text-fg">Create Your Calendar</h1>
+			<p class="text-sm text-fg-secondary mt-1">
+				Set up a custom calendar for your world with unique months, weekdays, moons, and more.
+			</p>
+		</div>
+		<form
+			method="POST"
+			action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+			class="space-y-4 text-left"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1">Calendar Name</label>
+				<input type="text" name="name" value="Campaign Calendar" class="input w-full" placeholder="e.g. The Reckoning of Ages"/>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1">Epoch / Era Name</label>
+				<input type="text" name="epoch_name" class="input w-full" placeholder="e.g. DR, Age of Fire, Third Era"/>
+				<p class="text-xs text-fg-muted mt-1">Optional. Displayed after the year number (e.g. "1492 DR").</p>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1">Starting Year</label>
+				<input type="number" name="start_year" value="1" class="input w-full"/>
+			</div>
+			<div class="pt-2">
+				<button type="submit" class="btn-primary w-full">
+					<i class="fa-solid fa-plus mr-2"></i> Create Calendar
+				</button>
+				<p class="text-xs text-fg-muted mt-2 text-center">
+					You can customize months, weekdays, and moons after creation.
+				</p>
+			</div>
+		</form>
+	</div>
+}
+
+// CalendarPage renders the full calendar page with monthly grid.
+templ CalendarPage(cc *campaigns.CampaignContext, data CalendarViewData) {
+	@layouts.App(data.Calendar.Name) {
+		<div class="h-full flex flex-col -mx-5 -my-4">
+			@calendarHeader(cc, data)
+			<div class="flex-1 overflow-y-auto px-6 py-4">
+				@calendarGrid(cc, data)
+			</div>
+		</div>
+		if data.IsScribe {
+			@eventModal(data)
+		}
+	}
+}
+
+// CalendarGridFragment renders just the grid area for HTMX swaps.
+templ CalendarGridFragment(cc *campaigns.CampaignContext, data CalendarViewData) {
+	@calendarHeader(cc, data)
+	<div class="flex-1 overflow-y-auto px-6 py-4">
+		@calendarGrid(cc, data)
+	</div>
+}
+
+// calendarHeader renders the month/year navigation and current date info.
+templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
+	<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
+		<div class="flex items-center gap-4">
+			<!-- Prev/Next month navigation -->
+			<div class="flex items-center gap-1">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", data.CampaignID, prevYear(data), prevMonth(data))) }
+					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+					title="Previous month"
+				>
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+					</svg>
+				</a>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", data.CampaignID, nextYear(data), nextMonth(data))) }
+					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+					title="Next month"
+				>
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+					</svg>
+				</a>
+			</div>
+			<!-- Month name + year -->
+			<div>
+				<h1 class="text-lg font-semibold text-fg">
+					if data.CurrentMonthDef() != nil {
+						{ data.CurrentMonthDef().Name }
+					}
+					{ " " }
+					{ strconv.Itoa(data.Year) }
+					if data.Calendar.EpochName != nil && *data.Calendar.EpochName != "" {
+						{ " " + *data.Calendar.EpochName }
+					}
+				</h1>
+				<!-- Season indicator -->
+				if season := data.CurrentSeason(1); season != nil {
+					<p class="text-xs text-fg-muted">
+						<span class="inline-block w-2 h-2 rounded-full mr-1" style={ fmt.Sprintf("background:%s", season.Color) }></span>
+						{ season.Name }
+					</p>
+				}
+			</div>
+		</div>
+		<div class="flex items-center gap-3">
+			<!-- "Today" button to jump to current date -->
+			if data.Year != data.Calendar.CurrentYear || data.MonthIndex != data.Calendar.CurrentMonth {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) }
+					class="btn-secondary text-xs"
+				>
+					<i class="fa-solid fa-crosshairs mr-1"></i> Today
+				</a>
+			}
+			<!-- Moon phases for today -->
+			if len(data.Calendar.Moons) > 0 {
+				<div class="flex items-center gap-2">
+					for _, moon := range data.Calendar.Moons {
+						<span
+							class="text-xs text-fg-secondary"
+							title={ fmt.Sprintf("%s: %s", moon.Name, moon.MoonPhaseName(data.AbsoluteDay(data.Calendar.CurrentDay))) }
+						>
+							{ moonPhaseIcon(moon.MoonPhase(data.AbsoluteDay(data.Calendar.CurrentDay))) }
+						</span>
+					}
+				</div>
+			}
+			<!-- View toggle: Grid / Timeline -->
+			<div class="flex items-center border border-edge rounded-md overflow-hidden">
+				<span
+					class="p-1.5 px-2 bg-accent/10 text-accent"
+					title="Calendar grid"
+				>
+					<i class="fa-solid fa-calendar text-xs"></i>
+				</span>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/timeline?year=%d", data.CampaignID, data.Year)) }
+					class="p-1.5 px-2 text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors"
+					title="Timeline view"
+				>
+					<i class="fa-solid fa-timeline text-xs"></i>
+				</a>
+			</div>
+			<!-- Settings link (Owner only) -->
+			if data.IsOwner {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/settings", data.CampaignID)) }
+					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+					title="Calendar settings"
+				>
+					<i class="fa-solid fa-gear text-sm"></i>
+				</a>
+			}
+			<!-- Add event button (Scribe+) -->
+			if data.IsScribe {
+				<button
+					class="btn-primary text-xs"
+					onclick="document.getElementById('event-modal').classList.remove('hidden')"
+				>
+					<i class="fa-solid fa-plus mr-1"></i> Event
+				</button>
+			}
+		</div>
+	</div>
+}
+
+// calendarGrid renders the weekday headers and day cells.
+templ calendarGrid(cc *campaigns.CampaignContext, data CalendarViewData) {
+	if data.CurrentMonthDef() == nil {
+		<div class="card p-6 text-center text-fg-secondary">
+			<p>No months configured. Add months in calendar settings.</p>
+		</div>
+	} else {
+		<div
+			class="grid gap-px bg-edge rounded-lg overflow-hidden"
+			style={ fmt.Sprintf("grid-template-columns: repeat(%d, minmax(0, 1fr))", data.Calendar.WeekLength()) }
+		>
+			<!-- Weekday headers -->
+			for _, wd := range data.Calendar.Weekdays {
+				<div class="bg-surface-alt px-2 py-2 text-center text-xs font-semibold text-fg-secondary uppercase tracking-wider">
+					{ wd.Name }
+				</div>
+			}
+			<!-- Empty cells before day 1 -->
+			for i := 0; i < data.StartWeekdayOffset(); i++ {
+				<div class="bg-surface min-h-[80px]"></div>
+			}
+			<!-- Day cells (use leap-year-aware day count) -->
+			for day := 1; day <= data.CurrentMonthDays(); day++ {
+				@dayCell(data, day)
+			}
+			<!-- Trailing empty cells to complete the last row -->
+			for i := 0; i < trailingCells(data); i++ {
+				<div class="bg-surface min-h-[80px]"></div>
+			}
+		</div>
+	}
+}
+
+// dayCell renders a single day in the calendar grid. Shows season color
+// as a subtle left border, moon phases on hover, and event chips.
+templ dayCell(data CalendarViewData, day int) {
+	<div class={
+		"bg-surface min-h-[80px] p-1.5 relative group",
+		templ.KV("ring-2 ring-inset ring-accent/40", data.IsToday(day)),
+	} style={ seasonBorderStyle(data.CurrentSeason(day)) }>
+		<!-- Day number + add button -->
+		<div class="flex items-center justify-between mb-1">
+			<span class={
+				"text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
+				templ.KV("bg-accent text-white", data.IsToday(day)),
+				templ.KV("text-fg-body", !data.IsToday(day)),
+			}>
+				{ strconv.Itoa(day) }
+			</span>
+			<!-- Quick add button visible on hover (Scribe+) -->
+			if data.IsScribe {
+				<button
+					class="hidden group-hover:flex w-5 h-5 items-center justify-center rounded text-[10px] text-fg-muted hover:text-accent hover:bg-accent/10 transition-colors"
+					onclick={ templ.ComponentScript{Call: fmt.Sprintf("openEventModal(%d, %d, %d)", data.Year, data.MonthIndex, day)} }
+					title="Add event"
+				>
+					<i class="fa-solid fa-plus"></i>
+				</button>
+			}
+		</div>
+		<!-- Events for this day -->
+		for _, evt := range data.EventsForDay(day) {
+			if data.IsScribe {
+				<button
+					class={
+						"w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-pointer hover:ring-1 hover:ring-accent/30",
+						templ.KV("bg-accent/15 text-accent", evt.Visibility == "everyone"),
+						templ.KV("bg-amber-500/15 text-amber-400", evt.Visibility == "dm_only"),
+					}
+					title={ eventTooltip(evt) }
+					data-event-id={ evt.ID }
+					data-event-name={ evt.Name }
+					data-event-description={ derefStr(evt.Description) }
+					data-event-year={ strconv.Itoa(evt.Year) }
+					data-event-month={ strconv.Itoa(evt.Month) }
+					data-event-day={ strconv.Itoa(evt.Day) }
+					data-event-visibility={ evt.Visibility }
+					data-event-category={ derefStr(evt.Category) }
+					data-event-recurring={ strconv.FormatBool(evt.IsRecurring) }
+					data-event-entity-id={ derefStr(evt.EntityID) }
+					onclick="openEditEventModal(this)"
+				>
+					if evt.EntityID != nil && evt.EntityIcon != "" {
+						<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
+					}
+					if evt.Category != nil && *evt.Category != "" {
+						<span class="opacity-60">{ categoryIcon(*evt.Category) }</span>
+						{ " " }
+					}
+					{ evt.Name }
+				</button>
+			} else {
+				<div
+					class={
+						"text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-default",
+						templ.KV("bg-accent/15 text-accent", evt.Visibility == "everyone"),
+						templ.KV("bg-amber-500/15 text-amber-400", evt.Visibility == "dm_only"),
+					}
+					title={ eventTooltip(evt) }
+				>
+					if evt.EntityID != nil && evt.EntityIcon != "" {
+						<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
+					}
+					if evt.Category != nil && *evt.Category != "" {
+						<span class="opacity-60">{ categoryIcon(*evt.Category) }</span>
+						{ " " }
+					}
+					{ evt.Name }
+				</div>
+			}
+		}
+	</div>
+}
+
+// eventModal renders the Alpine.js-powered event create/edit modal.
+// In create mode, it POSTs a new event. In edit mode, it PUTs updates
+// and offers a delete button with confirmation.
+templ eventModal(data CalendarViewData) {
+	<div
+		id="event-modal"
+		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick="if(event.target===this)closeEventModal()"
+	>
+		<div class="card p-6 w-full max-w-md space-y-4">
+			<div class="flex items-center justify-between">
+				<h2 id="evt-modal-title" class="text-lg font-semibold text-fg">New Event</h2>
+				<button class="text-fg-muted hover:text-fg" onclick="closeEventModal()">
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+			<form id="event-form" class="space-y-3">
+				<input type="hidden" name="event_id" id="evt-id" value=""/>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Name</label>
+					<input type="text" name="name" id="evt-name" class="input w-full" required placeholder="Event name"/>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Description</label>
+					<textarea name="description" id="evt-description" class="input w-full" rows="2" placeholder="Optional description"></textarea>
+				</div>
+				<div class="grid grid-cols-3 gap-2">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Year</label>
+						<input type="number" name="year" id="evt-year" class="input w-full" value={ strconv.Itoa(data.Year) }/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Month</label>
+						<input type="number" name="month" id="evt-month" class="input w-full" value={ strconv.Itoa(data.MonthIndex) }/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Day</label>
+						<input type="number" name="day" id="evt-day" class="input w-full" value="1"/>
+					</div>
+				</div>
+				<div class="grid grid-cols-2 gap-2">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Visibility</label>
+						<select name="visibility" id="evt-visibility" class="input w-full">
+							<option value="everyone">Everyone</option>
+							<option value="dm_only">DM Only</option>
+						</select>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Category</label>
+						<select name="category" id="evt-category" class="input w-full">
+							<option value="">None</option>
+							<option value="holiday">Holiday</option>
+							<option value="battle">Battle</option>
+							<option value="quest">Quest</option>
+							<option value="birthday">Birthday</option>
+							<option value="festival">Festival</option>
+							<option value="travel">Travel</option>
+							<option value="custom">Custom</option>
+						</select>
+					</div>
+				</div>
+				<div class="flex items-center gap-3">
+					<label class="flex items-center gap-2 text-xs text-fg-body">
+						<input type="checkbox" name="is_recurring" id="evt-recurring" class="rounded"/>
+						Recurring yearly
+					</label>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Link Entity (ID)</label>
+					<input type="text" name="entity_id" id="evt-entity-id" class="input w-full" placeholder="Optional entity ID"/>
+				</div>
+				<div class="flex items-center justify-between pt-2">
+					<!-- Delete button (edit mode only) -->
+					<div id="evt-delete-zone" class="hidden">
+						<button
+							type="button"
+							id="evt-delete-btn"
+							class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded transition-colors"
+							onclick="showDeleteConfirm()"
+						>
+							<i class="fa-solid fa-trash mr-1"></i> Delete
+						</button>
+					</div>
+					<div id="evt-delete-spacer"></div>
+					<div class="flex gap-2">
+						<button type="button" class="btn-secondary text-xs" onclick="closeEventModal()">
+							Cancel
+						</button>
+						<button type="submit" id="evt-submit-btn" class="btn-primary text-xs">
+							<i class="fa-solid fa-plus mr-1" id="evt-submit-icon"></i>
+							<span id="evt-submit-text">Create Event</span>
+						</button>
+					</div>
+				</div>
+			</form>
+			<!-- Delete confirmation overlay -->
+			<div id="evt-delete-confirm" class="hidden">
+				<div class="border-t border-edge pt-4 mt-2">
+					<div class="flex items-center gap-2 mb-3">
+						<i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+						<span class="text-sm font-medium text-fg">Delete this event?</span>
+					</div>
+					<p class="text-xs text-fg-secondary mb-3">This action cannot be undone.</p>
+					<div class="flex justify-end gap-2">
+						<button type="button" class="btn-secondary text-xs" onclick="hideDeleteConfirm()">
+							Cancel
+						</button>
+						<button type="button" class="text-xs px-3 py-1.5 rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors" onclick="deleteEvent()">
+							<i class="fa-solid fa-trash mr-1"></i> Delete Event
+						</button>
+					</div>
+				</div>
+			</div>
+			<script>
+				(function() {
+					var form = document.getElementById('event-form');
+					var campaignID = window.location.pathname.split('/')[2];
+
+					function getHeaders() {
+						var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+						var headers = { 'Content-Type': 'application/json' };
+						if (csrfMeta) headers['X-CSRF-Token'] = csrfMeta.content;
+						return headers;
+					}
+
+					function isEditMode() {
+						return document.getElementById('evt-id').value !== '';
+					}
+
+					// Form submit — create or update based on event ID presence.
+					form.addEventListener('submit', async function(e) {
+						e.preventDefault();
+						var fd = new FormData(form);
+						var body = {
+							name: fd.get('name'),
+							year: parseInt(fd.get('year')),
+							month: parseInt(fd.get('month')),
+							day: parseInt(fd.get('day')),
+							visibility: fd.get('visibility'),
+							is_recurring: fd.has('is_recurring'),
+							recurrence_type: fd.has('is_recurring') ? 'yearly' : null,
+						};
+						var desc = fd.get('description');
+						if (desc) body.description = desc;
+						var cat = fd.get('category');
+						if (cat) body.category = cat;
+						var eid = fd.get('entity_id');
+						if (eid) body.entity_id = eid;
+
+						var eventID = fd.get('event_id');
+						var url, method;
+						if (eventID) {
+							url = '/campaigns/' + campaignID + '/calendar/events/' + eventID;
+							method = 'PUT';
+						} else {
+							url = '/campaigns/' + campaignID + '/calendar/events';
+							method = 'POST';
+						}
+
+						try {
+							var resp = await fetch(url, {
+								method: method, headers: getHeaders(), body: JSON.stringify(body),
+							});
+							if (resp.ok) {
+								closeEventModal();
+								window.location.reload();
+							} else {
+								var data = await resp.json().catch(function() { return {}; });
+								alert(data.message || 'Failed to save event');
+							}
+						} catch (err) {
+							alert('Network error: ' + err.message);
+						}
+					});
+
+					// Open modal in create mode with a pre-set date.
+					window.openEventModal = function(year, month, day) {
+						resetEventModal();
+						document.getElementById('evt-year').value = year;
+						document.getElementById('evt-month').value = month;
+						document.getElementById('evt-day').value = day;
+						document.getElementById('event-modal').classList.remove('hidden');
+					};
+
+					// Open modal in edit mode, reading data-event-* attributes from the chip.
+					window.openEditEventModal = function(el) {
+						resetEventModal();
+						document.getElementById('evt-id').value = el.dataset.eventId;
+						document.getElementById('evt-name').value = el.dataset.eventName || '';
+						document.getElementById('evt-description').value = el.dataset.eventDescription || '';
+						document.getElementById('evt-year').value = el.dataset.eventYear || '';
+						document.getElementById('evt-month').value = el.dataset.eventMonth || '';
+						document.getElementById('evt-day').value = el.dataset.eventDay || '';
+						document.getElementById('evt-visibility').value = el.dataset.eventVisibility || 'everyone';
+						document.getElementById('evt-category').value = el.dataset.eventCategory || '';
+						document.getElementById('evt-recurring').checked = el.dataset.eventRecurring === 'true';
+						document.getElementById('evt-entity-id').value = el.dataset.eventEntityId || '';
+
+						// Switch to edit mode UI.
+						document.getElementById('evt-modal-title').textContent = 'Edit Event';
+						document.getElementById('evt-submit-icon').className = 'fa-solid fa-check mr-1';
+						document.getElementById('evt-submit-text').textContent = 'Save Changes';
+						document.getElementById('evt-delete-zone').classList.remove('hidden');
+						document.getElementById('evt-delete-spacer').classList.add('hidden');
+						document.getElementById('event-modal').classList.remove('hidden');
+					};
+
+					// Close the modal and reset state.
+					window.closeEventModal = function() {
+						document.getElementById('event-modal').classList.add('hidden');
+						hideDeleteConfirm();
+					};
+
+					// Reset modal to create mode defaults.
+					function resetEventModal() {
+						form.reset();
+						document.getElementById('evt-id').value = '';
+						document.getElementById('evt-modal-title').textContent = 'New Event';
+						document.getElementById('evt-submit-icon').className = 'fa-solid fa-plus mr-1';
+						document.getElementById('evt-submit-text').textContent = 'Create Event';
+						document.getElementById('evt-delete-zone').classList.add('hidden');
+						document.getElementById('evt-delete-spacer').classList.remove('hidden');
+						hideDeleteConfirm();
+					}
+
+					// Delete confirmation flow.
+					window.showDeleteConfirm = function() {
+						document.getElementById('evt-delete-confirm').classList.remove('hidden');
+						form.classList.add('hidden');
+					};
+
+					window.hideDeleteConfirm = function() {
+						document.getElementById('evt-delete-confirm').classList.add('hidden');
+						form.classList.remove('hidden');
+					};
+
+					window.deleteEvent = async function() {
+						var eventID = document.getElementById('evt-id').value;
+						if (!eventID) return;
+
+						try {
+							var resp = await fetch('/campaigns/' + campaignID + '/calendar/events/' + eventID, {
+								method: 'DELETE', headers: getHeaders(),
+							});
+							if (resp.ok) {
+								closeEventModal();
+								window.location.reload();
+							} else {
+								var data = await resp.json().catch(function() { return {}; });
+								alert(data.message || 'Failed to delete event');
+							}
+						} catch (err) {
+							alert('Network error: ' + err.message);
+						}
+					};
+				})();
+			</script>
+		</div>
+	</div>
+}
+
+// EntityEventsSection renders a list of calendar events linked to an entity.
+// Loaded via HTMX lazy-load on entity show pages.
+templ EntityEventsSection(cc *campaigns.CampaignContext, cal *Calendar, events []Event) {
+	<div class="mt-6">
+		<div class="flex items-center gap-2 mb-3 px-1">
+			<i class="fa-solid fa-calendar-days text-fg-muted text-sm"></i>
+			<h3 class="text-sm font-semibold text-fg">Calendar Events</h3>
+			<span class="text-xs text-fg-muted">({ strconv.Itoa(len(events)) })</span>
+		</div>
+		<div class="card divide-y divide-edge">
+			for _, evt := range events {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", cc.Campaign.ID, evt.Year, evt.Month)) }
+					class="flex items-center justify-between px-4 py-2.5 hover:bg-surface-alt transition-colors"
+				>
+					<div class="flex items-center gap-2 min-w-0">
+						if evt.Category != nil && *evt.Category != "" {
+							<span class="text-xs opacity-60">{ categoryIcon(*evt.Category) }</span>
+						}
+						<span class="text-sm text-fg truncate">{ evt.Name }</span>
+						if evt.IsRecurring {
+							<span class="text-[10px] text-fg-muted">(yearly)</span>
+						}
+					</div>
+					<span class="text-xs text-fg-secondary whitespace-nowrap ml-2">
+						{ formatEventDate(cal, evt) }
+					</span>
+				</a>
+			}
+		</div>
+	</div>
+}
+
+// formatEventDate returns a human-readable date string for an event.
+func formatEventDate(cal *Calendar, evt Event) string {
+	monthName := fmt.Sprintf("Month %d", evt.Month)
+	if evt.Month >= 1 && evt.Month <= len(cal.Months) {
+		monthName = cal.Months[evt.Month-1].Name
+	}
+	s := fmt.Sprintf("%d %s %d", evt.Day, monthName, evt.Year)
+	if cal.EpochName != nil && *cal.EpochName != "" {
+		s += " " + *cal.EpochName
+	}
+	return s
+}
+
+// Helper functions for template navigation.
+
+func prevYear(d CalendarViewData) int {
+	y, _ := d.PrevMonth()
+	return y
+}
+
+func prevMonth(d CalendarViewData) int {
+	_, m := d.PrevMonth()
+	return m
+}
+
+func nextYear(d CalendarViewData) int {
+	y, _ := d.NextMonth()
+	return y
+}
+
+func nextMonth(d CalendarViewData) int {
+	_, m := d.NextMonth()
+	return m
+}
+
+// trailingCells calculates empty cells needed to complete the last row.
+func trailingCells(d CalendarViewData) int {
+	wl := d.Calendar.WeekLength()
+	if wl == 0 {
+		return 0
+	}
+	totalCells := d.StartWeekdayOffset() + d.CurrentMonthDays()
+	remainder := totalCells % wl
+	if remainder == 0 {
+		return 0
+	}
+	return wl - remainder
+}
+
+// moonPhaseIcon returns a unicode moon phase character based on phase value (0-1).
+func moonPhaseIcon(phase float64) string {
+	switch {
+	case phase < 0.125:
+		return "\U0001F311" // New moon
+	case phase < 0.25:
+		return "\U0001F312" // Waxing crescent
+	case phase < 0.375:
+		return "\U0001F313" // First quarter
+	case phase < 0.5:
+		return "\U0001F314" // Waxing gibbous
+	case phase < 0.625:
+		return "\U0001F315" // Full moon
+	case phase < 0.75:
+		return "\U0001F316" // Waning gibbous
+	case phase < 0.875:
+		return "\U0001F317" // Last quarter
+	default:
+		return "\U0001F318" // Waning crescent
+	}
+}
+
+// seasonBorderStyle returns a CSS style for the season color left border.
+func seasonBorderStyle(s *Season) string {
+	if s == nil || s.Color == "" {
+		return ""
+	}
+	return fmt.Sprintf("border-left: 3px solid %s", s.Color)
+}
+
+// eventTooltip builds a tooltip string for an event chip.
+func eventTooltip(evt Event) string {
+	tip := evt.Name
+	if evt.EntityName != "" {
+		tip += " (" + evt.EntityName + ")"
+	}
+	if evt.Description != nil && *evt.Description != "" {
+		tip += "\n" + *evt.Description
+	}
+	if evt.IsRecurring {
+		tip += " [recurring]"
+	}
+	return tip
+}
+
+// UpcomingEventsBlock renders the upcoming events list for the dashboard block.
+// Returned as an HTMX fragment that replaces the loading placeholder.
+templ UpcomingEventsBlock(cc *campaigns.CampaignContext, cal *Calendar, events []Event) {
+	if len(events) == 0 {
+		<div class="px-4 py-6 text-center">
+			<p class="text-sm text-fg-muted">No upcoming events</p>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline mt-1 inline-block"
+			>
+				Open calendar
+			</a>
+		</div>
+	} else {
+		<!-- Current date display -->
+		<div class="px-4 py-2 bg-surface-alt/50 flex items-center justify-between">
+			<span class="text-xs text-fg-muted">
+				{ formatCurrentDate(cal) }
+			</span>
+			if cal.CurrentSeason() != nil {
+				<span class="text-xs text-fg-muted">
+					<span class="inline-block w-2 h-2 rounded-full mr-0.5" style={ fmt.Sprintf("background:%s", cal.CurrentSeason().Color) }></span>
+					{ cal.CurrentSeason().Name }
+				</span>
+			}
+		</div>
+		for _, evt := range events {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", cc.Campaign.ID, evt.Year, evt.Month)) }
+				class="flex items-center justify-between px-4 py-2.5 hover:bg-surface-alt transition-colors"
+			>
+				<div class="flex items-center gap-2 min-w-0">
+					if evt.Category != nil && *evt.Category != "" {
+						<span class="text-xs opacity-60">{ categoryIcon(*evt.Category) }</span>
+					}
+					if evt.EntityID != nil && evt.EntityIcon != "" {
+						<i class={ "fa-solid " + evt.EntityIcon, "text-xs" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
+					}
+					<span class="text-sm text-fg truncate">{ evt.Name }</span>
+					if evt.IsRecurring {
+						<span class="text-[10px] text-fg-muted">(yearly)</span>
+					}
+				</div>
+				<span class="text-xs text-fg-secondary whitespace-nowrap ml-2">
+					{ formatEventDate(cal, evt) }
+				</span>
+			</a>
+		}
+	}
+}
+
+// UpcomingEventsEmpty renders the empty state when no calendar exists.
+templ UpcomingEventsEmpty() {
+	<div class="px-4 py-6 text-center">
+		<p class="text-sm text-fg-muted">No calendar configured</p>
+	</div>
+}
+
+// TimelinePage renders the full timeline view page.
+templ TimelinePage(cc *campaigns.CampaignContext, data TimelineViewData) {
+	@layouts.App(data.Calendar.Name + " - Timeline") {
+		<div class="max-w-3xl mx-auto">
+			@timelineContent(cc, data)
+		</div>
+	}
+}
+
+// TimelineFragment renders just the timeline content for HTMX swaps.
+templ TimelineFragment(cc *campaigns.CampaignContext, data TimelineViewData) {
+	<div class="max-w-3xl mx-auto">
+		@timelineContent(cc, data)
+	</div>
+}
+
+// timelineContent renders the timeline header and event list grouped by month.
+templ timelineContent(cc *campaigns.CampaignContext, data TimelineViewData) {
+	<!-- Header with year nav and view toggle -->
+	<div class="flex items-center justify-between mb-6">
+		<div class="flex items-center gap-3">
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/timeline?year=%d", data.CampaignID, data.Year-1)) }
+				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				title="Previous year"
+			>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+				</svg>
+			</a>
+			<h1 class="text-xl font-semibold text-fg">
+				{ strconv.Itoa(data.Year) }
+				if data.Calendar.EpochName != nil && *data.Calendar.EpochName != "" {
+					{ " " + *data.Calendar.EpochName }
+				}
+			</h1>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/timeline?year=%d", data.CampaignID, data.Year+1)) }
+				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				title="Next year"
+			>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+				</svg>
+			</a>
+		</div>
+		<div class="flex items-center gap-2">
+			<!-- View toggle: Grid / Timeline -->
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) }
+				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				title="Calendar grid view"
+			>
+				<i class="fa-solid fa-calendar text-sm"></i>
+			</a>
+			<span
+				class="p-2 rounded-md bg-accent/10 text-accent"
+				title="Timeline view"
+			>
+				<i class="fa-solid fa-timeline text-sm"></i>
+			</span>
+			if data.IsOwner {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/settings", data.CampaignID)) }
+					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+					title="Calendar settings"
+				>
+					<i class="fa-solid fa-gear text-sm"></i>
+				</a>
+			}
+		</div>
+	</div>
+
+	if len(data.Events) == 0 {
+		<div class="card p-8 text-center">
+			<i class="fa-solid fa-calendar-xmark text-3xl text-fg-muted mb-3"></i>
+			<p class="text-fg-secondary">No events in { strconv.Itoa(data.Year) }</p>
+		</div>
+	} else {
+		<!-- Timeline grouped by month -->
+		<div class="space-y-6">
+			for _, tm := range data.EventsByMonth() {
+				<div>
+					<!-- Month header -->
+					<div class="flex items-center gap-3 mb-3">
+						<div class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+							{ tm.Name }
+						</div>
+						<div class="flex-1 h-px bg-edge"></div>
+						<span class="text-xs text-fg-muted">{ strconv.Itoa(len(tm.Events)) } events</span>
+					</div>
+					<!-- Event cards -->
+					<div class="space-y-2 pl-4 border-l-2 border-accent/20">
+						for _, evt := range tm.Events {
+							@timelineEvent(cc, data.Calendar, evt)
+						}
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+// timelineEvent renders a single event in the timeline view.
+templ timelineEvent(cc *campaigns.CampaignContext, cal *Calendar, evt Event) {
+	<div class="card p-3 relative -ml-[17px]">
+		<!-- Timeline dot -->
+		<div class="absolute left-0 top-4 -translate-x-[5.5px] w-2.5 h-2.5 rounded-full bg-accent ring-2 ring-surface"></div>
+		<div class="flex items-start justify-between gap-3 ml-3">
+			<div class="min-w-0">
+				<div class="flex items-center gap-2">
+					if evt.Category != nil && *evt.Category != "" {
+						<span class="text-sm opacity-60">{ categoryIcon(*evt.Category) }</span>
+					}
+					<span class="text-sm font-medium text-fg">{ evt.Name }</span>
+					if evt.IsRecurring {
+						<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">yearly</span>
+					}
+					if evt.Visibility == "dm_only" {
+						<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">DM only</span>
+					}
+				</div>
+				if evt.Description != nil && *evt.Description != "" {
+					<p class="text-xs text-fg-secondary mt-1">{ *evt.Description }</p>
+				}
+				if evt.EntityID != nil && evt.EntityName != "" {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, *evt.EntityID)) }
+						class="inline-flex items-center gap-1 mt-1.5 text-xs text-accent hover:underline"
+					>
+						if evt.EntityIcon != "" {
+							<i class={ "fa-solid " + evt.EntityIcon } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
+						}
+						{ evt.EntityName }
+					</a>
+				}
+			</div>
+			<div class="text-right shrink-0">
+				<div class="text-xs font-medium text-fg-secondary">
+					Day { strconv.Itoa(evt.Day) }
+				</div>
+				if evt.IsMultiDay() {
+					<div class="text-[10px] text-fg-muted mt-0.5">
+						→ { formatEventDate(cal, Event{Year: *evt.EndYear, Month: *evt.EndMonth, Day: *evt.EndDay}) }
+					</div>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// derefStr safely dereferences a *string, returning "" for nil.
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// formatCurrentDate returns a formatted string of the calendar's current date.
+func formatCurrentDate(cal *Calendar) string {
+	monthName := fmt.Sprintf("Month %d", cal.CurrentMonth)
+	if cal.CurrentMonth >= 1 && cal.CurrentMonth <= len(cal.Months) {
+		monthName = cal.Months[cal.CurrentMonth-1].Name
+	}
+	s := fmt.Sprintf("%d %s %d", cal.CurrentDay, monthName, cal.CurrentYear)
+	if cal.EpochName != nil && *cal.EpochName != "" {
+		s += " " + *cal.EpochName
+	}
+	return s
+}
+
+// categoryIcon returns a small icon for an event category.
+func categoryIcon(cat string) string {
+	switch cat {
+	case "holiday":
+		return "\u2B50" // star
+	case "battle":
+		return "\u2694" // swords
+	case "quest":
+		return "\u2757" // exclamation
+	case "birthday":
+		return "\U0001F382" // cake
+	case "festival":
+		return "\U0001F389" // party popper
+	case "travel":
+		return "\U0001F6B6" // walking
+	default:
+		return ""
+	}
+}

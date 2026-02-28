@@ -18,6 +18,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // EntityTagFetcher retrieves tags for entities in batch. Defined here to avoid
@@ -488,9 +489,24 @@ func (h *Handler) GetEntry(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	// Strip inline secrets for non-scribe users so players never receive
+	// GM-only text. Owners and scribes see secrets with a visual indicator.
+	entry := entity.Entry
+	entryHTML := entity.EntryHTML
+	if cc.MemberRole < campaigns.RoleScribe {
+		if entry != nil {
+			stripped := sanitize.StripSecretsJSON(*entry)
+			entry = &stripped
+		}
+		if entryHTML != nil {
+			stripped := sanitize.StripSecretsHTML(*entryHTML)
+			entryHTML = &stripped
+		}
+	}
+
 	response := map[string]any{
-		"entry":      entity.Entry,
-		"entry_html": entity.EntryHTML,
+		"entry":      entry,
+		"entry_html": entryHTML,
 	}
 	return c.JSON(http.StatusOK, response)
 }

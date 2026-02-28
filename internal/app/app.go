@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
+	echomw "github.com/labstack/echo/v4/middleware"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -79,6 +81,17 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client) *App {
 func (a *App) setupMiddleware() {
 	// Panic recovery -- must be outermost to catch panics from all other middleware.
 	a.Echo.Use(middleware.Recovery())
+
+	// Global request body size limit -- prevents memory exhaustion from
+	// oversized payloads on non-upload endpoints. The media upload endpoint
+	// has its own per-route body limit based on the configured max upload size,
+	// so we skip this global limit for that path.
+	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
+		Limit: "2M",
+		Skipper: func(c echo.Context) bool {
+			return strings.HasPrefix(c.Request().URL.Path, "/media/upload")
+		},
+	}))
 
 	// Request logging -- log every request with method, path, status, latency.
 	a.Echo.Use(middleware.RequestLogger())

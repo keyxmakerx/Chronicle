@@ -37,21 +37,29 @@ see `.ai/roadmap.md`.
 - [x] Editor Insert menu (+ dropdown for discoverable @mention, link, blockquote, code, hr)
 - [x] Backlinks / "Referenced by" on entity profiles (@mention reverse refs)
 - [ ] API technical documentation (OpenAPI spec or handwritten reference) (HIGH)
-- [ ] Keyboard shortcuts beyond Ctrl+K (Ctrl+N, Ctrl+E, Ctrl+S)
+- [x] Keyboard shortcuts beyond Ctrl+K (Ctrl+N, Ctrl+E, Ctrl+S)
 
-### Phase F: Calendar & Time (DIRE NEED)
-- [ ] Calendar plugin (custom months, weekdays, moons, seasons, eras, events, entity linking)
-- [ ] Calendar UI (monthly grid, year overview, moon phases, "today" marker)
-- [ ] Calendar dashboard block ("Upcoming events")
-- [ ] Timeline view (chronological event display, may be calendar view mode)
-- [ ] Calendar API endpoints (for Foundry VTT sync)
+### Phase F: Calendar & Time
+- [x] Calendar plugin Sprint 1 (model, repo, service, handler, routes, templates, migration 000027)
+- [x] Calendar monthly grid UI (weekday headers, day cells, event chips, moon phases, "today" marker)
+- [x] Calendar Sprint 2: Leap years, seasons with colors, event categories, multi-day events
+- [x] Calendar settings UI (5-tab page: General, Months, Weekdays, Moons, Seasons)
+- [x] Calendar event creation modal (Alpine.js + fetch, quick-add on day hover)
+- [x] Calendar API endpoints for Foundry VTT sync (full REST API in sync plugin)
+- [x] Device fingerprint binding for API keys (single-device lock)
+- [x] Entity-event reverse lookup (HTMX lazy-loaded section on entity pages)
+- [x] Calendar sidebar link
+- [x] Calendar dashboard block ("Upcoming events")
+- [x] Timeline view (chronological event display, month-grouped, year nav, view toggle)
+- [x] Event edit modal (dual-purpose create/edit, clickable event chips, data attributes)
+- [x] Event delete confirmation UI (in-modal confirmation overlay)
 
 ### Phase G: Maps & Geography
-- [ ] Maps plugin Phase 1 (Leaflet.js, image upload, pins, entity linking, DM-only pins)
+- [x] Maps plugin Phase 1 (Leaflet.js, image upload, pins, entity linking, DM-only pins, drag-and-drop)
 - [ ] Maps plugin Phase 2 (layers, marker groups, privacy, nested maps)
 
 ### Phase H: Secrets & Permissions
-- [ ] Inline secrets / GM-only text (TipTap extension, server-side filtering)
+- [x] Inline secrets / GM-only text (TipTap secret mark, server-side stripping, CSS styling)
 - [ ] Per-entity permissions (view/edit per role/user)
 - [ ] Campaign export/import (JSON bundle for backup/migration)
 - [ ] Group-based visibility (beyond everyone/dm_only)
@@ -345,3 +353,25 @@ see `.ai/roadmap.md`.
 - [x] Enhanced `entity_tooltip.js`: gradient-bordered image, side-by-side layout (image + attrs), entry excerpt, dynamic layout adaptation
 - [x] "Hover Preview Settings" collapsible section on entity edit form with Alpine.js auto-save
 - [x] All tests pass (40 entity tests including backlinks)
+
+### Phase E Sprint 10: Keyboard Shortcuts (2026-02-25)
+- [x] Global shortcuts: Ctrl+N (new entity), Ctrl+E (edit entity), Ctrl+S (save)
+- [x] IIFE pattern matching search_modal.js, suppresses shortcuts in inputs (except Ctrl+S)
+- [x] Save priority: #te-save-btn → .chronicle-editor__btn--save.has-changes → form .btn-primary → chronicle:save event
+
+### Phase F Sprint 1: Calendar Plugin (2026-02-25)
+- [x] Migration 000027: 6 tables (calendars, months, weekdays, moons, seasons, events)
+- [x] Model, repository, service, handler, routes, templates
+- [x] Monthly grid UI with weekday headers, day cells, event chips, moon phases, "today" marker
+
+### Phase F Sprint 2: Calendar Feature Parity + Sync API (2026-02-25)
+- [x] Migration 000028: leap years, event end dates, season colors, event categories, device fingerprint
+- [x] Leap year system: per-month extra days, LeapYearEvery/LeapYearOffset config
+- [x] Season display: color borders on day cells, season indicator in header, ContainsDate with wrap-around
+- [x] Multi-day events (EndYear/EndMonth/EndDay), event categories with icons
+- [x] Calendar settings page: 5-tab Alpine.js UI (General, Months, Weekdays, Moons, Seasons)
+- [x] Event creation modal: Alpine.js + fetch, quick-add button on day hover
+- [x] Entity-event reverse lookup: HTMX lazy-loaded section on entity show pages
+- [x] Sync API calendar endpoints: full REST API (GET/POST/PUT/DELETE calendar, events, months, weekdays, moons)
+- [x] Device fingerprint binding: auto-bind on first X-Device-Fingerprint header, reject mismatches
+- [x] All tests pass

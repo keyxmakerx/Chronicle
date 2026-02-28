@@ -29,7 +29,8 @@ three tiers.
 │  ┌──────────────────────────────────────────────────────┐    │
 │  │  PLUGINS -- Feature Applications                      │    │
 │  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
-│  │  timeline/  relations/  api/  tags/  posts/            │    │
+│  │  admin/  addons/  syncapi/  media/  audit/             │    │
+│  │  relations/  tags/  posts/  settings/                  │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
@@ -104,6 +105,9 @@ chronicle/
 │   ├── apperror/                     # CORE: Domain error types
 │   │   └── errors.go
 │   │
+│   ├── sanitize/                     # CORE: HTML sanitization (bluemonday)
+│   │   └── sanitize.go              #   HTML(), StripSecretsHTML(), StripSecretsJSON()
+│   │
 │   ├── plugins/                      # PLUGINS: Feature applications
 │   │   ├── auth/                     #   Authentication & user management
 │   │   │   ├── .ai.md
@@ -114,7 +118,24 @@ chronicle/
 │   │   │   ├── routes.go
 │   │   │   └── templates/
 │   │   ├── campaigns/                #   Campaign/world management
-│   │   └── entities/                 #   Entity CRUD & configurable types
+│   │   ├── entities/                 #   Entity CRUD & configurable types
+│   │   ├── calendar/                 #   Custom fantasy calendars + events
+│   │   │   ├── .ai.md
+│   │   │   ├── model.go             #   Calendar, Month, Weekday, Moon, Season, Event
+│   │   │   ├── repository.go
+│   │   │   ├── service.go
+│   │   │   ├── handler.go
+│   │   │   ├── routes.go
+│   │   │   ├── calendar.templ
+│   │   │   └── calendar_settings.templ
+│   │   └── maps/                     #   Interactive Leaflet.js maps + markers
+│   │       ├── .ai.md
+│   │       ├── model.go             #   Map, Marker + DTOs
+│   │       ├── repository.go
+│   │       ├── service.go
+│   │       ├── handler.go
+│   │       ├── routes.go
+│   │       └── maps.templ
 │   │
 │   ├── modules/                      # MODULES: Game system content packs
 │   │   └── dnd5e/                    #   D&D 5th Edition (first module)
@@ -163,11 +184,18 @@ chronicle/
 │   │   └── input.css                 # Tailwind input
 │   ├── js/
 │   │   ├── boot.js                   # Widget auto-mounter
+│   │   ├── keyboard_shortcuts.js     # Global shortcuts (Ctrl+N/E/S)
+│   │   ├── search_modal.js           # Quick search (Ctrl+K)
+│   │   ├── sidebar_drill.js          # Sidebar drill-down overlay
 │   │   └── widgets/
 │   │       ├── editor.js             # TipTap wrapper
+│   │       ├── editor_secret.js      # Inline secrets mark extension
 │   │       ├── attributes.js         # Dynamic field editor
 │   │       ├── tags.js               # Tag picker
-│   │       └── mentions.js           # @mention search
+│   │       ├── mentions.js           # @mention search
+│   │       ├── dashboard_editor.js   # Campaign/category dashboard builder
+│   │       ├── sidebar_nav_editor.js # Custom sidebar links CRUD
+│   │       └── notes.js              # Floating notes panel
 │   ├── vendor/                       # Vendored CDN libs
 │   ├── fonts/
 │   └── img/

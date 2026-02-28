@@ -8,11 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-24 -- Sidebar drill-down rework, extension fixes, customize page restructure, notes addon rename.
+2026-02-28 -- Documentation audit complete. All `.ai/` files updated to reflect
+Calendar Plugin (Sprints 1-4), Maps Plugin Phase 1, and Inline Secrets (Phase H).
+New files: `calendar/.ai.md`. Updated: `data-model.md` (migrations 24-29, 12 new
+tables), `architecture.md` (directory structure), `tech-stack.md` (Leaflet active),
+`decisions.md` (ADR-015 maps, ADR-016 secrets), `editor/.ai.md` (secret mark).
 
 ## Current Phase
-**Phase E: Core UX & Discovery.** Sidebar drill-down reworked with overlay approach,
-customize page restructured, attributes addon formalized, notes addon renamed from player-notes.
+**Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit
+complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
 
 ## Phase E: Entity Hierarchy & Extension Bug Fix (2026-02-24)
 
@@ -150,6 +154,128 @@ customize page restructured, attributes addon formalized, notes addon renamed fr
   interface on Handler, wired via `SetAddonChecker()` in routes.go.
 - **Tests**: Updated `TestIsInstalled` for both addons. All 32+ addon tests pass.
 
+### Keyboard Shortcuts — COMPLETE
+- Global shortcuts: Ctrl+N (new entity), Ctrl+E (edit entity), Ctrl+S (save).
+- IIFE pattern matching `search_modal.js`. Suppresses shortcuts in inputs (except Ctrl+S).
+- Save priority: `#te-save-btn` → `.chronicle-editor__btn--save.has-changes` → `form .btn-primary` → `chronicle:save` event.
+- Files: `static/js/keyboard_shortcuts.js`, `base.templ` (script tag).
+
+### Calendar Plugin Sprint 1 — COMPLETE
+- **Migration 000027**: 6 tables (`calendars`, `calendar_months`, `calendar_weekdays`,
+  `calendar_moons`, `calendar_seasons`, `calendar_events`). Registers "calendar" addon.
+- **Model**: Domain types + DTOs. `Moon.MoonPhase()` and `MoonPhaseName()` for phase
+  calculation. `Calendar.YearLength()` sums month days.
+- **Repository**: Full CRUD, transactional bulk-update for sub-resources, event listing
+  with recurring event support and role-based visibility filtering.
+- **Service**: Validation, one-calendar-per-campaign, date advancement with month/year rollover.
+- **Handler**: Setup page (create form), monthly grid view, API endpoints for settings/events/advance.
+  Seeds 12 default months (30 days) and 7 default weekdays on create.
+- **Templates**: `CalendarSetupPage`, `CalendarPage`, monthly grid with weekday headers,
+  day cells, event chips, moon phase icons, month navigation.
+- **Routes**: Owner (create, settings, advance), scribe (events), public (view).
+- **Wiring**: Added to `app/routes.go` and `installedAddons` registry.
+
+### Calendar Plugin Sprint 2 — COMPLETE
+- **Migration 000028**: Leap year fields (`leap_year_every`, `leap_year_offset` on calendars,
+  `leap_year_days` on months), season `color`, event end dates (`end_year`, `end_month`,
+  `end_day`), event `category`, device fingerprint (`device_fingerprint`, `device_bound_at`
+  on api_keys).
+- **Leap years**: `IsLeapYear()`, `YearLengthForYear()`, `MonthDays()` all account for
+  per-month leap year extra days. `AdvanceDate` is leap-year-aware.
+- **Seasons**: `Color` field, `ContainsDate()` with wrap-around support, `SeasonForDate()`
+  method, season color borders on calendar day cells.
+- **Events**: Multi-day events (EndYear/EndMonth/EndDay), event categories (holiday, battle,
+  quest, birthday, festival, travel, custom) with category icons.
+- **Calendar settings page**: 5-tab page (General, Months, Weekdays, Moons, Seasons) with
+  Alpine.js list management, JSON serialization for x-data attributes, fetch-based saves.
+  Accessible via gear icon on calendar header (Owner only).
+- **Event creation modal**: Alpine.js + fetch form with name, description, date, visibility,
+  category, entity link, recurring flag. Quick-add button on day cell hover.
+- **Entity-event reverse lookup**: HTMX lazy-loaded section on entity show pages. Calendar
+  plugin serves fragment at `GET /calendar/entity-events/:eid`.
+- **Sync API calendar endpoints**: Full REST API for external tools (Foundry VTT). GET/POST/
+  PUT/DELETE for calendar, events, months, weekdays, moons. Advance date endpoint.
+- **Device fingerprint binding**: Auto-bind on first `X-Device-Fingerprint` header, reject
+  mismatches with 403 + security event logging. `BindDevice`/`UnbindDevice` on service.
+
+### Calendar Plugin Sprint 3 — COMPLETE
+- **Sidebar link**: Calendar icon link in Zone 2 (campaign context), between Dashboard
+  and Categories. Gated behind `IsAddonEnabled(ctx, "calendar")`, active state highlighting.
+- **Dashboard block**: `calendar_preview` block type for campaign dashboard editor. HTMX
+  lazy-loaded from `GET /calendar/upcoming?limit=N`. Shows current date, season, and
+  upcoming events with category icons, entity links, and date formatting.
+- **Timeline view**: `GET /calendar/timeline?year=N` chronological event list grouped by
+  month. Year navigation, view toggle between grid and timeline on calendar header.
+  Timeline events show description, entity link, multi-day range, visibility badges.
+- **New service methods**: `ListUpcomingEvents()`, `ListEventsForYear()` on service interface.
+- **New repo method**: `ListUpcomingEvents()` with combined date comparison + recurring
+  event handling.
+- **Files**: `app.templ` (sidebar link), `campaigns/model.go` + `dashboard_blocks.templ`
+  (block type), `dashboard_editor.js` (palette), `calendar/handler.go` (2 new handlers +
+  TimelineViewData), `calendar/service.go` (2 new methods), `calendar/repository.go`
+  (ListUpcomingEvents query), `calendar/calendar.templ` (5 new components),
+  `calendar/routes.go` (2 new routes).
+
+### Calendar Plugin Sprint 4 — COMPLETE
+- **Dual-purpose event modal**: Transformed create-only modal into create/edit modal.
+  Hidden `event_id` field triggers PUT (edit) vs POST (create). Title, submit button
+  text/icon dynamically switch between modes.
+- **Clickable event chips**: Scribe+ users see event chips as `<button>` elements with
+  `data-event-*` attributes. Clicking opens the edit modal pre-filled with all event fields.
+  Players still see static `<div>` chips.
+- **Delete with confirmation**: Delete button visible only in edit mode. Clicking shows
+  a confirmation overlay within the modal (hides the form, shows warning + confirm/cancel).
+  DELETE request sent on confirm, page reloads on success.
+- **Helper function**: `derefStr()` for safe nil string pointer dereferencing in templates.
+
+### Maps Plugin Phase 1 — COMPLETE
+- **Migration 000029**: `maps` table (id, campaign_id, name, description, image_id FK,
+  image_width, image_height, sort_order) + `map_markers` table (id, map_id, name,
+  description, x/y percentage coords, icon, color, entity_id FK, visibility, created_by).
+  Addon registered as `maps` in addons table.
+- **Model**: Map, Marker structs with DTOs. MapViewData, MapListData for templates.
+- **Repository**: Full CRUD for maps and markers. Entity LEFT JOIN for display data.
+  Visibility filtering by role (role >= 3 sees dm_only).
+- **Service**: Validation, default icon/color, coordinate clamping (0-100), CRUD.
+- **Handler**: Index (map list), Show (Leaflet viewer), CRUD APIs for maps and markers.
+  Form-based map creation + JSON APIs.
+- **Templates**: Map list page with card grid + create modal. Leaflet.js map viewer
+  with CRS.Simple for image overlay. Marker create/edit modal with icon picker,
+  color picker, visibility, entity linking. Map settings modal with image upload.
+  Delete confirmation for markers (in-modal) and maps (confirm dialog).
+- **Leaflet features**: Draggable markers (Scribe+) with silent PUT on dragend.
+  Place mode (crosshair cursor, click to place). Tooltip on hover, popup for players.
+  DM-only markers hidden from players via server-side filtering.
+- **Wiring**: Added to `installedAddons`, `app/routes.go`, sidebar nav, admin plugin registry.
+
+### Phase H: Inline Secrets — COMPLETE
+- **TipTap secret mark**: `editor_secret.js` creates a `secret` mark via
+  `TipTap.Underline.extend()`. Renders as `<span data-secret="true" class="chronicle-secret">`.
+  Keyboard shortcut: `Ctrl+Shift+S`. Toolbar button with eye-slash icon.
+- **Editor integration**: SecretMark added to extensions array. Toolbar button in
+  text formatting group. Active state tracking. Insert via toolbar or keyboard shortcut.
+- **Server-side stripping**: `sanitize.StripSecretsHTML()` regex-strips secret spans from
+  HTML. `sanitize.StripSecretsJSON()` walks ProseMirror JSON tree and removes text nodes
+  with secret marks. Applied in `GetEntry` handler when `role < RoleScribe`.
+- **Sanitizer whitelist**: `data-secret` attribute allowed on `<span>` in bluemonday policy.
+- **CSS styling**: Amber background tint, dashed bottom border, eye-slash pseudo-element
+  indicator. Visible to owners/scribes, invisible to players (server-stripped).
+
+### Documentation Audit — COMPLETE
+- **calendar/.ai.md**: Created missing plugin documentation (architecture, data model,
+  routes, design decisions, sync API integration).
+- **data-model.md**: Added migrations 24-29 (security_events, attributes addon,
+  notes addon rename, 6 calendar tables, maps + map_markers). Updated ER diagram
+  and indexes section.
+- **architecture.md**: Updated directory structure with calendar plugin, maps plugin,
+  sanitize package, new JS files (editor_secret, keyboard_shortcuts, search_modal,
+  sidebar_drill, dashboard_editor, sidebar_nav_editor, notes). Updated plugin list.
+- **tech-stack.md**: Leaflet.js marked as active (was "Phase 2").
+- **decisions.md**: ADR-015 (Maps with percentage coords + Leaflet CRS.Simple),
+  ADR-016 (Inline secrets via TipTap Mark extension).
+- **editor/.ai.md**: Added editor_secret.js to files table, secret mark to current
+  state checklist, inline secrets documentation to notes section.
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -172,12 +298,13 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference),
-   keyboard shortcuts beyond Ctrl+K (Ctrl+N new entity, Ctrl+E edit, Ctrl+S save).
-2. **Phase F:** Calendar plugin (custom months, moons, eras, events, entity linking).
-   See `.ai/roadmap.md` for full data model and implementation plan.
-3. **Handler-level "view as player":** Extend toggle to filter is_private entities
+1. **Phase H continued:** Per-entity permissions (view/edit per role/user), group-based
+   visibility (beyond everyone/dm_only), campaign export/import.
+2. **Maps Phase 2 (optional):** Layers, marker groups, nested maps, fog of war.
+3. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference).
+4. **Handler-level "view as player":** Extend toggle to filter is_private entities
    at repository level (currently template-only).
+5. **UX polish:** Entity search typeahead for calendar event + map marker entity linking.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

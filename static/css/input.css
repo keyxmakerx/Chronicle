@@ -314,6 +314,19 @@
     @apply text-accent font-medium no-underline hover:underline;
   }
 
+  /* ---- Inline secrets (GM-only text) ---- */
+  .chronicle-secret {
+    @apply bg-amber-500/10 border-b border-dashed border-amber-500/40 rounded-sm px-0.5;
+    position: relative;
+  }
+  .chronicle-secret::before {
+    content: '\f070'; /* fa-eye-slash */
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    font-size: 9px;
+    @apply text-amber-500/60 mr-1;
+  }
+
   /* ---- Prose styling for dark mode ---- */
   .chronicle-editor__content .tiptap h1,
   .chronicle-editor__content .tiptap h2,

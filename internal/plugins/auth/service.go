@@ -365,14 +365,9 @@ func (s *authService) DestroyAllUserSessions(ctx context.Context, userID string)
 func (s *authService) InitiatePasswordReset(ctx context.Context, email string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 
-	// Look up user. If not found, log and return nil (don't reveal existence).
-	user, err := s.repo.FindByEmail(ctx, email)
-	if err != nil {
-		slog.Debug("password reset requested for unknown email", slog.String("email", email))
-		return nil
-	}
-
-	// Generate a random token and hash it for storage.
+	// Always generate a token regardless of whether the email exists.
+	// This prevents timing side-channel attacks that could reveal email existence
+	// by comparing response times (token generation + email send vs early return).
 	tokenBytes := make([]byte, resetTokenBytes)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return apperror.NewInternal(fmt.Errorf("generating reset token: %w", err))
@@ -380,6 +375,13 @@ func (s *authService) InitiatePasswordReset(ctx context.Context, email string) e
 	plainToken := hex.EncodeToString(tokenBytes)
 	tokenHash := hashToken(plainToken)
 	expiresAt := time.Now().UTC().Add(resetTokenExpiry)
+
+	// Look up user. If not found, log and return nil (don't reveal existence).
+	user, err := s.repo.FindByEmail(ctx, email)
+	if err != nil {
+		slog.Debug("password reset requested for unknown email", slog.String("email", email))
+		return nil
+	}
 
 	// Store hashed token in DB.
 	if err := s.repo.CreateResetToken(ctx, user.ID, user.Email, tokenHash, expiresAt); err != nil {
