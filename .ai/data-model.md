@@ -221,7 +221,7 @@ User --< CampaignMember >-- Campaign
 | slug | VARCHAR(100) | UNIQUE, NOT NULL | URL-safe identifier |
 | name | VARCHAR(200) | NOT NULL | Display name |
 | description | TEXT | NULL | |
-| category | VARCHAR(50) | NOT NULL | 'module', 'widget', 'integration' |
+| category | ENUM | NOT NULL | 'module', 'widget', 'integration', 'plugin' (added in 000027) |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'planned' | 'active', 'planned', 'deprecated' |
 | icon | VARCHAR(50) | DEFAULT 'fa-puzzle-piece' | |
 | version | VARCHAR(20) | DEFAULT '1.0.0' | |

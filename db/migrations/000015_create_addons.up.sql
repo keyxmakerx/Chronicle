@@ -6,6 +6,10 @@ CREATE TABLE IF NOT EXISTS addons (
     name        VARCHAR(200) NOT NULL,
     description TEXT,
     version     VARCHAR(50) NOT NULL DEFAULT '0.1.0',
+    -- IMPORTANT: When using a new category value in a later migration, you must
+    -- ALTER this ENUM first AND update the Go constants in internal/plugins/addons/model.go
+    -- AND update validCategories in internal/plugins/addons/service.go.
+    -- Extended to include 'plugin' in migration 000027.
     category    ENUM('module', 'widget', 'integration') NOT NULL DEFAULT 'module',
     status      ENUM('active', 'planned', 'deprecated') NOT NULL DEFAULT 'active',
     icon        VARCHAR(100) DEFAULT 'fa-puzzle-piece',

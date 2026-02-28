@@ -256,6 +256,21 @@ if campaign.CreatedBy != userID {
 CREATE TABLE campaigns ( ... );
 ```
 
+### Migration Safety Rules
+
+1. **ENUM values**: Before using a new ENUM value in an INSERT or UPDATE, the
+   same migration (or an earlier one) must ALTER TABLE to add that value. Never
+   assume ENUM values exist from a different, unapplied migration.
+2. **Seed data conflicts**: Check if seed data for a slug/key already exists from
+   an earlier migration. Use UPDATE or INSERT ON DUPLICATE KEY UPDATE, not INSERT.
+3. **Down migrations**: If the up migration UPDATEs an existing row, the down
+   migration should revert it to its original values, not DELETE it. Only DELETE
+   rows that were INSERTed by the same migration.
+4. **ENUM in down migrations**: If the up migration adds an ENUM value, the down
+   migration must revert all rows using that value BEFORE removing it from the ENUM.
+5. **Validation tests**: `internal/database/migrate_test.go` validates ENUM values
+   in migration SQL. Update the valid sets there when adding new ENUM values.
+
 ### Anti-Patterns (AVOID)
 
 ```go

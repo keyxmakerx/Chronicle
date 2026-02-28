@@ -1,6 +1,11 @@
 -- Calendar plugin: custom calendars with non-Gregorian months, moons, eras,
 -- and events linked to entities. Each campaign can have one calendar.
 
+-- Extend category ENUM to include 'plugin' for feature-app addons (calendar, maps).
+-- The original ENUM ('module', 'widget', 'integration') didn't cover the Plugin tier
+-- from the three-tier extension architecture (Plugin / Module / Widget).
+ALTER TABLE addons MODIFY COLUMN category ENUM('module', 'widget', 'integration', 'plugin') NOT NULL DEFAULT 'module';
+
 -- Core calendar definition with current in-game date tracking.
 CREATE TABLE IF NOT EXISTS calendars (
     id          VARCHAR(36)  NOT NULL PRIMARY KEY,
@@ -89,6 +94,10 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     INDEX idx_cal_events_entity (entity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Register the calendar addon so campaign owners can enable it.
-INSERT INTO addons (slug, name, description, version, category, status, icon, author)
-VALUES ('calendar', 'Calendar', 'Custom fantasy calendar with configurable months, weekdays, moons, seasons, and events. Link events to entities for timeline tracking.', '0.1.0', 'plugin', 'active', 'fa-calendar-days', 'Chronicle');
+-- Update the calendar addon from planned/widget to active/plugin now that
+-- the backing code is implemented. Row was seeded in migration 000015.
+UPDATE addons
+SET category    = 'plugin',
+    status      = 'active',
+    description = 'Custom fantasy calendar with configurable months, weekdays, moons, seasons, and events. Link events to entities for timeline tracking.'
+WHERE slug = 'calendar';

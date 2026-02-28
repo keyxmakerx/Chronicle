@@ -424,3 +424,33 @@ Applied in `GetEntry` handler when `role < RoleScribe`.
   being present in the bundle.
 - Bluemonday whitelist updated to allow `data-secret` on `<span>`.
 - CSS shows amber background + eye-slash indicator for owners/scribes in edit mode.
+
+## ADR-017: Add 'plugin' to Addon Category ENUM
+
+**Date:** 2026-02-28
+**Status:** Accepted
+
+**Context:** The `addons.category` ENUM had three values: `module`, `widget`,
+`integration`. Calendar and Maps are architecturally Plugins (full feature apps with
+handler/service/repo/templates), not Widgets. The original migration 000015 seed data
+miscategorized them as `widget` because the Plugin tier hadn't been reflected in the
+database schema. Migrations 000027 and 000029 attempted to INSERT with
+`category='plugin'`, causing a MariaDB "Data truncated" error (Error 1265). A
+secondary duplicate slug conflict also existed since the rows were already seeded.
+
+**Decision:** Add `plugin` as a fourth ENUM value via ALTER TABLE in migration 000027.
+Use UPDATE instead of INSERT to fix existing seed data rows. Add `CategoryPlugin`
+constant to Go code and validation. Add migration SQL validation tests as a safeguard.
+
+**Alternatives Considered:**
+- Keep only three categories and map plugins to `widget`: semantically wrong. Plugins
+  are full feature apps, not reusable UI blocks.
+- Change the column from ENUM to VARCHAR: loses the schema-level validation benefit
+  of ENUM. The four-value ENUM is small and stable.
+
+**Consequences:**
+- The category ENUM now has four values: `plugin`, `module`, `widget`, `integration`.
+- All future plugin registrations should use `category='plugin'`.
+- Down migration for 000027 must revert the ENUM (requires no rows use `plugin`).
+- Migration validation test in `internal/database/migrate_test.go` catches invalid
+  ENUM values at `make test` time.
