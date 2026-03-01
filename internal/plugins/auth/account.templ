@@ -1,0 +1,84 @@
+// account.templ renders the user account settings page where users can
+// configure personal preferences like timezone.
+
+package auth
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// AccountPage renders the full account settings page.
+templ AccountPage(user *User, csrfToken string, timezones []string) {
+	@layouts.App("Account Settings") {
+		<div class="max-w-2xl mx-auto">
+			<div class="mb-6">
+				<h1 class="text-2xl font-bold text-fg">Account Settings</h1>
+				<p class="text-sm text-fg-secondary mt-1">Manage your personal preferences.</p>
+			</div>
+			<!-- Profile Info (read-only) -->
+			<div class="card p-6 mb-6">
+				<h2 class="text-lg font-semibold text-fg mb-4">Profile</h2>
+				<div class="space-y-3">
+					<div>
+						<label class="block text-sm font-medium text-fg-secondary mb-0.5">Display Name</label>
+						<p class="text-sm text-fg">{ user.DisplayName }</p>
+					</div>
+					<div>
+						<label class="block text-sm font-medium text-fg-secondary mb-0.5">Email</label>
+						<p class="text-sm text-fg">{ user.Email }</p>
+					</div>
+				</div>
+			</div>
+			<!-- Timezone Setting -->
+			<div class="card p-6" x-data={ timezoneData(user) }>
+				<h2 class="text-lg font-semibold text-fg mb-1">Timezone</h2>
+				<p class="text-sm text-fg-secondary mb-4">
+					Used by real-life calendars to display dates and times in your local timezone.
+				</p>
+				<div class="mb-4">
+					<label class="block text-sm font-medium text-fg-body mb-1" for="timezone-select">Your Timezone</label>
+					<select id="timezone-select" x-model="timezone" class="input w-full">
+						<option value="">UTC (default)</option>
+						for _, tz := range timezones {
+							<option value={ tz }>{ tz }</option>
+						}
+					</select>
+					<p class="text-xs text-fg-muted mt-1">Select your IANA timezone (e.g. America/New_York, Europe/London).</p>
+				</div>
+				<div class="flex items-center justify-end gap-2 pt-2 border-t border-edge">
+					<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
+					<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+					<button
+						type="button"
+						class="btn-primary text-sm"
+						:disabled="saving"
+						@click={ fmt.Sprintf(`
+							saving = true; saved = false; error = '';
+							fetch('/account/timezone', {
+								method: 'PUT',
+								headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+								credentials: 'same-origin',
+								body: JSON.stringify({ timezone: timezone })
+							}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
+							.catch(e => { error = e.message; })
+							.finally(() => { saving = false; })
+						`, csrfToken) }
+					>
+						<span x-show="!saving">Save Timezone</span>
+						<span x-show="saving">Saving...</span>
+					</button>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// timezoneData returns the Alpine.js x-data JSON for the timezone selector.
+func timezoneData(user *User) string {
+	tz := ""
+	if user.Timezone != nil {
+		tz = *user.Timezone
+	}
+	return fmt.Sprintf(`{ timezone: %q, saving: false, saved: false, error: '' }`, tz)
+}

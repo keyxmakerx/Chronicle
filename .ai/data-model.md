@@ -49,6 +49,7 @@ User --< CampaignMember >-- Campaign
 | is_admin | BOOLEAN | DEFAULT false | System-level admin |
 | totp_secret | VARCHAR(255) | NULL | 2FA secret |
 | totp_enabled | BOOLEAN | DEFAULT false | |
+| timezone | VARCHAR(50) | NULL | IANA timezone string (added 000031) |
 | created_at | DATETIME | NOT NULL, DEFAULT NOW() | |
 | last_login_at | DATETIME | NULL | |
 
@@ -334,11 +335,12 @@ User --< CampaignMember >-- Campaign
 | details | JSON | NULL | Flexible metadata |
 | created_at | DATETIME | NOT NULL | |
 
-### calendars (implemented -- migrations 000027, 000028, 000030)
+### calendars (implemented -- migrations 000027, 000028, 000030, 000031)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | VARCHAR(36) | PK | UUID |
 | campaign_id | VARCHAR(36) | UNIQUE, FK -> campaigns.id ON DELETE CASCADE | One per campaign |
+| mode | VARCHAR(20) | NOT NULL, DEFAULT 'fantasy' | 'fantasy' or 'reallife' (added 000031) |
 | name | VARCHAR(255) | NOT NULL, DEFAULT 'Campaign Calendar' | |
 | description | TEXT | NULL | |
 | epoch_name | VARCHAR(100) | NULL | e.g., "Third Age" |
@@ -518,3 +520,4 @@ User --< CampaignMember >-- Campaign
 | 28 | 000028_calendar_v2_device_fingerprint | Leap years, event end dates, season colors, event categories, device fingerprint on api_keys | 2026-02-25 |
 | 29 | 000029_maps_plugin | Maps + map_markers tables + addon registration | 2026-02-28 |
 | 30 | 000030_calendar_time_system | Time system on calendars (hours/min/sec config, current time) + event times | 2026-03-01 |
+| 31 | 000031_calendar_mode_timezone | Calendar mode column (fantasy/reallife) + user timezone | 2026-03-01 |

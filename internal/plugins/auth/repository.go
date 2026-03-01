@@ -25,6 +25,9 @@ type UserRepository interface {
 	FindResetToken(ctx context.Context, tokenHash string) (userID, email string, expiresAt time.Time, usedAt *time.Time, err error)
 	MarkResetTokenUsed(ctx context.Context, tokenHash string) error
 
+	// User profile.
+	UpdateTimezone(ctx context.Context, userID, timezone string) error
+
 	// Admin operations.
 	ListUsers(ctx context.Context, offset, limit int) ([]User, int, error)
 	UpdateIsAdmin(ctx context.Context, id string, isAdmin bool) error
@@ -67,7 +70,8 @@ func (r *userRepository) Create(ctx context.Context, user *User) error {
 // Returns apperror.NotFound if no user exists with this ID.
 func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error) {
 	query := `SELECT id, email, display_name, password_hash, avatar_path,
-	                 is_admin, is_disabled, totp_secret, totp_enabled, created_at, last_login_at
+	                 is_admin, is_disabled, totp_secret, totp_enabled, timezone,
+	                 created_at, last_login_at
 	          FROM users WHERE id = ?`
 
 	user := &User{}
@@ -81,6 +85,7 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error)
 		&user.IsDisabled,
 		&user.TOTPSecret,
 		&user.TOTPEnabled,
+		&user.Timezone,
 		&user.CreatedAt,
 		&user.LastLoginAt,
 	)
@@ -98,7 +103,8 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*User, error)
 // Returns apperror.NotFound if no user exists with this email.
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
 	query := `SELECT id, email, display_name, password_hash, avatar_path,
-	                 is_admin, is_disabled, totp_secret, totp_enabled, created_at, last_login_at
+	                 is_admin, is_disabled, totp_secret, totp_enabled, timezone,
+	                 created_at, last_login_at
 	          FROM users WHERE email = ?`
 
 	user := &User{}
@@ -112,6 +118,7 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (*User, 
 		&user.IsDisabled,
 		&user.TOTPSecret,
 		&user.TOTPEnabled,
+		&user.Timezone,
 		&user.CreatedAt,
 		&user.LastLoginAt,
 	)
@@ -165,7 +172,8 @@ func (r *userRepository) ListUsers(ctx context.Context, offset, limit int) ([]Us
 	// Deliberately exclude password_hash and totp_secret from this query.
 	// Admin list views don't need sensitive credential data.
 	query := `SELECT id, email, display_name, avatar_path,
-	                 is_admin, is_disabled, totp_enabled, created_at, last_login_at
+	                 is_admin, is_disabled, totp_enabled, timezone,
+	                 created_at, last_login_at
 	          FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?`
 
 	rows, err := r.db.QueryContext(ctx, query, limit, offset)
@@ -179,7 +187,8 @@ func (r *userRepository) ListUsers(ctx context.Context, offset, limit int) ([]Us
 		var u User
 		if err := rows.Scan(
 			&u.ID, &u.Email, &u.DisplayName, &u.AvatarPath,
-			&u.IsAdmin, &u.IsDisabled, &u.TOTPEnabled, &u.CreatedAt, &u.LastLoginAt,
+			&u.IsAdmin, &u.IsDisabled, &u.TOTPEnabled, &u.Timezone,
+			&u.CreatedAt, &u.LastLoginAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning user row: %w", err)
 		}
@@ -241,6 +250,26 @@ func (r *userRepository) CountAdmins(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("counting admins: %w", err)
 	}
 	return count, nil
+}
+
+// --- User Profile ---
+
+// UpdateTimezone sets the IANA timezone for a user. Empty string sets NULL.
+func (r *userRepository) UpdateTimezone(ctx context.Context, userID, timezone string) error {
+	var tz interface{} = timezone
+	if timezone == "" {
+		tz = nil
+	}
+	query := `UPDATE users SET timezone = ? WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, tz, userID)
+	if err != nil {
+		return fmt.Errorf("updating timezone: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return apperror.NewNotFound("user not found")
+	}
+	return nil
 }
 
 // --- Password Reset ---

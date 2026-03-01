@@ -12,59 +12,136 @@ import (
 )
 
 // CalendarSetupPage renders the initial setup when no calendar exists yet.
+// Presents three mode cards: Sync to Real Life, New Custom Calendar, Import.
 templ CalendarSetupPage(cc *campaigns.CampaignContext, csrfToken string) {
 	@layouts.App("Calendar - Setup") {
-		<div class="max-w-lg mx-auto py-12">
-			@calendarSetupForm(cc, csrfToken)
+		<div class="max-w-3xl mx-auto py-12 px-4">
+			@calendarSetupChooser(cc, csrfToken)
 		</div>
 	}
 }
 
-// CalendarSetupFragment renders the setup form as an HTMX fragment.
+// CalendarSetupFragment renders the setup chooser as an HTMX fragment.
 templ CalendarSetupFragment(cc *campaigns.CampaignContext, csrfToken string) {
-	<div class="max-w-lg mx-auto py-12">
-		@calendarSetupForm(cc, csrfToken)
+	<div class="max-w-3xl mx-auto py-12 px-4">
+		@calendarSetupChooser(cc, csrfToken)
 	</div>
 }
 
-// calendarSetupForm renders the form to create a new calendar.
-templ calendarSetupForm(cc *campaigns.CampaignContext, csrfToken string) {
-	<div class="card p-8 text-center space-y-6">
-		<div>
-			<i class="fa-solid fa-calendar-days text-4xl text-accent mb-3"></i>
-			<h1 class="text-xl font-bold text-fg">Create Your Calendar</h1>
-			<p class="text-sm text-fg-secondary mt-1">
-				Set up a custom calendar for your world with unique months, weekdays, moons, and more.
-			</p>
+// calendarSetupChooser renders the mode selection cards and their forms.
+templ calendarSetupChooser(cc *campaigns.CampaignContext, csrfToken string) {
+	<div class="text-center mb-8">
+		<i class="fa-solid fa-calendar-days text-4xl text-accent mb-3"></i>
+		<h1 class="text-xl font-bold text-fg">Create Your Calendar</h1>
+		<p class="text-sm text-fg-secondary mt-1">
+			Choose how you want your calendar to work.
+		</p>
+	</div>
+	<div x-data="{ mode: '' }" class="space-y-6">
+		<!-- Mode selection cards -->
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+			<!-- Real Life -->
+			<button
+				type="button"
+				@click="mode = 'reallife'"
+				:class="mode === 'reallife' ? 'ring-2 ring-accent bg-accent/5' : 'hover:border-accent/30'"
+				class="card p-5 text-left transition-all cursor-pointer"
+			>
+				<div class="flex items-center gap-2 mb-2">
+					<i class="fa-solid fa-globe text-lg text-accent"></i>
+					<h3 class="text-sm font-semibold text-fg">Sync to Real Life</h3>
+				</div>
+				<p class="text-xs text-fg-secondary">
+					Gregorian calendar synced to real-world dates and your timezone.
+					Schedule sessions, track RSVPs.
+				</p>
+			</button>
+			<!-- Custom Fantasy -->
+			<button
+				type="button"
+				@click="mode = 'fantasy'"
+				:class="mode === 'fantasy' ? 'ring-2 ring-accent bg-accent/5' : 'hover:border-accent/30'"
+				class="card p-5 text-left transition-all cursor-pointer"
+			>
+				<div class="flex items-center gap-2 mb-2">
+					<i class="fa-solid fa-hat-wizard text-lg text-purple-400"></i>
+					<h3 class="text-sm font-semibold text-fg">New Custom Calendar</h3>
+				</div>
+				<p class="text-xs text-fg-secondary">
+					Build a fantasy calendar from scratch. Custom months, weekdays,
+					moons, seasons, and time system.
+				</p>
+			</button>
+			<!-- Import -->
+			<div class="card p-5 text-left opacity-60 cursor-not-allowed">
+				<div class="flex items-center gap-2 mb-2">
+					<i class="fa-solid fa-file-import text-lg text-fg-muted"></i>
+					<h3 class="text-sm font-semibold text-fg">Import Calendar</h3>
+				</div>
+				<p class="text-xs text-fg-secondary">
+					Import from Calendaria (Foundry VTT) or another Chronicle export.
+				</p>
+				<span class="inline-block mt-2 text-[10px] px-2 py-0.5 rounded-full bg-surface-alt text-fg-muted">Coming Soon</span>
+			</div>
 		</div>
-		<form
-			method="POST"
-			action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
-			class="space-y-4 text-left"
-		>
-			<input type="hidden" name="csrf_token" value={ csrfToken }/>
-			<div>
-				<label class="block text-sm font-medium text-fg-body mb-1">Calendar Name</label>
-				<input type="text" name="name" value="Campaign Calendar" class="input w-full" placeholder="e.g. The Reckoning of Ages"/>
-			</div>
-			<div>
-				<label class="block text-sm font-medium text-fg-body mb-1">Epoch / Era Name</label>
-				<input type="text" name="epoch_name" class="input w-full" placeholder="e.g. DR, Age of Fire, Third Era"/>
-				<p class="text-xs text-fg-muted mt-1">Optional. Displayed after the year number (e.g. "1492 DR").</p>
-			</div>
-			<div>
-				<label class="block text-sm font-medium text-fg-body mb-1">Starting Year</label>
-				<input type="number" name="start_year" value="1" class="input w-full"/>
-			</div>
-			<div class="pt-2">
+		<!-- Real Life form -->
+		<div x-show="mode === 'reallife'" x-transition x-cloak class="card p-6 space-y-4">
+			<h2 class="text-base font-semibold text-fg">Sync to Real Life</h2>
+			<p class="text-xs text-fg-secondary">
+				Uses the Gregorian calendar with real-world dates. Events will use your timezone.
+				You can still add moons and seasons for flavor.
+			</p>
+			<form
+				method="POST"
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				class="space-y-4"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<input type="hidden" name="mode" value="reallife"/>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Calendar Name</label>
+					<input type="text" name="name" value="Session Calendar" class="input w-full"/>
+				</div>
 				<button type="submit" class="btn-primary w-full">
-					<i class="fa-solid fa-plus mr-2"></i> Create Calendar
+					<i class="fa-solid fa-globe mr-2"></i> Create Real-Life Calendar
 				</button>
-				<p class="text-xs text-fg-muted mt-2 text-center">
+			</form>
+		</div>
+		<!-- Fantasy form -->
+		<div x-show="mode === 'fantasy'" x-transition x-cloak class="card p-6 space-y-4">
+			<h2 class="text-base font-semibold text-fg">New Custom Calendar</h2>
+			<p class="text-xs text-fg-secondary">
+				Create a fully custom fantasy calendar. You can configure months, weekdays,
+				moons, and seasons after creation.
+			</p>
+			<form
+				method="POST"
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				class="space-y-4"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<input type="hidden" name="mode" value="fantasy"/>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Calendar Name</label>
+					<input type="text" name="name" value="Campaign Calendar" class="input w-full" placeholder="e.g. The Reckoning of Ages"/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Epoch / Era Name</label>
+					<input type="text" name="epoch_name" class="input w-full" placeholder="e.g. DR, Age of Fire, Third Era"/>
+					<p class="text-xs text-fg-muted mt-1">Optional. Displayed after the year (e.g. "1492 DR").</p>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Starting Year</label>
+					<input type="number" name="start_year" value="1" class="input w-full"/>
+				</div>
+				<button type="submit" class="btn-primary w-full">
+					<i class="fa-solid fa-hat-wizard mr-2"></i> Create Fantasy Calendar
+				</button>
+				<p class="text-xs text-fg-muted text-center">
 					You can customize months, weekdays, and moons after creation.
 				</p>
-			</div>
-		</form>
+			</form>
+		</div>
 	</div>
 }
 

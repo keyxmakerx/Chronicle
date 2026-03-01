@@ -35,8 +35,10 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 			<!-- Tab bar -->
 			<div class="bg-surface border-b border-edge px-6 flex gap-0 shrink-0 overflow-x-auto">
 				@settingsTab("general", "fa-solid fa-gear", "General")
-				@settingsTab("months", "fa-solid fa-calendar", "Months")
-				@settingsTab("weekdays", "fa-solid fa-calendar-week", "Weekdays")
+				if !cal.IsRealLife() {
+					@settingsTab("months", "fa-solid fa-calendar", "Months")
+					@settingsTab("weekdays", "fa-solid fa-calendar-week", "Weekdays")
+				}
 				@settingsTab("moons", "fa-solid fa-moon", "Moons")
 				@settingsTab("seasons", "fa-solid fa-leaf", "Seasons")
 			</div>
@@ -47,16 +49,18 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 						@generalSettingsTab(cc, cal, csrfToken)
 					</div>
 				</div>
-				<div x-show="tab === 'months'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-6">
-						@monthsSettingsTab(cc, cal, csrfToken)
+				if !cal.IsRealLife() {
+					<div x-show="tab === 'months'" x-cloak class="h-full overflow-y-auto">
+						<div class="max-w-3xl mx-auto px-6 py-6">
+							@monthsSettingsTab(cc, cal, csrfToken)
+						</div>
 					</div>
-				</div>
-				<div x-show="tab === 'weekdays'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-6">
-						@weekdaysSettingsTab(cc, cal, csrfToken)
+					<div x-show="tab === 'weekdays'" x-cloak class="h-full overflow-y-auto">
+						<div class="max-w-3xl mx-auto px-6 py-6">
+							@weekdaysSettingsTab(cc, cal, csrfToken)
+						</div>
 					</div>
-				</div>
+				}
 				<div x-show="tab === 'moons'" x-cloak class="h-full overflow-y-auto">
 					<div class="max-w-3xl mx-auto px-6 py-6">
 						@moonsSettingsTab(cc, cal, csrfToken)
@@ -108,64 +112,80 @@ templ generalSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 				<input type="text" x-model="epochName" class="input w-full" maxlength="100" placeholder="e.g. DR, Age of Fire"/>
 				<p class="text-xs text-fg-muted mt-1">Displayed after the year (e.g. "1492 DR").</p>
 			</div>
-			<!-- Current Date -->
-			<div class="grid grid-cols-3 gap-3">
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Current Year</label>
-					<input type="number" x-model.number="currentYear" class="input w-full"/>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Current Month</label>
-					<input type="number" x-model.number="currentMonth" class="input w-full" min="1"/>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Current Day</label>
-					<input type="number" x-model.number="currentDay" class="input w-full" min="1"/>
-				</div>
-			</div>
-			<!-- Current Time -->
-			<div class="grid grid-cols-2 gap-3">
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Current Hour</label>
-					<input type="number" x-model.number="currentHour" class="input w-full" min="0" :max="hoursPerDay - 1"/>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Current Minute</label>
-					<input type="number" x-model.number="currentMinute" class="input w-full" min="0" :max="minutesPerHour - 1"/>
-				</div>
-			</div>
-			<!-- Time System Configuration -->
-			<div>
-				<h3 class="text-sm font-semibold text-fg mb-2">Time System</h3>
-				<p class="text-xs text-fg-muted mb-2">Configure the time units for your calendar. Earth uses 24 hours/day, 60 minutes/hour.</p>
+			if !cal.IsRealLife() {
+				<!-- Current Date -->
 				<div class="grid grid-cols-3 gap-3">
 					<div>
-						<label class="block text-sm font-medium text-fg-body mb-1">Hours per Day</label>
-						<input type="number" x-model.number="hoursPerDay" class="input w-full" min="1" max="1000"/>
+						<label class="block text-sm font-medium text-fg-body mb-1">Current Year</label>
+						<input type="number" x-model.number="currentYear" class="input w-full"/>
 					</div>
 					<div>
-						<label class="block text-sm font-medium text-fg-body mb-1">Minutes per Hour</label>
-						<input type="number" x-model.number="minutesPerHour" class="input w-full" min="1" max="1000"/>
+						<label class="block text-sm font-medium text-fg-body mb-1">Current Month</label>
+						<input type="number" x-model.number="currentMonth" class="input w-full" min="1"/>
 					</div>
 					<div>
-						<label class="block text-sm font-medium text-fg-body mb-1">Seconds per Minute</label>
-						<input type="number" x-model.number="secondsPerMinute" class="input w-full" min="1" max="1000"/>
+						<label class="block text-sm font-medium text-fg-body mb-1">Current Day</label>
+						<input type="number" x-model.number="currentDay" class="input w-full" min="1"/>
 					</div>
 				</div>
-			</div>
-			<!-- Leap Year -->
-			<div class="grid grid-cols-2 gap-3">
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Leap Year Every</label>
-					<input type="number" x-model.number="leapYearEvery" class="input w-full" min="0"/>
-					<p class="text-xs text-fg-muted mt-1">0 = no leap years</p>
+				<!-- Current Time -->
+				<div class="grid grid-cols-2 gap-3">
+					<div>
+						<label class="block text-sm font-medium text-fg-body mb-1">Current Hour</label>
+						<input type="number" x-model.number="currentHour" class="input w-full" min="0" :max="hoursPerDay - 1"/>
+					</div>
+					<div>
+						<label class="block text-sm font-medium text-fg-body mb-1">Current Minute</label>
+						<input type="number" x-model.number="currentMinute" class="input w-full" min="0" :max="minutesPerHour - 1"/>
+					</div>
 				</div>
+				<!-- Time System Configuration -->
 				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Leap Year Offset</label>
-					<input type="number" x-model.number="leapYearOffset" class="input w-full" min="0"/>
-					<p class="text-xs text-fg-muted mt-1">Year offset for leap year cycle</p>
+					<h3 class="text-sm font-semibold text-fg mb-2">Time System</h3>
+					<p class="text-xs text-fg-muted mb-2">Configure the time units for your calendar. Earth uses 24 hours/day, 60 minutes/hour.</p>
+					<div class="grid grid-cols-3 gap-3">
+						<div>
+							<label class="block text-sm font-medium text-fg-body mb-1">Hours per Day</label>
+							<input type="number" x-model.number="hoursPerDay" class="input w-full" min="1" max="1000"/>
+						</div>
+						<div>
+							<label class="block text-sm font-medium text-fg-body mb-1">Minutes per Hour</label>
+							<input type="number" x-model.number="minutesPerHour" class="input w-full" min="1" max="1000"/>
+						</div>
+						<div>
+							<label class="block text-sm font-medium text-fg-body mb-1">Seconds per Minute</label>
+							<input type="number" x-model.number="secondsPerMinute" class="input w-full" min="1" max="1000"/>
+						</div>
+					</div>
 				</div>
-			</div>
+				<!-- Leap Year -->
+				<div class="grid grid-cols-2 gap-3">
+					<div>
+						<label class="block text-sm font-medium text-fg-body mb-1">Leap Year Every</label>
+						<input type="number" x-model.number="leapYearEvery" class="input w-full" min="0"/>
+						<p class="text-xs text-fg-muted mt-1">0 = no leap years</p>
+					</div>
+					<div>
+						<label class="block text-sm font-medium text-fg-body mb-1">Leap Year Offset</label>
+						<input type="number" x-model.number="leapYearOffset" class="input w-full" min="0"/>
+						<p class="text-xs text-fg-muted mt-1">Year offset for leap year cycle</p>
+					</div>
+				</div>
+			}
+			if cal.IsRealLife() {
+				<!-- Real-life mode info -->
+				<div class="card p-4 bg-surface-secondary">
+					<div class="flex items-center gap-2 mb-1">
+						<i class="fa-solid fa-globe text-accent text-sm"></i>
+						<span class="text-sm font-medium text-fg">Real-Life Calendar</span>
+					</div>
+					<p class="text-xs text-fg-secondary">
+						This calendar syncs to the Gregorian calendar. Date, time, months, and weekdays
+						are determined automatically. Set your timezone in your account settings to ensure
+						correct local time display.
+					</p>
+				</div>
+			}
 			<div class="flex items-center justify-end gap-2 pt-2 border-t border-edge">
 				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
 				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>

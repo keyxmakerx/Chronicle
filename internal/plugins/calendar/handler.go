@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -94,6 +95,7 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 
+	mode := c.FormValue("mode")
 	name := c.FormValue("name")
 	if name == "" {
 		name = "Campaign Calendar"
@@ -109,45 +111,114 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 		epoch = &epochName
 	}
 
-	cal, err := h.svc.CreateCalendar(ctx, cc.Campaign.ID, CreateCalendarInput{
+	// For real-life mode, set Gregorian defaults.
+	input := CreateCalendarInput{
+		Mode:        mode,
 		Name:        name,
 		EpochName:   epoch,
 		CurrentYear: startYear,
-	})
+	}
+	if mode == ModeRealLife {
+		now := time.Now().UTC()
+		input.CurrentYear = now.Year()
+		input.HoursPerDay = 24
+		input.MinutesPerHour = 60
+		input.SecondsPerMinute = 60
+		input.LeapYearEvery = 4
+		input.LeapYearOffset = 0
+		if name == "" || name == "Campaign Calendar" {
+			input.Name = "Session Calendar"
+		}
+		ad := "AD"
+		input.EpochName = &ad
+	}
+
+	cal, err := h.svc.CreateCalendar(ctx, cc.Campaign.ID, input)
 	if err != nil {
 		return err
 	}
 
-	// Seed default months (12 months, 30 days each) and weekdays (7 days).
-	defaultMonths := []MonthInput{
-		{Name: "Month 1", Days: 30, SortOrder: 0},
-		{Name: "Month 2", Days: 30, SortOrder: 1},
-		{Name: "Month 3", Days: 30, SortOrder: 2},
-		{Name: "Month 4", Days: 30, SortOrder: 3},
-		{Name: "Month 5", Days: 30, SortOrder: 4},
-		{Name: "Month 6", Days: 30, SortOrder: 5},
-		{Name: "Month 7", Days: 30, SortOrder: 6},
-		{Name: "Month 8", Days: 30, SortOrder: 7},
-		{Name: "Month 9", Days: 30, SortOrder: 8},
-		{Name: "Month 10", Days: 30, SortOrder: 9},
-		{Name: "Month 11", Days: 30, SortOrder: 10},
-		{Name: "Month 12", Days: 30, SortOrder: 11},
-	}
-	if err := h.svc.SetMonths(ctx, cal.ID, defaultMonths); err != nil {
-		return err
-	}
-
-	defaultWeekdays := []WeekdayInput{
-		{Name: "Day 1", SortOrder: 0},
-		{Name: "Day 2", SortOrder: 1},
-		{Name: "Day 3", SortOrder: 2},
-		{Name: "Day 4", SortOrder: 3},
-		{Name: "Day 5", SortOrder: 4},
-		{Name: "Day 6", SortOrder: 5},
-		{Name: "Day 7", SortOrder: 6},
-	}
-	if err := h.svc.SetWeekdays(ctx, cal.ID, defaultWeekdays); err != nil {
-		return err
+	// Seed months and weekdays based on mode.
+	if mode == ModeRealLife {
+		// Gregorian months with correct day counts.
+		gregorianMonths := []MonthInput{
+			{Name: "January", Days: 31, SortOrder: 0},
+			{Name: "February", Days: 28, SortOrder: 1, LeapYearDays: 1},
+			{Name: "March", Days: 31, SortOrder: 2},
+			{Name: "April", Days: 30, SortOrder: 3},
+			{Name: "May", Days: 31, SortOrder: 4},
+			{Name: "June", Days: 30, SortOrder: 5},
+			{Name: "July", Days: 31, SortOrder: 6},
+			{Name: "August", Days: 31, SortOrder: 7},
+			{Name: "September", Days: 30, SortOrder: 8},
+			{Name: "October", Days: 31, SortOrder: 9},
+			{Name: "November", Days: 30, SortOrder: 10},
+			{Name: "December", Days: 31, SortOrder: 11},
+		}
+		if err := h.svc.SetMonths(ctx, cal.ID, gregorianMonths); err != nil {
+			return err
+		}
+		gregorianWeekdays := []WeekdayInput{
+			{Name: "Sunday", SortOrder: 0},
+			{Name: "Monday", SortOrder: 1},
+			{Name: "Tuesday", SortOrder: 2},
+			{Name: "Wednesday", SortOrder: 3},
+			{Name: "Thursday", SortOrder: 4},
+			{Name: "Friday", SortOrder: 5},
+			{Name: "Saturday", SortOrder: 6},
+		}
+		if err := h.svc.SetWeekdays(ctx, cal.ID, gregorianWeekdays); err != nil {
+			return err
+		}
+		// Set current date/time from wall clock.
+		now := time.Now().UTC()
+		if err := h.svc.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
+			Name:             cal.Name,
+			EpochName:        cal.EpochName,
+			CurrentYear:      now.Year(),
+			CurrentMonth:     int(now.Month()),
+			CurrentDay:       now.Day(),
+			CurrentHour:      now.Hour(),
+			CurrentMinute:    now.Minute(),
+			HoursPerDay:      24,
+			MinutesPerHour:   60,
+			SecondsPerMinute: 60,
+			LeapYearEvery:    4,
+			LeapYearOffset:   0,
+		}); err != nil {
+			return err
+		}
+	} else {
+		// Fantasy defaults: 12 months, 30 days each, 7 generic weekdays.
+		defaultMonths := []MonthInput{
+			{Name: "Month 1", Days: 30, SortOrder: 0},
+			{Name: "Month 2", Days: 30, SortOrder: 1},
+			{Name: "Month 3", Days: 30, SortOrder: 2},
+			{Name: "Month 4", Days: 30, SortOrder: 3},
+			{Name: "Month 5", Days: 30, SortOrder: 4},
+			{Name: "Month 6", Days: 30, SortOrder: 5},
+			{Name: "Month 7", Days: 30, SortOrder: 6},
+			{Name: "Month 8", Days: 30, SortOrder: 7},
+			{Name: "Month 9", Days: 30, SortOrder: 8},
+			{Name: "Month 10", Days: 30, SortOrder: 9},
+			{Name: "Month 11", Days: 30, SortOrder: 10},
+			{Name: "Month 12", Days: 30, SortOrder: 11},
+		}
+		if err := h.svc.SetMonths(ctx, cal.ID, defaultMonths); err != nil {
+			return err
+		}
+		defaultWeekdays := []WeekdayInput{
+			{Name: "Day 1", SortOrder: 0},
+			{Name: "Day 2", SortOrder: 1},
+			{Name: "Day 3", SortOrder: 2},
+			{Name: "Day 4", SortOrder: 3},
+			{Name: "Day 5", SortOrder: 4},
+			{Name: "Day 6", SortOrder: 5},
+			{Name: "Day 7", SortOrder: 6},
+		}
+		if err := h.svc.SetWeekdays(ctx, cal.ID, defaultWeekdays); err != nil {
+			return err
+		}
 	}
 
 	// Auto-enable the calendar addon for this campaign so dashboard/entity

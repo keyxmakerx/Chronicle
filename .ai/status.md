@@ -355,6 +355,35 @@ complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
 - **Files**: migration 000030, model.go, repository.go, service.go, handler.go, routes.go,
   calendar.templ, calendar_settings.templ, syncapi/calendar_api_handler.go, syncapi/routes.go.
 
+### Calendar Plugin Sprint 6 — Calendar Modes + Timezone — COMPLETE
+- **Migration 000031**: Added `mode` VARCHAR(20) to calendars (fantasy/reallife),
+  `timezone` VARCHAR(50) to users.
+- **Two calendar modes**: Fantasy (full customization, existing behavior) and Real-Life
+  (Gregorian months/weekdays, synced to wall clock via user timezone).
+- **Model**: `ModeFantasy`/`ModeRealLife` constants, `IsRealLife()` method, `Mode` field
+  on Calendar and CreateCalendarInput.
+- **Repository**: `mode` column in all calendar scan/insert queries.
+- **Service**: Mode validation in CreateCalendar (defaults to "fantasy" if not "reallife").
+- **Handler CreateCalendar**: Mode-aware creation — real-life seeds Gregorian months (correct
+  day counts including Feb 28+1 leap), Gregorian weekdays (Sun–Sat), current date/time from
+  `time.Now().UTC()`, epoch "AD", leap year every 4. Fantasy seeds generic 12×30 months.
+- **Setup page redesign**: Three mode cards (Real Life / Custom Fantasy / Import Coming Soon)
+  with Alpine.js mode selection. Each mode opens its own form with appropriate fields.
+- **Settings page**: Months/Weekdays tabs hidden for real-life mode. Date/time/time-system/
+  leap-year fields hidden for real-life mode. Info box shown instead explaining Gregorian sync.
+- **User timezone**: Added `Timezone *string` to User model. Updated FindByID, FindByEmail,
+  ListUsers to scan timezone. Added `UpdateTimezone` to UserRepository and AuthService.
+  Validates IANA timezone via `time.LoadLocation()`.
+- **Account page**: New `GET /account` settings page with timezone dropdown (curated list
+  of ~65 IANA timezones). `PUT /account/timezone` API for saving. Account link added to
+  app header navigation next to Logout.
+- **Sync API**: GetCurrentDate response includes `mode` field. GetCalendar already returns
+  full struct with mode.
+- **Files**: migration 000031, calendar/model.go, repository.go, service.go, handler.go,
+  calendar.templ, calendar_settings.templ, auth/model.go, auth/repository.go, auth/service.go,
+  auth/handler.go, auth/routes.go, auth/account.templ (new), auth/service_test.go (mock fix),
+  layouts/app.templ (account link), syncapi/calendar_api_handler.go.
+
 ### In Progress
 - Nothing currently in progress.
 

@@ -58,6 +58,7 @@ func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
+		"mode":   cal.Mode,
 		"year":   cal.CurrentYear,
 		"month":  cal.CurrentMonth,
 		"day":    cal.CurrentDay,

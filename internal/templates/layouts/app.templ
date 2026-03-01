@@ -652,6 +652,10 @@ templ Topbar() {
 					</span>
 				</div>
 
+				<a href="/account" class="text-sm text-fg-secondary hover:text-fg transition-colors">
+					<i class="fa-solid fa-gear text-xs mr-0.5"></i> Account
+				</a>
+
 				<form method="POST" action="/logout" class="inline">
 					<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
 					<button

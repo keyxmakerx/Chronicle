@@ -53,14 +53,15 @@ func NewCalendarRepository(db *sql.DB) CalendarRepository {
 }
 
 // calendarCols is the column list for calendar queries.
-const calendarCols = `id, campaign_id, name, description, epoch_name, current_year,
+const calendarCols = `id, campaign_id, mode, name, description, epoch_name, current_year,
         current_month, current_day, hours_per_day, minutes_per_hour, seconds_per_minute,
         current_hour, current_minute, leap_year_every, leap_year_offset, created_at, updated_at`
 
 // scanCalendar reads a row into a Calendar struct.
 func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 	cal := &Calendar{}
-	err := scanner.Scan(&cal.ID, &cal.CampaignID, &cal.Name, &cal.Description, &cal.EpochName,
+	err := scanner.Scan(&cal.ID, &cal.CampaignID, &cal.Mode,
+		&cal.Name, &cal.Description, &cal.EpochName,
 		&cal.CurrentYear, &cal.CurrentMonth, &cal.CurrentDay,
 		&cal.HoursPerDay, &cal.MinutesPerHour, &cal.SecondsPerMinute,
 		&cal.CurrentHour, &cal.CurrentMinute,
@@ -75,13 +76,13 @@ func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 // Create inserts a new calendar.
 func (r *calendarRepo) Create(ctx context.Context, cal *Calendar) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO calendars (id, campaign_id, name, description, epoch_name,
+		`INSERT INTO calendars (id, campaign_id, mode, name, description, epoch_name,
 		        current_year, current_month, current_day,
 		        hours_per_day, minutes_per_hour, seconds_per_minute,
 		        current_hour, current_minute,
 		        leap_year_every, leap_year_offset)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		cal.ID, cal.CampaignID, cal.Name, cal.Description, cal.EpochName,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		cal.ID, cal.CampaignID, cal.Mode, cal.Name, cal.Description, cal.EpochName,
 		cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay,
 		cal.HoursPerDay, cal.MinutesPerHour, cal.SecondsPerMinute,
 		cal.CurrentHour, cal.CurrentMinute,

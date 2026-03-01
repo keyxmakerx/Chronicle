@@ -9,10 +9,19 @@ import (
 	"time"
 )
 
+// Calendar mode constants.
+const (
+	// ModeFantasy indicates a fully custom fantasy calendar.
+	ModeFantasy = "fantasy"
+	// ModeRealLife indicates a Gregorian calendar synced to real-world time.
+	ModeRealLife = "reallife"
+)
+
 // Calendar is the top-level calendar definition for a campaign.
 type Calendar struct {
 	ID             string  `json:"id"`
 	CampaignID     string  `json:"campaign_id"`
+	Mode           string  `json:"mode"` // "fantasy" or "reallife"
 	Name           string  `json:"name"`
 	Description    *string `json:"description,omitempty"`
 	EpochName      *string `json:"epoch_name,omitempty"`
@@ -34,6 +43,11 @@ type Calendar struct {
 	Weekdays []Weekday `json:"weekdays,omitempty"`
 	Moons    []Moon    `json:"moons,omitempty"`
 	Seasons  []Season  `json:"seasons,omitempty"`
+}
+
+// IsRealLife returns true if this calendar syncs to real-world time.
+func (c *Calendar) IsRealLife() bool {
+	return c.Mode == ModeRealLife
 }
 
 // IsLeapYear returns true if the given year is a leap year according to
@@ -279,6 +293,7 @@ func (e *Event) IsMultiDay() bool {
 
 // CreateCalendarInput is the validated input for creating a calendar.
 type CreateCalendarInput struct {
+	Mode             string // "fantasy" or "reallife"
 	Name             string
 	Description      *string
 	EpochName        *string

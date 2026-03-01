@@ -67,6 +67,10 @@ type AuthService interface {
 	ValidateResetToken(ctx context.Context, token string) (email string, err error)
 	ResetPassword(ctx context.Context, token, newPassword string) error
 
+	// User profile.
+	GetUser(ctx context.Context, userID string) (*User, error)
+	UpdateTimezone(ctx context.Context, userID, timezone string) error
+
 	// Admin session management.
 	ListAllSessions(ctx context.Context) ([]SessionInfo, error)
 	DestroyAllUserSessions(ctx context.Context, userID string) (int, error)
@@ -511,6 +515,28 @@ func (s *authService) destroyUserSessions(ctx context.Context, userID string) {
 			slog.Int("session_count", len(tokens)),
 		)
 	}
+}
+
+// --- User Profile ---
+
+// GetUser retrieves a user by ID. Used by the account settings page.
+func (s *authService) GetUser(ctx context.Context, userID string) (*User, error) {
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// UpdateTimezone sets the user's IANA timezone. Validates the timezone string
+// against Go's timezone database before persisting.
+func (s *authService) UpdateTimezone(ctx context.Context, userID, timezone string) error {
+	if timezone != "" {
+		if _, err := time.LoadLocation(timezone); err != nil {
+			return apperror.NewBadRequest("invalid timezone: " + timezone)
+		}
+	}
+	return s.repo.UpdateTimezone(ctx, userID, timezone)
 }
 
 // --- Password Hashing (argon2id) ---

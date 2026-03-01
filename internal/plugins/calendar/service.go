@@ -71,6 +71,10 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 	if input.Name == "" {
 		input.Name = "Campaign Calendar"
 	}
+	// Validate and default mode.
+	if input.Mode != ModeRealLife {
+		input.Mode = ModeFantasy
+	}
 	if input.CurrentYear == 0 {
 		input.CurrentYear = 1
 	}
@@ -87,6 +91,7 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 	cal := &Calendar{
 		ID:               generateID(),
 		CampaignID:       campaignID,
+		Mode:             input.Mode,
 		Name:             input.Name,
 		Description:      input.Description,
 		EpochName:        input.EpochName,

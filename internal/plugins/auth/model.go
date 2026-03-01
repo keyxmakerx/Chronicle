@@ -22,6 +22,7 @@ type User struct {
 	IsDisabled   bool       `json:"is_disabled"`
 	TOTPSecret   *string    `json:"-"` // Never expose.
 	TOTPEnabled  bool       `json:"totp_enabled"`
+	Timezone     *string    `json:"timezone,omitempty"` // IANA timezone (e.g. "America/New_York"). Nil = UTC.
 	CreatedAt    time.Time  `json:"created_at"`
 	LastLoginAt  *time.Time `json:"last_login_at,omitempty"`
 }

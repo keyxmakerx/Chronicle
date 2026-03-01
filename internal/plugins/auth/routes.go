@@ -29,4 +29,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 
 	// Logout requires an active session.
 	e.POST("/logout", h.Logout)
+
+	// Account settings (requires auth).
+	e.GET("/account", h.AccountPage, RequireAuth(h.service))
+	e.PUT("/account/timezone", h.UpdateTimezoneAPI, RequireAuth(h.service))
 }

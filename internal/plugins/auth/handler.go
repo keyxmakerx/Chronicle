@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -305,6 +307,84 @@ func (h *Handler) logSecurityEvent(ctx context.Context, eventType, userID, actor
 	if h.securityLogger != nil {
 		_ = h.securityLogger.LogEvent(ctx, eventType, userID, actorID, ip, userAgent, details)
 	}
+}
+
+// --- Account Settings ---
+
+// AccountPage renders the user account settings page (GET /account).
+func (h *Handler) AccountPage(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return c.Redirect(http.StatusSeeOther, "/login")
+	}
+
+	user, err := h.service.GetUser(c.Request().Context(), userID)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	timezones := commonTimezones()
+
+	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones))
+}
+
+// UpdateTimezoneAPI updates the user's timezone preference (PUT /account/timezone).
+func (h *Handler) UpdateTimezoneAPI(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+	}
+
+	var req struct {
+		Timezone string `json:"timezone"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	}
+
+	if err := h.service.UpdateTimezone(c.Request().Context(), userID, req.Timezone); err != nil {
+		if appErr, ok := err.(*apperror.AppError); ok {
+			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update timezone"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// commonTimezones returns a curated list of IANA timezones for the dropdown.
+// Covers all major regions without overwhelming the user with obscure entries.
+func commonTimezones() []string {
+	zones := []string{}
+	regions := []string{
+		"Africa/Cairo", "Africa/Johannesburg", "Africa/Lagos", "Africa/Nairobi",
+		"America/Anchorage", "America/Argentina/Buenos_Aires", "America/Bogota",
+		"America/Chicago", "America/Denver", "America/Halifax", "America/Los_Angeles",
+		"America/Mexico_City", "America/New_York", "America/Phoenix",
+		"America/Santiago", "America/Sao_Paulo", "America/St_Johns", "America/Toronto",
+		"America/Vancouver",
+		"Asia/Baghdad", "Asia/Bangkok", "Asia/Colombo", "Asia/Dubai", "Asia/Hong_Kong",
+		"Asia/Istanbul", "Asia/Jakarta", "Asia/Karachi", "Asia/Kolkata", "Asia/Manila",
+		"Asia/Seoul", "Asia/Shanghai", "Asia/Singapore", "Asia/Taipei", "Asia/Tehran",
+		"Asia/Tokyo",
+		"Atlantic/Reykjavik",
+		"Australia/Adelaide", "Australia/Brisbane", "Australia/Melbourne",
+		"Australia/Perth", "Australia/Sydney",
+		"Europe/Amsterdam", "Europe/Athens", "Europe/Berlin", "Europe/Brussels",
+		"Europe/Dublin", "Europe/Helsinki", "Europe/Lisbon", "Europe/London",
+		"Europe/Madrid", "Europe/Moscow", "Europe/Oslo", "Europe/Paris",
+		"Europe/Prague", "Europe/Rome", "Europe/Stockholm", "Europe/Vienna",
+		"Europe/Warsaw", "Europe/Zurich",
+		"Pacific/Auckland", "Pacific/Fiji", "Pacific/Guam", "Pacific/Honolulu",
+	}
+	// Validate each timezone to ensure it's loadable.
+	for _, tz := range regions {
+		if _, err := time.LoadLocation(tz); err == nil {
+			zones = append(zones, tz)
+		}
+	}
+	return zones
 }
 
 // --- Cookie helpers ---
