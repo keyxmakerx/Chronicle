@@ -8,10 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-02-28 -- Fixed migration crash (Error 1265) caused by invalid ENUM value
-`'plugin'` in migrations 000027/000029. Added `plugin` to addons.category ENUM,
-changed INSERTs to UPDATEs (rows already seeded in 000015), added migration
-validation tests, documented in ADR-017.
+2026-03-01 -- Fixed entity page 500 error caused by `scanEntity` column count
+mismatch: `popup_config` was selected in the SQL query but missing from the
+`row.Scan()` call, causing "expected 22 destination arguments in Scan, not 21"
+on every FindByID/FindBySlug. Also fixed: migration ENUM crash (000027/000029),
+calendar HTMX lazy-load auth mismatch, error handler silent 500s.
 
 ## Current Phase
 **Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit
@@ -292,6 +293,21 @@ complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
 - **editor/.ai.md**: Added editor_secret.js to files table, secret mark to current
   state checklist, inline secrets documentation to notes section.
 
+### Entity Page 500 Fix — COMPLETE
+- **Root cause**: `scanEntity()` in `repository.go` selected 22 columns (including
+  `e.popup_config`) but only had 21 `Scan()` targets — `popup_config` was missing.
+  The Go SQL driver returned `"expected 22 destination arguments in Scan, not 21"`
+  for every `FindByID`/`FindBySlug` call, breaking all entity detail pages.
+- **Why it was silent**: Raw `fmt.Errorf` from the SQL driver bypassed both
+  `AppError` and `echo.HTTPError` checks in the error handler, falling through to
+  the default 500 case. The old error handler had blind spots that didn't log these.
+- **Fix**: Added `popupRaw` to the `scanEntity` scan targets and unmarshal logic,
+  matching the already-correct `scanEntityRow` (used by list queries).
+- **Also fixed**: Error handler now logs ALL 5xx errors (not just AppErrors with
+  Internal != nil). Calendar HTMX lazy-load gated behind addon check.
+- **Files**: `entities/repository.go` (scanEntity), `app/app.go` (error handler),
+  `entities/handler.go` (showCalendar gate), `entities/show.templ` (conditional render).
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -299,7 +315,7 @@ complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
 - Nothing blocked
 
 ## Active Branch
-`claude/fix-navbar-swiping-SZHP0`
+`claude/fix-calendar-migration-67cQE`
 
 ## Competitive Analysis & Roadmap
 Created `.ai/roadmap.md` with comprehensive comparison vs WorldAnvil, Kanka, and
