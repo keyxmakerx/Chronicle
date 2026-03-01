@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
+	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
@@ -331,6 +332,13 @@ func (a *App) RegisterRoutes() {
 	mapsService := maps.NewMapService(mapsRepo)
 	mapsHandler := maps.NewHandler(mapsService)
 	maps.RegisterRoutes(e, mapsHandler, campaignService, authService)
+
+	// Sessions plugin: game session scheduling, linked entities, RSVP tracking.
+	sessionsRepo := sessions.NewSessionRepository(a.DB)
+	sessionsService := sessions.NewSessionService(sessionsRepo)
+	sessionsHandler := sessions.NewHandler(sessionsService)
+	sessionsHandler.SetMemberLister(campaignService)
+	sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService)
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.

@@ -384,6 +384,28 @@ complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
   auth/handler.go, auth/routes.go, auth/account.templ (new), auth/service_test.go (mock fix),
   layouts/app.templ (account link), syncapi/calendar_api_handler.go.
 
+### Sessions Plugin (Sprint 7) — COMPLETE
+- **Migration 000032**: `sessions` table (id, campaign_id, name, summary, notes/notes_html,
+  scheduled_date, calendar_year/month/day, status, sort_order, created_by), `session_attendees`
+  table (session_id, user_id, status RSVP, responded_at), `session_entities` table (session_id,
+  entity_id, role). Addon registered as "sessions".
+- **Model**: Session, Attendee, SessionEntity structs with DTOs. Status constants (planned,
+  completed, cancelled). RSVP constants (invited, accepted, declined, tentative). Entity role
+  constants (mentioned, encountered, key).
+- **Repository**: Full CRUD for sessions, attendees (upsert via ON DUPLICATE KEY UPDATE),
+  entity linking. ListByCampaign sorts planned first, then by scheduled_date.
+- **Service**: Validation (name required, max 200 chars), CRUD orchestration, InviteAll for
+  batch attendee invites, UpdateRSVP with status validation, entity linking with role defaults.
+- **Handler**: MemberLister interface for cross-plugin campaign member access. All HTTP handlers
+  with IDOR protection (requireSessionInCampaign). Auto-invites all campaign members on create.
+  HTMX-aware RSVP responses (returns AttendeeList fragment or JSON).
+- **Templates**: Session list page with status grouping (Upcoming/Completed/Cancelled), detail
+  page with attendee list and RSVP buttons (Going/Maybe/Can't), create modal with name/date/summary.
+- **Wiring**: Added to app/routes.go, installedAddons, sidebar nav (dice-d20 icon).
+- **Files**: migration 000032, sessions/model.go, repository.go, service.go, handler.go,
+  routes.go, sessions.templ, sessions/.ai.md (new). Modified: app/routes.go, addons/service.go,
+  layouts/app.templ.
+
 ### In Progress
 - Nothing currently in progress.
 

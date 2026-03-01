@@ -104,6 +104,7 @@ var installedAddons = map[string]bool{
 	"attributes": true,
 	"calendar":   true,
 	"maps":       true,
+	"sessions":   true,
 }
 
 // IsInstalled reports whether an addon slug has backing code in the codebase.

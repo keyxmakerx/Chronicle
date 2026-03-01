@@ -25,6 +25,8 @@ User --< CampaignMember >-- Campaign
          |                      |       |---< CalendarSeason
          |                      |       |---< CalendarEvent
          |                      +--< Map --< MapMarker
+         |                      +--< Session --< SessionAttendee >-- User
+         |                      |       |---< SessionEntity >-- Entity
          |                      +--< AuditLog
          |                      +--< SecurityEvent (site-wide)
          |                      +--< Addon --< CampaignAddon
@@ -456,6 +458,44 @@ User --< CampaignMember >-- Campaign
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
 
+### sessions (implemented -- migration 000032)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | VARCHAR(36) | PK | UUID |
+| campaign_id | VARCHAR(36) | FK -> campaigns.id ON DELETE CASCADE | |
+| name | VARCHAR(200) | NOT NULL | Session title |
+| summary | TEXT | NULL | Brief description |
+| notes | JSON | NULL | ProseMirror JSON (GM notes) |
+| notes_html | TEXT | NULL | Pre-rendered HTML |
+| scheduled_date | DATE | NULL | Real-world date |
+| calendar_year | INT | NULL | In-game year |
+| calendar_month | INT | NULL | In-game month |
+| calendar_day | INT | NULL | In-game day |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'planned' | planned, completed, cancelled |
+| sort_order | INT | NOT NULL, DEFAULT 0 | Manual ordering |
+| created_by | VARCHAR(36) | FK -> users.id | Session creator |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+
+### session_attendees (implemented -- migration 000032)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| session_id | VARCHAR(36) | FK -> sessions.id ON DELETE CASCADE | |
+| user_id | VARCHAR(36) | FK -> users.id ON DELETE CASCADE | |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'invited' | invited, accepted, declined, tentative |
+| responded_at | DATETIME | NULL | When user last RSVPed |
+| UNIQUE(session_id, user_id) | | | |
+
+### session_entities (implemented -- migration 000032)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| session_id | VARCHAR(36) | FK -> sessions.id ON DELETE CASCADE | |
+| entity_id | VARCHAR(36) | FK -> entities.id ON DELETE CASCADE | |
+| role | VARCHAR(50) | NOT NULL, DEFAULT 'mentioned' | mentioned, encountered, key |
+| UNIQUE(session_id, entity_id) | | | |
+
 ## MariaDB-Specific Notes
 
 - **JSON columns:** MariaDB validates JSON on write. Use `JSON_EXTRACT()` for
@@ -485,6 +525,9 @@ User --< CampaignMember >-- Campaign
 - `calendar_events`: INDEX on (calendar_id, year, month, day), INDEX on entity_id
 - `maps`: INDEX on (campaign_id, sort_order)
 - `map_markers`: INDEX on map_id, INDEX on entity_id
+- `sessions`: INDEX on (campaign_id, status), INDEX on campaign_id
+- `session_attendees`: UNIQUE on (session_id, user_id), INDEX on session_id
+- `session_entities`: UNIQUE on (session_id, entity_id), INDEX on session_id, INDEX on entity_id
 
 ## Migration Log
 
@@ -521,3 +564,4 @@ User --< CampaignMember >-- Campaign
 | 29 | 000029_maps_plugin | Maps + map_markers tables + addon registration | 2026-02-28 |
 | 30 | 000030_calendar_time_system | Time system on calendars (hours/min/sec config, current time) + event times | 2026-03-01 |
 | 31 | 000031_calendar_mode_timezone | Calendar mode column (fantasy/reallife) + user timezone | 2026-03-01 |
+| 32 | 000032_sessions_plugin | Sessions, session_attendees, session_entities tables + addon | 2026-03-01 |
