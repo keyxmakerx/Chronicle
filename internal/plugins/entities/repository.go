@@ -496,13 +496,14 @@ func (r *entityRepository) FindBySlug(ctx context.Context, campaignID, slug stri
 }
 
 // scanEntity scans a single entity row with joined type fields.
+// The column order must match the SELECT in FindByID/FindBySlug.
 func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 	e := &Entity{}
-	var fieldsRaw, overridesRaw []byte
+	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := row.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
 		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.ParentID, &e.TypeLabel,
-		&e.IsPrivate, &e.IsTemplate, &fieldsRaw, &overridesRaw,
+		&e.IsPrivate, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
@@ -523,6 +524,12 @@ func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 		e.FieldOverrides = &FieldOverrides{}
 		if err := json.Unmarshal(overridesRaw, e.FieldOverrides); err != nil {
 			return nil, fmt.Errorf("unmarshaling field overrides: %w", err)
+		}
+	}
+	if len(popupRaw) > 0 {
+		e.PopupConfig = &PopupConfig{}
+		if err := json.Unmarshal(popupRaw, e.PopupConfig); err != nil {
+			return nil, fmt.Errorf("unmarshaling popup config: %w", err)
 		}
 	}
 	return e, nil
