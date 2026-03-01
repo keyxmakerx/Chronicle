@@ -137,9 +137,18 @@ templ calendarSetupChooser(cc *campaigns.CampaignContext, csrfToken string) {
 				<button type="submit" class="btn-primary w-full">
 					<i class="fa-solid fa-hat-wizard mr-2"></i> Create Fantasy Calendar
 				</button>
-				<p class="text-xs text-fg-muted text-center">
-					You can customize months, weekdays, and moons after creation.
-				</p>
+				<!-- Post-creation setup guidance -->
+				<div class="bg-surface-alt/50 rounded-lg p-3 space-y-1.5">
+					<p class="text-xs font-medium text-fg-secondary">After creation, customize in Settings:</p>
+					<div class="grid grid-cols-2 gap-1 text-[11px] text-fg-muted">
+						<span><i class="fa-solid fa-calendar text-accent/60 mr-1"></i> Months &amp; days</span>
+						<span><i class="fa-solid fa-calendar-week text-accent/60 mr-1"></i> Weekday names</span>
+						<span><i class="fa-solid fa-moon text-accent/60 mr-1"></i> Moons &amp; phases</span>
+						<span><i class="fa-solid fa-leaf text-accent/60 mr-1"></i> Seasons &amp; weather</span>
+						<span><i class="fa-solid fa-landmark text-accent/60 mr-1"></i> Eras &amp; ages</span>
+						<span><i class="fa-solid fa-gear text-accent/60 mr-1"></i> Time &amp; leap years</span>
+					</div>
+				</div>
 			</form>
 		</div>
 	</div>
@@ -213,6 +222,16 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 						<span class="text-xs text-fg-muted">
 							<span class="inline-block w-2 h-2 rounded-full mr-1" style={ fmt.Sprintf("background:%s", season.Color) }></span>
 							{ season.Name }
+							if season.WeatherEffect != nil && *season.WeatherEffect != "" {
+								<span class="text-fg-muted"> &middot; { *season.WeatherEffect }</span>
+							}
+						</span>
+					}
+					<!-- Era indicator -->
+					if era := data.Calendar.EraForYear(data.Year); era != nil {
+						<span class="text-xs" style={ fmt.Sprintf("color:%s", era.Color) }>
+							<i class="fa-solid fa-landmark mr-0.5 text-[10px]"></i>
+							{ era.Name }
 						</span>
 					}
 				</div>
@@ -870,9 +889,17 @@ templ UpcomingEventsBlock(cc *campaigns.CampaignContext, cal *Calendar, events [
 			<span class="text-xs text-fg-muted">
 				<span class="inline-block w-2 h-2 rounded-full mr-0.5" style={ fmt.Sprintf("background:%s", cal.CurrentSeason().Color) }></span>
 				{ cal.CurrentSeason().Name }
+				if cal.CurrentSeason().WeatherEffect != nil && *cal.CurrentSeason().WeatherEffect != "" {
+					<span class="text-fg-muted"> &middot; { *cal.CurrentSeason().WeatherEffect }</span>
+				}
 			</span>
 		}
 	</div>
+	if era := cal.CurrentEra(); era != nil {
+		<div class="px-4 py-1 text-[10px]" style={ fmt.Sprintf("color:%s", era.Color) }>
+			<i class="fa-solid fa-landmark mr-0.5"></i> { era.Name }
+		</div>
+	}
 	if len(events) == 0 {
 		<div class="px-4 py-6 text-center">
 			<p class="text-sm text-fg-muted">No upcoming events</p>
@@ -952,6 +979,11 @@ templ timelineContent(cc *campaigns.CampaignContext, data TimelineViewData) {
 					{ " " + *data.Calendar.EpochName }
 				}
 			</h1>
+			if era := data.Calendar.EraForYear(data.Year); era != nil {
+				<span class="text-xs font-medium px-2 py-0.5 rounded-full" style={ fmt.Sprintf("background:%s20;color:%s", era.Color, era.Color) }>
+					<i class="fa-solid fa-landmark mr-0.5 text-[9px]"></i> { era.Name }
+				</span>
+			}
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/timeline?year=%d", data.CampaignID, data.Year+1)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"

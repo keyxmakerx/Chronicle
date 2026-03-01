@@ -406,6 +406,29 @@ complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
   routes.go, sessions.templ, sessions/.ai.md (new). Modified: app/routes.go, addons/service.go,
   layouts/app.templ.
 
+### Eras, Weather & Setup Wizard (Sprint 8) — COMPLETE
+- **Migration 000033**: `calendar_eras` table (name, start_year, end_year, description,
+  color, sort_order). Added `weather_effect` VARCHAR(200) column to `calendar_seasons`.
+- **Model**: Era struct with IsOngoing(), ContainsYear() methods. Calendar.Eras field,
+  Calendar.CurrentEra(), Calendar.EraForYear() helpers. Season.WeatherEffect field.
+  EraInput DTO.
+- **Repository**: SetEras/GetEras (same bulk pattern as other sub-resources). Season
+  scan/insert updated for weather_effect column.
+- **Service**: SetEras validation (name required, end >= start), color defaults.
+  eagerLoad includes eras.
+- **Handler**: UpdateErasAPI (PUT /calendar/eras). CreateCalendar redirects fantasy
+  mode to settings page for immediate customization (real-life still goes to grid).
+- **Templates**: 6th tab "Eras" in settings page (name, start/end year, color,
+  description). Weather effect field added to seasons editor. Era indicator shown in
+  calendar header, timeline header, and dashboard preview (landmark icon + era name
+  with era color). Season weather effect shown alongside season name (middot separator).
+  Enhanced fantasy setup form with post-creation guidance grid showing all customizable
+  features.
+- **Sync API**: Added PUT /api/v1/campaigns/:id/calendar/eras endpoint.
+- **Files**: migration 000033, calendar/model.go, repository.go, service.go, handler.go,
+  routes.go, calendar.templ, calendar_settings.templ, syncapi/calendar_api_handler.go,
+  syncapi/routes.go, calendar/.ai.md.
+
 ### In Progress
 - Nothing currently in progress.
 

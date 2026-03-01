@@ -84,6 +84,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.PUT("/calendar/months", calAPI.UpdateMonths, RequirePermission(PermWrite))
 	cg.PUT("/calendar/weekdays", calAPI.UpdateWeekdays, RequirePermission(PermWrite))
 	cg.PUT("/calendar/moons", calAPI.UpdateMoons, RequirePermission(PermWrite))
+	cg.PUT("/calendar/eras", calAPI.UpdateEras, RequirePermission(PermWrite))
 	cg.POST("/calendar/advance", calAPI.AdvanceDate, RequirePermission(PermWrite))
 	cg.POST("/calendar/advance-time", calAPI.AdvanceTime, RequirePermission(PermWrite))
 

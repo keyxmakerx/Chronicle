@@ -520,6 +520,29 @@ func (h *CalendarAPIHandler) UpdateMoons(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// UpdateEras replaces all calendar eras.
+// PUT /api/v1/campaigns/:id/calendar/eras
+func (h *CalendarAPIHandler) UpdateEras(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var eras []calendar.EraInput
+	if err := c.Bind(&eras); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	if err := h.calendarSvc.SetEras(ctx, cal.ID, eras); err != nil {
+		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- Helpers ---
 
 // resolveRole returns the API key owner's role for privacy filtering.

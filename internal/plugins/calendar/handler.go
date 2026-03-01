@@ -233,8 +233,14 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 		}
 	}
 
+	// Redirect to settings for fantasy mode so users can immediately customize
+	// months, weekdays, etc. Real-life mode goes straight to the calendar.
+	if mode == ModeRealLife {
+		return c.Redirect(http.StatusSeeOther,
+			fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID))
+	}
 	return c.Redirect(http.StatusSeeOther,
-		fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID))
+		fmt.Sprintf("/campaigns/%s/calendar/settings", cc.Campaign.ID))
 }
 
 // UpdateCalendarAPI updates calendar settings.
@@ -517,6 +523,25 @@ func (h *Handler) UpdateSeasonsAPI(c echo.Context) error {
 	}
 
 	return h.svc.SetSeasons(ctx, cal.ID, seasons)
+}
+
+// UpdateErasAPI replaces all eras.
+// PUT /campaigns/:id/calendar/eras
+func (h *Handler) UpdateErasAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var eras []EraInput
+	if err := c.Bind(&eras); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	return h.svc.SetEras(ctx, cal.ID, eras)
 }
 
 // DeleteCalendarAPI removes the calendar and all its data.

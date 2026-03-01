@@ -41,6 +41,9 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 				}
 				@settingsTab("moons", "fa-solid fa-moon", "Moons")
 				@settingsTab("seasons", "fa-solid fa-leaf", "Seasons")
+				if !cal.IsRealLife() {
+					@settingsTab("eras", "fa-solid fa-landmark", "Eras")
+				}
 			</div>
 			<!-- Tab content -->
 			<div class="flex-1 overflow-hidden">
@@ -71,6 +74,13 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 						@seasonsSettingsTab(cc, cal, csrfToken)
 					</div>
 				</div>
+				if !cal.IsRealLife() {
+					<div x-show="tab === 'eras'" x-cloak class="h-full overflow-y-auto">
+						<div class="max-w-3xl mx-auto px-6 py-6">
+							@erasSettingsTab(cc, cal, csrfToken)
+						</div>
+					</div>
+				}
 			</div>
 		</div>
 	}
@@ -500,9 +510,13 @@ templ seasonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 								<label class="block text-[10px] text-fg-secondary mb-0.5">Color</label>
 								<input type="color" x-model="s.color" class="input w-full h-[34px]"/>
 							</div>
-							<div class="col-span-4">
+							<div class="col-span-2">
 								<label class="block text-[10px] text-fg-secondary mb-0.5">Description</label>
 								<input type="text" x-model="s.description" class="input text-sm w-full" placeholder="Optional description"/>
+							</div>
+							<div class="col-span-2">
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Weather Effect</label>
+								<input type="text" x-model="s.weather_effect" class="input text-sm w-full" placeholder="e.g. Snowy, Mild and rainy"/>
 							</div>
 						</div>
 					</div>
@@ -527,7 +541,8 @@ templ seasonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 						const payload = seasons.map(s => ({
 							name: s.name, start_month: s.start_month, start_day: s.start_day,
 							end_month: s.end_month, end_day: s.end_day, color: s.color,
-							description: s.description || null
+							description: s.description || null,
+								weather_effect: s.weather_effect || null
 						}));
 						fetch('/campaigns/%s/calendar/seasons', {
 							method: 'PUT',
@@ -540,6 +555,95 @@ templ seasonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 					`, cc.Campaign.ID, csrfToken) }
 				>
 					<span x-show="!saving">Save All Seasons</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// erasSettingsTab renders the eras editor for defining named time periods.
+templ erasSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Eras</h2>
+			<p class="text-sm text-fg-secondary">
+				Define named time periods (e.g. "First Age", "Age of Fire"). Eras span year ranges and display on the calendar and timeline.
+			</p>
+		</div>
+		<div x-data={ erasData(cal.Eras) }>
+			<div class="space-y-2 mb-4">
+				<template x-for="(e, i) in eras" :key="i">
+					<div class="card p-3 space-y-2">
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-2">
+								<span class="w-3 h-3 rounded-full" :style="'background:' + e.color"></span>
+								<span class="text-sm font-medium text-fg" x-text="e.name || 'Unnamed Era'"></span>
+								<span class="text-xs text-fg-muted" x-text="e.end_year ? e.start_year + ' – ' + e.end_year : e.start_year + ' – present'"></span>
+							</div>
+							<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="eras.splice(i, 1)">
+								<i class="fa-solid fa-trash-can"></i>
+							</button>
+						</div>
+						<div class="grid grid-cols-6 gap-2">
+							<div class="col-span-2">
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Name</label>
+								<input type="text" x-model="e.name" class="input text-sm w-full" placeholder="Era name"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Start Year</label>
+								<input type="number" x-model.number="e.start_year" class="input text-sm w-full"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">End Year</label>
+								<input type="number" x-model.number="e.end_year" class="input text-sm w-full" placeholder="Ongoing"/>
+								<p class="text-[9px] text-fg-muted mt-0.5">Leave empty for ongoing</p>
+							</div>
+							<div class="col-span-2">
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Color</label>
+								<input type="color" x-model="e.color" class="input w-full h-[34px]"/>
+							</div>
+						</div>
+						<div>
+							<label class="block text-[10px] text-fg-secondary mb-0.5">Description</label>
+							<input type="text" x-model="e.description" class="input text-sm w-full" placeholder="Optional description"/>
+						</div>
+					</div>
+				</template>
+			</div>
+			<button
+				type="button"
+				class="btn-secondary text-sm w-full"
+				@click="eras.push({ name: 'New Era', start_year: 1, end_year: null, color: '#6366f1', description: '' })"
+			>
+				<i class="fa-solid fa-plus mr-1"></i> Add Era
+			</button>
+			<div class="flex items-center justify-end gap-2 mt-4">
+				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
+				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false; error = '';
+						const payload = eras.map((e, i) => ({
+							name: e.name, start_year: e.start_year,
+							end_year: e.end_year || null,
+							color: e.color, description: e.description || null,
+							sort_order: i
+						}));
+						fetch('/campaigns/%s/calendar/eras', {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+							credentials: 'same-origin',
+							body: JSON.stringify(payload)
+						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
+						.catch(e => { error = e.message; })
+						.finally(() => { saving = false; })
+					`, cc.Campaign.ID, csrfToken) }
+				>
+					<span x-show="!saving">Save All Eras</span>
 					<span x-show="saving">Saving...</span>
 				</button>
 			</div>
@@ -619,13 +723,14 @@ func moonsData(moons []Moon) string {
 // seasonsData returns the Alpine.js x-data JSON for the seasons list.
 func seasonsData(seasons []Season) string {
 	type sItem struct {
-		Name        string `json:"name"`
-		StartMonth  int    `json:"start_month"`
-		StartDay    int    `json:"start_day"`
-		EndMonth    int    `json:"end_month"`
-		EndDay      int    `json:"end_day"`
-		Color       string `json:"color"`
-		Description string `json:"description"`
+		Name          string `json:"name"`
+		StartMonth    int    `json:"start_month"`
+		StartDay      int    `json:"start_day"`
+		EndMonth      int    `json:"end_month"`
+		EndDay        int    `json:"end_day"`
+		Color         string `json:"color"`
+		Description   string `json:"description"`
+		WeatherEffect string `json:"weather_effect"`
 	}
 	items := make([]sItem, len(seasons))
 	for i, s := range seasons {
@@ -633,13 +738,42 @@ func seasonsData(seasons []Season) string {
 		if s.Description != nil {
 			desc = *s.Description
 		}
+		weather := ""
+		if s.WeatherEffect != nil {
+			weather = *s.WeatherEffect
+		}
 		items[i] = sItem{
 			Name: s.Name, StartMonth: s.StartMonth, StartDay: s.StartDay,
-			EndMonth: s.EndMonth, EndDay: s.EndDay, Color: s.Color, Description: desc,
+			EndMonth: s.EndMonth, EndDay: s.EndDay, Color: s.Color,
+			Description: desc, WeatherEffect: weather,
 		}
 	}
 	b, _ := json.Marshal(items)
 	return fmt.Sprintf("{ seasons: %s, saving: false, saved: false, error: '' }", string(b))
+}
+
+// erasData returns the Alpine.js x-data JSON for the eras list.
+func erasData(eras []Era) string {
+	type eItem struct {
+		Name        string `json:"name"`
+		StartYear   int    `json:"start_year"`
+		EndYear     *int   `json:"end_year"`
+		Description string `json:"description"`
+		Color       string `json:"color"`
+	}
+	items := make([]eItem, len(eras))
+	for i, e := range eras {
+		desc := ""
+		if e.Description != nil {
+			desc = *e.Description
+		}
+		items[i] = eItem{
+			Name: e.Name, StartYear: e.StartYear, EndYear: e.EndYear,
+			Description: desc, Color: e.Color,
+		}
+	}
+	b, _ := json.Marshal(items)
+	return fmt.Sprintf("{ eras: %s, saving: false, saved: false, error: '' }", string(b))
 }
 
 // jsStr JSON-encodes a string for safe embedding in JavaScript.

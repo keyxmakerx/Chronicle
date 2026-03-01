@@ -31,6 +31,7 @@ type CalendarService interface {
 	SetWeekdays(ctx context.Context, calendarID string, weekdays []WeekdayInput) error
 	SetMoons(ctx context.Context, calendarID string, moons []MoonInput) error
 	SetSeasons(ctx context.Context, calendarID string, seasons []Season) error
+	SetEras(ctx context.Context, calendarID string, eras []EraInput) error
 
 	// Events.
 	CreateEvent(ctx context.Context, calendarID string, input CreateEventInput) (*Event, error)
@@ -150,6 +151,9 @@ func (s *calendarService) eagerLoad(ctx context.Context, cal *Calendar) (*Calend
 	if cal.Seasons, err = s.repo.GetSeasons(ctx, cal.ID); err != nil {
 		return nil, fmt.Errorf("get seasons: %w", err)
 	}
+	if cal.Eras, err = s.repo.GetEras(ctx, cal.ID); err != nil {
+		return nil, fmt.Errorf("get eras: %w", err)
+	}
 	return cal, nil
 }
 
@@ -241,6 +245,22 @@ func (s *calendarService) SetSeasons(ctx context.Context, calendarID string, sea
 		}
 	}
 	return s.repo.SetSeasons(ctx, calendarID, seasons)
+}
+
+// SetEras replaces all eras. Validates names and year ranges.
+func (s *calendarService) SetEras(ctx context.Context, calendarID string, eras []EraInput) error {
+	for i, e := range eras {
+		if e.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("era %d: name is required", i+1))
+		}
+		if e.EndYear != nil && *e.EndYear < e.StartYear {
+			return apperror.NewValidation(fmt.Sprintf("era %q: end year cannot be before start year", e.Name))
+		}
+		if e.Color == "" {
+			eras[i].Color = "#6366f1"
+		}
+	}
+	return s.repo.SetEras(ctx, calendarID, eras)
 }
 
 // CreateEvent creates a new calendar event.

@@ -43,6 +43,7 @@ type Calendar struct {
 	Weekdays []Weekday `json:"weekdays,omitempty"`
 	Moons    []Moon    `json:"moons,omitempty"`
 	Seasons  []Season  `json:"seasons,omitempty"`
+	Eras     []Era     `json:"eras,omitempty"`
 }
 
 // IsRealLife returns true if this calendar syncs to real-world time.
@@ -124,6 +125,23 @@ func (c *Calendar) SeasonForDate(month, day int) *Season {
 	return nil
 }
 
+// CurrentEra returns the era containing the current year, or nil if none match.
+func (c *Calendar) CurrentEra() *Era {
+	return c.EraForYear(c.CurrentYear)
+}
+
+// EraForYear returns the era containing the given year, or nil if none match.
+// An era with nil EndYear is considered ongoing (matches all years >= StartYear).
+func (c *Calendar) EraForYear(year int) *Era {
+	for i := range c.Eras {
+		e := &c.Eras[i]
+		if year >= e.StartYear && (e.EndYear == nil || year <= *e.EndYear) {
+			return e
+		}
+	}
+	return nil
+}
+
 // Month is a named period in the calendar with a configurable number of days.
 type Month struct {
 	ID            int    `json:"id"`
@@ -193,15 +211,16 @@ func (m *Moon) MoonPhaseName(absoluteDay int) string {
 
 // Season is a named period spanning a range of month+day to month+day.
 type Season struct {
-	ID          int     `json:"id"`
-	CalendarID  string  `json:"calendar_id"`
-	Name        string  `json:"name"`
-	StartMonth  int     `json:"start_month"`
-	StartDay    int     `json:"start_day"`
-	EndMonth    int     `json:"end_month"`
-	EndDay      int     `json:"end_day"`
-	Description *string `json:"description,omitempty"`
-	Color       string  `json:"color"`
+	ID            int     `json:"id"`
+	CalendarID    string  `json:"calendar_id"`
+	Name          string  `json:"name"`
+	StartMonth    int     `json:"start_month"`
+	StartDay      int     `json:"start_day"`
+	EndMonth      int     `json:"end_month"`
+	EndDay        int     `json:"end_day"`
+	Description   *string `json:"description,omitempty"`
+	Color         string  `json:"color"`
+	WeatherEffect *string `json:"weather_effect,omitempty"`
 }
 
 // ContainsDate returns true if the given month+day falls within this season.
@@ -217,6 +236,28 @@ func (s *Season) ContainsDate(month, day int) bool {
 	}
 	// Wrap-around (e.g. Winter: 11/1 → 2/28).
 	return dateVal >= startVal || dateVal <= endVal
+}
+
+// Era is a named time period spanning a range of years (e.g. "First Age", "Age of Fire").
+type Era struct {
+	ID         int     `json:"id"`
+	CalendarID string  `json:"calendar_id"`
+	Name       string  `json:"name"`
+	StartYear  int     `json:"start_year"`
+	EndYear    *int    `json:"end_year,omitempty"` // nil = ongoing
+	Description *string `json:"description,omitempty"`
+	Color      string  `json:"color"`
+	SortOrder  int     `json:"sort_order"`
+}
+
+// IsOngoing returns true if this era has no end year (still in progress).
+func (e *Era) IsOngoing() bool {
+	return e.EndYear == nil
+}
+
+// ContainsYear returns true if the given year falls within this era.
+func (e *Era) ContainsYear(year int) bool {
+	return year >= e.StartYear && (e.EndYear == nil || year <= *e.EndYear)
 }
 
 // Event is a calendar entry on a specific date, optionally linked to an entity.
@@ -386,4 +427,14 @@ type MoonInput struct {
 	CycleDays   float64 `json:"cycle_days"`
 	PhaseOffset float64 `json:"phase_offset"`
 	Color       string  `json:"color"`
+}
+
+// EraInput is the input for creating/updating an era.
+type EraInput struct {
+	Name        string  `json:"name"`
+	StartYear   int     `json:"start_year"`
+	EndYear     *int    `json:"end_year"`
+	Description *string `json:"description"`
+	Color       string  `json:"color"`
+	SortOrder   int     `json:"sort_order"`
 }

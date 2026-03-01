@@ -400,6 +400,19 @@ User --< CampaignMember >-- Campaign
 | end_day | INT | NOT NULL | |
 | description | TEXT | NULL | |
 | color | VARCHAR(7) | NOT NULL, DEFAULT '#6b7280' | Visual indicator (added 000028) |
+| weather_effect | VARCHAR(200) | NULL | Weather description for season (added 000033) |
+
+### calendar_eras (implemented -- migration 000033)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| calendar_id | VARCHAR(36) | FK -> calendars.id ON DELETE CASCADE | |
+| name | VARCHAR(200) | NOT NULL | Era name (e.g. "First Age") |
+| start_year | INT | NOT NULL | First year of era |
+| end_year | INT | NULL | Last year of era (NULL = ongoing) |
+| description | TEXT | NULL | |
+| color | VARCHAR(20) | NOT NULL, DEFAULT '#6366f1' | |
+| sort_order | INT | NOT NULL, DEFAULT 0 | |
 
 ### calendar_events (implemented -- migrations 000027, 000028, 000030)
 | Column | Type | Constraints | Notes |
@@ -522,6 +535,7 @@ User --< CampaignMember >-- Campaign
 - `calendar_weekdays`: INDEX on (calendar_id, sort_order)
 - `calendar_moons`: INDEX on calendar_id
 - `calendar_seasons`: INDEX on calendar_id
+- `calendar_eras`: INDEX on calendar_id
 - `calendar_events`: INDEX on (calendar_id, year, month, day), INDEX on entity_id
 - `maps`: INDEX on (campaign_id, sort_order)
 - `map_markers`: INDEX on map_id, INDEX on entity_id
@@ -565,3 +579,4 @@ User --< CampaignMember >-- Campaign
 | 30 | 000030_calendar_time_system | Time system on calendars (hours/min/sec config, current time) + event times | 2026-03-01 |
 | 31 | 000031_calendar_mode_timezone | Calendar mode column (fantasy/reallife) + user timezone | 2026-03-01 |
 | 32 | 000032_sessions_plugin | Sessions, session_attendees, session_entities tables + addon | 2026-03-01 |
+| 33 | 000033_calendar_eras_weather | calendar_eras table + season weather_effect column | 2026-03-01 |
