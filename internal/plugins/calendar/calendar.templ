@@ -705,6 +705,18 @@ func eventTooltip(evt Event) string {
 // UpcomingEventsBlock renders the upcoming events list for the dashboard block.
 // Returned as an HTMX fragment that replaces the loading placeholder.
 templ UpcomingEventsBlock(cc *campaigns.CampaignContext, cal *Calendar, events []Event) {
+	<!-- Current date display (always shown) -->
+	<div class="px-4 py-2 bg-surface-alt/50 flex items-center justify-between">
+		<span class="text-xs text-fg-muted">
+			{ formatCurrentDate(cal) }
+		</span>
+		if cal.CurrentSeason() != nil {
+			<span class="text-xs text-fg-muted">
+				<span class="inline-block w-2 h-2 rounded-full mr-0.5" style={ fmt.Sprintf("background:%s", cal.CurrentSeason().Color) }></span>
+				{ cal.CurrentSeason().Name }
+			</span>
+		}
+	</div>
 	if len(events) == 0 {
 		<div class="px-4 py-6 text-center">
 			<p class="text-sm text-fg-muted">No upcoming events</p>
@@ -716,18 +728,6 @@ templ UpcomingEventsBlock(cc *campaigns.CampaignContext, cal *Calendar, events [
 			</a>
 		</div>
 	} else {
-		<!-- Current date display -->
-		<div class="px-4 py-2 bg-surface-alt/50 flex items-center justify-between">
-			<span class="text-xs text-fg-muted">
-				{ formatCurrentDate(cal) }
-			</span>
-			if cal.CurrentSeason() != nil {
-				<span class="text-xs text-fg-muted">
-					<span class="inline-block w-2 h-2 rounded-full mr-0.5" style={ fmt.Sprintf("background:%s", cal.CurrentSeason().Color) }></span>
-					{ cal.CurrentSeason().Name }
-				</span>
-			}
-		</div>
 		for _, evt := range events {
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", cc.Campaign.ID, evt.Year, evt.Month)) }
