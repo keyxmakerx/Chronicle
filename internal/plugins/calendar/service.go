@@ -46,6 +46,10 @@ type CalendarService interface {
 	// Date/time helpers.
 	AdvanceDate(ctx context.Context, calendarID string, days int) error
 	AdvanceTime(ctx context.Context, calendarID string, hours, minutes int) error
+
+	// Import/export.
+	ApplyImport(ctx context.Context, calendarID string, result *ImportResult) error
+	ListAllEvents(ctx context.Context, calendarID string) ([]Event, error)
 }
 
 // calendarService is the default CalendarService implementation.
@@ -495,4 +499,74 @@ func (s *calendarService) AdvanceTime(ctx context.Context, calendarID string, ho
 	}
 
 	return s.repo.Update(ctx, cal)
+}
+
+// ApplyImport replaces a calendar's configuration with data from an ImportResult.
+// Updates the calendar settings and all sub-resources (months, weekdays, moons,
+// seasons, eras). This is a destructive operation — existing sub-resources are replaced.
+func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, result *ImportResult) error {
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	// Update calendar-level settings from import.
+	if result.CalendarName != "" {
+		cal.Name = result.CalendarName
+	}
+	cal.EpochName = result.Settings.EpochName
+	if result.Settings.CurrentYear != 0 {
+		cal.CurrentYear = result.Settings.CurrentYear
+	}
+	cal.CurrentMonth = 1
+	cal.CurrentDay = 1
+	cal.HoursPerDay = result.Settings.HoursPerDay
+	cal.MinutesPerHour = result.Settings.MinutesPerHour
+	cal.SecondsPerMinute = result.Settings.SecondsPerMinute
+	cal.LeapYearEvery = result.Settings.LeapYearEvery
+	cal.LeapYearOffset = result.Settings.LeapYearOffset
+
+	if err := s.repo.Update(ctx, cal); err != nil {
+		return fmt.Errorf("update calendar: %w", err)
+	}
+
+	// Apply sub-resources.
+	if len(result.Months) > 0 {
+		if err := s.SetMonths(ctx, calendarID, result.Months); err != nil {
+			return fmt.Errorf("set months: %w", err)
+		}
+	}
+	if len(result.Weekdays) > 0 {
+		if err := s.SetWeekdays(ctx, calendarID, result.Weekdays); err != nil {
+			return fmt.Errorf("set weekdays: %w", err)
+		}
+	}
+	if err := s.SetMoons(ctx, calendarID, result.Moons); err != nil {
+		return fmt.Errorf("set moons: %w", err)
+	}
+	if err := s.SetSeasons(ctx, calendarID, result.Seasons); err != nil {
+		return fmt.Errorf("set seasons: %w", err)
+	}
+	if err := s.SetEras(ctx, calendarID, result.Eras); err != nil {
+		return fmt.Errorf("set eras: %w", err)
+	}
+
+	return nil
+}
+
+// ListAllEvents returns all events for a calendar (owner visibility, no limit).
+// Used for calendar export.
+func (s *calendarService) ListAllEvents(ctx context.Context, calendarID string) ([]Event, error) {
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return nil, fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return nil, nil
+	}
+	// Use current year, owner role (3) to get all events including dm_only.
+	return s.repo.ListEventsForYear(ctx, calendarID, cal.CurrentYear, 3)
 }

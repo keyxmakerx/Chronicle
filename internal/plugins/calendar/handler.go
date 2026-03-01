@@ -1,7 +1,9 @@
 package calendar
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -747,6 +749,210 @@ func (h *Handler) ShowTimeline(c echo.Context) error {
 	}
 	return middleware.Render(c, http.StatusOK, TimelinePage(cc, data))
 }
+
+// ExportCalendarAPI returns the calendar as a downloadable JSON file.
+// GET /campaigns/:id/calendar/export
+func (h *Handler) ExportCalendarAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	// Optionally include events.
+	var events []Event
+	includeEvents := c.QueryParam("events") == "true"
+	if includeEvents {
+		events, err = h.svc.ListAllEvents(ctx, cal.ID)
+		if err != nil {
+			slog.Error("export: failed to list events", slog.Any("error", err))
+		}
+	}
+
+	export := BuildExport(cal, events, includeEvents)
+	c.Response().Header().Set("Content-Disposition",
+		fmt.Sprintf(`attachment; filename="%s-calendar.json"`, cc.Campaign.Slug))
+	return c.JSON(http.StatusOK, export)
+}
+
+// ImportCalendarAPI handles calendar import from an uploaded JSON file.
+// Accepts Simple Calendar, Calendaria, Fantasy-Calendar, and Chronicle formats.
+// POST /campaigns/:id/calendar/import
+func (h *Handler) ImportCalendarAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	if cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found — create a calendar first")
+	}
+
+	// Read uploaded file (multipart form or raw JSON body).
+	var data []byte
+	file, fileErr := c.FormFile("file")
+	if fileErr == nil {
+		// Multipart upload.
+		src, openErr := file.Open()
+		if openErr != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+		}
+		defer src.Close()
+		data, err = io.ReadAll(io.LimitReader(src, 10*1024*1024)) // 10MB limit
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+		}
+	} else {
+		// Try raw JSON body.
+		data, err = io.ReadAll(io.LimitReader(c.Request().Body, 10*1024*1024))
+		if err != nil || len(data) == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "no file uploaded and no JSON body")
+		}
+	}
+
+	// Parse and detect format.
+	result, parseErr := DetectAndParse(data)
+	if parseErr != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, parseErr.Error())
+	}
+
+	// Check for preview mode — return what would be imported without applying.
+	if c.QueryParam("preview") == "true" {
+		return c.JSON(http.StatusOK, result)
+	}
+
+	// Apply the import to the existing calendar.
+	if err := h.svc.ApplyImport(ctx, cal.ID, result); err != nil {
+		slog.Error("import: failed to apply", slog.Any("error", err))
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to apply import")
+	}
+
+	// Return JSON response with summary.
+	return c.JSON(http.StatusOK, map[string]any{
+		"status":   "ok",
+		"format":   result.Format,
+		"name":     result.CalendarName,
+		"months":   len(result.Months),
+		"weekdays": len(result.Weekdays),
+		"moons":    len(result.Moons),
+		"seasons":  len(result.Seasons),
+		"eras":     len(result.Eras),
+	})
+}
+
+// ImportPreviewAPI returns a preview of what would be imported from a JSON file
+// without actually applying the changes. Used by the import UI for confirmation.
+// POST /campaigns/:id/calendar/import/preview
+func (h *Handler) ImportPreviewAPI(c echo.Context) error {
+	// Read uploaded file.
+	var data []byte
+	var err error
+	file, fileErr := c.FormFile("file")
+	if fileErr == nil {
+		src, openErr := file.Open()
+		if openErr != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+		}
+		defer src.Close()
+		data, err = io.ReadAll(io.LimitReader(src, 10*1024*1024))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+		}
+	} else {
+		data, err = io.ReadAll(io.LimitReader(c.Request().Body, 10*1024*1024))
+		if err != nil || len(data) == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "no file uploaded")
+		}
+	}
+
+	result, parseErr := DetectAndParse(data)
+	if parseErr != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, parseErr.Error())
+	}
+
+	// Return the parsed preview as JSON.
+	return c.JSON(http.StatusOK, result)
+}
+
+// ImportFromSetupAPI handles import during calendar setup (no existing calendar).
+// Creates a new calendar and applies the imported configuration.
+// POST /campaigns/:id/calendar/import-setup
+func (h *Handler) ImportFromSetupAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	// Read uploaded file.
+	file, fileErr := c.FormFile("file")
+	if fileErr != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "no file uploaded")
+	}
+	src, err := file.Open()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+	}
+	defer src.Close()
+	data, err := io.ReadAll(io.LimitReader(src, 10*1024*1024))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+	}
+
+	// Parse the import.
+	result, parseErr := DetectAndParse(data)
+	if parseErr != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, parseErr.Error())
+	}
+
+	// Create a new fantasy calendar with the imported name.
+	calName := result.CalendarName
+	if calName == "" {
+		calName = "Imported Calendar"
+	}
+	input := CreateCalendarInput{
+		Mode:             ModeFantasy,
+		Name:             calName,
+		EpochName:        result.Settings.EpochName,
+		CurrentYear:      result.Settings.CurrentYear,
+		HoursPerDay:      result.Settings.HoursPerDay,
+		MinutesPerHour:   result.Settings.MinutesPerHour,
+		SecondsPerMinute: result.Settings.SecondsPerMinute,
+		LeapYearEvery:    result.Settings.LeapYearEvery,
+		LeapYearOffset:   result.Settings.LeapYearOffset,
+	}
+
+	cal, err := h.svc.CreateCalendar(ctx, cc.Campaign.ID, input)
+	if err != nil {
+		return err
+	}
+
+	// Apply imported sub-resources.
+	if err := h.svc.ApplyImport(ctx, cal.ID, result); err != nil {
+		slog.Error("import-setup: failed to apply", slog.Any("error", err))
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to apply import")
+	}
+
+	// Auto-enable the calendar addon.
+	if h.addonSvc != nil {
+		addon, aErr := h.addonSvc.GetBySlug(ctx, "calendar")
+		if aErr == nil && addon != nil {
+			userID := auth.GetUserID(c)
+			if eErr := h.addonSvc.EnableForCampaign(ctx, cc.Campaign.ID, addon.ID, userID); eErr != nil {
+				slog.Warn("auto-enable calendar addon failed", slog.Any("error", eErr))
+			}
+		}
+	}
+
+	// Redirect to settings page so user can review the import.
+	return c.Redirect(http.StatusSeeOther,
+		fmt.Sprintf("/campaigns/%s/calendar/settings", cc.Campaign.ID))
+}
+
+// Silence unused import warnings for json and io packages.
+var _ = json.Marshal
+var _ = io.ReadAll
 
 // CalendarViewData holds all data needed to render the calendar grid.
 type CalendarViewData struct {

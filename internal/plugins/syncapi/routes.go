@@ -87,6 +87,8 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.PUT("/calendar/eras", calAPI.UpdateEras, RequirePermission(PermWrite))
 	cg.POST("/calendar/advance", calAPI.AdvanceDate, RequirePermission(PermWrite))
 	cg.POST("/calendar/advance-time", calAPI.AdvanceTime, RequirePermission(PermWrite))
+	cg.GET("/calendar/export", calAPI.ExportCalendar, RequirePermission(PermRead))
+	cg.POST("/calendar/import", calAPI.ImportCalendar, RequirePermission(PermWrite))
 
 	// Sync endpoint (require "sync" permission).
 	cg.POST("/sync", api.Sync, RequirePermission(PermSync))

@@ -36,6 +36,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/calendar/advance", h.AdvanceDateAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendar/advance-time", h.AdvanceTimeAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Import/export (Owner only).
+	cg.GET("/calendar/export", h.ExportCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendar/import", h.ImportCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendar/import/preview", h.ImportPreviewAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendar/import-setup", h.ImportFromSetupAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Events CRUD (Scribe+ can create/edit, Owner can delete).
 	cg.POST("/calendar/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/calendar/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))

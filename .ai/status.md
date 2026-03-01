@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-01 -- Fixed entity page 500 error caused by `scanEntity` column count
-mismatch: `popup_config` was selected in the SQL query but missing from the
-`row.Scan()` call, causing "expected 22 destination arguments in Scan, not 21"
-on every FindByID/FindBySlug. Also fixed: migration ENUM crash (000027/000029),
-calendar HTMX lazy-load auth mismatch, error handler silent 500s.
+2026-03-01 -- Calendar Import/Export (Sprint 9). Added import support for 4 calendar
+formats: Chronicle native, Simple Calendar (Foundry VTT v1+v2), Calendaria (Foundry VTT),
+and Fantasy-Calendar.com. Auto-detection via top-level JSON keys. Export in Chronicle's
+native format with optional events. Setup page import card, settings page export button.
+Sync API endpoints for external tool integration.
 
 ## Current Phase
 **Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit
@@ -428,6 +428,31 @@ complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
 - **Files**: migration 000033, calendar/model.go, repository.go, service.go, handler.go,
   routes.go, calendar.templ, calendar_settings.templ, syncapi/calendar_api_handler.go,
   syncapi/routes.go, calendar/.ai.md.
+
+### Calendar Import/Export (Sprint 9) — COMPLETE
+- **export.go** (NEW): Chronicle native export format (`chronicle-calendar-v1`).
+  `ChronicleExport` envelope with calendar config + optional events. `BuildExport()`
+  constructs export from fully-loaded Calendar struct.
+- **import.go** (NEW): Auto-detection and parsing of 4 calendar JSON formats.
+  `DetectAndParse()` inspects top-level JSON keys: `"format"` for Chronicle,
+  `"calendar"` for Simple Calendar v1, `"exportVersion"+"calendars"` for SC v2,
+  `"static_data"+"dynamic_data"` for Fantasy-Calendar, `"days.hoursPerDay"` or
+  months-as-object for Calendaria. Format-specific parsers handle: 0-indexed→1-indexed
+  conversion (SC), localization key stripping (Calendaria), day-of-year→month+day
+  conversion (Calendaria seasons), `{values: {...}}` nesting (Calendaria), SC v1
+  legacy field aliases, leap day accumulation (Fantasy-Calendar).
+- **service.go**: Added `ApplyImport()` (destructive replacement of all sub-resources)
+  and `ListAllEvents()` (owner-visibility for export).
+- **handler.go**: 4 new handlers: `ExportCalendarAPI` (GET, JSON download),
+  `ImportCalendarAPI` (POST, multipart or JSON, 10MB limit, preview mode),
+  `ImportPreviewAPI` (POST, preview without applying), `ImportFromSetupAPI` (POST,
+  creates new calendar + applies import + auto-enables addon).
+- **routes.go**: 4 new routes (all Owner only).
+- **syncapi**: `ExportCalendar` and `ImportCalendar` methods on CalendarAPIHandler.
+  Routes: `GET /calendar/export` (read), `POST /calendar/import` (write).
+- **calendar.templ**: Setup page import card now functional with file upload form
+  (multipart, CSRF, supported formats list).
+- **calendar_settings.templ**: Export download button in settings header.
 
 ### In Progress
 - Nothing currently in progress.

@@ -31,6 +31,16 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 						<p class="text-[11px] text-fg-secondary">{ cal.Name }</p>
 					</div>
 				</div>
+				<div class="flex items-center gap-2">
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/export?events=true", cc.Campaign.ID)) }
+						class="btn-ghost text-xs flex items-center gap-1.5"
+						download
+					>
+						<i class="fa-solid fa-download text-[11px]"></i>
+						<span>Export</span>
+					</a>
+				</div>
 			</div>
 			<!-- Tab bar -->
 			<div class="bg-surface border-b border-edge px-6 flex gap-0 shrink-0 overflow-x-auto">

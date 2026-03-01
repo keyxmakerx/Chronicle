@@ -65,6 +65,7 @@ see `.ai/roadmap.md`.
 - [ ] Group-based visibility (beyond everyone/dm_only)
 
 ### Phase I: External Integrations
+- [x] Calendar import/export (Sprint 9: Chronicle, Simple Calendar, Calendaria, Fantasy-Calendar formats)
 - [ ] Foundry VTT sync module Phase 1 (notes/journal sync via REST API)
 - [ ] Foundry VTT sync module Phase 2 (calendar sync with Calendaria/Simple Calendar)
 - [ ] D&D 5e module (SRD reference data, tooltips, pages)

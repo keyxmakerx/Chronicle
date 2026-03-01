@@ -1,6 +1,8 @@
 package syncapi
 
 import (
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -541,6 +543,68 @@ func (h *CalendarAPIHandler) UpdateEras(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// --- Import/Export ---
+
+// ExportCalendar returns the full calendar as a Chronicle JSON export.
+// GET /api/v1/campaigns/:id/calendar/export
+func (h *CalendarAPIHandler) ExportCalendar(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var events []calendar.Event
+	if c.QueryParam("events") == "true" {
+		events, err = h.calendarSvc.ListAllEvents(ctx, cal.ID)
+		if err != nil {
+			slog.Error("api: failed to list events for export", slog.Any("error", err))
+		}
+	}
+
+	export := calendar.BuildExport(cal, events, c.QueryParam("events") == "true")
+	return c.JSON(http.StatusOK, export)
+}
+
+// ImportCalendar imports a calendar configuration from a JSON body.
+// POST /api/v1/campaigns/:id/calendar/import
+func (h *CalendarAPIHandler) ImportCalendar(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	data, err := io.ReadAll(io.LimitReader(c.Request().Body, 10*1024*1024))
+	if err != nil || len(data) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "empty request body")
+	}
+
+	result, parseErr := calendar.DetectAndParse(data)
+	if parseErr != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("parse error: %s", parseErr.Error()))
+	}
+
+	if err := h.calendarSvc.ApplyImport(ctx, cal.ID, result); err != nil {
+		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"status":   "ok",
+		"format":   result.Format,
+		"name":     result.CalendarName,
+		"months":   len(result.Months),
+		"weekdays": len(result.Weekdays),
+		"moons":    len(result.Moons),
+		"seasons":  len(result.Seasons),
+		"eras":     len(result.Eras),
+	})
 }
 
 // --- Helpers ---
