@@ -90,7 +90,7 @@ func (h *Handler) logAudit(c echo.Context, campaignID, action, entityID, entityN
 func (h *Handler) Index(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	role := int(cc.MemberRole)
@@ -172,7 +172,7 @@ func (h *Handler) Index(c echo.Context) error {
 func (h *Handler) NewForm(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
@@ -195,7 +195,7 @@ func (h *Handler) NewForm(c echo.Context) error {
 func (h *Handler) Create(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	var req CreateEntityRequest
@@ -302,7 +302,7 @@ func (h *Handler) Show(c echo.Context) error {
 func (h *Handler) EditForm(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -336,7 +336,7 @@ func (h *Handler) EditForm(c echo.Context) error {
 func (h *Handler) Update(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -400,7 +400,7 @@ func (h *Handler) Update(c echo.Context) error {
 func (h *Handler) Delete(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -434,7 +434,7 @@ func (h *Handler) Delete(c echo.Context) error {
 func (h *Handler) SearchAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	role := int(cc.MemberRole)
@@ -483,7 +483,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 func (h *Handler) GetEntry(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -529,7 +529,7 @@ func (h *Handler) GetEntry(c echo.Context) error {
 func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -567,7 +567,7 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 func (h *Handler) GetFieldsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -611,7 +611,7 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -646,7 +646,7 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 func (h *Handler) UpdateFieldOverridesAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -680,7 +680,7 @@ func (h *Handler) UpdateFieldOverridesAPI(c echo.Context) error {
 func (h *Handler) UpdateImageAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -719,7 +719,7 @@ var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
 func (h *Handler) PreviewAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -741,7 +741,7 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	// Look up the entity type for icon, color, name, and field definitions.
 	entityType, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
 	if err != nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	cfg := entity.EffectivePopupConfig()
@@ -816,7 +816,7 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 func (h *Handler) UpdatePopupConfigAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -848,7 +848,7 @@ func (h *Handler) UpdatePopupConfigAPI(c echo.Context) error {
 func (h *Handler) EntityTypesPage(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityTypes, err := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
@@ -875,7 +875,7 @@ func (h *Handler) EntityTypesPage(c echo.Context) error {
 func (h *Handler) CreateEntityType(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	var req CreateEntityTypeRequest
@@ -918,7 +918,7 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 func (h *Handler) UpdateEntityTypeAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -966,7 +966,7 @@ func (h *Handler) UpdateEntityTypeAPI(c echo.Context) error {
 func (h *Handler) DeleteEntityType(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -1010,7 +1010,7 @@ func (h *Handler) DeleteEntityType(c echo.Context) error {
 func (h *Handler) TemplateEditor(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -1037,7 +1037,7 @@ func (h *Handler) TemplateEditor(c echo.Context) error {
 func (h *Handler) EntityTypeConfig(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -1065,7 +1065,7 @@ func (h *Handler) EntityTypeConfig(c echo.Context) error {
 func (h *Handler) EntityTypeCustomizeFragment(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -1093,7 +1093,7 @@ func (h *Handler) EntityTypeCustomizeFragment(c echo.Context) error {
 func (h *Handler) EntityTypeAttributesFragment(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -1121,7 +1121,7 @@ func (h *Handler) EntityTypeAttributesFragment(c echo.Context) error {
 func (h *Handler) GetEntityTypeLayout(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -1150,7 +1150,7 @@ func (h *Handler) GetEntityTypeLayout(c echo.Context) error {
 func (h *Handler) UpdateEntityTypeLayout(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -1187,7 +1187,7 @@ func (h *Handler) UpdateEntityTypeLayout(c echo.Context) error {
 func (h *Handler) UpdateEntityTypeColor(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -1224,7 +1224,7 @@ func (h *Handler) UpdateEntityTypeColor(c echo.Context) error {
 func (h *Handler) UpdateEntityTypeDashboard(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -1262,7 +1262,7 @@ func (h *Handler) UpdateEntityTypeDashboard(c echo.Context) error {
 func (h *Handler) GetCategoryDashboardLayout(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -1297,7 +1297,7 @@ func (h *Handler) GetCategoryDashboardLayout(c echo.Context) error {
 func (h *Handler) UpdateCategoryDashboardLayout(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -1333,7 +1333,7 @@ func (h *Handler) UpdateCategoryDashboardLayout(c echo.Context) error {
 func (h *Handler) ResetCategoryDashboardLayout(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))

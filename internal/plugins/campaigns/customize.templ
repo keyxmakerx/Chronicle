@@ -341,6 +341,46 @@ templ extensionsTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 			</div>
 		</div>
 
+		<!-- Calendar display settings (shown when calendar addon exists) -->
+		<div class="border-t border-edge pt-6">
+			<div class="flex items-center gap-2 mb-1">
+				<i class="fa-solid fa-calendar-days text-sm text-accent"></i>
+				<h3 class="text-sm font-semibold text-fg">Calendar</h3>
+			</div>
+			<p class="text-xs text-fg-secondary mb-3">
+				Add a calendar block to any of the three layout editors below. Each editor is available in its own tab on this page.
+			</p>
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+				<div class="card p-3">
+					<div class="flex items-center gap-2 mb-1">
+						<i class="fa-solid fa-gauge text-xs text-fg-muted"></i>
+						<span class="text-sm font-medium text-fg">Dashboard</span>
+					</div>
+					<p class="text-xs text-fg-secondary">
+						Add a "Calendar" block in the <strong>Dashboard</strong> tab to show upcoming events on your campaign home page.
+					</p>
+				</div>
+				<div class="card p-3">
+					<div class="flex items-center gap-2 mb-1">
+						<i class="fa-solid fa-layer-group text-xs text-fg-muted"></i>
+						<span class="text-sm font-medium text-fg">Category Pages</span>
+					</div>
+					<p class="text-xs text-fg-secondary">
+						Add a "Calendar" block in the <strong>Categories</strong> tab to show upcoming events on category dashboards.
+					</p>
+				</div>
+				<div class="card p-3">
+					<div class="flex items-center gap-2 mb-1">
+						<i class="fa-solid fa-file-lines text-xs text-fg-muted"></i>
+						<span class="text-sm font-medium text-fg">Entity Pages</span>
+					</div>
+					<p class="text-xs text-fg-secondary">
+						Add a "Calendar" block in the <strong>Page Templates</strong> tab, or events linked to an entity appear automatically at the bottom.
+					</p>
+				</div>
+			</div>
+		</div>
+
 		<!-- Attributes field editor (per-category) -->
 		if len(entityTypes) > 0 {
 			<div class="border-t border-edge pt-6">

@@ -76,8 +76,9 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			}
 
 			// Calendar events linked to this entity (lazy-loaded from calendar plugin).
-			// Only rendered when the calendar addon is enabled for this campaign.
-			if showCalendar {
+			// Only rendered when the calendar addon is enabled AND the layout doesn't
+			// already contain a calendar block (to avoid duplicate rendering).
+			if showCalendar && !layoutHasBlock(entityType, "calendar") {
 				<div
 					hx-get={ fmt.Sprintf("/campaigns/%s/calendar/entity-events/%s", cc.Campaign.ID, entity.ID) }
 					hx-trigger="load"
@@ -86,6 +87,24 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			}
 		</div>
 	}
+}
+
+// layoutHasBlock checks whether the entity type layout contains a block of the given type.
+// Used to avoid duplicate rendering when a block is both in the layout and hardcoded.
+func layoutHasBlock(et *EntityType, blockType string) bool {
+	if et == nil {
+		return false
+	}
+	for _, row := range et.Layout.Rows {
+		for _, col := range row.Columns {
+			for _, block := range col.Blocks {
+				if block.Type == blockType {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // blockMinHeightStyle returns a CSS min-height value for a block based on its
@@ -172,6 +191,8 @@ templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entit
 			@blockRelations(cc, entity, csrfToken)
 		case "divider":
 			@blockDivider()
+		case "calendar":
+			@blockCalendarEvents(cc, entity)
 	}
 }
 
@@ -342,6 +363,20 @@ templ blockRelations(cc *campaigns.CampaignContext, entity *Entity, csrfToken st
 // blockDivider renders a visual separator between content sections.
 templ blockDivider() {
 	<hr class="border-edge my-2"/>
+}
+
+// blockCalendarEvents renders a lazy-loaded calendar events section for this entity.
+// Only renders when the calendar addon is enabled for the campaign. Uses the same
+// HTMX pattern as the hardcoded section at the bottom of the page, but can be
+// positioned anywhere in the entity type layout.
+templ blockCalendarEvents(cc *campaigns.CampaignContext, entity *Entity) {
+	if layouts.IsAddonEnabled(ctx, "calendar") {
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendar/entity-events/%s", cc.Campaign.ID, entity.ID) }
+			hx-trigger="load"
+			hx-swap="innerHTML"
+		></div>
+	}
 }
 
 // blockChildren renders a sub-pages section showing direct children of this entity,

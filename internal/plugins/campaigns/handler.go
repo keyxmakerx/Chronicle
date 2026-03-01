@@ -218,7 +218,7 @@ func (h *Handler) Create(c echo.Context) error {
 func (h *Handler) Show(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	// Check for pending transfer to show banner.
@@ -241,7 +241,7 @@ func (h *Handler) Show(c echo.Context) error {
 func (h *Handler) EditForm(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
@@ -250,7 +250,7 @@ func (h *Handler) EditForm(c echo.Context) error {
 func (h *Handler) Update(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	var req UpdateCampaignRequest
@@ -292,7 +292,7 @@ func (h *Handler) Update(c echo.Context) error {
 func (h *Handler) Delete(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	if err := h.service.Delete(c.Request().Context(), cc.Campaign.ID); err != nil {
@@ -312,7 +312,7 @@ func (h *Handler) Delete(c echo.Context) error {
 func (h *Handler) Settings(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
@@ -334,7 +334,7 @@ func (h *Handler) Settings(c echo.Context) error {
 func (h *Handler) Customize(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
@@ -355,7 +355,7 @@ func (h *Handler) Customize(c echo.Context) error {
 func (h *Handler) LayoutEditorFragment(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	etID, err := strconv.Atoi(c.Param("etid"))
@@ -364,7 +364,7 @@ func (h *Handler) LayoutEditorFragment(c echo.Context) error {
 	}
 
 	if h.layoutFetcher == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	et, err := h.layoutFetcher.GetEntityTypeForLayoutEditor(c.Request().Context(), etID)
@@ -387,7 +387,7 @@ func (h *Handler) LayoutEditorFragment(c echo.Context) error {
 func (h *Handler) GetSidebarConfig(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	cfg, err := h.service.GetSidebarConfig(c.Request().Context(), cc.Campaign.ID)
@@ -402,7 +402,7 @@ func (h *Handler) GetSidebarConfig(c echo.Context) error {
 func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	var req UpdateSidebarConfigRequest
@@ -431,7 +431,7 @@ func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
 func (h *Handler) GetDashboardLayout(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	layout, err := h.service.GetDashboardLayout(c.Request().Context(), cc.Campaign.ID)
@@ -446,7 +446,7 @@ func (h *Handler) GetDashboardLayout(c echo.Context) error {
 func (h *Handler) UpdateDashboardLayout(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	var layout DashboardLayout
@@ -466,7 +466,7 @@ func (h *Handler) UpdateDashboardLayout(c echo.Context) error {
 func (h *Handler) ResetDashboardLayout(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	if err := h.service.ResetDashboardLayout(c.Request().Context(), cc.Campaign.ID); err != nil {
@@ -544,7 +544,7 @@ func (h *Handler) ToggleViewAsPlayer(c echo.Context) error {
 func (h *Handler) Members(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	members, err := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
@@ -560,7 +560,7 @@ func (h *Handler) Members(c echo.Context) error {
 func (h *Handler) AddMember(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	var req AddMemberRequest
@@ -599,7 +599,7 @@ func (h *Handler) AddMember(c echo.Context) error {
 func (h *Handler) RemoveMember(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	targetUserID := c.Param("uid")
@@ -630,7 +630,7 @@ func (h *Handler) RemoveMember(c echo.Context) error {
 func (h *Handler) UpdateRole(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	targetUserID := c.Param("uid")
@@ -670,7 +670,7 @@ func (h *Handler) UpdateRole(c echo.Context) error {
 func (h *Handler) TransferForm(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
@@ -688,7 +688,7 @@ func (h *Handler) TransferForm(c echo.Context) error {
 func (h *Handler) Transfer(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	var req TransferOwnershipRequest
@@ -743,7 +743,7 @@ func (h *Handler) AcceptTransfer(c echo.Context) error {
 func (h *Handler) CancelTransfer(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	if err := h.service.CancelTransfer(c.Request().Context(), cc.Campaign.ID); err != nil {

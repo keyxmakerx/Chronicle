@@ -3,7 +3,7 @@
 // receives the category context and renders appropriate content.
 //
 // Block types: category_header, pinned_pages, entity_grid, text_block,
-// recent_pages, search_bar. Unknown block types are silently skipped.
+// recent_pages, search_bar, calendar_preview. Unknown types are silently skipped.
 
 package entities
 
@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // CategoryBlockSwitch dispatches a dashboard block to the appropriate render
@@ -30,6 +31,8 @@ templ CategoryBlockSwitch(cc *campaigns.CampaignContext, et *EntityType, block c
 			@catRecentPages(cc, entities, block.Config)
 		case "search_bar":
 			@catSearchBar(cc, et)
+		case "calendar_preview":
+			@catCalendarPreview(cc, block.Config)
 	}
 }
 
@@ -274,4 +277,53 @@ func catRelativeTime(t time.Time) string {
 	default:
 		return t.Format("Jan 2")
 	}
+}
+
+// catCalendarPreview renders a calendar upcoming-events card for category dashboards.
+// Uses the same HTMX lazy-load pattern as the campaign dashboard calendar block.
+// Only renders when the calendar addon is enabled for the campaign.
+templ catCalendarPreview(cc *campaigns.CampaignContext, config map[string]any) {
+	if layouts.IsAddonEnabled(ctx, "calendar") {
+		<div>
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+					<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
+				</h2>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					View calendar
+				</a>
+			</div>
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendar/upcoming?limit=%d", cc.Campaign.ID, catCalendarLimit(config)) }
+				hx-trigger="intersect once"
+				hx-swap="innerHTML"
+				class="card divide-y divide-edge min-h-[60px]"
+			>
+				<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+			</div>
+		</div>
+	}
+}
+
+// catCalendarLimit extracts the event limit from block config (default 5).
+func catCalendarLimit(config map[string]any) int {
+	limit := 5
+	if v, ok := config["limit"]; ok {
+		switch l := v.(type) {
+		case float64:
+			limit = int(l)
+		case int:
+			limit = l
+		}
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	return limit
 }

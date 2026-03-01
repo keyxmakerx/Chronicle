@@ -308,6 +308,23 @@ complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
 - **Files**: `entities/repository.go` (scanEntity), `app/app.go` (error handler),
   `entities/handler.go` (showCalendar gate), `entities/show.templ` (conditional render).
 
+### Calendar Block Support — COMPLETE
+- **Dashboard**: `calendar_preview` block already existed in dashboard editor palette.
+  Fixed route auth: moved `/calendar/upcoming` and `/calendar/entity-events/:eid` from
+  RequireAuth group to AllowPublicCampaignAccess group (matching `/calendar` and
+  `/calendar/timeline`). HTMX lazy-loads from the dashboard use OptionalAuth.
+- **Category dashboards**: Added `calendar_preview` block type to category block palette
+  (`categoryDashboardBlockTypes()`) and `CategoryBlockSwitch` renderer (`catCalendarPreview`).
+- **Entity pages**: Added `calendar` block type to template editor palette and
+  `entityBlockInner` renderer (`blockCalendarEvents`). Uses `layouts.IsAddonEnabled`
+  for addon gating. `layoutHasBlock` helper skips hardcoded bottom section when block
+  is placed in the layout to avoid duplicates.
+- **Customize page**: Added calendar settings info section to Extensions tab showing
+  where to add calendar blocks across the three layout editors.
+- **Files**: `calendar/routes.go`, `campaigns/customize.templ`, `entities/show.templ`,
+  `entities/category_blocks.templ`, `entities/entity_type_config.templ`,
+  `static/js/widgets/template_editor.js`.
+
 ### In Progress
 - Nothing currently in progress.
 
