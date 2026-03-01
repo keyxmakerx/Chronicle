@@ -361,23 +361,24 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 	}
 
 	var req struct {
-		Name           string  `json:"name"`
-		Description    *string `json:"description"`
-		EntityID       *string `json:"entity_id"`
-		Year           int     `json:"year"`
-		Month          int     `json:"month"`
-		Day            int     `json:"day"`
-		StartHour      *int    `json:"start_hour"`
-		StartMinute    *int    `json:"start_minute"`
-		EndYear        *int    `json:"end_year"`
-		EndMonth       *int    `json:"end_month"`
-		EndDay         *int    `json:"end_day"`
-		EndHour        *int    `json:"end_hour"`
-		EndMinute      *int    `json:"end_minute"`
-		IsRecurring    bool    `json:"is_recurring"`
-		RecurrenceType *string `json:"recurrence_type"`
-		Visibility     string  `json:"visibility"`
-		Category       *string `json:"category"`
+		Name            string  `json:"name"`
+		Description     *string `json:"description"`
+		DescriptionHTML *string `json:"description_html"`
+		EntityID        *string `json:"entity_id"`
+		Year            int     `json:"year"`
+		Month           int     `json:"month"`
+		Day             int     `json:"day"`
+		StartHour       *int    `json:"start_hour"`
+		StartMinute     *int    `json:"start_minute"`
+		EndYear         *int    `json:"end_year"`
+		EndMonth        *int    `json:"end_month"`
+		EndDay          *int    `json:"end_day"`
+		EndHour         *int    `json:"end_hour"`
+		EndMinute       *int    `json:"end_minute"`
+		IsRecurring     bool    `json:"is_recurring"`
+		RecurrenceType  *string `json:"recurrence_type"`
+		Visibility      string  `json:"visibility"`
+		Category        *string `json:"category"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
@@ -392,9 +393,10 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 	}
 
 	evt, err := h.svc.CreateEvent(ctx, cal.ID, CreateEventInput{
-		Name:           req.Name,
-		Description:    req.Description,
-		EntityID:       req.EntityID,
+		Name:            req.Name,
+		Description:     req.Description,
+		DescriptionHTML: req.DescriptionHTML,
+		EntityID:        req.EntityID,
 		Year:           req.Year,
 		Month:          req.Month,
 		Day:            req.Day,
@@ -447,32 +449,34 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 	}
 
 	var req struct {
-		Name           string  `json:"name"`
-		Description    *string `json:"description"`
-		EntityID       *string `json:"entity_id"`
-		Year           int     `json:"year"`
-		Month          int     `json:"month"`
-		Day            int     `json:"day"`
-		StartHour      *int    `json:"start_hour"`
-		StartMinute    *int    `json:"start_minute"`
-		EndYear        *int    `json:"end_year"`
-		EndMonth       *int    `json:"end_month"`
-		EndDay         *int    `json:"end_day"`
-		EndHour        *int    `json:"end_hour"`
-		EndMinute      *int    `json:"end_minute"`
-		IsRecurring    bool    `json:"is_recurring"`
-		RecurrenceType *string `json:"recurrence_type"`
-		Visibility     string  `json:"visibility"`
-		Category       *string `json:"category"`
+		Name            string  `json:"name"`
+		Description     *string `json:"description"`
+		DescriptionHTML *string `json:"description_html"`
+		EntityID        *string `json:"entity_id"`
+		Year            int     `json:"year"`
+		Month           int     `json:"month"`
+		Day             int     `json:"day"`
+		StartHour       *int    `json:"start_hour"`
+		StartMinute     *int    `json:"start_minute"`
+		EndYear         *int    `json:"end_year"`
+		EndMonth        *int    `json:"end_month"`
+		EndDay          *int    `json:"end_day"`
+		EndHour         *int    `json:"end_hour"`
+		EndMinute       *int    `json:"end_minute"`
+		IsRecurring     bool    `json:"is_recurring"`
+		RecurrenceType  *string `json:"recurrence_type"`
+		Visibility      string  `json:"visibility"`
+		Category        *string `json:"category"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 	}
 
 	return h.svc.UpdateEvent(ctx, eventID, UpdateEventInput{
-		Name:           req.Name,
-		Description:    req.Description,
-		EntityID:       req.EntityID,
+		Name:            req.Name,
+		Description:     req.Description,
+		DescriptionHTML: req.DescriptionHTML,
+		EntityID:        req.EntityID,
 		Year:           req.Year,
 		Month:          req.Month,
 		Day:            req.Day,

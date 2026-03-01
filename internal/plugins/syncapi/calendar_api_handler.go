@@ -150,9 +150,10 @@ func (h *CalendarAPIHandler) GetEvent(c echo.Context) error {
 
 // apiCreateEventRequest is the JSON body for creating a calendar event via the API.
 type apiCreateEventRequest struct {
-	Name           string  `json:"name"`
-	Description    *string `json:"description"`
-	EntityID       *string `json:"entity_id"`
+	Name            string  `json:"name"`
+	Description     *string `json:"description"`
+	DescriptionHTML *string `json:"description_html"`
+	EntityID        *string `json:"entity_id"`
 	Year           int     `json:"year"`
 	Month          int     `json:"month"`
 	Day            int     `json:"day"`
@@ -191,9 +192,10 @@ func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
 	}
 
 	evt, err := h.calendarSvc.CreateEvent(ctx, cal.ID, calendar.CreateEventInput{
-		Name:           req.Name,
-		Description:    req.Description,
-		EntityID:       req.EntityID,
+		Name:            req.Name,
+		Description:     req.Description,
+		DescriptionHTML: req.DescriptionHTML,
+		EntityID:        req.EntityID,
 		Year:           req.Year,
 		Month:          req.Month,
 		Day:            req.Day,
@@ -219,9 +221,10 @@ func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
 
 // apiUpdateEventRequest is the JSON body for updating a calendar event.
 type apiUpdateEventRequest struct {
-	Name           string  `json:"name"`
-	Description    *string `json:"description"`
-	EntityID       *string `json:"entity_id"`
+	Name            string  `json:"name"`
+	Description     *string `json:"description"`
+	DescriptionHTML *string `json:"description_html"`
+	EntityID        *string `json:"entity_id"`
 	Year           int     `json:"year"`
 	Month          int     `json:"month"`
 	Day            int     `json:"day"`
@@ -261,9 +264,10 @@ func (h *CalendarAPIHandler) UpdateEvent(c echo.Context) error {
 	}
 
 	if err := h.calendarSvc.UpdateEvent(ctx, eventID, calendar.UpdateEventInput{
-		Name:           req.Name,
-		Description:    req.Description,
-		EntityID:       req.EntityID,
+		Name:            req.Name,
+		Description:     req.Description,
+		DescriptionHTML: req.DescriptionHTML,
+		EntityID:        req.EntityID,
 		Year:           req.Year,
 		Month:          req.Month,
 		Day:            req.Day,

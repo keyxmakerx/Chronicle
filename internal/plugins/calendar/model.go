@@ -261,13 +261,16 @@ func (e *Era) ContainsYear(year int) bool {
 }
 
 // Event is a calendar entry on a specific date, optionally linked to an entity.
+// Description stores ProseMirror JSON for rich text editing; DescriptionHTML
+// stores pre-rendered sanitized HTML for display (same pattern as entity entries).
 type Event struct {
-	ID             string    `json:"id"`
-	CalendarID     string    `json:"calendar_id"`
-	EntityID       *string   `json:"entity_id,omitempty"`
-	Name           string    `json:"name"`
-	Description    *string   `json:"description,omitempty"`
-	Year           int       `json:"year"`
+	ID              string    `json:"id"`
+	CalendarID      string    `json:"calendar_id"`
+	EntityID        *string   `json:"entity_id,omitempty"`
+	Name            string    `json:"name"`
+	Description     *string   `json:"description,omitempty"`
+	DescriptionHTML *string   `json:"description_html,omitempty"`
+	Year            int       `json:"year"`
 	Month          int       `json:"month"`
 	Day            int       `json:"day"`
 	StartHour      *int      `json:"start_hour,omitempty"`
@@ -330,6 +333,27 @@ func (e *Event) IsMultiDay() bool {
 	return e.EndYear != nil && e.EndMonth != nil && e.EndDay != nil
 }
 
+// HasRichText returns true if this event has a rich text description (ProseMirror JSON
+// with pre-rendered HTML), as opposed to a legacy plain text description.
+func (e *Event) HasRichText() bool {
+	return e.DescriptionHTML != nil && *e.DescriptionHTML != ""
+}
+
+// PlainDescription returns a plain text version of the description for tooltips.
+// For rich text events, returns empty (tooltip should not show raw JSON).
+// For legacy plain text events, returns the description as-is.
+func (e *Event) PlainDescription() string {
+	if e.Description == nil || *e.Description == "" {
+		return ""
+	}
+	// If there's no HTML version, description is plain text (legacy).
+	if !e.HasRichText() {
+		return *e.Description
+	}
+	// Rich text event: description is ProseMirror JSON, not displayable as text.
+	return ""
+}
+
 // --- Request DTOs ---
 
 // CreateCalendarInput is the validated input for creating a calendar.
@@ -365,9 +389,10 @@ type UpdateCalendarInput struct {
 
 // CreateEventInput is the validated input for creating a calendar event.
 type CreateEventInput struct {
-	Name           string
-	Description    *string
-	EntityID       *string
+	Name            string
+	Description     *string
+	DescriptionHTML *string
+	EntityID        *string
 	Year           int
 	Month          int
 	Day            int
@@ -387,9 +412,10 @@ type CreateEventInput struct {
 
 // UpdateEventInput is the validated input for updating an event.
 type UpdateEventInput struct {
-	Name           string
-	Description    *string
-	EntityID       *string
+	Name            string
+	Description     *string
+	DescriptionHTML *string
+	EntityID        *string
 	Year           int
 	Month          int
 	Day            int

@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-01 -- Calendar Import/Export (Sprint 9). Added import support for 4 calendar
-formats: Chronicle native, Simple Calendar (Foundry VTT v1+v2), Calendaria (Foundry VTT),
-and Fantasy-Calendar.com. Auto-detection via top-level JSON keys. Export in Chronicle's
-native format with optional events. Setup page import card, settings page export button.
-Sync API endpoints for external tool integration.
+2026-03-01 -- Rich text event descriptions with @mentions (Sprint 10). Added TipTap
+rich text editor to event create/edit modal with @mention entity search support. Dual
+storage: ProseMirror JSON in `description`, sanitized HTML in `description_html` (new
+column via migration 000034). Timeline renders rich HTML descriptions. Legacy plain text
+events handled gracefully. Calendar V2 plan (Sprints 5-10) is now fully complete.
 
 ## Current Phase
 **Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit
@@ -453,6 +453,34 @@ complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
 - **calendar.templ**: Setup page import card now functional with file upload form
   (multipart, CSRF, supported formats list).
 - **calendar_settings.templ**: Export download button in settings header.
+
+### Rich Text Event Descriptions (Sprint 10) — COMPLETE
+- **Migration 000034**: `ALTER TABLE calendar_events ADD COLUMN description_html TEXT`
+- **model.go**: Added `DescriptionHTML *string` to Event struct and input DTOs.
+  Added `HasRichText()` and `PlainDescription()` helper methods.
+- **repository.go**: Updated eventCols, scanEvents, CreateEvent, UpdateEvent to
+  include description_html column.
+- **service.go**: Added `sanitize.HTML()` call in CreateEvent and UpdateEvent for
+  rich text HTML. Imported sanitize package.
+- **handler.go**: Both CreateEventAPI and UpdateEventAPI accept `description_html` in
+  JSON request bodies.
+- **syncapi/calendar_api_handler.go**: Both apiCreateEventRequest and
+  apiUpdateEventRequest accept `description_html`.
+- **export.go**: ExportEvent includes `description_html` for round-trip fidelity.
+- **calendar.templ**: Replaced textarea with inline TipTap editor in event modal.
+  Editor supports @mentions via Chronicle.MentionExtension. Editor initialized lazily
+  on modal open, content stored as ProseMirror JSON + rendered HTML. Modal widened to
+  max-w-lg. Timeline renders rich HTML via `templ.Raw()` with plain text fallback.
+  Tooltip uses PlainDescription() for clean display.
+
+### Calendar V2 Plan — FULLY COMPLETE
+All 6 sprints (5-10) are complete:
+- Sprint 5: Time System
+- Sprint 6: Calendar Modes + Timezone
+- Sprint 7: Session Scheduling + RSVP
+- Sprint 8: Eras, Weather & Setup Wizard
+- Sprint 9: Calendar Import/Export
+- Sprint 10: Rich Text Event Descriptions + @Mentions
 
 ### In Progress
 - Nothing currently in progress.

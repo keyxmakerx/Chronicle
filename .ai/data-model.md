@@ -414,14 +414,15 @@ User --< CampaignMember >-- Campaign
 | color | VARCHAR(20) | NOT NULL, DEFAULT '#6366f1' | |
 | sort_order | INT | NOT NULL, DEFAULT 0 | |
 
-### calendar_events (implemented -- migrations 000027, 000028, 000030)
+### calendar_events (implemented -- migrations 000027, 000028, 000030, 000034)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | VARCHAR(36) | PK | UUID |
 | calendar_id | VARCHAR(36) | FK -> calendars.id ON DELETE CASCADE | |
 | entity_id | VARCHAR(36) | NULL, FK -> entities.id ON DELETE SET NULL | |
 | name | VARCHAR(255) | NOT NULL | |
-| description | TEXT | NULL | |
+| description | TEXT | NULL | ProseMirror JSON (rich text) or plain text (legacy) |
+| description_html | TEXT | NULL | Pre-rendered sanitized HTML (added 000034) |
 | year | INT | NOT NULL | |
 | month | INT | NOT NULL | |
 | day | INT | NOT NULL | |
@@ -580,3 +581,4 @@ User --< CampaignMember >-- Campaign
 | 31 | 000031_calendar_mode_timezone | Calendar mode column (fantasy/reallife) + user timezone | 2026-03-01 |
 | 32 | 000032_sessions_plugin | Sessions, session_attendees, session_entities tables + addon | 2026-03-01 |
 | 33 | 000033_calendar_eras_weather | calendar_eras table + season weather_effect column | 2026-03-01 |
+| 34 | 000034_calendar_event_rich_text | Add description_html column to calendar_events | 2026-03-01 |

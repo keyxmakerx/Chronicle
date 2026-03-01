@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // generateID creates a random UUID v4 string.
@@ -279,13 +280,21 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID string, in
 		return nil, apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
 	}
 
+	// Sanitize HTML if provided (rich text descriptions from TipTap editor).
+	var descHTML *string
+	if input.DescriptionHTML != nil && *input.DescriptionHTML != "" {
+		sanitized := sanitize.HTML(*input.DescriptionHTML)
+		descHTML = &sanitized
+	}
+
 	evt := &Event{
-		ID:             generateID(),
-		CalendarID:     calendarID,
-		EntityID:       input.EntityID,
-		Name:           input.Name,
-		Description:    input.Description,
-		Year:           input.Year,
+		ID:              generateID(),
+		CalendarID:      calendarID,
+		EntityID:        input.EntityID,
+		Name:            input.Name,
+		Description:     input.Description,
+		DescriptionHTML: descHTML,
+		Year:            input.Year,
 		Month:          input.Month,
 		Day:            input.Day,
 		StartHour:      input.StartHour,
@@ -332,6 +341,13 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 
 	evt.Name = input.Name
 	evt.Description = input.Description
+	// Sanitize rich text HTML if provided.
+	if input.DescriptionHTML != nil && *input.DescriptionHTML != "" {
+		sanitized := sanitize.HTML(*input.DescriptionHTML)
+		evt.DescriptionHTML = &sanitized
+	} else {
+		evt.DescriptionHTML = input.DescriptionHTML
+	}
 	evt.EntityID = input.EntityID
 	evt.Year = input.Year
 	evt.Month = input.Month

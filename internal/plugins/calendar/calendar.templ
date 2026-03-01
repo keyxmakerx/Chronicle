@@ -418,6 +418,7 @@ templ dayCell(data CalendarViewData, day int) {
 					data-event-id={ evt.ID }
 					data-event-name={ evt.Name }
 					data-event-description={ derefStr(evt.Description) }
+					data-event-description-html={ derefStr(evt.DescriptionHTML) }
 					data-event-year={ strconv.Itoa(evt.Year) }
 					data-event-month={ strconv.Itoa(evt.Month) }
 					data-event-day={ strconv.Itoa(evt.Day) }
@@ -480,7 +481,7 @@ templ eventModal(data CalendarViewData) {
 		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
 		onclick="if(event.target===this)closeEventModal()"
 	>
-		<div class="card p-6 w-full max-w-md space-y-4">
+		<div class="card p-6 w-full max-w-lg space-y-4">
 			<div class="flex items-center justify-between">
 				<h2 id="evt-modal-title" class="text-lg font-semibold text-fg">New Event</h2>
 				<button class="text-fg-muted hover:text-fg" onclick="closeEventModal()">
@@ -495,7 +496,7 @@ templ eventModal(data CalendarViewData) {
 				</div>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Description</label>
-					<textarea name="description" id="evt-description" class="input w-full" rows="2" placeholder="Optional description"></textarea>
+					<div id="evt-description-editor" class="input w-full min-h-[80px] max-h-[200px] overflow-y-auto !p-0"></div>
 				</div>
 				<div class="grid grid-cols-3 gap-2">
 					<div>
@@ -616,6 +617,94 @@ templ eventModal(data CalendarViewData) {
 					var form = document.getElementById('event-form');
 					var campaignID = window.location.pathname.split('/')[2];
 
+					// --- TipTap rich text editor for event descriptions ---
+					var evtEditor = null;
+					var mentionExt = null;
+
+					function initEventEditor() {
+						if (evtEditor) return;
+						if (!window.TipTap) return;
+						var el = document.getElementById('evt-description-editor');
+						if (!el) return;
+
+						var extensions = [
+							TipTap.StarterKit.configure({
+								heading: false,
+								link: false,
+								underline: false,
+							}),
+							TipTap.Placeholder.configure({
+								placeholder: 'Optional description (supports @mentions)...',
+							}),
+							TipTap.Link.configure({
+								openOnClick: false,
+								HTMLAttributes: { class: 'text-accent hover:underline' },
+							}),
+							TipTap.Underline,
+						];
+
+						if (window.Chronicle && Chronicle.SecretMark) {
+							extensions.push(Chronicle.SecretMark);
+						}
+
+						var mentionExtRef = { current: null };
+						var editorProps = {
+							attributes: {
+								class: 'prose prose-sm max-w-none focus:outline-none min-h-[60px] p-2 text-fg-body text-sm',
+							},
+						};
+
+						if (campaignID && window.Chronicle && Chronicle.MentionExtension) {
+							editorProps.handleKeyDown = function(view, event) {
+								if (mentionExtRef.current) return mentionExtRef.current.onKeyDown(null, event);
+								return false;
+							};
+						}
+
+						evtEditor = new TipTap.Editor({
+							element: el,
+							extensions: extensions,
+							editable: true,
+							content: '',
+							editorProps: editorProps,
+						});
+
+						if (campaignID && window.Chronicle && Chronicle.MentionExtension) {
+							mentionExt = Chronicle.MentionExtension({ campaignId: campaignID });
+							mentionExt.onCreate(evtEditor);
+							mentionExtRef.current = mentionExt;
+							evtEditor.on('update', function() { mentionExt.onUpdate(evtEditor); });
+							evtEditor.on('selectionUpdate', function() { mentionExt.onUpdate(evtEditor); });
+						}
+					}
+
+					function setEditorContent(data) {
+						if (!evtEditor) return;
+						if (!data) { evtEditor.commands.setContent(''); return; }
+						try {
+							var parsed = JSON.parse(data);
+							if (parsed && parsed.type === 'doc') {
+								evtEditor.commands.setContent(parsed);
+							} else {
+								evtEditor.commands.setContent(data);
+							}
+						} catch (e) {
+							// Plain text fallback (legacy events).
+							evtEditor.commands.setContent('<p>' + data.replace(/\n/g, '</p><p>') + '</p>');
+						}
+					}
+
+					function getEditorDescription() {
+						if (!evtEditor) return { description: null, description_html: null };
+						var html = evtEditor.getHTML();
+						if (!html || html === '<p></p>') return { description: null, description_html: null };
+						var json = evtEditor.getJSON();
+						return {
+							description: JSON.stringify(json),
+							description_html: html,
+						};
+					}
+
 					function getHeaders() {
 						var csrfMeta = document.querySelector('meta[name="csrf-token"]');
 						var headers = { 'Content-Type': 'application/json' };
@@ -640,8 +729,12 @@ templ eventModal(data CalendarViewData) {
 							is_recurring: fd.has('is_recurring'),
 							recurrence_type: fd.has('is_recurring') ? 'yearly' : null,
 						};
-						var desc = fd.get('description');
-						if (desc) body.description = desc;
+						// Rich text description from TipTap editor.
+						var desc = getEditorDescription();
+						if (desc.description) {
+							body.description = desc.description;
+							body.description_html = desc.description_html;
+						}
 						var cat = fd.get('category');
 						if (cat) body.category = cat;
 						var eid = fd.get('entity_id');
@@ -685,6 +778,7 @@ templ eventModal(data CalendarViewData) {
 					// Open modal in create mode with a pre-set date.
 					window.openEventModal = function(year, month, day) {
 						resetEventModal();
+						initEventEditor();
 						document.getElementById('evt-year').value = year;
 						document.getElementById('evt-month').value = month;
 						document.getElementById('evt-day').value = day;
@@ -694,9 +788,11 @@ templ eventModal(data CalendarViewData) {
 					// Open modal in edit mode, reading data-event-* attributes from the chip.
 					window.openEditEventModal = function(el) {
 						resetEventModal();
+						initEventEditor();
 						document.getElementById('evt-id').value = el.dataset.eventId;
 						document.getElementById('evt-name').value = el.dataset.eventName || '';
-						document.getElementById('evt-description').value = el.dataset.eventDescription || '';
+						// Load description into TipTap editor.
+						setEditorContent(el.dataset.eventDescription || '');
 						document.getElementById('evt-year').value = el.dataset.eventYear || '';
 						document.getElementById('evt-month').value = el.dataset.eventMonth || '';
 						document.getElementById('evt-day').value = el.dataset.eventDay || '';
@@ -735,6 +831,8 @@ templ eventModal(data CalendarViewData) {
 					function resetEventModal() {
 						form.reset();
 						document.getElementById('evt-id').value = '';
+						// Clear TipTap editor content.
+						if (evtEditor) evtEditor.commands.setContent('');
 						// Clear time fields.
 						document.getElementById('evt-start-hour').value = '';
 						document.getElementById('evt-start-minute').value = '';
@@ -912,8 +1010,8 @@ func eventTooltip(evt Event) string {
 	if evt.EntityName != "" {
 		tip += " — " + evt.EntityName
 	}
-	if evt.Description != nil && *evt.Description != "" {
-		tip += "\n" + *evt.Description
+	if plain := evt.PlainDescription(); plain != "" {
+		tip += "\n" + plain
 	}
 	if evt.IsRecurring {
 		tip += " [recurring]"
@@ -1119,7 +1217,11 @@ templ timelineEvent(cc *campaigns.CampaignContext, cal *Calendar, evt Event) {
 						<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">DM only</span>
 					}
 				</div>
-				if evt.Description != nil && *evt.Description != "" {
+				if evt.HasRichText() {
+					<div class="prose prose-sm max-w-none text-xs text-fg-secondary mt-1">
+						@templ.Raw(*evt.DescriptionHTML)
+					</div>
+				} else if evt.Description != nil && *evt.Description != "" {
 					<p class="text-xs text-fg-secondary mt-1">{ *evt.Description }</p>
 				}
 				if evt.EntityID != nil && evt.EntityName != "" {

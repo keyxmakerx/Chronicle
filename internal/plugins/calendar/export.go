@@ -83,9 +83,10 @@ type ExportEra struct {
 
 // ExportEvent is a calendar event for export.
 type ExportEvent struct {
-	Name           string  `json:"name"`
-	Description    *string `json:"description,omitempty"`
-	Year           int     `json:"year"`
+	Name            string  `json:"name"`
+	Description     *string `json:"description,omitempty"`
+	DescriptionHTML *string `json:"description_html,omitempty"`
+	Year            int     `json:"year"`
 	Month          int     `json:"month"`
 	Day            int     `json:"day"`
 	StartHour      *int    `json:"start_hour,omitempty"`
@@ -184,9 +185,10 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 	if includeEvents && len(events) > 0 {
 		for _, evt := range events {
 			export.Events = append(export.Events, ExportEvent{
-				Name:           evt.Name,
-				Description:    evt.Description,
-				Year:           evt.Year,
+				Name:            evt.Name,
+				Description:     evt.Description,
+				DescriptionHTML: evt.DescriptionHTML,
+				Year:            evt.Year,
 				Month:          evt.Month,
 				Day:            evt.Day,
 				StartHour:      evt.StartHour,
