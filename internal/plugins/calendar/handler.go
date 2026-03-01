@@ -2,23 +2,33 @@ package calendar
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // Handler processes HTTP requests for the calendar plugin.
 type Handler struct {
-	svc CalendarService
+	svc      CalendarService
+	addonSvc addons.AddonService
 }
 
 // NewHandler creates a new calendar Handler.
 func NewHandler(svc CalendarService) *Handler {
 	return &Handler{svc: svc}
+}
+
+// SetAddonService sets the addon service for auto-enabling the calendar addon
+// when a calendar is created. Called after all plugins are wired.
+func (h *Handler) SetAddonService(svc addons.AddonService) {
+	h.addonSvc = svc
 }
 
 // Show renders the calendar page (monthly grid view).
@@ -138,6 +148,18 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 	}
 	if err := h.svc.SetWeekdays(ctx, cal.ID, defaultWeekdays); err != nil {
 		return err
+	}
+
+	// Auto-enable the calendar addon for this campaign so dashboard/entity
+	// blocks render immediately without manual extension toggling.
+	if h.addonSvc != nil {
+		addon, aErr := h.addonSvc.GetBySlug(ctx, "calendar")
+		if aErr == nil && addon != nil {
+			userID := auth.GetUserID(c)
+			if eErr := h.addonSvc.EnableForCampaign(ctx, cc.Campaign.ID, addon.ID, userID); eErr != nil {
+				slog.Warn("auto-enable calendar addon failed", slog.Any("error", eErr))
+			}
+		}
 	}
 
 	return c.Redirect(http.StatusSeeOther,

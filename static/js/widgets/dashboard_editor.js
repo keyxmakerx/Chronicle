@@ -597,6 +597,18 @@
           }
           break;
 
+        case 'calendar_preview':
+          var calLimit = prompt('Number of upcoming events to show (1-20):', cfg.limit || '5');
+          if (calLimit !== null) {
+            var cl = parseInt(calLimit);
+            if (cl >= 1 && cl <= 20) {
+              block.config.limit = cl;
+              this.dirty = true;
+              this.render();
+            }
+          }
+          break;
+
         default:
           Chronicle.notify('This block has no configurable options', 'info');
           break;

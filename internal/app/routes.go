@@ -323,6 +323,7 @@ func (a *App) RegisterRoutes() {
 	calendarRepo := calendar.NewCalendarRepository(a.DB)
 	calendarService := calendar.NewCalendarService(calendarRepo)
 	calendarHandler := calendar.NewHandler(calendarService)
+	calendarHandler.SetAddonService(addonService)
 	calendar.RegisterRoutes(e, calendarHandler, campaignService, authService)
 
 	// Maps plugin: interactive maps with Leaflet.js, pin markers, entity linking.
