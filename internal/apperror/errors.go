@@ -7,6 +7,7 @@
 package apperror
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -86,6 +87,16 @@ func NewConflict(message string) *AppError {
 		Type:    "conflict",
 		Message: message,
 	}
+}
+
+// errMissingContext is the shared internal error for nil precondition checks.
+var errMissingContext = errors.New("missing required context")
+
+// NewMissingContext creates a 500 error for handler nil-context guards
+// (e.g. campaign context not set, dependency not wired). Provides a
+// meaningful Internal error for logging instead of nil.
+func NewMissingContext() *AppError {
+	return NewInternal(errMissingContext)
 }
 
 // NewInternal creates a 500 Internal Server Error. The real error is stored

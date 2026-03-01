@@ -29,7 +29,7 @@ func NewHandler(service RelationService) *Handler {
 func (h *Handler) ListRelations(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -55,7 +55,7 @@ func (h *Handler) ListRelations(c echo.Context) error {
 func (h *Handler) CreateRelation(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	sourceEntityID := c.Param("eid")
@@ -95,7 +95,7 @@ func (h *Handler) CreateRelation(c echo.Context) error {
 func (h *Handler) DeleteRelation(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	relationID, err := strconv.Atoi(c.Param("rid"))

@@ -88,10 +88,14 @@
         el.appendChild(statusEl);
       }
 
-      // Configure TipTap extensions.
+      // Configure TipTap extensions. StarterKit is configured to exclude Link
+      // and Underline so we can provide our own configured versions without
+      // triggering "Duplicate extension names" warnings.
       var extensions = [
         StarterKit.configure({
           heading: { levels: [1, 2, 3] },
+          link: false,
+          underline: false,
         }),
         Placeholder.configure({
           placeholder: 'Begin writing your entry...',

@@ -310,7 +310,7 @@ func (h *Handler) LeaveCampaign(c echo.Context) error {
 // lists for the dropdown selectors.
 func (h *Handler) Storage(c echo.Context) error {
 	if h.mediaRepo == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	ctx := c.Request().Context()
@@ -367,7 +367,7 @@ func (h *Handler) Storage(c echo.Context) error {
 // DeleteMedia deletes a media file (DELETE /admin/media/:fileID).
 func (h *Handler) DeleteMedia(c echo.Context) error {
 	if h.mediaService == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	fileID := c.Param("fileID")
@@ -410,7 +410,7 @@ func (h *Handler) Plugins(c echo.Context) error {
 // Security renders the security dashboard page (GET /admin/security).
 func (h *Handler) Security(c echo.Context) error {
 	if h.securityService == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	ctx := c.Request().Context()
@@ -448,7 +448,7 @@ func (h *Handler) Security(c echo.Context) error {
 // TerminateSession destroys a specific session (DELETE /admin/security/sessions/:token).
 func (h *Handler) TerminateSession(c echo.Context) error {
 	if h.securityService == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	token := c.Param("token")
@@ -476,7 +476,7 @@ func (h *Handler) TerminateSession(c echo.Context) error {
 // ForceLogoutUser destroys all sessions for a user (POST /admin/security/users/:id/force-logout).
 func (h *Handler) ForceLogoutUser(c echo.Context) error {
 	if h.securityService == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	targetID := c.Param("id")
@@ -507,7 +507,7 @@ func (h *Handler) ForceLogoutUser(c echo.Context) error {
 // DisableUser disables a user account (PUT /admin/security/users/:id/disable).
 func (h *Handler) DisableUser(c echo.Context) error {
 	if h.securityService == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	targetID := c.Param("id")
@@ -540,7 +540,7 @@ func (h *Handler) DisableUser(c echo.Context) error {
 // EnableUser re-enables a disabled user account (PUT /admin/security/users/:id/enable).
 func (h *Handler) EnableUser(c echo.Context) error {
 	if h.securityService == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	targetID := c.Param("id")

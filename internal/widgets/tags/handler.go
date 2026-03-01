@@ -53,7 +53,7 @@ func (h *Handler) logAudit(c echo.Context, campaignID, action, tagName string) {
 func (h *Handler) ListTags(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	tags, err := h.service.ListByCampaign(c.Request().Context(), cc.Campaign.ID)
@@ -73,7 +73,7 @@ func (h *Handler) ListTags(c echo.Context) error {
 func (h *Handler) CreateTag(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	var req CreateTagRequest
@@ -95,7 +95,7 @@ func (h *Handler) CreateTag(c echo.Context) error {
 func (h *Handler) UpdateTag(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	tagID, err := strconv.Atoi(c.Param("tagId"))
@@ -129,7 +129,7 @@ func (h *Handler) UpdateTag(c echo.Context) error {
 func (h *Handler) DeleteTag(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	tagID, err := strconv.Atoi(c.Param("tagId"))
@@ -162,7 +162,7 @@ func (h *Handler) DeleteTag(c echo.Context) error {
 func (h *Handler) SetEntityTags(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")
@@ -196,7 +196,7 @@ func (h *Handler) SetEntityTags(c echo.Context) error {
 func (h *Handler) GetEntityTags(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 
 	entityID := c.Param("eid")

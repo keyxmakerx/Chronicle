@@ -29,7 +29,7 @@ func NewHandler(service NoteService) *Handler {
 func (h *Handler) List(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
 
@@ -64,7 +64,7 @@ func (h *Handler) List(c echo.Context) error {
 func (h *Handler) Create(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
 
@@ -86,7 +86,7 @@ func (h *Handler) Create(c echo.Context) error {
 func (h *Handler) Update(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
@@ -123,7 +123,7 @@ func (h *Handler) Update(c echo.Context) error {
 func (h *Handler) Delete(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
@@ -147,7 +147,7 @@ func (h *Handler) Delete(c echo.Context) error {
 func (h *Handler) ToggleCheck(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
@@ -177,7 +177,7 @@ func (h *Handler) ToggleCheck(c echo.Context) error {
 func (h *Handler) Lock(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
@@ -201,7 +201,7 @@ func (h *Handler) Lock(c echo.Context) error {
 func (h *Handler) Unlock(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
@@ -224,7 +224,7 @@ func (h *Handler) Unlock(c echo.Context) error {
 func (h *Handler) Heartbeat(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
@@ -248,7 +248,7 @@ func (h *Handler) Heartbeat(c echo.Context) error {
 func (h *Handler) ForceUnlock(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	noteID := c.Param("noteId")
 
@@ -266,7 +266,7 @@ func (h *Handler) ForceUnlock(c echo.Context) error {
 func (h *Handler) ListVersions(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
@@ -293,7 +293,7 @@ func (h *Handler) ListVersions(c echo.Context) error {
 func (h *Handler) GetVersion(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
@@ -319,7 +319,7 @@ func (h *Handler) GetVersion(c echo.Context) error {
 func (h *Handler) RestoreVersion(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewMissingContext()
 	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
