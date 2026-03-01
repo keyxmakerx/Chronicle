@@ -240,7 +240,7 @@ func (h *Handler) Create(c echo.Context) error {
 func (h *Handler) Show(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewInternal(fmt.Errorf("campaign context is nil for entity show"))
 	}
 
 	entityID := c.Param("eid")
@@ -261,7 +261,7 @@ func (h *Handler) Show(c echo.Context) error {
 
 	entityType, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
 	if err != nil {
-		return apperror.NewInternal(nil)
+		return apperror.NewInternal(fmt.Errorf("get entity type %d: %w", entity.EntityTypeID, err))
 	}
 
 	// Fetch ancestor chain for breadcrumbs, children for sub-page listing,
