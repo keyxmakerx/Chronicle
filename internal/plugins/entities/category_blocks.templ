@@ -12,7 +12,6 @@ import (
 	"sort"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // CategoryBlockSwitch dispatches a dashboard block to the appropriate render
@@ -281,31 +280,30 @@ func catRelativeTime(t time.Time) string {
 
 // catCalendarPreview renders a calendar upcoming-events card for category dashboards.
 // Uses the same HTMX lazy-load pattern as the campaign dashboard calendar block.
-// Only renders when the calendar addon is enabled for the campaign.
+// The block is only present if the user explicitly added it to the layout;
+// the HTMX endpoint handles the no-calendar case gracefully.
 templ catCalendarPreview(cc *campaigns.CampaignContext, config map[string]any) {
-	if layouts.IsAddonEnabled(ctx, "calendar") {
-		<div>
-			<div class="flex items-center justify-between mb-3">
-				<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-					<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
-				</h2>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
-					class="text-xs text-accent hover:underline"
-				>
-					View calendar
-				</a>
-			</div>
-			<div
-				hx-get={ fmt.Sprintf("/campaigns/%s/calendar/upcoming?limit=%d", cc.Campaign.ID, catCalendarLimit(config)) }
-				hx-trigger="intersect once"
-				hx-swap="innerHTML"
-				class="card divide-y divide-edge min-h-[60px]"
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
 			>
-				<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
-			</div>
+				View calendar
+			</a>
 		</div>
-	}
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendar/upcoming?limit=%d", cc.Campaign.ID, catCalendarLimit(config)) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card divide-y divide-edge min-h-[60px]"
+		>
+			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+		</div>
+	</div>
 }
 
 // catCalendarLimit extracts the event limit from block config (default 5).

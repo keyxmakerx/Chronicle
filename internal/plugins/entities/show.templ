@@ -366,17 +366,14 @@ templ blockDivider() {
 }
 
 // blockCalendarEvents renders a lazy-loaded calendar events section for this entity.
-// Only renders when the calendar addon is enabled for the campaign. Uses the same
-// HTMX pattern as the hardcoded section at the bottom of the page, but can be
-// positioned anywhere in the entity type layout.
+// The block is only present if the user explicitly added it to the layout;
+// the HTMX endpoint handles the no-calendar case gracefully (returns NoContent).
 templ blockCalendarEvents(cc *campaigns.CampaignContext, entity *Entity) {
-	if layouts.IsAddonEnabled(ctx, "calendar") {
-		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendar/entity-events/%s", cc.Campaign.ID, entity.ID) }
-			hx-trigger="load"
-			hx-swap="innerHTML"
-		></div>
-	}
+	<div
+		hx-get={ fmt.Sprintf("/campaigns/%s/calendar/entity-events/%s", cc.Campaign.ID, entity.ID) }
+		hx-trigger="load"
+		hx-swap="innerHTML"
+	></div>
 }
 
 // blockChildren renders a sub-pages section showing direct children of this entity,
