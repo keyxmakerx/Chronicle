@@ -39,17 +39,16 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/calendar/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/calendar/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// Entity-linked events fragment (Player+ — loaded on entity show pages).
-	cg.GET("/calendar/entity-events/:eid", h.EntityEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
-
-	// Upcoming events fragment (Player+ — loaded by dashboard block).
-	cg.GET("/calendar/upcoming", h.UpcomingEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
-
-	// Public-capable views: calendar grid + timeline viewable by players and public campaigns.
+	// Public-capable views: calendar grid, timeline, upcoming events, and
+	// entity-event fragments are viewable by players and public campaigns.
+	// These must use AllowPublicCampaignAccess so HTMX lazy-loads from
+	// the dashboard and entity pages (which use OptionalAuth) work correctly.
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 	)
 	pub.GET("/calendar", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/calendar/timeline", h.ShowTimeline, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendar/upcoming", h.UpcomingEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendar/entity-events/:eid", h.EntityEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
 }

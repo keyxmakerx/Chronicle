@@ -126,7 +126,7 @@ func jsEsc(s string) string {
 
 // categoryDashboardBlockTypes returns the block palette JSON for category dashboards.
 func categoryDashboardBlockTypes() string {
-	return `[{"type":"category_header","label":"Category Header","icon":"fa-heading","desc":"Category name, icon & description"},{"type":"pinned_pages","label":"Pinned Pages","icon":"fa-thumbtack","desc":"Pinned entity cards"},{"type":"entity_grid","label":"Entity Grid","icon":"fa-grid-2","desc":"All entities as card grid"},{"type":"recent_pages","label":"Recent Pages","icon":"fa-clock","desc":"Recently updated entities"},{"type":"text_block","label":"Text Block","icon":"fa-align-left","desc":"Custom rich text / HTML"},{"type":"search_bar","label":"Search Bar","icon":"fa-magnifying-glass","desc":"Search within this category"}]`
+	return `[{"type":"category_header","label":"Category Header","icon":"fa-heading","desc":"Category name, icon & description"},{"type":"pinned_pages","label":"Pinned Pages","icon":"fa-thumbtack","desc":"Pinned entity cards"},{"type":"entity_grid","label":"Entity Grid","icon":"fa-grid-2","desc":"All entities as card grid"},{"type":"recent_pages","label":"Recent Pages","icon":"fa-clock","desc":"Recently updated entities"},{"type":"text_block","label":"Text Block","icon":"fa-align-left","desc":"Custom rich text / HTML"},{"type":"search_bar","label":"Search Bar","icon":"fa-magnifying-glass","desc":"Search within this category"},{"type":"calendar_preview","label":"Calendar","icon":"fa-calendar-days","desc":"Upcoming calendar events"}]`
 }
 
 // catDescJS returns a JS-safe quoted string for initializing Alpine.js x-data.
