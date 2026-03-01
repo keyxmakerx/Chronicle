@@ -334,7 +334,7 @@ User --< CampaignMember >-- Campaign
 | details | JSON | NULL | Flexible metadata |
 | created_at | DATETIME | NOT NULL | |
 
-### calendars (implemented -- migrations 000027, 000028)
+### calendars (implemented -- migrations 000027, 000028, 000030)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | VARCHAR(36) | PK | UUID |
@@ -345,6 +345,11 @@ User --< CampaignMember >-- Campaign
 | current_year | INT | NOT NULL, DEFAULT 1 | In-game year |
 | current_month | INT | NOT NULL, DEFAULT 1 | In-game month |
 | current_day | INT | NOT NULL, DEFAULT 1 | In-game day |
+| hours_per_day | INT | NOT NULL, DEFAULT 24 | Configurable time system (added 000030) |
+| minutes_per_hour | INT | NOT NULL, DEFAULT 60 | Configurable time system (added 000030) |
+| seconds_per_minute | INT | NOT NULL, DEFAULT 60 | Configurable time system (added 000030) |
+| current_hour | INT | NOT NULL, DEFAULT 0 | In-game hour (added 000030) |
+| current_minute | INT | NOT NULL, DEFAULT 0 | In-game minute (added 000030) |
 | leap_year_every | INT | NOT NULL, DEFAULT 0 | 0 = no leap years (added 000028) |
 | leap_year_offset | INT | NOT NULL, DEFAULT 0 | Offset for calculation (added 000028) |
 | created_at | DATETIME | NOT NULL | |
@@ -392,7 +397,7 @@ User --< CampaignMember >-- Campaign
 | description | TEXT | NULL | |
 | color | VARCHAR(7) | NOT NULL, DEFAULT '#6b7280' | Visual indicator (added 000028) |
 
-### calendar_events (implemented -- migrations 000027, 000028)
+### calendar_events (implemented -- migrations 000027, 000028, 000030)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | VARCHAR(36) | PK | UUID |
@@ -403,9 +408,13 @@ User --< CampaignMember >-- Campaign
 | year | INT | NOT NULL | |
 | month | INT | NOT NULL | |
 | day | INT | NOT NULL | |
+| start_hour | INT | NULL | Event start hour (added 000030) |
+| start_minute | INT | NULL | Event start minute (added 000030) |
 | end_year | INT | NULL | Multi-day event end (added 000028) |
 | end_month | INT | NULL | (added 000028) |
 | end_day | INT | NULL | (added 000028) |
+| end_hour | INT | NULL | Event end hour (added 000030) |
+| end_minute | INT | NULL | Event end minute (added 000030) |
 | is_recurring | TINYINT(1) | NOT NULL, DEFAULT 0 | |
 | recurrence_type | VARCHAR(20) | NULL | yearly, monthly |
 | visibility | VARCHAR(20) | NOT NULL, DEFAULT 'everyone' | |
@@ -508,3 +517,4 @@ User --< CampaignMember >-- Campaign
 | 27 | 000027_calendar_plugin | Calendar tables (calendars, months, weekdays, moons, seasons, events) + addon | 2026-02-25 |
 | 28 | 000028_calendar_v2_device_fingerprint | Leap years, event end dates, season colors, event categories, device fingerprint on api_keys | 2026-02-25 |
 | 29 | 000029_maps_plugin | Maps + map_markers tables + addon registration | 2026-02-28 |
+| 30 | 000030_calendar_time_system | Time system on calendars (hours/min/sec config, current time) + event times | 2026-03-01 |
