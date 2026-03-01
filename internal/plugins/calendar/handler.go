@@ -178,28 +178,38 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 	}
 
 	var req struct {
-		Name           string  `json:"name"`
-		Description    *string `json:"description"`
-		EpochName      *string `json:"epoch_name"`
-		CurrentYear    int     `json:"current_year"`
-		CurrentMonth   int     `json:"current_month"`
-		CurrentDay     int     `json:"current_day"`
-		LeapYearEvery  int     `json:"leap_year_every"`
-		LeapYearOffset int     `json:"leap_year_offset"`
+		Name             string  `json:"name"`
+		Description      *string `json:"description"`
+		EpochName        *string `json:"epoch_name"`
+		CurrentYear      int     `json:"current_year"`
+		CurrentMonth     int     `json:"current_month"`
+		CurrentDay       int     `json:"current_day"`
+		CurrentHour      int     `json:"current_hour"`
+		CurrentMinute    int     `json:"current_minute"`
+		HoursPerDay      int     `json:"hours_per_day"`
+		MinutesPerHour   int     `json:"minutes_per_hour"`
+		SecondsPerMinute int     `json:"seconds_per_minute"`
+		LeapYearEvery    int     `json:"leap_year_every"`
+		LeapYearOffset   int     `json:"leap_year_offset"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 	}
 
 	return h.svc.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
-		Name:           req.Name,
-		Description:    req.Description,
-		EpochName:      req.EpochName,
-		CurrentYear:    req.CurrentYear,
-		CurrentMonth:   req.CurrentMonth,
-		CurrentDay:     req.CurrentDay,
-		LeapYearEvery:  req.LeapYearEvery,
-		LeapYearOffset: req.LeapYearOffset,
+		Name:             req.Name,
+		Description:      req.Description,
+		EpochName:        req.EpochName,
+		CurrentYear:      req.CurrentYear,
+		CurrentMonth:     req.CurrentMonth,
+		CurrentDay:       req.CurrentDay,
+		CurrentHour:      req.CurrentHour,
+		CurrentMinute:    req.CurrentMinute,
+		HoursPerDay:      req.HoursPerDay,
+		MinutesPerHour:   req.MinutesPerHour,
+		SecondsPerMinute: req.SecondsPerMinute,
+		LeapYearEvery:    req.LeapYearEvery,
+		LeapYearOffset:   req.LeapYearOffset,
 	})
 }
 
@@ -278,9 +288,13 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		Year           int     `json:"year"`
 		Month          int     `json:"month"`
 		Day            int     `json:"day"`
+		StartHour      *int    `json:"start_hour"`
+		StartMinute    *int    `json:"start_minute"`
 		EndYear        *int    `json:"end_year"`
 		EndMonth       *int    `json:"end_month"`
 		EndDay         *int    `json:"end_day"`
+		EndHour        *int    `json:"end_hour"`
+		EndMinute      *int    `json:"end_minute"`
 		IsRecurring    bool    `json:"is_recurring"`
 		RecurrenceType *string `json:"recurrence_type"`
 		Visibility     string  `json:"visibility"`
@@ -305,9 +319,13 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		Year:           req.Year,
 		Month:          req.Month,
 		Day:            req.Day,
+		StartHour:      req.StartHour,
+		StartMinute:    req.StartMinute,
 		EndYear:        req.EndYear,
 		EndMonth:       req.EndMonth,
 		EndDay:         req.EndDay,
+		EndHour:        req.EndHour,
+		EndMinute:      req.EndMinute,
 		IsRecurring:    req.IsRecurring,
 		RecurrenceType: req.RecurrenceType,
 		Visibility:     req.Visibility,
@@ -356,9 +374,13 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		Year           int     `json:"year"`
 		Month          int     `json:"month"`
 		Day            int     `json:"day"`
+		StartHour      *int    `json:"start_hour"`
+		StartMinute    *int    `json:"start_minute"`
 		EndYear        *int    `json:"end_year"`
 		EndMonth       *int    `json:"end_month"`
 		EndDay         *int    `json:"end_day"`
+		EndHour        *int    `json:"end_hour"`
+		EndMinute      *int    `json:"end_minute"`
 		IsRecurring    bool    `json:"is_recurring"`
 		RecurrenceType *string `json:"recurrence_type"`
 		Visibility     string  `json:"visibility"`
@@ -375,9 +397,13 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		Year:           req.Year,
 		Month:          req.Month,
 		Day:            req.Day,
+		StartHour:      req.StartHour,
+		StartMinute:    req.StartMinute,
 		EndYear:        req.EndYear,
 		EndMonth:       req.EndMonth,
 		EndDay:         req.EndDay,
+		EndHour:        req.EndHour,
+		EndMinute:      req.EndMinute,
 		IsRecurring:    req.IsRecurring,
 		RecurrenceType: req.RecurrenceType,
 		Visibility:     req.Visibility,
@@ -483,6 +509,38 @@ func (h *Handler) AdvanceDateAPI(c echo.Context) error {
 	}
 
 	return h.svc.AdvanceDate(ctx, cal.ID, req.Days)
+}
+
+// AdvanceTimeAPI moves the current time forward by hours and/or minutes,
+// rolling over into days as needed.
+// POST /campaigns/:id/calendar/advance-time
+func (h *Handler) AdvanceTimeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var req struct {
+		Hours   int `json:"hours"`
+		Minutes int `json:"minutes"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+	if req.Hours < 0 || req.Minutes < 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "hours and minutes must be non-negative")
+	}
+	if req.Hours == 0 && req.Minutes == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "must advance by at least 1 minute or 1 hour")
+	}
+	if req.Hours > 87600 { // ~10 years of 24-hour days
+		return echo.NewHTTPError(http.StatusBadRequest, "hours must be at most 87600")
+	}
+
+	return h.svc.AdvanceTime(ctx, cal.ID, req.Hours, req.Minutes)
 }
 
 // EntityEventsFragment returns a small HTMX fragment listing calendar events

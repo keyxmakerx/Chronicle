@@ -58,9 +58,11 @@ func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"year":  cal.CurrentYear,
-		"month": cal.CurrentMonth,
-		"day":   cal.CurrentDay,
+		"year":   cal.CurrentYear,
+		"month":  cal.CurrentMonth,
+		"day":    cal.CurrentDay,
+		"hour":   cal.CurrentHour,
+		"minute": cal.CurrentMinute,
 	})
 }
 
@@ -151,9 +153,13 @@ type apiCreateEventRequest struct {
 	Year           int     `json:"year"`
 	Month          int     `json:"month"`
 	Day            int     `json:"day"`
+	StartHour      *int    `json:"start_hour"`
+	StartMinute    *int    `json:"start_minute"`
 	EndYear        *int    `json:"end_year"`
 	EndMonth       *int    `json:"end_month"`
 	EndDay         *int    `json:"end_day"`
+	EndHour        *int    `json:"end_hour"`
+	EndMinute      *int    `json:"end_minute"`
 	IsRecurring    bool    `json:"is_recurring"`
 	RecurrenceType *string `json:"recurrence_type"`
 	Visibility     string  `json:"visibility"`
@@ -188,9 +194,13 @@ func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
 		Year:           req.Year,
 		Month:          req.Month,
 		Day:            req.Day,
+		StartHour:      req.StartHour,
+		StartMinute:    req.StartMinute,
 		EndYear:        req.EndYear,
 		EndMonth:       req.EndMonth,
 		EndDay:         req.EndDay,
+		EndHour:        req.EndHour,
+		EndMinute:      req.EndMinute,
 		IsRecurring:    req.IsRecurring,
 		RecurrenceType: req.RecurrenceType,
 		Visibility:     req.Visibility,
@@ -212,9 +222,13 @@ type apiUpdateEventRequest struct {
 	Year           int     `json:"year"`
 	Month          int     `json:"month"`
 	Day            int     `json:"day"`
+	StartHour      *int    `json:"start_hour"`
+	StartMinute    *int    `json:"start_minute"`
 	EndYear        *int    `json:"end_year"`
 	EndMonth       *int    `json:"end_month"`
 	EndDay         *int    `json:"end_day"`
+	EndHour        *int    `json:"end_hour"`
+	EndMinute      *int    `json:"end_minute"`
 	IsRecurring    bool    `json:"is_recurring"`
 	RecurrenceType *string `json:"recurrence_type"`
 	Visibility     string  `json:"visibility"`
@@ -250,9 +264,13 @@ func (h *CalendarAPIHandler) UpdateEvent(c echo.Context) error {
 		Year:           req.Year,
 		Month:          req.Month,
 		Day:            req.Day,
+		StartHour:      req.StartHour,
+		StartMinute:    req.StartMinute,
 		EndYear:        req.EndYear,
 		EndMonth:       req.EndMonth,
 		EndDay:         req.EndDay,
+		EndHour:        req.EndHour,
+		EndMinute:      req.EndMinute,
 		IsRecurring:    req.IsRecurring,
 		RecurrenceType: req.RecurrenceType,
 		Visibility:     req.Visibility,
@@ -329,6 +347,53 @@ func (h *CalendarAPIHandler) AdvanceDate(c echo.Context) error {
 		"year":   updatedCal.CurrentYear,
 		"month":  updatedCal.CurrentMonth,
 		"day":    updatedCal.CurrentDay,
+		"hour":   updatedCal.CurrentHour,
+		"minute": updatedCal.CurrentMinute,
+	})
+}
+
+// AdvanceTime moves the current time forward by hours and/or minutes.
+// POST /api/v1/campaigns/:id/calendar/advance-time
+func (h *CalendarAPIHandler) AdvanceTime(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var req struct {
+		Hours   int `json:"hours"`
+		Minutes int `json:"minutes"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if req.Hours < 0 || req.Minutes < 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "hours and minutes must be non-negative")
+	}
+	if req.Hours == 0 && req.Minutes == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "must advance by at least 1 minute or 1 hour")
+	}
+
+	if err := h.calendarSvc.AdvanceTime(ctx, cal.ID, req.Hours, req.Minutes); err != nil {
+		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+	}
+
+	// Return the updated date/time.
+	updatedCal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || updatedCal == nil {
+		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"status": "ok",
+		"year":   updatedCal.CurrentYear,
+		"month":  updatedCal.CurrentMonth,
+		"day":    updatedCal.CurrentDay,
+		"hour":   updatedCal.CurrentHour,
+		"minute": updatedCal.CurrentMinute,
 	})
 }
 
@@ -346,28 +411,38 @@ func (h *CalendarAPIHandler) UpdateCalendarSettings(c echo.Context) error {
 	}
 
 	var req struct {
-		Name           string  `json:"name"`
-		Description    *string `json:"description"`
-		EpochName      *string `json:"epoch_name"`
-		CurrentYear    int     `json:"current_year"`
-		CurrentMonth   int     `json:"current_month"`
-		CurrentDay     int     `json:"current_day"`
-		LeapYearEvery  int     `json:"leap_year_every"`
-		LeapYearOffset int     `json:"leap_year_offset"`
+		Name             string  `json:"name"`
+		Description      *string `json:"description"`
+		EpochName        *string `json:"epoch_name"`
+		CurrentYear      int     `json:"current_year"`
+		CurrentMonth     int     `json:"current_month"`
+		CurrentDay       int     `json:"current_day"`
+		CurrentHour      int     `json:"current_hour"`
+		CurrentMinute    int     `json:"current_minute"`
+		HoursPerDay      int     `json:"hours_per_day"`
+		MinutesPerHour   int     `json:"minutes_per_hour"`
+		SecondsPerMinute int     `json:"seconds_per_minute"`
+		LeapYearEvery    int     `json:"leap_year_every"`
+		LeapYearOffset   int     `json:"leap_year_offset"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
 	if err := h.calendarSvc.UpdateCalendar(ctx, cal.ID, calendar.UpdateCalendarInput{
-		Name:           req.Name,
-		Description:    req.Description,
-		EpochName:      req.EpochName,
-		CurrentYear:    req.CurrentYear,
-		CurrentMonth:   req.CurrentMonth,
-		CurrentDay:     req.CurrentDay,
-		LeapYearEvery:  req.LeapYearEvery,
-		LeapYearOffset: req.LeapYearOffset,
+		Name:             req.Name,
+		Description:      req.Description,
+		EpochName:        req.EpochName,
+		CurrentYear:      req.CurrentYear,
+		CurrentMonth:     req.CurrentMonth,
+		CurrentDay:       req.CurrentDay,
+		CurrentHour:      req.CurrentHour,
+		CurrentMinute:    req.CurrentMinute,
+		HoursPerDay:      req.HoursPerDay,
+		MinutesPerHour:   req.MinutesPerHour,
+		SecondsPerMinute: req.SecondsPerMinute,
+		LeapYearEvery:    req.LeapYearEvery,
+		LeapYearOffset:   req.LeapYearOffset,
 	}); err != nil {
 		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
 	}

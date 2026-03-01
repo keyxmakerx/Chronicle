@@ -42,8 +42,9 @@ type CalendarService interface {
 	ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int) ([]Event, error)
 	ListEventsForYear(ctx context.Context, calendarID string, year int, role int) ([]Event, error)
 
-	// Date helpers.
+	// Date/time helpers.
 	AdvanceDate(ctx context.Context, calendarID string, days int) error
+	AdvanceTime(ctx context.Context, calendarID string, hours, minutes int) error
 }
 
 // calendarService is the default CalendarService implementation.
@@ -73,18 +74,30 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 	if input.CurrentYear == 0 {
 		input.CurrentYear = 1
 	}
+	if input.HoursPerDay <= 0 {
+		input.HoursPerDay = 24
+	}
+	if input.MinutesPerHour <= 0 {
+		input.MinutesPerHour = 60
+	}
+	if input.SecondsPerMinute <= 0 {
+		input.SecondsPerMinute = 60
+	}
 
 	cal := &Calendar{
-		ID:             generateID(),
-		CampaignID:     campaignID,
-		Name:           input.Name,
-		Description:    input.Description,
-		EpochName:      input.EpochName,
-		CurrentYear:    input.CurrentYear,
-		CurrentMonth:   1,
-		CurrentDay:     1,
-		LeapYearEvery:  input.LeapYearEvery,
-		LeapYearOffset: input.LeapYearOffset,
+		ID:               generateID(),
+		CampaignID:       campaignID,
+		Name:             input.Name,
+		Description:      input.Description,
+		EpochName:        input.EpochName,
+		CurrentYear:      input.CurrentYear,
+		CurrentMonth:     1,
+		CurrentDay:       1,
+		HoursPerDay:      input.HoursPerDay,
+		MinutesPerHour:   input.MinutesPerHour,
+		SecondsPerMinute: input.SecondsPerMinute,
+		LeapYearEvery:    input.LeapYearEvery,
+		LeapYearOffset:   input.LeapYearOffset,
 	}
 
 	if err := s.repo.Create(ctx, cal); err != nil {
@@ -151,6 +164,11 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID string,
 	cal.CurrentYear = input.CurrentYear
 	cal.CurrentMonth = input.CurrentMonth
 	cal.CurrentDay = input.CurrentDay
+	cal.CurrentHour = input.CurrentHour
+	cal.CurrentMinute = input.CurrentMinute
+	cal.HoursPerDay = input.HoursPerDay
+	cal.MinutesPerHour = input.MinutesPerHour
+	cal.SecondsPerMinute = input.SecondsPerMinute
 	cal.LeapYearEvery = input.LeapYearEvery
 	cal.LeapYearOffset = input.LeapYearOffset
 
@@ -241,9 +259,13 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID string, in
 		Year:           input.Year,
 		Month:          input.Month,
 		Day:            input.Day,
+		StartHour:      input.StartHour,
+		StartMinute:    input.StartMinute,
 		EndYear:        input.EndYear,
 		EndMonth:       input.EndMonth,
 		EndDay:         input.EndDay,
+		EndHour:        input.EndHour,
+		EndMinute:      input.EndMinute,
 		IsRecurring:    input.IsRecurring,
 		RecurrenceType: input.RecurrenceType,
 		Visibility:     input.Visibility,
@@ -285,9 +307,13 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 	evt.Year = input.Year
 	evt.Month = input.Month
 	evt.Day = input.Day
+	evt.StartHour = input.StartHour
+	evt.StartMinute = input.StartMinute
 	evt.EndYear = input.EndYear
 	evt.EndMonth = input.EndMonth
 	evt.EndDay = input.EndDay
+	evt.EndHour = input.EndHour
+	evt.EndMinute = input.EndMinute
 	evt.IsRecurring = input.IsRecurring
 	evt.RecurrenceType = input.RecurrenceType
 	evt.Visibility = input.Visibility
@@ -377,5 +403,71 @@ func (s *calendarService) AdvanceDate(ctx context.Context, calendarID string, da
 	cal.CurrentDay = day
 	cal.CurrentMonth = monthIdx + 1
 	cal.CurrentYear = year
+	return s.repo.Update(ctx, cal)
+}
+
+// AdvanceTime moves the current time forward by the given hours and minutes,
+// rolling over into days (and subsequently months/years) as needed.
+func (s *calendarService) AdvanceTime(ctx context.Context, calendarID string, hours, minutes int) error {
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	months, err := s.repo.GetMonths(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("get months: %w", err)
+	}
+	if len(months) == 0 {
+		return apperror.NewValidation("calendar has no months configured")
+	}
+	cal.Months = months
+
+	hpd := cal.HoursPerDay
+	if hpd <= 0 {
+		hpd = 24
+	}
+	mph := cal.MinutesPerHour
+	if mph <= 0 {
+		mph = 60
+	}
+
+	// Add minutes, roll into hours.
+	totalMin := cal.CurrentMinute + minutes
+	extraHours := totalMin / mph
+	cal.CurrentMinute = totalMin % mph
+
+	// Add hours (including rollover from minutes), roll into days.
+	totalHours := cal.CurrentHour + hours + extraHours
+	extraDays := totalHours / hpd
+	cal.CurrentHour = totalHours % hpd
+
+	// Delegate day rollover to the existing date advancement logic.
+	if extraDays > 0 {
+		day := cal.CurrentDay
+		monthIdx := cal.CurrentMonth - 1
+		year := cal.CurrentYear
+
+		for i := 0; i < extraDays; i++ {
+			day++
+			maxDays := cal.MonthDays(monthIdx, year)
+			if day > maxDays {
+				day = 1
+				monthIdx++
+				if monthIdx >= len(months) {
+					monthIdx = 0
+					year++
+				}
+			}
+		}
+
+		cal.CurrentDay = day
+		cal.CurrentMonth = monthIdx + 1
+		cal.CurrentYear = year
+	}
+
 	return s.repo.Update(ctx, cal)
 }

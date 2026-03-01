@@ -325,6 +325,36 @@ complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
   `entities/category_blocks.templ`, `entities/entity_type_config.templ`,
   `static/js/widgets/template_editor.js`.
 
+### Calendar Plugin Sprint 5 — Time System — COMPLETE
+- **Migration 000030**: Added time columns to `calendars` (hours_per_day, minutes_per_hour,
+  seconds_per_minute, current_hour, current_minute) and `calendar_events` (start_hour,
+  start_minute, end_hour, end_minute). All nullable/defaulted for backwards compatibility.
+- **Model**: Calendar gets HoursPerDay, MinutesPerHour, SecondsPerMinute, CurrentHour,
+  CurrentMinute fields. Event gets StartHour, StartMinute, EndHour, EndMinute (*int, nullable).
+  Helper methods: FormatCurrentTime(), HasTime(), FormatTime(), FormatEndTime(),
+  FormatTimeRange(), IsMultiDay(). All DTOs updated with time fields.
+- **Repository**: All scan/insert/update queries updated for new columns. Event listing
+  now sorts by date AND time (COALESCE for null time = sort last).
+- **Service**: AdvanceTime() method with minute→hour→day rollover. CreateCalendar defaults
+  to 24/60/60 time system. All CRUD methods pass time fields through.
+- **Handler**: AdvanceTimeAPI endpoint (POST /calendar/advance-time). UpdateCalendarAPI,
+  CreateEventAPI, UpdateEventAPI all accept time fields.
+- **Settings UI**: General tab now has Current Hour/Minute inputs, Time System section
+  (hours/day, minutes/hour, seconds/minute). Save button sends all time fields.
+- **Event modal**: "Set specific time" checkbox reveals start/end time picker (hour:minute
+  inputs). Edit mode restores time from data attributes. Reset clears time fields.
+- **Calendar grid**: Event chips show time prefix (e.g. "14:30 Meeting") when HasTime().
+  Data attributes carry time fields for edit roundtrip.
+- **Calendar header**: Shows FormatCurrentTime() next to season indicator.
+- **Dashboard preview**: Shows current time alongside current date.
+- **Timeline view**: Shows FormatTimeRange() on events with times.
+- **Entity events**: Shows time range next to event date.
+- **Sync API**: All event endpoints (create/update) accept time fields. Settings endpoint
+  accepts time system fields. GetCurrentDate returns hour/minute. AdvanceTime endpoint added.
+- **Routes**: advance-time route on both internal and sync API.
+- **Files**: migration 000030, model.go, repository.go, service.go, handler.go, routes.go,
+  calendar.templ, calendar_settings.templ, syncapi/calendar_api_handler.go, syncapi/routes.go.
+
 ### In Progress
 - Nothing currently in progress.
 

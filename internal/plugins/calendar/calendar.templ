@@ -128,13 +128,17 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 						{ " " + *data.Calendar.EpochName }
 					}
 				</h1>
-				<!-- Season indicator -->
-				if season := data.CurrentSeason(1); season != nil {
-					<p class="text-xs text-fg-muted">
-						<span class="inline-block w-2 h-2 rounded-full mr-1" style={ fmt.Sprintf("background:%s", season.Color) }></span>
-						{ season.Name }
-					</p>
-				}
+				<div class="flex items-center gap-3">
+					<!-- Current time -->
+					<span class="text-xs text-fg-secondary">{ data.Calendar.FormatCurrentTime() }</span>
+					<!-- Season indicator -->
+					if season := data.CurrentSeason(1); season != nil {
+						<span class="text-xs text-fg-muted">
+							<span class="inline-block w-2 h-2 rounded-full mr-1" style={ fmt.Sprintf("background:%s", season.Color) }></span>
+							{ season.Name }
+						</span>
+					}
+				</div>
 			</div>
 		</div>
 		<div class="flex items-center gap-3">
@@ -275,12 +279,20 @@ templ dayCell(data CalendarViewData, day int) {
 					data-event-year={ strconv.Itoa(evt.Year) }
 					data-event-month={ strconv.Itoa(evt.Month) }
 					data-event-day={ strconv.Itoa(evt.Day) }
+					data-event-start-hour={ derefInt(evt.StartHour) }
+					data-event-start-minute={ derefInt(evt.StartMinute) }
+					data-event-end-hour={ derefInt(evt.EndHour) }
+					data-event-end-minute={ derefInt(evt.EndMinute) }
 					data-event-visibility={ evt.Visibility }
 					data-event-category={ derefStr(evt.Category) }
 					data-event-recurring={ strconv.FormatBool(evt.IsRecurring) }
 					data-event-entity-id={ derefStr(evt.EntityID) }
 					onclick="openEditEventModal(this)"
 				>
+					if evt.HasTime() {
+						<span class="opacity-60">{ evt.FormatTime() }</span>
+						{ " " }
+					}
 					if evt.EntityID != nil && evt.EntityIcon != "" {
 						<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
 					}
@@ -299,6 +311,10 @@ templ dayCell(data CalendarViewData, day int) {
 					}
 					title={ eventTooltip(evt) }
 				>
+					if evt.HasTime() {
+						<span class="opacity-60">{ evt.FormatTime() }</span>
+						{ " " }
+					}
 					if evt.EntityID != nil && evt.EntityIcon != "" {
 						<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
 					}
@@ -351,6 +367,32 @@ templ eventModal(data CalendarViewData) {
 					<div>
 						<label class="block text-xs font-medium text-fg-body mb-1">Day</label>
 						<input type="number" name="day" id="evt-day" class="input w-full" value="1"/>
+					</div>
+				</div>
+				<!-- Optional event time -->
+				<div x-data="{ hasTime: false }" x-init="hasTime = document.getElementById('evt-start-hour').value !== ''">
+					<label class="flex items-center gap-2 text-xs text-fg-body mb-2 cursor-pointer">
+						<input type="checkbox" x-model="hasTime" class="rounded" id="evt-has-time"
+							@change="if(!hasTime){document.getElementById('evt-start-hour').value='';document.getElementById('evt-start-minute').value='';document.getElementById('evt-end-hour').value='';document.getElementById('evt-end-minute').value=''}"/>
+						Set specific time
+					</label>
+					<div x-show="hasTime" x-transition class="grid grid-cols-2 gap-2">
+						<div>
+							<label class="block text-[10px] text-fg-secondary mb-0.5">Start Time</label>
+							<div class="flex items-center gap-1">
+								<input type="number" name="start_hour" id="evt-start-hour" class="input w-full text-sm" min="0" placeholder="HH"/>
+								<span class="text-fg-muted">:</span>
+								<input type="number" name="start_minute" id="evt-start-minute" class="input w-full text-sm" min="0" placeholder="MM"/>
+							</div>
+						</div>
+						<div>
+							<label class="block text-[10px] text-fg-secondary mb-0.5">End Time (optional)</label>
+							<div class="flex items-center gap-1">
+								<input type="number" name="end_hour" id="evt-end-hour" class="input w-full text-sm" min="0" placeholder="HH"/>
+								<span class="text-fg-muted">:</span>
+								<input type="number" name="end_minute" id="evt-end-minute" class="input w-full text-sm" min="0" placeholder="MM"/>
+							</div>
+						</div>
 					</div>
 				</div>
 				<div class="grid grid-cols-2 gap-2">
@@ -462,6 +504,15 @@ templ eventModal(data CalendarViewData) {
 						if (cat) body.category = cat;
 						var eid = fd.get('entity_id');
 						if (eid) body.entity_id = eid;
+						// Time fields (nullable — only set if the user enabled time).
+						var sh = fd.get('start_hour');
+						var sm = fd.get('start_minute');
+						if (sh !== '' && sh !== null) body.start_hour = parseInt(sh);
+						if (sm !== '' && sm !== null) body.start_minute = parseInt(sm);
+						var eh = fd.get('end_hour');
+						var em = fd.get('end_minute');
+						if (eh !== '' && eh !== null) body.end_hour = parseInt(eh);
+						if (em !== '' && em !== null) body.end_minute = parseInt(em);
 
 						var eventID = fd.get('event_id');
 						var url, method;
@@ -511,6 +562,17 @@ templ eventModal(data CalendarViewData) {
 						document.getElementById('evt-category').value = el.dataset.eventCategory || '';
 						document.getElementById('evt-recurring').checked = el.dataset.eventRecurring === 'true';
 						document.getElementById('evt-entity-id').value = el.dataset.eventEntityId || '';
+						// Restore time fields if the event has a specific time.
+						document.getElementById('evt-start-hour').value = el.dataset.eventStartHour || '';
+						document.getElementById('evt-start-minute').value = el.dataset.eventStartMinute || '';
+						document.getElementById('evt-end-hour').value = el.dataset.eventEndHour || '';
+						document.getElementById('evt-end-minute').value = el.dataset.eventEndMinute || '';
+						// Toggle the "has time" checkbox via Alpine.
+						var hasTimeCheckbox = document.getElementById('evt-has-time');
+						if (el.dataset.eventStartHour) {
+							hasTimeCheckbox.checked = true;
+							hasTimeCheckbox.dispatchEvent(new Event('change'));
+						}
 
 						// Switch to edit mode UI.
 						document.getElementById('evt-modal-title').textContent = 'Edit Event';
@@ -531,6 +593,13 @@ templ eventModal(data CalendarViewData) {
 					function resetEventModal() {
 						form.reset();
 						document.getElementById('evt-id').value = '';
+						// Clear time fields.
+						document.getElementById('evt-start-hour').value = '';
+						document.getElementById('evt-start-minute').value = '';
+						document.getElementById('evt-end-hour').value = '';
+						document.getElementById('evt-end-minute').value = '';
+						var hasTimeCheckbox = document.getElementById('evt-has-time');
+						if (hasTimeCheckbox) { hasTimeCheckbox.checked = false; hasTimeCheckbox.dispatchEvent(new Event('change')); }
 						document.getElementById('evt-modal-title').textContent = 'New Event';
 						document.getElementById('evt-submit-icon').className = 'fa-solid fa-plus mr-1';
 						document.getElementById('evt-submit-text').textContent = 'Create Event';
@@ -599,9 +668,14 @@ templ EntityEventsSection(cc *campaigns.CampaignContext, cal *Calendar, events [
 							<span class="text-[10px] text-fg-muted">(yearly)</span>
 						}
 					</div>
-					<span class="text-xs text-fg-secondary whitespace-nowrap ml-2">
-						{ formatEventDate(cal, evt) }
-					</span>
+					<div class="text-right shrink-0 ml-2">
+						<span class="text-xs text-fg-secondary whitespace-nowrap">
+							{ formatEventDate(cal, evt) }
+						</span>
+						if evt.HasTime() {
+							<span class="text-[10px] text-fg-muted ml-1">{ evt.FormatTimeRange() }</span>
+						}
+					</div>
 				</a>
 			}
 		</div>
@@ -690,8 +764,11 @@ func seasonBorderStyle(s *Season) string {
 // eventTooltip builds a tooltip string for an event chip.
 func eventTooltip(evt Event) string {
 	tip := evt.Name
+	if tr := evt.FormatTimeRange(); tr != "" {
+		tip += " (" + tr + ")"
+	}
 	if evt.EntityName != "" {
-		tip += " (" + evt.EntityName + ")"
+		tip += " — " + evt.EntityName
 	}
 	if evt.Description != nil && *evt.Description != "" {
 		tip += "\n" + *evt.Description
@@ -705,10 +782,12 @@ func eventTooltip(evt Event) string {
 // UpcomingEventsBlock renders the upcoming events list for the dashboard block.
 // Returned as an HTMX fragment that replaces the loading placeholder.
 templ UpcomingEventsBlock(cc *campaigns.CampaignContext, cal *Calendar, events []Event) {
-	<!-- Current date display (always shown) -->
+	<!-- Current date and time display (always shown) -->
 	<div class="px-4 py-2 bg-surface-alt/50 flex items-center justify-between">
 		<span class="text-xs text-fg-muted">
 			{ formatCurrentDate(cal) }
+			{ " " }
+			<span class="text-fg-secondary">{ cal.FormatCurrentTime() }</span>
 		</span>
 		if cal.CurrentSeason() != nil {
 			<span class="text-xs text-fg-muted">
@@ -874,6 +953,9 @@ templ timelineEvent(cc *campaigns.CampaignContext, cal *Calendar, evt Event) {
 					if evt.Category != nil && *evt.Category != "" {
 						<span class="text-sm opacity-60">{ categoryIcon(*evt.Category) }</span>
 					}
+					if evt.HasTime() {
+						<span class="text-xs text-fg-secondary">{ evt.FormatTimeRange() }</span>
+					}
 					<span class="text-sm font-medium text-fg">{ evt.Name }</span>
 					if evt.IsRecurring {
 						<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">yearly</span>
@@ -917,6 +999,14 @@ func derefStr(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// derefInt safely dereferences a *int, returning "" for nil.
+func derefInt(i *int) string {
+	if i == nil {
+		return ""
+	}
+	return strconv.Itoa(*i)
 }
 
 // formatCurrentDate returns a formatted string of the calendar's current date.

@@ -31,8 +31,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/calendar/moons", h.UpdateMoonsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendar/seasons", h.UpdateSeasonsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// Advance date (Owner only — GMs advance time during play).
+	// Advance date/time (Owner only — GMs advance time during play).
 	cg.POST("/calendar/advance", h.AdvanceDateAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendar/advance-time", h.AdvanceTimeAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Events CRUD (Scribe+ can create/edit, Owner can delete).
 	cg.POST("/calendar/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))

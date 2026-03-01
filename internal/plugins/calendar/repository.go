@@ -54,13 +54,16 @@ func NewCalendarRepository(db *sql.DB) CalendarRepository {
 
 // calendarCols is the column list for calendar queries.
 const calendarCols = `id, campaign_id, name, description, epoch_name, current_year,
-        current_month, current_day, leap_year_every, leap_year_offset, created_at, updated_at`
+        current_month, current_day, hours_per_day, minutes_per_hour, seconds_per_minute,
+        current_hour, current_minute, leap_year_every, leap_year_offset, created_at, updated_at`
 
 // scanCalendar reads a row into a Calendar struct.
 func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 	cal := &Calendar{}
 	err := scanner.Scan(&cal.ID, &cal.CampaignID, &cal.Name, &cal.Description, &cal.EpochName,
 		&cal.CurrentYear, &cal.CurrentMonth, &cal.CurrentDay,
+		&cal.HoursPerDay, &cal.MinutesPerHour, &cal.SecondsPerMinute,
+		&cal.CurrentHour, &cal.CurrentMinute,
 		&cal.LeapYearEvery, &cal.LeapYearOffset,
 		&cal.CreatedAt, &cal.UpdatedAt)
 	if err == sql.ErrNoRows {
@@ -73,10 +76,15 @@ func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 func (r *calendarRepo) Create(ctx context.Context, cal *Calendar) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO calendars (id, campaign_id, name, description, epoch_name,
-		        current_year, current_month, current_day, leap_year_every, leap_year_offset)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        current_year, current_month, current_day,
+		        hours_per_day, minutes_per_hour, seconds_per_minute,
+		        current_hour, current_minute,
+		        leap_year_every, leap_year_offset)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cal.ID, cal.CampaignID, cal.Name, cal.Description, cal.EpochName,
 		cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay,
+		cal.HoursPerDay, cal.MinutesPerHour, cal.SecondsPerMinute,
+		cal.CurrentHour, cal.CurrentMinute,
 		cal.LeapYearEvery, cal.LeapYearOffset,
 	)
 	return err
@@ -94,15 +102,19 @@ func (r *calendarRepo) GetByID(ctx context.Context, id string) (*Calendar, error
 		`SELECT `+calendarCols+` FROM calendars WHERE id = ?`, id))
 }
 
-// Update modifies an existing calendar's settings and current date.
+// Update modifies an existing calendar's settings and current date/time.
 func (r *calendarRepo) Update(ctx context.Context, cal *Calendar) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE calendars SET name = ?, description = ?, epoch_name = ?,
 		        current_year = ?, current_month = ?, current_day = ?,
+		        hours_per_day = ?, minutes_per_hour = ?, seconds_per_minute = ?,
+		        current_hour = ?, current_minute = ?,
 		        leap_year_every = ?, leap_year_offset = ?
 		 WHERE id = ?`,
 		cal.Name, cal.Description, cal.EpochName,
 		cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay,
+		cal.HoursPerDay, cal.MinutesPerHour, cal.SecondsPerMinute,
+		cal.CurrentHour, cal.CurrentMinute,
 		cal.LeapYearEvery, cal.LeapYearOffset, cal.ID,
 	)
 	return err
@@ -292,7 +304,8 @@ func (r *calendarRepo) GetSeasons(ctx context.Context, calendarID string) ([]Sea
 
 // eventCols is the column list for event queries (with entity join fields).
 const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description,
-       e.year, e.month, e.day, e.end_year, e.end_month, e.end_day,
+       e.year, e.month, e.day, e.start_hour, e.start_minute,
+       e.end_year, e.end_month, e.end_day, e.end_hour, e.end_minute,
        e.is_recurring, e.recurrence_type, e.visibility, e.category,
        e.created_by, e.created_at, e.updated_at,
        COALESCE(ent.name, ''), COALESCE(et.icon, ''), COALESCE(et.color, '')`
@@ -305,11 +318,13 @@ const eventJoins = `LEFT JOIN entities ent ON ent.id = e.entity_id
 func (r *calendarRepo) CreateEvent(ctx context.Context, evt *Event) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO calendar_events (id, calendar_id, entity_id, name, description,
-		        year, month, day, end_year, end_month, end_day,
+		        year, month, day, start_hour, start_minute,
+		        end_year, end_month, end_day, end_hour, end_minute,
 		        is_recurring, recurrence_type, visibility, category, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		evt.ID, evt.CalendarID, evt.EntityID, evt.Name, evt.Description,
-		evt.Year, evt.Month, evt.Day, evt.EndYear, evt.EndMonth, evt.EndDay,
+		evt.Year, evt.Month, evt.Day, evt.StartHour, evt.StartMinute,
+		evt.EndYear, evt.EndMonth, evt.EndDay, evt.EndHour, evt.EndMinute,
 		evt.IsRecurring, evt.RecurrenceType, evt.Visibility, evt.Category, evt.CreatedBy,
 	)
 	return err
@@ -323,7 +338,8 @@ func (r *calendarRepo) GetEvent(ctx context.Context, id string) (*Event, error) 
 		 FROM calendar_events e `+eventJoins+`
 		 WHERE e.id = ?`, id,
 	).Scan(&evt.ID, &evt.CalendarID, &evt.EntityID, &evt.Name, &evt.Description,
-		&evt.Year, &evt.Month, &evt.Day, &evt.EndYear, &evt.EndMonth, &evt.EndDay,
+		&evt.Year, &evt.Month, &evt.Day, &evt.StartHour, &evt.StartMinute,
+		&evt.EndYear, &evt.EndMonth, &evt.EndDay, &evt.EndHour, &evt.EndMinute,
 		&evt.IsRecurring, &evt.RecurrenceType, &evt.Visibility, &evt.Category,
 		&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
 		&evt.EntityName, &evt.EntityIcon, &evt.EntityColor)
@@ -338,11 +354,13 @@ func (r *calendarRepo) UpdateEvent(ctx context.Context, evt *Event) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE calendar_events
 		 SET name = ?, description = ?, entity_id = ?, year = ?, month = ?, day = ?,
-		     end_year = ?, end_month = ?, end_day = ?,
+		     start_hour = ?, start_minute = ?,
+		     end_year = ?, end_month = ?, end_day = ?, end_hour = ?, end_minute = ?,
 		     is_recurring = ?, recurrence_type = ?, visibility = ?, category = ?
 		 WHERE id = ?`,
 		evt.Name, evt.Description, evt.EntityID, evt.Year, evt.Month, evt.Day,
-		evt.EndYear, evt.EndMonth, evt.EndDay,
+		evt.StartHour, evt.StartMinute,
+		evt.EndYear, evt.EndMonth, evt.EndDay, evt.EndHour, evt.EndMinute,
 		evt.IsRecurring, evt.RecurrenceType, evt.Visibility, evt.Category, evt.ID,
 	)
 	return err
@@ -370,7 +388,7 @@ func (r *calendarRepo) ListEventsForMonth(ctx context.Context, calendarID string
 		  AND ((e.year = ? AND e.month = ? AND e.is_recurring = 0)
 		       OR (e.month = ? AND e.is_recurring = 1 AND e.recurrence_type = 'yearly'))
 		  %s
-		ORDER BY e.day, e.name`, visFilter)
+		ORDER BY e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
 	rows, err := r.db.QueryContext(ctx, query, calendarID, year, month, month)
 	if err != nil {
@@ -394,7 +412,7 @@ func (r *calendarRepo) ListEventsForYear(ctx context.Context, calendarID string,
 		WHERE e.calendar_id = ?
 		  AND (e.year = ? OR (e.is_recurring = 1 AND e.recurrence_type = 'yearly'))
 		  %s
-		ORDER BY e.month, e.day, e.name`, visFilter)
+		ORDER BY e.month, e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
 	rows, err := r.db.QueryContext(ctx, query, calendarID, year)
 	if err != nil {
@@ -479,7 +497,8 @@ func scanEvents(rows *sql.Rows) ([]Event, error) {
 		var evt Event
 		if err := rows.Scan(
 			&evt.ID, &evt.CalendarID, &evt.EntityID, &evt.Name, &evt.Description,
-			&evt.Year, &evt.Month, &evt.Day, &evt.EndYear, &evt.EndMonth, &evt.EndDay,
+			&evt.Year, &evt.Month, &evt.Day, &evt.StartHour, &evt.StartMinute,
+			&evt.EndYear, &evt.EndMonth, &evt.EndDay, &evt.EndHour, &evt.EndMinute,
 			&evt.IsRecurring, &evt.RecurrenceType, &evt.Visibility, &evt.Category,
 			&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
 			&evt.EntityName, &evt.EntityIcon, &evt.EntityColor,
