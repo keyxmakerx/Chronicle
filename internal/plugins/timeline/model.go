@@ -33,12 +33,13 @@ func IsValidZoom(z string) bool {
 	return false
 }
 
-// Timeline is a named visual timeline within a campaign. It references a
-// calendar for date context and links to calendar events via the join table.
+// Timeline is a named visual timeline within a campaign. It optionally
+// references a calendar for date context and linked calendar events.
+// When CalendarID is nil, the timeline only contains standalone events.
 type Timeline struct {
 	ID              string    `json:"id"`
 	CampaignID      string    `json:"campaign_id"`
-	CalendarID      string    `json:"calendar_id"`
+	CalendarID      *string   `json:"calendar_id,omitempty"`
 	Name            string    `json:"name"`
 	Description     *string   `json:"description,omitempty"`
 	DescriptionHTML *string   `json:"description_html,omitempty"`
@@ -60,6 +61,11 @@ type Timeline struct {
 // IsDMOnly returns true if this timeline is only visible to the DM.
 func (t *Timeline) IsDMOnly() bool {
 	return t.Visibility == "dm_only"
+}
+
+// HasCalendar returns true if this timeline is linked to a calendar.
+func (t *Timeline) HasCalendar() bool {
+	return t.CalendarID != nil && *t.CalendarID != ""
 }
 
 // ParseVisibilityRules parses the JSON visibility rules into a VisibilityRules struct.
@@ -85,11 +91,14 @@ type VisibilityRules struct {
 }
 
 // EventLink is the join between a timeline and a calendar event, with
-// per-link overrides for display properties and visibility.
+// per-link overrides for display properties and visibility. Also used as the
+// unified event view when merging linked calendar events with standalone events.
+// Source distinguishes the origin: "calendar" or "standalone".
 type EventLink struct {
 	ID                 int       `json:"id"`
 	TimelineID         string    `json:"timeline_id"`
 	EventID            string    `json:"event_id"`
+	Source             string    `json:"source"`
 	DisplayOrder       int       `json:"display_order"`
 	VisibilityOverride *string   `json:"visibility_override,omitempty"`
 	VisibilityRules    *string   `json:"visibility_rules,omitempty"`
@@ -179,7 +188,7 @@ type EntityGroupMember struct {
 // CreateTimelineInput is the validated input for creating a timeline.
 type CreateTimelineInput struct {
 	CampaignID  string
-	CalendarID  string
+	CalendarID  *string
 	Name        string
 	Description *string
 	Color       string
@@ -223,6 +232,117 @@ type UpdateEntityGroupInput struct {
 type UpdateEventVisibilityInput struct {
 	VisibilityOverride *string
 	VisibilityRules    *string
+}
+
+// --- Standalone Events ---
+
+// TimelineEvent is a standalone event that belongs directly to a timeline
+// without requiring a calendar. Provides full parity with calendar events
+// (multi-day spans, times, recurrence) while being owned 1:N by a timeline.
+type TimelineEvent struct {
+	ID              string    `json:"id"`
+	TimelineID      string    `json:"timeline_id"`
+	EntityID        *string   `json:"entity_id,omitempty"`
+	Name            string    `json:"name"`
+	Description     *string   `json:"description,omitempty"`
+	DescriptionHTML *string   `json:"description_html,omitempty"`
+	Year            int       `json:"year"`
+	Month           int       `json:"month"`
+	Day             int       `json:"day"`
+	StartHour       *int      `json:"start_hour,omitempty"`
+	StartMinute     *int      `json:"start_minute,omitempty"`
+	EndYear         *int      `json:"end_year,omitempty"`
+	EndMonth        *int      `json:"end_month,omitempty"`
+	EndDay          *int      `json:"end_day,omitempty"`
+	EndHour         *int      `json:"end_hour,omitempty"`
+	EndMinute       *int      `json:"end_minute,omitempty"`
+	IsRecurring     bool      `json:"is_recurring"`
+	RecurrenceType  *string   `json:"recurrence_type,omitempty"`
+	Category        *string   `json:"category,omitempty"`
+	Visibility      string    `json:"visibility"`
+	DisplayOrder    int       `json:"display_order"`
+	Label           *string   `json:"label,omitempty"`
+	Color           *string   `json:"color,omitempty"`
+	CreatedBy       *string   `json:"created_by,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+
+	// Joined fields (populated by queries that LEFT JOIN entities).
+	EntityName string `json:"entity_name,omitempty"`
+	EntityIcon string `json:"entity_icon,omitempty"`
+}
+
+// CreateTimelineEventInput is the validated input for creating a standalone event.
+type CreateTimelineEventInput struct {
+	Name            string
+	Description     *string
+	DescriptionHTML *string
+	EntityID        *string
+	Year            int
+	Month           int
+	Day             int
+	StartHour       *int
+	StartMinute     *int
+	EndYear         *int
+	EndMonth        *int
+	EndDay          *int
+	EndHour         *int
+	EndMinute       *int
+	IsRecurring     bool
+	RecurrenceType  *string
+	Category        *string
+	Visibility      string
+	Label           *string
+	Color           *string
+	CreatedBy       string
+}
+
+// UpdateTimelineEventInput is the validated input for updating a standalone event.
+type UpdateTimelineEventInput struct {
+	Name            string
+	Description     *string
+	DescriptionHTML *string
+	EntityID        *string
+	Year            int
+	Month           int
+	Day             int
+	StartHour       *int
+	StartMinute     *int
+	EndYear         *int
+	EndMonth        *int
+	EndDay          *int
+	EndHour         *int
+	EndMinute       *int
+	IsRecurring     bool
+	RecurrenceType  *string
+	Category        *string
+	Visibility      string
+	Label           *string
+	Color           *string
+}
+
+// ToEventLink converts a standalone TimelineEvent to an EventLink for
+// unified rendering in the D3 visualization and event list.
+func (e *TimelineEvent) ToEventLink() EventLink {
+	return EventLink{
+		TimelineID:       e.TimelineID,
+		EventID:          e.ID,
+		Source:           "standalone",
+		DisplayOrder:     e.DisplayOrder,
+		Label:            e.Label,
+		ColorOverride:    e.Color,
+		CreatedAt:        e.CreatedAt,
+		EventName:        e.Name,
+		EventDescription: e.Description,
+		EventYear:        e.Year,
+		EventMonth:       e.Month,
+		EventDay:         e.Day,
+		EventCategory:    e.Category,
+		EventVisibility:  e.Visibility,
+		EventEntityID:    e.EntityID,
+		EventEntityName:  e.EntityName,
+		EventEntityIcon:  e.EntityIcon,
+	}
 }
 
 // --- View Data ---

@@ -149,6 +149,10 @@ func (h *Handler) CreateForm(c echo.Context) error {
 
 	name := c.FormValue("name")
 	calendarID := c.FormValue("calendar_id")
+	var calPtr *string
+	if calendarID != "" {
+		calPtr = &calendarID
+	}
 	desc := c.FormValue("description")
 	var descPtr *string
 	if desc != "" {
@@ -161,7 +165,7 @@ func (h *Handler) CreateForm(c echo.Context) error {
 
 	t, err := h.svc.CreateTimeline(ctx, cc.Campaign.ID, CreateTimelineInput{
 		CampaignID:  cc.Campaign.ID,
-		CalendarID:  calendarID,
+		CalendarID:  calPtr,
 		Name:        name,
 		Description: descPtr,
 		Color:       color,
@@ -271,6 +275,158 @@ func (h *Handler) UnlinkEventAPI(c echo.Context) error {
 	}
 
 	if err := h.svc.UnlinkEvent(ctx, timelineID, eventID); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+// --- Standalone Event Handlers ---
+
+// CreateStandaloneEventAPI creates a new standalone event on a timeline.
+// POST /campaigns/:id/timelines/:tid/standalone-events
+func (h *Handler) CreateStandaloneEventAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	timelineID := c.Param("tid")
+	userID := auth.GetUserID(c)
+
+	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	var req struct {
+		Name            string  `json:"name"`
+		Description     *string `json:"description"`
+		DescriptionHTML *string `json:"description_html"`
+		EntityID        *string `json:"entity_id"`
+		Year            int     `json:"year"`
+		Month           int     `json:"month"`
+		Day             int     `json:"day"`
+		StartHour       *int    `json:"start_hour"`
+		StartMinute     *int    `json:"start_minute"`
+		EndYear         *int    `json:"end_year"`
+		EndMonth        *int    `json:"end_month"`
+		EndDay          *int    `json:"end_day"`
+		EndHour         *int    `json:"end_hour"`
+		EndMinute       *int    `json:"end_minute"`
+		IsRecurring     bool    `json:"is_recurring"`
+		RecurrenceType  *string `json:"recurrence_type"`
+		Category        *string `json:"category"`
+		Visibility      string  `json:"visibility"`
+		Label           *string `json:"label"`
+		Color           *string `json:"color"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	e, err := h.svc.CreateStandaloneEvent(ctx, timelineID, CreateTimelineEventInput{
+		Name:            req.Name,
+		Description:     req.Description,
+		DescriptionHTML: req.DescriptionHTML,
+		EntityID:        req.EntityID,
+		Year:            req.Year,
+		Month:           req.Month,
+		Day:             req.Day,
+		StartHour:       req.StartHour,
+		StartMinute:     req.StartMinute,
+		EndYear:         req.EndYear,
+		EndMonth:        req.EndMonth,
+		EndDay:          req.EndDay,
+		EndHour:         req.EndHour,
+		EndMinute:       req.EndMinute,
+		IsRecurring:     req.IsRecurring,
+		RecurrenceType:  req.RecurrenceType,
+		Category:        req.Category,
+		Visibility:      req.Visibility,
+		Label:           req.Label,
+		Color:           req.Color,
+		CreatedBy:       userID,
+	})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, e)
+}
+
+// UpdateStandaloneEventAPI modifies a standalone event.
+// PUT /campaigns/:id/timelines/:tid/standalone-events/:eid
+func (h *Handler) UpdateStandaloneEventAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	timelineID := c.Param("tid")
+	eventID := c.Param("eid")
+
+	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	var req struct {
+		Name            string  `json:"name"`
+		Description     *string `json:"description"`
+		DescriptionHTML *string `json:"description_html"`
+		EntityID        *string `json:"entity_id"`
+		Year            int     `json:"year"`
+		Month           int     `json:"month"`
+		Day             int     `json:"day"`
+		StartHour       *int    `json:"start_hour"`
+		StartMinute     *int    `json:"start_minute"`
+		EndYear         *int    `json:"end_year"`
+		EndMonth        *int    `json:"end_month"`
+		EndDay          *int    `json:"end_day"`
+		EndHour         *int    `json:"end_hour"`
+		EndMinute       *int    `json:"end_minute"`
+		IsRecurring     bool    `json:"is_recurring"`
+		RecurrenceType  *string `json:"recurrence_type"`
+		Category        *string `json:"category"`
+		Visibility      string  `json:"visibility"`
+		Label           *string `json:"label"`
+		Color           *string `json:"color"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	if err := h.svc.UpdateStandaloneEvent(ctx, eventID, UpdateTimelineEventInput{
+		Name:            req.Name,
+		Description:     req.Description,
+		DescriptionHTML: req.DescriptionHTML,
+		EntityID:        req.EntityID,
+		Year:            req.Year,
+		Month:           req.Month,
+		Day:             req.Day,
+		StartHour:       req.StartHour,
+		StartMinute:     req.StartMinute,
+		EndYear:         req.EndYear,
+		EndMonth:        req.EndMonth,
+		EndDay:          req.EndDay,
+		EndHour:         req.EndHour,
+		EndMinute:       req.EndMinute,
+		IsRecurring:     req.IsRecurring,
+		RecurrenceType:  req.RecurrenceType,
+		Category:        req.Category,
+		Visibility:      req.Visibility,
+		Label:           req.Label,
+		Color:           req.Color,
+	}); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+// DeleteStandaloneEventAPI removes a standalone event from a timeline.
+// DELETE /campaigns/:id/timelines/:tid/standalone-events/:eid
+func (h *Handler) DeleteStandaloneEventAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	timelineID := c.Param("tid")
+	eventID := c.Param("eid")
+
+	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	if err := h.svc.DeleteStandaloneEvent(ctx, eventID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

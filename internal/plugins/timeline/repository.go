@@ -27,6 +27,14 @@ type TimelineRepository interface {
 	// Event link visibility.
 	UpdateEventLinkVisibility(ctx context.Context, timelineID, eventID string, visOverride *string, visRules *string) error
 
+	// Standalone events.
+	CreateEvent(ctx context.Context, e *TimelineEvent) error
+	GetEvent(ctx context.Context, eventID string) (*TimelineEvent, error)
+	UpdateEvent(ctx context.Context, e *TimelineEvent) error
+	DeleteEvent(ctx context.Context, eventID string) error
+	ListStandaloneEvents(ctx context.Context, timelineID string, role int) ([]TimelineEvent, error)
+	CountStandaloneEvents(ctx context.Context, timelineID string) (int, error)
+
 	// Entity groups.
 	CreateEntityGroup(ctx context.Context, g *EntityGroup) error
 	UpdateEntityGroup(ctx context.Context, g *EntityGroup) error
@@ -114,7 +122,8 @@ func (r *timelineRepo) List(ctx context.Context, campaignID string, role int) ([
 
 	query := fmt.Sprintf(`
 		SELECT `+timelineCols+`, COALESCE(c.name, ''),
-		       (SELECT COUNT(*) FROM timeline_event_links tel WHERE tel.timeline_id = t.id)
+		       (SELECT COUNT(*) FROM timeline_event_links tel WHERE tel.timeline_id = t.id) +
+		       (SELECT COUNT(*) FROM timeline_events te WHERE te.timeline_id = t.id)
 		FROM timelines t
 		LEFT JOIN calendars c ON c.id = t.calendar_id
 		WHERE t.campaign_id = ? %s
@@ -312,6 +321,134 @@ func (r *timelineRepo) UpdateEventLinkVisibility(ctx context.Context, timelineID
 		visOverride, visRules, timelineID, eventID,
 	)
 	return err
+}
+
+// --- Standalone Events ---
+
+// standaloneEventCols is the column list for standalone event queries.
+const standaloneEventCols = `te.id, te.timeline_id, te.entity_id, te.name, te.description,
+       te.description_html, te.year, te.month, te.day,
+       te.start_hour, te.start_minute, te.end_year, te.end_month, te.end_day,
+       te.end_hour, te.end_minute, te.is_recurring, te.recurrence_type,
+       te.category, te.visibility, te.display_order, te.label, te.color,
+       te.created_by, te.created_at, te.updated_at,
+       COALESCE(ent.name, ''), COALESCE(et.icon, '')`
+
+// standaloneEventJoins is the JOIN clause for standalone event queries.
+const standaloneEventJoins = `LEFT JOIN entities ent ON ent.id = te.entity_id
+     LEFT JOIN entity_types et ON et.id = ent.entity_type_id`
+
+// scanStandaloneEvent reads a row into a TimelineEvent struct.
+func scanStandaloneEvent(scanner interface{ Scan(...any) error }) (*TimelineEvent, error) {
+	e := &TimelineEvent{}
+	err := scanner.Scan(
+		&e.ID, &e.TimelineID, &e.EntityID, &e.Name, &e.Description,
+		&e.DescriptionHTML, &e.Year, &e.Month, &e.Day,
+		&e.StartHour, &e.StartMinute, &e.EndYear, &e.EndMonth, &e.EndDay,
+		&e.EndHour, &e.EndMinute, &e.IsRecurring, &e.RecurrenceType,
+		&e.Category, &e.Visibility, &e.DisplayOrder, &e.Label, &e.Color,
+		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
+		&e.EntityName, &e.EntityIcon,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return e, err
+}
+
+// CreateEvent inserts a new standalone timeline event.
+func (r *timelineRepo) CreateEvent(ctx context.Context, e *TimelineEvent) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO timeline_events (id, timeline_id, entity_id, name, description,
+		        description_html, year, month, day,
+		        start_hour, start_minute, end_year, end_month, end_day,
+		        end_hour, end_minute, is_recurring, recurrence_type,
+		        category, visibility, display_order, label, color, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.ID, e.TimelineID, e.EntityID, e.Name, e.Description,
+		e.DescriptionHTML, e.Year, e.Month, e.Day,
+		e.StartHour, e.StartMinute, e.EndYear, e.EndMonth, e.EndDay,
+		e.EndHour, e.EndMinute, e.IsRecurring, e.RecurrenceType,
+		e.Category, e.Visibility, e.DisplayOrder, e.Label, e.Color, e.CreatedBy,
+	)
+	return err
+}
+
+// GetEvent returns a standalone event by ID with entity data joined.
+func (r *timelineRepo) GetEvent(ctx context.Context, eventID string) (*TimelineEvent, error) {
+	row := r.db.QueryRowContext(ctx,
+		`SELECT `+standaloneEventCols+`
+		 FROM timeline_events te
+		 `+standaloneEventJoins+`
+		 WHERE te.id = ?`, eventID,
+	)
+	return scanStandaloneEvent(row)
+}
+
+// UpdateEvent modifies an existing standalone timeline event.
+func (r *timelineRepo) UpdateEvent(ctx context.Context, e *TimelineEvent) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE timeline_events SET entity_id = ?, name = ?, description = ?,
+		        description_html = ?, year = ?, month = ?, day = ?,
+		        start_hour = ?, start_minute = ?, end_year = ?, end_month = ?, end_day = ?,
+		        end_hour = ?, end_minute = ?, is_recurring = ?, recurrence_type = ?,
+		        category = ?, visibility = ?, display_order = ?, label = ?, color = ?
+		 WHERE id = ?`,
+		e.EntityID, e.Name, e.Description,
+		e.DescriptionHTML, e.Year, e.Month, e.Day,
+		e.StartHour, e.StartMinute, e.EndYear, e.EndMonth, e.EndDay,
+		e.EndHour, e.EndMinute, e.IsRecurring, e.RecurrenceType,
+		e.Category, e.Visibility, e.DisplayOrder, e.Label, e.Color,
+		e.ID,
+	)
+	return err
+}
+
+// DeleteEvent removes a standalone timeline event.
+func (r *timelineRepo) DeleteEvent(ctx context.Context, eventID string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM timeline_events WHERE id = ?`, eventID)
+	return err
+}
+
+// ListStandaloneEvents returns all standalone events for a timeline, filtered by role.
+func (r *timelineRepo) ListStandaloneEvents(ctx context.Context, timelineID string, role int) ([]TimelineEvent, error) {
+	visFilter := "AND te.visibility = 'everyone'"
+	if role >= 2 {
+		visFilter = ""
+	}
+
+	query := fmt.Sprintf(`
+		SELECT `+standaloneEventCols+`
+		FROM timeline_events te
+		`+standaloneEventJoins+`
+		WHERE te.timeline_id = ? %s
+		ORDER BY te.year, te.month, te.day, te.display_order`, visFilter)
+
+	rows, err := r.db.QueryContext(ctx, query, timelineID)
+	if err != nil {
+		return nil, fmt.Errorf("list standalone events: %w", err)
+	}
+	defer rows.Close()
+
+	var result []TimelineEvent
+	for rows.Next() {
+		e, err := scanStandaloneEvent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan standalone event: %w", err)
+		}
+		result = append(result, *e)
+	}
+	return result, rows.Err()
+}
+
+// CountStandaloneEvents returns the number of standalone events on a timeline.
+func (r *timelineRepo) CountStandaloneEvents(ctx context.Context, timelineID string) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM timeline_events WHERE timeline_id = ?`,
+		timelineID,
+	).Scan(&count)
+	return count, err
 }
 
 // --- Entity Groups ---

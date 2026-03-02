@@ -43,8 +43,10 @@ templ timelinePreviewFragment(campaignID string, timelines []Timeline) {
 				<div class="min-w-0 flex-1">
 					<div class="text-sm font-medium text-fg truncate">{ t.Name }</div>
 					<div class="text-xs text-fg-muted">
-						{ t.CalendarName }
-						<span class="mx-1">&middot;</span>
+						if t.HasCalendar() {
+							{ t.CalendarName }
+							<span class="mx-1">&middot;</span>
+						}
 						{ fmt.Sprintf("%d events", t.EventCount) }
 					</div>
 				</div>
@@ -127,7 +129,13 @@ templ timelineCard(campaignID string, t Timeline) {
 			</div>
 			<div class="min-w-0 flex-1">
 				<h3 class="text-sm font-semibold text-fg truncate">{ t.Name }</h3>
-				<p class="text-xs text-fg-muted">{ t.CalendarName }</p>
+				<p class="text-xs text-fg-muted">
+					if t.HasCalendar() {
+						{ t.CalendarName }
+					} else {
+						Standalone
+					}
+				</p>
 			</div>
 		</div>
 		if t.Description != nil && *t.Description != "" {
@@ -168,14 +176,14 @@ templ createTimelineModal(data TimelineListData) {
 					<input type="text" name="name" class="input w-full" required placeholder="e.g. The War of Shadows"/>
 				</div>
 				<div>
-					<label class="block text-xs font-medium text-fg-body mb-1">Calendar</label>
-					<select name="calendar_id" class="input w-full" required x-model="calendarId">
-						<option value="">Select a calendar...</option>
+					<label class="block text-xs font-medium text-fg-body mb-1">Calendar (optional)</label>
+					<select name="calendar_id" class="input w-full" x-model="calendarId">
+						<option value="">No calendar (standalone events only)</option>
 						<template x-for="cal in calendars" :key="cal.id">
 							<option :value="cal.id" x-text="cal.name"></option>
 						</template>
 					</select>
-					<p class="text-xs text-fg-muted mt-1">Timeline events reference dates from this calendar.</p>
+					<p class="text-xs text-fg-muted mt-1">Link a calendar to import its events, or leave empty for standalone events only.</p>
 				</div>
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Description</label>
@@ -261,8 +269,10 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 					<div>
 						<h1 class="text-xl font-bold text-fg">{ data.Timeline.Name }</h1>
 						<p class="text-sm text-fg-muted">
-							<i class="fa-solid fa-calendar-days mr-1"></i>{ data.Timeline.CalendarName }
-							<span class="mx-2">&middot;</span>
+							if data.Timeline.HasCalendar() {
+								<i class="fa-solid fa-calendar-days mr-1"></i>{ data.Timeline.CalendarName }
+								<span class="mx-2">&middot;</span>
+							}
 							{ fmt.Sprintf("%d events", len(data.Events)) }
 						</p>
 					</div>
@@ -271,20 +281,28 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 					if data.IsScribe {
 						<button
 							class="btn-primary text-xs"
-							onclick="document.getElementById('event-picker-modal').classList.remove('hidden')"
+							onclick="document.getElementById('create-event-modal').classList.remove('hidden')"
 						>
-							<i class="fa-solid fa-link mr-1"></i> Add Events
+							<i class="fa-solid fa-plus mr-1"></i> Create Event
 						</button>
-						<button
-							class="btn-secondary text-xs"
-							hx-post={ fmt.Sprintf("/campaigns/%s/timelines/%s/events/all", data.CampaignID, data.Timeline.ID) }
-							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
-							hx-confirm="Link all available calendar events to this timeline?"
-							hx-swap="none"
-							hx-on::after-request="if(event.detail.successful) window.location.reload()"
-						>
-							<i class="fa-solid fa-link mr-1"></i> Add All
-						</button>
+						if data.Timeline.HasCalendar() {
+							<button
+								class="btn-secondary text-xs"
+								onclick="document.getElementById('event-picker-modal').classList.remove('hidden')"
+							>
+								<i class="fa-solid fa-link mr-1"></i> Link Events
+							</button>
+							<button
+								class="btn-secondary text-xs"
+								hx-post={ fmt.Sprintf("/campaigns/%s/timelines/%s/events/all", data.CampaignID, data.Timeline.ID) }
+								hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+								hx-confirm="Link all available calendar events to this timeline?"
+								hx-swap="none"
+								hx-on::after-request="if(event.detail.successful) window.location.reload()"
+							>
+								<i class="fa-solid fa-link mr-1"></i> Link All
+							</button>
+						}
 					}
 					if data.IsOwner {
 						<button
@@ -384,7 +402,10 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 			</div>
 		}
 		if data.IsScribe {
-			@eventPickerModal(data)
+			@createStandaloneEventModal(data)
+			if data.Timeline.HasCalendar() {
+				@eventPickerModal(data)
+			}
 		}
 	</div>
 }
@@ -706,6 +727,220 @@ templ entityGroupsInline(data TimelineViewData) {
 	</script>
 }
 
+// createStandaloneEventModal renders the form to create a standalone timeline event.
+templ createStandaloneEventModal(data TimelineViewData) {
+	<div
+		id="create-event-modal"
+		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick="if(event.target===this)this.classList.add('hidden')"
+	>
+		<div class="card p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4" x-data="standaloneEventForm()">
+			<div class="flex items-center justify-between">
+				<h2 class="text-lg font-semibold text-fg">Create Event</h2>
+				<button class="text-fg-muted hover:text-fg" onclick="document.getElementById('create-event-modal').classList.add('hidden')">
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+			<form @submit.prevent="submitEvent()" class="space-y-3">
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Event Name</label>
+					<input type="text" class="input w-full" x-model="name" required placeholder="e.g. Battle of the Five Kings"/>
+				</div>
+				<div class="grid grid-cols-3 gap-3">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Year</label>
+						<input type="number" class="input w-full" x-model.number="year" required/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Month</label>
+						<input type="number" class="input w-full" x-model.number="month" min="1" required/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Day</label>
+						<input type="number" class="input w-full" x-model.number="day" min="1" required/>
+					</div>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Description (optional)</label>
+					<textarea class="input w-full" rows="2" x-model="description" placeholder="What happened?"></textarea>
+				</div>
+				<div class="grid grid-cols-2 gap-3">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Category (optional)</label>
+						<input type="text" class="input w-full" x-model="category" placeholder="e.g. Battle, Festival"/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Visibility</label>
+						<select class="input w-full" x-model="visibility">
+							<option value="everyone">Everyone</option>
+							<option value="dm_only">DM Only</option>
+						</select>
+					</div>
+				</div>
+				<div class="grid grid-cols-2 gap-3">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Color (optional)</label>
+						<input type="color" class="input w-full h-9" x-model="color"/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Label Override (optional)</label>
+						<input type="text" class="input w-full" x-model="label" placeholder="Custom display label"/>
+					</div>
+				</div>
+				<!-- Expandable advanced fields -->
+				<details class="text-xs">
+					<summary class="cursor-pointer text-fg-muted hover:text-fg mb-2">Advanced Options (multi-day, time, recurrence)</summary>
+					<div class="space-y-3 pt-1">
+						<div class="grid grid-cols-2 gap-3">
+							<div>
+								<label class="block text-xs font-medium text-fg-body mb-1">Start Hour</label>
+								<input type="number" class="input w-full" x-model.number="startHour" min="0" max="23" placeholder="0-23"/>
+							</div>
+							<div>
+								<label class="block text-xs font-medium text-fg-body mb-1">Start Minute</label>
+								<input type="number" class="input w-full" x-model.number="startMinute" min="0" max="59" placeholder="0-59"/>
+							</div>
+						</div>
+						<div class="grid grid-cols-3 gap-3">
+							<div>
+								<label class="block text-xs font-medium text-fg-body mb-1">End Year</label>
+								<input type="number" class="input w-full" x-model.number="endYear"/>
+							</div>
+							<div>
+								<label class="block text-xs font-medium text-fg-body mb-1">End Month</label>
+								<input type="number" class="input w-full" x-model.number="endMonth" min="1"/>
+							</div>
+							<div>
+								<label class="block text-xs font-medium text-fg-body mb-1">End Day</label>
+								<input type="number" class="input w-full" x-model.number="endDay" min="1"/>
+							</div>
+						</div>
+						<div class="grid grid-cols-2 gap-3">
+							<div>
+								<label class="block text-xs font-medium text-fg-body mb-1">End Hour</label>
+								<input type="number" class="input w-full" x-model.number="endHour" min="0" max="23" placeholder="0-23"/>
+							</div>
+							<div>
+								<label class="block text-xs font-medium text-fg-body mb-1">End Minute</label>
+								<input type="number" class="input w-full" x-model.number="endMinute" min="0" max="59" placeholder="0-59"/>
+							</div>
+						</div>
+						<div class="flex items-center gap-3">
+							<label class="inline-flex items-center gap-1 text-xs text-fg-secondary">
+								<input type="checkbox" x-model="isRecurring" class="text-accent"/>
+								<span>Recurring</span>
+							</label>
+							<select class="input text-xs" x-model="recurrenceType" x-show="isRecurring">
+								<option value="yearly">Yearly</option>
+								<option value="monthly">Monthly</option>
+								<option value="weekly">Weekly</option>
+								<option value="daily">Daily</option>
+							</select>
+						</div>
+					</div>
+				</details>
+				<div class="flex items-center justify-between pt-2">
+					<span class="text-xs text-red-500" x-show="errorMsg" x-text="errorMsg"></span>
+					<div class="flex gap-2 ml-auto">
+						<button type="button" class="btn-secondary text-xs" onclick="document.getElementById('create-event-modal').classList.add('hidden')">
+							Cancel
+						</button>
+						<button type="submit" class="btn-primary text-xs" :disabled="saving">
+							<i class="fa-solid fa-plus mr-1"></i>
+							<span x-text="saving ? 'Creating...' : 'Create Event'"></span>
+						</button>
+					</div>
+				</div>
+			</form>
+		</div>
+	</div>
+	<script>
+		function standaloneEventForm() {
+			var parts = window.location.pathname.split('/');
+			var campaignID = parts[2];
+			var timelineID = parts[4];
+			return {
+				name: '',
+				year: 1,
+				month: 1,
+				day: 1,
+				description: '',
+				category: '',
+				visibility: 'everyone',
+				color: '',
+				label: '',
+				startHour: null,
+				startMinute: null,
+				endYear: null,
+				endMonth: null,
+				endDay: null,
+				endHour: null,
+				endMinute: null,
+				isRecurring: false,
+				recurrenceType: 'yearly',
+				saving: false,
+				errorMsg: '',
+				submitEvent() {
+					var self = this;
+					if (!self.name.trim()) { self.errorMsg = 'Name is required'; return; }
+					self.saving = true;
+					self.errorMsg = '';
+
+					var body = {
+						name: self.name.trim(),
+						year: self.year,
+						month: self.month,
+						day: self.day,
+						visibility: self.visibility
+					};
+					if (self.description) body.description = self.description;
+					if (self.category) body.category = self.category;
+					if (self.color) body.color = self.color;
+					if (self.label) body.label = self.label;
+					if (self.startHour !== null && self.startHour !== '') body.start_hour = parseInt(self.startHour);
+					if (self.startMinute !== null && self.startMinute !== '') body.start_minute = parseInt(self.startMinute);
+					if (self.endYear !== null && self.endYear !== '') body.end_year = parseInt(self.endYear);
+					if (self.endMonth !== null && self.endMonth !== '') body.end_month = parseInt(self.endMonth);
+					if (self.endDay !== null && self.endDay !== '') body.end_day = parseInt(self.endDay);
+					if (self.endHour !== null && self.endHour !== '') body.end_hour = parseInt(self.endHour);
+					if (self.endMinute !== null && self.endMinute !== '') body.end_minute = parseInt(self.endMinute);
+					if (self.isRecurring) {
+						body.is_recurring = true;
+						body.recurrence_type = self.recurrenceType;
+					}
+
+					var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
+					var headers = {'Content-Type': 'application/json'};
+					if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
+
+					fetch('/campaigns/' + campaignID + '/timelines/' + timelineID + '/standalone-events', {
+						method: 'POST',
+						headers: headers,
+						body: JSON.stringify(body)
+					})
+					.then(function(r) {
+						self.saving = false;
+						if (r.ok) {
+							document.getElementById('create-event-modal').classList.add('hidden');
+							window.location.reload();
+						} else {
+							return r.json().then(function(data) {
+								self.errorMsg = data.message || 'Failed to create event';
+							}).catch(function() {
+								self.errorMsg = 'Failed to create event';
+							});
+						}
+					})
+					.catch(function(err) {
+						self.saving = false;
+						self.errorMsg = 'Network error: ' + err.message;
+					});
+				}
+			};
+		}
+	</script>
+}
+
 // eventPickerModal renders the modal for linking calendar events to a timeline.
 templ eventPickerModal(data TimelineViewData) {
 	<div
@@ -853,16 +1088,29 @@ templ timelineEventCard(data TimelineViewData, el EventLink) {
 			}
 		</div>
 		if data.IsScribe {
-			<button
-				class="flex-shrink-0 text-fg-muted hover:text-red-500 transition-colors text-xs opacity-0 group-hover:opacity-100"
-				hx-delete={ fmt.Sprintf("/campaigns/%s/timelines/%s/events/%s", data.CampaignID, data.Timeline.ID, el.EventID) }
-				hx-confirm="Remove this event from the timeline?"
-				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
-				hx-target="closest .tl-event-card"
-				hx-swap="outerHTML"
-			>
-				<i class="fa-solid fa-unlink"></i>
-			</button>
+			if el.Source == "standalone" {
+				<button
+					class="flex-shrink-0 text-fg-muted hover:text-red-500 transition-colors text-xs opacity-0 group-hover:opacity-100"
+					hx-delete={ fmt.Sprintf("/campaigns/%s/timelines/%s/standalone-events/%s", data.CampaignID, data.Timeline.ID, el.EventID) }
+					hx-confirm="Delete this event? This action cannot be undone."
+					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+					hx-target="closest .tl-event-card"
+					hx-swap="outerHTML"
+				>
+					<i class="fa-solid fa-trash text-xs"></i>
+				</button>
+			} else {
+				<button
+					class="flex-shrink-0 text-fg-muted hover:text-red-500 transition-colors text-xs opacity-0 group-hover:opacity-100"
+					hx-delete={ fmt.Sprintf("/campaigns/%s/timelines/%s/events/%s", data.CampaignID, data.Timeline.ID, el.EventID) }
+					hx-confirm="Remove this event from the timeline?"
+					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+					hx-target="closest .tl-event-card"
+					hx-swap="outerHTML"
+				>
+					<i class="fa-solid fa-unlink"></i>
+				</button>
+			}
 		}
 	</div>
 }

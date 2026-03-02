@@ -33,6 +33,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Available events list for event picker (Scribe+).
 	cg.GET("/timelines/:tid/available-events", h.ListAvailableEventsAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// Standalone event CRUD (Scribe+).
+	cg.POST("/timelines/:tid/standalone-events", h.CreateStandaloneEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/timelines/:tid/standalone-events/:eid", h.UpdateStandaloneEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/timelines/:tid/standalone-events/:eid", h.DeleteStandaloneEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Entity group CRUD (Owner only — swim-lane management).
 	cg.GET("/timelines/:tid/groups", h.ListEntityGroupsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/timelines/:tid/groups", h.CreateEntityGroupAPI, campaigns.RequireRole(campaigns.RoleOwner))
