@@ -47,10 +47,10 @@ CREATE INDEX IF NOT EXISTS idx_session_entities_entity ON session_entities(entit
 CREATE INDEX IF NOT EXISTS idx_session_attendees_user ON session_attendees(user_id);
 
 -- Register sessions addon.
-INSERT INTO addons (id, name, slug, description, category, status, created_at, updated_at)
+INSERT INTO addons (slug, name, description, category, status, icon, author)
 VALUES (
-    UUID(), 'Sessions', 'sessions',
+    'sessions', 'Sessions',
     'Track game sessions with scheduling, linked entities, and RSVP.',
-    'plugin', 'active', NOW(), NOW()
+    'plugin', 'active', 'fa-calendar-check', 'Chronicle'
 )
 ON DUPLICATE KEY UPDATE name = VALUES(name);
