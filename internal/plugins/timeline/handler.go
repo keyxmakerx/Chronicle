@@ -387,7 +387,7 @@ func (h *Handler) UpdateStandaloneEventAPI(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 	}
 
-	if err := h.svc.UpdateStandaloneEvent(ctx, eventID, UpdateTimelineEventInput{
+	if err := h.svc.UpdateStandaloneEvent(ctx, timelineID, eventID, UpdateTimelineEventInput{
 		Name:            req.Name,
 		Description:     req.Description,
 		DescriptionHTML: req.DescriptionHTML,
@@ -426,7 +426,7 @@ func (h *Handler) DeleteStandaloneEventAPI(c echo.Context) error {
 		return err
 	}
 
-	if err := h.svc.DeleteStandaloneEvent(ctx, eventID); err != nil {
+	if err := h.svc.DeleteStandaloneEvent(ctx, timelineID, eventID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

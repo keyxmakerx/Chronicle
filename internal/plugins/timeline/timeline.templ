@@ -1041,7 +1041,7 @@ templ eventPickerModal(data TimelineViewData) {
 
 // timelineEventCard renders a single event in the timeline event list.
 templ timelineEventCard(data TimelineViewData, el EventLink) {
-	<div class="tl-event-card">
+	<div class="tl-event-card group">
 		<div class="w-14 text-center flex-shrink-0 pt-0.5">
 			<div class="text-xs font-mono text-fg-muted leading-tight">
 				{ fmt.Sprintf("Y%d", el.EventYear) }

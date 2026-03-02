@@ -80,8 +80,8 @@ type TimelineService interface {
 	// Standalone events.
 	CreateStandaloneEvent(ctx context.Context, timelineID string, input CreateTimelineEventInput) (*TimelineEvent, error)
 	GetStandaloneEvent(ctx context.Context, eventID string) (*TimelineEvent, error)
-	UpdateStandaloneEvent(ctx context.Context, eventID string, input UpdateTimelineEventInput) error
-	DeleteStandaloneEvent(ctx context.Context, eventID string) error
+	UpdateStandaloneEvent(ctx context.Context, timelineID, eventID string, input UpdateTimelineEventInput) error
+	DeleteStandaloneEvent(ctx context.Context, timelineID, eventID string) error
 
 	// Entity groups.
 	CreateEntityGroup(ctx context.Context, timelineID string, input CreateEntityGroupInput) (*EntityGroup, error)
@@ -515,12 +515,13 @@ func (s *timelineService) GetStandaloneEvent(ctx context.Context, eventID string
 }
 
 // UpdateStandaloneEvent modifies an existing standalone event.
-func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, eventID string, input UpdateTimelineEventInput) error {
+// timelineID is checked against the event's owner to prevent IDOR attacks.
+func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID, eventID string, input UpdateTimelineEventInput) error {
 	e, err := s.repo.GetEvent(ctx, eventID)
 	if err != nil {
 		return fmt.Errorf("get event for update: %w", err)
 	}
-	if e == nil {
+	if e == nil || e.TimelineID != timelineID {
 		return apperror.NewNotFound("event not found")
 	}
 
@@ -565,12 +566,13 @@ func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, eventID str
 }
 
 // DeleteStandaloneEvent removes a standalone event from a timeline.
-func (s *timelineService) DeleteStandaloneEvent(ctx context.Context, eventID string) error {
+// timelineID is checked against the event's owner to prevent IDOR attacks.
+func (s *timelineService) DeleteStandaloneEvent(ctx context.Context, timelineID, eventID string) error {
 	e, err := s.repo.GetEvent(ctx, eventID)
 	if err != nil {
 		return fmt.Errorf("get event for delete: %w", err)
 	}
-	if e == nil {
+	if e == nil || e.TimelineID != timelineID {
 		return apperror.NewNotFound("event not found")
 	}
 	if err := s.repo.DeleteEvent(ctx, eventID); err != nil {
