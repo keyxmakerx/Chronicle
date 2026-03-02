@@ -2,7 +2,7 @@
 -- Eras are named time periods (e.g. "Age of Fire", "Third Age") with year ranges.
 -- Weather effects are per-season text+icon hints (e.g. "Snowy", "Mild and rainy").
 
-CREATE TABLE calendar_eras (
+CREATE TABLE IF NOT EXISTS calendar_eras (
     id INT AUTO_INCREMENT PRIMARY KEY,
     calendar_id VARCHAR(36) NOT NULL,
     name VARCHAR(200) NOT NULL,
@@ -13,6 +13,6 @@ CREATE TABLE calendar_eras (
     sort_order INT NOT NULL DEFAULT 0,
     FOREIGN KEY (calendar_id) REFERENCES calendars(id) ON DELETE CASCADE,
     INDEX idx_eras_calendar (calendar_id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-ALTER TABLE calendar_seasons ADD COLUMN weather_effect VARCHAR(200) DEFAULT NULL;
+ALTER TABLE calendar_seasons ADD COLUMN IF NOT EXISTS weather_effect VARCHAR(200) DEFAULT NULL;
