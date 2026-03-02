@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-02 -- Timeline UI/UX polish pass. All 7 timeline plugin sprints complete. Added
-bordered card layout, polished header, event list with Alpine.js collapse, grouped admin
-panel with visibility/groups tabs. D3.js widget enhanced with card-style markers at day
-zoom, pill markers at month zoom, glow effects at low zoom, toolbar dividers, improved
-tooltip with opacity transitions, and better empty state with "Link Events" button.
+2026-03-02 -- Standalone timeline events. Timelines can now exist without a calendar
+and contain standalone events created directly on the timeline. Migration 000036 adds
+`timeline_events` table and makes `timelines.calendar_id` nullable. Full calendar event
+field parity (multi-day, times, recurrence). Create Event modal on show page. Service
+merges linked calendar events + standalone events into unified EventLink response.
 
 ## Current Phase
 **Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit

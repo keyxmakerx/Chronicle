@@ -706,9 +706,9 @@ templ eventModal(data CalendarViewData) {
 					}
 
 					function getHeaders() {
-						var csrfMeta = document.querySelector('meta[name="csrf-token"]');
 						var headers = { 'Content-Type': 'application/json' };
-						if (csrfMeta) headers['X-CSRF-Token'] = csrfMeta.content;
+						var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
+						if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
 						return headers;
 					}
 

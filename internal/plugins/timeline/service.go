@@ -67,7 +67,7 @@ type TimelineService interface {
 	UpdateTimeline(ctx context.Context, timelineID string, input UpdateTimelineInput) error
 	DeleteTimeline(ctx context.Context, timelineID string) error
 
-	// Event linking.
+	// Event linking (calendar events).
 	LinkEvent(ctx context.Context, timelineID, eventID string, input LinkEventInput) (*EventLink, error)
 	LinkAllEvents(ctx context.Context, timelineID string, role int) (int, error)
 	UnlinkEvent(ctx context.Context, timelineID, eventID string) error
@@ -76,6 +76,12 @@ type TimelineService interface {
 
 	// Event link visibility.
 	UpdateEventLinkVisibility(ctx context.Context, timelineID, eventID string, input UpdateEventVisibilityInput) error
+
+	// Standalone events.
+	CreateStandaloneEvent(ctx context.Context, timelineID string, input CreateTimelineEventInput) (*TimelineEvent, error)
+	GetStandaloneEvent(ctx context.Context, eventID string) (*TimelineEvent, error)
+	UpdateStandaloneEvent(ctx context.Context, timelineID, eventID string, input UpdateTimelineEventInput) error
+	DeleteStandaloneEvent(ctx context.Context, timelineID, eventID string) error
 
 	// Entity groups.
 	CreateEntityGroup(ctx context.Context, timelineID string, input CreateEntityGroupInput) (*EntityGroup, error)
@@ -113,10 +119,6 @@ func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string,
 	if len(input.Name) > 255 {
 		return nil, apperror.NewValidation("timeline name must be 255 characters or less")
 	}
-	if input.CalendarID == "" {
-		return nil, apperror.NewValidation("calendar is required")
-	}
-
 	// Default values.
 	if input.Color == "" {
 		input.Color = "#6366f1"
@@ -259,7 +261,8 @@ func (s *timelineService) DeleteTimeline(ctx context.Context, timelineID string)
 	return nil
 }
 
-// LinkEvent links a calendar event to a timeline.
+// LinkEvent links a calendar event to a timeline. Requires the timeline
+// to have a calendar (cannot link calendar events to calendar-free timelines).
 func (s *timelineService) LinkEvent(ctx context.Context, timelineID, eventID string, input LinkEventInput) (*EventLink, error) {
 	// Verify timeline exists.
 	t, err := s.repo.GetByID(ctx, timelineID)
@@ -268,6 +271,9 @@ func (s *timelineService) LinkEvent(ctx context.Context, timelineID, eventID str
 	}
 	if t == nil {
 		return nil, apperror.NewNotFound("timeline not found")
+	}
+	if !t.HasCalendar() {
+		return nil, apperror.NewValidation("cannot link calendar events to a timeline without a calendar")
 	}
 
 	// Determine display order (append to end).
@@ -298,13 +304,32 @@ func (s *timelineService) UnlinkEvent(ctx context.Context, timelineID, eventID s
 	return nil
 }
 
-// ListTimelineEvents returns all linked events for a timeline, filtered by
-// role-based visibility and per-user event link visibility rules.
+// ListTimelineEvents returns all events for a timeline — both linked calendar
+// events and standalone events — merged into a unified EventLink slice, sorted
+// by date, and filtered by role-based and per-user visibility rules.
 func (s *timelineService) ListTimelineEvents(ctx context.Context, timelineID string, role int, userID string) ([]EventLink, error) {
+	// Fetch linked calendar events.
 	events, err := s.repo.ListEventLinks(ctx, timelineID, role)
 	if err != nil {
 		return nil, fmt.Errorf("list timeline events: %w", err)
 	}
+
+	// Tag calendar events with their source.
+	for i := range events {
+		events[i].Source = "calendar"
+	}
+
+	// Fetch and merge standalone events.
+	standalone, err := s.repo.ListStandaloneEvents(ctx, timelineID, role)
+	if err != nil {
+		return nil, fmt.Errorf("list standalone events: %w", err)
+	}
+	for _, se := range standalone {
+		events = append(events, se.ToEventLink())
+	}
+
+	// Sort merged events by date then display order.
+	sortEventLinks(events)
 
 	// Apply per-user event link visibility rules (Owners always see everything).
 	if role < 3 && userID != "" {
@@ -320,6 +345,23 @@ func (s *timelineService) ListTimelineEvents(ctx context.Context, timelineID str
 	return events, nil
 }
 
+// sortEventLinks sorts events by year, month, day, then display order.
+func sortEventLinks(events []EventLink) {
+	for i := 1; i < len(events); i++ {
+		for j := i; j > 0; j-- {
+			a, b := events[j], events[j-1]
+			if a.EventYear < b.EventYear ||
+				(a.EventYear == b.EventYear && a.EventMonth < b.EventMonth) ||
+				(a.EventYear == b.EventYear && a.EventMonth == b.EventMonth && a.EventDay < b.EventDay) ||
+				(a.EventYear == b.EventYear && a.EventMonth == b.EventMonth && a.EventDay == b.EventDay && a.DisplayOrder < b.DisplayOrder) {
+				events[j], events[j-1] = events[j-1], events[j]
+			} else {
+				break
+			}
+		}
+	}
+}
+
 // ListAvailableEvents returns calendar events that can be linked to a timeline.
 // Filters out events already linked, returning only unlinked events.
 func (s *timelineService) ListAvailableEvents(ctx context.Context, timelineID string, role int) ([]CalendarEventRef, error) {
@@ -331,12 +373,12 @@ func (s *timelineService) ListAvailableEvents(ctx context.Context, timelineID st
 		return nil, apperror.NewNotFound("timeline not found")
 	}
 
-	if s.calEvents == nil {
+	if s.calEvents == nil || !t.HasCalendar() {
 		return nil, nil
 	}
 
 	// Get all calendar events.
-	allEvents, err := s.calEvents.ListEventsForCalendar(ctx, t.CalendarID, role)
+	allEvents, err := s.calEvents.ListEventsForCalendar(ctx, *t.CalendarID, role)
 	if err != nil {
 		return nil, fmt.Errorf("list calendar events: %w", err)
 	}
@@ -387,6 +429,156 @@ func (s *timelineService) LinkAllEvents(ctx context.Context, timelineID string, 
 		linked++
 	}
 	return linked, nil
+}
+
+// --- Standalone Event CRUD ---
+
+// CreateStandaloneEvent creates a new standalone event directly on a timeline.
+func (s *timelineService) CreateStandaloneEvent(ctx context.Context, timelineID string, input CreateTimelineEventInput) (*TimelineEvent, error) {
+	// Verify timeline exists.
+	t, err := s.repo.GetByID(ctx, timelineID)
+	if err != nil {
+		return nil, fmt.Errorf("get timeline for create event: %w", err)
+	}
+	if t == nil {
+		return nil, apperror.NewNotFound("timeline not found")
+	}
+
+	// Validate required fields.
+	if input.Name == "" {
+		return nil, apperror.NewValidation("event name is required")
+	}
+	if len(input.Name) > 255 {
+		return nil, apperror.NewValidation("event name must be 255 characters or less")
+	}
+
+	// Defaults.
+	if input.Visibility == "" {
+		input.Visibility = "everyone"
+	}
+	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
+		return nil, apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
+	}
+	if input.Color != nil && *input.Color != "" && !colorPattern.MatchString(*input.Color) {
+		return nil, apperror.NewValidation("color must be a valid hex color")
+	}
+
+	// Determine display order (append to end).
+	count, err := s.repo.CountStandaloneEvents(ctx, timelineID)
+	if err != nil {
+		return nil, fmt.Errorf("count standalone events: %w", err)
+	}
+
+	e := &TimelineEvent{
+		ID:              generateID(),
+		TimelineID:      timelineID,
+		EntityID:        input.EntityID,
+		Name:            input.Name,
+		Description:     input.Description,
+		DescriptionHTML: input.DescriptionHTML,
+		Year:            input.Year,
+		Month:           input.Month,
+		Day:             input.Day,
+		StartHour:       input.StartHour,
+		StartMinute:     input.StartMinute,
+		EndYear:         input.EndYear,
+		EndMonth:        input.EndMonth,
+		EndDay:          input.EndDay,
+		EndHour:         input.EndHour,
+		EndMinute:       input.EndMinute,
+		IsRecurring:     input.IsRecurring,
+		RecurrenceType:  input.RecurrenceType,
+		Category:        input.Category,
+		Visibility:      input.Visibility,
+		DisplayOrder:    count,
+		Label:           input.Label,
+		Color:           input.Color,
+		CreatedBy:       &input.CreatedBy,
+	}
+
+	if err := s.repo.CreateEvent(ctx, e); err != nil {
+		return nil, fmt.Errorf("create standalone event: %w", err)
+	}
+	return e, nil
+}
+
+// GetStandaloneEvent returns a standalone event by ID.
+func (s *timelineService) GetStandaloneEvent(ctx context.Context, eventID string) (*TimelineEvent, error) {
+	e, err := s.repo.GetEvent(ctx, eventID)
+	if err != nil {
+		return nil, fmt.Errorf("get standalone event: %w", err)
+	}
+	if e == nil {
+		return nil, apperror.NewNotFound("event not found")
+	}
+	return e, nil
+}
+
+// UpdateStandaloneEvent modifies an existing standalone event.
+// timelineID is checked against the event's owner to prevent IDOR attacks.
+func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID, eventID string, input UpdateTimelineEventInput) error {
+	e, err := s.repo.GetEvent(ctx, eventID)
+	if err != nil {
+		return fmt.Errorf("get event for update: %w", err)
+	}
+	if e == nil || e.TimelineID != timelineID {
+		return apperror.NewNotFound("event not found")
+	}
+
+	if input.Name == "" {
+		return apperror.NewValidation("event name is required")
+	}
+	if len(input.Name) > 255 {
+		return apperror.NewValidation("event name must be 255 characters or less")
+	}
+	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
+		return apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
+	}
+	if input.Color != nil && *input.Color != "" && !colorPattern.MatchString(*input.Color) {
+		return apperror.NewValidation("color must be a valid hex color")
+	}
+
+	e.EntityID = input.EntityID
+	e.Name = input.Name
+	e.Description = input.Description
+	e.DescriptionHTML = input.DescriptionHTML
+	e.Year = input.Year
+	e.Month = input.Month
+	e.Day = input.Day
+	e.StartHour = input.StartHour
+	e.StartMinute = input.StartMinute
+	e.EndYear = input.EndYear
+	e.EndMonth = input.EndMonth
+	e.EndDay = input.EndDay
+	e.EndHour = input.EndHour
+	e.EndMinute = input.EndMinute
+	e.IsRecurring = input.IsRecurring
+	e.RecurrenceType = input.RecurrenceType
+	e.Category = input.Category
+	e.Visibility = input.Visibility
+	e.Label = input.Label
+	e.Color = input.Color
+
+	if err := s.repo.UpdateEvent(ctx, e); err != nil {
+		return fmt.Errorf("update standalone event: %w", err)
+	}
+	return nil
+}
+
+// DeleteStandaloneEvent removes a standalone event from a timeline.
+// timelineID is checked against the event's owner to prevent IDOR attacks.
+func (s *timelineService) DeleteStandaloneEvent(ctx context.Context, timelineID, eventID string) error {
+	e, err := s.repo.GetEvent(ctx, eventID)
+	if err != nil {
+		return fmt.Errorf("get event for delete: %w", err)
+	}
+	if e == nil || e.TimelineID != timelineID {
+		return apperror.NewNotFound("event not found")
+	}
+	if err := s.repo.DeleteEvent(ctx, eventID); err != nil {
+		return fmt.Errorf("delete standalone event: %w", err)
+	}
+	return nil
 }
 
 // CreateEntityGroup creates a new entity group for swim-lane organization.

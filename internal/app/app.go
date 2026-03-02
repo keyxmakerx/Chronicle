@@ -223,9 +223,17 @@ func defaultErrorMessage(code int) string {
 	}
 }
 
-// isAPIRequest returns true if the request is targeting the API (JSON response expected).
+// isAPIRequest returns true if the request expects a JSON response.
+// Matches /api/* paths and fetch requests with JSON content type (e.g.,
+// calendar/maps/timeline endpoints that use fetch + JSON but live under
+// /campaigns/* rather than /api/*).
 func isAPIRequest(c echo.Context) bool {
-	return len(c.Request().URL.Path) >= 4 && c.Request().URL.Path[:4] == "/api"
+	path := c.Request().URL.Path
+	if len(path) >= 4 && path[:4] == "/api" {
+		return true
+	}
+	ct := c.Request().Header.Get("Content-Type")
+	return strings.Contains(ct, "application/json")
 }
 
 // isHTMXRequest returns true if the request was initiated by HTMX.

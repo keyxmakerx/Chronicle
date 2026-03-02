@@ -319,9 +319,9 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 			});
 
 			function getHeaders() {
-				var csrfMeta = document.querySelector('meta[name="csrf-token"]');
 				var headers = { 'Content-Type': 'application/json' };
-				if (csrfMeta) headers['X-CSRF-Token'] = csrfMeta.content;
+				var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
+				if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
 				return headers;
 			}
 
@@ -500,9 +500,9 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 				fd.append('campaign_id', campaignID);
 				fd.append('usage_type', 'attachment');
 
-				var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+				var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
 				var headers = {};
-				if (csrfMeta) headers['X-CSRF-Token'] = csrfMeta.content;
+				if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
 
 				try {
 					var resp = await fetch('/media/upload', {

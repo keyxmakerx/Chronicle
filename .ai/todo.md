@@ -54,9 +54,10 @@ see `.ai/roadmap.md`.
 - [x] Event edit modal (dual-purpose create/edit, clickable event chips, data attributes)
 - [x] Event delete confirmation UI (in-modal confirmation overlay)
 
-### Phase G: Maps & Geography
+### Phase G: Maps & Geography + Timeline
 - [x] Maps plugin Phase 1 (Leaflet.js, image upload, pins, entity linking, DM-only pins, drag-and-drop)
 - [ ] Maps plugin Phase 2 (layers, marker groups, privacy, nested maps)
+- [x] Timeline standalone events (migration 000036, calendar-free timelines, full event parity)
 
 ### Phase H: Secrets & Permissions
 - [x] Inline secrets / GM-only text (TipTap secret mark, server-side stripping, CSS styling)
