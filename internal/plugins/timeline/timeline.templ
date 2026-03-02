@@ -1,0 +1,311 @@
+// timeline.templ renders the timeline UI: timeline list page with create modal,
+// and timeline detail page with event list (Sprint 1 — static view).
+// D3.js interactive visualization will be added in Sprint 3.
+
+package timeline
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// TimelineListPage renders the full timeline list page.
+templ TimelineListPage(cc *campaigns.CampaignContext, data TimelineListData) {
+	@layouts.App("Timelines") {
+		@timelineListContent(cc, data)
+	}
+}
+
+// TimelineListFragment renders the timeline list as an HTMX fragment.
+templ TimelineListFragment(cc *campaigns.CampaignContext, data TimelineListData) {
+	@timelineListContent(cc, data)
+}
+
+// timelineListContent renders the timeline list body.
+templ timelineListContent(cc *campaigns.CampaignContext, data TimelineListData) {
+	<div class="max-w-4xl mx-auto py-6 px-4">
+		<div class="flex items-center justify-between mb-6">
+			<div>
+				<h1 class="text-xl font-bold text-fg">Timelines</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					if len(data.Timelines) == 0 {
+						No timelines yet. Create one to get started.
+					} else {
+						{ fmt.Sprintf("%d timeline(s)", len(data.Timelines)) }
+					}
+				</p>
+			</div>
+			if data.IsOwner {
+				<button
+					class="btn-primary text-sm"
+					onclick="document.getElementById('create-timeline-modal').classList.remove('hidden')"
+				>
+					<i class="fa-solid fa-plus mr-1"></i> New Timeline
+				</button>
+			}
+		</div>
+		if len(data.Timelines) > 0 {
+			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+				for _, t := range data.Timelines {
+					@timelineCard(data.CampaignID, t)
+				}
+			</div>
+		} else {
+			<div class="card p-12 text-center">
+				<i class="fa-solid fa-timeline text-4xl text-fg-muted mb-4"></i>
+				<p class="text-fg-secondary">No timelines yet.</p>
+				if data.IsOwner {
+					<p class="text-sm text-fg-muted mt-2">Click "New Timeline" to create your first timeline.</p>
+				}
+			</div>
+		}
+		if data.IsOwner {
+			@createTimelineModal(data)
+		}
+	</div>
+}
+
+// timelineCard renders a single timeline card in the list grid.
+templ timelineCard(campaignID string, t Timeline) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines/%s", campaignID, t.ID)) }
+		class="card p-4 hover:ring-2 hover:ring-accent/30 transition-all group"
+	>
+		<div class="flex items-center gap-3 mb-2">
+			<div
+				class="w-8 h-8 rounded-md flex items-center justify-center"
+				style={ fmt.Sprintf("background-color: %s20; color: %s", t.Color, t.Color) }
+			>
+				<i class={ "fa-solid " + t.Icon }></i>
+			</div>
+			<div class="min-w-0 flex-1">
+				<h3 class="text-sm font-semibold text-fg truncate">{ t.Name }</h3>
+				<p class="text-xs text-fg-muted">{ t.CalendarName }</p>
+			</div>
+		</div>
+		if t.Description != nil && *t.Description != "" {
+			<p class="text-xs text-fg-secondary mt-1 line-clamp-2">{ *t.Description }</p>
+		}
+		<div class="flex items-center gap-3 mt-3 text-xs text-fg-muted">
+			<span><i class="fa-solid fa-calendar-days mr-1"></i>{ fmt.Sprintf("%d events", t.EventCount) }</span>
+			if t.IsDMOnly() {
+				<span class="text-amber-500"><i class="fa-solid fa-eye-slash mr-1"></i>DM Only</span>
+			}
+		</div>
+	</a>
+}
+
+// createTimelineModal renders the form to create a new timeline.
+templ createTimelineModal(data TimelineListData) {
+	<div
+		id="create-timeline-modal"
+		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick="if(event.target===this)this.classList.add('hidden')"
+	>
+		<div class="card p-6 w-full max-w-md space-y-4">
+			<div class="flex items-center justify-between">
+				<h2 class="text-lg font-semibold text-fg">New Timeline</h2>
+				<button class="text-fg-muted hover:text-fg" onclick="document.getElementById('create-timeline-modal').classList.add('hidden')">
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+			<form
+				method="POST"
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", data.CampaignID)) }
+				class="space-y-3"
+				x-data="timelineCreateForm()"
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Timeline Name</label>
+					<input type="text" name="name" class="input w-full" required placeholder="e.g. The War of Shadows"/>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Calendar</label>
+					<select name="calendar_id" class="input w-full" required x-model="calendarId">
+						<option value="">Select a calendar...</option>
+						<template x-for="cal in calendars" :key="cal.id">
+							<option :value="cal.id" x-text="cal.name"></option>
+						</template>
+					</select>
+					<p class="text-xs text-fg-muted mt-1">Timeline events reference dates from this calendar.</p>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Description</label>
+					<textarea name="description" class="input w-full" rows="2" placeholder="Optional description"></textarea>
+				</div>
+				<div class="grid grid-cols-2 gap-3">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Color</label>
+						<input type="color" name="color" class="input w-full h-9" value="#6366f1"/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Visibility</label>
+						<select name="visibility" class="input w-full">
+							<option value="everyone">Everyone</option>
+							<option value="dm_only">DM Only</option>
+						</select>
+					</div>
+				</div>
+				<input type="hidden" name="icon" value="fa-timeline"/>
+				<div class="flex justify-end gap-2 pt-2">
+					<button type="button" class="btn-secondary text-xs" onclick="document.getElementById('create-timeline-modal').classList.add('hidden')">
+						Cancel
+					</button>
+					<button type="submit" class="btn-primary text-xs">
+						<i class="fa-solid fa-plus mr-1"></i> Create Timeline
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+	<script>
+		function timelineCreateForm() {
+			return {
+				calendarId: '',
+				calendars: [],
+				init() {
+					// Fetch available calendars for this campaign.
+					var campaignID = window.location.pathname.split('/campaigns/')[1].split('/')[0];
+					fetch('/campaigns/' + campaignID + '/timelines/calendars')
+						.then(function(r) { return r.json(); })
+						.then(function(data) { this.calendars = data || []; }.bind(this))
+						.catch(function(err) { console.warn('[timeline] Failed to load calendars:', err); });
+				}
+			};
+		}
+	</script>
+}
+
+// TimelineShowPage renders the full timeline detail page.
+templ TimelineShowPage(cc *campaigns.CampaignContext, data TimelineViewData) {
+	@layouts.App(data.Timeline.Name) {
+		@timelineShowContent(cc, data)
+	}
+}
+
+// TimelineShowFragment renders the timeline detail as an HTMX fragment.
+templ TimelineShowFragment(cc *campaigns.CampaignContext, data TimelineViewData) {
+	@timelineShowContent(cc, data)
+}
+
+// timelineShowContent renders the timeline detail page with event list.
+// Sprint 1: Static event list. Sprint 3 will replace with D3.js visualization.
+templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) {
+	<div class="max-w-5xl mx-auto py-6 px-4">
+		<!-- Header -->
+		<div class="flex items-center justify-between mb-6">
+			<div class="flex items-center gap-3">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", data.CampaignID)) }
+					class="text-fg-muted hover:text-fg transition-colors"
+				>
+					<i class="fa-solid fa-arrow-left"></i>
+				</a>
+				<div
+					class="w-10 h-10 rounded-lg flex items-center justify-center"
+					style={ fmt.Sprintf("background-color: %s20; color: %s", data.Timeline.Color, data.Timeline.Color) }
+				>
+					<i class={ "fa-solid " + data.Timeline.Icon + " text-lg" }></i>
+				</div>
+				<div>
+					<h1 class="text-xl font-bold text-fg">{ data.Timeline.Name }</h1>
+					<p class="text-sm text-fg-muted">
+						<i class="fa-solid fa-calendar-days mr-1"></i>{ data.Timeline.CalendarName }
+						<span class="mx-2">&middot;</span>
+						{ fmt.Sprintf("%d events", len(data.Events)) }
+					</p>
+				</div>
+			</div>
+			if data.IsOwner {
+				<div class="flex items-center gap-2">
+					<button
+						class="btn-secondary text-xs"
+						hx-delete={ fmt.Sprintf("/campaigns/%s/timelines/%s", data.CampaignID, data.Timeline.ID) }
+						hx-confirm="Delete this timeline? This action cannot be undone."
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+					>
+						<i class="fa-solid fa-trash mr-1"></i> Delete
+					</button>
+				</div>
+			}
+		</div>
+		if data.Timeline.Description != nil && *data.Timeline.Description != "" {
+			<p class="text-sm text-fg-secondary mb-6">{ *data.Timeline.Description }</p>
+		}
+		if data.Timeline.IsDMOnly() {
+			<div class="flex items-center gap-2 text-xs text-amber-500 mb-4">
+				<i class="fa-solid fa-eye-slash"></i>
+				<span>This timeline is only visible to the DM</span>
+			</div>
+		}
+		<!-- Event List (Sprint 1: static list, Sprint 3: D3.js visualization) -->
+		<div class="space-y-3">
+			if len(data.Events) > 0 {
+				for _, el := range data.Events {
+					@timelineEventCard(data, el)
+				}
+			} else {
+				<div class="card p-8 text-center">
+					<i class="fa-solid fa-calendar-plus text-3xl text-fg-muted mb-3"></i>
+					<p class="text-fg-secondary text-sm">No events linked yet.</p>
+					<p class="text-xs text-fg-muted mt-1">Link calendar events to build your timeline.</p>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+// timelineEventCard renders a single event in the timeline event list.
+templ timelineEventCard(data TimelineViewData, el EventLink) {
+	<div class="card p-4 flex items-start gap-3">
+		<div class="flex-shrink-0 w-16 text-center">
+			<div class="text-xs font-mono text-fg-muted">
+				{ fmt.Sprintf("Y%d", el.EventYear) }
+			</div>
+			<div class="text-sm font-semibold text-fg">
+				{ fmt.Sprintf("M%d D%d", el.EventMonth, el.EventDay) }
+			</div>
+		</div>
+		<div
+			class="w-1 self-stretch rounded-full flex-shrink-0"
+			if el.EffectiveColor() != "" {
+				style={ fmt.Sprintf("background-color: %s", el.EffectiveColor()) }
+			} else {
+				style={ fmt.Sprintf("background-color: %s", data.Timeline.Color) }
+			}
+		></div>
+		<div class="flex-1 min-w-0">
+			<h3 class="text-sm font-semibold text-fg">{ el.EffectiveLabel() }</h3>
+			if el.EventEntityName != "" {
+				<p class="text-xs text-fg-muted mt-0.5">
+					if el.EventEntityIcon != "" {
+						<i class={ "fa-solid " + el.EventEntityIcon + " mr-1" }></i>
+					}
+					{ el.EventEntityName }
+				</p>
+			}
+			if el.EventCategory != nil && *el.EventCategory != "" {
+				<span class="inline-block text-xs bg-surface-alt text-fg-secondary px-2 py-0.5 rounded mt-1">
+					{ *el.EventCategory }
+				</span>
+			}
+			if el.EventDescription != nil && *el.EventDescription != "" {
+				<p class="text-xs text-fg-secondary mt-1 line-clamp-2">{ *el.EventDescription }</p>
+			}
+		</div>
+		if data.IsScribe {
+			<button
+				class="flex-shrink-0 text-fg-muted hover:text-red-500 transition-colors text-xs"
+				hx-delete={ fmt.Sprintf("/campaigns/%s/timelines/%s/events/%s", data.CampaignID, data.Timeline.ID, el.EventID) }
+				hx-confirm="Remove this event from the timeline?"
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+				hx-target="closest .card"
+				hx-swap="outerHTML"
+			>
+				<i class="fa-solid fa-unlink"></i>
+			</button>
+		}
+	</div>
+}

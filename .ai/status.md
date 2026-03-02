@@ -511,6 +511,33 @@ All 6 sprints (5-10) are complete:
   calendar/{service,handler}.go, entities/{repository,handler}.go, app/routes.go,
   editor.js, template_editor.js, notes.js, dashboard_editor.js, .ai/status.md.
 
+### Timeline Plugin Sprint 1 — COMPLETE
+- **Migration 000035**: 4 tables (`timelines`, `timeline_event_links`,
+  `timeline_entity_groups`, `timeline_entity_group_members`). Addon updated from
+  planned/widget to active/plugin.
+- **Model**: Timeline, EventLink, EntityGroup, EntityGroupMember structs with DTOs.
+  VisibilityRules JSON struct for per-user visibility overrides. Zoom level constants
+  (era, century, decade, year, month, day). EffectiveLabel/EffectiveColor helpers.
+- **Repository**: Full CRUD for timelines, event links, entity groups. Calendar name
+  JOIN, event count subquery, entity display data JOINs. Role-based visibility filter.
+- **Service**: Validation (name, icon, color, visibility, zoom), CalendarLister interface
+  for calendar selector dropdown, CRUD orchestration.
+- **Handler**: Thin handlers with IDOR protection (requireTimelineInCampaign). Index,
+  Show, CreateForm, UpdateAPI, DeleteAPI, LinkEventAPI, UnlinkEventAPI, TimelineDataAPI,
+  ListCalendarsAPI. HTMX fragment support.
+- **Routes**: Owner (create, update, delete, calendar list), Scribe (link/unlink events),
+  Player (view list, view timeline, data API). Public-capable views via OptionalAuth.
+- **Templates**: List page with card grid + create modal (Alpine.js calendar selector).
+  Show page with event list (Sprint 1 static, Sprint 3 D3.js). Event cards with date,
+  color bar, entity link, category badge, unlink button.
+- **Calendar integration**: calendarListerAdapter in app/routes.go wraps CalendarService
+  for the timeline create form dropdown. User-selected calendar_id FK. Forward-compatible
+  with future multi-calendar support.
+- **Wiring**: Added to app/routes.go, installedAddons, sidebar nav (fa-timeline icon).
+- **Files**: migration 000035 (up/down), timeline/{model,repository,service,handler,
+  routes,timeline.templ,.ai.md} (all new), app/routes.go, addons/service.go,
+  layouts/app.templ.
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -533,10 +560,12 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Phase H continued:** Per-entity permissions (view/edit per role/user), group-based
-   visibility (beyond everyone/dm_only), campaign export/import.
-2. **Maps Phase 2 (optional):** Layers, marker groups, nested maps, fog of war.
-3. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference).
+1. **Timeline Sprint 2:** Calendar event linking UI (event picker modal, link/unlink
+   workflow, "create new event" flow from timeline).
+2. **Timeline Sprint 3:** Interactive D3.js visualization (vendor D3, timeline.js widget,
+   year-level zoom, pan/drag, tooltips, JSON data endpoint).
+3. **Phase H continued:** Per-entity permissions, group-based visibility.
+4. **Maps Phase 2 (optional):** Layers, marker groups, nested maps, fog of war.
 4. **Handler-level "view as player":** Extend toggle to filter is_private entities
    at repository level (currently template-only).
 5. **UX polish:** Entity search typeahead for calendar event + map marker entity linking.

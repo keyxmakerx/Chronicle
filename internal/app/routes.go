@@ -23,6 +23,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -166,6 +167,29 @@ func (a *entityCampaignCheckerAdapter) EntityBelongsToCampaign(ctx context.Conte
 		return false, err
 	}
 	return entity.CampaignID == campaignID, nil
+}
+
+// calendarListerAdapter wraps calendar.CalendarService to implement the
+// timeline.CalendarLister interface. Returns available calendars for the
+// timeline create form's calendar selector dropdown.
+type calendarListerAdapter struct {
+	svc calendar.CalendarService
+}
+
+// ListCalendars returns all calendars for a campaign as lightweight refs.
+// Currently returns at most one (one-per-campaign constraint), but is
+// forward-compatible with future multi-calendar support.
+func (a *calendarListerAdapter) ListCalendars(ctx context.Context, campaignID string) ([]timeline.CalendarRef, error) {
+	cal, err := a.svc.GetCalendar(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if cal == nil {
+		return nil, nil
+	}
+	return []timeline.CalendarRef{
+		{ID: cal.ID, Name: cal.Name},
+	}, nil
 }
 
 // storageLimiterAdapter wraps settings.SettingsService to implement the
@@ -356,6 +380,12 @@ func (a *App) RegisterRoutes() {
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService)
+
+	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
+	timelineRepo := timeline.NewTimelineRepository(a.DB)
+	timelineSvc := timeline.NewTimelineService(timelineRepo, &calendarListerAdapter{svc: calendarService})
+	timelineHandler := timeline.NewHandler(timelineSvc)
+	timeline.RegisterRoutes(e, timelineHandler, campaignService, authService)
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
