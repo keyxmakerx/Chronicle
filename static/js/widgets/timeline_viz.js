@@ -11,12 +11,12 @@
  *   - Skip-to-date input, zoom fit, search/filter bar
  *
  * Zoom levels and visual styles:
- *   Era     — Small dots, event count badges per era
- *   Century — Small circles with count badges per century
- *   Decade  — Medium circles, category color coding
+ *   Era     — Small dots with subtle glow
+ *   Century — Small circles with glow effect
+ *   Decade  — Medium circles with category color coding
  *   Year    — Circles with labels, date annotations
- *   Month   — Large circles with full labels and entity info
- *   Day     — Full cards with all event detail
+ *   Month   — Pill-shaped markers with label backgrounds
+ *   Day     — Card-style markers with full event detail
  *
  * Mount: <div data-widget="timeline-viz"
  *             data-campaign-id="..."
@@ -100,6 +100,7 @@ Chronicle.register('timeline-viz', {
         '</button>' +
         '<span class="timeline-viz-zoom-label">Year</span>' +
       '</div>' +
+      '<div class="timeline-viz-toolbar-divider"></div>' +
       '<div class="timeline-viz-toolbar-center">' +
         '<div class="timeline-viz-search-wrap">' +
           '<i class="fa-solid fa-search timeline-viz-search-icon"></i>' +
@@ -109,6 +110,7 @@ Chronicle.register('timeline-viz', {
           '</button>' +
         '</div>' +
       '</div>' +
+      '<div class="timeline-viz-toolbar-divider"></div>' +
       '<div class="timeline-viz-toolbar-right">' +
         '<label class="timeline-viz-skip-label">Go to year:</label>' +
         '<input type="number" class="timeline-viz-skip-input" placeholder="Year"/>' +
@@ -124,10 +126,9 @@ Chronicle.register('timeline-viz', {
     this.el.appendChild(svgContainer);
     this.svgContainer = svgContainer;
 
-    // Tooltip.
+    // Tooltip (uses opacity transition via .visible class).
     var tip = document.createElement('div');
     tip.className = 'timeline-viz-tooltip';
-    tip.style.display = 'none';
     document.body.appendChild(tip);
     this.tooltip = tip;
 
@@ -197,9 +198,14 @@ Chronicle.register('timeline-viz', {
     if (this.events.length === 0) {
       this.svgContainer.innerHTML =
         '<div class="timeline-viz-empty">' +
-          '<i class="fa-solid fa-calendar-plus text-3xl text-fg-muted mb-3"></i>' +
-          '<p>No events to display.</p>' +
-          '<p class="text-xs text-fg-muted mt-1">Link calendar events to see them on the timeline.</p>' +
+          '<div class="timeline-viz-empty-line"></div>' +
+          '<i class="fa-solid fa-calendar-plus text-4xl mb-3" style="color: var(--color-fg-muted)"></i>' +
+          '<p style="font-weight: 600">No events to display</p>' +
+          '<p class="text-xs mt-1" style="color: var(--color-fg-muted)">Link calendar events to see them on the timeline.</p>' +
+          '<button class="timeline-viz-btn mt-4" style="width:auto; padding:6px 16px; font-size:12px" ' +
+            'onclick="var m=document.getElementById(\'event-picker-modal\'); if(m) m.classList.remove(\'hidden\')">' +
+            '<i class="fa-solid fa-link" style="margin-right:6px"></i>Link Events' +
+          '</button>' +
         '</div>';
       return;
     }
@@ -232,15 +238,25 @@ Chronicle.register('timeline-viz', {
     this.width = width;
     this.height = height;
 
-    // Clip path for the main content area.
-    svg.append('defs')
-      .append('clipPath')
+    // Defs: clip path and glow filter.
+    var defs = svg.append('defs');
+    defs.append('clipPath')
       .attr('id', 'timeline-clip')
       .append('rect')
       .attr('x', m.left)
       .attr('y', m.top)
       .attr('width', width - m.left - m.right)
       .attr('height', contentHeight);
+
+    // Glow filter for low-zoom event dots.
+    var glowFilter = defs.append('filter')
+      .attr('id', 'event-glow')
+      .attr('x', '-50%').attr('y', '-50%')
+      .attr('width', '200%').attr('height', '200%');
+    glowFilter.append('feDropShadow')
+      .attr('dx', 0).attr('dy', 1)
+      .attr('stdDeviation', 2)
+      .attr('flood-opacity', 0.35);
 
     // X scale: maps year values to pixel positions.
     var xScale = d3.scaleLinear()
@@ -441,13 +457,15 @@ Chronicle.register('timeline-viz', {
       })
       .style('cursor', 'pointer');
 
-    // Event circle — base marker.
+    // Event circle — base marker (with glow at low zoom levels).
+    var useGlow = (this.currentZoomLevel === 'era' || this.currentZoomLevel === 'century' || this.currentZoomLevel === 'decade');
     eventGroups.append('circle')
       .attr('class', 'timeline-event-dot')
       .attr('r', style.radius)
       .attr('fill', function(d) { return self._eventColor(d); })
       .attr('stroke', 'var(--color-surface, #1a1b26)')
-      .attr('stroke-width', style.strokeWidth);
+      .attr('stroke-width', style.strokeWidth)
+      .attr('filter', useGlow ? 'url(#event-glow)' : null);
 
     // Pulsing ring for highlighted (searched) events.
     eventGroups.append('circle')
@@ -459,13 +477,50 @@ Chronicle.register('timeline-viz', {
       .attr('opacity', 0)
       .attr('stroke-dasharray', '3,3');
 
-    // Event name label.
+    // Pill background for month zoom labels.
+    var isMonth = (this.currentZoomLevel === 'month');
+    if (isMonth) {
+      eventGroups.append('rect')
+        .attr('class', 'timeline-event-pill')
+        .attr('rx', 4).attr('ry', 4)
+        .attr('x', style.radius + 2)
+        .attr('y', -13)
+        .attr('width', function(d) {
+          var label = d.label || d.event_name || '';
+          return Math.min(label.length * 6.5 + 16, 160);
+        })
+        .attr('height', 20)
+        .attr('fill', function(d) { return self._eventColor(d) + '20'; })
+        .attr('stroke', function(d) { return self._eventColor(d) + '60'; })
+        .attr('stroke-width', 1);
+    }
+
+    // Card markers at day zoom level (foreignObject with HTML cards).
+    var isDay = (this.currentZoomLevel === 'day');
+    if (isDay) {
+      eventGroups.append('foreignObject')
+        .attr('class', 'timeline-event-card-fo')
+        .attr('width', 180).attr('height', 62)
+        .attr('x', style.radius + 6).attr('y', -31)
+        .append('xhtml:div')
+        .attr('class', 'tl-viz-card')
+        .html(function(d) {
+          var label = self._escapeHTML(d.label || d.event_name || 'Untitled');
+          var date = 'M' + d.event_month + ' D' + d.event_day;
+          var entity = d.event_entity_name ? self._escapeHTML(d.event_entity_name) : '';
+          return '<div class="tl-viz-card-name">' + label + '</div>' +
+                 '<div class="tl-viz-card-date">' + date + '</div>' +
+                 (entity ? '<div class="tl-viz-card-entity">' + entity + '</div>' : '');
+        });
+    }
+
+    // Event name label (hidden at day zoom — cards replace it).
     eventGroups.append('text')
       .attr('class', 'timeline-event-label')
-      .attr('x', style.radius + 4)
+      .attr('x', style.radius + (isMonth ? 10 : 4))
       .attr('y', -2)
       .text(function(d) { return d.label || d.event_name || ''; })
-      .style('display', style.showLabel ? null : 'none');
+      .style('display', (style.showLabel && !isDay) ? null : 'none');
 
     // Date sub-label.
     eventGroups.append('text')
@@ -473,15 +528,15 @@ Chronicle.register('timeline-viz', {
       .attr('x', style.radius + 4)
       .attr('y', 10)
       .text(function(d) { return 'M' + d.event_month + ' D' + d.event_day; })
-      .style('display', style.showDate ? null : 'none');
+      .style('display', (style.showDate && !isDay) ? null : 'none');
 
-    // Entity sub-label.
+    // Entity sub-label (only at month zoom — day zoom uses cards).
     eventGroups.append('text')
       .attr('class', 'timeline-event-entity')
       .attr('x', style.radius + 4)
       .attr('y', 22)
       .text(function(d) { return d.event_entity_name || ''; })
-      .style('display', style.showEntity && this.currentZoomLevel === 'day' ? null : 'none');
+      .style('display', (style.showEntity && this.currentZoomLevel === 'month') ? null : 'none');
 
     // Category indicator dot (small colored dot next to main circle at decade+ zoom).
     eventGroups.append('circle')
@@ -625,28 +680,27 @@ Chronicle.register('timeline-viz', {
 
     // Update event visual styles based on zoom level.
     if (levelChanged) {
-      this.eventGroups.selectAll('.timeline-event-dot')
-        .transition().duration(200)
-        .attr('r', style.radius)
-        .attr('stroke-width', style.strokeWidth);
+      var isDay = (newLevel === 'day');
+      var isMonth = (newLevel === 'month');
+      var useGlow = (newLevel === 'era' || newLevel === 'century' || newLevel === 'decade');
 
-      this.eventGroups.selectAll('.timeline-event-highlight')
-        .attr('r', style.radius + 4);
+      // Redraw events to swap marker types (circle/pill/card).
+      this.contentGroup.selectAll('.timeline-event').remove();
+      this._drawEvents();
 
-      this.eventGroups.selectAll('.timeline-event-label')
-        .style('display', style.showLabel ? null : 'none')
-        .attr('x', style.radius + 4);
+      // Re-apply search filter after redraw.
+      if (this.searchQuery) {
+        this._applySearchFilter();
+      }
 
-      this.eventGroups.selectAll('.timeline-event-date')
-        .style('display', style.showDate ? null : 'none')
-        .attr('x', style.radius + 4);
-
-      this.eventGroups.selectAll('.timeline-event-entity')
-        .style('display', style.showEntity && this.currentZoomLevel === 'day' ? null : 'none')
-        .attr('x', style.radius + 4);
-
-      this.eventGroups.selectAll('.timeline-event-cat-dot')
-        .attr('cx', function() { return -(style.radius + 3); });
+      // Reposition after redraw.
+      this.eventGroups.attr('transform', function(d) {
+        var x = newX(self._dateToYear(d));
+        var laneY = self.yScale(d._lane) || self.margin.top;
+        var bandH = self.yScale.bandwidth() || self.laneHeight;
+        var y = laneY + bandH / 2;
+        return 'translate(' + x + ',' + y + ')';
+      });
     }
 
     this._updateZoomLevel();
@@ -774,52 +828,61 @@ Chronicle.register('timeline-viz', {
     var tip = this.tooltip;
     var label = d.label || d.event_name || 'Untitled';
     var date = 'Y' + d.event_year + ' M' + d.event_month + ' D' + d.event_day;
-    var lines = [
-      '<strong>' + this._escapeHTML(label) + '</strong>',
-      '<span class="text-fg-muted">' + date + '</span>'
-    ];
+
+    // Build structured tooltip content.
+    var html = '<div style="font-weight:700; font-size:13px; margin-bottom:4px">' +
+      this._escapeHTML(label) + '</div>';
+    html += '<div style="font-family:ui-monospace,monospace; font-size:11px; color:var(--color-fg-muted); margin-bottom:4px">' +
+      date + '</div>';
+
     if (d.event_entity_name) {
-      lines.push('<span class="text-fg-secondary">' +
-        (d.event_entity_icon ? '<i class="fa-solid ' + d.event_entity_icon + ' mr-1"></i>' : '') +
-        this._escapeHTML(d.event_entity_name) + '</span>');
+      html += '<div style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--color-fg-secondary); margin-bottom:3px">';
+      if (d.event_entity_icon) {
+        html += '<i class="fa-solid ' + d.event_entity_icon + '"></i>';
+      }
+      html += this._escapeHTML(d.event_entity_name) + '</div>';
     }
     if (d.event_category) {
-      lines.push('<span class="timeline-viz-tooltip-cat">' + this._escapeHTML(d.event_category) + '</span>');
+      html += '<div><span class="timeline-viz-tooltip-cat">' + this._escapeHTML(d.event_category) + '</span></div>';
     }
     if (d.event_description) {
       var desc = d.event_description;
-      if (desc.length > 100) desc = desc.substring(0, 100) + '...';
-      lines.push('<span class="text-xs text-fg-muted">' + this._escapeHTML(desc) + '</span>');
+      if (desc.length > 120) desc = desc.substring(0, 120) + '...';
+      html += '<div style="font-size:11px; color:var(--color-fg-muted); margin-top:4px; line-height:1.4">' +
+        this._escapeHTML(desc) + '</div>';
     }
 
-    tip.innerHTML = lines.join('<br/>');
-    tip.style.display = 'block';
+    tip.innerHTML = html;
 
-    var x = event.pageX + 12;
-    var y = event.pageY - 10;
+    // Position tooltip.
+    var x = event.pageX + 14;
+    var y = event.pageY - 12;
     var tipW = tip.offsetWidth;
     if (x + tipW > window.innerWidth - 20) {
-      x = event.pageX - tipW - 12;
+      x = event.pageX - tipW - 14;
     }
     tip.style.left = x + 'px';
     tip.style.top = y + 'px';
+
+    // Fade in via CSS transition.
+    tip.classList.add('visible');
   },
 
   /**
-   * Hide the tooltip.
+   * Hide the tooltip with opacity fade-out.
    */
   _hideTooltip: function() {
-    this.tooltip.style.display = 'none';
+    this.tooltip.classList.remove('visible');
   },
 
   /**
    * Handle click on an event marker.
    */
   _onEventClick: function(event, d) {
-    // Open the collapsible event list and scroll to the matching card.
-    var details = this.el.parentElement.querySelector('details');
-    if (details) {
-      details.open = true;
+    // Open the event list section (Alpine.js managed).
+    var container = this.el.closest('[x-data]');
+    if (container && container.__x) {
+      container.__x.$data.eventListOpen = true;
     }
   },
 

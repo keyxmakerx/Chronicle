@@ -98,8 +98,8 @@ templ timelineListContent(cc *campaigns.CampaignContext, data TimelineListData) 
 				}
 			</div>
 		} else {
-			<div class="card p-12 text-center">
-				<i class="fa-solid fa-timeline text-4xl text-fg-muted mb-4"></i>
+			<div class="card p-16 text-center">
+				<i class="fa-solid fa-timeline text-5xl text-fg-muted mb-4"></i>
 				<p class="text-fg-secondary">No timelines yet.</p>
 				if data.IsOwner {
 					<p class="text-sm text-fg-muted mt-2">Click "New Timeline" to create your first timeline.</p>
@@ -116,7 +116,7 @@ templ timelineListContent(cc *campaigns.CampaignContext, data TimelineListData) 
 templ timelineCard(campaignID string, t Timeline) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines/%s", campaignID, t.ID)) }
-		class="card p-4 hover:ring-2 hover:ring-accent/30 transition-all group"
+		class="card p-4 hover:ring-2 hover:ring-accent/30 hover:shadow-md transition-all group"
 	>
 		<div class="flex items-center gap-3 mb-2">
 			<div
@@ -241,73 +241,75 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 	<!-- D3.js (loaded only on timeline detail pages) -->
 	<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 	<script src="/static/js/widgets/timeline_viz.js"></script>
-	<div class="max-w-5xl mx-auto py-6 px-4">
-		<!-- Header -->
-		<div class="flex items-center justify-between mb-6">
-			<div class="flex items-center gap-3">
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", data.CampaignID)) }
-					class="text-fg-muted hover:text-fg transition-colors"
-				>
-					<i class="fa-solid fa-arrow-left"></i>
-				</a>
-				<div
-					class="w-10 h-10 rounded-lg flex items-center justify-center"
-					style={ fmt.Sprintf("background-color: %s20; color: %s", data.Timeline.Color, data.Timeline.Color) }
-				>
-					<i class={ "fa-solid " + data.Timeline.Icon + " text-lg" }></i>
+	<div class="max-w-5xl mx-auto py-6 px-4" x-data="{ eventListOpen: true, manageOpen: false, adminTab: 'visibility' }">
+		<!-- Header Card -->
+		<div class="card p-5 mb-4">
+			<div class="flex items-center justify-between">
+				<div class="flex items-center gap-3">
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", data.CampaignID)) }
+						class="text-fg-muted hover:text-fg transition-colors"
+					>
+						<i class="fa-solid fa-arrow-left"></i>
+					</a>
+					<div
+						class="w-10 h-10 rounded-lg flex items-center justify-center"
+						style={ fmt.Sprintf("background-color: %s20; color: %s", data.Timeline.Color, data.Timeline.Color) }
+					>
+						<i class={ "fa-solid " + data.Timeline.Icon + " text-lg" }></i>
+					</div>
+					<div>
+						<h1 class="text-xl font-bold text-fg">{ data.Timeline.Name }</h1>
+						<p class="text-sm text-fg-muted">
+							<i class="fa-solid fa-calendar-days mr-1"></i>{ data.Timeline.CalendarName }
+							<span class="mx-2">&middot;</span>
+							{ fmt.Sprintf("%d events", len(data.Events)) }
+						</p>
+					</div>
 				</div>
-				<div>
-					<h1 class="text-xl font-bold text-fg">{ data.Timeline.Name }</h1>
-					<p class="text-sm text-fg-muted">
-						<i class="fa-solid fa-calendar-days mr-1"></i>{ data.Timeline.CalendarName }
-						<span class="mx-2">&middot;</span>
-						{ fmt.Sprintf("%d events", len(data.Events)) }
-					</p>
+				<div class="flex items-center gap-2">
+					if data.IsScribe {
+						<button
+							class="btn-primary text-xs"
+							onclick="document.getElementById('event-picker-modal').classList.remove('hidden')"
+						>
+							<i class="fa-solid fa-link mr-1"></i> Add Events
+						</button>
+						<button
+							class="btn-secondary text-xs"
+							hx-post={ fmt.Sprintf("/campaigns/%s/timelines/%s/events/all", data.CampaignID, data.Timeline.ID) }
+							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+							hx-confirm="Link all available calendar events to this timeline?"
+							hx-swap="none"
+							hx-on::after-request="if(event.detail.successful) window.location.reload()"
+						>
+							<i class="fa-solid fa-link mr-1"></i> Add All
+						</button>
+					}
+					if data.IsOwner {
+						<button
+							class="btn-secondary text-xs text-red-500 hover:text-red-400"
+							hx-delete={ fmt.Sprintf("/campaigns/%s/timelines/%s", data.CampaignID, data.Timeline.ID) }
+							hx-confirm="Delete this timeline? This action cannot be undone."
+							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+							hx-swap="none"
+							hx-on::after-request="if(event.detail.successful) window.location.href='/campaigns/'+window.location.pathname.split('/')[2]+'/timelines'"
+						>
+							<i class="fa-solid fa-trash mr-1"></i> Delete
+						</button>
+					}
 				</div>
 			</div>
-			<div class="flex items-center gap-2">
-				if data.IsScribe {
-					<button
-						class="btn-primary text-xs"
-						onclick="document.getElementById('event-picker-modal').classList.remove('hidden')"
-					>
-						<i class="fa-solid fa-link mr-1"></i> Add Events
-					</button>
-					<button
-						class="btn-secondary text-xs"
-						hx-post={ fmt.Sprintf("/campaigns/%s/timelines/%s/events/all", data.CampaignID, data.Timeline.ID) }
-						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
-						hx-confirm="Link all available calendar events to this timeline?"
-						hx-swap="none"
-						hx-on::after-request="if(event.detail.successful) window.location.reload()"
-					>
-						<i class="fa-solid fa-link mr-1"></i> Add All
-					</button>
-				}
-				if data.IsOwner {
-					<button
-						class="btn-secondary text-xs text-red-500 hover:text-red-400"
-						hx-delete={ fmt.Sprintf("/campaigns/%s/timelines/%s", data.CampaignID, data.Timeline.ID) }
-						hx-confirm="Delete this timeline? This action cannot be undone."
-						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
-						hx-swap="none"
-						hx-on::after-request="if(event.detail.successful) window.location.href='/campaigns/'+window.location.pathname.split('/')[2]+'/timelines'"
-					>
-						<i class="fa-solid fa-trash mr-1"></i> Delete
-					</button>
-				}
-			</div>
+			if data.Timeline.Description != nil && *data.Timeline.Description != "" {
+				<p class="text-sm text-fg-secondary mt-3">{ *data.Timeline.Description }</p>
+			}
+			if data.Timeline.IsDMOnly() {
+				<div class="flex items-center gap-2 text-xs text-amber-500 mt-3">
+					<i class="fa-solid fa-eye-slash"></i>
+					<span>This timeline is only visible to the DM</span>
+				</div>
+			}
 		</div>
-		if data.Timeline.Description != nil && *data.Timeline.Description != "" {
-			<p class="text-sm text-fg-secondary mb-6">{ *data.Timeline.Description }</p>
-		}
-		if data.Timeline.IsDMOnly() {
-			<div class="flex items-center gap-2 text-xs text-amber-500 mb-4">
-				<i class="fa-solid fa-eye-slash"></i>
-				<span>This timeline is only visible to the DM</span>
-			</div>
-		}
 		<!-- D3.js Interactive Timeline Visualization -->
 		<div
 			data-widget="timeline-viz"
@@ -315,25 +317,71 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 			data-timeline-id={ data.Timeline.ID }
 			data-timeline-color={ data.Timeline.Color }
 			data-api-url={ fmt.Sprintf("/campaigns/%s/timelines/%s/data", data.CampaignID, data.Timeline.ID) }
-			style="min-height: 300px"
-			class="mb-6"
+			style="min-height: 350px"
+			class="mb-4"
 		></div>
-		<!-- Event List (collapsed by default, toggleable) -->
+		<!-- Event List Section -->
 		if len(data.Events) > 0 {
-			<details class="mt-4">
-				<summary class="text-sm font-medium text-fg-secondary cursor-pointer hover:text-fg transition-colors mb-3">
-					<i class="fa-solid fa-list mr-1"></i> Event List ({ fmt.Sprintf("%d", len(data.Events)) })
-				</summary>
-				<div class="space-y-3">
+			<div class="card overflow-hidden mb-4">
+				<button
+					class="tl-manage-header w-full text-left"
+					@click="eventListOpen = !eventListOpen"
+				>
+					<i class="fa-solid fa-list mr-1.5"></i>
+					<span class="text-sm font-medium text-fg">Event List</span>
+					<span class="text-xs text-fg-muted ml-auto">{ fmt.Sprintf("%d events", len(data.Events)) }</span>
+					<i class="fa-solid fa-chevron-down ml-2 text-xs transition-transform"
+						:class="eventListOpen && 'rotate-180'"
+					></i>
+				</button>
+				<div x-show="eventListOpen" x-collapse class="p-3 space-y-2">
 					for _, el := range data.Events {
 						@timelineEventCard(data, el)
 					}
 				</div>
-			</details>
+			</div>
 		}
+		<!-- Manage Timeline (Owner only) -->
 		if data.IsOwner {
-			@visibilitySettingsSection(data)
-			@entityGroupsSection(data)
+			<div class="tl-manage-section">
+				<button
+					class="tl-manage-header w-full text-left"
+					@click="manageOpen = !manageOpen"
+				>
+					<i class="fa-solid fa-gear mr-1.5"></i>
+					<span>Manage Timeline</span>
+					<i class="fa-solid fa-chevron-down ml-auto text-xs transition-transform"
+						:class="manageOpen && 'rotate-180'"
+					></i>
+				</button>
+				<div x-show="manageOpen" x-collapse>
+					<!-- Admin tabs -->
+					<div class="flex border-b border-edge">
+						<button
+							class="tl-manage-tab"
+							:class="adminTab === 'visibility' && 'active'"
+							@click="adminTab = 'visibility'"
+						>
+							<i class="fa-solid fa-eye mr-1"></i> Visibility
+						</button>
+						<button
+							class="tl-manage-tab"
+							:class="adminTab === 'groups' && 'active'"
+							@click="adminTab = 'groups'"
+						>
+							<i class="fa-solid fa-layer-group mr-1"></i> Entity Groups ({ fmt.Sprintf("%d", len(data.EntityGroups)) })
+						</button>
+					</div>
+					<div class="p-4">
+						<div x-show="adminTab === 'visibility'">
+							@visibilitySettingsInline(data)
+						</div>
+						<div x-show="adminTab === 'groups'">
+							@entityGroupsInline(data)
+						</div>
+					</div>
+				</div>
+			</div>
 		}
 		if data.IsScribe {
 			@eventPickerModal(data)
@@ -341,20 +389,10 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 	</div>
 }
 
-// visibilitySettingsSection renders the per-user visibility controls for owners.
-templ visibilitySettingsSection(data TimelineViewData) {
-	<details class="mt-4">
-		<summary class="text-sm font-medium text-fg-secondary cursor-pointer hover:text-fg transition-colors mb-3">
-			<i class="fa-solid fa-eye mr-1"></i> Visibility Settings
-			if data.Timeline.IsDMOnly() {
-				<span class="text-xs text-amber-500 ml-2">DM Only</span>
-			}
-			if data.Timeline.VisibilityRules != nil && *data.Timeline.VisibilityRules != "" {
-				<span class="text-xs text-blue-500 ml-2">Custom Rules</span>
-			}
-		</summary>
-		<div
-			class="card p-4 space-y-4"
+// visibilitySettingsInline renders the per-user visibility controls without a wrapper.
+templ visibilitySettingsInline(data TimelineViewData) {
+	<div
+		class="space-y-4"
 			x-data={ fmt.Sprintf(`visibilityManager('%s', '%s', '%s', %s, %s)`,
 				data.CampaignID, data.Timeline.ID, data.CSRFToken,
 				visibilityJSON(data.Timeline.Visibility),
@@ -409,7 +447,6 @@ templ visibilitySettingsSection(data TimelineViewData) {
 				<span x-show="saved" class="text-green-500" x-transition>Saved</span>
 			</div>
 		</div>
-	</details>
 	<script>
 		function visibilityManager(campaignID, timelineID, csrfToken, initVisibility, initRules) {
 			return {
@@ -486,14 +523,10 @@ templ visibilitySettingsSection(data TimelineViewData) {
 	</script>
 }
 
-// entityGroupsSection renders the swim-lane entity groups management panel.
-templ entityGroupsSection(data TimelineViewData) {
-	<details class="mt-4">
-		<summary class="text-sm font-medium text-fg-secondary cursor-pointer hover:text-fg transition-colors mb-3">
-			<i class="fa-solid fa-layer-group mr-1"></i> Entity Groups ({ fmt.Sprintf("%d", len(data.EntityGroups)) })
-		</summary>
-		<div
-			class="space-y-3"
+// entityGroupsInline renders entity group management without an outer wrapper.
+templ entityGroupsInline(data TimelineViewData) {
+	<div
+		class="space-y-3"
 			x-data={ fmt.Sprintf(`entityGroupManager('%s', '%s', '%s')`, data.CampaignID, data.Timeline.ID, data.CSRFToken) }
 		>
 			<!-- Create group form -->
@@ -559,7 +592,6 @@ templ entityGroupsSection(data TimelineViewData) {
 				</div>
 			</template>
 		</div>
-	</details>
 	<script>
 		function entityGroupManager(campaignID, timelineID, csrfToken) {
 			return {
@@ -774,13 +806,16 @@ templ eventPickerModal(data TimelineViewData) {
 
 // timelineEventCard renders a single event in the timeline event list.
 templ timelineEventCard(data TimelineViewData, el EventLink) {
-	<div class="card p-4 flex items-start gap-3">
-		<div class="flex-shrink-0 w-16 text-center">
-			<div class="text-xs font-mono text-fg-muted">
+	<div class="tl-event-card">
+		<div class="w-14 text-center flex-shrink-0 pt-0.5">
+			<div class="text-xs font-mono text-fg-muted leading-tight">
 				{ fmt.Sprintf("Y%d", el.EventYear) }
 			</div>
-			<div class="text-sm font-semibold text-fg">
-				{ fmt.Sprintf("M%d D%d", el.EventMonth, el.EventDay) }
+			<div class="text-sm font-bold text-fg leading-tight">
+				{ fmt.Sprintf("M%d", el.EventMonth) }
+			</div>
+			<div class="text-xs font-mono text-fg-muted leading-tight">
+				{ fmt.Sprintf("D%d", el.EventDay) }
 			</div>
 		</div>
 		<div
@@ -794,29 +829,36 @@ templ timelineEventCard(data TimelineViewData, el EventLink) {
 		<div class="flex-1 min-w-0">
 			<h3 class="text-sm font-semibold text-fg">{ el.EffectiveLabel() }</h3>
 			if el.EventEntityName != "" {
-				<p class="text-xs text-fg-muted mt-0.5">
+				<p class="text-xs text-fg-secondary mt-0.5">
 					if el.EventEntityIcon != "" {
 						<i class={ "fa-solid " + el.EventEntityIcon + " mr-1" }></i>
 					}
 					{ el.EventEntityName }
 				</p>
 			}
-			if el.EventCategory != nil && *el.EventCategory != "" {
-				<span class="inline-block text-xs bg-surface-alt text-fg-secondary px-2 py-0.5 rounded mt-1">
-					{ *el.EventCategory }
-				</span>
-			}
+			<div class="flex items-center gap-2 mt-1">
+				if el.EventCategory != nil && *el.EventCategory != "" {
+					<span class="inline-block text-xs bg-surface-alt text-fg-secondary px-2 py-0.5 rounded-full border border-edge">
+						{ *el.EventCategory }
+					</span>
+				}
+				if el.EffectiveVisibility() == "dm_only" {
+					<span class="inline-flex items-center gap-1 text-xs text-amber-500">
+						<i class="fa-solid fa-eye-slash"></i> DM Only
+					</span>
+				}
+			</div>
 			if el.EventDescription != nil && *el.EventDescription != "" {
-				<p class="text-xs text-fg-secondary mt-1 line-clamp-2">{ *el.EventDescription }</p>
+				<p class="text-xs text-fg-muted mt-1 line-clamp-2">{ *el.EventDescription }</p>
 			}
 		</div>
 		if data.IsScribe {
 			<button
-				class="flex-shrink-0 text-fg-muted hover:text-red-500 transition-colors text-xs"
+				class="flex-shrink-0 text-fg-muted hover:text-red-500 transition-colors text-xs opacity-0 group-hover:opacity-100"
 				hx-delete={ fmt.Sprintf("/campaigns/%s/timelines/%s/events/%s", data.CampaignID, data.Timeline.ID, el.EventID) }
 				hx-confirm="Remove this event from the timeline?"
 				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
-				hx-target="closest .card"
+				hx-target="closest .tl-event-card"
 				hx-swap="outerHTML"
 			>
 				<i class="fa-solid fa-unlink"></i>

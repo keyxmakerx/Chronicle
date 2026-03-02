@@ -790,13 +790,14 @@
   /* --- Timeline Visualization Widget --- */
 
   .timeline-viz-container {
-    @apply rounded-lg overflow-hidden;
+    @apply rounded-xl overflow-hidden;
     background: var(--color-surface, #1a1b26);
     border: 1px solid var(--color-edge, #2a2b3d);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   }
 
   .timeline-viz-toolbar {
-    @apply flex items-center justify-between px-4 py-2 border-b;
+    @apply flex items-center justify-between px-4 py-2.5 border-b gap-3;
     border-color: var(--color-edge, #2a2b3d);
     background: var(--color-surface-alt, #24253a);
   }
@@ -811,8 +812,13 @@
     @apply flex-1 justify-center;
   }
 
+  .timeline-viz-toolbar-divider {
+    @apply w-px h-5 mx-1;
+    background: var(--color-edge, #2a2b3d);
+  }
+
   .timeline-viz-btn {
-    @apply w-7 h-7 flex items-center justify-center rounded text-xs transition-colors;
+    @apply w-8 h-8 flex items-center justify-center rounded-md text-xs transition-all;
     color: var(--color-fg-secondary, #a9b1d6);
     background: var(--color-surface, #1a1b26);
     border: 1px solid var(--color-edge, #2a2b3d);
@@ -820,11 +826,14 @@
   .timeline-viz-btn:hover {
     color: var(--color-fg, #c0caf5);
     background: var(--color-surface-alt, #24253a);
+    transform: scale(1.05);
   }
 
   .timeline-viz-zoom-label {
-    @apply text-xs font-medium px-2;
-    color: var(--color-fg-muted, #565f89);
+    @apply text-xs font-semibold px-2.5 py-0.5 rounded-full;
+    background: var(--color-accent, #6366f1);
+    color: white;
+    opacity: 0.85;
   }
 
   .timeline-viz-skip-label {
@@ -833,7 +842,7 @@
   }
 
   .timeline-viz-skip-input {
-    @apply w-20 h-7 text-xs rounded px-2;
+    @apply w-20 h-8 text-xs rounded-md px-2;
     background: var(--color-surface, #1a1b26);
     border: 1px solid var(--color-edge, #2a2b3d);
     color: var(--color-fg, #c0caf5);
@@ -844,13 +853,13 @@
   }
 
   .timeline-viz-search-icon {
-    @apply absolute left-2 text-xs;
+    @apply absolute left-2.5 text-xs;
     color: var(--color-fg-muted, #565f89);
     pointer-events: none;
   }
 
   .timeline-viz-search-input {
-    @apply w-48 h-7 text-xs rounded pl-7 pr-7;
+    @apply w-56 h-8 text-xs rounded-md pl-8 pr-7;
     background: var(--color-surface, #1a1b26);
     border: 1px solid var(--color-edge, #2a2b3d);
     color: var(--color-fg, #c0caf5);
@@ -858,9 +867,14 @@
   .timeline-viz-search-input::placeholder {
     color: var(--color-fg-muted, #565f89);
   }
+  .timeline-viz-search-input:focus {
+    outline: none;
+    border-color: var(--color-accent, #6366f1);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+  }
 
   .timeline-viz-search-clear {
-    @apply absolute right-1 w-5 h-5 flex items-center justify-center rounded text-xs;
+    @apply absolute right-1.5 w-5 h-5 flex items-center justify-center rounded text-xs;
     color: var(--color-fg-muted, #565f89);
     background: transparent;
     border: none;
@@ -872,7 +886,7 @@
 
   .timeline-viz-svg-wrap {
     @apply w-full overflow-hidden;
-    min-height: 200px;
+    min-height: 350px;
   }
 
   .timeline-viz-svg {
@@ -880,30 +894,32 @@
   }
 
   .timeline-viz-svg .timeline-axis text {
-    fill: var(--color-fg-muted, #565f89);
-    font-size: 11px;
+    fill: var(--color-fg-secondary, #a9b1d6);
+    font-size: 12px;
   }
   .timeline-viz-svg .timeline-axis line,
   .timeline-viz-svg .timeline-axis path {
     stroke: var(--color-edge, #2a2b3d);
+    stroke-width: 1.5;
   }
 
   .timeline-viz-svg .timeline-event-label {
-    fill: var(--color-fg-secondary, #a9b1d6);
-    font-size: 10px;
-    font-weight: 500;
+    fill: var(--color-fg, #c0caf5);
+    font-size: 11px;
+    font-weight: 600;
     pointer-events: none;
   }
 
   .timeline-viz-svg .timeline-event-date {
     fill: var(--color-fg-muted, #565f89);
-    font-size: 9px;
+    font-size: 10px;
     pointer-events: none;
+    font-family: ui-monospace, monospace;
   }
 
   .timeline-viz-svg .timeline-event-entity {
-    fill: var(--color-fg-muted, #565f89);
-    font-size: 9px;
+    fill: var(--color-fg-secondary, #a9b1d6);
+    font-size: 10px;
     font-style: italic;
     pointer-events: none;
   }
@@ -911,33 +927,149 @@
   .timeline-viz-svg .timeline-lane-label {
     fill: var(--color-fg-muted, #565f89);
     font-size: 10px;
-    font-weight: 500;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   .timeline-viz-tooltip {
     position: fixed;
     z-index: 9999;
-    max-width: 280px;
-    padding: 8px 12px;
-    border-radius: 8px;
+    max-width: 320px;
+    padding: 12px 16px;
+    border-radius: 12px;
     font-size: 12px;
-    line-height: 1.5;
+    line-height: 1.6;
     pointer-events: none;
     background: var(--color-surface-alt, #24253a);
     border: 1px solid var(--color-edge, #2a2b3d);
     color: var(--color-fg, #c0caf5);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .timeline-viz-tooltip.visible {
+    opacity: 1;
   }
 
   .timeline-viz-tooltip-cat {
-    @apply inline-block text-xs px-2 py-0.5 rounded mt-1;
+    @apply inline-block text-xs px-2 py-0.5 rounded-full mt-1;
     background: var(--color-surface, #1a1b26);
     color: var(--color-fg-secondary, #a9b1d6);
+    border: 1px solid var(--color-edge, #2a2b3d);
   }
 
   .timeline-viz-empty {
-    @apply flex flex-col items-center justify-center text-center py-12;
+    @apply flex flex-col items-center justify-center text-center py-16;
     color: var(--color-fg-secondary, #a9b1d6);
     font-size: 14px;
+    position: relative;
+  }
+  .timeline-viz-empty-line {
+    width: 200px;
+    height: 2px;
+    margin-bottom: 20px;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--color-edge, #2a2b3d) 0px,
+      var(--color-edge, #2a2b3d) 6px,
+      transparent 6px,
+      transparent 12px
+    );
+    animation: timeline-empty-pulse 2s ease-in-out infinite;
+    border-radius: 1px;
+  }
+  @keyframes timeline-empty-pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.8; }
+  }
+
+  /* D3 card markers (day zoom) */
+  .tl-viz-card {
+    background: var(--color-surface-alt, #24253a);
+    border: 1px solid var(--color-edge, #2a2b3d);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--color-fg, #c0caf5);
+    pointer-events: all;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: border-color 150ms, box-shadow 150ms;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+  }
+  .tl-viz-card:hover {
+    border-color: var(--color-accent, #6366f1);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  }
+  .tl-viz-card-name {
+    font-weight: 600;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tl-viz-card-date {
+    font-size: 10px;
+    color: var(--color-fg-muted, #565f89);
+    font-family: ui-monospace, monospace;
+    margin-top: 1px;
+  }
+  .tl-viz-card-entity {
+    font-size: 10px;
+    color: var(--color-fg-secondary, #a9b1d6);
+    font-style: italic;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tl-viz-card-color-bar {
+    width: 3px;
+    border-radius: 2px;
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+  }
+
+  /* Event list cards */
+  .tl-event-card {
+    @apply flex gap-3 p-3 rounded-lg border transition-all;
+    background: var(--color-surface, #1a1b26);
+    border-color: var(--color-edge, #2a2b3d);
+  }
+  .tl-event-card:hover {
+    background: var(--color-surface-alt, #24253a);
+    border-color: rgba(99, 102, 241, 0.3);
+  }
+
+  /* Admin manage section */
+  .tl-manage-section {
+    @apply mt-6 rounded-xl border overflow-hidden;
+    background: var(--color-surface, #1a1b26);
+    border-color: var(--color-edge, #2a2b3d);
+  }
+  .tl-manage-header {
+    @apply flex items-center gap-2 px-4 py-3 text-sm font-medium border-b cursor-pointer transition-colors;
+    background: var(--color-surface-alt, #24253a);
+    border-color: var(--color-edge, #2a2b3d);
+    color: var(--color-fg-secondary, #a9b1d6);
+  }
+  .tl-manage-header:hover {
+    color: var(--color-fg, #c0caf5);
+  }
+  .tl-manage-tab {
+    @apply px-4 py-2 text-xs font-medium transition-colors cursor-pointer;
+    color: var(--color-fg-muted, #565f89);
+    border-bottom: 2px solid transparent;
+  }
+  .tl-manage-tab:hover {
+    color: var(--color-fg-secondary, #a9b1d6);
+  }
+  .tl-manage-tab.active {
+    color: var(--color-accent, #6366f1);
+    border-bottom-color: var(--color-accent, #6366f1);
   }
 }

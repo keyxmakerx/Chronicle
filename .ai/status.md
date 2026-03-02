@@ -8,12 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-02 -- Comprehensive code review. 14 issues identified and fixed across security,
-code quality, frontend, and documentation. Key fixes: Sessions IDOR (cross-campaign entity
-linking), secret stripping regex multiline leak, settings ParseFloat silent zero default,
-calendar event visibility validation on update, calendar handler refactored to thin handler
-pattern, entity repository error handling consistency, editor widget memory leak, template
-editor JSON.parse crash protection, notes widget missing error handler.
+2026-03-02 -- Timeline UI/UX polish pass. All 7 timeline plugin sprints complete. Added
+bordered card layout, polished header, event list with Alpine.js collapse, grouped admin
+panel with visibility/groups tabs. D3.js widget enhanced with card-style markers at day
+zoom, pill markers at month zoom, glow effects at low zoom, toolbar dividers, improved
+tooltip with opacity transitions, and better empty state with "Link Events" button.
 
 ## Current Phase
 **Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit
