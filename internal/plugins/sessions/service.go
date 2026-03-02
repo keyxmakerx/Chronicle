@@ -9,6 +9,12 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
+// EntityCampaignChecker verifies that an entity belongs to a given campaign.
+// Used to prevent cross-campaign entity linking (IDOR prevention).
+type EntityCampaignChecker interface {
+	EntityBelongsToCampaign(ctx context.Context, entityID, campaignID string) (bool, error)
+}
+
 // SessionService defines the business logic contract for sessions.
 type SessionService interface {
 	CreateSession(ctx context.Context, campaignID string, input CreateSessionInput) (*Session, error)
@@ -22,20 +28,24 @@ type SessionService interface {
 	UpdateRSVP(ctx context.Context, sessionID, userID, status string) error
 	ListAttendees(ctx context.Context, sessionID string) ([]Attendee, error)
 
-	// Entity linking.
-	LinkEntity(ctx context.Context, sessionID, entityID, role string) error
+	// Entity linking. campaignID is used to verify the entity belongs to the
+	// same campaign as the session, preventing cross-campaign IDOR attacks.
+	LinkEntity(ctx context.Context, sessionID, entityID, role, campaignID string) error
 	UnlinkEntity(ctx context.Context, sessionID, entityID string) error
 	ListSessionEntities(ctx context.Context, sessionID string) ([]SessionEntity, error)
 }
 
 // sessionService implements SessionService.
 type sessionService struct {
-	repo SessionRepository
+	repo           SessionRepository
+	entityChecker  EntityCampaignChecker
 }
 
-// NewSessionService creates a new session service.
-func NewSessionService(repo SessionRepository) SessionService {
-	return &sessionService{repo: repo}
+// NewSessionService creates a new session service. The EntityCampaignChecker
+// is used to verify entities belong to the correct campaign when linking,
+// preventing cross-campaign IDOR attacks.
+func NewSessionService(repo SessionRepository, ec EntityCampaignChecker) SessionService {
+	return &sessionService{repo: repo, entityChecker: ec}
 }
 
 // CreateSession validates input and creates a new session.
@@ -176,8 +186,20 @@ func (s *sessionService) ListAttendees(ctx context.Context, sessionID string) ([
 
 // --- Entity Linking ---
 
-// LinkEntity links an entity to a session.
-func (s *sessionService) LinkEntity(ctx context.Context, sessionID, entityID, role string) error {
+// LinkEntity links an entity to a session. Verifies the entity belongs to the
+// same campaign to prevent cross-campaign IDOR attacks.
+func (s *sessionService) LinkEntity(ctx context.Context, sessionID, entityID, role, campaignID string) error {
+	// Verify entity belongs to the same campaign as the session.
+	if s.entityChecker != nil {
+		belongs, err := s.entityChecker.EntityBelongsToCampaign(ctx, entityID, campaignID)
+		if err != nil {
+			return apperror.NewInternal(fmt.Errorf("checking entity campaign: %w", err))
+		}
+		if !belongs {
+			return apperror.NewBadRequest("entity does not belong to this campaign")
+		}
+	}
+
 	switch role {
 	case EntityRoleMentioned, EntityRoleEncountered, EntityRoleKey:
 		// Valid.

@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-01 -- Rich text event descriptions with @mentions (Sprint 10). Added TipTap
-rich text editor to event create/edit modal with @mention entity search support. Dual
-storage: ProseMirror JSON in `description`, sanitized HTML in `description_html` (new
-column via migration 000034). Timeline renders rich HTML descriptions. Legacy plain text
-events handled gracefully. Calendar V2 plan (Sprints 5-10) is now fully complete.
+2026-03-02 -- Timeline UI/UX polish pass. All 7 timeline plugin sprints complete. Added
+bordered card layout, polished header, event list with Alpine.js collapse, grouped admin
+panel with visibility/groups tabs. D3.js widget enhanced with card-style markers at day
+zoom, pill markers at month zoom, glow effects at low zoom, toolbar dividers, improved
+tooltip with opacity transitions, and better empty state with "Link Events" button.
 
 ## Current Phase
 **Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit
@@ -482,6 +482,192 @@ All 6 sprints (5-10) are complete:
 - Sprint 9: Calendar Import/Export
 - Sprint 10: Rich Text Event Descriptions + @Mentions
 
+### Code Review & Hardening — COMPLETE
+- **Sessions IDOR fix**: `LinkEntityAPI` now verifies entity belongs to the same campaign
+  as the session via `EntityCampaignChecker` interface, preventing cross-campaign IDOR.
+- **Secret regex fix**: Added `(?s)` dotall flag to `secretSpanRe` for multiline matching.
+  Fixed misleading comment about nested tag handling.
+- **Settings validation**: `UpdateStorageSettings` now validates ParseFloat/Atoi results
+  instead of silently defaulting to 0 (which means "no limit").
+- **Calendar visibility**: `UpdateEvent` now validates visibility field (same rules as
+  `CreateEvent`), preventing arbitrary visibility values via API.
+- **Entity repo consistency**: Fixed 3 ignored `json.Unmarshal` errors on PinnedEntityIDs
+  and 13 ignored `RowsAffected()` errors throughout `entities/repository.go`.
+- **Calendar handler refactor**: Moved ~150 lines of seeding logic (Gregorian/fantasy
+  months, weekdays, time system defaults) from handler to service. Handler now follows
+  "thin handler" convention.
+- **Entity handler**: Added `slog.Warn` for previously unchecked `GetEntityTypes` and
+  `CountByType` service errors.
+- **Editor memory leak**: Insert menu global click listener now stored and removed in
+  widget `destroy()` to prevent leaks during HTMX re-mounts.
+- **Template editor**: `JSON.parse` calls wrapped in try-catch with fallback defaults.
+- **Notes widget**: Added `.catch()` handler to create note promise chain.
+- **Dashboard editor**: Fixed validation mismatch (prompt said 4-12, code allowed 1-50).
+- **Follow-up**: Fixed missed `json.Unmarshal` error check in `ListByCampaign` (double-tab
+  indentation wasn't caught by `replace_all`). Fixed `seedDefaults` to preserve
+  `cal.Description` in the `UpdateCalendar` call (was silently nulling it out).
+- **Files changed**: sessions/{service,handler}.go, sanitize/sanitize.go, settings/handler.go,
+  calendar/{service,handler}.go, entities/{repository,handler}.go, app/routes.go,
+  editor.js, template_editor.js, notes.js, dashboard_editor.js, .ai/status.md.
+
+### Timeline Plugin Sprint 1 — COMPLETE
+- **Migration 000035**: 4 tables (`timelines`, `timeline_event_links`,
+  `timeline_entity_groups`, `timeline_entity_group_members`). Addon updated from
+  planned/widget to active/plugin.
+- **Model**: Timeline, EventLink, EntityGroup, EntityGroupMember structs with DTOs.
+  VisibilityRules JSON struct for per-user visibility overrides. Zoom level constants
+  (era, century, decade, year, month, day). EffectiveLabel/EffectiveColor helpers.
+- **Repository**: Full CRUD for timelines, event links, entity groups. Calendar name
+  JOIN, event count subquery, entity display data JOINs. Role-based visibility filter.
+- **Service**: Validation (name, icon, color, visibility, zoom), CalendarLister interface
+  for calendar selector dropdown, CRUD orchestration.
+- **Handler**: Thin handlers with IDOR protection (requireTimelineInCampaign). Index,
+  Show, CreateForm, UpdateAPI, DeleteAPI, LinkEventAPI, UnlinkEventAPI, TimelineDataAPI,
+  ListCalendarsAPI. HTMX fragment support.
+- **Routes**: Owner (create, update, delete, calendar list), Scribe (link/unlink events),
+  Player (view list, view timeline, data API). Public-capable views via OptionalAuth.
+- **Templates**: List page with card grid + create modal (Alpine.js calendar selector).
+  Show page with event list (Sprint 1 static, Sprint 3 D3.js). Event cards with date,
+  color bar, entity link, category badge, unlink button.
+- **Calendar integration**: calendarListerAdapter in app/routes.go wraps CalendarService
+  for the timeline create form dropdown. User-selected calendar_id FK. Forward-compatible
+  with future multi-calendar support.
+- **Wiring**: Added to app/routes.go, installedAddons, sidebar nav (fa-timeline icon).
+- **Files**: migration 000035 (up/down), timeline/{model,repository,service,handler,
+  routes,timeline.templ,.ai.md} (all new), app/routes.go, addons/service.go,
+  layouts/app.templ.
+
+### Timeline Plugin Sprint 2 — Calendar Event Linking — COMPLETE
+- **CalendarEventLister interface**: Cross-plugin adapter for reading calendar events
+  without importing the calendar repo. `calendarEventListerAdapter` in app/routes.go wraps
+  `CalendarService.ListAllEvents()`, maps to `CalendarEventRef` struct, and filters by
+  visibility role.
+- **Service methods**: `ListAvailableEvents` fetches all calendar events from the timeline's
+  calendar, filters out already-linked event IDs, returns unlinked events. `LinkAllEvents`
+  bulk-links all available events in a single call.
+- **Handler endpoints**: `ListAvailableEventsAPI` (GET .../available-events) for event picker
+  data, `LinkAllEventsAPI` (POST .../events/all) for bulk linking.
+- **Routes**: 2 new Scribe-level routes added to authenticated group.
+- **Event picker modal**: Alpine.js-powered modal on timeline show page. Fetches available
+  events from API, renders searchable list with date/name/entity/category, click-to-link
+  with immediate removal from list. Search filters by name, entity name, or category.
+- **Header buttons**: "Add Events" (opens picker modal) and "Add All" (bulk-link with
+  confirmation) buttons for Scribe+ users. Delete button styled with red text for Owner.
+- **Files**: service.go (CalendarEventLister, CalendarEventRef, ListAvailableEvents,
+  LinkAllEvents), handler.go (2 new handlers), routes.go (2 new routes), timeline.templ
+  (event picker modal, header buttons), app/routes.go (calendarEventListerAdapter),
+  .ai.md (updated routes/docs).
+
+### Timeline Plugin Sprint 3 — D3.js Interactive Visualization — COMPLETE
+- **D3.js loaded per-page**: CDN-loaded D3 v7 on timeline show pages only (matching
+  Leaflet per-page pattern from maps plugin). No bundle bloat for other pages.
+- **timeline_viz.js widget**: Self-contained Chronicle widget (`data-widget="timeline-viz"`)
+  that renders an interactive SVG timeline:
+  - Horizontal time axis with year-level default zoom
+  - Event markers positioned by fractional year (year + month/12 + day/365)
+  - d3.zoom for pan/drag/scroll-zoom (horizontal only)
+  - Color-coded events (per-link color_override or timeline default)
+  - Entity group swim-lanes with alternating background bands
+  - Tooltips on hover (name, date, entity, category, description excerpt)
+  - Event labels shown/hidden based on zoom level
+- **Toolbar**: Zoom in/out buttons, zoom-fit (all events), zoom level indicator
+  (Era/Century/Decade/Year/Month/Day), skip-to-year input.
+- **CSS**: Full dark-theme styling in input.css (toolbar, SVG elements, tooltip,
+  empty state). Uses CSS custom properties matching Chronicle's theme system.
+- **Template changes**: Static event list replaced with D3 widget mount point.
+  Event list preserved as collapsible `<details>` section below visualization.
+- **Files**: static/js/widgets/timeline_viz.js (new), static/css/input.css
+  (timeline-viz styles), timeline.templ (D3 script tags, widget mount, collapsible list).
+
+### Timeline Plugin Sprint 4 — Zoom Levels and Search — COMPLETE
+- **Zoom-level visual styles**: 6 distinct visual configurations (era→day), each with
+  different marker radius, stroke width, label/date/entity visibility. Markers smoothly
+  transition between sizes via D3 transitions on zoom level change.
+- **Zoom-level-aware axis**: Tick formatting adapts per level — years at era/century/decade,
+  months at month level, individual days at day level.
+- **Category indicator dots**: Small colored dots next to event markers showing category
+  color (holiday=amber, battle=red, quest=green, birthday=pink, etc.).
+- **Search/filter bar**: Text input in center of toolbar. Filters events in real-time:
+  matching events stay full opacity with highlight ring, non-matching dim to 15% opacity.
+  Searches across name, entity, category, description, and year. Clear button to reset.
+- **Enhanced date/entity sub-labels**: Additional text elements on events showing
+  month/day (at month+ zoom) and entity name (at day zoom) for fuller context.
+- **Files**: static/js/widgets/timeline_viz.js (enhanced), static/css/input.css
+  (search bar, date/entity label styles).
+
+### Timeline Plugin Sprint 5 — Entity Groups and Swim-Lanes — COMPLETE
+- **Entity group CRUD handlers**: CreateEntityGroupAPI, UpdateEntityGroupAPI,
+  DeleteEntityGroupAPI, ListEntityGroupsAPI — all Owner-only with IDOR protection
+  via requireTimelineInCampaign.
+- **Group member management**: AddGroupMemberAPI (with entity_id validation),
+  RemoveGroupMemberAPI — Owner-only routes.
+- **parseIntParam helper**: Extracts integer path parameters (:gid) with 400 error
+  on non-numeric input.
+- **Routes**: 7 new Owner-only routes under `/campaigns/:id/timelines/:tid/groups/...`
+  for full group and member lifecycle.
+- **Template**: entityGroupsSection Alpine.js component on timeline show page with:
+  create group form (name + color), group list with member chips, entity search for
+  adding members, inline delete for groups and members. Only visible to Owner role.
+- **Files**: handler.go (7 new handlers + parseIntParam), routes.go (7 new routes),
+  timeline.templ (entityGroupsSection component), .ai.md (updated routes + sprint).
+
+### Timeline Plugin Sprint 6 — Visibility Controls — COMPLETE
+- **Per-user visibility filtering**: `canUserView()` helper in service layer evaluates
+  base visibility (everyone/dm_only) then JSON `visibility_rules` (allowed_users whitelist
+  takes precedence over denied_users blacklist). Owners always see everything.
+- **ListTimelines and ListTimelineEvents**: Now filter by per-user visibility rules
+  using the userID parameter (previously reserved, now active).
+- **EventLink visibility**: `EffectiveVisibility()` and `ParseVisibilityRules()` methods
+  on EventLink. `UpdateEventLinkVisibility` service/repo method for per-event overrides.
+- **Validation**: `validateVisibilityRules()` checks JSON format on timeline update and
+  event visibility update. Visibility override validated against allowed values.
+- **MemberLister integration**: Cross-plugin adapter pattern (same as sessions plugin).
+  `ListCampaignMembersAPI` returns campaign members for the visibility user selector.
+  Non-owner members only shown in selector (owners always see everything).
+- **View-as-player integration**: `effectiveRole()` helper checks `layouts.IsViewingAsPlayer`
+  context. Index, Show, and TimelineDataAPI handlers use effective role for content
+  filtering. Owner in "view as player" mode sees only player-visible timelines/events.
+- **Visibility settings UI**: Alpine.js `visibilitySettingsSection` component on timeline
+  show page (Owner only). Base visibility dropdown (everyone/dm_only) + per-user
+  restrictions: radio toggle (none/only these players/everyone except) with member
+  checkboxes. Auto-saves to `PUT /timelines/:tid/visibility` with inline status feedback.
+- **Routes**: 3 new Owner-only routes: PUT .../visibility (timeline), PUT .../events/:eid/visibility
+  (event link), GET .../members (campaign members for selector).
+- **Files**: model.go (ParseVisibilityRules on EventLink, MemberRef, UpdateEventVisibilityInput),
+  service.go (canUserView, validateVisibilityRules, filtering in List methods),
+  repository.go (UpdateEventLinkVisibility), handler.go (MemberLister, effectiveRole,
+  3 new handlers), routes.go (3 new routes), timeline.templ (visibilitySettingsSection,
+  visibilityJSON/rulesJSON helpers), app/routes.go (SetMemberLister wiring).
+
+### Timeline Plugin Sprint 7 — @Mentions, Dashboard Block, Polish — COMPLETE
+- **Dashboard block**: `timeline_preview` block type for campaign dashboard editor.
+  HTMX lazy-loaded from `GET /timelines/preview?limit=N`. Shows timeline cards with
+  icon, name, calendar name, event count, and DM-only indicator. Palette entry in
+  dashboard_editor.js with configurable limit (1-20).
+- **@Mention support**: `TimelineSearcher` cross-plugin interface on entity handler.
+  Timeline service `SearchTimelines()` method with LIKE query (name match, role-filtered,
+  limit 10). Entity search JSON response appends timeline results when the editor
+  @mention widget requests JSON (Accept: application/json). Timelines appear in the
+  @mention popup with type "Timeline" and timeline icon/color.
+- **Repository search**: `Search()` method on timeline repo with LIKE-based name matching,
+  visibility filtering, and calendar name JOIN.
+- **Wiring**: `entityHandler.SetTimelineSearcher(timelineSvc)` in app/routes.go.
+- **Files**: model.go (no change), service.go (SearchTimelines), repository.go (Search),
+  handler.go (PreviewAPI), routes.go (preview route), timeline.templ (timelinePreviewFragment),
+  campaigns/model.go (BlockTimelinePreview), campaigns/dashboard_blocks.templ
+  (dashTimelinePreview), entities/handler.go (TimelineSearcher interface, SearchAPI merge),
+  dashboard_editor.js (palette + config), app/routes.go (wiring).
+
+### All 7 Timeline Plugin Sprints Complete
+The timeline plugin is now fully implemented with all planned features:
+- Sprint 1: Core infrastructure (CRUD, migration, sidebar, list/show pages)
+- Sprint 2: Calendar event linking (link/unlink UI, event picker, bulk link)
+- Sprint 3: Interactive D3.js visualization (zoom, pan, drag, tooltips)
+- Sprint 4: Zoom levels and search (era→day visual styles, search/filter bar)
+- Sprint 5: Entity groups and swim-lanes
+- Sprint 6: Visibility controls (per-user JSON rules, view-as-player)
+- Sprint 7: @Mentions, dashboard block, polish
+
 ### In Progress
 - Nothing currently in progress.
 
@@ -489,7 +675,7 @@ All 6 sprints (5-10) are complete:
 - Nothing blocked
 
 ## Active Branch
-`claude/fix-calendar-migration-67cQE`
+`claude/project-code-review-8BHVS`
 
 ## Competitive Analysis & Roadmap
 Created `.ai/roadmap.md` with comprehensive comparison vs WorldAnvil, Kanka, and
@@ -504,13 +690,11 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Phase H continued:** Per-entity permissions (view/edit per role/user), group-based
-   visibility (beyond everyone/dm_only), campaign export/import.
-2. **Maps Phase 2 (optional):** Layers, marker groups, nested maps, fog of war.
-3. **Phase E continued:** API technical documentation (OpenAPI spec or handwritten reference).
-4. **Handler-level "view as player":** Extend toggle to filter is_private entities
+1. **Phase H continued:** Per-entity permissions, group-based visibility.
+4. **Maps Phase 2 (optional):** Layers, marker groups, nested maps, fog of war.
+5. **Handler-level "view as player":** Extend toggle to filter is_private entities
    at repository level (currently template-only).
-5. **UX polish:** Entity search typeahead for calendar event + map marker entity linking.
+6. **UX polish:** Entity search typeahead for calendar event + map marker entity linking.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

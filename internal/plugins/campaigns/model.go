@@ -267,6 +267,7 @@ const (
 	BlockTextBlock     = "text_block"     // Custom rich text / markdown.
 	BlockPinnedPages     = "pinned_pages"     // Pinned entities grid.
 	BlockCalendarPreview = "calendar_preview" // Upcoming calendar events.
+	BlockTimelinePreview = "timeline_preview" // Timeline visualization preview.
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -284,6 +285,7 @@ var ValidBlockTypes = map[string]bool{
 	BlockTextBlock:      true,
 	BlockPinnedPages:     true,
 	BlockCalendarPreview: true,
+	BlockTimelinePreview: true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
 	BlockSearchBar:      true,

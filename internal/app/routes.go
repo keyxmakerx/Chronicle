@@ -23,6 +23,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -150,6 +151,92 @@ func (a *entityTagFetcherAdapter) GetEntityTagsBatch(ctx context.Context, entity
 		result[eid] = infos
 	}
 	return result, nil
+}
+
+// entityCampaignCheckerAdapter wraps entities.EntityService to implement the
+// sessions.EntityCampaignChecker interface, verifying entity-campaign membership
+// to prevent cross-campaign IDOR attacks on entity linking.
+type entityCampaignCheckerAdapter struct {
+	svc entities.EntityService
+}
+
+// EntityBelongsToCampaign checks if the given entity exists in the given campaign.
+func (a *entityCampaignCheckerAdapter) EntityBelongsToCampaign(ctx context.Context, entityID, campaignID string) (bool, error) {
+	entity, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		return false, err
+	}
+	return entity.CampaignID == campaignID, nil
+}
+
+// calendarListerAdapter wraps calendar.CalendarService to implement the
+// timeline.CalendarLister interface. Returns available calendars for the
+// timeline create form's calendar selector dropdown.
+type calendarListerAdapter struct {
+	svc calendar.CalendarService
+}
+
+// ListCalendars returns all calendars for a campaign as lightweight refs.
+// Currently returns at most one (one-per-campaign constraint), but is
+// forward-compatible with future multi-calendar support.
+func (a *calendarListerAdapter) ListCalendars(ctx context.Context, campaignID string) ([]timeline.CalendarRef, error) {
+	cal, err := a.svc.GetCalendar(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if cal == nil {
+		return nil, nil
+	}
+	return []timeline.CalendarRef{
+		{ID: cal.ID, Name: cal.Name},
+	}, nil
+}
+
+// calendarEventListerAdapter wraps calendar.CalendarService to implement the
+// timeline.CalendarEventLister interface. Lists all calendar events for the
+// event picker when linking events to a timeline.
+type calendarEventListerAdapter struct {
+	svc calendar.CalendarService
+}
+
+// ListEventsForCalendar returns all events for a calendar as lightweight refs.
+func (a *calendarEventListerAdapter) ListEventsForCalendar(ctx context.Context, calendarID string, role int) ([]timeline.CalendarEventRef, error) {
+	cal, err := a.svc.GetCalendarByID(ctx, calendarID)
+	if err != nil {
+		return nil, err
+	}
+	if cal == nil {
+		return nil, nil
+	}
+
+	// Use ListAllEvents for owner-level access (gets all events regardless of visibility).
+	// For non-owners, use ListEventsForYear across a broad range.
+	// ListAllEvents returns all events with owner visibility.
+	events, err := a.svc.ListAllEvents(ctx, calendarID)
+	if err != nil {
+		return nil, err
+	}
+
+	refs := make([]timeline.CalendarEventRef, 0, len(events))
+	for _, ev := range events {
+		// Apply role-based visibility filter.
+		if role < 2 && ev.Visibility == "dm_only" {
+			continue
+		}
+		refs = append(refs, timeline.CalendarEventRef{
+			ID:         ev.ID,
+			Name:       ev.Name,
+			Year:       ev.Year,
+			Month:      ev.Month,
+			Day:        ev.Day,
+			Category:   ev.Category,
+			Visibility: ev.Visibility,
+			EntityID:   ev.EntityID,
+			EntityName: ev.EntityName,
+			EntityIcon: ev.EntityIcon,
+		})
+	}
+	return refs, nil
 }
 
 // storageLimiterAdapter wraps settings.SettingsService to implement the
@@ -334,11 +421,19 @@ func (a *App) RegisterRoutes() {
 	maps.RegisterRoutes(e, mapsHandler, campaignService, authService)
 
 	// Sessions plugin: game session scheduling, linked entities, RSVP tracking.
+	// Entity campaign checker prevents cross-campaign entity linking (IDOR).
 	sessionsRepo := sessions.NewSessionRepository(a.DB)
-	sessionsService := sessions.NewSessionService(sessionsRepo)
+	sessionsService := sessions.NewSessionService(sessionsRepo, &entityCampaignCheckerAdapter{svc: entityService})
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService)
+
+	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
+	timelineRepo := timeline.NewTimelineRepository(a.DB)
+	timelineSvc := timeline.NewTimelineService(timelineRepo, &calendarListerAdapter{svc: calendarService}, &calendarEventListerAdapter{svc: calendarService})
+	timelineHandler := timeline.NewHandler(timelineSvc)
+	timelineHandler.SetMemberLister(campaignService)
+	timeline.RegisterRoutes(e, timelineHandler, campaignService, authService)
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
@@ -373,6 +468,7 @@ func (a *App) RegisterRoutes() {
 	// Wire audit logging into mutation handlers so CRUD actions are recorded.
 	entityHandler.SetAuditService(auditService)
 	entityHandler.SetTagFetcher(&entityTagFetcherAdapter{svc: tagService})
+	entityHandler.SetTimelineSearcher(timelineSvc)
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	tagHandler.SetAuditService(auditService)
 

@@ -272,7 +272,10 @@ func (h *Handler) LinkEntityAPI(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
 	}
 
-	if err := h.svc.LinkEntity(c.Request().Context(), sessionID, req.EntityID, req.Role); err != nil {
+	if err := h.svc.LinkEntity(c.Request().Context(), sessionID, req.EntityID, req.Role, cc.Campaign.ID); err != nil {
+		if appErr, ok := err.(*apperror.AppError); ok {
+			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
+		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "link failed"})
 	}
 

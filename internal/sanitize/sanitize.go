@@ -68,9 +68,12 @@ func HTML(input string) string {
 	return getPolicy().Sanitize(input)
 }
 
-// secretSpanRe matches <span data-secret="true" ...>...</span> including nested tags.
-// Uses a non-greedy match with a lookahead for the closing tag.
-var secretSpanRe = regexp.MustCompile(`<span[^>]*\bdata-secret\b[^>]*>.*?</span>`)
+// secretSpanRe matches <span data-secret="true" ...>...</span> elements.
+// Uses (?s) dotall flag so . matches newlines in multi-line secret content.
+// Assumes flat spans without nested <span> elements, which is consistent with
+// TipTap editor output. The ProseMirror JSON stripper (StripSecretsJSON) provides
+// a more robust secondary defense for the JSON storage path.
+var secretSpanRe = regexp.MustCompile(`(?s)<span[^>]*\bdata-secret\b[^>]*>.*?</span>`)
 
 // StripSecretsHTML removes all <span data-secret>...</span> elements from HTML,
 // used to hide GM-only inline secrets from players.

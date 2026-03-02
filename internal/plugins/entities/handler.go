@@ -33,13 +33,20 @@ type AddonChecker interface {
 	IsEnabledForCampaign(ctx context.Context, campaignID string, addonSlug string) (bool, error)
 }
 
+// TimelineSearcher provides timeline search results for the @mention popup.
+// Implemented by the timeline plugin and injected via SetTimelineSearcher.
+type TimelineSearcher interface {
+	SearchTimelines(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
+}
+
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service    EntityService
-	auditSvc   audit.AuditService
-	tagFetcher EntityTagFetcher
-	addonSvc   AddonChecker
+	service          EntityService
+	auditSvc         audit.AuditService
+	tagFetcher       EntityTagFetcher
+	addonSvc         AddonChecker
+	timelineSearcher TimelineSearcher
 }
 
 // NewHandler creates a new entity handler.
@@ -63,6 +70,12 @@ func (h *Handler) SetAddonChecker(svc AddonChecker) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetTagFetcher(f EntityTagFetcher) {
 	h.tagFetcher = f
+}
+
+// SetTimelineSearcher sets the timeline searcher for @mention results.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetTimelineSearcher(ts TimelineSearcher) {
+	h.timelineSearcher = ts
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
@@ -121,9 +134,16 @@ func (h *Handler) Index(c echo.Context) error {
 		}
 	}
 
-	// Fetch entity types for sidebar filter and counts.
-	entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), campaignID)
-	counts, _ := h.service.CountByType(c.Request().Context(), campaignID, role)
+	// Fetch entity types for sidebar filter and counts. Non-fatal: degrade
+	// gracefully if these fail (page still renders, just without filters).
+	entityTypes, err := h.service.GetEntityTypes(c.Request().Context(), campaignID)
+	if err != nil {
+		slog.Warn("failed to load entity types for list page", slog.Any("error", err))
+	}
+	counts, err := h.service.CountByType(c.Request().Context(), campaignID, role)
+	if err != nil {
+		slog.Warn("failed to load entity counts for list page", slog.Any("error", err))
+	}
 
 	entities, total, err := h.service.List(c.Request().Context(), campaignID, typeID, role, opts)
 	if err != nil {
@@ -468,6 +488,15 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 				"type_icon":  e.TypeIcon,
 				"type_color": e.TypeColor,
 				"url":        fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, e.ID),
+			}
+		}
+		// Append timeline results if the searcher is registered.
+		if h.timelineSearcher != nil && query != "" {
+			if tlResults, err := h.timelineSearcher.SearchTimelines(
+				c.Request().Context(), cc.Campaign.ID, query, role,
+			); err == nil {
+				items = append(items, tlResults...)
+				total += len(tlResults)
 			}
 		}
 		return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total})

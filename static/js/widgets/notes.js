@@ -320,6 +320,10 @@ Chronicle.register('notes', {
           }
           state.notes.unshift(note);
           renderNotes();
+        })
+        .catch(function (err) {
+          console.error('[notes] Failed to create note:', err);
+          renderNotes();
         });
     }
 

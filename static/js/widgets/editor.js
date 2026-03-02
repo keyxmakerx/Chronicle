@@ -235,6 +235,12 @@
         state.mentionExt.onDestroy();
       }
 
+      // Clean up insert menu global click listener to prevent memory leaks.
+      var insertMenu = el.querySelector('.chronicle-editor__insert-wrapper');
+      if (insertMenu && insertMenu._closeDropdownHandler) {
+        document.removeEventListener('click', insertMenu._closeDropdownHandler);
+      }
+
       if (state.editor) {
         state.editor.destroy();
       }
@@ -533,13 +539,16 @@
       trigger.classList.remove('chronicle-editor__btn--active');
     });
 
-    // Close dropdown when clicking outside.
-    document.addEventListener('click', function (e) {
+    // Close dropdown when clicking outside. Store handler reference on the
+    // wrapper element so it can be removed in destroy() to prevent memory leaks
+    // when the widget is re-mounted via HTMX swaps.
+    wrapper._closeDropdownHandler = function (e) {
       if (!wrapper.contains(e.target)) {
         dropdown.style.display = 'none';
         trigger.classList.remove('chronicle-editor__btn--active');
       }
-    });
+    };
+    document.addEventListener('click', wrapper._closeDropdownHandler);
 
     return wrapper;
   }

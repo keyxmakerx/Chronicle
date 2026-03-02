@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -37,11 +38,28 @@ func (h *Handler) UpdateStorageSettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Parse form values. Sizes are submitted in MB and converted to bytes.
-	maxUploadMB, _ := strconv.ParseFloat(c.FormValue("max_upload_size"), 64)
-	maxStorageUserMB, _ := strconv.ParseFloat(c.FormValue("max_storage_per_user"), 64)
-	maxStorageCampaignMB, _ := strconv.ParseFloat(c.FormValue("max_storage_per_campaign"), 64)
-	maxFiles, _ := strconv.Atoi(c.FormValue("max_files_per_campaign"))
-	rateLimit, _ := strconv.Atoi(c.FormValue("rate_limit_uploads_per_min"))
+	// Empty values default to 0 (unlimited). Non-empty invalid values are rejected
+	// to prevent accidentally removing limits via malformed input.
+	maxUploadMB, err := parseFloatField(c.FormValue("max_upload_size"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid max upload size")
+	}
+	maxStorageUserMB, err := parseFloatField(c.FormValue("max_storage_per_user"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid max storage per user")
+	}
+	maxStorageCampaignMB, err := parseFloatField(c.FormValue("max_storage_per_campaign"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid max storage per campaign")
+	}
+	maxFiles, err := parseIntField(c.FormValue("max_files_per_campaign"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid max files per campaign")
+	}
+	rateLimit, err := parseIntField(c.FormValue("rate_limit_uploads_per_min"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid rate limit")
+	}
 
 	limits := &GlobalStorageLimits{
 		MaxUploadSize:          int64(maxUploadMB * 1024 * 1024),
@@ -201,4 +219,37 @@ func (h *Handler) DeleteCampaignStorageLimit(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+}
+
+// parseFloatField parses a form field as float64. Empty strings return 0 (no limit).
+// Non-empty strings that fail to parse return an error, preventing accidental
+// removal of limits via malformed input.
+func parseFloatField(s string) (float64, error) {
+	if s == "" {
+		return 0, nil
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	if v < 0 {
+		return 0, fmt.Errorf("value must not be negative")
+	}
+	return v, nil
+}
+
+// parseIntField parses a form field as int. Empty strings return 0 (no limit).
+// Non-empty strings that fail to parse return an error.
+func parseIntField(s string) (int, error) {
+	if s == "" {
+		return 0, nil
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, err
+	}
+	if v < 0 {
+		return 0, fmt.Errorf("value must not be negative")
+	}
+	return v, nil
 }

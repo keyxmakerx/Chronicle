@@ -454,3 +454,32 @@ constant to Go code and validation. Add migration SQL validation tests as a safe
 - Down migration for 000027 must revert the ENUM (requires no rows use `plugin`).
 - Migration validation test in `internal/database/migrate_test.go` catches invalid
   ENUM values at `make test` time.
+
+---
+
+## ADR-018: D3.js for Timeline Visualization
+
+**Date:** 2026-03-02
+**Status:** Accepted
+**Context:** The timeline plugin needs an interactive visualization with zoom/pan/drag,
+time scales, and entity group swim-lanes. We already use Leaflet.js for the maps plugin.
+
+**Decision:** Use D3.js v7 for the timeline visualization. Load from CDN per-page
+(matching Leaflet pattern), not bundled globally. D3 provides SVG-based rendering,
+`d3.zoom` for pan/drag, `d3.scaleLinear` for time axes, and transitions. Leaflet.js
+is designed for geographic tile-based rendering and is unsuitable for time-axis layouts.
+
+**Alternatives Considered:**
+- Leaflet.js: Already in the project for maps, but fundamentally geographic. Would
+  require fighting the library's coordinate system and tile-based assumptions.
+- vis-timeline: Purpose-built timeline library, but opinionated about styling and
+  harder to customize for swim-lanes, fantasy calendars, and Chronicle's dark theme.
+- Canvas-based rendering: Better performance for very large datasets, but loses SVG's
+  accessibility, CSS styling integration, and text rendering quality.
+
+**Consequences:**
+- D3 v7 (~90KB gzipped) loaded only on timeline detail pages, no impact on other pages.
+- SVG rendering gives full CSS control, accessibility, and crisp text at all zoom levels.
+- Swim-lanes, zoom levels, and entity grouping can be implemented incrementally.
+- Fantasy calendar dates (arbitrary year/month/day systems) work naturally with
+  `d3.scaleLinear` since we convert to fractional years for positioning.

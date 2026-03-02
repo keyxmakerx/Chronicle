@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -63,7 +64,15 @@ func NewCalendarService(repo CalendarRepository) CalendarService {
 	return &calendarService{repo: repo}
 }
 
-// CreateCalendar creates a new calendar for a campaign. Only one per campaign.
+// CreateCalendar creates a new calendar for a campaign with default months and
+// weekdays seeded based on the mode. Only one calendar per campaign is allowed.
+//
+// For real-life mode: seeds Gregorian months (with correct day counts), standard
+// weekdays, 24/60/60 time system, leap year every 4, and syncs current date/time
+// from the wall clock (UTC).
+//
+// For fantasy mode: seeds 12 generic months (30 days each) and 7 generic weekdays
+// with 24/60/60 time system defaults.
 func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string, input CreateCalendarInput) (*Calendar, error) {
 	// Check if calendar already exists.
 	existing, err := s.repo.GetByCampaignID(ctx, campaignID)
@@ -81,6 +90,23 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 	if input.Mode != ModeRealLife {
 		input.Mode = ModeFantasy
 	}
+
+	// For real-life mode, override defaults with Gregorian settings.
+	if input.Mode == ModeRealLife {
+		now := time.Now().UTC()
+		input.CurrentYear = now.Year()
+		input.HoursPerDay = 24
+		input.MinutesPerHour = 60
+		input.SecondsPerMinute = 60
+		input.LeapYearEvery = 4
+		input.LeapYearOffset = 0
+		if input.Name == "" || input.Name == "Campaign Calendar" {
+			input.Name = "Session Calendar"
+		}
+		ad := "AD"
+		input.EpochName = &ad
+	}
+
 	if input.CurrentYear == 0 {
 		input.CurrentYear = 1
 	}
@@ -114,7 +140,96 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 	if err := s.repo.Create(ctx, cal); err != nil {
 		return nil, fmt.Errorf("create calendar: %w", err)
 	}
+
+	// Seed default months and weekdays based on mode.
+	if err := s.seedDefaults(ctx, cal); err != nil {
+		return nil, fmt.Errorf("seeding calendar defaults: %w", err)
+	}
+
 	return cal, nil
+}
+
+// seedDefaults populates a newly created calendar with mode-appropriate months,
+// weekdays, and time settings. For real-life mode, also syncs wall clock time.
+func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error {
+	if cal.Mode == ModeRealLife {
+		// Gregorian months with correct day counts.
+		gregorianMonths := []MonthInput{
+			{Name: "January", Days: 31, SortOrder: 0},
+			{Name: "February", Days: 28, SortOrder: 1, LeapYearDays: 1},
+			{Name: "March", Days: 31, SortOrder: 2},
+			{Name: "April", Days: 30, SortOrder: 3},
+			{Name: "May", Days: 31, SortOrder: 4},
+			{Name: "June", Days: 30, SortOrder: 5},
+			{Name: "July", Days: 31, SortOrder: 6},
+			{Name: "August", Days: 31, SortOrder: 7},
+			{Name: "September", Days: 30, SortOrder: 8},
+			{Name: "October", Days: 31, SortOrder: 9},
+			{Name: "November", Days: 30, SortOrder: 10},
+			{Name: "December", Days: 31, SortOrder: 11},
+		}
+		if err := s.SetMonths(ctx, cal.ID, gregorianMonths); err != nil {
+			return err
+		}
+		gregorianWeekdays := []WeekdayInput{
+			{Name: "Sunday", SortOrder: 0},
+			{Name: "Monday", SortOrder: 1},
+			{Name: "Tuesday", SortOrder: 2},
+			{Name: "Wednesday", SortOrder: 3},
+			{Name: "Thursday", SortOrder: 4},
+			{Name: "Friday", SortOrder: 5},
+			{Name: "Saturday", SortOrder: 6},
+		}
+		if err := s.SetWeekdays(ctx, cal.ID, gregorianWeekdays); err != nil {
+			return err
+		}
+		// Sync current date/time from wall clock.
+		now := time.Now().UTC()
+		return s.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
+			Name:             cal.Name,
+			Description:      cal.Description,
+			EpochName:        cal.EpochName,
+			CurrentYear:      now.Year(),
+			CurrentMonth:     int(now.Month()),
+			CurrentDay:       now.Day(),
+			CurrentHour:      now.Hour(),
+			CurrentMinute:    now.Minute(),
+			HoursPerDay:      24,
+			MinutesPerHour:   60,
+			SecondsPerMinute: 60,
+			LeapYearEvery:    4,
+			LeapYearOffset:   0,
+		})
+	}
+
+	// Fantasy mode: 12 generic months and 7 generic weekdays.
+	defaultMonths := []MonthInput{
+		{Name: "Month 1", Days: 30, SortOrder: 0},
+		{Name: "Month 2", Days: 30, SortOrder: 1},
+		{Name: "Month 3", Days: 30, SortOrder: 2},
+		{Name: "Month 4", Days: 30, SortOrder: 3},
+		{Name: "Month 5", Days: 30, SortOrder: 4},
+		{Name: "Month 6", Days: 30, SortOrder: 5},
+		{Name: "Month 7", Days: 30, SortOrder: 6},
+		{Name: "Month 8", Days: 30, SortOrder: 7},
+		{Name: "Month 9", Days: 30, SortOrder: 8},
+		{Name: "Month 10", Days: 30, SortOrder: 9},
+		{Name: "Month 11", Days: 30, SortOrder: 10},
+		{Name: "Month 12", Days: 30, SortOrder: 11},
+	}
+	if err := s.SetMonths(ctx, cal.ID, defaultMonths); err != nil {
+		return err
+	}
+	defaultWeekdays := []WeekdayInput{
+		{Name: "Day 1", SortOrder: 0},
+		{Name: "Day 2", SortOrder: 1},
+		{Name: "Day 3", SortOrder: 2},
+		{Name: "Day 4", SortOrder: 3},
+		{Name: "Day 5", SortOrder: 4},
+		{Name: "Day 6", SortOrder: 5},
+		{Name: "Day 7", SortOrder: 6},
+	}
+	return s.SetWeekdays(ctx, cal.ID, defaultWeekdays)
 }
 
 // GetCalendar returns the full calendar for a campaign with all sub-resources.
@@ -337,6 +452,14 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 	}
 	if evt == nil {
 		return apperror.NewNotFound("event not found")
+	}
+
+	// Validate visibility (same rules as CreateEvent).
+	if input.Visibility == "" {
+		input.Visibility = evt.Visibility // preserve existing if not provided
+	}
+	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
+		return apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
 	}
 
 	evt.Name = input.Name

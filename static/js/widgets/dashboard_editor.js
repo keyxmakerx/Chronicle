@@ -24,7 +24,8 @@
     { type: 'entity_list',    label: 'Entity List',     icon: 'fa-list',       desc: 'Filtered list by category' },
     { type: 'text_block',     label: 'Text Block',      icon: 'fa-align-left', desc: 'Custom rich text / HTML' },
     { type: 'pinned_pages',   label: 'Pinned Pages',    icon: 'fa-thumbtack',  desc: 'Hand-picked entity cards' },
-    { type: 'calendar_preview', label: 'Calendar',     icon: 'fa-calendar-days', desc: 'Upcoming calendar events' }
+    { type: 'calendar_preview', label: 'Calendar',     icon: 'fa-calendar-days', desc: 'Upcoming calendar events' },
+    { type: 'timeline_preview', label: 'Timeline',     icon: 'fa-timeline',      desc: 'Timeline list with event counts' }
   ];
 
   /** Column layout presets for adding new rows. */
@@ -543,7 +544,7 @@
           var limit = prompt('Number of recent pages to show (4-12):', cfg.limit || '8');
           if (limit !== null) {
             var n = parseInt(limit);
-            if (n >= 1 && n <= 50) {
+            if (n >= 4 && n <= 12) {
               block.config.limit = n;
               this.dirty = true;
               this.render();
@@ -603,6 +604,18 @@
             var cl = parseInt(calLimit);
             if (cl >= 1 && cl <= 20) {
               block.config.limit = cl;
+              this.dirty = true;
+              this.render();
+            }
+          }
+          break;
+
+        case 'timeline_preview':
+          var tlLimit = prompt('Number of timelines to show (1-20):', cfg.limit || '5');
+          if (tlLimit !== null) {
+            var tl = parseInt(tlLimit);
+            if (tl >= 1 && tl <= 20) {
+              block.config.limit = tl;
               this.dirty = true;
               this.render();
             }

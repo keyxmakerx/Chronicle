@@ -19,8 +19,18 @@ Chronicle.register('template-editor', {
     this.endpoint = el.dataset.endpoint;
     this.entityTypeName = el.dataset.entityTypeName;
     this.csrfToken = el.dataset.csrfToken;
-    this.fields = JSON.parse(el.dataset.fields || '[]');
-    this.layout = JSON.parse(el.dataset.layout || '{"rows":[]}');
+    try {
+      this.fields = JSON.parse(el.dataset.fields || '[]');
+    } catch (e) {
+      console.warn('[template-editor] Invalid fields JSON, using default:', e);
+      this.fields = [];
+    }
+    try {
+      this.layout = JSON.parse(el.dataset.layout || '{"rows":[]}');
+    } catch (e) {
+      console.warn('[template-editor] Invalid layout JSON, using default:', e);
+      this.layout = { rows: [] };
+    }
     this.dirty = false;
     // Track current drop indicator position.
     this.dropIndicator = null;

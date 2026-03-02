@@ -37,6 +37,8 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashPinnedPages(cc, block.Config)
 		case "calendar_preview":
 			@dashCalendarPreview(cc, block.Config)
+		case "timeline_preview":
+			@dashTimelinePreview(cc, block.Config)
 	}
 }
 
@@ -241,4 +243,30 @@ func limitRecentEntities(entities []RecentEntity, config map[string]any) []Recen
 		limit = len(entities)
 	}
 	return entities[:limit]
+}
+
+// dashTimelinePreview renders a card that lazy-loads timeline summaries.
+// Config: limit (int, default 5). Uses HTMX to fetch from the timeline plugin.
+templ dashTimelinePreview(cc *CampaignContext, config map[string]any) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-timeline mr-1.5"></i>Timelines
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				View all
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/timelines/preview?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card divide-y divide-edge min-h-[60px]"
+		>
+			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+		</div>
+	</div>
 }
