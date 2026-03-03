@@ -8,11 +8,12 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-02 -- Standalone timeline events. Timelines can now exist without a calendar
-and contain standalone events created directly on the timeline. Migration 000036 adds
-`timeline_events` table and makes `timelines.calendar_id` nullable. Full calendar event
-field parity (multi-day, times, recurrence). Create Event modal on show page. Service
-merges linked calendar events + standalone events into unified EventLink response.
+2026-03-03 -- Full per-user visibility for calendar and timeline events. Fixed critical
+visibility leak (timeline used role >= 2, calendar/maps used role >= 3 for dm_only).
+Migration 000037 adds `visibility_rules` JSON column to `calendar_events` and
+`timeline_events`. Per-user whitelist/blacklist UI on calendar event modals and timeline
+event cards. Standalone events now support per-user visibility rules. Service-layer
+`filterEventsByUser()` / `canUserView()` applied to all event listing endpoints.
 
 ## Current Phase
 **Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit
