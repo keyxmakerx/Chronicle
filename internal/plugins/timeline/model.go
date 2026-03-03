@@ -109,9 +109,9 @@ type EventLink struct {
 	// Calendar event fields (joined from calendar_events).
 	EventName        string  `json:"event_name,omitempty"`
 	EventDescription *string `json:"event_description,omitempty"`
-	EventYear        int     `json:"event_year,omitempty"`
-	EventMonth       int     `json:"event_month,omitempty"`
-	EventDay         int     `json:"event_day,omitempty"`
+	EventYear        int     `json:"event_year"`
+	EventMonth       int     `json:"event_month"`
+	EventDay         int     `json:"event_day"`
 	EventCategory    *string `json:"event_category,omitempty"`
 	EventVisibility  string  `json:"event_visibility,omitempty"`
 	EventEntityID    *string `json:"event_entity_id,omitempty"`
