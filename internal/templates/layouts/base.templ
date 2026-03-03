@@ -41,6 +41,8 @@ templ Base(title string) {
 
 		<!-- Vendored libraries (loaded last for faster initial paint) -->
 		<script src="/static/vendor/htmx.min.js" defer></script>
+		<!-- Alpine plugins must load before Alpine core -->
+		<script src="/static/vendor/alpine-collapse.min.js" defer></script>
 		<script src="/static/vendor/alpine.min.js" defer></script>
 
 		<!-- Toast notification system (before widgets so they can use Chronicle.notify) -->

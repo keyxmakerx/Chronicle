@@ -265,7 +265,7 @@ templ TimelineShowFragment(cc *campaigns.CampaignContext, data TimelineViewData)
 templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) {
 	<!-- D3.js (loaded only on timeline detail pages — large library, not in base layout) -->
 	<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-	<div class="max-w-5xl mx-auto py-6 px-4" x-data="{ eventListOpen: true, manageOpen: false, adminTab: 'visibility' }">
+	<div class="max-w-5xl mx-auto py-6 px-4" x-data="{ manageOpen: false, adminTab: 'visibility' }">
 		<!-- Header Card -->
 		<div class="card p-5 mb-4">
 			<div class="flex items-center justify-between">
@@ -344,43 +344,53 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 				</div>
 			}
 		</div>
-		<!-- D3.js Interactive Timeline Visualization -->
-		<div
-			data-widget="timeline-viz"
-			data-campaign-id={ data.CampaignID }
-			data-timeline-id={ data.Timeline.ID }
-			data-timeline-color={ data.Timeline.Color }
-			data-api-url={ fmt.Sprintf("/campaigns/%s/timelines/%s/data", data.CampaignID, data.Timeline.ID) }
-			style="min-height: 350px"
-			class="mb-4"
-		></div>
-		<!-- Event List Section -->
-		if len(data.Events) > 0 {
-			<div class="card overflow-hidden mb-4">
+		<!-- Unified Timeline Visualization + Event List -->
+		<div class="card overflow-hidden mb-4" x-data="{ viewMode: 'viz' }">
+			<!-- Tab bar -->
+			<div class="tl-view-tabs">
 				<button
-					class="tl-manage-header w-full text-left"
-					@click="eventListOpen = !eventListOpen"
+					class="tl-view-tab"
+					:class="viewMode === 'viz' && 'active'"
+					@click="viewMode = 'viz'; $nextTick(function() { window.dispatchEvent(new Event('resize')) })"
 				>
-					<i class="fa-solid fa-list mr-1.5"></i>
-					<span class="text-sm font-medium text-fg">Event List</span>
-					<span class="text-xs text-fg-muted ml-auto">{ fmt.Sprintf("%d events", len(data.Events)) }</span>
-					<i class="fa-solid fa-chevron-down ml-2 text-xs transition-transform"
-						:class="eventListOpen && 'rotate-180'"
-					></i>
+					<i class="fa-solid fa-chart-line"></i> Visualization
 				</button>
-				<div x-show="eventListOpen" x-collapse class="p-3 space-y-2">
-					for _, el := range data.Events {
-						@timelineEventCard(data, el)
-					}
-				</div>
+				<button
+					class="tl-view-tab"
+					:class="viewMode === 'list' && 'active'"
+					@click="viewMode = 'list'"
+				>
+					<i class="fa-solid fa-list"></i> Event List
+					<span class="tl-view-tab-count">{ fmt.Sprintf("%d", len(data.Events)) }</span>
+				</button>
 			</div>
-		} else {
-			<div class="card p-6 mb-4 text-center">
-				<i class="fa-solid fa-calendar-plus text-3xl mb-3" style="color: var(--color-fg-muted)"></i>
-				<p class="text-sm font-medium text-fg-secondary">No events yet</p>
-				<p class="text-xs text-fg-muted mt-1">Create a standalone event or link calendar events to get started.</p>
+			<!-- Visualization view -->
+			<div x-show="viewMode === 'viz'">
+				<div
+					data-widget="timeline-viz"
+					data-campaign-id={ data.CampaignID }
+					data-timeline-id={ data.Timeline.ID }
+					data-timeline-color={ data.Timeline.Color }
+					data-api-url={ fmt.Sprintf("/campaigns/%s/timelines/%s/data", data.CampaignID, data.Timeline.ID) }
+				></div>
 			</div>
-		}
+			<!-- Event list view -->
+			<div x-show="viewMode === 'list'" x-cloak>
+				if len(data.Events) > 0 {
+					<div class="p-3 space-y-2">
+						for _, el := range data.Events {
+							@timelineEventCard(data, el)
+						}
+					</div>
+				} else {
+					<div class="p-6 text-center">
+						<i class="fa-solid fa-calendar-plus text-3xl mb-3" style="color: var(--color-fg-muted)"></i>
+						<p class="text-sm font-medium text-fg-secondary">No events yet</p>
+						<p class="text-xs text-fg-muted mt-1">Create a standalone event or link calendar events to get started.</p>
+					</div>
+				}
+			</div>
+		</div>
 		<!-- Manage Timeline (Owner only) -->
 		if data.IsOwner {
 			<div class="tl-manage-section">

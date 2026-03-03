@@ -8,7 +8,8 @@
  *   - Tooltips on hover (event name, date, entity, category)
  *   - Color-coded events (per-link override or timeline default color)
  *   - Entity group swim-lanes (when groups exist)
- *   - Skip-to-date input, zoom fit, search/filter bar
+ *   - Clickable zoom level buttons, zoom fit, search/filter bar
+ *   - Event detail panel on click
  *
  * Zoom levels and visual styles:
  *   Era     — Small dots with subtle glow
@@ -36,6 +37,14 @@ var _impl = {
   _d3Src: 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js',
 
   /**
+   * Target scale factors for each zoom level (midpoints of threshold ranges).
+   * Used when clicking a zoom level button to animate to that level.
+   */
+  _zoomTargets: {
+    era: 0.15, century: 0.55, decade: 1.4, year: 5, month: 16.5, day: 37
+  },
+
+  /**
    * Initialize the timeline visualization.
    * @param {HTMLElement} el - Mount point element.
    * @param {Object} config - Parsed data-* attributes.
@@ -50,6 +59,7 @@ var _impl = {
     this.groups = [];
     this.timeline = null;
     this.tooltip = null;
+    this.detailPanel = null;
     this.svg = null;
     this.zoom = null;
     this.currentTransform = null;
@@ -123,7 +133,6 @@ var _impl = {
           clearInterval(poll);
           cb();
         } else if (attempts > 100) {
-          // ~10 seconds of polling.
           clearInterval(poll);
           self._showD3Error();
         }
@@ -153,11 +162,12 @@ var _impl = {
   },
 
   /**
-   * Build the widget DOM structure (toolbar + SVG container).
+   * Build the widget DOM structure (toolbar + SVG container + panels).
    */
   _buildDOM: function() {
     this.el.innerHTML = '';
     this.el.classList.add('timeline-viz-container');
+    var self = this;
 
     // Toolbar.
     var toolbar = document.createElement('div');
@@ -173,9 +183,15 @@ var _impl = {
         '<button class="timeline-viz-btn" data-action="zoom-fit" title="Fit all events">' +
           '<i class="fa-solid fa-expand"></i>' +
         '</button>' +
-        '<span class="timeline-viz-zoom-label">Year</span>' +
+        '<div class="timeline-viz-zoom-buttons">' +
+          '<button class="timeline-viz-zoom-btn" data-zoom-level="era">Era</button>' +
+          '<button class="timeline-viz-zoom-btn" data-zoom-level="century">Cen</button>' +
+          '<button class="timeline-viz-zoom-btn" data-zoom-level="decade">Dec</button>' +
+          '<button class="timeline-viz-zoom-btn active" data-zoom-level="year">Year</button>' +
+          '<button class="timeline-viz-zoom-btn" data-zoom-level="month">Mon</button>' +
+          '<button class="timeline-viz-zoom-btn" data-zoom-level="day">Day</button>' +
+        '</div>' +
       '</div>' +
-      '<div class="timeline-viz-toolbar-divider"></div>' +
       '<div class="timeline-viz-toolbar-center">' +
         '<div class="timeline-viz-search-wrap">' +
           '<i class="fa-solid fa-search timeline-viz-search-icon"></i>' +
@@ -185,19 +201,25 @@ var _impl = {
           '</button>' +
         '</div>' +
       '</div>' +
-      '<div class="timeline-viz-toolbar-divider"></div>' +
       '<div class="timeline-viz-toolbar-right">' +
-        '<label class="timeline-viz-skip-label">Go to year:</label>' +
-        '<input type="number" class="timeline-viz-skip-input" placeholder="Year"/>' +
-        '<button class="timeline-viz-btn" data-action="skip-to">' +
+        '<input type="number" class="timeline-viz-skip-input" placeholder="Year" title="Go to year"/>' +
+        '<button class="timeline-viz-btn" data-action="skip-to" title="Go to year">' +
           '<i class="fa-solid fa-arrow-right"></i>' +
         '</button>' +
       '</div>';
     this.el.appendChild(toolbar);
 
-    // SVG container.
+    // SVG container with loading skeleton.
     var svgContainer = document.createElement('div');
     svgContainer.className = 'timeline-viz-svg-wrap';
+    svgContainer.innerHTML =
+      '<div class="timeline-viz-skeleton">' +
+        '<div class="timeline-viz-skeleton-bar" style="width:70%; margin-left:15%"></div>' +
+        '<div class="timeline-viz-skeleton-dots">' +
+          '<span></span><span></span><span></span><span></span><span></span>' +
+        '</div>' +
+        '<div class="timeline-viz-skeleton-bar" style="width:50%; margin-left:25%"></div>' +
+      '</div>';
     this.el.appendChild(svgContainer);
     this.svgContainer = svgContainer;
 
@@ -207,17 +229,48 @@ var _impl = {
     document.body.appendChild(tip);
     this.tooltip = tip;
 
+    // Detail panel (floating, shown on event click).
+    var detail = document.createElement('div');
+    detail.className = 'timeline-viz-detail';
+    detail.innerHTML =
+      '<button class="timeline-viz-detail-close"><i class="fa-solid fa-xmark"></i></button>' +
+      '<div class="timeline-viz-detail-body"></div>';
+    document.body.appendChild(detail);
+    this.detailPanel = detail;
+
+    // Close detail panel on button click or Escape key.
+    detail.querySelector('.timeline-viz-detail-close').addEventListener('click', function() {
+      self._hideDetail();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') self._hideDetail();
+    });
+    // Close on click outside.
+    document.addEventListener('mousedown', function(e) {
+      if (self.detailPanel.classList.contains('visible') &&
+          !self.detailPanel.contains(e.target) &&
+          !e.target.closest('.timeline-event')) {
+        self._hideDetail();
+      }
+    });
+
     // Wire toolbar buttons.
-    var self = this;
     toolbar.addEventListener('click', function(e) {
       var btn = e.target.closest('[data-action]');
-      if (!btn) return;
-      var action = btn.getAttribute('data-action');
-      if (action === 'zoom-in') self._zoomBy(1.5);
-      else if (action === 'zoom-out') self._zoomBy(1 / 1.5);
-      else if (action === 'zoom-fit') self._zoomFit();
-      else if (action === 'skip-to') self._skipToYear();
-      else if (action === 'search-clear') self._clearSearch();
+      if (btn) {
+        var action = btn.getAttribute('data-action');
+        if (action === 'zoom-in') self._zoomBy(1.5);
+        else if (action === 'zoom-out') self._zoomBy(1 / 1.5);
+        else if (action === 'zoom-fit') self._zoomFit();
+        else if (action === 'skip-to') self._skipToYear();
+        else if (action === 'search-clear') self._clearSearch();
+        return;
+      }
+      // Zoom level buttons.
+      var zoomBtn = e.target.closest('[data-zoom-level]');
+      if (zoomBtn) {
+        self._jumpToZoomLevel(zoomBtn.getAttribute('data-zoom-level'));
+      }
     });
 
     // Enter key on skip input.
@@ -274,7 +327,11 @@ var _impl = {
       .catch(function(err) {
         console.warn('[timeline-viz] Failed to load data:', err);
         self.svgContainer.innerHTML =
-          '<div class="timeline-viz-empty">Failed to load timeline data.</div>';
+          '<div class="timeline-viz-empty">' +
+            '<i class="fa-solid fa-triangle-exclamation text-3xl mb-3" style="color: var(--color-fg-muted)"></i>' +
+            '<p style="font-weight: 600">Failed to load timeline data</p>' +
+            '<p class="text-xs mt-1" style="color: var(--color-fg-muted)">' + self._escapeHTML(String(err)) + '</p>' +
+          '</div>';
       });
   },
 
@@ -311,7 +368,10 @@ var _impl = {
     // Build swim-lanes.
     var lanes = this._buildLanes();
     var laneCount = Math.max(lanes.length, 1);
-    var contentHeight = laneCount * this.laneHeight;
+    // Use a dynamic minimum content height so the SVG fills the container
+    // instead of leaving empty whitespace below a tiny 50px content area.
+    var minContentHeight = Math.max(laneCount * this.laneHeight, 200);
+    var contentHeight = minContentHeight;
     var height = m.top + contentHeight + m.bottom;
 
     // Create SVG.
@@ -324,16 +384,18 @@ var _impl = {
     this.svg = svg;
     this.width = width;
     this.height = height;
+    this.contentHeight = contentHeight;
 
-    // Defs: clip path and glow filter.
+    // Defs: clip path with padding for day-level cards (extend above/below).
     var defs = svg.append('defs');
+    var clipPad = 45;
     defs.append('clipPath')
       .attr('id', 'timeline-clip')
       .append('rect')
       .attr('x', m.left)
-      .attr('y', m.top)
+      .attr('y', m.top - clipPad)
       .attr('width', width - m.left - m.right)
-      .attr('height', contentHeight);
+      .attr('height', contentHeight + clipPad * 2);
 
     // Glow filter for low-zoom event dots.
     var glowFilter = defs.append('filter')
@@ -587,17 +649,23 @@ var _impl = {
     if (isDay) {
       eventGroups.append('foreignObject')
         .attr('class', 'timeline-event-card-fo')
-        .attr('width', 180).attr('height', 62)
-        .attr('x', style.radius + 6).attr('y', -31)
+        .attr('width', 220).attr('height', 80)
+        .attr('x', style.radius + 6).attr('y', -40)
         .append('xhtml:div')
         .attr('class', 'tl-viz-card')
         .html(function(d) {
           var label = self._escapeHTML(d.label || d.event_name || 'Untitled');
-          var date = 'M' + d.event_month + ' D' + d.event_day;
+          var date = 'Y' + d.event_year + ' M' + d.event_month + ' D' + d.event_day;
           var entity = d.event_entity_name ? self._escapeHTML(d.event_entity_name) : '';
+          var catHtml = '';
+          if (d.event_category) {
+            catHtml = '<span class="tl-viz-card-cat">' + self._escapeHTML(d.event_category) + '</span>';
+          }
           return '<div class="tl-viz-card-name">' + label + '</div>' +
                  '<div class="tl-viz-card-date">' + date + '</div>' +
-                 (entity ? '<div class="tl-viz-card-entity">' + entity + '</div>' : '');
+                 (entity ? '<div class="tl-viz-card-entity"><i class="fa-solid ' +
+                   (d.event_entity_icon || 'fa-circle-dot') + ' tl-viz-card-entity-icon"></i>' + entity + '</div>' : '') +
+                 catHtml;
         });
     }
 
@@ -714,7 +782,7 @@ var _impl = {
    */
   _drawGrid: function() {
     var m = this.margin;
-    var contentHeight = this.height - m.top - m.bottom;
+    var contentHeight = this.contentHeight || (this.height - m.top - m.bottom);
     var ticks = this.xScale.ticks(
       Math.max(2, Math.floor((this.width - m.left - m.right) / 80))
     );
@@ -753,9 +821,6 @@ var _impl = {
     this._drawAxis();
     this._drawGrid();
 
-    // Get current style.
-    var style = this._currentStyle();
-
     // Reposition events.
     this.eventGroups.attr('transform', function(d) {
       var x = newX(self._dateToYear(d));
@@ -767,10 +832,6 @@ var _impl = {
 
     // Update event visual styles based on zoom level.
     if (levelChanged) {
-      var isDay = (newLevel === 'day');
-      var isMonth = (newLevel === 'month');
-      var useGlow = (newLevel === 'era' || newLevel === 'century' || newLevel === 'decade');
-
       // Redraw events to swap marker types (circle/pill/card).
       this.contentGroup.selectAll('.timeline-event').remove();
       this._drawEvents();
@@ -794,14 +855,43 @@ var _impl = {
   },
 
   /**
-   * Update the zoom level indicator in the toolbar.
+   * Update the active zoom level button in the toolbar.
    */
   _updateZoomLevel: function() {
-    var label = this.el.querySelector('.timeline-viz-zoom-label');
-    if (!label) return;
+    var btns = this.el.querySelectorAll('.timeline-viz-zoom-btn');
     var level = this.currentZoomLevel;
-    var display = level.charAt(0).toUpperCase() + level.slice(1);
-    label.textContent = display;
+    for (var i = 0; i < btns.length; i++) {
+      if (btns[i].getAttribute('data-zoom-level') === level) {
+        btns[i].classList.add('active');
+      } else {
+        btns[i].classList.remove('active');
+      }
+    }
+  },
+
+  /**
+   * Jump to a specific zoom level by animating to its target scale factor.
+   * Preserves the current horizontal pan center.
+   * @param {string} level - Zoom level name (era/century/decade/year/month/day).
+   */
+  _jumpToZoomLevel: function(level) {
+    if (!this.svg || !this.zoom) return;
+    var targetK = this._zoomTargets[level];
+    if (targetK == null) return;
+
+    var m = this.margin;
+    var centerX = (this.width - m.left - m.right) / 2 + m.left;
+
+    // Calculate the center year of the current view.
+    var currentCenterYear = this.xScale.invert(centerX);
+
+    // Compute new translation to keep the same center year.
+    var tx = centerX - targetK * this.xScaleOrig(currentCenterYear);
+
+    this.svg.transition().duration(400).call(
+      this.zoom.transform,
+      d3.zoomIdentity.translate(tx, 0).scale(targetK)
+    );
   },
 
   /**
@@ -867,7 +957,6 @@ var _impl = {
     this.eventGroups.each(function(d) {
       var g = d3.select(this);
       if (!q) {
-        // No filter: reset all to full opacity.
         g.style('opacity', 1);
         g.select('.timeline-event-highlight').attr('opacity', 0);
         return;
@@ -892,7 +981,6 @@ var _impl = {
     if (cat.indexOf(q) !== -1) return true;
     var desc = (d.event_description || '').toLowerCase();
     if (desc.indexOf(q) !== -1) return true;
-    // Match year.
     if (String(d.event_year).indexOf(q) !== -1) return true;
     return false;
   },
@@ -916,7 +1004,6 @@ var _impl = {
     var label = d.label || d.event_name || 'Untitled';
     var date = 'Y' + d.event_year + ' M' + d.event_month + ' D' + d.event_day;
 
-    // Build structured tooltip content.
     var html = '<div style="font-weight:700; font-size:13px; margin-bottom:4px">' +
       this._escapeHTML(label) + '</div>';
     html += '<div style="font-family:ui-monospace,monospace; font-size:11px; color:var(--color-fg-muted); margin-bottom:4px">' +
@@ -941,7 +1028,6 @@ var _impl = {
 
     tip.innerHTML = html;
 
-    // Position tooltip.
     var x = event.pageX + 14;
     var y = event.pageY - 12;
     var tipW = tip.offsetWidth;
@@ -950,26 +1036,88 @@ var _impl = {
     }
     tip.style.left = x + 'px';
     tip.style.top = y + 'px';
-
-    // Fade in via CSS transition.
     tip.classList.add('visible');
   },
 
   /**
-   * Hide the tooltip with opacity fade-out.
+   * Hide the tooltip.
    */
   _hideTooltip: function() {
     this.tooltip.classList.remove('visible');
   },
 
   /**
-   * Handle click on an event marker.
+   * Handle click on an event marker — show the detail panel.
    */
   _onEventClick: function(event, d) {
-    // Open the event list section (Alpine.js managed).
-    var container = this.el.closest('[x-data]');
-    if (container && container.__x) {
-      container.__x.$data.eventListOpen = true;
+    this._hideTooltip();
+    this._showDetail(event, d);
+  },
+
+  /**
+   * Show the event detail panel positioned near the clicked event.
+   * @param {MouseEvent} event - Click event for positioning.
+   * @param {Object} d - Event data object.
+   */
+  _showDetail: function(event, d) {
+    var panel = this.detailPanel;
+    var body = panel.querySelector('.timeline-viz-detail-body');
+    var label = d.label || d.event_name || 'Untitled';
+    var date = 'Y' + d.event_year + ' M' + d.event_month + ' D' + d.event_day;
+    var color = this._eventColor(d);
+
+    var html = '<div class="timeline-viz-detail-color" style="background:' + color + '"></div>';
+    html += '<div class="timeline-viz-detail-name">' + this._escapeHTML(label) + '</div>';
+    html += '<div class="timeline-viz-detail-date">' + date + '</div>';
+
+    if (d.event_entity_name) {
+      html += '<div class="timeline-viz-detail-entity">';
+      if (d.event_entity_icon) {
+        html += '<i class="fa-solid ' + d.event_entity_icon + '"></i> ';
+      }
+      html += this._escapeHTML(d.event_entity_name) + '</div>';
+    }
+
+    if (d.event_category) {
+      html += '<div class="timeline-viz-detail-cat">' + this._escapeHTML(d.event_category) + '</div>';
+    }
+
+    if (d.event_description) {
+      html += '<div class="timeline-viz-detail-desc">' + this._escapeHTML(d.event_description) + '</div>';
+    }
+
+    // Source indicator.
+    if (d.source === 'standalone') {
+      html += '<div class="timeline-viz-detail-source"><i class="fa-solid fa-pen-fancy"></i> Standalone event</div>';
+    } else {
+      html += '<div class="timeline-viz-detail-source"><i class="fa-solid fa-calendar-days"></i> Calendar event</div>';
+    }
+
+    body.innerHTML = html;
+
+    // Position near the click, staying within viewport.
+    var x = event.pageX + 16;
+    var y = event.pageY - 20;
+    var panelW = 320;
+    if (x + panelW > window.innerWidth - 20) {
+      x = event.pageX - panelW - 16;
+    }
+    if (y + 300 > window.innerHeight) {
+      y = window.innerHeight - 320;
+    }
+    if (y < 10) y = 10;
+
+    panel.style.left = x + 'px';
+    panel.style.top = y + 'px';
+    panel.classList.add('visible');
+  },
+
+  /**
+   * Hide the event detail panel.
+   */
+  _hideDetail: function() {
+    if (this.detailPanel) {
+      this.detailPanel.classList.remove('visible');
     }
   },
 
@@ -988,6 +1136,9 @@ var _impl = {
   destroy: function() {
     if (this.tooltip && this.tooltip.parentNode) {
       this.tooltip.parentNode.removeChild(this.tooltip);
+    }
+    if (this.detailPanel && this.detailPanel.parentNode) {
+      this.detailPanel.parentNode.removeChild(this.detailPanel);
     }
     if (this.el) {
       this.el.innerHTML = '';
