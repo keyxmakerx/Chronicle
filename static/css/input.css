@@ -1258,4 +1258,80 @@
     color: var(--color-fg-muted, #565f89);
     font-size: 10px;
   }
+
+  /* ---- Timeline Visual Enrichment (Phase 2) ---- */
+
+  /* Central ruler line ("spine" of the timeline) */
+  .timeline-viz-svg .timeline-ruler-line {
+    stroke: var(--color-edge, #2a2b3d);
+    stroke-width: 2.5;
+    opacity: 0.8;
+  }
+
+  /* Ruler tick labels */
+  .timeline-viz-svg .ruler-label-primary {
+    fill: var(--color-fg-secondary, #a9b1d6);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+
+  /* Era background bands */
+  .timeline-viz-svg .timeline-era-band {
+    pointer-events: none;
+  }
+  .timeline-viz-svg .timeline-era-label {
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Range event bars (horizontal bars for multi-day events) */
+  .timeline-viz-svg .timeline-event-range-bar {
+    pointer-events: none;
+    transition: opacity 150ms;
+  }
+  .timeline-event:hover .timeline-event-range-bar {
+    opacity: 0.5;
+  }
+
+  /* Cluster badges */
+  .timeline-viz-svg .timeline-cluster-badge {
+    cursor: pointer;
+    transition: stroke-width 150ms;
+  }
+  .timeline-event:hover .timeline-cluster-badge {
+    stroke-width: 2;
+  }
+  .timeline-viz-svg .timeline-cluster-label {
+    pointer-events: none;
+  }
+
+  /* Category icons (Font Awesome glyphs as SVG text) */
+  .timeline-viz-svg .timeline-event-icon {
+    pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+  }
+
+  /* Mini-map overview strip */
+  .timeline-viz-minimap {
+    width: 100%;
+    height: 36px;
+    border-top: 1px solid var(--color-edge, #2a2b3d);
+    cursor: pointer;
+    background: var(--color-surface-alt, #24253a);
+  }
+  .timeline-viz-minimap-svg {
+    display: block;
+  }
+  .timeline-minimap-viewport {
+    cursor: grab;
+  }
+
+  /* Toolbar: visible year range indicator */
+  .timeline-viz-range {
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    color: var(--color-fg-muted, #565f89);
+    white-space: nowrap;
+  }
 }

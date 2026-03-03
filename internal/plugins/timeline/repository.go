@@ -219,6 +219,7 @@ const eventLinkCols = `tel.id, tel.timeline_id, tel.event_id, tel.display_order,
        tel.visibility_override, tel.visibility_rules, tel.label, tel.color_override,
        tel.created_at,
        ce.name, ce.description, ce.year, ce.month, ce.day,
+       ce.end_year, ce.end_month, ce.end_day,
        ce.category, ce.visibility, ce.entity_id,
        COALESCE(ent.name, ''), COALESCE(et.icon, '')`
 
@@ -235,6 +236,7 @@ func scanEventLink(scanner interface{ Scan(...any) error }) (*EventLink, error) 
 		&el.VisibilityOverride, &el.VisibilityRules, &el.Label, &el.ColorOverride,
 		&el.CreatedAt,
 		&el.EventName, &el.EventDescription, &el.EventYear, &el.EventMonth, &el.EventDay,
+		&el.EventEndYear, &el.EventEndMonth, &el.EventEndDay,
 		&el.EventCategory, &el.EventVisibility, &el.EventEntityID,
 		&el.EventEntityName, &el.EventEntityIcon,
 	)

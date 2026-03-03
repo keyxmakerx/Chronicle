@@ -45,6 +45,20 @@ type CalendarEventLister interface {
 	ListEventsForCalendar(ctx context.Context, calendarID string, role int) ([]CalendarEventRef, error)
 }
 
+// CalendarEraLister fetches calendar eras for the D3 visualization background bands.
+// Implemented as an adapter in app/routes.go to avoid importing the calendar package.
+type CalendarEraLister interface {
+	ListEras(ctx context.Context, calendarID string) ([]CalendarEra, error)
+}
+
+// CalendarEra is a lightweight reference to a calendar era for D3 visualization.
+type CalendarEra struct {
+	Name      string `json:"name"`
+	StartYear int    `json:"start_year"`
+	EndYear   *int   `json:"end_year,omitempty"`
+	Color     string `json:"color"`
+}
+
 // CalendarEventRef is a lightweight reference to a calendar event used in the
 // event picker when linking events to a timeline.
 type CalendarEventRef struct {
@@ -98,6 +112,7 @@ type TimelineService interface {
 
 	// Calendar lookup.
 	ListCalendars(ctx context.Context, campaignID string) ([]CalendarRef, error)
+	ListCalendarEras(ctx context.Context, calendarID string) ([]CalendarEra, error)
 }
 
 // timelineService is the default TimelineService implementation.
@@ -105,12 +120,14 @@ type timelineService struct {
 	repo      TimelineRepository
 	calLists  CalendarLister
 	calEvents CalendarEventLister
+	calEras   CalendarEraLister
 }
 
 // NewTimelineService creates a TimelineService backed by the given repository,
-// calendar lister (for the selector dropdown), and event lister (for the event picker).
-func NewTimelineService(repo TimelineRepository, calLists CalendarLister, calEvents CalendarEventLister) TimelineService {
-	return &timelineService{repo: repo, calLists: calLists, calEvents: calEvents}
+// calendar lister (for the selector dropdown), event lister (for the event picker),
+// and era lister (for visualization background bands).
+func NewTimelineService(repo TimelineRepository, calLists CalendarLister, calEvents CalendarEventLister, calEras CalendarEraLister) TimelineService {
+	return &timelineService{repo: repo, calLists: calLists, calEvents: calEvents, calEras: calEras}
 }
 
 // CreateTimeline creates a new timeline in a campaign.
@@ -729,6 +746,14 @@ func (s *timelineService) ListCalendars(ctx context.Context, campaignID string) 
 		return nil, nil
 	}
 	return s.calLists.ListCalendars(ctx, campaignID)
+}
+
+// ListCalendarEras returns eras for a calendar (used by the D3 visualization).
+func (s *timelineService) ListCalendarEras(ctx context.Context, calendarID string) ([]CalendarEra, error) {
+	if s.calEras == nil {
+		return nil, nil
+	}
+	return s.calEras.ListEras(ctx, calendarID)
 }
 
 // --- Visibility Helpers ---

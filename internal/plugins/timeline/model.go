@@ -112,6 +112,9 @@ type EventLink struct {
 	EventYear        int     `json:"event_year"`
 	EventMonth       int     `json:"event_month"`
 	EventDay         int     `json:"event_day"`
+	EventEndYear     *int    `json:"event_end_year,omitempty"`
+	EventEndMonth    *int    `json:"event_end_month,omitempty"`
+	EventEndDay      *int    `json:"event_end_day,omitempty"`
 	EventCategory    *string `json:"event_category,omitempty"`
 	EventVisibility  string  `json:"event_visibility,omitempty"`
 	EventEntityID    *string `json:"event_entity_id,omitempty"`
@@ -340,6 +343,9 @@ func (e *TimelineEvent) ToEventLink() EventLink {
 		EventYear:        e.Year,
 		EventMonth:       e.Month,
 		EventDay:         e.Day,
+		EventEndYear:     e.EndYear,
+		EventEndMonth:    e.EndMonth,
+		EventEndDay:      e.EndDay,
 		EventCategory:    e.Category,
 		EventVisibility:  e.Visibility,
 		EventEntityID:    e.EntityID,

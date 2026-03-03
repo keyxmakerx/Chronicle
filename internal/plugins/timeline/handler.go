@@ -456,10 +456,17 @@ func (h *Handler) TimelineDataAPI(c echo.Context) error {
 		return err
 	}
 
+	// Fetch calendar eras for visualization background bands.
+	var eras []CalendarEra
+	if t.HasCalendar() && t.CalendarID != nil {
+		eras, _ = h.svc.ListCalendarEras(ctx, *t.CalendarID)
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
 		"timeline": t,
 		"events":   events,
 		"groups":   groups,
+		"eras":     eras,
 	})
 }
 

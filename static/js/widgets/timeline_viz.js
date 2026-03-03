@@ -2,8 +2,14 @@
  * timeline_viz.js -- D3.js Interactive Timeline Visualization Widget
  *
  * Renders an interactive SVG timeline with:
+ *   - Center spine ruler with multi-tier ticks (primary/secondary/tertiary)
  *   - Horizontal time axis with 6 zoom levels (era→day)
  *   - Event markers with zoom-level-dependent visual styles
+ *   - Range bars for multi-day events (horizontal colored bars)
+ *   - Event clustering at low zoom (era/century) with count badges
+ *   - Category-based event icons at year/month zoom
+ *   - Calendar era background bands with watermark labels
+ *   - Mini-map overview strip with viewport indicator
  *   - Pan/drag via d3.zoom, scroll wheel zoom
  *   - Tooltips on hover (event name, date, entity, category)
  *   - Color-coded events (per-link override or timeline default color)
@@ -12,10 +18,10 @@
  *   - Event detail panel on click
  *
  * Zoom levels and visual styles:
- *   Era     — Small dots with subtle glow
- *   Century — Small circles with glow effect
+ *   Era     — Small dots with subtle glow (clustered when dense)
+ *   Century — Small circles with glow effect (clustered when dense)
  *   Decade  — Medium circles with category color coding
- *   Year    — Circles with labels, date annotations
+ *   Year    — Circles/icons with labels, date annotations
  *   Month   — Pill-shaped markers with label backgrounds
  *   Day     — Card-style markers with full event detail
  *
@@ -57,6 +63,7 @@ var _impl = {
     this.timelineColor = config.timelineColor || '#6366f1';
     this.events = [];
     this.groups = [];
+    this.eras = [];
     this.timeline = null;
     this.tooltip = null;
     this.detailPanel = null;
@@ -67,7 +74,7 @@ var _impl = {
     this.currentZoomLevel = 'year';
 
     // Layout constants.
-    this.margin = { top: 60, right: 40, bottom: 40, left: 40 };
+    this.margin = { top: 40, right: 40, bottom: 10, left: 40 };
     this.rowHeight = 36;
     this.laneHeight = 50;
 
@@ -162,7 +169,7 @@ var _impl = {
   },
 
   /**
-   * Build the widget DOM structure (toolbar + SVG container + panels).
+   * Build the widget DOM structure (toolbar + SVG container + minimap + panels).
    */
   _buildDOM: function() {
     this.el.innerHTML = '';
@@ -202,6 +209,7 @@ var _impl = {
         '</div>' +
       '</div>' +
       '<div class="timeline-viz-toolbar-right">' +
+        '<span class="timeline-viz-range"></span>' +
         '<input type="number" class="timeline-viz-skip-input" placeholder="Year" title="Go to year"/>' +
         '<button class="timeline-viz-btn" data-action="skip-to" title="Go to year">' +
           '<i class="fa-solid fa-arrow-right"></i>' +
@@ -222,6 +230,12 @@ var _impl = {
       '</div>';
     this.el.appendChild(svgContainer);
     this.svgContainer = svgContainer;
+
+    // Mini-map container (below SVG).
+    var minimapContainer = document.createElement('div');
+    minimapContainer.className = 'timeline-viz-minimap';
+    this.el.appendChild(minimapContainer);
+    this.minimapContainer = minimapContainer;
 
     // Tooltip (uses opacity transition via .visible class).
     var tip = document.createElement('div');
@@ -299,6 +313,7 @@ var _impl = {
       .then(function(data) {
         self.timeline = data.timeline;
         self.groups = data.groups || [];
+        self.eras = data.eras || [];
 
         // Filter out events with missing or NaN date fields. This guards
         // against omitted JSON fields (e.g. zero-value ints with omitempty)
@@ -351,6 +366,7 @@ var _impl = {
             '<i class="fa-solid fa-link" style="margin-right:6px"></i>Link Events' +
           '</button>' +
         '</div>';
+      this.minimapContainer.innerHTML = '';
       return;
     }
 
@@ -370,7 +386,7 @@ var _impl = {
     var laneCount = Math.max(lanes.length, 1);
     // Use a dynamic minimum content height so the SVG fills the container
     // instead of leaving empty whitespace below a tiny 50px content area.
-    var minContentHeight = Math.max(laneCount * this.laneHeight, 200);
+    var minContentHeight = Math.max(laneCount * this.laneHeight, 240);
     var contentHeight = minContentHeight;
     var height = m.top + contentHeight + m.bottom;
 
@@ -385,6 +401,9 @@ var _impl = {
     this.width = width;
     this.height = height;
     this.contentHeight = contentHeight;
+
+    // Ruler Y position: center of the content area.
+    this.rulerY = m.top + contentHeight / 2;
 
     // Defs: clip path with padding for day-level cards (extend above/below).
     var defs = svg.append('defs');
@@ -420,6 +439,7 @@ var _impl = {
       .range([m.top, m.top + contentHeight])
       .padding(0.1);
     this.yScale = yScale;
+    this.laneCount = laneCount;
 
     // Background.
     svg.append('rect')
@@ -428,7 +448,10 @@ var _impl = {
       .attr('fill', 'var(--color-surface, #1a1b26)')
       .attr('rx', 8);
 
-    // Grid lines group (behind everything).
+    // Era bands group (behind everything except background).
+    this.eraBandGroup = svg.append('g').attr('class', 'timeline-era-bands');
+
+    // Grid lines group (behind events, on top of eras).
     this.gridGroup = svg.append('g').attr('class', 'timeline-grid');
 
     // Swim-lane backgrounds.
@@ -447,6 +470,7 @@ var _impl = {
           ? 'var(--color-surface-alt, #24253a)'
           : 'transparent';
       })
+      .attr('opacity', lanes.length > 1 ? 1 : 0)
       .attr('rx', 4);
 
     // Lane labels.
@@ -461,10 +485,17 @@ var _impl = {
         .text(function(d) { return d.name; });
     }
 
-    // Axis group.
-    this.axisGroup = svg.append('g')
-      .attr('class', 'timeline-axis')
-      .attr('transform', 'translate(0,' + m.top + ')');
+    // Ruler group (center spine with ticks).
+    this.rulerGroup = svg.append('g')
+      .attr('class', 'timeline-ruler')
+      .attr('transform', 'translate(0,' + this.rulerY + ')');
+
+    // Central ruler line (the "spine").
+    this.rulerGroup.append('line')
+      .attr('class', 'timeline-ruler-line')
+      .attr('x1', m.left)
+      .attr('x2', width - m.right)
+      .attr('y1', 0).attr('y2', 0);
 
     // Main content group (clipped).
     this.contentGroup = svg.append('g')
@@ -473,10 +504,11 @@ var _impl = {
     // Assign lane index to each event.
     this._assignLanes(lanes);
 
-    // Draw events.
-    this._drawEvents();
-    this._drawAxis();
+    // Draw everything.
+    this._drawEraBands();
     this._drawGrid();
+    this._drawRulerTicks();
+    this._drawEvents();
 
     // Setup zoom behavior.
     this.zoom = d3.zoom()
@@ -489,7 +521,11 @@ var _impl = {
 
     svg.call(this.zoom);
     this._updateZoomLevel();
+    this._drawMinimap();
+    this._updateVisibleRange();
   },
+
+  // ---- Swim-Lane Helpers ----
 
   /**
    * Build swim-lane definitions from entity groups.
@@ -548,11 +584,24 @@ var _impl = {
     }
   },
 
+  // ---- Date/Color Helpers ----
+
   /**
    * Convert event date to a fractional year for precise positioning.
    */
   _dateToYear: function(evt) {
     return evt.event_year + (evt.event_month - 1) / 12 + (evt.event_day - 1) / 365;
+  },
+
+  /**
+   * Convert end date to fractional year for range bars.
+   */
+  _endDateToYear: function(evt) {
+    if (!evt.event_end_year) return null;
+    var ey = evt.event_end_year;
+    var em = evt.event_end_month || evt.event_month || 1;
+    var ed = evt.event_end_day || evt.event_day || 1;
+    return ey + (em - 1) / 12 + (ed - 1) / 365;
   },
 
   /**
@@ -562,6 +611,8 @@ var _impl = {
     if (evt.color_override) return evt.color_override;
     return this.timelineColor;
   },
+
+  // ---- Zoom Level Helpers ----
 
   /**
    * Determine the current zoom level name from scale factor.
@@ -583,32 +634,465 @@ var _impl = {
     return this.zoomStyles[this.currentZoomLevel];
   },
 
+  // ---- Ruler Tick System (Center Spine) ----
+
+  /**
+   * Get primary tick spacing (in pixels) based on zoom level.
+   */
+  _primarySpacing: function() {
+    var level = this.currentZoomLevel;
+    if (level === 'era' || level === 'century') return 120;
+    if (level === 'decade') return 80;
+    if (level === 'year') return 60;
+    if (level === 'month') return 50;
+    return 70; // day
+  },
+
+  /**
+   * Format a tick value as a label based on zoom level.
+   */
+  _tickLabel: function(d, level) {
+    if (level === 'era' || level === 'century' || level === 'decade' || level === 'year') {
+      return 'Y' + Math.round(d);
+    }
+    if (level === 'month') {
+      var year = Math.floor(d);
+      var monthFrac = (d - year) * 12;
+      var month = Math.round(monthFrac) + 1;
+      if (month <= 1 || month > 12) return 'Y' + year;
+      return 'M' + month;
+    }
+    // Day level.
+    var year = Math.floor(d);
+    var dayFrac = (d - year) * 365;
+    var month = Math.floor(dayFrac / 30) + 1;
+    var day = Math.round(dayFrac % 30) + 1;
+    if (day <= 1 && month <= 1) return 'Y' + year;
+    return 'M' + month + ' D' + day;
+  },
+
+  /**
+   * Compute secondary tick values (between primary ticks).
+   */
+  _secondaryTickValues: function(primaryTicks) {
+    if (primaryTicks.length < 2) return [];
+    var result = [];
+    for (var i = 0; i < primaryTicks.length - 1; i++) {
+      var mid = (primaryTicks[i] + primaryTicks[i + 1]) / 2;
+      result.push(mid);
+    }
+    return result;
+  },
+
+  /**
+   * Compute tertiary tick values (between primary and secondary ticks).
+   */
+  _tertiaryTickValues: function(primaryTicks, secondaryTicks) {
+    if (primaryTicks.length < 2) return [];
+    var all = primaryTicks.concat(secondaryTicks).sort(function(a, b) { return a - b; });
+    var result = [];
+    for (var i = 0; i < all.length - 1; i++) {
+      var mid = (all[i] + all[i + 1]) / 2;
+      result.push(mid);
+    }
+    return result;
+  },
+
+  /**
+   * Draw the center ruler with multi-tier ticks.
+   * Replaces the old _drawAxis() method.
+   */
+  _drawRulerTicks: function() {
+    var self = this;
+    var m = this.margin;
+    var level = this.currentZoomLevel;
+    var w = this.width - m.left - m.right;
+
+    // Clear previous ticks.
+    this.rulerGroup.selectAll('.ruler-tick').remove();
+
+    // Primary ticks (tall, labeled).
+    var primaryTicks = this.xScale.ticks(
+      Math.max(2, Math.floor(w / this._primarySpacing()))
+    );
+
+    var primaryG = this.rulerGroup.selectAll('.ruler-tick-primary')
+      .data(primaryTicks).enter().append('g')
+      .attr('class', 'ruler-tick ruler-tick-primary')
+      .attr('transform', function(d) { return 'translate(' + self.xScale(d) + ',0)'; });
+
+    primaryG.append('line')
+      .attr('y1', -14).attr('y2', 14)
+      .attr('stroke', 'var(--color-fg-secondary, #a9b1d6)')
+      .attr('stroke-width', 1.5)
+      .attr('opacity', 0.5);
+
+    primaryG.append('text')
+      .attr('class', 'ruler-label ruler-label-primary')
+      .attr('y', -20)
+      .attr('text-anchor', 'middle')
+      .text(function(d) { return self._tickLabel(d, level); });
+
+    // Secondary ticks (medium, unlabeled).
+    var secondaryTicks = this._secondaryTickValues(primaryTicks);
+
+    this.rulerGroup.selectAll('.ruler-tick-secondary')
+      .data(secondaryTicks).enter().append('g')
+      .attr('class', 'ruler-tick ruler-tick-secondary')
+      .attr('transform', function(d) { return 'translate(' + self.xScale(d) + ',0)'; })
+      .append('line')
+      .attr('y1', -8).attr('y2', 8)
+      .attr('stroke', 'var(--color-fg-muted, #565f89)')
+      .attr('stroke-width', 1)
+      .attr('opacity', 0.3);
+
+    // Tertiary ticks (short, very subtle).
+    var tertiaryTicks = this._tertiaryTickValues(primaryTicks, secondaryTicks);
+
+    this.rulerGroup.selectAll('.ruler-tick-tertiary')
+      .data(tertiaryTicks).enter().append('g')
+      .attr('class', 'ruler-tick ruler-tick-tertiary')
+      .attr('transform', function(d) { return 'translate(' + self.xScale(d) + ',0)'; })
+      .append('line')
+      .attr('y1', -4).attr('y2', 4)
+      .attr('stroke', 'var(--color-fg-muted, #565f89)')
+      .attr('stroke-width', 0.5)
+      .attr('opacity', 0.2);
+
+    // Store primary ticks for grid reuse.
+    this._lastPrimaryTicks = primaryTicks;
+    this._lastSecondaryTicks = secondaryTicks;
+  },
+
+  // ---- Grid System ----
+
+  /**
+   * Draw vertical grid lines with alternating column bands.
+   */
+  _drawGrid: function() {
+    var self = this;
+    var m = this.margin;
+    var contentHeight = this.contentHeight || (this.height - m.top - m.bottom);
+    var w = this.width - m.left - m.right;
+
+    // Clear previous grid.
+    this.gridGroup.selectAll('*').remove();
+
+    // Get tick positions from xScale.
+    var majorTicks = this.xScale.ticks(
+      Math.max(2, Math.floor(w / this._primarySpacing()))
+    );
+
+    // Alternating column bands (very subtle zebra striping).
+    var bandPositions = [m.left].concat(majorTicks.map(function(d) {
+      return self.xScale(d);
+    })).concat([this.width - m.right]);
+
+    for (var i = 0; i < bandPositions.length - 1; i++) {
+      if (i % 2 === 0) {
+        var bw = bandPositions[i + 1] - bandPositions[i];
+        if (bw > 0) {
+          this.gridGroup.append('rect')
+            .attr('x', bandPositions[i])
+            .attr('y', m.top)
+            .attr('width', bw)
+            .attr('height', contentHeight)
+            .attr('fill', 'var(--color-fg, #c0caf5)')
+            .attr('opacity', 0.02);
+        }
+      }
+    }
+
+    // Major grid lines at primary tick positions.
+    this.gridGroup.selectAll('.grid-major')
+      .data(majorTicks).enter().append('line')
+      .attr('class', 'grid-major')
+      .attr('x1', function(d) { return self.xScale(d); })
+      .attr('x2', function(d) { return self.xScale(d); })
+      .attr('y1', m.top)
+      .attr('y2', m.top + contentHeight)
+      .attr('stroke', 'var(--color-edge, #2a2b3d)')
+      .attr('stroke-width', 1)
+      .attr('opacity', 0.15);
+
+    // Minor grid lines between major ticks.
+    var minorTicks = this._secondaryTickValues(majorTicks);
+    this.gridGroup.selectAll('.grid-minor')
+      .data(minorTicks).enter().append('line')
+      .attr('class', 'grid-minor')
+      .attr('x1', function(d) { return self.xScale(d); })
+      .attr('x2', function(d) { return self.xScale(d); })
+      .attr('y1', m.top)
+      .attr('y2', m.top + contentHeight)
+      .attr('stroke', 'var(--color-edge, #2a2b3d)')
+      .attr('stroke-dasharray', '2,6')
+      .attr('stroke-width', 0.5)
+      .attr('opacity', 0.08);
+  },
+
+  // ---- Era Background Bands ----
+
+  /**
+   * Draw calendar era bands as semi-transparent colored rectangles
+   * with faint watermark labels.
+   */
+  _drawEraBands: function() {
+    var self = this;
+    if (!this.eras || this.eras.length === 0) {
+      if (this.eraBandGroup) this.eraBandGroup.selectAll('*').remove();
+      return;
+    }
+
+    var m = this.margin;
+    var contentHeight = this.contentHeight;
+
+    this.eraBandGroup.selectAll('*').remove();
+
+    var xScale = this.xScale;
+
+    this.eras.forEach(function(era) {
+      var startYear = era.start_year;
+      var endYear = era.end_year || xScale.domain()[1];
+
+      // Skip eras completely outside visible domain.
+      var domain = xScale.domain();
+      if (endYear < domain[0] || startYear > domain[1]) return;
+
+      var x1 = xScale(Math.max(startYear, domain[0]));
+      var x2 = xScale(Math.min(endYear, domain[1]));
+      var bandWidth = Math.max(x2 - x1, 1);
+
+      // Colored band rectangle.
+      self.eraBandGroup.append('rect')
+        .attr('class', 'timeline-era-band')
+        .attr('x', x1).attr('y', m.top)
+        .attr('width', bandWidth)
+        .attr('height', contentHeight)
+        .attr('fill', era.color || '#6366f1')
+        .attr('opacity', 0.06)
+        .attr('rx', 2);
+
+      // Watermark label (very faint, large text).
+      var midX = (x1 + x2) / 2;
+      if (bandWidth > 40) {
+        self.eraBandGroup.append('text')
+          .attr('class', 'timeline-era-label')
+          .attr('x', midX)
+          .attr('y', m.top + contentHeight / 2)
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'middle')
+          .attr('font-size', Math.min(32, bandWidth / era.name.length * 1.2) + 'px')
+          .attr('font-weight', '800')
+          .attr('fill', era.color || '#6366f1')
+          .attr('opacity', 0.06)
+          .attr('pointer-events', 'none')
+          .text(era.name);
+      }
+    });
+  },
+
+  // ---- Event Clustering ----
+
+  /**
+   * Cluster nearby events at low zoom levels to avoid visual clutter.
+   * Returns the displayable data array (mix of real events and cluster objects).
+   */
+  _clusterEvents: function() {
+    var level = this.currentZoomLevel;
+    if (level !== 'era' && level !== 'century') {
+      // No clustering at higher zoom levels.
+      this._displayEvents = this.events;
+      return this.events;
+    }
+
+    var threshold = (level === 'era') ? 20 : 15;
+    var xScale = this.xScale;
+    var self = this;
+    var clusters = [];
+    var used = {};
+
+    for (var i = 0; i < this.events.length; i++) {
+      if (used[i]) continue;
+      var cluster = [this.events[i]];
+      used[i] = true;
+      var px = xScale(self._dateToYear(this.events[i]));
+
+      for (var j = i + 1; j < this.events.length; j++) {
+        if (used[j]) continue;
+        var px2 = xScale(self._dateToYear(this.events[j]));
+        if (Math.abs(px2 - px) < threshold) {
+          cluster.push(this.events[j]);
+          used[j] = true;
+        }
+      }
+
+      if (cluster.length > 1) {
+        // Create cluster pseudo-event with averaged position.
+        var avgYear = 0;
+        for (var c = 0; c < cluster.length; c++) {
+          avgYear += self._dateToYear(cluster[c]);
+        }
+        avgYear /= cluster.length;
+        clusters.push({
+          _isCluster: true,
+          _events: cluster,
+          _count: cluster.length,
+          _lane: cluster[0]._lane,
+          _subIndex: cluster[0]._subIndex,
+          event_year: cluster[0].event_year,
+          event_month: cluster[0].event_month,
+          event_day: cluster[0].event_day,
+          _avgYear: avgYear,
+          _minYear: d3.min(cluster, function(e) { return e.event_year; }),
+          _maxYear: d3.max(cluster, function(e) { return e.event_year; })
+        });
+      } else {
+        clusters.push(cluster[0]);
+      }
+    }
+
+    this._displayEvents = clusters;
+    return clusters;
+  },
+
+  // ---- Category Icons ----
+
+  /**
+   * Map event category to a Font Awesome unicode glyph.
+   * Returns null if no icon mapping exists.
+   */
+  _categoryIcon: function(cat) {
+    if (!cat) return null;
+    var map = {
+      holiday:  '\uf073',  // calendar-days
+      battle:   '\uf132',  // shield-halved
+      quest:    '\uf279',  // map
+      birthday: '\uf1fd',  // cake-candles
+      festival: '\uf72b',  // hat-wizard
+      travel:   '\uf072',  // plane
+      custom:   '\uf111'   // circle
+    };
+    return map[cat] || null;
+  },
+
+  /**
+   * Map event category to a color for the category indicator dot.
+   */
+  _categoryColor: function(cat) {
+    if (!cat) return 'transparent';
+    var map = {
+      holiday:  '#f59e0b',
+      battle:   '#ef4444',
+      quest:    '#22c55e',
+      birthday: '#ec4899',
+      festival: '#a855f7',
+      travel:   '#3b82f6',
+      custom:   '#6b7280'
+    };
+    return map[cat] || '#6b7280';
+  },
+
+  // ---- Event Drawing ----
+
+  /**
+   * Compute Y position for an event, using center-spine layout for
+   * single-lane timelines and swim-lane centering for multi-lane.
+   */
+  _eventY: function(d) {
+    if (this.laneCount <= 1) {
+      // Single lane: alternate events above and below the ruler spine.
+      var offset = (d._subIndex % 2 === 0) ? -28 : 28;
+      return this.rulerY + offset;
+    }
+    // Multi-lane: center within swim-lane band.
+    var laneY = this.yScale(d._lane) || this.margin.top;
+    var bandH = this.yScale.bandwidth() || this.laneHeight;
+    return laneY + bandH / 2;
+  },
+
   /**
    * Draw event markers on the timeline.
    */
   _drawEvents: function() {
     var self = this;
     var xScale = this.xScale;
-    var yScale = this.yScale;
     var style = this._currentStyle();
+    var level = this.currentZoomLevel;
+
+    // Get display data (possibly clustered).
+    var displayData = this._clusterEvents();
 
     var eventGroups = this.contentGroup.selectAll('.timeline-event')
-      .data(this.events)
+      .data(displayData)
       .enter()
       .append('g')
       .attr('class', 'timeline-event')
       .attr('transform', function(d) {
-        var x = xScale(self._dateToYear(d));
-        var laneY = yScale(d._lane) || self.margin.top;
-        var bandH = yScale.bandwidth() || self.laneHeight;
-        var y = laneY + bandH / 2;
+        var x = d._isCluster
+          ? xScale(d._avgYear)
+          : xScale(self._dateToYear(d));
+        var y = self._eventY(d);
         return 'translate(' + x + ',' + y + ')';
       })
       .style('cursor', 'pointer');
 
-    // Event circle — base marker (with glow at low zoom levels).
-    var useGlow = (this.currentZoomLevel === 'era' || this.currentZoomLevel === 'century' || this.currentZoomLevel === 'decade');
-    eventGroups.append('circle')
+    // --- Range bars for multi-day events ---
+    eventGroups.each(function(d) {
+      if (d._isCluster) return;
+      var endYearFrac = self._endDateToYear(d);
+      if (endYearFrac === null) return;
+      var g = d3.select(this);
+      var startX = 0;
+      var endX = xScale(endYearFrac) - xScale(self._dateToYear(d));
+      if (endX < 3) return; // too small to show
+
+      // Bar behind the dot.
+      g.insert('rect', ':first-child')
+        .attr('class', 'timeline-event-range-bar')
+        .attr('x', 0).attr('y', -4)
+        .attr('width', endX)
+        .attr('height', 8)
+        .attr('rx', 4)
+        .attr('fill', self._eventColor(d))
+        .attr('opacity', 0.3);
+
+      // End cap circle.
+      g.append('circle')
+        .attr('class', 'timeline-event-range-end')
+        .attr('cx', endX).attr('cy', 0)
+        .attr('r', Math.max(style.radius * 0.5, 2))
+        .attr('fill', self._eventColor(d))
+        .attr('opacity', 0.5);
+    });
+
+    // --- Cluster badges ---
+    eventGroups.each(function(d) {
+      if (!d._isCluster) return;
+      var g = d3.select(this);
+      var label = d._count + ' events';
+      var pillW = label.length * 6.5 + 20;
+
+      g.append('rect')
+        .attr('class', 'timeline-cluster-badge')
+        .attr('x', -pillW / 2).attr('y', -11)
+        .attr('width', pillW).attr('height', 22)
+        .attr('rx', 11)
+        .attr('fill', 'var(--color-surface-alt, #24253a)')
+        .attr('stroke', 'var(--color-accent, #6366f1)')
+        .attr('stroke-width', 1.5);
+      g.append('text')
+        .attr('class', 'timeline-cluster-label')
+        .attr('text-anchor', 'middle')
+        .attr('y', 4)
+        .attr('fill', 'var(--color-fg, #c0caf5)')
+        .attr('font-size', '10px')
+        .attr('font-weight', '600')
+        .text(label);
+    });
+
+    // --- Event dot (base marker) for non-cluster events ---
+    var useGlow = (level === 'era' || level === 'century' || level === 'decade');
+    eventGroups.filter(function(d) { return !d._isCluster; }).append('circle')
       .attr('class', 'timeline-event-dot')
       .attr('r', style.radius)
       .attr('fill', function(d) { return self._eventColor(d); })
@@ -616,8 +1100,29 @@ var _impl = {
       .attr('stroke-width', style.strokeWidth)
       .attr('filter', useGlow ? 'url(#event-glow)' : null);
 
+    // --- Category icons (replace dots at year/month zoom) ---
+    if (level === 'year' || level === 'month') {
+      eventGroups.each(function(d) {
+        if (d._isCluster) return;
+        var icon = self._categoryIcon(d.event_category);
+        if (!icon) return;
+        var g = d3.select(this);
+        // Hide the dot, show icon instead.
+        g.select('.timeline-event-dot').attr('opacity', 0);
+        g.append('text')
+          .attr('class', 'timeline-event-icon')
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'central')
+          .attr('font-family', '"Font Awesome 6 Free"')
+          .attr('font-weight', 900)
+          .attr('font-size', (style.radius * 1.6) + 'px')
+          .attr('fill', self._eventColor(d))
+          .text(icon);
+      });
+    }
+
     // Pulsing ring for highlighted (searched) events.
-    eventGroups.append('circle')
+    eventGroups.filter(function(d) { return !d._isCluster; }).append('circle')
       .attr('class', 'timeline-event-highlight')
       .attr('r', style.radius + 4)
       .attr('fill', 'none')
@@ -627,9 +1132,9 @@ var _impl = {
       .attr('stroke-dasharray', '3,3');
 
     // Pill background for month zoom labels.
-    var isMonth = (this.currentZoomLevel === 'month');
+    var isMonth = (level === 'month');
     if (isMonth) {
-      eventGroups.append('rect')
+      eventGroups.filter(function(d) { return !d._isCluster; }).append('rect')
         .attr('class', 'timeline-event-pill')
         .attr('rx', 4).attr('ry', 4)
         .attr('x', style.radius + 2)
@@ -645,9 +1150,9 @@ var _impl = {
     }
 
     // Card markers at day zoom level (foreignObject with HTML cards).
-    var isDay = (this.currentZoomLevel === 'day');
+    var isDay = (level === 'day');
     if (isDay) {
-      eventGroups.append('foreignObject')
+      eventGroups.filter(function(d) { return !d._isCluster; }).append('foreignObject')
         .attr('class', 'timeline-event-card-fo')
         .attr('width', 220).attr('height', 80)
         .attr('x', style.radius + 6).attr('y', -40)
@@ -670,7 +1175,7 @@ var _impl = {
     }
 
     // Event name label (hidden at day zoom — cards replace it).
-    eventGroups.append('text')
+    eventGroups.filter(function(d) { return !d._isCluster; }).append('text')
       .attr('class', 'timeline-event-label')
       .attr('x', style.radius + (isMonth ? 10 : 4))
       .attr('y', -2)
@@ -678,7 +1183,7 @@ var _impl = {
       .style('display', (style.showLabel && !isDay) ? null : 'none');
 
     // Date sub-label.
-    eventGroups.append('text')
+    eventGroups.filter(function(d) { return !d._isCluster; }).append('text')
       .attr('class', 'timeline-event-date')
       .attr('x', style.radius + 4)
       .attr('y', 10)
@@ -686,15 +1191,15 @@ var _impl = {
       .style('display', (style.showDate && !isDay) ? null : 'none');
 
     // Entity sub-label (only at month zoom — day zoom uses cards).
-    eventGroups.append('text')
+    eventGroups.filter(function(d) { return !d._isCluster; }).append('text')
       .attr('class', 'timeline-event-entity')
       .attr('x', style.radius + 4)
       .attr('y', 22)
       .text(function(d) { return d.event_entity_name || ''; })
-      .style('display', (style.showEntity && this.currentZoomLevel === 'month') ? null : 'none');
+      .style('display', (style.showEntity && level === 'month') ? null : 'none');
 
     // Category indicator dot (small colored dot next to main circle at decade+ zoom).
-    eventGroups.append('circle')
+    eventGroups.filter(function(d) { return !d._isCluster; }).append('circle')
       .attr('class', 'timeline-event-cat-dot')
       .attr('cx', function() { return -(style.radius + 3); })
       .attr('cy', 0)
@@ -708,98 +1213,165 @@ var _impl = {
 
     // Hover/click handlers.
     eventGroups
-      .on('mouseenter', function(event, d) { self._showTooltip(event, d); })
+      .on('mouseenter', function(event, d) {
+        if (d._isCluster) return;
+        self._showTooltip(event, d);
+      })
       .on('mouseleave', function() { self._hideTooltip(); })
-      .on('click', function(event, d) { self._onEventClick(event, d); });
+      .on('click', function(event, d) {
+        if (d._isCluster) {
+          // Zoom into the cluster's year range.
+          self._zoomToRange(d._minYear - 1, d._maxYear + 1);
+        } else {
+          self._onEventClick(event, d);
+        }
+      });
 
     this.eventGroups = eventGroups;
   },
 
-  /**
-   * Map event category to a color for the category indicator dot.
-   */
-  _categoryColor: function(cat) {
-    if (!cat) return 'transparent';
-    var map = {
-      holiday:  '#f59e0b',
-      battle:   '#ef4444',
-      quest:    '#22c55e',
-      birthday: '#ec4899',
-      festival: '#a855f7',
-      travel:   '#3b82f6',
-      custom:   '#6b7280'
-    };
-    return map[cat] || '#6b7280';
-  },
+  // ---- Mini-Map Overview Strip ----
 
   /**
-   * Draw the time axis with zoom-level-aware tick formatting.
+   * Draw the mini-map overview strip below the main SVG.
    */
-  _drawAxis: function() {
+  _drawMinimap: function() {
     var self = this;
-    var level = this.currentZoomLevel;
-    var tickFormat, tickCount;
+    var container = this.minimapContainer;
+    if (!container) return;
+    var width = container.clientWidth || this.width || 800;
+    var height = 36;
 
-    if (level === 'era' || level === 'century') {
-      tickFormat = function(d) { return 'Y' + Math.round(d); };
-      tickCount = Math.max(2, Math.floor((self.width - self.margin.left - self.margin.right) / 120));
-    } else if (level === 'decade') {
-      tickFormat = function(d) { return 'Y' + Math.round(d); };
-      tickCount = Math.max(2, Math.floor((self.width - self.margin.left - self.margin.right) / 80));
-    } else if (level === 'year') {
-      tickFormat = function(d) { return 'Y' + Math.round(d); };
-      tickCount = Math.max(2, Math.floor((self.width - self.margin.left - self.margin.right) / 60));
-    } else if (level === 'month') {
-      tickFormat = function(d) {
-        var year = Math.floor(d);
-        var monthFrac = (d - year) * 12;
-        var month = Math.round(monthFrac) + 1;
-        if (month <= 1 || month > 12) return 'Y' + year;
-        return 'M' + month;
-      };
-      tickCount = Math.max(4, Math.floor((self.width - self.margin.left - self.margin.right) / 50));
-    } else {
-      // Day level.
-      tickFormat = function(d) {
-        var year = Math.floor(d);
-        var dayFrac = (d - year) * 365;
-        var month = Math.floor(dayFrac / 30) + 1;
-        var day = Math.round(dayFrac % 30) + 1;
-        if (day <= 1 && month <= 1) return 'Y' + year;
-        return 'M' + month + ' D' + day;
-      };
-      tickCount = Math.max(4, Math.floor((self.width - self.margin.left - self.margin.right) / 70));
-    }
+    container.innerHTML = '';
 
-    var xAxis = d3.axisTop(this.xScale)
-      .tickFormat(tickFormat)
-      .ticks(tickCount);
-    this.axisGroup.call(xAxis);
+    if (this.events.length === 0) return;
+
+    var miniSvg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .attr('class', 'timeline-viz-minimap-svg');
+
+    // Background.
+    miniSvg.append('rect')
+      .attr('width', width).attr('height', height)
+      .attr('fill', 'var(--color-surface-alt, #24253a)')
+      .attr('rx', 0);
+
+    // Mini scale spanning full event range.
+    var minYear = d3.min(this.events, function(d) { return d.event_year; }) - 1;
+    var maxYear = d3.max(this.events, function(d) { return d.event_year; }) + 1;
+    this.miniScale = d3.scaleLinear()
+      .domain([minYear, maxYear])
+      .range([4, width - 4]);
+
+    // Draw mini event dots.
+    miniSvg.selectAll('.mini-dot')
+      .data(this.events).enter()
+      .append('circle')
+      .attr('cx', function(d) { return self.miniScale(self._dateToYear(d)); })
+      .attr('cy', height / 2)
+      .attr('r', 1.5)
+      .attr('fill', function(d) { return self._eventColor(d); })
+      .attr('opacity', 0.6);
+
+    // Subtle center line across minimap.
+    miniSvg.append('line')
+      .attr('x1', 4).attr('x2', width - 4)
+      .attr('y1', height / 2).attr('y2', height / 2)
+      .attr('stroke', 'var(--color-edge, #2a2b3d)')
+      .attr('stroke-width', 1)
+      .attr('opacity', 0.4);
+
+    // Viewport rectangle (updated on zoom).
+    this.miniViewport = miniSvg.append('rect')
+      .attr('class', 'timeline-minimap-viewport')
+      .attr('y', 2).attr('height', height - 4)
+      .attr('rx', 3)
+      .attr('fill', 'var(--color-accent, #6366f1)')
+      .attr('opacity', 0.12)
+      .attr('stroke', 'var(--color-accent, #6366f1)')
+      .attr('stroke-width', 1)
+      .attr('stroke-opacity', 0.4);
+
+    this._updateMinimapViewport();
+
+    // Click on minimap to jump.
+    miniSvg.on('click', function(event) {
+      var coords = d3.pointer(event);
+      var targetYear = self.miniScale.invert(coords[0]);
+      self._centerOnYear(targetYear);
+    });
+
+    this.miniSvg = miniSvg;
   },
 
   /**
-   * Draw vertical grid lines.
+   * Update the minimap viewport rectangle to reflect the current main view.
    */
-  _drawGrid: function() {
+  _updateMinimapViewport: function() {
+    if (!this.miniViewport || !this.miniScale) return;
     var m = this.margin;
-    var contentHeight = this.contentHeight || (this.height - m.top - m.bottom);
-    var ticks = this.xScale.ticks(
-      Math.max(2, Math.floor((this.width - m.left - m.right) / 80))
-    );
-
-    this.gridGroup.selectAll('line').remove();
-    this.gridGroup.selectAll('line')
-      .data(ticks)
-      .enter()
-      .append('line')
-      .attr('x1', this.xScale)
-      .attr('x2', this.xScale)
-      .attr('y1', m.top)
-      .attr('y2', m.top + contentHeight)
-      .attr('stroke', 'var(--color-edge, #2a2b3d)')
-      .attr('stroke-dasharray', '2,4')
-      .attr('stroke-width', 0.5);
+    var leftYear = this.xScale.invert(m.left);
+    var rightYear = this.xScale.invert(this.width - m.right);
+    var x1 = this.miniScale(leftYear);
+    var x2 = this.miniScale(rightYear);
+    this.miniViewport
+      .attr('x', Math.max(0, x1))
+      .attr('width', Math.max(4, x2 - x1));
   },
+
+  // ---- Navigation Helpers ----
+
+  /**
+   * Center the view on a specific year (preserves current zoom scale).
+   */
+  _centerOnYear: function(year) {
+    if (!this.svg || !this.zoom) return;
+    var m = this.margin;
+    var centerX = (this.width - m.left - m.right) / 2 + m.left;
+    var k = this.currentTransform.k;
+    var tx = centerX - k * this.xScaleOrig(year);
+
+    this.svg.transition().duration(400).call(
+      this.zoom.transform,
+      d3.zoomIdentity.translate(tx, 0).scale(k)
+    );
+  },
+
+  /**
+   * Zoom to fit a specific year range.
+   */
+  _zoomToRange: function(minYear, maxYear) {
+    if (!this.svg || !this.zoom) return;
+    var m = this.margin;
+    var w = this.width - m.left - m.right;
+    var yearSpan = maxYear - minYear;
+    if (yearSpan <= 0) yearSpan = 2;
+
+    var scale = w / (this.xScaleOrig(maxYear) - this.xScaleOrig(minYear));
+    var tx = m.left - scale * this.xScaleOrig(minYear);
+
+    this.svg.transition().duration(500).call(
+      this.zoom.transform,
+      d3.zoomIdentity.translate(tx, 0).scale(scale)
+    );
+  },
+
+  /**
+   * Update the visible year range indicator in the toolbar.
+   */
+  _updateVisibleRange: function() {
+    var m = this.margin;
+    var leftYear = Math.round(this.xScale.invert(m.left));
+    var rightYear = Math.round(this.xScale.invert(this.width - m.right));
+    var rangeEl = this.el.querySelector('.timeline-viz-range');
+    if (rangeEl) {
+      rangeEl.textContent = 'Y' + leftYear + ' \u2013 Y' + rightYear;
+    }
+  },
+
+  // ---- Zoom/Pan ----
 
   /**
    * Handle zoom/pan events: rescale axis, reposition events, update styles.
@@ -817,22 +1389,30 @@ var _impl = {
     var levelChanged = (newLevel !== this.currentZoomLevel);
     this.currentZoomLevel = newLevel;
 
-    // Update axis with level-aware formatting.
-    this._drawAxis();
+    // Update ruler, grid, eras.
+    this._drawRulerTicks();
     this._drawGrid();
+    this._drawEraBands();
+
+    // Update ruler spine line extent.
+    this.rulerGroup.select('.timeline-ruler-line')
+      .attr('x1', this.margin.left)
+      .attr('x2', this.width - this.margin.right);
 
     // Reposition events.
-    this.eventGroups.attr('transform', function(d) {
-      var x = newX(self._dateToYear(d));
-      var laneY = self.yScale(d._lane) || self.margin.top;
-      var bandH = self.yScale.bandwidth() || self.laneHeight;
-      var y = laneY + bandH / 2;
-      return 'translate(' + x + ',' + y + ')';
-    });
+    if (this.eventGroups) {
+      this.eventGroups.attr('transform', function(d) {
+        var x = d._isCluster
+          ? newX(d._avgYear)
+          : newX(self._dateToYear(d));
+        var y = self._eventY(d);
+        return 'translate(' + x + ',' + y + ')';
+      });
+    }
 
     // Update event visual styles based on zoom level.
     if (levelChanged) {
-      // Redraw events to swap marker types (circle/pill/card).
+      // Redraw events to swap marker types (circle/pill/card) and clustering.
       this.contentGroup.selectAll('.timeline-event').remove();
       this._drawEvents();
 
@@ -842,16 +1422,20 @@ var _impl = {
       }
 
       // Reposition after redraw.
-      this.eventGroups.attr('transform', function(d) {
-        var x = newX(self._dateToYear(d));
-        var laneY = self.yScale(d._lane) || self.margin.top;
-        var bandH = self.yScale.bandwidth() || self.laneHeight;
-        var y = laneY + bandH / 2;
-        return 'translate(' + x + ',' + y + ')';
-      });
+      if (this.eventGroups) {
+        this.eventGroups.attr('transform', function(d) {
+          var x = d._isCluster
+            ? newX(d._avgYear)
+            : newX(self._dateToYear(d));
+          var y = self._eventY(d);
+          return 'translate(' + x + ',' + y + ')';
+        });
+      }
     }
 
     this._updateZoomLevel();
+    this._updateMinimapViewport();
+    this._updateVisibleRange();
   },
 
   /**
@@ -932,19 +1516,11 @@ var _impl = {
     var input = this.el.querySelector('.timeline-viz-skip-input');
     var year = parseInt(input.value, 10);
     if (isNaN(year)) return;
-
-    if (!this.svg || !this.zoom) return;
-    var m = this.margin;
-    var centerX = (this.width - m.left - m.right) / 2 + m.left;
-    var k = this.currentTransform.k;
-    var tx = centerX - k * this.xScaleOrig(year);
-
-    this.svg.transition().duration(500).call(
-      this.zoom.transform,
-      d3.zoomIdentity.translate(tx, 0).scale(k)
-    );
+    this._centerOnYear(year);
     input.value = '';
   },
+
+  // ---- Search/Filter ----
 
   /**
    * Apply search filter: highlight matching events, dim non-matching ones.
@@ -962,7 +1538,13 @@ var _impl = {
         return;
       }
 
-      var match = self._eventMatchesSearch(d, q);
+      var match;
+      if (d._isCluster) {
+        // A cluster matches if any of its events match.
+        match = d._events.some(function(e) { return self._eventMatchesSearch(e, q); });
+      } else {
+        match = self._eventMatchesSearch(d, q);
+      }
       g.style('opacity', match ? 1 : 0.15);
       g.select('.timeline-event-highlight')
         .attr('opacity', match ? 0.6 : 0);
@@ -995,6 +1577,8 @@ var _impl = {
     this.el.querySelector('.timeline-viz-search-clear').style.display = 'none';
     this._applySearchFilter();
   },
+
+  // ---- Tooltip/Detail Panel ----
 
   /**
    * Show tooltip for an event.
@@ -1066,6 +1650,13 @@ var _impl = {
     var date = 'Y' + d.event_year + ' M' + d.event_month + ' D' + d.event_day;
     var color = this._eventColor(d);
 
+    // Show end date if range event.
+    if (d.event_end_year) {
+      date += ' \u2013 Y' + d.event_end_year;
+      if (d.event_end_month) date += ' M' + d.event_end_month;
+      if (d.event_end_day) date += ' D' + d.event_end_day;
+    }
+
     var html = '<div class="timeline-viz-detail-color" style="background:' + color + '"></div>';
     html += '<div class="timeline-viz-detail-name">' + this._escapeHTML(label) + '</div>';
     html += '<div class="timeline-viz-detail-date">' + date + '</div>';
@@ -1120,6 +1711,8 @@ var _impl = {
       this.detailPanel.classList.remove('visible');
     }
   },
+
+  // ---- Utilities ----
 
   /**
    * Escape HTML entities for safe insertion.

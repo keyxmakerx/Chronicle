@@ -8,15 +8,27 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-03 -- Timeline visualization Phase 1 complete (7 items: SVG layout fix,
-day-level text, Alpine Collapse, loading skeleton, zoom buttons, event detail panel,
-unified tabbed view). Phase 2A (eras, range bars, custom icons) planned and documented
-in plan file `/root/.claude/plans/binary-purring-frost.md`. Branch: `claude/fix-refresh-glitch-ybWmN`.
+2026-03-03 -- Timeline visualization Phase 2 UI overhaul complete (8 items: center
+spine ruler, rich grid, era bands, range bars, clustering, category icons, minimap,
+toolbar polish). Branch: `claude/improve-timeline-ui-e1R9X`.
 
 ## Current Phase
-**Phase G: Maps & Geography + Timeline.** Timeline Phase 1 visualization overhaul
-complete. Phase 2A (calendar eras, range event bars, custom event icons) designed
-and ready for implementation. See plan file for full spec.
+**Phase G: Maps & Geography + Timeline.** Timeline Phase 2 visualization UI overhaul
+complete. Phase 2B (event connections, create-from-timeline) remaining.
+
+### Timeline Phase 2 — COMPLETE
+Branch: `claude/improve-timeline-ui-e1R9X`
+1. Center spine ruler — horizontal ruler line at vertical center with 3-tier ticks
+   (primary/secondary/tertiary) replacing top-only axis
+2. Rich grid — alternating column bands + major/minor grid lines
+3. Calendar era background bands — semi-transparent colored rects with watermark labels
+   (CalendarEraLister adapter, handler returns eras in data API)
+4. Range event bars — multi-day events as horizontal colored bars (end_year/end_month/
+   end_day added to EventLink, SQL, scan)
+5. Event clustering — at era/century zoom, overlapping events collapse to count badges
+6. Category event icons — Font Awesome glyphs replace dots for categorized events
+7. Mini-map overview strip — 36px strip below SVG with viewport indicator + click-to-jump
+8. Toolbar polish — visible year range indicator (Y{left} – Y{right})
 
 ### Timeline Phase 1 — COMPLETE (commit `0667e55`)
 Branch: `claude/fix-refresh-glitch-ybWmN`
@@ -28,11 +40,10 @@ Branch: `claude/fix-refresh-glitch-ybWmN`
 6. Event detail panel — floating panel on click with full event info
 7. Unified tabbed view — single card with "Visualization" / "Event List" tabs
 
-### Timeline Phase 2A — PLANNED (not yet implemented)
-See plan file: `/root/.claude/plans/binary-purring-frost.md`
-- Range event bars (multi-day events as horizontal bars)
-- Custom event icons (migration 000038, icon picker, FontAwesome rendering)
-- Calendar era bands (cross-plugin adapter for era overlay on D3 viz)
+### Timeline Phase 2B — FUTURE
+- Event connections/relationships (draw links between related events)
+- Create-from-timeline workflow (create new events directly from viz)
+- Additional polish and animations
 
 ### Environment Notes
 - `templ` binary at `/root/go/bin/templ` — run `export PATH="$PATH:/root/go/bin"` first

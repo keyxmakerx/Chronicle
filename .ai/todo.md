@@ -59,7 +59,7 @@ see `.ai/roadmap.md`.
 - [ ] Maps plugin Phase 2 (layers, marker groups, privacy, nested maps)
 - [x] Timeline standalone events (migration 000036, calendar-free timelines, full event parity)
 - [x] Timeline visualization Phase 1 (D3 overhaul: SVG layout, zoom buttons, detail panel, unified tabs)
-- [~] Timeline visualization Phase 2A (calendar eras on viz, range event bars, custom event icons)
+- [x] Timeline visualization Phase 2A (center spine ruler, rich grid, era bands, range bars, clustering, category icons, minimap, toolbar)
 - [ ] Timeline visualization Phase 2B (event connections, create-from-timeline, beautification)
 
 ### Phase H: Secrets & Permissions

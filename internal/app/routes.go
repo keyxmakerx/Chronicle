@@ -239,6 +239,36 @@ func (a *calendarEventListerAdapter) ListEventsForCalendar(ctx context.Context, 
 	return refs, nil
 }
 
+// calendarEraListerAdapter wraps calendar.CalendarService to implement the
+// timeline.CalendarEraLister interface. Returns calendar eras for the D3
+// visualization background bands.
+type calendarEraListerAdapter struct {
+	svc calendar.CalendarService
+}
+
+// ListEras returns all eras for a calendar as lightweight refs for the timeline viz.
+// Uses GetCalendarByID which loads all sub-resources including eras.
+func (a *calendarEraListerAdapter) ListEras(ctx context.Context, calendarID string) ([]timeline.CalendarEra, error) {
+	cal, err := a.svc.GetCalendarByID(ctx, calendarID)
+	if err != nil {
+		return nil, err
+	}
+	if cal == nil {
+		return nil, nil
+	}
+
+	refs := make([]timeline.CalendarEra, 0, len(cal.Eras))
+	for _, e := range cal.Eras {
+		refs = append(refs, timeline.CalendarEra{
+			Name:      e.Name,
+			StartYear: e.StartYear,
+			EndYear:   e.EndYear,
+			Color:     e.Color,
+		})
+	}
+	return refs, nil
+}
+
 // storageLimiterAdapter wraps settings.SettingsService to implement the
 // media.StorageLimiter interface without creating a circular import.
 type storageLimiterAdapter struct {
@@ -430,7 +460,7 @@ func (a *App) RegisterRoutes() {
 
 	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
 	timelineRepo := timeline.NewTimelineRepository(a.DB)
-	timelineSvc := timeline.NewTimelineService(timelineRepo, &calendarListerAdapter{svc: calendarService}, &calendarEventListerAdapter{svc: calendarService})
+	timelineSvc := timeline.NewTimelineService(timelineRepo, &calendarListerAdapter{svc: calendarService}, &calendarEventListerAdapter{svc: calendarService}, &calendarEraListerAdapter{svc: calendarService})
 	timelineHandler := timeline.NewHandler(timelineSvc)
 	timelineHandler.SetMemberLister(campaignService)
 	timeline.RegisterRoutes(e, timelineHandler, campaignService, authService)
