@@ -26,8 +26,12 @@
  *
  * Requires D3.js v7. If D3 is not yet loaded when the widget mounts (e.g.
  * during HTMX navigation), it is loaded dynamically from the CDN.
+ *
+ * Load-order safe: if boot.js hasn't executed yet (Chronicle undefined),
+ * registration is deferred until DOMContentLoaded.
  */
-Chronicle.register('timeline-viz', {
+(function() {
+var _impl = {
   /** CDN URL used to dynamically load D3 when it's not already available. */
   _d3Src: 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js',
 
@@ -989,4 +993,16 @@ Chronicle.register('timeline-viz', {
       this.el.innerHTML = '';
     }
   }
-});
+};
+
+// Register with Chronicle's widget system. If boot.js hasn't executed yet
+// (e.g. this script loaded as a non-defer tag in the body while boot.js is
+// deferred in the head), wait for DOMContentLoaded when all defer scripts
+// will have run.
+function _register() { Chronicle.register('timeline-viz', _impl); }
+if (typeof Chronicle !== 'undefined') {
+  _register();
+} else {
+  document.addEventListener('DOMContentLoaded', _register);
+}
+})();
