@@ -162,7 +162,7 @@ func (a *App) errorHandler(err error, c echo.Context) {
 
 	// API requests always get JSON.
 	if isAPIRequest(c) {
-		c.JSON(code, map[string]string{
+		_ = c.JSON(code, map[string]string{
 			"error":   http.StatusText(code),
 			"message": message,
 		})
@@ -174,7 +174,7 @@ func (a *App) errorHandler(err error, c echo.Context) {
 	if isHTMXRequest(c) {
 		if code == http.StatusUnauthorized {
 			c.Response().Header().Set("HX-Redirect", "/login")
-			c.NoContent(http.StatusNoContent)
+			_ = c.NoContent(http.StatusNoContent)
 			return
 		}
 		// For other HTMX errors, retarget to body so the full error page
@@ -185,11 +185,11 @@ func (a *App) errorHandler(err error, c echo.Context) {
 
 	// Regular browser 401 — redirect to login page.
 	if code == http.StatusUnauthorized {
-		c.Redirect(http.StatusSeeOther, "/login")
+		_ = c.Redirect(http.StatusSeeOther, "/login")
 		return
 	}
 
-	middleware.Render(c, code, pages.ErrorPage(code, message))
+	_ = middleware.Render(c, code, pages.ErrorPage(code, message))
 }
 
 // defaultErrorMessage returns a user-friendly message for common HTTP status codes

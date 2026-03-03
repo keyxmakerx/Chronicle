@@ -81,6 +81,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/entities/:eid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
+	// Widget data endpoints (read-only) — needed so public campaign visitors
+	// can load editor content, attribute fields, etc. Handlers already enforce
+	// entity-level privacy checks (private entities require Scribe+).
+	pub.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/entities/:eid/fields", h.GetFieldsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
 	// Dynamic category route: resolves any entity type slug to a category
 	// dashboard. Echo's router gives static segments (entities, settings, etc.)
 	// priority over this parameter route, so it only catches actual type slugs.

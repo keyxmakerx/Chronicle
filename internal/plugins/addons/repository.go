@@ -69,7 +69,9 @@ func (r *addonRepository) List(ctx context.Context) ([]Addon, error) {
 			return nil, fmt.Errorf("scanning addon: %w", err)
 		}
 		if len(schemaRaw) > 0 {
-			json.Unmarshal(schemaRaw, &a.ConfigSchema)
+			if err := json.Unmarshal(schemaRaw, &a.ConfigSchema); err != nil {
+				return nil, fmt.Errorf("unmarshaling addon config schema: %w", err)
+			}
 		}
 		addons = append(addons, a)
 	}
@@ -96,7 +98,9 @@ func (r *addonRepository) FindByID(ctx context.Context, id int) (*Addon, error) 
 		return nil, fmt.Errorf("finding addon: %w", err)
 	}
 	if len(schemaRaw) > 0 {
-		json.Unmarshal(schemaRaw, &a.ConfigSchema)
+		if err := json.Unmarshal(schemaRaw, &a.ConfigSchema); err != nil {
+			return nil, fmt.Errorf("unmarshaling addon config schema: %w", err)
+		}
 	}
 	return a, nil
 }
@@ -121,7 +125,9 @@ func (r *addonRepository) FindBySlug(ctx context.Context, slug string) (*Addon, 
 		return nil, fmt.Errorf("finding addon by slug: %w", err)
 	}
 	if len(schemaRaw) > 0 {
-		json.Unmarshal(schemaRaw, &a.ConfigSchema)
+		if err := json.Unmarshal(schemaRaw, &a.ConfigSchema); err != nil {
+			return nil, fmt.Errorf("unmarshaling addon config schema: %w", err)
+		}
 	}
 	return a, nil
 }
@@ -227,7 +233,9 @@ func (r *addonRepository) ListForCampaign(ctx context.Context, campaignID string
 			ca.EnabledBy = &eb
 		}
 		if len(configRaw) > 0 {
-			json.Unmarshal(configRaw, &ca.ConfigJSON)
+			if err := json.Unmarshal(configRaw, &ca.ConfigJSON); err != nil {
+				return nil, fmt.Errorf("unmarshaling campaign addon config: %w", err)
+			}
 		}
 		result = append(result, ca)
 	}

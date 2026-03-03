@@ -217,23 +217,9 @@
     return html;
   }
 
-  /**
-   * Escape HTML to prevent XSS.
-   */
-  function escapeHtml(text) {
-    var div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  /**
-   * Escape a string for use in an HTML attribute.
-   */
-  function escapeAttr(text) {
-    return String(text).replace(/[&"'<>]/g, function (c) {
-      return { '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;' }[c];
-    });
-  }
+  // Use shared utilities from Chronicle (boot.js).
+  var escapeHtml = Chronicle.escapeHtml;
+  var escapeAttr = Chronicle.escapeAttr;
 
   // Close drill-down after hx-boost navigation (user navigated away from
   // the category context via a boosted sidebar link like Dashboard or Members).

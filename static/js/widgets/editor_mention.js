@@ -624,39 +624,9 @@
     };
   }
 
-  // --- Utility Functions ---
-
-  /**
-   * Escape HTML special characters to prevent XSS in rendered content.
-   *
-   * @param {string} str - Raw string to escape.
-   * @returns {string} HTML-escaped string.
-   */
-  function escapeHTML(str) {
-    if (!str) return '';
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  /**
-   * Escape a string for safe use in HTML attribute values.
-   *
-   * @param {string} str - Raw string to escape.
-   * @returns {string} Attribute-safe string.
-   */
-  function escapeAttr(str) {
-    if (!str) return '';
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-  }
+  // Use shared utilities from Chronicle (boot.js).
+  var escapeHTML = Chronicle.escapeHtml;
+  var escapeAttr = Chronicle.escapeAttr;
 
   // --- Public API ---
 

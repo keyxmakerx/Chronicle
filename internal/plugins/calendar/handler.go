@@ -736,7 +736,7 @@ func (h *Handler) ImportCalendarAPI(c echo.Context) error {
 		if openErr != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
 		}
-		defer src.Close()
+		defer func() { _ = src.Close() }()
 		data, err = io.ReadAll(io.LimitReader(src, 10*1024*1024)) // 10MB limit
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
@@ -792,7 +792,7 @@ func (h *Handler) ImportPreviewAPI(c echo.Context) error {
 		if openErr != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
 		}
-		defer src.Close()
+		defer func() { _ = src.Close() }()
 		data, err = io.ReadAll(io.LimitReader(src, 10*1024*1024))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
@@ -829,7 +829,7 @@ func (h *Handler) ImportFromSetupAPI(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 	data, err := io.ReadAll(io.LimitReader(src, 10*1024*1024))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")

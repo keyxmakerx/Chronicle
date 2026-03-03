@@ -957,17 +957,9 @@ Chronicle.register('notes', {
 
     // --- Helpers ---
 
-    function escapeHtml(text) {
-      var div = document.createElement('div');
-      div.textContent = text || '';
-      return div.innerHTML;
-    }
-
-    function escapeAttr(text) {
-      return String(text || '').replace(/[&"'<>]/g, function (c) {
-        return { '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;' }[c];
-      });
-    }
+    // Use shared utilities from Chronicle (boot.js).
+    var escapeHtml = Chronicle.escapeHtml;
+    var escapeAttr = Chronicle.escapeAttr;
 
     // --- hx-boost navigation sync ---
     // The notes widget is outside #main-content, so it persists across

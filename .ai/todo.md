@@ -9,80 +9,71 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
-## Next Up: Priority Tasks
+## 1. Bugfixes & Problems
 
-These are the highest-priority items across all future phases. Pick from here.
-For the full competitive analysis and architectural breakdown of each feature,
-see `.ai/roadmap.md`.
+Known broken or missing things, ordered by severity.
 
-### Phase D: Campaign Customization Hub (Active -- Finishing)
-- [x] Campaign Customization Hub page shell (4 tabs, owner-only route)
-- [x] Navigation tab (sidebar config widget + custom sections/links editor)
-- [x] Settings cleanup (removed Categories duplication, added Customize link)
-- [x] Custom sections/links sidebar rendering (context helpers + app.templ)
-- [x] Admin panel flickering fix (x-cloak)
-- [x] Sidebar debug log cleanup
-- [x] Dashboard Editor (Sprint 2: migration 000021, dashboard_editor.js, block rendering)
-- [x] Category Dashboards (Sprint 3: per-category layout editor)
-- [x] Page Layouts tab (Sprint 3.5: HTMX lazy-loaded template-editor in Customize hub)
-- [x] Player Notes Overhaul (Sprint 4: locking, rich text, versions, shared notes)
-- [x] hx-boost sidebar navigation (Sprint 5: prevent full page reloads)
-- [x] "View as player" toggle (Sprint 5)
-- [x] Widget lifecycle audit (check all widgets for missing destroy() cleanup)
+### Critical
 
-### Phase E: Core UX & Discovery (Active)
-- [x] Quick search (Ctrl+K) — global search modal for entities (CRITICAL)
-- [x] Entity hierarchy (parent_id UI + tree view + breadcrumbs + "Create sub-page") (CRITICAL)
-- [x] Extension enable bug fix (installed addons registry, service-layer validation)
-- [x] Editor Insert menu (+ dropdown for discoverable @mention, link, blockquote, code, hr)
-- [x] Backlinks / "Referenced by" on entity profiles (@mention reverse refs)
-- [ ] API technical documentation (OpenAPI spec or handwritten reference) (HIGH)
-- [x] Keyboard shortcuts beyond Ctrl+K (Ctrl+N, Ctrl+E, Ctrl+S)
+- [x] **Public campaign widget 403s** — Editor and attributes widgets return 403 for non-member visitors on public campaigns. Root cause: GET `/entry`, `/fields`, `/tags`, `/relations` only registered in authenticated route group, not in public-capable group. Fixed by adding routes to `pub` group in entities/routes.go, tags/routes.go, relations/routes.go.
 
-### Phase F: Calendar & Time
-- [x] Calendar plugin Sprint 1 (model, repo, service, handler, routes, templates, migration 000027)
-- [x] Calendar monthly grid UI (weekday headers, day cells, event chips, moon phases, "today" marker)
-- [x] Calendar Sprint 2: Leap years, seasons with colors, event categories, multi-day events
-- [x] Calendar settings UI (5-tab page: General, Months, Weekdays, Moons, Seasons)
-- [x] Calendar event creation modal (Alpine.js + fetch, quick-add on day hover)
-- [x] Calendar API endpoints for Foundry VTT sync (full REST API in sync plugin)
-- [x] Device fingerprint binding for API keys (single-device lock)
-- [x] Entity-event reverse lookup (HTMX lazy-loaded section on entity pages)
-- [x] Calendar sidebar link
-- [x] Calendar dashboard block ("Upcoming events")
-- [x] Timeline view (chronological event display, month-grouped, year nav, view toggle)
-- [x] Event edit modal (dual-purpose create/edit, clickable event chips, data attributes)
-- [x] Event delete confirmation UI (in-modal confirmation overlay)
+### High
 
-### Phase G: Maps & Geography + Timeline
-- [x] Maps plugin Phase 1 (Leaflet.js, image upload, pins, entity linking, DM-only pins, drag-and-drop)
-- [ ] Maps plugin Phase 2 (layers, marker groups, privacy, nested maps)
-- [x] Timeline standalone events (migration 000036, calendar-free timelines, full event parity)
-- [x] Timeline visualization Phase 1 (D3 overhaul: SVG layout, zoom buttons, detail panel, unified tabs)
-- [x] Timeline visualization Phase 2A (center spine ruler, rich grid, era bands, range bars, clustering, category icons, minimap, toolbar)
-- [ ] Timeline visualization Phase 2B (event connections, create-from-timeline, beautification)
+- [ ] **Image upload click does nothing** — Users click "Add Image" area, nothing happens. Widget code (`image_upload.js`) appears correct; likely browser-level issue (Firefox blocking programmatic file input `.click()`) or widget not mounting. Needs browser-level debugging with DevTools.
+- [ ] **No media management for campaign owners** — Admin has `/admin/storage` page. Campaign owners have NO way to browse, manage, or delete their uploads. Need campaign-scoped media browser at `/campaigns/:id/media` with "referenced by" tracking, delete with warnings, and upload from browser page.
 
-### Phase H: Secrets & Permissions
-- [x] Inline secrets / GM-only text (TipTap secret mark, server-side stripping, CSS styling)
+### Medium
+
+- [ ] **Tags not hideable from players** — All tags visible to all campaign members. No per-tag visibility field. Need `dm_only` visibility option so GMs can create tags players shouldn't see (e.g., "Plot Hook", "Deceased").
+- [ ] **Attributes missing "Use Template" reset** — Entity types define field templates, entities can override with `FieldOverrides`. But no UI to reset overrides back to type defaults. Especially painful when entity type fields are updated — old entities don't get new fields automatically.
+
+### Low
+
+- [ ] **API endpoints ignore addon disabled state** — Routes are hardcoded at startup. If calendar addon is disabled for a campaign, `/api/v1/campaigns/:id/calendar` still executes. Need `RequireAddon` middleware on API route groups.
+- [ ] **API technical documentation missing** — REST API v1 exists and works but has no public documentation (OpenAPI spec or reference).
+- [ ] **Calendar HTMX detection inconsistency** — `internal/plugins/calendar/handler.go` uses raw `c.Request().Header.Get("HX-Request")` in 5 places instead of centralized `middleware.IsHTMX(c)`. Should standardize.
+- [ ] **Cross-plugin adapter interface duplication** — `MemberLister` interface duplicated in timeline and sessions plugins. Should extract to shared package.
+- [ ] **IDOR check functions duplicated** — `requireTimelineInCampaign`, `requireMapInCampaign`, `requireSessionInCampaign`, `requireEventInCampaign` follow identical patterns in 4 plugins. Extract to shared generic helper.
+- [ ] **logAudit fire-and-forget duplicated** — Similar audit logging patterns in entities, campaigns, tags handlers. Could extract to shared `FireAudit()` utility.
+- [ ] **JS fetch header setup duplicated** — CSRF + JSON header construction repeated in notes, relations, tag_picker, attributes. Add `Chronicle.apiFetch()` wrapper to boot.js.
+- [ ] **Mixed error types** — `echo.NewHTTPError` used directly in 30+ places instead of centralized `apperror` package. Should standardize.
+- [ ] **LIKE metacharacter in backlinks** — `entities/repository.go:1011` concatenates entityID into LIKE pattern without escaping `%`/`_`. Low risk (UUIDs only) but should escape for safety.
+- [ ] **No Content Security Policy headers** — CSP not implemented. Would provide XSS defense-in-depth alongside bluemonday sanitization.
+- [ ] **No input size validation on text fields** — Relies on DB column limits. Handler-level validation (name max 200, description max 5000, etc.) would be better.
+- [ ] **Package-level Go doc comments missing** — ~80% of .go files lack `// Package ...` comments (handler.go, service.go, repository.go, routes.go across all plugins).
+- [ ] **Missing JS widget .ai.md docs** — 11 widget files + 6 core JS files lack documentation. Priority: editor.js, attributes.js, tag_picker.js, relations.js, notes.js.
+
+---
+
+## 2. Features To Do
+
+New capabilities ordered by priority for alpha release.
+
+### Alpha-Critical (Must Have)
+
+- [ ] **Media management for owners + admins** — Campaign-scoped media browser: grid/list view, "referenced by" queries, delete with entity reference warnings, upload from browser page. Admin view spans all campaigns.
+- [ ] **Tag visibility controls** — Per-tag `dm_only` flag. Migration for new column. Filter in repo/handler. Respect in tag_picker.js widget. Player role should not see DM-only tags.
+- [ ] **Attributes template reset** — "Reset to Type Template" button in attributes customize panel. Clear `field_overrides`, restore type-level defaults.
+- [ ] **Extension technical documentation** — 1-3 page `.ai.md` writeup per plugin/widget/module. Standard template covering purpose, architecture, API endpoints, widget integration, lifecycle, security. See documentation audit in plan.
+- [ ] **Graceful extension degradation** — `RequireAddon` API middleware, human-readable errors for disabled/uninstalled addons, addon dependency checking.
+
+### Alpha-Nice-to-Have
+
+- [ ] **File security audit + ClamAV** — Add ClamAV container to docker-compose, scan uploads before storage, configurable file type allowlist, SVG blocking (XSS vector).
+- [ ] **API documentation** — OpenAPI 3.0 spec or handwritten reference for REST v1. Auth guide, endpoint reference, rate limiting docs, sync protocol.
+- [ ] **Maps Phase 2** — Layers, marker groups, privacy controls, nested maps (world → continent → city).
+- [ ] **Timeline Phase 2B** — Event connections (visual lines between related events), create-from-timeline modal, beautification pass.
+- [ ] **Campaign export/import** — JSON bundle for backup/migration. Media as separate zip or URL references.
+
+### Post-Alpha
+
 - [ ] Per-entity permissions (view/edit per role/user)
-- [ ] Campaign export/import (JSON bundle for backup/migration)
 - [ ] Group-based visibility (beyond everyone/dm_only)
-
-### Phase I: External Integrations
-- [x] Calendar import/export (Sprint 9: Chronicle, Simple Calendar, Calendaria, Fantasy-Calendar formats)
-- [ ] Foundry VTT sync module Phase 1 (notes/journal sync via REST API)
-- [ ] Foundry VTT sync module Phase 2 (calendar sync with Calendaria/Simple Calendar)
-- [ ] D&D 5e module (SRD reference data, tooltips, pages)
-- [ ] API enhancements: tags/relations in responses, efficient `modified_since` sync pull
-- [ ] Webhook support for external event notifications
-
-### Phase J: Visualization & Play
+- [ ] Foundry VTT sync module Phase 1 (notes/journal sync)
+- [ ] Foundry VTT sync module Phase 2 (calendar sync)
 - [ ] Relations graph visualization widget (D3.js/Cytoscape.js)
-- [ ] Sessions plugin (session CRUD, linked entities, reports)
 - [ ] Dice roller widget (floating panel, expression parser)
 - [ ] Entity sub-notes/posts (sub-documents with separate visibility)
-
-### Phase K: Delight & Polish
 - [ ] Auto-linking in editor (LegendKeeper-style entity name detection)
 - [ ] Guided worldbuilding prompts per entity type (WorldAnvil-style)
 - [ ] Role-aware dashboards (different views per campaign role)
@@ -90,40 +81,71 @@ see `.ai/roadmap.md`.
 - [ ] Saved filters / smart lists (filter presets as sidebar links)
 - [ ] Bulk entity operations (multi-select for batch tag/move/delete)
 - [ ] Whiteboards / freeform canvas (Tldraw/Excalidraw)
-- [ ] Richer entity tooltips (image + attributes + excerpt)
 - [ ] Persistent filters per category (localStorage)
+- [ ] 2FA/TOTP support
+- [ ] Invite system (email invitations for campaigns)
+- [ ] Webhook support for external event notifications
 
-### Testing (High Priority -- Many plugins have zero tests)
-- [x] Entity service unit tests (30 tests passing)
-- [x] Sync API service tests (31 tests — key creation, bcrypt auth, IP check)
-- [x] Addons service tests (28 tests — CRUD, campaign enable/disable)
-- [x] Auth service tests (26 tests — register, password hashing, reset flow)
-- [x] Notes widget service tests (28 tests — CRUD, checklists, scoping)
+### Testing (High Priority)
+
+- [x] Entity service unit tests (40 tests passing)
+- [x] Sync API service tests (31 tests)
+- [x] Addons service tests (32 tests)
+- [x] Auth service tests (26 tests)
+- [x] Notes widget service tests (28 tests)
+- [x] Widget lifecycle audit (destroy methods, event listener leaks)
 - [ ] Campaigns service tests (HIGHEST PRIORITY — most critical untested code)
 - [ ] Relations service tests (bi-directional create/delete, validation)
 - [ ] Tags service tests (CRUD, slug generation, diff-based assignment)
 - [ ] Audit service tests (pagination, validation, fire-and-forget)
 - [ ] Media service tests (file validation, thumbnail generation)
 - [ ] Settings service tests (limit resolution, override priority)
-- [x] Widget lifecycle audit (destroy methods, event listener leaks)
 - [ ] HTMX fragment edge cases (CSRF propagation, double-init, nested targets)
-- [ ] Plugin/addon system stress test (JS load failures, boot.js resilience)
-
-### Auth & Security
-- [x] Password reset flow (migration 000020, forgot/reset pages, SMTP integration)
-- [ ] 2FA/TOTP support
-- [ ] Invite system (email invitations for campaigns)
-- [x] Concurrent editing safeguards (pessimistic locking on shared notes, Sprint 4)
 
 ### Game System Modules
-- [ ] D&D 5e module (SRD reference data, tooltips, pages) — registry in `internal/modules/registry.go`
+
+- [ ] D&D 5e module (SRD reference data, tooltips, pages)
 - [ ] Pathfinder 2e module
 - [ ] Draw Steel module
 
 ### Infrastructure
+
+- [ ] **Add golangci-lint to CI pipeline** — Currently only `go vet` + unit tests run in CI. golangci-lint catches real bugs (unchecked errors, dead code) and should be enforced.
+- [ ] **Add security scanning to CI** — gosec (static analysis) and govulncheck (dependency vulnerabilities) should run in CI. Requires Go 1.25+ for latest gosec.
+- [ ] **Increase test coverage** — Currently 5.3% (6 test files). Priority: campaigns service tests, relations service tests, tags service tests, media service tests, then handler tests.
 - [ ] docker-compose.yml full stack verification (app + MariaDB + Redis)
 - [ ] `air` hot reload setup for dev workflow
-- [ ] Verify `make docker-up` -> `make dev` works end-to-end
+
+---
+
+## 3. Competitive Analysis
+
+Summary of strengths/weaknesses for strategic positioning. Full analysis in `.ai/roadmap.md`.
+
+| Platform | Users | Key Strengths | Key Weaknesses | What Chronicle Should Learn |
+|----------|-------|--------------|----------------|----------------------------|
+| **WorldAnvil** | ~1.5M | 25+ templates, guided prompts, inline secrets, Chronicles (map+timeline combo), 45+ RPG systems, family trees | BBCode editor, steep learning curve, cluttered UI, aggressive paywall, privacy requires paid | Guided prompts, deep secrets system, RPG system breadth |
+| **Kanka** | ~300K | Structured 20-type entities, generous free tier, deep per-role/user permissions, best calendar (-2B to +2B years), GPL source, REST API, marketplace | Summernote editor, complex permission UI, self-hosted deprioritized | Permission granularity, calendar depth, marketplace concept |
+| **LegendKeeper** | Small | Best WebGL maps (regions, navigation), real-time co-editing, auto-linking, offline-first, clean UI, speed as brand | Limited entity types, no formal relations, minimal game systems | Auto-linking magic, speed obsession, map interaction depth |
+| **Obsidian** | ~4M+ | Local-first markdown, 1000+ plugins, graph view, backlinks, community themes, offline, privacy by default, canvas/whiteboard | Not TTRPG-specific, no calendar/maps/timeline natively (requires plugin cobbling), single-user (no campaign sharing), no web UI | Plugin ecosystem model, graph visualization, local-first philosophy, community extensibility |
+
+### Where Chronicle Already Wins
+
+1. **Drag-and-drop page layout editor** — nobody else has visual page design
+2. **Customizable dashboards** (campaign + per-category) — most flexible dashboard system
+3. **Self-hosted as primary target** — no paywall, no forced public content
+4. **Modern tech stack** — TipTap + HTMX + Templ vs BBCode/Summernote
+5. **Per-entity field overrides** — unique; entities customize their own schema
+6. **REST API from day one** — matches Kanka, beats WorldAnvil and LegendKeeper
+7. **Extension framework** — per-campaign addon toggle
+8. **Audit logging** — no competitor has this
+9. **Interactive D3 timeline** with eras, clustering, minimap — exceeds Kanka, matches WorldAnvil
+
+### Chronicle vs Obsidian
+
+- Obsidian users cobble TTRPG workflows from community plugins (Fantasy Calendar, Leaflet, TTRPG plugin). Chronicle offers purpose-built calendar/maps/timelines/entity types as first-class features.
+- Chronicle has multi-user campaign sharing built-in; Obsidian is single-user.
+- Obsidian's plugin ecosystem (1000+) is aspirational — Chronicle's addon system is the foundation for similar extensibility.
 
 ---
 
@@ -156,227 +178,62 @@ see `.ai/roadmap.md`.
 - [x] Auto-migrations on startup, first-user-is-admin, /health alias
 
 ### Phase 2: Media & UI (2026-02-19 to 2026-02-20)
-
-**Plugins:**
-- [x] Media plugin (upload, thumbnails, magic byte validation, rate limiting)
-- [x] Audit plugin (campaign activity timeline, stats, wired into handlers)
-- [x] Site settings plugin (storage limits, per-user/campaign overrides)
-- [x] Admin modules page (registry, card grid, status badges)
-
-**Widgets:**
-- [x] Editor view/edit toggle (read-only default, Edit/Done, autosave)
-- [x] @mention system (search popup, keyboard nav, styled links)
-- [x] Attributes widget (inline edit for all field types, full-stack)
-- [x] Tag picker widget (search, create, assign on entity profiles)
-- [x] Tag display on entity list cards (batch fetch, colored chips)
-- [x] Relations widget (bi-directional linking, common types, reverse auto-create)
-- [x] Template editor (drag-and-drop page builder, 2-col/3-col/tabs/sections, preview)
-- [x] Entity tooltip/popover (hover preview, LRU cache, smart positioning)
-
-**Entity enhancements:**
-- [x] Entity type CRUD (create, edit, delete, icon/color/fields management)
-- [x] Entity list redesign (horizontal tabs, search bar, stats)
-- [x] Entity image upload pipeline + UI
-- [x] Descriptor rename (Subtype Label -> Descriptor)
-- [x] Dynamic sidebar with entity types from DB + count badges
-- [x] Sidebar customization (drag-to-reorder, hide/show per campaign)
-- [x] Layout-driven entity profile pages (layout_json)
-
-**Security:**
-- [x] Comprehensive security audit (14 vulnerability fixes)
-- [x] IDOR protection on all entity endpoints
-- [x] HSTS security header
-- [x] Rate limiting (auth + uploads)
-- [x] Storage limit enforcement in media upload
-
-**UI & Styling:**
-- [x] Dark mode toggle (theme.js, localStorage, sidebar button)
-- [x] Semantic color system (CSS custom properties + Tailwind tokens)
-- [x] All templ files migrated to semantic color tokens (20+ files)
-- [x] All CSS components migrated to semantic tokens
-- [x] Visual polish pass (gradient hero, icon cards, refined buttons/cards)
-- [x] Public landing page with discoverable campaign cards
-- [x] Collapsible admin sidebar with modules section
-- [x] Toast notification system (Chronicle.notify API + HTMX integration)
-- [x] Public campaign support (is_public flag, OptionalAuth)
-
-**Phase 2 Polish (2026-02-20):**
-- [x] Entity type badge contrast (luminance-based text color for light backgrounds)
-- [x] Dark mode fix for entity type config widget (semantic tokens)
-- [x] Merged campaign Edit + Settings into unified settings page
-- [x] Game Modules section in campaign settings (shows available modules)
-- [x] Admin plugins page (plugin registry, active/planned status, categories)
+- [x] Media plugin, Audit plugin, Settings plugin, Admin modules page
+- [x] Editor view/edit, @mention, Attributes, Tag picker, Relations, Template editor, Entity tooltip widgets
+- [x] Entity type CRUD, list redesign, image upload, sidebar customization, layout-driven profiles
+- [x] Security audit (14 fixes), IDOR protection, HSTS, rate limiting, storage limits
+- [x] Dark mode, semantic color system, toast notifications, public campaign support
 
 ### Phase 3: Competitor-Inspired UI Overhaul (2026-02-20)
 - [x] Terminology rename (Entity→Page, Entity Type→Category)
-- [x] Drill-down sidebar (iOS Settings-style push nav with peek)
-- [x] Category dashboard pages (customizable landing with pinned, tags, grid)
-- [x] DB migration 000013 (description + pinned_entity_ids on entity_types)
-- [x] Tighter card spacing (4-col XL, reduced padding, compact badges)
+- [x] Drill-down sidebar, category dashboards, tighter card spacing
 
 ### Phase B: Extensions & API (2026-02-20)
-- [x] Discover page split (DiscoverPublicPage + DiscoverAuthPage + AboutPage)
-- [x] Discover link in sidebar (authenticated users can browse public campaigns)
-- [x] Template editor block resizing (minHeight presets: auto/sm/md/lg/xl)
-- [x] Block-level visibility controls (everyone/dm_only with role-based filtering)
-- [x] Per-entity field overrides (migration 000014, MergeFields, customization panel)
-- [x] Extension framework — addons plugin (migration 000015, model/repo/service/handler)
-- [x] Admin addon management page with status controls + creation form
-- [x] Campaign addon settings with per-campaign toggle (HTMX)
-- [x] Sync API plugin (migration 000016, model/repo/service/handler)
-- [x] Owner API key management (create/toggle/revoke, usage stats)
-- [x] Admin API monitoring dashboard (stats, charts, security events, IP blocklist, keys)
+- [x] Discover page, template editor resizing, block visibility, field overrides
+- [x] Extension framework (addons plugin), Sync API plugin, API key management
 
 ### Phase C: Notes & Terminology (2026-02-20)
-- [x] Player Notes widget (migration 000017-000018, floating panel, checklists)
-- [x] Terminology standardization: all user-facing "Addon" → "Extension"
-- [x] Admin dashboard: removed "Modules" card, unified "Extensions" card with count
-- [x] Admin sidebar: removed "Modules" link, renamed "Addons" → "Extensions"
-- [x] Campaign settings: removed duplicate "Game Modules" section
-- [x] Migration 000019: fixed addon table status mismatches (sync-api, game modules, dice-roller, media-gallery)
+- [x] Player Notes widget, terminology standardization, admin cleanup
 
-### Phase D Sprint 1 + 1.5: Customization Hub (2026-02-22)
-- [x] Admin panel flickering fix (x-cloak on admin-slide div)
-- [x] Sidebar debug log cleanup (removed 3 console.log from sidebar_drill.js)
-- [x] Campaign Customization Hub page (`/campaigns/:id/customize`, 4 tabs)
-- [x] Navigation tab with sidebar config widget + custom sections/links editor
-- [x] Categories tab with entity type grid linking to per-type config pages
-- [x] Dashboard + Category Dashboards tabs with "coming soon" placeholders
-- [x] Sidebar "Customize" link (paintbrush icon, owner-only)
-- [x] Settings page: replaced duplicated Categories section with link card
-- [x] New widget: `sidebar_nav_editor.js` (custom sections + links CRUD)
-- [x] Context helpers: SidebarSection/SidebarLink types, Set/Get functions in data.go
-- [x] Custom nav items rendered in sidebar (sections as headers, links with icons)
-- [x] External link detection (target="_blank" + arrow icon for https:// URLs)
+### Phase D: Campaign Customization Hub (2026-02-22 to 2026-02-24)
+- [x] Sprint 1-1.5: Customization Hub (4 tabs, sidebar config, custom nav)
+- [x] Sprint 2: Dashboard Editor (drag-and-drop, 6 block types)
+- [x] Sprint 3: Category Dashboards (per-category layout editor)
+- [x] Sprint 3.5: Page Layouts Tab (HTMX lazy-loaded template-editor)
+- [x] Sprint 4: Player Notes Overhaul (locking, rich text, versions, shared)
+- [x] Sprint 5: Polish (hx-boost, "View as player", widget lifecycle)
 
-### Phase D Sprint 2: Dashboard Editor (2026-02-22)
-- [x] Migration 000021: `dashboard_layout JSON DEFAULT NULL` on campaigns + entity_types
-- [x] Dashboard layout Go types (DashboardLayout, DashboardRow, DashboardColumn, DashboardBlock)
-- [x] ParseDashboardLayout() method + ValidBlockTypes map + block type constants
-- [x] Repository: all queries include dashboard_layout, UpdateDashboardLayout method
-- [x] Service: UpdateDashboardLayout (validation), GetDashboardLayout, ResetDashboardLayout
-- [x] Handler + routes: GET/PUT/DELETE `/campaigns/:id/dashboard-layout` (owner-only)
-- [x] `dashboard_editor.js` widget (drag-and-drop, 6 block types, row presets, config dialogs)
-- [x] `dashboard_blocks.templ` (DashboardBlockSwitch + 6 block components)
-- [x] `show.templ` refactored: custom layout → 12-col grid render, NULL → hardcoded default
-- [x] Customize page Dashboard tab mounts dashboard-editor widget
-- [x] dashColSpan, dashGridClass, limitRecentEntities helper functions
+### Phase E: Core UX & Discovery (2026-02-24 to 2026-02-25)
+- [x] Sprint 1: Quick Search (Ctrl+K)
+- [x] Sprint 2: Customization Hub Rework (consolidated tabs)
+- [x] Sprint 3: Extension Enable Bug Fix (installed addons registry)
+- [x] Sprint 4-7: Entity Hierarchy (parent/child, tree view, breadcrumbs)
+- [x] Sprint 8: Editor Insert Menu + Backlinks
+- [x] Sprint 9: Entity Preview Tooltip + Popup Config
+- [x] Sprint 10: Keyboard Shortcuts (Ctrl+N, Ctrl+E, Ctrl+S)
 
-### Phase D Sprint 3: Category Dashboards (2026-02-22)
-- [x] `dashboard_editor.js` parameterized with `data-block-types` attribute for custom palettes
-- [x] EntityType model: `DashboardLayout *string` field + `ParseCategoryDashboardLayout()` method
-- [x] Repository: all entity type queries include `dashboard_layout`, `UpdateDashboardLayout()` method
-- [x] Service: `GetCategoryDashboardLayout`, `UpdateCategoryDashboardLayout` (validation), `ResetCategoryDashboardLayout`
-- [x] Handler + routes: GET/PUT/DELETE `/entity-types/:etid/dashboard-layout` (owner-only)
-- [x] New block type constants: `category_header`, `entity_grid`, `search_bar` in campaigns/model.go
-- [x] `category_blocks.templ`: CategoryBlockSwitch + 6 category block components
-- [x] `category_dashboard.templ`: conditional render from custom layout or hardcoded default
-- [x] Customize page Category Dashboards tab: Alpine.js category selector + dashboard-editor per category
+### Phase F: Calendar & Time (2026-02-25 to 2026-02-28)
+- [x] Sprint 1: Calendar Plugin (model, repo, service, handler, monthly grid)
+- [x] Sprint 2: Calendar Feature Parity + Sync API (leap years, seasons, event categories, multi-day, device fingerprint)
+- [x] Sprints 3-9: Calendar settings, event modal, sidebar/dashboard, timeline view, event edit/delete, calendar import/export, eras
 
-### Phase D Sprint 3.5: Page Layouts Tab (2026-02-23)
-- [x] `template_editor.js`: `destroy()` method for HTMX lifecycle cleanup
-- [x] `template_editor.js`: scoped `findSaveBtn()`/`findSaveStatus()` helpers (fragment + fallback)
-- [x] `EntityTypeLayoutFetcher` interface + `LayoutEditorEntityType` struct in campaigns/handler.go
-- [x] `LayoutEditorFragment` handler (GET `/customize/layout-editor/:etid`, IDOR protection)
-- [x] Route registration in campaigns/routes.go (owner-only)
-- [x] Customize page: fifth "Page Layouts" tab button + tab content panel
-- [x] `pageLayoutsTab` component: category selector + HTMX lazy-load triggers
-- [x] `LayoutEditorFragment` templ component: scoped save controls + template-editor mount
-- [x] `entityTypeLayoutFetcherAdapter` in app/routes.go (bridges entities service → campaigns handler)
-- [x] Entity type config page: back button → `/campaigns/:id/customize`
+### Phase G: Maps & Geography + Timeline (2026-02-28 to 2026-03-03)
+- [x] Maps Phase 1 (Leaflet.js, image upload, pins, entity linking, DM-only)
+- [x] Timeline standalone events (calendar-free timelines)
+- [x] Timeline visualization Phase 1 (D3 overhaul: SVG, zoom, detail panel)
+- [x] Timeline visualization Phase 2A (ruler, grid, era bars, range bars, clustering, minimap)
+- [x] FOUC prevention (SVG dimension fallbacks, inline bg-color, body opacity guard)
+- [x] SVG favicon
 
-### Phase D Sprint 4: Player Notes Overhaul (2026-02-24)
-- [x] Migration 000022: `is_shared`, `last_edited_by`, `locked_by`, `locked_at`, `entry`, `entry_html` columns + `note_versions` table
-- [x] Shared notes: `is_shared` toggle, campaign-wide visibility, share badge, access control
-- [x] Pessimistic edit locking: 5-min auto-expiry, stale reclamation, heartbeat, force-unlock
-- [x] Version history: snapshot-on-save, max 50 with auto-prune, restore with pre-snapshot
-- [x] Rich text: `entry` (ProseMirror JSON) + `entry_html` (pre-rendered) dual storage
-- [x] Layout data: `SetUserID`/`GetUserID` context helpers, `data-user-id` on widget mount
-- [x] Backend: model, repository, service, handler, routes updated; 8 new API endpoints
-- [x] Frontend: notes.js with lock/unlock flow, heartbeat, share toggle, version panel, lock toast
-- [x] CSS: shared note accent, lock/shared badges, toast animation, rich text styles, version list
-- [x] Tests: all 28 service tests pass, mock updated with new repo methods
+### Alpha Documentation Sprint (2026-03-03)
+- [x] Public campaign widget 403 fix (entities, tags, relations route groups)
+- [x] Todo.md restructure (3 categories: Bugs, Features, Competitive Analysis)
+- [x] Roadmap.md Obsidian competitive analysis
+- [x] Extension documentation sprint (media plugin, 5 JS widgets: image_upload, timeline_viz, dashboard_editor, template_editor, entity_tooltip)
+- [x] Status.md update
 
-### Phase D Sprint 5: Polish (2026-02-24)
-- [x] hx-boost sidebar navigation: `hx-boost="true"` on sidebar nav + admin links, `hx-select="#main-content"` for partial swaps
-- [x] Active link highlighting via `updateSidebarActiveLinks()` in boot.js (longest-prefix-match)
-- [x] `hx-boost="false"` on category links, custom links, context-switching links
-- [x] `chronicle:navigated` event for Alpine.js mobile sidebar close + sidebar_drill.js panel close
-- [x] Widget lifecycle: tag_picker closeHandler leak fix, image_upload destroy method, notes entity ID sync
-- [x] "View as player" toggle: cookie-based, LayoutInjector role override, topbar button, banner
-- [x] Context helpers: `SetViewingAsPlayer`/`IsViewingAsPlayer`, `SetIsOwner`/`IsOwner`
-- [x] Toggle endpoint: `POST /campaigns/:id/toggle-view-mode` (owner-only, HX-Refresh response)
-
-### Phase E Sprint 1: Quick Search (2026-02-24)
-- [x] Quick Search (Ctrl+K / Cmd+K) — `search_modal.js` standalone module
-- [x] Centered modal overlay with debounced search, keyboard navigation, mouse hover
-- [x] Reuses existing `/campaigns/:id/entities/search` JSON endpoint
-- [x] Topbar trigger button replaces inline HTMX search input (responsive, all screen sizes)
-- [x] Closes on Escape, backdrop click, and `chronicle:navigated` event
-
-### Phase E Sprint 2: Customization Hub Rework (2026-02-24)
-- [x] Consolidated 5 tabs → 4 tabs (Dashboard, Categories, Page Templates, Navigation)
-- [x] Categories tab: HTMX lazy-loads identity + attributes + category dashboard per category
-- [x] New endpoint: `GET /entity-types/:etid/customize` (HTMX fragment in entities plugin)
-- [x] Identity save uses Alpine.js + fetch() with JSON (fixed broken HTMX form submission)
-- [x] Attributes (entity-type-editor fields-only) now embedded in Categories tab
-- [x] Entity types management page back link updated to Customize
-- [x] Bug fix: Nav Panel tab identity save on entity type config page (same HTMX→JSON fix)
-
-### Phase E Sprint 3: Extension Enable Bug Fix (2026-02-24)
-- [x] `installedAddons` registry in addons/service.go (map of slugs with real code)
-- [x] `IsInstalled()` exported function for cross-package use
-- [x] `UpdateStatus()` blocks activating uninstalled addons
-- [x] `EnableForCampaign()` blocks enabling uninstalled addons
-- [x] `List()` and `ListForCampaign()` annotate `Installed bool` field
-- [x] Admin UI: disabled activate button + "Not installed" label for uninstalled addons
-- [x] Campaign UI: "Coming Soon" badge for uninstalled addons
-- [x] 5 new addon service tests, all 32 pass
-
-### Phase E Sprint 4-7: Entity Hierarchy (2026-02-24)
-- [x] Sprint 4 (Data plumbing): ParentID in DTOs, FindChildren/FindAncestors/UpdateParent repo methods, recursive CTE for ancestors, parent validation in Create/Update with circular ref detection
-- [x] Sprint 5 (Form UI): Alpine.js parent selector with async search, ?parent_id= pre-fill, edit form pre-population
-- [x] Sprint 6 (Profile UI): Ancestor chain breadcrumbs, blockChildren component with sub-page cards grid, "Create sub-page" button
-- [x] Sprint 7 (Tree view): Grid/Table/Tree toggle on category dashboard, EntityTreeNode struct, buildEntityTree() from flat list, recursive entityTreeLevel templ component with collapsible nodes
-- [x] 8 new entity hierarchy tests, all passing
-
-### Phase E Sprint 8: Editor Insert Menu + Backlinks (2026-02-24)
-- [x] Editor Insert menu: `+` toolbar dropdown with Mention Entity, Insert Link, Horizontal Rule, Blockquote, Code Block items with shortcut hints
-- [x] "Mention Entity" inserts `@` at cursor and triggers mention popup; "Insert Link" prompts for URL
-- [x] CSS: `.chronicle-editor__insert-*` styles (dropdown, items, hints, icons)
-- [x] Backlinks: `FindBacklinks()` repo method searches `entry_html` for `data-mention-id` pattern (LIKE query, limit 50, privacy filter)
-- [x] `GetBacklinks()` service method, handler Show() fetches backlinks
-- [x] `blockBacklinks` templ component: "Referenced by" section with entity type icon/name pill links
-- [x] 1 new backlinks test (TestGetBacklinks_DelegatesToRepo), all 39 entity tests pass
-
-### Phase E Sprint 9: Entity Preview Tooltip + Popup Config (2026-02-24)
-- [x] Migration 000023: `popup_config` JSON column on entities table
-- [x] `PopupConfig` struct (ShowImage, ShowAttributes, ShowEntry) + `EffectivePopupConfig()` default
-- [x] All 9 entity SELECT queries updated to include `popup_config`, `scanEntityRow` updated
-- [x] `UpdatePopupConfig()` repo + service + `PUT /entities/:eid/popup-config` handler + route
-- [x] Enhanced `PreviewAPI` to include up to 5 attributes (key-value pairs) and respect popup_config
-- [x] Enhanced `entity_tooltip.js`: gradient-bordered image, side-by-side layout (image + attrs), entry excerpt, dynamic layout adaptation
-- [x] "Hover Preview Settings" collapsible section on entity edit form with Alpine.js auto-save
-- [x] All tests pass (40 entity tests including backlinks)
-
-### Phase E Sprint 10: Keyboard Shortcuts (2026-02-25)
-- [x] Global shortcuts: Ctrl+N (new entity), Ctrl+E (edit entity), Ctrl+S (save)
-- [x] IIFE pattern matching search_modal.js, suppresses shortcuts in inputs (except Ctrl+S)
-- [x] Save priority: #te-save-btn → .chronicle-editor__btn--save.has-changes → form .btn-primary → chronicle:save event
-
-### Phase F Sprint 1: Calendar Plugin (2026-02-25)
-- [x] Migration 000027: 6 tables (calendars, months, weekdays, moons, seasons, events)
-- [x] Model, repository, service, handler, routes, templates
-- [x] Monthly grid UI with weekday headers, day cells, event chips, moon phases, "today" marker
-
-### Phase F Sprint 2: Calendar Feature Parity + Sync API (2026-02-25)
-- [x] Migration 000028: leap years, event end dates, season colors, event categories, device fingerprint
-- [x] Leap year system: per-month extra days, LeapYearEvery/LeapYearOffset config
-- [x] Season display: color borders on day cells, season indicator in header, ContainsDate with wrap-around
-- [x] Multi-day events (EndYear/EndMonth/EndDay), event categories with icons
-- [x] Calendar settings page: 5-tab Alpine.js UI (General, Months, Weekdays, Moons, Seasons)
-- [x] Event creation modal: Alpine.js + fetch, quick-add button on day hover
-- [x] Entity-event reverse lookup: HTMX lazy-loaded section on entity show pages
-- [x] Sync API calendar endpoints: full REST API (GET/POST/PUT/DELETE calendar, events, months, weekdays, moons)
-- [x] Device fingerprint binding: auto-bind on first X-Device-Fingerprint header, reject mismatches
-- [x] All tests pass
+### Code Quality Sprint (2026-03-03)
+- [x] golangci-lint v2 config fixes (.golangci.yml: version field, removed typecheck/gosimple)
+- [x] Fixed all 138 golangci-lint issues (errcheck, staticcheck S1016, unused dead code)
+- [x] Consolidated JS utility duplication: escapeHtml (9 copies), escapeAttr (7 copies), getCsrf (3 copies) → shared Chronicle.* in boot.js
+- [x] Syncapi repository errcheck fixes (Row.Scan error handling, json.Unmarshal acknowledgement)

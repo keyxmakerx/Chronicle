@@ -64,13 +64,8 @@
         return 'nav_' + Math.random().toString(36).substr(2, 8);
       }
 
-      /**
-       * Get CSRF token from cookie.
-       */
-      function getCsrf() {
-        var match = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-        return match ? decodeURIComponent(match[1]) : '';
-      }
+      // Use shared utility from Chronicle (boot.js).
+      var getCsrf = Chronicle.getCsrf;
 
       /**
        * Save the full sidebar config to the server.
@@ -376,14 +371,8 @@
         return null;
       }
 
-      /**
-       * Escape HTML to prevent XSS.
-       */
-      function esc(text) {
-        var div = document.createElement('div');
-        div.textContent = String(text || '');
-        return div.innerHTML;
-      }
+      // Use shared utility from Chronicle (boot.js).
+      var esc = Chronicle.escapeHtml;
     },
 
     destroy: function (el) {

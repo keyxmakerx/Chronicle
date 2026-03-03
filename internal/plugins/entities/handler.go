@@ -912,12 +912,7 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	input := CreateEntityTypeInput{
-		Name:       req.Name,
-		NamePlural: req.NamePlural,
-		Icon:       req.Icon,
-		Color:      req.Color,
-	}
+	input := CreateEntityTypeInput(req)
 
 	et, err := h.service.CreateEntityType(c.Request().Context(), cc.Campaign.ID, input)
 	if err != nil {
@@ -969,13 +964,7 @@ func (h *Handler) UpdateEntityTypeAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	input := UpdateEntityTypeInput{
-		Name:       body.Name,
-		NamePlural: body.NamePlural,
-		Icon:       body.Icon,
-		Color:      body.Color,
-		Fields:     body.Fields,
-	}
+	input := UpdateEntityTypeInput(body)
 
 	updated, err := h.service.UpdateEntityType(c.Request().Context(), etID, input)
 	if err != nil {

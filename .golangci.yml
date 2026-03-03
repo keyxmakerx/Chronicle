@@ -1,6 +1,7 @@
 # golangci-lint configuration for Chronicle.
 # Tuned for the project's conventions: hand-written SQL, Templ templates,
 # Echo handlers. Run with `make lint`.
+version: "2"
 
 run:
   go: "1.24"
@@ -13,8 +14,28 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-    - gosimple
-    - typecheck
+  settings:
+    errcheck:
+      # Exclude common defer Close/Rollback patterns where errors are
+      # intentionally ignored. These are idiomatic Go — the deferred call
+      # is a cleanup action and the primary error path is already handled.
+      exclude-functions:
+        # database/sql cleanup — errors on Close/Rollback after successful
+        # operations are non-actionable.
+        - (*database/sql.Rows).Close
+        - (*database/sql.DB).Close
+        - (*database/sql.Tx).Rollback
+        # Redis client cleanup.
+        - (*github.com/redis/go-redis/v9.Client).Close
+        # Generic io closer — covers multipart.File, http.Response.Body, etc.
+        - io.Closer.Close
+        - (*net/http.Response).Body.Close
+        # Network connection cleanup — defer conn.Close() is standard pattern.
+        - (net.Conn).Close
+        - (*net/smtp.Client).Close
+        - (*crypto/tls.Conn).Close
+        # File handle cleanup — defer f.Close() after successful writes.
+        - (*os.File).Close
 
 issues:
   # Exclude generated templ files from all linters.

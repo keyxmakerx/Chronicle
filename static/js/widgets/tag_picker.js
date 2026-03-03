@@ -326,11 +326,8 @@ Chronicle.register('tag-picker', {
         });
     }
 
-    function escapeHtml(str) {
-      var div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
-    }
+    // Use shared utility from Chronicle (boot.js).
+    var escapeHtml = Chronicle.escapeHtml;
   },
 
   destroy: function (el) {

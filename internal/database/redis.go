@@ -50,6 +50,6 @@ func NewRedis(cfg config.RedisConfig) (*redis.Client, error) {
 		backoff = min(backoff*2, 30*time.Second)
 	}
 
-	client.Close()
+	_ = client.Close()
 	return nil, fmt.Errorf("pinging redis after %d attempts: %w", maxRetries, pingErr)
 }

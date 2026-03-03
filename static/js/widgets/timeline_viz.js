@@ -375,6 +375,12 @@ var _impl = {
     var width = container.clientWidth || 800;
     var m = this.margin;
 
+    // Reserve extra top space for era bar strip when eras exist.
+    var eraBarHeight = (this.eras && this.eras.length > 0) ? 20 : 0;
+    m.top = 40 + eraBarHeight;
+    this.margin.top = m.top;
+    this.eraBarHeight = eraBarHeight;
+
     // Compute year range.
     var minYear = d3.min(this.events, function(d) { return d.event_year; });
     var maxYear = d3.max(this.events, function(d) { return d.event_year; });
@@ -843,12 +849,11 @@ var _impl = {
       return;
     }
 
-    var m = this.margin;
-    var contentHeight = this.contentHeight;
-
     this.eraBandGroup.selectAll('*').remove();
 
     var xScale = this.xScale;
+    var barY = 8;   // top padding inside SVG
+    var barH = 16;  // compact bar height
 
     this.eras.forEach(function(era) {
       var startYear = era.start_year;
@@ -861,32 +866,35 @@ var _impl = {
       var x1 = xScale(Math.max(startYear, domain[0]));
       var x2 = xScale(Math.min(endYear, domain[1]));
       var bandWidth = Math.max(x2 - x1, 1);
+      var color = era.color || '#6366f1';
 
-      // Colored band rectangle.
+      // Colored bar rectangle at the top.
       self.eraBandGroup.append('rect')
         .attr('class', 'timeline-era-band')
-        .attr('x', x1).attr('y', m.top)
+        .attr('x', x1).attr('y', barY)
         .attr('width', bandWidth)
-        .attr('height', contentHeight)
-        .attr('fill', era.color || '#6366f1')
-        .attr('opacity', 0.06)
-        .attr('rx', 2);
+        .attr('height', barH)
+        .attr('fill', color)
+        .attr('opacity', 0.25)
+        .attr('rx', 3);
 
-      // Watermark label (very faint, large text).
-      var midX = (x1 + x2) / 2;
-      if (bandWidth > 40) {
+      // Era name label (truncated to fit bar width).
+      if (bandWidth > 30) {
         self.eraBandGroup.append('text')
           .attr('class', 'timeline-era-label')
-          .attr('x', midX)
-          .attr('y', m.top + contentHeight / 2)
-          .attr('text-anchor', 'middle')
-          .attr('dominant-baseline', 'middle')
-          .attr('font-size', Math.min(32, bandWidth / era.name.length * 1.2) + 'px')
-          .attr('font-weight', '800')
-          .attr('fill', era.color || '#6366f1')
-          .attr('opacity', 0.06)
-          .attr('pointer-events', 'none')
-          .text(era.name);
+          .attr('x', x1 + 6)
+          .attr('y', barY + barH / 2)
+          .attr('dominant-baseline', 'central')
+          .attr('font-size', '10px')
+          .attr('font-weight', '600')
+          .attr('fill', color)
+          .attr('opacity', 0.9)
+          .text(function() {
+            var maxChars = Math.floor(bandWidth / 6);
+            return era.name.length > maxChars
+              ? era.name.substring(0, maxChars - 1) + '\u2026'
+              : era.name;
+          });
       }
     });
   },

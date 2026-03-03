@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -29,7 +28,7 @@ func Recovery() echo.MiddlewareFunc {
 					// Return a generic error to the client.
 					returnErr = c.String(
 						http.StatusInternalServerError,
-						fmt.Sprintf("Internal Server Error"),
+						"Internal Server Error",
 					)
 				}
 			}()

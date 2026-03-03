@@ -3,19 +3,39 @@
 <!-- ====================================================================== -->
 <!-- Category: Semi-static                                                    -->
 <!-- Purpose: Strategic feature planning based on competitive analysis of     -->
-<!--          WorldAnvil, Kanka, and LegendKeeper. Organized by Chronicle's  -->
-<!--          three-tier architecture (Plugin/Module/Widget) plus core.       -->
+<!--          WorldAnvil, Kanka, LegendKeeper, and Obsidian. Organized by    -->
+<!--          Chronicle's three-tier architecture (Plugin/Module/Widget).     -->
 <!-- Update: When priorities shift, features are completed, or new           -->
 <!--         competitive insights emerge.                                    -->
 <!-- ====================================================================== -->
 
-## Competitive Landscape (as of 2026-02)
+## Competitive Landscape (as of 2026-03)
 
 | Platform | Users | Strengths | Weaknesses |
 |----------|-------|-----------|------------|
 | **WorldAnvil** | ~1.5M | 25+ article templates, guided prompts, interactive maps, Chronicles (map+timeline), secrets system with per-player granularity, 45+ RPG system support, family trees, diplomacy webs | BBCode editor (dated), steep learning curve, cluttered UI, aggressive paywall (privacy requires paid), heavy auto-renewal complaints |
 | **Kanka** | ~300K | Structured 20-type entity model, generous free tier (unlimited entities), deep permissions (visibility per role/user), best-in-class calendar (custom months/moons/-2B to +2B years), GPL source-available, full REST API, marketplace | Summernote editor (mediocre), complex permission UI, self-hosted deprioritized, entity dashboard locked to premium |
 | **LegendKeeper** | Small | Best-in-class WebGL maps (regions, navigation, paths), speed/performance focus, real-time co-editing, block-based wiki editor, auto-linking, offline-first architecture, clean minimal UI | Limited entity types, minimal game system support, no formal relation system, newer/smaller feature set |
+| **Obsidian** | ~4M+ | Local-first markdown vault, 1000+ community plugins, graph view with backlinks, community themes, full offline support, privacy by default, canvas/whiteboard, extremely fast, extensible via plugin API | Not purpose-built for TTRPGs (requires plugin cobbling: Fantasy Calendar, Leaflet, TTRPG plugin), single-user only (no campaign sharing/roles), no web UI, steep plugin setup, no structured entity types, no built-in calendar/maps/timeline |
+
+### Obsidian Deep Dive
+
+Obsidian deserves special attention because many TTRPG worldbuilders use it despite
+it not being purpose-built for the task. Key takeaways:
+
+- **Plugin ecosystem model**: 1000+ plugins created by community. Chronicle's addon
+  system is the foundation for similar extensibility. Aspirational target.
+- **Graph visualization**: Obsidian's graph view showing note connections is beloved.
+  Chronicle should build a relation graph widget (D3.js/Cytoscape.js) to match.
+- **Local-first philosophy**: Obsidian works fully offline with files on disk. Chronicle
+  is server-based but should consider offline-friendly features (service worker, PWA).
+- **Community extensibility**: Obsidian's success comes from empowering developers.
+  Chronicle should document its addon API and make extension development easy.
+- **TTRPG plugin ecosystem gap**: Obsidian TTRPG users cobble together Fantasy Calendar
+  plugin + Leaflet plugin + Dataview + TTRPG Statblocks to approximate what Chronicle
+  offers as integrated first-class features. Chronicle's advantage: purpose-built
+  calendar with moons/eras, maps with entity-linked pins, campaign roles, timeline
+  visualization — all working together natively.
 
 ### Where Chronicle Already Wins
 
@@ -27,6 +47,8 @@
 6. **REST API from day one** -- matches Kanka, beats WorldAnvil and LegendKeeper
 7. **Extension framework** -- addons system with per-campaign toggle
 8. **Audit logging** -- none of the competitors have this
+9. **Interactive D3 timeline** with eras, clustering, minimap -- exceeds Kanka, matches WorldAnvil
+10. **Multi-user campaign sharing** -- built-in roles (Owner/Scribe/Player), beats Obsidian entirely
 
 ---
 

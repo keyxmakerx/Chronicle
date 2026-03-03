@@ -38,7 +38,7 @@ func (h *Handler) Upload(c echo.Context) error {
 	if err != nil {
 		return apperror.NewInternal(err)
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	fileBytes, err := io.ReadAll(src)
 	if err != nil {

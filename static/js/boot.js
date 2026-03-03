@@ -260,4 +260,46 @@
   // Expose mount/destroy for manual use if needed.
   Chronicle.mountWidgets = mountWidgets;
   Chronicle.destroyWidget = destroyElement;
+
+  // --- Shared Utilities ---
+  // Centralized utility functions used by multiple widgets. Widgets should
+  // call Chronicle.escapeHtml() etc. instead of defining their own copies.
+
+  /**
+   * Escape a string for safe insertion into HTML content.
+   * Uses DOM textContent/innerHTML for correctness.
+   *
+   * @param {string} str - Raw string to escape.
+   * @returns {string} HTML-safe string.
+   */
+  Chronicle.escapeHtml = function (str) {
+    var div = document.createElement('div');
+    div.textContent = String(str || '');
+    return div.innerHTML;
+  };
+
+  /**
+   * Escape a string for safe insertion into an HTML attribute value.
+   *
+   * @param {string} str - Raw string to escape.
+   * @returns {string} Attribute-safe string.
+   */
+  Chronicle.escapeAttr = function (str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  };
+
+  /**
+   * Read the CSRF token from the chronicle_csrf cookie.
+   *
+   * @returns {string} CSRF token value or empty string.
+   */
+  Chronicle.getCsrf = function () {
+    var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
+    return m ? decodeURIComponent(m[1]) : '';
+  };
 })();

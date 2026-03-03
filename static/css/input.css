@@ -1276,13 +1276,16 @@
     font-family: ui-monospace, SFMono-Regular, monospace;
   }
 
-  /* Era background bands */
+  /* Era top-bar strips */
   .timeline-viz-svg .timeline-era-band {
     pointer-events: none;
+    transition: opacity 150ms;
   }
   .timeline-viz-svg .timeline-era-label {
     pointer-events: none;
     user-select: none;
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+    letter-spacing: 0.02em;
   }
 
   /* Range event bars (horizontal bars for multi-day events) */

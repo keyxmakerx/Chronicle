@@ -44,22 +44,9 @@
     return 'db_' + Math.random().toString(36).substr(2, 8);
   }
 
-  /**
-   * Escape HTML to prevent XSS.
-   */
-  function esc(text) {
-    var d = document.createElement('div');
-    d.textContent = String(text || '');
-    return d.innerHTML;
-  }
-
-  /**
-   * Get CSRF token from cookie.
-   */
-  function getCsrf() {
-    var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-    return m ? decodeURIComponent(m[1]) : '';
-  }
+  // Use shared utilities from Chronicle (boot.js).
+  var esc = Chronicle.escapeHtml;
+  var getCsrf = Chronicle.getCsrf;
 
   Chronicle.register('dashboard-editor', {
     init: function (el, config) {

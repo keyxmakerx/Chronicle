@@ -63,20 +63,6 @@ const timelineCols = `t.id, t.campaign_id, t.calendar_id, t.name, t.description,
        t.description_html, t.color, t.icon, t.visibility, t.visibility_rules,
        t.sort_order, t.zoom_default, t.created_by, t.created_at, t.updated_at`
 
-// scanTimeline reads a row into a Timeline struct.
-func scanTimeline(scanner interface{ Scan(...any) error }) (*Timeline, error) {
-	t := &Timeline{}
-	err := scanner.Scan(
-		&t.ID, &t.CampaignID, &t.CalendarID, &t.Name, &t.Description,
-		&t.DescriptionHTML, &t.Color, &t.Icon, &t.Visibility, &t.VisibilityRules,
-		&t.SortOrder, &t.ZoomDefault, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return t, err
-}
-
 // Create inserts a new timeline.
 func (r *timelineRepo) Create(ctx context.Context, t *Timeline) error {
 	_, err := r.db.ExecContext(ctx,

@@ -344,17 +344,9 @@
     window.location.href = url;
   }
 
-  // --- Escape Helpers ---
-
-  function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  function escapeAttr(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
+  // Use shared utilities from Chronicle (boot.js).
+  var escapeHtml = Chronicle.escapeHtml;
+  var escapeAttr = Chronicle.escapeAttr;
 
   // --- Global Keyboard Shortcut ---
 

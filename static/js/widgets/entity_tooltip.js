@@ -428,20 +428,9 @@
 
   // --- Utility ---
 
-  function escapeHtml(str) {
-    var div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
-  function escapeAttr(str) {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-  }
+  // Use shared utilities from Chronicle (boot.js).
+  var escapeHtml = Chronicle.escapeHtml;
+  var escapeAttr = Chronicle.escapeAttr;
 
   /**
    * Return a contrasting text color (hex) for the given background hex color.

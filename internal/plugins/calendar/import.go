@@ -160,31 +160,17 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 
 	// Copy months.
 	for _, m := range export.Calendar.Months {
-		result.Months = append(result.Months, MonthInput{
-			Name:          m.Name,
-			Days:          m.Days,
-			SortOrder:     m.SortOrder,
-			IsIntercalary: m.IsIntercalary,
-			LeapYearDays:  m.LeapYearDays,
-		})
+		result.Months = append(result.Months, MonthInput(m))
 	}
 
 	// Copy weekdays.
 	for _, w := range export.Calendar.Weekdays {
-		result.Weekdays = append(result.Weekdays, WeekdayInput{
-			Name:      w.Name,
-			SortOrder: w.SortOrder,
-		})
+		result.Weekdays = append(result.Weekdays, WeekdayInput(w))
 	}
 
 	// Copy moons.
 	for _, m := range export.Calendar.Moons {
-		result.Moons = append(result.Moons, MoonInput{
-			Name:        m.Name,
-			CycleDays:   m.CycleDays,
-			PhaseOffset: m.PhaseOffset,
-			Color:       m.Color,
-		})
+		result.Moons = append(result.Moons, MoonInput(m))
 	}
 
 	// Copy seasons.
@@ -203,14 +189,7 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 
 	// Copy eras.
 	for _, e := range export.Calendar.Eras {
-		result.Eras = append(result.Eras, EraInput{
-			Name:        e.Name,
-			StartYear:   e.StartYear,
-			EndYear:     e.EndYear,
-			Description: e.Description,
-			Color:       e.Color,
-			SortOrder:   e.SortOrder,
-		})
+		result.Eras = append(result.Eras, EraInput(e))
 	}
 
 	return result, nil
@@ -254,39 +233,41 @@ func (c *scCalendar) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil
 	}
+	// Try v1 legacy field aliases. Errors are non-fatal — malformed v1
+	// fields are silently skipped since the v2 fields take precedence.
 	if len(c.Months) == 0 {
 		if v, ok := raw["monthSettings"]; ok {
-			json.Unmarshal(v, &c.Months)
+			_ = json.Unmarshal(v, &c.Months)
 		}
 	}
 	if len(c.Weekdays) == 0 {
 		if v, ok := raw["weekdaySettings"]; ok {
-			json.Unmarshal(v, &c.Weekdays)
+			_ = json.Unmarshal(v, &c.Weekdays)
 		}
 	}
 	if len(c.Seasons) == 0 {
 		if v, ok := raw["seasonSettings"]; ok {
-			json.Unmarshal(v, &c.Seasons)
+			_ = json.Unmarshal(v, &c.Seasons)
 		}
 	}
 	if len(c.Moons) == 0 {
 		if v, ok := raw["moonSettings"]; ok {
-			json.Unmarshal(v, &c.Moons)
+			_ = json.Unmarshal(v, &c.Moons)
 		}
 	}
 	if c.Year.NumericRepresentation == 0 {
 		if v, ok := raw["yearSettings"]; ok {
-			json.Unmarshal(v, &c.Year)
+			_ = json.Unmarshal(v, &c.Year)
 		}
 	}
 	if c.Time.HoursInDay == 0 {
 		if v, ok := raw["timeSettings"]; ok {
-			json.Unmarshal(v, &c.Time)
+			_ = json.Unmarshal(v, &c.Time)
 		}
 	}
 	if c.LeapYear.Rule == "" {
 		if v, ok := raw["leapYearSettings"]; ok {
-			json.Unmarshal(v, &c.LeapYear)
+			_ = json.Unmarshal(v, &c.LeapYear)
 		}
 	}
 	return nil
@@ -770,12 +751,7 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 	if len(weekdaySource) == 0 {
 		// Some Calendaria files use "weeks" instead of "days.values".
 		for k, w := range cal.Weeks {
-			weekdaySource[k] = calWeekday{
-				Name:         w.Name,
-				Abbreviation: w.Abbreviation,
-				Ordinal:      w.Ordinal,
-				IsRestDay:    w.IsRestDay,
-			}
+			weekdaySource[k] = calWeekday(w)
 		}
 	}
 

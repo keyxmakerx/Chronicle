@@ -283,7 +283,7 @@ func (s *noteService) createVersionSnapshot(ctx context.Context, note *Note, use
 // generateID creates a random 36-char hex string formatted as a UUID-like ID.
 func generateID() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	h := hex.EncodeToString(b)
 	return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:]
 }

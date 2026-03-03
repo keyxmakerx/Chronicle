@@ -8,13 +8,43 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-03 -- Timeline visualization Phase 2 UI overhaul complete (8 items: center
-spine ruler, rich grid, era bands, range bars, clustering, category icons, minimap,
-toolbar polish). Branch: `claude/improve-timeline-ui-e1R9X`.
+2026-03-03 -- Code quality sprint: fixed all 138 golangci-lint issues, consolidated
+JS utility duplication (18 copies → 3 shared functions in boot.js), fixed syncapi
+repository error handling. Branch: `claude/improve-timeline-ui-e1R9X`.
 
 ## Current Phase
-**Phase G: Maps & Geography + Timeline.** Timeline Phase 2 visualization UI overhaul
-complete. Phase 2B (event connections, create-from-timeline) remaining.
+**Code Quality Sprint complete.** Documentation sprint and lint/deduplication done.
+Next: remaining bug fixes (image upload, tag visibility, attributes template reset),
+then media management, API hardening.
+
+### Code Quality Sprint — COMPLETE
+Branch: `claude/improve-timeline-ui-e1R9X`
+1. **golangci-lint v2 config** — Updated `.golangci.yml` for v2 compatibility (version
+   field, removed typecheck/gosimple linters).
+2. **Fixed all 138 lint issues:**
+   - 126 errcheck: added exclusion rules for idiomatic defer patterns, fixed real bugs
+     (unchecked json.Unmarshal, Row.Scan, rand.Read)
+   - 11 staticcheck S1016: simplified struct conversions in calendar/campaigns/entities
+   - 1 unused: removed dead `scanTimeline` function from timeline repository
+3. **JS utility consolidation:** `escapeHtml` (9 copies), `escapeAttr` (7 copies),
+   `getCsrf` (3 copies) replaced with shared `Chronicle.escapeHtml`, `Chronicle.escapeAttr`,
+   `Chronicle.getCsrf` in `boot.js`. 11 widget files updated.
+4. **syncapi repository** — Proper error handling for 6 Row.Scan calls and 5
+   json.Unmarshal calls in stats/key scanning methods.
+
+### Alpha Documentation Sprint — COMPLETE
+1. BUG-0 fix (public campaign 403s), todo.md restructure, roadmap.md update
+2. 6 new `.ai.md` documentation files (media plugin, 5 JS widgets)
+
+### Remaining Alpha Priorities
+- Debug image upload click handler (BUG-1)
+- Tag visibility controls — per-tag `dm_only` flag (BUG-3)
+- Attributes "Reset to Template" button (BUG-4)
+- Campaign-scoped media browser for owners (BUG-2)
+- `RequireAddon` API middleware for graceful extension degradation
+- Add golangci-lint + security scanning to CI pipeline
+- Increase test coverage (currently 5.3%)
+- ClamAV file scanning integration
 
 ### Timeline Phase 2 — COMPLETE
 Branch: `claude/improve-timeline-ui-e1R9X`

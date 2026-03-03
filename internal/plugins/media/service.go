@@ -145,9 +145,10 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 	// Save to database.
 	if err := s.repo.Create(ctx, file); err != nil {
 		// Clean up all disk files (main + thumbnails) on DB failure.
-		os.Remove(fullPath)
+		// Errors are intentionally ignored — cleanup is best-effort.
+		_ = os.Remove(fullPath)
 		for _, thumbFile := range file.ThumbnailPaths {
-			os.Remove(filepath.Join(s.mediaPath, thumbFile))
+			_ = os.Remove(filepath.Join(s.mediaPath, thumbFile))
 		}
 		return nil, apperror.NewInternal(fmt.Errorf("saving media record: %w", err))
 	}
@@ -222,13 +223,14 @@ func (s *mediaService) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	// Delete main file from disk.
+	// Delete main file from disk. Errors are intentionally ignored —
+	// orphaned files are preferable to failing a successful DB delete.
 	mainPath := filepath.Join(s.mediaPath, file.Filename)
-	os.Remove(mainPath)
+	_ = os.Remove(mainPath)
 
 	// Delete thumbnails.
 	for _, thumbFile := range file.ThumbnailPaths {
-		os.Remove(filepath.Join(s.mediaPath, thumbFile))
+		_ = os.Remove(filepath.Join(s.mediaPath, thumbFile))
 	}
 
 	slog.Info("media file deleted", slog.String("id", id))
@@ -313,7 +315,7 @@ func (s *mediaService) generateThumbnail(data []byte, dir, id, ext string, maxDi
 	}
 
 	if err != nil {
-		os.Remove(thumbPath)
+		_ = os.Remove(thumbPath)
 		return "", fmt.Errorf("encoding thumbnail: %w", err)
 	}
 

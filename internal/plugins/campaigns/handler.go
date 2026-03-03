@@ -189,10 +189,7 @@ func (h *Handler) Create(c echo.Context) error {
 	}
 
 	userID := auth.GetUserID(c)
-	input := CreateCampaignInput{
-		Name:        req.Name,
-		Description: req.Description,
-	}
+	input := CreateCampaignInput(req)
 
 	campaign, err := h.service.Create(c.Request().Context(), userID, input)
 	if err != nil {
@@ -258,11 +255,7 @@ func (h *Handler) Update(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	input := UpdateCampaignInput{
-		Name:        req.Name,
-		Description: req.Description,
-		IsPublic:    req.IsPublic,
-	}
+	input := UpdateCampaignInput(req)
 
 	_, err := h.service.Update(c.Request().Context(), cc.Campaign.ID, input)
 	if err != nil {
@@ -410,12 +403,7 @@ func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	config := SidebarConfig{
-		EntityTypeOrder: req.EntityTypeOrder,
-		HiddenTypeIDs:   req.HiddenTypeIDs,
-		CustomSections:  req.CustomSections,
-		CustomLinks:     req.CustomLinks,
-	}
+	config := SidebarConfig(req)
 
 	if err := h.service.UpdateSidebarConfig(c.Request().Context(), cc.Campaign.ID, config); err != nil {
 		return err

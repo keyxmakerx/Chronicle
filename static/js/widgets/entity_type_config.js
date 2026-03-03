@@ -57,22 +57,10 @@
 
       // --- Helpers ---
 
-      function getCSRF() {
-        var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-        return m ? decodeURIComponent(m[1]) : '';
-      }
-
-      function escapeHtml(text) {
-        var div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-      }
-
-      function escapeAttr(text) {
-        return String(text).replace(/[&"'<>]/g, function (c) {
-          return { '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;' }[c];
-        });
-      }
+      // Use shared utilities from Chronicle (boot.js).
+      var getCSRF = Chronicle.getCsrf;
+      var escapeHtml = Chronicle.escapeHtml;
+      var escapeAttr = Chronicle.escapeAttr;
 
       // --- Ordering ---
 

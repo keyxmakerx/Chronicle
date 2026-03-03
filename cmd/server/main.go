@@ -56,7 +56,7 @@ func main() {
 		slog.Error("failed to connect to Redis", slog.Any("error", err))
 		os.Exit(1)
 	}
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 	slog.Info("connected to Redis")
 
 	// --- Create Application ---

@@ -255,24 +255,9 @@
           });
       }
 
-      /**
-       * Escape HTML to prevent XSS.
-       */
-      function escapeHtml(text) {
-        var div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-      }
-
-      /**
-       * Escape a string for use in an HTML attribute value.
-       * Strips characters that could break out of class/style attributes.
-       */
-      function escapeAttr(text) {
-        return String(text).replace(/[&"'<>]/g, function (c) {
-          return { '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;' }[c];
-        });
-      }
+      // Use shared utilities from Chronicle (boot.js).
+      var escapeHtml = Chronicle.escapeHtml;
+      var escapeAttr = Chronicle.escapeAttr;
     },
 
     destroy: function (el) {

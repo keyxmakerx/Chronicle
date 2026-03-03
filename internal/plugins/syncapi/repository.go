@@ -368,7 +368,7 @@ func (r *syncAPIRepository) ListSecurityEvents(ctx context.Context, filter Secur
 			return nil, 0, fmt.Errorf("scanning security event: %w", err)
 		}
 		if len(detailsRaw) > 0 {
-			json.Unmarshal(detailsRaw, &e.Details)
+			_ = json.Unmarshal(detailsRaw, &e.Details)
 		}
 		if resolvedAt.Valid {
 			e.ResolvedAt = &resolvedAt.Time
@@ -493,26 +493,34 @@ func (r *syncAPIRepository) GetStats(ctx context.Context, since time.Time) (*API
 	stats := &APIStats{}
 
 	// Request stats.
-	r.db.QueryRowContext(ctx,
+	if err := r.db.QueryRowContext(ctx,
 		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END), 0),
 		        COUNT(DISTINCT ip_address), COALESCE(AVG(duration_ms), 0)
 		 FROM api_request_log WHERE created_at >= ?`, since).
-		Scan(&stats.TotalRequests, &stats.TotalErrors, &stats.UniqueIPs, &stats.AvgResponseTimeMs)
+		Scan(&stats.TotalRequests, &stats.TotalErrors, &stats.UniqueIPs, &stats.AvgResponseTimeMs); err != nil {
+		return nil, fmt.Errorf("scanning request stats: %w", err)
+	}
 
 	// Key count.
-	r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM api_keys WHERE is_active = 1`).
-		Scan(&stats.ActiveKeys)
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM api_keys WHERE is_active = 1`).
+		Scan(&stats.ActiveKeys); err != nil {
+		return nil, fmt.Errorf("scanning active keys: %w", err)
+	}
 
 	// Security event counts.
-	r.db.QueryRowContext(ctx,
+	if err := r.db.QueryRowContext(ctx,
 		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN resolved = 0 THEN 1 ELSE 0 END), 0)
 		 FROM api_security_events WHERE created_at >= ?`, since).
-		Scan(&stats.SecurityEvents, &stats.UnresolvedEvents)
+		Scan(&stats.SecurityEvents, &stats.UnresolvedEvents); err != nil {
+		return nil, fmt.Errorf("scanning security events: %w", err)
+	}
 
 	// Blocked IPs.
-	r.db.QueryRowContext(ctx,
+	if err := r.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM api_ip_blocklist WHERE expires_at IS NULL OR expires_at > NOW()`).
-		Scan(&stats.BlockedIPs)
+		Scan(&stats.BlockedIPs); err != nil {
+		return nil, fmt.Errorf("scanning blocked IPs: %w", err)
+	}
 
 	return stats, nil
 }
@@ -521,15 +529,19 @@ func (r *syncAPIRepository) GetStats(ctx context.Context, since time.Time) (*API
 func (r *syncAPIRepository) GetCampaignStats(ctx context.Context, campaignID string, since time.Time) (*APIStats, error) {
 	stats := &APIStats{}
 
-	r.db.QueryRowContext(ctx,
+	if err := r.db.QueryRowContext(ctx,
 		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END), 0),
 		        COUNT(DISTINCT ip_address), COALESCE(AVG(duration_ms), 0)
 		 FROM api_request_log WHERE campaign_id = ? AND created_at >= ?`, campaignID, since).
-		Scan(&stats.TotalRequests, &stats.TotalErrors, &stats.UniqueIPs, &stats.AvgResponseTimeMs)
+		Scan(&stats.TotalRequests, &stats.TotalErrors, &stats.UniqueIPs, &stats.AvgResponseTimeMs); err != nil {
+		return nil, fmt.Errorf("scanning campaign request stats: %w", err)
+	}
 
-	r.db.QueryRowContext(ctx,
+	if err := r.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM api_keys WHERE campaign_id = ? AND is_active = 1`, campaignID).
-		Scan(&stats.ActiveKeys)
+		Scan(&stats.ActiveKeys); err != nil {
+		return nil, fmt.Errorf("scanning campaign active keys: %w", err)
+	}
 
 	return stats, nil
 }
@@ -558,10 +570,10 @@ func (r *syncAPIRepository) scanKey(row *sql.Row) (*APIKey, error) {
 	}
 
 	if len(permsRaw) > 0 {
-		json.Unmarshal(permsRaw, &k.Permissions)
+		_ = json.Unmarshal(permsRaw, &k.Permissions)
 	}
 	if len(ipRaw) > 0 {
-		json.Unmarshal(ipRaw, &k.IPAllowlist)
+		_ = json.Unmarshal(ipRaw, &k.IPAllowlist)
 	}
 	if lastUsedAt.Valid {
 		k.LastUsedAt = &lastUsedAt.Time
@@ -601,10 +613,10 @@ func (r *syncAPIRepository) scanKeys(rows *sql.Rows) ([]APIKey, error) {
 		}
 
 		if len(permsRaw) > 0 {
-			json.Unmarshal(permsRaw, &k.Permissions)
+			_ = json.Unmarshal(permsRaw, &k.Permissions)
 		}
 		if len(ipRaw) > 0 {
-			json.Unmarshal(ipRaw, &k.IPAllowlist)
+			_ = json.Unmarshal(ipRaw, &k.IPAllowlist)
 		}
 		if lastUsedAt.Valid {
 			k.LastUsedAt = &lastUsedAt.Time

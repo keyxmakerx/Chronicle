@@ -37,7 +37,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 				slog.Warn("ip blocklist check failed", slog.Any("error", err))
 			}
 			if blocked {
-				service.LogSecurityEvent(ctx, &SecurityEvent{
+				_ = service.LogSecurityEvent(ctx, &SecurityEvent{
 					EventType: EventIPBlocked,
 					IPAddress: ip,
 					UserAgent: strPtr(c.Request().UserAgent()),
@@ -48,7 +48,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 			// Extract API key from Authorization header.
 			authHeader := c.Request().Header.Get("Authorization")
 			if authHeader == "" {
-				service.LogSecurityEvent(ctx, &SecurityEvent{
+				_ = service.LogSecurityEvent(ctx, &SecurityEvent{
 					EventType: EventAuthFailure,
 					IPAddress: ip,
 					UserAgent: strPtr(c.Request().UserAgent()),
@@ -66,7 +66,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 			// Authenticate the key (prefix lookup + bcrypt verify).
 			key, err := service.AuthenticateKey(ctx, rawKey)
 			if err != nil {
-				service.LogSecurityEvent(ctx, &SecurityEvent{
+				_ = service.LogSecurityEvent(ctx, &SecurityEvent{
 					EventType: EventAuthFailure,
 					IPAddress: ip,
 					UserAgent: strPtr(c.Request().UserAgent()),
@@ -77,7 +77,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 
 			// Verify IP allowlist if configured.
 			if len(key.IPAllowlist) > 0 && !isIPAllowed(ip, key.IPAllowlist) {
-				service.LogSecurityEvent(ctx, &SecurityEvent{
+				_ = service.LogSecurityEvent(ctx, &SecurityEvent{
 					EventType: EventIPBlocked,
 					APIKeyID:  &key.ID,
 					IPAddress: ip,
@@ -99,7 +99,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 					}()
 				} else if *key.DeviceFingerprint != deviceFP {
 					// Device mismatch — reject.
-					service.LogSecurityEvent(ctx, &SecurityEvent{
+					_ = service.LogSecurityEvent(ctx, &SecurityEvent{
 						EventType:  EventSuspicious,
 						APIKeyID:   &key.ID,
 						CampaignID: &key.CampaignID,
@@ -249,7 +249,7 @@ func RateLimit(service SyncAPIService) echo.MiddlewareFunc {
 			c.Response().Header().Set("X-RateLimit-Remaining", strconv.Itoa(max(remaining, 0)))
 
 			if remaining < 0 {
-				service.LogSecurityEvent(c.Request().Context(), &SecurityEvent{
+				_ = service.LogSecurityEvent(c.Request().Context(), &SecurityEvent{
 					EventType:  EventRateLimit,
 					APIKeyID:   &key.ID,
 					CampaignID: &key.CampaignID,

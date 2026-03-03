@@ -264,7 +264,9 @@ func (r *noteRepository) ListVersions(ctx context.Context, noteID string, limit 
 			return nil, fmt.Errorf("scanning note version: %w", err)
 		}
 		if len(contentRaw) > 0 {
-			json.Unmarshal(contentRaw, &v.Content)
+			if err := json.Unmarshal(contentRaw, &v.Content); err != nil {
+				return nil, fmt.Errorf("unmarshaling version content: %w", err)
+			}
 		}
 		versions = append(versions, v)
 	}
@@ -289,7 +291,9 @@ func (r *noteRepository) FindVersionByID(ctx context.Context, id string) (*NoteV
 		return nil, fmt.Errorf("scanning note version: %w", err)
 	}
 	if len(contentRaw) > 0 {
-		json.Unmarshal(contentRaw, &v.Content)
+		if err := json.Unmarshal(contentRaw, &v.Content); err != nil {
+			return nil, fmt.Errorf("unmarshaling version content: %w", err)
+		}
 	}
 	return v, nil
 }
@@ -361,7 +365,9 @@ func (r *noteRepository) scanNotes(ctx context.Context, query string, args ...an
 		}
 
 		if len(contentRaw) > 0 {
-			json.Unmarshal(contentRaw, &n.Content)
+			if err := json.Unmarshal(contentRaw, &n.Content); err != nil {
+				return nil, fmt.Errorf("unmarshaling note content: %w", err)
+			}
 		}
 		notes = append(notes, n)
 	}
