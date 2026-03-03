@@ -58,6 +58,9 @@ see `.ai/roadmap.md`.
 - [x] Maps plugin Phase 1 (Leaflet.js, image upload, pins, entity linking, DM-only pins, drag-and-drop)
 - [ ] Maps plugin Phase 2 (layers, marker groups, privacy, nested maps)
 - [x] Timeline standalone events (migration 000036, calendar-free timelines, full event parity)
+- [x] Timeline visualization Phase 1 (D3 overhaul: SVG layout, zoom buttons, detail panel, unified tabs)
+- [~] Timeline visualization Phase 2A (calendar eras on viz, range event bars, custom event icons)
+- [ ] Timeline visualization Phase 2B (event connections, create-from-timeline, beautification)
 
 ### Phase H: Secrets & Permissions
 - [x] Inline secrets / GM-only text (TipTap secret mark, server-side stripping, CSS styling)

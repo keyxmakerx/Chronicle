@@ -8,16 +8,36 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-03 -- Security and validation audit of calendar + timeline plugins. Fixed entity
-group IDOR (cross-timeline manipulation via unscoped group IDs), XSS in standalone
-timeline events (missing HTML sanitization), missing visibility_rules validation on
-create/update paths, and missing input validation on calendar time system and event dates.
-Added slog.Warn for malformed visibility_rules JSON. Updated plugin documentation with
-Security & Validation sections and Known Limitations.
+2026-03-03 -- Timeline visualization Phase 1 complete (7 items: SVG layout fix,
+day-level text, Alpine Collapse, loading skeleton, zoom buttons, event detail panel,
+unified tabbed view). Phase 2A (eras, range bars, custom icons) planned and documented
+in plan file `/root/.claude/plans/binary-purring-frost.md`. Branch: `claude/fix-refresh-glitch-ybWmN`.
 
 ## Current Phase
-**Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit
-complete. Next: per-entity permissions, campaign export/import, or Maps Phase 2.
+**Phase G: Maps & Geography + Timeline.** Timeline Phase 1 visualization overhaul
+complete. Phase 2A (calendar eras, range event bars, custom event icons) designed
+and ready for implementation. See plan file for full spec.
+
+### Timeline Phase 1 — COMPLETE (commit `0667e55`)
+Branch: `claude/fix-refresh-glitch-ybWmN`
+1. SVG layout fix — dynamic content height, clip path padding
+2. Day-level text fix — foreignObject cards with line-clamp, category badges
+3. Alpine Collapse plugin — downloaded vendor JS, loaded before Alpine core
+4. Loading skeleton — pulsing placeholder bars while D3 loads
+5. Clickable zoom buttons — segmented Era|Cen|Dec|Year|Mon|Day group
+6. Event detail panel — floating panel on click with full event info
+7. Unified tabbed view — single card with "Visualization" / "Event List" tabs
+
+### Timeline Phase 2A — PLANNED (not yet implemented)
+See plan file: `/root/.claude/plans/binary-purring-frost.md`
+- Range event bars (multi-day events as horizontal bars)
+- Custom event icons (migration 000038, icon picker, FontAwesome rendering)
+- Calendar era bands (cross-plugin adapter for era overlay on D3 viz)
+
+### Environment Notes
+- `templ` binary at `/root/go/bin/templ` — run `export PATH="$PATH:/root/go/bin"` first
+- `tailwindcss` NOT installed in this environment — run `make tailwind` locally
+- Build cycle: `templ generate && go build ./... && go test ./...`
 
 ### Migration ENUM Bug Fix — COMPLETE
 - **Root cause**: Migrations 000027 (calendar) and 000029 (maps) used `INSERT INTO
