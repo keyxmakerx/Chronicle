@@ -37,7 +37,7 @@
         e.stopPropagation();
         drillIn();
         // Trigger the HTMX fetch manually since we prevented default.
-        htmx.ajax('GET', link.getAttribute('hx-get'), {
+        htmx.ajax('GET', link.getAttribute('data-drill-url'), {
           target: '#sidebar-cat-content',
           swap: 'innerHTML'
         });

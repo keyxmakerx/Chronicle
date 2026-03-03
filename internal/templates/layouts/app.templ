@@ -511,9 +511,7 @@ templ entityTypeLink(slug string, label string, color string, icon string, count
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug)) }
 		hx-boost="false"
-		hx-get={ fmt.Sprintf("/campaigns/%s/sidebar/drill/%s", GetCampaignID(ctx), slug) }
-		hx-target="#sidebar-cat-content"
-		hx-swap="innerHTML"
+		data-drill-url={ fmt.Sprintf("/campaigns/%s/sidebar/drill/%s", GetCampaignID(ctx), slug) }
 		class={ "sidebar-category-link", sidebarNavLink,
 			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))),
 			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))) }
