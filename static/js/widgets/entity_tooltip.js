@@ -167,7 +167,7 @@
 
     if (hasImage) {
       html += '<div class="et-tooltip__image-wrap">';
-      html += '<img class="et-tooltip__image" src="' + escapeAttr(data.image_path) + '" alt="' + escapeAttr(data.name) + '" />';
+      html += '<img class="et-tooltip__image" src="' + Chronicle.escapeAttr(data.image_path) + '" alt="' + Chronicle.escapeAttr(data.name) + '" />';
       html += '</div>';
     }
 
@@ -175,14 +175,14 @@
 
     // Type badge row.
     html += '<div class="et-tooltip__type-row">';
-    html += '<span class="et-tooltip__badge" style="background-color: ' + escapeAttr(data.type_color) + '; color: ' + contrastTextColor(data.type_color) + '">';
+    html += '<span class="et-tooltip__badge" style="background-color: ' + Chronicle.escapeAttr(data.type_color) + '; color: ' + contrastTextColor(data.type_color) + '">';
     if (data.type_icon) {
-      html += '<i class="fa-solid ' + escapeAttr(data.type_icon) + '" style="font-size:9px"></i> ';
+      html += '<i class="fa-solid ' + Chronicle.escapeAttr(data.type_icon) + '" style="font-size:9px"></i> ';
     }
-    html += escapeHtml(data.type_name);
+    html += Chronicle.escapeHtml(data.type_name);
     html += '</span>';
     if (data.type_label) {
-      html += '<span class="et-tooltip__label">' + escapeHtml(data.type_label) + '</span>';
+      html += '<span class="et-tooltip__label">' + Chronicle.escapeHtml(data.type_label) + '</span>';
     }
     if (data.is_private) {
       html += ' <span class="et-tooltip__private" title="Private"><i class="fa-solid fa-lock" style="font-size:9px"></i></span>';
@@ -190,7 +190,7 @@
     html += '</div>';
 
     // Entity name.
-    html += '<div class="et-tooltip__name">' + escapeHtml(data.name) + '</div>';
+    html += '<div class="et-tooltip__name">' + Chronicle.escapeHtml(data.name) + '</div>';
 
     // Attributes (key-value pairs, up to 5).
     if (hasAttrs) {
@@ -198,8 +198,8 @@
       for (var i = 0; i < data.attributes.length; i++) {
         var attr = data.attributes[i];
         html += '<div class="et-tooltip__attr">';
-        html += '<span class="et-tooltip__attr-label">' + escapeHtml(attr.label) + '</span>';
-        html += '<span class="et-tooltip__attr-value">' + escapeHtml(attr.value) + '</span>';
+        html += '<span class="et-tooltip__attr-label">' + Chronicle.escapeHtml(attr.label) + '</span>';
+        html += '<span class="et-tooltip__attr-value">' + Chronicle.escapeHtml(attr.value) + '</span>';
         html += '</div>';
       }
       html += '</div>';
@@ -210,7 +210,7 @@
 
     // Entry excerpt below the content area.
     if (hasExcerpt) {
-      html += '<p class="et-tooltip__excerpt">' + escapeHtml(data.entry_excerpt) + '</p>';
+      html += '<p class="et-tooltip__excerpt">' + Chronicle.escapeHtml(data.entry_excerpt) + '</p>';
     }
 
     // Footer with "Click to view" hint.
@@ -427,10 +427,6 @@
   }, true); // Capture phase to catch all scrollable elements.
 
   // --- Utility ---
-
-  // Use shared utilities from Chronicle (boot.js).
-  var escapeHtml = Chronicle.escapeHtml;
-  var escapeAttr = Chronicle.escapeAttr;
 
   /**
    * Return a contrasting text color (hex) for the given background hex color.

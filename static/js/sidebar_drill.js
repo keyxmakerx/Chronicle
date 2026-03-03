@@ -1,76 +1,58 @@
 /**
- * sidebar_drill.js -- Drill-Down Sidebar Navigation (Overlay Approach)
+ * sidebar_drill.js -- HTMX-Powered Sidebar Drill-Down
  *
- * When a category link is clicked, the category sub-panel slides in from the
- * right as an overlay (paper effect) while the main category list collapses
- * to icon-only mode with a gradient shadow. The Manage, Admin, Dashboard,
- * and global nav sections remain completely static.
+ * Handles CSS class toggling for the sidebar category drill-down animation.
+ * The panel content is fetched via HTMX (hx-get on category links) and rendered
+ * server-side as a Templ fragment. This script only manages visual state:
  *
- * Architecture:
- *   #sidebar-categories-zone is a relative-positioned container.
- *   #sidebar-cat-list holds category links (collapses to icon-only).
- *   #sidebar-category is an absolute overlay that slides in from the right.
- *
- *   Drill-in: #sidebar-category gets .sidebar-cat-active (translateX(0)),
- *             #sidebar-cat-list gets .sidebar-icon-only (hides text, shows icons).
+ *   Drill-in: #sidebar-cat-list gets .sidebar-icon-only (hides text, shows icons).
+ *             #sidebar-category gets .sidebar-cat-active (translateX(0)).
  *   Drill-out: classes removed, everything restores.
+ *
+ * Auto-drill on page load is handled server-side: the Templ template pre-renders
+ * the panel content and applies CSS classes when the URL matches a category.
  */
 (function () {
   'use strict';
 
-  /** @type {HTMLElement|null} */
   var catList = null;
-  /** @type {HTMLElement|null} */
   var catPanel = null;
-  /** @type {HTMLElement|null} */
-  var backBtn = null;
-  /** @type {HTMLElement|null} */
-  var catIcon = null;
-  /** @type {HTMLElement|null} */
-  var catName = null;
-  /** @type {HTMLElement|null} */
-  var catCount = null;
-  /** @type {HTMLElement|null} */
-  var catNav = null;
-
-  /** Whether the sidebar is currently drilled into a category. */
   var isDrilled = false;
 
-  /** Current active category slug (to restore on page load). */
-  var activeSlug = null;
-
   /**
-   * Initialize the drill-down sidebar on DOMContentLoaded.
+   * Initialize the drill-down sidebar.
    */
   function init() {
     catList = document.getElementById('sidebar-cat-list');
     catPanel = document.getElementById('sidebar-category');
-    backBtn = document.getElementById('sidebar-back');
-    catIcon = document.getElementById('sidebar-cat-icon');
-    catName = document.getElementById('sidebar-cat-name');
-    catCount = document.getElementById('sidebar-cat-count');
-    catNav = document.getElementById('sidebar-cat-nav');
 
-    if (!catList || !catPanel || !backBtn) {
-      return;
-    }
+    if (!catList || !catPanel) return;
 
-    // Bind category links.
+    // Category link clicks: HTMX handles the content fetch (hx-get),
+    // but we need to preventDefault (to avoid navigation) and toggle CSS.
     var links = catList.querySelectorAll('.sidebar-category-link');
     links.forEach(function (link) {
       link.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        drillIn(link);
+        drillIn();
+        // Trigger the HTMX fetch manually since we prevented default.
+        htmx.ajax('GET', link.getAttribute('hx-get'), {
+          target: '#sidebar-cat-content',
+          swap: 'innerHTML'
+        });
       });
     });
 
-    // Bind back button.
-    backBtn.addEventListener('click', function () {
-      drillOut();
-    });
+    // Back button (event delegation for the static back button).
+    var backBtn = document.getElementById('sidebar-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', function () {
+        drillOut();
+      });
+    }
 
-    // Make the icon-only category list clickable to go back.
+    // Click the collapsed icon strip to go back.
     catList.addEventListener('click', function (e) {
       if (isDrilled) {
         e.preventDefault();
@@ -79,155 +61,36 @@
       }
     });
 
-    // Check if the current URL matches a category and auto-drill.
-    var currentPath = window.location.pathname;
-    links.forEach(function (link) {
-      var catUrl = link.getAttribute('data-cat-url');
-      if (catUrl && currentPath.indexOf(catUrl) === 0) {
-        drillIn(link, true); // true = no animation on initial load.
-      }
+    // Auto-drill: if server pre-rendered the active state, mark as drilled.
+    if (catPanel.classList.contains('sidebar-cat-active')) {
+      isDrilled = true;
+    }
+
+    // Close drill-down on hx-boost navigation (user navigated away).
+    window.addEventListener('chronicle:navigated', function () {
+      if (isDrilled) drillOut();
     });
   }
 
   /**
-   * Drill into a category sub-panel (overlay approach).
-   * @param {HTMLElement} link - The category link that was clicked.
-   * @param {boolean} [instant] - If true, skip the animation (initial load).
+   * Drill into a category: collapse list, slide panel in.
    */
-  function drillIn(link, instant) {
+  function drillIn() {
     if (!catList || !catPanel) return;
-
-    var slug = link.getAttribute('data-cat-slug') || '';
-    var label = link.getAttribute('data-cat-label') || '';
-    var color = link.getAttribute('data-cat-color') || '#6b7280';
-    var icon = link.getAttribute('data-cat-icon') || '';
-    var count = link.getAttribute('data-cat-count') || '0';
-    var catUrl = link.getAttribute('data-cat-url') || '#';
-    var newUrl = link.getAttribute('data-cat-new-url') || '#';
-    var campaignId = link.getAttribute('data-campaign-id') || '';
-
-    activeSlug = slug;
     isDrilled = true;
-
-    // Populate category header.
-    if (catIcon) {
-      if (icon) {
-        catIcon.innerHTML = '<i class="fa-solid ' + escapeAttr(icon) + ' text-sm" style="color: ' + escapeAttr(color) + '"></i>';
-      } else {
-        catIcon.innerHTML = '<span class="w-3 h-3 rounded-full" style="background-color: ' + escapeAttr(color) + '"></span>';
-      }
-    }
-    if (catName) catName.textContent = label;
-    if (catCount) catCount.textContent = count + (parseInt(count, 10) === 1 ? ' page' : ' pages');
-
-    // Build category sub-nav content.
-    if (catNav) {
-      catNav.innerHTML = buildCategoryNav(catUrl, newUrl, label, color, icon, campaignId, slug);
-    }
-
-    // Skip animation on initial page load.
-    if (instant) {
-      catPanel.style.transition = 'none';
-      catList.style.transition = 'none';
-    }
-
-    // Collapse category list to icon-only mode.
     catList.classList.add('sidebar-icon-only');
-
-    // Slide the overlay panel in from the right.
     catPanel.classList.add('sidebar-cat-active');
-
-    if (instant) {
-      // Force reflow then restore transitions.
-      catPanel.offsetHeight; // eslint-disable-line no-unused-expressions
-      catPanel.style.transition = '';
-      catList.style.transition = '';
-    }
   }
 
   /**
-   * Drill out back to the main category list.
+   * Drill out: restore list, slide panel out.
    */
   function drillOut() {
     if (!catList || !catPanel) return;
-
     isDrilled = false;
-    activeSlug = null;
-
-    // Remove icon-only mode from category list.
     catList.classList.remove('sidebar-icon-only');
-
-    // Slide the overlay panel back out.
     catPanel.classList.remove('sidebar-cat-active');
   }
-
-  /**
-   * Build HTML for the category sub-nav panel.
-   */
-  function buildCategoryNav(catUrl, newUrl, label, color, icon, campaignId, slug) {
-    var linkClass = 'flex items-center px-4 py-2 text-sm transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active';
-    var searchUrl = '/campaigns/' + campaignId + '/entities/search?type_slug=' + slug;
-
-    var html = '';
-
-    // View all link (to category dashboard).
-    html += '<a href="' + escapeAttr(catUrl) + '" class="' + linkClass + '">' +
-      '<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">' +
-      '<i class="fa-solid fa-th-large text-xs" style="color: ' + escapeAttr(color) + '"></i>' +
-      '</span>' +
-      '<span class="flex-1">View All ' + escapeHtml(label) + '</span>' +
-      '</a>';
-
-    // New page link.
-    html += '<a href="' + escapeAttr(newUrl) + '" class="' + linkClass + '">' +
-      '<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">' +
-      '<i class="fa-solid fa-plus text-xs text-gray-400"></i>' +
-      '</span>' +
-      '<span class="flex-1">New Page</span>' +
-      '</a>';
-
-    // Divider.
-    html += '<div class="my-2 mx-4 border-t border-gray-700/50"></div>';
-
-    // Quick search (HTMX-powered).
-    html += '<div class="px-4 mb-2">' +
-      '<div class="relative">' +
-      '<input type="search" placeholder="Search ' + escapeAttr(label) + '..." ' +
-      'class="w-full px-3 py-1.5 pl-8 text-xs rounded-md bg-gray-800 border border-gray-700 text-gray-300 placeholder-gray-500 focus:outline-none focus:border-gray-500 transition-colors" ' +
-      'hx-get="/campaigns/' + escapeAttr(campaignId) + '/entities/search?type_slug=' + escapeAttr(slug) + '" ' +
-      'hx-trigger="keyup changed delay:300ms" ' +
-      'hx-target="#sidebar-cat-results" ' +
-      'hx-swap="innerHTML" ' +
-      'name="q" autocomplete="off"/>' +
-      '<i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-[10px] pointer-events-none"></i>' +
-      '</div>' +
-      '</div>';
-
-    // Search results area.
-    html += '<div id="sidebar-cat-results" class="px-2"></div>';
-
-    // Section header for recent pages.
-    html += '<div class="px-4 mt-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">Recent</div>';
-
-    // Placeholder for recent pages.
-    html += '<div id="sidebar-cat-recent" class="text-xs text-gray-500 px-4 py-2 italic">' +
-      'Visit "View All" to browse pages' +
-      '</div>';
-
-    return html;
-  }
-
-  // Use shared utilities from Chronicle (boot.js).
-  var escapeHtml = Chronicle.escapeHtml;
-  var escapeAttr = Chronicle.escapeAttr;
-
-  // Close drill-down after hx-boost navigation (user navigated away from
-  // the category context via a boosted sidebar link like Dashboard or Members).
-  window.addEventListener('chronicle:navigated', function () {
-    if (isDrilled) {
-      drillOut();
-    }
-  });
 
   // Initialize when DOM is ready.
   if (document.readyState === 'loading') {

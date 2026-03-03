@@ -8,14 +8,31 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-03 -- Code quality sprint: fixed all 138 golangci-lint issues, consolidated
-JS utility duplication (18 copies → 3 shared functions in boot.js), fixed syncapi
-repository error handling. Branch: `claude/improve-timeline-ui-e1R9X`.
+2026-03-03 -- HTMX sidebar drill-down conversion + JS hoisting bug fixes. Converted
+sidebar drill-down from 238 lines of JS HTML-building to server-rendered HTMX fragments
+(~95 lines of CSS-toggling JS). Fixed var hoisting bugs in 10 widget files introduced
+by Code Quality Sprint's JS utility consolidation. Branch: `claude/review-codebase-R1WqN`.
 
 ## Current Phase
-**Code Quality Sprint complete.** Documentation sprint and lint/deduplication done.
-Next: remaining bug fixes (image upload, tag visibility, attributes template reset),
-then media management, API hardening.
+**Sidebar HTMX conversion + JS hoisting fixes complete.** Sidebar drill-down now uses
+server-rendered Templ fragments via HTMX. All widget JS files use Chronicle.* utilities
+directly (no local aliases). Next: remaining bug fixes (image upload, tag visibility,
+attributes template reset), then media management, API hardening.
+
+### HTMX Sidebar Conversion + JS Hoisting Fixes — COMPLETE
+Branch: `claude/review-codebase-R1WqN`
+1. **JS hoisting bug fixes** — Removed local `var` aliases for Chronicle.escapeHtml/
+   escapeAttr/getCsrf in 10 JS files. Replaced all call sites with direct Chronicle.*
+   calls, eliminating the var hoisting bug class permanently.
+2. **HTMX sidebar drill-down** — Converted sidebar from 238 lines of JS HTML-building
+   to server-rendered Templ fragments. New `SidebarDrillPanel` component, `SidebarDrill`
+   handler + route (`GET /campaigns/:id/sidebar/drill/:slug`). Server-side auto-drill
+   on page load when URL matches a category.
+3. **sidebar_drill.js rewrite** — 238 → 95 lines. Zero escapeHtml/escapeAttr usage.
+   Only handles CSS class toggling + htmx.ajax() triggers.
+4. **Latent search bug fixed** — Sidebar search was passing `type_slug` (ignored by
+   SearchAPI handler); now passes `type` (numeric entity type ID) for correct filtering.
+5. **Script load order fixed** — sidebar_drill.js now loads after boot.js in base.templ.
 
 ### Code Quality Sprint — COMPLETE
 Branch: `claude/improve-timeline-ui-e1R9X`

@@ -379,9 +379,9 @@
         (item.type_color || '#6b7280') + '"></span>' +
         '<div style="min-width:0;flex:1">' +
         '<div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
-        escapeHTML(item.name) + '</div>' +
+        Chronicle.escapeHtml(item.name) + '</div>' +
         '<div style="font-size:12px;opacity:0.6">' +
-        escapeHTML(item.type_name || '') + '</div>' +
+        Chronicle.escapeHtml(item.type_name || '') + '</div>' +
         '</div>' +
         '</div>';
     }
@@ -417,7 +417,7 @@
     this._applyTheme();
     this.el.innerHTML =
       '<div style="padding:10px 14px;font-size:13px;opacity:0.5">' +
-      escapeHTML(message) +
+      Chronicle.escapeHtml(message) +
       '</div>';
   };
 
@@ -475,12 +475,12 @@
 
       // Create the mention node content as HTML and insert it.
       // Include data-entity-preview for hover tooltip support.
-      var previewAttr = entity.url ? ' data-entity-preview="' + escapeAttr(entity.url + '/preview') + '"' : '';
+      var previewAttr = entity.url ? ' data-entity-preview="' + Chronicle.escapeAttr(entity.url + '/preview') + '"' : '';
       var mentionHTML =
-        '<a data-mention-id="' + escapeAttr(entity.id) + '" ' +
-        'href="' + escapeAttr(entity.url) + '"' + previewAttr + ' ' +
+        '<a data-mention-id="' + Chronicle.escapeAttr(entity.id) + '" ' +
+        'href="' + Chronicle.escapeAttr(entity.url) + '"' + previewAttr + ' ' +
         'class="mention-link text-accent font-medium hover:underline cursor-pointer" ' +
-        'contenteditable="false">@' + escapeHTML(entity.name) + '</a>';
+        'contenteditable="false">@' + Chronicle.escapeHtml(entity.name) + '</a>';
 
       // Delete the @query text and insert the mention link.
       editor
@@ -623,10 +623,6 @@
       },
     };
   }
-
-  // Use shared utilities from Chronicle (boot.js).
-  var escapeHTML = Chronicle.escapeHtml;
-  var escapeAttr = Chronicle.escapeAttr;
 
   // --- Public API ---
 

@@ -108,9 +108,9 @@
             '" draggable="true" data-type-id="' + t.id + '">' +
             '<span class="drag-handle mr-2 text-gray-400"><i class="fa-solid fa-grip-vertical text-xs"></i></span>' +
             '<span class="w-4 h-4 mr-2 flex items-center justify-center">' +
-            '<i class="fa-solid ' + escapeAttr(t.icon || 'fa-file') + ' text-xs" style="color: ' + escapeAttr(t.color || '#6b7280') + '"></i>' +
+            '<i class="fa-solid ' + Chronicle.escapeAttr(t.icon || 'fa-file') + ' text-xs" style="color: ' + Chronicle.escapeAttr(t.color || '#6b7280') + '"></i>' +
             '</span>' +
-            '<span class="flex-1 text-sm text-gray-700">' + escapeHtml(t.name_plural || t.name) + '</span>' +
+            '<span class="flex-1 text-sm text-gray-700">' + Chronicle.escapeHtml(t.name_plural || t.name) + '</span>' +
             '<button type="button" class="toggle-visibility ml-2 p-1 text-xs rounded hover:bg-gray-100 transition-colors" data-type-id="' + t.id + '" title="' +
             (hidden ? 'Show in sidebar' : 'Hide from sidebar') + '">' +
             '<i class="fa-solid ' + (hidden ? 'fa-eye-slash text-gray-400' : 'fa-eye text-gray-600') + '"></i>' +
@@ -255,9 +255,6 @@
           });
       }
 
-      // Use shared utilities from Chronicle (boot.js).
-      var escapeHtml = Chronicle.escapeHtml;
-      var escapeAttr = Chronicle.escapeAttr;
     },
 
     destroy: function (el) {

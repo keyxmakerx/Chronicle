@@ -64,9 +64,6 @@
         return 'nav_' + Math.random().toString(36).substr(2, 8);
       }
 
-      // Use shared utility from Chronicle (boot.js).
-      var getCsrf = Chronicle.getCsrf;
-
       /**
        * Save the full sidebar config to the server.
        */
@@ -75,7 +72,7 @@
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'X-CSRF-Token': getCsrf()
+            'X-CSRF-Token': Chronicle.getCsrf()
           },
           credentials: 'same-origin',
           body: JSON.stringify(sidebarConfig)
@@ -157,17 +154,17 @@
       function renderSectionItem(section) {
         var isEditing = editingId === section.id;
         var h = '';
-        h += '<div class="flex items-center gap-2 px-3 py-2 rounded-md border border-edge bg-surface-raised text-sm" data-section-id="' + esc(section.id) + '">';
+        h += '<div class="flex items-center gap-2 px-3 py-2 rounded-md border border-edge bg-surface-raised text-sm" data-section-id="' + Chronicle.escapeHtml(section.id) + '">';
 
         if (isEditing) {
-          h += '<input type="text" class="edit-section-label input text-sm flex-1 py-1" value="' + esc(section.label) + '" placeholder="Section label" />';
+          h += '<input type="text" class="edit-section-label input text-sm flex-1 py-1" value="' + Chronicle.escapeHtml(section.label) + '" placeholder="Section label" />';
           h += '<button type="button" class="save-section-btn p-1 text-green-500 hover:text-green-400" title="Save"><i class="fa-solid fa-check text-xs"></i></button>';
           h += '<button type="button" class="cancel-edit-btn p-1 text-fg-muted hover:text-fg" title="Cancel"><i class="fa-solid fa-xmark text-xs"></i></button>';
         } else {
           h += '<i class="fa-solid fa-minus text-fg-muted text-xs mr-1"></i>';
-          h += '<span class="flex-1 text-fg font-medium">' + esc(section.label || 'Untitled Section') + '</span>';
-          h += '<button type="button" class="edit-item-btn p-1 text-fg-muted hover:text-fg" data-item-id="' + esc(section.id) + '" title="Edit"><i class="fa-solid fa-pen text-xs"></i></button>';
-          h += '<button type="button" class="delete-section-btn p-1 text-red-400 hover:text-red-300" data-section-id="' + esc(section.id) + '" title="Delete"><i class="fa-solid fa-trash text-xs"></i></button>';
+          h += '<span class="flex-1 text-fg font-medium">' + Chronicle.escapeHtml(section.label || 'Untitled Section') + '</span>';
+          h += '<button type="button" class="edit-item-btn p-1 text-fg-muted hover:text-fg" data-item-id="' + Chronicle.escapeHtml(section.id) + '" title="Edit"><i class="fa-solid fa-pen text-xs"></i></button>';
+          h += '<button type="button" class="delete-section-btn p-1 text-red-400 hover:text-red-300" data-section-id="' + Chronicle.escapeHtml(section.id) + '" title="Delete"><i class="fa-solid fa-trash text-xs"></i></button>';
         }
 
         h += '</div>';
@@ -180,20 +177,20 @@
       function renderLinkItem(link) {
         var isEditing = editingId === link.id;
         var h = '';
-        h += '<div class="flex items-center gap-2 px-3 py-2 rounded-md border border-edge bg-surface-raised text-sm" data-link-id="' + esc(link.id) + '">';
+        h += '<div class="flex items-center gap-2 px-3 py-2 rounded-md border border-edge bg-surface-raised text-sm" data-link-id="' + Chronicle.escapeHtml(link.id) + '">';
 
         if (isEditing) {
           h += '<div class="flex-1 space-y-1.5">';
-          h += '<input type="text" class="edit-link-label input text-sm w-full py-1" value="' + esc(link.label) + '" placeholder="Link label" />';
-          h += '<input type="text" class="edit-link-url input text-sm w-full py-1" value="' + esc(link.url) + '" placeholder="URL (e.g. /page or https://...)" />';
-          h += '<input type="text" class="edit-link-icon input text-sm w-full py-1" value="' + esc(link.icon) + '" placeholder="Icon class (e.g. fa-globe)" />';
+          h += '<input type="text" class="edit-link-label input text-sm w-full py-1" value="' + Chronicle.escapeHtml(link.label) + '" placeholder="Link label" />';
+          h += '<input type="text" class="edit-link-url input text-sm w-full py-1" value="' + Chronicle.escapeHtml(link.url) + '" placeholder="URL (e.g. /page or https://...)" />';
+          h += '<input type="text" class="edit-link-icon input text-sm w-full py-1" value="' + Chronicle.escapeHtml(link.icon) + '" placeholder="Icon class (e.g. fa-globe)" />';
 
           // Section assignment dropdown.
           var sections = sidebarConfig.custom_sections || [];
           h += '<select class="edit-link-section input text-sm w-full py-1">';
           h += '<option value=""' + (!link.section ? ' selected' : '') + '>Top level (no section)</option>';
           sections.forEach(function (s) {
-            h += '<option value="' + esc(s.id) + '"' + (link.section === s.id ? ' selected' : '') + '>' + esc(s.label) + '</option>';
+            h += '<option value="' + Chronicle.escapeHtml(s.id) + '"' + (link.section === s.id ? ' selected' : '') + '>' + Chronicle.escapeHtml(s.label) + '</option>';
           });
           h += '</select>';
 
@@ -204,14 +201,14 @@
           h += '</div>';
         } else {
           h += '<span class="w-4 h-4 flex items-center justify-center shrink-0">';
-          h += '<i class="fa-solid ' + esc(link.icon || 'fa-link') + ' text-xs text-fg-muted"></i>';
+          h += '<i class="fa-solid ' + Chronicle.escapeHtml(link.icon || 'fa-link') + ' text-xs text-fg-muted"></i>';
           h += '</span>';
           h += '<div class="flex-1 min-w-0">';
-          h += '<div class="text-fg font-medium truncate">' + esc(link.label || 'Untitled Link') + '</div>';
-          h += '<div class="text-xs text-fg-muted truncate">' + esc(link.url || 'No URL') + '</div>';
+          h += '<div class="text-fg font-medium truncate">' + Chronicle.escapeHtml(link.label || 'Untitled Link') + '</div>';
+          h += '<div class="text-xs text-fg-muted truncate">' + Chronicle.escapeHtml(link.url || 'No URL') + '</div>';
           h += '</div>';
-          h += '<button type="button" class="edit-item-btn p-1 text-fg-muted hover:text-fg" data-item-id="' + esc(link.id) + '" title="Edit"><i class="fa-solid fa-pen text-xs"></i></button>';
-          h += '<button type="button" class="delete-link-btn p-1 text-red-400 hover:text-red-300" data-link-id="' + esc(link.id) + '" title="Delete"><i class="fa-solid fa-trash text-xs"></i></button>';
+          h += '<button type="button" class="edit-item-btn p-1 text-fg-muted hover:text-fg" data-item-id="' + Chronicle.escapeHtml(link.id) + '" title="Edit"><i class="fa-solid fa-pen text-xs"></i></button>';
+          h += '<button type="button" class="delete-link-btn p-1 text-red-400 hover:text-red-300" data-link-id="' + Chronicle.escapeHtml(link.id) + '" title="Delete"><i class="fa-solid fa-trash text-xs"></i></button>';
         }
 
         h += '</div>';
@@ -371,8 +368,6 @@
         return null;
       }
 
-      // Use shared utility from Chronicle (boot.js).
-      var esc = Chronicle.escapeHtml;
     },
 
     destroy: function (el) {

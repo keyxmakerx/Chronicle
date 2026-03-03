@@ -235,19 +235,19 @@
       var color = r.type_color || '#6b7280';
 
       html +=
-        '<a href="' + escapeAttr(r.url) + '" ' +
+        '<a href="' + Chronicle.escapeAttr(r.url) + '" ' +
           'class="search-result flex items-center px-4 py-2.5 text-sm transition-colors cursor-pointer ' +
           (isActive ? 'bg-accent/10 text-accent' : 'text-fg hover:bg-surface-alt') + '" ' +
           'data-index="' + i + '">' +
           '<span class="w-6 h-6 rounded flex items-center justify-center mr-3 shrink-0">' +
             (icon
-              ? '<i class="fa-solid ' + escapeAttr(icon) + ' text-xs" style="color:' + escapeAttr(color) + '"></i>'
-              : '<span class="w-2.5 h-2.5 rounded-full" style="background-color:' + escapeAttr(color) + '"></span>'
+              ? '<i class="fa-solid ' + Chronicle.escapeAttr(icon) + ' text-xs" style="color:' + Chronicle.escapeAttr(color) + '"></i>'
+              : '<span class="w-2.5 h-2.5 rounded-full" style="background-color:' + Chronicle.escapeAttr(color) + '"></span>'
             ) +
           '</span>' +
           '<div class="min-w-0 flex-1">' +
-            '<div class="font-medium truncate">' + escapeHtml(r.name) + '</div>' +
-            '<div class="text-xs text-fg-secondary">' + escapeHtml(r.type_name) + '</div>' +
+            '<div class="font-medium truncate">' + Chronicle.escapeHtml(r.name) + '</div>' +
+            '<div class="text-xs text-fg-secondary">' + Chronicle.escapeHtml(r.type_name) + '</div>' +
           '</div>' +
         '</a>';
     }
@@ -343,10 +343,6 @@
     close();
     window.location.href = url;
   }
-
-  // Use shared utilities from Chronicle (boot.js).
-  var escapeHtml = Chronicle.escapeHtml;
-  var escapeAttr = Chronicle.escapeAttr;
 
   // --- Global Keyboard Shortcut ---
 

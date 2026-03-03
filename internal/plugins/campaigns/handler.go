@@ -13,6 +13,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // EntityTypeLister lists entity types for the settings page sidebar config.
@@ -410,6 +411,26 @@ func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// --- Sidebar Drill-Down ---
+
+// SidebarDrill returns the drill-down panel content for a sidebar category
+// (GET /campaigns/:id/sidebar/drill/:slug). The LayoutInjector populates
+// entity types and counts into the context, and the Templ component finds
+// the matching entity type by slug.
+func (h *Handler) SidebarDrill(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	slug := c.Param("slug")
+	if slug == "" {
+		return apperror.NewBadRequest("category slug is required")
+	}
+
+	return middleware.Render(c, http.StatusOK, layouts.SidebarDrillFragment(slug))
 }
 
 // --- Dashboard Layout ---

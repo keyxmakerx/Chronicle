@@ -524,7 +524,7 @@ Chronicle.register('notes', {
         var emptyMsg = state.tab === 'page'
           ? 'No notes for this page yet'
           : 'No notes yet';
-        notesList.innerHTML = '<div class="notes-empty">' + escapeHtml(emptyMsg) + '</div>';
+        notesList.innerHTML = '<div class="notes-empty">' + Chronicle.escapeHtml(emptyMsg) + '</div>';
         return;
       }
 
@@ -544,14 +544,14 @@ Chronicle.register('notes', {
       var isLockedByOther = isShared && note.lockedBy && note.lockedBy !== currentUserId && note.lockedAt;
       var pinClass = note.pinned ? ' note-pinned' : '';
       var sharedClass = isShared ? ' note-shared' : '';
-      var html = '<div class="note-card' + pinClass + sharedClass + '" data-id="' + escapeAttr(note.id) + '">';
+      var html = '<div class="note-card' + pinClass + sharedClass + '" data-id="' + Chronicle.escapeAttr(note.id) + '">';
 
       // Header row.
       html += '<div class="note-card-header">';
       if (isEditing) {
-        html += '<input type="text" class="note-title-input" value="' + escapeAttr(note.title === 'Untitled' ? '' : note.title) + '" placeholder="Note title...">';
+        html += '<input type="text" class="note-title-input" value="' + Chronicle.escapeAttr(note.title === 'Untitled' ? '' : note.title) + '" placeholder="Note title...">';
       } else {
-        html += '<span class="note-title">' + escapeHtml(note.title) + '</span>';
+        html += '<span class="note-title">' + Chronicle.escapeHtml(note.title) + '</span>';
       }
       html += '<div class="note-actions">';
 
@@ -603,9 +603,9 @@ Chronicle.register('notes', {
         note.content.forEach(function (block, bIdx) {
           if (block.type === 'text') {
             if (isEditing) {
-              html += '<textarea class="note-text-input" data-block="' + bIdx + '" placeholder="Write something...">' + escapeHtml(block.value || '') + '</textarea>';
+              html += '<textarea class="note-text-input" data-block="' + bIdx + '" placeholder="Write something...">' + Chronicle.escapeHtml(block.value || '') + '</textarea>';
             } else if (block.value) {
-              html += '<p class="note-text">' + escapeHtml(block.value) + '</p>';
+              html += '<p class="note-text">' + Chronicle.escapeHtml(block.value) + '</p>';
             }
           } else if (block.type === 'checklist') {
             html += '<div class="note-checklist" data-block="' + bIdx + '">';
@@ -616,9 +616,9 @@ Chronicle.register('notes', {
                 html += '<label class="note-check-item' + strikeClass + '">';
                 html += '<input type="checkbox"' + checked + ' data-block="' + bIdx + '" data-item="' + iIdx + '" class="note-checkbox">';
                 if (isEditing) {
-                  html += '<input type="text" class="note-check-text-input" value="' + escapeAttr(item.text) + '" data-block="' + bIdx + '" data-item="' + iIdx + '" placeholder="List item...">';
+                  html += '<input type="text" class="note-check-text-input" value="' + Chronicle.escapeAttr(item.text) + '" data-block="' + bIdx + '" data-item="' + iIdx + '" placeholder="List item...">';
                 } else {
-                  html += '<span>' + escapeHtml(item.text) + '</span>';
+                  html += '<span>' + Chronicle.escapeHtml(item.text) + '</span>';
                 }
                 html += '</label>';
               });
@@ -646,7 +646,7 @@ Chronicle.register('notes', {
     /** Render the version history sub-panel. */
     function renderVersionsPanel() {
       var note = findNote(state.versionsNoteId);
-      var title = note ? escapeHtml(note.title) : 'Note';
+      var title = note ? Chronicle.escapeHtml(note.title) : 'Note';
 
       if (headerTitle) {
         headerTitle.textContent = 'History: ' + (note ? note.title : '');
@@ -674,10 +674,10 @@ Chronicle.register('notes', {
         state.versions.forEach(function (v) {
           var date = new Date(v.createdAt);
           var dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          html += '<div class="notes-version-item" data-vid="' + escapeAttr(v.id) + '">';
+          html += '<div class="notes-version-item" data-vid="' + Chronicle.escapeAttr(v.id) + '">';
           html += '<div class="notes-version-info">';
-          html += '<span class="notes-version-title">' + escapeHtml(v.title || 'Untitled') + '</span>';
-          html += '<span class="notes-version-date">' + escapeHtml(dateStr) + '</span>';
+          html += '<span class="notes-version-title">' + Chronicle.escapeHtml(v.title || 'Untitled') + '</span>';
+          html += '<span class="notes-version-date">' + Chronicle.escapeHtml(dateStr) + '</span>';
           html += '</div>';
           html += '<button class="note-btn notes-version-restore" title="Restore this version"><i class="fa-solid fa-rotate-left text-[10px]"></i></button>';
           html += '</div>';
@@ -950,16 +950,10 @@ Chronicle.register('notes', {
         tabsHtml +
         '<div class="notes-quick-add">' +
         '<i class="fa-solid fa-plus text-[10px] text-fg-muted"></i>' +
-        '<input type="text" class="notes-quick-input" placeholder="' + escapeAttr(quickPlaceholder) + '" autocomplete="off">' +
+        '<input type="text" class="notes-quick-input" placeholder="' + Chronicle.escapeAttr(quickPlaceholder) + '" autocomplete="off">' +
         '</div>' +
         '<div class="notes-list"></div>';
     }
-
-    // --- Helpers ---
-
-    // Use shared utilities from Chronicle (boot.js).
-    var escapeHtml = Chronicle.escapeHtml;
-    var escapeAttr = Chronicle.escapeAttr;
 
     // --- hx-boost navigation sync ---
     // The notes widget is outside #main-content, so it persists across

@@ -207,7 +207,7 @@ Chronicle.register('tag-picker', {
             if (!exists) {
               var createOption = document.createElement('div');
               createOption.className = 'tp-create';
-              createOption.innerHTML = '<i class="fa-solid fa-plus" style="font-size:11px"></i> Create "' + escapeHtml(searchTerm) + '"';
+              createOption.innerHTML = '<i class="fa-solid fa-plus" style="font-size:11px"></i> Create "' + Chronicle.escapeHtml(searchTerm) + '"';
               createOption.addEventListener('click', function () {
                 createTag(searchTerm);
               });
@@ -326,8 +326,6 @@ Chronicle.register('tag-picker', {
         });
     }
 
-    // Use shared utility from Chronicle (boot.js).
-    var escapeHtml = Chronicle.escapeHtml;
   },
 
   destroy: function (el) {

@@ -44,10 +44,6 @@
     return 'db_' + Math.random().toString(36).substr(2, 8);
   }
 
-  // Use shared utilities from Chronicle (boot.js).
-  var esc = Chronicle.escapeHtml;
-  var getCsrf = Chronicle.getCsrf;
-
   Chronicle.register('dashboard-editor', {
     init: function (el, config) {
       this.el = el;
@@ -110,7 +106,7 @@
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRF-Token': getCsrf()
+          'X-CSRF-Token': Chronicle.getCsrf()
         },
         credentials: 'same-origin',
         body: JSON.stringify(this.layout)
@@ -139,7 +135,7 @@
 
       fetch(this.endpoint, {
         method: 'DELETE',
-        headers: { 'X-CSRF-Token': getCsrf() },
+        headers: { 'X-CSRF-Token': Chronicle.getCsrf() },
         credentials: 'same-origin'
       })
         .then(function (res) {
@@ -194,8 +190,8 @@
         h += '<div class="palette-block flex items-center gap-2 px-2 py-1.5 rounded border border-edge bg-surface-raised cursor-grab hover:border-accent/50 transition-colors text-sm" draggable="true" data-block-type="' + bt.type + '">';
         h += '<i class="fa-solid ' + bt.icon + ' text-xs text-fg-muted w-4 text-center"></i>';
         h += '<div>';
-        h += '<div class="text-fg font-medium text-xs">' + esc(bt.label) + '</div>';
-        h += '<div class="text-[10px] text-fg-muted">' + esc(bt.desc) + '</div>';
+        h += '<div class="text-fg font-medium text-xs">' + Chronicle.escapeHtml(bt.label) + '</div>';
+        h += '<div class="text-[10px] text-fg-muted">' + Chronicle.escapeHtml(bt.desc) + '</div>';
         h += '</div>';
         h += '</div>';
       });
@@ -205,7 +201,7 @@
       COL_PRESETS.forEach(function (p) {
         h += '<button type="button" class="add-row-btn w-full text-left flex items-center gap-2 px-2 py-1.5 rounded border border-edge bg-surface-raised hover:border-accent/50 transition-colors text-xs" data-widths=\'' + JSON.stringify(p.widths) + '\'>';
         h += '<i class="fa-solid fa-plus text-[10px] text-fg-muted w-4 text-center"></i>';
-        h += '<span class="text-fg font-medium">' + esc(p.label) + '</span>';
+        h += '<span class="text-fg font-medium">' + Chronicle.escapeHtml(p.label) + '</span>';
         h += '</button>';
       });
       h += '</div>';
@@ -292,7 +288,7 @@
       var h = '';
       h += '<div class="dash-block flex items-center gap-2 px-2 py-1.5 rounded bg-surface-raised border border-edge text-xs cursor-grab mb-1" draggable="true" data-row="' + rowIdx + '" data-col="' + colIdx + '" data-block="' + blockIdx + '">';
       h += '<i class="fa-solid ' + icon + ' text-fg-muted w-3 text-center text-[10px]"></i>';
-      h += '<span class="flex-1 text-fg font-medium truncate">' + esc(label) + '</span>';
+      h += '<span class="flex-1 text-fg font-medium truncate">' + Chronicle.escapeHtml(label) + '</span>';
 
       // Config indicator for blocks with config.
       if (block.config && Object.keys(block.config).length > 0) {

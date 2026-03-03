@@ -55,13 +55,6 @@
           render();
         });
 
-      // --- Helpers ---
-
-      // Use shared utilities from Chronicle (boot.js).
-      var getCSRF = Chronicle.getCsrf;
-      var escapeHtml = Chronicle.escapeHtml;
-      var escapeAttr = Chronicle.escapeAttr;
-
       // --- Ordering ---
 
       function getOrderedTypes() {
@@ -108,20 +101,20 @@
 
           // Color swatch (clickable).
           html += '<label class="relative mr-2.5 cursor-pointer" title="Change color">';
-          html += '<span class="w-4 h-4 rounded-full block border border-edge" style="background-color: ' + escapeAttr(t.color || '#6b7280') + '"></span>';
-          html += '<input type="color" class="color-picker absolute inset-0 w-full h-full opacity-0 cursor-pointer" data-type-id="' + t.id + '" value="' + escapeAttr(t.color || '#6b7280') + '"/>';
+          html += '<span class="w-4 h-4 rounded-full block border border-edge" style="background-color: ' + Chronicle.escapeAttr(t.color || '#6b7280') + '"></span>';
+          html += '<input type="color" class="color-picker absolute inset-0 w-full h-full opacity-0 cursor-pointer" data-type-id="' + t.id + '" value="' + Chronicle.escapeAttr(t.color || '#6b7280') + '"/>';
           html += '</label>';
 
           // Icon.
           html += '<span class="w-4 h-4 mr-2 flex items-center justify-center">';
-          html += '<i class="fa-solid ' + escapeAttr(t.icon || 'fa-file') + ' text-xs" style="color: ' + escapeAttr(t.color || '#6b7280') + '"></i>';
+          html += '<i class="fa-solid ' + Chronicle.escapeAttr(t.icon || 'fa-file') + ' text-xs" style="color: ' + Chronicle.escapeAttr(t.color || '#6b7280') + '"></i>';
           html += '</span>';
 
           // Name.
-          html += '<span class="flex-1 text-sm font-medium text-fg-body">' + escapeHtml(t.name_plural || t.name) + '</span>';
+          html += '<span class="flex-1 text-sm font-medium text-fg-body">' + Chronicle.escapeHtml(t.name_plural || t.name) + '</span>';
 
           // Template editor link.
-          html += '<a href="' + escapeAttr(layoutBase) + '/' + t.id + '/template" class="p-1 mr-1.5 text-xs rounded hover:bg-surface-alt transition-colors" title="Edit page template">';
+          html += '<a href="' + Chronicle.escapeAttr(layoutBase) + '/' + t.id + '/template" class="p-1 mr-1.5 text-xs rounded hover:bg-surface-alt transition-colors" title="Edit page template">';
           html += '<i class="fa-solid fa-table-cells-large text-fg-muted"></i>';
           html += '</a>';
 
@@ -237,7 +230,7 @@
 
         fetch(layoutBase + '/' + typeID + '/color', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCSRF() },
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf() },
           credentials: 'same-origin',
           body: JSON.stringify({ color: newColor })
         })
@@ -263,7 +256,7 @@
       function saveSidebarConfig() {
         fetch(sidebarEndpoint, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCSRF() },
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf() },
           credentials: 'same-origin',
           body: JSON.stringify({
             entity_type_order: sidebarConfig.entity_type_order || [],

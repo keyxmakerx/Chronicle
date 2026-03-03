@@ -170,7 +170,7 @@ Chronicle.register('relations', {
         groupOrder.forEach(function (type) {
           var headerEl = document.createElement('div');
           headerEl.className = 'rel-group-header';
-          headerEl.innerHTML = '<i class="fa-solid fa-link" style="font-size:10px"></i> ' + escapeHtml(type);
+          headerEl.innerHTML = '<i class="fa-solid fa-link" style="font-size:10px"></i> ' + Chronicle.escapeHtml(type);
           card.appendChild(headerEl);
 
           groups[type].forEach(function (rel) {
@@ -223,7 +223,7 @@ Chronicle.register('relations', {
       var icon = document.createElement('div');
       icon.className = 'rel-icon';
       icon.style.backgroundColor = rel.targetEntityColor || '#6b7280';
-      icon.innerHTML = '<i class="fa-solid ' + escapeHtml(rel.targetEntityIcon || 'fa-file') + '"></i>';
+      icon.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(rel.targetEntityIcon || 'fa-file') + '"></i>';
       item.appendChild(icon);
 
       // Entity name link with tooltip preview support.
@@ -316,7 +316,7 @@ Chronicle.register('relations', {
         var selIcon = document.createElement('div');
         selIcon.className = 'rel-result-icon';
         selIcon.style.backgroundColor = state.selectedTarget.type_color || '#6b7280';
-        selIcon.innerHTML = '<i class="fa-solid ' + escapeHtml(state.selectedTarget.type_icon || 'fa-file') + '"></i>';
+        selIcon.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(state.selectedTarget.type_icon || 'fa-file') + '"></i>';
         selectedEl.appendChild(selIcon);
 
         var selName = document.createElement('span');
@@ -463,7 +463,7 @@ Chronicle.register('relations', {
         var icon = document.createElement('div');
         icon.className = 'rel-result-icon';
         icon.style.backgroundColor = entity.type_color || '#6b7280';
-        icon.innerHTML = '<i class="fa-solid ' + escapeHtml(entity.type_icon || 'fa-file') + '"></i>';
+        icon.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(entity.type_icon || 'fa-file') + '"></i>';
         result.appendChild(icon);
 
         var name = document.createElement('span');
@@ -623,8 +623,6 @@ Chronicle.register('relations', {
         });
     }
 
-    // Use shared utility from Chronicle (boot.js).
-    var escapeHtml = Chronicle.escapeHtml;
   },
 
   destroy: function (el) {
