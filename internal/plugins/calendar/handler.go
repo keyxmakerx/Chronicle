@@ -68,7 +68,8 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 
 	role := int(cc.MemberRole)
-	events, err := h.svc.ListEventsForMonth(ctx, cal.ID, year, month, role)
+	userID := auth.GetUserID(c)
+	events, err := h.svc.ListEventsForMonth(ctx, cal.ID, year, month, role, userID)
 	if err != nil {
 		return err
 	}
@@ -278,6 +279,7 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		IsRecurring     bool    `json:"is_recurring"`
 		RecurrenceType  *string `json:"recurrence_type"`
 		Visibility      string  `json:"visibility"`
+		VisibilityRules *string `json:"visibility_rules"`
 		Category        *string `json:"category"`
 	}
 	if err := c.Bind(&req); err != nil {
@@ -297,21 +299,22 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		Description:     req.Description,
 		DescriptionHTML: req.DescriptionHTML,
 		EntityID:        req.EntityID,
-		Year:           req.Year,
-		Month:          req.Month,
-		Day:            req.Day,
-		StartHour:      req.StartHour,
-		StartMinute:    req.StartMinute,
-		EndYear:        req.EndYear,
-		EndMonth:       req.EndMonth,
-		EndDay:         req.EndDay,
-		EndHour:        req.EndHour,
-		EndMinute:      req.EndMinute,
-		IsRecurring:    req.IsRecurring,
-		RecurrenceType: req.RecurrenceType,
-		Visibility:     req.Visibility,
-		Category:       req.Category,
-		CreatedBy:      userID,
+		Year:            req.Year,
+		Month:           req.Month,
+		Day:             req.Day,
+		StartHour:       req.StartHour,
+		StartMinute:     req.StartMinute,
+		EndYear:         req.EndYear,
+		EndMonth:        req.EndMonth,
+		EndDay:          req.EndDay,
+		EndHour:         req.EndHour,
+		EndMinute:       req.EndMinute,
+		IsRecurring:     req.IsRecurring,
+		RecurrenceType:  req.RecurrenceType,
+		Visibility:      req.Visibility,
+		VisibilityRules: req.VisibilityRules,
+		Category:        req.Category,
+		CreatedBy:       userID,
 	})
 	if err != nil {
 		return err
@@ -366,6 +369,7 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		IsRecurring     bool    `json:"is_recurring"`
 		RecurrenceType  *string `json:"recurrence_type"`
 		Visibility      string  `json:"visibility"`
+		VisibilityRules *string `json:"visibility_rules"`
 		Category        *string `json:"category"`
 	}
 	if err := c.Bind(&req); err != nil {
@@ -377,20 +381,21 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		Description:     req.Description,
 		DescriptionHTML: req.DescriptionHTML,
 		EntityID:        req.EntityID,
-		Year:           req.Year,
-		Month:          req.Month,
-		Day:            req.Day,
-		StartHour:      req.StartHour,
-		StartMinute:    req.StartMinute,
-		EndYear:        req.EndYear,
-		EndMonth:       req.EndMonth,
-		EndDay:         req.EndDay,
-		EndHour:        req.EndHour,
-		EndMinute:      req.EndMinute,
-		IsRecurring:    req.IsRecurring,
-		RecurrenceType: req.RecurrenceType,
-		Visibility:     req.Visibility,
-		Category:       req.Category,
+		Year:            req.Year,
+		Month:           req.Month,
+		Day:             req.Day,
+		StartHour:       req.StartHour,
+		StartMinute:     req.StartMinute,
+		EndYear:         req.EndYear,
+		EndMonth:        req.EndMonth,
+		EndDay:          req.EndDay,
+		EndHour:         req.EndHour,
+		EndMinute:       req.EndMinute,
+		IsRecurring:     req.IsRecurring,
+		RecurrenceType:  req.RecurrenceType,
+		Visibility:      req.Visibility,
+		VisibilityRules: req.VisibilityRules,
+		Category:        req.Category,
 	})
 }
 
@@ -410,6 +415,29 @@ func (h *Handler) DeleteEventAPI(c echo.Context) error {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
+}
+
+// UpdateEventVisibilityAPI updates the visibility and per-user rules for a calendar event.
+// PUT /campaigns/:id/calendar/events/:eid/visibility
+func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	eventID := c.Param("eid")
+
+	// IDOR protection: verify event belongs to this campaign's calendar.
+	if _, err := h.requireEventInCampaign(c, eventID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	var input UpdateEventVisibilityInput
+	if err := c.Bind(&input); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	if err := h.svc.UpdateEventVisibility(ctx, eventID, input); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // UpdateSeasonsAPI replaces all seasons.
@@ -563,7 +591,8 @@ func (h *Handler) EntityEventsFragment(c echo.Context) error {
 	}
 
 	role := int(cc.MemberRole)
-	events, err := h.svc.ListEventsForEntity(ctx, entityID, role)
+	userID := auth.GetUserID(c)
+	events, err := h.svc.ListEventsForEntity(ctx, entityID, role, userID)
 	if err != nil {
 		return err
 	}
@@ -597,7 +626,8 @@ func (h *Handler) UpcomingEventsFragment(c echo.Context) error {
 	}
 
 	role := int(cc.MemberRole)
-	events, err := h.svc.ListUpcomingEvents(ctx, cal.ID, limit, role)
+	userID := auth.GetUserID(c)
+	events, err := h.svc.ListUpcomingEvents(ctx, cal.ID, limit, role, userID)
 	if err != nil {
 		return err
 	}
@@ -633,7 +663,8 @@ func (h *Handler) ShowTimeline(c echo.Context) error {
 	}
 
 	role := int(cc.MemberRole)
-	events, err := h.svc.ListEventsForYear(ctx, cal.ID, year, role)
+	userID := auth.GetUserID(c)
+	events, err := h.svc.ListEventsForYear(ctx, cal.ID, year, role, userID)
 	if err != nil {
 		return err
 	}

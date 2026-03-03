@@ -427,6 +427,7 @@ templ dayCell(data CalendarViewData, day int) {
 					data-event-end-hour={ derefInt(evt.EndHour) }
 					data-event-end-minute={ derefInt(evt.EndMinute) }
 					data-event-visibility={ evt.Visibility }
+					data-event-visibility-rules={ derefStr(evt.VisibilityRules) }
 					data-event-category={ derefStr(evt.Category) }
 					data-event-recurring={ strconv.FormatBool(evt.IsRecurring) }
 					data-event-entity-id={ derefStr(evt.EntityID) }
@@ -560,6 +561,43 @@ templ eventModal(data CalendarViewData) {
 						</select>
 					</div>
 				</div>
+				if data.IsOwner {
+					<div
+						x-data="eventVisRules()"
+						id="evt-vis-rules-section"
+						x-show="document.getElementById('evt-visibility').value === 'everyone'"
+						x-init="$watch('visibility', function(v) { $el.style.display = v === 'everyone' ? '' : 'none'; })"
+						class="border border-border rounded p-3 space-y-2"
+					>
+						<label class="block text-xs font-medium text-fg-body">Per-Player Restrictions (Optional)</label>
+						<p class="text-[10px] text-fg-muted">Restrict this event to specific players, or hide it from specific players.</p>
+						<div class="flex items-center gap-3">
+							<label class="inline-flex items-center gap-1 text-[11px] text-fg-secondary">
+								<input type="radio" name="vis_rule_mode" value="none" x-model="ruleMode" class="text-accent"/>
+								<span>No restrictions</span>
+							</label>
+							<label class="inline-flex items-center gap-1 text-[11px] text-fg-secondary">
+								<input type="radio" name="vis_rule_mode" value="allow" x-model="ruleMode" class="text-accent"/>
+								<span>Only these players</span>
+							</label>
+							<label class="inline-flex items-center gap-1 text-[11px] text-fg-secondary">
+								<input type="radio" name="vis_rule_mode" value="deny" x-model="ruleMode" class="text-accent"/>
+								<span>Everyone except</span>
+							</label>
+						</div>
+						<div x-show="ruleMode !== 'none'" class="space-y-1 max-h-32 overflow-y-auto">
+							<template x-for="member in members" :key="member.user_id">
+								<label class="flex items-center gap-2 text-[11px] p-1 rounded hover:bg-surface-alt cursor-pointer">
+									<input type="checkbox" :value="member.user_id"
+										:checked="selectedUsers.indexOf(member.user_id) !== -1"
+										@change="toggleUser(member.user_id)" class="text-accent"/>
+									<span class="text-fg-secondary" x-text="member.username"></span>
+									<span class="text-fg-muted" x-text="'(' + member.role + ')'"></span>
+								</label>
+							</template>
+						</div>
+					</div>
+				}
 				<div class="flex items-center gap-3">
 					<label class="flex items-center gap-2 text-xs text-fg-body">
 						<input type="checkbox" name="is_recurring" id="evt-recurring" class="rounded"/>
@@ -712,6 +750,21 @@ templ eventModal(data CalendarViewData) {
 						return headers;
 					}
 
+					// Get visibility rules JSON from the Alpine per-user UI (if present).
+					function getVisibilityRules() {
+						var section = document.getElementById('evt-vis-rules-section');
+						if (!section || !section.__x) return null;
+						var data = section.__x.$data || section._x_dataStack && section._x_dataStack[0];
+						if (!data || data.ruleMode === 'none') return null;
+						if (data.ruleMode === 'allow' && data.selectedUsers.length > 0) {
+							return JSON.stringify({ allowed_users: data.selectedUsers });
+						}
+						if (data.ruleMode === 'deny' && data.selectedUsers.length > 0) {
+							return JSON.stringify({ denied_users: data.selectedUsers });
+						}
+						return null;
+					}
+
 					function isEditMode() {
 						return document.getElementById('evt-id').value !== '';
 					}
@@ -726,6 +779,7 @@ templ eventModal(data CalendarViewData) {
 							month: parseInt(fd.get('month')),
 							day: parseInt(fd.get('day')),
 							visibility: fd.get('visibility'),
+							visibility_rules: getVisibilityRules(),
 							is_recurring: fd.has('is_recurring'),
 							recurrence_type: fd.has('is_recurring') ? 'yearly' : null,
 						};
@@ -797,6 +851,27 @@ templ eventModal(data CalendarViewData) {
 						document.getElementById('evt-month').value = el.dataset.eventMonth || '';
 						document.getElementById('evt-day').value = el.dataset.eventDay || '';
 						document.getElementById('evt-visibility').value = el.dataset.eventVisibility || 'everyone';
+						// Restore per-user visibility rules.
+						var visSection = document.getElementById('evt-vis-rules-section');
+						if (visSection) {
+							var rulesStr = el.dataset.eventVisibilityRules || '';
+							if (rulesStr) {
+								try {
+									var rules = JSON.parse(rulesStr);
+									var alpineData = visSection.__x ? visSection.__x.$data : (visSection._x_dataStack && visSection._x_dataStack[0]);
+									if (alpineData) {
+										if (rules.allowed_users && rules.allowed_users.length > 0) {
+											alpineData.ruleMode = 'allow';
+											alpineData.selectedUsers = rules.allowed_users.slice();
+										} else if (rules.denied_users && rules.denied_users.length > 0) {
+											alpineData.ruleMode = 'deny';
+											alpineData.selectedUsers = rules.denied_users.slice();
+										}
+									}
+								} catch(e) { /* ignore parse errors */ }
+							}
+							visSection.style.display = (el.dataset.eventVisibility || 'everyone') === 'everyone' ? '' : 'none';
+						}
 						document.getElementById('evt-category').value = el.dataset.eventCategory || '';
 						document.getElementById('evt-recurring').checked = el.dataset.eventRecurring === 'true';
 						document.getElementById('evt-entity-id').value = el.dataset.eventEntityId || '';
@@ -840,6 +915,13 @@ templ eventModal(data CalendarViewData) {
 						document.getElementById('evt-end-minute').value = '';
 						var hasTimeCheckbox = document.getElementById('evt-has-time');
 						if (hasTimeCheckbox) { hasTimeCheckbox.checked = false; hasTimeCheckbox.dispatchEvent(new Event('change')); }
+						// Reset per-user visibility rules.
+						var visSection = document.getElementById('evt-vis-rules-section');
+						if (visSection) {
+							var alpineData = visSection.__x ? visSection.__x.$data : (visSection._x_dataStack && visSection._x_dataStack[0]);
+							if (alpineData && alpineData.reset) alpineData.reset();
+							visSection.style.display = '';
+						}
 						document.getElementById('evt-modal-title').textContent = 'New Event';
 						document.getElementById('evt-submit-icon').className = 'fa-solid fa-plus mr-1';
 						document.getElementById('evt-submit-text').textContent = 'Create Event';
@@ -879,6 +961,43 @@ templ eventModal(data CalendarViewData) {
 						}
 					};
 				})();
+
+				// Alpine component for per-user visibility rules on the event modal.
+				function eventVisRules() {
+					var parts = window.location.pathname.split('/');
+					var campaignID = parts[2];
+					return {
+						ruleMode: 'none',
+						selectedUsers: [],
+						members: [],
+						visibility: 'everyone',
+						init() {
+							var self = this;
+							// Sync with the base visibility select.
+							var sel = document.getElementById('evt-visibility');
+							if (sel) {
+								self.visibility = sel.value;
+								sel.addEventListener('change', function() { self.visibility = sel.value; });
+							}
+							// Load campaign members (reuse timeline members endpoint).
+							fetch('/campaigns/' + campaignID + '/timelines/members')
+								.then(function(r) { return r.json(); })
+								.then(function(data) {
+									self.members = (data || []).filter(function(m) { return m.role !== 'owner'; });
+								})
+								.catch(function() {});
+						},
+						toggleUser(uid) {
+							var idx = this.selectedUsers.indexOf(uid);
+							if (idx === -1) { this.selectedUsers.push(uid); }
+							else { this.selectedUsers.splice(idx, 1); }
+						},
+						reset() {
+							this.ruleMode = 'none';
+							this.selectedUsers = [];
+						}
+					};
+				}
 			</script>
 		</div>
 	</div>

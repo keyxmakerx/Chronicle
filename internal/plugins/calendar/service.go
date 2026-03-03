@@ -3,7 +3,9 @@ package calendar
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -40,10 +42,11 @@ type CalendarService interface {
 	GetEvent(ctx context.Context, eventID string) (*Event, error)
 	UpdateEvent(ctx context.Context, eventID string, input UpdateEventInput) error
 	DeleteEvent(ctx context.Context, eventID string) error
-	ListEventsForMonth(ctx context.Context, calendarID string, year, month int, role int) ([]Event, error)
-	ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error)
-	ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int) ([]Event, error)
-	ListEventsForYear(ctx context.Context, calendarID string, year int, role int) ([]Event, error)
+	UpdateEventVisibility(ctx context.Context, eventID string, input UpdateEventVisibilityInput) error
+	ListEventsForMonth(ctx context.Context, calendarID string, year, month int, role int, userID string) ([]Event, error)
+	ListEventsForEntity(ctx context.Context, entityID string, role int, userID string) ([]Event, error)
+	ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int, userID string) ([]Event, error)
+	ListEventsForYear(ctx context.Context, calendarID string, year int, role int, userID string) ([]Event, error)
 
 	// Date/time helpers.
 	AdvanceDate(ctx context.Context, calendarID string, days int) error
@@ -287,6 +290,32 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID string,
 		return apperror.NewNotFound("calendar not found")
 	}
 
+	// Validate time system values to prevent division by zero and invalid state.
+	if input.HoursPerDay < 1 {
+		return apperror.NewValidation("hours_per_day must be at least 1")
+	}
+	if input.MinutesPerHour < 1 {
+		return apperror.NewValidation("minutes_per_hour must be at least 1")
+	}
+	if input.SecondsPerMinute < 1 {
+		return apperror.NewValidation("seconds_per_minute must be at least 1")
+	}
+	if input.CurrentMonth < 1 {
+		return apperror.NewValidation("current_month must be at least 1")
+	}
+	if input.CurrentDay < 1 {
+		return apperror.NewValidation("current_day must be at least 1")
+	}
+	if input.CurrentHour < 0 || input.CurrentHour >= input.HoursPerDay {
+		return apperror.NewValidation("current_hour must be between 0 and hours_per_day - 1")
+	}
+	if input.CurrentMinute < 0 || input.CurrentMinute >= input.MinutesPerHour {
+		return apperror.NewValidation("current_minute must be between 0 and minutes_per_hour - 1")
+	}
+	if input.LeapYearEvery < 0 {
+		return apperror.NewValidation("leap_year_every must not be negative")
+	}
+
 	cal.Name = input.Name
 	cal.Description = input.Description
 	cal.EpochName = input.EpochName
@@ -388,11 +417,23 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID string, in
 	if input.Name == "" {
 		return nil, apperror.NewValidation("event name is required")
 	}
+	if len(input.Name) > 255 {
+		return nil, apperror.NewValidation("event name must be 255 characters or less")
+	}
+	if input.Month < 1 {
+		return nil, apperror.NewValidation("month must be at least 1")
+	}
+	if input.Day < 1 {
+		return nil, apperror.NewValidation("day must be at least 1")
+	}
 	if input.Visibility == "" {
 		input.Visibility = "everyone"
 	}
 	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
 		return nil, apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
+	}
+	if err := validateVisibilityRules(input.VisibilityRules); err != nil {
+		return nil, err
 	}
 
 	// Sanitize HTML if provided (rich text descriptions from TipTap editor).
@@ -421,9 +462,10 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID string, in
 		EndMinute:      input.EndMinute,
 		IsRecurring:    input.IsRecurring,
 		RecurrenceType: input.RecurrenceType,
-		Visibility:     input.Visibility,
-		Category:       input.Category,
-		CreatedBy:      &input.CreatedBy,
+		Visibility:      input.Visibility,
+		VisibilityRules: input.VisibilityRules,
+		Category:        input.Category,
+		CreatedBy:       &input.CreatedBy,
 	}
 
 	if err := s.repo.CreateEvent(ctx, evt); err != nil {
@@ -461,6 +503,9 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
 		return apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
 	}
+	if err := validateVisibilityRules(input.VisibilityRules); err != nil {
+		return err
+	}
 
 	evt.Name = input.Name
 	evt.Description = input.Description
@@ -485,6 +530,7 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 	evt.IsRecurring = input.IsRecurring
 	evt.RecurrenceType = input.RecurrenceType
 	evt.Visibility = input.Visibility
+	evt.VisibilityRules = input.VisibilityRules
 	evt.Category = input.Category
 
 	return s.repo.UpdateEvent(ctx, evt)
@@ -495,24 +541,54 @@ func (s *calendarService) DeleteEvent(ctx context.Context, eventID string) error
 	return s.repo.DeleteEvent(ctx, eventID)
 }
 
-// ListEventsForMonth returns events for a given month/year.
-func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID string, year, month int, role int) ([]Event, error) {
-	return s.repo.ListEventsForMonth(ctx, calendarID, year, month, role)
+// ListEventsForMonth returns events for a given month/year, filtered by role and per-user rules.
+func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID string, year, month int, role int, userID string) ([]Event, error) {
+	events, err := s.repo.ListEventsForMonth(ctx, calendarID, year, month, role)
+	if err != nil {
+		return nil, err
+	}
+	return filterEventsByUser(events, role, userID), nil
 }
 
-// ListEventsForEntity returns all events linked to a specific entity.
-func (s *calendarService) ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error) {
-	return s.repo.ListEventsForEntity(ctx, entityID, role)
+// ListEventsForEntity returns all events linked to a specific entity, filtered by per-user rules.
+func (s *calendarService) ListEventsForEntity(ctx context.Context, entityID string, role int, userID string) ([]Event, error) {
+	events, err := s.repo.ListEventsForEntity(ctx, entityID, role)
+	if err != nil {
+		return nil, err
+	}
+	return filterEventsByUser(events, role, userID), nil
 }
 
-// ListEventsForYear returns all events for a given year.
-func (s *calendarService) ListEventsForYear(ctx context.Context, calendarID string, year int, role int) ([]Event, error) {
-	return s.repo.ListEventsForYear(ctx, calendarID, year, role)
+// ListEventsForYear returns all events for a given year, filtered by per-user rules.
+func (s *calendarService) ListEventsForYear(ctx context.Context, calendarID string, year int, role int, userID string) ([]Event, error) {
+	events, err := s.repo.ListEventsForYear(ctx, calendarID, year, role)
+	if err != nil {
+		return nil, err
+	}
+	return filterEventsByUser(events, role, userID), nil
+}
+
+// UpdateEventVisibility updates the base visibility and per-user rules for a calendar event.
+func (s *calendarService) UpdateEventVisibility(ctx context.Context, eventID string, input UpdateEventVisibilityInput) error {
+	evt, err := s.repo.GetEvent(ctx, eventID)
+	if err != nil {
+		return fmt.Errorf("get event: %w", err)
+	}
+	if evt == nil {
+		return apperror.NewNotFound("event not found")
+	}
+	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
+		return apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
+	}
+	if err := validateVisibilityRules(input.VisibilityRules); err != nil {
+		return err
+	}
+	return s.repo.UpdateEventVisibility(ctx, eventID, input.Visibility, input.VisibilityRules)
 }
 
 // ListUpcomingEvents returns the next N events from the calendar's current date.
 // Fetches the calendar to determine the current date, then delegates to the repo.
-func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int) ([]Event, error) {
+func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int, userID string) ([]Event, error) {
 	cal, err := s.repo.GetByID(ctx, calendarID)
 	if err != nil {
 		return nil, fmt.Errorf("get calendar: %w", err)
@@ -526,7 +602,11 @@ func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID str
 	if limit > 20 {
 		limit = 20
 	}
-	return s.repo.ListUpcomingEvents(ctx, calendarID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, role, limit)
+	events, err := s.repo.ListUpcomingEvents(ctx, calendarID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, role, limit)
+	if err != nil {
+		return nil, err
+	}
+	return filterEventsByUser(events, role, userID), nil
 }
 
 // AdvanceDate moves the current date forward by the given number of days,
@@ -708,4 +788,75 @@ func (s *calendarService) ListAllEvents(ctx context.Context, calendarID string) 
 	}
 	// Use current year, owner role (3) to get all events including dm_only.
 	return s.repo.ListEventsForYear(ctx, calendarID, cal.CurrentYear, 3)
+}
+
+// --- Visibility Helpers ---
+
+// filterEventsByUser applies per-user visibility rules to a slice of events.
+// Owners (role >= 3) always see everything and are not filtered.
+func filterEventsByUser(events []Event, role int, userID string) []Event {
+	if role >= 3 || userID == "" {
+		return events
+	}
+	filtered := events[:0]
+	for _, e := range events {
+		if canUserView(e.Visibility, e.VisibilityRules, role, userID) {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
+}
+
+// canUserView checks whether a user can see an event based on its base visibility
+// and per-user JSON rules. Owners (role >= 3) always see everything and should
+// be checked before calling this function.
+func canUserView(baseVisibility string, visRulesJSON *string, role int, userID string) bool {
+	// Base visibility: dm_only requires Owner role.
+	if baseVisibility == "dm_only" && role < 3 {
+		return false
+	}
+
+	// Parse per-user JSON rules if present.
+	if visRulesJSON == nil || *visRulesJSON == "" {
+		return true
+	}
+	var rules VisibilityRules
+	if err := json.Unmarshal([]byte(*visRulesJSON), &rules); err != nil {
+		slog.Warn("unparseable visibility_rules JSON, failing open", slog.Any("error", err))
+		return true // Fail open for existing items — validated on write path.
+	}
+
+	// AllowedUsers whitelist takes precedence.
+	if len(rules.AllowedUsers) > 0 {
+		for _, uid := range rules.AllowedUsers {
+			if uid == userID {
+				return true
+			}
+		}
+		return false
+	}
+
+	// DeniedUsers blacklist.
+	if len(rules.DeniedUsers) > 0 {
+		for _, uid := range rules.DeniedUsers {
+			if uid == userID {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// validateVisibilityRules checks that a visibility_rules JSON string is
+// well-formed if present. Returns a validation error on bad JSON.
+func validateVisibilityRules(rulesJSON *string) error {
+	if rulesJSON == nil || *rulesJSON == "" {
+		return nil
+	}
+	var rules VisibilityRules
+	if err := json.Unmarshal([]byte(*rulesJSON), &rules); err != nil {
+		return apperror.NewValidation("visibility_rules must be valid JSON: " + err.Error())
+	}
+	return nil
 }

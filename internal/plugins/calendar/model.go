@@ -5,9 +5,25 @@
 package calendar
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 )
+
+// VisibilityRules defines per-user visibility overrides for calendar events.
+// If AllowedUsers is set, only those users can see the item (whitelist).
+// If DeniedUsers is set, those users cannot see the item (blacklist).
+// AllowedUsers takes precedence: if set, DeniedUsers is ignored.
+type VisibilityRules struct {
+	AllowedUsers []string `json:"allowed_users,omitempty"`
+	DeniedUsers  []string `json:"denied_users,omitempty"`
+}
+
+// UpdateEventVisibilityInput is the validated input for updating event visibility.
+type UpdateEventVisibilityInput struct {
+	Visibility      string  `json:"visibility"`
+	VisibilityRules *string `json:"visibility_rules"`
+}
 
 // Calendar mode constants.
 const (
@@ -282,9 +298,10 @@ type Event struct {
 	EndMinute      *int      `json:"end_minute,omitempty"`
 	IsRecurring    bool      `json:"is_recurring"`
 	RecurrenceType *string   `json:"recurrence_type,omitempty"`
-	Visibility     string    `json:"visibility"`
-	Category       *string   `json:"category,omitempty"`
-	CreatedBy      *string   `json:"created_by,omitempty"`
+	Visibility      string  `json:"visibility"`
+	VisibilityRules *string `json:"visibility_rules,omitempty"`
+	Category        *string `json:"category,omitempty"`
+	CreatedBy       *string `json:"created_by,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 
@@ -331,6 +348,19 @@ func (e *Event) FormatTimeRange() string {
 // IsMultiDay returns true if this event spans more than one day.
 func (e *Event) IsMultiDay() bool {
 	return e.EndYear != nil && e.EndMonth != nil && e.EndDay != nil
+}
+
+// ParseVisibilityRules parses the JSON visibility rules into a VisibilityRules struct.
+// Returns nil if no rules are set.
+func (e *Event) ParseVisibilityRules() *VisibilityRules {
+	if e.VisibilityRules == nil || *e.VisibilityRules == "" {
+		return nil
+	}
+	var rules VisibilityRules
+	if err := json.Unmarshal([]byte(*e.VisibilityRules), &rules); err != nil {
+		return nil
+	}
+	return &rules
 }
 
 // HasRichText returns true if this event has a rich text description (ProseMirror JSON
@@ -404,10 +434,11 @@ type CreateEventInput struct {
 	EndHour        *int
 	EndMinute      *int
 	IsRecurring    bool
-	RecurrenceType *string
-	Visibility     string
-	Category       *string
-	CreatedBy      string
+	RecurrenceType  *string
+	Visibility      string
+	VisibilityRules *string
+	Category        *string
+	CreatedBy       string
 }
 
 // UpdateEventInput is the validated input for updating an event.
@@ -426,10 +457,11 @@ type UpdateEventInput struct {
 	EndDay         *int
 	EndHour        *int
 	EndMinute      *int
-	IsRecurring    bool
-	RecurrenceType *string
-	Visibility     string
-	Category       *string
+	IsRecurring     bool
+	RecurrenceType  *string
+	Visibility      string
+	VisibilityRules *string
+	Category        *string
 }
 
 // MonthInput is the input for creating/updating a month.

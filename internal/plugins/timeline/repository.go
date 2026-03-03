@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // TimelineRepository defines persistence operations for timelines and related data.
@@ -38,10 +40,10 @@ type TimelineRepository interface {
 	// Entity groups.
 	CreateEntityGroup(ctx context.Context, g *EntityGroup) error
 	UpdateEntityGroup(ctx context.Context, g *EntityGroup) error
-	DeleteEntityGroup(ctx context.Context, groupID int) error
+	DeleteEntityGroup(ctx context.Context, groupID int, timelineID string) error
 	ListEntityGroups(ctx context.Context, timelineID string) ([]EntityGroup, error)
-	AddGroupMember(ctx context.Context, groupID int, entityID string) error
-	RemoveGroupMember(ctx context.Context, groupID int, entityID string) error
+	AddGroupMember(ctx context.Context, groupID int, timelineID, entityID string) error
+	RemoveGroupMember(ctx context.Context, groupID int, timelineID, entityID string) error
 }
 
 // timelineRepo is the MariaDB implementation of TimelineRepository.
@@ -113,10 +115,10 @@ func (r *timelineRepo) GetByID(ctx context.Context, id string) (*Timeline, error
 }
 
 // List returns all timelines for a campaign, filtered by role-based visibility.
-// role >= 3 (Owner/Scribe) sees dm_only timelines; players see only 'everyone'.
+// role >= 3 (Owner) sees dm_only timelines; others see only 'everyone'.
 func (r *timelineRepo) List(ctx context.Context, campaignID string, role int) ([]Timeline, error) {
 	visFilter := "AND t.visibility = 'everyone'"
-	if role >= 2 {
+	if role >= 3 {
 		visFilter = ""
 	}
 
@@ -176,7 +178,7 @@ func (r *timelineRepo) Delete(ctx context.Context, id string) error {
 // Search returns timelines matching a name query, filtered by role-based visibility.
 func (r *timelineRepo) Search(ctx context.Context, campaignID, query string, role int) ([]Timeline, error) {
 	visFilter := "AND t.visibility = 'everyone'"
-	if role >= 2 {
+	if role >= 3 {
 		visFilter = ""
 	}
 
@@ -273,7 +275,7 @@ func (r *timelineRepo) UnlinkEvent(ctx context.Context, timelineID, eventID stri
 // Filtered by role-based visibility on the underlying calendar event.
 func (r *timelineRepo) ListEventLinks(ctx context.Context, timelineID string, role int) ([]EventLink, error) {
 	visFilter := "AND ce.visibility = 'everyone'"
-	if role >= 2 {
+	if role >= 3 {
 		visFilter = ""
 	}
 
@@ -330,7 +332,7 @@ const standaloneEventCols = `te.id, te.timeline_id, te.entity_id, te.name, te.de
        te.description_html, te.year, te.month, te.day,
        te.start_hour, te.start_minute, te.end_year, te.end_month, te.end_day,
        te.end_hour, te.end_minute, te.is_recurring, te.recurrence_type,
-       te.category, te.visibility, te.display_order, te.label, te.color,
+       te.category, te.visibility, te.visibility_rules, te.display_order, te.label, te.color,
        te.created_by, te.created_at, te.updated_at,
        COALESCE(ent.name, ''), COALESCE(et.icon, '')`
 
@@ -346,7 +348,7 @@ func scanStandaloneEvent(scanner interface{ Scan(...any) error }) (*TimelineEven
 		&e.DescriptionHTML, &e.Year, &e.Month, &e.Day,
 		&e.StartHour, &e.StartMinute, &e.EndYear, &e.EndMonth, &e.EndDay,
 		&e.EndHour, &e.EndMinute, &e.IsRecurring, &e.RecurrenceType,
-		&e.Category, &e.Visibility, &e.DisplayOrder, &e.Label, &e.Color,
+		&e.Category, &e.Visibility, &e.VisibilityRules, &e.DisplayOrder, &e.Label, &e.Color,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.EntityName, &e.EntityIcon,
 	)
@@ -363,13 +365,13 @@ func (r *timelineRepo) CreateEvent(ctx context.Context, e *TimelineEvent) error 
 		        description_html, year, month, day,
 		        start_hour, start_minute, end_year, end_month, end_day,
 		        end_hour, end_minute, is_recurring, recurrence_type,
-		        category, visibility, display_order, label, color, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        category, visibility, visibility_rules, display_order, label, color, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.ID, e.TimelineID, e.EntityID, e.Name, e.Description,
 		e.DescriptionHTML, e.Year, e.Month, e.Day,
 		e.StartHour, e.StartMinute, e.EndYear, e.EndMonth, e.EndDay,
 		e.EndHour, e.EndMinute, e.IsRecurring, e.RecurrenceType,
-		e.Category, e.Visibility, e.DisplayOrder, e.Label, e.Color, e.CreatedBy,
+		e.Category, e.Visibility, e.VisibilityRules, e.DisplayOrder, e.Label, e.Color, e.CreatedBy,
 	)
 	return err
 }
@@ -392,13 +394,13 @@ func (r *timelineRepo) UpdateEvent(ctx context.Context, e *TimelineEvent) error 
 		        description_html = ?, year = ?, month = ?, day = ?,
 		        start_hour = ?, start_minute = ?, end_year = ?, end_month = ?, end_day = ?,
 		        end_hour = ?, end_minute = ?, is_recurring = ?, recurrence_type = ?,
-		        category = ?, visibility = ?, display_order = ?, label = ?, color = ?
+		        category = ?, visibility = ?, visibility_rules = ?, display_order = ?, label = ?, color = ?
 		 WHERE id = ?`,
 		e.EntityID, e.Name, e.Description,
 		e.DescriptionHTML, e.Year, e.Month, e.Day,
 		e.StartHour, e.StartMinute, e.EndYear, e.EndMonth, e.EndDay,
 		e.EndHour, e.EndMinute, e.IsRecurring, e.RecurrenceType,
-		e.Category, e.Visibility, e.DisplayOrder, e.Label, e.Color,
+		e.Category, e.Visibility, e.VisibilityRules, e.DisplayOrder, e.Label, e.Color,
 		e.ID,
 	)
 	return err
@@ -413,7 +415,7 @@ func (r *timelineRepo) DeleteEvent(ctx context.Context, eventID string) error {
 // ListStandaloneEvents returns all standalone events for a timeline, filtered by role.
 func (r *timelineRepo) ListStandaloneEvents(ctx context.Context, timelineID string, role int) ([]TimelineEvent, error) {
 	visFilter := "AND te.visibility = 'everyone'"
-	if role >= 2 {
+	if role >= 3 {
 		visFilter = ""
 	}
 
@@ -473,19 +475,34 @@ func (r *timelineRepo) CreateEntityGroup(ctx context.Context, g *EntityGroup) er
 
 // UpdateEntityGroup modifies an existing entity group.
 func (r *timelineRepo) UpdateEntityGroup(ctx context.Context, g *EntityGroup) error {
-	_, err := r.db.ExecContext(ctx,
+	res, err := r.db.ExecContext(ctx,
 		`UPDATE timeline_entity_groups SET name = ?, color = ?, sort_order = ?
-		 WHERE id = ?`,
-		g.Name, g.Color, g.SortOrder, g.ID,
+		 WHERE id = ? AND timeline_id = ?`,
+		g.Name, g.Color, g.SortOrder, g.ID, g.TimelineID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return apperror.NewNotFound("entity group not found")
+	}
+	return nil
 }
 
 // DeleteEntityGroup removes an entity group and its members (cascaded by FK).
-func (r *timelineRepo) DeleteEntityGroup(ctx context.Context, groupID int) error {
-	_, err := r.db.ExecContext(ctx,
-		`DELETE FROM timeline_entity_groups WHERE id = ?`, groupID)
-	return err
+// timelineID scoping prevents cross-timeline IDOR.
+func (r *timelineRepo) DeleteEntityGroup(ctx context.Context, groupID int, timelineID string) error {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM timeline_entity_groups WHERE id = ? AND timeline_id = ?`, groupID, timelineID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return apperror.NewNotFound("entity group not found")
+	}
+	return nil
 }
 
 // ListEntityGroups returns all entity groups for a timeline with members loaded.
@@ -554,7 +571,16 @@ func (r *timelineRepo) listGroupMembers(ctx context.Context, groupID int) ([]Ent
 }
 
 // AddGroupMember adds an entity to an entity group.
-func (r *timelineRepo) AddGroupMember(ctx context.Context, groupID int, entityID string) error {
+// Verifies the group belongs to the given timeline to prevent cross-timeline IDOR.
+func (r *timelineRepo) AddGroupMember(ctx context.Context, groupID int, timelineID, entityID string) error {
+	// Verify group belongs to this timeline before inserting.
+	var exists int
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT 1 FROM timeline_entity_groups WHERE id = ? AND timeline_id = ?`,
+		groupID, timelineID,
+	).Scan(&exists); err != nil {
+		return apperror.NewNotFound("entity group not found")
+	}
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO timeline_entity_group_members (group_id, entity_id) VALUES (?, ?)`,
 		groupID, entityID,
@@ -563,7 +589,16 @@ func (r *timelineRepo) AddGroupMember(ctx context.Context, groupID int, entityID
 }
 
 // RemoveGroupMember removes an entity from an entity group.
-func (r *timelineRepo) RemoveGroupMember(ctx context.Context, groupID int, entityID string) error {
+// Verifies the group belongs to the given timeline to prevent cross-timeline IDOR.
+func (r *timelineRepo) RemoveGroupMember(ctx context.Context, groupID int, timelineID, entityID string) error {
+	// Verify group belongs to this timeline before deleting.
+	var exists int
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT 1 FROM timeline_entity_groups WHERE id = ? AND timeline_id = ?`,
+		groupID, timelineID,
+	).Scan(&exists); err != nil {
+		return apperror.NewNotFound("entity group not found")
+	}
 	_, err := r.db.ExecContext(ctx,
 		`DELETE FROM timeline_entity_group_members WHERE group_id = ? AND entity_id = ?`,
 		groupID, entityID,

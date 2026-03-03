@@ -44,6 +44,9 @@ type CalendarRepository interface {
 	ListEventsForYear(ctx context.Context, calendarID string, year int, role int) ([]Event, error)
 	ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error)
 	ListUpcomingEvents(ctx context.Context, calendarID string, year, month, day int, role int, limit int) ([]Event, error)
+
+	// Event visibility.
+	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error
 }
 
 // calendarRepo is the MariaDB implementation of CalendarRepository.
@@ -355,7 +358,7 @@ func (r *calendarRepo) GetEras(ctx context.Context, calendarID string) ([]Era, e
 const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description, e.description_html,
        e.year, e.month, e.day, e.start_hour, e.start_minute,
        e.end_year, e.end_month, e.end_day, e.end_hour, e.end_minute,
-       e.is_recurring, e.recurrence_type, e.visibility, e.category,
+       e.is_recurring, e.recurrence_type, e.visibility, e.visibility_rules, e.category,
        e.created_by, e.created_at, e.updated_at,
        COALESCE(ent.name, ''), COALESCE(et.icon, ''), COALESCE(et.color, '')`
 
@@ -369,12 +372,12 @@ func (r *calendarRepo) CreateEvent(ctx context.Context, evt *Event) error {
 		`INSERT INTO calendar_events (id, calendar_id, entity_id, name, description, description_html,
 		        year, month, day, start_hour, start_minute,
 		        end_year, end_month, end_day, end_hour, end_minute,
-		        is_recurring, recurrence_type, visibility, category, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        is_recurring, recurrence_type, visibility, visibility_rules, category, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		evt.ID, evt.CalendarID, evt.EntityID, evt.Name, evt.Description, evt.DescriptionHTML,
 		evt.Year, evt.Month, evt.Day, evt.StartHour, evt.StartMinute,
 		evt.EndYear, evt.EndMonth, evt.EndDay, evt.EndHour, evt.EndMinute,
-		evt.IsRecurring, evt.RecurrenceType, evt.Visibility, evt.Category, evt.CreatedBy,
+		evt.IsRecurring, evt.RecurrenceType, evt.Visibility, evt.VisibilityRules, evt.Category, evt.CreatedBy,
 	)
 	return err
 }
@@ -389,7 +392,7 @@ func (r *calendarRepo) GetEvent(ctx context.Context, id string) (*Event, error) 
 	).Scan(&evt.ID, &evt.CalendarID, &evt.EntityID, &evt.Name, &evt.Description, &evt.DescriptionHTML,
 		&evt.Year, &evt.Month, &evt.Day, &evt.StartHour, &evt.StartMinute,
 		&evt.EndYear, &evt.EndMonth, &evt.EndDay, &evt.EndHour, &evt.EndMinute,
-		&evt.IsRecurring, &evt.RecurrenceType, &evt.Visibility, &evt.Category,
+		&evt.IsRecurring, &evt.RecurrenceType, &evt.Visibility, &evt.VisibilityRules, &evt.Category,
 		&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
 		&evt.EntityName, &evt.EntityIcon, &evt.EntityColor)
 	if err == sql.ErrNoRows {
@@ -406,13 +409,13 @@ func (r *calendarRepo) UpdateEvent(ctx context.Context, evt *Event) error {
 		     year = ?, month = ?, day = ?,
 		     start_hour = ?, start_minute = ?,
 		     end_year = ?, end_month = ?, end_day = ?, end_hour = ?, end_minute = ?,
-		     is_recurring = ?, recurrence_type = ?, visibility = ?, category = ?
+		     is_recurring = ?, recurrence_type = ?, visibility = ?, visibility_rules = ?, category = ?
 		 WHERE id = ?`,
 		evt.Name, evt.Description, evt.DescriptionHTML, evt.EntityID,
 		evt.Year, evt.Month, evt.Day,
 		evt.StartHour, evt.StartMinute,
 		evt.EndYear, evt.EndMonth, evt.EndDay, evt.EndHour, evt.EndMinute,
-		evt.IsRecurring, evt.RecurrenceType, evt.Visibility, evt.Category, evt.ID,
+		evt.IsRecurring, evt.RecurrenceType, evt.Visibility, evt.VisibilityRules, evt.Category, evt.ID,
 	)
 	return err
 }
@@ -550,7 +553,7 @@ func scanEvents(rows *sql.Rows) ([]Event, error) {
 			&evt.ID, &evt.CalendarID, &evt.EntityID, &evt.Name, &evt.Description, &evt.DescriptionHTML,
 			&evt.Year, &evt.Month, &evt.Day, &evt.StartHour, &evt.StartMinute,
 			&evt.EndYear, &evt.EndMonth, &evt.EndDay, &evt.EndHour, &evt.EndMinute,
-			&evt.IsRecurring, &evt.RecurrenceType, &evt.Visibility, &evt.Category,
+			&evt.IsRecurring, &evt.RecurrenceType, &evt.Visibility, &evt.VisibilityRules, &evt.Category,
 			&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
 			&evt.EntityName, &evt.EntityIcon, &evt.EntityColor,
 		); err != nil {
@@ -559,4 +562,13 @@ func scanEvents(rows *sql.Rows) ([]Event, error) {
 		events = append(events, evt)
 	}
 	return events, rows.Err()
+}
+
+// UpdateEventVisibility sets the visibility and per-user rules on an event.
+func (r *calendarRepo) UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE calendar_events SET visibility = ?, visibility_rules = ? WHERE id = ?`,
+		visibility, visRules, eventID,
+	)
+	return err
 }

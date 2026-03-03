@@ -42,9 +42,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/calendar/import/preview", h.ImportPreviewAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendar/import-setup", h.ImportFromSetupAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// Events CRUD (Scribe+ can create/edit, Owner can delete).
+	// Events CRUD (Scribe+ can create/edit, Owner can delete/set visibility).
 	cg.POST("/calendar/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/calendar/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/calendar/events/:eid/visibility", h.UpdateEventVisibilityAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/calendar/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Public-capable views: calendar grid, timeline, upcoming events, and

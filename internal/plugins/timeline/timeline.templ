@@ -31,6 +31,15 @@ func ptrStr(v *string) string {
 	return *v
 }
 
+// visRulesJSValue returns a JS-safe value for visibility rules dispatch.
+// Returns the JSON string if set, or "null" if not.
+func visRulesJSValue(v *string) string {
+	if v == nil || *v == "" {
+		return "null"
+	}
+	return *v
+}
+
 
 // timelinePreviewFragment renders timeline summary items for the dashboard preview block.
 templ timelinePreviewFragment(campaignID string, timelines []Timeline) {
@@ -254,9 +263,8 @@ templ TimelineShowFragment(cc *campaigns.CampaignContext, data TimelineViewData)
 
 // timelineShowContent renders the timeline detail page with D3.js visualization.
 templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) {
-	<!-- D3.js (loaded only on timeline detail pages) -->
+	<!-- D3.js (loaded only on timeline detail pages — large library, not in base layout) -->
 	<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-	<script src="/static/js/widgets/timeline_viz.js"></script>
 	<div class="max-w-5xl mx-auto py-6 px-4" x-data="{ eventListOpen: true, manageOpen: false, adminTab: 'visibility' }">
 		<!-- Header Card -->
 		<div class="card p-5 mb-4">
@@ -366,6 +374,12 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 					}
 				</div>
 			</div>
+		} else {
+			<div class="card p-6 mb-4 text-center">
+				<i class="fa-solid fa-calendar-plus text-3xl mb-3" style="color: var(--color-fg-muted)"></i>
+				<p class="text-sm font-medium text-fg-secondary">No events yet</p>
+				<p class="text-xs text-fg-muted mt-1">Create a standalone event or link calendar events to get started.</p>
+			</div>
 		}
 		<!-- Manage Timeline (Owner only) -->
 		if data.IsOwner {
@@ -412,6 +426,9 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 		if data.IsScribe {
 			@createStandaloneEventModal(data)
 			@editStandaloneEventModal(data)
+			if data.IsOwner {
+				@eventVisibilityModal(data)
+			}
 			if data.Timeline.HasCalendar() {
 				@eventPickerModal(data)
 			}
@@ -1113,6 +1130,159 @@ templ editStandaloneEventModal(data TimelineViewData) {
 	</script>
 }
 
+// eventVisibilityModal renders the per-event visibility modal for both calendar-linked
+// and standalone events. Owners can set base visibility and per-user whitelist/blacklist.
+templ eventVisibilityModal(data TimelineViewData) {
+	<div
+		id="event-vis-modal"
+		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick="if(event.target===this)this.classList.add('hidden')"
+		x-data="eventVisForm()"
+		@edit-event-visibility.window="openVis($event.detail)"
+	>
+		<div class="card p-6 w-full max-w-md space-y-4">
+			<div class="flex items-center justify-between">
+				<h2 class="text-lg font-semibold text-fg">Event Visibility</h2>
+				<button class="text-fg-muted hover:text-fg" @click="closeVis()">
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+			<div class="space-y-3">
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Base Visibility</label>
+					<select class="input w-full text-sm" x-model="visibility">
+						<option value="everyone">Everyone</option>
+						<option value="dm_only">DM Only</option>
+					</select>
+				</div>
+				<div x-show="visibility === 'everyone'">
+					<label class="block text-xs font-medium text-fg-body mb-1">Per-Player Restrictions (Optional)</label>
+					<div class="flex items-center gap-3 mb-2">
+						<label class="inline-flex items-center gap-1 text-[11px] text-fg-secondary">
+							<input type="radio" name="ev_rule_mode" value="none" x-model="ruleMode" class="text-accent"/>
+							<span>No restrictions</span>
+						</label>
+						<label class="inline-flex items-center gap-1 text-[11px] text-fg-secondary">
+							<input type="radio" name="ev_rule_mode" value="allow" x-model="ruleMode" class="text-accent"/>
+							<span>Only these players</span>
+						</label>
+						<label class="inline-flex items-center gap-1 text-[11px] text-fg-secondary">
+							<input type="radio" name="ev_rule_mode" value="deny" x-model="ruleMode" class="text-accent"/>
+							<span>Everyone except</span>
+						</label>
+					</div>
+					<div x-show="ruleMode !== 'none'" class="space-y-1 max-h-32 overflow-y-auto">
+						<template x-for="member in members" :key="member.user_id">
+							<label class="flex items-center gap-2 text-[11px] p-1 rounded hover:bg-surface-alt cursor-pointer">
+								<input type="checkbox" :value="member.user_id"
+									:checked="selectedUsers.indexOf(member.user_id) !== -1"
+									@change="toggleUser(member.user_id)" class="text-accent"/>
+								<span class="text-fg-secondary" x-text="member.username"></span>
+								<span class="text-fg-muted" x-text="'(' + member.role + ')'"></span>
+							</label>
+						</template>
+					</div>
+				</div>
+				<div class="flex items-center justify-between pt-2">
+					<span class="text-xs text-red-500" x-show="errorMsg" x-text="errorMsg"></span>
+					<div class="flex gap-2 ml-auto">
+						<button type="button" class="btn-secondary text-xs" @click="closeVis()">Cancel</button>
+						<button type="button" class="btn-primary text-xs" @click="saveVis()" :disabled="saving">
+							<span x-text="saving ? 'Saving...' : 'Save'"></span>
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<script>
+		function eventVisForm() {
+			var parts = window.location.pathname.split('/');
+			var campaignID = parts[2];
+			var timelineID = parts[4];
+			return {
+				eventID: '',
+				source: '',
+				visibility: 'everyone',
+				ruleMode: 'none',
+				selectedUsers: [],
+				members: [],
+				saving: false,
+				errorMsg: '',
+				init() {
+					var self = this;
+					fetch('/campaigns/' + campaignID + '/timelines/members')
+						.then(function(r) { return r.json(); })
+						.then(function(data) {
+							self.members = (data || []).filter(function(m) { return m.role !== 'owner'; });
+						})
+						.catch(function() {});
+				},
+				openVis(detail) {
+					this.eventID = detail.id || '';
+					this.source = detail.source || '';
+					this.visibility = detail.visibility || 'everyone';
+					this.ruleMode = 'none';
+					this.selectedUsers = [];
+					this.errorMsg = '';
+					if (detail.rules) {
+						if (detail.rules.allowed_users && detail.rules.allowed_users.length > 0) {
+							this.ruleMode = 'allow';
+							this.selectedUsers = detail.rules.allowed_users.slice();
+						} else if (detail.rules.denied_users && detail.rules.denied_users.length > 0) {
+							this.ruleMode = 'deny';
+							this.selectedUsers = detail.rules.denied_users.slice();
+						}
+					}
+					document.getElementById('event-vis-modal').classList.remove('hidden');
+				},
+				closeVis() {
+					document.getElementById('event-vis-modal').classList.add('hidden');
+				},
+				toggleUser(uid) {
+					var idx = this.selectedUsers.indexOf(uid);
+					if (idx === -1) { this.selectedUsers.push(uid); }
+					else { this.selectedUsers.splice(idx, 1); }
+				},
+				saveVis() {
+					var self = this;
+					self.saving = true;
+					self.errorMsg = '';
+					var rules = null;
+					if (self.ruleMode === 'allow' && self.selectedUsers.length > 0) {
+						rules = JSON.stringify({ allowed_users: self.selectedUsers });
+					} else if (self.ruleMode === 'deny' && self.selectedUsers.length > 0) {
+						rules = JSON.stringify({ denied_users: self.selectedUsers });
+					}
+					// Determine endpoint based on source.
+					var url;
+					if (self.source === 'standalone') {
+						url = '/campaigns/' + campaignID + '/timelines/' + timelineID + '/standalone-events/' + self.eventID + '/visibility';
+					} else {
+						url = '/campaigns/' + campaignID + '/timelines/' + timelineID + '/events/' + self.eventID + '/visibility';
+					}
+					var body = { visibility_rules: rules };
+					if (self.source === 'standalone') {
+						body.visibility = self.visibility;
+					} else {
+						body.visibility_override = self.visibility === 'dm_only' ? self.visibility : null;
+					}
+					var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
+					var headers = { 'Content-Type': 'application/json' };
+					if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
+					fetch(url, { method: 'PUT', headers: headers, body: JSON.stringify(body) })
+						.then(function(r) {
+							self.saving = false;
+							if (r.ok) { self.closeVis(); window.location.reload(); }
+							else { r.json().then(function(d) { self.errorMsg = d.message || 'Failed'; }).catch(function() { self.errorMsg = 'Failed'; }); }
+						})
+						.catch(function(err) { self.saving = false; self.errorMsg = 'Network error: ' + err.message; });
+				}
+			};
+		}
+	</script>
+}
+
 // eventPickerModal renders the modal for linking calendar events to a timeline.
 templ eventPickerModal(data TimelineViewData) {
 	<div
@@ -1254,6 +1424,11 @@ templ timelineEventCard(data TimelineViewData, el EventLink) {
 						<i class="fa-solid fa-eye-slash"></i> DM Only
 					</span>
 				}
+				if el.VisibilityRules != nil && *el.VisibilityRules != "" {
+					<span class="inline-flex items-center gap-1 text-xs text-blue-400" title="Per-player visibility rules active">
+						<i class="fa-solid fa-users"></i> Restricted
+					</span>
+				}
 			</div>
 			if el.EventDescription != nil && *el.EventDescription != "" {
 				<p class="text-xs text-fg-muted mt-1 line-clamp-2">{ *el.EventDescription }</p>
@@ -1262,6 +1437,16 @@ templ timelineEventCard(data TimelineViewData, el EventLink) {
 		if data.IsScribe {
 			if el.Source == "standalone" {
 				<div class="flex flex-col gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+					if data.IsOwner {
+						<button
+							class="text-fg-muted hover:text-blue-400 transition-colors text-xs"
+							title="Visibility settings"
+							@click={ fmt.Sprintf(`$dispatch('edit-event-visibility', {id:'%s',source:'standalone',visibility:'%s',rules:%s})`,
+								el.EventID, el.EventVisibility, visRulesJSValue(el.VisibilityRules)) }
+						>
+							<i class="fa-solid fa-eye text-xs"></i>
+						</button>
+					}
 					<button
 						class="text-fg-muted hover:text-accent transition-colors text-xs"
 						title="Edit event"
@@ -1284,16 +1469,28 @@ templ timelineEventCard(data TimelineViewData, el EventLink) {
 					</button>
 				</div>
 			} else {
-				<button
-					class="flex-shrink-0 text-fg-muted hover:text-red-500 transition-colors text-xs opacity-0 group-hover:opacity-100"
-					hx-delete={ fmt.Sprintf("/campaigns/%s/timelines/%s/events/%s", data.CampaignID, data.Timeline.ID, el.EventID) }
-					hx-confirm="Remove this event from the timeline?"
-					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
-					hx-target="closest .tl-event-card"
-					hx-swap="outerHTML"
-				>
-					<i class="fa-solid fa-unlink"></i>
-				</button>
+				<div class="flex flex-col gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+					if data.IsOwner {
+						<button
+							class="text-fg-muted hover:text-blue-400 transition-colors text-xs"
+							title="Visibility settings"
+							@click={ fmt.Sprintf(`$dispatch('edit-event-visibility', {id:'%s',source:'calendar',visibility:'%s',rules:%s})`,
+								el.EventID, el.EffectiveVisibility(), visRulesJSValue(el.VisibilityRules)) }
+						>
+							<i class="fa-solid fa-eye text-xs"></i>
+						</button>
+					}
+					<button
+						class="text-fg-muted hover:text-red-500 transition-colors text-xs"
+						hx-delete={ fmt.Sprintf("/campaigns/%s/timelines/%s/events/%s", data.CampaignID, data.Timeline.ID, el.EventID) }
+						hx-confirm="Remove this event from the timeline?"
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+						hx-target="closest .tl-event-card"
+						hx-swap="outerHTML"
+					>
+						<i class="fa-solid fa-unlink"></i>
+					</button>
+				</div>
 			}
 		}
 	</div>

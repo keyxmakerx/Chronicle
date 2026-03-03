@@ -24,9 +24,13 @@
  *             data-timeline-color="..."
  *             data-api-url="...">
  *
- * Requires D3.js v7 to be loaded on the page before this widget initializes.
+ * Requires D3.js v7. If D3 is not yet loaded when the widget mounts (e.g.
+ * during HTMX navigation), it is loaded dynamically from the CDN.
  */
 Chronicle.register('timeline-viz', {
+  /** CDN URL used to dynamically load D3 when it's not already available. */
+  _d3Src: 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js',
+
   /**
    * Initialize the timeline visualization.
    * @param {HTMLElement} el - Mount point element.
@@ -44,7 +48,7 @@ Chronicle.register('timeline-viz', {
     this.tooltip = null;
     this.svg = null;
     this.zoom = null;
-    this.currentTransform = d3.zoomIdentity;
+    this.currentTransform = null;
     this.searchQuery = '';
     this.currentZoomLevel = 'year';
 
@@ -73,8 +77,75 @@ Chronicle.register('timeline-viz', {
       day:     { radius: 10, showLabel: true,  showDate: true,  showEntity: true,  strokeWidth: 2.5 }
     };
 
+    // Build toolbar/container first so the user sees something immediately.
     this._buildDOM();
-    this._loadData();
+
+    // Ensure D3 is available before loading data. During HTMX navigation the
+    // CDN script tag in the template may not have executed yet.
+    if (typeof d3 !== 'undefined') {
+      this.currentTransform = d3.zoomIdentity;
+      this._loadData();
+    } else {
+      this._ensureD3(function() {
+        self.currentTransform = d3.zoomIdentity;
+        self._loadData();
+      });
+    }
+  },
+
+  /**
+   * Dynamically load D3.js from the CDN if it hasn't been loaded yet.
+   * Shows a loading indicator while waiting, and an error if it fails.
+   * @param {Function} cb - Callback invoked once D3 is available.
+   */
+  _ensureD3: function(cb) {
+    var self = this;
+
+    // Show loading state in the SVG container area.
+    this.svgContainer.innerHTML =
+      '<div class="timeline-viz-empty">' +
+        '<i class="fa-solid fa-spinner fa-spin text-2xl mb-3" style="color: var(--color-fg-muted)"></i>' +
+        '<p class="text-sm" style="color: var(--color-fg-muted)">Loading visualization...</p>' +
+      '</div>';
+
+    // Check if another script element is already loading D3.
+    var existing = document.querySelector('script[src="' + this._d3Src + '"]');
+    if (existing) {
+      // D3 script tag exists but hasn't finished loading. Wait for it.
+      var attempts = 0;
+      var poll = setInterval(function() {
+        attempts++;
+        if (typeof d3 !== 'undefined') {
+          clearInterval(poll);
+          cb();
+        } else if (attempts > 100) {
+          // ~10 seconds of polling.
+          clearInterval(poll);
+          self._showD3Error();
+        }
+      }, 100);
+      return;
+    }
+
+    // Load D3 dynamically.
+    var script = document.createElement('script');
+    script.src = this._d3Src;
+    script.onload = function() { cb(); };
+    script.onerror = function() { self._showD3Error(); };
+    document.head.appendChild(script);
+  },
+
+  /**
+   * Show a user-friendly error when D3 fails to load.
+   */
+  _showD3Error: function() {
+    this.svgContainer.innerHTML =
+      '<div class="timeline-viz-empty">' +
+        '<i class="fa-solid fa-triangle-exclamation text-3xl mb-3" style="color: var(--color-fg-muted)"></i>' +
+        '<p style="font-weight: 600">Unable to load visualization library</p>' +
+        '<p class="text-xs mt-1" style="color: var(--color-fg-muted)">' +
+          'D3.js failed to load. Check your internet connection or try refreshing the page.</p>' +
+      '</div>';
   },
 
   /**
@@ -170,8 +241,20 @@ Chronicle.register('timeline-viz', {
       .then(function(r) { return r.json(); })
       .then(function(data) {
         self.timeline = data.timeline;
-        self.events = (data.events || []).slice();
         self.groups = data.groups || [];
+
+        // Filter out events with missing or NaN date fields. This guards
+        // against omitted JSON fields (e.g. zero-value ints with omitempty)
+        // that would produce NaN positions in the D3 scale.
+        self.events = (data.events || []).filter(function(e) {
+          var y = e.event_year;
+          // Year 0 is valid; only reject undefined/null/NaN.
+          if (y == null || y !== y) return false;
+          // Default missing month/day to 1 (safe fallback).
+          if (e.event_month == null || e.event_month !== e.event_month) e.event_month = 1;
+          if (e.event_day == null || e.event_day !== e.event_day) e.event_day = 1;
+          return true;
+        });
 
         // Sort events by date.
         self.events.sort(function(a, b) {

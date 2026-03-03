@@ -51,6 +51,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Visibility management (Owner only).
 	cg.PUT("/timelines/:tid/visibility", h.UpdateTimelineVisibilityAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/timelines/:tid/events/:eid/visibility", h.UpdateEventVisibilityAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/timelines/:tid/standalone-events/:eid/visibility", h.UpdateStandaloneEventVisibilityAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.GET("/timelines/members", h.ListCampaignMembersAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Public-capable views: timeline list, show, data endpoint.

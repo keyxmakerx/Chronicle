@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // iconPattern validates FontAwesome icon class names to prevent XSS injection.
@@ -85,11 +87,11 @@ type TimelineService interface {
 
 	// Entity groups.
 	CreateEntityGroup(ctx context.Context, timelineID string, input CreateEntityGroupInput) (*EntityGroup, error)
-	UpdateEntityGroup(ctx context.Context, groupID int, input UpdateEntityGroupInput) error
-	DeleteEntityGroup(ctx context.Context, groupID int) error
+	UpdateEntityGroup(ctx context.Context, timelineID string, groupID int, input UpdateEntityGroupInput) error
+	DeleteEntityGroup(ctx context.Context, timelineID string, groupID int) error
 	ListEntityGroups(ctx context.Context, timelineID string) ([]EntityGroup, error)
-	AddGroupMember(ctx context.Context, groupID int, entityID string) error
-	RemoveGroupMember(ctx context.Context, groupID int, entityID string) error
+	AddGroupMember(ctx context.Context, timelineID string, groupID int, entityID string) error
+	RemoveGroupMember(ctx context.Context, timelineID string, groupID int, entityID string) error
 
 	// Search.
 	SearchTimelines(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
@@ -463,6 +465,13 @@ func (s *timelineService) CreateStandaloneEvent(ctx context.Context, timelineID 
 		return nil, apperror.NewValidation("color must be a valid hex color")
 	}
 
+	// Sanitize HTML if provided (rich text descriptions from TipTap editor).
+	var descHTML *string
+	if input.DescriptionHTML != nil && *input.DescriptionHTML != "" {
+		sanitized := sanitize.HTML(*input.DescriptionHTML)
+		descHTML = &sanitized
+	}
+
 	// Determine display order (append to end).
 	count, err := s.repo.CountStandaloneEvents(ctx, timelineID)
 	if err != nil {
@@ -475,7 +484,7 @@ func (s *timelineService) CreateStandaloneEvent(ctx context.Context, timelineID 
 		EntityID:        input.EntityID,
 		Name:            input.Name,
 		Description:     input.Description,
-		DescriptionHTML: input.DescriptionHTML,
+		DescriptionHTML: descHTML,
 		Year:            input.Year,
 		Month:           input.Month,
 		Day:             input.Day,
@@ -538,10 +547,17 @@ func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID,
 		return apperror.NewValidation("color must be a valid hex color")
 	}
 
+	// Sanitize HTML if provided (rich text descriptions from TipTap editor).
+	var descHTML *string
+	if input.DescriptionHTML != nil && *input.DescriptionHTML != "" {
+		sanitized := sanitize.HTML(*input.DescriptionHTML)
+		descHTML = &sanitized
+	}
+
 	e.EntityID = input.EntityID
 	e.Name = input.Name
 	e.Description = input.Description
-	e.DescriptionHTML = input.DescriptionHTML
+	e.DescriptionHTML = descHTML
 	e.Year = input.Year
 	e.Month = input.Month
 	e.Day = input.Day
@@ -556,6 +572,7 @@ func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID,
 	e.RecurrenceType = input.RecurrenceType
 	e.Category = input.Category
 	e.Visibility = input.Visibility
+	e.VisibilityRules = input.VisibilityRules
 	e.Label = input.Label
 	e.Color = input.Color
 
@@ -586,6 +603,9 @@ func (s *timelineService) CreateEntityGroup(ctx context.Context, timelineID stri
 	if input.Name == "" {
 		return nil, apperror.NewValidation("group name is required")
 	}
+	if len(input.Name) > 200 {
+		return nil, apperror.NewValidation("group name must be 200 characters or less")
+	}
 	if input.Color == "" {
 		input.Color = "#6b7280"
 	}
@@ -606,18 +626,23 @@ func (s *timelineService) CreateEntityGroup(ctx context.Context, timelineID stri
 }
 
 // UpdateEntityGroup modifies an existing entity group.
-func (s *timelineService) UpdateEntityGroup(ctx context.Context, groupID int, input UpdateEntityGroupInput) error {
+// timelineID scoping prevents cross-timeline IDOR.
+func (s *timelineService) UpdateEntityGroup(ctx context.Context, timelineID string, groupID int, input UpdateEntityGroupInput) error {
 	if input.Name == "" {
 		return apperror.NewValidation("group name is required")
+	}
+	if len(input.Name) > 200 {
+		return apperror.NewValidation("group name must be 200 characters or less")
 	}
 	if input.Color != "" && !colorPattern.MatchString(input.Color) {
 		return apperror.NewValidation("color must be a valid hex color")
 	}
 
 	g := &EntityGroup{
-		ID:    groupID,
-		Name:  input.Name,
-		Color: input.Color,
+		ID:         groupID,
+		TimelineID: timelineID,
+		Name:       input.Name,
+		Color:      input.Color,
 	}
 
 	if err := s.repo.UpdateEntityGroup(ctx, g); err != nil {
@@ -627,8 +652,9 @@ func (s *timelineService) UpdateEntityGroup(ctx context.Context, groupID int, in
 }
 
 // DeleteEntityGroup removes an entity group and its members.
-func (s *timelineService) DeleteEntityGroup(ctx context.Context, groupID int) error {
-	if err := s.repo.DeleteEntityGroup(ctx, groupID); err != nil {
+// timelineID scoping prevents cross-timeline IDOR.
+func (s *timelineService) DeleteEntityGroup(ctx context.Context, timelineID string, groupID int) error {
+	if err := s.repo.DeleteEntityGroup(ctx, groupID, timelineID); err != nil {
 		return fmt.Errorf("delete entity group: %w", err)
 	}
 	return nil
@@ -644,16 +670,18 @@ func (s *timelineService) ListEntityGroups(ctx context.Context, timelineID strin
 }
 
 // AddGroupMember adds an entity to an entity group.
-func (s *timelineService) AddGroupMember(ctx context.Context, groupID int, entityID string) error {
-	if err := s.repo.AddGroupMember(ctx, groupID, entityID); err != nil {
+// timelineID scoping prevents cross-timeline IDOR.
+func (s *timelineService) AddGroupMember(ctx context.Context, timelineID string, groupID int, entityID string) error {
+	if err := s.repo.AddGroupMember(ctx, groupID, timelineID, entityID); err != nil {
 		return fmt.Errorf("add group member: %w", err)
 	}
 	return nil
 }
 
 // RemoveGroupMember removes an entity from an entity group.
-func (s *timelineService) RemoveGroupMember(ctx context.Context, groupID int, entityID string) error {
-	if err := s.repo.RemoveGroupMember(ctx, groupID, entityID); err != nil {
+// timelineID scoping prevents cross-timeline IDOR.
+func (s *timelineService) RemoveGroupMember(ctx context.Context, timelineID string, groupID int, entityID string) error {
+	if err := s.repo.RemoveGroupMember(ctx, groupID, timelineID, entityID); err != nil {
 		return fmt.Errorf("remove group member: %w", err)
 	}
 	return nil
@@ -709,8 +737,8 @@ func (s *timelineService) ListCalendars(ctx context.Context, campaignID string) 
 // and per-user JSON rules. Owners (role >= 3) always see everything and should
 // be checked before calling this function.
 func canUserView(baseVisibility string, visRulesJSON *string, role int, userID string) bool {
-	// Base visibility: dm_only requires role >= 2 (Scribe+).
-	if baseVisibility == "dm_only" && role < 2 {
+	// Base visibility: dm_only requires role >= 3 (Owner).
+	if baseVisibility == "dm_only" && role < 3 {
 		return false
 	}
 
@@ -720,7 +748,8 @@ func canUserView(baseVisibility string, visRulesJSON *string, role int, userID s
 	}
 	var rules VisibilityRules
 	if err := json.Unmarshal([]byte(*visRulesJSON), &rules); err != nil {
-		return true // Unparseable rules = visible (fail open for existing items).
+		slog.Warn("unparseable visibility_rules JSON, failing open", slog.Any("error", err))
+		return true // Fail open for existing items — validated on write path.
 	}
 
 	// AllowedUsers whitelist takes precedence.

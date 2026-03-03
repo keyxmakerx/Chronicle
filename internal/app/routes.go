@@ -219,8 +219,8 @@ func (a *calendarEventListerAdapter) ListEventsForCalendar(ctx context.Context, 
 
 	refs := make([]timeline.CalendarEventRef, 0, len(events))
 	for _, ev := range events {
-		// Apply role-based visibility filter.
-		if role < 2 && ev.Visibility == "dm_only" {
+		// Apply role-based visibility filter (dm_only = Owner only).
+		if role < 3 && ev.Visibility == "dm_only" {
 			continue
 		}
 		refs = append(refs, timeline.CalendarEventRef{

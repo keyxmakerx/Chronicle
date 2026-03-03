@@ -92,15 +92,17 @@ func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
 
 	var events []calendar.Event
 
+	// Sync API uses API-key auth, not user sessions, so pass empty userID
+	// to skip per-user visibility filtering.
 	if month > 0 {
-		events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, month, role)
+		events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, month, role, "")
 	} else {
 		// No month specified — return events for the entity if entity_id is provided.
 		entityID := c.QueryParam("entity_id")
 		if entityID != "" {
-			events, err = h.calendarSvc.ListEventsForEntity(ctx, entityID, role)
+			events, err = h.calendarSvc.ListEventsForEntity(ctx, entityID, role, "")
 		} else {
-			events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, cal.CurrentMonth, role)
+			events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, cal.CurrentMonth, role, "")
 		}
 	}
 

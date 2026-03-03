@@ -8,11 +8,12 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-02 -- Standalone timeline events. Timelines can now exist without a calendar
-and contain standalone events created directly on the timeline. Migration 000036 adds
-`timeline_events` table and makes `timelines.calendar_id` nullable. Full calendar event
-field parity (multi-day, times, recurrence). Create Event modal on show page. Service
-merges linked calendar events + standalone events into unified EventLink response.
+2026-03-03 -- Security and validation audit of calendar + timeline plugins. Fixed entity
+group IDOR (cross-timeline manipulation via unscoped group IDs), XSS in standalone
+timeline events (missing HTML sanitization), missing visibility_rules validation on
+create/update paths, and missing input validation on calendar time system and event dates.
+Added slog.Warn for malformed visibility_rules JSON. Updated plugin documentation with
+Security & Validation sections and Known Limitations.
 
 ## Current Phase
 **Phase H: Secrets & Permissions.** Inline secrets complete. Documentation audit
