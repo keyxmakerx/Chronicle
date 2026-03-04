@@ -60,16 +60,36 @@ type CalendarService interface {
 	// Import/export.
 	ApplyImport(ctx context.Context, calendarID string, result *ImportResult) error
 	ListAllEvents(ctx context.Context, calendarID string) ([]Event, error)
+
+	// Wiring.
+	SetEventPublisher(pub CalendarEventPublisher)
 }
+
+// CalendarEventPublisher emits domain events when calendar data changes.
+// Implemented by the WebSocket EventBus adapter in routes.go.
+type CalendarEventPublisher interface {
+	PublishCalendarEvent(eventType, campaignID, resourceID string, payload any)
+}
+
+// NoopCalendarEventPublisher is a no-op implementation for tests.
+type NoopCalendarEventPublisher struct{}
+
+func (NoopCalendarEventPublisher) PublishCalendarEvent(string, string, string, any) {}
 
 // calendarService is the default CalendarService implementation.
 type calendarService struct {
-	repo CalendarRepository
+	repo   CalendarRepository
+	events CalendarEventPublisher
 }
 
 // NewCalendarService creates a CalendarService backed by the given repository.
 func NewCalendarService(repo CalendarRepository) CalendarService {
-	return &calendarService{repo: repo}
+	return &calendarService{repo: repo, events: NoopCalendarEventPublisher{}}
+}
+
+// SetEventPublisher sets the event publisher for real-time sync.
+func (s *calendarService) SetEventPublisher(pub CalendarEventPublisher) {
+	s.events = pub
 }
 
 // CreateCalendar creates a new calendar for a campaign with default months and
@@ -507,6 +527,10 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID string, in
 	if err := s.repo.CreateEvent(ctx, evt); err != nil {
 		return nil, fmt.Errorf("create event: %w", err)
 	}
+	// Resolve campaign ID for event publishing.
+	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
+		s.events.PublishCalendarEvent("event.created", cal.CampaignID, evt.ID, evt)
+	}
 	return evt, nil
 }
 
@@ -569,12 +593,28 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 	evt.VisibilityRules = input.VisibilityRules
 	evt.Category = input.Category
 
-	return s.repo.UpdateEvent(ctx, evt)
+	if err := s.repo.UpdateEvent(ctx, evt); err != nil {
+		return err
+	}
+	if cal, err := s.repo.GetByID(ctx, evt.CalendarID); err == nil && cal != nil {
+		s.events.PublishCalendarEvent("event.updated", cal.CampaignID, evt.ID, evt)
+	}
+	return nil
 }
 
 // DeleteEvent removes an event.
 func (s *calendarService) DeleteEvent(ctx context.Context, eventID string) error {
-	return s.repo.DeleteEvent(ctx, eventID)
+	// Fetch event before deletion for event publishing.
+	evt, _ := s.repo.GetEvent(ctx, eventID)
+	if err := s.repo.DeleteEvent(ctx, eventID); err != nil {
+		return err
+	}
+	if evt != nil {
+		if cal, err := s.repo.GetByID(ctx, evt.CalendarID); err == nil && cal != nil {
+			s.events.PublishCalendarEvent("event.deleted", cal.CampaignID, eventID, evt)
+		}
+	}
+	return nil
 }
 
 // ListEventsForMonth returns events for a given month/year, filtered by role and per-user rules.
@@ -687,7 +727,15 @@ func (s *calendarService) AdvanceDate(ctx context.Context, calendarID string, da
 	cal.CurrentDay = day
 	cal.CurrentMonth = monthIdx + 1
 	cal.CurrentYear = year
-	return s.repo.Update(ctx, cal)
+	if err := s.repo.Update(ctx, cal); err != nil {
+		return err
+	}
+	s.events.PublishCalendarEvent("date.advanced", cal.CampaignID, calendarID, map[string]int{
+		"year":  cal.CurrentYear,
+		"month": cal.CurrentMonth,
+		"day":   cal.CurrentDay,
+	})
+	return nil
 }
 
 // AdvanceTime moves the current time forward by the given hours and minutes,
