@@ -20,7 +20,7 @@ Known broken or missing things, ordered by severity.
 ### High
 
 - [x] **@mention popup won't dismiss** — Fixed by adding link mark guard in `onUpdate` (skips `@` inside existing mention links) and removing `selectionUpdate` event binding. Mentions still stored as Link marks, but popup no longer re-triggers.
-- [ ] **Image upload click does nothing** — Users click "Add Image" area, nothing happens. Widget code (`image_upload.js`) appears correct; likely browser-level issue (Firefox blocking programmatic file input `.click()`) or widget not mounting. Needs browser-level debugging with DevTools.
+- [x] **Image upload click does nothing** — Fixed event recursion: file input's click event bubbled back to parent widget, causing Firefox to suppress file picker. Added stopPropagation on file input click, campaign_id to upload FormData, and fixed hover feedback on placeholder.
 - [ ] **No media management for campaign owners** — Admin has `/admin/storage` page. Campaign owners have NO way to browse, manage, or delete their uploads. Need campaign-scoped media browser at `/campaigns/:id/media` with "referenced by" tracking, delete with warnings, and upload from browser page.
 
 ### Medium
@@ -32,11 +32,11 @@ Known broken or missing things, ordered by severity.
 
 - [ ] **API endpoints ignore addon disabled state** — Routes are hardcoded at startup. If calendar addon is disabled for a campaign, `/api/v1/campaigns/:id/calendar` still executes. Need `RequireAddon` middleware on API route groups.
 - [ ] **API technical documentation missing** — REST API v1 exists and works but has no public documentation (OpenAPI spec or reference).
-- [ ] **Calendar HTMX detection inconsistency** — `internal/plugins/calendar/handler.go` uses raw `c.Request().Header.Get("HX-Request")` in 5 places instead of centralized `middleware.IsHTMX(c)`. Should standardize.
+- [x] **Calendar HTMX detection inconsistency** — Replaced 5 raw `HX-Request` header checks in calendar handler with `middleware.IsHTMX(c)`, which also checks `HX-Boosted` to avoid returning fragments on boosted navigation.
 - [ ] **Cross-plugin adapter interface duplication** — `MemberLister` interface duplicated in timeline and sessions plugins. Should extract to shared package.
 - [ ] **IDOR check functions duplicated** — `requireTimelineInCampaign`, `requireMapInCampaign`, `requireSessionInCampaign`, `requireEventInCampaign` follow identical patterns in 4 plugins. Extract to shared generic helper.
 - [ ] **logAudit fire-and-forget duplicated** — Similar audit logging patterns in entities, campaigns, tags handlers. Could extract to shared `FireAudit()` utility.
-- [ ] **JS fetch header setup duplicated** — CSRF + JSON header construction repeated in notes, relations, tag_picker, attributes. Add `Chronicle.apiFetch()` wrapper to boot.js.
+- [x] **JS fetch header setup duplicated** — Added `Chronicle.apiFetch()` wrapper to boot.js (auto-sets headers, CSRF, JSON serialization). Migrated sidebar_config, entity_type_config, sidebar_nav_editor, dashboard_editor widgets. Simplified notes.js CSRF reading.
 - [ ] **Mixed error types** — `echo.NewHTTPError` used directly in 30+ places instead of centralized `apperror` package. Should standardize.
 - [ ] **LIKE metacharacter in backlinks** — `entities/repository.go:1011` concatenates entityID into LIKE pattern without escaping `%`/`_`. Low risk (UUIDs only) but should escape for safety.
 - [ ] **No Content Security Policy headers** — CSP not implemented. Would provide XSS defense-in-depth alongside bluemonday sanitization.
@@ -96,8 +96,8 @@ New capabilities ordered by priority for alpha release.
 - [x] Notes widget service tests (28 tests)
 - [x] Widget lifecycle audit (destroy methods, event listener leaks)
 - [x] Campaigns service tests (72 tests covering CRUD, membership, ownership transfer, sidebar, dashboard, admin ops, model helpers)
-- [ ] Relations service tests (bi-directional create/delete, validation)
-- [ ] Tags service tests (CRUD, slug generation, diff-based assignment)
+- [x] Relations service tests (25 tests: bi-directional create/delete, symmetric relations, validation, conflict handling)
+- [x] Tags service tests (40 tests: CRUD, color validation, slug generation, diff-based SetEntityTags, cross-campaign prevention, visibility filtering)
 - [ ] Audit service tests (pagination, validation, fire-and-forget)
 - [ ] Media service tests (file validation, thumbnail generation)
 - [ ] Settings service tests (limit resolution, override priority)
@@ -238,3 +238,11 @@ Summary of strengths/weaknesses for strategic positioning. Full analysis in `.ai
 - [x] Fixed all 138 golangci-lint issues (errcheck, staticcheck S1016, unused dead code)
 - [x] Consolidated JS utility duplication: escapeHtml (9 copies), escapeAttr (7 copies), getCsrf (3 copies) → shared Chronicle.* in boot.js
 - [x] Syncapi repository errcheck fixes (Row.Scan error handling, json.Unmarshal acknowledgement)
+
+### Bug Fixes & Testing Sprint (2026-03-04)
+- [x] Image upload click fix (event recursion prevention, campaign_id in FormData, hover feedback)
+- [x] Chronicle.apiFetch() shared wrapper in boot.js (auto-headers, CSRF, JSON serialization)
+- [x] Migrated 4 widgets to Chronicle.apiFetch() (sidebar_config, entity_type_config, sidebar_nav_editor, dashboard_editor)
+- [x] Calendar HTMX detection fix (5 raw header checks → middleware.IsHTMX())
+- [x] Relations service tests (25 tests)
+- [x] Tags service tests (40 tests)

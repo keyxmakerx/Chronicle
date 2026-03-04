@@ -8,15 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Tag dm_only visibility, @mention fix, blank sidebar fix, attributes
-template reset, campaigns service tests (72 tests). All alpha-critical bugs except
-image upload resolved. Branch: `claude/review-codebase-R1WqN`.
+2026-03-04 -- Image upload fix, Chronicle.apiFetch() wrapper, calendar HTMX fix,
+relations tests (25), tags tests (40). Branch: `claude/review-codebase-R1WqN`.
 
 ## Current Phase
-**Bug fixes + feature sprint.** Completed: tag dm_only visibility controls, @mention
-popup fix, blank sidebar drill panel fix, attributes template reset button, campaigns
-service tests (72 tests). Next: image upload fix, media management, extension docs,
-graceful addon degradation.
+**Bug fixes + code quality sprint.** Completed this session: image upload click fix
+(event recursion + missing campaign_id), Chronicle.apiFetch() shared wrapper (4 widgets
+migrated), calendar handler HTMX detection fix (5 instances → middleware.IsHTMX()),
+relations service tests (25 tests), tags service tests (40 tests). Next: media
+management, extension docs, graceful addon degradation, more test coverage.
 
 ### HTMX Sidebar Conversion + JS Hoisting Fixes — COMPLETE
 Branch: `claude/review-codebase-R1WqN`
