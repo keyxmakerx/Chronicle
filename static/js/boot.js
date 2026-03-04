@@ -261,6 +261,100 @@
   Chronicle.mountWidgets = mountWidgets;
   Chronicle.destroyWidget = destroyElement;
 
+  // --- Unsaved Changes Warning ---
+  // Global dirty state tracker. Widgets and forms register themselves as
+  // dirty sources. A single beforeunload listener warns the user when
+  // navigating away with unsaved changes.
+
+  var dirtySources = {};
+
+  /**
+   * Mark a source as having unsaved changes.
+   * @param {string} id - Unique source identifier (e.g. 'editor', 'form:entity-edit').
+   */
+  Chronicle.markDirty = function (id) {
+    dirtySources[id] = true;
+  };
+
+  /**
+   * Mark a source as clean (changes saved or discarded).
+   * @param {string} id - Source identifier to clear.
+   */
+  Chronicle.markClean = function (id) {
+    delete dirtySources[id];
+  };
+
+  /**
+   * Check if any source has unsaved changes.
+   * @returns {boolean}
+   */
+  Chronicle.isDirty = function () {
+    for (var k in dirtySources) {
+      if (dirtySources.hasOwnProperty(k)) return true;
+    }
+    return false;
+  };
+
+  // Warn user before leaving the page with unsaved changes.
+  window.addEventListener('beforeunload', function (e) {
+    if (Chronicle.isDirty()) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
+  // Clear form dirty sources when HTMX swaps out tracked forms.
+  document.addEventListener('htmx:beforeSwap', function (event) {
+    if (event.detail && event.detail.target) {
+      var forms = event.detail.target.querySelectorAll('form[data-track-changes]');
+      for (var i = 0; i < forms.length; i++) {
+        var formId = forms[i].getAttribute('data-track-changes');
+        if (formId) Chronicle.markClean('form:' + formId);
+      }
+    }
+  });
+
+  // --- Form Change Tracking ---
+  // Forms with data-track-changes="<id>" are auto-tracked. Any input/change
+  // event marks the form dirty. Successful HTMX submission clears it.
+
+  function trackFormChanges(form) {
+    var formId = form.getAttribute('data-track-changes');
+    if (!formId || form._trackingChanges) return;
+    form._trackingChanges = true;
+
+    var dirtyKey = 'form:' + formId;
+
+    function onInput() { Chronicle.markDirty(dirtyKey); }
+
+    form.addEventListener('input', onInput);
+    form.addEventListener('change', onInput);
+
+    // Clear dirty state after successful HTMX request from this form.
+    form.addEventListener('htmx:afterRequest', function (evt) {
+      if (evt.detail && evt.detail.successful) {
+        Chronicle.markClean(dirtyKey);
+      }
+    });
+  }
+
+  function initFormTracking(root) {
+    var forms = root.querySelectorAll('form[data-track-changes]');
+    for (var i = 0; i < forms.length; i++) {
+      trackFormChanges(forms[i]);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    initFormTracking(document);
+  });
+
+  document.addEventListener('htmx:afterSettle', function (event) {
+    if (event.detail && event.detail.target) {
+      initFormTracking(event.detail.target);
+    }
+  });
+
   // --- Shared Utilities ---
   // Centralized utility functions used by multiple widgets. Widgets should
   // call Chronicle.escapeHtml() etc. instead of defining their own copies.

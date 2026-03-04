@@ -8,30 +8,25 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Comprehensive QoL audit (60+ items across 4 priority tiers), README.md
-creation, todo.md overhaul. Branch: `claude/review-codebase-R1WqN`.
+2026-03-04 -- UX hardening sprint: sidebar drill fix, unsaved changes warning,
+confirmation dialogs, timeline era editing link. Branch: `claude/review-codebase-R1WqN`.
 
 ## Current Phase
-**Comprehensive audit + documentation.** Completed this session: full codebase audit
-across all 17 route files, 24 JS widgets, all templ templates. Found and categorized
-60+ gaps into MUST (10), NEED (15), WANT (20), MAYBE (15). Key findings:
-- Sidebar drill route 403 for public visitors (auth-only route group)
-- Sessions addon not discoverable (RSVP lives there, users look in Calendar)
-- Calendar missing click-to-create, event detail view, customizable categories
-- Timeline era editing only via Calendar settings (no per-era edit/delete UI)
-- No unsaved changes warning, inconsistent empty states, no loading spinners
-- Editor missing tables and callout blocks
-- Search limited to entities only
-
-Created full README.md (features, setup, tech stack, architecture, inspiration).
-Updated todo.md with all audit findings + corrected root causes.
+**UX hardening.** Completed this session:
+- Fixed sidebar drill 403 for public visitors (moved route to `pub` group)
+- Added global unsaved changes warning (`beforeunload`) with editor + form tracking
+- Added confirmation dialogs to notes delete and relations delete
+- Added "Edit Eras" button on timeline page linking to calendar settings
+- Calendar settings now reads `?tab` query param for deep-linking
+- README.md finalized (minor accuracy fix for modules list)
+- All 294+ tests passing
 
 **Next priorities:**
-1. Fix sidebar drill for public visitors (move route to pub group)
-2. Calendar event detail view + click-to-create on date
-3. Sessions discoverability (auto-enable, calendar cross-linking)
-4. Era editing UX (per-era edit/delete buttons)
-5. Media management for campaign owners
+1. Calendar event detail view + click-to-create on date
+2. Sessions discoverability (auto-enable, calendar cross-linking)
+3. Media management for campaign owners
+4. Empty states consistency pass
+5. Loading/spinner states
 6. Editor tables + callout blocks
 
 ### HTMX Sidebar Conversion + JS Hoisting Fixes — COMPLETE

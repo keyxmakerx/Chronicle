@@ -364,6 +364,7 @@ Chronicle.register('notes', {
     }
 
     function deleteNote(id) {
+      if (!confirm('Delete this note? This cannot be undone.')) return;
       // Release lock before deleting if we hold one.
       if (state.lockedNoteId === id) {
         releaseLockIfHeld();

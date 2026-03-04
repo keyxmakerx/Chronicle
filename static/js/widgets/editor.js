@@ -195,13 +195,14 @@
         });
       }
 
-      // Track changes for autosave and highlight the save button.
+      // Track changes for autosave, highlight save button, and notify global dirty state.
       if (canEdit) {
         editor.on('update', function () {
           if (!state.isEditing) return; // ignore updates during content loading
           state.dirty = true;
           setStatus(statusEl, 'unsaved');
           updateSaveButton(toolbar, true);
+          Chronicle.markDirty('editor');
         });
       }
 
@@ -244,6 +245,7 @@
         state.editor.destroy();
       }
 
+      Chronicle.markClean('editor');
       editors.delete(el);
     },
   });
@@ -720,6 +722,7 @@
         state.saving = false;
         setStatus(state.statusEl, 'saved');
         updateSaveButton(state.toolbar, false);
+        Chronicle.markClean('editor');
       })
       .catch(function (err) {
         console.error('[Editor] Save error:', err);

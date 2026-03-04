@@ -14,7 +14,7 @@ import (
 // CalendarSettingsPage renders the full settings page for calendar owners.
 templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
 	@layouts.App("Calendar Settings - " + cc.Campaign.Name) {
-		<div class="h-full flex flex-col -mx-5 -my-4" x-data="{ tab: 'general' }">
+		<div class="h-full flex flex-col -mx-5 -my-4" x-data="{ tab: new URLSearchParams(window.location.search).get('tab') || 'general' }">
 			<!-- Header -->
 			<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
 				<div class="flex items-center gap-3">
@@ -591,7 +591,7 @@ templ erasSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken st
 								<span class="text-sm font-medium text-fg" x-text="e.name || 'Unnamed Era'"></span>
 								<span class="text-xs text-fg-muted" x-text="e.end_year ? e.start_year + ' – ' + e.end_year : e.start_year + ' – present'"></span>
 							</div>
-							<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="eras.splice(i, 1)">
+							<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="if(confirm('Remove this era? Click Save to confirm.')) eras.splice(i, 1)">
 								<i class="fa-solid fa-trash-can"></i>
 							</button>
 						</div>

@@ -22,12 +22,12 @@ Known broken or missing things, ordered by severity.
 - [x] **@mention popup won't dismiss** — Fixed by adding link mark guard in `onUpdate` (skips `@` inside existing mention links) and removing `selectionUpdate` event binding. Mentions still stored as Link marks, but popup no longer re-triggers.
 - [x] **Image upload click does nothing** — Fixed event recursion: file input's click event bubbled back to parent widget, causing Firefox to suppress file picker. Added stopPropagation on file input click, campaign_id to upload FormData, and fixed hover feedback on placeholder.
 - [ ] **No media management for campaign owners** — Admin has `/admin/storage` page. Campaign owners have NO way to browse, manage, or delete their uploads. Need campaign-scoped media browser at `/campaigns/:id/media` with "referenced by" tracking, delete with warnings, and upload from browser page.
-- [ ] **Sidebar drill 403 for public visitors** — Root cause: `GET /campaigns/:id/sidebar/drill/:slug` only registered in authenticated `cg` group (`campaigns/routes.go:49`), not in `pub` group. Category pages via `/:typeSlug` work fine for public users (in `pub` group), but clicking categories in sidebar triggers drill route → 403. Fix: add drill route to `pub` group.
-- [ ] **Timeline eras not editable** — Backend `PUT /calendar/eras` exists (Owner-only) but only as a bulk update via calendar settings. No per-era edit/delete UI buttons. No link from timeline page to era editor. Fix: add per-era edit/delete in calendar settings + "Edit Eras" link from timeline.
+- [x] **Sidebar drill 403 for public visitors** — Fixed: added `GET /campaigns/:id/sidebar/drill/:slug` to `pub` group in `campaigns/routes.go`. Public visitors can now click categories in sidebar without 403.
+- [x] **Timeline eras not editable** — Fixed: added "Edit Eras" button on timeline detail page (links to `/calendar/settings?tab=eras`). Calendar settings now reads `?tab` query param to open correct tab. Added confirmation dialog to era delete button.
 - [ ] **Sessions addon not discoverable** — RSVP is in Sessions plugin (not Calendar). Sessions is an addon requiring manual enable per-campaign. Sidebar shows Sessions link only when addon enabled (`app.templ:159`). Users expect RSVP in Calendar. Fix: improve Sessions discoverability, add Calendar→Sessions cross-linking, consider auto-enabling Sessions.
 - [ ] **Calendar events lack view→edit mode** — Events open directly in create/edit modal. No read-only event detail view (unlike entity pages which have separate show/edit routes). Fix: add event detail panel with view mode, edit button.
 - [ ] **Calendar click-to-create on date** — No way to click a calendar date cell to create an event (standard calendar UX, Google Calendar style). Must use separate "New Event" button.
-- [ ] **No unsaved changes warning** — Navigating away from editor/forms loses work without warning. Need `beforeunload` handler when there are unsaved changes.
+- [x] **No unsaved changes warning** — Fixed: global dirty state tracker in boot.js (`Chronicle.markDirty/markClean/isDirty`) with `beforeunload` handler. Editor widget hooks in. Forms with `data-track-changes` auto-tracked (entity create/edit, campaign create/settings).
 - [ ] **Empty states inconsistent** — Many list views lack empty state messaging or CTAs (some entity lists, maps list, timelines). Calendar has `UpcomingEventsEmpty()` as good pattern to follow.
 - [ ] **Calendar event categories not customizable** — 8 hardcoded category strings (birthday, battle, ceremony, death, discovery, marriage, milestone, other) in `categoryIcon()` helper. No UI to add custom categories.
 
@@ -36,7 +36,7 @@ Known broken or missing things, ordered by severity.
 - [x] **Tags not hideable from players** — Implemented `dm_only` column (migration 000038), role-based filtering in repo/service/handler, eye-slash badge + DM checkbox in tag_picker.js.
 - [x] **Attributes missing "Use Template" reset** — Added DELETE `/field-overrides` endpoint and "Reset" button in attributes customize panel with confirmation dialog. Clears field_overrides to NULL, restoring category template defaults.
 - [ ] **Search scope limited to entities** — Ctrl+K quick search only searches entities. Should also search calendar events, timelines, maps, sessions. Would significantly improve discoverability.
-- [ ] **No confirmation dialogs for destructive actions** — No standard confirm modal for delete entity/event/map/timeline. Some delete operations fire immediately on click.
+- [x] **No confirmation dialogs for destructive actions** — Audited all delete operations. Most already had confirms (campaigns, entities, maps, markers, timelines, sessions, calendar events, sidebar nav, admin pages). Added confirms to notes.js and relations.js (the two missing ones). Dashboard editor row/block delete is safe (not persisted until explicit save).
 - [ ] **No loading/spinner states** — No visual loading indicator during HTMX requests or API calls. Users see no feedback while waiting.
 - [ ] **Keyboard shortcuts help** — No way to discover available shortcuts (Ctrl+? or help overlay). 4 shortcuts exist but undocumented in UI.
 - [ ] **Form validation feedback** — No client-side validation styling (red borders, inline error messages). Server validates but user gets no inline hints.
@@ -78,7 +78,7 @@ New capabilities ordered by priority for alpha release.
 - [ ] **Extension technical documentation** — 1-3 page `.ai.md` writeup per plugin/widget/module. Standard template covering purpose, architecture, API endpoints, widget integration, lifecycle, security. See documentation audit in plan.
 - [ ] **Graceful extension degradation** — `RequireAddon` API middleware, human-readable errors for disabled/uninstalled addons, addon dependency checking.
 - [x] **Permissions & UX completeness audit** — Completed 2026-03-04. Audited all 17 route files, 24 JS widgets, all templ templates. Found 10 MUST-haves, 15 NEED-to-haves, 20 WANTs, 15 MAYBEs. Key findings: sidebar drill public access, sessions discoverability, calendar UX gaps, missing editor features (tables, callouts), no unsaved changes warning, inconsistent empty states. All items added to Bugfixes section above.
-- [ ] **README.md** — Project has only `# Chronicle` stub. Need proper open-source README with features, setup instructions, tech stack, screenshots placeholders, inspiration credits.
+- [x] **README.md** — Full open-source README with features, setup instructions, tech stack, architecture, project structure, screenshots placeholders, inspiration credits. Created 2026-03-04.
 
 ### Alpha-Nice-to-Have
 

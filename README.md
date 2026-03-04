@@ -168,7 +168,7 @@ make docker-down     # Stop containers
 cmd/server/          # Application entrypoint
 internal/
   plugins/           # Feature apps (auth, campaigns, entities, calendar, ...)
-  modules/           # Game system content packs (dnd5e, pathfinder, drawsteel)
+  modules/           # Game system content packs (dnd5e)
   widgets/           # Reusable UI components (editor, tags, relations, notes, ...)
   templates/         # Templ layouts and shared components
   middleware/        # HTTP middleware (auth, CSRF, logging, recovery)

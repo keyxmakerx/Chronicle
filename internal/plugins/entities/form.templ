@@ -52,6 +52,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			hx-post={ fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }
 			hx-target="#entity-form"
 			hx-swap="outerHTML"
+			data-track-changes="entity-create"
 		>
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
 
@@ -135,6 +136,7 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 			hx-put={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
 			hx-target="#entity-form"
 			hx-swap="outerHTML"
+			data-track-changes="entity-edit"
 		>
 			<input type="hidden" name="_method" value="PUT"/>
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
