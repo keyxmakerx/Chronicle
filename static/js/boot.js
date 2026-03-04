@@ -302,4 +302,65 @@
     var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
     return m ? decodeURIComponent(m[1]) : '';
   };
+
+  /**
+   * Convenience wrapper around fetch() for API calls.
+   *
+   * Automatically:
+   *  - Sets Accept: application/json
+   *  - Adds X-CSRF-Token header on mutating requests (POST/PUT/DELETE)
+   *  - Serializes plain-object bodies as JSON (sets Content-Type)
+   *  - Sets credentials: same-origin
+   *
+   * @param {string} url - Request URL.
+   * @param {Object} [opts] - Options forwarded to fetch().
+   * @param {string} [opts.method] - HTTP method (default GET).
+   * @param {Object|FormData|string} [opts.body] - Request body. Plain objects are JSON-serialized.
+   * @param {Object} [opts.headers] - Extra headers (merged with defaults).
+   * @param {AbortSignal} [opts.signal] - AbortController signal.
+   * @param {string} [opts.csrfToken] - Explicit CSRF token; falls back to cookie.
+   * @returns {Promise<Response>} The fetch Response (caller handles .json() / .ok).
+   */
+  Chronicle.apiFetch = function (url, opts) {
+    opts = opts || {};
+    var method = (opts.method || 'GET').toUpperCase();
+    var headers = {};
+
+    // Merge caller-supplied headers first.
+    if (opts.headers) {
+      for (var k in opts.headers) {
+        headers[k] = opts.headers[k];
+      }
+    }
+
+    // Default Accept header.
+    if (!headers['Accept']) {
+      headers['Accept'] = 'application/json';
+    }
+
+    // Auto-attach CSRF token on mutating requests.
+    if (method !== 'GET' && method !== 'HEAD' && !headers['X-CSRF-Token']) {
+      var csrf = opts.csrfToken || Chronicle.getCsrf();
+      if (csrf) {
+        headers['X-CSRF-Token'] = csrf;
+      }
+    }
+
+    // Serialize plain objects as JSON.
+    var body = opts.body;
+    if (body && typeof body === 'object' && !(body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify(body);
+    }
+
+    var fetchOpts = {
+      method: method,
+      headers: headers,
+      credentials: 'same-origin'
+    };
+    if (body !== undefined) fetchOpts.body = body;
+    if (opts.signal) fetchOpts.signal = opts.signal;
+
+    return fetch(url, fetchOpts);
+  };
 })();

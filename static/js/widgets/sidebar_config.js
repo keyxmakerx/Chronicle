@@ -37,10 +37,7 @@
       }
 
       // Fetch current config from server.
-      fetch(endpoint, {
-        headers: { 'Accept': 'application/json' },
-        credentials: 'same-origin'
-      })
+      Chronicle.apiFetch(endpoint)
         .then(function (res) {
           if (!res.ok) throw new Error('HTTP ' + res.status);
           return res.json();
@@ -232,20 +229,12 @@
        * Save configuration to server.
        */
       function save() {
-        var csrfMatch = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-        var csrf = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
-
-        fetch(endpoint, {
+        Chronicle.apiFetch(endpoint, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': csrf
-          },
-          credentials: 'same-origin',
-          body: JSON.stringify({
+          body: {
             entity_type_order: sidebarConfig.entity_type_order || [],
             hidden_type_ids: sidebarConfig.hidden_type_ids || []
-          })
+          }
         })
           .then(function (res) {
             if (!res.ok) console.error('[sidebar-config] Save returned HTTP ' + res.status);
