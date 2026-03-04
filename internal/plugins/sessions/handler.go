@@ -49,13 +49,14 @@ func (h *Handler) ListSessions(c echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
 	isOwner := cc.MemberRole >= campaigns.RoleOwner
 	isScribe := cc.MemberRole >= campaigns.RoleScribe
+	userID := auth.GetUserID(c)
 
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK,
-			SessionListFragment(cc, sessionList, csrfToken, isOwner, isScribe))
+			SessionListFragment(cc, sessionList, csrfToken, isOwner, isScribe, userID))
 	}
 	return middleware.Render(c, http.StatusOK,
-		SessionListPage(cc, sessionList, csrfToken, isOwner, isScribe))
+		SessionListPage(cc, sessionList, csrfToken, isOwner, isScribe, userID))
 }
 
 // ShowSession renders a session detail page.

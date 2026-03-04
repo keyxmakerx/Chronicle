@@ -546,12 +546,12 @@
     @apply fixed z-50 bg-surface rounded-xl
            shadow-2xl border border-edge flex flex-col;
     transition: opacity 0.3s ease-out, transform 0.3s ease-out;
-    /* Mobile: full-width bottom sheet */
+    /* Mobile: full-width bottom sheet, using dvh to dodge virtual keyboard. */
     bottom: 0;
     left: 0;
     right: 0;
     width: 100%;
-    max-height: 75vh;
+    max-height: 75dvh;
     border-radius: 0.75rem 0.75rem 0 0;
   }
   @media (min-width: 640px) {
@@ -839,10 +839,20 @@
   /* --- Timeline Visualization Widget --- */
 
   .timeline-viz-container {
-    @apply rounded-xl overflow-hidden;
+    @apply overflow-hidden sm:rounded-xl;
     background: var(--color-surface, #1a1b26);
     border: 1px solid var(--color-edge, #2a2b3d);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+  /* On mobile, let the viz bleed to screen edges. */
+  @media (max-width: 639px) {
+    .timeline-viz-container {
+      margin-left: -0.5rem;
+      margin-right: -0.5rem;
+      border-left: none;
+      border-right: none;
+      border-radius: 0;
+    }
   }
 
   .timeline-viz-toolbar {
