@@ -9,4 +9,4 @@ CREATE TABLE IF NOT EXISTS calendar_event_categories (
     sort_order INT          NOT NULL DEFAULT 0,
     UNIQUE KEY idx_calendar_category_slug (calendar_id, slug),
     CONSTRAINT fk_event_categories_calendar FOREIGN KEY (calendar_id) REFERENCES calendars(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
