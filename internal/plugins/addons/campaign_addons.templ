@@ -50,6 +50,21 @@ templ CampaignAddonsPageTempl(campaignID string, addons []CampaignAddon, csrfTok
 // CampaignAddonsListFragment renders just the addon list (for HTMX swaps).
 templ CampaignAddonsListFragment(campaignID string, addons []CampaignAddon, csrfToken string) {
 	// Group by category.
+	if countCampaignAddonsByCategory(addons, CategoryPlugin) > 0 {
+		<div class="mb-6">
+			<h2 class="section-header mb-3">
+				<i class="fa-solid fa-cube mr-2 text-fg-muted"></i>Plugins
+			</h2>
+			<div class="space-y-2">
+				for _, a := range addons {
+					if a.AddonCategory == CategoryPlugin {
+						@campaignAddonRow(campaignID, a, csrfToken)
+					}
+				}
+			</div>
+		</div>
+	}
+
 	if countCampaignAddonsByCategory(addons, CategoryModule) > 0 {
 		<div class="mb-6">
 			<h2 class="section-header mb-3">
