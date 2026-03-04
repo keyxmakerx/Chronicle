@@ -470,6 +470,20 @@ func (a *sessionListerAdapter) ListSessionsForDateRange(ctx context.Context, cam
 	if err != nil {
 		return nil, err
 	}
+	return sessionsToCalendarSessions(sess, ""), nil
+}
+
+// ListAllSessions returns all planned sessions for the calendar sessions modal.
+func (a *sessionListerAdapter) ListAllSessions(ctx context.Context, campaignID, userID string) ([]calendar.CalendarSession, error) {
+	sess, err := a.svc.ListPlannedSessions(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return sessionsToCalendarSessions(sess, userID), nil
+}
+
+// sessionsToCalendarSessions converts session models to calendar display structs.
+func sessionsToCalendarSessions(sess []sessions.Session, userID string) []calendar.CalendarSession {
 	result := make([]calendar.CalendarSession, 0, len(sess))
 	for _, s := range sess {
 		cs := calendar.CalendarSession{
@@ -487,10 +501,14 @@ func (a *sessionListerAdapter) ListSessionsForDateRange(ctx context.Context, cam
 			if att.Status == "accepted" {
 				cs.AcceptedCount++
 			}
+			// Track current user's RSVP status.
+			if userID != "" && att.UserID == userID {
+				cs.UserRSVP = att.Status
+			}
 		}
 		result = append(result, cs)
 	}
-	return result, nil
+	return result
 }
 
 // RegisterRoutes sets up all application routes. It registers public routes

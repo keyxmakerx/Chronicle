@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -211,8 +212,8 @@ templ CalendarPage(cc *campaigns.CampaignContext, data CalendarViewData) {
 			</div>
 		</div>
 		@eventViewModal(data)
-		if len(data.Sessions) > 0 {
-			@sessionViewModal(data)
+		if data.Calendar.Mode == "reallife" {
+			@sessionsModal(data)
 		}
 		if data.IsScribe {
 			@eventModal(data)
@@ -337,15 +338,18 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 					<i class="fa-solid fa-gear text-sm"></i>
 				</a>
 			}
-			<!-- Sessions link (integrated into calendar) -->
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions", data.CampaignID)) }
-				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
-				title="Game sessions & RSVP"
-			>
-				<i class="fa-solid fa-dice-d20 text-sm"></i>
-			</a>
-			<!-- Add event / session buttons (Scribe+) -->
+			<!-- Sessions modal toggle (real-life calendars only) -->
+			if data.Calendar.Mode == "reallife" {
+				<button
+					type="button"
+					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+					title="Game sessions & RSVP"
+					onclick="toggleSessionsModal()"
+				>
+					<i class="fa-solid fa-dice-d20 text-sm"></i>
+				</button>
+			}
+			<!-- Add event button (Scribe+) -->
 			if data.IsScribe {
 				<button
 					class="btn-primary text-xs"
@@ -353,12 +357,6 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 				>
 					<i class="fa-solid fa-plus mr-1"></i> Event
 				</button>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions", data.CampaignID)) }
-					class="btn-secondary text-xs"
-				>
-					<i class="fa-solid fa-dice-d20 mr-1"></i> Sessions
-				</a>
 			}
 		</div>
 	</div>
@@ -477,16 +475,7 @@ templ dayCell(data CalendarViewData, day int) {
 			<button
 				class="w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-pointer hover:ring-1 hover:ring-purple-400/30 bg-purple-500/15 text-purple-400"
 				title={ sess.Name + " — " + fmt.Sprintf("%d/%d attending", sess.AcceptedCount, sess.TotalCount) }
-				data-session-id={ sess.ID }
-				data-session-name={ sess.Name }
-				data-session-date={ sess.ScheduledDate }
-				data-session-status={ sess.Status }
-				data-session-recurring={ strconv.FormatBool(sess.IsRecurring) }
-				data-session-recurrence-label={ sess.RecurrenceLabel }
-				data-session-accepted={ strconv.Itoa(sess.AcceptedCount) }
-				data-session-total={ strconv.Itoa(sess.TotalCount) }
-				data-campaign-id={ data.CampaignID }
-				onclick="openSessionModal(this)"
+				onclick="toggleSessionsModal()"
 			>
 				<i class="fa-solid fa-dice-d20 mr-0.5 text-[8px]"></i>
 				{ sess.Name }
@@ -676,135 +665,249 @@ templ eventViewModal(data CalendarViewData) {
 	</script>
 }
 
-// sessionViewModal renders the session detail overlay shown when clicking a
-// session chip on the calendar grid. Includes RSVP controls inline.
-templ sessionViewModal(data CalendarViewData) {
+// sessionsModal renders the sessions overlay modal on the calendar page.
+// Shows the session list with inline RSVP, and a create form for Scribes+.
+// Content is loaded via HTMX from the sessions-fragment endpoint.
+templ sessionsModal(data CalendarViewData) {
 	<div
-		id="session-view-modal"
+		id="sessions-modal"
 		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-		onclick="if(event.target===this)closeSessionModal()"
+		onclick="if(event.target===this)toggleSessionsModal()"
 	>
-		<div class="card p-6 w-full max-w-md">
-			<div class="flex items-center justify-between mb-4">
+		<div class="card w-full max-w-lg max-h-[80vh] flex flex-col">
+			<!-- Header -->
+			<div class="flex items-center justify-between p-5 pb-3 border-b border-edge shrink-0">
 				<div class="flex items-center gap-2">
 					<i class="fa-solid fa-dice-d20 text-purple-400"></i>
-					<h2 id="session-modal-name" class="text-lg font-semibold text-fg truncate"></h2>
+					<h2 class="text-lg font-semibold text-fg">Sessions</h2>
 				</div>
-				<button onclick="closeSessionModal()" class="text-fg-muted hover:text-fg text-sm">
-					<i class="fa-solid fa-xmark"></i>
-				</button>
-			</div>
-			<!-- Session details -->
-			<div class="space-y-3">
-				<div class="flex items-center gap-3 text-sm text-fg-secondary">
-					<span id="session-modal-date">
-						<i class="fa-regular fa-calendar mr-1"></i>
-					</span>
-					<span id="session-modal-status" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium"></span>
-				</div>
-				<div id="session-modal-recurrence" class="hidden">
-					<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
-						<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
-						<span id="session-modal-recurrence-label"></span>
-					</span>
-				</div>
-				<div class="text-sm text-fg-secondary">
-					<i class="fa-solid fa-users mr-1"></i>
-					<span id="session-modal-attendance"></span>
-				</div>
-				<!-- RSVP controls (loaded via HTMX) -->
-				<div id="session-modal-rsvp" class="pt-3 border-t border-edge">
-					<p class="text-sm font-semibold text-fg mb-2">
-						<i class="fa-solid fa-envelope-open-text mr-1 text-accent"></i> RSVP
-					</p>
-					<div class="flex gap-2" id="session-rsvp-buttons"></div>
+				<div class="flex items-center gap-2">
+					if data.IsScribe {
+						<button
+							type="button"
+							class="btn-primary text-xs"
+							onclick="document.getElementById('sessions-create-form').classList.toggle('hidden')"
+						>
+							<i class="fa-solid fa-plus mr-1"></i> New Session
+						</button>
+					}
+					<button onclick="toggleSessionsModal()" class="text-fg-muted hover:text-fg text-sm">
+						<i class="fa-solid fa-xmark"></i>
+					</button>
 				</div>
 			</div>
-			<!-- Action links -->
-			<div class="flex items-center justify-between mt-4 pt-4 border-t border-edge">
-				<a id="session-modal-link" href="#" class="text-xs text-accent hover:underline">
-					View full session
-				</a>
-				<button onclick="closeSessionModal()" class="btn-secondary text-xs">Close</button>
+			<!-- Content (HTMX loaded) -->
+			<div
+				id="sessions-modal-content"
+				class="flex-1 overflow-y-auto p-5"
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendar/sessions-fragment", data.CampaignID) }
+				hx-trigger="sessions-refresh from:body"
+				hx-swap="innerHTML"
+			>
+				@sessionsModalContent(data)
 			</div>
 		</div>
 	</div>
 	<script>
-		(function() {
-			var modal = document.getElementById('session-view-modal');
-			var csrf = { fmt.Sprintf("'%s'", data.CSRFToken) };
-
-			window.openSessionModal = function(el) {
-				var id = el.dataset.sessionId;
-				var name = el.dataset.sessionName;
-				var date = el.dataset.sessionDate;
-				var status = el.dataset.sessionStatus;
-				var recurring = el.dataset.sessionRecurring === 'true';
-				var recLabel = el.dataset.sessionRecurrenceLabel;
-				var accepted = el.dataset.sessionAccepted;
-				var total = el.dataset.sessionTotal;
-				var campaignId = el.dataset.campaignId;
-
-				document.getElementById('session-modal-name').textContent = name;
-
-				// Format date
-				var dateEl = document.getElementById('session-modal-date');
-				if (date) {
-					var d = new Date(date + 'T12:00:00');
-					var formatted = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-					dateEl.innerHTML = '<i class="fa-regular fa-calendar mr-1"></i>' + formatted;
-				}
-
-				// Status badge
-				var statusEl = document.getElementById('session-modal-status');
-				if (status === 'planned') {
-					statusEl.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
-					statusEl.innerHTML = '<i class="fa-solid fa-clock text-[10px] mr-0.5"></i> Planned';
-				} else if (status === 'completed') {
-					statusEl.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
-					statusEl.innerHTML = '<i class="fa-solid fa-check text-[10px] mr-0.5"></i> Completed';
-				}
-
-				// Recurrence
-				var recEl = document.getElementById('session-modal-recurrence');
-				if (recurring && recLabel) {
-					recEl.classList.remove('hidden');
-					document.getElementById('session-modal-recurrence-label').textContent = recLabel;
-				} else {
-					recEl.classList.add('hidden');
-				}
-
-				// Attendance
-				document.getElementById('session-modal-attendance').textContent = accepted + '/' + total + ' attending';
-
-				// Full session link
-				document.getElementById('session-modal-link').href = '/campaigns/' + campaignId + '/sessions/' + id;
-
-				// RSVP buttons
-				var rsvpDiv = document.getElementById('session-rsvp-buttons');
-				var rsvpUrl = '/campaigns/' + campaignId + '/sessions/' + id + '/rsvp';
-				rsvpDiv.innerHTML =
-					'<button class="text-sm px-3 py-1.5 rounded-md bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:ring-1 hover:ring-green-400 inline-flex items-center gap-1" ' +
-					'hx-post="' + rsvpUrl + '" hx-headers=\'{"Content-Type":"application/json","X-CSRF-Token":"' + csrf + '"}\' hx-vals=\'{"status":"accepted"}\' hx-swap="none" hx-on::after-request="closeSessionModal();location.reload()">' +
-					'<i class="fa-solid fa-check"></i> Going</button>' +
-					'<button class="text-sm px-3 py-1.5 rounded-md bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 hover:ring-1 hover:ring-yellow-400 inline-flex items-center gap-1" ' +
-					'hx-post="' + rsvpUrl + '" hx-headers=\'{"Content-Type":"application/json","X-CSRF-Token":"' + csrf + '"}\' hx-vals=\'{"status":"tentative"}\' hx-swap="none" hx-on::after-request="closeSessionModal();location.reload()">' +
-					'<i class="fa-solid fa-question"></i> Maybe</button>' +
-					'<button class="text-sm px-3 py-1.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:ring-1 hover:ring-red-400 inline-flex items-center gap-1" ' +
-					'hx-post="' + rsvpUrl + '" hx-headers=\'{"Content-Type":"application/json","X-CSRF-Token":"' + csrf + '"}\' hx-vals=\'{"status":"declined"}\' hx-swap="none" hx-on::after-request="closeSessionModal();location.reload()">' +
-					'<i class="fa-solid fa-xmark"></i> Can\'t</button>';
-
-				// Re-process HTMX on dynamic content.
-				if (window.htmx) htmx.process(rsvpDiv);
-
+		window.toggleSessionsModal = function() {
+			var modal = document.getElementById('sessions-modal');
+			if (modal.classList.contains('hidden')) {
 				modal.classList.remove('hidden');
-			};
-
-			window.closeSessionModal = function() {
+			} else {
 				modal.classList.add('hidden');
-			};
-		})();
+				// Hide create form when closing
+				var form = document.getElementById('sessions-create-form');
+				if (form) form.classList.add('hidden');
+			}
+		};
 	</script>
+}
+
+// sessionsModalContent renders the session list and create form inside the modal.
+// Returned as an HTMX fragment by the sessions-fragment endpoint.
+templ sessionsModalContent(data CalendarViewData) {
+	<!-- Inline create form (hidden by default) -->
+	if data.IsScribe {
+		<div id="sessions-create-form" class="hidden mb-4">
+			<form
+				hx-post={ fmt.Sprintf("/campaigns/%s/sessions", data.CampaignID) }
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+				hx-target="#sessions-modal-content"
+				hx-swap="innerHTML"
+				hx-vals='{"from":"calendar"}'
+				class="card p-4 space-y-3 border-accent/30"
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Session Name</label>
+					<input type="text" name="name" class="input w-full text-sm" required placeholder="e.g. Session 12: The Dragon's Lair"/>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Scheduled Date</label>
+					<input type="date" name="scheduled_date" class="input w-full text-sm"/>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Summary</label>
+					<textarea name="summary" class="input w-full text-sm" rows="2" placeholder="Brief description..."></textarea>
+				</div>
+				<div x-data="{ recurring: false, recType: '' }">
+					<label class="flex items-center gap-2 text-xs font-medium text-fg-body cursor-pointer">
+						<input type="checkbox" name="is_recurring" value="1" x-model="recurring" class="accent-accent"/>
+						Repeating session
+					</label>
+					<div x-show="recurring" x-transition x-cloak class="mt-2 space-y-2 pl-3 border-l-2 border-accent/30">
+						<div>
+							<label class="block text-xs font-medium text-fg-body mb-1">Frequency</label>
+							<select name="recurrence_type" x-model="recType" class="input w-full text-xs">
+								<option value="">Select...</option>
+								<option value="weekly">Every week</option>
+								<option value="biweekly">Every 2 weeks</option>
+								<option value="monthly">Monthly</option>
+								<option value="custom">Custom interval</option>
+							</select>
+						</div>
+						<div x-show="recType === 'custom'" x-transition>
+							<label class="block text-xs font-medium text-fg-body mb-1">Every N weeks</label>
+							<input type="number" name="recurrence_interval" min="1" max="52" value="3" class="input w-20 text-xs"/>
+						</div>
+						<div>
+							<label class="block text-xs font-medium text-fg-body mb-1">End date (optional)</label>
+							<input type="date" name="recurrence_end_date" class="input w-full text-xs"/>
+						</div>
+					</div>
+				</div>
+				<div class="flex justify-end gap-2 pt-1">
+					<button type="button" class="btn-secondary text-xs" onclick="document.getElementById('sessions-create-form').classList.add('hidden')">
+						Cancel
+					</button>
+					<button type="submit" class="btn-primary text-xs">
+						<i class="fa-solid fa-plus mr-1"></i> Create
+					</button>
+				</div>
+			</form>
+		</div>
+	}
+	<!-- Session list -->
+	if len(data.Sessions) == 0 {
+		<div class="text-center py-8">
+			<i class="fa-solid fa-dice-d20 text-3xl text-fg-muted mb-3"></i>
+			<p class="text-sm text-fg-secondary">No sessions scheduled.</p>
+			if data.IsScribe {
+				<p class="text-xs text-fg-muted mt-1">Click "New Session" to schedule a game night.</p>
+			}
+		</div>
+	} else {
+		<div class="space-y-2">
+			for _, sess := range data.Sessions {
+				@calendarSessionCard(data, sess)
+			}
+		</div>
+	}
+}
+
+// calendarSessionCard renders a single session card inside the sessions modal.
+// Shows session info, status badge, recurrence, attendance, and inline RSVP.
+templ calendarSessionCard(data CalendarViewData, sess CalendarSession) {
+	<div class="card p-3 hover:border-purple-400/30 transition-colors">
+		<div class="flex items-start justify-between">
+			<div class="flex-1 min-w-0">
+				<div class="flex items-center gap-2">
+					@calSessionStatusBadge(sess.Status)
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions/%s", data.CampaignID, sess.ID)) }
+						class="font-semibold text-sm text-fg hover:text-accent truncate"
+					>
+						{ sess.Name }
+					</a>
+				</div>
+				<div class="flex items-center gap-3 mt-1 text-xs text-fg-secondary">
+					if sess.ScheduledDate != "" {
+						<span>
+							<i class="fa-regular fa-calendar mr-0.5"></i>
+							{ formatSessionDate(sess.ScheduledDate) }
+						</span>
+					}
+					if sess.IsRecurring && sess.RecurrenceLabel != "" {
+						<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+							<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
+							{ sess.RecurrenceLabel }
+						</span>
+					}
+					<span>
+						<i class="fa-solid fa-users mr-0.5"></i>
+						{ strconv.Itoa(sess.AcceptedCount) }/{ strconv.Itoa(sess.TotalCount) } attending
+					</span>
+				</div>
+			</div>
+		</div>
+		<!-- Inline RSVP for planned sessions -->
+		if sess.Status == "planned" {
+			<div class="flex gap-1.5 mt-2 pt-2 border-t border-edge">
+				<button
+					class={ "text-xs px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1",
+						templ.KV("bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium ring-1 ring-green-300 dark:ring-green-700", sess.UserRSVP == "accepted"),
+						templ.KV("bg-surface-secondary text-fg-secondary hover:bg-green-50 dark:hover:bg-green-900/20", sess.UserRSVP != "accepted") }
+					hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", data.CampaignID, sess.ID) }
+					hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, data.CSRFToken) }
+					hx-vals='{"status":"accepted"}'
+					hx-swap="none"
+					hx-on--after-request="htmx.trigger(document.body,'sessions-refresh')"
+				>
+					<i class="fa-solid fa-check"></i> Going
+				</button>
+				<button
+					class={ "text-xs px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1",
+						templ.KV("bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 font-medium ring-1 ring-yellow-300 dark:ring-yellow-700", sess.UserRSVP == "tentative"),
+						templ.KV("bg-surface-secondary text-fg-secondary hover:bg-yellow-50 dark:hover:bg-yellow-900/20", sess.UserRSVP != "tentative") }
+					hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", data.CampaignID, sess.ID) }
+					hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, data.CSRFToken) }
+					hx-vals='{"status":"tentative"}'
+					hx-swap="none"
+					hx-on--after-request="htmx.trigger(document.body,'sessions-refresh')"
+				>
+					<i class="fa-solid fa-question"></i> Maybe
+				</button>
+				<button
+					class={ "text-xs px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1",
+						templ.KV("bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-medium ring-1 ring-red-300 dark:ring-red-700", sess.UserRSVP == "declined"),
+						templ.KV("bg-surface-secondary text-fg-secondary hover:bg-red-50 dark:hover:bg-red-900/20", sess.UserRSVP != "declined") }
+					hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", data.CampaignID, sess.ID) }
+					hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, data.CSRFToken) }
+					hx-vals='{"status":"declined"}'
+					hx-swap="none"
+					hx-on--after-request="htmx.trigger(document.body,'sessions-refresh')"
+				>
+					<i class="fa-solid fa-xmark"></i> Can't
+				</button>
+			</div>
+		}
+	</div>
+}
+
+// calSessionStatusBadge renders a session status badge for the calendar modal.
+templ calSessionStatusBadge(status string) {
+	if status == "planned" {
+		<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+			<i class="fa-solid fa-clock text-[8px] mr-0.5"></i> Planned
+		</span>
+	} else if status == "completed" {
+		<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+			<i class="fa-solid fa-check text-[8px] mr-0.5"></i> Completed
+		</span>
+	} else {
+		<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+			<i class="fa-solid fa-ban text-[8px] mr-0.5"></i> Cancelled
+		</span>
+	}
+}
+
+// formatSessionDate formats a YYYY-MM-DD date string for display.
+func formatSessionDate(dateStr string) string {
+	t, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return dateStr
+	}
+	return t.Format("Mon, Jan 2, 2006")
 }
 
 // eventModal renders the Alpine.js-powered event create/edit modal.

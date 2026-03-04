@@ -20,8 +20,13 @@ type SessionService interface {
 	CreateSession(ctx context.Context, campaignID string, input CreateSessionInput) (*Session, error)
 	GetSession(ctx context.Context, id string) (*Session, error)
 	ListSessions(ctx context.Context, campaignID string) ([]Session, error)
+	// ListPlannedSessions returns only planned (upcoming) sessions for a campaign.
+	ListPlannedSessions(ctx context.Context, campaignID string) ([]Session, error)
 	ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
-	UpdateSession(ctx context.Context, id string, input UpdateSessionInput) error
+	// UpdateSession validates and updates a session. If a recurring session is
+	// completed, auto-generates the next occurrence and returns it. Returns nil
+	// if no new session was created.
+	UpdateSession(ctx context.Context, id string, input UpdateSessionInput) (*Session, error)
 	DeleteSession(ctx context.Context, id string) error
 	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
@@ -146,10 +151,34 @@ func (s *sessionService) ListSessions(ctx context.Context, campaignID string) ([
 	return sessions, nil
 }
 
-// UpdateSession validates and updates a session.
-func (s *sessionService) UpdateSession(ctx context.Context, id string, input UpdateSessionInput) error {
+// ListPlannedSessions returns only planned (upcoming) sessions for a campaign,
+// ordered by scheduled date. Used by the calendar sessions modal.
+func (s *sessionService) ListPlannedSessions(ctx context.Context, campaignID string) ([]Session, error) {
+	sessions, err := s.repo.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing planned sessions: %w", err))
+	}
+
+	// Filter to planned only and load attendees.
+	var planned []Session
+	for _, sess := range sessions {
+		if sess.Status == StatusPlanned {
+			attendees, err := s.repo.ListAttendees(ctx, sess.ID)
+			if err == nil {
+				sess.Attendees = attendees
+			}
+			planned = append(planned, sess)
+		}
+	}
+
+	return planned, nil
+}
+
+// UpdateSession validates and updates a session. If a recurring session is
+// completed, auto-generates the next occurrence and returns it.
+func (s *sessionService) UpdateSession(ctx context.Context, id string, input UpdateSessionInput) (*Session, error) {
 	if input.Name == "" {
-		return apperror.NewBadRequest("session name is required")
+		return nil, apperror.NewBadRequest("session name is required")
 	}
 
 	// Validate status.
@@ -162,8 +191,12 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 
 	session, err := s.repo.FindByID(ctx, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	// Track whether this is a planned→completed transition for recurring logic.
+	wasPlanned := session.Status == StatusPlanned
+	wasRecurring := session.IsRecurring
 
 	session.Name = input.Name
 	session.Summary = input.Summary
@@ -181,7 +214,19 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 	session.RecurrenceDayOfWeek = input.RecurrenceDayOfWeek
 	session.RecurrenceEndDate = input.RecurrenceEndDate
 
-	return s.repo.Update(ctx, session)
+	if err := s.repo.Update(ctx, session); err != nil {
+		return nil, err
+	}
+
+	// Auto-generate next occurrence when a recurring session is completed.
+	if wasPlanned && wasRecurring && input.Status == StatusCompleted {
+		nextSession := s.generateNextOccurrence(ctx, session)
+		if nextSession != nil {
+			return nextSession, nil
+		}
+	}
+
+	return nil, nil
 }
 
 // DeleteSession removes a session.
@@ -347,6 +392,91 @@ func (s *sessionService) RedeemRSVPToken(ctx context.Context, tokenStr string) (
 	}
 
 	return token, nil
+}
+
+// --- Recurring Session Auto-Generation ---
+
+// generateNextOccurrence creates the next session in a recurring series.
+// Returns nil if no next occurrence should be created (past end date, etc.).
+func (s *sessionService) generateNextOccurrence(ctx context.Context, completed *Session) *Session {
+	if completed.ScheduledDate == nil || *completed.ScheduledDate == "" {
+		return nil
+	}
+
+	nextDate := computeNextOccurrence(completed)
+	if nextDate == "" {
+		return nil
+	}
+
+	// Check if past the recurrence end date.
+	if completed.RecurrenceEndDate != nil && *completed.RecurrenceEndDate != "" {
+		if nextDate > *completed.RecurrenceEndDate {
+			return nil
+		}
+	}
+
+	next := &Session{
+		ID:                  generateUUID(),
+		CampaignID:          completed.CampaignID,
+		Name:                completed.Name,
+		Summary:             completed.Summary,
+		ScheduledDate:       &nextDate,
+		Status:              StatusPlanned,
+		IsRecurring:         true,
+		RecurrenceType:      completed.RecurrenceType,
+		RecurrenceInterval:  completed.RecurrenceInterval,
+		RecurrenceDayOfWeek: completed.RecurrenceDayOfWeek,
+		RecurrenceEndDate:   completed.RecurrenceEndDate,
+		CreatedBy:           completed.CreatedBy,
+		CreatedAt:           time.Now().UTC(),
+		UpdatedAt:           time.Now().UTC(),
+	}
+
+	if err := s.repo.Create(ctx, completed.CampaignID, next); err != nil {
+		return nil
+	}
+
+	// Copy attendees from the completed session (all reset to "invited").
+	attendees, err := s.repo.ListAttendees(ctx, completed.ID)
+	if err == nil {
+		for _, a := range attendees {
+			_ = s.repo.AddAttendee(ctx, next.ID, a.UserID, RSVPInvited)
+		}
+	}
+
+	return next
+}
+
+// computeNextOccurrence calculates the next scheduled date based on recurrence.
+func computeNextOccurrence(session *Session) string {
+	if session.ScheduledDate == nil || session.RecurrenceType == nil {
+		return ""
+	}
+
+	anchor, err := time.Parse("2006-01-02", *session.ScheduledDate)
+	if err != nil {
+		return ""
+	}
+
+	var next time.Time
+	switch *session.RecurrenceType {
+	case RecurrenceWeekly:
+		next = anchor.AddDate(0, 0, 7)
+	case RecurrenceBiWeekly:
+		next = anchor.AddDate(0, 0, 14)
+	case RecurrenceMonthly:
+		next = anchor.AddDate(0, 1, 0)
+	case RecurrenceCustom:
+		interval := session.RecurrenceInterval
+		if interval < 1 {
+			interval = 1
+		}
+		next = anchor.AddDate(0, 0, interval*7)
+	default:
+		return ""
+	}
+
+	return next.Format("2006-01-02")
 }
 
 // generateToken creates a secure random token for RSVP email links.

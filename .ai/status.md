@@ -8,11 +8,27 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Production fix, mobile nav cleanup, dashboard widgets, Foundry completion (batch 20).
-Branch: `claude/fix-production-logging-bwyeV`.
+2026-03-04 -- Interactive calendar sessions integration (batch 21).
+Branch: `claude/interactive-calendar-sessions-UJaq2`.
 
 ## Current Phase
-**Production fix + Mobile nav + Dashboard widgets + Foundry completion.** Completed this session (batch 20):
+**Interactive calendar sessions integration.** Completed this session (batch 21):
+- **Calendar sessions modal** — Replaced two redundant session navigation buttons on the
+  calendar page with an interactive sessions modal overlay. Sessions are now managed directly
+  from the calendar (list, create, RSVP) without navigating away.
+- **RSVP inline controls** — Session cards in the modal show inline Going/Maybe/Can't buttons
+  with HTMX-powered updates. User's current RSVP status is highlighted.
+- **Recurring session auto-generation** — When a recurring session is marked complete, the
+  system auto-creates the next occurrence (weekly/biweekly/monthly/custom intervals), copies
+  attendees, and sends RSVP emails via SMTP.
+- **Calendar sessions fragment endpoint** — New `GET /calendar/sessions-fragment` returns
+  HTMX fragment for refreshing the session list after create/RSVP actions.
+- **SMTP verification** — Confirmed RSVP email wiring is correct end-to-end (handler →
+  mailer → SMTP service → one-click token emails).
+- **Repository fix** — Fixed `ListByDateRange` SQL to exclude recurring sessions past
+  their `recurrence_end_date`.
+
+### Previous session (batch 20):
 - **Critical: Fixed duplicate migration 000041** — Two different migrations shared number
   000041 (session_recurrence_and_rsvp_tokens vs sync_mappings). Renumbered:
   sync_mappings→000044, map_expansion→000045, relation_metadata→000046. Production blocker resolved.

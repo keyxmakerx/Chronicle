@@ -22,6 +22,8 @@ import (
 // Implemented by the sessions service. Defined here to avoid import cycles.
 type SessionLister interface {
 	ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]CalendarSession, error)
+	// ListAllSessions returns all planned sessions for a campaign (for the sessions modal).
+	ListAllSessions(ctx context.Context, campaignID, userID string) ([]CalendarSession, error)
 }
 
 // CalendarSession is a lightweight session representation for calendar display.
@@ -128,6 +130,39 @@ func (h *Handler) Show(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, CalendarGridFragment(cc, data))
 	}
 	return middleware.Render(c, http.StatusOK, CalendarPage(cc, data))
+}
+
+// SessionsFragment returns the sessions modal content as an HTMX fragment.
+// Used to refresh the session list inside the calendar's sessions overlay.
+// GET /campaigns/:id/calendar/sessions-fragment
+func (h *Handler) SessionsFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	userID := auth.GetUserID(c)
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return c.NoContent(http.StatusNotFound)
+	}
+
+	data := CalendarViewData{
+		Calendar:   cal,
+		CampaignID: cc.Campaign.ID,
+		UserID:     userID,
+		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
+		CSRFToken:  middleware.GetCSRFToken(c),
+	}
+
+	// Fetch all planned sessions for the campaign.
+	if h.sessionLister != nil {
+		sessions, err := h.sessionLister.ListAllSessions(ctx, cc.Campaign.ID, userID)
+		if err == nil {
+			data.Sessions = sessions
+		}
+	}
+
+	return middleware.Render(c, http.StatusOK, sessionsModalContent(data))
 }
 
 // CreateCalendar handles calendar creation from the setup form.

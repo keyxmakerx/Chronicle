@@ -364,11 +364,12 @@ func (r *sessionRepository) ListByDateRange(ctx context.Context, campaignID, sta
 	            AND s.status = 'planned'
 	            AND (
 	              (s.scheduled_date BETWEEN ? AND ?)
-	              OR (s.is_recurring = 1 AND s.scheduled_date <= ?)
+	              OR (s.is_recurring = 1 AND s.scheduled_date <= ?
+	                  AND (s.recurrence_end_date IS NULL OR s.recurrence_end_date >= ?))
 	            )
 	          ORDER BY s.scheduled_date ASC, s.sort_order ASC`
 
-	rows, err := r.db.QueryContext(ctx, query, campaignID, startDate, endDate, endDate)
+	rows, err := r.db.QueryContext(ctx, query, campaignID, startDate, endDate, endDate, startDate)
 	if err != nil {
 		return nil, fmt.Errorf("listing sessions by date range: %w", err)
 	}

@@ -183,6 +183,14 @@ func (h *Handler) CreateSession(c echo.Context) error {
 		}
 	}
 
+	// If created from the calendar context, trigger a refresh instead of redirect.
+	if middleware.IsHTMX(c) && c.FormValue("from") == "calendar" {
+		c.Response().Header().Set("HX-Trigger", "sessions-refresh")
+		c.Response().Header().Set("HX-Retarget", "#sessions-modal-content")
+		c.Response().Header().Set("HX-Reswap", "innerHTML")
+		return c.NoContent(http.StatusNoContent)
+	}
+
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect",
 			"/campaigns/"+cc.Campaign.ID+"/sessions/"+session.ID)
@@ -220,7 +228,7 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
 	}
 
-	if err := h.svc.UpdateSession(c.Request().Context(), sessionID, UpdateSessionInput{
+	nextSession, err := h.svc.UpdateSession(c.Request().Context(), sessionID, UpdateSessionInput{
 		Name:                req.Name,
 		Summary:             req.Summary,
 		ScheduledDate:       req.ScheduledDate,
@@ -233,11 +241,33 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 		RecurrenceInterval:  req.RecurrenceInterval,
 		RecurrenceDayOfWeek: req.RecurrenceDayOfWeek,
 		RecurrenceEndDate:   req.RecurrenceEndDate,
-	}); err != nil {
+	})
+	if err != nil {
 		if appErr, ok := err.(*apperror.AppError); ok {
 			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "update failed"})
+	}
+
+	// If a recurring session was completed, a new session was auto-generated.
+	// Send RSVP emails for the new session.
+	if nextSession != nil {
+		slog.Info("auto-generated next recurring session",
+			slog.String("session_id", nextSession.ID),
+			slog.String("campaign_id", cc.Campaign.ID),
+		)
+
+		if h.mailer != nil && h.mailer.IsConfigured(c.Request().Context()) && h.memberLister != nil {
+			members, mErr := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID)
+			if mErr == nil {
+				go h.sendRSVPEmails(context.Background(), nextSession, cc.Campaign.Name, members)
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]string{
+			"status":         "ok",
+			"next_session_id": nextSession.ID,
+		})
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
