@@ -90,6 +90,15 @@ func (c *Client) readPump() {
 			continue
 		}
 
+		// Reject unknown message types to prevent garbage from propagating.
+		if !IsValidMessageType(msg.Type) {
+			slog.Warn("ws: unknown message type",
+				slog.String("client", c.ID),
+				slog.String("type", string(msg.Type)),
+			)
+			continue
+		}
+
 		// Enforce campaign scope: clients can only send messages for their campaign.
 		msg.CampaignID = c.CampaignID
 		msg.SenderID = c.ID

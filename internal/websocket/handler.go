@@ -3,21 +3,56 @@ package websocket
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 
 	gorillaWs "github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 )
 
-// upgrader configures the WebSocket upgrade with permissive CORS for dev.
-// In production, CheckOrigin should validate against the configured base URL.
-var upgrader = gorillaWs.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// Allow all origins for now; Foundry VTT connects from different hosts.
-		// API key auth on the connection provides security.
-		return true
-	},
+// newUpgrader creates a WebSocket upgrader that validates the Origin header
+// against the configured allowed origins. Requests authenticated with an API
+// key (Foundry VTT) bypass origin checks since they already prove authorization.
+func newUpgrader(allowedOrigins []string) gorillaWs.Upgrader {
+	// Pre-parse allowed origins for efficient comparison.
+	parsedOrigins := make([]string, 0, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		if u, err := url.Parse(o); err == nil && u.Host != "" {
+			// Normalize to scheme + host (strip path/query).
+			parsedOrigins = append(parsedOrigins, strings.ToLower(u.Scheme+"://"+u.Host))
+		}
+	}
+
+	return gorillaWs.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			// API key auth (Foundry VTT) — origin varies by deployment, but
+			// the token query param already proves authorization.
+			if r.URL.Query().Get("token") != "" {
+				return true
+			}
+
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				// No Origin header: same-origin request or non-browser client.
+				return true
+			}
+
+			originLower := strings.ToLower(origin)
+			for _, allowed := range parsedOrigins {
+				if originLower == allowed {
+					return true
+				}
+			}
+
+			slog.Warn("ws: origin rejected",
+				slog.String("origin", origin),
+				slog.String("remote", r.RemoteAddr),
+			)
+			return false
+		},
+	}
 }
 
 // Authenticator resolves a WebSocket upgrade request into campaign/user identity.
@@ -31,7 +66,12 @@ type Authenticator interface {
 
 // HandleUpgrade returns an Echo handler that upgrades HTTP connections to WebSocket
 // and registers them with the hub. Authentication is delegated to the Authenticator.
-func HandleUpgrade(hub *Hub, auth Authenticator) echo.HandlerFunc {
+// The allowedOrigins parameter specifies which origins are permitted for browser
+// clients (typically the app's BaseURL). API-key-authenticated connections bypass
+// origin checks.
+func HandleUpgrade(hub *Hub, auth Authenticator, allowedOrigins []string) echo.HandlerFunc {
+	upgrader := newUpgrader(allowedOrigins)
+
 	return func(c echo.Context) error {
 		r := c.Request()
 

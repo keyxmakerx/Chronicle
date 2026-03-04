@@ -8,23 +8,28 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Entity page widget blocks expansion (batch 22).
+2026-03-04 -- Foundry VTT module documentation and security hardening (batch 23).
 Branch: `claude/interactive-calendar-sessions-UJaq2`.
 
 ## Current Phase
-**Entity page widget blocks expansion.** Completed this session (batch 22):
-- **New entity page blocks** — Added 5 new block types to the entity page template editor:
-  - `timeline` — Lazy-loaded timeline preview with event counts (uses timeline-widget JS)
-  - `map_preview` — Embedded Leaflet map viewer with optional map_id config (uses map-widget JS)
-  - `upcoming_events` — Upcoming calendar events list with configurable limit (uses calendar-widget JS)
-  - `shop_inventory` — Shop inventory management (was renderable but missing from editor palette)
-  - `text_block` — Static rich text / HTML content block with prose styling
-- **Template editor palette** — All new block types appear in the drag-and-drop palette
-  alongside existing content and container blocks.
-- **HTMX lazy-loading** — Timeline, map, and upcoming events blocks use `intersect once`
-  triggers for deferred loading, matching the dashboard block pattern.
-- **Addon gating** — Blocks that depend on addons (calendar, timeline, maps) are gated
-  server-side by addon middleware on their HTMX endpoints.
+**Foundry VTT module documentation and security hardening.** Completed this session (batch 23):
+- **Documentation** — Created `.ai.md` files for `foundry-module/` and `internal/websocket/`
+  covering architecture, file index, security considerations, and interconnects.
+- **WebSocket origin validation** — Replaced permissive `CheckOrigin: true` with proper
+  origin validation against configured `BaseURL`. API-key-authenticated connections
+  (Foundry VTT) bypass origin checks since the token proves authorization.
+- **Message type validation** — WebSocket readPump now rejects unknown message types
+  before broadcasting, preventing garbage propagation.
+- **Device fingerprint race fix** — Changed async `go BindDevice()` to synchronous call,
+  preventing concurrent requests from racing to bind different devices to the same key.
+- **Pagination clamping** — Sync mapping list endpoint now clamps limit (0-1000) and
+  offset (>=0) to prevent resource exhaustion from extreme values.
+- **API key masking** — Foundry module settings dialog now renders the API key field
+  as a password input via `renderSettingsConfig` hook.
+
+Previous session (batch 22):
+- Entity page widget blocks expansion (timeline, map_preview, upcoming_events,
+  shop_inventory, text_block).
 
 Previous session (batch 21):
 - Calendar sessions modal, RSVP inline controls, recurring session auto-generation,

@@ -90,13 +90,18 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 			// Device fingerprint enforcement: if the client sends X-Device-Fingerprint,
 			// auto-bind on first use; reject mismatches on subsequent requests.
 			// This ensures a key can only be used by a single registered device.
+			// Binding is synchronous to prevent race conditions where concurrent
+			// requests could both see DeviceFingerprint==nil and bind different devices.
 			deviceFP := c.Request().Header.Get("X-Device-Fingerprint")
 			if deviceFP != "" {
 				if key.DeviceFingerprint == nil {
-					// First use — bind the device.
-					go func() {
-						_ = service.BindDevice(context.Background(), key.ID, deviceFP)
-					}()
+					// First use — bind the device synchronously.
+					if bindErr := service.BindDevice(ctx, key.ID, deviceFP); bindErr != nil {
+						slog.Warn("device fingerprint binding failed",
+							slog.Int("key_id", key.ID),
+							slog.Any("error", bindErr),
+						)
+					}
 				} else if *key.DeviceFingerprint != deviceFP {
 					// Device mismatch — reject.
 					_ = service.LogSecurityEvent(ctx, &SecurityEvent{

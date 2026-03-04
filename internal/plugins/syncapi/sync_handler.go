@@ -25,6 +25,17 @@ func (h *SyncHandler) ListMappings(c echo.Context) error {
 	limit, _ := strconv.Atoi(c.QueryParam("limit"))
 	offset, _ := strconv.Atoi(c.QueryParam("offset"))
 
+	// Clamp pagination parameters to safe ranges.
+	if limit < 0 {
+		limit = 0
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
 	mappings, total, err := h.syncMappingSvc.ListMappings(c.Request().Context(), campaignID, limit, offset)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list sync mappings")

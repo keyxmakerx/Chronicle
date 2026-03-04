@@ -48,6 +48,39 @@ const (
 	MsgSyncConflict MessageType = "sync.conflict"
 )
 
+// validMessageTypes is the set of known message types, used for validation.
+var validMessageTypes = map[MessageType]struct{}{
+	MsgEntityCreated:        {},
+	MsgEntityUpdated:        {},
+	MsgEntityDeleted:        {},
+	MsgMapUpdated:           {},
+	MsgDrawingCreated:       {},
+	MsgDrawingUpdated:       {},
+	MsgDrawingDeleted:       {},
+	MsgTokenCreated:         {},
+	MsgTokenMoved:           {},
+	MsgTokenUpdated:         {},
+	MsgTokenDeleted:         {},
+	MsgMarkerCreated:        {},
+	MsgMarkerUpdated:        {},
+	MsgMarkerDeleted:        {},
+	MsgFogUpdated:           {},
+	MsgLayerUpdated:         {},
+	MsgCalendarEventCreated: {},
+	MsgCalendarEventUpdated: {},
+	MsgCalendarEventDeleted: {},
+	MsgCalendarDateAdvanced: {},
+	MsgSyncStatus:           {},
+	MsgSyncError:            {},
+	MsgSyncConflict:         {},
+}
+
+// IsValidMessageType reports whether the given message type is known.
+func IsValidMessageType(t MessageType) bool {
+	_, ok := validMessageTypes[t]
+	return ok
+}
+
 // Message is the envelope for all WebSocket communication.
 // Clients and servers exchange these JSON messages over the WS connection.
 type Message struct {

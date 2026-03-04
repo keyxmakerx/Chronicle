@@ -120,3 +120,18 @@ export function isConfigured() {
   const campaign = getSetting('campaignId');
   return !!(url && key && campaign);
 }
+
+/**
+ * Mask the API key input in the module settings dialog.
+ * Foundry doesn't have a native password input type for settings,
+ * so we convert it after the settings form renders.
+ */
+Hooks.on('renderSettingsConfig', (app, html) => {
+  const keyInput = html[0]?.querySelector
+    ? html[0].querySelector(`input[name="${MODULE_ID}.apiKey"]`)
+    : html.find(`input[name="${MODULE_ID}.apiKey"]`)[0];
+  if (keyInput) {
+    keyInput.type = 'password';
+    keyInput.autocomplete = 'off';
+  }
+});

@@ -911,7 +911,7 @@ func (a *App) RegisterRoutes() {
 		&wsSessionAuthAdapter{svc: authService},
 		&wsCampaignRoleAdapter{svc: campaignService},
 	)
-	e.GET("/ws", ws.HandleUpgrade(wsHub, wsAuth))
+	e.GET("/ws", ws.HandleUpgrade(wsHub, wsAuth, []string{a.Config.BaseURL}))
 
 	// Wire EventBus into services for real-time event publishing.
 	wsEventBus := ws.NewEventBus(wsHub)
