@@ -120,6 +120,13 @@ export class SyncManager {
         }
       }
 
+      // Let each module perform its own initial sync (e.g., calendar structure).
+      for (const mod of this._modules) {
+        if (typeof mod.onInitialSync === 'function') {
+          await mod.onInitialSync();
+        }
+      }
+
       // Update last sync timestamp.
       await setSetting('lastSyncTime', result.server_time || new Date().toISOString());
 

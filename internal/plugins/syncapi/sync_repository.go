@@ -144,7 +144,7 @@ func (r *syncMappingRepo) UpdateVersion(ctx context.Context, id string, newVersi
 		return apperror.NewInternal(err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperror.NewNotFound("sync mapping", id)
+		return apperror.NewNotFound("sync mapping not found: " + id)
 	}
 	return nil
 }
@@ -157,7 +157,7 @@ func (r *syncMappingRepo) Delete(ctx context.Context, id string) error {
 		return apperror.NewInternal(err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperror.NewNotFound("sync mapping", id)
+		return apperror.NewNotFound("sync mapping not found: " + id)
 	}
 	return nil
 }
@@ -199,7 +199,7 @@ func (r *syncMappingRepo) scanMapping(row *sql.Row) (*SyncMapping, error) {
 		&m.SyncDirection, &metaJSON, &m.CreatedAt, &m.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, apperror.NewNotFound("sync mapping", "")
+		return nil, apperror.NewNotFound("sync mapping not found")
 	}
 	if err != nil {
 		return nil, apperror.NewInternal(err)

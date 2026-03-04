@@ -317,6 +317,48 @@ func (h *CalendarAPIHandler) DeleteEvent(c echo.Context) error {
 
 // --- Date Management ---
 
+// apiSetDateRequest is the JSON body for setting an absolute date/time.
+type apiSetDateRequest struct {
+	Year   int `json:"year"`
+	Month  int `json:"month"`
+	Day    int `json:"day"`
+	Hour   int `json:"hour"`
+	Minute int `json:"minute"`
+}
+
+// SetDate sets the calendar's current date/time to an absolute value.
+// Used by external calendar modules (Calendaria, SimpleCalendar) that
+// send absolute dates rather than relative day counts.
+// PUT /api/v1/campaigns/:id/calendar/date
+func (h *CalendarAPIHandler) SetDate(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var req apiSetDateRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	if err := h.calendarSvc.SetDate(ctx, cal.ID, req.Year, req.Month, req.Day, req.Hour, req.Minute); err != nil {
+		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+	}
+
+	// Return the confirmed date.
+	return c.JSON(http.StatusOK, map[string]any{
+		"status": "ok",
+		"year":   req.Year,
+		"month":  req.Month,
+		"day":    req.Day,
+		"hour":   req.Hour,
+		"minute": req.Minute,
+	})
+}
+
 // apiAdvanceDateRequest is the JSON body for advancing the calendar date.
 type apiAdvanceDateRequest struct {
 	Days int `json:"days"`

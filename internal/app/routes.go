@@ -310,6 +310,125 @@ func (a *wsCampaignRoleAdapter) GetUserCampaignRole(ctx context.Context, campaig
 	return int(member.Role), nil
 }
 
+// calendarEventPublisherAdapter bridges the websocket.EventBus to the
+// calendar.CalendarEventPublisher interface.
+type calendarEventPublisherAdapter struct {
+	bus ws.EventBus
+}
+
+func (a *calendarEventPublisherAdapter) PublishCalendarEvent(eventType, campaignID, resourceID string, payload any) {
+	if campaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case "event.created":
+		msgType = ws.MsgCalendarEventCreated
+	case "event.updated":
+		msgType = ws.MsgCalendarEventUpdated
+	case "event.deleted":
+		msgType = ws.MsgCalendarEventDeleted
+	case "date.advanced":
+		msgType = ws.MsgCalendarDateAdvanced
+	default:
+		return
+	}
+	a.bus.Publish(ws.NewMessage(msgType, campaignID, resourceID, payload))
+}
+
+// entityEventPublisherAdapter bridges the websocket.EventBus to the
+// entities.EntityEventPublisher interface.
+type entityEventPublisherAdapter struct {
+	bus ws.EventBus
+}
+
+func (a *entityEventPublisherAdapter) PublishEntityEvent(eventType, campaignID, entityID string, entity *entities.Entity) {
+	if campaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case "created":
+		msgType = ws.MsgEntityCreated
+	case "updated":
+		msgType = ws.MsgEntityUpdated
+	case "deleted":
+		msgType = ws.MsgEntityDeleted
+	default:
+		return
+	}
+	a.bus.Publish(ws.NewMessage(msgType, campaignID, entityID, entity))
+}
+
+// mapEventPublisherAdapter bridges the websocket.EventBus to the maps.MapEventPublisher
+// interface, translating domain events into WebSocket messages.
+type mapEventPublisherAdapter struct {
+	bus ws.EventBus
+}
+
+func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaignID string, drawing *maps.Drawing) {
+	if campaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case "created":
+		msgType = ws.MsgDrawingCreated
+	case "updated":
+		msgType = ws.MsgDrawingUpdated
+	case "deleted":
+		msgType = ws.MsgDrawingDeleted
+	default:
+		return
+	}
+	a.bus.Publish(ws.NewMessage(msgType, campaignID, drawing.ID, drawing))
+}
+
+func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignID string, token *maps.Token) {
+	if campaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case "created":
+		msgType = ws.MsgTokenCreated
+	case "updated":
+		msgType = ws.MsgTokenUpdated
+	case "deleted":
+		msgType = ws.MsgTokenDeleted
+	default:
+		return
+	}
+	a.bus.Publish(ws.NewMessage(msgType, campaignID, token.ID, token))
+}
+
+func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, tokenID string, x, y float64) {
+	if campaignID == "" {
+		return
+	}
+	a.bus.Publish(ws.NewMessage(ws.MsgTokenMoved, campaignID, tokenID, map[string]float64{
+		"x": x,
+		"y": y,
+	}))
+}
+
+func (a *mapEventPublisherAdapter) PublishLayerEvent(eventType string, campaignID string, layer *maps.Layer) {
+	if campaignID == "" {
+		return
+	}
+	a.bus.Publish(ws.NewMessage(ws.MsgLayerUpdated, campaignID, layer.ID, layer))
+}
+
+func (a *mapEventPublisherAdapter) PublishFogEvent(eventType string, campaignID, mapID string) {
+	if campaignID == "" {
+		return
+	}
+	a.bus.Publish(ws.NewMessage(ws.MsgFogUpdated, campaignID, mapID, map[string]string{
+		"event":  eventType,
+		"map_id": mapID,
+	}))
+}
+
 // mediaMemberCheckerAdapter wraps campaigns.CampaignService to implement the
 // media.MemberChecker interface without creating a circular import.
 // Uses background context since membership checks happen on unauthenticated
@@ -607,8 +726,9 @@ func (a *App) RegisterRoutes() {
 	syncMappingSvc := syncapi.NewSyncMappingService(syncMappingRepo)
 	syncMappingHandler := syncapi.NewSyncHandler(syncMappingSvc)
 	_ = syncMappingSvc // Service will also be used by map/entity handlers.
+	mapAPIHandler := syncapi.NewMapAPIHandler(syncService, mapsService, drawingService, campaignService)
 
-	syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, syncMappingHandler, syncService)
+	syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, syncMappingHandler, syncService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
 	tagRepo := tags.NewTagRepository(a.DB)
@@ -772,8 +892,20 @@ func (a *App) RegisterRoutes() {
 	)
 	e.GET("/ws", ws.HandleUpgrade(wsHub, wsAuth))
 
-	// Store hub reference for services that need to emit events.
-	_ = wsHub // TODO: wire EventBus into entity/map/calendar services.
+	// Wire EventBus into services for real-time event publishing.
+	wsEventBus := ws.NewEventBus(wsHub)
+
+	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
+	calendarService.SetEventPublisher(&calendarEventPublisherAdapter{bus: wsEventBus})
+
+	drawingService.SetEventPublisher(&mapEventPublisherAdapter{bus: wsEventBus})
+	drawingService.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {
+		m, err := mapsService.GetMap(ctx, mapID)
+		if err != nil {
+			return "", err
+		}
+		return m.CampaignID, nil
+	})
 
 	// --- Module Routes ---
 	// Game system reference pages and tooltip APIs.

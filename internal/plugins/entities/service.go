@@ -66,12 +66,27 @@ type EntityService interface {
 
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
+
+	// Wiring.
+	SetEventPublisher(pub EntityEventPublisher)
 }
+
+// EntityEventPublisher emits domain events when entities change.
+// Implemented by the WebSocket EventBus adapter in routes.go.
+type EntityEventPublisher interface {
+	PublishEntityEvent(eventType, campaignID, entityID string, entity *Entity)
+}
+
+// NoopEntityEventPublisher is a no-op implementation for tests.
+type NoopEntityEventPublisher struct{}
+
+func (NoopEntityEventPublisher) PublishEntityEvent(string, string, string, *Entity) {}
 
 // entityService implements EntityService.
 type entityService struct {
 	entities EntityRepository
 	types    EntityTypeRepository
+	events   EntityEventPublisher
 }
 
 // NewEntityService creates a new entity service with the given dependencies.
@@ -79,7 +94,13 @@ func NewEntityService(entities EntityRepository, types EntityTypeRepository) Ent
 	return &entityService{
 		entities: entities,
 		types:    types,
+		events:   NoopEntityEventPublisher{},
 	}
+}
+
+// SetEventPublisher sets the event publisher for real-time sync.
+func (s *entityService) SetEventPublisher(pub EntityEventPublisher) {
+	s.events = pub
 }
 
 // --- Entity CRUD ---
@@ -161,6 +182,7 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		slog.String("name", name),
 	)
 
+	s.events.PublishEntityEvent("created", campaignID, entity.ID, entity)
 	return entity, nil
 }
 
@@ -323,6 +345,7 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		return nil, apperror.NewInternal(fmt.Errorf("updating entity: %w", err))
 	}
 
+	s.events.PublishEntityEvent("updated", entity.CampaignID, entity.ID, entity)
 	return entity, nil
 }
 
@@ -374,6 +397,10 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 		return err
 	}
 	slog.Info("entity entry updated", slog.String("entity_id", entityID))
+	// Emit entity updated event (fetch entity for campaign ID).
+	if entity, err := s.entities.FindByID(ctx, entityID); err == nil {
+		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	}
 	return nil
 }
 
@@ -435,10 +462,17 @@ func (s *entityService) UpdateImage(ctx context.Context, entityID, imagePath str
 
 // Delete removes an entity.
 func (s *entityService) Delete(ctx context.Context, entityID string) error {
+	// Fetch entity before deletion to get campaign ID for event publishing.
+	entity, _ := s.entities.FindByID(ctx, entityID)
+
 	if err := s.entities.Delete(ctx, entityID); err != nil {
 		return err
 	}
 	slog.Info("entity deleted", slog.String("entity_id", entityID))
+
+	if entity != nil {
+		s.events.PublishEntityEvent("deleted", entity.CampaignID, entityID, entity)
+	}
 	return nil
 }
 

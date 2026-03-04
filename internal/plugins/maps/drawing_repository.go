@@ -83,7 +83,7 @@ func (r *drawingRepo) GetDrawing(ctx context.Context, id string) (*Drawing, erro
 		&d.CreatedBy, &d.FoundryID, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, apperror.NewNotFound("drawing", id)
+		return nil, apperror.NewNotFound("drawing not found: " + id)
 	}
 	if err != nil {
 		return nil, apperror.NewInternal(err)
@@ -105,7 +105,7 @@ func (r *drawingRepo) UpdateDrawing(ctx context.Context, d *Drawing) error {
 		return apperror.NewInternal(err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperror.NewNotFound("drawing", d.ID)
+		return apperror.NewNotFound("drawing not found: " + d.ID)
 	}
 	return nil
 }
@@ -117,7 +117,7 @@ func (r *drawingRepo) DeleteDrawing(ctx context.Context, id string) error {
 		return apperror.NewInternal(err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperror.NewNotFound("drawing", id)
+		return apperror.NewNotFound("drawing not found: " + id)
 	}
 	return nil
 }
@@ -212,7 +212,7 @@ func (r *drawingRepo) GetToken(ctx context.Context, id string) (*Token, error) {
 		&statusJSON, &flagsJSON, &t.FoundryID, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, apperror.NewNotFound("token", id)
+		return nil, apperror.NewNotFound("token not found: " + id)
 	}
 	if err != nil {
 		return nil, apperror.NewInternal(err)
@@ -250,7 +250,7 @@ func (r *drawingRepo) UpdateToken(ctx context.Context, t *Token) error {
 		return apperror.NewInternal(err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperror.NewNotFound("token", t.ID)
+		return apperror.NewNotFound("token not found: " + t.ID)
 	}
 	return nil
 }
@@ -263,7 +263,7 @@ func (r *drawingRepo) UpdateTokenPosition(ctx context.Context, id string, x, y f
 		return apperror.NewInternal(err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperror.NewNotFound("token", id)
+		return apperror.NewNotFound("token not found: " + id)
 	}
 	return nil
 }
@@ -275,7 +275,7 @@ func (r *drawingRepo) DeleteToken(ctx context.Context, id string) error {
 		return apperror.NewInternal(err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperror.NewNotFound("token", id)
+		return apperror.NewNotFound("token not found: " + id)
 	}
 	return nil
 }
@@ -350,7 +350,7 @@ func (r *drawingRepo) GetLayer(ctx context.Context, id string) (*Layer, error) {
 	).Scan(&l.ID, &l.MapID, &l.Name, &l.LayerType, &l.SortOrder,
 		&l.IsVisible, &l.Opacity, &l.IsLocked, &l.CreatedAt)
 	if err == sql.ErrNoRows {
-		return nil, apperror.NewNotFound("layer", id)
+		return nil, apperror.NewNotFound("layer not found: " + id)
 	}
 	if err != nil {
 		return nil, apperror.NewInternal(err)
@@ -370,7 +370,7 @@ func (r *drawingRepo) UpdateLayer(ctx context.Context, l *Layer) error {
 		return apperror.NewInternal(err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperror.NewNotFound("layer", l.ID)
+		return apperror.NewNotFound("layer not found: " + l.ID)
 	}
 	return nil
 }
@@ -382,7 +382,7 @@ func (r *drawingRepo) DeleteLayer(ctx context.Context, id string) error {
 		return apperror.NewInternal(err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperror.NewNotFound("layer", id)
+		return apperror.NewNotFound("layer not found: " + id)
 	}
 	return nil
 }
@@ -434,7 +434,7 @@ func (r *drawingRepo) DeleteFog(ctx context.Context, id string) error {
 		return apperror.NewInternal(err)
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperror.NewNotFound("fog region", id)
+		return apperror.NewNotFound("fog region not found: " + id)
 	}
 	return nil
 }
