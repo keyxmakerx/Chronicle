@@ -4,9 +4,8 @@ package middleware
 
 import (
 	"context"
-	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // CampaignScoped is satisfied by any model that belongs to a campaign.
@@ -29,7 +28,7 @@ func RequireInCampaign[T CampaignScoped](ctx context.Context, fetchFn func(ctx c
 	}
 	if resource.GetCampaignID() != campaignID {
 		var zero T
-		return zero, echo.NewHTTPError(http.StatusNotFound, resourceName+" not found")
+		return zero, apperror.NewNotFound(resourceName + " not found")
 	}
 	return resource, nil
 }

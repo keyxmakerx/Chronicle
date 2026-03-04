@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // apiKeyContextKey is the Echo context key for the authenticated API key.
@@ -42,7 +44,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 					IPAddress: ip,
 					UserAgent: strPtr(c.Request().UserAgent()),
 				})
-				return echo.NewHTTPError(http.StatusForbidden, "ip address blocked")
+				return apperror.NewForbidden("ip address blocked")
 			}
 
 			// Extract API key from Authorization header.
@@ -54,13 +56,13 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 					UserAgent: strPtr(c.Request().UserAgent()),
 					Details:   map[string]any{"reason": "missing authorization header"},
 				})
-				return echo.NewHTTPError(http.StatusUnauthorized, "api key required")
+				return apperror.NewUnauthorized("api key required")
 			}
 
 			rawKey := strings.TrimPrefix(authHeader, "Bearer ")
 			if rawKey == authHeader {
 				// No "Bearer " prefix found.
-				return echo.NewHTTPError(http.StatusUnauthorized, "invalid authorization format, use: Bearer <key>")
+				return apperror.NewUnauthorized("invalid authorization format, use: Bearer <key>")
 			}
 
 			// Authenticate the key (prefix lookup + bcrypt verify).
@@ -72,7 +74,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 					UserAgent: strPtr(c.Request().UserAgent()),
 					Details:   map[string]any{"reason": err.Error()},
 				})
-				return echo.NewHTTPError(http.StatusUnauthorized, "invalid api key")
+				return apperror.NewUnauthorized("invalid api key")
 			}
 
 			// Verify IP allowlist if configured.
@@ -84,7 +86,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 					UserAgent: strPtr(c.Request().UserAgent()),
 					Details:   map[string]any{"reason": "ip not in allowlist"},
 				})
-				return echo.NewHTTPError(http.StatusForbidden, "ip address not allowed for this key")
+				return apperror.NewForbidden("ip address not allowed for this key")
 			}
 
 			// Device fingerprint enforcement: if the client sends X-Device-Fingerprint,
@@ -112,7 +114,7 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 						UserAgent:  strPtr(c.Request().UserAgent()),
 						Details:    map[string]any{"reason": "device fingerprint mismatch"},
 					})
-					return echo.NewHTTPError(http.StatusForbidden, "device not authorized for this key")
+					return apperror.NewForbidden("device not authorized for this key")
 				}
 			}
 
@@ -174,10 +176,10 @@ func RequirePermission(perm APIKeyPermission) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			key := GetAPIKey(c)
 			if key == nil {
-				return echo.NewHTTPError(http.StatusUnauthorized, "api key required")
+				return apperror.NewUnauthorized("api key required")
 			}
 			if !key.HasPermission(perm) {
-				return echo.NewHTTPError(http.StatusForbidden, "insufficient permissions: requires "+string(perm))
+				return apperror.NewForbidden("insufficient permissions: requires " + string(perm))
 			}
 			return next(c)
 		}
@@ -192,11 +194,11 @@ func RequireCampaignMatch() echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			key := GetAPIKey(c)
 			if key == nil {
-				return echo.NewHTTPError(http.StatusUnauthorized, "api key required")
+				return apperror.NewUnauthorized("api key required")
 			}
 			campaignID := c.Param("id")
 			if campaignID != key.CampaignID {
-				return echo.NewHTTPError(http.StatusForbidden, "api key not authorized for this campaign")
+				return apperror.NewForbidden("api key not authorized for this campaign")
 			}
 			return next(c)
 		}
@@ -262,7 +264,7 @@ func RateLimit(service SyncAPIService) echo.MiddlewareFunc {
 					UserAgent:  strPtr(c.Request().UserAgent()),
 				})
 				c.Response().Header().Set("Retry-After", "60")
-				return echo.NewHTTPError(http.StatusTooManyRequests, "rate limit exceeded")
+				return &apperror.AppError{Code: http.StatusTooManyRequests, Type: "rate_limit_exceeded", Message: "rate limit exceeded"}
 			}
 
 			return next(c)
@@ -308,7 +310,7 @@ func RequireAddonAPI(addonChecker AddonChecker, slug string) echo.MiddlewareFunc
 		return func(c echo.Context) error {
 			campaignID := c.Param("id")
 			if campaignID == "" {
-				return echo.NewHTTPError(http.StatusBadRequest, "campaign ID required")
+				return apperror.NewBadRequest("campaign ID required")
 			}
 
 			enabled, err := addonChecker.IsEnabledForCampaign(c.Request().Context(), campaignID, slug)
@@ -319,10 +321,10 @@ func RequireAddonAPI(addonChecker AddonChecker, slug string) echo.MiddlewareFunc
 					slog.String("slug", slug),
 					slog.Any("error", err),
 				)
-				return echo.NewHTTPError(http.StatusServiceUnavailable, "temporarily unable to verify addon status")
+				return &apperror.AppError{Code: http.StatusServiceUnavailable, Type: "service_unavailable", Message: "temporarily unable to verify addon status"}
 			}
 			if !enabled {
-				return echo.NewHTTPError(http.StatusNotFound, slug+" addon is not enabled for this campaign")
+				return apperror.NewNotFound(slug + " addon is not enabled for this campaign")
 			}
 			return next(c)
 		}

@@ -39,10 +39,10 @@ func (h *CalendarAPIHandler) GetCalendar(c echo.Context) error {
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil {
 		slog.Error("api: failed to get calendar", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get calendar")
+		return apperror.NewInternal(fmt.Errorf("failed to get calendar"))
 	}
 	if cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "no calendar configured for this campaign")
+		return apperror.NewNotFound("no calendar configured for this campaign")
 	}
 
 	return c.JSON(http.StatusOK, cal)
@@ -56,7 +56,7 @@ func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
@@ -79,7 +79,7 @@ func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	role := h.resolveRole(c)
@@ -108,7 +108,7 @@ func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
 
 	if err != nil {
 		slog.Error("api: failed to list events", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list events")
+		return apperror.NewInternal(fmt.Errorf("failed to list events"))
 	}
 
 	if events == nil {
@@ -130,19 +130,19 @@ func (h *CalendarAPIHandler) GetEvent(c echo.Context) error {
 
 	evt, err := h.calendarSvc.GetEvent(ctx, eventID)
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	// IDOR protection: verify event belongs to this campaign's calendar.
 	cal, err := h.calendarSvc.GetCalendarByID(ctx, evt.CalendarID)
 	if err != nil || cal == nil || cal.CampaignID != campaignID {
-		return echo.NewHTTPError(http.StatusNotFound, "event not found")
+		return apperror.NewNotFound("event not found")
 	}
 
 	// Visibility check: dm_only events require owner-level role.
 	role := h.resolveRole(c)
 	if evt.Visibility == "dm_only" && role < 3 {
-		return echo.NewHTTPError(http.StatusNotFound, "event not found")
+		return apperror.NewNotFound("event not found")
 	}
 
 	return c.JSON(http.StatusOK, evt)
@@ -177,7 +177,7 @@ type apiCreateEventRequest struct {
 func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
 	key := GetAPIKey(c)
 	if key == nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "api key required")
+		return apperror.NewUnauthorized("api key required")
 	}
 
 	campaignID := c.Param("id")
@@ -185,12 +185,12 @@ func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var req apiCreateEventRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	evt, err := h.calendarSvc.CreateEvent(ctx, cal.ID, calendar.CreateEventInput{
@@ -215,7 +215,7 @@ func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
 		CreatedBy:      key.UserID,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusCreated, evt)
@@ -253,16 +253,16 @@ func (h *CalendarAPIHandler) UpdateEvent(c echo.Context) error {
 	// IDOR protection: verify event belongs to this campaign's calendar.
 	evt, err := h.calendarSvc.GetEvent(ctx, eventID)
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	cal, err := h.calendarSvc.GetCalendarByID(ctx, evt.CalendarID)
 	if err != nil || cal == nil || cal.CampaignID != campaignID {
-		return echo.NewHTTPError(http.StatusNotFound, "event not found")
+		return apperror.NewNotFound("event not found")
 	}
 
 	var req apiUpdateEventRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.calendarSvc.UpdateEvent(ctx, eventID, calendar.UpdateEventInput{
@@ -285,7 +285,7 @@ func (h *CalendarAPIHandler) UpdateEvent(c echo.Context) error {
 		Visibility:     req.Visibility,
 		Category:       req.Category,
 	}); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -301,15 +301,15 @@ func (h *CalendarAPIHandler) DeleteEvent(c echo.Context) error {
 	// IDOR protection: verify event belongs to this campaign's calendar.
 	evt, err := h.calendarSvc.GetEvent(ctx, eventID)
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	cal, err := h.calendarSvc.GetCalendarByID(ctx, evt.CalendarID)
 	if err != nil || cal == nil || cal.CampaignID != campaignID {
-		return echo.NewHTTPError(http.StatusNotFound, "event not found")
+		return apperror.NewNotFound("event not found")
 	}
 
 	if err := h.calendarSvc.DeleteEvent(ctx, eventID); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.NoContent(http.StatusNoContent)
@@ -336,16 +336,16 @@ func (h *CalendarAPIHandler) SetDate(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var req apiSetDateRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.calendarSvc.SetDate(ctx, cal.ID, req.Year, req.Month, req.Day, req.Hour, req.Minute); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	// Return the confirmed date.
@@ -372,19 +372,19 @@ func (h *CalendarAPIHandler) AdvanceDate(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var req apiAdvanceDateRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 	if req.Days < 1 || req.Days > 3650 {
-		return echo.NewHTTPError(http.StatusBadRequest, "days must be between 1 and 3650")
+		return apperror.NewBadRequest("days must be between 1 and 3650")
 	}
 
 	if err := h.calendarSvc.AdvanceDate(ctx, cal.ID, req.Days); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	// Return the updated date.
@@ -411,7 +411,7 @@ func (h *CalendarAPIHandler) AdvanceTime(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var req struct {
@@ -419,17 +419,17 @@ func (h *CalendarAPIHandler) AdvanceTime(c echo.Context) error {
 		Minutes int `json:"minutes"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 	if req.Hours < 0 || req.Minutes < 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "hours and minutes must be non-negative")
+		return apperror.NewBadRequest("hours and minutes must be non-negative")
 	}
 	if req.Hours == 0 && req.Minutes == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "must advance by at least 1 minute or 1 hour")
+		return apperror.NewBadRequest("must advance by at least 1 minute or 1 hour")
 	}
 
 	if err := h.calendarSvc.AdvanceTime(ctx, cal.ID, req.Hours, req.Minutes); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	// Return the updated date/time.
@@ -458,7 +458,7 @@ func (h *CalendarAPIHandler) UpdateCalendarSettings(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var req struct {
@@ -477,7 +477,7 @@ func (h *CalendarAPIHandler) UpdateCalendarSettings(c echo.Context) error {
 		LeapYearOffset   int     `json:"leap_year_offset"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.calendarSvc.UpdateCalendar(ctx, cal.ID, calendar.UpdateCalendarInput{
@@ -495,7 +495,7 @@ func (h *CalendarAPIHandler) UpdateCalendarSettings(c echo.Context) error {
 		LeapYearEvery:    req.LeapYearEvery,
 		LeapYearOffset:   req.LeapYearOffset,
 	}); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -509,16 +509,16 @@ func (h *CalendarAPIHandler) UpdateMonths(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var months []calendar.MonthInput
 	if err := c.Bind(&months); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.calendarSvc.SetMonths(ctx, cal.ID, months); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -532,16 +532,16 @@ func (h *CalendarAPIHandler) UpdateWeekdays(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var weekdays []calendar.WeekdayInput
 	if err := c.Bind(&weekdays); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.calendarSvc.SetWeekdays(ctx, cal.ID, weekdays); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -555,16 +555,16 @@ func (h *CalendarAPIHandler) UpdateMoons(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var moons []calendar.MoonInput
 	if err := c.Bind(&moons); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.calendarSvc.SetMoons(ctx, cal.ID, moons); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -578,16 +578,16 @@ func (h *CalendarAPIHandler) UpdateEras(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var eras []calendar.EraInput
 	if err := c.Bind(&eras); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.calendarSvc.SetEras(ctx, cal.ID, eras); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -603,7 +603,7 @@ func (h *CalendarAPIHandler) ExportCalendar(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var events []calendar.Event
@@ -626,21 +626,21 @@ func (h *CalendarAPIHandler) ImportCalendar(c echo.Context) error {
 
 	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	data, err := io.ReadAll(io.LimitReader(c.Request().Body, 10*1024*1024))
 	if err != nil || len(data) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "empty request body")
+		return apperror.NewBadRequest("empty request body")
 	}
 
 	result, parseErr := calendar.DetectAndParse(data)
 	if parseErr != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("parse error: %s", parseErr.Error()))
+		return apperror.NewBadRequest(fmt.Sprintf("parse error: %s", parseErr.Error()))
 	}
 
 	if err := h.calendarSvc.ApplyImport(ctx, cal.ID, result); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{

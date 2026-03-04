@@ -8,6 +8,8 @@ import (
 
 	gorillaWs "github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // newUpgrader creates a WebSocket upgrader that validates the Origin header
@@ -81,7 +83,7 @@ func HandleUpgrade(hub *Hub, auth Authenticator, allowedOrigins []string) echo.H
 				slog.Any("error", err),
 				slog.String("remote", r.RemoteAddr),
 			)
-			return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+			return apperror.NewUnauthorized("authentication required")
 		}
 
 		conn, err := upgrader.Upgrade(c.Response(), r, nil)

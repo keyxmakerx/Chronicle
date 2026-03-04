@@ -168,7 +168,7 @@ func (h *MapAPIHandler) CreateDrawing(c echo.Context) error {
 		FoundryID:   req.FoundryID,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.JSON(http.StatusCreated, drawing)
 }
@@ -211,7 +211,7 @@ func (h *MapAPIHandler) UpdateDrawing(c echo.Context) error {
 		Visibility:  req.Visibility,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -223,7 +223,7 @@ func (h *MapAPIHandler) DeleteDrawing(c echo.Context) error {
 		return err
 	}
 	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("drawingID")); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -271,7 +271,7 @@ func (h *MapAPIHandler) ListTokens(c echo.Context) error {
 	role := h.resolveRole(c)
 	tokens, err := h.drawingSvc.ListTokens(c.Request().Context(), m.ID, role)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list tokens")
+		return apperror.NewInternal(fmt.Errorf("failed to list tokens"))
 	}
 	return c.JSON(http.StatusOK, tokens)
 }
@@ -325,7 +325,7 @@ func (h *MapAPIHandler) CreateToken(c echo.Context) error {
 		FoundryID:      req.FoundryID,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.JSON(http.StatusCreated, token)
 }
@@ -398,7 +398,7 @@ func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
 		Flags:          req.Flags,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -427,7 +427,7 @@ func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
 		Y: req.Y,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -439,7 +439,7 @@ func (h *MapAPIHandler) DeleteToken(c echo.Context) error {
 		return err
 	}
 	if err := h.drawingSvc.DeleteToken(c.Request().Context(), c.Param("tokenID")); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -465,7 +465,7 @@ func (h *MapAPIHandler) ListLayers(c echo.Context) error {
 	}
 	layers, err := h.drawingSvc.ListLayers(c.Request().Context(), m.ID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list layers")
+		return apperror.NewInternal(fmt.Errorf("failed to list layers"))
 	}
 	return c.JSON(http.StatusOK, layers)
 }
@@ -493,7 +493,7 @@ func (h *MapAPIHandler) CreateLayer(c echo.Context) error {
 		IsLocked:  req.IsLocked,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.JSON(http.StatusCreated, layer)
 }
@@ -528,7 +528,7 @@ func (h *MapAPIHandler) UpdateLayer(c echo.Context) error {
 		IsLocked:  req.IsLocked,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -540,7 +540,7 @@ func (h *MapAPIHandler) DeleteLayer(c echo.Context) error {
 		return err
 	}
 	if err := h.drawingSvc.DeleteLayer(c.Request().Context(), c.Param("layerID")); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -562,7 +562,7 @@ func (h *MapAPIHandler) ListFog(c echo.Context) error {
 	}
 	fog, err := h.drawingSvc.ListFog(c.Request().Context(), m.ID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list fog")
+		return apperror.NewInternal(fmt.Errorf("failed to list fog"))
 	}
 	return c.JSON(http.StatusOK, fog)
 }
@@ -586,7 +586,7 @@ func (h *MapAPIHandler) CreateFog(c echo.Context) error {
 		IsExplored: req.IsExplored,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.JSON(http.StatusCreated, fog)
 }
@@ -598,7 +598,7 @@ func (h *MapAPIHandler) DeleteFog(c echo.Context) error {
 		return err
 	}
 	if err := h.drawingSvc.DeleteFog(c.Request().Context(), c.Param("fogID")); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -611,7 +611,7 @@ func (h *MapAPIHandler) ResetFog(c echo.Context) error {
 		return err
 	}
 	if err := h.drawingSvc.ResetFog(c.Request().Context(), m.ID); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }

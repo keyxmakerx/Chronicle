@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // testResource is a mock model that implements CampaignScoped.
@@ -23,7 +23,7 @@ func TestRequireInCampaign_Success(t *testing.T) {
 		if id == "res-1" {
 			return resource, nil
 		}
-		return nil, echo.NewHTTPError(http.StatusNotFound, "not found")
+		return nil, apperror.NewNotFound("not found")
 	}
 
 	result, err := RequireInCampaign(context.Background(), fetchFn, "res-1", "camp-1", "resource")
@@ -46,12 +46,12 @@ func TestRequireInCampaign_WrongCampaign(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	httpErr, ok := err.(*echo.HTTPError)
+	appErr, ok := err.(*apperror.AppError)
 	if !ok {
-		t.Fatalf("expected *echo.HTTPError, got %T", err)
+		t.Fatalf("expected *apperror.AppError, got %T", err)
 	}
-	if httpErr.Code != http.StatusNotFound {
-		t.Errorf("expected 404, got %d", httpErr.Code)
+	if appErr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", appErr.Code)
 	}
 }
 

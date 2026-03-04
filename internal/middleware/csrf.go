@@ -4,10 +4,13 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // csrfTokenLength is the number of random bytes in a CSRF token (32 bytes = 64 hex chars).
@@ -57,7 +60,7 @@ func CSRF() echo.MiddlewareFunc {
 				// Generate a new CSRF token and set it as a cookie.
 				token, genErr := generateCSRFToken()
 				if genErr != nil {
-					return echo.NewHTTPError(http.StatusInternalServerError, "failed to generate CSRF token")
+					return apperror.NewInternal(fmt.Errorf("failed to generate CSRF token"))
 				}
 
 				c.SetCookie(&http.Cookie{
@@ -100,7 +103,7 @@ func CSRF() echo.MiddlewareFunc {
 			// Use constant-time comparison to prevent timing side-channel attacks
 			// that could allow an attacker to deduce the token byte-by-byte.
 			if submittedToken == "" || subtle.ConstantTimeCompare([]byte(submittedToken), []byte(cookieToken)) != 1 {
-				return echo.NewHTTPError(http.StatusForbidden, "invalid or missing CSRF token")
+				return apperror.NewForbidden("invalid or missing CSRF token")
 			}
 
 			return next(c)

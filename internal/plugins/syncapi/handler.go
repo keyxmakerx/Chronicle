@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -30,7 +31,7 @@ func NewHandler(service SyncAPIService) *Handler {
 func (h *Handler) KeysPage(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+		return apperror.NewForbidden("campaign context required")
 	}
 
 	keys, err := h.service.ListKeysByCampaign(c.Request().Context(), cc.Campaign.ID)
@@ -49,7 +50,7 @@ func (h *Handler) KeysPage(c echo.Context) error {
 func (h *Handler) CreateKey(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+		return apperror.NewForbidden("campaign context required")
 	}
 
 	userID := auth.GetUserID(c)
@@ -118,12 +119,12 @@ func (h *Handler) CreateKey(c echo.Context) error {
 func (h *Handler) ToggleKey(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+		return apperror.NewForbidden("campaign context required")
 	}
 
 	keyID, err := strconv.Atoi(c.Param("keyID"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid key ID")
+		return apperror.NewBadRequest("invalid key ID")
 	}
 
 	ctx := c.Request().Context()
@@ -131,7 +132,7 @@ func (h *Handler) ToggleKey(c echo.Context) error {
 	// IDOR protection: verify key belongs to this campaign.
 	key, err := h.service.GetKey(ctx, keyID)
 	if err != nil || key.CampaignID != cc.Campaign.ID {
-		return echo.NewHTTPError(http.StatusNotFound, "api key not found")
+		return apperror.NewNotFound("api key not found")
 	}
 
 	action := c.FormValue("action")
@@ -156,12 +157,12 @@ func (h *Handler) ToggleKey(c echo.Context) error {
 func (h *Handler) RevokeKey(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+		return apperror.NewForbidden("campaign context required")
 	}
 
 	keyID, err := strconv.Atoi(c.Param("keyID"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid key ID")
+		return apperror.NewBadRequest("invalid key ID")
 	}
 
 	ctx := c.Request().Context()
@@ -169,7 +170,7 @@ func (h *Handler) RevokeKey(c echo.Context) error {
 	// IDOR protection: verify key belongs to this campaign.
 	key, err := h.service.GetKey(ctx, keyID)
 	if err != nil || key.CampaignID != cc.Campaign.ID {
-		return echo.NewHTTPError(http.StatusNotFound, "api key not found")
+		return apperror.NewNotFound("api key not found")
 	}
 
 	if err := h.service.RevokeKey(ctx, keyID); err != nil {
@@ -287,7 +288,7 @@ func (h *Handler) AdminSecurityEvents(c echo.Context) error {
 func (h *Handler) ResolveEvent(c echo.Context) error {
 	eventID, err := strconv.ParseInt(c.Param("eventID"), 10, 64)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid event ID")
+		return apperror.NewBadRequest("invalid event ID")
 	}
 
 	adminID := auth.GetUserID(c)
@@ -334,7 +335,7 @@ func (h *Handler) BlockIP(c echo.Context) error {
 func (h *Handler) UnblockIP(c echo.Context) error {
 	blockID, err := strconv.Atoi(c.Param("blockID"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid block ID")
+		return apperror.NewBadRequest("invalid block ID")
 	}
 
 	if err := h.service.UnblockIP(c.Request().Context(), blockID); err != nil {
@@ -352,7 +353,7 @@ func (h *Handler) UnblockIP(c echo.Context) error {
 func (h *Handler) AdminToggleKey(c echo.Context) error {
 	keyID, err := strconv.Atoi(c.Param("keyID"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid key ID")
+		return apperror.NewBadRequest("invalid key ID")
 	}
 
 	action := c.FormValue("action")
@@ -379,7 +380,7 @@ func (h *Handler) AdminToggleKey(c echo.Context) error {
 func (h *Handler) AdminRevokeKey(c echo.Context) error {
 	keyID, err := strconv.Atoi(c.Param("keyID"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid key ID")
+		return apperror.NewBadRequest("invalid key ID")
 	}
 
 	if err := h.service.RevokeKey(c.Request().Context(), keyID); err != nil {
