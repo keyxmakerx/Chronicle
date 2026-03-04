@@ -47,7 +47,7 @@ func (h *Handler) Show(c echo.Context) error {
 	// If no calendar exists, show setup page.
 	if cal == nil {
 		csrfToken := middleware.GetCSRFToken(c)
-		if c.Request().Header.Get("HX-Request") != "" {
+		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
 		}
 		return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
@@ -85,7 +85,7 @@ func (h *Handler) Show(c echo.Context) error {
 		CSRFToken:  middleware.GetCSRFToken(c),
 	}
 
-	if c.Request().Header.Get("HX-Request") != "" {
+	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, CalendarGridFragment(cc, data))
 	}
 	return middleware.Render(c, http.StatusOK, CalendarPage(cc, data))
@@ -511,7 +511,7 @@ func (h *Handler) ShowSettings(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
-	if c.Request().Header.Get("HX-Request") != "" {
+	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, CalendarSettingsFragment(cc, cal, csrfToken))
 	}
 	return middleware.Render(c, http.StatusOK, CalendarSettingsPage(cc, cal, csrfToken))
@@ -648,7 +648,7 @@ func (h *Handler) ShowTimeline(c echo.Context) error {
 
 	if cal == nil {
 		csrfToken := middleware.GetCSRFToken(c)
-		if c.Request().Header.Get("HX-Request") != "" {
+		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
 		}
 		return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
@@ -679,7 +679,7 @@ func (h *Handler) ShowTimeline(c echo.Context) error {
 		CSRFToken:  middleware.GetCSRFToken(c),
 	}
 
-	if c.Request().Header.Get("HX-Request") != "" {
+	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, TimelineFragment(cc, data))
 	}
 	return middleware.Render(c, http.StatusOK, TimelinePage(cc, data))
