@@ -36,7 +36,7 @@ templ CategoryDashboardContent(cc *campaigns.CampaignContext, et *EntityType, en
 templ customCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, layout *campaigns.DashboardLayout, entities []Entity, total int) {
 	<div id="entity-list">
 		for _, row := range layout.Rows {
-			<div class="grid grid-cols-12 gap-4 mb-4">
+			<div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
 				for _, col := range row.Columns {
 					<div class={ catColSpan(col.Width) }>
 						for _, block := range col.Blocks {

@@ -712,9 +712,16 @@ func (a *App) RegisterRoutes() {
 	timelineHandler.SetMemberLister(campaignService)
 	timeline.RegisterRoutes(e, timelineHandler, campaignService, authService, addonService)
 
+	// Relations widget: bi-directional entity linking. Created before REST API
+	// so it can be injected into the API handler for shop inventory support.
+	relRepo := relations.NewRelationRepository(a.DB)
+	relService := relations.NewRelationService(relRepo)
+	relHandler := relations.NewHandler(relService)
+	relations.RegisterRoutes(e, relHandler, campaignService, authService)
+
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
-	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService)
+	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {
@@ -728,7 +735,7 @@ func (a *App) RegisterRoutes() {
 	_ = syncMappingSvc // Service will also be used by map/entity handlers.
 	mapAPIHandler := syncapi.NewMapAPIHandler(syncService, mapsService, drawingService, campaignService)
 
-	syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, syncMappingHandler, syncService)
+	syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, syncMappingHandler, syncService, addonService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
 	tagRepo := tags.NewTagRepository(a.DB)
@@ -742,11 +749,7 @@ func (a *App) RegisterRoutes() {
 	noteHandler := notes.NewHandler(noteService)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 
-	// Relations widget: bi-directional entity linking (create/list/delete).
-	relRepo := relations.NewRelationRepository(a.DB)
-	relService := relations.NewRelationService(relRepo)
-	relHandler := relations.NewHandler(relService)
-	relations.RegisterRoutes(e, relHandler, campaignService, authService)
+	// Relations widget routes already registered above (before REST API v1).
 
 	// Audit plugin: campaign activity logging and history.
 	auditRepo := audit.NewAuditRepository(a.DB)

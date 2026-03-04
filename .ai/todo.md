@@ -84,7 +84,7 @@ New capabilities ordered by priority for alpha release.
 
 - [ ] **File security audit + ClamAV** — Add ClamAV container to docker-compose, scan uploads before storage, configurable file type allowlist, SVG blocking (XSS vector).
 - [ ] **API documentation** — OpenAPI 3.0 spec or handwritten reference for REST v1. Auth guide, endpoint reference, rate limiting docs, sync protocol.
-- [~] **Foundry VTT Sync** — Bidirectional sync between Chronicle and Foundry VTT. Phases 1-4 complete (WebSocket, sync mappings, journal sync, map expansion, EventBus, Map API v1, calendar live sync). Phase 5 (shop entity type + Chronicle inventory widget + relation metadata) complete. Remaining: Foundry shop widget wiring to Chronicle API, end-to-end testing, permission hardening.
+- [x] **Foundry VTT Sync** — Bidirectional sync between Chronicle and Foundry VTT. Phases 1-4 complete (WebSocket, sync mappings, journal sync, map expansion, EventBus, Map API v1, calendar live sync). Phase 5 (shop entity type + Chronicle inventory widget + relation metadata, Foundry shop widget wiring, RequireAddonAPI permission hardening, E2E testing checklist) complete.
 - [x] **Maps Phase 2** — Layers, drawings, tokens, fog of war. Migration 000042, full CRUD service + repository + REST API handler. Role-based visibility filtering. Percentage-based coordinates for resolution independence.
 - [ ] **Timeline Phase 2B** — Event connections (visual lines between related events), create-from-timeline modal, beautification pass.
 - [ ] **Campaign export/import** — JSON bundle for backup/migration. Media as separate zip or URL references.
@@ -304,3 +304,14 @@ Summary of strengths/weaknesses for strategic positioning. Full analysis in `.ai
 - [x] Calendar HTMX detection fix (5 raw header checks → middleware.IsHTMX())
 - [x] Relations service tests (25 tests)
 - [x] Tags service tests (40 tests)
+
+### Production Fix + Mobile Nav + Widgets + Foundry Completion (2026-03-04, batch 20)
+- [x] Fixed duplicate migration 000041 (renumbered sync_mappings→044, map_expansion→045, relation_metadata→046)
+- [x] Removed Calendar/Maps/Timelines addon sidebar links from mobile nav
+- [x] Added map_preview dashboard block type with Leaflet-based widget
+- [x] Created 3 interactive dashboard widgets (calendar, timeline, map) with boot.js auto-mount
+- [x] Mobile responsive dashboard/category/entity grids (1-col mobile, 12-col desktop)
+- [x] Relations API endpoint for Foundry shop inventory (GET /entities/:entityID/relations)
+- [x] Foundry shop widget wired to relations API with inventory filtering
+- [x] RequireAddonAPI middleware gating calendar and map API v1 routes
+- [x] Foundry VTT E2E testing checklist (TESTING.md)

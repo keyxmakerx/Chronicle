@@ -8,11 +8,33 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Shop inventory widget + README cleanup (batch 19).
-Branch: `claude/foundry-sync-feature-05M5a`.
+2026-03-04 -- Production fix, mobile nav cleanup, dashboard widgets, Foundry completion (batch 20).
+Branch: `claude/fix-production-logging-bwyeV`.
 
 ## Current Phase
-**Sessions-Calendar integration + RSVP system.** Completed this session (batch 16):
+**Production fix + Mobile nav + Dashboard widgets + Foundry completion.** Completed this session (batch 20):
+- **Critical: Fixed duplicate migration 000041** — Two different migrations shared number
+  000041 (session_recurrence_and_rsvp_tokens vs sync_mappings). Renumbered:
+  sync_mappings→000044, map_expansion→000045, relation_metadata→000046. Production blocker resolved.
+- **Mobile nav cleanup** — Removed all 3 addon sidebar links (Calendar, Maps, Timelines)
+  from app.templ campaign navigation. Features now accessed via dashboard widgets.
+- **Dashboard widgets** — Created 3 new interactive JS widgets (calendar_widget.js,
+  timeline_widget.js, map_widget.js) auto-mounted by boot.js. Enhanced existing dashboard
+  blocks with `data-widget` attributes. Added `map_preview` block type to dashboard editor.
+- **Mobile responsive layouts** — Changed all dashboard/category/entity grids from fixed
+  12-column to responsive (1-col mobile, 12-col desktop via `grid-cols-1 md:grid-cols-12`).
+  Updated all colSpan helpers for responsive classes.
+- **Foundry relations API** — Added GET `/entities/:entityID/relations` to sync API.
+  Wired relations service into APIHandler. Shop widget fetches inventory via relations.
+- **Foundry permission hardening** — Added `RequireAddonAPI` middleware gating calendar
+  and map API routes behind addon enabled checks. Returns 404 for disabled addons.
+- **Foundry E2E testing checklist** — Created comprehensive `foundry-module/TESTING.md`.
+
+Previously completed (batch 19):
+- Shop inventory widget + README cleanup
+
+Previously completed (batch 16-18):
+**Sessions-Calendar integration + RSVP system.** Completed (batch 16):
 - **RequireAddon middleware**: Route-level addon gating for calendar, maps, sessions,
   timeline. Disabled addons now return 404/redirect instead of just hiding sidebar links.
 - **Sessions merged into calendar**: Sessions sidebar link removed. Sessions now
