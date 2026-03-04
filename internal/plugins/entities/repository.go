@@ -372,6 +372,14 @@ var defaultEntityTypes = []EntityType{
 			{Key: "date", Label: "Date", Type: "text", Section: "Basics"},
 			{Key: "location", Label: "Location", Type: "text", Section: "Basics"},
 		}},
+	{Slug: "shop", Name: "Shop", NamePlural: "Shops", Icon: "fa-store", Color: "#f97316", SortOrder: 7, IsDefault: true, Enabled: true,
+		Fields: []FieldDefinition{
+			{Key: "shop_type", Label: "Shop Type", Type: "select", Section: "Basics",
+				Options: []string{"General Store", "Blacksmith", "Apothecary", "Magic Shop", "Tavern", "Armorer", "Jeweler", "Tailor", "Stable", "Other"}},
+			{Key: "shop_keeper", Label: "Shopkeeper", Type: "text", Section: "Basics"},
+			{Key: "currency", Label: "Currency", Type: "text", Section: "Basics"},
+			{Key: "price_modifier", Label: "Price Modifier (%)", Type: "number", Section: "Basics"},
+		}},
 }
 
 // SeedDefaults inserts the default entity types for a newly created campaign.

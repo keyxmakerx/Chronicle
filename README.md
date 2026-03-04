@@ -10,9 +10,7 @@ Chronicle gives game masters and players a shared space to build worlds, track l
 
 ## Why Chronicle?
 
-Existing tools either lock features behind paid tiers (World Anvil), rely on outdated editors (Kanka's Summernote), require cobbling together plugins for basic TTRPG features (Obsidian), or are closed-source (LegendKeeper). Chronicle is purpose-built for tabletop RPGs, open source, and designed to be self-hosted from day one.
-
-**Inspired by** [World Anvil](https://www.worldanvil.com/), [Kanka](https://kanka.io/), [LegendKeeper](https://www.legendkeeper.com/), and [Obsidian](https://obsidian.md/) — taking the best ideas from each while avoiding their limitations.
+Chronicle is purpose-built for tabletop RPGs, open source, and designed to be self-hosted from day one. No paywalls, no forced public content, no vendor lock-in — your world, your server, your data.
 
 ---
 
@@ -64,9 +62,9 @@ Existing tools either lock features behind paid tiers (World Anvil), rely on out
 - **Checklists** — Quick checklist blocks within notes
 
 ### REST API
-- **API v1** — Full CRUD for entities, calendar, and events
+- **API v1** — Full CRUD for entities, calendar, events, maps, drawings, tokens, layers, fog, and media
 - **API Key Auth** — Per-campaign API keys with read/write/sync permissions
-- **Sync Protocol** — Device fingerprinting for external tool integration (Foundry VTT planned)
+- **Sync Protocol** — Sync mappings, WebSocket real-time events, and bidirectional Foundry VTT integration
 
 ### Admin & Security
 - **User Management** — Admin dashboard for users, campaigns, storage, and security
@@ -78,17 +76,26 @@ Existing tools either lock features behind paid tiers (World Anvil), rely on out
 
 ---
 
+## Foundry VTT Integration
+
+Chronicle includes a Foundry VTT module for bidirectional sync between your Chronicle worldbuilding and your Foundry VTT game. Sync journals, maps (drawings, tokens, fog of war), and calendars in real-time.
+
+**Install in Foundry VTT:**
+```
+https://github.com/keyxmakerx/Chronicle/releases/latest/download/module.json
+```
+
+Supports [Calendaria](https://foundryvtt.com/packages/calendaria) and [Simple Calendar](https://foundryvtt.com/packages/foundryvtt-simple-calendar) for calendar sync.
+
 ## Planned Features
 
 - Per-entity permissions (view/edit per role)
-- Media browser for campaign owners
-- Map layers, marker groups, and nested maps
 - Relations graph visualization
-- Editor tables and callout blocks
+- Editor tables
 - Game system modules (D&D 5e SRD, Pathfinder 2e, Draw Steel)
 - Campaign export/import
-- Foundry VTT sync
-- Auto-linking (LegendKeeper-style entity name detection)
+- Auto-linking (entity name detection in editor)
+- Shop entity type with inventory management
 
 See [.ai/todo.md](.ai/todo.md) for the full backlog.
 
@@ -217,12 +224,9 @@ See [.ai/architecture.md](.ai/architecture.md) for the full architecture documen
 
 ## Inspiration & Credits
 
-Chronicle draws inspiration from the best in the TTRPG worldbuilding space:
+Chronicle was developed with reference to several existing worldbuilding and note-taking platforms in the TTRPG space. We're grateful to the broader community for establishing patterns and conventions that inform what users expect from tools like these.
 
-- **[World Anvil](https://www.worldanvil.com/)** — Guided worldbuilding prompts, deep secrets system, 45+ RPG system support. Chronicle aims for similar breadth with a cleaner UI and no paywall.
-- **[Kanka](https://kanka.io/)** — Generous free tier, deep permissions, best-in-class calendar. Chronicle's calendar and permission model are influenced by Kanka's approach.
-- **[LegendKeeper](https://www.legendkeeper.com/)** — Auto-linking, speed-first philosophy, beautiful maps. Chronicle aspires to LegendKeeper's polish and interaction depth.
-- **[Obsidian](https://obsidian.md/)** — Plugin ecosystem, graph visualization, local-first philosophy. Chronicle's addon system aims to enable similar extensibility for TTRPG-specific features.
+Notable platforms we studied during development include [World Anvil](https://www.worldanvil.com/), [Kanka](https://kanka.io/), [LegendKeeper](https://www.legendkeeper.com/), and [Obsidian](https://obsidian.md/). All design and code in Chronicle is original work.
 
 ---
 
