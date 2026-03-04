@@ -1,15 +1,19 @@
 package media
 
 import (
+	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // Handler handles HTTP requests for media operations.
@@ -181,4 +185,91 @@ func (h *Handler) Delete(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// --- Campaign-scoped media browser ---
+
+// CampaignMediaPageData holds all data for rendering the campaign media browser.
+type CampaignMediaPageData struct {
+	Files     []MediaFile
+	Stats     *CampaignMediaStats
+	Total     int
+	Page      int
+	PerPage   int
+	CSRFToken string
+}
+
+// CampaignMedia renders the campaign media browser page (GET /campaigns/:id/media).
+func (h *Handler) CampaignMedia(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+
+	ctx := c.Request().Context()
+
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	if page < 1 {
+		page = 1
+	}
+	perPage := 24
+
+	files, total, err := h.service.ListCampaignMedia(ctx, cc.Campaign.ID, page, perPage)
+	if err != nil {
+		return err
+	}
+
+	stats, err := h.service.GetCampaignStats(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	data := CampaignMediaPageData{
+		Files:     files,
+		Stats:     stats,
+		Total:     total,
+		Page:      page,
+		PerPage:   perPage,
+		CSRFToken: middleware.GetCSRFToken(c),
+	}
+
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, CampaignMediaFragment(cc, data))
+	}
+	return middleware.Render(c, http.StatusOK, CampaignMediaPage(cc, data))
+}
+
+// CampaignDeleteMedia handles deletion of a campaign media file
+// (DELETE /campaigns/:id/media/:mid).
+func (h *Handler) CampaignDeleteMedia(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+
+	mediaID := c.Param("mid")
+	if err := h.service.DeleteCampaignMedia(c.Request().Context(), cc.Campaign.ID, mediaID); err != nil {
+		return err
+	}
+
+	// Redirect back to media page for HTMX and standard requests.
+	c.Response().Header().Set("HX-Redirect", fmt.Sprintf("/campaigns/%s/media", cc.Campaign.ID))
+	return c.JSON(http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// CampaignMediaRefs returns an HTMX fragment showing which entities reference
+// a media file (GET /campaigns/:id/media/:mid/refs).
+func (h *Handler) CampaignMediaRefs(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+
+	mediaID := c.Param("mid")
+	refs, err := h.service.FindReferences(c.Request().Context(), cc.Campaign.ID, mediaID)
+	if err != nil {
+		return err
+	}
+
+	return middleware.Render(c, http.StatusOK, MediaRefsFragment(cc, mediaID, refs))
 }

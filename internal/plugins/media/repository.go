@@ -41,6 +41,10 @@ type MediaRepository interface {
 	// GetCampaignUsage returns the total bytes and file count for a campaign.
 	// Used for storage quota enforcement at upload time.
 	GetCampaignUsage(ctx context.Context, campaignID string) (totalBytes int64, fileCount int, err error)
+
+	// FindReferences returns entities that reference the given media file,
+	// either via image_path or in their editor HTML content.
+	FindReferences(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error)
 }
 
 // mediaRepository implements MediaRepository with MariaDB queries.
@@ -259,4 +263,33 @@ func (r *mediaRepository) GetCampaignUsage(ctx context.Context, campaignID strin
 		return 0, 0, fmt.Errorf("querying campaign storage usage: %w", err)
 	}
 	return totalBytes, fileCount, nil
+}
+
+// FindReferences returns entities that reference the given media file.
+// Checks both entity image_path (direct reference) and entry_html (embedded in editor).
+func (r *mediaRepository) FindReferences(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error) {
+	query := `SELECT id, name, slug, 'image' AS ref_type
+	          FROM entities
+	          WHERE campaign_id = ? AND image_path = ?
+	          UNION
+	          SELECT id, name, slug, 'content' AS ref_type
+	          FROM entities
+	          WHERE campaign_id = ? AND entry_html LIKE CONCAT('%/media/', ?, '%')
+	          ORDER BY name`
+
+	rows, err := r.db.QueryContext(ctx, query, campaignID, mediaID, campaignID, mediaID)
+	if err != nil {
+		return nil, fmt.Errorf("finding media references: %w", err)
+	}
+	defer rows.Close()
+
+	var refs []MediaRef
+	for rows.Next() {
+		var ref MediaRef
+		if err := rows.Scan(&ref.EntityID, &ref.EntityName, &ref.EntitySlug, &ref.RefType); err != nil {
+			return nil, fmt.Errorf("scanning media reference: %w", err)
+		}
+		refs = append(refs, ref)
+	}
+	return refs, rows.Err()
 }

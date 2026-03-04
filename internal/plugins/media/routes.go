@@ -9,6 +9,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // RegisterRoutes sets up all media-related routes on the given Echo instance.
@@ -37,6 +38,20 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authSvc auth.AuthService, maxUploa
 	e.POST("/media/upload", h.Upload, authMw, uploadRateLimit, bodyLimit)
 	e.GET("/media/:fileID/info", h.Info, authMw)
 	e.DELETE("/media/:fileID", h.Delete, authMw)
+}
+
+// RegisterCampaignRoutes sets up campaign-scoped media management routes.
+// The media browser is Owner-only -- allows browsing, deleting, and
+// checking which entities reference each file.
+func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+	)
+
+	cg.GET("/media", h.CampaignMedia, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.DELETE("/media/:mid", h.CampaignDeleteMedia, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.GET("/media/:mid/refs", h.CampaignMediaRefs, campaigns.RequireRole(campaigns.RoleOwner))
 }
 
 // bodyLimitMiddleware returns middleware that rejects request bodies exceeding

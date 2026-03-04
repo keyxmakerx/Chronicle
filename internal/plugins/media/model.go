@@ -81,3 +81,18 @@ const (
 	UsageAvatar      = "avatar"
 	UsageBackdrop    = "backdrop"
 )
+
+// MediaRef is a lightweight reference from an entity to a media file.
+// Used by the campaign media browser to show which entities use each file.
+type MediaRef struct {
+	EntityID   string `json:"entity_id"`
+	EntityName string `json:"entity_name"`
+	EntitySlug string `json:"entity_slug"`
+	RefType    string `json:"ref_type"` // "image" (entity image) or "content" (in editor HTML).
+}
+
+// CampaignMediaStats holds aggregate storage stats scoped to one campaign.
+type CampaignMediaStats struct {
+	TotalFiles int
+	TotalBytes int64
+}

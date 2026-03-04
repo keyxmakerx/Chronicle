@@ -8,18 +8,27 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- UX hardening sprint: calendar categories, search expansion, callout blocks.
+2026-03-04 -- Media management for campaign owners.
 Branch: `claude/review-codebase-R1WqN`.
 
 ## Current Phase
-**UX hardening.** Completed this session (batch 8):
-- Customizable calendar event categories:
-  - Migration 000039: `calendar_event_categories` table with slug/name/icon/color
-  - Default categories seeded on calendar creation (holiday, battle, quest, birthday, festival, travel)
-  - Categories tab in calendar settings for full CRUD management
-  - Event modal dropdown dynamically populated from calendar's categories
-  - categoryIcon() now looks up from calendar's EventCategories (no more hardcoded switch)
-  - JS view modal reads categories from data attribute for display
+**UX hardening.** Completed this session (batch 9):
+- Campaign-scoped media browser:
+  - New page at `/campaigns/:id/media` (Owner-only)
+  - Grid view with thumbnails, file info overlay on hover, lazy image loading
+  - "Referenced by" tracking: queries entities by `image_path` and `entry_html` content
+  - HTMX lazy-loaded reference fragments per file
+  - Delete with confirmation warning about broken images
+  - Upload from browser page (Alpine.js uploader with validation)
+  - Storage stats header (file count, total bytes used)
+  - Pagination for large media libraries (24 per page)
+  - Sidebar "Media" link in Manage section (Owner-only, between Activity Log and Customize)
+  - Repository: `FindReferences()` via UNION query on entities
+  - Service: `ListCampaignMedia()`, `GetCampaignStats()`, `FindReferences()`, `DeleteCampaignMedia()`
+  - Routes: `RegisterCampaignRoutes()` function for campaign-scoped media management
+
+Completed (batch 8):
+- Customizable calendar event categories (migration 000039, settings tab, dynamic dropdown)
 
 Completed (batch 7):
 - Search scope expanded: Ctrl+K now searches entities, timelines, maps, calendar events, and sessions

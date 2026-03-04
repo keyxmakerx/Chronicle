@@ -38,6 +38,18 @@ type MediaService interface {
 	FilePath(file *MediaFile) string
 	ThumbnailPath(file *MediaFile, size string) string
 	SetStorageLimiter(limiter StorageLimiter)
+
+	// ListCampaignMedia returns paginated media files for a campaign.
+	ListCampaignMedia(ctx context.Context, campaignID string, page, perPage int) ([]MediaFile, int, error)
+
+	// GetCampaignStats returns aggregate storage stats for a campaign.
+	GetCampaignStats(ctx context.Context, campaignID string) (*CampaignMediaStats, error)
+
+	// FindReferences returns entities that reference a media file.
+	FindReferences(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error)
+
+	// DeleteCampaignMedia deletes a media file after verifying it belongs to the campaign.
+	DeleteCampaignMedia(ctx context.Context, campaignID, mediaID string) error
 }
 
 // mediaService implements MediaService.
@@ -248,6 +260,47 @@ func (s *mediaService) ThumbnailPath(file *MediaFile, size string) string {
 		return filepath.Join(s.mediaPath, thumbFile)
 	}
 	return s.FilePath(file)
+}
+
+// ListCampaignMedia returns paginated media files for a campaign.
+func (s *mediaService) ListCampaignMedia(ctx context.Context, campaignID string, page, perPage int) ([]MediaFile, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * perPage
+	return s.repo.ListByCampaign(ctx, campaignID, perPage, offset)
+}
+
+// GetCampaignStats returns aggregate storage stats for a campaign.
+func (s *mediaService) GetCampaignStats(ctx context.Context, campaignID string) (*CampaignMediaStats, error) {
+	totalBytes, fileCount, err := s.repo.GetCampaignUsage(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return &CampaignMediaStats{
+		TotalFiles: fileCount,
+		TotalBytes: totalBytes,
+	}, nil
+}
+
+// FindReferences returns entities that reference a media file.
+func (s *mediaService) FindReferences(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error) {
+	return s.repo.FindReferences(ctx, campaignID, mediaID)
+}
+
+// DeleteCampaignMedia deletes a media file after verifying it belongs to the campaign.
+func (s *mediaService) DeleteCampaignMedia(ctx context.Context, campaignID, mediaID string) error {
+	file, err := s.repo.FindByID(ctx, mediaID)
+	if err != nil {
+		return err
+	}
+
+	// Verify the file belongs to this campaign.
+	if file.CampaignID == nil || *file.CampaignID != campaignID {
+		return apperror.NewNotFound("media file not found")
+	}
+
+	return s.Delete(ctx, mediaID)
 }
 
 // maxImageDimension is the maximum width or height in pixels for uploaded images.

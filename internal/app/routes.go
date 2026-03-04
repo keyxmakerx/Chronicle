@@ -387,6 +387,7 @@ func (a *App) RegisterRoutes() {
 	mediaService := media.NewMediaService(mediaRepo, a.Config.Upload.MediaPath, a.Config.Upload.MaxSize)
 	mediaHandler := media.NewHandler(mediaService)
 	media.RegisterRoutes(e, mediaHandler, authService, a.Config.Upload.MaxSize)
+	media.RegisterCampaignRoutes(e, mediaHandler, campaignService, authService)
 
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings, storage).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)

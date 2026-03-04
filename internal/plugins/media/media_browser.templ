@@ -1,0 +1,302 @@
+// media_browser.templ renders the campaign-scoped media browser page.
+// Allows campaign owners to browse, manage, and delete their uploads.
+// Shows a grid of thumbnails with file info, "referenced by" lookup, and
+// delete with warnings.
+
+package media
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CampaignMediaPage renders the full media browser page.
+templ CampaignMediaPage(cc *campaigns.CampaignContext, data CampaignMediaPageData) {
+	@layouts.App("Media") {
+		@campaignMediaContent(cc, data)
+	}
+}
+
+// CampaignMediaFragment renders the media browser as an HTMX fragment.
+templ CampaignMediaFragment(cc *campaigns.CampaignContext, data CampaignMediaPageData) {
+	@campaignMediaContent(cc, data)
+}
+
+// formatFileSize converts bytes to a human-readable string (KB, MB, GB).
+func formatFileSize(b int64) string {
+	switch {
+	case b >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(b)/float64(1<<30))
+	case b >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(b)/float64(1<<20))
+	case b >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(b)/float64(1<<10))
+	default:
+		return fmt.Sprintf("%d B", b)
+	}
+}
+
+// mediaUsageLabel returns a human-readable label for a usage type.
+func mediaUsageLabel(t string) string {
+	switch t {
+	case "entity_image":
+		return "Page Image"
+	case "attachment":
+		return "Attachment"
+	case "avatar":
+		return "Avatar"
+	case "backdrop":
+		return "Backdrop"
+	default:
+		return t
+	}
+}
+
+// campaignMediaContent renders the media browser body.
+templ campaignMediaContent(cc *campaigns.CampaignContext, data CampaignMediaPageData) {
+	<div class="max-w-6xl mx-auto py-6 px-4">
+		<!-- Header -->
+		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
+			<div>
+				<h1 class="text-xl font-bold text-fg">
+					<i class="fa-solid fa-photo-film mr-2 text-accent"></i>Media
+				</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					{ fmt.Sprintf("%d files", data.Stats.TotalFiles) } &middot; { formatFileSize(data.Stats.TotalBytes) } used
+				</p>
+			</div>
+			<!-- Upload button opens native file picker -->
+			<div
+				x-data={ fmt.Sprintf("mediaUploader('%s', '%s')", cc.Campaign.ID, data.CSRFToken) }
+			>
+				<button
+					class="btn-primary text-sm"
+					@click="$refs.fileInput.click()"
+					:disabled="uploading"
+				>
+					<template x-if="!uploading">
+						<span><i class="fa-solid fa-arrow-up-from-bracket mr-1"></i> Upload</span>
+					</template>
+					<template x-if="uploading">
+						<span><i class="fa-solid fa-spinner fa-spin mr-1"></i> Uploading...</span>
+					</template>
+				</button>
+				<input
+					type="file"
+					x-ref="fileInput"
+					class="hidden"
+					accept="image/jpeg,image/png,image/webp,image/gif"
+					@change="uploadFile($event)"
+				/>
+			</div>
+		</div>
+
+		if data.Total == 0 {
+			<!-- Empty state -->
+			<div class="card text-center py-12">
+				<i class="fa-solid fa-photo-film text-4xl text-fg-muted mb-3"></i>
+				<p class="text-fg-secondary mb-1">No media files yet</p>
+				<p class="text-sm text-fg-muted">
+					Upload images through the page editor, page images, or the Upload button above.
+				</p>
+			</div>
+		} else {
+			<!-- Media grid -->
+			<div class="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+				for _, f := range data.Files {
+					@mediaCard(cc, f, data.CSRFToken)
+				}
+			</div>
+
+			<!-- Pagination -->
+			if data.Total > data.PerPage {
+				<div class="flex justify-center items-center gap-4 mt-6">
+					if data.Page > 1 {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/media?page=%d", cc.Campaign.ID, data.Page-1)) }
+							class="btn-secondary text-sm"
+						>
+							Previous
+						</a>
+					} else {
+						<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Previous</span>
+					}
+					<span class="text-sm text-fg-secondary">
+						Page { fmt.Sprintf("%d", data.Page) } of { fmt.Sprintf("%d", (data.Total+data.PerPage-1)/data.PerPage) }
+					</span>
+					if data.Page*data.PerPage < data.Total {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/media?page=%d", cc.Campaign.ID, data.Page+1)) }
+							class="btn-secondary text-sm"
+						>
+							Next
+						</a>
+					} else {
+						<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Next</span>
+					}
+				</div>
+			}
+		}
+	</div>
+
+	<!-- Inline uploader script -->
+	@mediaUploaderScript()
+}
+
+// mediaCard renders a single media file in the grid view.
+templ mediaCard(cc *campaigns.CampaignContext, f MediaFile, csrfToken string) {
+	<div
+		class="card p-0 overflow-hidden group relative"
+		x-data="{ showDetail: false }"
+	>
+		<!-- Thumbnail -->
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/media/%s", f.ID)) }
+			target="_blank"
+			class="block aspect-square bg-surface-alt overflow-hidden"
+		>
+			if f.IsImage() {
+				<img
+					src={ fmt.Sprintf("/media/%s/thumb/300", f.ID) }
+					alt={ f.OriginalName }
+					class="w-full h-full object-cover"
+					loading="lazy"
+				/>
+			} else {
+				<div class="w-full h-full flex items-center justify-center">
+					<i class="fa-solid fa-file text-2xl text-fg-muted"></i>
+				</div>
+			}
+		</a>
+
+		<!-- Info overlay on hover -->
+		<div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2 pointer-events-none">
+			<p class="text-white text-xs font-medium truncate">{ f.OriginalName }</p>
+			<p class="text-white/70 text-[10px]">{ formatFileSize(f.FileSize) } &middot; { mediaUsageLabel(f.UsageType) }</p>
+		</div>
+
+		<!-- Actions (visible on hover) -->
+		<div class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+			<!-- Show references -->
+			<button
+				@click.stop="showDetail = !showDetail"
+				class="w-6 h-6 rounded bg-black/50 hover:bg-black/70 text-white flex items-center justify-center text-[10px] pointer-events-auto"
+				title="Show references"
+			>
+				<i class="fa-solid fa-link"></i>
+			</button>
+			<!-- Delete -->
+			<button
+				hx-delete={ fmt.Sprintf("/campaigns/%s/media/%s", cc.Campaign.ID, f.ID) }
+				hx-confirm={ fmt.Sprintf("Delete '%s'? This cannot be undone. Any pages using this image will show a broken image.", f.OriginalName) }
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+				class="w-6 h-6 rounded bg-red-600/70 hover:bg-red-600 text-white flex items-center justify-center text-[10px] pointer-events-auto"
+				title="Delete file"
+			>
+				<i class="fa-solid fa-trash"></i>
+			</button>
+		</div>
+
+		<!-- Detail/refs panel (expandable) -->
+		<div
+			x-show="showDetail"
+			x-cloak
+			class="border-t border-edge bg-surface p-2"
+		>
+			<p class="text-xs font-medium text-fg-body truncate mb-1" title={ f.OriginalName }>{ f.OriginalName }</p>
+			<p class="text-[10px] text-fg-muted mb-1.5">
+				{ formatFileSize(f.FileSize) } &middot; { f.MimeType } &middot; { f.CreatedAt.Format("Jan 2, 2006") }
+			</p>
+			<!-- Lazy-load references -->
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/media/%s/refs", cc.Campaign.ID, f.ID) }
+				hx-trigger="intersect once"
+				hx-swap="innerHTML"
+				class="text-[10px] text-fg-muted"
+			>
+				<i class="fa-solid fa-spinner fa-spin mr-1"></i> Loading references...
+			</div>
+		</div>
+	</div>
+}
+
+// MediaRefsFragment renders entity references for a media file (HTMX fragment).
+templ MediaRefsFragment(cc *campaigns.CampaignContext, mediaID string, refs []MediaRef) {
+	if len(refs) == 0 {
+		<span class="text-fg-muted">Not referenced by any pages.</span>
+	} else {
+		<div class="space-y-0.5">
+			<span class="font-medium text-fg-secondary">Referenced by:</span>
+			for _, ref := range refs {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, ref.EntitySlug)) }
+					class="block text-accent hover:underline truncate"
+				>
+					{ ref.EntityName }
+					if ref.RefType == "image" {
+						<span class="text-fg-muted">(image)</span>
+					} else {
+						<span class="text-fg-muted">(in content)</span>
+					}
+				</a>
+			}
+		</div>
+	}
+}
+
+// mediaUploaderScript renders the inline Alpine.js uploader component.
+templ mediaUploaderScript() {
+	<script>
+		function mediaUploader(campaignId, csrfToken) {
+			return {
+				uploading: false,
+				async uploadFile(event) {
+					const file = event.target.files[0];
+					if (!file) return;
+
+					const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+					if (!allowed.includes(file.type)) {
+						Chronicle.toast('Only JPEG, PNG, WebP, and GIF files are allowed.', 'error');
+						event.target.value = '';
+						return;
+					}
+
+					const maxSize = 10 * 1024 * 1024;
+					if (file.size > maxSize) {
+						Chronicle.toast('File is too large. Maximum size is 10 MB.', 'error');
+						event.target.value = '';
+						return;
+					}
+
+					this.uploading = true;
+					try {
+						const fd = new FormData();
+						fd.append('file', file);
+						fd.append('campaign_id', campaignId);
+						fd.append('usage_type', 'attachment');
+
+						const resp = await fetch('/media/upload', {
+							method: 'POST',
+							headers: { 'X-CSRF-Token': csrfToken },
+							body: fd
+						});
+
+						if (!resp.ok) {
+							const err = await resp.json().catch(() => ({}));
+							throw new Error(err.message || 'Upload failed');
+						}
+
+						Chronicle.toast('File uploaded successfully.', 'success');
+						window.location.reload();
+					} catch (e) {
+						Chronicle.toast(e.message || 'Upload failed.', 'error');
+					} finally {
+						this.uploading = false;
+						event.target.value = '';
+					}
+				}
+			};
+		}
+	</script>
+}

@@ -290,6 +290,17 @@ templ Sidebar() {
 							Activity Log
 						</a>
 						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/media", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/media", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/media", GetCampaignID(ctx)))) }
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-photo-film text-xs"></i>
+							</span>
+							Media
+						</a>
+						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx))) }
 							class={ sidebarNavLink,
 								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx)))),
