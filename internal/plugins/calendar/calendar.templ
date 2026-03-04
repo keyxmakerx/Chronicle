@@ -343,14 +343,6 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 				>
 					<i class="fa-solid fa-dice-d20 text-sm"></i>
 				</a>
-			} else if data.IsOwner {
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/addons/settings", data.CampaignID)) }
-					class="p-2 rounded-md hover:bg-surface-alt text-fg-muted hover:text-fg transition-colors"
-					title="Enable Sessions addon for RSVP tracking"
-				>
-					<i class="fa-solid fa-dice-d20 text-sm opacity-50"></i>
-				</a>
 			}
 			<!-- Add event button (Scribe+) -->
 			if data.IsScribe {

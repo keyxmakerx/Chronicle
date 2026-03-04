@@ -10,16 +10,16 @@ import (
 )
 
 // SessionListPage renders the full sessions page.
-templ SessionListPage(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool) {
+templ SessionListPage(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool, userID string) {
 	@layouts.App(cc.Campaign.Name + " - Sessions") {
 		<div class="max-w-4xl mx-auto">
-			@SessionListFragment(cc, sessions, csrfToken, isOwner, isScribe)
+			@SessionListFragment(cc, sessions, csrfToken, isOwner, isScribe, userID)
 		</div>
 	}
 }
 
 // SessionListFragment renders just the session list content (for HTMX).
-templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool) {
+templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool, userID string) {
 	<div class="flex items-center justify-between mb-6">
 		<div>
 			<h1 class="text-2xl font-bold text-fg">Sessions</h1>
@@ -91,7 +91,12 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 							<p class="text-sm text-fg-secondary mt-1 line-clamp-2">{ *s.Summary }</p>
 						}
 					</div>
-					<i class="fa-solid fa-chevron-right text-fg-muted text-xs mt-1 ml-2 shrink-0"></i>
+					<div class="flex items-center gap-2 ml-2 shrink-0">
+						if s.Status == StatusPlanned {
+							@userRSVPBadge(s.Attendees, userID)
+						}
+						<i class="fa-solid fa-chevron-right text-fg-muted text-xs"></i>
+					</div>
 				</div>
 			</a>
 		}
@@ -283,12 +288,14 @@ templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []
 		<!-- Current user RSVP controls -->
 		for _, a := range attendees {
 			if a.UserID == currentUserID {
-				<div class="mt-3 pt-3 border-t border-edge">
-					<p class="text-xs text-fg-muted mb-2">Your response:</p>
-					<div class="flex gap-1.5">
+				<div class="mt-4 pt-4 border-t border-edge">
+					<p class="text-sm font-semibold text-fg mb-2">
+						<i class="fa-solid fa-envelope-open-text mr-1 text-accent"></i> RSVP
+					</p>
+					<div class="flex gap-2">
 						<button
-							class={ "text-xs px-2 py-1 rounded transition-colors",
-								templ.KV("bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium", a.Status == RSVPAccepted),
+							class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+								templ.KV("bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium ring-1 ring-green-300 dark:ring-green-700", a.Status == RSVPAccepted),
 								templ.KV("bg-surface-secondary text-fg-secondary hover:bg-green-50 dark:hover:bg-green-900/20", a.Status != RSVPAccepted) }
 							hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
 							hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, csrfToken) }
@@ -296,11 +303,11 @@ templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []
 							hx-target="#attendee-list"
 							hx-swap="innerHTML"
 						>
-							<i class="fa-solid fa-check mr-0.5"></i> Going
+							<i class="fa-solid fa-check"></i> Going
 						</button>
 						<button
-							class={ "text-xs px-2 py-1 rounded transition-colors",
-								templ.KV("bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 font-medium", a.Status == RSVPTentative),
+							class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+								templ.KV("bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 font-medium ring-1 ring-yellow-300 dark:ring-yellow-700", a.Status == RSVPTentative),
 								templ.KV("bg-surface-secondary text-fg-secondary hover:bg-yellow-50 dark:hover:bg-yellow-900/20", a.Status != RSVPTentative) }
 							hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
 							hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, csrfToken) }
@@ -308,11 +315,11 @@ templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []
 							hx-target="#attendee-list"
 							hx-swap="innerHTML"
 						>
-							<i class="fa-solid fa-question mr-0.5"></i> Maybe
+							<i class="fa-solid fa-question"></i> Maybe
 						</button>
 						<button
-							class={ "text-xs px-2 py-1 rounded transition-colors",
-								templ.KV("bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-medium", a.Status == RSVPDeclined),
+							class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+								templ.KV("bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-medium ring-1 ring-red-300 dark:ring-red-700", a.Status == RSVPDeclined),
 								templ.KV("bg-surface-secondary text-fg-secondary hover:bg-red-50 dark:hover:bg-red-900/20", a.Status != RSVPDeclined) }
 							hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
 							hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, csrfToken) }
@@ -320,7 +327,7 @@ templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []
 							hx-target="#attendee-list"
 							hx-swap="innerHTML"
 						>
-							<i class="fa-solid fa-xmark mr-0.5"></i> Can't
+							<i class="fa-solid fa-xmark"></i> Can't
 						</button>
 					</div>
 				</div>
@@ -339,6 +346,32 @@ templ rsvpBadge(status string) {
 		<span class="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">Can't</span>
 	} else {
 		<span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">Invited</span>
+	}
+}
+
+// userRSVPBadge shows the current user's RSVP status on the session list card.
+// Highlights "needs response" when still in the invited state.
+templ userRSVPBadge(attendees []Attendee, userID string) {
+	for _, a := range attendees {
+		if a.UserID == userID {
+			if a.Status == RSVPAccepted {
+				<span class="text-[10px] px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 whitespace-nowrap">
+					<i class="fa-solid fa-check mr-0.5"></i> Going
+				</span>
+			} else if a.Status == RSVPTentative {
+				<span class="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 whitespace-nowrap">
+					<i class="fa-solid fa-question mr-0.5"></i> Maybe
+				</span>
+			} else if a.Status == RSVPDeclined {
+				<span class="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 whitespace-nowrap">
+					<i class="fa-solid fa-xmark mr-0.5"></i> Can't
+				</span>
+			} else {
+				<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium whitespace-nowrap animate-pulse">
+					<i class="fa-solid fa-envelope mr-0.5"></i> RSVP
+				</span>
+			}
+		}
 	}
 }
 

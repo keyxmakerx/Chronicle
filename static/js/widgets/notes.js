@@ -202,6 +202,16 @@ Chronicle.register('notes', {
       state.versionsNoteId = null;
     });
 
+    // On mobile, dodge the virtual keyboard by adjusting panel bottom offset
+    // when the visual viewport shrinks (keyboard opening).
+    if (window.visualViewport && window.innerWidth < 640) {
+      window.visualViewport.addEventListener('resize', function () {
+        if (!state.open) return;
+        var kbHeight = window.innerHeight - window.visualViewport.height;
+        panel.style.bottom = (kbHeight > 0 ? kbHeight : 0) + 'px';
+      });
+    }
+
     // Quick-add: Enter creates note instantly.
     if (quickInput) {
       quickInput.addEventListener('keydown', function (e) {

@@ -89,7 +89,7 @@ templ TimelineListFragment(cc *campaigns.CampaignContext, data TimelineListData)
 
 // timelineListContent renders the timeline list body.
 templ timelineListContent(cc *campaigns.CampaignContext, data TimelineListData) {
-	<div class="max-w-4xl mx-auto py-6 px-4">
+	<div class="sm:max-w-4xl mx-auto py-6 px-2 sm:px-4">
 		<div class="flex items-center justify-between mb-6">
 			<div>
 				<h1 class="text-xl font-bold text-fg">Timelines</h1>
@@ -265,7 +265,7 @@ templ TimelineShowFragment(cc *campaigns.CampaignContext, data TimelineViewData)
 templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) {
 	<!-- D3.js (loaded only on timeline detail pages — large library, not in base layout) -->
 	<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-	<div class="max-w-5xl mx-auto py-6 px-4" x-data="{ manageOpen: false, adminTab: 'visibility' }">
+	<div class="sm:max-w-5xl mx-auto py-6 px-2 sm:px-4" x-data="{ manageOpen: false, adminTab: 'visibility' }">
 		<!-- Header Card -->
 		<div class="card p-5 mb-4">
 			<div class="flex items-center justify-between">
