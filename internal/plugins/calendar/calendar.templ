@@ -204,7 +204,7 @@ templ calendarSetupChooser(cc *campaigns.CampaignContext, csrfToken string) {
 // CalendarPage renders the full calendar page with monthly grid.
 templ CalendarPage(cc *campaigns.CampaignContext, data CalendarViewData) {
 	@layouts.App(data.Calendar.Name) {
-		<div class="h-full flex flex-col -mx-5 -my-4" data-calendar-months={ calendarMonthNamesJSON(data.Calendar) }>
+		<div class="h-full flex flex-col -mx-5 -my-4" data-calendar-months={ calendarMonthNamesJSON(data.Calendar) } data-calendar-categories={ calendarCategoriesJSON(data.Calendar) }>
 			@calendarHeader(cc, data)
 			<div class="flex-1 overflow-y-auto px-6 py-4">
 				@calendarGrid(cc, data)
@@ -467,7 +467,7 @@ templ dayCell(data CalendarViewData, day int) {
 					<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
 				}
 				if evt.Category != nil && *evt.Category != "" {
-					<span class="opacity-60">{ categoryIcon(*evt.Category) }</span>
+					<span class="opacity-60">{ categoryIcon(data.Calendar.EventCategories, *evt.Category) }</span>
 					{ " " }
 				}
 				{ evt.Name }
@@ -538,12 +538,21 @@ templ eventViewModal(data CalendarViewData) {
 			var viewModal = document.getElementById('event-view-modal');
 			var currentViewEl = null;
 
-			// Build month name lookup from calendar data.
+			// Build month name and category lookups from calendar data.
 			var calMonths = [];
+			var calCategories = [];
 			try {
 				var calData = document.querySelector('[data-calendar-months]');
 				if (calData) calMonths = JSON.parse(calData.dataset.calendarMonths);
+				if (calData && calData.dataset.calendarCategories) calCategories = JSON.parse(calData.dataset.calendarCategories);
 			} catch(e) {}
+
+			function categoryLabel(slug) {
+				for (var i = 0; i < calCategories.length; i++) {
+					if (calCategories[i].slug === slug) return calCategories[i].icon + ' ' + calCategories[i].name;
+				}
+				return slug.charAt(0).toUpperCase() + slug.slice(1);
+			}
 
 			function monthName(idx) {
 				if (idx >= 1 && idx <= calMonths.length) return calMonths[idx - 1];
@@ -575,7 +584,7 @@ templ eventViewModal(data CalendarViewData) {
 				// Category
 				var catBadge = document.getElementById('view-evt-category-badge');
 				if (d.eventCategory) {
-					catBadge.textContent = d.eventCategory.charAt(0).toUpperCase() + d.eventCategory.slice(1);
+					catBadge.textContent = categoryLabel(d.eventCategory);
 					catBadge.classList.remove('hidden');
 				} else {
 					catBadge.classList.add('hidden');
@@ -726,13 +735,9 @@ templ eventModal(data CalendarViewData) {
 						<label class="block text-xs font-medium text-fg-body mb-1">Category</label>
 						<select name="category" id="evt-category" class="input w-full">
 							<option value="">None</option>
-							<option value="holiday">Holiday</option>
-							<option value="battle">Battle</option>
-							<option value="quest">Quest</option>
-							<option value="birthday">Birthday</option>
-							<option value="festival">Festival</option>
-							<option value="travel">Travel</option>
-							<option value="custom">Custom</option>
+							for _, cat := range data.Calendar.EventCategories {
+								<option value={ cat.Slug }>{ cat.Icon } { cat.Name }</option>
+							}
 						</select>
 					</div>
 				</div>
@@ -1203,7 +1208,7 @@ templ EntityEventsSection(cc *campaigns.CampaignContext, cal *Calendar, events [
 				>
 					<div class="flex items-center gap-2 min-w-0">
 						if evt.Category != nil && *evt.Category != "" {
-							<span class="text-xs opacity-60">{ categoryIcon(*evt.Category) }</span>
+							<span class="text-xs opacity-60">{ categoryIcon(cal.EventCategories, *evt.Category) }</span>
 						}
 						<span class="text-sm text-fg truncate">{ evt.Name }</span>
 						if evt.IsRecurring {
@@ -1364,7 +1369,7 @@ templ UpcomingEventsBlock(cc *campaigns.CampaignContext, cal *Calendar, events [
 			>
 				<div class="flex items-center gap-2 min-w-0">
 					if evt.Category != nil && *evt.Category != "" {
-						<span class="text-xs opacity-60">{ categoryIcon(*evt.Category) }</span>
+						<span class="text-xs opacity-60">{ categoryIcon(cal.EventCategories, *evt.Category) }</span>
 					}
 					if evt.EntityID != nil && evt.EntityIcon != "" {
 						<i class={ "fa-solid " + evt.EntityIcon, "text-xs" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
@@ -1506,7 +1511,7 @@ templ timelineEvent(cc *campaigns.CampaignContext, cal *Calendar, evt Event) {
 			<div class="min-w-0">
 				<div class="flex items-center gap-2">
 					if evt.Category != nil && *evt.Category != "" {
-						<span class="text-sm opacity-60">{ categoryIcon(*evt.Category) }</span>
+						<span class="text-sm opacity-60">{ categoryIcon(cal.EventCategories, *evt.Category) }</span>
 					}
 					if evt.HasTime() {
 						<span class="text-xs text-fg-secondary">{ evt.FormatTimeRange() }</span>
@@ -1591,22 +1596,29 @@ func calendarMonthNamesJSON(cal *Calendar) string {
 	return string(b)
 }
 
-// categoryIcon returns a small icon for an event category.
-func categoryIcon(cat string) string {
-	switch cat {
-	case "holiday":
-		return "\u2B50" // star
-	case "battle":
-		return "\u2694" // swords
-	case "quest":
-		return "\u2757" // exclamation
-	case "birthday":
-		return "\U0001F382" // cake
-	case "festival":
-		return "\U0001F389" // party popper
-	case "travel":
-		return "\U0001F6B6" // walking
-	default:
-		return ""
+// calendarCategoriesJSON returns a JSON array of category objects for JS consumption.
+func calendarCategoriesJSON(cal *Calendar) string {
+	type catJSON struct {
+		Slug  string `json:"slug"`
+		Name  string `json:"name"`
+		Icon  string `json:"icon"`
+		Color string `json:"color"`
 	}
+	cats := make([]catJSON, len(cal.EventCategories))
+	for i, c := range cal.EventCategories {
+		cats[i] = catJSON{Slug: c.Slug, Name: c.Name, Icon: c.Icon, Color: c.Color}
+	}
+	b, _ := json.Marshal(cats)
+	return string(b)
+}
+
+// categoryIcon returns a small icon for an event category by looking up
+// the category slug in the calendar's custom event categories.
+func categoryIcon(cats []EventCategory, slug string) string {
+	for _, c := range cats {
+		if c.Slug == slug {
+			return c.Icon
+		}
+	}
+	return ""
 }

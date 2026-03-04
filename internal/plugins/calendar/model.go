@@ -59,7 +59,8 @@ type Calendar struct {
 	Weekdays []Weekday `json:"weekdays,omitempty"`
 	Moons    []Moon    `json:"moons,omitempty"`
 	Seasons  []Season  `json:"seasons,omitempty"`
-	Eras     []Era     `json:"eras,omitempty"`
+	Eras            []Era            `json:"eras,omitempty"`
+	EventCategories []EventCategory  `json:"event_categories,omitempty"`
 }
 
 // IsRealLife returns true if this calendar syncs to real-world time.
@@ -495,4 +496,38 @@ type EraInput struct {
 	Description *string `json:"description"`
 	Color       string  `json:"color"`
 	SortOrder   int     `json:"sort_order"`
+}
+
+// EventCategory is a campaign-defined event category for calendar events.
+// Categories have a slug (stored on events), display name, emoji icon, and color.
+type EventCategory struct {
+	ID         int    `json:"id"`
+	CalendarID string `json:"calendar_id"`
+	Slug       string `json:"slug"`
+	Name       string `json:"name"`
+	Icon       string `json:"icon"`
+	Color      string `json:"color"`
+	SortOrder  int    `json:"sort_order"`
+}
+
+// EventCategoryInput is the input for creating/updating an event category.
+type EventCategoryInput struct {
+	Slug      string `json:"slug"`
+	Name      string `json:"name"`
+	Icon      string `json:"icon"`
+	Color     string `json:"color"`
+	SortOrder int    `json:"sort_order"`
+}
+
+// DefaultEventCategories returns the default set of event categories seeded
+// for new calendars. Provides a sensible starting point for TTRPG campaigns.
+func DefaultEventCategories() []EventCategoryInput {
+	return []EventCategoryInput{
+		{Slug: "holiday", Name: "Holiday", Icon: "⭐", Color: "#f59e0b", SortOrder: 0},
+		{Slug: "battle", Name: "Battle", Icon: "⚔", Color: "#ef4444", SortOrder: 1},
+		{Slug: "quest", Name: "Quest", Icon: "❗", Color: "#8b5cf6", SortOrder: 2},
+		{Slug: "birthday", Name: "Birthday", Icon: "🎂", Color: "#ec4899", SortOrder: 3},
+		{Slug: "festival", Name: "Festival", Icon: "🎉", Color: "#10b981", SortOrder: 4},
+		{Slug: "travel", Name: "Travel", Icon: "🚶", Color: "#3b82f6", SortOrder: 5},
+	}
 }

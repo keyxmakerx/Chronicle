@@ -478,6 +478,46 @@ func (h *Handler) UpdateErasAPI(c echo.Context) error {
 	return h.svc.SetEras(ctx, cal.ID, eras)
 }
 
+// UpdateEventCategoriesAPI replaces all event categories.
+// PUT /campaigns/:id/calendar/event-categories
+func (h *Handler) UpdateEventCategoriesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var cats []EventCategoryInput
+	if err := c.Bind(&cats); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	return h.svc.SetEventCategories(ctx, cal.ID, cats)
+}
+
+// GetEventCategoriesAPI returns all event categories for a calendar.
+// GET /campaigns/:id/calendar/event-categories
+func (h *Handler) GetEventCategoriesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	cats, err := h.svc.GetEventCategories(ctx, cal.ID)
+	if err != nil {
+		return err
+	}
+	if cats == nil {
+		cats = []EventCategory{}
+	}
+	return c.JSON(http.StatusOK, cats)
+}
+
 // DeleteCalendarAPI removes the calendar and all its data.
 // DELETE /campaigns/:id/calendar
 func (h *Handler) DeleteCalendarAPI(c echo.Context) error {

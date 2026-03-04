@@ -36,6 +36,8 @@ type CalendarService interface {
 	SetMoons(ctx context.Context, calendarID string, moons []MoonInput) error
 	SetSeasons(ctx context.Context, calendarID string, seasons []Season) error
 	SetEras(ctx context.Context, calendarID string, eras []EraInput) error
+	SetEventCategories(ctx context.Context, calendarID string, cats []EventCategoryInput) error
+	GetEventCategories(ctx context.Context, calendarID string) ([]EventCategory, error)
 
 	// Events.
 	CreateEvent(ctx context.Context, calendarID string, input CreateEventInput) (*Event, error)
@@ -189,6 +191,10 @@ func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error
 		if err := s.SetWeekdays(ctx, cal.ID, gregorianWeekdays); err != nil {
 			return err
 		}
+		// Seed default event categories.
+		if err := s.SetEventCategories(ctx, cal.ID, DefaultEventCategories()); err != nil {
+			return err
+		}
 		// Sync current date/time from wall clock.
 		now := time.Now().UTC()
 		return s.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
@@ -235,7 +241,10 @@ func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error
 		{Name: "Day 6", SortOrder: 5},
 		{Name: "Day 7", SortOrder: 6},
 	}
-	return s.SetWeekdays(ctx, cal.ID, defaultWeekdays)
+	if err := s.SetWeekdays(ctx, cal.ID, defaultWeekdays); err != nil {
+		return err
+	}
+	return s.SetEventCategories(ctx, cal.ID, DefaultEventCategories())
 }
 
 // GetCalendar returns the full calendar for a campaign with all sub-resources.
@@ -279,6 +288,9 @@ func (s *calendarService) eagerLoad(ctx context.Context, cal *Calendar) (*Calend
 	}
 	if cal.Eras, err = s.repo.GetEras(ctx, cal.ID); err != nil {
 		return nil, fmt.Errorf("get eras: %w", err)
+	}
+	if cal.EventCategories, err = s.repo.GetEventCategories(ctx, cal.ID); err != nil {
+		return nil, fmt.Errorf("get event categories: %w", err)
 	}
 	return cal, nil
 }
@@ -413,6 +425,27 @@ func (s *calendarService) SetEras(ctx context.Context, calendarID string, eras [
 		}
 	}
 	return s.repo.SetEras(ctx, calendarID, eras)
+}
+
+// SetEventCategories replaces all event categories. Validates names and slugs.
+func (s *calendarService) SetEventCategories(ctx context.Context, calendarID string, cats []EventCategoryInput) error {
+	for i, c := range cats {
+		if c.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("category %d: name is required", i+1))
+		}
+		if c.Slug == "" {
+			return apperror.NewValidation(fmt.Sprintf("category %d: slug is required", i+1))
+		}
+		if c.Color == "" {
+			cats[i].Color = "#6b7280"
+		}
+	}
+	return s.repo.SetEventCategories(ctx, calendarID, cats)
+}
+
+// GetEventCategories returns all event categories for a calendar.
+func (s *calendarService) GetEventCategories(ctx context.Context, calendarID string) ([]EventCategory, error) {
+	return s.repo.GetEventCategories(ctx, calendarID)
 }
 
 // CreateEvent creates a new calendar event.

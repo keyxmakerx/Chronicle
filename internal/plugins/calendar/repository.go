@@ -35,6 +35,10 @@ type CalendarRepository interface {
 	SetEras(ctx context.Context, calendarID string, eras []EraInput) error
 	GetEras(ctx context.Context, calendarID string) ([]Era, error)
 
+	// Event categories.
+	SetEventCategories(ctx context.Context, calendarID string, cats []EventCategoryInput) error
+	GetEventCategories(ctx context.Context, calendarID string) ([]EventCategory, error)
+
 	// Events.
 	CreateEvent(ctx context.Context, evt *Event) error
 	GetEvent(ctx context.Context, id string) (*Event, error)
@@ -353,6 +357,50 @@ func (r *calendarRepo) GetEras(ctx context.Context, calendarID string) ([]Era, e
 		eras = append(eras, e)
 	}
 	return eras, rows.Err()
+}
+
+// SetEventCategories replaces all event categories for a calendar (delete + bulk insert).
+func (r *calendarRepo) SetEventCategories(ctx context.Context, calendarID string, cats []EventCategoryInput) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM calendar_event_categories WHERE calendar_id = ?`, calendarID); err != nil {
+		return err
+	}
+	for _, c := range cats {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO calendar_event_categories (calendar_id, slug, name, icon, color, sort_order)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			calendarID, c.Slug, c.Name, c.Icon, c.Color, c.SortOrder,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// GetEventCategories returns all event categories for a calendar ordered by sort_order.
+func (r *calendarRepo) GetEventCategories(ctx context.Context, calendarID string) ([]EventCategory, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, calendar_id, slug, name, icon, color, sort_order
+		 FROM calendar_event_categories WHERE calendar_id = ? ORDER BY sort_order`, calendarID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cats []EventCategory
+	for rows.Next() {
+		var c EventCategory
+		if err := rows.Scan(&c.ID, &c.CalendarID, &c.Slug, &c.Name, &c.Icon, &c.Color, &c.SortOrder); err != nil {
+			return nil, err
+		}
+		cats = append(cats, c)
+	}
+	return cats, rows.Err()
 }
 
 // eventCols is the column list for event queries (with entity join fields).

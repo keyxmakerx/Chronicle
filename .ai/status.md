@@ -8,19 +8,22 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- UX hardening sprint continued: search expansion, callout blocks.
+2026-03-04 -- UX hardening sprint: calendar categories, search expansion, callout blocks.
 Branch: `claude/review-codebase-R1WqN`.
 
 ## Current Phase
-**UX hardening.** Completed this session (batch 7):
+**UX hardening.** Completed this session (batch 8):
+- Customizable calendar event categories:
+  - Migration 000039: `calendar_event_categories` table with slug/name/icon/color
+  - Default categories seeded on calendar creation (holiday, battle, quest, birthday, festival, travel)
+  - Categories tab in calendar settings for full CRUD management
+  - Event modal dropdown dynamically populated from calendar's categories
+  - categoryIcon() now looks up from calendar's EventCategories (no more hardcoded switch)
+  - JS view modal reads categories from data attribute for display
+
+Completed (batch 7):
 - Search scope expanded: Ctrl+K now searches entities, timelines, maps, calendar events, and sessions
-  - Added MapSearcher, CalendarSearcher, SessionSearcher interfaces in entities handler
-  - Each plugin implements Search repo method + formats results with type_name/icon/color
-  - Wired in routes.go following TimelineSearcher pattern
 - Editor callout blocks: blockquote restyled as callout with accent border, background, info icon
-  - Insert menu: "Blockquote" → "Callout Block" with fa-circle-info icon
-  - Read-only prose views also styled (entity pages, dashboards)
-  - TipTap bundle constraint: custom node types not possible without bundle rebuild
 
 Previously completed (batches 1-6):
 - Fixed sidebar drill 403, unsaved changes warning, confirmation dialogs, timeline eras

@@ -29,7 +29,7 @@ Known broken or missing things, ordered by severity.
 - [x] **Calendar click-to-create on date** — Fixed: entire date cell is clickable for Scribes+ (cursor-pointer, hover highlight). Clicks on empty space open create modal with date pre-filled. Event chip clicks are properly intercepted.
 - [x] **No unsaved changes warning** — Fixed: global dirty state tracker in boot.js (`Chronicle.markDirty/markClean/isDirty`) with `beforeunload` handler. Editor widget hooks in. Forms with `data-track-changes` auto-tracked (entity create/edit, campaign create/settings).
 - [x] **Empty states inconsistent** — Fixed: added empty states to campaign members, admin campaigns, admin users, admin modules. Fixed entity_types.templ if/else structure. Calendar `UpcomingEventsEmpty()` was already good. Maps/timelines already have empty states.
-- [ ] **Calendar event categories not customizable** — 8 hardcoded category strings (birthday, battle, ceremony, death, discovery, marriage, milestone, other) in `categoryIcon()` helper. No UI to add custom categories.
+- [x] **Calendar event categories not customizable** — Fixed: added `calendar_event_categories` table (migration 000039) with slug/name/icon/color per calendar. Default categories seeded on creation. Categories tab in calendar settings for full CRUD. Event modal dropdown and categoryIcon() now dynamic. JS view modal uses categories data attribute for display.
 
 ### Medium
 
