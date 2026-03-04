@@ -52,6 +52,9 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 					<div class="col-span-8 space-y-4">
 						@blockTitle(cc, entity, csrfToken)
 						@blockTags(cc, entity, csrfToken)
+						if entity.TypeSlug == "shop" {
+							@blockShopInventory(cc, entity, csrfToken)
+						}
 						@blockRelations(cc, entity, csrfToken)
 						@blockEntry(cc, entity, csrfToken)
 					</div>
@@ -189,6 +192,8 @@ templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entit
 			@blockTags(cc, entity, csrfToken)
 		case "relations":
 			@blockRelations(cc, entity, csrfToken)
+		case "shop_inventory":
+			@blockShopInventory(cc, entity, csrfToken)
 		case "divider":
 			@blockDivider()
 		case "calendar":
@@ -362,6 +367,22 @@ templ blockRelations(cc *campaigns.CampaignContext, entity *Entity, csrfToken st
 		data-widget="relations"
 		data-relations-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/relations", cc.Campaign.ID, entity.ID) }
 		data-relation-types-endpoint={ fmt.Sprintf("/campaigns/%s/relation-types", cc.Campaign.ID) }
+		data-entity-search-endpoint={ fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID) }
+		data-campaign-url={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
+		if cc.MemberRole >= campaigns.RoleScribe {
+			data-editable="true"
+		}
+		data-csrf-token={ csrfToken }
+	></div>
+}
+
+// blockShopInventory renders the shop inventory widget mount point. Appears on
+// entities of type "Shop" and displays items as "sells" relations with price,
+// quantity, and stock metadata.
+templ blockShopInventory(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
+	<div
+		data-widget="shop_inventory"
+		data-relations-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/relations", cc.Campaign.ID, entity.ID) }
 		data-entity-search-endpoint={ fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID) }
 		data-campaign-url={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
 		if cc.MemberRole >= campaigns.RoleScribe {

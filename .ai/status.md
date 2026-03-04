@@ -8,9 +8,8 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Foundry VTT sync feature (batch 18, Phase 3+4).
-2026-03-04 -- Sessions-Calendar integration, RSVP emails, addon gating (batch 16).
-Branch: `claude/review-codebase-R1WqN`.
+2026-03-04 -- Shop inventory widget + README cleanup (batch 19).
+Branch: `claude/foundry-sync-feature-05M5a`.
 
 ## Current Phase
 **Sessions-Calendar integration + RSVP system.** Completed this session (batch 16):
@@ -37,7 +36,28 @@ Branch: `claude/review-codebase-R1WqN`.
 Branch: `claude/foundry-sync-feature-05M5a`.
 
 ## Current Phase
-**Foundry VTT bidirectional sync.** Completed this session (batch 18):
+**Shop inventory widget + README updates.** Completed this session (batch 19):
+- **Shop entity type**: New default entity type "Shop" seeded with field definitions
+  (shop_type select, shopkeeper, currency, price_modifier). fa-store icon, orange color.
+- **Relation metadata**: Added `Metadata` (JSON) field to Relation model, repository,
+  and service. Migration 000043 column was already in DB — now wired end-to-end.
+  New `PUT /entities/:eid/relations/:rid/metadata` endpoint for updating metadata.
+  "sells"/"sold by" relation type pair added to common types.
+- **Shop inventory widget** (`static/js/widgets/shop_inventory.js`): Self-contained
+  JS widget that displays "sells" relations as inventory items with price, quantity,
+  and in-stock controls. Search + add items UI. Auto-mounted on Shop entities via
+  `data-widget="shop_inventory"`. Editable for Scribe+ roles.
+- **Layout integration**: `blockShopInventory` templ block added. Auto-renders on
+  Shop entities in fallback layout; available as `shop_inventory` block type in
+  custom entity type layouts.
+- **README cleanup**: Removed direct competitor comparisons (legal concern). Kept
+  attribution as reference/inspiration. Added Foundry module manifest URL. Updated
+  features and planned features lists.
+- **Templ regeneration**: Fixed sessions handler build error (upstream merge had
+  added userID param to templ but generated code was stale).
+
+Previously completed (batch 18):
+**Foundry VTT bidirectional sync:**
 - **Map REST API v1** (batch 17): 23 new endpoints for maps, drawings, tokens, layers, fog
   CRUD. Authenticated via API keys with read/write permission levels.
 - **Calendar live sync** (batch 18, Phase 4):

@@ -22,6 +22,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 
 	// Write routes -- Scribe or above can manage relations.
 	cg.POST("/entities/:eid/relations", h.CreateRelation, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/entities/:eid/relations/:rid/metadata", h.UpdateRelationMetadata, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/entities/:eid/relations/:rid", h.DeleteRelation, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Public-capable read routes: allow public campaign visitors to see relations.

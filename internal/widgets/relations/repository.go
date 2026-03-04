@@ -3,6 +3,7 @@ package relations
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -29,6 +30,9 @@ type RelationRepository interface {
 	// FindReverse finds the reverse relation for a given relation.
 	// Used when deleting a relation to also remove its reverse.
 	FindReverse(ctx context.Context, sourceEntityID, targetEntityID, relationType string) (*Relation, error)
+
+	// UpdateMetadata updates only the metadata JSON column for a relation.
+	UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error
 }
 
 // relationRepository implements RelationRepository using MariaDB with
@@ -47,12 +51,12 @@ func NewRelationRepository(db *sql.DB) RelationRepository {
 // auto-generated ID on the provided struct.
 func (r *relationRepository) Create(ctx context.Context, rel *Relation) error {
 	query := `INSERT INTO entity_relations
-	           (campaign_id, source_entity_id, target_entity_id, relation_type, reverse_relation_type, created_by)
-	           VALUES (?, ?, ?, ?, ?, ?)`
+	           (campaign_id, source_entity_id, target_entity_id, relation_type, reverse_relation_type, created_by, metadata)
+	           VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := r.db.ExecContext(ctx, query,
 		rel.CampaignID, rel.SourceEntityID, rel.TargetEntityID,
-		rel.RelationType, rel.ReverseRelationType, rel.CreatedBy,
+		rel.RelationType, rel.ReverseRelationType, rel.CreatedBy, nullableJSON(rel.Metadata),
 	)
 	if err != nil {
 		// Check for duplicate relation (same source, target, type).
@@ -74,14 +78,16 @@ func (r *relationRepository) Create(ctx context.Context, rel *Relation) error {
 // FindByID retrieves a single relation by its primary key.
 func (r *relationRepository) FindByID(ctx context.Context, id int) (*Relation, error) {
 	query := `SELECT id, campaign_id, source_entity_id, target_entity_id,
-	                  relation_type, reverse_relation_type, created_at, created_by
+	                  relation_type, reverse_relation_type, metadata, created_at, created_by
 	           FROM entity_relations WHERE id = ?`
 
 	var rel Relation
+	var metaBytes []byte
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&rel.ID, &rel.CampaignID, &rel.SourceEntityID, &rel.TargetEntityID,
-		&rel.RelationType, &rel.ReverseRelationType, &rel.CreatedAt, &rel.CreatedBy,
+		&rel.RelationType, &rel.ReverseRelationType, &metaBytes, &rel.CreatedAt, &rel.CreatedBy,
 	)
+	rel.Metadata = metaBytes
 	if err == sql.ErrNoRows {
 		return nil, apperror.NewNotFound("relation not found")
 	}
@@ -96,7 +102,8 @@ func (r *relationRepository) FindByID(ctx context.Context, id int) (*Relation, e
 // target entity name for consistent grouping in the UI.
 func (r *relationRepository) ListByEntity(ctx context.Context, entityID string) ([]Relation, error) {
 	query := `SELECT er.id, er.campaign_id, er.source_entity_id, er.target_entity_id,
-	                  er.relation_type, er.reverse_relation_type, er.created_at, er.created_by,
+	                  er.relation_type, er.reverse_relation_type, er.metadata,
+	                  er.created_at, er.created_by,
 	                  e.name, COALESCE(et.icon, 'fa-file'), COALESCE(et.color, '#6b7280'),
 	                  e.slug, COALESCE(et.name, '')
 	           FROM entity_relations er
@@ -114,14 +121,17 @@ func (r *relationRepository) ListByEntity(ctx context.Context, entityID string) 
 	var relations []Relation
 	for rows.Next() {
 		var rel Relation
+		var metaBytes []byte
 		if err := rows.Scan(
 			&rel.ID, &rel.CampaignID, &rel.SourceEntityID, &rel.TargetEntityID,
-			&rel.RelationType, &rel.ReverseRelationType, &rel.CreatedAt, &rel.CreatedBy,
+			&rel.RelationType, &rel.ReverseRelationType, &metaBytes,
+			&rel.CreatedAt, &rel.CreatedBy,
 			&rel.TargetEntityName, &rel.TargetEntityIcon, &rel.TargetEntityColor,
 			&rel.TargetEntitySlug, &rel.TargetEntityType,
 		); err != nil {
 			return nil, fmt.Errorf("scanning relation row: %w", err)
 		}
+		rel.Metadata = metaBytes
 		relations = append(relations, rel)
 	}
 	if err := rows.Err(); err != nil {
@@ -173,6 +183,34 @@ func (r *relationRepository) FindReverse(ctx context.Context, sourceEntityID, ta
 		return nil, fmt.Errorf("finding reverse relation: %w", err)
 	}
 	return &rel, nil
+}
+
+// UpdateMetadata updates only the metadata JSON column for a relation.
+func (r *relationRepository) UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error {
+	query := `UPDATE entity_relations SET metadata = ? WHERE id = ?`
+
+	result, err := r.db.ExecContext(ctx, query, nullableJSON(metadata), id)
+	if err != nil {
+		return fmt.Errorf("updating relation metadata: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return apperror.NewNotFound("relation not found")
+	}
+
+	return nil
+}
+
+// nullableJSON returns nil for empty/null JSON, or the raw bytes otherwise.
+func nullableJSON(data json.RawMessage) any {
+	if len(data) == 0 || string(data) == "null" {
+		return nil
+	}
+	return []byte(data)
 }
 
 // isDuplicateEntry checks if a MySQL/MariaDB error is a duplicate key violation.

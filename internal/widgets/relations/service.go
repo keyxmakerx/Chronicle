@@ -2,6 +2,7 @@ package relations
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -15,7 +16,7 @@ type RelationService interface {
 	// Create validates input and creates a bi-directional relation between
 	// two entities. Both the forward (A→B) and reverse (B→A) directions are
 	// created atomically. Returns the forward relation.
-	Create(ctx context.Context, campaignID, sourceEntityID, targetEntityID, relationType, reverseRelationType, createdBy string) (*Relation, error)
+	Create(ctx context.Context, campaignID, sourceEntityID, targetEntityID, relationType, reverseRelationType, createdBy string, metadata json.RawMessage) (*Relation, error)
 
 	// ListByEntity returns all relations originating from the given entity,
 	// enriched with target entity display data.
@@ -31,6 +32,10 @@ type RelationService interface {
 	// GetCommonTypes returns the predefined relation type pairs for the
 	// frontend UI suggestion list.
 	GetCommonTypes() []RelationTypePair
+
+	// UpdateMetadata updates the metadata JSON for a relation.
+	// Used by the shop inventory widget to update price/quantity/stock.
+	UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error
 }
 
 // relationService implements RelationService with validation and
@@ -56,7 +61,7 @@ func NewRelationService(repo RelationRepository) RelationService {
 //
 // If the reverse already exists (e.g., due to a prior incomplete creation),
 // the duplicate is silently ignored via the unique constraint.
-func (s *relationService) Create(ctx context.Context, campaignID, sourceEntityID, targetEntityID, relationType, reverseRelationType, createdBy string) (*Relation, error) {
+func (s *relationService) Create(ctx context.Context, campaignID, sourceEntityID, targetEntityID, relationType, reverseRelationType, createdBy string, metadata json.RawMessage) (*Relation, error) {
 	// Validate: no self-relations.
 	if sourceEntityID == targetEntityID {
 		return nil, apperror.NewBadRequest("an entity cannot have a relation with itself")
@@ -89,6 +94,7 @@ func (s *relationService) Create(ctx context.Context, campaignID, sourceEntityID
 		TargetEntityID:      targetEntityID,
 		RelationType:        relationType,
 		ReverseRelationType: reverseRelationType,
+		Metadata:            metadata,
 		CreatedBy:           createdBy,
 	}
 	if err := s.repo.Create(ctx, forward); err != nil {
@@ -161,4 +167,9 @@ func (s *relationService) GetByID(ctx context.Context, id int) (*Relation, error
 // GetCommonTypes returns the predefined relation type pairs.
 func (s *relationService) GetCommonTypes() []RelationTypePair {
 	return CommonRelationTypes
+}
+
+// UpdateMetadata updates the metadata JSON for a relation.
+func (s *relationService) UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error {
+	return s.repo.UpdateMetadata(ctx, id, metadata)
 }

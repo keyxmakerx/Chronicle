@@ -2,6 +2,7 @@ package relations
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -61,6 +62,10 @@ func (m *mockRelationRepo) FindReverse(ctx context.Context, sourceEntityID, targ
 	return nil, nil
 }
 
+func (m *mockRelationRepo) UpdateMetadata(_ context.Context, _ int, _ json.RawMessage) error {
+	return nil
+}
+
 // --- Test Helpers ---
 
 func newTestService(repo *mockRelationRepo) RelationService {
@@ -94,7 +99,7 @@ func TestCreate_Success(t *testing.T) {
 	}
 	svc := newTestService(repo)
 
-	result, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "parent of", "child of", "user-1")
+	result, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "parent of", "child of", "user-1", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -144,7 +149,7 @@ func TestCreate_SymmetricRelation(t *testing.T) {
 	svc := newTestService(repo)
 
 	// Empty reverse type should default to forward type.
-	result, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "allied with", "", "user-1")
+	result, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "allied with", "", "user-1", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -165,7 +170,7 @@ func TestCreate_TrimsWhitespace(t *testing.T) {
 	}
 	svc := newTestService(repo)
 
-	result, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "  parent of  ", "  child of  ", "user-1")
+	result, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "  parent of  ", "  child of  ", "user-1", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -180,21 +185,21 @@ func TestCreate_TrimsWhitespace(t *testing.T) {
 func TestCreate_SelfRelation(t *testing.T) {
 	svc := newTestService(&mockRelationRepo{})
 
-	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-a", "parent of", "child of", "user-1")
+	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-a", "parent of", "child of", "user-1", nil)
 	assertAppError(t, err, 400)
 }
 
 func TestCreate_EmptyRelationType(t *testing.T) {
 	svc := newTestService(&mockRelationRepo{})
 
-	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "", "", "user-1")
+	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "", "", "user-1", nil)
 	assertAppError(t, err, 400)
 }
 
 func TestCreate_WhitespaceOnlyRelationType(t *testing.T) {
 	svc := newTestService(&mockRelationRepo{})
 
-	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "   ", "", "user-1")
+	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "   ", "", "user-1", nil)
 	assertAppError(t, err, 400)
 }
 
@@ -205,7 +210,7 @@ func TestCreate_RelationTypeTooLong(t *testing.T) {
 	for i := 0; i < 101; i++ {
 		longType += "x"
 	}
-	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", longType, "short", "user-1")
+	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", longType, "short", "user-1", nil)
 	assertAppError(t, err, 400)
 }
 
@@ -216,7 +221,7 @@ func TestCreate_ReverseTypeTooLong(t *testing.T) {
 	for i := 0; i < 101; i++ {
 		longType += "x"
 	}
-	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "short", longType, "user-1")
+	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "short", longType, "user-1", nil)
 	assertAppError(t, err, 400)
 }
 
@@ -233,7 +238,7 @@ func TestCreate_RelationTypeExactly100(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		exactType += "x"
 	}
-	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", exactType, "short", "user-1")
+	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", exactType, "short", "user-1", nil)
 	if err != nil {
 		t.Fatalf("100-char type should be allowed, got error: %v", err)
 	}
@@ -247,7 +252,7 @@ func TestCreate_ForwardRepoError(t *testing.T) {
 	}
 	svc := newTestService(repo)
 
-	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "allied with", "", "user-1")
+	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "allied with", "", "user-1", nil)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -268,7 +273,7 @@ func TestCreate_ReverseConflictIgnored(t *testing.T) {
 	}
 	svc := newTestService(repo)
 
-	result, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "allied with", "", "user-1")
+	result, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "allied with", "", "user-1", nil)
 	if err != nil {
 		t.Fatalf("reverse conflict should be silently ignored, got: %v", err)
 	}
@@ -292,7 +297,7 @@ func TestCreate_ReverseNonAppError(t *testing.T) {
 	}
 	svc := newTestService(repo)
 
-	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "allied with", "", "user-1")
+	_, err := svc.Create(context.Background(), "camp-1", "entity-a", "entity-b", "allied with", "", "user-1", nil)
 	if err == nil {
 		t.Fatal("expected error for non-AppError reverse failure")
 	}
@@ -314,7 +319,7 @@ func TestCreate_PopulatesCampaignAndCreatedBy(t *testing.T) {
 	}
 	svc := newTestService(repo)
 
-	_, err := svc.Create(context.Background(), "camp-xyz", "entity-a", "entity-b", "knows", "", "user-42")
+	_, err := svc.Create(context.Background(), "camp-xyz", "entity-a", "entity-b", "knows", "", "user-42", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

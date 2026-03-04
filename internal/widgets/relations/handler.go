@@ -82,6 +82,7 @@ func (h *Handler) CreateRelation(c echo.Context) error {
 		req.RelationType,
 		req.ReverseRelationType,
 		userID,
+		req.Metadata,
 	)
 	if err != nil {
 		return err
@@ -113,6 +114,39 @@ func (h *Handler) DeleteRelation(c echo.Context) error {
 	}
 
 	if err := h.service.Delete(c.Request().Context(), relationID); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateRelationMetadata updates the metadata JSON for a single relation
+// (PUT /campaigns/:id/entities/:eid/relations/:rid/metadata).
+func (h *Handler) UpdateRelationMetadata(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	relationID, err := strconv.Atoi(c.Param("rid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid relation ID")
+	}
+
+	existing, err := h.service.GetByID(c.Request().Context(), relationID)
+	if err != nil {
+		return err
+	}
+	if existing.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("relation not found")
+	}
+
+	var req UpdateRelationMetadataRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdateMetadata(c.Request().Context(), relationID, req.Metadata); err != nil {
 		return err
 	}
 
