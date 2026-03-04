@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -29,7 +30,7 @@ func (h *DrawingHandler) requireMapOwnership(c echo.Context, mapID, campaignID s
 		return err
 	}
 	if m.CampaignID != campaignID {
-		return echo.NewHTTPError(http.StatusNotFound, "map not found")
+		return apperror.NewNotFound("map not found")
 	}
 	return nil
 }
@@ -89,7 +90,7 @@ func (h *DrawingHandler) CreateDrawing(c echo.Context) error {
 		FoundryID   *string         `json:"foundry_id"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	d, err := h.drawingSvc.CreateDrawing(c.Request().Context(), CreateDrawingInput{
@@ -129,7 +130,7 @@ func (h *DrawingHandler) GetDrawing(c echo.Context) error {
 		return err
 	}
 	if d.MapID != mapID {
-		return echo.NewHTTPError(http.StatusNotFound, "drawing not found")
+		return apperror.NewNotFound("drawing not found")
 	}
 	return c.JSON(http.StatusOK, d)
 }
@@ -156,7 +157,7 @@ func (h *DrawingHandler) UpdateDrawing(c echo.Context) error {
 		Visibility  string          `json:"visibility"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), UpdateDrawingInput{
@@ -251,7 +252,7 @@ func (h *DrawingHandler) CreateToken(c echo.Context) error {
 		FoundryID      *string         `json:"foundry_id"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	t, err := h.drawingSvc.CreateToken(c.Request().Context(), CreateTokenInput{
@@ -306,7 +307,7 @@ func (h *DrawingHandler) GetToken(c echo.Context) error {
 		return err
 	}
 	if t.MapID != mapID {
-		return echo.NewHTTPError(http.StatusNotFound, "token not found")
+		return apperror.NewNotFound("token not found")
 	}
 	return c.JSON(http.StatusOK, t)
 }
@@ -348,7 +349,7 @@ func (h *DrawingHandler) UpdateToken(c echo.Context) error {
 		Flags          json.RawMessage `json:"flags"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.drawingSvc.UpdateToken(c.Request().Context(), c.Param("tid"), UpdateTokenInput{
@@ -397,7 +398,7 @@ func (h *DrawingHandler) UpdateTokenPosition(c echo.Context) error {
 		Y float64 `json:"y"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), c.Param("tid"), UpdateTokenPositionInput{
@@ -463,7 +464,7 @@ func (h *DrawingHandler) CreateLayer(c echo.Context) error {
 		IsLocked  bool    `json:"is_locked"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	l, err := h.drawingSvc.CreateLayer(c.Request().Context(), CreateLayerInput{
@@ -496,7 +497,7 @@ func (h *DrawingHandler) GetLayer(c echo.Context) error {
 		return err
 	}
 	if l.MapID != mapID {
-		return echo.NewHTTPError(http.StatusNotFound, "layer not found")
+		return apperror.NewNotFound("layer not found")
 	}
 	return c.JSON(http.StatusOK, l)
 }
@@ -519,7 +520,7 @@ func (h *DrawingHandler) UpdateLayer(c echo.Context) error {
 		IsLocked  bool    `json:"is_locked"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.drawingSvc.UpdateLayer(c.Request().Context(), c.Param("lid"), UpdateLayerInput{
@@ -584,7 +585,7 @@ func (h *DrawingHandler) CreateFog(c echo.Context) error {
 		IsExplored bool            `json:"is_explored"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	f, err := h.drawingSvc.CreateFog(c.Request().Context(), CreateFogInput{

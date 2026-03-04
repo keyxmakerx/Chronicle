@@ -237,7 +237,7 @@ func (h *Handler) checkMediaAccess(c echo.Context, file *MediaFile, isThumb bool
 			// No valid signature. Fall back: allow if user is authenticated
 			// and is a member of the file's campaign (graceful migration).
 			if !h.allowUnsignedAccess(c, file) {
-				return echo.NewHTTPError(http.StatusForbidden, "signed URL required")
+				return apperror.NewForbidden("signed URL required")
 			}
 		}
 	}

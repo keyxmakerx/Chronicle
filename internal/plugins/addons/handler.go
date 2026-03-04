@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -63,7 +64,7 @@ func (h *Handler) CreateAddon(c echo.Context) error {
 func (h *Handler) UpdateAddonStatus(c echo.Context) error {
 	addonID, err := strconv.Atoi(c.Param("addonID"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid addon ID")
+		return apperror.NewBadRequest("invalid addon ID")
 	}
 
 	status := AddonStatus(c.FormValue("status"))
@@ -82,7 +83,7 @@ func (h *Handler) UpdateAddonStatus(c echo.Context) error {
 func (h *Handler) DeleteAddon(c echo.Context) error {
 	addonID, err := strconv.Atoi(c.Param("addonID"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid addon ID")
+		return apperror.NewBadRequest("invalid addon ID")
 	}
 
 	if err := h.service.Delete(c.Request().Context(), addonID); err != nil {
@@ -102,7 +103,7 @@ func (h *Handler) DeleteAddon(c echo.Context) error {
 func (h *Handler) CampaignAddonsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+		return apperror.NewForbidden("campaign context required")
 	}
 
 	addons, err := h.service.ListForCampaign(c.Request().Context(), cc.Campaign.ID)
@@ -116,7 +117,7 @@ func (h *Handler) CampaignAddonsAPI(c echo.Context) error {
 func (h *Handler) CampaignAddonsPage(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+		return apperror.NewForbidden("campaign context required")
 	}
 
 	addons, err := h.service.ListForCampaign(c.Request().Context(), cc.Campaign.ID)
@@ -133,7 +134,7 @@ func (h *Handler) CampaignAddonsPage(c echo.Context) error {
 func (h *Handler) CampaignAddonsFragment(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+		return apperror.NewForbidden("campaign context required")
 	}
 
 	addons, err := h.service.ListForCampaign(c.Request().Context(), cc.Campaign.ID)
@@ -149,12 +150,12 @@ func (h *Handler) CampaignAddonsFragment(c echo.Context) error {
 func (h *Handler) ToggleCampaignAddon(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return echo.NewHTTPError(http.StatusForbidden, "campaign context required")
+		return apperror.NewForbidden("campaign context required")
 	}
 
 	addonID, err := strconv.Atoi(c.Param("addonID"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid addon ID")
+		return apperror.NewBadRequest("invalid addon ID")
 	}
 
 	userID := auth.GetUserID(c)

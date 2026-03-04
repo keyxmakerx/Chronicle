@@ -205,7 +205,7 @@ func (h *Handler) UpdateAPI(c echo.Context) error {
 		ZoomDefault string  `json:"zoom_default"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.UpdateTimeline(ctx, timelineID, UpdateTimelineInput{
@@ -252,7 +252,7 @@ func (h *Handler) LinkEventAPI(c echo.Context) error {
 		ColorOverride *string `json:"color_override"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	link, err := h.svc.LinkEvent(ctx, timelineID, req.EventID, LinkEventInput{
@@ -320,7 +320,7 @@ func (h *Handler) CreateStandaloneEventAPI(c echo.Context) error {
 		Color           *string `json:"color"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	e, err := h.svc.CreateStandaloneEvent(ctx, timelineID, CreateTimelineEventInput{
@@ -387,7 +387,7 @@ func (h *Handler) UpdateStandaloneEventAPI(c echo.Context) error {
 		Color           *string `json:"color"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	if err := h.svc.UpdateStandaloneEvent(ctx, timelineID, eventID, UpdateTimelineEventInput{
@@ -542,7 +542,7 @@ func (h *Handler) CreateEntityGroupAPI(c echo.Context) error {
 		Color string `json:"color"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	g, err := h.svc.CreateEntityGroup(c.Request().Context(), timelineID, CreateEntityGroupInput{
@@ -574,7 +574,7 @@ func (h *Handler) UpdateEntityGroupAPI(c echo.Context) error {
 		Color string `json:"color"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.UpdateEntityGroup(c.Request().Context(), timelineID, groupID, UpdateEntityGroupInput{
@@ -621,10 +621,10 @@ func (h *Handler) AddGroupMemberAPI(c echo.Context) error {
 		EntityID string `json:"entity_id"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 	if req.EntityID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "entity_id is required")
+		return apperror.NewBadRequest("entity_id is required")
 	}
 
 	if err := h.svc.AddGroupMember(c.Request().Context(), timelineID, groupID, req.EntityID); err != nil {
@@ -688,7 +688,7 @@ func (h *Handler) UpdateTimelineVisibilityAPI(c echo.Context) error {
 		VisibilityRules *string `json:"visibility_rules"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	// Build a full update preserving existing settings.
@@ -721,7 +721,7 @@ func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
 		VisibilityRules    *string `json:"visibility_rules"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	if err := h.svc.UpdateEventLinkVisibility(ctx, timelineID, eventID, UpdateEventVisibilityInput{
@@ -750,7 +750,7 @@ func (h *Handler) UpdateStandaloneEventVisibilityAPI(c echo.Context) error {
 		VisibilityRules *string `json:"visibility_rules"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	// Get the standalone event and verify it belongs to this timeline.
@@ -759,7 +759,7 @@ func (h *Handler) UpdateStandaloneEventVisibilityAPI(c echo.Context) error {
 		return err
 	}
 	if e.TimelineID != timelineID {
-		return echo.NewHTTPError(http.StatusNotFound, "event not found")
+		return apperror.NewNotFound("event not found")
 	}
 
 	// Validate visibility.
@@ -767,7 +767,7 @@ func (h *Handler) UpdateStandaloneEventVisibilityAPI(c echo.Context) error {
 		req.Visibility = e.Visibility
 	}
 	if req.Visibility != "everyone" && req.Visibility != "dm_only" {
-		return echo.NewHTTPError(http.StatusBadRequest, "visibility must be 'everyone' or 'dm_only'")
+		return apperror.NewBadRequest("visibility must be 'everyone' or 'dm_only'")
 	}
 
 	e.Visibility = req.Visibility
@@ -862,7 +862,7 @@ func parseIntParam(c echo.Context, name string) (int, error) {
 	s := c.Param(name)
 	var v int
 	if _, err := fmt.Sscanf(s, "%d", &v); err != nil {
-		return 0, echo.NewHTTPError(http.StatusBadRequest, name+" must be a number")
+		return 0, apperror.NewBadRequest(name + " must be a number")
 	}
 	return v, nil
 }
