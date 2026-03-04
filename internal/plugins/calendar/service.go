@@ -56,6 +56,7 @@ type CalendarService interface {
 	// Date/time helpers.
 	AdvanceDate(ctx context.Context, calendarID string, days int) error
 	AdvanceTime(ctx context.Context, calendarID string, hours, minutes int) error
+	SetDate(ctx context.Context, calendarID string, year, month, day, hour, minute int) error
 
 	// Import/export.
 	ApplyImport(ctx context.Context, calendarID string, result *ImportResult) error
@@ -802,6 +803,60 @@ func (s *calendarService) AdvanceTime(ctx context.Context, calendarID string, ho
 	}
 
 	return s.repo.Update(ctx, cal)
+}
+
+// SetDate sets the calendar's current date/time to an absolute value.
+// Unlike AdvanceDate (which moves forward by N days), this sets exact values.
+// Used by external sync tools (Foundry/Calendaria) that send absolute dates.
+func (s *calendarService) SetDate(ctx context.Context, calendarID string, year, month, day, hour, minute int) error {
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	if month < 1 {
+		return apperror.NewValidation("month must be at least 1")
+	}
+	if day < 1 {
+		return apperror.NewValidation("day must be at least 1")
+	}
+
+	hpd := cal.HoursPerDay
+	if hpd <= 0 {
+		hpd = 24
+	}
+	mph := cal.MinutesPerHour
+	if mph <= 0 {
+		mph = 60
+	}
+	if hour < 0 || hour >= hpd {
+		return apperror.NewValidation("hour out of range for this calendar")
+	}
+	if minute < 0 || minute >= mph {
+		return apperror.NewValidation("minute out of range for this calendar")
+	}
+
+	cal.CurrentYear = year
+	cal.CurrentMonth = month
+	cal.CurrentDay = day
+	cal.CurrentHour = hour
+	cal.CurrentMinute = minute
+
+	if err := s.repo.Update(ctx, cal); err != nil {
+		return fmt.Errorf("set date: %w", err)
+	}
+
+	s.events.PublishCalendarEvent("date.advanced", cal.CampaignID, calendarID, map[string]int{
+		"year":   cal.CurrentYear,
+		"month":  cal.CurrentMonth,
+		"day":    cal.CurrentDay,
+		"hour":   cal.CurrentHour,
+		"minute": cal.CurrentMinute,
+	})
+	return nil
 }
 
 // ApplyImport replaces a calendar's configuration with data from an ImportResult.

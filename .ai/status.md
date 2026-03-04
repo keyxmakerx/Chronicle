@@ -8,19 +8,27 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Foundry VTT sync feature (batch 17, Phase 2+3).
+2026-03-04 -- Foundry VTT sync feature (batch 18, Phase 3+4).
 Branch: `claude/foundry-sync-feature-05M5a`.
 
 ## Current Phase
-**Foundry VTT bidirectional sync.** Completed this session (batch 17):
-- **EventBus wiring**: Entity, calendar, and drawing services now emit WebSocket events
-  on all mutations. Each service defines a local `EventPublisher` interface with adapter
-  in routes.go bridging to the WebSocket hub. `NoopPublisher` defaults for tests.
-- **Map REST API v1**: Full external API for map data (`syncapi/map_api_handler.go`):
-  23 new endpoints for maps, drawings, tokens, layers, fog CRUD. Authenticated via API
-  keys with read/write permission levels. IDOR protection via `requireMapInCampaign`.
-- **Build fix**: Fixed `apperror.NewNotFound` two-argument calls in drawing_repository.go
-  and sync_repository.go (was passing type + id, function only accepts message string).
+**Foundry VTT bidirectional sync.** Completed this session (batch 18):
+- **Map REST API v1** (batch 17): 23 new endpoints for maps, drawings, tokens, layers, fog
+  CRUD. Authenticated via API keys with read/write permission levels.
+- **Calendar live sync** (batch 18, Phase 4):
+  - New `PUT /calendar/date` API endpoint for absolute date setting (used by Calendaria
+    and SimpleCalendar which send `{year, month, day}` instead of relative `{days: N}`).
+  - New `CalendarService.SetDate()` method with validation and WebSocket event publishing.
+  - Complete rewrite of `foundry-module/scripts/calendar-sync.mjs` with adapter pattern
+    supporting **both Calendaria and SimpleCalendar**. Handles date sync, event CRUD
+    (create/update/delete), and initial calendar structure sync on connect.
+  - Fixed date sync mismatch: Foundry module was sending absolute dates to `POST /advance`
+    (which expects relative days). Now correctly uses `PUT /calendar/date`.
+  - Added `onInitialSync()` lifecycle hook — SyncManager calls it after WebSocket connect.
+  - Event mapping persistence via Foundry user flags (`chronicle-sync.calendarEventMappings`)
+    for bidirectional event ID tracking between Calendaria/SimpleCalendar and Chronicle.
+  - SimpleCalendar support: 0-indexed month/day conversion, `addNote()` for event creation,
+    `simple-calendar-date-time-change` hook for date sync.
 
 Previously completed (batch 16):
 - WebSocket hub infrastructure (`internal/websocket/`): hub, client, message types,
@@ -850,11 +858,11 @@ LegendKeeper. Key findings:
   H (secrets) → I (integrations) → J (visualization) → K (delight)
 
 ## Next Session Should
-1. **Foundry sync Phase 4:** Shop entity type (inventory relations, Foundry drag-and-drop).
+1. **Foundry sync Phase 5:** Shop entity type (inventory relations, Foundry drag-and-drop widget).
 2. **Foundry sync testing:** End-to-end verification of WebSocket event flow and API endpoints.
 3. **Permission hardening:** RequireAddon middleware on API routes, sync permission audit.
 4. **Extension documentation:** `.ai.md` for websocket, syncapi, maps drawing subsystem.
-5. **Calendar live sync polish:** Calendar-sync.mjs event CRUD (currently stubbed).
+5. **Alpha-critical:** Extension technical documentation (1-3 page `.ai.md` per plugin/widget).
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
