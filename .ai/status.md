@@ -8,16 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Tag dm_only visibility controls, @mention popup fix, blank sidebar panel
-fix. Tags can now be marked "DM only" (hidden from Players). @mention popup no longer
-persists after selection. Sidebar drill panel renders content correctly.
-Branch: `claude/review-codebase-R1WqN`.
+2026-03-04 -- Tag dm_only visibility, @mention fix, blank sidebar fix, attributes
+template reset, campaigns service tests (72 tests). All alpha-critical bugs except
+image upload resolved. Branch: `claude/review-codebase-R1WqN`.
 
 ## Current Phase
-**Bug fixes + tag visibility complete.** Fixed @mention popup persistence, blank sidebar
-drill panel, and implemented tag dm_only visibility controls (backend + frontend).
-Next: attributes template reset, campaigns service tests, image upload fix, media
-management.
+**Bug fixes + feature sprint.** Completed: tag dm_only visibility controls, @mention
+popup fix, blank sidebar drill panel fix, attributes template reset button, campaigns
+service tests (72 tests). Next: image upload fix, media management, extension docs,
+graceful addon degradation.
 
 ### HTMX Sidebar Conversion + JS Hoisting Fixes — COMPLETE
 Branch: `claude/review-codebase-R1WqN`

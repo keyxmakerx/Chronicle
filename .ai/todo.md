@@ -26,7 +26,7 @@ Known broken or missing things, ordered by severity.
 ### Medium
 
 - [x] **Tags not hideable from players** — Implemented `dm_only` column (migration 000038), role-based filtering in repo/service/handler, eye-slash badge + DM checkbox in tag_picker.js.
-- [ ] **Attributes missing "Use Template" reset** — Entity types define field templates, entities can override with `FieldOverrides`. But no UI to reset overrides back to type defaults. Especially painful when entity type fields are updated — old entities don't get new fields automatically.
+- [x] **Attributes missing "Use Template" reset** — Added DELETE `/field-overrides` endpoint and "Reset" button in attributes customize panel with confirmation dialog. Clears field_overrides to NULL, restoring category template defaults.
 
 ### Low
 
@@ -54,7 +54,7 @@ New capabilities ordered by priority for alpha release.
 
 - [ ] **Media management for owners + admins** — Campaign-scoped media browser: grid/list view, "referenced by" queries, delete with entity reference warnings, upload from browser page. Admin view spans all campaigns.
 - [x] **Tag visibility controls** — Implemented: migration 000038, `dm_only` bool in model/repo/service/handler, role-based filtering, tag_picker.js DM-only badge + create checkbox.
-- [ ] **Attributes template reset** — "Reset to Type Template" button in attributes customize panel. Clear `field_overrides`, restore type-level defaults.
+- [x] **Attributes template reset** — Implemented DELETE endpoint + "Reset" button in customize panel with confirmation dialog.
 - [ ] **Extension technical documentation** — 1-3 page `.ai.md` writeup per plugin/widget/module. Standard template covering purpose, architecture, API endpoints, widget integration, lifecycle, security. See documentation audit in plan.
 - [ ] **Graceful extension degradation** — `RequireAddon` API middleware, human-readable errors for disabled/uninstalled addons, addon dependency checking.
 
@@ -95,7 +95,7 @@ New capabilities ordered by priority for alpha release.
 - [x] Auth service tests (26 tests)
 - [x] Notes widget service tests (28 tests)
 - [x] Widget lifecycle audit (destroy methods, event listener leaks)
-- [ ] Campaigns service tests (HIGHEST PRIORITY — most critical untested code)
+- [x] Campaigns service tests (72 tests covering CRUD, membership, ownership transfer, sidebar, dashboard, admin ops, model helpers)
 - [ ] Relations service tests (bi-directional create/delete, validation)
 - [ ] Tags service tests (CRUD, slug generation, diff-based assignment)
 - [ ] Audit service tests (pagination, validation, fire-and-forget)
