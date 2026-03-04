@@ -50,7 +50,7 @@ Known broken or missing things, ordered by severity.
 
 ### Low
 
-- [~] **API endpoints ignore addon disabled state** — RequireAddon middleware now gates calendar, maps, sessions, timeline routes. Still needed: API v1 routes (syncapi).
+- [x] **API endpoints ignore addon disabled state** — RequireAddon middleware gates calendar, maps, sessions, timeline routes. RequireAddonAPI middleware gates API v1 routes (syncapi). Fail-closed on DB errors.
 - [ ] **API technical documentation missing** — REST API v1 exists and works but has no public documentation (OpenAPI spec or reference).
 - [x] **Calendar HTMX detection inconsistency** — Replaced 5 raw `HX-Request` header checks in calendar handler with `middleware.IsHTMX(c)`, which also checks `HX-Boosted` to avoid returning fragments on boosted navigation.
 - [ ] **Cross-plugin adapter interface duplication** — `MemberLister` interface duplicated in timeline and sessions plugins. Should extract to shared package.
@@ -62,7 +62,7 @@ Known broken or missing things, ordered by severity.
 - [ ] **No Content Security Policy headers** — CSP not implemented. Would provide XSS defense-in-depth alongside bluemonday sanitization.
 - [ ] **No input size validation on text fields** — Relies on DB column limits. Handler-level validation (name max 200, description max 5000, etc.) would be better.
 - [ ] **Package-level Go doc comments missing** — ~80% of .go files lack `// Package ...` comments (handler.go, service.go, repository.go, routes.go across all plugins).
-- [ ] **Missing JS widget .ai.md docs** — 11 widget files + 6 core JS files lack documentation. Priority: editor.js, attributes.js, tag_picker.js, relations.js, notes.js.
+- [~] **Missing JS widget .ai.md docs** — Done: image_upload, timeline_viz, dashboard_editor, template_editor, entity_tooltip, foundry-module, websocket. Still needed: editor.js, attributes.js, tag_picker.js, relations.js, notes.js, boot.js.
 
 ---
 
@@ -75,8 +75,8 @@ New capabilities ordered by priority for alpha release.
 - [x] **Media management for owners** — Campaign-scoped media browser at `/campaigns/:id/media` (Owner-only): grid view with thumbnails, "referenced by" entity queries, delete with warnings, upload from browser, pagination, storage stats. Admin already had `/admin/storage`.
 - [x] **Tag visibility controls** — Implemented: migration 000038, `dm_only` bool in model/repo/service/handler, role-based filtering, tag_picker.js DM-only badge + create checkbox.
 - [x] **Attributes template reset** — Implemented DELETE endpoint + "Reset" button in customize panel with confirmation dialog.
-- [ ] **Extension technical documentation** — 1-3 page `.ai.md` writeup per plugin/widget/module. Standard template covering purpose, architecture, API endpoints, widget integration, lifecycle, security. See documentation audit in plan.
-- [ ] **Graceful extension degradation** — `RequireAddon` API middleware, human-readable errors for disabled/uninstalled addons, addon dependency checking.
+- [~] **Extension technical documentation** — 1-3 page `.ai.md` writeup per plugin/widget/module. Done: foundry-module, websocket, media, image_upload, timeline_viz, dashboard_editor, template_editor, entity_tooltip. Still needed: syncapi, maps drawing subsystem, editor.js, attributes.js, tag_picker.js, relations.js, notes.js.
+- [x] **Graceful extension degradation** — `RequireAddon` middleware (web) and `RequireAddonAPI` middleware (API) gate routes. Human-readable errors for disabled addons. Fail-closed on DB errors.
 - [x] **Permissions & UX completeness audit** — Completed 2026-03-04. Audited all 17 route files, 24 JS widgets, all templ templates. Found 10 MUST-haves, 15 NEED-to-haves, 20 WANTs, 15 MAYBEs. Key findings: sidebar drill public access, sessions discoverability, calendar UX gaps, missing editor features (tables, callouts), no unsaved changes warning, inconsistent empty states. All items added to Bugfixes section above.
 - [x] **README.md** — Full open-source README with features, setup instructions, tech stack, architecture, project structure, screenshots placeholders, inspiration credits. Created 2026-03-04.
 
@@ -110,15 +110,15 @@ New capabilities ordered by priority for alpha release.
 
 - [ ] Per-entity permissions (view/edit per role/user)
 - [ ] Group-based visibility (beyond everyone/dm_only)
-- [ ] Foundry VTT sync module Phase 1 (notes/journal sync)
-- [ ] Foundry VTT sync module Phase 2 (calendar sync)
+- [x] Foundry VTT sync module Phase 1 (notes/journal sync)
+- [x] Foundry VTT sync module Phase 2 (calendar sync)
 - [ ] Relations graph visualization widget (D3.js/Cytoscape.js)
 - [ ] Dice roller widget (floating panel, expression parser)
 - [ ] Entity sub-notes/posts (sub-documents with separate visibility)
 - [ ] Auto-linking in editor (LegendKeeper-style entity name detection)
 - [ ] Guided worldbuilding prompts per entity type (WorldAnvil-style)
 - [ ] **Discord bot integration** — Session RSVP via Discord reactions. Plugin at internal/plugins/discord/ with bot token config, webhook notifications, reaction listener. See ADR-012.
-- [ ] **Session recurrence server-side expansion** — Currently recurring sessions stored as single record with recurrence metadata. Need auto-generation of next occurrence when current one completes.
+- [x] **Session recurrence server-side expansion** — Recurring sessions auto-generate next occurrence when current one completes. Implemented in batch 21.
 - [ ] **Calendar event recurring expansion** — Expand calendar event recurrence beyond "yearly" to monthly/weekly/daily/custom, matching session recurrence options.
 - [ ] Role-aware dashboards (different views per campaign role)
 - [ ] Entity type template library (genre presets for new campaigns)
@@ -129,7 +129,7 @@ New capabilities ordered by priority for alpha release.
 - [ ] 2FA/TOTP support
 - [ ] Invite system (email invitations for campaigns)
 - [ ] Webhook support for external event notifications
-- [ ] Fog of war for maps (DM-only visibility per marker/region)
+- [~] Fog of war for maps — Server-side fog regions with CRUD API complete. Chronicle→Foundry one-way sync done (polygon overlay drawings). Foundry→Chronicle push not yet implemented.
 - [ ] Map drawing tools (freehand, shapes, annotations)
 - [ ] Map hex/square grid overlay for tactical combat
 - [ ] Map measurement tool (distance/area)
@@ -315,3 +315,16 @@ Summary of strengths/weaknesses for strategic positioning. Full analysis in `.ai
 - [x] Foundry shop widget wired to relations API with inventory filtering
 - [x] RequireAddonAPI middleware gating calendar and map API v1 routes
 - [x] Foundry VTT E2E testing checklist (TESTING.md)
+
+### Calendar Sessions + Entity Widgets + Foundry Security (2026-03-04, batches 21-24)
+- [x] Calendar sessions modal overlay with inline RSVP controls
+- [x] Sessions fragment endpoint (GET /calendar/sessions-fragment)
+- [x] Recurring session auto-generation on completion (server-side)
+- [x] Entity page widget blocks (timeline, map_preview, upcoming_events, shop_inventory, text_block)
+- [x] WebSocket security (origin validation, message type validation, campaign-scoped)
+- [x] Device fingerprint binding race condition fix (async→synchronous)
+- [x] Sync action input sanitization (removed user input echo from errors)
+- [x] Rate limit bounds validation (clamped to 1-10000)
+- [x] RequireAddonAPI fail-closed on DB errors (was fail-open)
+- [x] Fog-of-war Chronicle→Foundry sync (polygon overlay drawings on Foundry scene)
+- [x] Extension .ai.md documentation (foundry-module, websocket)
