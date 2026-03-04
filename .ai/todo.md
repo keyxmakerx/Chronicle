@@ -45,8 +45,8 @@ Known broken or missing things, ordered by severity.
 - [ ] **Editor lacks table support** — TipTap editor has no table insert/edit (common need for TTRPG stat blocks, encounter tables).
 - [ ] **Editor lacks callout/highlight blocks** — No callout/admonition blocks for DM notes, rules references, warnings.
 - [x] **Entity cloning** — Fixed: Clone button on entity show page (Scribe+). POST creates copy with "(Copy)" suffix, clones entry, image, fields, field overrides, popup config, tags via INSERT...SELECT. Redirects to edit page. Does NOT copy relations.
-- [ ] **Map marker search** — No search-by-name for markers within a map. Must scan visually.
-- [ ] **Timeline event creation from timeline page** — Must leave timeline to create events. No inline add button or modal on timeline.
+- [x] **Map marker search** — Fixed: added search input in map header. Client-side filtering dims non-matching markers (opacity 0.15). Enter pans to first match and opens tooltip. Searches name and description.
+- [x] **Timeline event creation from timeline page** — Already implemented: "Create Event" button in header opens modal with full form (name, date, description, category, visibility, color, multi-day, recurrence). POST to standalone-events API.
 
 ### Low
 

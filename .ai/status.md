@@ -36,12 +36,16 @@ Completed (batch 4):
 - Sessions addon discoverability (cross-link in calendar header)
 - Form validation feedback (CSS `:user-invalid` red borders, inline error hints)
 
+Completed (batch 5):
+- Entity cloning (Clone button, service method, CopyEntityTags repo, audit logging)
+- Map marker search (client-side filter + pan-to-match on Enter)
+- Verified: mobile sidebar toggle already implemented, timeline event creation already implemented
+
 **Next priorities:**
 1. Media management for campaign owners
 2. Editor tables + callout blocks (requires TipTap bundle rebuild)
 3. Search scope expansion (calendar events, timelines, maps, sessions)
-4. Mobile sidebar toggle
-5. Entity cloning
+4. Calendar event categories customization
 
 ### HTMX Sidebar Conversion + JS Hoisting Fixes — COMPLETE
 Branch: `claude/review-codebase-R1WqN`

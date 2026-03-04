@@ -168,6 +168,17 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 				</div>
 			</div>
 			<div class="flex items-center gap-2">
+				<!-- Marker search -->
+				<div class="relative">
+					<input
+						type="text"
+						id="marker-search"
+						class="input text-xs py-1.5 pl-7 pr-2 w-40"
+						placeholder="Search markers..."
+						autocomplete="off"
+					/>
+					<i class="fa-solid fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-fg-muted pointer-events-none"></i>
+				</div>
 				if data.IsScribe {
 					<button
 						id="place-marker-btn"
@@ -289,6 +300,42 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 
 				leafletMarkers[mk.id] = lm;
 			}
+
+			// Marker search: filter and pan to matching markers.
+			(function() {
+				var searchInput = document.getElementById('marker-search');
+				if (!searchInput) return;
+				searchInput.addEventListener('input', function() {
+					var q = searchInput.value.toLowerCase().trim();
+					for (var i = 0; i < markers.length; i++) {
+						var mk = markers[i];
+						var lm = leafletMarkers[mk.id];
+						if (!lm) continue;
+						var name = (mk.name || '').toLowerCase();
+						var desc = (mk.description || '').toLowerCase();
+						var match = !q || name.indexOf(q) !== -1 || desc.indexOf(q) !== -1;
+						lm.setOpacity(match ? 1 : 0.15);
+					}
+				});
+				searchInput.addEventListener('keydown', function(e) {
+					if (e.key !== 'Enter') return;
+					var q = searchInput.value.toLowerCase().trim();
+					if (!q) return;
+					// Pan to the first match.
+					for (var i = 0; i < markers.length; i++) {
+						var mk = markers[i];
+						var name = (mk.name || '').toLowerCase();
+						if (name.indexOf(q) !== -1) {
+							var lat = h - (mk.y / 100) * h;
+							var lng = (mk.x / 100) * w;
+							map.setView([lat, lng], 1);
+							var lm = leafletMarkers[mk.id];
+							if (lm) lm.openTooltip();
+							break;
+						}
+					}
+				});
+			})();
 
 			// Place mode: click on map to create a marker at that position.
 			window.togglePlaceMode = function() {
