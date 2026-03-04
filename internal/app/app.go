@@ -89,7 +89,8 @@ func (a *App) setupMiddleware() {
 	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
 		Limit: "2M",
 		Skipper: func(c echo.Context) bool {
-			return strings.HasPrefix(c.Request().URL.Path, "/media/upload")
+			path := c.Request().URL.Path
+			return strings.HasPrefix(path, "/media/upload") || path == "/ws"
 		},
 	}))
 

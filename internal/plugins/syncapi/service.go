@@ -60,6 +60,9 @@ type SyncAPIService interface {
 	// Statistics.
 	GetStats(ctx context.Context, since time.Time) (*APIStats, error)
 	GetCampaignStats(ctx context.Context, campaignID string, since time.Time) (*APIStats, error)
+
+	// WebSocket authentication.
+	AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, err error)
 }
 
 // syncAPIService implements SyncAPIService.
@@ -389,4 +392,18 @@ func (s *syncAPIService) GetStats(ctx context.Context, since time.Time) (*APISta
 // GetCampaignStats returns API stats scoped to a campaign.
 func (s *syncAPIService) GetCampaignStats(ctx context.Context, campaignID string, since time.Time) (*APIStats, error) {
 	return s.repo.GetCampaignStats(ctx, campaignID, since)
+}
+
+// --- WebSocket Authentication ---
+
+// AuthenticateKeyForWS validates a raw API key and returns the campaign ID,
+// owner user ID, and a default owner role (3). This provides the WebSocket
+// authenticator with the identity needed to register a client.
+func (s *syncAPIService) AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, err error) {
+	key, err := s.AuthenticateKey(ctx, rawKey)
+	if err != nil {
+		return "", "", 0, err
+	}
+	// API keys are always created by the campaign owner, so default to owner role.
+	return key.CampaignID, key.UserID, 3, nil
 }

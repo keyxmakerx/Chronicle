@@ -168,3 +168,64 @@ type TopEntry struct {
 	Label string `json:"label"`
 	Count int64  `json:"count"`
 }
+
+// --- Sync Mappings ---
+
+// SyncMapping tracks the relationship between a Chronicle object and its
+// external counterpart (e.g., entity ↔ Foundry JournalEntry). It includes
+// version tracking for conflict detection.
+type SyncMapping struct {
+	ID             string         `json:"id"`
+	CampaignID     string         `json:"campaign_id"`
+	ChronicleType  string         `json:"chronicle_type"`  // entity, map, calendar_event, marker, drawing, token
+	ChronicleID    string         `json:"chronicle_id"`
+	ExternalSystem string         `json:"external_system"` // foundry
+	ExternalID     string         `json:"external_id"`     // Foundry document ID
+	SyncVersion    int            `json:"sync_version"`
+	LastSyncedAt   time.Time      `json:"last_synced_at"`
+	SyncDirection  string         `json:"sync_direction"` // both, push, pull
+	SyncMetadata   map[string]any `json:"sync_metadata,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+}
+
+// CreateSyncMappingInput is the validated input for creating a sync mapping.
+type CreateSyncMappingInput struct {
+	ChronicleType  string         `json:"chronicle_type"`
+	ChronicleID    string         `json:"chronicle_id"`
+	ExternalSystem string         `json:"external_system"`
+	ExternalID     string         `json:"external_id"`
+	SyncDirection  string         `json:"sync_direction"`
+	SyncMetadata   map[string]any `json:"sync_metadata,omitempty"`
+}
+
+// SyncPushRequest represents a batch of changes pushed from an external system.
+type SyncPushRequest struct {
+	Source  string       `json:"source"`  // "foundry"
+	Changes []SyncPushChange `json:"changes"`
+}
+
+// SyncPushChange is a single change in a push batch.
+type SyncPushChange struct {
+	Action         string         `json:"action"`          // create, update, delete
+	ChronicleType  string         `json:"chronicle_type"`  // entity, map, etc.
+	ChronicleID    string         `json:"chronicle_id"`    // For update/delete.
+	ExternalID     string         `json:"external_id"`     // Foundry document ID.
+	Data           map[string]any `json:"data,omitempty"`  // Payload for create/update.
+}
+
+// SyncPushResult is the outcome of a single push operation.
+type SyncPushResult struct {
+	Action      string `json:"action"`
+	ChronicleID string `json:"chronicle_id"`
+	ExternalID  string `json:"external_id"`
+	Status      string `json:"status"` // ok, error, conflict
+	Error       string `json:"error,omitempty"`
+}
+
+// SyncPullResponse contains changes since a given timestamp.
+type SyncPullResponse struct {
+	ServerTime time.Time     `json:"server_time"`
+	Mappings   []SyncMapping `json:"mappings"`
+	HasMore    bool          `json:"has_more"`
+}

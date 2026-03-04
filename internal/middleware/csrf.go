@@ -43,10 +43,11 @@ func CSRF() echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			req := c.Request()
 
-			// Skip CSRF for API routes. They use Bearer token authentication
-			// (not cookies), so they are not vulnerable to CSRF attacks. External
-			// clients (Foundry VTT) cannot obtain a CSRF cookie.
-			if strings.HasPrefix(req.URL.Path, "/api/") {
+			// Skip CSRF for API routes and WebSocket upgrades. They use Bearer
+			// token / API key authentication (not cookies), so they are not
+			// vulnerable to CSRF attacks. External clients (Foundry VTT) cannot
+			// obtain a CSRF cookie.
+			if strings.HasPrefix(req.URL.Path, "/api/") || req.URL.Path == "/ws" {
 				return next(c)
 			}
 
