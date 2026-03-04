@@ -39,6 +39,8 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashCalendarPreview(cc, block.Config)
 		case "timeline_preview":
 			@dashTimelinePreview(cc, block.Config)
+		case "map_preview":
+			@dashMapPreview(cc, block.Config)
 	}
 }
 
@@ -150,8 +152,13 @@ templ dashPinnedPages(cc *CampaignContext, config map[string]any) {
 
 // dashCalendarPreview renders a card that lazy-loads upcoming calendar events.
 // Config: limit (int, default 5). Uses HTMX to fetch from the calendar plugin.
+// Mounts the calendar-widget JS for interactive features (quick-add, event detail).
 templ dashCalendarPreview(cc *CampaignContext, config map[string]any) {
-	<div>
+	<div
+		data-widget="calendar-widget"
+		data-campaign-id={ cc.Campaign.ID }
+		data-limit={ fmt.Sprintf("%d", dashCalendarLimit(config)) }
+	>
 		<div class="flex items-center justify-between mb-3">
 			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
@@ -247,8 +254,13 @@ func limitRecentEntities(entities []RecentEntity, config map[string]any) []Recen
 
 // dashTimelinePreview renders a card that lazy-loads timeline summaries.
 // Config: limit (int, default 5). Uses HTMX to fetch from the timeline plugin.
+// Mounts the timeline-widget JS for interactive features (event detail popup).
 templ dashTimelinePreview(cc *CampaignContext, config map[string]any) {
-	<div>
+	<div
+		data-widget="timeline-widget"
+		data-campaign-id={ cc.Campaign.ID }
+		data-limit={ fmt.Sprintf("%d", dashCalendarLimit(config)) }
+	>
 		<div class="flex items-center justify-between mb-3">
 			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-timeline mr-1.5"></i>Timelines
@@ -269,4 +281,47 @@ templ dashTimelinePreview(cc *CampaignContext, config map[string]any) {
 			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
 		</div>
 	</div>
+}
+
+// dashMapPreview renders a card that lazy-loads an embedded map viewer.
+// Config: map_id (string, optional — shows map picker if not set).
+// Mounts the map-widget JS for interactive Leaflet map with markers.
+templ dashMapPreview(cc *CampaignContext, config map[string]any) {
+	<div
+		data-widget="map-widget"
+		data-campaign-id={ cc.Campaign.ID }
+		data-map-id={ dashMapID(config) }
+	>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-map mr-1.5"></i>Map
+			</h2>
+			if dashMapID(config) != "" {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, dashMapID(config))) }
+					class="text-xs text-accent hover:underline"
+				>
+					Open map
+				</a>
+			} else {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", cc.Campaign.ID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					View all maps
+				</a>
+			}
+		</div>
+		<div class="card min-h-[200px] overflow-hidden rounded-lg">
+			<div class="px-4 py-3 text-sm text-fg-muted">Loading map...</div>
+		</div>
+	</div>
+}
+
+// dashMapID extracts the map_id from block config (empty string if not set).
+func dashMapID(config map[string]any) string {
+	if id, ok := config["map_id"].(string); ok {
+		return id
+	}
+	return ""
 }

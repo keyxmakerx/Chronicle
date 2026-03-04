@@ -36,9 +36,9 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			<!-- Dynamic layout from entity type template -->
 			if entityType != nil && len(entityType.Layout.Rows) > 0 {
 				for _, row := range entityType.Layout.Rows {
-					<div class="grid grid-cols-12 gap-6 mb-6">
+					<div class="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
 						for _, col := range row.Columns {
-							<div class={ fmt.Sprintf("col-span-%d space-y-4", col.Width) }>
+							<div class={ entityColSpan(col.Width) }>
 								for _, block := range col.Blocks {
 									@entityBlock(block, cc, entity, entityType, showAttributes, csrfToken)
 								}
@@ -48,14 +48,14 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				}
 			} else {
 				<!-- Fallback: default two-column layout if no layout defined -->
-				<div class="grid grid-cols-12 gap-6">
-					<div class="col-span-8 space-y-4">
+				<div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+					<div class="col-span-1 md:col-span-8 space-y-4">
 						@blockTitle(cc, entity, csrfToken)
 						@blockTags(cc, entity, csrfToken)
 						@blockRelations(cc, entity, csrfToken)
 						@blockEntry(cc, entity, csrfToken)
 					</div>
-					<div class="col-span-4 space-y-4">
+					<div class="col-span-1 md:col-span-4 space-y-4">
 						@blockImage(cc, entity, csrfToken)
 						if showAttributes {
 							@blockAttributes(cc, entity, entityType, csrfToken)
@@ -485,4 +485,25 @@ templ blockBacklinks(cc *campaigns.CampaignContext, backlinks []Entity) {
 			}
 		</div>
 	</div>
+}
+
+// entityColSpan returns responsive Tailwind CSS classes for entity layout columns.
+// On mobile all columns are full-width; on desktop they use the 12-column grid.
+func entityColSpan(width int) string {
+	if width < 1 {
+		width = 1
+	}
+	if width > 12 {
+		width = 12
+	}
+	classes := [13]string{
+		"",
+		"col-span-1 md:col-span-1 space-y-4", "col-span-1 md:col-span-2 space-y-4",
+		"col-span-1 md:col-span-3 space-y-4", "col-span-1 md:col-span-4 space-y-4",
+		"col-span-1 md:col-span-5 space-y-4", "col-span-1 md:col-span-6 space-y-4",
+		"col-span-1 md:col-span-7 space-y-4", "col-span-1 md:col-span-8 space-y-4",
+		"col-span-1 md:col-span-9 space-y-4", "col-span-1 md:col-span-10 space-y-4",
+		"col-span-1 md:col-span-11 space-y-4", "col-span-1 md:col-span-12 space-y-4",
+	}
+	return classes[width]
 }

@@ -1,4 +1,4 @@
--- Migration 000042: Map expansion for Foundry VTT sync.
+-- Migration 000045: Map expansion for Foundry VTT sync.
 -- Adds layers, drawings, tokens, and fog of war to the maps system.
 -- Also adds grid and sync settings to the maps table.
 

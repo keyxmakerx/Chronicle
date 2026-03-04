@@ -1,4 +1,4 @@
--- Migration 000043: Add metadata column to entity_relations.
+-- Migration 000046: Add metadata column to entity_relations.
 -- Enables shop inventory (price, quantity, stock status) and other
 -- relation-specific data without creating separate tables.
 

@@ -295,3 +295,33 @@ func isIPAllowed(ip string, allowlist []string) bool {
 	return false
 }
 
+// RequireAddonAPI returns middleware that gates API endpoints behind addon
+// enabled checks. Returns 404 JSON response when the addon is disabled,
+// matching the behavior of the web RequireAddon middleware but for API context.
+func RequireAddonAPI(addonChecker AddonChecker, slug string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			campaignID := c.Param("id")
+			if campaignID == "" {
+				return echo.NewHTTPError(http.StatusBadRequest, "campaign ID required")
+			}
+
+			enabled, err := addonChecker.IsEnabledForCampaign(c.Request().Context(), campaignID, slug)
+			if err != nil {
+				// Fail open for DB errors — don't block API access.
+				return next(c)
+			}
+			if !enabled {
+				return echo.NewHTTPError(http.StatusNotFound, slug+" addon is not enabled for this campaign")
+			}
+			return next(c)
+		}
+	}
+}
+
+// AddonChecker defines the interface for checking addon enabled state.
+// Implemented by the addons plugin's service.
+type AddonChecker interface {
+	IsEnabledForCampaign(ctx context.Context, campaignID, slug string) (bool, error)
+}
+

@@ -1,4 +1,4 @@
--- Migration 000041: sync_mappings table for bidirectional Foundry VTT sync.
+-- Migration 000044: sync_mappings table for bidirectional Foundry VTT sync.
 -- Tracks the mapping between Chronicle objects and their external counterparts
 -- (e.g., Chronicle entity ↔ Foundry JournalEntry) along with version tracking.
 

@@ -130,11 +130,29 @@ class ShopWindow extends Application {
 
   async getData() {
     try {
-      // Fetch entity with relations.
+      // Fetch entity data.
       this._entity = await this._api.get(`/entities/${this._entityId}`);
 
-      // The inventory will be populated via entity relations.
-      // For now, return the entity data.
+      // Fetch entity relations with metadata (price, quantity, stock status).
+      const relations = await this._api.get(`/entities/${this._entityId}/relations`);
+
+      // Filter for inventory-type relations: those with metadata containing
+      // price or quantity fields indicate shop inventory items.
+      this._inventory = (relations || [])
+        .filter((r) => r.metadata && (r.metadata.price !== undefined || r.metadata.quantity !== undefined))
+        .map((r) => ({
+          id: r.targetEntityId,
+          name: r.targetEntityName || 'Unknown Item',
+          image_path: r.targetEntityIcon ? null : null, // Icons only for now.
+          icon: r.targetEntityIcon || 'fa-box',
+          color: r.targetEntityColor || '#6b7280',
+          type: r.targetEntityType || '',
+          price: r.metadata.price,
+          quantity: r.metadata.quantity,
+          in_stock: r.metadata.in_stock !== false,
+          description: r.metadata.description || '',
+        }));
+
       return {
         entity: this._entity,
         inventory: this._inventory,

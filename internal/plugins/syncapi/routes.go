@@ -47,7 +47,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 // All routes require API key authentication. Permission middleware enforces
 // read/write/sync access levels. Campaign match middleware ensures keys can
 // only access their scoped campaign.
-func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService) {
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService, addonChecker AddonChecker) {
 	// API v1 group with key auth and rate limiting.
 	v1 := e.Group("/api/v1",
 		RequireAPIKey(syncSvc),
@@ -63,12 +63,14 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.GET("/entity-types/:typeID", api.GetEntityType, RequirePermission(PermRead))
 	cg.GET("/entities", api.ListEntities, RequirePermission(PermRead))
 	cg.GET("/entities/:entityID", api.GetEntity, RequirePermission(PermRead))
+	cg.GET("/entities/:entityID/relations", api.ListEntityRelations, RequirePermission(PermRead))
 
-	// Calendar read endpoints (require "read" permission).
-	cg.GET("/calendar", calAPI.GetCalendar, RequirePermission(PermRead))
-	cg.GET("/calendar/date", calAPI.GetCurrentDate, RequirePermission(PermRead))
-	cg.GET("/calendar/events", calAPI.ListEvents, RequirePermission(PermRead))
-	cg.GET("/calendar/events/:eventID", calAPI.GetEvent, RequirePermission(PermRead))
+	// Calendar read endpoints (require "read" permission + calendar addon).
+	calGroup := cg.Group("", RequireAddonAPI(addonChecker, "calendar"))
+	calGroup.GET("/calendar", calAPI.GetCalendar, RequirePermission(PermRead))
+	calGroup.GET("/calendar/date", calAPI.GetCurrentDate, RequirePermission(PermRead))
+	calGroup.GET("/calendar/events", calAPI.ListEvents, RequirePermission(PermRead))
+	calGroup.GET("/calendar/events/:eventID", calAPI.GetEvent, RequirePermission(PermRead))
 
 	// Write endpoints (require "write" permission).
 	cg.POST("/entities", api.CreateEntity, RequirePermission(PermWrite))
@@ -76,20 +78,20 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.PUT("/entities/:entityID/fields", api.UpdateEntityFields, RequirePermission(PermWrite))
 	cg.DELETE("/entities/:entityID", api.DeleteEntity, RequirePermission(PermWrite))
 
-	// Calendar write endpoints (require "write" permission).
-	cg.POST("/calendar/events", calAPI.CreateEvent, RequirePermission(PermWrite))
-	cg.PUT("/calendar/events/:eventID", calAPI.UpdateEvent, RequirePermission(PermWrite))
-	cg.DELETE("/calendar/events/:eventID", calAPI.DeleteEvent, RequirePermission(PermWrite))
-	cg.PUT("/calendar/settings", calAPI.UpdateCalendarSettings, RequirePermission(PermWrite))
-	cg.PUT("/calendar/months", calAPI.UpdateMonths, RequirePermission(PermWrite))
-	cg.PUT("/calendar/weekdays", calAPI.UpdateWeekdays, RequirePermission(PermWrite))
-	cg.PUT("/calendar/moons", calAPI.UpdateMoons, RequirePermission(PermWrite))
-	cg.PUT("/calendar/eras", calAPI.UpdateEras, RequirePermission(PermWrite))
-	cg.POST("/calendar/advance", calAPI.AdvanceDate, RequirePermission(PermWrite))
-	cg.PUT("/calendar/date", calAPI.SetDate, RequirePermission(PermWrite))
-	cg.POST("/calendar/advance-time", calAPI.AdvanceTime, RequirePermission(PermWrite))
-	cg.GET("/calendar/export", calAPI.ExportCalendar, RequirePermission(PermRead))
-	cg.POST("/calendar/import", calAPI.ImportCalendar, RequirePermission(PermWrite))
+	// Calendar write endpoints (require "write" permission + calendar addon).
+	calGroup.POST("/calendar/events", calAPI.CreateEvent, RequirePermission(PermWrite))
+	calGroup.PUT("/calendar/events/:eventID", calAPI.UpdateEvent, RequirePermission(PermWrite))
+	calGroup.DELETE("/calendar/events/:eventID", calAPI.DeleteEvent, RequirePermission(PermWrite))
+	calGroup.PUT("/calendar/settings", calAPI.UpdateCalendarSettings, RequirePermission(PermWrite))
+	calGroup.PUT("/calendar/months", calAPI.UpdateMonths, RequirePermission(PermWrite))
+	calGroup.PUT("/calendar/weekdays", calAPI.UpdateWeekdays, RequirePermission(PermWrite))
+	calGroup.PUT("/calendar/moons", calAPI.UpdateMoons, RequirePermission(PermWrite))
+	calGroup.PUT("/calendar/eras", calAPI.UpdateEras, RequirePermission(PermWrite))
+	calGroup.POST("/calendar/advance", calAPI.AdvanceDate, RequirePermission(PermWrite))
+	calGroup.PUT("/calendar/date", calAPI.SetDate, RequirePermission(PermWrite))
+	calGroup.POST("/calendar/advance-time", calAPI.AdvanceTime, RequirePermission(PermWrite))
+	calGroup.GET("/calendar/export", calAPI.ExportCalendar, RequirePermission(PermRead))
+	calGroup.POST("/calendar/import", calAPI.ImportCalendar, RequirePermission(PermWrite))
 
 	// Media read endpoints (require "read" permission).
 	cg.GET("/media", mediaAPI.ListMedia, RequirePermission(PermRead))
@@ -100,28 +102,29 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.POST("/media", mediaAPI.UploadMedia, RequirePermission(PermWrite))
 	cg.DELETE("/media/:mediaID", mediaAPI.DeleteMedia, RequirePermission(PermWrite))
 
-	// Map read endpoints (require "read" permission).
-	cg.GET("/maps", mapAPI.ListMaps, RequirePermission(PermRead))
-	cg.GET("/maps/:mapID", mapAPI.GetMap, RequirePermission(PermRead))
-	cg.GET("/maps/:mapID/drawings", mapAPI.ListDrawings, RequirePermission(PermRead))
-	cg.GET("/maps/:mapID/tokens", mapAPI.ListTokens, RequirePermission(PermRead))
-	cg.GET("/maps/:mapID/layers", mapAPI.ListLayers, RequirePermission(PermRead))
-	cg.GET("/maps/:mapID/fog", mapAPI.ListFog, RequirePermission(PermRead))
+	// Map read endpoints (require "read" permission + maps addon).
+	mapGroup := cg.Group("", RequireAddonAPI(addonChecker, "maps"))
+	mapGroup.GET("/maps", mapAPI.ListMaps, RequirePermission(PermRead))
+	mapGroup.GET("/maps/:mapID", mapAPI.GetMap, RequirePermission(PermRead))
+	mapGroup.GET("/maps/:mapID/drawings", mapAPI.ListDrawings, RequirePermission(PermRead))
+	mapGroup.GET("/maps/:mapID/tokens", mapAPI.ListTokens, RequirePermission(PermRead))
+	mapGroup.GET("/maps/:mapID/layers", mapAPI.ListLayers, RequirePermission(PermRead))
+	mapGroup.GET("/maps/:mapID/fog", mapAPI.ListFog, RequirePermission(PermRead))
 
-	// Map write endpoints (require "write" permission).
-	cg.POST("/maps/:mapID/drawings", mapAPI.CreateDrawing, RequirePermission(PermWrite))
-	cg.PUT("/maps/:mapID/drawings/:drawingID", mapAPI.UpdateDrawing, RequirePermission(PermWrite))
-	cg.DELETE("/maps/:mapID/drawings/:drawingID", mapAPI.DeleteDrawing, RequirePermission(PermWrite))
-	cg.POST("/maps/:mapID/tokens", mapAPI.CreateToken, RequirePermission(PermWrite))
-	cg.PUT("/maps/:mapID/tokens/:tokenID", mapAPI.UpdateToken, RequirePermission(PermWrite))
-	cg.PATCH("/maps/:mapID/tokens/:tokenID/position", mapAPI.UpdateTokenPosition, RequirePermission(PermWrite))
-	cg.DELETE("/maps/:mapID/tokens/:tokenID", mapAPI.DeleteToken, RequirePermission(PermWrite))
-	cg.POST("/maps/:mapID/layers", mapAPI.CreateLayer, RequirePermission(PermWrite))
-	cg.PUT("/maps/:mapID/layers/:layerID", mapAPI.UpdateLayer, RequirePermission(PermWrite))
-	cg.DELETE("/maps/:mapID/layers/:layerID", mapAPI.DeleteLayer, RequirePermission(PermWrite))
-	cg.POST("/maps/:mapID/fog", mapAPI.CreateFog, RequirePermission(PermWrite))
-	cg.DELETE("/maps/:mapID/fog/:fogID", mapAPI.DeleteFog, RequirePermission(PermWrite))
-	cg.DELETE("/maps/:mapID/fog", mapAPI.ResetFog, RequirePermission(PermWrite))
+	// Map write endpoints (require "write" permission + maps addon).
+	mapGroup.POST("/maps/:mapID/drawings", mapAPI.CreateDrawing, RequirePermission(PermWrite))
+	mapGroup.PUT("/maps/:mapID/drawings/:drawingID", mapAPI.UpdateDrawing, RequirePermission(PermWrite))
+	mapGroup.DELETE("/maps/:mapID/drawings/:drawingID", mapAPI.DeleteDrawing, RequirePermission(PermWrite))
+	mapGroup.POST("/maps/:mapID/tokens", mapAPI.CreateToken, RequirePermission(PermWrite))
+	mapGroup.PUT("/maps/:mapID/tokens/:tokenID", mapAPI.UpdateToken, RequirePermission(PermWrite))
+	mapGroup.PATCH("/maps/:mapID/tokens/:tokenID/position", mapAPI.UpdateTokenPosition, RequirePermission(PermWrite))
+	mapGroup.DELETE("/maps/:mapID/tokens/:tokenID", mapAPI.DeleteToken, RequirePermission(PermWrite))
+	mapGroup.POST("/maps/:mapID/layers", mapAPI.CreateLayer, RequirePermission(PermWrite))
+	mapGroup.PUT("/maps/:mapID/layers/:layerID", mapAPI.UpdateLayer, RequirePermission(PermWrite))
+	mapGroup.DELETE("/maps/:mapID/layers/:layerID", mapAPI.DeleteLayer, RequirePermission(PermWrite))
+	mapGroup.POST("/maps/:mapID/fog", mapAPI.CreateFog, RequirePermission(PermWrite))
+	mapGroup.DELETE("/maps/:mapID/fog/:fogID", mapAPI.DeleteFog, RequirePermission(PermWrite))
+	mapGroup.DELETE("/maps/:mapID/fog", mapAPI.ResetFog, RequirePermission(PermWrite))
 
 	// Sync endpoint (require "sync" permission).
 	cg.POST("/sync", api.Sync, RequirePermission(PermSync))

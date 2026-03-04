@@ -98,7 +98,7 @@ func (r *relationRepository) ListByEntity(ctx context.Context, entityID string) 
 	query := `SELECT er.id, er.campaign_id, er.source_entity_id, er.target_entity_id,
 	                  er.relation_type, er.reverse_relation_type, er.created_at, er.created_by,
 	                  e.name, COALESCE(et.icon, 'fa-file'), COALESCE(et.color, '#6b7280'),
-	                  e.slug, COALESCE(et.name, '')
+	                  e.slug, COALESCE(et.name, ''), er.metadata
 	           FROM entity_relations er
 	           INNER JOIN entities e ON e.id = er.target_entity_id
 	           LEFT JOIN entity_types et ON et.id = e.entity_type_id
@@ -114,13 +114,17 @@ func (r *relationRepository) ListByEntity(ctx context.Context, entityID string) 
 	var relations []Relation
 	for rows.Next() {
 		var rel Relation
+		var metadata sql.NullString
 		if err := rows.Scan(
 			&rel.ID, &rel.CampaignID, &rel.SourceEntityID, &rel.TargetEntityID,
 			&rel.RelationType, &rel.ReverseRelationType, &rel.CreatedAt, &rel.CreatedBy,
 			&rel.TargetEntityName, &rel.TargetEntityIcon, &rel.TargetEntityColor,
-			&rel.TargetEntitySlug, &rel.TargetEntityType,
+			&rel.TargetEntitySlug, &rel.TargetEntityType, &metadata,
 		); err != nil {
 			return nil, fmt.Errorf("scanning relation row: %w", err)
+		}
+		if metadata.Valid && metadata.String != "" {
+			rel.Metadata = []byte(metadata.String)
 		}
 		relations = append(relations, rel)
 	}

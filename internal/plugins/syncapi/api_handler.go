@@ -12,6 +12,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 )
 
 // APIHandler serves the versioned REST API for external tool integration.
@@ -21,14 +22,16 @@ type APIHandler struct {
 	syncSvc     SyncAPIService
 	entitySvc   entities.EntityService
 	campaignSvc campaigns.CampaignService
+	relationSvc relations.RelationService
 }
 
 // NewAPIHandler creates a new API handler with the required service dependencies.
-func NewAPIHandler(syncSvc SyncAPIService, entitySvc entities.EntityService, campaignSvc campaigns.CampaignService) *APIHandler {
+func NewAPIHandler(syncSvc SyncAPIService, entitySvc entities.EntityService, campaignSvc campaigns.CampaignService, relationSvc relations.RelationService) *APIHandler {
 	return &APIHandler{
 		syncSvc:     syncSvc,
 		entitySvc:   entitySvc,
 		campaignSvc: campaignSvc,
+		relationSvc: relationSvc,
 	}
 }
 
@@ -513,4 +516,28 @@ func (h *APIHandler) Sync(c echo.Context) error {
 		HasMore:    hasMore,
 		Results:    results,
 	})
+}
+
+// --- Entity Relations ---
+
+// ListEntityRelations returns all relations for an entity, enriched with target
+// entity display data and metadata (price, quantity for shop inventory).
+// GET /api/v1/campaigns/:id/entities/:entityID/relations
+func (h *APIHandler) ListEntityRelations(c echo.Context) error {
+	entityID := c.Param("entityID")
+	if entityID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "entity ID required")
+	}
+
+	rels, err := h.relationSvc.ListByEntity(c.Request().Context(), entityID)
+	if err != nil {
+		slog.Error("listing entity relations", slog.String("entity_id", entityID), slog.String("error", err.Error()))
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list relations")
+	}
+
+	if rels == nil {
+		rels = []relations.Relation{}
+	}
+
+	return c.JSON(http.StatusOK, rels)
 }

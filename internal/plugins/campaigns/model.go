@@ -268,6 +268,7 @@ const (
 	BlockPinnedPages     = "pinned_pages"     // Pinned entities grid.
 	BlockCalendarPreview = "calendar_preview" // Upcoming calendar events.
 	BlockTimelinePreview = "timeline_preview" // Timeline visualization preview.
+	BlockMapPreview      = "map_preview"      // Embedded map viewer.
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -286,6 +287,7 @@ var ValidBlockTypes = map[string]bool{
 	BlockPinnedPages:     true,
 	BlockCalendarPreview: true,
 	BlockTimelinePreview: true,
+	BlockMapPreview:      true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
 	BlockSearchBar:      true,

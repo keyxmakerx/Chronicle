@@ -9,7 +9,10 @@
 // and are mounted on entity profile pages.
 package relations
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Relation represents a single directional link between two entities within
 // a campaign. The service layer always creates relations in pairs (forward
@@ -30,6 +33,11 @@ type Relation struct {
 	TargetEntityColor string `json:"targetEntityColor,omitempty"`
 	TargetEntitySlug  string `json:"targetEntitySlug,omitempty"`
 	TargetEntityType  string `json:"targetEntityType,omitempty"`
+
+	// Metadata holds relation-specific JSON data (e.g., shop inventory:
+	// price, quantity, stock status). Populated from the metadata column
+	// added in migration 000046.
+	Metadata json.RawMessage `json:"metadata,omitempty"`
 }
 
 // --- Request DTOs (bound from HTTP requests) ---
