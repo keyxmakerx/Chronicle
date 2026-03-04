@@ -13,6 +13,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
+	"syscall"
 	"time"
 
 	// Register decoders for image formats.
@@ -38,6 +40,60 @@ type MediaService interface {
 	FilePath(file *MediaFile) string
 	ThumbnailPath(file *MediaFile, size string) string
 	SetStorageLimiter(limiter StorageLimiter)
+
+	// ListCampaignMedia returns paginated media files for a campaign.
+	ListCampaignMedia(ctx context.Context, campaignID string, page, perPage int) ([]MediaFile, int, error)
+
+	// GetCampaignStats returns aggregate storage stats for a campaign.
+	GetCampaignStats(ctx context.Context, campaignID string) (*CampaignMediaStats, error)
+
+	// FindReferences returns entities that reference a media file.
+	FindReferences(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error)
+
+	// DeleteCampaignMedia deletes a media file after verifying it belongs to the campaign.
+	DeleteCampaignMedia(ctx context.Context, campaignID, mediaID string) error
+
+	// CleanupOrphans finds files on disk without a corresponding DB record and
+	// deletes them. Returns the number of files removed.
+	CleanupOrphans(ctx context.Context) (int, error)
+}
+
+// maxConcurrentUploadsPerUser limits simultaneous uploads per user to prevent
+// resource exhaustion from parallel large file processing.
+const maxConcurrentUploadsPerUser = 3
+
+// minFreeDiskBytes is the minimum free disk space required after writing a file.
+// Uploads are rejected if writing the file would leave less than this available.
+const minFreeDiskBytes = 100 * 1024 * 1024 // 100 MB
+
+// uploadSemaphore tracks concurrent uploads per user.
+type uploadSemaphore struct {
+	mu    sync.Mutex
+	slots map[string]int
+}
+
+// acquire increments the user's active upload count and returns true, or
+// returns false if the user has reached the concurrency limit.
+func (s *uploadSemaphore) acquire(userID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.slots[userID] >= maxConcurrentUploadsPerUser {
+		return false
+	}
+	s.slots[userID]++
+	return true
+}
+
+// release decrements the user's active upload count.
+func (s *uploadSemaphore) release(userID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.slots[userID] > 0 {
+		s.slots[userID]--
+	}
+	if s.slots[userID] == 0 {
+		delete(s.slots, userID)
+	}
 }
 
 // mediaService implements MediaService.
@@ -46,6 +102,7 @@ type mediaService struct {
 	mediaPath string         // Root directory for file storage.
 	maxSize   int64          // Maximum file size in bytes (static fallback).
 	limiter   StorageLimiter // Dynamic storage limits from settings plugin. May be nil.
+	sem       *uploadSemaphore
 }
 
 // NewMediaService creates a new media service.
@@ -54,6 +111,7 @@ func NewMediaService(repo MediaRepository, mediaPath string, maxSize int64) Medi
 		repo:      repo,
 		mediaPath: mediaPath,
 		maxSize:   maxSize,
+		sem:       &uploadSemaphore{slots: make(map[string]int)},
 	}
 }
 
@@ -65,6 +123,12 @@ func (s *mediaService) SetStorageLimiter(limiter StorageLimiter) {
 
 // Upload validates, stores, and records a new media file.
 func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFile, error) {
+	// Limit concurrent uploads per user to prevent resource exhaustion.
+	if !s.sem.acquire(input.UploadedBy) {
+		return nil, apperror.NewBadRequest("too many concurrent uploads; please wait and try again")
+	}
+	defer s.sem.release(input.UploadedBy)
+
 	// Validate MIME type.
 	if !AllowedMimeTypes[input.MimeType] {
 		return nil, apperror.NewBadRequest("unsupported file type: " + input.MimeType)
@@ -88,6 +152,17 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		return nil, apperror.NewBadRequest("file content does not match declared type")
 	}
 
+	// Re-encode the image to strip ALL metadata (EXIF, IPTC, XMP) and
+	// destroy any polyglot payloads. The decode-then-encode pipeline
+	// produces a clean file containing only pixel data (CDR approach).
+	sanitizedBytes, effectiveMime, err := sanitizeImage(input.FileBytes, input.MimeType)
+	if err != nil {
+		return nil, apperror.NewBadRequest("image sanitization failed: " + err.Error())
+	}
+	input.FileBytes = sanitizedBytes
+	input.FileSize = int64(len(sanitizedBytes))
+	input.MimeType = effectiveMime
+
 	// Generate UUID filename in date-based directory.
 	id := generateUUID()
 	now := time.Now().UTC()
@@ -95,14 +170,19 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 	ext := MimeToExtension[input.MimeType]
 	filename := id + ext
 
-	// Create directory.
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	// Create directory with restrictive permissions.
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("creating media directory: %w", err))
 	}
 
-	// Write file to disk.
+	// Verify sufficient disk space before writing to prevent filling the filesystem.
+	if err := checkDiskSpace(dir, input.FileSize); err != nil {
+		return nil, err
+	}
+
+	// Write sanitized file to disk with restrictive permissions.
 	fullPath := filepath.Join(dir, filename)
-	if err := os.WriteFile(fullPath, input.FileBytes, 0644); err != nil {
+	if err := os.WriteFile(fullPath, input.FileBytes, 0640); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("writing media file: %w", err))
 	}
 
@@ -125,7 +205,7 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		CreatedAt:      now,
 	}
 
-	// Generate thumbnails for images.
+	// Generate thumbnails for images (using sanitized bytes).
 	if file.IsImage() && input.MimeType != "image/gif" {
 		thumbSizes := map[string]int{"300": 300, "800": 800}
 		for sizeLabel, maxDim := range thumbSizes {
@@ -250,6 +330,102 @@ func (s *mediaService) ThumbnailPath(file *MediaFile, size string) string {
 	return s.FilePath(file)
 }
 
+// ListCampaignMedia returns paginated media files for a campaign.
+func (s *mediaService) ListCampaignMedia(ctx context.Context, campaignID string, page, perPage int) ([]MediaFile, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * perPage
+	return s.repo.ListByCampaign(ctx, campaignID, perPage, offset)
+}
+
+// GetCampaignStats returns aggregate storage stats for a campaign.
+func (s *mediaService) GetCampaignStats(ctx context.Context, campaignID string) (*CampaignMediaStats, error) {
+	totalBytes, fileCount, err := s.repo.GetCampaignUsage(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return &CampaignMediaStats{
+		TotalFiles: fileCount,
+		TotalBytes: totalBytes,
+	}, nil
+}
+
+// FindReferences returns entities that reference a media file.
+func (s *mediaService) FindReferences(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error) {
+	return s.repo.FindReferences(ctx, campaignID, mediaID)
+}
+
+// DeleteCampaignMedia deletes a media file after verifying it belongs to the campaign.
+func (s *mediaService) DeleteCampaignMedia(ctx context.Context, campaignID, mediaID string) error {
+	file, err := s.repo.FindByID(ctx, mediaID)
+	if err != nil {
+		return err
+	}
+
+	// Verify the file belongs to this campaign.
+	if file.CampaignID == nil || *file.CampaignID != campaignID {
+		return apperror.NewNotFound("media file not found")
+	}
+
+	return s.Delete(ctx, mediaID)
+}
+
+// CleanupOrphans walks the media directory, checks each file against the
+// database, and deletes any files not tracked. This handles the case where
+// an upload crashes between writing the file and saving the DB record.
+func (s *mediaService) CleanupOrphans(ctx context.Context) (int, error) {
+	knownFiles, err := s.repo.ListAllFilenames(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("listing known files: %w", err)
+	}
+
+	removed := 0
+	err = filepath.Walk(s.mediaPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip unreadable entries.
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		// Get the relative path from mediaPath for comparison with DB filenames.
+		rel, relErr := filepath.Rel(s.mediaPath, path)
+		if relErr != nil {
+			return nil
+		}
+
+		if !knownFiles[rel] {
+			// Grace period: skip files younger than 15 minutes to avoid
+			// deleting files from in-progress uploads (TOCTOU race).
+			if time.Since(info.ModTime()) < 15*time.Minute {
+				slog.Debug("skipping recent orphan file",
+					slog.String("path", rel),
+					slog.Duration("age", time.Since(info.ModTime())),
+				)
+				return nil
+			}
+
+			if removeErr := os.Remove(path); removeErr == nil {
+				removed++
+				slog.Info("removed orphan media file", slog.String("path", rel))
+			} else {
+				slog.Warn("failed to remove orphan media file",
+					slog.String("path", rel),
+					slog.Any("error", removeErr),
+				)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return removed, fmt.Errorf("walking media directory: %w", err)
+	}
+
+	slog.Info("orphan cleanup completed", slog.Int("removed", removed))
+	return removed, nil
+}
+
 // maxImageDimension is the maximum width or height in pixels for uploaded images.
 // Images larger than this are rejected to prevent decompression bomb attacks
 // (e.g., a tiny PNG that decompresses to gigabytes in memory).
@@ -343,6 +519,26 @@ func validateMagicBytes(data []byte, declaredMIME string) bool {
 	default:
 		return false
 	}
+}
+
+// checkDiskSpace verifies that writing a file of the given size will leave at
+// least minFreeDiskBytes of free space. Prevents media uploads from filling
+// the filesystem and breaking other services.
+func checkDiskSpace(path string, fileSize int64) error {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		slog.Warn("disk space check failed, allowing upload",
+			slog.String("path", path),
+			slog.Any("error", err),
+		)
+		return nil // Don't block uploads if statfs fails.
+	}
+	available := int64(stat.Bavail) * int64(stat.Bsize)
+	if available-fileSize < minFreeDiskBytes {
+		return apperror.NewInternal(fmt.Errorf("insufficient disk space: %d bytes available, need %d + %d reserve",
+			available, fileSize, minFreeDiskBytes))
+	}
+	return nil
 }
 
 // generateUUID creates a new v4 UUID string using crypto/rand.

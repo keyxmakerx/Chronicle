@@ -206,6 +206,17 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/edit", cc.Campaign.ID, entity.ID)) }
 					class="btn-secondary text-sm"
 				>Edit</a>
+				<form
+					method="POST"
+					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID)) }
+					hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID) }
+					class="inline"
+				>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<button type="submit" class="btn-secondary text-sm" title="Create a copy of this page">
+						<i class="fa-regular fa-clone mr-1"></i> Clone
+					</button>
+				</form>
 				if cc.MemberRole >= campaigns.RoleOwner {
 					<form
 						method="POST"
@@ -230,7 +241,7 @@ templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
 			<div class="relative group">
 				<img
-					src={ fmt.Sprintf("/media/%s", *entity.ImagePath) }
+					src={ layouts.MediaURL(ctx, *entity.ImagePath) }
 					alt={ entity.Name }
 					class="w-full h-56 object-cover"
 				/>
@@ -249,7 +260,7 @@ templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 		} else {
 			if cc.MemberRole >= campaigns.RoleScribe {
 				<div
-					class="w-full h-40 bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface-alt transition-colors"
+					class="w-full h-40 bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors"
 					data-widget="image-upload"
 					data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
 					data-upload-url="/media/upload"
@@ -407,7 +418,7 @@ templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []En
 						<div class="flex items-center gap-3">
 							if child.ImagePath != nil && *child.ImagePath != "" {
 								<img
-									src={ fmt.Sprintf("/media/%s", *child.ImagePath) }
+									src={ layouts.MediaURL(ctx, *child.ImagePath) }
 									alt={ child.Name }
 									class="w-10 h-10 rounded-lg object-cover shrink-0"
 								/>

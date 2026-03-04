@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -44,6 +45,18 @@ type SettingsRepository interface {
 
 	// ListCampaignLimits returns all per-campaign overrides with campaign names for the admin table.
 	ListCampaignLimits(ctx context.Context) ([]CampaignStorageLimitWithName, error)
+
+	// SetUserBypass sets a temporary bypass on a user's storage limits.
+	SetUserBypass(ctx context.Context, userID string, maxUpload *int64, expiresAt time.Time, reason, grantedBy string) error
+
+	// ClearUserBypass removes the temporary bypass from a user's storage limits.
+	ClearUserBypass(ctx context.Context, userID string) error
+
+	// SetCampaignBypass sets a temporary bypass on a campaign's storage limits.
+	SetCampaignBypass(ctx context.Context, campaignID string, maxStorage *int64, maxFiles *int, expiresAt time.Time, reason, grantedBy string) error
+
+	// ClearCampaignBypass removes the temporary bypass from a campaign's storage limits.
+	ClearCampaignBypass(ctx context.Context, campaignID string) error
 }
 
 // settingsRepository implements SettingsRepository using MariaDB.
@@ -111,12 +124,14 @@ func (r *settingsRepository) GetAll(ctx context.Context) (map[string]string, err
 
 // GetUserLimit returns the per-user override, or nil if no row exists.
 func (r *settingsRepository) GetUserLimit(ctx context.Context, userID string) (*UserStorageLimit, error) {
-	query := `SELECT user_id, max_upload_size, max_total_storage, updated_at
+	query := `SELECT user_id, max_upload_size, max_total_storage, updated_at,
+	                 bypass_max_upload, bypass_expires_at, bypass_reason, bypass_granted_by
 	          FROM user_storage_limits WHERE user_id = ?`
 
 	var ul UserStorageLimit
 	err := r.db.QueryRowContext(ctx, query, userID).Scan(
 		&ul.UserID, &ul.MaxUploadSize, &ul.MaxTotalStorage, &ul.UpdatedAt,
+		&ul.BypassMaxUpload, &ul.BypassExpiresAt, &ul.BypassReason, &ul.BypassGrantedBy,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // No override -- use global defaults.
@@ -160,12 +175,14 @@ func (r *settingsRepository) DeleteUserLimit(ctx context.Context, userID string)
 
 // GetCampaignLimit returns the per-campaign override, or nil if no row exists.
 func (r *settingsRepository) GetCampaignLimit(ctx context.Context, campaignID string) (*CampaignStorageLimit, error) {
-	query := `SELECT campaign_id, max_total_storage, max_files, updated_at
+	query := `SELECT campaign_id, max_total_storage, max_files, updated_at,
+	                 bypass_max_storage, bypass_max_files, bypass_expires_at, bypass_reason, bypass_granted_by
 	          FROM campaign_storage_limits WHERE campaign_id = ?`
 
 	var cl CampaignStorageLimit
 	err := r.db.QueryRowContext(ctx, query, campaignID).Scan(
 		&cl.CampaignID, &cl.MaxTotalStorage, &cl.MaxFiles, &cl.UpdatedAt,
+		&cl.BypassMaxStorage, &cl.BypassMaxFiles, &cl.BypassExpiresAt, &cl.BypassReason, &cl.BypassGrantedBy,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // No override -- use global/user defaults.
@@ -210,6 +227,7 @@ func (r *settingsRepository) DeleteCampaignLimit(ctx context.Context, campaignID
 // ListUserLimits returns all per-user overrides joined with users.display_name.
 func (r *settingsRepository) ListUserLimits(ctx context.Context) ([]UserStorageLimitWithName, error) {
 	query := `SELECT ul.user_id, ul.max_upload_size, ul.max_total_storage, ul.updated_at,
+	                 ul.bypass_max_upload, ul.bypass_expires_at, ul.bypass_reason, ul.bypass_granted_by,
 	                 u.display_name
 	          FROM user_storage_limits ul
 	          JOIN users u ON u.id = ul.user_id
@@ -226,6 +244,7 @@ func (r *settingsRepository) ListUserLimits(ctx context.Context) ([]UserStorageL
 		var l UserStorageLimitWithName
 		if err := rows.Scan(
 			&l.UserID, &l.MaxUploadSize, &l.MaxTotalStorage, &l.UpdatedAt,
+			&l.BypassMaxUpload, &l.BypassExpiresAt, &l.BypassReason, &l.BypassGrantedBy,
 			&l.DisplayName,
 		); err != nil {
 			return nil, apperror.NewInternal(fmt.Errorf("scanning user limit row: %w", err))
@@ -241,6 +260,7 @@ func (r *settingsRepository) ListUserLimits(ctx context.Context) ([]UserStorageL
 // ListCampaignLimits returns all per-campaign overrides joined with campaigns.name.
 func (r *settingsRepository) ListCampaignLimits(ctx context.Context) ([]CampaignStorageLimitWithName, error) {
 	query := `SELECT cl.campaign_id, cl.max_total_storage, cl.max_files, cl.updated_at,
+	                 cl.bypass_max_storage, cl.bypass_max_files, cl.bypass_expires_at, cl.bypass_reason, cl.bypass_granted_by,
 	                 c.name
 	          FROM campaign_storage_limits cl
 	          JOIN campaigns c ON c.id = cl.campaign_id
@@ -257,6 +277,7 @@ func (r *settingsRepository) ListCampaignLimits(ctx context.Context) ([]Campaign
 		var l CampaignStorageLimitWithName
 		if err := rows.Scan(
 			&l.CampaignID, &l.MaxTotalStorage, &l.MaxFiles, &l.UpdatedAt,
+			&l.BypassMaxStorage, &l.BypassMaxFiles, &l.BypassExpiresAt, &l.BypassReason, &l.BypassGrantedBy,
 			&l.CampaignName,
 		); err != nil {
 			return nil, apperror.NewInternal(fmt.Errorf("scanning campaign limit row: %w", err))
@@ -267,4 +288,81 @@ func (r *settingsRepository) ListCampaignLimits(ctx context.Context) ([]Campaign
 		return nil, apperror.NewInternal(fmt.Errorf("iterating campaign limits: %w", err))
 	}
 	return limits, nil
+}
+
+// --- Temporary Bypass Methods ---
+
+// SetUserBypass sets a time-limited bypass on a user's storage limits.
+// If no override row exists for the user, one is created with NULL limits
+// so the bypass columns have a row to live on.
+func (r *settingsRepository) SetUserBypass(ctx context.Context, userID string, maxUpload *int64, expiresAt time.Time, reason, grantedBy string) error {
+	query := `INSERT INTO user_storage_limits (user_id, bypass_max_upload, bypass_expires_at, bypass_reason, bypass_granted_by)
+	          VALUES (?, ?, ?, ?, ?)
+	          ON DUPLICATE KEY UPDATE
+	              bypass_max_upload = VALUES(bypass_max_upload),
+	              bypass_expires_at = VALUES(bypass_expires_at),
+	              bypass_reason = VALUES(bypass_reason),
+	              bypass_granted_by = VALUES(bypass_granted_by)`
+
+	if _, err := r.db.ExecContext(ctx, query, userID, maxUpload, expiresAt, reason, grantedBy); err != nil {
+		return apperror.NewInternal(fmt.Errorf("setting user bypass for %s: %w", userID, err))
+	}
+	return nil
+}
+
+// ClearUserBypass removes the temporary bypass from a user's storage limits
+// by setting all bypass columns to NULL.
+func (r *settingsRepository) ClearUserBypass(ctx context.Context, userID string) error {
+	query := `UPDATE user_storage_limits
+	          SET bypass_max_upload = NULL, bypass_expires_at = NULL,
+	              bypass_reason = NULL, bypass_granted_by = NULL
+	          WHERE user_id = ?`
+
+	result, err := r.db.ExecContext(ctx, query, userID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("clearing user bypass for %s: %w", userID, err))
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("no storage override found for this user")
+	}
+	return nil
+}
+
+// SetCampaignBypass sets a time-limited bypass on a campaign's storage limits.
+// If no override row exists for the campaign, one is created with NULL limits
+// so the bypass columns have a row to live on.
+func (r *settingsRepository) SetCampaignBypass(ctx context.Context, campaignID string, maxStorage *int64, maxFiles *int, expiresAt time.Time, reason, grantedBy string) error {
+	query := `INSERT INTO campaign_storage_limits (campaign_id, bypass_max_storage, bypass_max_files, bypass_expires_at, bypass_reason, bypass_granted_by)
+	          VALUES (?, ?, ?, ?, ?, ?)
+	          ON DUPLICATE KEY UPDATE
+	              bypass_max_storage = VALUES(bypass_max_storage),
+	              bypass_max_files = VALUES(bypass_max_files),
+	              bypass_expires_at = VALUES(bypass_expires_at),
+	              bypass_reason = VALUES(bypass_reason),
+	              bypass_granted_by = VALUES(bypass_granted_by)`
+
+	if _, err := r.db.ExecContext(ctx, query, campaignID, maxStorage, maxFiles, expiresAt, reason, grantedBy); err != nil {
+		return apperror.NewInternal(fmt.Errorf("setting campaign bypass for %s: %w", campaignID, err))
+	}
+	return nil
+}
+
+// ClearCampaignBypass removes the temporary bypass from a campaign's storage limits
+// by setting all bypass columns to NULL.
+func (r *settingsRepository) ClearCampaignBypass(ctx context.Context, campaignID string) error {
+	query := `UPDATE campaign_storage_limits
+	          SET bypass_max_storage = NULL, bypass_max_files = NULL,
+	              bypass_expires_at = NULL, bypass_reason = NULL, bypass_granted_by = NULL
+	          WHERE campaign_id = ?`
+
+	result, err := r.db.ExecContext(ctx, query, campaignID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("clearing campaign bypass for %s: %w", campaignID, err))
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("no storage override found for this campaign")
+	}
+	return nil
 }

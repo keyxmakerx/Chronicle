@@ -8,16 +8,79 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-03 -- HTMX sidebar drill-down conversion + JS hoisting bug fixes. Converted
-sidebar drill-down from 238 lines of JS HTML-building to server-rendered HTMX fragments
-(~95 lines of CSS-toggling JS). Fixed var hoisting bugs in 10 widget files introduced
-by Code Quality Sprint's JS utility consolidation. Branch: `claude/review-codebase-R1WqN`.
+2026-03-04 -- Entity link hover fix + codebase review (batch 15).
+Branch: `claude/review-codebase-R1WqN`.
 
 ## Current Phase
-**Sidebar HTMX conversion + JS hoisting fixes complete.** Sidebar drill-down now uses
-server-rendered Templ fragments via HTMX. All widget JS files use Chronicle.* utilities
-directly (no local aliases). Next: remaining bug fixes (image upload, tag visibility,
-attributes template reset), then media management, API hardening.
+**Entity link hover fix + codebase review.** Completed this session (batch 15):
+- Fixed entity link hover previews: data-mention-id and data-entity-preview were dropped
+  during ProseMirror JSON round-trip because TipTap's Link mark didn't store them.
+  Created MentionLink (extended Link mark) that preserves these attributes in the schema.
+- Entity links now render as styled pills (bg-accent/10, rounded) distinct from regular links.
+- Renamed "Mention Entity" to "Link Entity" in editor Insert menu.
+- Full codebase health review: all 14 plugins, 16 JS widgets, 40 migrations, 294+ tests
+  passing, zero TODO/FIXME comments, clean lint. Ready for Maps Phase 2 + Foundry sync.
+
+Previously completed (batch 14):
+- Temporary storage limit bypass system for admin panel
+
+Previously completed (batch 13):
+- Bug fixes + QoL media browser enhancements
+
+Previously completed (batch 12):
+- REST API v1 media endpoints for Foundry VTT and external tools
+
+Previously completed (batch 11):
+- Security hardening: audit logging, concurrent upload limits, disk space checks, orphan cleanup
+
+Remaining from approved media plan:
+- Part 5e: Media usage indicator in browser (pre-computed reference counts)
+
+Completed (batch 9):
+- Campaign-scoped media browser:
+  - New page at `/campaigns/:id/media` (Owner-only)
+  - Grid view with thumbnails, file info overlay on hover, lazy image loading
+  - "Referenced by" tracking: queries entities by `image_path` and `entry_html` content
+  - HTMX lazy-loaded reference fragments per file
+  - Delete with confirmation warning about broken images
+  - Upload from browser page (Alpine.js uploader with validation)
+  - Storage stats header (file count, total bytes used)
+  - Pagination for large media libraries (24 per page)
+  - Sidebar "Media" link in Manage section (Owner-only, between Activity Log and Customize)
+  - Repository: `FindReferences()` via UNION query on entities
+  - Service: `ListCampaignMedia()`, `GetCampaignStats()`, `FindReferences()`, `DeleteCampaignMedia()`
+  - Routes: `RegisterCampaignRoutes()` function for campaign-scoped media management
+
+Completed (batch 8):
+- Customizable calendar event categories (migration 000039, settings tab, dynamic dropdown)
+
+Completed (batch 7):
+- Search scope expanded: Ctrl+K now searches entities, timelines, maps, calendar events, and sessions
+- Editor callout blocks: blockquote restyled as callout with accent border, background, info icon
+
+Previously completed (batches 1-6):
+- Fixed sidebar drill 403, unsaved changes warning, confirmation dialogs, timeline eras
+- HTMX loading indicator, empty states, calendar click-to-create, event detail view
+- Keyboard shortcuts help, sessions discoverability, form validation feedback
+- Entity cloning, mobile sidebar toggle (already done), timeline event creation (already done)
+- Map marker search
+- All 294+ tests passing
+
+Completed (batch 4):
+- Keyboard shortcuts help overlay (press `?`, Mac-aware ⌘/Ctrl)
+- Sessions addon discoverability (cross-link in calendar header)
+- Form validation feedback (CSS `:user-invalid` red borders, inline error hints)
+
+Completed (batch 5):
+- Entity cloning (Clone button, service method, CopyEntityTags repo, audit logging)
+- Map marker search (client-side filter + pan-to-match on Enter)
+- Verified: mobile sidebar toggle already implemented, timeline event creation already implemented
+
+**Next priorities:**
+1. Media management for campaign owners
+2. Editor tables + callout blocks (requires TipTap bundle rebuild)
+3. Search scope expansion (calendar events, timelines, maps, sessions)
+4. Calendar event categories customization
 
 ### HTMX Sidebar Conversion + JS Hoisting Fixes — COMPLETE
 Branch: `claude/review-codebase-R1WqN`

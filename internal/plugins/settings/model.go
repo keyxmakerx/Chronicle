@@ -5,7 +5,9 @@
 // with 0 meaning unlimited at any tier.
 package settings
 
-import "time"
+import (
+	"time"
+)
 
 // --- Database Models ---
 
@@ -24,6 +26,17 @@ type UserStorageLimit struct {
 	MaxUploadSize   *int64    `json:"max_upload_size"`   // NULL = use global default.
 	MaxTotalStorage *int64    `json:"max_total_storage"`  // NULL = use global default.
 	UpdatedAt       time.Time `json:"updated_at"`
+
+	// Bypass fields: temporary time-limited overrides that take highest priority.
+	BypassMaxUpload *int64     `json:"bypass_max_upload,omitempty"`
+	BypassExpiresAt *time.Time `json:"bypass_expires_at,omitempty"`
+	BypassReason    *string    `json:"bypass_reason,omitempty"`
+	BypassGrantedBy *string    `json:"bypass_granted_by,omitempty"`
+}
+
+// HasActiveBypass returns true if the user has a non-expired bypass.
+func (ul *UserStorageLimit) HasActiveBypass() bool {
+	return ul != nil && ul.BypassExpiresAt != nil && ul.BypassExpiresAt.After(time.Now())
 }
 
 // CampaignStorageLimit represents a per-campaign storage override. NULL fields
@@ -33,6 +46,18 @@ type CampaignStorageLimit struct {
 	MaxTotalStorage *int64    `json:"max_total_storage"` // NULL = use global/user default.
 	MaxFiles        *int      `json:"max_files"`          // NULL = use global default.
 	UpdatedAt       time.Time `json:"updated_at"`
+
+	// Bypass fields: temporary time-limited overrides that take highest priority.
+	BypassMaxStorage *int64     `json:"bypass_max_storage,omitempty"`
+	BypassMaxFiles   *int       `json:"bypass_max_files,omitempty"`
+	BypassExpiresAt  *time.Time `json:"bypass_expires_at,omitempty"`
+	BypassReason     *string    `json:"bypass_reason,omitempty"`
+	BypassGrantedBy  *string    `json:"bypass_granted_by,omitempty"`
+}
+
+// HasActiveBypass returns true if the campaign has a non-expired bypass.
+func (cl *CampaignStorageLimit) HasActiveBypass() bool {
+	return cl != nil && cl.BypassExpiresAt != nil && cl.BypassExpiresAt.After(time.Now())
 }
 
 // --- Display Models (with JOINed names) ---

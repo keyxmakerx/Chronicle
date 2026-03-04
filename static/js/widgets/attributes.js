@@ -402,15 +402,77 @@ Chronicle.register('attributes', {
       });
       container.appendChild(addBtn);
 
+      // Button row: Save + Reset.
+      var btnRow = document.createElement('div');
+      btnRow.className = 'flex items-center gap-2 mt-4';
+
       // Save button.
       var saveBtn = document.createElement('button');
       saveBtn.type = 'button';
-      saveBtn.className = 'chronicle-editor__edit-btn chronicle-editor__edit-btn--done mt-4 w-full';
+      saveBtn.className = 'chronicle-editor__edit-btn chronicle-editor__edit-btn--done flex-1';
       saveBtn.innerHTML = '<i class="fa-solid fa-check" style="font-size:11px"></i> Save Customizations';
       saveBtn.addEventListener('click', function () {
         saveOverrides(overrides);
       });
-      container.appendChild(saveBtn);
+      btnRow.appendChild(saveBtn);
+
+      // Reset to template button (only shown if overrides exist).
+      if (state.fieldOverrides) {
+        var resetBtn = document.createElement('button');
+        resetBtn.type = 'button';
+        resetBtn.className = 'chronicle-editor__edit-btn flex-shrink-0';
+        resetBtn.style.color = 'var(--color-text-muted)';
+        resetBtn.title = 'Reset to category template';
+        resetBtn.innerHTML = '<i class="fa-solid fa-rotate-left" style="font-size:11px"></i> Reset';
+        resetBtn.addEventListener('click', function () {
+          if (!confirm('Reset to category template? Custom fields and visibility changes will be lost.')) return;
+          resetOverrides();
+        });
+        btnRow.appendChild(resetBtn);
+      }
+
+      container.appendChild(btnRow);
+    }
+
+    function resetOverrides() {
+      if (state.isSaving) return;
+      state.isSaving = true;
+
+      var reqHeaders = { 'Accept': 'application/json' };
+      if (config.csrfToken) {
+        reqHeaders['X-CSRF-Token'] = config.csrfToken;
+      }
+
+      fetch(overridesEndpoint, {
+        method: 'DELETE',
+        headers: reqHeaders,
+        credentials: 'same-origin'
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('Failed to reset overrides');
+          state.fieldOverrides = null;
+          state.isCustomizing = false;
+          state.isSaving = false;
+          // Reload to get type-level fields without overrides.
+          return fetch(config.endpoint, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+        })
+        .then(function (r) {
+          if (!r.ok) throw new Error('Failed to reload fields');
+          return r.json();
+        })
+        .then(function (data) {
+          state.fields = data.fields || [];
+          state.typeFields = data.type_fields || data.fields || [];
+          state.fieldsData = data.fields_data || {};
+          state.fieldOverrides = data.field_overrides || null;
+          render();
+        })
+        .catch(function (err) {
+          console.error('[attributes] Reset overrides failed:', err);
+          state.error = 'Failed to reset customizations.';
+          state.isSaving = false;
+          render();
+        });
     }
 
     function saveOverrides(overrides) {

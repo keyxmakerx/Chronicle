@@ -582,6 +582,7 @@ Chronicle.register('relations', {
     }
 
     function deleteRelation(relationId) {
+      if (!confirm('Remove this relation?')) return;
       var reqHeaders = {
         'Accept': 'application/json'
       };

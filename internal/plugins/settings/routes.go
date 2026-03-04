@@ -17,4 +17,10 @@ func RegisterRoutes(adminGroup *echo.Group, h *Handler) {
 	// Per-campaign storage overrides.
 	adminGroup.PUT("/campaigns/:id/storage", h.SetCampaignStorageLimit)
 	adminGroup.DELETE("/campaigns/:id/storage", h.DeleteCampaignStorageLimit)
+
+	// Temporary storage bypass overrides.
+	adminGroup.PUT("/users/:id/storage/bypass", h.SetUserBypass)
+	adminGroup.DELETE("/users/:id/storage/bypass", h.ClearUserBypass)
+	adminGroup.PUT("/campaigns/:id/storage/bypass", h.SetCampaignBypass)
+	adminGroup.DELETE("/campaigns/:id/storage/bypass", h.ClearCampaignBypass)
 }

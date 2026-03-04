@@ -120,6 +120,17 @@
     @apply opacity-60 cursor-not-allowed;
     background-color: var(--color-bg-tertiary);
   }
+  /* Show red border after user interaction on invalid required/pattern fields. */
+  .input:user-invalid {
+    @apply border-red-500 focus:ring-red-500/30 focus:border-red-500;
+  }
+  .input-error {
+    @apply border-red-500 focus:ring-red-500/30 focus:border-red-500;
+  }
+  /* Inline validation hint shown below an input. */
+  .field-error {
+    @apply text-xs text-red-600 dark:text-red-400 mt-1;
+  }
 
   /* ---- Links ---- */
   .link {
@@ -309,8 +320,19 @@
   .chronicle-editor__status--unsaved { @apply text-amber-600; }
   .chronicle-editor__status--error { @apply text-red-600; }
 
-  /* ---- Mention Links in Editor ---- */
-  .chronicle-editor__content a[data-mention-id] {
+  /* ---- Entity Links (mention-style references to other entities) ---- */
+  /* Styled as distinctive inline pills so they stand out from regular links. */
+  .chronicle-editor__content a.entity-link,
+  .prose a.entity-link {
+    @apply text-accent font-medium no-underline cursor-pointer
+           rounded bg-accent/10 px-1 py-0.5
+           hover:bg-accent/20 transition-colors;
+    user-select: all;
+  }
+
+  /* Fallback for entity links rendered without the class (legacy content). */
+  .chronicle-editor__content a[data-mention-id]:not(.entity-link),
+  .prose a[data-mention-id]:not(.entity-link) {
     @apply text-accent font-medium no-underline hover:underline;
   }
 
@@ -334,9 +356,36 @@
     color: var(--color-text-primary);
   }
   .chronicle-editor__content .tiptap blockquote {
-    border-left-color: var(--color-border);
-    color: var(--color-text-secondary);
+    @apply bg-accent/5 rounded-r-lg py-3 px-4 my-4;
+    border-left: 3px solid var(--color-accent);
+    color: var(--color-text-body);
   }
+  .chronicle-editor__content .tiptap blockquote::before {
+    content: '\f05a'; /* fa-circle-info */
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    font-size: 12px;
+    @apply text-accent/70 mr-2;
+    float: left;
+    margin-top: 2px;
+  }
+  .chronicle-editor__content .tiptap blockquote p {
+    @apply my-0;
+  }
+  /* ---- Callout styling for read-only prose views (entity pages, dashboards) ---- */
+  .prose blockquote {
+    @apply bg-accent/5 rounded-r-lg not-italic;
+    border-left: 3px solid var(--color-accent);
+    color: var(--color-text-body);
+  }
+  .prose blockquote::before {
+    content: '\f05a'; /* fa-circle-info */
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    font-size: 11px;
+    @apply text-accent/70 mr-2;
+  }
+
   .chronicle-editor__content .tiptap code {
     color: var(--color-text-body);
   }
@@ -1336,5 +1385,36 @@
     font-family: ui-monospace, SFMono-Regular, monospace;
     color: var(--color-fg-muted, #565f89);
     white-space: nowrap;
+  }
+
+  /* --- HTMX Loading Indicator ---
+   * A thin progress bar fixed at the top of the viewport. Hidden by default,
+   * shown via .htmx-request class that HTMX adds during active requests. */
+  .htmx-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 9999;
+    background: var(--color-accent, #6366f1);
+    transform: scaleX(0);
+    transform-origin: left;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+
+  body.htmx-request .htmx-indicator {
+    opacity: 1;
+    transform: scaleX(1);
+    animation: htmx-progress 2s ease-in-out infinite;
+  }
+
+  @keyframes htmx-progress {
+    0%   { transform: scaleX(0); transform-origin: left; }
+    50%  { transform: scaleX(0.7); transform-origin: left; }
+    51%  { transform-origin: right; }
+    100% { transform: scaleX(0); transform-origin: right; }
   }
 }

@@ -22,6 +22,7 @@ import (
 type EntityService interface {
 	// Entity CRUD
 	Create(ctx context.Context, campaignID, userID string, input CreateEntityInput) (*Entity, error)
+	Clone(ctx context.Context, campaignID, userID, sourceEntityID string) (*Entity, error)
 	GetByID(ctx context.Context, id string) (*Entity, error)
 	GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
@@ -161,6 +162,74 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 	)
 
 	return entity, nil
+}
+
+// Clone creates a copy of an existing entity. Copies name (with " (Copy)" suffix),
+// entry, image, parent, privacy, fields, field overrides, popup config, and tags.
+// Does NOT copy relations (they reference other entities and shouldn't be duplicated).
+func (s *entityService) Clone(ctx context.Context, campaignID, userID, sourceEntityID string) (*Entity, error) {
+	source, err := s.entities.FindByID(ctx, sourceEntityID)
+	if err != nil {
+		return nil, apperror.NewNotFound("source entity not found")
+	}
+	if source.CampaignID != campaignID {
+		return nil, apperror.NewNotFound("source entity not found")
+	}
+
+	// Generate name and unique slug for the clone.
+	cloneName := source.Name + " (Copy)"
+	if len(cloneName) > 200 {
+		cloneName = cloneName[:200]
+	}
+	slug, err := s.generateSlug(ctx, campaignID, cloneName)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("generating slug for clone: %w", err))
+	}
+
+	now := time.Now().UTC()
+	fieldsData := source.FieldsData
+	if fieldsData == nil {
+		fieldsData = make(map[string]any)
+	}
+
+	clone := &Entity{
+		ID:             generateUUID(),
+		CampaignID:     campaignID,
+		EntityTypeID:   source.EntityTypeID,
+		Name:           cloneName,
+		Slug:           slug,
+		Entry:          source.Entry,
+		EntryHTML:      source.EntryHTML,
+		ImagePath:      source.ImagePath,
+		ParentID:       source.ParentID,
+		TypeLabel:      source.TypeLabel,
+		IsPrivate:      source.IsPrivate,
+		IsTemplate:     source.IsTemplate,
+		FieldsData:     fieldsData,
+		FieldOverrides: source.FieldOverrides,
+		PopupConfig:    source.PopupConfig,
+		CreatedBy:      userID,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	if err := s.entities.Create(ctx, clone); err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("creating cloned entity: %w", err))
+	}
+
+	// Copy tags from source to clone.
+	if err := s.entities.CopyEntityTags(ctx, sourceEntityID, clone.ID); err != nil {
+		slog.Warn("failed to copy tags during clone", slog.String("source", sourceEntityID), slog.String("clone", clone.ID), slog.Any("error", err))
+	}
+
+	slog.Info("entity cloned",
+		slog.String("source_id", sourceEntityID),
+		slog.String("clone_id", clone.ID),
+		slog.String("campaign_id", campaignID),
+		slog.String("name", cloneName),
+	)
+
+	return clone, nil
 }
 
 // GetByID retrieves an entity by ID.

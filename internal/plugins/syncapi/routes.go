@@ -47,7 +47,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 // All routes require API key authentication. Permission middleware enforces
 // read/write/sync access levels. Campaign match middleware ensures keys can
 // only access their scoped campaign.
-func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, syncSvc SyncAPIService) {
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, syncSvc SyncAPIService) {
 	// API v1 group with key auth and rate limiting.
 	v1 := e.Group("/api/v1",
 		RequireAPIKey(syncSvc),
@@ -89,6 +89,15 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.POST("/calendar/advance-time", calAPI.AdvanceTime, RequirePermission(PermWrite))
 	cg.GET("/calendar/export", calAPI.ExportCalendar, RequirePermission(PermRead))
 	cg.POST("/calendar/import", calAPI.ImportCalendar, RequirePermission(PermWrite))
+
+	// Media read endpoints (require "read" permission).
+	cg.GET("/media", mediaAPI.ListMedia, RequirePermission(PermRead))
+	cg.GET("/media/stats", mediaAPI.GetMediaStats, RequirePermission(PermRead))
+	cg.GET("/media/:mediaID", mediaAPI.GetMedia, RequirePermission(PermRead))
+
+	// Media write endpoints (require "write" permission).
+	cg.POST("/media", mediaAPI.UploadMedia, RequirePermission(PermWrite))
+	cg.DELETE("/media/:mediaID", mediaAPI.DeleteMedia, RequirePermission(PermWrite))
 
 	// Sync endpoint (require "sync" permission).
 	cg.POST("/sync", api.Sync, RequirePermission(PermSync))

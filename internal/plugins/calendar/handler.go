@@ -47,7 +47,7 @@ func (h *Handler) Show(c echo.Context) error {
 	// If no calendar exists, show setup page.
 	if cal == nil {
 		csrfToken := middleware.GetCSRFToken(c)
-		if c.Request().Header.Get("HX-Request") != "" {
+		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
 		}
 		return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
@@ -85,7 +85,7 @@ func (h *Handler) Show(c echo.Context) error {
 		CSRFToken:  middleware.GetCSRFToken(c),
 	}
 
-	if c.Request().Header.Get("HX-Request") != "" {
+	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, CalendarGridFragment(cc, data))
 	}
 	return middleware.Render(c, http.StatusOK, CalendarPage(cc, data))
@@ -478,6 +478,46 @@ func (h *Handler) UpdateErasAPI(c echo.Context) error {
 	return h.svc.SetEras(ctx, cal.ID, eras)
 }
 
+// UpdateEventCategoriesAPI replaces all event categories.
+// PUT /campaigns/:id/calendar/event-categories
+func (h *Handler) UpdateEventCategoriesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	var cats []EventCategoryInput
+	if err := c.Bind(&cats); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	return h.svc.SetEventCategories(ctx, cal.ID, cats)
+}
+
+// GetEventCategoriesAPI returns all event categories for a calendar.
+// GET /campaigns/:id/calendar/event-categories
+func (h *Handler) GetEventCategoriesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil || cal == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+	}
+
+	cats, err := h.svc.GetEventCategories(ctx, cal.ID)
+	if err != nil {
+		return err
+	}
+	if cats == nil {
+		cats = []EventCategory{}
+	}
+	return c.JSON(http.StatusOK, cats)
+}
+
 // DeleteCalendarAPI removes the calendar and all its data.
 // DELETE /campaigns/:id/calendar
 func (h *Handler) DeleteCalendarAPI(c echo.Context) error {
@@ -511,7 +551,7 @@ func (h *Handler) ShowSettings(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
-	if c.Request().Header.Get("HX-Request") != "" {
+	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, CalendarSettingsFragment(cc, cal, csrfToken))
 	}
 	return middleware.Render(c, http.StatusOK, CalendarSettingsPage(cc, cal, csrfToken))
@@ -648,7 +688,7 @@ func (h *Handler) ShowTimeline(c echo.Context) error {
 
 	if cal == nil {
 		csrfToken := middleware.GetCSRFToken(c)
-		if c.Request().Header.Get("HX-Request") != "" {
+		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
 		}
 		return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
@@ -679,7 +719,7 @@ func (h *Handler) ShowTimeline(c echo.Context) error {
 		CSRFToken:  middleware.GetCSRFToken(c),
 	}
 
-	if c.Request().Header.Get("HX-Request") != "" {
+	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, TimelineFragment(cc, data))
 	}
 	return middleware.Render(c, http.StatusOK, TimelinePage(cc, data))

@@ -9,20 +9,26 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // RegisterRoutes sets up all media-related routes on the given Echo instance.
 // maxUploadSize is used to limit request body size on the upload endpoint so
 // oversized payloads are rejected before being read into memory.
-func RegisterRoutes(e *echo.Echo, h *Handler, authSvc auth.AuthService, maxUploadSize int64) {
-	// Public route: serve media files with cache headers.
-	// SECURITY NOTE: Media files are served without authentication, relying on
-	// UUID-based unguessability (122 bits of entropy). This is a deliberate
-	// tradeoff: adding auth here would break image loading on public campaign
-	// pages for non-logged-in users. If you need stricter access control for
-	// private campaign media, add auth middleware and check campaign membership.
-	e.GET("/media/:id", h.Serve)
-	e.GET("/media/:id/thumb/:size", h.ServeThumbnail)
+// serveRateLimit controls the max media serve requests per minute per IP (0 = 300 default).
+func RegisterRoutes(e *echo.Echo, h *Handler, authSvc auth.AuthService, maxUploadSize int64, serveRateLimit int) {
+	// Serve routes are protected by:
+	// 1. HMAC-signed URLs (handler-level, verifies cryptographic signature)
+	// 2. Campaign membership check for private campaigns (handler-level)
+	// 3. Per-IP rate limiting (middleware-level, prevents scraping/DoS)
+	// 4. OptionalAuth for session-based fallback access during migration
+	if serveRateLimit <= 0 {
+		serveRateLimit = 300
+	}
+	serveRL := middleware.RateLimit(serveRateLimit, time.Minute)
+	authOptional := auth.OptionalAuth(authSvc)
+	e.GET("/media/:id", h.Serve, authOptional, serveRL)
+	e.GET("/media/:id/thumb/:size", h.ServeThumbnail, authOptional, serveRL)
 
 	// Authenticated routes.
 	authMw := auth.RequireAuth(authSvc)
@@ -37,6 +43,20 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authSvc auth.AuthService, maxUploa
 	e.POST("/media/upload", h.Upload, authMw, uploadRateLimit, bodyLimit)
 	e.GET("/media/:fileID/info", h.Info, authMw)
 	e.DELETE("/media/:fileID", h.Delete, authMw)
+}
+
+// RegisterCampaignRoutes sets up campaign-scoped media management routes.
+// The media browser is Owner-only -- allows browsing, deleting, and
+// checking which entities reference each file.
+func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+	)
+
+	cg.GET("/media", h.CampaignMedia, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.DELETE("/media/:mid", h.CampaignDeleteMedia, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.GET("/media/:mid/refs", h.CampaignMediaRefs, campaigns.RequireRole(campaigns.RoleOwner))
 }
 
 // bodyLimitMiddleware returns middleware that rejects request bodies exceeding

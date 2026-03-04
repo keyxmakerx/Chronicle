@@ -246,6 +246,10 @@ func (m *mockEntityRepo) UpdatePopupConfig(ctx context.Context, entityID string,
 	return nil
 }
 
+func (m *mockEntityRepo) CopyEntityTags(ctx context.Context, sourceEntityID, targetEntityID string) error {
+	return nil
+}
+
 // --- Test Helpers ---
 
 func newTestService(entityRepo *mockEntityRepo, typeRepo *mockEntityTypeRepo) EntityService {

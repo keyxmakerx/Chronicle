@@ -123,6 +123,14 @@ type UploadConfig struct {
 
 	// MediaPath is the root directory for media file storage.
 	MediaPath string
+
+	// SigningSecret is the HMAC-SHA256 key for signing media URLs.
+	// Auto-generated on first boot if not set. Must be at least 32 bytes.
+	SigningSecret string
+
+	// ServeRateLimit is the max requests per minute per IP for media serve
+	// routes (GET /media/:id). 0 means use default (300/min).
+	ServeRateLimit int
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -155,8 +163,10 @@ func Load() (*Config, error) {
 		},
 
 		Upload: UploadConfig{
-			MaxSize:   getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
-			MediaPath: getEnv("MEDIA_PATH", "./media"),
+			MaxSize:        getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
+			MediaPath:      getEnv("MEDIA_PATH", "./media"),
+			SigningSecret:  getEnv("MEDIA_SIGNING_SECRET", ""),
+			ServeRateLimit: getEnvInt("MEDIA_SERVE_RATE_LIMIT", 300),
 		},
 	}
 

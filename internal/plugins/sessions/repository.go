@@ -14,6 +14,7 @@ type SessionRepository interface {
 	Create(ctx context.Context, campaignID string, s *Session) error
 	FindByID(ctx context.Context, id string) (*Session, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]Session, error)
+	SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error)
 	Update(ctx context.Context, s *Session) error
 	Delete(ctx context.Context, id string) error
 
@@ -117,6 +118,40 @@ func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID strin
 			&s.CreatorName,
 		); err != nil {
 			return nil, fmt.Errorf("scanning session row: %w", err)
+		}
+		sessions = append(sessions, s)
+	}
+	return sessions, rows.Err()
+}
+
+// SearchByCampaign returns sessions matching a name query for a campaign.
+func (r *sessionRepository) SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error) {
+	q := `SELECT s.id, s.campaign_id, s.name, s.summary,
+	             s.scheduled_date, s.calendar_year, s.calendar_month, s.calendar_day,
+	             s.status, s.sort_order, s.created_by, s.created_at, s.updated_at,
+	             u.display_name
+	      FROM sessions s
+	      LEFT JOIN users u ON u.id = s.created_by
+	      WHERE s.campaign_id = ? AND s.name LIKE ?
+	      ORDER BY s.name
+	      LIMIT 10`
+
+	rows, err := r.db.QueryContext(ctx, q, campaignID, "%"+query+"%")
+	if err != nil {
+		return nil, fmt.Errorf("search sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []Session
+	for rows.Next() {
+		var s Session
+		if err := rows.Scan(
+			&s.ID, &s.CampaignID, &s.Name, &s.Summary,
+			&s.ScheduledDate, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+			&s.Status, &s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
+			&s.CreatorName,
+		); err != nil {
+			return nil, fmt.Errorf("scanning session search row: %w", err)
 		}
 		sessions = append(sessions, s)
 	}

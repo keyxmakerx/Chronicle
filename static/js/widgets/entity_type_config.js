@@ -37,10 +37,7 @@
       }
 
       // Fetch sidebar config from server.
-      fetch(sidebarEndpoint, {
-        headers: { 'Accept': 'application/json' },
-        credentials: 'same-origin'
-      })
+      Chronicle.apiFetch(sidebarEndpoint)
         .then(function (res) {
           if (!res.ok) throw new Error('HTTP ' + res.status);
           return res.json();
@@ -228,11 +225,9 @@
           if (t.id === typeID) t.color = newColor;
         });
 
-        fetch(layoutBase + '/' + typeID + '/color', {
+        Chronicle.apiFetch(layoutBase + '/' + typeID + '/color', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf() },
-          credentials: 'same-origin',
-          body: JSON.stringify({ color: newColor })
+          body: { color: newColor }
         })
           .then(function (res) {
             if (!res.ok) console.error('[entity-type-config] Color save failed: HTTP ' + res.status);
@@ -254,14 +249,12 @@
       // --- Save ---
 
       function saveSidebarConfig() {
-        fetch(sidebarEndpoint, {
+        Chronicle.apiFetch(sidebarEndpoint, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf() },
-          credentials: 'same-origin',
-          body: JSON.stringify({
+          body: {
             entity_type_order: sidebarConfig.entity_type_order || [],
             hidden_type_ids: sidebarConfig.hidden_type_ids || []
-          })
+          }
         })
           .then(function (res) {
             if (!res.ok) console.error('[entity-type-config] Sidebar save failed: HTTP ' + res.status);

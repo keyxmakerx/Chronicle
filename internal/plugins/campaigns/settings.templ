@@ -44,6 +44,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 					hx-swap="outerHTML"
 					id="campaign-details-form"
 					class="space-y-4"
+					data-track-changes="campaign-settings"
 				>
 					<input type="hidden" name="_method" value="PUT"/>
 					<input type="hidden" name="csrf_token" value={ csrfToken }/>

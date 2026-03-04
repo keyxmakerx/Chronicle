@@ -12,12 +12,14 @@ import "time"
 
 // Tag represents a campaign-scoped label that can be attached to entities.
 // Tags have a unique slug within their campaign for URL-safe references.
+// DmOnly tags are only visible to Scribes and Owners — Players cannot see them.
 type Tag struct {
 	ID         int       `json:"id"`
 	CampaignID string    `json:"campaignId"`
 	Name       string    `json:"name"`
 	Slug       string    `json:"slug"`
 	Color      string    `json:"color"`
+	DmOnly     bool      `json:"dmOnly"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
@@ -33,14 +35,16 @@ type EntityTag struct {
 
 // CreateTagRequest holds the data submitted when creating a new tag.
 type CreateTagRequest struct {
-	Name  string `json:"name" form:"name"`
-	Color string `json:"color" form:"color"`
+	Name   string `json:"name" form:"name"`
+	Color  string `json:"color" form:"color"`
+	DmOnly bool   `json:"dmOnly" form:"dmOnly"`
 }
 
 // UpdateTagRequest holds the data submitted when updating an existing tag.
 type UpdateTagRequest struct {
-	Name  string `json:"name" form:"name"`
-	Color string `json:"color" form:"color"`
+	Name   string `json:"name" form:"name"`
+	Color  string `json:"color" form:"color"`
+	DmOnly bool   `json:"dmOnly" form:"dmOnly"`
 }
 
 // SetEntityTagsRequest holds the array of tag IDs to assign to an entity.

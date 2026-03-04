@@ -30,6 +30,8 @@ const (
 	keyCustomLinks       ctxKey = "layout_custom_links"
 	keyViewingAsPlayer   ctxKey = "layout_viewing_as_player"
 	keyIsOwner           ctxKey = "layout_is_owner"
+	keyMediaURLFunc      ctxKey = "layout_media_url_func"
+	keyMediaThumbFunc    ctxKey = "layout_media_thumb_func"
 )
 
 // SidebarEntityType holds the minimum entity type info needed for sidebar
@@ -347,4 +349,47 @@ func SetIsOwner(ctx context.Context, isOwner bool) context.Context {
 func IsOwner(ctx context.Context) bool {
 	isOwner, _ := ctx.Value(keyIsOwner).(bool)
 	return isOwner
+}
+
+// --- Signed Media URLs ---
+
+// MediaURLFunc generates a signed media URL given a file ID.
+// The function encapsulates the HMAC signing logic so templates don't
+// need to import the media package.
+type MediaURLFunc func(fileID string) string
+
+// MediaThumbFunc generates a signed thumbnail URL given a file ID and size.
+type MediaThumbFunc func(fileID, size string) string
+
+// SetMediaURLFunc stores the signed URL generator in context. Called by
+// the LayoutInjector in app/routes.go after the URLSigner is created.
+func SetMediaURLFunc(ctx context.Context, fn MediaURLFunc) context.Context {
+	return context.WithValue(ctx, keyMediaURLFunc, fn)
+}
+
+// SetMediaThumbFunc stores the signed thumbnail URL generator in context.
+func SetMediaThumbFunc(ctx context.Context, fn MediaThumbFunc) context.Context {
+	return context.WithValue(ctx, keyMediaThumbFunc, fn)
+}
+
+// MediaURL returns a signed URL for a media file. Falls back to an
+// unsigned URL if no signing function is configured (dev mode, migration).
+func MediaURL(ctx context.Context, fileID string) string {
+	if fn, ok := ctx.Value(keyMediaURLFunc).(MediaURLFunc); ok && fn != nil {
+		return fn(fileID)
+	}
+	return "/media/" + fileID
+}
+
+// MediaThumbURL returns a signed URL for a media thumbnail at the given
+// size. Falls back to an unsigned URL if no signing function is configured.
+func MediaThumbURL(ctx context.Context, fileID, size string) string {
+	if fn, ok := ctx.Value(keyMediaURLFunc).(MediaURLFunc); ok && fn != nil {
+		// The signing function handles full URLs; for thumbnails we need
+		// the thumb-specific variant. We store a second function for this.
+		if thumbFn, ok2 := ctx.Value(keyMediaThumbFunc).(MediaThumbFunc); ok2 && thumbFn != nil {
+			return thumbFn(fileID, size)
+		}
+	}
+	return "/media/" + fileID + "/thumb/" + size
 }

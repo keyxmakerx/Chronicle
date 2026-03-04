@@ -28,6 +28,7 @@ templ CampaignCreateForm(csrfToken string, req *CreateCampaignRequest, errMsg st
 			hx-post="/campaigns"
 			hx-target="#campaign-form"
 			hx-swap="outerHTML"
+			data-track-changes="campaign-create"
 		>
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
 

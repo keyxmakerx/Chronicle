@@ -36,6 +36,8 @@ type CalendarService interface {
 	SetMoons(ctx context.Context, calendarID string, moons []MoonInput) error
 	SetSeasons(ctx context.Context, calendarID string, seasons []Season) error
 	SetEras(ctx context.Context, calendarID string, eras []EraInput) error
+	SetEventCategories(ctx context.Context, calendarID string, cats []EventCategoryInput) error
+	GetEventCategories(ctx context.Context, calendarID string) ([]EventCategory, error)
 
 	// Events.
 	CreateEvent(ctx context.Context, calendarID string, input CreateEventInput) (*Event, error)
@@ -47,6 +49,9 @@ type CalendarService interface {
 	ListEventsForEntity(ctx context.Context, entityID string, role int, userID string) ([]Event, error)
 	ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int, userID string) ([]Event, error)
 	ListEventsForYear(ctx context.Context, calendarID string, year int, role int, userID string) ([]Event, error)
+
+	// Search.
+	SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
 
 	// Date/time helpers.
 	AdvanceDate(ctx context.Context, calendarID string, days int) error
@@ -186,6 +191,10 @@ func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error
 		if err := s.SetWeekdays(ctx, cal.ID, gregorianWeekdays); err != nil {
 			return err
 		}
+		// Seed default event categories.
+		if err := s.SetEventCategories(ctx, cal.ID, DefaultEventCategories()); err != nil {
+			return err
+		}
 		// Sync current date/time from wall clock.
 		now := time.Now().UTC()
 		return s.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
@@ -232,7 +241,10 @@ func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error
 		{Name: "Day 6", SortOrder: 5},
 		{Name: "Day 7", SortOrder: 6},
 	}
-	return s.SetWeekdays(ctx, cal.ID, defaultWeekdays)
+	if err := s.SetWeekdays(ctx, cal.ID, defaultWeekdays); err != nil {
+		return err
+	}
+	return s.SetEventCategories(ctx, cal.ID, DefaultEventCategories())
 }
 
 // GetCalendar returns the full calendar for a campaign with all sub-resources.
@@ -276,6 +288,9 @@ func (s *calendarService) eagerLoad(ctx context.Context, cal *Calendar) (*Calend
 	}
 	if cal.Eras, err = s.repo.GetEras(ctx, cal.ID); err != nil {
 		return nil, fmt.Errorf("get eras: %w", err)
+	}
+	if cal.EventCategories, err = s.repo.GetEventCategories(ctx, cal.ID); err != nil {
+		return nil, fmt.Errorf("get event categories: %w", err)
 	}
 	return cal, nil
 }
@@ -410,6 +425,27 @@ func (s *calendarService) SetEras(ctx context.Context, calendarID string, eras [
 		}
 	}
 	return s.repo.SetEras(ctx, calendarID, eras)
+}
+
+// SetEventCategories replaces all event categories. Validates names and slugs.
+func (s *calendarService) SetEventCategories(ctx context.Context, calendarID string, cats []EventCategoryInput) error {
+	for i, c := range cats {
+		if c.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("category %d: name is required", i+1))
+		}
+		if c.Slug == "" {
+			return apperror.NewValidation(fmt.Sprintf("category %d: slug is required", i+1))
+		}
+		if c.Color == "" {
+			cats[i].Color = "#6b7280"
+		}
+	}
+	return s.repo.SetEventCategories(ctx, calendarID, cats)
+}
+
+// GetEventCategories returns all event categories for a calendar.
+func (s *calendarService) GetEventCategories(ctx context.Context, calendarID string) ([]EventCategory, error) {
+	return s.repo.GetEventCategories(ctx, calendarID)
 }
 
 // CreateEvent creates a new calendar event.
@@ -859,4 +895,34 @@ func validateVisibilityRules(rulesJSON *string) error {
 		return apperror.NewValidation("visibility_rules must be valid JSON: " + err.Error())
 	}
 	return nil
+}
+
+// SearchCalendarEvents returns calendar events matching a query for the quick search system.
+// Looks up the campaign's calendar first, then searches events by name with role-based filtering.
+func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error) {
+	cal, err := s.repo.GetByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("search calendar events: %w", err)
+	}
+	if cal == nil {
+		return nil, nil
+	}
+
+	events, err := s.repo.SearchEvents(ctx, cal.ID, query, role)
+	if err != nil {
+		return nil, fmt.Errorf("search calendar events: %w", err)
+	}
+
+	results := make([]map[string]string, 0, len(events))
+	for _, e := range events {
+		results = append(results, map[string]string{
+			"id":         e.ID,
+			"name":       e.Name,
+			"type_name":  "Event",
+			"type_icon":  "fa-calendar",
+			"type_color": "#f59e0b",
+			"url":        fmt.Sprintf("/campaigns/%s/calendar", campaignID),
+		})
+	}
+	return results, nil
 }

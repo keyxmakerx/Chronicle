@@ -27,6 +27,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 		AllowPublicCampaignAccess(svc),
 	)
 	pub.GET("", h.Show, RequireRole(RolePlayer))
+	// Sidebar drill-down for public visitors (clicking categories in sidebar).
+	pub.GET("/sidebar/drill/:slug", h.SidebarDrill, RequireRole(RolePlayer))
 
 	// Authenticated campaign-scoped routes require membership.
 	cg := e.Group("/campaigns/:id",
@@ -44,9 +46,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.GET("/settings", h.Settings, RequireRole(RoleOwner))
 	cg.GET("/customize", h.Customize, RequireRole(RoleOwner))
 	cg.GET("/customize/layout-editor/:etid", h.LayoutEditorFragment, RequireRole(RoleOwner))
-
-	// Sidebar drill-down panel (HTMX fragment, all members).
-	cg.GET("/sidebar/drill/:slug", h.SidebarDrill, RequireRole(RolePlayer))
 
 	// Sidebar config API (Owner only).
 	cg.GET("/sidebar-config", h.GetSidebarConfig, RequireRole(RoleOwner))

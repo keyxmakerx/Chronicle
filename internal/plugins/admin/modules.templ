@@ -28,11 +28,19 @@ templ AdminModulesPage(mods []modules.ModuleInfo) {
 			</div>
 
 			<!-- Module Cards -->
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-				for _, mod := range mods {
-					@moduleCard(mod)
-				}
-			</div>
+			if len(mods) > 0 {
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+					for _, mod := range mods {
+						@moduleCard(mod)
+					}
+				</div>
+			} else {
+				<div class="card p-12 text-center">
+					<div class="text-fg-muted mb-2"><i class="fa-solid fa-puzzle-piece text-2xl"></i></div>
+					<div class="text-sm font-medium text-fg mb-1">No modules available</div>
+					<div class="text-xs text-fg-secondary">Game system modules will appear here once installed.</div>
+				</div>
+			}
 
 			<!-- Info Panel -->
 			<div class="card p-6">

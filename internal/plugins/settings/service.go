@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -46,6 +47,18 @@ type SettingsService interface {
 
 	// ListCampaignLimits returns all per-campaign overrides with campaign names.
 	ListCampaignLimits(ctx context.Context) ([]CampaignStorageLimitWithName, error)
+
+	// SetUserBypass sets a temporary bypass on a user's storage limits.
+	SetUserBypass(ctx context.Context, userID string, maxUpload *int64, expiresAt time.Time, reason, grantedBy string) error
+
+	// ClearUserBypass removes the temporary bypass from a user's storage limits.
+	ClearUserBypass(ctx context.Context, userID string) error
+
+	// SetCampaignBypass sets a temporary bypass on a campaign's storage limits.
+	SetCampaignBypass(ctx context.Context, campaignID string, maxStorage *int64, maxFiles *int, expiresAt time.Time, reason, grantedBy string) error
+
+	// ClearCampaignBypass removes the temporary bypass from a campaign's storage limits.
+	ClearCampaignBypass(ctx context.Context, campaignID string) error
 }
 
 // settingsService implements SettingsService.
@@ -129,8 +142,9 @@ func (s *settingsService) GetEffectiveLimits(ctx context.Context, userID, campai
 	}
 
 	// Layer per-user overrides if a userID was provided.
+	var userLimit *UserStorageLimit
 	if userID != "" {
-		userLimit, err := s.repo.GetUserLimit(ctx, userID)
+		userLimit, err = s.repo.GetUserLimit(ctx, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -145,8 +159,9 @@ func (s *settingsService) GetEffectiveLimits(ctx context.Context, userID, campai
 	}
 
 	// Layer per-campaign overrides if a campaignID was provided.
+	var campaignLimit *CampaignStorageLimit
 	if campaignID != "" {
-		campaignLimit, err := s.repo.GetCampaignLimit(ctx, campaignID)
+		campaignLimit, err = s.repo.GetCampaignLimit(ctx, campaignID)
 		if err != nil {
 			return nil, err
 		}
@@ -157,6 +172,22 @@ func (s *settingsService) GetEffectiveLimits(ctx context.Context, userID, campai
 			if campaignLimit.MaxFiles != nil {
 				effective.MaxFiles = *campaignLimit.MaxFiles
 			}
+		}
+	}
+
+	// Apply active bypasses as the highest-priority overrides.
+	// Bypasses are time-limited and auto-expire; only apply if not expired.
+	if userLimit.HasActiveBypass() {
+		if userLimit.BypassMaxUpload != nil {
+			effective.MaxUploadSize = *userLimit.BypassMaxUpload
+		}
+	}
+	if campaignLimit.HasActiveBypass() {
+		if campaignLimit.BypassMaxStorage != nil {
+			effective.MaxTotalStorage = *campaignLimit.BypassMaxStorage
+		}
+		if campaignLimit.BypassMaxFiles != nil {
+			effective.MaxFiles = *campaignLimit.BypassMaxFiles
 		}
 	}
 
@@ -238,6 +269,61 @@ func (s *settingsService) ListUserLimits(ctx context.Context) ([]UserStorageLimi
 // ListCampaignLimits returns all per-campaign overrides with campaign names.
 func (s *settingsService) ListCampaignLimits(ctx context.Context) ([]CampaignStorageLimitWithName, error) {
 	return s.repo.ListCampaignLimits(ctx)
+}
+
+// --- Temporary Bypass Methods ---
+
+// SetUserBypass validates and sets a temporary bypass on a user's storage limits.
+func (s *settingsService) SetUserBypass(ctx context.Context, userID string, maxUpload *int64, expiresAt time.Time, reason, grantedBy string) error {
+	if userID == "" {
+		return apperror.NewBadRequest("user ID is required")
+	}
+	if grantedBy == "" {
+		return apperror.NewBadRequest("granted_by is required")
+	}
+	if expiresAt.Before(time.Now()) {
+		return apperror.NewBadRequest("expiration must be in the future")
+	}
+	if maxUpload != nil && *maxUpload < 0 {
+		return apperror.NewBadRequest("bypass max upload cannot be negative")
+	}
+	return s.repo.SetUserBypass(ctx, userID, maxUpload, expiresAt, reason, grantedBy)
+}
+
+// ClearUserBypass removes the temporary bypass from a user's storage limits.
+func (s *settingsService) ClearUserBypass(ctx context.Context, userID string) error {
+	if userID == "" {
+		return apperror.NewBadRequest("user ID is required")
+	}
+	return s.repo.ClearUserBypass(ctx, userID)
+}
+
+// SetCampaignBypass validates and sets a temporary bypass on a campaign's storage limits.
+func (s *settingsService) SetCampaignBypass(ctx context.Context, campaignID string, maxStorage *int64, maxFiles *int, expiresAt time.Time, reason, grantedBy string) error {
+	if campaignID == "" {
+		return apperror.NewBadRequest("campaign ID is required")
+	}
+	if grantedBy == "" {
+		return apperror.NewBadRequest("granted_by is required")
+	}
+	if expiresAt.Before(time.Now()) {
+		return apperror.NewBadRequest("expiration must be in the future")
+	}
+	if maxStorage != nil && *maxStorage < 0 {
+		return apperror.NewBadRequest("bypass max storage cannot be negative")
+	}
+	if maxFiles != nil && *maxFiles < 0 {
+		return apperror.NewBadRequest("bypass max files cannot be negative")
+	}
+	return s.repo.SetCampaignBypass(ctx, campaignID, maxStorage, maxFiles, expiresAt, reason, grantedBy)
+}
+
+// ClearCampaignBypass removes the temporary bypass from a campaign's storage limits.
+func (s *settingsService) ClearCampaignBypass(ctx context.Context, campaignID string) error {
+	if campaignID == "" {
+		return apperror.NewBadRequest("campaign ID is required")
+	}
+	return s.repo.ClearCampaignBypass(ctx, campaignID)
 }
 
 // --- Parsing Helpers ---

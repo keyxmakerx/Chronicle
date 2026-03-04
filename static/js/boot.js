@@ -155,6 +155,47 @@
     }
   });
 
+  // --- HTMX Loading Indicator ---
+  // Toggle body.htmx-request class to show/hide the global progress bar.
+  var activeRequests = 0;
+  document.addEventListener('htmx:beforeRequest', function () {
+    activeRequests++;
+    document.body.classList.add('htmx-request');
+  });
+  document.addEventListener('htmx:afterRequest', function () {
+    activeRequests = Math.max(0, activeRequests - 1);
+    if (activeRequests === 0) {
+      document.body.classList.remove('htmx-request');
+    }
+  });
+
+  // --- Form Validation Feedback ---
+  // On invalid submit, show inline .field-error hints below invalid fields
+  // and add .input-error class for red border styling.
+  document.addEventListener('invalid', function (e) {
+    var el = e.target;
+    if (!el.classList.contains('input')) return;
+    el.classList.add('input-error');
+    // Remove existing hint if any.
+    var next = el.nextElementSibling;
+    if (next && next.classList.contains('field-error')) next.remove();
+    // Insert validation message.
+    if (el.validationMessage) {
+      var hint = document.createElement('div');
+      hint.className = 'field-error';
+      hint.textContent = el.validationMessage;
+      el.parentNode.insertBefore(hint, el.nextSibling);
+    }
+  }, true);
+  // Clear error state on input.
+  document.addEventListener('input', function (e) {
+    var el = e.target;
+    if (!el.classList.contains('input-error')) return;
+    el.classList.remove('input-error');
+    var next = el.nextElementSibling;
+    if (next && next.classList.contains('field-error')) next.remove();
+  }, true);
+
   // --- Lifecycle ---
 
   // Mount all widgets on initial page load.
@@ -261,6 +302,100 @@
   Chronicle.mountWidgets = mountWidgets;
   Chronicle.destroyWidget = destroyElement;
 
+  // --- Unsaved Changes Warning ---
+  // Global dirty state tracker. Widgets and forms register themselves as
+  // dirty sources. A single beforeunload listener warns the user when
+  // navigating away with unsaved changes.
+
+  var dirtySources = {};
+
+  /**
+   * Mark a source as having unsaved changes.
+   * @param {string} id - Unique source identifier (e.g. 'editor', 'form:entity-edit').
+   */
+  Chronicle.markDirty = function (id) {
+    dirtySources[id] = true;
+  };
+
+  /**
+   * Mark a source as clean (changes saved or discarded).
+   * @param {string} id - Source identifier to clear.
+   */
+  Chronicle.markClean = function (id) {
+    delete dirtySources[id];
+  };
+
+  /**
+   * Check if any source has unsaved changes.
+   * @returns {boolean}
+   */
+  Chronicle.isDirty = function () {
+    for (var k in dirtySources) {
+      if (dirtySources.hasOwnProperty(k)) return true;
+    }
+    return false;
+  };
+
+  // Warn user before leaving the page with unsaved changes.
+  window.addEventListener('beforeunload', function (e) {
+    if (Chronicle.isDirty()) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
+  // Clear form dirty sources when HTMX swaps out tracked forms.
+  document.addEventListener('htmx:beforeSwap', function (event) {
+    if (event.detail && event.detail.target) {
+      var forms = event.detail.target.querySelectorAll('form[data-track-changes]');
+      for (var i = 0; i < forms.length; i++) {
+        var formId = forms[i].getAttribute('data-track-changes');
+        if (formId) Chronicle.markClean('form:' + formId);
+      }
+    }
+  });
+
+  // --- Form Change Tracking ---
+  // Forms with data-track-changes="<id>" are auto-tracked. Any input/change
+  // event marks the form dirty. Successful HTMX submission clears it.
+
+  function trackFormChanges(form) {
+    var formId = form.getAttribute('data-track-changes');
+    if (!formId || form._trackingChanges) return;
+    form._trackingChanges = true;
+
+    var dirtyKey = 'form:' + formId;
+
+    function onInput() { Chronicle.markDirty(dirtyKey); }
+
+    form.addEventListener('input', onInput);
+    form.addEventListener('change', onInput);
+
+    // Clear dirty state after successful HTMX request from this form.
+    form.addEventListener('htmx:afterRequest', function (evt) {
+      if (evt.detail && evt.detail.successful) {
+        Chronicle.markClean(dirtyKey);
+      }
+    });
+  }
+
+  function initFormTracking(root) {
+    var forms = root.querySelectorAll('form[data-track-changes]');
+    for (var i = 0; i < forms.length; i++) {
+      trackFormChanges(forms[i]);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    initFormTracking(document);
+  });
+
+  document.addEventListener('htmx:afterSettle', function (event) {
+    if (event.detail && event.detail.target) {
+      initFormTracking(event.detail.target);
+    }
+  });
+
   // --- Shared Utilities ---
   // Centralized utility functions used by multiple widgets. Widgets should
   // call Chronicle.escapeHtml() etc. instead of defining their own copies.
@@ -301,5 +436,66 @@
   Chronicle.getCsrf = function () {
     var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
     return m ? decodeURIComponent(m[1]) : '';
+  };
+
+  /**
+   * Convenience wrapper around fetch() for API calls.
+   *
+   * Automatically:
+   *  - Sets Accept: application/json
+   *  - Adds X-CSRF-Token header on mutating requests (POST/PUT/DELETE)
+   *  - Serializes plain-object bodies as JSON (sets Content-Type)
+   *  - Sets credentials: same-origin
+   *
+   * @param {string} url - Request URL.
+   * @param {Object} [opts] - Options forwarded to fetch().
+   * @param {string} [opts.method] - HTTP method (default GET).
+   * @param {Object|FormData|string} [opts.body] - Request body. Plain objects are JSON-serialized.
+   * @param {Object} [opts.headers] - Extra headers (merged with defaults).
+   * @param {AbortSignal} [opts.signal] - AbortController signal.
+   * @param {string} [opts.csrfToken] - Explicit CSRF token; falls back to cookie.
+   * @returns {Promise<Response>} The fetch Response (caller handles .json() / .ok).
+   */
+  Chronicle.apiFetch = function (url, opts) {
+    opts = opts || {};
+    var method = (opts.method || 'GET').toUpperCase();
+    var headers = {};
+
+    // Merge caller-supplied headers first.
+    if (opts.headers) {
+      for (var k in opts.headers) {
+        headers[k] = opts.headers[k];
+      }
+    }
+
+    // Default Accept header.
+    if (!headers['Accept']) {
+      headers['Accept'] = 'application/json';
+    }
+
+    // Auto-attach CSRF token on mutating requests.
+    if (method !== 'GET' && method !== 'HEAD' && !headers['X-CSRF-Token']) {
+      var csrf = opts.csrfToken || Chronicle.getCsrf();
+      if (csrf) {
+        headers['X-CSRF-Token'] = csrf;
+      }
+    }
+
+    // Serialize plain objects as JSON.
+    var body = opts.body;
+    if (body && typeof body === 'object' && !(body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify(body);
+    }
+
+    var fetchOpts = {
+      method: method,
+      headers: headers,
+      credentials: 'same-origin'
+    };
+    if (body !== undefined) fetchOpts.body = body;
+    if (opts.signal) fetchOpts.signal = opts.signal;
+
+    return fetch(url, fetchOpts);
   };
 })();

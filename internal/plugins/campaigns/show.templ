@@ -205,7 +205,7 @@ templ RecentEntityCard(cc *CampaignContext, re *RecentEntity) {
 		if re.ImagePath != nil && *re.ImagePath != "" {
 			<div class="h-20 bg-surface-alt overflow-hidden">
 				<img
-					src={ fmt.Sprintf("/media/%s", *re.ImagePath) }
+					src={ layouts.MediaURL(ctx, *re.ImagePath) }
 					alt={ re.Name }
 					class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
 				/>

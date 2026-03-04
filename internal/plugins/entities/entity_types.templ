@@ -133,13 +133,13 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 		</div>
 
 		// Existing entity types list.
-		<div class="space-y-3">
-			for _, et := range entityTypes {
-				@EntityTypeCard(cc, &et, counts[et.ID], csrfToken)
-			}
-		</div>
-
-		if len(entityTypes) == 0 {
+		if len(entityTypes) > 0 {
+			<div class="space-y-3">
+				for _, et := range entityTypes {
+					@EntityTypeCard(cc, &et, counts[et.ID], csrfToken)
+				}
+			</div>
+		} else {
 			<div class="empty-state">
 				<div class="empty-state__icon">
 					<i class="fa-solid fa-shapes text-fg-muted"></i>

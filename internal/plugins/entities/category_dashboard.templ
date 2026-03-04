@@ -255,7 +255,7 @@ templ PinnedCard(entity *Entity, cc *campaigns.CampaignContext) {
 	>
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
 			<img
-				src={ fmt.Sprintf("/media/%s", *entity.ImagePath) }
+				src={ layouts.MediaURL(ctx, *entity.ImagePath) }
 				alt={ entity.Name }
 				class="w-8 h-8 rounded object-cover shrink-0"
 			/>
@@ -287,7 +287,7 @@ templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
 			>
 				if entity.ImagePath != nil && *entity.ImagePath != "" {
 					<img
-						src={ fmt.Sprintf("/media/%s", *entity.ImagePath) }
+						src={ layouts.MediaURL(ctx, *entity.ImagePath) }
 						alt={ entity.Name }
 						class="w-8 h-8 rounded object-cover shrink-0"
 					/>

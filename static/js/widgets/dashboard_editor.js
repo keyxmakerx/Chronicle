@@ -73,10 +73,7 @@
      */
     load: function () {
       var self = this;
-      fetch(this.endpoint, {
-        headers: { 'Accept': 'application/json' },
-        credentials: 'same-origin'
-      })
+      Chronicle.apiFetch(this.endpoint)
         .then(function (res) {
           if (!res.ok) throw new Error('HTTP ' + res.status);
           return res.json();
@@ -102,14 +99,9 @@
         return;
       }
 
-      fetch(this.endpoint, {
+      Chronicle.apiFetch(this.endpoint, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': Chronicle.getCsrf()
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(this.layout)
+        body: this.layout
       })
         .then(function (res) {
           if (!res.ok) {
@@ -133,11 +125,7 @@
       var self = this;
       if (!confirm('Reset to default dashboard? This will remove your custom layout.')) return;
 
-      fetch(this.endpoint, {
-        method: 'DELETE',
-        headers: { 'X-CSRF-Token': Chronicle.getCsrf() },
-        credentials: 'same-origin'
-      })
+      Chronicle.apiFetch(this.endpoint, { method: 'DELETE' })
         .then(function (res) {
           if (!res.ok) throw new Error('HTTP ' + res.status);
           self.layout = null;

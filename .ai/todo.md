@@ -19,23 +19,44 @@ Known broken or missing things, ordered by severity.
 
 ### High
 
-- [ ] **Image upload click does nothing** — Users click "Add Image" area, nothing happens. Widget code (`image_upload.js`) appears correct; likely browser-level issue (Firefox blocking programmatic file input `.click()`) or widget not mounting. Needs browser-level debugging with DevTools.
-- [ ] **No media management for campaign owners** — Admin has `/admin/storage` page. Campaign owners have NO way to browse, manage, or delete their uploads. Need campaign-scoped media browser at `/campaigns/:id/media` with "referenced by" tracking, delete with warnings, and upload from browser page.
+- [x] **@mention popup won't dismiss** — Fixed by adding link mark guard in `onUpdate` (skips `@` inside existing mention links) and removing `selectionUpdate` event binding. Mentions still stored as Link marks, but popup no longer re-triggers.
+- [x] **Image upload click does nothing** — Fixed event recursion: file input's click event bubbled back to parent widget, causing Firefox to suppress file picker. Added stopPropagation on file input click, campaign_id to upload FormData, and fixed hover feedback on placeholder.
+- [x] **No media management for campaign owners** — Fixed: campaign-scoped media browser at `/campaigns/:id/media` (Owner-only). Grid view with thumbnails, "referenced by" tracking (queries entities by image_path and entry_html), delete with confirmation warnings, upload from browser page (Alpine.js), pagination, storage stats header. Sidebar "Media" link in Manage section.
+- [x] **Sidebar drill 403 for public visitors** — Fixed: added `GET /campaigns/:id/sidebar/drill/:slug` to `pub` group in `campaigns/routes.go`. Public visitors can now click categories in sidebar without 403.
+- [x] **Timeline eras not editable** — Fixed: added "Edit Eras" button on timeline detail page (links to `/calendar/settings?tab=eras`). Calendar settings now reads `?tab` query param to open correct tab. Added confirmation dialog to era delete button.
+- [x] **Sessions addon not discoverable** — Fixed: added Sessions cross-link in calendar header (dice icon). When Sessions addon enabled, links to sessions page. When disabled, owners see dimmed icon linking to addon settings. Users on Calendar can now discover Sessions naturally.
+- [x] **Calendar events lack view→edit mode** — Fixed: added read-only event detail modal (`eventViewModal`) showing name, date, time, category, visibility, description, and entity link. Scribes see "Edit" button that transitions to edit modal. All users can click event chips to view details.
+- [x] **Calendar click-to-create on date** — Fixed: entire date cell is clickable for Scribes+ (cursor-pointer, hover highlight). Clicks on empty space open create modal with date pre-filled. Event chip clicks are properly intercepted.
+- [x] **No unsaved changes warning** — Fixed: global dirty state tracker in boot.js (`Chronicle.markDirty/markClean/isDirty`) with `beforeunload` handler. Editor widget hooks in. Forms with `data-track-changes` auto-tracked (entity create/edit, campaign create/settings).
+- [x] **Empty states inconsistent** — Fixed: added empty states to campaign members, admin campaigns, admin users, admin modules. Fixed entity_types.templ if/else structure. Calendar `UpcomingEventsEmpty()` was already good. Maps/timelines already have empty states.
+- [x] **Calendar event categories not customizable** — Fixed: added `calendar_event_categories` table (migration 000039) with slug/name/icon/color per calendar. Default categories seeded on creation. Categories tab in calendar settings for full CRUD. Event modal dropdown and categoryIcon() now dynamic. JS view modal uses categories data attribute for display.
 
 ### Medium
 
-- [ ] **Tags not hideable from players** — All tags visible to all campaign members. No per-tag visibility field. Need `dm_only` visibility option so GMs can create tags players shouldn't see (e.g., "Plot Hook", "Deceased").
-- [ ] **Attributes missing "Use Template" reset** — Entity types define field templates, entities can override with `FieldOverrides`. But no UI to reset overrides back to type defaults. Especially painful when entity type fields are updated — old entities don't get new fields automatically.
+- [x] **Tags not hideable from players** — Implemented `dm_only` column (migration 000038), role-based filtering in repo/service/handler, eye-slash badge + DM checkbox in tag_picker.js.
+- [x] **Attributes missing "Use Template" reset** — Added DELETE `/field-overrides` endpoint and "Reset" button in attributes customize panel with confirmation dialog. Clears field_overrides to NULL, restoring category template defaults.
+- [x] **Search scope limited to entities** — Fixed: Ctrl+K now searches entities, timelines, maps, calendar events, and sessions. Added MapSearcher, CalendarSearcher, SessionSearcher interfaces following the TimelineSearcher pattern. Each plugin implements Search repo method + formats results. Wired in routes.go.
+- [x] **No confirmation dialogs for destructive actions** — Audited all delete operations. Most already had confirms (campaigns, entities, maps, markers, timelines, sessions, calendar events, sidebar nav, admin pages). Added confirms to notes.js and relations.js (the two missing ones). Dashboard editor row/block delete is safe (not persisted until explicit save).
+- [x] **No loading/spinner states** — Fixed: added HTMX loading indicator (3px accent-colored progress bar at top of viewport). CSS animation in input.css, request tracking in boot.js, indicator div in app.templ layout. Tracks concurrent requests, only hides when all complete.
+- [x] **Keyboard shortcuts help** — Fixed: press `?` to open shortcuts help overlay showing all 4 global shortcuts (Ctrl+K/N/E/S). Closes with `?`, Escape, or clicking outside. Mac-aware (shows ⌘ vs Ctrl).
+- [x] **Form validation feedback** — Fixed: added `:user-invalid` and `.input-error` CSS for red borders on invalid fields. JS in boot.js listens for `invalid` events and inserts `.field-error` inline hints with the browser's validation message. Errors clear on input.
+- [x] **Mobile sidebar toggle** — Already implemented: hamburger button in topbar (md:hidden), Alpine.js sidebarOpen state, CSS translate slide-in animation, backdrop overlay, auto-close on navigation.
+- [ ] **Calendar recurring events limited** — Only "yearly" recurrence type. No monthly/weekly/daily/custom recurrence patterns.
+- [ ] **Editor lacks table support** — TipTap editor has no table insert/edit (common need for TTRPG stat blocks, encounter tables).
+- [x] **Editor lacks callout/highlight blocks** — Fixed: blockquote restyled as callout block with accent border, subtle background, info icon. Insert menu renamed "Blockquote" → "Callout Block". Read-only prose views also styled. TipTap bundle limits prevent custom node types; blockquote serves as callout.
+- [x] **Entity cloning** — Fixed: Clone button on entity show page (Scribe+). POST creates copy with "(Copy)" suffix, clones entry, image, fields, field overrides, popup config, tags via INSERT...SELECT. Redirects to edit page. Does NOT copy relations.
+- [x] **Map marker search** — Fixed: added search input in map header. Client-side filtering dims non-matching markers (opacity 0.15). Enter pans to first match and opens tooltip. Searches name and description.
+- [x] **Timeline event creation from timeline page** — Already implemented: "Create Event" button in header opens modal with full form (name, date, description, category, visibility, color, multi-day, recurrence). POST to standalone-events API.
 
 ### Low
 
 - [ ] **API endpoints ignore addon disabled state** — Routes are hardcoded at startup. If calendar addon is disabled for a campaign, `/api/v1/campaigns/:id/calendar` still executes. Need `RequireAddon` middleware on API route groups.
 - [ ] **API technical documentation missing** — REST API v1 exists and works but has no public documentation (OpenAPI spec or reference).
-- [ ] **Calendar HTMX detection inconsistency** — `internal/plugins/calendar/handler.go` uses raw `c.Request().Header.Get("HX-Request")` in 5 places instead of centralized `middleware.IsHTMX(c)`. Should standardize.
+- [x] **Calendar HTMX detection inconsistency** — Replaced 5 raw `HX-Request` header checks in calendar handler with `middleware.IsHTMX(c)`, which also checks `HX-Boosted` to avoid returning fragments on boosted navigation.
 - [ ] **Cross-plugin adapter interface duplication** — `MemberLister` interface duplicated in timeline and sessions plugins. Should extract to shared package.
 - [ ] **IDOR check functions duplicated** — `requireTimelineInCampaign`, `requireMapInCampaign`, `requireSessionInCampaign`, `requireEventInCampaign` follow identical patterns in 4 plugins. Extract to shared generic helper.
 - [ ] **logAudit fire-and-forget duplicated** — Similar audit logging patterns in entities, campaigns, tags handlers. Could extract to shared `FireAudit()` utility.
-- [ ] **JS fetch header setup duplicated** — CSRF + JSON header construction repeated in notes, relations, tag_picker, attributes. Add `Chronicle.apiFetch()` wrapper to boot.js.
+- [x] **JS fetch header setup duplicated** — Added `Chronicle.apiFetch()` wrapper to boot.js (auto-sets headers, CSRF, JSON serialization). Migrated sidebar_config, entity_type_config, sidebar_nav_editor, dashboard_editor widgets. Simplified notes.js CSRF reading.
 - [ ] **Mixed error types** — `echo.NewHTTPError` used directly in 30+ places instead of centralized `apperror` package. Should standardize.
 - [ ] **LIKE metacharacter in backlinks** — `entities/repository.go:1011` concatenates entityID into LIKE pattern without escaping `%`/`_`. Low risk (UUIDs only) but should escape for safety.
 - [ ] **No Content Security Policy headers** — CSP not implemented. Would provide XSS defense-in-depth alongside bluemonday sanitization.
@@ -51,11 +72,13 @@ New capabilities ordered by priority for alpha release.
 
 ### Alpha-Critical (Must Have)
 
-- [ ] **Media management for owners + admins** — Campaign-scoped media browser: grid/list view, "referenced by" queries, delete with entity reference warnings, upload from browser page. Admin view spans all campaigns.
-- [ ] **Tag visibility controls** — Per-tag `dm_only` flag. Migration for new column. Filter in repo/handler. Respect in tag_picker.js widget. Player role should not see DM-only tags.
-- [ ] **Attributes template reset** — "Reset to Type Template" button in attributes customize panel. Clear `field_overrides`, restore type-level defaults.
+- [x] **Media management for owners** — Campaign-scoped media browser at `/campaigns/:id/media` (Owner-only): grid view with thumbnails, "referenced by" entity queries, delete with warnings, upload from browser, pagination, storage stats. Admin already had `/admin/storage`.
+- [x] **Tag visibility controls** — Implemented: migration 000038, `dm_only` bool in model/repo/service/handler, role-based filtering, tag_picker.js DM-only badge + create checkbox.
+- [x] **Attributes template reset** — Implemented DELETE endpoint + "Reset" button in customize panel with confirmation dialog.
 - [ ] **Extension technical documentation** — 1-3 page `.ai.md` writeup per plugin/widget/module. Standard template covering purpose, architecture, API endpoints, widget integration, lifecycle, security. See documentation audit in plan.
 - [ ] **Graceful extension degradation** — `RequireAddon` API middleware, human-readable errors for disabled/uninstalled addons, addon dependency checking.
+- [x] **Permissions & UX completeness audit** — Completed 2026-03-04. Audited all 17 route files, 24 JS widgets, all templ templates. Found 10 MUST-haves, 15 NEED-to-haves, 20 WANTs, 15 MAYBEs. Key findings: sidebar drill public access, sessions discoverability, calendar UX gaps, missing editor features (tables, callouts), no unsaved changes warning, inconsistent empty states. All items added to Bugfixes section above.
+- [x] **README.md** — Full open-source README with features, setup instructions, tech stack, architecture, project structure, screenshots placeholders, inspiration credits. Created 2026-03-04.
 
 ### Alpha-Nice-to-Have
 
@@ -64,6 +87,23 @@ New capabilities ordered by priority for alpha release.
 - [ ] **Maps Phase 2** — Layers, marker groups, privacy controls, nested maps (world → continent → city).
 - [ ] **Timeline Phase 2B** — Event connections (visual lines between related events), create-from-timeline modal, beautification pass.
 - [ ] **Campaign export/import** — JSON bundle for backup/migration. Media as separate zip or URL references.
+- [x] **Image drag-and-drop upload** — Media browser has drag-and-drop + multi-file upload with per-file progress bars (Alpine.js + XHR). Entity image widget (`image_upload.js`) still click-only.
+- [ ] **Calendar week view** — Only month + timeline views exist. Week view is standard calendar UX expectation.
+- [ ] **Calendar event drag-and-drop** — Can't drag events between dates (standard Google Calendar UX).
+- [ ] **Calendar day view** — No single-day detailed view with time blocks.
+- [ ] **Map marker clustering** — Markers don't auto-cluster when zoomed out (Leaflet.markercluster).
+- [ ] **Map marker icon picker** — No predefined POI icons (city, dungeon, tavern, etc.).
+- [ ] **Recent entities sidebar** — No "recently viewed" quick-access list.
+- [ ] **Command palette (Ctrl+Shift+P)** — Quick action palette beyond Ctrl+K search.
+- [ ] **Breadcrumb consistency** — Breadcrumbs exist on entity pages but not calendar/timeline/maps.
+- [ ] **Timeline search/filter** — No search within timeline events by name/text.
+- [ ] **Timeline zoom-to-era** — No button to jump viewport to a specific era.
+- [ ] **Editor find/replace** — No Ctrl+F within editor content.
+- [ ] **Editor code syntax highlighting** — Code blocks have no language-aware highlighting.
+- [ ] **Entity version history UI** — Audit log exists but no "view diff / restore version" for entities.
+- [ ] **Notes search/filter** — No search within notes panel.
+- [ ] **Toast notification grouping** — Duplicate toasts stack separately instead of grouping.
+- [ ] **Entity image gallery** — Only one image per entity; no carousel/gallery for multiple images.
 
 ### Post-Alpha
 
@@ -85,6 +125,21 @@ New capabilities ordered by priority for alpha release.
 - [ ] 2FA/TOTP support
 - [ ] Invite system (email invitations for campaigns)
 - [ ] Webhook support for external event notifications
+- [ ] Fog of war for maps (DM-only visibility per marker/region)
+- [ ] Map drawing tools (freehand, shapes, annotations)
+- [ ] Map hex/square grid overlay for tactical combat
+- [ ] Map measurement tool (distance/area)
+- [ ] Accessibility audit (ARIA labels, focus traps, screen readers, skip-to-content)
+- [ ] Offline mode / service worker caching
+- [ ] Collaborative editing presence indicators ("user X is editing")
+- [ ] Additional themes beyond light/dark (sepia, high-contrast, custom accent colors)
+- [ ] Editor markdown import/export
+- [ ] Calendar timezone support (real-life mode uses UTC; need per-user timezone)
+- [ ] Calendar print/PDF export
+- [ ] Notes rich text (TipTap in notes instead of plain text blocks)
+- [ ] Note folders/nesting organization
+- [ ] Reusable modal/dropdown component library (widgets each build their own)
+- [ ] Widget inline CSS → CSS classes migration (consistency, maintainability)
 
 ### Testing (High Priority)
 
@@ -94,9 +149,9 @@ New capabilities ordered by priority for alpha release.
 - [x] Auth service tests (26 tests)
 - [x] Notes widget service tests (28 tests)
 - [x] Widget lifecycle audit (destroy methods, event listener leaks)
-- [ ] Campaigns service tests (HIGHEST PRIORITY — most critical untested code)
-- [ ] Relations service tests (bi-directional create/delete, validation)
-- [ ] Tags service tests (CRUD, slug generation, diff-based assignment)
+- [x] Campaigns service tests (72 tests covering CRUD, membership, ownership transfer, sidebar, dashboard, admin ops, model helpers)
+- [x] Relations service tests (25 tests: bi-directional create/delete, symmetric relations, validation, conflict handling)
+- [x] Tags service tests (40 tests: CRUD, color validation, slug generation, diff-based SetEntityTags, cross-campaign prevention, visibility filtering)
 - [ ] Audit service tests (pagination, validation, fire-and-forget)
 - [ ] Media service tests (file validation, thumbnail generation)
 - [ ] Settings service tests (limit resolution, override priority)
@@ -112,7 +167,7 @@ New capabilities ordered by priority for alpha release.
 
 - [ ] **Add golangci-lint to CI pipeline** — Currently only `go vet` + unit tests run in CI. golangci-lint catches real bugs (unchecked errors, dead code) and should be enforced.
 - [ ] **Add security scanning to CI** — gosec (static analysis) and govulncheck (dependency vulnerabilities) should run in CI. Requires Go 1.25+ for latest gosec.
-- [ ] **Increase test coverage** — Currently 5.3% (6 test files). Priority: campaigns service tests, relations service tests, tags service tests, media service tests, then handler tests.
+- [ ] **Increase test coverage** — Currently 8 test files (294+ tests). Priority: media service tests, audit service tests, settings service tests, then handler tests.
 - [ ] docker-compose.yml full stack verification (app + MariaDB + Redis)
 - [ ] `air` hot reload setup for dev workflow
 
@@ -237,3 +292,11 @@ Summary of strengths/weaknesses for strategic positioning. Full analysis in `.ai
 - [x] Fixed all 138 golangci-lint issues (errcheck, staticcheck S1016, unused dead code)
 - [x] Consolidated JS utility duplication: escapeHtml (9 copies), escapeAttr (7 copies), getCsrf (3 copies) → shared Chronicle.* in boot.js
 - [x] Syncapi repository errcheck fixes (Row.Scan error handling, json.Unmarshal acknowledgement)
+
+### Bug Fixes & Testing Sprint (2026-03-04)
+- [x] Image upload click fix (event recursion prevention, campaign_id in FormData, hover feedback)
+- [x] Chronicle.apiFetch() shared wrapper in boot.js (auto-headers, CSRF, JSON serialization)
+- [x] Migrated 4 widgets to Chronicle.apiFetch() (sidebar_config, entity_type_config, sidebar_nav_editor, dashboard_editor)
+- [x] Calendar HTMX detection fix (5 raw header checks → middleware.IsHTMX())
+- [x] Relations service tests (25 tests)
+- [x] Tags service tests (40 tests)

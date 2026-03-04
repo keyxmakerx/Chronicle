@@ -37,10 +37,7 @@
       var editingId = null;
 
       // Load current config from server.
-      fetch(endpoint, {
-        headers: { 'Accept': 'application/json' },
-        credentials: 'same-origin'
-      })
+      Chronicle.apiFetch(endpoint)
         .then(function (res) {
           if (!res.ok) throw new Error('HTTP ' + res.status);
           return res.json();
@@ -68,14 +65,9 @@
        * Save the full sidebar config to the server.
        */
       function save(callback) {
-        fetch(endpoint, {
+        Chronicle.apiFetch(endpoint, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': Chronicle.getCsrf()
-          },
-          credentials: 'same-origin',
-          body: JSON.stringify(sidebarConfig)
+          body: sidebarConfig
         })
           .then(function (res) {
             if (!res.ok) {

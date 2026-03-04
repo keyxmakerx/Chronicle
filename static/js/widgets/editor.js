@@ -31,8 +31,13 @@
   var Editor = TipTap.Editor;
   var StarterKit = TipTap.StarterKit;
   var Placeholder = TipTap.Placeholder;
-  var Link = TipTap.Link;
   var Underline = TipTap.Underline;
+
+  // Use MentionLink (extended Link with entity mention attributes) if
+  // available, otherwise fall back to standard Link. MentionLink preserves
+  // data-mention-id and data-entity-preview through the ProseMirror JSON
+  // round-trip so hover preview cards work after save/reload.
+  var Link = (Chronicle && Chronicle.MentionLink) || TipTap.Link;
 
   // Store editor instances for cleanup.
   var editors = new WeakMap();
@@ -186,23 +191,23 @@
       }
 
       // Wire mention extension into editor update events so it can
-      // detect the @ trigger and update the suggestion popup.
+      // detect the @ trigger and update the suggestion popup. Only fires
+      // on content changes (update), NOT on cursor movement (selectionUpdate),
+      // to prevent the popup from reappearing when clicking in the editor.
       if (mentionExt) {
         editor.on('update', function () {
           mentionExt.onUpdate(editor);
         });
-        editor.on('selectionUpdate', function () {
-          mentionExt.onUpdate(editor);
-        });
       }
 
-      // Track changes for autosave and highlight the save button.
+      // Track changes for autosave, highlight save button, and notify global dirty state.
       if (canEdit) {
         editor.on('update', function () {
           if (!state.isEditing) return; // ignore updates during content loading
           state.dirty = true;
           setStatus(statusEl, 'unsaved');
           updateSaveButton(toolbar, true);
+          Chronicle.markDirty('editor');
         });
       }
 
@@ -245,6 +250,7 @@
         state.editor.destroy();
       }
 
+      Chronicle.markClean('editor');
       editors.delete(el);
     },
   });
@@ -488,10 +494,10 @@
 
     // Menu items: each has an action key, icon, label, and shortcut hint.
     var items = [
-      { action: 'mention',        icon: 'fa-at',              label: 'Mention Entity',  hint: 'Type @' },
+      { action: 'mention',        icon: 'fa-diagram-project', label: 'Link Entity',     hint: 'Type @' },
       { action: 'link',           icon: 'fa-link',            label: 'Insert Link',     hint: '' },
       { action: 'horizontalRule', icon: 'fa-minus',           label: 'Horizontal Rule', hint: '---' },
-      { action: 'blockquote',     icon: 'fa-quote-left',      label: 'Blockquote',      hint: '>' },
+      { action: 'blockquote',     icon: 'fa-circle-info',     label: 'Callout Block',   hint: '>' },
       { action: 'code',           icon: 'fa-code',            label: 'Code Block',      hint: '```' },
     ];
 
@@ -721,6 +727,7 @@
         state.saving = false;
         setStatus(state.statusEl, 'saved');
         updateSaveButton(state.toolbar, false);
+        Chronicle.markClean('editor');
       })
       .catch(function (err) {
         console.error('[Editor] Save error:', err);

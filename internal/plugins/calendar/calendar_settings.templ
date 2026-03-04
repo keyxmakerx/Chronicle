@@ -14,7 +14,7 @@ import (
 // CalendarSettingsPage renders the full settings page for calendar owners.
 templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
 	@layouts.App("Calendar Settings - " + cc.Campaign.Name) {
-		<div class="h-full flex flex-col -mx-5 -my-4" x-data="{ tab: 'general' }">
+		<div class="h-full flex flex-col -mx-5 -my-4" x-data="{ tab: new URLSearchParams(window.location.search).get('tab') || 'general' }">
 			<!-- Header -->
 			<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
 				<div class="flex items-center gap-3">
@@ -54,6 +54,7 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 				if !cal.IsRealLife() {
 					@settingsTab("eras", "fa-solid fa-landmark", "Eras")
 				}
+				@settingsTab("categories", "fa-solid fa-tag", "Categories")
 			</div>
 			<!-- Tab content -->
 			<div class="flex-1 overflow-hidden">
@@ -91,6 +92,11 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 						</div>
 					</div>
 				}
+				<div x-show="tab === 'categories'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-6">
+						@categoriesSettingsTab(cc, cal, csrfToken)
+					</div>
+				</div>
 			</div>
 		</div>
 	}
@@ -591,7 +597,7 @@ templ erasSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken st
 								<span class="text-sm font-medium text-fg" x-text="e.name || 'Unnamed Era'"></span>
 								<span class="text-xs text-fg-muted" x-text="e.end_year ? e.start_year + ' – ' + e.end_year : e.start_year + ' – present'"></span>
 							</div>
-							<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="eras.splice(i, 1)">
+							<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="if(confirm('Remove this era? Click Save to confirm.')) eras.splice(i, 1)">
 								<i class="fa-solid fa-trash-can"></i>
 							</button>
 						</div>
@@ -784,6 +790,107 @@ func erasData(eras []Era) string {
 	}
 	b, _ := json.Marshal(items)
 	return fmt.Sprintf("{ eras: %s, saving: false, saved: false, error: '' }", string(b))
+}
+
+// categoriesSettingsTab renders the event categories management UI.
+templ categoriesSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Event Categories</h2>
+			<p class="text-sm text-fg-secondary">
+				Customize event categories for your calendar. Each category has a name, emoji icon, and color used in the calendar grid.
+			</p>
+		</div>
+		<div x-data={ categoriesData(cal.EventCategories) }>
+			<div class="space-y-2 mb-4">
+				<template x-for="(c, i) in categories" :key="i">
+					<div class="card p-3">
+						<div class="flex items-center justify-between mb-2">
+							<div class="flex items-center gap-2">
+								<span class="text-base" x-text="c.icon || '📌'"></span>
+								<span class="text-sm font-medium text-fg" x-text="c.name || 'Unnamed'"></span>
+								<span class="text-[10px] text-fg-muted font-mono" x-text="c.slug"></span>
+							</div>
+							<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="if(confirm('Remove this category? Click Save to confirm.')) categories.splice(i, 1)">
+								<i class="fa-solid fa-trash-can"></i>
+							</button>
+						</div>
+						<div class="grid grid-cols-4 gap-2">
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Slug</label>
+								<input type="text" x-model="c.slug" class="input text-sm w-full" placeholder="slug"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Name</label>
+								<input type="text" x-model="c.name" class="input text-sm w-full" placeholder="Category name"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Icon (emoji)</label>
+								<input type="text" x-model="c.icon" class="input text-sm w-full" placeholder="⭐"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Color</label>
+								<input type="color" x-model="c.color" class="input w-full h-[34px]"/>
+							</div>
+						</div>
+					</div>
+				</template>
+			</div>
+			<button
+				type="button"
+				class="btn-secondary text-sm w-full"
+				@click="categories.push({ slug: 'new', name: 'New Category', icon: '📌', color: '#6b7280' })"
+			>
+				<i class="fa-solid fa-plus mr-1"></i> Add Category
+			</button>
+			<div class="flex items-center justify-end gap-2 mt-4">
+				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
+				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false; error = '';
+						const payload = categories.map((c, i) => ({
+							slug: c.slug, name: c.name,
+							icon: c.icon || '', color: c.color || '#6b7280',
+							sort_order: i
+						}));
+						fetch('/campaigns/%s/calendar/event-categories', {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+							credentials: 'same-origin',
+							body: JSON.stringify(payload)
+						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
+						.catch(e => { error = e.message; })
+						.finally(() => { saving = false; })
+					`, cc.Campaign.ID, csrfToken) }
+				>
+					<span x-show="!saving">Save Categories</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// categoriesData returns the Alpine.js x-data JSON for the event categories list.
+func categoriesData(cats []EventCategory) string {
+	type cItem struct {
+		Slug  string `json:"slug"`
+		Name  string `json:"name"`
+		Icon  string `json:"icon"`
+		Color string `json:"color"`
+	}
+	items := make([]cItem, len(cats))
+	for i, c := range cats {
+		items[i] = cItem{
+			Slug: c.Slug, Name: c.Name, Icon: c.Icon, Color: c.Color,
+		}
+	}
+	b, _ := json.Marshal(items)
+	return fmt.Sprintf("{ categories: %s, saving: false, saved: false, error: '' }", string(b))
 }
 
 // jsStr JSON-encodes a string for safe embedding in JavaScript.

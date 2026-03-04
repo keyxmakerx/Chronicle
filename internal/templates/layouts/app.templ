@@ -16,6 +16,8 @@ import "strings"
 // topbar. The main content area is where page-specific content goes.
 templ App(title string) {
 	@Base(title) {
+		<!-- Global HTMX loading indicator (thin bar at top of viewport) -->
+		<div id="htmx-indicator" class="htmx-indicator"></div>
 		<div class="flex h-screen overflow-hidden" x-data="{ sidebarOpen: false }" @chronicle:navigated.window="sidebarOpen = false">
 			<!-- Mobile backdrop -->
 			<div
@@ -286,6 +288,17 @@ templ Sidebar() {
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
 							</svg>
 							Activity Log
+						</a>
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/media", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/media", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/media", GetCampaignID(ctx)))) }
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-photo-film text-xs"></i>
+							</span>
+							Media
 						</a>
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx))) }

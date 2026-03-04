@@ -7,6 +7,7 @@ package entities
 import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // EntityCard renders a single entity card with image, type badge, and privacy indicator.
@@ -20,7 +21,7 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
 			<div class="h-28 bg-surface-alt overflow-hidden">
 				<img
-					src={ fmt.Sprintf("/media/%s", *entity.ImagePath) }
+					src={ layouts.MediaURL(ctx, *entity.ImagePath) }
 					alt={ entity.Name }
 					class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
 				/>

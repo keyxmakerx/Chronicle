@@ -23,8 +23,9 @@ import (
 
 // EntityTagFetcher retrieves tags for entities in batch. Defined here to avoid
 // importing the tags widget package, keeping plugins loosely coupled via interfaces.
+// includeDmOnly controls whether dm_only tags are returned (true for Scribes+).
 type EntityTagFetcher interface {
-	GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]EntityTagInfo, error)
+	GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]EntityTagInfo, error)
 }
 
 // AddonChecker is a narrow interface for checking whether an addon is enabled
@@ -39,14 +40,35 @@ type TimelineSearcher interface {
 	SearchTimelines(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
 }
 
+// MapSearcher provides map search results for the quick search popup.
+// Implemented by the maps plugin and injected via SetMapSearcher.
+type MapSearcher interface {
+	SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+}
+
+// CalendarSearcher provides calendar event search results for the quick search popup.
+// Implemented by the calendar plugin and injected via SetCalendarSearcher.
+type CalendarSearcher interface {
+	SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
+}
+
+// SessionSearcher provides session search results for the quick search popup.
+// Implemented by the sessions plugin and injected via SetSessionSearcher.
+type SessionSearcher interface {
+	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+}
+
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service          EntityService
-	auditSvc         audit.AuditService
-	tagFetcher       EntityTagFetcher
-	addonSvc         AddonChecker
-	timelineSearcher TimelineSearcher
+	service            EntityService
+	auditSvc           audit.AuditService
+	tagFetcher         EntityTagFetcher
+	addonSvc           AddonChecker
+	timelineSearcher   TimelineSearcher
+	mapSearcher        MapSearcher
+	calendarSearcher   CalendarSearcher
+	sessionSearcher    SessionSearcher
 }
 
 // NewHandler creates a new entity handler.
@@ -76,6 +98,24 @@ func (h *Handler) SetTagFetcher(f EntityTagFetcher) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetTimelineSearcher(ts TimelineSearcher) {
 	h.timelineSearcher = ts
+}
+
+// SetMapSearcher sets the map searcher for quick search results.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetMapSearcher(ms MapSearcher) {
+	h.mapSearcher = ms
+}
+
+// SetCalendarSearcher sets the calendar event searcher for quick search results.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetCalendarSearcher(cs CalendarSearcher) {
+	h.calendarSearcher = cs
+}
+
+// SetSessionSearcher sets the session searcher for quick search results.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetSessionSearcher(ss SessionSearcher) {
+	h.sessionSearcher = ss
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
@@ -156,7 +196,10 @@ func (h *Handler) Index(c echo.Context) error {
 		for i := range entities {
 			entityIDs[i] = entities[i].ID
 		}
-		if tagsMap, err := h.tagFetcher.GetEntityTagsBatch(c.Request().Context(), entityIDs); err == nil {
+		// Scribes+ see all tags including dm_only; Players see only public tags.
+		cc := campaigns.GetCampaignContext(c)
+		includeDmOnly := cc != nil && cc.MemberRole >= campaigns.RoleScribe
+		if tagsMap, err := h.tagFetcher.GetEntityTagsBatch(c.Request().Context(), entityIDs, includeDmOnly); err == nil {
 			for i := range entities {
 				if t, ok := tagsMap[entities[i].ID]; ok {
 					entities[i].Tags = t
@@ -316,6 +359,33 @@ func (h *Handler) Show(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, backlinks, showAttributes, showCalendar, csrfToken))
+}
+
+// Clone creates a copy of an entity (POST /campaigns/:id/entities/:eid/clone).
+// Copies name (with " (Copy)" suffix), entry, fields, image, parent, privacy,
+// field overrides, popup config, and tags. Does NOT copy relations.
+func (h *Handler) Clone(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(fmt.Errorf("campaign context is nil for entity clone"))
+	}
+
+	userID := auth.GetUserID(c)
+	entityID := c.Param("eid")
+	clone, err := h.service.Clone(c.Request().Context(), cc.Campaign.ID, userID, entityID)
+	if err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "entity.clone", clone.ID, clone.Name)
+
+	// Redirect to the edit page of the new clone so user can review/rename.
+	editURL := fmt.Sprintf("/campaigns/%s/entities/%s/edit", cc.Campaign.ID, clone.ID)
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", editURL)
+		return c.NoContent(http.StatusOK)
+	}
+	return c.Redirect(http.StatusSeeOther, editURL)
 }
 
 // EditForm renders the entity edit form (GET /campaigns/:id/entities/:eid/edit).
@@ -490,13 +560,37 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 				"url":        fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, e.ID),
 			}
 		}
-		// Append timeline results if the searcher is registered.
+		// Append cross-plugin search results from registered searchers.
 		if h.timelineSearcher != nil && query != "" {
 			if tlResults, err := h.timelineSearcher.SearchTimelines(
 				c.Request().Context(), cc.Campaign.ID, query, role,
 			); err == nil {
 				items = append(items, tlResults...)
 				total += len(tlResults)
+			}
+		}
+		if h.mapSearcher != nil && query != "" {
+			if mapResults, err := h.mapSearcher.SearchMaps(
+				c.Request().Context(), cc.Campaign.ID, query,
+			); err == nil {
+				items = append(items, mapResults...)
+				total += len(mapResults)
+			}
+		}
+		if h.calendarSearcher != nil && query != "" {
+			if calResults, err := h.calendarSearcher.SearchCalendarEvents(
+				c.Request().Context(), cc.Campaign.ID, query, role,
+			); err == nil {
+				items = append(items, calResults...)
+				total += len(calResults)
+			}
+		}
+		if h.sessionSearcher != nil && query != "" {
+			if sessResults, err := h.sessionSearcher.SearchSessions(
+				c.Request().Context(), cc.Campaign.ID, query,
+			); err == nil {
+				items = append(items, sessResults...)
+				total += len(sessResults)
 			}
 		}
 		return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total})
@@ -694,6 +788,34 @@ func (h *Handler) UpdateFieldOverridesAPI(c echo.Context) error {
 	}
 
 	if err := h.service.UpdateFieldOverrides(c.Request().Context(), entityID, &body); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// ResetFieldOverridesAPI clears all per-entity field customizations, restoring
+// the entity to its category's default field template.
+// DELETE /campaigns/:id/entities/:eid/field-overrides
+func (h *Handler) ResetFieldOverridesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	if err := h.service.UpdateFieldOverrides(c.Request().Context(), entityID, nil); err != nil {
 		return err
 	}
 

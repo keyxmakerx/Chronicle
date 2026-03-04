@@ -137,8 +137,9 @@ type entityTagFetcherAdapter struct {
 }
 
 // GetEntityTagsBatch returns minimal tag info for multiple entities.
-func (a *entityTagFetcherAdapter) GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]entities.EntityTagInfo, error) {
-	tagsMap, err := a.svc.GetEntityTagsBatch(ctx, entityIDs)
+// includeDmOnly controls whether dm_only tags are included (true for Scribes+).
+func (a *entityTagFetcherAdapter) GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]entities.EntityTagInfo, error) {
+	tagsMap, err := a.svc.GetEntityTagsBatch(ctx, entityIDs, includeDmOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -269,6 +270,20 @@ func (a *calendarEraListerAdapter) ListEras(ctx context.Context, calendarID stri
 	return refs, nil
 }
 
+// mediaMemberCheckerAdapter wraps campaigns.CampaignService to implement the
+// media.MemberChecker interface without creating a circular import.
+// Uses background context since membership checks happen on unauthenticated
+// serve requests where the request context may not carry campaign data.
+type mediaMemberCheckerAdapter struct {
+	svc campaigns.CampaignService
+}
+
+// IsCampaignMember checks if the user is a member of the campaign.
+func (a *mediaMemberCheckerAdapter) IsCampaignMember(campaignID, userID string) bool {
+	member, err := a.svc.GetMember(context.Background(), campaignID, userID)
+	return err == nil && member != nil
+}
+
 // storageLimiterAdapter wraps settings.SettingsService to implement the
 // media.StorageLimiter interface without creating a circular import.
 type storageLimiterAdapter struct {
@@ -385,7 +400,30 @@ func (a *App) RegisterRoutes() {
 	mediaRepo := media.NewMediaRepository(a.DB)
 	mediaService := media.NewMediaService(mediaRepo, a.Config.Upload.MediaPath, a.Config.Upload.MaxSize)
 	mediaHandler := media.NewHandler(mediaService)
-	media.RegisterRoutes(e, mediaHandler, authService, a.Config.Upload.MaxSize)
+
+	// Initialize HMAC URL signer for secure media access.
+	// Auto-generate a signing secret on first boot if not configured.
+	signingSecret := a.Config.Upload.SigningSecret
+	if signingSecret == "" {
+		generated, err := media.GenerateSigningSecret()
+		if err != nil {
+			slog.Error("failed to generate media signing secret", slog.Any("error", err))
+		} else {
+			signingSecret = generated
+			slog.Warn("MEDIA_SIGNING_SECRET not set, using auto-generated secret (will change on restart)")
+		}
+	}
+	var urlSigner *media.URLSigner
+	if signingSecret != "" {
+		urlSigner = media.NewURLSigner(signingSecret)
+		mediaHandler.SetURLSigner(urlSigner)
+	}
+
+	// Wire campaign membership checker for private media access control.
+	mediaHandler.SetMemberChecker(&mediaMemberCheckerAdapter{svc: campaignService})
+
+	media.RegisterRoutes(e, mediaHandler, authService, a.Config.Upload.MaxSize, a.Config.Upload.ServeRateLimit)
+	media.RegisterCampaignRoutes(e, mediaHandler, campaignService, authService)
 
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings, storage).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
@@ -428,6 +466,10 @@ func (a *App) RegisterRoutes() {
 	// failed attempts, and password resets are recorded automatically.
 	authHandler.SetSecurityLogger(securityService)
 
+	// Wire security event logging into the media handler so uploads, deletes,
+	// and quota failures are recorded in the admin security dashboard.
+	mediaHandler.SetSecurityLogger(securityService)
+
 	// Sync API plugin: external tool integration with API key auth,
 	// request logging, security monitoring, and admin dashboard.
 	syncRepo := syncapi.NewSyncAPIRepository(a.DB)
@@ -469,7 +511,11 @@ func (a *App) RegisterRoutes() {
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService)
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService)
-	syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, syncService)
+	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
+	if urlSigner != nil {
+		mediaAPIHandler.SetURLSigner(urlSigner)
+	}
+	syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, syncService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
 	tagRepo := tags.NewTagRepository(a.DB)
@@ -499,6 +545,9 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetAuditService(auditService)
 	entityHandler.SetTagFetcher(&entityTagFetcherAdapter{svc: tagService})
 	entityHandler.SetTimelineSearcher(timelineSvc)
+	entityHandler.SetMapSearcher(mapsService)
+	entityHandler.SetCalendarSearcher(calendarService)
+	entityHandler.SetSessionSearcher(sessionsService)
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	tagHandler.SetAuditService(auditService)
 
@@ -604,6 +653,16 @@ func (a *App) RegisterRoutes() {
 
 		// Active path for nav highlighting.
 		ctx = layouts.SetActivePath(ctx, c.Request().URL.Path)
+
+		// Signed media URL generators for templates.
+		if urlSigner != nil {
+			ctx = layouts.SetMediaURLFunc(ctx, func(fileID string) string {
+				return urlSigner.Sign(fileID, 1*time.Hour)
+			})
+			ctx = layouts.SetMediaThumbFunc(ctx, func(fileID, size string) string {
+				return urlSigner.SignThumb(fileID, size, 1*time.Hour)
+			})
+		}
 
 		return ctx
 	}

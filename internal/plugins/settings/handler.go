@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -219,6 +220,178 @@ func (h *Handler) DeleteCampaignStorageLimit(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+}
+
+// --- Temporary Bypass Handlers ---
+
+// SetUserBypass sets a temporary bypass on a user's upload limit
+// (PUT /admin/users/:id/storage/bypass).
+func (h *Handler) SetUserBypass(c echo.Context) error {
+	userID := c.Param("id")
+	if userID == "" {
+		return apperror.NewBadRequest("user ID is required")
+	}
+
+	// Parse bypass upload limit (MB).
+	var maxUpload *int64
+	if v := c.FormValue("bypass_max_upload"); v != "" {
+		mb, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return apperror.NewBadRequest("invalid bypass max upload size")
+		}
+		bytes := int64(mb * 1024 * 1024)
+		maxUpload = &bytes
+	}
+
+	// Parse duration.
+	expiresAt, err := parseDuration(c.FormValue("duration"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid duration")
+	}
+
+	reason := c.FormValue("reason")
+	grantedBy := auth.GetUserID(c)
+
+	if err := h.service.SetUserBypass(c.Request().Context(), userID, maxUpload, expiresAt, reason, grantedBy); err != nil {
+		return err
+	}
+
+	slog.Info("user storage bypass set",
+		slog.String("target_user", userID),
+		slog.String("by", grantedBy),
+		slog.Time("expires_at", expiresAt),
+	)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/admin/storage")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+}
+
+// ClearUserBypass removes a temporary bypass from a user's storage limits
+// (DELETE /admin/users/:id/storage/bypass).
+func (h *Handler) ClearUserBypass(c echo.Context) error {
+	userID := c.Param("id")
+	if userID == "" {
+		return apperror.NewBadRequest("user ID is required")
+	}
+
+	if err := h.service.ClearUserBypass(c.Request().Context(), userID); err != nil {
+		return err
+	}
+
+	slog.Info("user storage bypass cleared",
+		slog.String("target_user", userID),
+		slog.String("by", auth.GetUserID(c)),
+	)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/admin/storage")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+}
+
+// SetCampaignBypass sets a temporary bypass on a campaign's storage limits
+// (PUT /admin/campaigns/:id/storage/bypass).
+func (h *Handler) SetCampaignBypass(c echo.Context) error {
+	campaignID := c.Param("id")
+	if campaignID == "" {
+		return apperror.NewBadRequest("campaign ID is required")
+	}
+
+	// Parse bypass storage limit (MB).
+	var maxStorage *int64
+	if v := c.FormValue("bypass_max_storage"); v != "" {
+		mb, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return apperror.NewBadRequest("invalid bypass max storage")
+		}
+		bytes := int64(mb * 1024 * 1024)
+		maxStorage = &bytes
+	}
+
+	// Parse bypass files limit.
+	var maxFiles *int
+	if v := c.FormValue("bypass_max_files"); v != "" {
+		files, err := strconv.Atoi(v)
+		if err != nil {
+			return apperror.NewBadRequest("invalid bypass max files")
+		}
+		maxFiles = &files
+	}
+
+	// Parse duration.
+	expiresAt, err := parseDuration(c.FormValue("duration"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid duration")
+	}
+
+	reason := c.FormValue("reason")
+	grantedBy := auth.GetUserID(c)
+
+	if err := h.service.SetCampaignBypass(c.Request().Context(), campaignID, maxStorage, maxFiles, expiresAt, reason, grantedBy); err != nil {
+		return err
+	}
+
+	slog.Info("campaign storage bypass set",
+		slog.String("target_campaign", campaignID),
+		slog.String("by", grantedBy),
+		slog.Time("expires_at", expiresAt),
+	)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/admin/storage")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+}
+
+// ClearCampaignBypass removes a temporary bypass from a campaign's storage limits
+// (DELETE /admin/campaigns/:id/storage/bypass).
+func (h *Handler) ClearCampaignBypass(c echo.Context) error {
+	campaignID := c.Param("id")
+	if campaignID == "" {
+		return apperror.NewBadRequest("campaign ID is required")
+	}
+
+	if err := h.service.ClearCampaignBypass(c.Request().Context(), campaignID); err != nil {
+		return err
+	}
+
+	slog.Info("campaign storage bypass cleared",
+		slog.String("target_campaign", campaignID),
+		slog.String("by", auth.GetUserID(c)),
+	)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/admin/storage")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+}
+
+// parseDuration converts a duration string (e.g., "1h", "6h", "24h", "7d", "30d")
+// into a future expiration time.
+func parseDuration(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, fmt.Errorf("duration is required")
+	}
+
+	durations := map[string]time.Duration{
+		"1h":  1 * time.Hour,
+		"6h":  6 * time.Hour,
+		"24h": 24 * time.Hour,
+		"7d":  7 * 24 * time.Hour,
+		"30d": 30 * 24 * time.Hour,
+	}
+
+	d, ok := durations[s]
+	if !ok {
+		return time.Time{}, fmt.Errorf("unsupported duration %q", s)
+	}
+	return time.Now().Add(d), nil
 }
 
 // parseFloatField parses a form field as float64. Empty strings return 0 (no limit).

@@ -574,6 +574,22 @@
           var atOffset = textBefore.length - mentionMatch[0].length + (mentionMatch[1].length);
           var startPos = $pos.start() + atOffset;
 
+          // Skip if the @ is inside a link mark (an already-inserted mention).
+          // Resolve the position just after @ and check its marks.
+          var $atPos = state.doc.resolve(Math.min(startPos + 1, state.doc.content.size));
+          var marks = $atPos.marks();
+          var inLink = false;
+          for (var mi = 0; mi < marks.length; mi++) {
+            if (marks[mi].type.name === 'link') {
+              inLink = true;
+              break;
+            }
+          }
+          if (inLink) {
+            if (mentionActive) closeMention();
+            return;
+          }
+
           if (!mentionActive) {
             mentionActive = true;
             mentionStartPos = startPos;
@@ -624,6 +640,84 @@
     };
   }
 
+  // --- Extended Link Mark for Entity Mentions ---
+
+  /**
+   * Chronicle.MentionLink - Extended TipTap Link mark that preserves
+   * entity mention attributes through the ProseMirror JSON round-trip.
+   *
+   * TipTap's default Link mark only stores href/target. When a mention is
+   * inserted as <a data-mention-id="..." data-entity-preview="...">, those
+   * attributes are dropped during parse → JSON → render. This extended mark
+   * keeps them in the schema so hover preview cards work after save/reload.
+   *
+   * Must replace TipTap.Link in the editor extensions array.
+   */
+  Chronicle.MentionLink = TipTap.Link.extend({
+    addAttributes: function () {
+      // Inherit parent Link attributes (href, target, etc.).
+      var parentAttrs = {};
+      if (this.parent) {
+        try { parentAttrs = this.parent(); } catch (e) {}
+      }
+      // Ensure core Link attrs exist even if parent() failed.
+      if (!parentAttrs.href) {
+        parentAttrs.href = { default: null };
+      }
+      if (!parentAttrs.target) {
+        parentAttrs.target = { default: null };
+      }
+
+      // Entity mention ID — identifies this link as an entity reference.
+      parentAttrs['data-mention-id'] = {
+        default: null,
+        parseHTML: function (el) {
+          return el.getAttribute('data-mention-id');
+        },
+        renderHTML: function (attributes) {
+          if (!attributes['data-mention-id']) return {};
+          return { 'data-mention-id': attributes['data-mention-id'] };
+        },
+      };
+
+      // Entity preview URL — used by entity_tooltip.js for hover cards.
+      parentAttrs['data-entity-preview'] = {
+        default: null,
+        parseHTML: function (el) {
+          return el.getAttribute('data-entity-preview');
+        },
+        renderHTML: function (attributes) {
+          if (!attributes['data-entity-preview']) return {};
+          return { 'data-entity-preview': attributes['data-entity-preview'] };
+        },
+      };
+
+      return parentAttrs;
+    },
+
+    // Override renderHTML to add entity-link class on mention links while
+    // keeping regular links styled normally.
+    renderHTML: function (props) {
+      var attrs = props.HTMLAttributes;
+      // Merge with configured HTMLAttributes (class, target, rel, etc.).
+      var merged = {};
+      var optAttrs = this.options.HTMLAttributes || {};
+      var key;
+      for (key in optAttrs) {
+        if (optAttrs.hasOwnProperty(key)) merged[key] = optAttrs[key];
+      }
+      for (key in attrs) {
+        if (attrs.hasOwnProperty(key)) merged[key] = attrs[key];
+      }
+      // Entity mention links get distinctive styling + non-editable behavior.
+      if (merged['data-mention-id']) {
+        merged['class'] = 'entity-link';
+        merged['contenteditable'] = 'false';
+      }
+      return ['a', merged, 0];
+    },
+  });
+
   // --- Public API ---
 
   /**
@@ -640,11 +734,4 @@
    * @returns {Object} Extension config with lifecycle hooks.
    */
   Chronicle.MentionExtension = createMentionExtensionConfig;
-
-  /**
-   * Chronicle.MentionNode - The mention node schema definition.
-   * Used by the editor to register the custom node type so that
-   * mentions are properly parsed from and serialized to HTML.
-   */
-  Chronicle.MentionNode = createMentionNode;
 })();

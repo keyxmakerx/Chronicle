@@ -455,6 +455,9 @@ type EntityRepository interface {
 
 	// UpdatePopupConfig persists the entity's hover preview configuration.
 	UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error
+
+	// CopyEntityTags copies all entity_tags associations from one entity to another.
+	CopyEntityTags(ctx context.Context, sourceEntityID, targetEntityID string) error
 }
 
 // entityRepository implements EntityRepository with MariaDB queries.
@@ -1066,6 +1069,18 @@ func (r *entityRepository) UpdatePopupConfig(ctx context.Context, entityID strin
 	}
 	if rows == 0 {
 		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
+// CopyEntityTags duplicates all entity_tags rows from one entity to another
+// using a single INSERT...SELECT statement.
+func (r *entityRepository) CopyEntityTags(ctx context.Context, sourceEntityID, targetEntityID string) error {
+	query := `INSERT IGNORE INTO entity_tags (entity_id, tag_id, created_at)
+	           SELECT ?, tag_id, NOW() FROM entity_tags WHERE entity_id = ?`
+	_, err := r.db.ExecContext(ctx, query, targetEntityID, sourceEntityID)
+	if err != nil {
+		return fmt.Errorf("copying entity tags: %w", err)
 	}
 	return nil
 }

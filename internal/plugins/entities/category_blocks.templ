@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // CategoryBlockSwitch dispatches a dashboard block to the appropriate render
@@ -156,7 +157,7 @@ templ catRecentPages(cc *campaigns.CampaignContext, entities []Entity, config ma
 					>
 						if entity.ImagePath != nil && *entity.ImagePath != "" {
 							<img
-								src={ fmt.Sprintf("/media/%s", *entity.ImagePath) }
+								src={ layouts.MediaURL(ctx, *entity.ImagePath) }
 								alt={ entity.Name }
 								class="w-8 h-8 rounded object-cover shrink-0"
 							/>

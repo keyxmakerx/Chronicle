@@ -28,11 +28,7 @@ Chronicle.register('notes', {
     var campaignId = config.campaignId || '';
     var entityId = config.entityId || '';
     var currentUserId = config.userId || '';
-    var csrfToken = '';
-
-    // Read CSRF token from cookie.
-    var match = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-    if (match) csrfToken = decodeURIComponent(match[1]);
+    var csrfToken = Chronicle.getCsrf();
 
     var HEARTBEAT_INTERVAL = 2 * 60 * 1000; // 2 minutes
 
@@ -368,6 +364,7 @@ Chronicle.register('notes', {
     }
 
     function deleteNote(id) {
+      if (!confirm('Delete this note? This cannot be undone.')) return;
       // Release lock before deleting if we hold one.
       if (state.lockedNoteId === id) {
         releaseLockIfHeld();

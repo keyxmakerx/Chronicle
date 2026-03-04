@@ -19,6 +19,13 @@ Chronicle.register('image-upload', {
     fileInput.style.display = 'none';
     el.appendChild(fileInput);
 
+    // Prevent the file input's click from bubbling back up to el,
+    // which would re-trigger the handler and cause Firefox to suppress
+    // the file picker (recursive dispatch detected as non-user-gesture).
+    fileInput.addEventListener('click', function (e) {
+      e.stopPropagation();
+    });
+
     // Clicking the widget area opens the file picker.
     el.addEventListener('click', function (e) {
       e.preventDefault();
@@ -54,6 +61,13 @@ Chronicle.register('image-upload', {
       var formData = new FormData();
       formData.append('file', file);
       formData.append('usage_type', 'entity_image');
+
+      // Extract campaign_id from the entity endpoint URL for quota enforcement.
+      // Endpoint format: /campaigns/:id/entities/:eid/image
+      var campMatch = (config.endpoint || '').match(/\/campaigns\/([^/]+)\//);
+      if (campMatch) {
+        formData.append('campaign_id', campMatch[1]);
+      }
 
       fetch(config.uploadUrl, {
         method: 'POST',

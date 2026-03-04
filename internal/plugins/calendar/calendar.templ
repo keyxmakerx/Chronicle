@@ -5,6 +5,7 @@
 package calendar
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -203,12 +204,13 @@ templ calendarSetupChooser(cc *campaigns.CampaignContext, csrfToken string) {
 // CalendarPage renders the full calendar page with monthly grid.
 templ CalendarPage(cc *campaigns.CampaignContext, data CalendarViewData) {
 	@layouts.App(data.Calendar.Name) {
-		<div class="h-full flex flex-col -mx-5 -my-4">
+		<div class="h-full flex flex-col -mx-5 -my-4" data-calendar-months={ calendarMonthNamesJSON(data.Calendar) } data-calendar-categories={ calendarCategoriesJSON(data.Calendar) }>
 			@calendarHeader(cc, data)
 			<div class="flex-1 overflow-y-auto px-6 py-4">
 				@calendarGrid(cc, data)
 			</div>
 		</div>
+		@eventViewModal(data)
 		if data.IsScribe {
 			@eventModal(data)
 		}
@@ -332,6 +334,24 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 					<i class="fa-solid fa-gear text-sm"></i>
 				</a>
 			}
+			<!-- Sessions link (cross-plugin discoverability) -->
+			if layouts.IsAddonEnabled(ctx, "sessions") {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions", data.CampaignID)) }
+					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+					title="Game sessions & RSVP"
+				>
+					<i class="fa-solid fa-dice-d20 text-sm"></i>
+				</a>
+			} else if data.IsOwner {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/addons/settings", data.CampaignID)) }
+					class="p-2 rounded-md hover:bg-surface-alt text-fg-muted hover:text-fg transition-colors"
+					title="Enable Sessions addon for RSVP tracking"
+				>
+					<i class="fa-solid fa-dice-d20 text-sm opacity-50"></i>
+				</a>
+			}
 			<!-- Add event button (Scribe+) -->
 			if data.IsScribe {
 				<button
@@ -381,10 +401,17 @@ templ calendarGrid(cc *campaigns.CampaignContext, data CalendarViewData) {
 // dayCell renders a single day in the calendar grid. Shows season color
 // as a subtle left border, moon phases on hover, and event chips.
 templ dayCell(data CalendarViewData, day int) {
-	<div class={
-		"bg-surface min-h-[80px] p-1.5 relative group",
-		templ.KV("ring-2 ring-inset ring-accent/40", data.IsToday(day)),
-	} style={ seasonBorderStyle(data.CurrentSeason(day)) }>
+	<div
+		class={
+			"bg-surface min-h-[80px] p-1.5 relative group",
+			templ.KV("ring-2 ring-inset ring-accent/40", data.IsToday(day)),
+			templ.KV("cursor-pointer hover:bg-surface-alt/50 transition-colors", data.IsScribe),
+		}
+		style={ seasonBorderStyle(data.CurrentSeason(day)) }
+		if data.IsScribe {
+			onclick={ templ.ComponentScript{Call: fmt.Sprintf("dayCellClick(event, %d, %d, %d)", data.Year, data.MonthIndex, day)} }
+		}
+	>
 		<!-- Day number + add button -->
 		<div class="flex items-center justify-between mb-1">
 			<span class={
@@ -407,70 +434,227 @@ templ dayCell(data CalendarViewData, day int) {
 		</div>
 		<!-- Events for this day -->
 		for _, evt := range data.EventsForDay(day) {
-			if data.IsScribe {
-				<button
-					class={
-						"w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-pointer hover:ring-1 hover:ring-accent/30",
-						templ.KV("bg-accent/15 text-accent", evt.Visibility == "everyone"),
-						templ.KV("bg-amber-500/15 text-amber-400", evt.Visibility == "dm_only"),
-					}
-					title={ eventTooltip(evt) }
-					data-event-id={ evt.ID }
-					data-event-name={ evt.Name }
-					data-event-description={ derefStr(evt.Description) }
-					data-event-description-html={ derefStr(evt.DescriptionHTML) }
-					data-event-year={ strconv.Itoa(evt.Year) }
-					data-event-month={ strconv.Itoa(evt.Month) }
-					data-event-day={ strconv.Itoa(evt.Day) }
-					data-event-start-hour={ derefInt(evt.StartHour) }
-					data-event-start-minute={ derefInt(evt.StartMinute) }
-					data-event-end-hour={ derefInt(evt.EndHour) }
-					data-event-end-minute={ derefInt(evt.EndMinute) }
-					data-event-visibility={ evt.Visibility }
-					data-event-visibility-rules={ derefStr(evt.VisibilityRules) }
-					data-event-category={ derefStr(evt.Category) }
-					data-event-recurring={ strconv.FormatBool(evt.IsRecurring) }
-					data-event-entity-id={ derefStr(evt.EntityID) }
-					onclick="openEditEventModal(this)"
-				>
-					if evt.HasTime() {
-						<span class="opacity-60">{ evt.FormatTime() }</span>
-						{ " " }
-					}
-					if evt.EntityID != nil && evt.EntityIcon != "" {
-						<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
-					}
-					if evt.Category != nil && *evt.Category != "" {
-						<span class="opacity-60">{ categoryIcon(*evt.Category) }</span>
-						{ " " }
-					}
-					{ evt.Name }
-				</button>
-			} else {
-				<div
-					class={
-						"text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-default",
-						templ.KV("bg-accent/15 text-accent", evt.Visibility == "everyone"),
-						templ.KV("bg-amber-500/15 text-amber-400", evt.Visibility == "dm_only"),
-					}
-					title={ eventTooltip(evt) }
-				>
-					if evt.HasTime() {
-						<span class="opacity-60">{ evt.FormatTime() }</span>
-						{ " " }
-					}
-					if evt.EntityID != nil && evt.EntityIcon != "" {
-						<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
-					}
-					if evt.Category != nil && *evt.Category != "" {
-						<span class="opacity-60">{ categoryIcon(*evt.Category) }</span>
-						{ " " }
-					}
-					{ evt.Name }
-				</div>
-			}
+			<button
+				class={
+					"w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-pointer hover:ring-1 hover:ring-accent/30",
+					templ.KV("bg-accent/15 text-accent", evt.Visibility == "everyone"),
+					templ.KV("bg-amber-500/15 text-amber-400", evt.Visibility == "dm_only"),
+				}
+				title={ eventTooltip(evt) }
+				data-event-id={ evt.ID }
+				data-event-name={ evt.Name }
+				data-event-description={ derefStr(evt.Description) }
+				data-event-description-html={ derefStr(evt.DescriptionHTML) }
+				data-event-year={ strconv.Itoa(evt.Year) }
+				data-event-month={ strconv.Itoa(evt.Month) }
+				data-event-day={ strconv.Itoa(evt.Day) }
+				data-event-start-hour={ derefInt(evt.StartHour) }
+				data-event-start-minute={ derefInt(evt.StartMinute) }
+				data-event-end-hour={ derefInt(evt.EndHour) }
+				data-event-end-minute={ derefInt(evt.EndMinute) }
+				data-event-visibility={ evt.Visibility }
+				data-event-visibility-rules={ derefStr(evt.VisibilityRules) }
+				data-event-category={ derefStr(evt.Category) }
+				data-event-recurring={ strconv.FormatBool(evt.IsRecurring) }
+				data-event-entity-id={ derefStr(evt.EntityID) }
+				onclick="openViewEventModal(this)"
+			>
+				if evt.HasTime() {
+					<span class="opacity-60">{ evt.FormatTime() }</span>
+					{ " " }
+				}
+				if evt.EntityID != nil && evt.EntityIcon != "" {
+					<i class={ "fa-solid " + evt.EntityIcon, "mr-0.5" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
+				}
+				if evt.Category != nil && *evt.Category != "" {
+					<span class="opacity-60">{ categoryIcon(data.Calendar.EventCategories, *evt.Category) }</span>
+					{ " " }
+				}
+				{ evt.Name }
+			</button>
 		}
 	</div>
+}
+
+// eventViewModal renders a read-only event detail overlay.
+// Clicking an event chip opens this first; scribes see an Edit button
+// that transitions to the full edit modal.
+templ eventViewModal(data CalendarViewData) {
+	<div
+		id="event-view-modal"
+		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick="if(event.target===this)closeViewModal()"
+	>
+		<div class="card p-6 w-full max-w-md">
+			<!-- Header -->
+			<div class="flex items-center justify-between mb-4">
+				<h2 id="view-evt-name" class="text-lg font-semibold text-fg truncate"></h2>
+				<button onclick="closeViewModal()" class="text-fg-muted hover:text-fg text-sm">
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+
+			<!-- Date & time -->
+			<div class="flex items-center gap-2 text-sm text-fg-secondary mb-3">
+				<i class="fa-regular fa-calendar text-fg-muted"></i>
+				<span id="view-evt-date"></span>
+				<span id="view-evt-time" class="hidden">
+					<i class="fa-regular fa-clock text-fg-muted ml-2"></i>
+					<span id="view-evt-time-text"></span>
+				</span>
+			</div>
+
+			<!-- Category & visibility badges -->
+			<div id="view-evt-badges" class="flex flex-wrap gap-2 mb-4">
+				<span id="view-evt-category-badge" class="hidden inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-accent/10 text-accent"></span>
+				<span id="view-evt-visibility-badge" class="hidden inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full"></span>
+				<span id="view-evt-recurring-badge" class="hidden inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+					<i class="fa-solid fa-repeat mr-1"></i> Recurring yearly
+				</span>
+			</div>
+
+			<!-- Description -->
+			<div id="view-evt-description" class="hidden prose prose-sm dark:prose-invert max-w-none text-sm text-fg-body mb-4 border-t border-edge pt-3"></div>
+
+			<!-- Linked entity -->
+			<div id="view-evt-entity" class="hidden text-sm mb-4">
+				<span class="text-fg-muted">Linked to: </span>
+				<a id="view-evt-entity-link" href="#" class="text-accent hover:text-accent-hover"></a>
+			</div>
+
+			<!-- Actions -->
+			<div class="flex justify-end gap-2 pt-2 border-t border-edge">
+				<button onclick="closeViewModal()" class="btn-secondary text-xs">Close</button>
+				if data.IsScribe {
+					<button id="view-evt-edit-btn" class="btn-primary text-xs" onclick="editFromView()">
+						<i class="fa-solid fa-pencil mr-1"></i> Edit
+					</button>
+				}
+			</div>
+		</div>
+	</div>
+	<script>
+		(function() {
+			var viewModal = document.getElementById('event-view-modal');
+			var currentViewEl = null;
+
+			// Build month name and category lookups from calendar data.
+			var calMonths = [];
+			var calCategories = [];
+			try {
+				var calData = document.querySelector('[data-calendar-months]');
+				if (calData) calMonths = JSON.parse(calData.dataset.calendarMonths);
+				if (calData && calData.dataset.calendarCategories) calCategories = JSON.parse(calData.dataset.calendarCategories);
+			} catch(e) {}
+
+			function categoryLabel(slug) {
+				for (var i = 0; i < calCategories.length; i++) {
+					if (calCategories[i].slug === slug) return calCategories[i].icon + ' ' + calCategories[i].name;
+				}
+				return slug.charAt(0).toUpperCase() + slug.slice(1);
+			}
+
+			function monthName(idx) {
+				if (idx >= 1 && idx <= calMonths.length) return calMonths[idx - 1];
+				return 'Month ' + idx;
+			}
+
+			window.openViewEventModal = function(el) {
+				currentViewEl = el;
+				var d = el.dataset;
+
+				// Name
+				document.getElementById('view-evt-name').textContent = d.eventName || 'Untitled Event';
+
+				// Date
+				var dateStr = d.eventDay + ' ' + monthName(parseInt(d.eventMonth)) + ' ' + d.eventYear;
+				document.getElementById('view-evt-date').textContent = dateStr;
+
+				// Time
+				var timeEl = document.getElementById('view-evt-time');
+				if (d.eventStartHour) {
+					var t = pad(d.eventStartHour) + ':' + pad(d.eventStartMinute || '0');
+					if (d.eventEndHour) t += ' – ' + pad(d.eventEndHour) + ':' + pad(d.eventEndMinute || '0');
+					document.getElementById('view-evt-time-text').textContent = t;
+					timeEl.classList.remove('hidden');
+				} else {
+					timeEl.classList.add('hidden');
+				}
+
+				// Category
+				var catBadge = document.getElementById('view-evt-category-badge');
+				if (d.eventCategory) {
+					catBadge.textContent = categoryLabel(d.eventCategory);
+					catBadge.classList.remove('hidden');
+				} else {
+					catBadge.classList.add('hidden');
+				}
+
+				// Visibility
+				var visBadge = document.getElementById('view-evt-visibility-badge');
+				if (d.eventVisibility === 'dm_only') {
+					visBadge.textContent = 'DM Only';
+					visBadge.className = 'inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300';
+					visBadge.classList.remove('hidden');
+				} else {
+					visBadge.classList.add('hidden');
+				}
+
+				// Recurring
+				var recBadge = document.getElementById('view-evt-recurring-badge');
+				if (d.eventRecurring === 'true') {
+					recBadge.classList.remove('hidden');
+				} else {
+					recBadge.classList.add('hidden');
+				}
+
+				// Description
+				var descEl = document.getElementById('view-evt-description');
+				if (d.eventDescriptionHtml) {
+					descEl.innerHTML = d.eventDescriptionHtml;
+					descEl.classList.remove('hidden');
+				} else if (d.eventDescription) {
+					descEl.textContent = d.eventDescription;
+					descEl.classList.remove('hidden');
+				} else {
+					descEl.classList.add('hidden');
+				}
+
+				// Entity link
+				var entityEl = document.getElementById('view-evt-entity');
+				if (d.eventEntityId) {
+					var campaignID = window.location.pathname.split('/')[2];
+					var link = document.getElementById('view-evt-entity-link');
+					link.href = '/campaigns/' + campaignID + '/entities/' + d.eventEntityId;
+					link.textContent = 'View linked page';
+					entityEl.classList.remove('hidden');
+				} else {
+					entityEl.classList.add('hidden');
+				}
+
+				viewModal.classList.remove('hidden');
+			};
+
+			window.closeViewModal = function() {
+				viewModal.classList.add('hidden');
+				currentViewEl = null;
+			};
+
+			// Transition from view to edit modal.
+			window.editFromView = function() {
+				var el = currentViewEl;
+				closeViewModal();
+				if (el && window.openEditEventModal) {
+					openEditEventModal(el);
+				}
+			};
+
+			function pad(n) {
+				var s = String(n);
+				return s.length < 2 ? '0' + s : s;
+			}
+		})();
+	</script>
 }
 
 // eventModal renders the Alpine.js-powered event create/edit modal.
@@ -551,13 +735,9 @@ templ eventModal(data CalendarViewData) {
 						<label class="block text-xs font-medium text-fg-body mb-1">Category</label>
 						<select name="category" id="evt-category" class="input w-full">
 							<option value="">None</option>
-							<option value="holiday">Holiday</option>
-							<option value="battle">Battle</option>
-							<option value="quest">Quest</option>
-							<option value="birthday">Birthday</option>
-							<option value="festival">Festival</option>
-							<option value="travel">Travel</option>
-							<option value="custom">Custom</option>
+							for _, cat := range data.Calendar.EventCategories {
+								<option value={ cat.Slug }>{ cat.Icon } { cat.Name }</option>
+							}
 						</select>
 					</div>
 				</div>
@@ -829,6 +1009,14 @@ templ eventModal(data CalendarViewData) {
 						}
 					});
 
+					// Click on empty space in a date cell to create event.
+					// Ignores clicks on event chips or buttons (they handle themselves).
+					window.dayCellClick = function(e, year, month, day) {
+						var tag = e.target.tagName.toLowerCase();
+						if (tag === 'button' || tag === 'i' || e.target.closest('button')) return;
+						openEventModal(year, month, day);
+					};
+
 					// Open modal in create mode with a pre-set date.
 					window.openEventModal = function(year, month, day) {
 						resetEventModal();
@@ -1020,7 +1208,7 @@ templ EntityEventsSection(cc *campaigns.CampaignContext, cal *Calendar, events [
 				>
 					<div class="flex items-center gap-2 min-w-0">
 						if evt.Category != nil && *evt.Category != "" {
-							<span class="text-xs opacity-60">{ categoryIcon(*evt.Category) }</span>
+							<span class="text-xs opacity-60">{ categoryIcon(cal.EventCategories, *evt.Category) }</span>
 						}
 						<span class="text-sm text-fg truncate">{ evt.Name }</span>
 						if evt.IsRecurring {
@@ -1181,7 +1369,7 @@ templ UpcomingEventsBlock(cc *campaigns.CampaignContext, cal *Calendar, events [
 			>
 				<div class="flex items-center gap-2 min-w-0">
 					if evt.Category != nil && *evt.Category != "" {
-						<span class="text-xs opacity-60">{ categoryIcon(*evt.Category) }</span>
+						<span class="text-xs opacity-60">{ categoryIcon(cal.EventCategories, *evt.Category) }</span>
 					}
 					if evt.EntityID != nil && evt.EntityIcon != "" {
 						<i class={ "fa-solid " + evt.EntityIcon, "text-xs" } style={ fmt.Sprintf("color:%s", evt.EntityColor) }></i>
@@ -1323,7 +1511,7 @@ templ timelineEvent(cc *campaigns.CampaignContext, cal *Calendar, evt Event) {
 			<div class="min-w-0">
 				<div class="flex items-center gap-2">
 					if evt.Category != nil && *evt.Category != "" {
-						<span class="text-sm opacity-60">{ categoryIcon(*evt.Category) }</span>
+						<span class="text-sm opacity-60">{ categoryIcon(cal.EventCategories, *evt.Category) }</span>
 					}
 					if evt.HasTime() {
 						<span class="text-xs text-fg-secondary">{ evt.FormatTimeRange() }</span>
@@ -1398,22 +1586,39 @@ func formatCurrentDate(cal *Calendar) string {
 	return s
 }
 
-// categoryIcon returns a small icon for an event category.
-func categoryIcon(cat string) string {
-	switch cat {
-	case "holiday":
-		return "\u2B50" // star
-	case "battle":
-		return "\u2694" // swords
-	case "quest":
-		return "\u2757" // exclamation
-	case "birthday":
-		return "\U0001F382" // cake
-	case "festival":
-		return "\U0001F389" // party popper
-	case "travel":
-		return "\U0001F6B6" // walking
-	default:
-		return ""
+// calendarMonthNamesJSON returns a JSON array of month names for JS consumption.
+func calendarMonthNamesJSON(cal *Calendar) string {
+	names := make([]string, len(cal.Months))
+	for i, m := range cal.Months {
+		names[i] = m.Name
 	}
+	b, _ := json.Marshal(names)
+	return string(b)
+}
+
+// calendarCategoriesJSON returns a JSON array of category objects for JS consumption.
+func calendarCategoriesJSON(cal *Calendar) string {
+	type catJSON struct {
+		Slug  string `json:"slug"`
+		Name  string `json:"name"`
+		Icon  string `json:"icon"`
+		Color string `json:"color"`
+	}
+	cats := make([]catJSON, len(cal.EventCategories))
+	for i, c := range cal.EventCategories {
+		cats[i] = catJSON{Slug: c.Slug, Name: c.Name, Icon: c.Icon, Color: c.Color}
+	}
+	b, _ := json.Marshal(cats)
+	return string(b)
+}
+
+// categoryIcon returns a small icon for an event category by looking up
+// the category slug in the calendar's custom event categories.
+func categoryIcon(cats []EventCategory, slug string) string {
+	for _, c := range cats {
+		if c.Slug == slug {
+			return c.Icon
+		}
+	}
+	return ""
 }

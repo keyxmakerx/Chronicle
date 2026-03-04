@@ -41,6 +41,15 @@ type MediaRepository interface {
 	// GetCampaignUsage returns the total bytes and file count for a campaign.
 	// Used for storage quota enforcement at upload time.
 	GetCampaignUsage(ctx context.Context, campaignID string) (totalBytes int64, fileCount int, err error)
+
+	// FindReferences returns entities that reference the given media file,
+	// either via image_path or in their editor HTML content.
+	FindReferences(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error)
+
+	// ListAllFilenames returns all filenames (including thumbnail paths) tracked
+	// in the database. Used by the orphan cleanup job to find disk files without
+	// a corresponding DB record.
+	ListAllFilenames(ctx context.Context) (map[string]bool, error)
 }
 
 // mediaRepository implements MediaRepository with MariaDB queries.
@@ -76,11 +85,16 @@ func (r *mediaRepository) Create(ctx context.Context, file *MediaFile) error {
 	return nil
 }
 
-// FindByID retrieves a media file by its UUID.
+// FindByID retrieves a media file by its UUID. LEFT JOINs the campaigns
+// table to populate CampaignIsPublic in a single query, avoiding N+1
+// lookups when the serve handler checks campaign privacy.
 func (r *mediaRepository) FindByID(ctx context.Context, id string) (*MediaFile, error) {
-	query := `SELECT id, campaign_id, uploaded_by, filename, original_name,
-	                 mime_type, file_size, usage_type, thumbnail_paths, created_at
-	          FROM media_files WHERE id = ?`
+	query := `SELECT m.id, m.campaign_id, m.uploaded_by, m.filename, m.original_name,
+	                 m.mime_type, m.file_size, m.usage_type, m.thumbnail_paths, m.created_at,
+	                 c.is_public
+	          FROM media_files m
+	          LEFT JOIN campaigns c ON m.campaign_id = c.id
+	          WHERE m.id = ?`
 
 	file := &MediaFile{}
 	var thumbJSON string
@@ -88,7 +102,7 @@ func (r *mediaRepository) FindByID(ctx context.Context, id string) (*MediaFile, 
 		&file.ID, &file.CampaignID, &file.UploadedBy,
 		&file.Filename, &file.OriginalName, &file.MimeType,
 		&file.FileSize, &file.UsageType, &thumbJSON,
-		&file.CreatedAt,
+		&file.CreatedAt, &file.CampaignIsPublic,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("media file not found")
@@ -259,4 +273,63 @@ func (r *mediaRepository) GetCampaignUsage(ctx context.Context, campaignID strin
 		return 0, 0, fmt.Errorf("querying campaign storage usage: %w", err)
 	}
 	return totalBytes, fileCount, nil
+}
+
+// ListAllFilenames returns a set of all filenames tracked in the database,
+// including thumbnail paths. The returned map uses relative paths (e.g.,
+// "2006/01/uuid.jpg") as keys.
+func (r *mediaRepository) ListAllFilenames(ctx context.Context) (map[string]bool, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT filename, thumbnail_paths FROM media_files`)
+	if err != nil {
+		return nil, fmt.Errorf("listing all filenames: %w", err)
+	}
+	defer rows.Close()
+
+	known := make(map[string]bool)
+	for rows.Next() {
+		var filename, thumbJSON string
+		if err := rows.Scan(&filename, &thumbJSON); err != nil {
+			return nil, fmt.Errorf("scanning filename row: %w", err)
+		}
+		known[filename] = true
+		if thumbJSON != "" && thumbJSON != "{}" {
+			var thumbs map[string]string
+			if err := json.Unmarshal([]byte(thumbJSON), &thumbs); err == nil {
+				for _, tp := range thumbs {
+					known[tp] = true
+				}
+			}
+		}
+	}
+	return known, rows.Err()
+}
+
+// FindReferences returns entities that reference the given media file.
+// Checks both entity image_path (direct reference) and entry_html (embedded in editor).
+func (r *mediaRepository) FindReferences(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error) {
+	query := `SELECT id, name, slug, 'image' AS ref_type
+	          FROM entities
+	          WHERE campaign_id = ? AND image_path = ?
+	          UNION
+	          SELECT id, name, slug, 'content' AS ref_type
+	          FROM entities
+	          WHERE campaign_id = ? AND entry_html LIKE CONCAT('%/media/', ?, '%')
+	          ORDER BY name`
+
+	rows, err := r.db.QueryContext(ctx, query, campaignID, mediaID, campaignID, mediaID)
+	if err != nil {
+		return nil, fmt.Errorf("finding media references: %w", err)
+	}
+	defer rows.Close()
+
+	var refs []MediaRef
+	for rows.Next() {
+		var ref MediaRef
+		if err := rows.Scan(&ref.EntityID, &ref.EntityName, &ref.EntitySlug, &ref.RefType); err != nil {
+			return nil, fmt.Errorf("scanning media reference: %w", err)
+		}
+		refs = append(refs, ref)
+	}
+	return refs, rows.Err()
 }

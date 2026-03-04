@@ -2,6 +2,8 @@ package admin
 
 import (
 	"fmt"
+	"math"
+	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -87,6 +89,31 @@ func usageColor(t string) string {
 	default:
 		return "text-fg-secondary bg-surface-alt"
 	}
+}
+
+// formatTimeRemaining returns a human-readable countdown string (e.g., "2h 30m", "5d").
+func formatTimeRemaining(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	remaining := time.Until(*t)
+	if remaining <= 0 {
+		return "expired"
+	}
+	hours := remaining.Hours()
+	if hours >= 24 {
+		days := int(math.Floor(hours / 24))
+		return fmt.Sprintf("%dd", days)
+	}
+	if hours >= 1 {
+		h := int(math.Floor(hours))
+		m := int(math.Floor(remaining.Minutes())) - h*60
+		if m > 0 {
+			return fmt.Sprintf("%dh %dm", h, m)
+		}
+		return fmt.Sprintf("%dh", h)
+	}
+	return fmt.Sprintf("%dm", int(math.Floor(remaining.Minutes())))
 }
 
 // AdminStoragePage renders the combined storage management and settings admin page.
@@ -194,7 +221,7 @@ templ storageFilesTab(data StoragePageData) {
 									<div class="flex items-center gap-2">
 										if f.IsImage() {
 											<img
-												src={ fmt.Sprintf("/media/%s/thumb/300", f.ID) }
+												src={ layouts.MediaThumbURL(ctx, f.ID, "300") }
 												alt={ f.OriginalName }
 												class="w-8 h-8 rounded object-cover bg-surface-alt"
 											/>
@@ -223,7 +250,7 @@ templ storageFilesTab(data StoragePageData) {
 								<td class="px-4 py-2.5 text-right">
 									<div class="flex items-center justify-end gap-2">
 										<a
-											href={ templ.SafeURL(fmt.Sprintf("/media/%s", f.ID)) }
+											href={ templ.SafeURL(layouts.MediaURL(ctx, f.ID)) }
 											target="_blank"
 											class="text-sm text-accent hover:text-accent-hover transition-colors"
 										>
@@ -398,7 +425,15 @@ templ storageLimitsTab(data StoragePageData) {
 						for _, ul := range data.UserLimits {
 							<div class="flex items-center justify-between px-3 py-2 bg-surface-alt rounded-lg text-sm">
 								<div class="min-w-0">
-									<span class="font-medium text-fg-body">{ ul.DisplayName }</span>
+									<div class="flex items-center gap-2">
+										<span class="font-medium text-fg-body">{ ul.DisplayName }</span>
+										if ul.HasActiveBypass() {
+											<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+												<i class="fa-solid fa-bolt text-[8px]"></i>
+												Bypass { formatTimeRemaining(ul.BypassExpiresAt) }
+											</span>
+										}
+									</div>
 									<div class="flex gap-3 text-xs text-fg-muted mt-0.5">
 										<span>
 											Upload:
@@ -417,15 +452,30 @@ templ storageLimitsTab(data StoragePageData) {
 											}
 										</span>
 									</div>
+									if ul.HasActiveBypass() && ul.BypassReason != nil && *ul.BypassReason != "" {
+										<p class="text-[10px] text-orange-600 dark:text-orange-400 mt-0.5 italic">{ *ul.BypassReason }</p>
+									}
 								</div>
-								<button
-									hx-delete={ fmt.Sprintf("/admin/users/%s/storage", ul.UserID) }
-									hx-confirm={ fmt.Sprintf("Remove override for %s?", ul.DisplayName) }
-									hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
-									class="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors shrink-0 ml-2"
-								>
-									Remove
-								</button>
+								<div class="flex items-center gap-2 shrink-0 ml-2">
+									if ul.HasActiveBypass() {
+										<button
+											hx-delete={ fmt.Sprintf("/admin/users/%s/storage/bypass", ul.UserID) }
+											hx-confirm={ fmt.Sprintf("Revoke bypass for %s?", ul.DisplayName) }
+											hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+											class="text-xs text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 transition-colors"
+										>
+											Revoke
+										</button>
+									}
+									<button
+										hx-delete={ fmt.Sprintf("/admin/users/%s/storage", ul.UserID) }
+										hx-confirm={ fmt.Sprintf("Remove override for %s?", ul.DisplayName) }
+										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+										class="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+									>
+										Remove
+									</button>
+								</div>
 							</div>
 						}
 					</div>
@@ -452,7 +502,15 @@ templ storageLimitsTab(data StoragePageData) {
 						for _, cl := range data.CampaignLimits {
 							<div class="flex items-center justify-between px-3 py-2 bg-surface-alt rounded-lg text-sm">
 								<div class="min-w-0">
-									<span class="font-medium text-fg-body">{ cl.CampaignName }</span>
+									<div class="flex items-center gap-2">
+										<span class="font-medium text-fg-body">{ cl.CampaignName }</span>
+										if cl.HasActiveBypass() {
+											<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+												<i class="fa-solid fa-bolt text-[8px]"></i>
+												Bypass { formatTimeRemaining(cl.BypassExpiresAt) }
+											</span>
+										}
+									</div>
 									<div class="flex gap-3 text-xs text-fg-muted mt-0.5">
 										<span>
 											Storage:
@@ -471,19 +529,55 @@ templ storageLimitsTab(data StoragePageData) {
 											}
 										</span>
 									</div>
+									if cl.HasActiveBypass() && cl.BypassReason != nil && *cl.BypassReason != "" {
+										<p class="text-[10px] text-orange-600 dark:text-orange-400 mt-0.5 italic">{ *cl.BypassReason }</p>
+									}
 								</div>
-								<button
-									hx-delete={ fmt.Sprintf("/admin/campaigns/%s/storage", cl.CampaignID) }
-									hx-confirm={ fmt.Sprintf("Remove override for %s?", cl.CampaignName) }
-									hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
-									class="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors shrink-0 ml-2"
-								>
-									Remove
-								</button>
+								<div class="flex items-center gap-2 shrink-0 ml-2">
+									if cl.HasActiveBypass() {
+										<button
+											hx-delete={ fmt.Sprintf("/admin/campaigns/%s/storage/bypass", cl.CampaignID) }
+											hx-confirm={ fmt.Sprintf("Revoke bypass for %s?", cl.CampaignName) }
+											hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+											class="text-xs text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 transition-colors"
+										>
+											Revoke
+										</button>
+									}
+									<button
+										hx-delete={ fmt.Sprintf("/admin/campaigns/%s/storage", cl.CampaignID) }
+										hx-confirm={ fmt.Sprintf("Remove override for %s?", cl.CampaignName) }
+										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+										class="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+									>
+										Remove
+									</button>
+								</div>
 							</div>
 						}
 					</div>
 				}
+			</div>
+		</div>
+
+		<!-- Temporary Bypass Form -->
+		<div class="card">
+			<div class="flex items-center gap-3 mb-4">
+				<span class="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center">
+					<i class="fa-solid fa-bolt text-orange-500 text-sm"></i>
+				</span>
+				<div>
+					<h2 class="text-base font-semibold text-fg">Temporary Bypasses</h2>
+					<p class="text-xs text-fg-muted">Time-limited overrides for bulk imports, migrations, or one-time uploads.</p>
+				</div>
+			</div>
+
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+				<!-- User Bypass Form -->
+				@userBypassForm(data.Users, data.CSRFToken)
+
+				<!-- Campaign Bypass Form -->
+				@campaignBypassForm(data.Campaigns, data.CSRFToken)
 			</div>
 		</div>
 
@@ -492,7 +586,7 @@ templ storageLimitsTab(data StoragePageData) {
 			<div class="flex items-start gap-3">
 				<i class="fa-solid fa-circle-info text-amber-500 mt-0.5"></i>
 				<div class="text-xs text-fg-secondary space-y-1">
-					<p><span class="font-medium text-fg-body">Priority:</span> Campaign override &gt; User override &gt; Global setting. <span class="font-medium text-fg-body">0</span> = unlimited. Empty = inherit.</p>
+					<p><span class="font-medium text-fg-body">Priority:</span> Active bypass &gt; Campaign override &gt; User override &gt; Global setting. <span class="font-medium text-fg-body">0</span> = unlimited. Empty = inherit.</p>
 					<p><span class="font-medium text-fg-body">Allowed types:</span> JPEG, PNG, WebP, GIF. Magic byte validation prevents MIME spoofing.</p>
 				</div>
 			</div>
@@ -617,4 +711,147 @@ templ campaignOverrideForm(allCampaigns []campaigns.Campaign, csrfToken string) 
 			Set Campaign Override
 		</button>
 	</form>
+}
+
+// userBypassForm renders the form for setting a temporary user bypass.
+templ userBypassForm(users []auth.User, csrfToken string) {
+	<div class="p-3 bg-surface-alt rounded-lg">
+		<div class="flex items-center gap-2 mb-2">
+			<i class="fa-solid fa-user text-blue-500 text-xs"></i>
+			<h4 class="text-xs font-semibold text-fg">User Bypass</h4>
+		</div>
+		<form
+			x-data={ fmt.Sprintf("{ userId: '', csrf: '%s' }", csrfToken) }
+			@submit.prevent="
+				if (!userId) return;
+				const fd = new FormData($el);
+				fetch('/admin/users/' + userId + '/storage/bypass', {
+					method: 'PUT',
+					headers: { 'X-CSRF-Token': csrf },
+					body: fd
+				}).then(() => window.location.reload());
+			"
+		>
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+				<div class="sm:col-span-2">
+					<select x-model="userId" class="input text-sm" required>
+						<option value="">Select user...</option>
+						for _, u := range users {
+							<option value={ u.ID }>
+								{ u.DisplayName }
+							</option>
+						}
+					</select>
+				</div>
+				<div>
+					<input
+						type="number"
+						name="bypass_max_upload"
+						step="0.1"
+						min="0"
+						placeholder="Upload Limit (MB)"
+						class="input text-sm"
+					/>
+				</div>
+				<div>
+					<select name="duration" class="input text-sm" required>
+						<option value="">Duration...</option>
+						<option value="1h">1 hour</option>
+						<option value="6h">6 hours</option>
+						<option value="24h">24 hours</option>
+						<option value="7d">7 days</option>
+						<option value="30d">30 days</option>
+					</select>
+				</div>
+				<div class="sm:col-span-2">
+					<input
+						type="text"
+						name="reason"
+						placeholder="Reason (optional)"
+						maxlength="255"
+						class="input text-sm"
+					/>
+				</div>
+			</div>
+			<button type="submit" class="btn-primary text-xs mt-2 w-full bg-orange-600 hover:bg-orange-700 border-orange-600">
+				<i class="fa-solid fa-bolt mr-1"></i>Set Bypass
+			</button>
+		</form>
+	</div>
+}
+
+// campaignBypassForm renders the form for setting a temporary campaign bypass.
+templ campaignBypassForm(allCampaigns []campaigns.Campaign, csrfToken string) {
+	<div class="p-3 bg-surface-alt rounded-lg">
+		<div class="flex items-center gap-2 mb-2">
+			<i class="fa-solid fa-book-open text-emerald-500 text-xs"></i>
+			<h4 class="text-xs font-semibold text-fg">Campaign Bypass</h4>
+		</div>
+		<form
+			x-data={ fmt.Sprintf("{ campaignId: '', csrf: '%s' }", csrfToken) }
+			@submit.prevent="
+				if (!campaignId) return;
+				const fd = new FormData($el);
+				fetch('/admin/campaigns/' + campaignId + '/storage/bypass', {
+					method: 'PUT',
+					headers: { 'X-CSRF-Token': csrf },
+					body: fd
+				}).then(() => window.location.reload());
+			"
+		>
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+				<div class="sm:col-span-2">
+					<select x-model="campaignId" class="input text-sm" required>
+						<option value="">Select campaign...</option>
+						for _, c := range allCampaigns {
+							<option value={ c.ID }>
+								{ c.Name }
+							</option>
+						}
+					</select>
+				</div>
+				<div>
+					<input
+						type="number"
+						name="bypass_max_storage"
+						step="0.1"
+						min="0"
+						placeholder="Storage Limit (MB)"
+						class="input text-sm"
+					/>
+				</div>
+				<div>
+					<input
+						type="number"
+						name="bypass_max_files"
+						min="0"
+						placeholder="Max Files"
+						class="input text-sm"
+					/>
+				</div>
+				<div>
+					<select name="duration" class="input text-sm" required>
+						<option value="">Duration...</option>
+						<option value="1h">1 hour</option>
+						<option value="6h">6 hours</option>
+						<option value="24h">24 hours</option>
+						<option value="7d">7 days</option>
+						<option value="30d">30 days</option>
+					</select>
+				</div>
+				<div>
+					<input
+						type="text"
+						name="reason"
+						placeholder="Reason (optional)"
+						maxlength="255"
+						class="input text-sm"
+					/>
+				</div>
+			</div>
+			<button type="submit" class="btn-primary text-xs mt-2 w-full bg-orange-600 hover:bg-orange-700 border-orange-600">
+				<i class="fa-solid fa-bolt mr-1"></i>Set Bypass
+			</button>
+		</form>
+	</div>
 }
