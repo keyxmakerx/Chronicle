@@ -574,6 +574,22 @@
           var atOffset = textBefore.length - mentionMatch[0].length + (mentionMatch[1].length);
           var startPos = $pos.start() + atOffset;
 
+          // Skip if the @ is inside a link mark (an already-inserted mention).
+          // Resolve the position just after @ and check its marks.
+          var $atPos = state.doc.resolve(Math.min(startPos + 1, state.doc.content.size));
+          var marks = $atPos.marks();
+          var inLink = false;
+          for (var mi = 0; mi < marks.length; mi++) {
+            if (marks[mi].type.name === 'link') {
+              inLink = true;
+              break;
+            }
+          }
+          if (inLink) {
+            if (mentionActive) closeMention();
+            return;
+          }
+
           if (!mentionActive) {
             mentionActive = true;
             mentionStartPos = startPos;

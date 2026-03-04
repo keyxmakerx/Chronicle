@@ -186,12 +186,11 @@
       }
 
       // Wire mention extension into editor update events so it can
-      // detect the @ trigger and update the suggestion popup.
+      // detect the @ trigger and update the suggestion popup. Only fires
+      // on content changes (update), NOT on cursor movement (selectionUpdate),
+      // to prevent the popup from reappearing when clicking in the editor.
       if (mentionExt) {
         editor.on('update', function () {
-          mentionExt.onUpdate(editor);
-        });
-        editor.on('selectionUpdate', function () {
           mentionExt.onUpdate(editor);
         });
       }

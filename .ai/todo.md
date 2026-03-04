@@ -19,6 +19,7 @@ Known broken or missing things, ordered by severity.
 
 ### High
 
+- [ ] **@mention popup won't dismiss** — After selecting a mention, the popup keeps reappearing on every keystroke. Also reappears when clicking "Edit" on entity pages. Two root causes: (1) `Chronicle.MentionNode` is defined in `editor_mention.js` but never registered as a TipTap extension in `editor.js` — so `insertContent()` inserts the mention as a regular Link/text instead of an atom node, leaving literal `@Name` text that the trigger regex keeps matching. (2) `selectionUpdate` event calls `onUpdate` which re-checks for `@` triggers — any cursor movement near an `@` in plain text re-triggers the popup. Fix: register MentionNode in extensions array, and only fire `@` detection on content changes (not selection changes).
 - [ ] **Image upload click does nothing** — Users click "Add Image" area, nothing happens. Widget code (`image_upload.js`) appears correct; likely browser-level issue (Firefox blocking programmatic file input `.click()`) or widget not mounting. Needs browser-level debugging with DevTools.
 - [ ] **No media management for campaign owners** — Admin has `/admin/storage` page. Campaign owners have NO way to browse, manage, or delete their uploads. Need campaign-scoped media browser at `/campaigns/:id/media` with "referenced by" tracking, delete with warnings, and upload from browser page.
 
