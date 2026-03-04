@@ -1337,4 +1337,35 @@
     color: var(--color-fg-muted, #565f89);
     white-space: nowrap;
   }
+
+  /* --- HTMX Loading Indicator ---
+   * A thin progress bar fixed at the top of the viewport. Hidden by default,
+   * shown via .htmx-request class that HTMX adds during active requests. */
+  .htmx-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 9999;
+    background: var(--color-accent, #6366f1);
+    transform: scaleX(0);
+    transform-origin: left;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+
+  body.htmx-request .htmx-indicator {
+    opacity: 1;
+    transform: scaleX(1);
+    animation: htmx-progress 2s ease-in-out infinite;
+  }
+
+  @keyframes htmx-progress {
+    0%   { transform: scaleX(0); transform-origin: left; }
+    50%  { transform: scaleX(0.7); transform-origin: left; }
+    51%  { transform-origin: right; }
+    100% { transform: scaleX(0); transform-origin: right; }
+  }
 }

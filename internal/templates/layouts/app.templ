@@ -16,6 +16,8 @@ import "strings"
 // topbar. The main content area is where page-specific content goes.
 templ App(title string) {
 	@Base(title) {
+		<!-- Global HTMX loading indicator (thin bar at top of viewport) -->
+		<div id="htmx-indicator" class="htmx-indicator"></div>
 		<div class="flex h-screen overflow-hidden" x-data="{ sidebarOpen: false }" @chronicle:navigated.window="sidebarOpen = false">
 			<!-- Mobile backdrop -->
 			<div

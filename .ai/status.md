@@ -8,11 +8,16 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- UX hardening sprint: sidebar drill fix, unsaved changes warning,
-confirmation dialogs, timeline era editing link. Branch: `claude/review-codebase-R1WqN`.
+2026-03-04 -- UX hardening sprint continued: HTMX loading indicator, empty states
+consistency. Branch: `claude/review-codebase-R1WqN`.
 
 ## Current Phase
-**UX hardening.** Completed this session:
+**UX hardening.** Completed this session (batch 2):
+- Added HTMX loading indicator (thin progress bar at top, CSS animation, auto-tracks requests)
+- Fixed empty states in 5 list views: campaign members, admin campaigns, admin users,
+  admin modules, entity types (fixed if/else structure)
+
+Previously completed (batch 1):
 - Fixed sidebar drill 403 for public visitors (moved route to `pub` group)
 - Added global unsaved changes warning (`beforeunload`) with editor + form tracking
 - Added confirmation dialogs to notes delete and relations delete
@@ -25,9 +30,9 @@ confirmation dialogs, timeline era editing link. Branch: `claude/review-codebase
 1. Calendar event detail view + click-to-create on date
 2. Sessions discoverability (auto-enable, calendar cross-linking)
 3. Media management for campaign owners
-4. Empty states consistency pass
-5. Loading/spinner states
-6. Editor tables + callout blocks
+4. Editor tables + callout blocks
+5. Search scope expansion (calendar events, timelines, maps, sessions)
+6. Keyboard shortcuts help overlay
 
 ### HTMX Sidebar Conversion + JS Hoisting Fixes — COMPLETE
 Branch: `claude/review-codebase-R1WqN`

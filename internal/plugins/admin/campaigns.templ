@@ -22,57 +22,65 @@ templ AdminCampaignsPage(allCampaigns []campaigns.Campaign, total, page, perPage
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-edge">
-						for _, c := range allCampaigns {
-							<tr class="hover:bg-surface-alt transition-colors">
-								<td class="px-4 py-3">
-									<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", c.ID)) } class="text-sm font-medium text-accent hover:text-accent-hover transition-colors">
-										{ c.Name }
-									</a>
-								</td>
-								<td class="px-4 py-3 text-sm text-fg-muted">{ c.Slug }</td>
-								<td class="px-4 py-3 text-sm text-fg-muted">
-									{ c.CreatedAt.Format("Jan 2, 2006") }
-								</td>
-								<td class="px-4 py-3 text-right">
-									<div class="flex items-center justify-end gap-3">
-										<!-- Join as... dropdown -->
-										<div class="relative" x-data="{ open: false }">
-											<button
-												@click="open = !open"
-												@click.outside="open = false"
-												class="text-sm text-accent hover:text-accent-hover transition-colors"
-											>
-												Join as...
-											</button>
-											<div
-												x-show="open"
-												x-transition
-												class="absolute right-0 mt-1 w-36 bg-surface rounded-lg shadow-lg border border-edge z-10 overflow-hidden"
-											>
-												<form hx-post={ fmt.Sprintf("/admin/campaigns/%s/join", c.ID) } hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }>
-													<input type="hidden" name="csrf_token" value={ csrfToken }/>
-													<button type="submit" name="role" value="player" class="block w-full text-left px-4 py-2 text-sm text-fg-body hover:bg-surface-alt transition-colors">Player</button>
-													<button type="submit" name="role" value="scribe" class="block w-full text-left px-4 py-2 text-sm text-fg-body hover:bg-surface-alt transition-colors">Scribe</button>
-													<button type="submit" name="role" value="owner" class="block w-full text-left px-4 py-2 text-sm text-amber-600 hover:bg-surface-alt transition-colors">Owner (transfers)</button>
-												</form>
+						if len(allCampaigns) > 0 {
+							for _, c := range allCampaigns {
+								<tr class="hover:bg-surface-alt transition-colors">
+									<td class="px-4 py-3">
+										<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", c.ID)) } class="text-sm font-medium text-accent hover:text-accent-hover transition-colors">
+											{ c.Name }
+										</a>
+									</td>
+									<td class="px-4 py-3 text-sm text-fg-muted">{ c.Slug }</td>
+									<td class="px-4 py-3 text-sm text-fg-muted">
+										{ c.CreatedAt.Format("Jan 2, 2006") }
+									</td>
+									<td class="px-4 py-3 text-right">
+										<div class="flex items-center justify-end gap-3">
+											<!-- Join as... dropdown -->
+											<div class="relative" x-data="{ open: false }">
+												<button
+													@click="open = !open"
+													@click.outside="open = false"
+													class="text-sm text-accent hover:text-accent-hover transition-colors"
+												>
+													Join as...
+												</button>
+												<div
+													x-show="open"
+													x-transition
+													class="absolute right-0 mt-1 w-36 bg-surface rounded-lg shadow-lg border border-edge z-10 overflow-hidden"
+												>
+													<form hx-post={ fmt.Sprintf("/admin/campaigns/%s/join", c.ID) } hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }>
+														<input type="hidden" name="csrf_token" value={ csrfToken }/>
+														<button type="submit" name="role" value="player" class="block w-full text-left px-4 py-2 text-sm text-fg-body hover:bg-surface-alt transition-colors">Player</button>
+														<button type="submit" name="role" value="scribe" class="block w-full text-left px-4 py-2 text-sm text-fg-body hover:bg-surface-alt transition-colors">Scribe</button>
+														<button type="submit" name="role" value="owner" class="block w-full text-left px-4 py-2 text-sm text-amber-600 hover:bg-surface-alt transition-colors">Owner (transfers)</button>
+													</form>
+												</div>
 											</div>
+											<button
+												hx-delete={ fmt.Sprintf("/admin/campaigns/%s/leave", c.ID) }
+												hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+												class="text-sm text-fg-muted hover:text-fg-body transition-colors"
+											>
+												Leave
+											</button>
+											<button
+												hx-delete={ fmt.Sprintf("/admin/campaigns/%s", c.ID) }
+												hx-confirm="Permanently delete this campaign and all its data?"
+												hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+												class="text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+											>
+												Delete
+											</button>
 										</div>
-										<button
-											hx-delete={ fmt.Sprintf("/admin/campaigns/%s/leave", c.ID) }
-											hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-											class="text-sm text-fg-muted hover:text-fg-body transition-colors"
-										>
-											Leave
-										</button>
-										<button
-											hx-delete={ fmt.Sprintf("/admin/campaigns/%s", c.ID) }
-											hx-confirm="Permanently delete this campaign and all its data?"
-											hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-											class="text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-										>
-											Delete
-										</button>
-									</div>
+									</td>
+								</tr>
+							}
+						} else {
+							<tr>
+								<td colspan="4" class="px-4 py-12 text-center">
+									<div class="text-fg-muted text-sm">No campaigns found.</div>
 								</td>
 							</tr>
 						}

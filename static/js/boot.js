@@ -155,6 +155,20 @@
     }
   });
 
+  // --- HTMX Loading Indicator ---
+  // Toggle body.htmx-request class to show/hide the global progress bar.
+  var activeRequests = 0;
+  document.addEventListener('htmx:beforeRequest', function () {
+    activeRequests++;
+    document.body.classList.add('htmx-request');
+  });
+  document.addEventListener('htmx:afterRequest', function () {
+    activeRequests = Math.max(0, activeRequests - 1);
+    if (activeRequests === 0) {
+      document.body.classList.remove('htmx-request');
+    }
+  });
+
   // --- Lifecycle ---
 
   // Mount all widgets on initial page load.

@@ -28,7 +28,7 @@ Known broken or missing things, ordered by severity.
 - [ ] **Calendar events lack view→edit mode** — Events open directly in create/edit modal. No read-only event detail view (unlike entity pages which have separate show/edit routes). Fix: add event detail panel with view mode, edit button.
 - [ ] **Calendar click-to-create on date** — No way to click a calendar date cell to create an event (standard calendar UX, Google Calendar style). Must use separate "New Event" button.
 - [x] **No unsaved changes warning** — Fixed: global dirty state tracker in boot.js (`Chronicle.markDirty/markClean/isDirty`) with `beforeunload` handler. Editor widget hooks in. Forms with `data-track-changes` auto-tracked (entity create/edit, campaign create/settings).
-- [ ] **Empty states inconsistent** — Many list views lack empty state messaging or CTAs (some entity lists, maps list, timelines). Calendar has `UpcomingEventsEmpty()` as good pattern to follow.
+- [x] **Empty states inconsistent** — Fixed: added empty states to campaign members, admin campaigns, admin users, admin modules. Fixed entity_types.templ if/else structure. Calendar `UpcomingEventsEmpty()` was already good. Maps/timelines already have empty states.
 - [ ] **Calendar event categories not customizable** — 8 hardcoded category strings (birthday, battle, ceremony, death, discovery, marriage, milestone, other) in `categoryIcon()` helper. No UI to add custom categories.
 
 ### Medium
@@ -37,7 +37,7 @@ Known broken or missing things, ordered by severity.
 - [x] **Attributes missing "Use Template" reset** — Added DELETE `/field-overrides` endpoint and "Reset" button in attributes customize panel with confirmation dialog. Clears field_overrides to NULL, restoring category template defaults.
 - [ ] **Search scope limited to entities** — Ctrl+K quick search only searches entities. Should also search calendar events, timelines, maps, sessions. Would significantly improve discoverability.
 - [x] **No confirmation dialogs for destructive actions** — Audited all delete operations. Most already had confirms (campaigns, entities, maps, markers, timelines, sessions, calendar events, sidebar nav, admin pages). Added confirms to notes.js and relations.js (the two missing ones). Dashboard editor row/block delete is safe (not persisted until explicit save).
-- [ ] **No loading/spinner states** — No visual loading indicator during HTMX requests or API calls. Users see no feedback while waiting.
+- [x] **No loading/spinner states** — Fixed: added HTMX loading indicator (3px accent-colored progress bar at top of viewport). CSS animation in input.css, request tracking in boot.js, indicator div in app.templ layout. Tracks concurrent requests, only hides when all complete.
 - [ ] **Keyboard shortcuts help** — No way to discover available shortcuts (Ctrl+? or help overlay). 4 shortcuts exist but undocumented in UI.
 - [ ] **Form validation feedback** — No client-side validation styling (red borders, inline error messages). Server validates but user gets no inline hints.
 - [ ] **Mobile sidebar toggle** — Sidebar doesn't collapse/hamburger on mobile. No mobile navigation menu.

@@ -74,8 +74,16 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-edge">
-					for _, member := range members {
-						@MemberRow(cc, &member, csrfToken)
+					if len(members) > 0 {
+						for _, member := range members {
+							@MemberRow(cc, &member, csrfToken)
+						}
+					} else {
+						<tr>
+							<td colspan="4" class="px-6 py-12 text-center">
+								<div class="text-fg-muted text-sm">No members yet. Add someone above to get started.</div>
+							</td>
+						</tr>
 					}
 				</tbody>
 			</table>
