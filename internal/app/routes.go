@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
+	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
@@ -270,6 +272,44 @@ func (a *calendarEraListerAdapter) ListEras(ctx context.Context, calendarID stri
 	return refs, nil
 }
 
+// wsSessionAuthAdapter wraps auth.AuthService to implement the
+// websocket.SessionAuthenticator interface. Extracts the session cookie
+// from the raw HTTP request and validates it.
+type wsSessionAuthAdapter struct {
+	svc auth.AuthService
+}
+
+// AuthenticateSessionForWS validates the chronicle_session cookie and returns the user ID.
+func (a *wsSessionAuthAdapter) AuthenticateSessionForWS(r *http.Request) (string, error) {
+	cookie, err := r.Cookie("chronicle_session")
+	if err != nil || cookie.Value == "" {
+		return "", fmt.Errorf("no session cookie")
+	}
+	session, err := a.svc.ValidateSession(r.Context(), cookie.Value)
+	if err != nil {
+		return "", fmt.Errorf("invalid session: %w", err)
+	}
+	return session.UserID, nil
+}
+
+// wsCampaignRoleAdapter wraps campaigns.CampaignService to implement the
+// websocket.CampaignRoleLookup interface.
+type wsCampaignRoleAdapter struct {
+	svc campaigns.CampaignService
+}
+
+// GetUserCampaignRole returns the user's role in the campaign.
+func (a *wsCampaignRoleAdapter) GetUserCampaignRole(ctx context.Context, campaignID, userID string) (int, error) {
+	member, err := a.svc.GetMember(ctx, campaignID, userID)
+	if err != nil {
+		return 0, err
+	}
+	if member == nil {
+		return 0, nil
+	}
+	return int(member.Role), nil
+}
+
 // mediaMemberCheckerAdapter wraps campaigns.CampaignService to implement the
 // media.MemberChecker interface without creating a circular import.
 // Uses background context since membership checks happen on unauthenticated
@@ -492,6 +532,12 @@ func (a *App) RegisterRoutes() {
 	mapsHandler := maps.NewHandler(mapsService)
 	maps.RegisterRoutes(e, mapsHandler, campaignService, authService)
 
+	// Map expansion: drawings, tokens, layers, fog of war for real-time map sync.
+	drawingRepo := maps.NewDrawingRepository(a.DB)
+	drawingService := maps.NewDrawingService(drawingRepo)
+	drawingHandler := maps.NewDrawingHandler(mapsService, drawingService)
+	maps.RegisterDrawingRoutes(e, drawingHandler, campaignService, authService)
+
 	// Sessions plugin: game session scheduling, linked entities, RSVP tracking.
 	// Entity campaign checker prevents cross-campaign entity linking (IDOR).
 	sessionsRepo := sessions.NewSessionRepository(a.DB)
@@ -515,7 +561,14 @@ func (a *App) RegisterRoutes() {
 	if urlSigner != nil {
 		mediaAPIHandler.SetURLSigner(urlSigner)
 	}
-	syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, syncService)
+
+	// Sync mapping service and handler for Foundry VTT bidirectional sync.
+	syncMappingRepo := syncapi.NewSyncMappingRepository(a.DB)
+	syncMappingSvc := syncapi.NewSyncMappingService(syncMappingRepo)
+	syncMappingHandler := syncapi.NewSyncHandler(syncMappingSvc)
+	_ = syncMappingSvc // Service will also be used by map/entity handlers.
+
+	syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, syncMappingHandler, syncService)
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
 	tagRepo := tags.NewTagRepository(a.DB)
@@ -666,6 +719,21 @@ func (a *App) RegisterRoutes() {
 
 		return ctx
 	}
+
+	// --- WebSocket Hub ---
+	// Real-time bidirectional sync for Foundry VTT and browser clients.
+	wsHub := ws.NewHub()
+	go wsHub.Run()
+
+	wsAuth := ws.NewMultiAuthenticator(
+		syncService,
+		&wsSessionAuthAdapter{svc: authService},
+		&wsCampaignRoleAdapter{svc: campaignService},
+	)
+	e.GET("/ws", ws.HandleUpgrade(wsHub, wsAuth))
+
+	// Store hub reference for services that need to emit events.
+	_ = wsHub // TODO: wire EventBus into entity/map/calendar services.
 
 	// --- Module Routes ---
 	// Game system reference pages and tooltip APIs.

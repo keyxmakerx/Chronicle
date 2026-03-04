@@ -47,7 +47,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 // All routes require API key authentication. Permission middleware enforces
 // read/write/sync access levels. Campaign match middleware ensures keys can
 // only access their scoped campaign.
-func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, syncSvc SyncAPIService) {
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService) {
 	// API v1 group with key auth and rate limiting.
 	v1 := e.Group("/api/v1",
 		RequireAPIKey(syncSvc),
@@ -101,4 +101,12 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 
 	// Sync endpoint (require "sync" permission).
 	cg.POST("/sync", api.Sync, RequirePermission(PermSync))
+
+	// Sync mapping endpoints (require "sync" permission).
+	cg.GET("/sync/mappings", syncH.ListMappings, RequirePermission(PermSync))
+	cg.GET("/sync/mappings/:mappingID", syncH.GetMapping, RequirePermission(PermSync))
+	cg.POST("/sync/mappings", syncH.CreateMapping, RequirePermission(PermSync))
+	cg.DELETE("/sync/mappings/:mappingID", syncH.DeleteMapping, RequirePermission(PermSync))
+	cg.GET("/sync/lookup", syncH.LookupMapping, RequirePermission(PermSync))
+	cg.GET("/sync/pull", syncH.PullMappings, RequirePermission(PermSync))
 }

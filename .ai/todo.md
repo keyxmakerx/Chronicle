@@ -84,7 +84,8 @@ New capabilities ordered by priority for alpha release.
 
 - [ ] **File security audit + ClamAV** — Add ClamAV container to docker-compose, scan uploads before storage, configurable file type allowlist, SVG blocking (XSS vector).
 - [ ] **API documentation** — OpenAPI 3.0 spec or handwritten reference for REST v1. Auth guide, endpoint reference, rate limiting docs, sync protocol.
-- [ ] **Maps Phase 2** — Layers, marker groups, privacy controls, nested maps (world → continent → city).
+- [~] **Foundry VTT Sync** — Bidirectional sync between Chronicle and Foundry VTT. Phase 1 (WebSocket hub, sync mappings, Foundry module skeleton, journal sync) and Phase 2 (map expansion: drawings, tokens, layers, fog CRUD + API) backend complete. Remaining: wire EventBus into services, Foundry module testing, Chronicle map UI expansion, shop entity type, calendar live sync, permission hardening.
+- [x] **Maps Phase 2** — Layers, drawings, tokens, fog of war. Migration 000042, full CRUD service + repository + REST API handler. Role-based visibility filtering. Percentage-based coordinates for resolution independence.
 - [ ] **Timeline Phase 2B** — Event connections (visual lines between related events), create-from-timeline modal, beautification pass.
 - [ ] **Campaign export/import** — JSON bundle for backup/migration. Media as separate zip or URL references.
 - [x] **Image drag-and-drop upload** — Media browser has drag-and-drop + multi-file upload with per-file progress bars (Alpine.js + XHR). Entity image widget (`image_upload.js`) still click-only.

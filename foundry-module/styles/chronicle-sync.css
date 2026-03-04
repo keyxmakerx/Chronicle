@@ -1,0 +1,106 @@
+/* Chronicle Sync - Foundry VTT Module Styles */
+
+/* Sync status indicator in the sidebar */
+.chronicle-sync-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chronicle-sync-status .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.chronicle-sync-status.connected .status-dot {
+  background-color: #4ade80;
+  box-shadow: 0 0 4px #4ade80;
+}
+
+.chronicle-sync-status.disconnected .status-dot {
+  background-color: #ef4444;
+}
+
+.chronicle-sync-status.reconnecting .status-dot {
+  background-color: #fbbf24;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Shop window styles */
+.chronicle-shop-window {
+  min-width: 360px;
+}
+
+.chronicle-shop-window .shop-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.chronicle-shop-window .shop-header img {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.chronicle-shop-window .shop-inventory {
+  padding: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.chronicle-shop-window .shop-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: grab;
+  transition: background 0.15s;
+}
+
+.chronicle-shop-window .shop-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chronicle-shop-window .shop-item img {
+  width: 32px;
+  height: 32px;
+  border-radius: 2px;
+  object-fit: cover;
+}
+
+.chronicle-shop-window .shop-item .item-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.chronicle-shop-window .shop-item .item-price {
+  color: #fbbf24;
+  font-size: 13px;
+}
+
+.chronicle-shop-window .shop-item .item-qty {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+
+.chronicle-shop-window .shop-item.out-of-stock {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

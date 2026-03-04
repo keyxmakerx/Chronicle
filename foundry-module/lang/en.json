@@ -1,0 +1,49 @@
+{
+  "CHRONICLE": {
+    "ModuleTitle": "Chronicle Sync",
+    "Settings": {
+      "ApiUrl": {
+        "Name": "Chronicle URL",
+        "Hint": "The base URL of your Chronicle instance (e.g., https://chronicle.example.com)"
+      },
+      "ApiKey": {
+        "Name": "API Key",
+        "Hint": "API key with 'sync' permission from your Chronicle campaign settings"
+      },
+      "CampaignId": {
+        "Name": "Campaign ID",
+        "Hint": "The UUID of your Chronicle campaign"
+      },
+      "SyncEnabled": {
+        "Name": "Enable Sync",
+        "Hint": "Master toggle for all Chronicle sync features"
+      },
+      "SyncJournals": {
+        "Name": "Sync Journals",
+        "Hint": "Sync Chronicle entities with Foundry journal entries"
+      },
+      "SyncMaps": {
+        "Name": "Sync Maps",
+        "Hint": "Sync Chronicle maps with Foundry scenes (drawings, tokens)"
+      },
+      "SyncCalendar": {
+        "Name": "Sync Calendar",
+        "Hint": "Sync Chronicle calendar with Calendaria module"
+      }
+    },
+    "Status": {
+      "Connected": "Connected to Chronicle",
+      "Disconnected": "Disconnected from Chronicle",
+      "Reconnecting": "Reconnecting to Chronicle...",
+      "Error": "Chronicle sync error",
+      "SyncPaused": "Sync paused — changes are queued"
+    },
+    "Notifications": {
+      "JournalSynced": "Journal synced from Chronicle: {name}",
+      "MapSynced": "Map synced from Chronicle: {name}",
+      "SyncConflict": "Sync conflict detected for: {name}",
+      "ConnectionLost": "Lost connection to Chronicle. Retrying...",
+      "ConnectionRestored": "Connection to Chronicle restored"
+    }
+  }
+}

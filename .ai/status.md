@@ -8,18 +8,26 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Entity link hover fix + codebase review (batch 15).
-Branch: `claude/review-codebase-R1WqN`.
+2026-03-04 -- Foundry VTT sync feature (batch 16, Phase 1+2 partial).
+Branch: `claude/foundry-sync-feature-05M5a`.
 
 ## Current Phase
-**Entity link hover fix + codebase review.** Completed this session (batch 15):
-- Fixed entity link hover previews: data-mention-id and data-entity-preview were dropped
-  during ProseMirror JSON round-trip because TipTap's Link mark didn't store them.
-  Created MentionLink (extended Link mark) that preserves these attributes in the schema.
-- Entity links now render as styled pills (bg-accent/10, rounded) distinct from regular links.
-- Renamed "Mention Entity" to "Link Entity" in editor Insert menu.
-- Full codebase health review: all 14 plugins, 16 JS widgets, 40 migrations, 294+ tests
-  passing, zero TODO/FIXME comments, clean lint. Ready for Maps Phase 2 + Foundry sync.
+**Foundry VTT bidirectional sync.** Completed this session (batch 16):
+- WebSocket hub infrastructure (`internal/websocket/`): hub, client, message types,
+  multi-authenticator (API key + session cookie), EventBus interface.
+- Sync mapping service: CRUD for `sync_mappings` table tracking Chronicle↔Foundry
+  document ID relationships with version tracking.
+- Foundry VTT module skeleton (`foundry-module/`): 8 JS modules (api-client, sync-manager,
+  journal-sync, map-sync, shop-widget, calendar-sync, settings, module entry point),
+  templates, styles, lang, module.json manifest.
+- Map data model expansion: migrations 000042 (layers, drawings, tokens, fog tables +
+  grid/fog columns on maps table) and 000043 (relation metadata for shop inventory).
+- Drawing/Token/Layer/Fog CRUD: full service, repository, and REST API handler with
+  role-based visibility filtering, IDOR protection, percentage-based coordinates.
+- Wired everything into app routes.go with adapter patterns to avoid circular imports.
+
+Previously completed (batch 15):
+- Entity link hover fix + codebase review
 
 Previously completed (batch 14):
 - Temporary storage limit bypass system for admin panel
