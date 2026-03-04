@@ -17,7 +17,8 @@ Chronicle.register('tag-picker', {
       entityTags: [],
       isOpen: false,
       search: '',
-      creating: false
+      creating: false,
+      createDmOnly: false
     };
 
     // Inject scoped styles once.
@@ -47,7 +48,13 @@ Chronicle.register('tag-picker', {
         '.dark .tp-create { color: #818cf8; border-top-color: #374151; }',
         '.tp-create:hover { background: #f3f4f6; }',
         '.dark .tp-create:hover { background: #374151; }',
-        '.tp-empty { padding: 12px 8px; font-size: 13px; color: #9ca3af; text-align: center; }'
+        '.tp-empty { padding: 12px 8px; font-size: 13px; color: #9ca3af; text-align: center; }',
+        '.tp-dm-badge { font-size: 9px; opacity: 0.7; margin-left: 2px; }',
+        '.tp-option-dm { font-size: 9px; opacity: 0.6; margin-left: auto; }',
+        '.tp-dm-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 12px; color: #6b7280; border-top: 1px solid #e5e7eb; margin-top: 4px; padding-top: 8px; }',
+        '.dark .tp-dm-row { color: #9ca3af; border-top-color: #374151; }',
+        '.tp-dm-row label { display: flex; align-items: center; gap: 4px; cursor: pointer; }',
+        '.tp-dm-row input[type="checkbox"] { accent-color: #6366f1; }'
       ].join('\n');
       document.head.appendChild(style);
     }
@@ -84,6 +91,14 @@ Chronicle.register('tag-picker', {
         chip.style.backgroundColor = tag.color + '22';
         chip.style.color = tag.color;
         chip.textContent = tag.name;
+
+        // Show DM-only indicator for dm_only tags.
+        if (tag.dmOnly) {
+          var dmBadge = document.createElement('i');
+          dmBadge.className = 'fa-solid fa-eye-slash tp-dm-badge';
+          dmBadge.title = 'DM only';
+          chip.appendChild(dmBadge);
+        }
 
         if (config.editable) {
           var remove = document.createElement('span');
@@ -148,7 +163,7 @@ Chronicle.register('tag-picker', {
             if (match) {
               toggleTag(match.id);
             } else {
-              createTag(state.search.trim());
+              createTag(state.search.trim(), state.createDmOnly || false);
             }
           }
         });
@@ -195,6 +210,14 @@ Chronicle.register('tag-picker', {
             label.textContent = tag.name;
             option.appendChild(label);
 
+            // Show DM-only indicator in the option list.
+            if (tag.dmOnly) {
+              var dmLabel = document.createElement('span');
+              dmLabel.className = 'tp-option-dm';
+              dmLabel.innerHTML = '<i class="fa-solid fa-eye-slash"></i> DM';
+              option.appendChild(dmLabel);
+            }
+
             listEl.appendChild(option);
           });
 
@@ -205,11 +228,27 @@ Chronicle.register('tag-picker', {
               return t.name.toLowerCase() === searchTerm.toLowerCase();
             });
             if (!exists) {
+              // DM-only checkbox for new tags (only shown to Scribes+, which
+              // is already the case since the dropdown only appears when editable).
+              var dmRow = document.createElement('div');
+              dmRow.className = 'tp-dm-row';
+              var dmCheckLabel = document.createElement('label');
+              var dmCheck = document.createElement('input');
+              dmCheck.type = 'checkbox';
+              dmCheck.checked = state.createDmOnly || false;
+              dmCheck.addEventListener('change', function () {
+                state.createDmOnly = dmCheck.checked;
+              });
+              dmCheckLabel.appendChild(dmCheck);
+              dmCheckLabel.appendChild(document.createTextNode(' DM only'));
+              dmRow.appendChild(dmCheckLabel);
+              listEl.appendChild(dmRow);
+
               var createOption = document.createElement('div');
               createOption.className = 'tp-create';
               createOption.innerHTML = '<i class="fa-solid fa-plus" style="font-size:11px"></i> Create "' + Chronicle.escapeHtml(searchTerm) + '"';
               createOption.addEventListener('click', function () {
-                createTag(searchTerm);
+                createTag(searchTerm, state.createDmOnly || false);
               });
               listEl.appendChild(createOption);
             }
@@ -287,7 +326,7 @@ Chronicle.register('tag-picker', {
         });
     }
 
-    function createTag(name) {
+    function createTag(name, dmOnly) {
       if (state.creating) return;
       state.creating = true;
 
@@ -306,7 +345,7 @@ Chronicle.register('tag-picker', {
       fetch(config.tagsEndpoint, {
         method: 'POST',
         headers: reqHeaders,
-        body: JSON.stringify({ name: name, color: color })
+        body: JSON.stringify({ name: name, color: color, dmOnly: !!dmOnly })
       })
         .then(function (r) {
           if (!r.ok) throw new Error('Failed to create tag');
@@ -316,6 +355,7 @@ Chronicle.register('tag-picker', {
           state.allTags.push(newTag);
           state.search = '';
           state.creating = false;
+          state.createDmOnly = false;
           // Immediately add the new tag to the entity.
           var newIds = state.entityTags.map(function (t) { return t.id; }).concat([newTag.id]);
           saveEntityTags(newIds);

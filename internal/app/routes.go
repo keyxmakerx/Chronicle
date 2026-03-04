@@ -137,8 +137,9 @@ type entityTagFetcherAdapter struct {
 }
 
 // GetEntityTagsBatch returns minimal tag info for multiple entities.
-func (a *entityTagFetcherAdapter) GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]entities.EntityTagInfo, error) {
-	tagsMap, err := a.svc.GetEntityTagsBatch(ctx, entityIDs)
+// includeDmOnly controls whether dm_only tags are included (true for Scribes+).
+func (a *entityTagFetcherAdapter) GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]entities.EntityTagInfo, error) {
+	tagsMap, err := a.svc.GetEntityTagsBatch(ctx, entityIDs, includeDmOnly)
 	if err != nil {
 		return nil, err
 	}

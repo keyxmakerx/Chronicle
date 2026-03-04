@@ -19,8 +19,9 @@ type TagRepository interface {
 	FindByID(ctx context.Context, id int) (*Tag, error)
 
 	// ListByCampaign returns all tags belonging to the given campaign,
-	// ordered alphabetically by name.
-	ListByCampaign(ctx context.Context, campaignID string) ([]Tag, error)
+	// ordered alphabetically by name. If includeDmOnly is false,
+	// dm_only tags are excluded (for player-visible queries).
+	ListByCampaign(ctx context.Context, campaignID string, includeDmOnly bool) ([]Tag, error)
 
 	// Update modifies an existing tag's name, slug, and color.
 	Update(ctx context.Context, tag *Tag) error
@@ -35,11 +36,13 @@ type TagRepository interface {
 	RemoveTagFromEntity(ctx context.Context, entityID string, tagID int) error
 
 	// GetEntityTags returns all tags associated with a single entity.
-	GetEntityTags(ctx context.Context, entityID string) ([]Tag, error)
+	// If includeDmOnly is false, dm_only tags are excluded.
+	GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]Tag, error)
 
 	// GetEntityTagsBatch returns tags for multiple entities in a single query.
 	// The result is keyed by entity ID. Useful for list views to avoid N+1.
-	GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]Tag, error)
+	// If includeDmOnly is false, dm_only tags are excluded.
+	GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]Tag, error)
 }
 
 // tagRepository implements TagRepository using MariaDB with hand-written SQL.
@@ -55,11 +58,11 @@ func NewTagRepository(db *sql.DB) TagRepository {
 // Create inserts a new tag into the tags table and sets the auto-generated ID
 // on the provided struct.
 func (r *tagRepository) Create(ctx context.Context, tag *Tag) error {
-	query := `INSERT INTO tags (campaign_id, name, slug, color)
-	           VALUES (?, ?, ?, ?)`
+	query := `INSERT INTO tags (campaign_id, name, slug, color, dm_only)
+	           VALUES (?, ?, ?, ?, ?)`
 
 	result, err := r.db.ExecContext(ctx, query,
-		tag.CampaignID, tag.Name, tag.Slug, tag.Color,
+		tag.CampaignID, tag.Name, tag.Slug, tag.Color, tag.DmOnly,
 	)
 	if err != nil {
 		// Check for duplicate slug within the campaign.
@@ -80,12 +83,12 @@ func (r *tagRepository) Create(ctx context.Context, tag *Tag) error {
 
 // FindByID retrieves a single tag by its primary key.
 func (r *tagRepository) FindByID(ctx context.Context, id int) (*Tag, error) {
-	query := `SELECT id, campaign_id, name, slug, color, created_at
+	query := `SELECT id, campaign_id, name, slug, color, dm_only, created_at
 	           FROM tags WHERE id = ?`
 
 	var t Tag
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&t.ID, &t.CampaignID, &t.Name, &t.Slug, &t.Color, &t.CreatedAt,
+		&t.ID, &t.CampaignID, &t.Name, &t.Slug, &t.Color, &t.DmOnly, &t.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, apperror.NewNotFound("tag not found")
@@ -97,12 +100,18 @@ func (r *tagRepository) FindByID(ctx context.Context, id int) (*Tag, error) {
 }
 
 // ListByCampaign returns all tags for a campaign, ordered by name.
-func (r *tagRepository) ListByCampaign(ctx context.Context, campaignID string) ([]Tag, error) {
-	query := `SELECT id, campaign_id, name, slug, color, created_at
-	           FROM tags WHERE campaign_id = ?
-	           ORDER BY name ASC`
+// When includeDmOnly is false, dm_only tags are excluded (player view).
+func (r *tagRepository) ListByCampaign(ctx context.Context, campaignID string, includeDmOnly bool) ([]Tag, error) {
+	query := `SELECT id, campaign_id, name, slug, color, dm_only, created_at
+	           FROM tags WHERE campaign_id = ?`
+	args := []interface{}{campaignID}
 
-	rows, err := r.db.QueryContext(ctx, query, campaignID)
+	if !includeDmOnly {
+		query += ` AND dm_only = FALSE`
+	}
+	query += ` ORDER BY name ASC`
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing tags by campaign: %w", err)
 	}
@@ -111,7 +120,7 @@ func (r *tagRepository) ListByCampaign(ctx context.Context, campaignID string) (
 	var tags []Tag
 	for rows.Next() {
 		var t Tag
-		if err := rows.Scan(&t.ID, &t.CampaignID, &t.Name, &t.Slug, &t.Color, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.CampaignID, &t.Name, &t.Slug, &t.Color, &t.DmOnly, &t.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning tag row: %w", err)
 		}
 		tags = append(tags, t)
@@ -123,12 +132,12 @@ func (r *tagRepository) ListByCampaign(ctx context.Context, campaignID string) (
 	return tags, nil
 }
 
-// Update modifies an existing tag's name, slug, and color.
+// Update modifies an existing tag's name, slug, color, and dm_only flag.
 func (r *tagRepository) Update(ctx context.Context, tag *Tag) error {
-	query := `UPDATE tags SET name = ?, slug = ?, color = ?
+	query := `UPDATE tags SET name = ?, slug = ?, color = ?, dm_only = ?
 	           WHERE id = ?`
 
-	result, err := r.db.ExecContext(ctx, query, tag.Name, tag.Slug, tag.Color, tag.ID)
+	result, err := r.db.ExecContext(ctx, query, tag.Name, tag.Slug, tag.Color, tag.DmOnly, tag.ID)
 	if err != nil {
 		if isDuplicateEntry(err) {
 			return apperror.NewConflict("a tag with this name already exists in the campaign")
@@ -191,13 +200,17 @@ func (r *tagRepository) RemoveTagFromEntity(ctx context.Context, entityID string
 }
 
 // GetEntityTags returns all tags associated with a single entity, ordered
-// alphabetically by name.
-func (r *tagRepository) GetEntityTags(ctx context.Context, entityID string) ([]Tag, error) {
-	query := `SELECT t.id, t.campaign_id, t.name, t.slug, t.color, t.created_at
+// alphabetically by name. When includeDmOnly is false, dm_only tags are excluded.
+func (r *tagRepository) GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]Tag, error) {
+	query := `SELECT t.id, t.campaign_id, t.name, t.slug, t.color, t.dm_only, t.created_at
 	           FROM tags t
 	           INNER JOIN entity_tags et ON et.tag_id = t.id
-	           WHERE et.entity_id = ?
-	           ORDER BY t.name ASC`
+	           WHERE et.entity_id = ?`
+
+	if !includeDmOnly {
+		query += ` AND t.dm_only = FALSE`
+	}
+	query += ` ORDER BY t.name ASC`
 
 	rows, err := r.db.QueryContext(ctx, query, entityID)
 	if err != nil {
@@ -208,7 +221,7 @@ func (r *tagRepository) GetEntityTags(ctx context.Context, entityID string) ([]T
 	var tags []Tag
 	for rows.Next() {
 		var t Tag
-		if err := rows.Scan(&t.ID, &t.CampaignID, &t.Name, &t.Slug, &t.Color, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.CampaignID, &t.Name, &t.Slug, &t.Color, &t.DmOnly, &t.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning entity tag row: %w", err)
 		}
 		tags = append(tags, t)
@@ -224,7 +237,7 @@ func (r *tagRepository) GetEntityTags(ctx context.Context, entityID string) ([]T
 // keyed by entity ID. This avoids N+1 queries on entity list views.
 //
 // Returns an empty map if no entity IDs are provided.
-func (r *tagRepository) GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]Tag, error) {
+func (r *tagRepository) GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]Tag, error) {
 	if len(entityIDs) == 0 {
 		return make(map[string][]Tag), nil
 	}
@@ -237,11 +250,15 @@ func (r *tagRepository) GetEntityTagsBatch(ctx context.Context, entityIDs []stri
 		args[i] = id
 	}
 
-	query := fmt.Sprintf(`SELECT et.entity_id, t.id, t.campaign_id, t.name, t.slug, t.color, t.created_at
+	query := fmt.Sprintf(`SELECT et.entity_id, t.id, t.campaign_id, t.name, t.slug, t.color, t.dm_only, t.created_at
 	           FROM tags t
 	           INNER JOIN entity_tags et ON et.tag_id = t.id
-	           WHERE et.entity_id IN (%s)
-	           ORDER BY t.name ASC`, strings.Join(placeholders, ","))
+	           WHERE et.entity_id IN (%s)`, strings.Join(placeholders, ","))
+
+	if !includeDmOnly {
+		query += ` AND t.dm_only = FALSE`
+	}
+	query += ` ORDER BY t.name ASC`
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -253,7 +270,7 @@ func (r *tagRepository) GetEntityTagsBatch(ctx context.Context, entityIDs []stri
 	for rows.Next() {
 		var entityID string
 		var t Tag
-		if err := rows.Scan(&entityID, &t.ID, &t.CampaignID, &t.Name, &t.Slug, &t.Color, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&entityID, &t.ID, &t.CampaignID, &t.Name, &t.Slug, &t.Color, &t.DmOnly, &t.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning batch entity tag row: %w", err)
 		}
 		result[entityID] = append(result[entityID], t)

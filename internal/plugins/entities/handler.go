@@ -23,8 +23,9 @@ import (
 
 // EntityTagFetcher retrieves tags for entities in batch. Defined here to avoid
 // importing the tags widget package, keeping plugins loosely coupled via interfaces.
+// includeDmOnly controls whether dm_only tags are returned (true for Scribes+).
 type EntityTagFetcher interface {
-	GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]EntityTagInfo, error)
+	GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]EntityTagInfo, error)
 }
 
 // AddonChecker is a narrow interface for checking whether an addon is enabled
@@ -156,7 +157,10 @@ func (h *Handler) Index(c echo.Context) error {
 		for i := range entities {
 			entityIDs[i] = entities[i].ID
 		}
-		if tagsMap, err := h.tagFetcher.GetEntityTagsBatch(c.Request().Context(), entityIDs); err == nil {
+		// Scribes+ see all tags including dm_only; Players see only public tags.
+		cc := campaigns.GetCampaignContext(c)
+		includeDmOnly := cc != nil && cc.MemberRole >= campaigns.RoleScribe
+		if tagsMap, err := h.tagFetcher.GetEntityTagsBatch(c.Request().Context(), entityIDs, includeDmOnly); err == nil {
 			for i := range entities {
 				if t, ok := tagsMap[entities[i].ID]; ok {
 					entities[i].Tags = t

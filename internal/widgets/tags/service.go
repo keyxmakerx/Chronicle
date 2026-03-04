@@ -17,18 +17,23 @@ var slugPattern = regexp.MustCompile(`[^a-z0-9]+`)
 
 // TagService defines the business logic contract for tag operations.
 // Handlers call these methods -- they never touch the repository directly.
+//
+// The includeDmOnly parameter controls visibility filtering. Pass true for
+// Scribes/Owners (who can see all tags) and false for Players (who should
+// not see dm_only tags).
 type TagService interface {
 	// Create validates input and creates a new tag in the campaign.
-	Create(ctx context.Context, campaignID string, name, color string) (*Tag, error)
+	Create(ctx context.Context, campaignID string, name, color string, dmOnly bool) (*Tag, error)
 
 	// GetByID retrieves a single tag by ID.
 	GetByID(ctx context.Context, id int) (*Tag, error)
 
-	// ListByCampaign returns all tags for a campaign.
-	ListByCampaign(ctx context.Context, campaignID string) ([]Tag, error)
+	// ListByCampaign returns all tags for a campaign. When includeDmOnly is
+	// false, dm_only tags are excluded (player view).
+	ListByCampaign(ctx context.Context, campaignID string, includeDmOnly bool) ([]Tag, error)
 
 	// Update validates input and updates an existing tag.
-	Update(ctx context.Context, id int, name, color string) (*Tag, error)
+	Update(ctx context.Context, id int, name, color string, dmOnly bool) (*Tag, error)
 
 	// Delete removes a tag and all its entity associations.
 	Delete(ctx context.Context, id int) error
@@ -37,11 +42,13 @@ type TagService interface {
 	// Performs a diff: removes tags not in the new set, adds tags not currently present.
 	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error
 
-	// GetEntityTags returns all tags associated with an entity.
-	GetEntityTags(ctx context.Context, entityID string) ([]Tag, error)
+	// GetEntityTags returns all tags associated with an entity. When
+	// includeDmOnly is false, dm_only tags are excluded.
+	GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]Tag, error)
 
 	// GetEntityTagsBatch returns tags for multiple entities in a single query.
-	GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]Tag, error)
+	// When includeDmOnly is false, dm_only tags are excluded.
+	GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]Tag, error)
 }
 
 // tagService implements TagService with validation and slug generation.
@@ -57,7 +64,7 @@ func NewTagService(repo TagRepository) TagService {
 // Create validates the tag name and color, generates a URL-safe slug, and
 // persists the new tag. The slug is derived from the name (lowercase, hyphens
 // replace non-alphanumeric characters).
-func (s *tagService) Create(ctx context.Context, campaignID string, name, color string) (*Tag, error) {
+func (s *tagService) Create(ctx context.Context, campaignID string, name, color string, dmOnly bool) (*Tag, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, apperror.NewBadRequest("tag name is required")
@@ -76,6 +83,7 @@ func (s *tagService) Create(ctx context.Context, campaignID string, name, color 
 		Name:       name,
 		Slug:       generateSlug(name),
 		Color:      color,
+		DmOnly:     dmOnly,
 	}
 
 	if err := s.repo.Create(ctx, tag); err != nil {
@@ -90,14 +98,15 @@ func (s *tagService) GetByID(ctx context.Context, id int) (*Tag, error) {
 	return s.repo.FindByID(ctx, id)
 }
 
-// ListByCampaign returns all tags for the given campaign.
-func (s *tagService) ListByCampaign(ctx context.Context, campaignID string) ([]Tag, error) {
-	return s.repo.ListByCampaign(ctx, campaignID)
+// ListByCampaign returns all tags for the given campaign. When includeDmOnly
+// is false, dm_only tags are excluded (player view).
+func (s *tagService) ListByCampaign(ctx context.Context, campaignID string, includeDmOnly bool) ([]Tag, error) {
+	return s.repo.ListByCampaign(ctx, campaignID, includeDmOnly)
 }
 
 // Update validates the new name and color, regenerates the slug, and persists
 // the changes to the tag.
-func (s *tagService) Update(ctx context.Context, id int, name, color string) (*Tag, error) {
+func (s *tagService) Update(ctx context.Context, id int, name, color string, dmOnly bool) (*Tag, error) {
 	// Verify the tag exists before updating.
 	tag, err := s.repo.FindByID(ctx, id)
 	if err != nil {
@@ -120,6 +129,7 @@ func (s *tagService) Update(ctx context.Context, id int, name, color string) (*T
 	tag.Name = name
 	tag.Slug = generateSlug(name)
 	tag.Color = color
+	tag.DmOnly = dmOnly
 
 	if err := s.repo.Update(ctx, tag); err != nil {
 		return nil, err
@@ -143,7 +153,8 @@ func (s *tagService) SetEntityTags(ctx context.Context, entityID string, campaig
 	// Validate that all provided tag IDs belong to the correct campaign.
 	// This prevents users from assigning tags from other campaigns.
 	if len(tagIDs) > 0 {
-		campaignTags, err := s.repo.ListByCampaign(ctx, campaignID)
+		// Include dm_only tags in validation — Scribes can assign any tag.
+		campaignTags, err := s.repo.ListByCampaign(ctx, campaignID, true)
 		if err != nil {
 			return fmt.Errorf("listing campaign tags for validation: %w", err)
 		}
@@ -160,8 +171,8 @@ func (s *tagService) SetEntityTags(ctx context.Context, entityID string, campaig
 		}
 	}
 
-	// Get current tags to compute the diff.
-	currentTags, err := s.repo.GetEntityTags(ctx, entityID)
+	// Get current tags to compute the diff (include all for accurate diff).
+	currentTags, err := s.repo.GetEntityTags(ctx, entityID, true)
 	if err != nil {
 		return fmt.Errorf("getting current entity tags: %w", err)
 	}
@@ -199,13 +210,15 @@ func (s *tagService) SetEntityTags(ctx context.Context, entityID string, campaig
 }
 
 // GetEntityTags returns all tags associated with the given entity.
-func (s *tagService) GetEntityTags(ctx context.Context, entityID string) ([]Tag, error) {
-	return s.repo.GetEntityTags(ctx, entityID)
+// When includeDmOnly is false, dm_only tags are excluded.
+func (s *tagService) GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]Tag, error) {
+	return s.repo.GetEntityTags(ctx, entityID, includeDmOnly)
 }
 
 // GetEntityTagsBatch returns tags for multiple entities in one query.
-func (s *tagService) GetEntityTagsBatch(ctx context.Context, entityIDs []string) (map[string][]Tag, error) {
-	return s.repo.GetEntityTagsBatch(ctx, entityIDs)
+// When includeDmOnly is false, dm_only tags are excluded.
+func (s *tagService) GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]Tag, error) {
+	return s.repo.GetEntityTagsBatch(ctx, entityIDs, includeDmOnly)
 }
 
 // generateSlug creates a URL-safe slug from a tag name. Converts to lowercase,

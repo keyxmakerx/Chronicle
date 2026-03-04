@@ -49,14 +49,21 @@ func (h *Handler) logAudit(c echo.Context, campaignID, action, tagName string) {
 	}
 }
 
+// canSeeDmOnly returns true if the current user's role is Scribe or higher,
+// meaning they can see dm_only tags.
+func canSeeDmOnly(cc *campaigns.CampaignContext) bool {
+	return cc.MemberRole >= campaigns.RoleScribe
+}
+
 // ListTags returns all tags for a campaign as JSON (GET /campaigns/:id/tags).
+// Players see only public tags; Scribes and Owners see all tags including dm_only.
 func (h *Handler) ListTags(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	tags, err := h.service.ListByCampaign(c.Request().Context(), cc.Campaign.ID)
+	tags, err := h.service.ListByCampaign(c.Request().Context(), cc.Campaign.ID, canSeeDmOnly(cc))
 	if err != nil {
 		return err
 	}
@@ -81,7 +88,7 @@ func (h *Handler) CreateTag(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	tag, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, req.Name, req.Color)
+	tag, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, req.Name, req.Color, req.DmOnly)
 	if err != nil {
 		return err
 	}
@@ -117,7 +124,7 @@ func (h *Handler) UpdateTag(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	tag, err := h.service.Update(c.Request().Context(), tagID, req.Name, req.Color)
+	tag, err := h.service.Update(c.Request().Context(), tagID, req.Name, req.Color, req.DmOnly)
 	if err != nil {
 		return err
 	}
@@ -179,8 +186,8 @@ func (h *Handler) SetEntityTags(c echo.Context) error {
 		return err
 	}
 
-	// Return the updated set of tags for the entity.
-	tags, err := h.service.GetEntityTags(c.Request().Context(), entityID)
+	// Return the updated set of tags for the entity (Scribes see all tags).
+	tags, err := h.service.GetEntityTags(c.Request().Context(), entityID, canSeeDmOnly(cc))
 	if err != nil {
 		return err
 	}
@@ -193,6 +200,7 @@ func (h *Handler) SetEntityTags(c echo.Context) error {
 
 // GetEntityTags returns all tags for an entity as JSON
 // (GET /campaigns/:id/entities/:eid/tags).
+// Players see only public tags; Scribes and Owners see all tags including dm_only.
 func (h *Handler) GetEntityTags(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -204,7 +212,7 @@ func (h *Handler) GetEntityTags(c echo.Context) error {
 		return apperror.NewBadRequest("entity ID is required")
 	}
 
-	tags, err := h.service.GetEntityTags(c.Request().Context(), entityID)
+	tags, err := h.service.GetEntityTags(c.Request().Context(), entityID, canSeeDmOnly(cc))
 	if err != nil {
 		return err
 	}
