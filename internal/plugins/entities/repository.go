@@ -1019,7 +1019,10 @@ func (r *entityRepository) UpdateParent(ctx context.Context, entityID string, pa
 func (r *entityRepository) FindBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error) {
 	where := `WHERE e.entry_html LIKE ? AND e.id != ?`
 	// Pattern: search for the mention data attribute containing the entity ID.
-	pattern := `%data-mention-id="` + entityID + `"%`
+	// Escape LIKE metacharacters in entityID for safety (UUIDs don't contain
+	// % or _ but this prevents injection if ID format ever changes).
+	escaped := strings.NewReplacer("%", `\%`, "_", `\_`).Replace(entityID)
+	pattern := `%data-mention-id="` + escaped + `"%`
 	args := []any{pattern, entityID}
 
 	if role < 2 {

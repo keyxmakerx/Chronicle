@@ -1,7 +1,6 @@
 package timeline
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 
@@ -14,15 +13,10 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// MemberLister provides campaign membership data for the visibility user selector.
-type MemberLister interface {
-	ListMembers(ctx context.Context, campaignID string) ([]campaigns.CampaignMember, error)
-}
-
 // Handler processes HTTP requests for the timeline plugin.
 type Handler struct {
 	svc          TimelineService
-	memberLister MemberLister
+	memberLister campaigns.MemberLister
 }
 
 // NewHandler creates a new timeline Handler.
@@ -31,7 +25,7 @@ func NewHandler(svc TimelineService) *Handler {
 }
 
 // SetMemberLister injects the campaign member lister for visibility settings.
-func (h *Handler) SetMemberLister(ml MemberLister) {
+func (h *Handler) SetMemberLister(ml campaigns.MemberLister) {
 	h.memberLister = ml
 }
 

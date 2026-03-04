@@ -16,11 +16,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// MemberLister provides campaign membership data for RSVP.
-type MemberLister interface {
-	ListMembers(ctx context.Context, campaignID string) ([]campaigns.CampaignMember, error)
-}
-
 // MailSender sends email notifications. Wraps the SMTP service interface.
 type MailSender interface {
 	SendHTMLMail(ctx context.Context, to []string, subject, plainBody, htmlBody string) error
@@ -30,7 +25,7 @@ type MailSender interface {
 // Handler processes HTTP requests for the sessions plugin.
 type Handler struct {
 	svc          SessionService
-	memberLister MemberLister
+	memberLister campaigns.MemberLister
 	mailer       MailSender
 	baseURL      string // Application base URL for RSVP links (e.g. "https://chronicle.example.com").
 }
@@ -41,7 +36,7 @@ func NewHandler(svc SessionService) *Handler {
 }
 
 // SetMemberLister wires a campaign member lister for RSVP invite-all.
-func (h *Handler) SetMemberLister(ml MemberLister) {
+func (h *Handler) SetMemberLister(ml campaigns.MemberLister) {
 	h.memberLister = ml
 }
 
