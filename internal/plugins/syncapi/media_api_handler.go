@@ -156,6 +156,10 @@ func (h *MediaAPIHandler) GetMediaStats(c echo.Context) error {
 	})
 }
 
+// maxAPIUploadBody is the maximum request body size for API media uploads.
+// Set to 11 MB (10 MB file limit + 10% margin for multipart encoding overhead).
+const maxAPIUploadBody = 11 * 1024 * 1024
+
 // UploadMedia handles file upload via multipart form.
 // POST /api/v1/campaigns/:id/media
 //
@@ -163,6 +167,10 @@ func (h *MediaAPIHandler) GetMediaStats(c echo.Context) error {
 //   - file: the file to upload (required)
 //   - usage_type: "attachment", "entity_image", "avatar", "backdrop" (optional, defaults to "attachment")
 func (h *MediaAPIHandler) UploadMedia(c echo.Context) error {
+	// Limit request body size to prevent memory exhaustion from oversized payloads.
+	// The media service enforces the exact per-file limit; this is a coarse guard.
+	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, maxAPIUploadBody)
+
 	key := GetAPIKey(c)
 	if key == nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "api key required")

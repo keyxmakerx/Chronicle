@@ -8,27 +8,29 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Media API v1 endpoints (Part 2).
+2026-03-04 -- Bug fixes + QoL media browser enhancements (batch 13).
 Branch: `claude/review-codebase-R1WqN`.
 
 ## Current Phase
-**Media API v1 endpoints.** Completed this session (batch 12):
-- REST API v1 media endpoints for Foundry VTT and external tools:
-  - `GET /api/v1/campaigns/:id/media` — list media with pagination
-  - `GET /api/v1/campaigns/:id/media/:mediaID` — get single file metadata
-  - `GET /api/v1/campaigns/:id/media/stats` — campaign storage stats
-  - `POST /api/v1/campaigns/:id/media` — upload via multipart form
-  - `DELETE /api/v1/campaigns/:id/media/:mediaID` — delete media file
-  - Read endpoints require "read" permission, write endpoints require "write"
-  - IDOR protection: verifies file belongs to campaign before returning
-  - Signed URLs in responses when signer is configured
-  - New `MediaAPIHandler` in `syncapi/media_api_handler.go`
+**Bug fixes and QoL enhancements.** Completed this session (batch 13):
+- Fixed CleanupOrphans TOCTOU race condition: added 15-minute grace period
+  to avoid deleting files from in-progress uploads
+- Added body size limit (11 MB) on API media upload endpoint to prevent
+  memory exhaustion from oversized payloads
+- Enhanced media browser with drag-and-drop upload support, multi-file
+  selection, and per-file progress bars via XHR upload tracking
+- Alpine.js `mediaUploader` component fully rewritten with queue management,
+  sequential processing, and status indicators per file
+
+Previously completed (batch 12):
+- REST API v1 media endpoints for Foundry VTT and external tools
 
 Previously completed (batch 11):
 - Security hardening: audit logging, concurrent upload limits, disk space checks, orphan cleanup
 
 Remaining from approved media plan:
-- Part 5: QoL features (drag-drop, progress, multi-upload, usage indicators)
+- Part 1: Temporary storage limit bypass (admin panel)
+- Part 5e: Media usage indicator in browser (pre-computed reference counts)
 
 Completed (batch 9):
 - Campaign-scoped media browser:

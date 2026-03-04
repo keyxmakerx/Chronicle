@@ -56,40 +56,90 @@ func mediaUsageLabel(t string) string {
 // campaignMediaContent renders the media browser body.
 templ campaignMediaContent(cc *campaigns.CampaignContext, data CampaignMediaPageData) {
 	<div class="max-w-6xl mx-auto py-6 px-4">
-		<!-- Header -->
-		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
-			<div>
-				<h1 class="text-xl font-bold text-fg">
-					<i class="fa-solid fa-photo-film mr-2 text-accent"></i>Media
-				</h1>
-				<p class="text-sm text-fg-secondary mt-1">
-					{ fmt.Sprintf("%d files", data.Stats.TotalFiles) } &middot; { formatFileSize(data.Stats.TotalBytes) } used
-				</p>
+		<!-- Header + upload zone -->
+		<div
+			x-data={ fmt.Sprintf("mediaUploader('%s', '%s')", cc.Campaign.ID, data.CSRFToken) }
+			@dragover.prevent="dragOver = true"
+			@dragleave.prevent="dragOver = false"
+			@drop.prevent="handleDrop($event)"
+		>
+			<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
+				<div>
+					<h1 class="text-xl font-bold text-fg">
+						<i class="fa-solid fa-photo-film mr-2 text-accent"></i>Media
+					</h1>
+					<p class="text-sm text-fg-secondary mt-1">
+						{ fmt.Sprintf("%d files", data.Stats.TotalFiles) } &middot; { formatFileSize(data.Stats.TotalBytes) } used
+					</p>
+				</div>
+				<div class="flex items-center gap-2">
+					<button
+						class="btn-primary text-sm"
+						@click="$refs.fileInput.click()"
+						:disabled="queue.length > 0"
+					>
+						<i class="fa-solid fa-arrow-up-from-bracket mr-1"></i> Upload
+					</button>
+					<input
+						type="file"
+						x-ref="fileInput"
+						class="hidden"
+						accept="image/jpeg,image/png,image/webp,image/gif"
+						multiple
+						@change="handleFiles($event.target.files); $event.target.value = ''"
+					/>
+				</div>
 			</div>
-			<!-- Upload button opens native file picker -->
+
+			<!-- Drag overlay -->
 			<div
-				x-data={ fmt.Sprintf("mediaUploader('%s', '%s')", cc.Campaign.ID, data.CSRFToken) }
+				x-show="dragOver"
+				x-transition.opacity
+				class="fixed inset-0 z-50 bg-accent/10 border-4 border-dashed border-accent rounded-lg flex items-center justify-center pointer-events-none"
 			>
-				<button
-					class="btn-primary text-sm"
-					@click="$refs.fileInput.click()"
-					:disabled="uploading"
-				>
-					<template x-if="!uploading">
-						<span><i class="fa-solid fa-arrow-up-from-bracket mr-1"></i> Upload</span>
-					</template>
-					<template x-if="uploading">
-						<span><i class="fa-solid fa-spinner fa-spin mr-1"></i> Uploading...</span>
-					</template>
-				</button>
-				<input
-					type="file"
-					x-ref="fileInput"
-					class="hidden"
-					accept="image/jpeg,image/png,image/webp,image/gif"
-					@change="uploadFile($event)"
-				/>
+				<div class="text-center">
+					<i class="fa-solid fa-cloud-arrow-up text-4xl text-accent mb-2"></i>
+					<p class="text-lg font-medium text-fg">Drop images to upload</p>
+					<p class="text-sm text-fg-secondary">JPEG, PNG, WebP, or GIF &middot; 10 MB max</p>
+				</div>
 			</div>
+
+			<!-- Upload queue -->
+			<template x-if="queue.length > 0">
+				<div class="mb-4 space-y-2">
+					<template x-for="(item, idx) in queue" :key="idx">
+						<div class="card p-3 flex items-center gap-3">
+							<div class="w-8 h-8 rounded bg-surface-alt flex items-center justify-center flex-shrink-0">
+								<template x-if="item.status === 'uploading'">
+									<i class="fa-solid fa-spinner fa-spin text-accent text-sm"></i>
+								</template>
+								<template x-if="item.status === 'done'">
+									<i class="fa-solid fa-check text-emerald-500 text-sm"></i>
+								</template>
+								<template x-if="item.status === 'error'">
+									<i class="fa-solid fa-xmark text-red-500 text-sm"></i>
+								</template>
+								<template x-if="item.status === 'pending'">
+									<i class="fa-solid fa-clock text-fg-muted text-sm"></i>
+								</template>
+							</div>
+							<div class="flex-1 min-w-0">
+								<p class="text-sm text-fg truncate" x-text="item.name"></p>
+								<div class="flex items-center gap-2 mt-1">
+									<div class="flex-1 h-1.5 bg-surface-alt rounded-full overflow-hidden">
+										<div
+											class="h-full rounded-full transition-all duration-300"
+											:class="item.status === 'error' ? 'bg-red-500' : item.status === 'done' ? 'bg-emerald-500' : 'bg-accent'"
+											:style="'width:' + item.progress + '%'"
+										></div>
+									</div>
+									<span class="text-[10px] text-fg-muted flex-shrink-0" x-text="item.statusText"></span>
+								</div>
+							</div>
+						</div>
+					</template>
+				</div>
+			</template>
 		</div>
 
 		if data.Total == 0 {
@@ -245,56 +295,125 @@ templ MediaRefsFragment(cc *campaigns.CampaignContext, mediaID string, refs []Me
 	}
 }
 
-// mediaUploaderScript renders the inline Alpine.js uploader component.
+// mediaUploaderScript renders the inline Alpine.js uploader component with
+// drag-drop, progress tracking, and multi-file upload support.
 templ mediaUploaderScript() {
 	<script>
 		function mediaUploader(campaignId, csrfToken) {
+			var ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+			var MAX_SIZE = 10 * 1024 * 1024;
+
+			function formatSize(b) {
+				if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+				if (b >= 1024) return (b / 1024).toFixed(1) + ' KB';
+				return b + ' B';
+			}
+
 			return {
-				uploading: false,
-				async uploadFile(event) {
-					const file = event.target.files[0];
-					if (!file) return;
+				dragOver: false,
+				queue: [],
+				_processing: false,
 
-					const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-					if (!allowed.includes(file.type)) {
-						Chronicle.toast('Only JPEG, PNG, WebP, and GIF files are allowed.', 'error');
-						event.target.value = '';
-						return;
+				handleDrop(event) {
+					this.dragOver = false;
+					var files = event.dataTransfer ? event.dataTransfer.files : [];
+					this.handleFiles(files);
+				},
+
+				handleFiles(files) {
+					if (!files || !files.length) return;
+					for (var i = 0; i < files.length; i++) {
+						var f = files[i];
+						if (!ALLOWED.includes(f.type)) {
+							Chronicle.toast(f.name + ': unsupported file type.', 'error');
+							continue;
+						}
+						if (f.size > MAX_SIZE) {
+							Chronicle.toast(f.name + ': too large (max 10 MB).', 'error');
+							continue;
+						}
+						this.queue.push({
+							file: f,
+							name: f.name,
+							size: f.size,
+							progress: 0,
+							status: 'pending',
+							statusText: formatSize(f.size)
+						});
+					}
+					this._processQueue();
+				},
+
+				async _processQueue() {
+					if (this._processing) return;
+					this._processing = true;
+
+					while (true) {
+						var next = this.queue.find(function(q) { return q.status === 'pending'; });
+						if (!next) break;
+						await this._uploadOne(next);
 					}
 
-					const maxSize = 10 * 1024 * 1024;
-					if (file.size > maxSize) {
-						Chronicle.toast('File is too large. Maximum size is 10 MB.', 'error');
-						event.target.value = '';
-						return;
-					}
+					this._processing = false;
 
-					this.uploading = true;
-					try {
-						const fd = new FormData();
-						fd.append('file', file);
+					// If all succeeded, reload after a brief pause to show green checks.
+					var allDone = this.queue.length > 0 && this.queue.every(function(q) { return q.status === 'done'; });
+					if (allDone) {
+						var count = this.queue.length;
+						Chronicle.toast(count + ' file' + (count > 1 ? 's' : '') + ' uploaded.', 'success');
+						setTimeout(function() { window.location.reload(); }, 800);
+					}
+				},
+
+				_uploadOne(item) {
+					var self = this;
+					item.status = 'uploading';
+					item.statusText = '0%';
+
+					return new Promise(function(resolve) {
+						var xhr = new XMLHttpRequest();
+						var fd = new FormData();
+						fd.append('file', item.file);
 						fd.append('campaign_id', campaignId);
 						fd.append('usage_type', 'attachment');
 
-						const resp = await fetch('/media/upload', {
-							method: 'POST',
-							headers: { 'X-CSRF-Token': csrfToken },
-							body: fd
+						xhr.upload.addEventListener('progress', function(e) {
+							if (e.lengthComputable) {
+								var pct = Math.round((e.loaded / e.total) * 100);
+								item.progress = pct;
+								item.statusText = pct + '%';
+							}
 						});
 
-						if (!resp.ok) {
-							const err = await resp.json().catch(() => ({}));
-							throw new Error(err.message || 'Upload failed');
-						}
+						xhr.addEventListener('load', function() {
+							if (xhr.status >= 200 && xhr.status < 300) {
+								item.progress = 100;
+								item.status = 'done';
+								item.statusText = 'Done';
+							} else {
+								item.status = 'error';
+								try {
+									var err = JSON.parse(xhr.responseText);
+									item.statusText = err.message || 'Failed';
+								} catch (_) {
+									item.statusText = 'Failed';
+								}
+								Chronicle.toast(item.name + ': ' + item.statusText, 'error');
+							}
+							resolve();
+						});
 
-						Chronicle.toast('File uploaded successfully.', 'success');
-						window.location.reload();
-					} catch (e) {
-						Chronicle.toast(e.message || 'Upload failed.', 'error');
-					} finally {
-						this.uploading = false;
-						event.target.value = '';
-					}
+						xhr.addEventListener('error', function() {
+							item.status = 'error';
+							item.statusText = 'Network error';
+							Chronicle.toast(item.name + ': network error.', 'error');
+							resolve();
+						});
+
+						xhr.open('POST', '/media/upload');
+						xhr.setRequestHeader('X-CSRF-Token', csrfToken);
+						xhr.send(fd);
+					});
 				}
 			};
 		}

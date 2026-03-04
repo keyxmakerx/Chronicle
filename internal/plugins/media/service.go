@@ -396,6 +396,16 @@ func (s *mediaService) CleanupOrphans(ctx context.Context) (int, error) {
 		}
 
 		if !knownFiles[rel] {
+			// Grace period: skip files younger than 15 minutes to avoid
+			// deleting files from in-progress uploads (TOCTOU race).
+			if time.Since(info.ModTime()) < 15*time.Minute {
+				slog.Debug("skipping recent orphan file",
+					slog.String("path", rel),
+					slog.Duration("age", time.Since(info.ModTime())),
+				)
+				return nil
+			}
+
 			if removeErr := os.Remove(path); removeErr == nil {
 				removed++
 				slog.Info("removed orphan media file", slog.String("path", rel))
