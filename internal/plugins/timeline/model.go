@@ -58,6 +58,10 @@ type Timeline struct {
 	EventCount   int    `json:"event_count,omitempty"`
 }
 
+// GetCampaignID returns the campaign this timeline belongs to. Implements
+// middleware.CampaignScoped for generic IDOR protection.
+func (t *Timeline) GetCampaignID() string { return t.CampaignID }
+
 // IsDMOnly returns true if this timeline is only visible to the DM.
 func (t *Timeline) IsDMOnly() bool {
 	return t.Visibility == "dm_only"

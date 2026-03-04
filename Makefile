@@ -52,6 +52,10 @@ tailwind: ## Regenerate Tailwind CSS
 tailwind-watch: ## Watch mode for Tailwind CSS
 	tailwindcss -i static/css/input.css -o static/css/app.css --watch
 
+.PHONY: tiptap-bundle
+tiptap-bundle: ## Rebuild TipTap editor bundle (table extensions, etc.)
+	npx esbuild static/vendor/tiptap-bundle.src.js --bundle --minify --outfile=static/vendor/tiptap-bundle.min.js --format=iife --global-name=__TipTapInternal
+
 .PHONY: generate
 generate: templ tailwind ## Run all code generation (templ + tailwind)
 

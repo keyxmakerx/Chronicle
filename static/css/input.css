@@ -393,6 +393,34 @@
     border-color: var(--color-border-light);
   }
 
+  /* ---- Table support (TipTap table extension) ---- */
+  .chronicle-editor__content .tiptap table,
+  .prose table {
+    @apply w-full border-collapse my-4;
+  }
+  .chronicle-editor__content .tiptap th,
+  .prose th {
+    @apply bg-bg-tertiary text-left text-sm font-semibold px-3 py-2;
+    border: 1px solid var(--color-border-light);
+    color: var(--color-text-primary);
+  }
+  .chronicle-editor__content .tiptap td,
+  .prose td {
+    @apply text-sm px-3 py-2;
+    border: 1px solid var(--color-border-light);
+    color: var(--color-text-body);
+  }
+  .chronicle-editor__content .tiptap .selectedCell {
+    @apply bg-accent/10;
+  }
+  .chronicle-editor__content .tiptap .column-resize-handle {
+    @apply absolute top-0 right-[-2px] bottom-0 w-1 bg-accent/40 cursor-col-resize;
+    pointer-events: auto;
+  }
+  .chronicle-editor__content .tiptap table .tableWrapper {
+    @apply overflow-x-auto my-4;
+  }
+
   /* ---- Entity Type Tabs (entity list page filter) ---- */
   .entity-tab {
     @apply inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium

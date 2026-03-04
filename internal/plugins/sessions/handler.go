@@ -105,6 +105,14 @@ func (h *Handler) CreateSession(c echo.Context) error {
 	summary := c.FormValue("summary")
 	scheduledDate := c.FormValue("scheduled_date")
 
+	// Validate field lengths.
+	if err := apperror.ValidateRequired("name", name); err != nil {
+		return err
+	}
+	if err := apperror.ValidateStringLength("name", name, apperror.MaxNameLength); err != nil {
+		return err
+	}
+
 	var summaryPtr *string
 	if summary != "" {
 		summaryPtr = &summary
@@ -503,12 +511,5 @@ p{color:#666;margin:0;font-size:.9rem}</style></head><body>
 
 // requireSessionInCampaign fetches a session and verifies it belongs to the campaign.
 func (h *Handler) requireSessionInCampaign(c echo.Context, sessionID, campaignID string) (*Session, error) {
-	session, err := h.svc.GetSession(c.Request().Context(), sessionID)
-	if err != nil {
-		return nil, err
-	}
-	if session.CampaignID != campaignID {
-		return nil, echo.NewHTTPError(http.StatusNotFound, "session not found")
-	}
-	return session, nil
+	return middleware.RequireInCampaign(c.Request().Context(), h.svc.GetSession, sessionID, campaignID, "session")
 }

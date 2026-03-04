@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -38,14 +39,7 @@ func (h *Handler) SetMemberLister(ml MemberLister) {
 // to the given campaign. Returns 404 if not found or mismatched, preventing
 // cross-campaign IDOR attacks.
 func (h *Handler) requireTimelineInCampaign(c echo.Context, timelineID, campaignID string) (*Timeline, error) {
-	t, err := h.svc.GetTimeline(c.Request().Context(), timelineID)
-	if err != nil {
-		return nil, err
-	}
-	if t.CampaignID != campaignID {
-		return nil, echo.NewHTTPError(http.StatusNotFound, "timeline not found")
-	}
-	return t, nil
+	return middleware.RequireInCampaign(c.Request().Context(), h.svc.GetTimeline, timelineID, campaignID, "timeline")
 }
 
 // effectiveRole returns the role to use for content filtering. When
@@ -148,6 +142,15 @@ func (h *Handler) CreateForm(c echo.Context) error {
 	userID := auth.GetUserID(c)
 
 	name := c.FormValue("name")
+
+	// Validate field lengths.
+	if err := apperror.ValidateRequired("name", name); err != nil {
+		return err
+	}
+	if err := apperror.ValidateStringLength("name", name, apperror.MaxNameLength); err != nil {
+		return err
+	}
+
 	calendarID := c.FormValue("calendar_id")
 	var calPtr *string
 	if calendarID != "" {

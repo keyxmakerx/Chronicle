@@ -189,6 +189,17 @@ func (h *Handler) Create(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
+	// Validate field lengths before processing.
+	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+		return err
+	}
+	if err := apperror.ValidateStringLength("name", req.Name, apperror.MaxNameLength); err != nil {
+		return err
+	}
+	if err := apperror.ValidateStringLength("description", req.Description, apperror.MaxDescriptionLength); err != nil {
+		return err
+	}
+
 	userID := auth.GetUserID(c)
 	input := CreateCampaignInput(req)
 

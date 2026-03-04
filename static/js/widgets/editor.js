@@ -38,6 +38,10 @@
   // data-mention-id and data-entity-preview through the ProseMirror JSON
   // round-trip so hover preview cards work after save/reload.
   var Link = (Chronicle && Chronicle.MentionLink) || TipTap.Link;
+  var Table = TipTap.Table;
+  var TableRow = TipTap.TableRow;
+  var TableCell = TipTap.TableCell;
+  var TableHeader = TipTap.TableHeader;
 
   // Store editor instances for cleanup.
   var editors = new WeakMap();
@@ -111,6 +115,16 @@
         }),
         Underline,
       ];
+
+      // Add table extensions if available in the bundle.
+      if (Table) {
+        extensions.push(
+          Table.configure({ resizable: true, HTMLAttributes: { class: 'chronicle-table' } }),
+          TableRow,
+          TableCell,
+          TableHeader
+        );
+      }
 
       // Add inline secrets mark if extension is loaded.
       if (Chronicle.SecretMark) {
@@ -499,6 +513,7 @@
       { action: 'horizontalRule', icon: 'fa-minus',           label: 'Horizontal Rule', hint: '---' },
       { action: 'blockquote',     icon: 'fa-circle-info',     label: 'Callout Block',   hint: '>' },
       { action: 'code',           icon: 'fa-code',            label: 'Code Block',      hint: '```' },
+      { action: 'table',          icon: 'fa-table',           label: 'Insert Table',    hint: '' },
     ];
 
     items.forEach(function (item) {
@@ -604,6 +619,13 @@
 
       case 'code':
         editor.chain().focus().toggleCodeBlock().run();
+        break;
+
+      case 'table':
+        // Insert a 3x3 table with header row.
+        if (editor.can().insertTable) {
+          editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        }
         break;
     }
   }

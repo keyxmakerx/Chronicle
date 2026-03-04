@@ -42,7 +42,7 @@ Known broken or missing things, ordered by severity.
 - [x] **Form validation feedback** — Fixed: added `:user-invalid` and `.input-error` CSS for red borders on invalid fields. JS in boot.js listens for `invalid` events and inserts `.field-error` inline hints with the browser's validation message. Errors clear on input.
 - [x] **Mobile sidebar toggle** — Already implemented: hamburger button in topbar (md:hidden), Alpine.js sidebarOpen state, CSS translate slide-in animation, backdrop overlay, auto-close on navigation.
 - [x] **Calendar recurring events limited** — Sessions now support weekly/biweekly/monthly/custom recurrence. Calendar events still yearly-only (separate concern). Session recurrence via migration 000041.
-- [ ] **Editor lacks table support** — TipTap editor has no table insert/edit (common need for TTRPG stat blocks, encounter tables).
+- [x] **Editor lacks table support** — Added TipTap table extensions (Table, TableRow, TableCell, TableHeader), insert menu entry, CSS styles, rebuilt vendor bundle via esbuild.
 - [x] **Editor lacks callout/highlight blocks** — Fixed: blockquote restyled as callout block with accent border, subtle background, info icon. Insert menu renamed "Blockquote" → "Callout Block". Read-only prose views also styled. TipTap bundle limits prevent custom node types; blockquote serves as callout.
 - [x] **Entity cloning** — Fixed: Clone button on entity show page (Scribe+). POST creates copy with "(Copy)" suffix, clones entry, image, fields, field overrides, popup config, tags via INSERT...SELECT. Redirects to edit page. Does NOT copy relations.
 - [x] **Map marker search** — Fixed: added search input in map header. Client-side filtering dims non-matching markers (opacity 0.15). Enter pans to first match and opens tooltip. Searches name and description.
@@ -54,15 +54,15 @@ Known broken or missing things, ordered by severity.
 - [ ] **API technical documentation missing** — REST API v1 exists and works but has no public documentation (OpenAPI spec or reference).
 - [x] **Calendar HTMX detection inconsistency** — Replaced 5 raw `HX-Request` header checks in calendar handler with `middleware.IsHTMX(c)`, which also checks `HX-Boosted` to avoid returning fragments on boosted navigation.
 - [ ] **Cross-plugin adapter interface duplication** — `MemberLister` interface duplicated in timeline and sessions plugins. Should extract to shared package.
-- [ ] **IDOR check functions duplicated** — `requireTimelineInCampaign`, `requireMapInCampaign`, `requireSessionInCampaign`, `requireEventInCampaign` follow identical patterns in 4 plugins. Extract to shared generic helper.
+- [x] **IDOR check functions duplicated** — Extracted generic `middleware.RequireInCampaign[T]()` helper with Go generics. Updated maps, timeline, sessions handlers. Calendar/markers left as-is (parent traversal needed).
 - [ ] **logAudit fire-and-forget duplicated** — Similar audit logging patterns in entities, campaigns, tags handlers. Could extract to shared `FireAudit()` utility.
 - [x] **JS fetch header setup duplicated** — Added `Chronicle.apiFetch()` wrapper to boot.js (auto-sets headers, CSRF, JSON serialization). Migrated sidebar_config, entity_type_config, sidebar_nav_editor, dashboard_editor widgets. Simplified notes.js CSRF reading.
 - [ ] **Mixed error types** — `echo.NewHTTPError` used directly in 30+ places instead of centralized `apperror` package. Should standardize.
 - [ ] **LIKE metacharacter in backlinks** — `entities/repository.go:1011` concatenates entityID into LIKE pattern without escaping `%`/`_`. Low risk (UUIDs only) but should escape for safety.
 - [ ] **No Content Security Policy headers** — CSP not implemented. Would provide XSS defense-in-depth alongside bluemonday sanitization.
-- [ ] **No input size validation on text fields** — Relies on DB column limits. Handler-level validation (name max 200, description max 5000, etc.) would be better.
+- [x] **No input size validation on text fields** — Added `apperror/validate.go` helpers (ValidateStringLength, ValidateRequired) and wired into entities, campaigns, maps, timeline, sessions create handlers.
 - [ ] **Package-level Go doc comments missing** — ~80% of .go files lack `// Package ...` comments (handler.go, service.go, repository.go, routes.go across all plugins).
-- [~] **Missing JS widget .ai.md docs** — Done: image_upload, timeline_viz, dashboard_editor, template_editor, entity_tooltip, foundry-module, websocket. Still needed: editor.js, attributes.js, tag_picker.js, relations.js, notes.js, boot.js.
+- [~] **Missing JS widget .ai.md docs** — Done: image_upload, timeline_viz, dashboard_editor, template_editor, entity_tooltip, foundry-module, websocket, attributes, mentions, title, boot.js. Still needed: editor.js, tag_picker.js, relations.js, notes.js.
 
 ---
 
@@ -156,9 +156,9 @@ New capabilities ordered by priority for alpha release.
 - [x] Campaigns service tests (72 tests covering CRUD, membership, ownership transfer, sidebar, dashboard, admin ops, model helpers)
 - [x] Relations service tests (25 tests: bi-directional create/delete, symmetric relations, validation, conflict handling)
 - [x] Tags service tests (40 tests: CRUD, color validation, slug generation, diff-based SetEntityTags, cross-campaign prevention, visibility filtering)
-- [ ] Audit service tests (pagination, validation, fire-and-forget)
-- [ ] Media service tests (file validation, thumbnail generation)
-- [ ] Settings service tests (limit resolution, override priority)
+- [x] Audit service tests (12 tests: Log validation, pagination, entity history, stats)
+- [x] Media service tests (20+ tests: CRUD, upload validation, quotas, storage stats)
+- [x] Settings service tests (30+ tests: limit resolution, override chain, bypass validation)
 - [ ] HTMX fragment edge cases (CSRF propagation, double-init, nested targets)
 
 ### Game System Modules
@@ -169,9 +169,9 @@ New capabilities ordered by priority for alpha release.
 
 ### Infrastructure
 
-- [ ] **Add golangci-lint to CI pipeline** — Currently only `go vet` + unit tests run in CI. golangci-lint catches real bugs (unchecked errors, dead code) and should be enforced.
-- [ ] **Add security scanning to CI** — gosec (static analysis) and govulncheck (dependency vulnerabilities) should run in CI. Requires Go 1.25+ for latest gosec.
-- [ ] **Increase test coverage** — Currently 8 test files (294+ tests). Priority: media service tests, audit service tests, settings service tests, then handler tests.
+- [x] **Add golangci-lint to CI pipeline** — Added `lint` job to GitHub Actions CI using golangci-lint-action v6.
+- [x] **Add security scanning to CI** — Added `security` job with govulncheck to GitHub Actions CI.
+- [x] **Increase test coverage** — Now 11 test files (356+ tests). Added audit, media, settings service tests + IDOR middleware tests.
 - [ ] docker-compose.yml full stack verification (app + MariaDB + Redis)
 - [ ] `air` hot reload setup for dev workflow
 
@@ -328,3 +328,11 @@ Summary of strengths/weaknesses for strategic positioning. Full analysis in `.ai
 - [x] RequireAddonAPI fail-closed on DB errors (was fail-open)
 - [x] Fog-of-war Chronicle→Foundry sync (polygon overlay drawings on Foundry scene)
 - [x] Extension .ai.md documentation (foundry-module, websocket)
+
+### Alpha Hardening Batch (2026-03-04, batch 25)
+- [x] CI pipeline: golangci-lint job + govulncheck security scan job in GitHub Actions
+- [x] Service tests: audit (12), media (20+), settings (30+), IDOR middleware (3)
+- [x] Generic IDOR helper: `middleware.RequireInCampaign[T]()` with Go generics
+- [x] Input validation: `apperror/validate.go` helpers, wired into 5 create handlers
+- [x] Widget documentation: attributes, mentions, title `.ai.md` + boot.js `.ai.md`
+- [x] TipTap table support: Table/TableRow/TableCell/TableHeader extensions, esbuild pipeline, CSS styles

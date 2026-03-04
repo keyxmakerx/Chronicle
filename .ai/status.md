@@ -8,13 +8,16 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Documentation cleanup for fresh start (batch 24 complete).
-Branch: `claude/interactive-calendar-sessions-UJaq2`.
+2026-03-04 -- Alpha Hardening batch (batch 25 complete).
+Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**All major features complete through batch 24.** Ready for next priorities.
+**All major features complete through batch 25.** Alpha hardening done.
 
-### Summary of Recent Work (batches 21-24)
+### Summary of Recent Work (batches 21-25)
+- **Batch 25**: Alpha Hardening — CI pipeline (golangci-lint + govulncheck), 3 new
+  service test suites (audit, media, settings), generic IDOR helper, input size
+  validation helpers, JS widget `.ai.md` docs, TipTap table support.
 - **Batch 24**: Security hardening (input sanitization, rate limit bounds, fail-closed
   addon middleware) + fog-of-war Chronicle→Foundry sync (polygon drawings).
 - **Batch 23**: WebSocket security (origin validation, message type validation), device
@@ -36,16 +39,13 @@ Branch: `claude/interactive-calendar-sessions-UJaq2`.
 ---
 
 ## Next Session Should
-1. **Interactive calendar sessions** — The approved plan (`declarative-bouncing-cherny.md`)
-   for sessions modal overlay on calendar page is ready for implementation. Key pieces:
-   remove old session nav buttons, add sessions modal, create sessions fragment endpoint,
-   server-side recurring session auto-generation on completion.
+1. **Mixed error types cleanup** — Standardize `echo.NewHTTPError` → `apperror` in 30+ places.
 2. **Extension documentation** — `.ai.md` writeups still needed for: syncapi, maps drawing
-   subsystem, most JS widgets (editor.js, attributes.js, tag_picker.js, relations.js, notes.js).
+   subsystem, editor.js, tag_picker.js, relations.js, notes.js.
 3. **API documentation** — OpenAPI spec or handwritten REST v1 reference. Auth guide,
    endpoint reference, rate limiting docs, sync protocol.
-4. **Test coverage** — Audit service tests, media service tests, settings service tests.
-5. **Timeline Phase 2B** — Event connections, create-from-timeline modal, beautification.
+4. **Timeline Phase 2B** — Event connections, create-from-timeline modal, beautification.
+5. **Campaign export/import** — JSON bundle for backup/migration.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -77,3 +77,6 @@ Branch: `claude/interactive-calendar-sessions-UJaq2`.
 - **2026-03-04: Foundry VTT Completion** — Sessions-calendar integration, RSVP emails,
   recurring sessions, Foundry sync (WebSocket, maps API, calendar, shop, fog), security
   hardening, dashboard widgets, mobile responsive, extension documentation
+- **2026-03-04: Alpha Hardening** — CI pipeline (golangci-lint + govulncheck), 3 service
+  test suites (audit/media/settings), generic IDOR helper, input validation, widget docs,
+  TipTap table extensions
