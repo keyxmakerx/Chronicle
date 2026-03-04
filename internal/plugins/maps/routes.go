@@ -3,6 +3,7 @@ package maps
 import (
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -10,11 +11,12 @@ import (
 // RegisterRoutes sets up all map-related routes.
 // Map routes are scoped to a campaign and require membership.
 // CRUD operations require Owner/Scribe role; viewing requires Player role.
-func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	// Authenticated routes (CRUD).
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "maps"),
 	)
 
 	// Map CRUD (Owner can create/update/delete maps).
@@ -32,6 +34,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "maps"),
 	)
 	pub.GET("/maps", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/maps/:mid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))

@@ -339,6 +339,41 @@ func (a *storageLimiterAdapter) GetEffectiveLimits(ctx context.Context, userID, 
 	return limits.MaxUploadSize, limits.MaxTotalStorage, limits.MaxFiles, nil
 }
 
+// sessionListerAdapter wraps sessions.SessionService to implement the
+// calendar.SessionLister interface for displaying sessions on the calendar grid.
+type sessionListerAdapter struct {
+	svc sessions.SessionService
+}
+
+// ListSessionsForDateRange returns sessions as lightweight CalendarSession structs.
+func (a *sessionListerAdapter) ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]calendar.CalendarSession, error) {
+	sess, err := a.svc.ListSessionsForDateRange(ctx, campaignID, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]calendar.CalendarSession, 0, len(sess))
+	for _, s := range sess {
+		cs := calendar.CalendarSession{
+			ID:              s.ID,
+			Name:            s.Name,
+			Status:          s.Status,
+			IsRecurring:     s.IsRecurring,
+			RecurrenceLabel: s.RecurrenceLabel(),
+		}
+		if s.ScheduledDate != nil {
+			cs.ScheduledDate = *s.ScheduledDate
+		}
+		for _, att := range s.Attendees {
+			cs.TotalCount++
+			if att.Status == "accepted" {
+				cs.AcceptedCount++
+			}
+		}
+		result = append(result, cs)
+	}
+	return result, nil
+}
+
 // RegisterRoutes sets up all application routes. It registers public routes
 // directly and delegates to each plugin's route registration function.
 //
@@ -524,13 +559,13 @@ func (a *App) RegisterRoutes() {
 	calendarService := calendar.NewCalendarService(calendarRepo)
 	calendarHandler := calendar.NewHandler(calendarService)
 	calendarHandler.SetAddonService(addonService)
-	calendar.RegisterRoutes(e, calendarHandler, campaignService, authService)
+	calendar.RegisterRoutes(e, calendarHandler, campaignService, authService, addonService)
 
 	// Maps plugin: interactive maps with Leaflet.js, pin markers, entity linking.
 	mapsRepo := maps.NewMapRepository(a.DB)
 	mapsService := maps.NewMapService(mapsRepo)
 	mapsHandler := maps.NewHandler(mapsService)
-	maps.RegisterRoutes(e, mapsHandler, campaignService, authService)
+	maps.RegisterRoutes(e, mapsHandler, campaignService, authService, addonService)
 
 	// Map expansion: drawings, tokens, layers, fog of war for real-time map sync.
 	drawingRepo := maps.NewDrawingRepository(a.DB)
@@ -540,18 +575,23 @@ func (a *App) RegisterRoutes() {
 
 	// Sessions plugin: game session scheduling, linked entities, RSVP tracking.
 	// Entity campaign checker prevents cross-campaign entity linking (IDOR).
+	// Sessions require the calendar addon (integrated into calendar UI).
 	sessionsRepo := sessions.NewSessionRepository(a.DB)
 	sessionsService := sessions.NewSessionService(sessionsRepo, &entityCampaignCheckerAdapter{svc: entityService})
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
-	sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService)
+	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
+	sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService, addonService)
+
+	// Wire sessions into calendar for grid display (real-life mode).
+	calendarHandler.SetSessionLister(&sessionListerAdapter{svc: sessionsService})
 
 	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
 	timelineRepo := timeline.NewTimelineRepository(a.DB)
 	timelineSvc := timeline.NewTimelineService(timelineRepo, &calendarListerAdapter{svc: calendarService}, &calendarEventListerAdapter{svc: calendarService}, &calendarEraListerAdapter{svc: calendarService})
 	timelineHandler := timeline.NewHandler(timelineSvc)
 	timelineHandler.SetMemberLister(campaignService)
-	timeline.RegisterRoutes(e, timelineHandler, campaignService, authService)
+	timeline.RegisterRoutes(e, timelineHandler, campaignService, authService, addonService)
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.

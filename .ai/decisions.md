@@ -483,3 +483,53 @@ is designed for geographic tile-based rendering and is unsuitable for time-axis 
 - Swim-lanes, zoom levels, and entity grouping can be implemented incrementally.
 - Fantasy calendar dates (arbitrary year/month/day systems) work naturally with
   `d3.scaleLinear` since we convert to fractional years for positioning.
+
+---
+
+## ADR-012: Sessions-Calendar Integration and RSVP Email System
+
+**Date:** 2026-03-04
+**Status:** Accepted
+
+**Context:** Sessions were a standalone plugin with their own sidebar link and
+addon toggle. Users expected sessions to appear on the calendar (especially
+real-life mode calendars) and wanted RSVP from the calendar UI. The separate
+sidebar link was confusing — sessions are fundamentally a calendar feature.
+
+**Decision:**
+- **Sessions require the calendar addon** — no separate "sessions" addon toggle.
+  The sidebar link for sessions is removed; sessions are accessed via the
+  calendar's dice icon and Sessions button in the calendar header.
+- **Sessions display on real-life calendar grids** as purple chips with a dice
+  icon. Clicking opens an inline modal with RSVP controls (Going/Maybe/Can't).
+- **Recurring sessions** supported: weekly, biweekly, monthly, and custom N-week
+  intervals. Stored on the sessions table with recurrence_type/interval fields.
+- **RSVP via email**: SMTP SendHTMLMail added for multipart/alternative emails.
+  Each invitation generates single-use tokens (7-day expiry) for one-click
+  accept/decline links without requiring login.
+- **RequireAddon middleware**: Route-level addon gating via AddonService.IsEnabledForCampaign
+  query. Applied to calendar, maps, sessions, and timeline route groups.
+- **Date formatting**: Session dates use `FormatScheduledDate()` returning
+  "Mon, Jan 2, 2006" instead of raw ISO 8601.
+
+**Alternatives considered:**
+- Merging sessions into the calendar_events table: Rejected because sessions have
+  attendees, RSVP tracking, entity linking, and notes — fundamentally different
+  from calendar events. Keeping separate tables is cleaner.
+- JWT-based RSVP tokens: Rejected for simplicity. Random tokens with DB lookup
+  are simpler, revocable, and auditable.
+
+**Future: Discord Bot Integration**
+- Plan: A `discord` integration plugin that sends session invites to a configured
+  Discord channel with reaction-based RSVP (✅/❌ emoji reactions).
+- Architecture: `internal/plugins/discord/` plugin with bot token configuration
+  (admin settings), webhook for outbound notifications, and a listener for
+  reaction events that calls SessionService.UpdateRSVP.
+- The Discord bot will reuse the same SessionService interface — no session-specific
+  code changes needed. Just a new notification channel alongside SMTP email.
+
+**Consequences:**
+- Sessions sidebar link removed — users navigate via calendar.
+- Disabled addons now return 404/redirect at the route level, not just hidden sidebar links.
+- SMTP service supports both plain text and HTML email variants.
+- Session RSVP tokens stored in session_rsvp_tokens table with FK cascade.

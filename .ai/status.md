@@ -8,6 +8,30 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
+2026-03-04 -- Sessions-Calendar integration, RSVP emails, addon gating (batch 16).
+Branch: `claude/review-codebase-R1WqN`.
+
+## Current Phase
+**Sessions-Calendar integration + RSVP system.** Completed this session (batch 16):
+- **RequireAddon middleware**: Route-level addon gating for calendar, maps, sessions,
+  timeline. Disabled addons now return 404/redirect instead of just hiding sidebar links.
+- **Sessions merged into calendar**: Sessions sidebar link removed. Sessions now
+  accessed via calendar header (dice icon). Sessions require calendar addon.
+- **Sessions on calendar grid**: Real-life mode calendars display session chips
+  (purple, dice icon) on their scheduled dates. Click opens inline session detail
+  modal with RSVP controls (Going/Maybe/Can't).
+- **Recurring sessions**: Weekly, biweekly, monthly, and custom N-week intervals.
+  New DB columns: is_recurring, recurrence_type, recurrence_interval,
+  recurrence_day_of_week, recurrence_end_date. Migration 000041.
+- **Date formatting**: Session dates now display as "Mon, Jan 2, 2006" instead of
+  raw ISO 8601 strings. FormatScheduledDate() helper on Session model.
+- **SMTP HTML email**: Added SendHTMLMail with multipart/alternative MIME support
+  (plain text + HTML variants). Existing SendMail unchanged.
+- **RSVP email system**: Session creation auto-sends HTML invitation emails with
+  one-click accept/decline links. Token-based (7-day expiry, single-use).
+  Public /rsvp/:token endpoint for redemption — no login required.
+- **Discord bot plan**: Documented in ADR-012. Future plugin at internal/plugins/discord/
+  with reaction-based RSVP via bot token + webhook.
 2026-03-04 -- Foundry VTT sync feature (batch 16, Phase 1+2 partial).
 Branch: `claude/foundry-sync-feature-05M5a`.
 

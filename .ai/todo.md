@@ -41,7 +41,7 @@ Known broken or missing things, ordered by severity.
 - [x] **Keyboard shortcuts help** — Fixed: press `?` to open shortcuts help overlay showing all 4 global shortcuts (Ctrl+K/N/E/S). Closes with `?`, Escape, or clicking outside. Mac-aware (shows ⌘ vs Ctrl).
 - [x] **Form validation feedback** — Fixed: added `:user-invalid` and `.input-error` CSS for red borders on invalid fields. JS in boot.js listens for `invalid` events and inserts `.field-error` inline hints with the browser's validation message. Errors clear on input.
 - [x] **Mobile sidebar toggle** — Already implemented: hamburger button in topbar (md:hidden), Alpine.js sidebarOpen state, CSS translate slide-in animation, backdrop overlay, auto-close on navigation.
-- [ ] **Calendar recurring events limited** — Only "yearly" recurrence type. No monthly/weekly/daily/custom recurrence patterns.
+- [x] **Calendar recurring events limited** — Sessions now support weekly/biweekly/monthly/custom recurrence. Calendar events still yearly-only (separate concern). Session recurrence via migration 000041.
 - [ ] **Editor lacks table support** — TipTap editor has no table insert/edit (common need for TTRPG stat blocks, encounter tables).
 - [x] **Editor lacks callout/highlight blocks** — Fixed: blockquote restyled as callout block with accent border, subtle background, info icon. Insert menu renamed "Blockquote" → "Callout Block". Read-only prose views also styled. TipTap bundle limits prevent custom node types; blockquote serves as callout.
 - [x] **Entity cloning** — Fixed: Clone button on entity show page (Scribe+). POST creates copy with "(Copy)" suffix, clones entry, image, fields, field overrides, popup config, tags via INSERT...SELECT. Redirects to edit page. Does NOT copy relations.
@@ -50,7 +50,7 @@ Known broken or missing things, ordered by severity.
 
 ### Low
 
-- [ ] **API endpoints ignore addon disabled state** — Routes are hardcoded at startup. If calendar addon is disabled for a campaign, `/api/v1/campaigns/:id/calendar` still executes. Need `RequireAddon` middleware on API route groups.
+- [~] **API endpoints ignore addon disabled state** — RequireAddon middleware now gates calendar, maps, sessions, timeline routes. Still needed: API v1 routes (syncapi).
 - [ ] **API technical documentation missing** — REST API v1 exists and works but has no public documentation (OpenAPI spec or reference).
 - [x] **Calendar HTMX detection inconsistency** — Replaced 5 raw `HX-Request` header checks in calendar handler with `middleware.IsHTMX(c)`, which also checks `HX-Boosted` to avoid returning fragments on boosted navigation.
 - [ ] **Cross-plugin adapter interface duplication** — `MemberLister` interface duplicated in timeline and sessions plugins. Should extract to shared package.
@@ -117,6 +117,9 @@ New capabilities ordered by priority for alpha release.
 - [ ] Entity sub-notes/posts (sub-documents with separate visibility)
 - [ ] Auto-linking in editor (LegendKeeper-style entity name detection)
 - [ ] Guided worldbuilding prompts per entity type (WorldAnvil-style)
+- [ ] **Discord bot integration** — Session RSVP via Discord reactions. Plugin at internal/plugins/discord/ with bot token config, webhook notifications, reaction listener. See ADR-012.
+- [ ] **Session recurrence server-side expansion** — Currently recurring sessions stored as single record with recurrence metadata. Need auto-generation of next occurrence when current one completes.
+- [ ] **Calendar event recurring expansion** — Expand calendar event recurrence beyond "yearly" to monthly/weekly/daily/custom, matching session recurrence options.
 - [ ] Role-aware dashboards (different views per campaign role)
 - [ ] Entity type template library (genre presets for new campaigns)
 - [ ] Saved filters / smart lists (filter presets as sidebar links)

@@ -18,6 +18,7 @@ import (
 // This is the cross-plugin contract -- campaigns uses this for transfer emails.
 type MailService interface {
 	SendMail(ctx context.Context, to []string, subject, body string) error
+	SendHTMLMail(ctx context.Context, to []string, subject, plainBody, htmlBody string) error
 	IsConfigured(ctx context.Context) bool
 }
 
@@ -106,6 +107,73 @@ func (s *smtpService) SendMail(ctx context.Context, to []string, subject, body s
 	case "none":
 		return s.sendPlain(addr, row.Host, row.Username, password, from.Address, to, msg.String())
 	default: // "starttls"
+		return s.sendStartTLS(addr, row.Host, row.Username, password, from.Address, to, msg.String())
+	}
+}
+
+// SendHTMLMail sends a multipart/alternative email with both plain text and HTML
+// variants. Email clients that support HTML will render the rich version;
+// text-only clients fall back to the plain text.
+func (s *smtpService) SendHTMLMail(ctx context.Context, to []string, subject, plainBody, htmlBody string) error {
+	row, err := s.repo.Get(ctx)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("loading smtp settings: %w", err))
+	}
+	if !row.Enabled || row.Host == "" {
+		return apperror.NewBadRequest("SMTP is not configured")
+	}
+
+	var password string
+	if len(row.PasswordEncrypted) > 0 {
+		plaintext, err := decrypt(row.PasswordEncrypted, s.secret)
+		if err != nil {
+			return apperror.NewInternal(fmt.Errorf("decrypting smtp password: %w", err))
+		}
+		password = string(plaintext)
+	}
+
+	from := mail.Address{Name: row.FromName, Address: row.FromAddress}
+	safeSubject := strings.NewReplacer("\r", "", "\n", "").Replace(subject)
+
+	// MIME boundary for multipart/alternative.
+	boundary := fmt.Sprintf("chronicle_%d", time.Now().UnixNano())
+
+	var msg strings.Builder
+	msg.WriteString(fmt.Sprintf("From: %s\r\n", from.String()))
+	msg.WriteString(fmt.Sprintf("To: %s\r\n", strings.Join(to, ", ")))
+	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", safeSubject))
+	msg.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z)))
+	msg.WriteString("MIME-Version: 1.0\r\n")
+	msg.WriteString(fmt.Sprintf("Content-Type: multipart/alternative; boundary=\"%s\"\r\n", boundary))
+	msg.WriteString("\r\n")
+
+	// Plain text part.
+	msg.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+	msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+	msg.WriteString("Content-Transfer-Encoding: 7bit\r\n")
+	msg.WriteString("\r\n")
+	msg.WriteString(plainBody)
+	msg.WriteString("\r\n\r\n")
+
+	// HTML part.
+	msg.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+	msg.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
+	msg.WriteString("Content-Transfer-Encoding: 7bit\r\n")
+	msg.WriteString("\r\n")
+	msg.WriteString(htmlBody)
+	msg.WriteString("\r\n\r\n")
+
+	// Close boundary.
+	msg.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
+
+	addr := fmt.Sprintf("%s:%d", row.Host, row.Port)
+
+	switch row.Encryption {
+	case "ssl":
+		return s.sendSSL(addr, row.Host, row.Username, password, from.Address, to, msg.String())
+	case "none":
+		return s.sendPlain(addr, row.Host, row.Username, password, from.Address, to, msg.String())
+	default:
 		return s.sendStartTLS(addr, row.Host, row.Username, password, from.Address, to, msg.String())
 	}
 }

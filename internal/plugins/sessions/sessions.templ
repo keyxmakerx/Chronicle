@@ -71,7 +71,13 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 							if s.ScheduledDate != nil {
 								<span>
 									<i class="fa-regular fa-calendar mr-0.5"></i>
-									{ *s.ScheduledDate }
+									{ s.FormatScheduledDate() }
+								</span>
+							}
+							if s.IsRecurring {
+								<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+									<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
+									{ s.RecurrenceLabel() }
 								</span>
 							}
 							if len(s.Attendees) > 0 {
@@ -133,7 +139,7 @@ templ createSessionModal(cc *campaigns.CampaignContext, csrfToken string) {
 		>
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
 			<h2 class="text-lg font-semibold text-fg mb-4">New Session</h2>
-			<div class="space-y-4">
+			<div class="space-y-4" x-data="{ recurring: false, recType: '' }">
 				<div>
 					<label class="block text-sm font-medium text-fg-body mb-1">Session Name</label>
 					<input type="text" name="name" class="input w-full" required placeholder="e.g. Session 12: The Dragon's Lair"/>
@@ -146,6 +152,34 @@ templ createSessionModal(cc *campaigns.CampaignContext, csrfToken string) {
 				<div>
 					<label class="block text-sm font-medium text-fg-body mb-1">Summary</label>
 					<textarea name="summary" class="input w-full" rows="3" placeholder="Brief session description..."></textarea>
+				</div>
+				<!-- Recurrence -->
+				<div>
+					<label class="flex items-center gap-2 text-sm font-medium text-fg-body cursor-pointer">
+						<input type="checkbox" name="is_recurring" value="1" x-model="recurring" class="accent-accent"/>
+						Repeating session
+					</label>
+				</div>
+				<div x-show="recurring" x-transition x-cloak class="space-y-3 pl-4 border-l-2 border-accent/30">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Frequency</label>
+						<select name="recurrence_type" x-model="recType" class="input w-full text-sm">
+							<option value="">Select...</option>
+							<option value="weekly">Every week</option>
+							<option value="biweekly">Every 2 weeks</option>
+							<option value="monthly">Monthly</option>
+							<option value="custom">Custom interval</option>
+						</select>
+					</div>
+					<div x-show="recType === 'custom'" x-transition>
+						<label class="block text-xs font-medium text-fg-body mb-1">Every N weeks</label>
+						<input type="number" name="recurrence_interval" min="1" max="52" value="3" class="input w-24 text-sm"/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">End date (optional)</label>
+						<input type="date" name="recurrence_end_date" class="input w-full text-sm"/>
+						<p class="text-xs text-fg-muted mt-0.5">Leave empty for no end date.</p>
+					</div>
 				</div>
 			</div>
 			<div class="flex items-center justify-end gap-2 mt-6">
@@ -180,7 +214,13 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 						if session.ScheduledDate != nil {
 							<span>
 								<i class="fa-regular fa-calendar mr-0.5"></i>
-								{ *session.ScheduledDate }
+								{ session.FormatScheduledDate() }
+							</span>
+						}
+						if session.IsRecurring {
+							<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+								<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
+								{ session.RecurrenceLabel() }
 							</span>
 						}
 						if session.CreatorName != "" {

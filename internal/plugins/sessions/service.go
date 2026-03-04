@@ -20,6 +20,7 @@ type SessionService interface {
 	CreateSession(ctx context.Context, campaignID string, input CreateSessionInput) (*Session, error)
 	GetSession(ctx context.Context, id string) (*Session, error)
 	ListSessions(ctx context.Context, campaignID string) ([]Session, error)
+	ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	UpdateSession(ctx context.Context, id string, input UpdateSessionInput) error
 	DeleteSession(ctx context.Context, id string) error
 	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
@@ -28,6 +29,10 @@ type SessionService interface {
 	InviteAll(ctx context.Context, sessionID string, userIDs []string) error
 	UpdateRSVP(ctx context.Context, sessionID, userID, status string) error
 	ListAttendees(ctx context.Context, sessionID string) ([]Attendee, error)
+
+	// RSVP tokens for email-based responses.
+	CreateRSVPTokens(ctx context.Context, sessionID, userID string) (acceptToken, declineToken string, err error)
+	RedeemRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error)
 
 	// Entity linking. campaignID is used to verify the entity belongs to the
 	// same campaign as the session, preventing cross-campaign IDOR attacks.
@@ -58,19 +63,39 @@ func (s *sessionService) CreateSession(ctx context.Context, campaignID string, i
 		return nil, apperror.NewBadRequest("session name must be at most 200 characters")
 	}
 
+	// Validate recurrence settings.
+	if input.IsRecurring && input.RecurrenceType != nil {
+		switch *input.RecurrenceType {
+		case RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceMonthly, RecurrenceCustom:
+			// Valid.
+		default:
+			return nil, apperror.NewBadRequest("invalid recurrence type")
+		}
+	}
+
+	interval := input.RecurrenceInterval
+	if interval < 1 {
+		interval = 1
+	}
+
 	session := &Session{
-		ID:            generateUUID(),
-		CampaignID:    campaignID,
-		Name:          input.Name,
-		Summary:       input.Summary,
-		ScheduledDate: input.ScheduledDate,
-		CalendarYear:  input.CalendarYear,
-		CalendarMonth: input.CalendarMonth,
-		CalendarDay:   input.CalendarDay,
-		Status:        StatusPlanned,
-		CreatedBy:     input.CreatedBy,
-		CreatedAt:     time.Now().UTC(),
-		UpdatedAt:     time.Now().UTC(),
+		ID:                  generateUUID(),
+		CampaignID:          campaignID,
+		Name:                input.Name,
+		Summary:             input.Summary,
+		ScheduledDate:       input.ScheduledDate,
+		CalendarYear:        input.CalendarYear,
+		CalendarMonth:       input.CalendarMonth,
+		CalendarDay:         input.CalendarDay,
+		Status:              StatusPlanned,
+		IsRecurring:         input.IsRecurring,
+		RecurrenceType:      input.RecurrenceType,
+		RecurrenceInterval:  interval,
+		RecurrenceDayOfWeek: input.RecurrenceDayOfWeek,
+		RecurrenceEndDate:   input.RecurrenceEndDate,
+		CreatedBy:           input.CreatedBy,
+		CreatedAt:           time.Now().UTC(),
+		UpdatedAt:           time.Now().UTC(),
 	}
 
 	if err := s.repo.Create(ctx, campaignID, session); err != nil {
@@ -147,6 +172,14 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 	session.CalendarMonth = input.CalendarMonth
 	session.CalendarDay = input.CalendarDay
 	session.Status = input.Status
+	session.IsRecurring = input.IsRecurring
+	session.RecurrenceType = input.RecurrenceType
+	session.RecurrenceInterval = input.RecurrenceInterval
+	if session.RecurrenceInterval < 1 {
+		session.RecurrenceInterval = 1
+	}
+	session.RecurrenceDayOfWeek = input.RecurrenceDayOfWeek
+	session.RecurrenceEndDate = input.RecurrenceEndDate
 
 	return s.repo.Update(ctx, session)
 }
@@ -240,6 +273,87 @@ func (s *sessionService) SearchSessions(ctx context.Context, campaignID, query s
 		})
 	}
 	return results, nil
+}
+
+// ListSessionsForDateRange returns sessions for a campaign that overlap the
+// given date range. Used by the calendar plugin to display sessions on the grid.
+func (s *sessionService) ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error) {
+	sessions, err := s.repo.ListByDateRange(ctx, campaignID, startDate, endDate)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing sessions for date range: %w", err))
+	}
+	// Load attendees for each session.
+	for i := range sessions {
+		attendees, err := s.repo.ListAttendees(ctx, sessions[i].ID)
+		if err == nil {
+			sessions[i].Attendees = attendees
+		}
+	}
+	return sessions, nil
+}
+
+// CreateRSVPTokens generates accept and decline tokens for a session invitation.
+// Tokens are single-use and expire in 7 days.
+func (s *sessionService) CreateRSVPTokens(ctx context.Context, sessionID, userID string) (string, string, error) {
+	acceptToken := generateToken()
+	declineToken := generateToken()
+	now := time.Now().UTC()
+	expires := now.Add(7 * 24 * time.Hour)
+
+	for _, tok := range []struct {
+		token  string
+		action string
+	}{
+		{acceptToken, RSVPAccepted},
+		{declineToken, RSVPDeclined},
+	} {
+		if err := s.repo.CreateRSVPToken(ctx, &RSVPToken{
+			Token:     tok.token,
+			SessionID: sessionID,
+			UserID:    userID,
+			Action:    tok.action,
+			ExpiresAt: expires,
+			CreatedAt: now,
+		}); err != nil {
+			return "", "", apperror.NewInternal(fmt.Errorf("creating rsvp token: %w", err))
+		}
+	}
+
+	return acceptToken, declineToken, nil
+}
+
+// RedeemRSVPToken validates and applies an RSVP token, updating the user's attendance.
+func (s *sessionService) RedeemRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error) {
+	token, err := s.repo.FindRSVPToken(ctx, tokenStr)
+	if err != nil {
+		return nil, err
+	}
+
+	if token.UsedAt != nil {
+		return nil, apperror.NewBadRequest("this RSVP link has already been used")
+	}
+	if time.Now().UTC().After(token.ExpiresAt) {
+		return nil, apperror.NewBadRequest("this RSVP link has expired")
+	}
+
+	// Apply the RSVP.
+	if err := s.repo.UpdateAttendeeStatus(ctx, token.SessionID, token.UserID, token.Action); err != nil {
+		return nil, err
+	}
+
+	// Mark token as used.
+	if err := s.repo.MarkRSVPTokenUsed(ctx, tokenStr); err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("marking token used: %w", err))
+	}
+
+	return token, nil
+}
+
+// generateToken creates a secure random token for RSVP email links.
+func generateToken() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("%x", b)
 }
 
 // generateUUID creates a v4 UUID.

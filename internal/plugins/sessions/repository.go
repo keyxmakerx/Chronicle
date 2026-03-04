@@ -14,6 +14,7 @@ type SessionRepository interface {
 	Create(ctx context.Context, campaignID string, s *Session) error
 	FindByID(ctx context.Context, id string) (*Session, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]Session, error)
+	ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error)
 	Update(ctx context.Context, s *Session) error
 	Delete(ctx context.Context, id string) error
@@ -28,6 +29,11 @@ type SessionRepository interface {
 	LinkEntity(ctx context.Context, sessionID, entityID, role string) error
 	UnlinkEntity(ctx context.Context, sessionID, entityID string) error
 	ListSessionEntities(ctx context.Context, sessionID string) ([]SessionEntity, error)
+
+	// RSVP tokens for email-based responses.
+	CreateRSVPToken(ctx context.Context, token *RSVPToken) error
+	FindRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error)
+	MarkRSVPTokenUsed(ctx context.Context, tokenStr string) error
 }
 
 // sessionRepository implements SessionRepository with MariaDB queries.
@@ -44,13 +50,16 @@ func NewSessionRepository(db *sql.DB) SessionRepository {
 func (r *sessionRepository) Create(ctx context.Context, campaignID string, s *Session) error {
 	query := `INSERT INTO sessions
 		(id, campaign_id, name, summary, scheduled_date, calendar_year, calendar_month,
-		 calendar_day, status, sort_order, created_by, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		 calendar_day, status, is_recurring, recurrence_type, recurrence_interval,
+		 recurrence_day_of_week, recurrence_end_date, sort_order, created_by, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query,
 		s.ID, campaignID, s.Name, s.Summary, s.ScheduledDate,
 		s.CalendarYear, s.CalendarMonth, s.CalendarDay,
-		s.Status, s.SortOrder, s.CreatedBy, s.CreatedAt, s.UpdatedAt,
+		s.Status, s.IsRecurring, s.RecurrenceType, s.RecurrenceInterval,
+		s.RecurrenceDayOfWeek, s.RecurrenceEndDate,
+		s.SortOrder, s.CreatedBy, s.CreatedAt, s.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting session: %w", err)
@@ -62,7 +71,9 @@ func (r *sessionRepository) Create(ctx context.Context, campaignID string, s *Se
 func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, error) {
 	query := `SELECT s.id, s.campaign_id, s.name, s.summary, s.notes, s.notes_html,
 	                 s.scheduled_date, s.calendar_year, s.calendar_month, s.calendar_day,
-	                 s.status, s.sort_order, s.created_by, s.created_at, s.updated_at,
+	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
+	                 s.recurrence_day_of_week, s.recurrence_end_date,
+	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
 	                 u.display_name
 	          FROM sessions s
 	          LEFT JOIN users u ON u.id = s.created_by
@@ -72,7 +83,9 @@ func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&s.ID, &s.CampaignID, &s.Name, &s.Summary, &s.Notes, &s.NotesHTML,
 		&s.ScheduledDate, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
-		&s.Status, &s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
+		&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
+		&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
+		&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
 		&s.CreatorName,
 	)
 	if err == sql.ErrNoRows {
@@ -89,7 +102,9 @@ func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, 
 func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID string) ([]Session, error) {
 	query := `SELECT s.id, s.campaign_id, s.name, s.summary,
 	                 s.scheduled_date, s.calendar_year, s.calendar_month, s.calendar_day,
-	                 s.status, s.sort_order, s.created_by, s.created_at, s.updated_at,
+	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
+	                 s.recurrence_day_of_week, s.recurrence_end_date,
+	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
 	                 u.display_name
 	          FROM sessions s
 	          LEFT JOIN users u ON u.id = s.created_by
@@ -114,7 +129,9 @@ func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID strin
 		if err := rows.Scan(
 			&s.ID, &s.CampaignID, &s.Name, &s.Summary,
 			&s.ScheduledDate, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
-			&s.Status, &s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
+			&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
+			&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
+			&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
 			&s.CreatorName,
 		); err != nil {
 			return nil, fmt.Errorf("scanning session row: %w", err)
@@ -128,7 +145,9 @@ func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID strin
 func (r *sessionRepository) SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error) {
 	q := `SELECT s.id, s.campaign_id, s.name, s.summary,
 	             s.scheduled_date, s.calendar_year, s.calendar_month, s.calendar_day,
-	             s.status, s.sort_order, s.created_by, s.created_at, s.updated_at,
+	             s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
+	             s.recurrence_day_of_week, s.recurrence_end_date,
+	             s.sort_order, s.created_by, s.created_at, s.updated_at,
 	             u.display_name
 	      FROM sessions s
 	      LEFT JOIN users u ON u.id = s.created_by
@@ -148,7 +167,9 @@ func (r *sessionRepository) SearchByCampaign(ctx context.Context, campaignID, qu
 		if err := rows.Scan(
 			&s.ID, &s.CampaignID, &s.Name, &s.Summary,
 			&s.ScheduledDate, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
-			&s.Status, &s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
+			&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
+			&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
+			&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
 			&s.CreatorName,
 		); err != nil {
 			return nil, fmt.Errorf("scanning session search row: %w", err)
@@ -163,13 +184,15 @@ func (r *sessionRepository) Update(ctx context.Context, s *Session) error {
 	query := `UPDATE sessions SET
 		name = ?, summary = ?, notes = ?, notes_html = ?,
 		scheduled_date = ?, calendar_year = ?, calendar_month = ?, calendar_day = ?,
-		status = ?, updated_at = ?
+		status = ?, is_recurring = ?, recurrence_type = ?, recurrence_interval = ?,
+		recurrence_day_of_week = ?, recurrence_end_date = ?, updated_at = ?
 		WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query,
 		s.Name, s.Summary, s.Notes, s.NotesHTML,
 		s.ScheduledDate, s.CalendarYear, s.CalendarMonth, s.CalendarDay,
-		s.Status, time.Now().UTC(), s.ID,
+		s.Status, s.IsRecurring, s.RecurrenceType, s.RecurrenceInterval,
+		s.RecurrenceDayOfWeek, s.RecurrenceEndDate, time.Now().UTC(), s.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating session: %w", err)
@@ -321,4 +344,96 @@ func (r *sessionRepository) ListSessionEntities(ctx context.Context, sessionID s
 		entities = append(entities, se)
 	}
 	return entities, rows.Err()
+}
+
+// --- Date Range Queries (for calendar integration) ---
+
+// ListByDateRange returns sessions in a campaign that fall within a date range.
+// Used by the calendar to display sessions on the grid. Includes both exact
+// date matches and recurring sessions that would fall in the range.
+func (r *sessionRepository) ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error) {
+	query := `SELECT s.id, s.campaign_id, s.name, s.summary,
+	                 s.scheduled_date, s.calendar_year, s.calendar_month, s.calendar_day,
+	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
+	                 s.recurrence_day_of_week, s.recurrence_end_date,
+	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
+	                 u.display_name
+	          FROM sessions s
+	          LEFT JOIN users u ON u.id = s.created_by
+	          WHERE s.campaign_id = ?
+	            AND s.status = 'planned'
+	            AND (
+	              (s.scheduled_date BETWEEN ? AND ?)
+	              OR (s.is_recurring = 1 AND s.scheduled_date <= ?)
+	            )
+	          ORDER BY s.scheduled_date ASC, s.sort_order ASC`
+
+	rows, err := r.db.QueryContext(ctx, query, campaignID, startDate, endDate, endDate)
+	if err != nil {
+		return nil, fmt.Errorf("listing sessions by date range: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []Session
+	for rows.Next() {
+		var s Session
+		if err := rows.Scan(
+			&s.ID, &s.CampaignID, &s.Name, &s.Summary,
+			&s.ScheduledDate, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+			&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
+			&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
+			&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
+			&s.CreatorName,
+		); err != nil {
+			return nil, fmt.Errorf("scanning session date range row: %w", err)
+		}
+		sessions = append(sessions, s)
+	}
+	return sessions, rows.Err()
+}
+
+// --- RSVP Token Management ---
+
+// CreateRSVPToken inserts a new RSVP token.
+func (r *sessionRepository) CreateRSVPToken(ctx context.Context, token *RSVPToken) error {
+	query := `INSERT INTO session_rsvp_tokens (token, session_id, user_id, action, expires_at, created_at)
+	          VALUES (?, ?, ?, ?, ?, ?)`
+
+	_, err := r.db.ExecContext(ctx, query,
+		token.Token, token.SessionID, token.UserID, token.Action,
+		token.ExpiresAt, token.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("creating rsvp token: %w", err)
+	}
+	return nil
+}
+
+// FindRSVPToken retrieves an RSVP token by its token string.
+func (r *sessionRepository) FindRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error) {
+	query := `SELECT id, token, session_id, user_id, action, used_at, expires_at, created_at
+	          FROM session_rsvp_tokens WHERE token = ?`
+
+	t := &RSVPToken{}
+	err := r.db.QueryRowContext(ctx, query, tokenStr).Scan(
+		&t.ID, &t.Token, &t.SessionID, &t.UserID, &t.Action,
+		&t.UsedAt, &t.ExpiresAt, &t.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, apperror.NewNotFound("invalid or expired RSVP token")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("finding rsvp token: %w", err)
+	}
+	return t, nil
+}
+
+// MarkRSVPTokenUsed marks an RSVP token as used so it can't be reused.
+func (r *sessionRepository) MarkRSVPTokenUsed(ctx context.Context, tokenStr string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE session_rsvp_tokens SET used_at = NOW() WHERE token = ?`, tokenStr)
+	if err != nil {
+		return fmt.Errorf("marking rsvp token used: %w", err)
+	}
+	return nil
 }

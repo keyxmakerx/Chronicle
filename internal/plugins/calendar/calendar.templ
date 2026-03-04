@@ -211,6 +211,9 @@ templ CalendarPage(cc *campaigns.CampaignContext, data CalendarViewData) {
 			</div>
 		</div>
 		@eventViewModal(data)
+		if len(data.Sessions) > 0 {
+			@sessionViewModal(data)
+		}
 		if data.IsScribe {
 			@eventModal(data)
 		}
@@ -334,17 +337,15 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 					<i class="fa-solid fa-gear text-sm"></i>
 				</a>
 			}
-			<!-- Sessions link (cross-plugin discoverability) -->
-			if layouts.IsAddonEnabled(ctx, "sessions") {
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions", data.CampaignID)) }
-					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
-					title="Game sessions & RSVP"
-				>
-					<i class="fa-solid fa-dice-d20 text-sm"></i>
-				</a>
-			}
-			<!-- Add event button (Scribe+) -->
+			<!-- Sessions link (integrated into calendar) -->
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions", data.CampaignID)) }
+				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				title="Game sessions & RSVP"
+			>
+				<i class="fa-solid fa-dice-d20 text-sm"></i>
+			</a>
+			<!-- Add event / session buttons (Scribe+) -->
 			if data.IsScribe {
 				<button
 					class="btn-primary text-xs"
@@ -352,6 +353,12 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 				>
 					<i class="fa-solid fa-plus mr-1"></i> Event
 				</button>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions", data.CampaignID)) }
+					class="btn-secondary text-xs"
+				>
+					<i class="fa-solid fa-dice-d20 mr-1"></i> Sessions
+				</a>
 			}
 		</div>
 	</div>
@@ -463,6 +470,26 @@ templ dayCell(data CalendarViewData, day int) {
 					{ " " }
 				}
 				{ evt.Name }
+			</button>
+		}
+		<!-- Sessions for this day (real-life calendar mode) -->
+		for _, sess := range data.SessionsForDay(day) {
+			<button
+				class="w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-pointer hover:ring-1 hover:ring-purple-400/30 bg-purple-500/15 text-purple-400"
+				title={ sess.Name + " — " + fmt.Sprintf("%d/%d attending", sess.AcceptedCount, sess.TotalCount) }
+				data-session-id={ sess.ID }
+				data-session-name={ sess.Name }
+				data-session-date={ sess.ScheduledDate }
+				data-session-status={ sess.Status }
+				data-session-recurring={ strconv.FormatBool(sess.IsRecurring) }
+				data-session-recurrence-label={ sess.RecurrenceLabel }
+				data-session-accepted={ strconv.Itoa(sess.AcceptedCount) }
+				data-session-total={ strconv.Itoa(sess.TotalCount) }
+				data-campaign-id={ data.CampaignID }
+				onclick="openSessionModal(this)"
+			>
+				<i class="fa-solid fa-dice-d20 mr-0.5 text-[8px]"></i>
+				{ sess.Name }
 			</button>
 		}
 	</div>
@@ -645,6 +672,137 @@ templ eventViewModal(data CalendarViewData) {
 				var s = String(n);
 				return s.length < 2 ? '0' + s : s;
 			}
+		})();
+	</script>
+}
+
+// sessionViewModal renders the session detail overlay shown when clicking a
+// session chip on the calendar grid. Includes RSVP controls inline.
+templ sessionViewModal(data CalendarViewData) {
+	<div
+		id="session-view-modal"
+		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick="if(event.target===this)closeSessionModal()"
+	>
+		<div class="card p-6 w-full max-w-md">
+			<div class="flex items-center justify-between mb-4">
+				<div class="flex items-center gap-2">
+					<i class="fa-solid fa-dice-d20 text-purple-400"></i>
+					<h2 id="session-modal-name" class="text-lg font-semibold text-fg truncate"></h2>
+				</div>
+				<button onclick="closeSessionModal()" class="text-fg-muted hover:text-fg text-sm">
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+			<!-- Session details -->
+			<div class="space-y-3">
+				<div class="flex items-center gap-3 text-sm text-fg-secondary">
+					<span id="session-modal-date">
+						<i class="fa-regular fa-calendar mr-1"></i>
+					</span>
+					<span id="session-modal-status" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium"></span>
+				</div>
+				<div id="session-modal-recurrence" class="hidden">
+					<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+						<i class="fa-solid fa-repeat text-[10px] mr-0.5"></i>
+						<span id="session-modal-recurrence-label"></span>
+					</span>
+				</div>
+				<div class="text-sm text-fg-secondary">
+					<i class="fa-solid fa-users mr-1"></i>
+					<span id="session-modal-attendance"></span>
+				</div>
+				<!-- RSVP controls (loaded via HTMX) -->
+				<div id="session-modal-rsvp" class="pt-3 border-t border-edge">
+					<p class="text-sm font-semibold text-fg mb-2">
+						<i class="fa-solid fa-envelope-open-text mr-1 text-accent"></i> RSVP
+					</p>
+					<div class="flex gap-2" id="session-rsvp-buttons"></div>
+				</div>
+			</div>
+			<!-- Action links -->
+			<div class="flex items-center justify-between mt-4 pt-4 border-t border-edge">
+				<a id="session-modal-link" href="#" class="text-xs text-accent hover:underline">
+					View full session
+				</a>
+				<button onclick="closeSessionModal()" class="btn-secondary text-xs">Close</button>
+			</div>
+		</div>
+	</div>
+	<script>
+		(function() {
+			var modal = document.getElementById('session-view-modal');
+			var csrf = { fmt.Sprintf("'%s'", data.CSRFToken) };
+
+			window.openSessionModal = function(el) {
+				var id = el.dataset.sessionId;
+				var name = el.dataset.sessionName;
+				var date = el.dataset.sessionDate;
+				var status = el.dataset.sessionStatus;
+				var recurring = el.dataset.sessionRecurring === 'true';
+				var recLabel = el.dataset.sessionRecurrenceLabel;
+				var accepted = el.dataset.sessionAccepted;
+				var total = el.dataset.sessionTotal;
+				var campaignId = el.dataset.campaignId;
+
+				document.getElementById('session-modal-name').textContent = name;
+
+				// Format date
+				var dateEl = document.getElementById('session-modal-date');
+				if (date) {
+					var d = new Date(date + 'T12:00:00');
+					var formatted = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+					dateEl.innerHTML = '<i class="fa-regular fa-calendar mr-1"></i>' + formatted;
+				}
+
+				// Status badge
+				var statusEl = document.getElementById('session-modal-status');
+				if (status === 'planned') {
+					statusEl.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
+					statusEl.innerHTML = '<i class="fa-solid fa-clock text-[10px] mr-0.5"></i> Planned';
+				} else if (status === 'completed') {
+					statusEl.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+					statusEl.innerHTML = '<i class="fa-solid fa-check text-[10px] mr-0.5"></i> Completed';
+				}
+
+				// Recurrence
+				var recEl = document.getElementById('session-modal-recurrence');
+				if (recurring && recLabel) {
+					recEl.classList.remove('hidden');
+					document.getElementById('session-modal-recurrence-label').textContent = recLabel;
+				} else {
+					recEl.classList.add('hidden');
+				}
+
+				// Attendance
+				document.getElementById('session-modal-attendance').textContent = accepted + '/' + total + ' attending';
+
+				// Full session link
+				document.getElementById('session-modal-link').href = '/campaigns/' + campaignId + '/sessions/' + id;
+
+				// RSVP buttons
+				var rsvpDiv = document.getElementById('session-rsvp-buttons');
+				var rsvpUrl = '/campaigns/' + campaignId + '/sessions/' + id + '/rsvp';
+				rsvpDiv.innerHTML =
+					'<button class="text-sm px-3 py-1.5 rounded-md bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:ring-1 hover:ring-green-400 inline-flex items-center gap-1" ' +
+					'hx-post="' + rsvpUrl + '" hx-headers=\'{"Content-Type":"application/json","X-CSRF-Token":"' + csrf + '"}\' hx-vals=\'{"status":"accepted"}\' hx-swap="none" hx-on::after-request="closeSessionModal();location.reload()">' +
+					'<i class="fa-solid fa-check"></i> Going</button>' +
+					'<button class="text-sm px-3 py-1.5 rounded-md bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 hover:ring-1 hover:ring-yellow-400 inline-flex items-center gap-1" ' +
+					'hx-post="' + rsvpUrl + '" hx-headers=\'{"Content-Type":"application/json","X-CSRF-Token":"' + csrf + '"}\' hx-vals=\'{"status":"tentative"}\' hx-swap="none" hx-on::after-request="closeSessionModal();location.reload()">' +
+					'<i class="fa-solid fa-question"></i> Maybe</button>' +
+					'<button class="text-sm px-3 py-1.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:ring-1 hover:ring-red-400 inline-flex items-center gap-1" ' +
+					'hx-post="' + rsvpUrl + '" hx-headers=\'{"Content-Type":"application/json","X-CSRF-Token":"' + csrf + '"}\' hx-vals=\'{"status":"declined"}\' hx-swap="none" hx-on::after-request="closeSessionModal();location.reload()">' +
+					'<i class="fa-solid fa-xmark"></i> Can\'t</button>';
+
+				// Re-process HTMX on dynamic content.
+				if (window.htmx) htmx.process(rsvpDiv);
+
+				modal.classList.remove('hidden');
+			};
+
+			window.closeSessionModal = function() {
+				modal.classList.add('hidden');
+			};
 		})();
 	</script>
 }

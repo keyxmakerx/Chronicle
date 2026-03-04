@@ -1,12 +1,14 @@
 package calendar
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -16,10 +18,31 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// SessionLister provides session data for the calendar grid display.
+// Implemented by the sessions service. Defined here to avoid import cycles.
+type SessionLister interface {
+	ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]CalendarSession, error)
+}
+
+// CalendarSession is a lightweight session representation for calendar display.
+// Avoids importing the sessions package directly.
+type CalendarSession struct {
+	ID            string
+	Name          string
+	ScheduledDate string // YYYY-MM-DD
+	Status        string
+	IsRecurring   bool
+	RecurrenceLabel string
+	AcceptedCount int
+	TotalCount    int
+	UserRSVP      string // Current user's RSVP status (empty if not attendee).
+}
+
 // Handler processes HTTP requests for the calendar plugin.
 type Handler struct {
-	svc      CalendarService
-	addonSvc addons.AddonService
+	svc           CalendarService
+	addonSvc      addons.AddonService
+	sessionLister SessionLister
 }
 
 // NewHandler creates a new calendar Handler.
@@ -31,6 +54,11 @@ func NewHandler(svc CalendarService) *Handler {
 // when a calendar is created. Called after all plugins are wired.
 func (h *Handler) SetAddonService(svc addons.AddonService) {
 	h.addonSvc = svc
+}
+
+// SetSessionLister wires the session service for calendar grid display.
+func (h *Handler) SetSessionLister(sl SessionLister) {
+	h.sessionLister = sl
 }
 
 // Show renders the calendar page (monthly grid view).
@@ -80,9 +108,20 @@ func (h *Handler) Show(c echo.Context) error {
 		MonthIndex: month,
 		Events:     events,
 		CampaignID: cc.Campaign.ID,
+		UserID:     userID,
 		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
 		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
 		CSRFToken:  middleware.GetCSRFToken(c),
+	}
+
+	// For real-life calendars, fetch sessions that fall in this month.
+	if cal.Mode == "reallife" && h.sessionLister != nil {
+		startDate := fmt.Sprintf("%04d-%02d-01", year, month)
+		endDate := fmt.Sprintf("%04d-%02d-%02d", year, month, daysInGregorianMonth(year, month))
+		sessions, err := h.sessionLister.ListSessionsForDateRange(ctx, cc.Campaign.ID, startDate, endDate)
+		if err == nil {
+			data.Sessions = sessions
+		}
 	}
 
 	if middleware.IsHTMX(c) {
@@ -935,7 +974,9 @@ type CalendarViewData struct {
 	Year       int
 	MonthIndex int // 1-based month index
 	Events     []Event
+	Sessions   []CalendarSession // Sessions to display on real-life calendar grids.
 	CampaignID string
+	UserID     string
 	IsOwner    bool
 	IsScribe   bool
 	CSRFToken  string
@@ -989,6 +1030,19 @@ func (d CalendarViewData) EventsForDay(day int) []Event {
 	for _, e := range d.Events {
 		if e.Day == day {
 			result = append(result, e)
+		}
+	}
+	return result
+}
+
+// SessionsForDay returns sessions scheduled on the given day.
+// Day is 1-based for the current month being viewed.
+func (d CalendarViewData) SessionsForDay(day int) []CalendarSession {
+	target := fmt.Sprintf("%04d-%02d-%02d", d.Year, d.MonthIndex, day)
+	var result []CalendarSession
+	for _, s := range d.Sessions {
+		if s.ScheduledDate == target {
+			result = append(result, s)
 		}
 	}
 	return result
@@ -1077,4 +1131,9 @@ type TimelineMonth struct {
 	Index  int
 	Name   string
 	Events []Event
+}
+
+// daysInGregorianMonth returns the number of days in a Gregorian calendar month.
+func daysInGregorianMonth(year, month int) int {
+	return time.Date(year, time.Month(month+1), 0, 0, 0, 0, 0, time.UTC).Day()
 }

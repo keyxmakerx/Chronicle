@@ -3,6 +3,7 @@ package timeline
 import (
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -10,11 +11,12 @@ import (
 // RegisterRoutes sets up all timeline-related routes.
 // Timeline routes are scoped to a campaign and require membership.
 // CRUD and event management require Owner/Scribe roles; viewing requires Player.
-func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	// Authenticated routes (create, update, delete, link/unlink events).
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "timeline"),
 	)
 
 	// Timeline CRUD (Owner only for create/update/delete).
@@ -59,6 +61,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "timeline"),
 	)
 	pub.GET("/timelines", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/timelines/:tid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))

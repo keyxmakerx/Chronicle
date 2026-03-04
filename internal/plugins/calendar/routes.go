@@ -3,6 +3,7 @@ package calendar
 import (
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -10,11 +11,12 @@ import (
 // RegisterRoutes sets up all calendar-related routes.
 // Calendar routes are scoped to a campaign and require membership.
 // Setup and settings require Owner role; viewing requires Player role.
-func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	// Authenticated routes (create, settings, events, advance).
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "calendar"),
 	)
 
 	// Calendar setup + creation + deletion (Owner only).
@@ -57,6 +59,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "calendar"),
 	)
 	pub.GET("/calendar", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/calendar/timeline", h.ShowTimeline, campaigns.RequireRole(campaigns.RolePlayer))
