@@ -492,7 +492,7 @@
       { action: 'mention',        icon: 'fa-at',              label: 'Mention Entity',  hint: 'Type @' },
       { action: 'link',           icon: 'fa-link',            label: 'Insert Link',     hint: '' },
       { action: 'horizontalRule', icon: 'fa-minus',           label: 'Horizontal Rule', hint: '---' },
-      { action: 'blockquote',     icon: 'fa-quote-left',      label: 'Blockquote',      hint: '>' },
+      { action: 'blockquote',     icon: 'fa-circle-info',     label: 'Callout Block',   hint: '>' },
       { action: 'code',           icon: 'fa-code',            label: 'Code Block',      hint: '```' },
     ];
 

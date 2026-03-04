@@ -44,6 +44,7 @@ type CalendarRepository interface {
 	ListEventsForYear(ctx context.Context, calendarID string, year int, role int) ([]Event, error)
 	ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error)
 	ListUpcomingEvents(ctx context.Context, calendarID string, year, month, day int, role int, limit int) ([]Event, error)
+	SearchEvents(ctx context.Context, calendarID, query string, role int) ([]Event, error)
 
 	// Event visibility.
 	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error
@@ -571,4 +572,27 @@ func (r *calendarRepo) UpdateEventVisibility(ctx context.Context, eventID string
 		visibility, visRules, eventID,
 	)
 	return err
+}
+
+// SearchEvents returns events matching a name query, filtered by role-based visibility.
+func (r *calendarRepo) SearchEvents(ctx context.Context, calendarID, query string, role int) ([]Event, error) {
+	visFilter := "AND e.visibility = 'everyone'"
+	if role >= 3 {
+		visFilter = ""
+	}
+
+	q := fmt.Sprintf(`
+		SELECT `+eventCols+`
+		FROM calendar_events e `+eventJoins+`
+		WHERE e.calendar_id = ? AND e.name LIKE ? %s
+		ORDER BY e.name
+		LIMIT 10`, visFilter)
+
+	rows, err := r.db.QueryContext(ctx, q, calendarID, "%"+query+"%")
+	if err != nil {
+		return nil, fmt.Errorf("search events: %w", err)
+	}
+	defer rows.Close()
+
+	return scanEvents(rows)
 }

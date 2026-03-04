@@ -48,6 +48,9 @@ type CalendarService interface {
 	ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int, userID string) ([]Event, error)
 	ListEventsForYear(ctx context.Context, calendarID string, year int, role int, userID string) ([]Event, error)
 
+	// Search.
+	SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
+
 	// Date/time helpers.
 	AdvanceDate(ctx context.Context, calendarID string, days int) error
 	AdvanceTime(ctx context.Context, calendarID string, hours, minutes int) error
@@ -859,4 +862,34 @@ func validateVisibilityRules(rulesJSON *string) error {
 		return apperror.NewValidation("visibility_rules must be valid JSON: " + err.Error())
 	}
 	return nil
+}
+
+// SearchCalendarEvents returns calendar events matching a query for the quick search system.
+// Looks up the campaign's calendar first, then searches events by name with role-based filtering.
+func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error) {
+	cal, err := s.repo.GetByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("search calendar events: %w", err)
+	}
+	if cal == nil {
+		return nil, nil
+	}
+
+	events, err := s.repo.SearchEvents(ctx, cal.ID, query, role)
+	if err != nil {
+		return nil, fmt.Errorf("search calendar events: %w", err)
+	}
+
+	results := make([]map[string]string, 0, len(events))
+	for _, e := range events {
+		results = append(results, map[string]string{
+			"id":         e.ID,
+			"name":       e.Name,
+			"type_name":  "Event",
+			"type_icon":  "fa-calendar",
+			"type_color": "#f59e0b",
+			"url":        fmt.Sprintf("/campaigns/%s/calendar", campaignID),
+		})
+	}
+	return results, nil
 }

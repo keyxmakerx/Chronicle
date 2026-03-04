@@ -34,6 +34,7 @@ type MapService interface {
 	UpdateMap(ctx context.Context, id string, input UpdateMapInput) error
 	DeleteMap(ctx context.Context, id string) error
 	ListMaps(ctx context.Context, campaignID string) ([]Map, error)
+	SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
 	// Marker CRUD.
 	CreateMarker(ctx context.Context, input CreateMarkerInput) (*Marker, error)
@@ -261,4 +262,26 @@ func (s *mapService) ListMarkers(ctx context.Context, mapID string, role int) ([
 		return nil, fmt.Errorf("list markers: %w", err)
 	}
 	return markers, nil
+}
+
+// SearchMaps returns maps matching a query as map results for the quick search system.
+// Results are formatted to match the entity search JSON format.
+func (s *mapService) SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error) {
+	maps, err := s.repo.SearchMaps(ctx, campaignID, query)
+	if err != nil {
+		return nil, fmt.Errorf("search maps: %w", err)
+	}
+
+	results := make([]map[string]string, 0, len(maps))
+	for _, m := range maps {
+		results = append(results, map[string]string{
+			"id":         m.ID,
+			"name":       m.Name,
+			"type_name":  "Map",
+			"type_icon":  "fa-map",
+			"type_color": "#10b981",
+			"url":        fmt.Sprintf("/campaigns/%s/maps/%s", campaignID, m.ID),
+		})
+	}
+	return results, nil
 }

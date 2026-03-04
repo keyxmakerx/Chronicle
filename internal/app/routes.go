@@ -500,6 +500,9 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetAuditService(auditService)
 	entityHandler.SetTagFetcher(&entityTagFetcherAdapter{svc: tagService})
 	entityHandler.SetTimelineSearcher(timelineSvc)
+	entityHandler.SetMapSearcher(mapsService)
+	entityHandler.SetCalendarSearcher(calendarService)
+	entityHandler.SetSessionSearcher(sessionsService)
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	tagHandler.SetAuditService(auditService)
 

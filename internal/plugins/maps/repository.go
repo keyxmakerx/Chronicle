@@ -14,6 +14,7 @@ type MapRepository interface {
 	UpdateMap(ctx context.Context, m *Map) error
 	DeleteMap(ctx context.Context, id string) error
 	ListMaps(ctx context.Context, campaignID string) ([]Map, error)
+	SearchMaps(ctx context.Context, campaignID, query string) ([]Map, error)
 
 	// Marker CRUD.
 	CreateMarker(ctx context.Context, mk *Marker) error
@@ -195,6 +196,29 @@ func (r *mapRepo) ListMarkers(ctx context.Context, mapID string, role int) ([]Ma
 			return nil, err
 		}
 		result = append(result, *mk)
+	}
+	return result, rows.Err()
+}
+
+// SearchMaps returns maps matching a name query for a campaign.
+func (r *mapRepo) SearchMaps(ctx context.Context, campaignID, query string) ([]Map, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+mapCols+` FROM maps
+		 WHERE campaign_id = ? AND name LIKE ?
+		 ORDER BY name LIMIT 10`,
+		campaignID, "%"+query+"%")
+	if err != nil {
+		return nil, fmt.Errorf("search maps: %w", err)
+	}
+	defer rows.Close()
+
+	var result []Map
+	for rows.Next() {
+		m, err := scanMap(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan map: %w", err)
+		}
+		result = append(result, *m)
 	}
 	return result, rows.Err()
 }

@@ -40,14 +40,35 @@ type TimelineSearcher interface {
 	SearchTimelines(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
 }
 
+// MapSearcher provides map search results for the quick search popup.
+// Implemented by the maps plugin and injected via SetMapSearcher.
+type MapSearcher interface {
+	SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+}
+
+// CalendarSearcher provides calendar event search results for the quick search popup.
+// Implemented by the calendar plugin and injected via SetCalendarSearcher.
+type CalendarSearcher interface {
+	SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
+}
+
+// SessionSearcher provides session search results for the quick search popup.
+// Implemented by the sessions plugin and injected via SetSessionSearcher.
+type SessionSearcher interface {
+	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+}
+
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service          EntityService
-	auditSvc         audit.AuditService
-	tagFetcher       EntityTagFetcher
-	addonSvc         AddonChecker
-	timelineSearcher TimelineSearcher
+	service            EntityService
+	auditSvc           audit.AuditService
+	tagFetcher         EntityTagFetcher
+	addonSvc           AddonChecker
+	timelineSearcher   TimelineSearcher
+	mapSearcher        MapSearcher
+	calendarSearcher   CalendarSearcher
+	sessionSearcher    SessionSearcher
 }
 
 // NewHandler creates a new entity handler.
@@ -77,6 +98,24 @@ func (h *Handler) SetTagFetcher(f EntityTagFetcher) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetTimelineSearcher(ts TimelineSearcher) {
 	h.timelineSearcher = ts
+}
+
+// SetMapSearcher sets the map searcher for quick search results.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetMapSearcher(ms MapSearcher) {
+	h.mapSearcher = ms
+}
+
+// SetCalendarSearcher sets the calendar event searcher for quick search results.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetCalendarSearcher(cs CalendarSearcher) {
+	h.calendarSearcher = cs
+}
+
+// SetSessionSearcher sets the session searcher for quick search results.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetSessionSearcher(ss SessionSearcher) {
+	h.sessionSearcher = ss
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
@@ -521,13 +560,37 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 				"url":        fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, e.ID),
 			}
 		}
-		// Append timeline results if the searcher is registered.
+		// Append cross-plugin search results from registered searchers.
 		if h.timelineSearcher != nil && query != "" {
 			if tlResults, err := h.timelineSearcher.SearchTimelines(
 				c.Request().Context(), cc.Campaign.ID, query, role,
 			); err == nil {
 				items = append(items, tlResults...)
 				total += len(tlResults)
+			}
+		}
+		if h.mapSearcher != nil && query != "" {
+			if mapResults, err := h.mapSearcher.SearchMaps(
+				c.Request().Context(), cc.Campaign.ID, query,
+			); err == nil {
+				items = append(items, mapResults...)
+				total += len(mapResults)
+			}
+		}
+		if h.calendarSearcher != nil && query != "" {
+			if calResults, err := h.calendarSearcher.SearchCalendarEvents(
+				c.Request().Context(), cc.Campaign.ID, query, role,
+			); err == nil {
+				items = append(items, calResults...)
+				total += len(calResults)
+			}
+		}
+		if h.sessionSearcher != nil && query != "" {
+			if sessResults, err := h.sessionSearcher.SearchSessions(
+				c.Request().Context(), cc.Campaign.ID, query,
+			); err == nil {
+				items = append(items, sessResults...)
+				total += len(sessResults)
 			}
 		}
 		return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total})

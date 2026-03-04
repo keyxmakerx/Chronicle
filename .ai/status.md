@@ -8,27 +8,26 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- UX hardening sprint continued: HTMX loading indicator, empty states
-consistency. Branch: `claude/review-codebase-R1WqN`.
+2026-03-04 -- UX hardening sprint continued: search expansion, callout blocks.
+Branch: `claude/review-codebase-R1WqN`.
 
 ## Current Phase
-**UX hardening.** Completed this session (batch 3):
-- Calendar click-to-create: date cells clickable for Scribes+ (opens create modal with date pre-filled)
-- Calendar event detail view: read-only modal showing event details, Edit button for Scribes
-- Event chips now open view modal first (all users), then Edit transitions to edit modal
+**UX hardening.** Completed this session (batch 7):
+- Search scope expanded: Ctrl+K now searches entities, timelines, maps, calendar events, and sessions
+  - Added MapSearcher, CalendarSearcher, SessionSearcher interfaces in entities handler
+  - Each plugin implements Search repo method + formats results with type_name/icon/color
+  - Wired in routes.go following TimelineSearcher pattern
+- Editor callout blocks: blockquote restyled as callout with accent border, background, info icon
+  - Insert menu: "Blockquote" → "Callout Block" with fa-circle-info icon
+  - Read-only prose views also styled (entity pages, dashboards)
+  - TipTap bundle constraint: custom node types not possible without bundle rebuild
 
-Completed (batch 2):
-- Added HTMX loading indicator (thin progress bar at top, CSS animation, auto-tracks requests)
-- Fixed empty states in 5 list views: campaign members, admin campaigns, admin users,
-  admin modules, entity types (fixed if/else structure)
-
-Previously completed (batch 1):
-- Fixed sidebar drill 403 for public visitors (moved route to `pub` group)
-- Added global unsaved changes warning (`beforeunload`) with editor + form tracking
-- Added confirmation dialogs to notes delete and relations delete
-- Added "Edit Eras" button on timeline page linking to calendar settings
-- Calendar settings now reads `?tab` query param for deep-linking
-- README.md finalized (minor accuracy fix for modules list)
+Previously completed (batches 1-6):
+- Fixed sidebar drill 403, unsaved changes warning, confirmation dialogs, timeline eras
+- HTMX loading indicator, empty states, calendar click-to-create, event detail view
+- Keyboard shortcuts help, sessions discoverability, form validation feedback
+- Entity cloning, mobile sidebar toggle (already done), timeline event creation (already done)
+- Map marker search
 - All 294+ tests passing
 
 Completed (batch 4):

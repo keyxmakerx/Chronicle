@@ -22,6 +22,7 @@ type SessionService interface {
 	ListSessions(ctx context.Context, campaignID string) ([]Session, error)
 	UpdateSession(ctx context.Context, id string, input UpdateSessionInput) error
 	DeleteSession(ctx context.Context, id string) error
+	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
 	// Attendees / RSVP.
 	InviteAll(ctx context.Context, sessionID string, userIDs []string) error
@@ -217,6 +218,28 @@ func (s *sessionService) UnlinkEntity(ctx context.Context, sessionID, entityID s
 // ListSessionEntities returns entities linked to a session.
 func (s *sessionService) ListSessionEntities(ctx context.Context, sessionID string) ([]SessionEntity, error) {
 	return s.repo.ListSessionEntities(ctx, sessionID)
+}
+
+// SearchSessions returns sessions matching a query for the quick search system.
+// Results are formatted to match the entity search JSON format.
+func (s *sessionService) SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error) {
+	sessions, err := s.repo.SearchByCampaign(ctx, campaignID, query)
+	if err != nil {
+		return nil, fmt.Errorf("search sessions: %w", err)
+	}
+
+	results := make([]map[string]string, 0, len(sessions))
+	for _, sess := range sessions {
+		results = append(results, map[string]string{
+			"id":         sess.ID,
+			"name":       sess.Name,
+			"type_name":  "Session",
+			"type_icon":  "fa-dice-d20",
+			"type_color": "#8b5cf6",
+			"url":        fmt.Sprintf("/campaigns/%s/sessions/%s", campaignID, sess.ID),
+		})
+	}
+	return results, nil
 }
 
 // generateUUID creates a v4 UUID.

@@ -13,7 +13,7 @@
   var mod = isMac ? '⌘' : 'Ctrl';
 
   var shortcuts = [
-    { keys: mod + '+K', desc: 'Quick search' },
+    { keys: mod + '+K', desc: 'Quick search (pages, maps, events, sessions)' },
     { keys: mod + '+N', desc: 'New page' },
     { keys: mod + '+E', desc: 'Edit current page' },
     { keys: mod + '+S', desc: 'Save' },

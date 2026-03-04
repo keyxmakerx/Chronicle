@@ -35,7 +35,7 @@ Known broken or missing things, ordered by severity.
 
 - [x] **Tags not hideable from players** — Implemented `dm_only` column (migration 000038), role-based filtering in repo/service/handler, eye-slash badge + DM checkbox in tag_picker.js.
 - [x] **Attributes missing "Use Template" reset** — Added DELETE `/field-overrides` endpoint and "Reset" button in attributes customize panel with confirmation dialog. Clears field_overrides to NULL, restoring category template defaults.
-- [ ] **Search scope limited to entities** — Ctrl+K quick search only searches entities. Should also search calendar events, timelines, maps, sessions. Would significantly improve discoverability.
+- [x] **Search scope limited to entities** — Fixed: Ctrl+K now searches entities, timelines, maps, calendar events, and sessions. Added MapSearcher, CalendarSearcher, SessionSearcher interfaces following the TimelineSearcher pattern. Each plugin implements Search repo method + formats results. Wired in routes.go.
 - [x] **No confirmation dialogs for destructive actions** — Audited all delete operations. Most already had confirms (campaigns, entities, maps, markers, timelines, sessions, calendar events, sidebar nav, admin pages). Added confirms to notes.js and relations.js (the two missing ones). Dashboard editor row/block delete is safe (not persisted until explicit save).
 - [x] **No loading/spinner states** — Fixed: added HTMX loading indicator (3px accent-colored progress bar at top of viewport). CSS animation in input.css, request tracking in boot.js, indicator div in app.templ layout. Tracks concurrent requests, only hides when all complete.
 - [x] **Keyboard shortcuts help** — Fixed: press `?` to open shortcuts help overlay showing all 4 global shortcuts (Ctrl+K/N/E/S). Closes with `?`, Escape, or clicking outside. Mac-aware (shows ⌘ vs Ctrl).
@@ -43,7 +43,7 @@ Known broken or missing things, ordered by severity.
 - [x] **Mobile sidebar toggle** — Already implemented: hamburger button in topbar (md:hidden), Alpine.js sidebarOpen state, CSS translate slide-in animation, backdrop overlay, auto-close on navigation.
 - [ ] **Calendar recurring events limited** — Only "yearly" recurrence type. No monthly/weekly/daily/custom recurrence patterns.
 - [ ] **Editor lacks table support** — TipTap editor has no table insert/edit (common need for TTRPG stat blocks, encounter tables).
-- [ ] **Editor lacks callout/highlight blocks** — No callout/admonition blocks for DM notes, rules references, warnings.
+- [x] **Editor lacks callout/highlight blocks** — Fixed: blockquote restyled as callout block with accent border, subtle background, info icon. Insert menu renamed "Blockquote" → "Callout Block". Read-only prose views also styled. TipTap bundle limits prevent custom node types; blockquote serves as callout.
 - [x] **Entity cloning** — Fixed: Clone button on entity show page (Scribe+). POST creates copy with "(Copy)" suffix, clones entry, image, fields, field overrides, popup config, tags via INSERT...SELECT. Redirects to edit page. Does NOT copy relations.
 - [x] **Map marker search** — Fixed: added search input in map header. Client-side filtering dims non-matching markers (opacity 0.15). Enter pans to first match and opens tooltip. Searches name and description.
 - [x] **Timeline event creation from timeline page** — Already implemented: "Create Event" button in header opens modal with full form (name, date, description, category, visibility, color, multi-day, recurrence). POST to standalone-events API.
