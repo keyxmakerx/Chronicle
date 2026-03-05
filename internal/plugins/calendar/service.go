@@ -49,6 +49,7 @@ type CalendarService interface {
 	ListEventsForEntity(ctx context.Context, entityID string, role int, userID string) ([]Event, error)
 	ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int, userID string) ([]Event, error)
 	ListEventsForYear(ctx context.Context, calendarID string, year int, role int, userID string) ([]Event, error)
+	ListEventsForDateRange(ctx context.Context, calendarID string, year, startMonth, startDay, endMonth, endDay int, role int, userID string) ([]Event, error)
 
 	// Search.
 	SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
@@ -639,6 +640,15 @@ func (s *calendarService) ListEventsForEntity(ctx context.Context, entityID stri
 // ListEventsForYear returns all events for a given year, filtered by per-user rules.
 func (s *calendarService) ListEventsForYear(ctx context.Context, calendarID string, year int, role int, userID string) ([]Event, error) {
 	events, err := s.repo.ListEventsForYear(ctx, calendarID, year, role)
+	if err != nil {
+		return nil, err
+	}
+	return filterEventsByUser(events, role, userID), nil
+}
+
+// ListEventsForDateRange returns events within a date range for a given year.
+func (s *calendarService) ListEventsForDateRange(ctx context.Context, calendarID string, year, startMonth, startDay, endMonth, endDay int, role int, userID string) ([]Event, error) {
+	events, err := s.repo.ListEventsForDateRange(ctx, calendarID, year, startMonth, startDay, endMonth, endDay, role)
 	if err != nil {
 		return nil, err
 	}

@@ -1,27 +1,22 @@
 package timeline
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// MemberLister provides campaign membership data for the visibility user selector.
-type MemberLister interface {
-	ListMembers(ctx context.Context, campaignID string) ([]campaigns.CampaignMember, error)
-}
-
 // Handler processes HTTP requests for the timeline plugin.
 type Handler struct {
 	svc          TimelineService
-	memberLister MemberLister
+	memberLister campaigns.MemberLister
 }
 
 // NewHandler creates a new timeline Handler.
@@ -30,7 +25,7 @@ func NewHandler(svc TimelineService) *Handler {
 }
 
 // SetMemberLister injects the campaign member lister for visibility settings.
-func (h *Handler) SetMemberLister(ml MemberLister) {
+func (h *Handler) SetMemberLister(ml campaigns.MemberLister) {
 	h.memberLister = ml
 }
 
@@ -38,14 +33,7 @@ func (h *Handler) SetMemberLister(ml MemberLister) {
 // to the given campaign. Returns 404 if not found or mismatched, preventing
 // cross-campaign IDOR attacks.
 func (h *Handler) requireTimelineInCampaign(c echo.Context, timelineID, campaignID string) (*Timeline, error) {
-	t, err := h.svc.GetTimeline(c.Request().Context(), timelineID)
-	if err != nil {
-		return nil, err
-	}
-	if t.CampaignID != campaignID {
-		return nil, echo.NewHTTPError(http.StatusNotFound, "timeline not found")
-	}
-	return t, nil
+	return middleware.RequireInCampaign(c.Request().Context(), h.svc.GetTimeline, timelineID, campaignID, "timeline")
 }
 
 // effectiveRole returns the role to use for content filtering. When
@@ -123,11 +111,17 @@ func (h *Handler) Show(c echo.Context) error {
 		}
 	}
 
+	connections, err := h.svc.ListConnections(ctx, timelineID)
+	if err != nil {
+		return err
+	}
+
 	data := TimelineViewData{
 		CampaignID:   cc.Campaign.ID,
 		Timeline:     t,
 		Events:       events,
 		EntityGroups: groups,
+		Connections:  connections,
 		IsOwner:      cc.MemberRole >= campaigns.RoleOwner,
 		IsScribe:     cc.MemberRole >= campaigns.RoleScribe,
 		CSRFToken:    middleware.GetCSRFToken(c),
@@ -148,6 +142,15 @@ func (h *Handler) CreateForm(c echo.Context) error {
 	userID := auth.GetUserID(c)
 
 	name := c.FormValue("name")
+
+	// Validate field lengths.
+	if err := apperror.ValidateRequired("name", name); err != nil {
+		return err
+	}
+	if err := apperror.ValidateStringLength("name", name, apperror.MaxNameLength); err != nil {
+		return err
+	}
+
 	calendarID := c.FormValue("calendar_id")
 	var calPtr *string
 	if calendarID != "" {
@@ -202,7 +205,7 @@ func (h *Handler) UpdateAPI(c echo.Context) error {
 		ZoomDefault string  `json:"zoom_default"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.UpdateTimeline(ctx, timelineID, UpdateTimelineInput{
@@ -249,7 +252,7 @@ func (h *Handler) LinkEventAPI(c echo.Context) error {
 		ColorOverride *string `json:"color_override"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	link, err := h.svc.LinkEvent(ctx, timelineID, req.EventID, LinkEventInput{
@@ -317,7 +320,7 @@ func (h *Handler) CreateStandaloneEventAPI(c echo.Context) error {
 		Color           *string `json:"color"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	e, err := h.svc.CreateStandaloneEvent(ctx, timelineID, CreateTimelineEventInput{
@@ -384,7 +387,7 @@ func (h *Handler) UpdateStandaloneEventAPI(c echo.Context) error {
 		Color           *string `json:"color"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	if err := h.svc.UpdateStandaloneEvent(ctx, timelineID, eventID, UpdateTimelineEventInput{
@@ -462,11 +465,17 @@ func (h *Handler) TimelineDataAPI(c echo.Context) error {
 		eras, _ = h.svc.ListCalendarEras(ctx, *t.CalendarID)
 	}
 
+	connections, err := h.svc.ListConnections(ctx, timelineID)
+	if err != nil {
+		return err
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
-		"timeline": t,
-		"events":   events,
-		"groups":   groups,
-		"eras":     eras,
+		"timeline":    t,
+		"events":      events,
+		"groups":      groups,
+		"eras":        eras,
+		"connections": connections,
 	})
 }
 
@@ -539,7 +548,7 @@ func (h *Handler) CreateEntityGroupAPI(c echo.Context) error {
 		Color string `json:"color"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	g, err := h.svc.CreateEntityGroup(c.Request().Context(), timelineID, CreateEntityGroupInput{
@@ -571,7 +580,7 @@ func (h *Handler) UpdateEntityGroupAPI(c echo.Context) error {
 		Color string `json:"color"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.UpdateEntityGroup(c.Request().Context(), timelineID, groupID, UpdateEntityGroupInput{
@@ -618,10 +627,10 @@ func (h *Handler) AddGroupMemberAPI(c echo.Context) error {
 		EntityID string `json:"entity_id"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 	if req.EntityID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "entity_id is required")
+		return apperror.NewBadRequest("entity_id is required")
 	}
 
 	if err := h.svc.AddGroupMember(c.Request().Context(), timelineID, groupID, req.EntityID); err != nil {
@@ -685,7 +694,7 @@ func (h *Handler) UpdateTimelineVisibilityAPI(c echo.Context) error {
 		VisibilityRules *string `json:"visibility_rules"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	// Build a full update preserving existing settings.
@@ -718,7 +727,7 @@ func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
 		VisibilityRules    *string `json:"visibility_rules"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	if err := h.svc.UpdateEventLinkVisibility(ctx, timelineID, eventID, UpdateEventVisibilityInput{
@@ -747,7 +756,7 @@ func (h *Handler) UpdateStandaloneEventVisibilityAPI(c echo.Context) error {
 		VisibilityRules *string `json:"visibility_rules"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	// Get the standalone event and verify it belongs to this timeline.
@@ -756,7 +765,7 @@ func (h *Handler) UpdateStandaloneEventVisibilityAPI(c echo.Context) error {
 		return err
 	}
 	if e.TimelineID != timelineID {
-		return echo.NewHTTPError(http.StatusNotFound, "event not found")
+		return apperror.NewNotFound("event not found")
 	}
 
 	// Validate visibility.
@@ -764,7 +773,7 @@ func (h *Handler) UpdateStandaloneEventVisibilityAPI(c echo.Context) error {
 		req.Visibility = e.Visibility
 	}
 	if req.Visibility != "everyone" && req.Visibility != "dm_only" {
-		return echo.NewHTTPError(http.StatusBadRequest, "visibility must be 'everyone' or 'dm_only'")
+		return apperror.NewBadRequest("visibility must be 'everyone' or 'dm_only'")
 	}
 
 	e.Visibility = req.Visibility
@@ -854,12 +863,93 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, timelinePreviewFragment(cc.Campaign.ID, timelines))
 }
 
+// --- Event Connection Handlers ---
+
+// CreateConnectionAPI creates a connection between two events on a timeline.
+// POST /campaigns/:id/timelines/:tid/connections
+func (h *Handler) CreateConnectionAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	timelineID := c.Param("tid")
+
+	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	var req struct {
+		SourceID   string  `json:"source_id"`
+		TargetID   string  `json:"target_id"`
+		SourceType string  `json:"source_type"`
+		TargetType string  `json:"target_type"`
+		Label      *string `json:"label"`
+		Color      *string `json:"color"`
+		Style      string  `json:"style"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	conn, err := h.svc.CreateConnection(ctx, timelineID, CreateConnectionInput{
+		SourceID:   req.SourceID,
+		TargetID:   req.TargetID,
+		SourceType: req.SourceType,
+		TargetType: req.TargetType,
+		Label:      req.Label,
+		Color:      req.Color,
+		Style:      req.Style,
+	})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, conn)
+}
+
+// DeleteConnectionAPI removes a connection between two events.
+// DELETE /campaigns/:id/timelines/:tid/connections/:cid
+func (h *Handler) DeleteConnectionAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	timelineID := c.Param("tid")
+
+	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	connID, err := parseIntParam(c, "cid")
+	if err != nil {
+		return err
+	}
+
+	if err := h.svc.DeleteConnection(ctx, timelineID, connID); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ListConnectionsAPI returns all connections for a timeline.
+// GET /campaigns/:id/timelines/:tid/connections
+func (h *Handler) ListConnectionsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	timelineID := c.Param("tid")
+
+	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	connections, err := h.svc.ListConnections(ctx, timelineID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, connections)
+}
+
 // parseIntParam extracts an integer path parameter, returning 400 on failure.
 func parseIntParam(c echo.Context, name string) (int, error) {
 	s := c.Param(name)
 	var v int
 	if _, err := fmt.Sscanf(s, "%d", &v); err != nil {
-		return 0, echo.NewHTTPError(http.StatusBadRequest, name+" must be a number")
+		return 0, apperror.NewBadRequest(name + " must be a number")
 	}
 	return v, nil
 }

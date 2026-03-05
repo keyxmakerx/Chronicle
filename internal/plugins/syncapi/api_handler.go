@@ -49,6 +49,15 @@ func (h *APIHandler) resolveRole(c echo.Context) int {
 	return int(member.Role)
 }
 
+// resolveUserID returns the API key owner's user ID for permission checks.
+func (h *APIHandler) resolveUserID(c echo.Context) string {
+	key := GetAPIKey(c)
+	if key == nil {
+		return ""
+	}
+	return key.UserID
+}
+
 // --- Campaign Info ---
 
 // apiCampaignResponse is the API-safe representation of a campaign.
@@ -69,7 +78,7 @@ func (h *APIHandler) GetCampaign(c echo.Context) error {
 	campaignID := c.Param("id")
 	campaign, err := h.campaignSvc.GetByID(c.Request().Context(), campaignID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "campaign not found")
+		return apperror.NewNotFound("campaign not found")
 	}
 	return c.JSON(http.StatusOK, apiCampaignResponse{
 		ID:          campaign.ID,
@@ -91,7 +100,7 @@ func (h *APIHandler) ListEntityTypes(c echo.Context) error {
 	types, err := h.entitySvc.GetEntityTypes(c.Request().Context(), campaignID)
 	if err != nil {
 		slog.Error("api: failed to list entity types", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list entity types")
+		return apperror.NewInternal(fmt.Errorf("failed to list entity types"))
 	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":  types,
@@ -104,17 +113,17 @@ func (h *APIHandler) ListEntityTypes(c echo.Context) error {
 func (h *APIHandler) GetEntityType(c echo.Context) error {
 	typeID, err := strconv.Atoi(c.Param("typeID"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid entity type ID")
+		return apperror.NewBadRequest("invalid entity type ID")
 	}
 
 	et, err := h.entitySvc.GetEntityTypeByID(c.Request().Context(), typeID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "entity type not found")
+		return apperror.NewNotFound("entity type not found")
 	}
 
 	// Verify it belongs to the API key's campaign.
 	if et.CampaignID != c.Param("id") {
-		return echo.NewHTTPError(http.StatusNotFound, "entity type not found")
+		return apperror.NewNotFound("entity type not found")
 	}
 
 	return c.JSON(http.StatusOK, et)
@@ -147,14 +156,15 @@ func (h *APIHandler) ListEntities(c echo.Context) error {
 		err   error
 	)
 
+	userID := h.resolveUserID(c)
 	if query != "" {
-		items, total, err = h.entitySvc.Search(c.Request().Context(), campaignID, query, typeID, role, opts)
+		items, total, err = h.entitySvc.Search(c.Request().Context(), campaignID, query, typeID, role, userID, opts)
 	} else {
-		items, total, err = h.entitySvc.List(c.Request().Context(), campaignID, typeID, role, opts)
+		items, total, err = h.entitySvc.List(c.Request().Context(), campaignID, typeID, role, userID, opts)
 	}
 	if err != nil {
 		slog.Error("api: failed to list entities", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list entities")
+		return apperror.NewInternal(fmt.Errorf("failed to list entities"))
 	}
 
 	if items == nil {
@@ -178,17 +188,17 @@ func (h *APIHandler) GetEntity(c echo.Context) error {
 
 	entity, err := h.entitySvc.GetByID(ctx, entityID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "entity not found")
+		return apperror.NewNotFound("entity not found")
 	}
 
 	// Verify the entity belongs to the API key's campaign.
 	if entity.CampaignID != c.Param("id") {
-		return echo.NewHTTPError(http.StatusNotFound, "entity not found")
+		return apperror.NewNotFound("entity not found")
 	}
 
 	// Enforce privacy: private entities require Owner role.
 	if entity.IsPrivate && role < int(campaigns.RoleOwner) {
-		return echo.NewHTTPError(http.StatusNotFound, "entity not found")
+		return apperror.NewNotFound("entity not found")
 	}
 
 	return c.JSON(http.StatusOK, entity)
@@ -210,12 +220,12 @@ type apiCreateEntityRequest struct {
 func (h *APIHandler) CreateEntity(c echo.Context) error {
 	key := GetAPIKey(c)
 	if key == nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "api key required")
+		return apperror.NewUnauthorized("api key required")
 	}
 
 	var req apiCreateEntityRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	entity, err := h.entitySvc.Create(c.Request().Context(), c.Param("id"), key.UserID, entities.CreateEntityInput{
@@ -226,7 +236,7 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 		FieldsData:   req.FieldsData,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusCreated, entity)
@@ -250,15 +260,15 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 	// Verify entity belongs to this campaign.
 	entity, err := h.entitySvc.GetByID(ctx, entityID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "entity not found")
+		return apperror.NewNotFound("entity not found")
 	}
 	if entity.CampaignID != c.Param("id") {
-		return echo.NewHTTPError(http.StatusNotFound, "entity not found")
+		return apperror.NewNotFound("entity not found")
 	}
 
 	var req apiUpdateEntityRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	updated, err := h.entitySvc.Update(ctx, entityID, entities.UpdateEntityInput{
@@ -269,7 +279,7 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 		FieldsData: req.FieldsData,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusOK, updated)
@@ -289,19 +299,19 @@ func (h *APIHandler) UpdateEntityFields(c echo.Context) error {
 	// Verify entity belongs to this campaign.
 	entity, err := h.entitySvc.GetByID(ctx, entityID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "entity not found")
+		return apperror.NewNotFound("entity not found")
 	}
 	if entity.CampaignID != c.Param("id") {
-		return echo.NewHTTPError(http.StatusNotFound, "entity not found")
+		return apperror.NewNotFound("entity not found")
 	}
 
 	var req apiUpdateFieldsRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.entitySvc.UpdateFields(ctx, entityID, req.FieldsData); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -316,15 +326,15 @@ func (h *APIHandler) DeleteEntity(c echo.Context) error {
 	// Verify entity belongs to this campaign.
 	entity, err := h.entitySvc.GetByID(ctx, entityID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "entity not found")
+		return apperror.NewNotFound("entity not found")
 	}
 	if entity.CampaignID != c.Param("id") {
-		return echo.NewHTTPError(http.StatusNotFound, "entity not found")
+		return apperror.NewNotFound("entity not found")
 	}
 
 	if err := h.entitySvc.Delete(ctx, entityID); err != nil {
 		slog.Error("api: failed to delete entity", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete entity")
+		return apperror.NewInternal(fmt.Errorf("failed to delete entity"))
 	}
 
 	return c.NoContent(http.StatusNoContent)
@@ -382,7 +392,7 @@ type syncResponse struct {
 func (h *APIHandler) Sync(c echo.Context) error {
 	key := GetAPIKey(c)
 	if key == nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "api key required")
+		return apperror.NewUnauthorized("api key required")
 	}
 
 	campaignID := c.Param("id")
@@ -391,13 +401,13 @@ func (h *APIHandler) Sync(c echo.Context) error {
 
 	var req syncRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	// Reject oversized sync batches to prevent memory/CPU exhaustion.
 	const maxSyncChanges = 2000
 	if len(req.Changes) > maxSyncChanges {
-		return echo.NewHTTPError(http.StatusBadRequest,
+		return apperror.NewBadRequest(
 			fmt.Sprintf("too many changes; maximum is %d per request", maxSyncChanges))
 	}
 
@@ -409,14 +419,15 @@ func (h *APIHandler) Sync(c echo.Context) error {
 
 	if req.Since != nil {
 		since := *req.Since
+		syncUserID := h.resolveUserID(c)
 		for page := 1; page <= syncMaxPullPages; page++ {
-			items, total, err := h.entitySvc.List(ctx, campaignID, 0, role, entities.ListOptions{
+			items, total, err := h.entitySvc.List(ctx, campaignID, 0, role, syncUserID, entities.ListOptions{
 				Page:    page,
 				PerPage: syncPageSize,
 			})
 			if err != nil {
 				slog.Error("api: sync pull failed", slog.Any("error", err))
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to pull entities")
+				return apperror.NewInternal(fmt.Errorf("failed to pull entities"))
 			}
 
 			for _, e := range items {
@@ -526,13 +537,13 @@ func (h *APIHandler) Sync(c echo.Context) error {
 func (h *APIHandler) ListEntityRelations(c echo.Context) error {
 	entityID := c.Param("entityID")
 	if entityID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "entity ID required")
+		return apperror.NewBadRequest("entity ID required")
 	}
 
 	rels, err := h.relationSvc.ListByEntity(c.Request().Context(), entityID)
 	if err != nil {
 		slog.Error("listing entity relations", slog.String("entity_id", entityID), slog.String("error", err.Error()))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list relations")
+		return apperror.NewInternal(fmt.Errorf("failed to list relations"))
 	}
 
 	if rels == nil {

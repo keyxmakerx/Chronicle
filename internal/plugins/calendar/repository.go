@@ -46,6 +46,7 @@ type CalendarRepository interface {
 	DeleteEvent(ctx context.Context, id string) error
 	ListEventsForMonth(ctx context.Context, calendarID string, year, month int, role int) ([]Event, error)
 	ListEventsForYear(ctx context.Context, calendarID string, year int, role int) ([]Event, error)
+	ListEventsForDateRange(ctx context.Context, calendarID string, year, startMonth, startDay, endMonth, endDay int, role int) ([]Event, error)
 	ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error)
 	ListUpcomingEvents(ctx context.Context, calendarID string, year, month, day int, role int, limit int) ([]Event, error)
 	SearchEvents(ctx context.Context, calendarID, query string, role int) ([]Event, error)
@@ -522,6 +523,39 @@ func (r *calendarRepo) ListEventsForYear(ctx context.Context, calendarID string,
 		return nil, err
 	}
 	defer rows.Close()
+
+	return scanEvents(rows)
+}
+
+// ListEventsForDateRange returns events within a date range (same year).
+// Handles single-month or cross-month ranges within the same year.
+// Also includes yearly recurring events that fall in the range.
+func (r *calendarRepo) ListEventsForDateRange(ctx context.Context, calendarID string, year, startMonth, startDay, endMonth, endDay int, role int) ([]Event, error) {
+	visFilter := "AND e.visibility = 'everyone'"
+	if role >= 3 {
+		visFilter = ""
+	}
+
+	// Use composite date value (month*100 + day) for range comparison.
+	query := fmt.Sprintf(`
+		SELECT `+eventCols+`
+		FROM calendar_events e `+eventJoins+`
+		WHERE e.calendar_id = ?
+		  AND (
+		    (e.is_recurring = 0 AND e.year = ? AND (e.month * 100 + e.day) >= ? AND (e.month * 100 + e.day) <= ?)
+		    OR (e.is_recurring = 1 AND e.recurrence_type = 'yearly' AND (e.month * 100 + e.day) >= ? AND (e.month * 100 + e.day) <= ?)
+		  )
+		  %s
+		ORDER BY e.month, e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
+
+	startVal := startMonth*100 + startDay
+	endVal := endMonth*100 + endDay
+
+	rows, err := r.db.QueryContext(ctx, query, calendarID, year, startVal, endVal, startVal, endVal)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
 
 	return scanEvents(rows)
 }

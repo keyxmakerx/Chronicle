@@ -320,6 +320,33 @@
   .chronicle-editor__status--unsaved { @apply text-amber-600; }
   .chronicle-editor__status--error { @apply text-red-600; }
 
+  /* ---- Find/Replace Bar ---- */
+  .chronicle-find-bar {
+    @apply flex flex-col gap-1 px-3 py-2 border-b border-edge-light;
+    background: var(--color-bg-secondary);
+  }
+  .chronicle-find-bar__row {
+    @apply flex items-center gap-1.5;
+  }
+  .chronicle-find-bar__input {
+    @apply flex-1 text-xs rounded border border-edge px-2 py-1;
+    background: var(--color-bg-primary);
+    color: var(--color-text-body);
+    min-width: 0;
+  }
+  .chronicle-find-bar__input:focus {
+    @apply outline-none ring-1 ring-accent border-accent;
+  }
+  .chronicle-find-bar__count {
+    @apply text-[10px] text-fg-muted whitespace-nowrap min-w-[3.5rem] text-center;
+  }
+  .chronicle-find-bar__btn {
+    @apply text-xs px-1.5 py-1 rounded hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors;
+  }
+  .chronicle-find-bar__close {
+    @apply ml-1;
+  }
+
   /* ---- Entity Links (mention-style references to other entities) ---- */
   /* Styled as distinctive inline pills so they stand out from regular links. */
   .chronicle-editor__content a.entity-link,
@@ -389,8 +416,148 @@
   .chronicle-editor__content .tiptap code {
     color: var(--color-text-body);
   }
+
+  /* ---- Code block syntax highlighting (lowlight/highlight.js) ---- */
+  .chronicle-editor__content .tiptap pre,
+  .prose pre {
+    @apply rounded-lg my-4 p-4 overflow-x-auto text-sm leading-relaxed;
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-body);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .chronicle-editor__content .tiptap pre code,
+  .prose pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
+  }
+  /* Language label (positioned in top-right of code block) */
+  .chronicle-editor__content .tiptap pre .hljs-language-label {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    font-size: 10px;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  /* Syntax token colors — dark mode first (most users). */
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-built_in,
+  .hljs-name,
+  .hljs-tag { color: #7aa2f7; }
+  .hljs-string,
+  .hljs-title,
+  .hljs-section,
+  .hljs-attribute,
+  .hljs-literal,
+  .hljs-template-tag,
+  .hljs-template-variable,
+  .hljs-type { color: #9ece6a; }
+  .hljs-comment,
+  .hljs-deletion,
+  .hljs-meta { color: #565f89; font-style: italic; }
+  .hljs-number,
+  .hljs-symbol,
+  .hljs-bullet,
+  .hljs-link { color: #ff9e64; }
+  .hljs-regexp,
+  .hljs-variable,
+  .hljs-addition { color: #73daca; }
+  .hljs-params { color: #c0caf5; }
+  .hljs-selector-id,
+  .hljs-selector-class { color: #bb9af7; }
+  .hljs-doctag,
+  .hljs-strong { font-weight: 700; }
+  .hljs-emphasis { font-style: italic; }
+
+  /* Light mode overrides. */
+  :root .hljs-keyword,
+  :root .hljs-selector-tag,
+  :root .hljs-built_in,
+  :root .hljs-name,
+  :root .hljs-tag { color: #0550ae; }
+  :root .hljs-string,
+  :root .hljs-title,
+  :root .hljs-section,
+  :root .hljs-attribute,
+  :root .hljs-literal,
+  :root .hljs-template-tag,
+  :root .hljs-template-variable,
+  :root .hljs-type { color: #116329; }
+  :root .hljs-comment,
+  :root .hljs-deletion,
+  :root .hljs-meta { color: #6e7781; font-style: italic; }
+  :root .hljs-number,
+  :root .hljs-symbol,
+  :root .hljs-bullet,
+  :root .hljs-link { color: #953800; }
+  :root .hljs-regexp,
+  :root .hljs-variable,
+  :root .hljs-addition { color: #1a7f37; }
+  :root .hljs-params { color: #24292f; }
+  :root .hljs-selector-id,
+  :root .hljs-selector-class { color: #8250df; }
+  /* Dark mode overrides (re-declare to beat light specificity). */
+  .dark .hljs-keyword,
+  .dark .hljs-selector-tag,
+  .dark .hljs-built_in,
+  .dark .hljs-name,
+  .dark .hljs-tag { color: #7aa2f7; }
+  .dark .hljs-string,
+  .dark .hljs-title,
+  .dark .hljs-section,
+  .dark .hljs-attribute,
+  .dark .hljs-literal,
+  .dark .hljs-template-tag,
+  .dark .hljs-template-variable,
+  .dark .hljs-type { color: #9ece6a; }
+  .dark .hljs-comment,
+  .dark .hljs-deletion,
+  .dark .hljs-meta { color: #565f89; font-style: italic; }
+  .dark .hljs-number,
+  .dark .hljs-symbol,
+  .dark .hljs-bullet,
+  .dark .hljs-link { color: #ff9e64; }
+  .dark .hljs-regexp,
+  .dark .hljs-variable,
+  .dark .hljs-addition { color: #73daca; }
+  .dark .hljs-params { color: #c0caf5; }
+  .dark .hljs-selector-id,
+  .dark .hljs-selector-class { color: #bb9af7; }
+
   .chronicle-editor__content .tiptap hr {
     border-color: var(--color-border-light);
+  }
+
+  /* ---- Table support (TipTap table extension) ---- */
+  .chronicle-editor__content .tiptap table,
+  .prose table {
+    @apply w-full border-collapse my-4;
+  }
+  .chronicle-editor__content .tiptap th,
+  .prose th {
+    @apply bg-bg-tertiary text-left text-sm font-semibold px-3 py-2;
+    border: 1px solid var(--color-border-light);
+    color: var(--color-text-primary);
+  }
+  .chronicle-editor__content .tiptap td,
+  .prose td {
+    @apply text-sm px-3 py-2;
+    border: 1px solid var(--color-border-light);
+    color: var(--color-text-body);
+  }
+  .chronicle-editor__content .tiptap .selectedCell {
+    @apply bg-accent/10;
+  }
+  .chronicle-editor__content .tiptap .column-resize-handle {
+    @apply absolute top-0 right-[-2px] bottom-0 w-1 bg-accent/40 cursor-col-resize;
+    pointer-events: auto;
+  }
+  .chronicle-editor__content .tiptap table .tableWrapper {
+    @apply overflow-x-auto my-4;
   }
 
   /* ---- Entity Type Tabs (entity list page filter) ---- */
@@ -1131,6 +1298,54 @@
     left: 0;
     top: 4px;
     bottom: 4px;
+  }
+
+  /* Map marker cluster icons */
+  .chronicle-cluster { background: none !important; border: none !important; }
+  .chronicle-cluster-icon {
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(59, 130, 246, 0.85);
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    transition: transform 150ms ease;
+  }
+  .chronicle-cluster-icon:hover {
+    transform: scale(1.15);
+  }
+
+  /* Event connection lines */
+  .timeline-connection-line {
+    transition: stroke-opacity 150ms ease;
+  }
+  .timeline-connection-line:hover {
+    stroke-opacity: 1 !important;
+    stroke-width: 2.5;
+  }
+  .timeline-connection-label {
+    pointer-events: none;
+  }
+
+  /* Event marker hover effects */
+  .timeline-event .timeline-event-dot {
+    transition: r 150ms ease, filter 150ms ease;
+  }
+  .timeline-event:hover .timeline-event-dot {
+    filter: brightness(1.3) drop-shadow(0 0 4px currentColor);
+  }
+
+  /* Ruler label styling */
+  .ruler-label-primary {
+    fill: var(--color-fg-secondary, #a9b1d6);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: ui-monospace, monospace;
+    letter-spacing: 0.02em;
   }
 
   /* Event list cards */

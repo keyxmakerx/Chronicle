@@ -66,6 +66,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 	pub.GET("/calendar", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/calendar/timeline", h.ShowTimeline, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendar/week", h.ShowWeek, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/calendar/upcoming", h.UpcomingEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/calendar/entity-events/:eid", h.EntityEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
 }

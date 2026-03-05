@@ -8,21 +8,67 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Documentation cleanup for fresh start (batch 24 complete).
-Branch: `claude/interactive-calendar-sessions-UJaq2`.
+2026-03-05 -- Sprint K-1 (Per-Entity Permissions Model) complete (batch 35).
+Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**All major features complete through batch 24.** Ready for next priorities.
+**Phase K: Permissions & Competitive Gap Closers.** Sprint K-1 delivered (batch 35). Next: Sprint K-2 (Per-Entity Permissions UI).
 
-### Summary of Recent Work (batches 21-24)
-- **Batch 24**: Security hardening (input sanitization, rate limit bounds, fail-closed
-  addon middleware) + fog-of-war Chronicle→Foundry sync (polygon drawings).
-- **Batch 23**: WebSocket security (origin validation, message type validation), device
-  fingerprint race fix, extension `.ai.md` documentation (foundry-module, websocket).
-- **Batch 22**: Entity page widget blocks (timeline, map_preview, upcoming_events,
-  shop_inventory, text_block).
-- **Batch 21**: Calendar sessions modal, RSVP inline controls, recurring session
-  auto-generation, calendar sessions fragment endpoint, SMTP verification.
+### Summary of Recent Work (batches 25-35)
+- **Batch 35**: Sprint K-1 Per-Entity Permissions Model — Migration 000048
+  (`entity_permissions` table, `visibility` ENUM column on entities). Permission
+  model types (VisibilityMode, SubjectType, Permission, EntityPermission,
+  EffectivePermission, SetPermissionsInput, PermissionGrant). Full
+  EntityPermissionRepository (ListByEntity, SetPermissions transactional,
+  DeleteByEntity, GetEffectivePermission, UpdateVisibility). visibilityFilter()
+  SQL helper handles both legacy is_private and custom permission modes in a
+  single WHERE clause. Service: CheckEntityAccess, SetEntityPermissions,
+  GetEntityPermissions. All entity list/search/count/children/backlinks queries
+  updated with userID parameter across handlers, sync API, export adapters,
+  layout injector, campaign dashboard. 13 new unit tests. Pure backend — no UI.
+- **Batch 34**: Sprint J-4 File Security — ClamAV antivirus integration for upload
+  scanning via clamd TCP protocol (INSTREAM). Fail-open when clamd unavailable.
+  ClamAV container in docker-compose (clamav/clamav:1.4). CLAMAV_ADDRESS env var.
+  3 unit tests. SVG blocked by MIME allowlist. CDR strips metadata/polyglots.
+- **Batch 33**: Sprint J-3 Testing & Infrastructure — Verified HTMX edge cases (CSRF
+  propagation, double-init prevention, widget cleanup, form tracking all covered by boot.js).
+  Created `.air.toml` for hot reload config. Fixed docker-compose.yml em-dash in error
+  message. Added `doc.go` for templates/components package. Verified all Go packages have
+  package doc comments.
+- **Batch 32**: Sprint J-2 Editor Enhancements — Code block syntax highlighting via
+  @tiptap/extension-code-block-lowlight with highlight.js common languages (JS, Python,
+  Go, SQL, etc.). Tokyo Night-inspired dark/light syntax theme in input.css. Find/replace
+  bar (Ctrl+F find, Ctrl+H replace) with match navigation, replace, replace-all.
+  TipTap bundle rebuilt with lowlight extension (~558KB).
+- **Batch 31**: Sprint J-1 Breadcrumbs + Navigation — Shared breadcrumb component
+  (`components/breadcrumbs.templ`). Added breadcrumbs to: maps list, map detail, timeline
+  list, timeline detail, sessions list, session detail, calendar grid header, calendar
+  timeline view, calendar week view. Recently Viewed Entities tracker
+  (`recent_entities.js`) using localStorage, renders in sidebar drill panel.
+- **Batch 30**: Sprint I-4 Map UX Polish — Leaflet.markercluster integration for both
+  map widget and full map page (auto-clustering when >5 markers). Expanded POI icon
+  picker from 18 to 39 icons organized in 8 groups (General, Settlements, Fortifications,
+  Dungeons & Ruins, Nature, Maritime, Sacred & Magic, Resources). Custom cluster icon
+  styling. CDN-loaded MarkerCluster CSS + JS.
+- **Batch 29**: Sprint I-3 Calendar Week View — 7-column day grid with event cards.
+  Repo: `ListEventsForDateRange`. Handler: `ShowWeek`. Template: `WeekPage/WeekFragment`.
+  View toggle (Grid/Week/Timeline) added to all 3 calendar views. Navigation: prev/next/today.
+  Cross-month and cross-year boundary handling. 5 unit tests. Route: GET /calendar/week.
+- **Batch 28**: Sprint I-2 Timeline Phase 2B — Event connections (migration 000047,
+  model/repo/service/handler, D3 SVG lines/arrows with arrowhead markers, 4 line styles),
+  create-from-timeline (double-click empty space opens modal with date pre-filled),
+  visual polish (connection line CSS, event marker hover effects, ruler label improvements).
+  3 unit tests. Routes: GET/POST/DELETE /timelines/:tid/connections.
+- **Batch 27**: Sprint I-1 Campaign Export/Import — Full JSON export/import for campaigns
+  including entity types, entities, tags, relations, calendar (config + events),
+  timelines (standalone events), sessions, maps (markers, drawings, layers, tokens, fog),
+  addons, media manifest. 6 new files (export.go, import.go, export_service.go,
+  export_handler.go, export_adapters.go, import_test.go). Adapter pattern for 7 plugin
+  services. Routes: GET /campaigns/:id/export, POST /campaigns/import.
+- **Batch 26**: Phase H Release Readiness — error standardization (249 calls), code dedup,
+  OpenAPI 3.0.3 spec, extension docs.
+- **Batch 25**: Alpha Hardening — CI pipeline, 3 service test suites, IDOR helper,
+  input validation, TipTap table support.
 
 ### Earlier Batches (summary)
 - **Batch 20**: Fixed duplicate migration 000041, mobile nav cleanup, 3 dashboard widgets.
@@ -36,16 +82,7 @@ Branch: `claude/interactive-calendar-sessions-UJaq2`.
 ---
 
 ## Next Session Should
-1. **Interactive calendar sessions** — The approved plan (`declarative-bouncing-cherny.md`)
-   for sessions modal overlay on calendar page is ready for implementation. Key pieces:
-   remove old session nav buttons, add sessions modal, create sessions fragment endpoint,
-   server-side recurring session auto-generation on completion.
-2. **Extension documentation** — `.ai.md` writeups still needed for: syncapi, maps drawing
-   subsystem, most JS widgets (editor.js, attributes.js, tag_picker.js, relations.js, notes.js).
-3. **API documentation** — OpenAPI spec or handwritten REST v1 reference. Auth guide,
-   endpoint reference, rate limiting docs, sync protocol.
-4. **Test coverage** — Audit service tests, media service tests, settings service tests.
-5. **Timeline Phase 2B** — Event connections, create-from-timeline modal, beautification.
+Continue **Phase K** with Sprint K-2 (Per-Entity Permissions UI — "Permissions" tab on entity edit page, visibility selector, user/role picker with view/edit toggles, entity list + sidebar filter by resolved permissions). Full post-alpha roadmap (Phases K through O, 25 sprints) documented in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -77,3 +114,18 @@ Branch: `claude/interactive-calendar-sessions-UJaq2`.
 - **2026-03-04: Foundry VTT Completion** — Sessions-calendar integration, RSVP emails,
   recurring sessions, Foundry sync (WebSocket, maps API, calendar, shop, fog), security
   hardening, dashboard widgets, mobile responsive, extension documentation
+- **2026-03-04: Alpha Hardening** — CI pipeline (golangci-lint + govulncheck), 3 service
+  test suites (audit/media/settings), generic IDOR helper, input validation, widget docs,
+  TipTap table extensions
+- **2026-03-04: Phase H Release Readiness** — Error standardization (249 calls, 15+ files),
+  code dedup (MemberLister, LIKE escape), OpenAPI 3.0.3 spec (63 endpoints), extension docs
+- **2026-03-05: Sprint I-1 Campaign Export/Import** — Full JSON export/import for campaigns
+  (entities, calendar, timelines, sessions, maps, addons, media manifest). 7 adapter services.
+- **2026-03-05: Phase I Core UX** — Sprint I-2 (timeline connections + create-from-timeline),
+  Sprint I-3 (calendar week view), Sprint I-4 (map marker clustering + expanded POI icons).
+- **2026-03-05: Sprint J-1** — Breadcrumbs on all non-entity pages, recently viewed entities sidebar widget.
+- **2026-03-05: Sprint J-2** — Code syntax highlighting (lowlight + highlight.js), find/replace bar (Ctrl+F/H).
+- **2026-03-05: Sprint J-3** — HTMX verification, `.air.toml`, docker-compose fix, package doc comments.
+- **2026-03-05: Sprint J-4** — ClamAV antivirus scanning, docker-compose ClamAV container.
+- **2026-03-05: ALL PHASES COMPLETE** — H (release readiness), I (core UX), J (polish & infra).
+- **2026-03-05: Sprint K-1** — Per-entity permissions model (backend): migration 000048, model types, permission repository, service methods, visibility filter, 13 tests.

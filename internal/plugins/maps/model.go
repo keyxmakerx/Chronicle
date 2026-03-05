@@ -22,6 +22,10 @@ type Map struct {
 	Markers []Marker `json:"markers,omitempty"`
 }
 
+// GetCampaignID returns the campaign this map belongs to. Implements
+// middleware.CampaignScoped for generic IDOR protection.
+func (m *Map) GetCampaignID() string { return m.CampaignID }
+
 // HasImage returns true if the map has a background image set.
 func (m *Map) HasImage() bool {
 	return m.ImageID != nil && *m.ImageID != ""

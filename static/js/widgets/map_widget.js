@@ -166,7 +166,26 @@
       }
       map.fitBounds(bounds);
 
-      // Add markers.
+      // Add markers with optional clustering for dense maps.
+      var markerTarget = map;
+      if (typeof L.markerClusterGroup === 'function' && markers.length > 5) {
+        var clusterGroup = L.markerClusterGroup({
+          maxClusterRadius: 40,
+          spiderfyOnMaxZoom: true,
+          showCoverageOnHover: false,
+          iconCreateFunction: function(cluster) {
+            var count = cluster.getChildCount();
+            return L.divIcon({
+              className: 'chronicle-cluster',
+              html: '<div class="chronicle-cluster-icon">' + count + '</div>',
+              iconSize: [32, 32],
+              iconAnchor: [16, 16],
+            });
+          }
+        });
+        markerTarget = clusterGroup;
+      }
+
       markers.forEach(function (mk) {
         var icon = L.divIcon({
           className: 'chronicle-marker',
@@ -177,7 +196,7 @@
           iconAnchor: [10, 10],
         });
 
-        var marker = L.marker([mk.y, mk.x], { icon: icon }).addTo(map);
+        var marker = L.marker([mk.y, mk.x], { icon: icon }).addTo(markerTarget);
 
         var popupContent = '<div class="text-xs">' +
           '<strong>' + Chronicle.escapeHtml(mk.name) + '</strong>';
@@ -187,6 +206,10 @@
         popupContent += '</div>';
         marker.bindPopup(popupContent, { maxWidth: 200 });
       });
+
+      if (markerTarget !== map) {
+        map.addLayer(markerTarget);
+      }
 
       // Add "Open map" overlay link.
       var overlay = document.createElement('a');
@@ -265,32 +288,40 @@
     },
 
     /**
-     * Dynamically load Leaflet CSS if not already present.
+     * Dynamically load Leaflet CSS and MarkerCluster CSS if not already present.
      */
     _loadLeafletCSS: function () {
-      if (document.querySelector('link[href*="leaflet"]')) return;
-      var link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
-      link.crossOrigin = '';
-      document.head.appendChild(link);
+      if (!document.querySelector('link[href*="leaflet.css"]')) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
+        link.crossOrigin = '';
+        document.head.appendChild(link);
+      }
+      // MarkerCluster CSS.
+      if (!document.querySelector('link[href*="MarkerCluster"]')) {
+        var mcLink = document.createElement('link');
+        mcLink.rel = 'stylesheet';
+        mcLink.href = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css';
+        document.head.appendChild(mcLink);
+      }
     },
 
     /**
-     * Dynamically load Leaflet JS if not already present.
+     * Dynamically load Leaflet JS and MarkerCluster JS if not already present.
      */
     _loadLeafletJS: function (callback) {
+      var self = this;
       if (typeof L !== 'undefined') {
-        callback();
+        self._loadMarkerClusterJS(callback);
         return;
       }
-      if (document.querySelector('script[src*="leaflet"]')) {
-        // Script tag exists but L not yet loaded — wait for it.
+      if (document.querySelector('script[src*="leaflet.js"]')) {
         var interval = setInterval(function () {
           if (typeof L !== 'undefined') {
             clearInterval(interval);
-            callback();
+            self._loadMarkerClusterJS(callback);
           }
         }, 50);
         return;
@@ -299,6 +330,31 @@
       script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
       script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
       script.crossOrigin = '';
+      script.onload = function () {
+        self._loadMarkerClusterJS(callback);
+      };
+      document.head.appendChild(script);
+    },
+
+    /**
+     * Load MarkerCluster plugin after Leaflet is available.
+     */
+    _loadMarkerClusterJS: function (callback) {
+      if (typeof L.markerClusterGroup === 'function') {
+        callback();
+        return;
+      }
+      if (document.querySelector('script[src*="leaflet.markercluster"]')) {
+        var interval = setInterval(function () {
+          if (typeof L.markerClusterGroup === 'function') {
+            clearInterval(interval);
+            callback();
+          }
+        }, 50);
+        return;
+      }
+      var script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js';
       script.onload = callback;
       document.head.appendChild(script);
     },

@@ -40,6 +40,7 @@ type MediaService interface {
 	FilePath(file *MediaFile) string
 	ThumbnailPath(file *MediaFile, size string) string
 	SetStorageLimiter(limiter StorageLimiter)
+	SetVirusScanner(scanner VirusScanner)
 
 	// ListCampaignMedia returns paginated media files for a campaign.
 	ListCampaignMedia(ctx context.Context, campaignID string, page, perPage int) ([]MediaFile, int, error)
@@ -102,6 +103,7 @@ type mediaService struct {
 	mediaPath string         // Root directory for file storage.
 	maxSize   int64          // Maximum file size in bytes (static fallback).
 	limiter   StorageLimiter // Dynamic storage limits from settings plugin. May be nil.
+	scanner   VirusScanner   // Optional ClamAV scanner. May be nil (scanning disabled).
 	sem       *uploadSemaphore
 }
 
@@ -119,6 +121,12 @@ func NewMediaService(repo MediaRepository, mediaPath string, maxSize int64) Medi
 // Called after all plugins are wired to avoid initialization order issues.
 func (s *mediaService) SetStorageLimiter(limiter StorageLimiter) {
 	s.limiter = limiter
+}
+
+// SetVirusScanner sets the optional antivirus scanner. When set, uploaded
+// files are scanned before being written to disk.
+func (s *mediaService) SetVirusScanner(scanner VirusScanner) {
+	s.scanner = scanner
 }
 
 // Upload validates, stores, and records a new media file.
@@ -162,6 +170,13 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 	input.FileBytes = sanitizedBytes
 	input.FileSize = int64(len(sanitizedBytes))
 	input.MimeType = effectiveMime
+
+	// Scan for malware if ClamAV is configured.
+	if s.scanner != nil {
+		if err := s.scanner.Scan(input.FileBytes, input.OriginalName); err != nil {
+			return nil, err
+		}
+	}
 
 	// Generate UUID filename in date-based directory.
 	id := generateUUID()

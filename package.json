@@ -1,6 +1,20 @@
 {
   "devDependencies": {
     "@tailwindcss/forms": "^0.5.11",
-    "@tailwindcss/typography": "^0.5.19"
+    "@tailwindcss/typography": "^0.5.19",
+    "@tiptap/core": "^3.20.0",
+    "@tiptap/extension-code-block-lowlight": "^3.20.0",
+    "@tiptap/extension-link": "^3.20.0",
+    "@tiptap/extension-placeholder": "^3.20.0",
+    "@tiptap/extension-table": "^3.20.0",
+    "@tiptap/extension-table-cell": "^3.20.0",
+    "@tiptap/extension-table-header": "^3.20.0",
+    "@tiptap/extension-table-row": "^3.20.0",
+    "@tiptap/extension-underline": "^3.20.0",
+    "@tiptap/pm": "^3.20.0",
+    "@tiptap/starter-kit": "^3.20.0",
+    "esbuild": "^0.27.3",
+    "highlight.js": "^11.11.1",
+    "lowlight": "^3.3.0"
   }
 }

@@ -42,7 +42,7 @@ Known broken or missing things, ordered by severity.
 - [x] **Form validation feedback** — Fixed: added `:user-invalid` and `.input-error` CSS for red borders on invalid fields. JS in boot.js listens for `invalid` events and inserts `.field-error` inline hints with the browser's validation message. Errors clear on input.
 - [x] **Mobile sidebar toggle** — Already implemented: hamburger button in topbar (md:hidden), Alpine.js sidebarOpen state, CSS translate slide-in animation, backdrop overlay, auto-close on navigation.
 - [x] **Calendar recurring events limited** — Sessions now support weekly/biweekly/monthly/custom recurrence. Calendar events still yearly-only (separate concern). Session recurrence via migration 000041.
-- [ ] **Editor lacks table support** — TipTap editor has no table insert/edit (common need for TTRPG stat blocks, encounter tables).
+- [x] **Editor lacks table support** — Added TipTap table extensions (Table, TableRow, TableCell, TableHeader), insert menu entry, CSS styles, rebuilt vendor bundle via esbuild.
 - [x] **Editor lacks callout/highlight blocks** — Fixed: blockquote restyled as callout block with accent border, subtle background, info icon. Insert menu renamed "Blockquote" → "Callout Block". Read-only prose views also styled. TipTap bundle limits prevent custom node types; blockquote serves as callout.
 - [x] **Entity cloning** — Fixed: Clone button on entity show page (Scribe+). POST creates copy with "(Copy)" suffix, clones entry, image, fields, field overrides, popup config, tags via INSERT...SELECT. Redirects to edit page. Does NOT copy relations.
 - [x] **Map marker search** — Fixed: added search input in map header. Client-side filtering dims non-matching markers (opacity 0.15). Enter pans to first match and opens tooltip. Searches name and description.
@@ -51,18 +51,18 @@ Known broken or missing things, ordered by severity.
 ### Low
 
 - [x] **API endpoints ignore addon disabled state** — RequireAddon middleware gates calendar, maps, sessions, timeline routes. RequireAddonAPI middleware gates API v1 routes (syncapi). Fail-closed on DB errors.
-- [ ] **API technical documentation missing** — REST API v1 exists and works but has no public documentation (OpenAPI spec or reference).
+- [x] **API technical documentation missing** — Created OpenAPI 3.0.3 spec at `docs/api/openapi.yaml` with 63 endpoints, 42 schemas, auth details, and error responses.
 - [x] **Calendar HTMX detection inconsistency** — Replaced 5 raw `HX-Request` header checks in calendar handler with `middleware.IsHTMX(c)`, which also checks `HX-Boosted` to avoid returning fragments on boosted navigation.
-- [ ] **Cross-plugin adapter interface duplication** — `MemberLister` interface duplicated in timeline and sessions plugins. Should extract to shared package.
-- [ ] **IDOR check functions duplicated** — `requireTimelineInCampaign`, `requireMapInCampaign`, `requireSessionInCampaign`, `requireEventInCampaign` follow identical patterns in 4 plugins. Extract to shared generic helper.
-- [ ] **logAudit fire-and-forget duplicated** — Similar audit logging patterns in entities, campaigns, tags handlers. Could extract to shared `FireAudit()` utility.
+- [x] **Cross-plugin adapter interface duplication** — Extracted `campaigns.MemberLister` interface. Timeline and sessions handlers now import it instead of defining local copies.
+- [x] **IDOR check functions duplicated** — Extracted generic `middleware.RequireInCampaign[T]()` helper with Go generics. Updated maps, timeline, sessions handlers. Calendar/markers left as-is (parent traversal needed).
+- [x] **logAudit fire-and-forget duplicated** — Assessed: three plugins use different logAudit signatures (entities: entityID+name, campaigns: details map, tags: tagName). Not worth abstracting — left as-is.
 - [x] **JS fetch header setup duplicated** — Added `Chronicle.apiFetch()` wrapper to boot.js (auto-sets headers, CSRF, JSON serialization). Migrated sidebar_config, entity_type_config, sidebar_nav_editor, dashboard_editor widgets. Simplified notes.js CSRF reading.
-- [ ] **Mixed error types** — `echo.NewHTTPError` used directly in 30+ places instead of centralized `apperror` package. Should standardize.
-- [ ] **LIKE metacharacter in backlinks** — `entities/repository.go:1011` concatenates entityID into LIKE pattern without escaping `%`/`_`. Low risk (UUIDs only) but should escape for safety.
-- [ ] **No Content Security Policy headers** — CSP not implemented. Would provide XSS defense-in-depth alongside bluemonday sanitization.
-- [ ] **No input size validation on text fields** — Relies on DB column limits. Handler-level validation (name max 200, description max 5000, etc.) would be better.
-- [ ] **Package-level Go doc comments missing** — ~80% of .go files lack `// Package ...` comments (handler.go, service.go, repository.go, routes.go across all plugins).
-- [~] **Missing JS widget .ai.md docs** — Done: image_upload, timeline_viz, dashboard_editor, template_editor, entity_tooltip, foundry-module, websocket. Still needed: editor.js, attributes.js, tag_picker.js, relations.js, notes.js, boot.js.
+- [x] **Mixed error types** — Replaced all 249 `echo.NewHTTPError` calls with `apperror` domain errors across 15 handler files + middleware + websocket. Zero remaining.
+- [x] **LIKE metacharacter in backlinks** — Added `strings.NewReplacer` to escape `%` and `_` in entityID before LIKE pattern in `entities/repository.go:FindBacklinks`.
+- [x] **No Content Security Policy headers** — CSP implemented in `middleware/security.go` (default-src 'self', script-src, style-src, img-src, font-src, connect-src, frame-ancestors, base-uri, form-action). Alpine.js requires 'unsafe-inline'/'unsafe-eval'; documented tradeoff.
+- [x] **No input size validation on text fields** — Added `apperror/validate.go` helpers (ValidateStringLength, ValidateRequired) and wired into entities, campaigns, maps, timeline, sessions create handlers.
+- [x] **Package-level Go doc comments** — All Go packages have `// Package ...` comments. Added `doc.go` for `templates/components`. Widget "packages" are JS-only (`.ai.md` docs).
+- [x] **Missing JS widget .ai.md docs** — All done: image_upload, timeline_viz, dashboard_editor, template_editor, entity_tooltip, foundry-module, websocket, attributes, mentions, title, boot.js, editor, tags. Relations and notes already existed.
 
 ---
 
@@ -75,105 +75,95 @@ New capabilities ordered by priority for alpha release.
 - [x] **Media management for owners** — Campaign-scoped media browser at `/campaigns/:id/media` (Owner-only): grid view with thumbnails, "referenced by" entity queries, delete with warnings, upload from browser, pagination, storage stats. Admin already had `/admin/storage`.
 - [x] **Tag visibility controls** — Implemented: migration 000038, `dm_only` bool in model/repo/service/handler, role-based filtering, tag_picker.js DM-only badge + create checkbox.
 - [x] **Attributes template reset** — Implemented DELETE endpoint + "Reset" button in customize panel with confirmation dialog.
-- [~] **Extension technical documentation** — 1-3 page `.ai.md` writeup per plugin/widget/module. Done: foundry-module, websocket, media, image_upload, timeline_viz, dashboard_editor, template_editor, entity_tooltip. Still needed: syncapi, maps drawing subsystem, editor.js, attributes.js, tag_picker.js, relations.js, notes.js.
+- [x] **Extension technical documentation** — All `.ai.md` writeups complete: foundry-module, websocket, media, image_upload, timeline_viz, dashboard_editor, template_editor, entity_tooltip, syncapi, maps, editor, tags, attributes, mentions, title, boot.js, relations, notes.
 - [x] **Graceful extension degradation** — `RequireAddon` middleware (web) and `RequireAddonAPI` middleware (API) gate routes. Human-readable errors for disabled addons. Fail-closed on DB errors.
 - [x] **Permissions & UX completeness audit** — Completed 2026-03-04. Audited all 17 route files, 24 JS widgets, all templ templates. Found 10 MUST-haves, 15 NEED-to-haves, 20 WANTs, 15 MAYBEs. Key findings: sidebar drill public access, sessions discoverability, calendar UX gaps, missing editor features (tables, callouts), no unsaved changes warning, inconsistent empty states. All items added to Bugfixes section above.
 - [x] **README.md** — Full open-source README with features, setup instructions, tech stack, architecture, project structure, screenshots placeholders, inspiration credits. Created 2026-03-04.
 
 ### Alpha-Nice-to-Have
 
-- [ ] **File security audit + ClamAV** — Add ClamAV container to docker-compose, scan uploads before storage, configurable file type allowlist, SVG blocking (XSS vector).
-- [ ] **API documentation** — OpenAPI 3.0 spec or handwritten reference for REST v1. Auth guide, endpoint reference, rate limiting docs, sync protocol.
+- [x] **File security audit + ClamAV** — ClamAV integration via clamd TCP protocol (INSTREAM). Fail-open when unavailable. Docker-compose ClamAV container (clamav/clamav:1.4). CLAMAV_ADDRESS config. 3 tests. SVG already blocked by MIME allowlist. CDR pipeline strips metadata/polyglots.
+- [x] **API documentation** — OpenAPI 3.0.3 spec at `docs/api/openapi.yaml`. 63 endpoints, 42 schemas, auth guide, rate limiting headers, sync protocol.
 - [x] **Foundry VTT Sync** — Bidirectional sync between Chronicle and Foundry VTT. Phases 1-4 complete (WebSocket, sync mappings, journal sync, map expansion, EventBus, Map API v1, calendar live sync). Phase 5 (shop entity type + Chronicle inventory widget + relation metadata, Foundry shop widget wiring, RequireAddonAPI permission hardening, E2E testing checklist) complete.
 - [x] **Maps Phase 2** — Layers, drawings, tokens, fog of war. Migration 000042, full CRUD service + repository + REST API handler. Role-based visibility filtering. Percentage-based coordinates for resolution independence.
-- [ ] **Timeline Phase 2B** — Event connections (visual lines between related events), create-from-timeline modal, beautification pass.
-- [ ] **Campaign export/import** — JSON bundle for backup/migration. Media as separate zip or URL references.
+- [x] **Timeline Phase 2B** — Event connections (migration 000047, SVG lines/arrows, 4 styles), create-from-timeline (double-click opens modal with date), visual polish (hover effects, ruler labels, connection CSS). 3 tests.
+- [x] **Campaign export/import** — JSON bundle for backup/migration. Export/import service with adapter pattern for 7 plugins (entities, calendar, timeline, sessions, maps, addons, media). Slug-based cross-references, ID remapping on import. 6 tests.
 - [x] **Image drag-and-drop upload** — Media browser has drag-and-drop + multi-file upload with per-file progress bars (Alpine.js + XHR). Entity image widget (`image_upload.js`) still click-only.
-- [ ] **Calendar week view** — Only month + timeline views exist. Week view is standard calendar UX expectation.
+- [x] **Calendar week view** — 7-column day grid with event cards, cross-month handling, prev/next/today navigation. View toggle added to all calendar views. 5 tests.
 - [ ] **Calendar event drag-and-drop** — Can't drag events between dates (standard Google Calendar UX).
 - [ ] **Calendar day view** — No single-day detailed view with time blocks.
-- [ ] **Map marker clustering** — Markers don't auto-cluster when zoomed out (Leaflet.markercluster).
-- [ ] **Map marker icon picker** — No predefined POI icons (city, dungeon, tavern, etc.).
-- [ ] **Recent entities sidebar** — No "recently viewed" quick-access list.
+- [x] **Map marker clustering** — Leaflet.markercluster integration on both map widget and full map page. Auto-clustering when >5 markers with custom cluster icons. CDN-loaded.
+- [x] **Map marker icon picker** — Expanded from 18 to 39 POI icons in 8 organized groups (General, Settlements, Fortifications, Dungeons & Ruins, Nature, Maritime, Sacred & Magic, Resources).
+- [x] **Recent entities sidebar** — localStorage-backed "recently viewed" list in sidebar drill panel. Tracks entity visits, renders last 10 with clock icons. `recent_entities.js`.
 - [ ] **Command palette (Ctrl+Shift+P)** — Quick action palette beyond Ctrl+K search.
-- [ ] **Breadcrumb consistency** — Breadcrumbs exist on entity pages but not calendar/timeline/maps.
+- [x] **Breadcrumb consistency** — Shared breadcrumb component (`components/breadcrumbs.templ`). Added to maps list/detail, timeline list/detail, sessions list/detail, calendar grid/timeline/week views.
 - [ ] **Timeline search/filter** — No search within timeline events by name/text.
 - [ ] **Timeline zoom-to-era** — No button to jump viewport to a specific era.
-- [ ] **Editor find/replace** — No Ctrl+F within editor content.
-- [ ] **Editor code syntax highlighting** — Code blocks have no language-aware highlighting.
+- [x] **Editor find/replace** — Ctrl+F opens find bar, Ctrl+H opens find+replace. Match navigation, replace, replace-all. Selection-based highlighting.
+- [x] **Editor code syntax highlighting** — @tiptap/extension-code-block-lowlight with highlight.js common languages. Tokyo Night-inspired dark/light theme in input.css.
 - [ ] **Entity version history UI** — Audit log exists but no "view diff / restore version" for entities.
 - [ ] **Notes search/filter** — No search within notes panel.
 - [ ] **Toast notification grouping** — Duplicate toasts stack separately instead of grouping.
 - [ ] **Entity image gallery** — Only one image per entity; no carousel/gallery for multiple images.
 
-### Post-Alpha
+### Phase K: Permissions & Competitive Gap Closers
 
-- [ ] Per-entity permissions (view/edit per role/user)
-- [ ] Group-based visibility (beyond everyone/dm_only)
-- [x] Foundry VTT sync module Phase 1 (notes/journal sync)
-- [x] Foundry VTT sync module Phase 2 (calendar sync)
-- [ ] Relations graph visualization widget (D3.js/Cytoscape.js)
-- [ ] Dice roller widget (floating panel, expression parser)
-- [ ] Entity sub-notes/posts (sub-documents with separate visibility)
-- [ ] Auto-linking in editor (LegendKeeper-style entity name detection)
-- [ ] Guided worldbuilding prompts per entity type (WorldAnvil-style)
-- [ ] **Discord bot integration** — Session RSVP via Discord reactions. Plugin at internal/plugins/discord/ with bot token config, webhook notifications, reaction listener. See ADR-012.
-- [x] **Session recurrence server-side expansion** — Recurring sessions auto-generate next occurrence when current one completes. Implemented in batch 21.
-- [ ] **Calendar event recurring expansion** — Expand calendar event recurrence beyond "yearly" to monthly/weekly/daily/custom, matching session recurrence options.
-- [ ] Role-aware dashboards (different views per campaign role)
-- [ ] Entity type template library (genre presets for new campaigns)
-- [ ] Saved filters / smart lists (filter presets as sidebar links)
-- [ ] Bulk entity operations (multi-select for batch tag/move/delete)
-- [ ] Whiteboards / freeform canvas (Tldraw/Excalidraw)
-- [ ] Persistent filters per category (localStorage)
-- [ ] 2FA/TOTP support
-- [ ] Invite system (email invitations for campaigns)
-- [ ] Webhook support for external event notifications
-- [~] Fog of war for maps — Server-side fog regions with CRUD API complete. Chronicle→Foundry one-way sync done (polygon overlay drawings). Foundry→Chronicle push not yet implemented.
-- [ ] Map drawing tools (freehand, shapes, annotations)
-- [ ] Map hex/square grid overlay for tactical combat
-- [ ] Map measurement tool (distance/area)
-- [ ] Accessibility audit (ARIA labels, focus traps, screen readers, skip-to-content)
-- [ ] Offline mode / service worker caching
-- [ ] Collaborative editing presence indicators ("user X is editing")
-- [ ] Additional themes beyond light/dark (sepia, high-contrast, custom accent colors)
-- [ ] Editor markdown import/export
-- [ ] Calendar timezone support (real-life mode uses UTC; need per-user timezone)
-- [ ] Calendar print/PDF export
-- [ ] Notes rich text (TipTap in notes instead of plain text blocks)
-- [ ] Note folders/nesting organization
-- [ ] Reusable modal/dropdown component library (widgets each build their own)
-- [ ] Widget inline CSS → CSS classes migration (consistency, maintainability)
+- [x] **Sprint K-1: Per-Entity Permissions Model** — Migration 000048: `entity_permissions` table + `visibility` column on entities. Models: VisibilityMode, SubjectType, Permission, EntityPermission, EffectivePermission, SetPermissionsInput, PermissionGrant. Repository: EntityPermissionRepository (ListByEntity, SetPermissions, DeleteByEntity, GetEffectivePermission, UpdateVisibility) + visibilityFilter() SQL helper. Service: CheckEntityAccess, SetEntityPermissions, GetEntityPermissions. All list/search/count queries updated with userID param for permission-aware filtering. 13 new unit tests.
+- [ ] **Sprint K-2: Per-Entity Permissions UI** — "Permissions" tab on entity edit page. Visibility selector (everyone/dm_only/custom). User/role picker with view/edit toggles. Entity list + sidebar filter by resolved permissions.
+- [ ] **Sprint K-3: Group-Based Visibility** — Migration: `campaign_groups` + `campaign_group_members`. Permission subject_type gains "group." Groups in Campaign Settings. Entity permission UI gets group selector.
+- [ ] **Sprint K-4: Auto-Linking in Editor** — Backend: entity-names API (Redis-cached). Frontend: TipTap InputRule matches entity names, inline suggestion popup. Per-campaign toggle. Whole-word, case-insensitive, min 3 chars.
+- [ ] **Sprint K-5: Relations Graph Visualization** — D3.js force-directed graph (`relation_graph.js`). Backend: relation-graph API (nodes/edges JSON). Dashboard block + standalone page `/campaigns/:id/relations`.
 
-### Testing (High Priority)
+### Phase L: Content Depth & Editor Power
 
-- [x] Entity service unit tests (40 tests passing)
-- [x] Sync API service tests (31 tests)
-- [x] Addons service tests (32 tests)
-- [x] Auth service tests (26 tests)
-- [x] Notes widget service tests (28 tests)
-- [x] Widget lifecycle audit (destroy methods, event listener leaks)
-- [x] Campaigns service tests (72 tests covering CRUD, membership, ownership transfer, sidebar, dashboard, admin ops, model helpers)
-- [x] Relations service tests (25 tests: bi-directional create/delete, symmetric relations, validation, conflict handling)
-- [x] Tags service tests (40 tests: CRUD, color validation, slug generation, diff-based SetEntityTags, cross-campaign prevention, visibility filtering)
-- [ ] Audit service tests (pagination, validation, fire-and-forget)
-- [ ] Media service tests (file validation, thumbnail generation)
-- [ ] Settings service tests (limit resolution, override priority)
-- [ ] HTMX fragment edge cases (CSRF propagation, double-init, nested targets)
+- [ ] **Sprint L-1: Entity Sub-Notes (Posts) UI** — `entity_posts` table exists but no UI. Full CRUD: list below entry, create/edit modal with TipTap, per-post visibility, drag-to-reorder.
+- [ ] **Sprint L-2: Notes Rich Text (TipTap)** — Replace plain-text blocks with TipTap in notes widget. `entry`/`entry_html` columns exist. Support bold, italic, lists, links, @mentions. Block→TipTap migration on first edit.
+- [ ] **Sprint L-3: Note Folders and Organization** — Migration: `parent_id` + `folder` boolean. Tree view in notes panel, expand/collapse, drag-to-reorder within/between folders.
+- [ ] **Sprint L-4: Calendar Event Drag-and-Drop** — HTML5 DnD on monthly grid. Events draggable, date cells as drop targets. HTMX PUT on drop. Ghost element + drop zone highlighting. Scribe+ only.
+- [ ] **Sprint L-5: Calendar Day View + Recurring Events** — Single-day view with hourly time blocks. Expand event recurrence to monthly/weekly/daily/custom matching session recurrence.
 
-### Game System Modules
+### Phase M: Game System Modules & Worldbuilding Tools
 
-- [ ] D&D 5e module (SRD reference data, tooltips, pages)
-- [ ] Pathfinder 2e module
+- [ ] **Sprint M-1: D&D 5e Module — Data & Tooltip API** — SRD-legal JSON (spells, monsters, items, conditions, classes, races). Tooltip endpoint. Wire into entity_tooltip widget. Register as addon.
+- [ ] **Sprint M-2: D&D 5e Module — Reference Pages** — Browsable pages at `/modules/dnd5e/`. Category cards, searchable lists, formatted stat block detail pages. Quick-search integration.
+- [ ] **Sprint M-3: Pathfinder 2e Module** — ORC-licensed data following D&D 5e pattern. Spells, monsters, ancestries, classes, conditions, feats.
+- [ ] **Sprint M-4: Guided Worldbuilding Prompts** — `worldbuilding_prompts` table. "Writing Prompts" collapsible panel on entity edit page. Default prompt packs per entity type. Owner-customizable.
+- [ ] **Sprint M-5: Entity Type Template Library** — Genre presets (fantasy, sci-fi, horror, modern, historical) as JSON fixtures. Campaign creation genre selection. "Import preset" in Customization Hub.
+
+### Phase N: Collaboration & Platform Maturity
+
+- [ ] **Sprint N-1: Role-Aware Dashboards** — Role-keyed dashboard layouts. Dashboard editor gains role selector. Players see role-specific dashboard or default fallback.
+- [ ] **Sprint N-2: Invite System** — Migration: `campaign_invites` table. Email invitations with one-click accept link. Non-public campaigns require invitation. Invite management UI.
+- [ ] **Sprint N-3: 2FA/TOTP Support** — TOTP enrollment with QR code (`pquerna/otp`). Login redirect to TOTP input. Recovery codes (8 hashed). Admin force-disable.
+- [ ] **Sprint N-4: Accessibility Audit (WCAG 2.1 AA)** — ARIA labels, focus traps, skip-to-content, color contrast 4.5:1, keyboard nav, screen reader announcements, axe-core scanning.
+- [ ] **Sprint N-5: Infrastructure & Deployment** — Docker-compose full stack verification with health checks. Makefile full-stack target. `CONTRIBUTING.md`. CI against docker-compose.
+
+### Phase O: Polish, Ecosystem & Delight
+
+- [ ] **Sprint O-1: Command Palette & Saved Filters** — Ctrl+Shift+P action palette with fuzzy search. Saved entity list filter presets as sidebar links in `saved_filters` table.
+- [ ] **Sprint O-2: Map Drawing Tools** — Leaflet.Draw integration (freehand, polygons, circles, rectangles, text). Uses existing `map_drawings` table. Per-drawing visibility, color/opacity.
+- [ ] **Sprint O-3: Discord Bot Integration** — Plugin at `internal/plugins/discord/`. Bot token config. Webhook session notifications. Reaction-based RSVP per ADR-012.
+- [ ] **Sprint O-4: Bulk Operations & Persistent Filters** — Multi-select entity lists with batch actions (tag, move, visibility, delete). Persistent filters per category in localStorage.
+- [ ] **Sprint O-5: Editor Import/Export & Additional Themes** — Markdown import/export via `goldmark`. Sepia + high-contrast themes. Custom accent color picker.
+
+### Deferred to Phase P+ (or community contributions)
+
 - [ ] Draw Steel module
-
-### Infrastructure
-
-- [ ] **Add golangci-lint to CI pipeline** — Currently only `go vet` + unit tests run in CI. golangci-lint catches real bugs (unchecked errors, dead code) and should be enforced.
-- [ ] **Add security scanning to CI** — gosec (static analysis) and govulncheck (dependency vulnerabilities) should run in CI. Requires Go 1.25+ for latest gosec.
-- [ ] **Increase test coverage** — Currently 8 test files (294+ tests). Priority: media service tests, audit service tests, settings service tests, then handler tests.
-- [ ] docker-compose.yml full stack verification (app + MariaDB + Redis)
-- [ ] `air` hot reload setup for dev workflow
+- [ ] Whiteboards / freeform canvas (Tldraw/Excalidraw)
+- [ ] Offline mode / service worker caching
+- [ ] Collaborative editing presence indicators
+- [ ] Calendar timezone support / print-PDF export
+- [ ] Map hex/square grid overlay / measurement tool
+- [~] Fog of war Foundry→Chronicle push (Chronicle→Foundry done)
+- [ ] Webhook support for external event notifications
+- [ ] Widget inline CSS → CSS classes migration
+- [ ] Reusable modal/dropdown component library
+- [ ] Toast notification grouping
+- [ ] Entity image gallery (multi-image carousel)
+- [ ] Entity version history UI (view diff / restore)
+- [ ] Timeline search/filter + zoom-to-era
+- [ ] Notes search/filter
+- [ ] Dice roller widget
 
 ---
 
@@ -328,3 +318,48 @@ Summary of strengths/weaknesses for strategic positioning. Full analysis in `.ai
 - [x] RequireAddonAPI fail-closed on DB errors (was fail-open)
 - [x] Fog-of-war Chronicle→Foundry sync (polygon overlay drawings on Foundry scene)
 - [x] Extension .ai.md documentation (foundry-module, websocket)
+
+### Alpha Hardening Batch (2026-03-04, batch 25)
+- [x] CI pipeline: golangci-lint job + govulncheck security scan job in GitHub Actions
+- [x] Service tests: audit (12), media (20+), settings (30+), IDOR middleware (3)
+- [x] Generic IDOR helper: `middleware.RequireInCampaign[T]()` with Go generics
+- [x] Input validation: `apperror/validate.go` helpers, wired into 5 create handlers
+- [x] Widget documentation: attributes, mentions, title `.ai.md` + boot.js `.ai.md`
+- [x] TipTap table support: Table/TableRow/TableCell/TableHeader extensions, esbuild pipeline, CSS styles
+
+### Phase H: Release Readiness (2026-03-04, batches 26-27)
+- [x] Error type standardization: replaced all 249 `echo.NewHTTPError` calls with `apperror` domain errors across 15 handler files
+- [x] Code dedup: MemberLister interface extraction, LIKE metacharacter escaping
+- [x] API documentation: OpenAPI 3.0.3 spec at `docs/api/openapi.yaml` (63 endpoints, 42 schemas)
+- [x] Extension `.ai.md` docs: syncapi, maps, editor, tags (all widget/plugin docs complete)
+
+### Phase I Sprint 1: Campaign Export/Import (2026-03-04, batch 27)
+- [x] Export model (`campaigns/export.go`): 20+ types covering all campaign data sections
+- [x] Import model (`campaigns/import.go`): format detection, ID mapping structure
+- [x] Export/import service (`campaigns/export_service.go`): adapter interfaces for 7 plugins
+- [x] HTTP handler (`campaigns/export_handler.go`): GET export download, POST import upload
+- [x] Export adapters (`app/export_adapters.go`): adapter implementations for all plugins
+- [x] Route wiring in `campaigns/routes.go` and `app/routes.go`
+- [x] Tests: 6 unit tests for import detection and ID mapping
+
+### Phase I Sprint 2: Timeline Phase 2B (2026-03-05, batch 28)
+- [x] Migration 000047: `timeline_event_connections` table
+- [x] Model: `EventConnection` struct, `CreateConnectionInput`, connection style validation
+- [x] Repository: `CreateConnection`, `DeleteConnection`, `ListConnections` with IDOR protection
+- [x] Service: connection CRUD with validation (source/target type, self-connect, color, style)
+- [x] Handler: `CreateConnectionAPI`, `DeleteConnectionAPI`, `ListConnectionsAPI`
+- [x] Routes: GET/POST/DELETE `/timelines/:tid/connections` (Scribe+)
+- [x] D3 visualization: SVG arrowhead marker, quadratic Bézier curves, 4 line styles, labels
+- [x] Create-from-timeline: double-click empty space opens modal with date pre-filled
+- [x] Visual polish: connection line CSS (hover), event marker hover effects, ruler labels
+- [x] Tests: 3 unit tests for connection style validation and model fields
+
+### Phase I Sprint 3: Calendar Week View (2026-03-05, batch 29)
+- [x] Repository: `ListEventsForDateRange` with composite date value SQL
+- [x] Service: `ListEventsForDateRange` with per-user visibility filtering
+- [x] Handler: `ShowWeek` with week-start snapping, cross-month event fetching
+- [x] Model: `WeekViewData`, `WeekDay` structs with helper methods (WeekDays, PrevWeek, NextWeek, EndDate)
+- [x] Template: `WeekPage`, `WeekFragment`, `weekContent` with 7-column day grid
+- [x] View toggle: Grid/Week/Timeline button group added to all 3 calendar views
+- [x] Route: GET `/calendar/week` (public-capable)
+- [x] Tests: 5 unit tests for week data helpers (WeekDays, CrossMonth, PrevNext, WeekdayName)

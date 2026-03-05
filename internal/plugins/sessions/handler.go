@@ -16,11 +16,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// MemberLister provides campaign membership data for RSVP.
-type MemberLister interface {
-	ListMembers(ctx context.Context, campaignID string) ([]campaigns.CampaignMember, error)
-}
-
 // MailSender sends email notifications. Wraps the SMTP service interface.
 type MailSender interface {
 	SendHTMLMail(ctx context.Context, to []string, subject, plainBody, htmlBody string) error
@@ -30,7 +25,7 @@ type MailSender interface {
 // Handler processes HTTP requests for the sessions plugin.
 type Handler struct {
 	svc          SessionService
-	memberLister MemberLister
+	memberLister campaigns.MemberLister
 	mailer       MailSender
 	baseURL      string // Application base URL for RSVP links (e.g. "https://chronicle.example.com").
 }
@@ -41,7 +36,7 @@ func NewHandler(svc SessionService) *Handler {
 }
 
 // SetMemberLister wires a campaign member lister for RSVP invite-all.
-func (h *Handler) SetMemberLister(ml MemberLister) {
+func (h *Handler) SetMemberLister(ml campaigns.MemberLister) {
 	h.memberLister = ml
 }
 
@@ -104,6 +99,14 @@ func (h *Handler) CreateSession(c echo.Context) error {
 	name := c.FormValue("name")
 	summary := c.FormValue("summary")
 	scheduledDate := c.FormValue("scheduled_date")
+
+	// Validate field lengths.
+	if err := apperror.ValidateRequired("name", name); err != nil {
+		return err
+	}
+	if err := apperror.ValidateStringLength("name", name, apperror.MaxNameLength); err != nil {
+		return err
+	}
 
 	var summaryPtr *string
 	if summary != "" {
@@ -469,11 +472,14 @@ func (h *Handler) RedeemRSVPToken(c echo.Context) error {
 		return c.HTML(http.StatusOK, rsvpResultHTML("RSVP Failed", msg, false))
 	}
 
-	action := "accepted"
-	if token.Action == RSVPDeclined {
+	var action string
+	switch token.Action {
+	case RSVPDeclined:
 		action = "declined"
-	} else if token.Action == RSVPTentative {
+	case RSVPTentative:
 		action = "marked as maybe"
+	default:
+		action = "accepted"
 	}
 
 	return c.HTML(http.StatusOK, rsvpResultHTML("RSVP Recorded",
@@ -503,12 +509,5 @@ p{color:#666;margin:0;font-size:.9rem}</style></head><body>
 
 // requireSessionInCampaign fetches a session and verifies it belongs to the campaign.
 func (h *Handler) requireSessionInCampaign(c echo.Context, sessionID, campaignID string) (*Session, error) {
-	session, err := h.svc.GetSession(c.Request().Context(), sessionID)
-	if err != nil {
-		return nil, err
-	}
-	if session.CampaignID != campaignID {
-		return nil, echo.NewHTTPError(http.StatusNotFound, "session not found")
-	}
-	return session, nil
+	return middleware.RequireInCampaign(c.Request().Context(), h.svc.GetSession, sessionID, campaignID, "session")
 }

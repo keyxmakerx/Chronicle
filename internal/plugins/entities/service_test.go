@@ -116,13 +116,14 @@ type mockEntityRepo struct {
 	updateImageFn    func(ctx context.Context, id, imagePath string) error
 	deleteFn         func(ctx context.Context, id string) error
 	slugExistsFn     func(ctx context.Context, campaignID, slug string) (bool, error)
-	listByCampaignFn func(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
-	searchFn         func(ctx context.Context, campaignID, query string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
-	countByTypeFn    func(ctx context.Context, campaignID string, role int) (map[int]int, error)
-	findChildrenFn   func(ctx context.Context, parentID string, role int) ([]Entity, error)
+	listByCampaignFn func(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
+	searchFn         func(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
+	countByTypeFn    func(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error)
+	listRecentFn     func(ctx context.Context, campaignID string, role int, userID string, limit int) ([]Entity, error)
+	findChildrenFn   func(ctx context.Context, parentID string, role int, userID string) ([]Entity, error)
 	findAncestorsFn  func(ctx context.Context, entityID string) ([]Entity, error)
 	updateParentFn   func(ctx context.Context, entityID string, parentID *string) error
-	findBacklinksFn  func(ctx context.Context, entityID string, role int) ([]Entity, error)
+	findBacklinksFn  func(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
 }
 
 func (m *mockEntityRepo) Create(ctx context.Context, entity *Entity) error {
@@ -189,34 +190,37 @@ func (m *mockEntityRepo) SlugExists(ctx context.Context, campaignID, slug string
 	return false, nil
 }
 
-func (m *mockEntityRepo) ListByCampaign(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error) {
+func (m *mockEntityRepo) ListByCampaign(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	if m.listByCampaignFn != nil {
-		return m.listByCampaignFn(ctx, campaignID, typeID, role, opts)
+		return m.listByCampaignFn(ctx, campaignID, typeID, role, userID, opts)
 	}
 	return nil, 0, nil
 }
 
-func (m *mockEntityRepo) Search(ctx context.Context, campaignID, query string, typeID int, role int, opts ListOptions) ([]Entity, int, error) {
+func (m *mockEntityRepo) Search(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	if m.searchFn != nil {
-		return m.searchFn(ctx, campaignID, query, typeID, role, opts)
+		return m.searchFn(ctx, campaignID, query, typeID, role, userID, opts)
 	}
 	return nil, 0, nil
 }
 
-func (m *mockEntityRepo) CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error) {
+func (m *mockEntityRepo) CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error) {
 	if m.countByTypeFn != nil {
-		return m.countByTypeFn(ctx, campaignID, role)
+		return m.countByTypeFn(ctx, campaignID, role, userID)
 	}
 	return nil, nil
 }
 
-func (m *mockEntityRepo) ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error) {
+func (m *mockEntityRepo) ListRecent(ctx context.Context, campaignID string, role int, userID string, limit int) ([]Entity, error) {
+	if m.listRecentFn != nil {
+		return m.listRecentFn(ctx, campaignID, role, userID, limit)
+	}
 	return nil, nil
 }
 
-func (m *mockEntityRepo) FindChildren(ctx context.Context, parentID string, role int) ([]Entity, error) {
+func (m *mockEntityRepo) FindChildren(ctx context.Context, parentID string, role int, userID string) ([]Entity, error) {
 	if m.findChildrenFn != nil {
-		return m.findChildrenFn(ctx, parentID, role)
+		return m.findChildrenFn(ctx, parentID, role, userID)
 	}
 	return nil, nil
 }
@@ -235,9 +239,9 @@ func (m *mockEntityRepo) UpdateParent(ctx context.Context, entityID string, pare
 	return nil
 }
 
-func (m *mockEntityRepo) FindBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error) {
+func (m *mockEntityRepo) FindBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
 	if m.findBacklinksFn != nil {
-		return m.findBacklinksFn(ctx, entityID, role)
+		return m.findBacklinksFn(ctx, entityID, role, userID)
 	}
 	return nil, nil
 }
@@ -252,8 +256,52 @@ func (m *mockEntityRepo) CopyEntityTags(ctx context.Context, sourceEntityID, tar
 
 // --- Test Helpers ---
 
+// mockPermissionRepo implements EntityPermissionRepository for testing.
+type mockPermissionRepo struct {
+	listByEntityFn         func(ctx context.Context, entityID string) ([]EntityPermission, error)
+	setPermissionsFn       func(ctx context.Context, entityID string, grants []PermissionGrant) error
+	deleteByEntityFn       func(ctx context.Context, entityID string) error
+	getEffectivePermFn     func(ctx context.Context, entityID string, role int, userID string) (*EffectivePermission, error)
+	updateVisibilityFn     func(ctx context.Context, entityID string, visibility VisibilityMode) error
+}
+
+func (m *mockPermissionRepo) ListByEntity(ctx context.Context, entityID string) ([]EntityPermission, error) {
+	if m.listByEntityFn != nil {
+		return m.listByEntityFn(ctx, entityID)
+	}
+	return nil, nil
+}
+
+func (m *mockPermissionRepo) SetPermissions(ctx context.Context, entityID string, grants []PermissionGrant) error {
+	if m.setPermissionsFn != nil {
+		return m.setPermissionsFn(ctx, entityID, grants)
+	}
+	return nil
+}
+
+func (m *mockPermissionRepo) DeleteByEntity(ctx context.Context, entityID string) error {
+	if m.deleteByEntityFn != nil {
+		return m.deleteByEntityFn(ctx, entityID)
+	}
+	return nil
+}
+
+func (m *mockPermissionRepo) GetEffectivePermission(ctx context.Context, entityID string, role int, userID string) (*EffectivePermission, error) {
+	if m.getEffectivePermFn != nil {
+		return m.getEffectivePermFn(ctx, entityID, role, userID)
+	}
+	return &EffectivePermission{CanView: true, CanEdit: true}, nil
+}
+
+func (m *mockPermissionRepo) UpdateVisibility(ctx context.Context, entityID string, visibility VisibilityMode) error {
+	if m.updateVisibilityFn != nil {
+		return m.updateVisibilityFn(ctx, entityID, visibility)
+	}
+	return nil
+}
+
 func newTestService(entityRepo *mockEntityRepo, typeRepo *mockEntityTypeRepo) EntityService {
-	return NewEntityService(entityRepo, typeRepo)
+	return NewEntityService(entityRepo, typeRepo, &mockPermissionRepo{})
 }
 
 // assertAppError checks that an error is an AppError with the expected code.
@@ -657,7 +705,7 @@ func TestDelete_RepoError(t *testing.T) {
 func TestList_DefaultPagination(t *testing.T) {
 	called := false
 	entityRepo := &mockEntityRepo{
-		listByCampaignFn: func(_ context.Context, _ string, _ int, _ int, opts ListOptions) ([]Entity, int, error) {
+		listByCampaignFn: func(_ context.Context, _ string, _ int, _ int, _ string, opts ListOptions) ([]Entity, int, error) {
 			called = true
 			if opts.PerPage != 24 {
 				t.Errorf("expected default per_page 24, got %d", opts.PerPage)
@@ -670,7 +718,7 @@ func TestList_DefaultPagination(t *testing.T) {
 	}
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
-	_, _, err := svc.List(context.Background(), "camp-1", 0, 1, ListOptions{})
+	_, _, err := svc.List(context.Background(), "camp-1", 0, 1, "", ListOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -681,7 +729,7 @@ func TestList_DefaultPagination(t *testing.T) {
 
 func TestList_ClampsPerPage(t *testing.T) {
 	entityRepo := &mockEntityRepo{
-		listByCampaignFn: func(_ context.Context, _ string, _ int, _ int, opts ListOptions) ([]Entity, int, error) {
+		listByCampaignFn: func(_ context.Context, _ string, _ int, _ int, _ string, opts ListOptions) ([]Entity, int, error) {
 			if opts.PerPage != 24 {
 				t.Errorf("expected clamped per_page 24, got %d", opts.PerPage)
 			}
@@ -690,26 +738,26 @@ func TestList_ClampsPerPage(t *testing.T) {
 	}
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
-	_, _, _ = svc.List(context.Background(), "camp-1", 0, 1, ListOptions{PerPage: 500})
+	_, _, _ = svc.List(context.Background(), "camp-1", 0, 1, "", ListOptions{PerPage: 500})
 }
 
 // --- Search Tests ---
 
 func TestSearch_MinQueryLength(t *testing.T) {
 	svc := newTestService(&mockEntityRepo{}, &mockEntityTypeRepo{})
-	_, _, err := svc.Search(context.Background(), "camp-1", "a", 0, 1, DefaultListOptions())
+	_, _, err := svc.Search(context.Background(), "camp-1", "a", 0, 1, "", DefaultListOptions())
 	assertAppError(t, err, 400)
 }
 
 func TestSearch_TrimsQuery(t *testing.T) {
 	svc := newTestService(&mockEntityRepo{}, &mockEntityTypeRepo{})
-	_, _, err := svc.Search(context.Background(), "camp-1", "  a  ", 0, 1, DefaultListOptions())
+	_, _, err := svc.Search(context.Background(), "camp-1", "  a  ", 0, 1, "", DefaultListOptions())
 	assertAppError(t, err, 400) // "a" is only 1 char after trim
 }
 
 func TestSearch_ValidQuery(t *testing.T) {
 	entityRepo := &mockEntityRepo{
-		searchFn: func(_ context.Context, _ string, query string, _ int, _ int, _ ListOptions) ([]Entity, int, error) {
+		searchFn: func(_ context.Context, _ string, query string, _ int, _ int, _ string, _ ListOptions) ([]Entity, int, error) {
 			if query != "gandalf" {
 				t.Errorf("expected trimmed query 'gandalf', got %q", query)
 			}
@@ -718,7 +766,7 @@ func TestSearch_ValidQuery(t *testing.T) {
 	}
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
-	results, total, err := svc.Search(context.Background(), "camp-1", "  gandalf  ", 0, 1, DefaultListOptions())
+	results, total, err := svc.Search(context.Background(), "camp-1", "  gandalf  ", 0, 1, "", DefaultListOptions())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -992,7 +1040,7 @@ func TestUpdate_CircularParent(t *testing.T) {
 
 func TestGetChildren_DelegatesToRepo(t *testing.T) {
 	entityRepo := &mockEntityRepo{
-		findChildrenFn: func(ctx context.Context, parentID string, role int) ([]Entity, error) {
+		findChildrenFn: func(ctx context.Context, parentID string, role int, userID string) ([]Entity, error) {
 			return []Entity{
 				{ID: "child-1", Name: "Child 1"},
 				{ID: "child-2", Name: "Child 2"},
@@ -1001,7 +1049,7 @@ func TestGetChildren_DelegatesToRepo(t *testing.T) {
 	}
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
-	children, err := svc.GetChildren(context.Background(), "parent-1", 3)
+	children, err := svc.GetChildren(context.Background(), "parent-1", 3, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1032,7 +1080,7 @@ func TestGetAncestors_DelegatesToRepo(t *testing.T) {
 
 func TestGetBacklinks_DelegatesToRepo(t *testing.T) {
 	entityRepo := &mockEntityRepo{
-		findBacklinksFn: func(ctx context.Context, entityID string, role int) ([]Entity, error) {
+		findBacklinksFn: func(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
 			return []Entity{
 				{ID: "ref-1", Name: "Referrer One"},
 				{ID: "ref-2", Name: "Referrer Two"},
@@ -1042,13 +1090,293 @@ func TestGetBacklinks_DelegatesToRepo(t *testing.T) {
 	}
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
-	backlinks, err := svc.GetBacklinks(context.Background(), "target-entity", 2)
+	backlinks, err := svc.GetBacklinks(context.Background(), "target-entity", 2, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(backlinks) != 3 {
 		t.Errorf("expected 3 backlinks, got %d", len(backlinks))
 	}
+}
+
+// --- Permission Model Validation Tests ---
+
+func TestValidSubjectType(t *testing.T) {
+	tests := []struct {
+		input SubjectType
+		valid bool
+	}{
+		{SubjectRole, true},
+		{SubjectUser, true},
+		{"group", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := ValidSubjectType(tt.input); got != tt.valid {
+			t.Errorf("ValidSubjectType(%q) = %v, want %v", tt.input, got, tt.valid)
+		}
+	}
+}
+
+func TestValidPermission(t *testing.T) {
+	tests := []struct {
+		input Permission
+		valid bool
+	}{
+		{PermView, true},
+		{PermEdit, true},
+		{"delete", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := ValidPermission(tt.input); got != tt.valid {
+			t.Errorf("ValidPermission(%q) = %v, want %v", tt.input, got, tt.valid)
+		}
+	}
+}
+
+// --- CheckEntityAccess Tests ---
+
+func TestCheckEntityAccess_OwnerAlwaysFullAccess(t *testing.T) {
+	svc := newTestService(&mockEntityRepo{}, &mockEntityTypeRepo{})
+	perm, err := svc.CheckEntityAccess(context.Background(), "ent-1", 3, "user-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !perm.CanView || !perm.CanEdit {
+		t.Errorf("owner should have full access, got view=%v edit=%v", perm.CanView, perm.CanEdit)
+	}
+}
+
+func TestCheckEntityAccess_DefaultVisibility_PublicEntity(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+			return &Entity{
+				ID:         "ent-1",
+				IsPrivate:  false,
+				Visibility: VisibilityDefault,
+			}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+
+	// Player (role 1) can view but not edit public entities.
+	perm, err := svc.CheckEntityAccess(context.Background(), "ent-1", 1, "player-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !perm.CanView {
+		t.Error("player should be able to view public entity")
+	}
+	if perm.CanEdit {
+		t.Error("player should NOT be able to edit public entity")
+	}
+
+	// Scribe (role 2) can view and edit.
+	perm, err = svc.CheckEntityAccess(context.Background(), "ent-1", 2, "scribe-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !perm.CanView || !perm.CanEdit {
+		t.Errorf("scribe should have full access to public entity, got view=%v edit=%v", perm.CanView, perm.CanEdit)
+	}
+}
+
+func TestCheckEntityAccess_DefaultVisibility_PrivateEntity(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+			return &Entity{
+				ID:         "ent-1",
+				IsPrivate:  true,
+				Visibility: VisibilityDefault,
+			}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+
+	// Player (role 1) cannot see private entities.
+	perm, err := svc.CheckEntityAccess(context.Background(), "ent-1", 1, "player-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if perm.CanView || perm.CanEdit {
+		t.Error("player should NOT have access to private entity")
+	}
+
+	// Scribe (role 2) can see private entities.
+	perm, err = svc.CheckEntityAccess(context.Background(), "ent-1", 2, "scribe-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !perm.CanView || !perm.CanEdit {
+		t.Errorf("scribe should have full access to private entity, got view=%v edit=%v", perm.CanView, perm.CanEdit)
+	}
+}
+
+func TestCheckEntityAccess_CustomVisibility_DelegatesToRepo(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+			return &Entity{
+				ID:         "ent-1",
+				Visibility: VisibilityCustom,
+			}, nil
+		},
+	}
+	permRepo := &mockPermissionRepo{
+		getEffectivePermFn: func(_ context.Context, entityID string, role int, userID string) (*EffectivePermission, error) {
+			if entityID != "ent-1" {
+				t.Errorf("expected entity_id 'ent-1', got %q", entityID)
+			}
+			if userID != "user-42" {
+				t.Errorf("expected user_id 'user-42', got %q", userID)
+			}
+			return &EffectivePermission{CanView: true, CanEdit: false}, nil
+		},
+	}
+
+	svc := NewEntityService(entityRepo, &mockEntityTypeRepo{}, permRepo)
+	perm, err := svc.CheckEntityAccess(context.Background(), "ent-1", 1, "user-42")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !perm.CanView {
+		t.Error("expected CanView=true from permission repo")
+	}
+	if perm.CanEdit {
+		t.Error("expected CanEdit=false from permission repo")
+	}
+}
+
+// --- SetEntityPermissions Tests ---
+
+func TestSetEntityPermissions_DefaultMode_ClearsCustom(t *testing.T) {
+	deleteCalled := false
+	visibilityCalled := false
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+			return &Entity{ID: "ent-1", CampaignID: "camp-1", Name: "Test"}, nil
+		},
+	}
+	permRepo := &mockPermissionRepo{
+		deleteByEntityFn: func(_ context.Context, entityID string) error {
+			deleteCalled = true
+			return nil
+		},
+		updateVisibilityFn: func(_ context.Context, entityID string, vis VisibilityMode) error {
+			visibilityCalled = true
+			if vis != VisibilityDefault {
+				t.Errorf("expected visibility 'default', got %q", vis)
+			}
+			return nil
+		},
+	}
+
+	svc := NewEntityService(entityRepo, &mockEntityTypeRepo{}, permRepo)
+	err := svc.SetEntityPermissions(context.Background(), "ent-1", SetPermissionsInput{
+		Visibility: VisibilityDefault,
+		IsPrivate:  true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleteCalled {
+		t.Error("expected DeleteByEntity to be called")
+	}
+	if !visibilityCalled {
+		t.Error("expected UpdateVisibility to be called")
+	}
+}
+
+func TestSetEntityPermissions_CustomMode_ValidatesGrants(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+			return &Entity{ID: "ent-1", CampaignID: "camp-1", Name: "Test"}, nil
+		},
+	}
+
+	svc := NewEntityService(entityRepo, &mockEntityTypeRepo{}, &mockPermissionRepo{})
+
+	// Invalid subject type.
+	err := svc.SetEntityPermissions(context.Background(), "ent-1", SetPermissionsInput{
+		Visibility: VisibilityCustom,
+		Permissions: []PermissionGrant{
+			{SubjectType: "invalid", SubjectID: "1", Permission: PermView},
+		},
+	})
+	assertAppError(t, err, 400)
+
+	// Empty subject ID.
+	err = svc.SetEntityPermissions(context.Background(), "ent-1", SetPermissionsInput{
+		Visibility: VisibilityCustom,
+		Permissions: []PermissionGrant{
+			{SubjectType: SubjectRole, SubjectID: "", Permission: PermView},
+		},
+	})
+	assertAppError(t, err, 400)
+
+	// Invalid permission.
+	err = svc.SetEntityPermissions(context.Background(), "ent-1", SetPermissionsInput{
+		Visibility: VisibilityCustom,
+		Permissions: []PermissionGrant{
+			{SubjectType: SubjectUser, SubjectID: "user-1", Permission: "delete"},
+		},
+	})
+	assertAppError(t, err, 400)
+}
+
+func TestSetEntityPermissions_CustomMode_Success(t *testing.T) {
+	setCalled := false
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+			return &Entity{ID: "ent-1", CampaignID: "camp-1", Name: "Test"}, nil
+		},
+	}
+	permRepo := &mockPermissionRepo{
+		setPermissionsFn: func(_ context.Context, entityID string, grants []PermissionGrant) error {
+			setCalled = true
+			if len(grants) != 2 {
+				t.Errorf("expected 2 grants, got %d", len(grants))
+			}
+			return nil
+		},
+		updateVisibilityFn: func(_ context.Context, _ string, vis VisibilityMode) error {
+			if vis != VisibilityCustom {
+				t.Errorf("expected visibility 'custom', got %q", vis)
+			}
+			return nil
+		},
+	}
+
+	svc := NewEntityService(entityRepo, &mockEntityTypeRepo{}, permRepo)
+	err := svc.SetEntityPermissions(context.Background(), "ent-1", SetPermissionsInput{
+		Visibility: VisibilityCustom,
+		Permissions: []PermissionGrant{
+			{SubjectType: SubjectRole, SubjectID: "1", Permission: PermView},
+			{SubjectType: SubjectUser, SubjectID: "user-42", Permission: PermEdit},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !setCalled {
+		t.Error("expected SetPermissions to be called")
+	}
+}
+
+func TestSetEntityPermissions_InvalidVisibility(t *testing.T) {
+	entityRepo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+			return &Entity{ID: "ent-1", CampaignID: "camp-1"}, nil
+		},
+	}
+
+	svc := NewEntityService(entityRepo, &mockEntityTypeRepo{}, &mockPermissionRepo{})
+	err := svc.SetEntityPermissions(context.Background(), "ent-1", SetPermissionsInput{
+		Visibility: "invalid",
+	})
+	assertAppError(t, err, 400)
 }
 
 // strPtr returns a pointer to the given string.

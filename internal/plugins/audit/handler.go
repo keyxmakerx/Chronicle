@@ -1,11 +1,13 @@
 package audit
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -27,7 +29,7 @@ func NewHandler(service AuditService) *Handler {
 func (h *Handler) Activity(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "missing campaign context")
+		return apperror.NewInternal(fmt.Errorf("missing campaign context"))
 	}
 
 	page, _ := strconv.Atoi(c.QueryParam("page"))
@@ -59,7 +61,7 @@ func (h *Handler) Activity(c echo.Context) error {
 func (h *Handler) EntityHistory(c echo.Context) error {
 	entityID := c.Param("eid")
 	if entityID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "entity ID is required")
+		return apperror.NewBadRequest("entity ID is required")
 	}
 
 	entries, err := h.service.GetEntityHistory(c.Request().Context(), entityID)

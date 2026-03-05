@@ -5,6 +5,7 @@ package syncapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -54,10 +55,10 @@ func (h *MapAPIHandler) requireMapInCampaign(c echo.Context) (*maps.Map, error) 
 
 	m, err := h.mapSvc.GetMap(ctx, mapID)
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusNotFound, "map not found")
+		return nil, apperror.NewNotFound("map not found")
 	}
 	if m.CampaignID != campaignID {
-		return nil, echo.NewHTTPError(http.StatusForbidden, "map does not belong to this campaign")
+		return nil, apperror.NewForbidden("map does not belong to this campaign")
 	}
 	return m, nil
 }
@@ -73,7 +74,7 @@ func (h *MapAPIHandler) ListMaps(c echo.Context) error {
 	result, err := h.mapSvc.ListMaps(ctx, campaignID)
 	if err != nil {
 		slog.Error("api: list maps failed", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list maps")
+		return apperror.NewInternal(fmt.Errorf("failed to list maps"))
 	}
 	return c.JSON(http.StatusOK, result)
 }
@@ -93,7 +94,7 @@ func (h *MapAPIHandler) GetMap(c echo.Context) error {
 	markers, err := h.mapSvc.ListMarkers(ctx, m.ID, role)
 	if err != nil {
 		slog.Error("api: list markers failed", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load markers")
+		return apperror.NewInternal(fmt.Errorf("failed to load markers"))
 	}
 	m.Markers = markers
 
@@ -128,7 +129,7 @@ func (h *MapAPIHandler) ListDrawings(c echo.Context) error {
 	role := h.resolveRole(c)
 	drawings, err := h.drawingSvc.ListDrawings(c.Request().Context(), m.ID, role)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list drawings")
+		return apperror.NewInternal(fmt.Errorf("failed to list drawings"))
 	}
 	return c.JSON(http.StatusOK, drawings)
 }
@@ -142,12 +143,12 @@ func (h *MapAPIHandler) CreateDrawing(c echo.Context) error {
 	}
 	key := GetAPIKey(c)
 	if key == nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "api key required")
+		return apperror.NewUnauthorized("api key required")
 	}
 
 	var req apiCreateDrawingRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	drawing, err := h.drawingSvc.CreateDrawing(c.Request().Context(), maps.CreateDrawingInput{
@@ -167,7 +168,7 @@ func (h *MapAPIHandler) CreateDrawing(c echo.Context) error {
 		FoundryID:   req.FoundryID,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.JSON(http.StatusCreated, drawing)
 }
@@ -195,7 +196,7 @@ func (h *MapAPIHandler) UpdateDrawing(c echo.Context) error {
 
 	var req apiUpdateDrawingRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, maps.UpdateDrawingInput{
@@ -210,7 +211,7 @@ func (h *MapAPIHandler) UpdateDrawing(c echo.Context) error {
 		Visibility:  req.Visibility,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -222,7 +223,7 @@ func (h *MapAPIHandler) DeleteDrawing(c echo.Context) error {
 		return err
 	}
 	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("drawingID")); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -270,7 +271,7 @@ func (h *MapAPIHandler) ListTokens(c echo.Context) error {
 	role := h.resolveRole(c)
 	tokens, err := h.drawingSvc.ListTokens(c.Request().Context(), m.ID, role)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list tokens")
+		return apperror.NewInternal(fmt.Errorf("failed to list tokens"))
 	}
 	return c.JSON(http.StatusOK, tokens)
 }
@@ -284,12 +285,12 @@ func (h *MapAPIHandler) CreateToken(c echo.Context) error {
 	}
 	key := GetAPIKey(c)
 	if key == nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "api key required")
+		return apperror.NewUnauthorized("api key required")
 	}
 
 	var req apiCreateTokenRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	token, err := h.drawingSvc.CreateToken(c.Request().Context(), maps.CreateTokenInput{
@@ -324,7 +325,7 @@ func (h *MapAPIHandler) CreateToken(c echo.Context) error {
 		FoundryID:      req.FoundryID,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.JSON(http.StatusCreated, token)
 }
@@ -367,7 +368,7 @@ func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
 
 	var req apiUpdateTokenRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	err := h.drawingSvc.UpdateToken(c.Request().Context(), tokenID, maps.UpdateTokenInput{
@@ -397,7 +398,7 @@ func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
 		Flags:          req.Flags,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -418,7 +419,7 @@ func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
 
 	var req apiUpdateTokenPositionRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, maps.UpdateTokenPositionInput{
@@ -426,7 +427,7 @@ func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
 		Y: req.Y,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -438,7 +439,7 @@ func (h *MapAPIHandler) DeleteToken(c echo.Context) error {
 		return err
 	}
 	if err := h.drawingSvc.DeleteToken(c.Request().Context(), c.Param("tokenID")); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -464,7 +465,7 @@ func (h *MapAPIHandler) ListLayers(c echo.Context) error {
 	}
 	layers, err := h.drawingSvc.ListLayers(c.Request().Context(), m.ID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list layers")
+		return apperror.NewInternal(fmt.Errorf("failed to list layers"))
 	}
 	return c.JSON(http.StatusOK, layers)
 }
@@ -479,7 +480,7 @@ func (h *MapAPIHandler) CreateLayer(c echo.Context) error {
 
 	var req apiCreateLayerRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	layer, err := h.drawingSvc.CreateLayer(c.Request().Context(), maps.CreateLayerInput{
@@ -492,7 +493,7 @@ func (h *MapAPIHandler) CreateLayer(c echo.Context) error {
 		IsLocked:  req.IsLocked,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.JSON(http.StatusCreated, layer)
 }
@@ -516,7 +517,7 @@ func (h *MapAPIHandler) UpdateLayer(c echo.Context) error {
 
 	var req apiUpdateLayerRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	err := h.drawingSvc.UpdateLayer(c.Request().Context(), layerID, maps.UpdateLayerInput{
@@ -527,7 +528,7 @@ func (h *MapAPIHandler) UpdateLayer(c echo.Context) error {
 		IsLocked:  req.IsLocked,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -539,7 +540,7 @@ func (h *MapAPIHandler) DeleteLayer(c echo.Context) error {
 		return err
 	}
 	if err := h.drawingSvc.DeleteLayer(c.Request().Context(), c.Param("layerID")); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -561,7 +562,7 @@ func (h *MapAPIHandler) ListFog(c echo.Context) error {
 	}
 	fog, err := h.drawingSvc.ListFog(c.Request().Context(), m.ID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list fog")
+		return apperror.NewInternal(fmt.Errorf("failed to list fog"))
 	}
 	return c.JSON(http.StatusOK, fog)
 }
@@ -576,7 +577,7 @@ func (h *MapAPIHandler) CreateFog(c echo.Context) error {
 
 	var req apiCreateFogRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	fog, err := h.drawingSvc.CreateFog(c.Request().Context(), maps.CreateFogInput{
@@ -585,7 +586,7 @@ func (h *MapAPIHandler) CreateFog(c echo.Context) error {
 		IsExplored: req.IsExplored,
 	})
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.JSON(http.StatusCreated, fog)
 }
@@ -597,7 +598,7 @@ func (h *MapAPIHandler) DeleteFog(c echo.Context) error {
 		return err
 	}
 	if err := h.drawingSvc.DeleteFog(c.Request().Context(), c.Param("fogID")); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -610,7 +611,7 @@ func (h *MapAPIHandler) ResetFog(c echo.Context) error {
 		return err
 	}
 	if err := h.drawingSvc.ResetFog(c.Request().Context(), m.ID); err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }

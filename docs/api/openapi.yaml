@@ -1,0 +1,3161 @@
+openapi: 3.0.3
+info:
+  title: Chronicle API
+  version: 1.0.0
+  description: REST API for Chronicle, a self-hosted TTRPG worldbuilding platform. Provides programmatic access to campaign data for external tool integration (Foundry VTT, custom scripts).
+
+servers:
+  - url: "{baseUrl}/api/v1"
+    variables:
+      baseUrl:
+        default: http://localhost:8080
+        description: Chronicle server base URL
+
+security:
+  - BearerApiKey: []
+
+tags:
+  - name: Campaigns
+    description: Campaign details
+  - name: Entities
+    description: Worldbuilding entities (characters, locations, items, etc.)
+  - name: Calendar
+    description: Fantasy calendar, events, and date management
+  - name: Media
+    description: Campaign media file management
+  - name: Maps
+    description: Interactive maps, drawings, tokens, layers, and fog of war
+  - name: Sync
+    description: Bidirectional sync and external system mapping
+
+paths:
+  # --- Campaigns ---
+  /campaigns/{campaignId}:
+    get:
+      tags: [Campaigns]
+      summary: Get campaign details
+      operationId: getCampaign
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: Campaign details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --- Entity Types ---
+  /campaigns/{campaignId}/entity-types:
+    get:
+      tags: [Entities]
+      summary: List entity types
+      operationId: listEntityTypes
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: All entity types for the campaign
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EntityType"
+                  total:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /campaigns/{campaignId}/entity-types/{typeId}:
+    get:
+      tags: [Entities]
+      summary: Get entity type
+      operationId: getEntityType
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/typeId"
+      responses:
+        "200":
+          description: Entity type details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityType"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  # --- Entities ---
+  /campaigns/{campaignId}/entities:
+    get:
+      tags: [Entities]
+      summary: List entities
+      operationId: listEntities
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: type_id
+          in: query
+          schema:
+            type: integer
+        - name: q
+          in: query
+          description: Search query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated entity list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedEntities"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Entities]
+      summary: Create entity
+      operationId: createEntity
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEntityRequest"
+      responses:
+        "201":
+          description: Created entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entity"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/entities/{entityId}:
+    get:
+      tags: [Entities]
+      summary: Get entity
+      operationId: getEntity
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+      responses:
+        "200":
+          description: Entity details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entity"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    put:
+      tags: [Entities]
+      summary: Update entity
+      operationId: updateEntity
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEntityRequest"
+      responses:
+        "200":
+          description: Updated entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entity"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [Entities]
+      summary: Delete entity
+      operationId: deleteEntity
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+      responses:
+        "204":
+          description: Entity deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /campaigns/{campaignId}/entities/{entityId}/fields:
+    put:
+      tags: [Entities]
+      summary: Update entity fields
+      operationId: updateEntityFields
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fields_data:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Fields updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOk"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/entities/{entityId}/relations:
+    get:
+      tags: [Entities]
+      summary: List entity relations
+      operationId: listEntityRelations
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+      responses:
+        "200":
+          description: List of relations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Relation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --- Calendar ---
+  /campaigns/{campaignId}/calendar:
+    get:
+      tags: [Calendar]
+      summary: Get calendar
+      operationId: getCalendar
+      description: Requires calendar addon to be enabled.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: Full calendar structure with months, weekdays, moons, seasons, eras
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /campaigns/{campaignId}/calendar/date:
+    get:
+      tags: [Calendar]
+      summary: Get current calendar date
+      operationId: getCurrentDate
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: Current in-game date/time
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarDate"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    put:
+      tags: [Calendar]
+      summary: Set current date
+      operationId: setCurrentDate
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetDateRequest"
+      responses:
+        "200":
+          description: Date set successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/StatusOk"
+                  - $ref: "#/components/schemas/CalendarDate"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/events:
+    get:
+      tags: [Calendar]
+      summary: List events
+      operationId: listEvents
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: entity_id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Events list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+                  total:
+                    type: integer
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Calendar]
+      summary: Create event
+      operationId: createEvent
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEventRequest"
+      responses:
+        "201":
+          description: Created event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/events/{eventId}:
+    get:
+      tags: [Calendar]
+      summary: Get event
+      operationId: getEvent
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200":
+          description: Event details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    put:
+      tags: [Calendar]
+      summary: Update event
+      operationId: updateEvent
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/eventId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEventRequest"
+      responses:
+        "200":
+          description: Event updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOk"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [Calendar]
+      summary: Delete event
+      operationId: deleteEvent
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "204":
+          description: Event deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/settings:
+    put:
+      tags: [Calendar]
+      summary: Update calendar settings
+      operationId: updateCalendarSettings
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCalendarSettingsRequest"
+      responses:
+        "200":
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOk"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/months:
+    put:
+      tags: [Calendar]
+      summary: Update months
+      operationId: updateMonths
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/MonthInput"
+      responses:
+        "200":
+          description: Months updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOk"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/weekdays:
+    put:
+      tags: [Calendar]
+      summary: Update weekdays
+      operationId: updateWeekdays
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/WeekdayInput"
+      responses:
+        "200":
+          description: Weekdays updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOk"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/moons:
+    put:
+      tags: [Calendar]
+      summary: Update moons
+      operationId: updateMoons
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/MoonInput"
+      responses:
+        "200":
+          description: Moons updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOk"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/eras:
+    put:
+      tags: [Calendar]
+      summary: Update eras
+      operationId: updateEras
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/EraInput"
+      responses:
+        "200":
+          description: Eras updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOk"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/advance:
+    post:
+      tags: [Calendar]
+      summary: Advance date by days
+      operationId: advanceDate
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [days]
+              properties:
+                days:
+                  type: integer
+                  minimum: 1
+                  maximum: 3650
+      responses:
+        "200":
+          description: Date advanced
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/StatusOk"
+                  - $ref: "#/components/schemas/CalendarDate"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/advance-time:
+    post:
+      tags: [Calendar]
+      summary: Advance time by hours/minutes
+      operationId: advanceTime
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hours:
+                  type: integer
+                  minimum: 0
+                minutes:
+                  type: integer
+                  minimum: 0
+      responses:
+        "200":
+          description: Time advanced
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/StatusOk"
+                  - $ref: "#/components/schemas/CalendarDate"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/export:
+    get:
+      tags: [Calendar]
+      summary: Export calendar JSON
+      operationId: exportCalendar
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: events
+          in: query
+          description: Include events in export
+          schema:
+            type: string
+            enum: ["true", "false"]
+      responses:
+        "200":
+          description: Calendar export data
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/calendar/import:
+    post:
+      tags: [Calendar]
+      summary: Import calendar
+      operationId: importCalendar
+      description: Accepts Chronicle or Foundry SimpleCalendar JSON format (auto-detected).
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Import result summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  format:
+                    type: string
+                  name:
+                    type: string
+                  months:
+                    type: integer
+                  weekdays:
+                    type: integer
+                  moons:
+                    type: integer
+                  seasons:
+                    type: integer
+                  eras:
+                    type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  # --- Media ---
+  /campaigns/{campaignId}/media:
+    get:
+      tags: [Media]
+      summary: List media files
+      operationId: listMedia
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated media list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MediaFile"
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  per_page:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Media]
+      summary: Upload media file
+      operationId: uploadMedia
+      description: Max file size 10 MB.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                usage_type:
+                  type: string
+                  enum: [attachment, entity_image, avatar, backdrop]
+                  default: attachment
+      responses:
+        "201":
+          description: Uploaded media file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaFile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/media/stats:
+    get:
+      tags: [Media]
+      summary: Get media storage stats
+      operationId: getMediaStats
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: Storage statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_files:
+                    type: integer
+                  total_bytes:
+                    type: integer
+                    format: int64
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /campaigns/{campaignId}/media/{mediaId}:
+    get:
+      tags: [Media]
+      summary: Get media file details
+      operationId: getMedia
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mediaId"
+      responses:
+        "200":
+          description: Media file metadata with signed URLs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaFile"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [Media]
+      summary: Delete media file
+      operationId: deleteMedia
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mediaId"
+      responses:
+        "204":
+          description: Media deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --- Maps ---
+  /campaigns/{campaignId}/maps:
+    get:
+      tags: [Maps]
+      summary: List maps
+      operationId: listMaps
+      description: Requires maps addon to be enabled.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: List of maps
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Map"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /campaigns/{campaignId}/maps/{mapId}:
+    get:
+      tags: [Maps]
+      summary: Get map details
+      operationId: getMap
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+      responses:
+        "200":
+          description: Map with markers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Map"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/maps/{mapId}/drawings:
+    get:
+      tags: [Maps]
+      summary: List drawings
+      operationId: listDrawings
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+      responses:
+        "200":
+          description: List of drawings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Drawing"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Maps]
+      summary: Create drawing
+      operationId: createDrawing
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDrawingRequest"
+      responses:
+        "201":
+          description: Created drawing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Drawing"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/maps/{mapId}/drawings/{drawingId}:
+    put:
+      tags: [Maps]
+      summary: Update drawing
+      operationId: updateDrawing
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+        - $ref: "#/components/parameters/drawingId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDrawingRequest"
+      responses:
+        "204":
+          description: Drawing updated
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [Maps]
+      summary: Delete drawing
+      operationId: deleteDrawing
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+        - $ref: "#/components/parameters/drawingId"
+      responses:
+        "204":
+          description: Drawing deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/maps/{mapId}/tokens:
+    get:
+      tags: [Maps]
+      summary: List tokens
+      operationId: listTokens
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+      responses:
+        "200":
+          description: List of tokens
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Token"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Maps]
+      summary: Create token
+      operationId: createToken
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTokenRequest"
+      responses:
+        "201":
+          description: Created token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Token"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/maps/{mapId}/tokens/{tokenId}:
+    put:
+      tags: [Maps]
+      summary: Update token
+      operationId: updateToken
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+        - $ref: "#/components/parameters/tokenId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTokenRequest"
+      responses:
+        "204":
+          description: Token updated
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [Maps]
+      summary: Delete token
+      operationId: deleteToken
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+        - $ref: "#/components/parameters/tokenId"
+      responses:
+        "204":
+          description: Token deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/maps/{mapId}/tokens/{tokenId}/position:
+    patch:
+      tags: [Maps]
+      summary: Update token position
+      operationId: updateTokenPosition
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+        - $ref: "#/components/parameters/tokenId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [x, y]
+              properties:
+                x:
+                  type: number
+                  format: double
+                y:
+                  type: number
+                  format: double
+      responses:
+        "204":
+          description: Position updated
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/maps/{mapId}/layers:
+    get:
+      tags: [Maps]
+      summary: List layers
+      operationId: listLayers
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+      responses:
+        "200":
+          description: List of layers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Layer"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Maps]
+      summary: Create layer
+      operationId: createLayer
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLayerRequest"
+      responses:
+        "201":
+          description: Created layer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Layer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/maps/{mapId}/layers/{layerId}:
+    put:
+      tags: [Maps]
+      summary: Update layer
+      operationId: updateLayer
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+        - $ref: "#/components/parameters/layerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLayerRequest"
+      responses:
+        "204":
+          description: Layer updated
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [Maps]
+      summary: Delete layer
+      operationId: deleteLayer
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+        - $ref: "#/components/parameters/layerId"
+      responses:
+        "204":
+          description: Layer deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/maps/{mapId}/fog:
+    get:
+      tags: [Maps]
+      summary: List fog regions
+      operationId: listFog
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+      responses:
+        "200":
+          description: List of fog regions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FogRegion"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Maps]
+      summary: Create fog region
+      operationId: createFog
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFogRequest"
+      responses:
+        "201":
+          description: Created fog region
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FogRegion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [Maps]
+      summary: Reset all fog
+      operationId: resetFog
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+      responses:
+        "204":
+          description: All fog cleared
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/maps/{mapId}/fog/{fogId}:
+    delete:
+      tags: [Maps]
+      summary: Delete fog region
+      operationId: deleteFog
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+        - $ref: "#/components/parameters/fogId"
+      responses:
+        "204":
+          description: Fog region deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  # --- Sync ---
+  /campaigns/{campaignId}/sync:
+    post:
+      tags: [Sync]
+      summary: Batch sync (push/pull changes)
+      operationId: sync
+      description: >
+        Bidirectional sync endpoint. Provide "since" to pull entities modified
+        after that timestamp. Provide "changes" array to push create/update/delete
+        operations. Max 2000 changes per request.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncRequest"
+      responses:
+        "200":
+          description: Sync results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/sync/mappings:
+    get:
+      tags: [Sync]
+      summary: List sync mappings
+      operationId: listSyncMappings
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 1000
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated sync mappings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SyncMapping"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Sync]
+      summary: Create sync mapping
+      operationId: createSyncMapping
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSyncMappingRequest"
+      responses:
+        "201":
+          description: Created mapping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncMapping"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/sync/mappings/{mappingId}:
+    get:
+      tags: [Sync]
+      summary: Get sync mapping
+      operationId: getSyncMapping
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mappingId"
+      responses:
+        "200":
+          description: Sync mapping details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncMapping"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [Sync]
+      summary: Delete sync mapping
+      operationId: deleteSyncMapping
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mappingId"
+      responses:
+        "204":
+          description: Mapping deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /campaigns/{campaignId}/sync/lookup:
+    get:
+      tags: [Sync]
+      summary: Lookup sync mapping by identity
+      operationId: lookupSyncMapping
+      description: >
+        Look up by Chronicle identity (chronicle_type + chronicle_id) or by
+        external identity (external_system + external_id).
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: chronicle_type
+          in: query
+          schema:
+            type: string
+        - name: chronicle_id
+          in: query
+          schema:
+            type: string
+        - name: external_system
+          in: query
+          schema:
+            type: string
+        - name: external_id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Found mapping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncMapping"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /campaigns/{campaignId}/sync/pull:
+    get:
+      tags: [Sync]
+      summary: Pull changes since timestamp
+      operationId: pullSyncChanges
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: since
+          in: query
+          description: RFC3339 timestamp
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+      responses:
+        "200":
+          description: Modified mappings since timestamp
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncPullResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    BearerApiKey:
+      type: http
+      scheme: bearer
+      description: >
+        API key passed as Bearer token. Keys are scoped to a single campaign
+        with permission levels: read, write, sync. Rate limited per key.
+
+  parameters:
+    campaignId:
+      name: campaignId
+      in: path
+      required: true
+      schema:
+        type: string
+    entityId:
+      name: entityId
+      in: path
+      required: true
+      schema:
+        type: string
+    typeId:
+      name: typeId
+      in: path
+      required: true
+      schema:
+        type: integer
+    eventId:
+      name: eventId
+      in: path
+      required: true
+      schema:
+        type: string
+    mediaId:
+      name: mediaId
+      in: path
+      required: true
+      schema:
+        type: string
+    mapId:
+      name: mapId
+      in: path
+      required: true
+      schema:
+        type: string
+    drawingId:
+      name: drawingId
+      in: path
+      required: true
+      schema:
+        type: string
+    tokenId:
+      name: tokenId
+      in: path
+      required: true
+      schema:
+        type: string
+    layerId:
+      name: layerId
+      in: path
+      required: true
+      schema:
+        type: string
+    fogId:
+      name: fogId
+      in: path
+      required: true
+      schema:
+        type: string
+    mappingId:
+      name: mappingId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: integer
+        type:
+          type: string
+        message:
+          type: string
+
+    StatusOk:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+
+    # --- Campaigns ---
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        is_public:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # --- Entities ---
+    EntityType:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaign_id:
+          type: string
+        slug:
+          type: string
+        name:
+          type: string
+        name_plural:
+          type: string
+        icon:
+          type: string
+        color:
+          type: string
+        description:
+          type: string
+          nullable: true
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldDefinition"
+        layout:
+          type: object
+          description: Row-based page layout
+        sort_order:
+          type: integer
+        is_default:
+          type: boolean
+        enabled:
+          type: boolean
+
+    FieldDefinition:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum: [text, number, select, textarea, checkbox, url]
+        section:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+
+    Entity:
+      type: object
+      properties:
+        id:
+          type: string
+        campaign_id:
+          type: string
+        entity_type_id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        entry:
+          type: string
+          nullable: true
+          description: ProseMirror JSON document
+        entry_html:
+          type: string
+          nullable: true
+        image_path:
+          type: string
+          nullable: true
+        parent_id:
+          type: string
+          nullable: true
+        type_label:
+          type: string
+          nullable: true
+        is_private:
+          type: boolean
+        is_template:
+          type: boolean
+        fields_data:
+          type: object
+          additionalProperties: true
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        type_name:
+          type: string
+        type_icon:
+          type: string
+        type_color:
+          type: string
+        type_slug:
+          type: string
+        tags:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              color:
+                type: string
+
+    PaginatedEntities:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Entity"
+        total:
+          type: integer
+        page:
+          type: integer
+        per_page:
+          type: integer
+
+    CreateEntityRequest:
+      type: object
+      required: [name, entity_type_id]
+      properties:
+        name:
+          type: string
+        entity_type_id:
+          type: integer
+        type_label:
+          type: string
+        is_private:
+          type: boolean
+          default: false
+        fields_data:
+          type: object
+          additionalProperties: true
+
+    UpdateEntityRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        type_label:
+          type: string
+        is_private:
+          type: boolean
+        entry:
+          type: string
+          description: ProseMirror JSON document
+        fields_data:
+          type: object
+          additionalProperties: true
+
+    Relation:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: string
+        sourceEntityId:
+          type: string
+        targetEntityId:
+          type: string
+        relationType:
+          type: string
+        reverseRelationType:
+          type: string
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+        targetEntityName:
+          type: string
+        targetEntityIcon:
+          type: string
+        targetEntityColor:
+          type: string
+        targetEntitySlug:
+          type: string
+        targetEntityType:
+          type: string
+
+    # --- Calendar ---
+    Calendar:
+      type: object
+      properties:
+        id:
+          type: string
+        campaign_id:
+          type: string
+        mode:
+          type: string
+          enum: [fantasy, reallife]
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        epoch_name:
+          type: string
+          nullable: true
+        current_year:
+          type: integer
+        current_month:
+          type: integer
+        current_day:
+          type: integer
+        current_hour:
+          type: integer
+        current_minute:
+          type: integer
+        hours_per_day:
+          type: integer
+        minutes_per_hour:
+          type: integer
+        seconds_per_minute:
+          type: integer
+        leap_year_every:
+          type: integer
+        leap_year_offset:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        months:
+          type: array
+          items:
+            $ref: "#/components/schemas/Month"
+        weekdays:
+          type: array
+          items:
+            $ref: "#/components/schemas/Weekday"
+        moons:
+          type: array
+          items:
+            $ref: "#/components/schemas/Moon"
+        seasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/Season"
+        eras:
+          type: array
+          items:
+            $ref: "#/components/schemas/Era"
+        event_categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventCategory"
+
+    CalendarDate:
+      type: object
+      properties:
+        mode:
+          type: string
+        year:
+          type: integer
+        month:
+          type: integer
+        day:
+          type: integer
+        hour:
+          type: integer
+        minute:
+          type: integer
+
+    Month:
+      type: object
+      properties:
+        id:
+          type: integer
+        calendar_id:
+          type: string
+        name:
+          type: string
+        days:
+          type: integer
+        sort_order:
+          type: integer
+        is_intercalary:
+          type: boolean
+        leap_year_days:
+          type: integer
+
+    Weekday:
+      type: object
+      properties:
+        id:
+          type: integer
+        calendar_id:
+          type: string
+        name:
+          type: string
+        sort_order:
+          type: integer
+
+    Moon:
+      type: object
+      properties:
+        id:
+          type: integer
+        calendar_id:
+          type: string
+        name:
+          type: string
+        cycle_days:
+          type: number
+          format: double
+        phase_offset:
+          type: number
+          format: double
+        color:
+          type: string
+
+    Season:
+      type: object
+      properties:
+        id:
+          type: integer
+        calendar_id:
+          type: string
+        name:
+          type: string
+        start_month:
+          type: integer
+        start_day:
+          type: integer
+        end_month:
+          type: integer
+        end_day:
+          type: integer
+        description:
+          type: string
+          nullable: true
+        color:
+          type: string
+        weather_effect:
+          type: string
+          nullable: true
+
+    Era:
+      type: object
+      properties:
+        id:
+          type: integer
+        calendar_id:
+          type: string
+        name:
+          type: string
+        start_year:
+          type: integer
+        end_year:
+          type: integer
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        color:
+          type: string
+        sort_order:
+          type: integer
+
+    EventCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+        calendar_id:
+          type: string
+        slug:
+          type: string
+        name:
+          type: string
+        icon:
+          type: string
+        color:
+          type: string
+        sort_order:
+          type: integer
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+        calendar_id:
+          type: string
+        entity_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        description_html:
+          type: string
+          nullable: true
+        year:
+          type: integer
+        month:
+          type: integer
+        day:
+          type: integer
+        start_hour:
+          type: integer
+          nullable: true
+        start_minute:
+          type: integer
+          nullable: true
+        end_year:
+          type: integer
+          nullable: true
+        end_month:
+          type: integer
+          nullable: true
+        end_day:
+          type: integer
+          nullable: true
+        end_hour:
+          type: integer
+          nullable: true
+        end_minute:
+          type: integer
+          nullable: true
+        is_recurring:
+          type: boolean
+        recurrence_type:
+          type: string
+          nullable: true
+        visibility:
+          type: string
+        category:
+          type: string
+          nullable: true
+        created_by:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        entity_name:
+          type: string
+        entity_icon:
+          type: string
+        entity_color:
+          type: string
+
+    CreateEventRequest:
+      type: object
+      required: [name, year, month, day]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        description_html:
+          type: string
+          nullable: true
+        entity_id:
+          type: string
+          nullable: true
+        year:
+          type: integer
+        month:
+          type: integer
+        day:
+          type: integer
+        start_hour:
+          type: integer
+          nullable: true
+        start_minute:
+          type: integer
+          nullable: true
+        end_year:
+          type: integer
+          nullable: true
+        end_month:
+          type: integer
+          nullable: true
+        end_day:
+          type: integer
+          nullable: true
+        end_hour:
+          type: integer
+          nullable: true
+        end_minute:
+          type: integer
+          nullable: true
+        is_recurring:
+          type: boolean
+          default: false
+        recurrence_type:
+          type: string
+          nullable: true
+        visibility:
+          type: string
+          default: everyone
+        category:
+          type: string
+          nullable: true
+
+    UpdateEventRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        description_html:
+          type: string
+          nullable: true
+        entity_id:
+          type: string
+          nullable: true
+        year:
+          type: integer
+        month:
+          type: integer
+        day:
+          type: integer
+        start_hour:
+          type: integer
+          nullable: true
+        start_minute:
+          type: integer
+          nullable: true
+        end_year:
+          type: integer
+          nullable: true
+        end_month:
+          type: integer
+          nullable: true
+        end_day:
+          type: integer
+          nullable: true
+        end_hour:
+          type: integer
+          nullable: true
+        end_minute:
+          type: integer
+          nullable: true
+        is_recurring:
+          type: boolean
+        recurrence_type:
+          type: string
+          nullable: true
+        visibility:
+          type: string
+        category:
+          type: string
+          nullable: true
+
+    UpdateCalendarSettingsRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        epoch_name:
+          type: string
+          nullable: true
+        current_year:
+          type: integer
+        current_month:
+          type: integer
+        current_day:
+          type: integer
+        current_hour:
+          type: integer
+        current_minute:
+          type: integer
+        hours_per_day:
+          type: integer
+        minutes_per_hour:
+          type: integer
+        seconds_per_minute:
+          type: integer
+        leap_year_every:
+          type: integer
+        leap_year_offset:
+          type: integer
+
+    SetDateRequest:
+      type: object
+      required: [year, month, day]
+      properties:
+        year:
+          type: integer
+        month:
+          type: integer
+        day:
+          type: integer
+        hour:
+          type: integer
+          default: 0
+        minute:
+          type: integer
+          default: 0
+
+    MonthInput:
+      type: object
+      required: [name, days]
+      properties:
+        name:
+          type: string
+        days:
+          type: integer
+        sort_order:
+          type: integer
+        is_intercalary:
+          type: boolean
+          default: false
+        leap_year_days:
+          type: integer
+          default: 0
+
+    WeekdayInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        sort_order:
+          type: integer
+
+    MoonInput:
+      type: object
+      required: [name, cycle_days]
+      properties:
+        name:
+          type: string
+        cycle_days:
+          type: number
+          format: double
+        phase_offset:
+          type: number
+          format: double
+          default: 0
+        color:
+          type: string
+
+    EraInput:
+      type: object
+      required: [name, start_year]
+      properties:
+        name:
+          type: string
+        start_year:
+          type: integer
+        end_year:
+          type: integer
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        color:
+          type: string
+        sort_order:
+          type: integer
+
+    # --- Media ---
+    MediaFile:
+      type: object
+      properties:
+        id:
+          type: string
+        campaign_id:
+          type: string
+          nullable: true
+        uploaded_by:
+          type: string
+        original_name:
+          type: string
+        mime_type:
+          type: string
+        file_size:
+          type: integer
+          format: int64
+        usage_type:
+          type: string
+        url:
+          type: string
+          description: Signed URL for file access
+        thumbnail_url:
+          type: string
+        thumbnails:
+          type: object
+          additionalProperties:
+            type: string
+          description: Map of size to signed thumbnail URL
+        created_at:
+          type: string
+          format: date-time
+
+    # --- Maps ---
+    Map:
+      type: object
+      properties:
+        id:
+          type: string
+        campaign_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        image_id:
+          type: string
+          nullable: true
+        image_width:
+          type: integer
+        image_height:
+          type: integer
+        sort_order:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        markers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Marker"
+
+    Marker:
+      type: object
+      properties:
+        id:
+          type: string
+        map_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        x:
+          type: number
+          format: double
+        y:
+          type: number
+          format: double
+        icon:
+          type: string
+        color:
+          type: string
+        entity_id:
+          type: string
+          nullable: true
+        visibility:
+          type: string
+        created_by:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        entity_name:
+          type: string
+        entity_icon:
+          type: string
+
+    Drawing:
+      type: object
+      properties:
+        id:
+          type: string
+        map_id:
+          type: string
+        layer_id:
+          type: string
+          nullable: true
+        drawing_type:
+          type: string
+          enum: [freehand, rectangle, ellipse, polygon, text]
+        points:
+          type: array
+          description: Array of {x, y} coordinate pairs
+          items:
+            type: object
+        stroke_color:
+          type: string
+        stroke_width:
+          type: number
+          format: double
+        fill_color:
+          type: string
+          nullable: true
+        fill_alpha:
+          type: number
+          format: double
+        text_content:
+          type: string
+          nullable: true
+        font_size:
+          type: integer
+          nullable: true
+        rotation:
+          type: number
+          format: double
+        visibility:
+          type: string
+          enum: [everyone, dm_only]
+        created_by:
+          type: string
+          nullable: true
+        foundry_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateDrawingRequest:
+      type: object
+      required: [drawing_type, points, stroke_color]
+      properties:
+        layer_id:
+          type: string
+          nullable: true
+        drawing_type:
+          type: string
+          enum: [freehand, rectangle, ellipse, polygon, text]
+        points:
+          type: array
+          items:
+            type: object
+        stroke_color:
+          type: string
+        stroke_width:
+          type: number
+          format: double
+        fill_color:
+          type: string
+          nullable: true
+        fill_alpha:
+          type: number
+          format: double
+        text_content:
+          type: string
+          nullable: true
+        font_size:
+          type: integer
+          nullable: true
+        rotation:
+          type: number
+          format: double
+          default: 0
+        visibility:
+          type: string
+          enum: [everyone, dm_only]
+          default: everyone
+        foundry_id:
+          type: string
+          nullable: true
+
+    UpdateDrawingRequest:
+      type: object
+      properties:
+        points:
+          type: array
+          items:
+            type: object
+        stroke_color:
+          type: string
+        stroke_width:
+          type: number
+          format: double
+        fill_color:
+          type: string
+          nullable: true
+        fill_alpha:
+          type: number
+          format: double
+        text_content:
+          type: string
+          nullable: true
+        font_size:
+          type: integer
+          nullable: true
+        rotation:
+          type: number
+          format: double
+        visibility:
+          type: string
+          enum: [everyone, dm_only]
+
+    Token:
+      type: object
+      properties:
+        id:
+          type: string
+        map_id:
+          type: string
+        layer_id:
+          type: string
+          nullable: true
+        entity_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+        image_path:
+          type: string
+          nullable: true
+        x:
+          type: number
+          format: double
+        y:
+          type: number
+          format: double
+        width:
+          type: number
+          format: double
+        height:
+          type: number
+          format: double
+        rotation:
+          type: number
+          format: double
+        scale:
+          type: number
+          format: double
+        is_hidden:
+          type: boolean
+        is_locked:
+          type: boolean
+        bar1_value:
+          type: integer
+          nullable: true
+        bar1_max:
+          type: integer
+          nullable: true
+        bar2_value:
+          type: integer
+          nullable: true
+        bar2_max:
+          type: integer
+          nullable: true
+        aura_radius:
+          type: number
+          format: double
+          nullable: true
+        aura_color:
+          type: string
+          nullable: true
+        light_radius:
+          type: number
+          format: double
+          nullable: true
+        light_dim_radius:
+          type: number
+          format: double
+          nullable: true
+        light_color:
+          type: string
+          nullable: true
+        vision_enabled:
+          type: boolean
+        vision_range:
+          type: number
+          format: double
+          nullable: true
+        elevation:
+          type: integer
+        sort_order:
+          type: integer
+        status_effects:
+          type: array
+          items:
+            type: object
+        flags:
+          type: object
+        foundry_id:
+          type: string
+          nullable: true
+        created_by:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateTokenRequest:
+      type: object
+      required: [name, x, y, width, height]
+      properties:
+        layer_id:
+          type: string
+          nullable: true
+        entity_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+        image_path:
+          type: string
+          nullable: true
+        x:
+          type: number
+          format: double
+        y:
+          type: number
+          format: double
+        width:
+          type: number
+          format: double
+        height:
+          type: number
+          format: double
+        rotation:
+          type: number
+          format: double
+          default: 0
+        scale:
+          type: number
+          format: double
+          default: 1
+        is_hidden:
+          type: boolean
+          default: false
+        is_locked:
+          type: boolean
+          default: false
+        bar1_value:
+          type: integer
+          nullable: true
+        bar1_max:
+          type: integer
+          nullable: true
+        bar2_value:
+          type: integer
+          nullable: true
+        bar2_max:
+          type: integer
+          nullable: true
+        aura_radius:
+          type: number
+          format: double
+          nullable: true
+        aura_color:
+          type: string
+          nullable: true
+        light_radius:
+          type: number
+          format: double
+          nullable: true
+        light_dim_radius:
+          type: number
+          format: double
+          nullable: true
+        light_color:
+          type: string
+          nullable: true
+        vision_enabled:
+          type: boolean
+          default: false
+        vision_range:
+          type: number
+          format: double
+          nullable: true
+        elevation:
+          type: integer
+          default: 0
+        status_effects:
+          type: array
+          items:
+            type: object
+        flags:
+          type: object
+        foundry_id:
+          type: string
+          nullable: true
+
+    UpdateTokenRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        image_path:
+          type: string
+          nullable: true
+        x:
+          type: number
+          format: double
+        y:
+          type: number
+          format: double
+        width:
+          type: number
+          format: double
+        height:
+          type: number
+          format: double
+        rotation:
+          type: number
+          format: double
+        scale:
+          type: number
+          format: double
+        is_hidden:
+          type: boolean
+        is_locked:
+          type: boolean
+        bar1_value:
+          type: integer
+          nullable: true
+        bar1_max:
+          type: integer
+          nullable: true
+        bar2_value:
+          type: integer
+          nullable: true
+        bar2_max:
+          type: integer
+          nullable: true
+        aura_radius:
+          type: number
+          format: double
+          nullable: true
+        aura_color:
+          type: string
+          nullable: true
+        light_radius:
+          type: number
+          format: double
+          nullable: true
+        light_dim_radius:
+          type: number
+          format: double
+          nullable: true
+        light_color:
+          type: string
+          nullable: true
+        vision_enabled:
+          type: boolean
+        vision_range:
+          type: number
+          format: double
+          nullable: true
+        elevation:
+          type: integer
+        status_effects:
+          type: array
+          items:
+            type: object
+        flags:
+          type: object
+
+    Layer:
+      type: object
+      properties:
+        id:
+          type: string
+        map_id:
+          type: string
+        name:
+          type: string
+        layer_type:
+          type: string
+          enum: [background, drawing, token, gm, fog]
+        sort_order:
+          type: integer
+        is_visible:
+          type: boolean
+        opacity:
+          type: number
+          format: double
+        is_locked:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    CreateLayerRequest:
+      type: object
+      required: [name, layer_type]
+      properties:
+        name:
+          type: string
+        layer_type:
+          type: string
+          enum: [background, drawing, token, gm, fog]
+        sort_order:
+          type: integer
+          default: 0
+        is_visible:
+          type: boolean
+          default: true
+        opacity:
+          type: number
+          format: double
+          default: 1
+        is_locked:
+          type: boolean
+          default: false
+
+    UpdateLayerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        sort_order:
+          type: integer
+        is_visible:
+          type: boolean
+        opacity:
+          type: number
+          format: double
+        is_locked:
+          type: boolean
+
+    FogRegion:
+      type: object
+      properties:
+        id:
+          type: string
+        map_id:
+          type: string
+        points:
+          type: array
+          description: Polygon vertices
+          items:
+            type: object
+        is_explored:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    CreateFogRequest:
+      type: object
+      required: [points]
+      properties:
+        points:
+          type: array
+          items:
+            type: object
+        is_explored:
+          type: boolean
+          default: false
+
+    # --- Sync ---
+    SyncRequest:
+      type: object
+      properties:
+        since:
+          type: string
+          format: date-time
+          nullable: true
+          description: Pull entities modified after this timestamp
+        changes:
+          type: array
+          maxItems: 2000
+          items:
+            $ref: "#/components/schemas/SyncChange"
+
+    SyncChange:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [create, update, delete]
+        entity_id:
+          type: string
+          description: Required for update/delete
+        entity_type_id:
+          type: integer
+          description: Required for create
+        name:
+          type: string
+        type_label:
+          type: string
+        is_private:
+          type: boolean
+        entry:
+          type: string
+        fields_data:
+          type: object
+          additionalProperties: true
+
+    SyncResponse:
+      type: object
+      properties:
+        server_time:
+          type: string
+          format: date-time
+        entities:
+          type: array
+          items:
+            $ref: "#/components/schemas/Entity"
+        has_more:
+          type: boolean
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncResult"
+
+    SyncResult:
+      type: object
+      properties:
+        action:
+          type: string
+        entity_id:
+          type: string
+        status:
+          type: string
+          enum: [ok, error]
+        error:
+          type: string
+
+    SyncMapping:
+      type: object
+      properties:
+        id:
+          type: string
+        campaign_id:
+          type: string
+        chronicle_type:
+          type: string
+          description: "entity, map, calendar_event, marker, drawing, token"
+        chronicle_id:
+          type: string
+        external_system:
+          type: string
+          description: e.g. "foundry"
+        external_id:
+          type: string
+        sync_version:
+          type: integer
+        last_synced_at:
+          type: string
+          format: date-time
+        sync_direction:
+          type: string
+          enum: [both, push, pull]
+        sync_metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateSyncMappingRequest:
+      type: object
+      required: [chronicle_type, chronicle_id, external_system, external_id, sync_direction]
+      properties:
+        chronicle_type:
+          type: string
+        chronicle_id:
+          type: string
+        external_system:
+          type: string
+        external_id:
+          type: string
+        sync_direction:
+          type: string
+          enum: [both, push, pull]
+        sync_metadata:
+          type: object
+          additionalProperties: true
+
+    SyncPullResponse:
+      type: object
+      properties:
+        server_time:
+          type: string
+          format: date-time
+        mappings:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncMapping"
+        has_more:
+          type: boolean

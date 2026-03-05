@@ -222,6 +222,7 @@ type Entity struct {
 	ParentID       *string         `json:"parent_id,omitempty"`
 	TypeLabel      *string         `json:"type_label,omitempty"` // Freeform subtype (e.g., "City" for a Location).
 	IsPrivate      bool            `json:"is_private"`
+	Visibility     VisibilityMode  `json:"visibility"`
 	IsTemplate     bool            `json:"is_template"`
 	FieldsData     map[string]any  `json:"fields_data"`
 	FieldOverrides *FieldOverrides `json:"field_overrides,omitempty"` // Per-entity field customizations.
@@ -446,4 +447,79 @@ func Slugify(name string) string {
 		slug = "entity"
 	}
 	return slug
+}
+
+// --- Per-Entity Permissions ---
+
+// VisibilityMode indicates how an entity's access is determined.
+// "default" uses the legacy is_private flag; "custom" uses entity_permissions.
+type VisibilityMode string
+
+const (
+	// VisibilityDefault uses the legacy is_private flag for access control.
+	VisibilityDefault VisibilityMode = "default"
+	// VisibilityCustom uses the entity_permissions table for fine-grained access.
+	VisibilityCustom VisibilityMode = "custom"
+)
+
+// SubjectType identifies what kind of subject holds a permission grant.
+type SubjectType string
+
+const (
+	// SubjectRole grants access to all members at or above a campaign role level.
+	SubjectRole SubjectType = "role"
+	// SubjectUser grants access to a specific user by ID.
+	SubjectUser SubjectType = "user"
+)
+
+// Permission represents an access level that can be granted on an entity.
+type Permission string
+
+const (
+	// PermView allows the subject to see the entity.
+	PermView Permission = "view"
+	// PermEdit allows the subject to see and modify the entity.
+	PermEdit Permission = "edit"
+)
+
+// EntityPermission is a single access grant on an entity.
+type EntityPermission struct {
+	ID          int         `json:"id"`
+	EntityID    string      `json:"entity_id"`
+	SubjectType SubjectType `json:"subject_type"`
+	SubjectID   string      `json:"subject_id"` // Role level as string ("1","2","3") or user UUID.
+	Permission  Permission  `json:"permission"`
+	CreatedAt   time.Time   `json:"created_at"`
+}
+
+// EffectivePermission is the resolved access level for a specific user on
+// a specific entity after merging all applicable grants (role-based, user-based).
+type EffectivePermission struct {
+	CanView bool
+	CanEdit bool
+}
+
+// SetPermissionsInput is the validated input for setting entity permissions.
+// Replaces all existing grants for the entity.
+type SetPermissionsInput struct {
+	Visibility  VisibilityMode     `json:"visibility"`
+	IsPrivate   bool               `json:"is_private"`   // Used when visibility=default.
+	Permissions []PermissionGrant  `json:"permissions"`   // Used when visibility=custom.
+}
+
+// PermissionGrant is a single grant in a SetPermissionsInput request.
+type PermissionGrant struct {
+	SubjectType SubjectType `json:"subject_type"`
+	SubjectID   string      `json:"subject_id"`
+	Permission  Permission  `json:"permission"`
+}
+
+// ValidSubjectType returns true if s is a recognized subject type.
+func ValidSubjectType(s SubjectType) bool {
+	return s == SubjectRole || s == SubjectUser
+}
+
+// ValidPermission returns true if p is a recognized permission level.
+func ValidPermission(p Permission) bool {
+	return p == PermView || p == PermEdit
 }

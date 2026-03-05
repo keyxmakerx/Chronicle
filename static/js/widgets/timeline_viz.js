@@ -16,6 +16,8 @@
  *   - Entity group swim-lanes (when groups exist)
  *   - Clickable zoom level buttons, zoom fit, search/filter bar
  *   - Event detail panel on click
+ *   - Event connections: SVG lines/arrows between related events
+ *   - Create-from-timeline: double-click empty space to create event at that date
  *
  * Zoom levels and visual styles:
  *   Era     — Small dots with subtle glow (clustered when dense)
@@ -64,6 +66,7 @@ var _impl = {
     this.events = [];
     this.groups = [];
     this.eras = [];
+    this.connections = [];
     this.timeline = null;
     this.tooltip = null;
     this.detailPanel = null;
@@ -314,6 +317,7 @@ var _impl = {
         self.timeline = data.timeline;
         self.groups = data.groups || [];
         self.eras = data.eras || [];
+        self.connections = data.connections || [];
 
         // Filter out events with missing or NaN date fields. This guards
         // against omitted JSON fields (e.g. zero-value ints with omitempty)
@@ -432,6 +436,17 @@ var _impl = {
       .attr('stdDeviation', 2)
       .attr('flood-opacity', 0.35);
 
+    // Arrowhead marker for event connections.
+    defs.append('marker')
+      .attr('id', 'conn-arrow')
+      .attr('viewBox', '0 0 10 10')
+      .attr('refX', 9).attr('refY', 5)
+      .attr('markerWidth', 6).attr('markerHeight', 6)
+      .attr('orient', 'auto-start-reverse')
+      .append('path')
+      .attr('d', 'M 0 0 L 10 5 L 0 10 Z')
+      .attr('fill', 'var(--color-accent, #6366f1)');
+
     // X scale: maps year values to pixel positions.
     var xScale = d3.scaleLinear()
       .domain([minYear, maxYear])
@@ -503,6 +518,11 @@ var _impl = {
       .attr('x2', width - m.right)
       .attr('y1', 0).attr('y2', 0);
 
+    // Connection lines group (behind events, clipped).
+    this.connectionGroup = svg.append('g')
+      .attr('clip-path', 'url(#timeline-clip)')
+      .attr('class', 'timeline-connections');
+
     // Main content group (clipped).
     this.contentGroup = svg.append('g')
       .attr('clip-path', 'url(#timeline-clip)');
@@ -515,6 +535,7 @@ var _impl = {
     this._drawGrid();
     this._drawRulerTicks();
     this._drawEvents();
+    this._drawConnections();
 
     // Setup zoom behavior.
     this.zoom = d3.zoom()
@@ -526,6 +547,16 @@ var _impl = {
       });
 
     svg.call(this.zoom);
+
+    // Double-click on empty space to create event at that date.
+    svg.on('dblclick.create', function(event) {
+      // Only trigger if the click was not on an event marker.
+      if (event.target.closest('.timeline-event')) return;
+      var coords = d3.pointer(event);
+      var yearFrac = self.xScale.invert(coords[0]);
+      self._onCreateAtDate(yearFrac);
+    });
+
     this._updateZoomLevel();
     this._drawMinimap();
     this._updateVisibleRange();
@@ -1238,6 +1269,91 @@ var _impl = {
     this.eventGroups = eventGroups;
   },
 
+  // ---- Event Connection Lines ----
+
+  /**
+   * Build a lookup from event_id → event data for fast connection resolution.
+   */
+  _buildEventIndex: function() {
+    var idx = {};
+    var events = this._displayEvents || this.events;
+    for (var i = 0; i < events.length; i++) {
+      var e = events[i];
+      if (!e._isCluster) {
+        idx[e.event_id] = e;
+      }
+    }
+    return idx;
+  },
+
+  /**
+   * Draw SVG lines/arrows between connected events.
+   * Lines curve upward (for left-to-right) using quadratic Bézier paths.
+   */
+  _drawConnections: function() {
+    if (!this.connectionGroup) return;
+    this.connectionGroup.selectAll('*').remove();
+
+    if (!this.connections || this.connections.length === 0) return;
+
+    var self = this;
+    var xScale = this.xScale;
+    var idx = this._buildEventIndex();
+
+    this.connections.forEach(function(conn) {
+      var srcEvt = idx[conn.source_id];
+      var tgtEvt = idx[conn.target_id];
+      if (!srcEvt || !tgtEvt) return;
+
+      var x1 = xScale(self._dateToYear(srcEvt));
+      var y1 = self._eventY(srcEvt);
+      var x2 = xScale(self._dateToYear(tgtEvt));
+      var y2 = self._eventY(tgtEvt);
+
+      // Quadratic Bézier control point (arc above the line).
+      var midX = (x1 + x2) / 2;
+      var dist = Math.abs(x2 - x1);
+      var arcHeight = Math.min(dist * 0.3, 60);
+      var midY = Math.min(y1, y2) - arcHeight;
+
+      var color = (conn.color) ? conn.color : 'var(--color-accent, #6366f1)';
+      var dashArray = '';
+      if (conn.style === 'dashed') dashArray = '8,4';
+      else if (conn.style === 'dotted') dashArray = '3,3';
+
+      var path = self.connectionGroup.append('path')
+        .attr('d', 'M ' + x1 + ' ' + y1 + ' Q ' + midX + ' ' + midY + ' ' + x2 + ' ' + y2)
+        .attr('fill', 'none')
+        .attr('stroke', color)
+        .attr('stroke-width', 1.5)
+        .attr('stroke-opacity', 0.6)
+        .attr('class', 'timeline-connection-line');
+
+      if (dashArray) path.attr('stroke-dasharray', dashArray);
+
+      // Add arrowhead for 'arrow' style.
+      if (conn.style === 'arrow' || conn.style === '') {
+        path.attr('marker-end', 'url(#conn-arrow)');
+      }
+
+      // Optional label at midpoint.
+      if (conn.label) {
+        var labelX = midX;
+        var labelY = midY - 6;
+        self.connectionGroup.append('text')
+          .attr('x', labelX)
+          .attr('y', labelY)
+          .attr('text-anchor', 'middle')
+          .attr('fill', color)
+          .attr('font-size', '10px')
+          .attr('font-weight', '500')
+          .attr('opacity', 0.8)
+          .attr('class', 'timeline-connection-label')
+          .text(conn.label);
+      }
+    });
+  },
+
   // ---- Mini-Map Overview Strip ----
 
   /**
@@ -1440,6 +1556,9 @@ var _impl = {
         });
       }
     }
+
+    // Redraw connection lines (they depend on event positions).
+    this._drawConnections();
 
     this._updateZoomLevel();
     this._updateMinimapViewport();
@@ -1718,6 +1837,39 @@ var _impl = {
     if (this.detailPanel) {
       this.detailPanel.classList.remove('visible');
     }
+  },
+
+  // ---- Create From Timeline ----
+
+  /**
+   * Open the standalone event create modal with the date pre-filled from the
+   * clicked position on the timeline. Triggered by double-click on empty space.
+   * @param {number} yearFrac - Fractional year value from the D3 scale.
+   */
+  _onCreateAtDate: function(yearFrac) {
+    var year = Math.floor(yearFrac);
+    var monthFrac = (yearFrac - year) * 12;
+    var month = Math.floor(monthFrac) + 1;
+    var dayFrac = (monthFrac - Math.floor(monthFrac)) * 30;
+    var day = Math.max(1, Math.round(dayFrac) + 1);
+    if (month < 1) month = 1;
+    if (month > 12) month = 12;
+    if (day > 30) day = 30;
+
+    // Try to find the standalone event create modal and populate date fields.
+    var modal = document.getElementById('standalone-event-modal');
+    if (!modal) return;
+
+    // Fill date fields.
+    var yearInput = modal.querySelector('[name="year"]');
+    var monthInput = modal.querySelector('[name="month"]');
+    var dayInput = modal.querySelector('[name="day"]');
+    if (yearInput) yearInput.value = year;
+    if (monthInput) monthInput.value = month;
+    if (dayInput) dayInput.value = day;
+
+    // Show the modal.
+    modal.classList.remove('hidden');
   },
 
   // ---- Utilities ----

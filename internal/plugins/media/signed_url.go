@@ -73,14 +73,14 @@ func (s *URLSigner) VerifyThumb(fileID, size string, expiresStr, signature strin
 // computeSignature creates an HMAC-SHA256 hex digest over "{fileID}:{expires}".
 func (s *URLSigner) computeSignature(fileID string, expires int64) string {
 	mac := hmac.New(sha256.New, s.secret)
-	mac.Write([]byte(fmt.Sprintf("%s:%d", fileID, expires)))
+	_, _ = fmt.Fprintf(mac, "%s:%d", fileID, expires)
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // computeThumbSignature includes the size to prevent size parameter tampering.
 func (s *URLSigner) computeThumbSignature(fileID, size string, expires int64) string {
 	mac := hmac.New(sha256.New, s.secret)
-	mac.Write([]byte(fmt.Sprintf("%s:%s:%d", fileID, size, expires)))
+	_, _ = fmt.Fprintf(mac, "%s:%s:%d", fileID, size, expires)
 	return hex.EncodeToString(mac.Sum(nil))
 }
 

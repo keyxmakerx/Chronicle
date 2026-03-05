@@ -7,6 +7,7 @@ package timeline
 import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -90,6 +91,10 @@ templ TimelineListFragment(cc *campaigns.CampaignContext, data TimelineListData)
 // timelineListContent renders the timeline list body.
 templ timelineListContent(cc *campaigns.CampaignContext, data TimelineListData) {
 	<div class="sm:max-w-4xl mx-auto py-6 px-2 sm:px-4">
+		@components.Breadcrumbs([]components.BreadcrumbItem{
+			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+			{Label: "Timelines"},
+		})
 		<div class="flex items-center justify-between mb-6">
 			<div>
 				<h1 class="text-xl font-bold text-fg">Timelines</h1>
@@ -266,6 +271,11 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 	<!-- D3.js (loaded only on timeline detail pages — large library, not in base layout) -->
 	<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 	<div class="sm:max-w-5xl mx-auto py-6 px-2 sm:px-4" x-data="{ manageOpen: false, adminTab: 'visibility' }">
+		@components.Breadcrumbs([]components.BreadcrumbItem{
+			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+			{Label: "Timelines", Href: fmt.Sprintf("/campaigns/%s/timelines", data.CampaignID)},
+			{Label: data.Timeline.Name},
+		})
 		<!-- Header Card -->
 		<div class="card p-5 mb-4">
 			<div class="flex items-center justify-between">

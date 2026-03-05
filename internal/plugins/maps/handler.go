@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -46,17 +47,10 @@ func (h *Handler) Index(c echo.Context) error {
 }
 
 // requireMapInCampaign fetches a map by ID and verifies it belongs to the
-// given campaign. Returns 404 if not found or if the map's campaign_id does
-// not match, preventing cross-campaign IDOR attacks.
+// given campaign. Returns 404 if not found or mismatched, preventing
+// cross-campaign IDOR attacks.
 func (h *Handler) requireMapInCampaign(c echo.Context, mapID, campaignID string) (*Map, error) {
-	m, err := h.svc.GetMap(c.Request().Context(), mapID)
-	if err != nil {
-		return nil, err
-	}
-	if m.CampaignID != campaignID {
-		return nil, echo.NewHTTPError(http.StatusNotFound, "map not found")
-	}
-	return m, nil
+	return middleware.RequireInCampaign(c.Request().Context(), h.svc.GetMap, mapID, campaignID, "map")
 }
 
 // requireMarkerInCampaign fetches a marker and verifies its parent map belongs
@@ -69,7 +63,7 @@ func (h *Handler) requireMarkerInCampaign(c echo.Context, markerID, campaignID s
 	// Verify the marker's parent map belongs to the correct campaign.
 	m, err := h.svc.GetMap(c.Request().Context(), mk.MapID)
 	if err != nil || m.CampaignID != campaignID {
-		return nil, echo.NewHTTPError(http.StatusNotFound, "marker not found")
+		return nil, apperror.NewNotFound("marker not found")
 	}
 	return mk, nil
 }
@@ -118,7 +112,15 @@ func (h *Handler) CreateMapAPI(c echo.Context) error {
 		ImageHeight int     `json:"image_height"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
+	}
+
+	// Validate field lengths.
+	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+		return err
+	}
+	if err := apperror.ValidateStringLength("name", req.Name, apperror.MaxNameLength); err != nil {
+		return err
 	}
 
 	m, err := h.svc.CreateMap(ctx, CreateMapInput{
@@ -185,7 +187,7 @@ func (h *Handler) UpdateMapAPI(c echo.Context) error {
 		ImageHeight int     `json:"image_height"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.UpdateMap(ctx, mapID, UpdateMapInput{
@@ -238,7 +240,7 @@ func (h *Handler) CreateMarkerAPI(c echo.Context) error {
 		Visibility  string  `json:"visibility"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	// Get user ID from session context.
@@ -291,7 +293,7 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 		Visibility  string  `json:"visibility"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.UpdateMarker(ctx, markerID, UpdateMarkerInput{

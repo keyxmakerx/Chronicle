@@ -256,6 +256,11 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 			</div>
 			<!-- Month name + year -->
 			<div>
+				<nav class="text-xs text-fg-muted mb-0.5" aria-label="Breadcrumb">
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", data.CampaignID)) } class="hover:text-fg-body">{ cc.Campaign.Name }</a>
+					<span class="mx-1">/</span>
+					<span class="text-fg-secondary">Calendar</span>
+				</nav>
 				<h1 class="text-lg font-semibold text-fg">
 					if data.CurrentMonthDef() != nil {
 						{ data.CurrentMonthDef().Name }
@@ -312,7 +317,7 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 					}
 				</div>
 			}
-			<!-- View toggle: Grid / Timeline -->
+			<!-- View toggle: Grid / Week / Timeline -->
 			<div class="flex items-center border border-edge rounded-md overflow-hidden">
 				<span
 					class="p-1.5 px-2 bg-accent/10 text-accent"
@@ -320,6 +325,13 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 				>
 					<i class="fa-solid fa-calendar text-xs"></i>
 				</span>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/week?year=%d&month=%d&day=1", data.CampaignID, data.Year, data.MonthIndex)) }
+					class="p-1.5 px-2 text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors"
+					title="Week view"
+				>
+					<i class="fa-solid fa-calendar-week text-xs"></i>
+				</a>
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/timeline?year=%d", data.CampaignID, data.Year)) }
 					class="p-1.5 px-2 text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors"
@@ -1665,6 +1677,13 @@ templ TimelineFragment(cc *campaigns.CampaignContext, data TimelineViewData) {
 
 // timelineContent renders the timeline header and event list grouped by month.
 templ timelineContent(cc *campaigns.CampaignContext, data TimelineViewData) {
+	<nav class="text-xs text-fg-muted mb-3" aria-label="Breadcrumb">
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", data.CampaignID)) } class="hover:text-fg-body">{ cc.Campaign.Name }</a>
+		<span class="mx-1">/</span>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) } class="hover:text-fg-body">Calendar</a>
+		<span class="mx-1">/</span>
+		<span class="text-fg-secondary">Timeline</span>
+	</nav>
 	<!-- Header with year nav and view toggle -->
 	<div class="flex items-center justify-between mb-6">
 		<div class="flex items-center gap-3">
@@ -1699,13 +1718,20 @@ templ timelineContent(cc *campaigns.CampaignContext, data TimelineViewData) {
 			</a>
 		</div>
 		<div class="flex items-center gap-2">
-			<!-- View toggle: Grid / Timeline -->
+			<!-- View toggle: Grid / Week / Timeline -->
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Calendar grid view"
 			>
 				<i class="fa-solid fa-calendar text-sm"></i>
+			</a>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/week?year=%d", data.CampaignID, data.Year)) }
+				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				title="Week view"
+			>
+				<i class="fa-solid fa-calendar-week text-sm"></i>
 			</a>
 			<span
 				class="p-2 rounded-md bg-accent/10 text-accent"
@@ -1875,3 +1901,197 @@ func categoryIcon(cats []EventCategory, slug string) string {
 	}
 	return ""
 }
+
+// --- Week View ---
+
+// WeekPage renders the full calendar week view page.
+templ WeekPage(cc *campaigns.CampaignContext, data WeekViewData) {
+	@layouts.App(data.Calendar.Name + " - Week") {
+		<div class="max-w-6xl mx-auto">
+			@weekContent(cc, data)
+		</div>
+	}
+}
+
+// WeekFragment renders just the week content for HTMX swaps.
+templ WeekFragment(cc *campaigns.CampaignContext, data WeekViewData) {
+	<div class="max-w-6xl mx-auto">
+		@weekContent(cc, data)
+	</div>
+}
+
+// weekContent renders the week header and day grid.
+templ weekContent(cc *campaigns.CampaignContext, data WeekViewData) {
+	<nav class="text-xs text-fg-muted mb-3" aria-label="Breadcrumb">
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", data.CampaignID)) } class="hover:text-fg-body">{ cc.Campaign.Name }</a>
+		<span class="mx-1">/</span>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) } class="hover:text-fg-body">Calendar</a>
+		<span class="mx-1">/</span>
+		<span class="text-fg-secondary">Week</span>
+	</nav>
+	<!-- Header with week nav and view toggle -->
+	<div class="flex items-center justify-between mb-6">
+		<div class="flex items-center gap-3">
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/week?year=%d&month=%d&day=%d", data.CampaignID, weekPrevYear(data), weekPrevMonth(data), weekPrevDay(data))) }
+				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				title="Previous week"
+			>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+				</svg>
+			</a>
+			<h1 class="text-xl font-semibold text-fg">
+				{ weekTitle(data) }
+			</h1>
+			if era := data.Calendar.EraForYear(data.Year); era != nil {
+				<span class="text-xs font-medium px-2 py-0.5 rounded-full" style={ fmt.Sprintf("background:%s20;color:%s", era.Color, era.Color) }>
+					<i class="fa-solid fa-landmark mr-0.5 text-[9px]"></i> { era.Name }
+				</span>
+			}
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/week?year=%d&month=%d&day=%d", data.CampaignID, weekNextYear(data), weekNextMonth(data), weekNextDay(data))) }
+				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				title="Next week"
+			>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+				</svg>
+			</a>
+			<!-- Today button -->
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/week", data.CampaignID)) }
+				class="text-xs font-medium px-2.5 py-1 rounded-md border border-edge hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				title="Go to current week"
+			>
+				Today
+			</a>
+		</div>
+		<div class="flex items-center gap-2">
+			<!-- View toggle: Grid / Week / Timeline -->
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", data.CampaignID, data.Year, data.MonthIndex)) }
+				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				title="Calendar grid view"
+			>
+				<i class="fa-solid fa-calendar text-sm"></i>
+			</a>
+			<span
+				class="p-2 rounded-md bg-accent/10 text-accent"
+				title="Week view"
+			>
+				<i class="fa-solid fa-calendar-week text-sm"></i>
+			</span>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/timeline?year=%d", data.CampaignID, data.Year)) }
+				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				title="Timeline view"
+			>
+				<i class="fa-solid fa-timeline text-sm"></i>
+			</a>
+			if data.IsOwner {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/settings", data.CampaignID)) }
+					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+					title="Calendar settings"
+				>
+					<i class="fa-solid fa-gear text-sm"></i>
+				</a>
+			}
+		</div>
+	</div>
+
+	<!-- Week day grid -->
+	<div class="grid gap-3" style={ fmt.Sprintf("grid-template-columns: repeat(%d, minmax(0, 1fr))", len(data.Calendar.Weekdays)) }>
+		for i, wd := range data.WeekDays() {
+			<div class={ "rounded-xl border overflow-hidden flex flex-col", templ.KV("border-accent/30 ring-1 ring-accent/20", wd.IsToday), templ.KV("border-edge", !wd.IsToday) }>
+				<!-- Day header -->
+				<div class={ "px-3 py-2 border-b text-center", templ.KV("bg-accent/10 border-accent/20", wd.IsToday), templ.KV("bg-surface-alt border-edge", !wd.IsToday) }>
+					<div class="text-xs font-medium text-fg-muted uppercase tracking-wide">
+						{ data.WeekdayName(i) }
+					</div>
+					<div class={ "text-lg font-semibold", templ.KV("text-accent", wd.IsToday), templ.KV("text-fg", !wd.IsToday) }>
+						{ strconv.Itoa(wd.Day) }
+					</div>
+					<div class="text-[10px] text-fg-muted">
+						{ wd.MonthName }
+					</div>
+					if wd.Season != nil {
+						<div class="text-[9px] font-medium mt-0.5" style={ fmt.Sprintf("color:%s", wd.Season.Color) }>
+							{ wd.Season.Name }
+						</div>
+					}
+				</div>
+				<!-- Events for this day -->
+				<div class="flex-1 bg-surface p-2 space-y-1.5 min-h-[120px]">
+					if len(wd.Events) == 0 && len(wd.Sessions) == 0 {
+						<div class="text-xs text-fg-muted text-center py-4 opacity-50">
+							—
+						</div>
+					}
+					for _, evt := range wd.Events {
+						<div class="text-xs rounded-md px-2 py-1.5 bg-surface-alt border border-edge hover:border-accent/30 transition-colors cursor-pointer group"
+							title={ evt.Name }
+						>
+							if evt.Category != nil && *evt.Category != "" {
+								<span class="mr-1">
+									{ categoryIcon(data.Calendar.EventCategories, *evt.Category) }
+								</span>
+							}
+							if evt.HasTime() {
+								<span class="text-fg-muted font-mono text-[10px]">{ evt.FormatTime() }</span>
+								<span class="mx-0.5">·</span>
+							}
+							<span class="font-medium text-fg group-hover:text-accent transition-colors">
+								{ evt.Name }
+							</span>
+							if evt.EntityName != "" {
+								<div class="text-[10px] text-fg-muted mt-0.5 truncate">
+									if evt.EntityIcon != "" {
+										<i class={ "mr-0.5 text-[8px]", evt.EntityIcon }></i>
+									}
+									{ evt.EntityName }
+								</div>
+							}
+						</div>
+					}
+					for _, sess := range wd.Sessions {
+						<div class="text-xs rounded-md px-2 py-1.5 bg-purple-500/10 border border-purple-500/20 hover:border-purple-500/40 transition-colors"
+							title={ sess.Name }
+						>
+							<i class="fa-solid fa-dice-d20 mr-1 text-purple-400 text-[10px]"></i>
+							<span class="font-medium text-fg">{ sess.Name }</span>
+						</div>
+					}
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// weekTitle returns a display title for the week (e.g. "Month 3, Year 1024").
+func weekTitle(data WeekViewData) string {
+	monthName := ""
+	if data.MonthIndex >= 1 && data.MonthIndex <= len(data.Calendar.Months) {
+		monthName = data.Calendar.Months[data.MonthIndex-1].Name
+	}
+	endYear, endMonth, endDay := data.EndDate()
+	endMonthName := ""
+	if endMonth >= 1 && endMonth <= len(data.Calendar.Months) {
+		endMonthName = data.Calendar.Months[endMonth-1].Name
+	}
+	if data.MonthIndex == endMonth {
+		return fmt.Sprintf("%s %d–%d, %d", monthName, data.StartDay, endDay, data.Year)
+	}
+	if data.Year == endYear {
+		return fmt.Sprintf("%s %d – %s %d, %d", monthName, data.StartDay, endMonthName, endDay, data.Year)
+	}
+	return fmt.Sprintf("%s %d, %d – %s %d, %d", monthName, data.StartDay, data.Year, endMonthName, endDay, endYear)
+}
+
+func weekPrevYear(data WeekViewData) int  { y, _, _ := data.PrevWeek(); return y }
+func weekPrevMonth(data WeekViewData) int { _, m, _ := data.PrevWeek(); return m }
+func weekPrevDay(data WeekViewData) int   { _, _, d := data.PrevWeek(); return d }
+func weekNextYear(data WeekViewData) int  { y, _, _ := data.NextWeek(); return y }
+func weekNextMonth(data WeekViewData) int { _, m, _ := data.NextWeek(); return m }
+func weekNextDay(data WeekViewData) int   { _, _, d := data.NextWeek(); return d }

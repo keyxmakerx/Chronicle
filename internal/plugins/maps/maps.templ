@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -27,6 +28,10 @@ templ MapListFragment(cc *campaigns.CampaignContext, data MapListData) {
 // mapListContent renders the map list body.
 templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
 	<div class="max-w-4xl mx-auto py-6 px-4">
+		@components.Breadcrumbs([]components.BreadcrumbItem{
+			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+			{Label: "Maps"},
+		})
 		<div class="flex items-center justify-between mb-6">
 			<div>
 				<h1 class="text-xl font-bold text-fg">Maps</h1>
@@ -147,6 +152,9 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 	<!-- Leaflet CSS + JS (loaded only on map pages) -->
 	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+	<!-- MarkerCluster plugin for auto-grouping dense markers at low zoom -->
+	<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+	<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
 	<div class="h-full flex flex-col -mx-5 -my-4">
 		<!-- Map header with name, back link, and controls -->
@@ -162,6 +170,13 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 					</svg>
 				</a>
 				<div>
+					<nav class="text-xs text-fg-muted mb-0.5" aria-label="Breadcrumb">
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", data.CampaignID)) } class="hover:text-fg-body">{ cc.Campaign.Name }</a>
+						<span class="mx-1">/</span>
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", data.CampaignID)) } class="hover:text-fg-body">Maps</a>
+						<span class="mx-1">/</span>
+						<span class="text-fg-secondary">{ data.Map.Name }</span>
+					</nav>
 					<h1 class="text-lg font-semibold text-fg">{ data.Map.Name }</h1>
 					if data.Map.Description != nil && *data.Map.Description != "" {
 						<p class="text-xs text-fg-muted">{ *data.Map.Description }</p>
@@ -256,8 +271,32 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 				return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 			}
 
+			// Use marker clustering when there are many markers.
+			var clusterGroup = null;
+			if (typeof L.markerClusterGroup === 'function' && markers.length > 5) {
+				clusterGroup = L.markerClusterGroup({
+					maxClusterRadius: 40,
+					spiderfyOnMaxZoom: true,
+					showCoverageOnHover: false,
+					iconCreateFunction: function(cluster) {
+						var count = cluster.getChildCount();
+						return L.divIcon({
+							className: 'chronicle-cluster',
+							html: '<div class="chronicle-cluster-icon">' + count + '</div>',
+							iconSize: [32, 32],
+							iconAnchor: [16, 16],
+						});
+					}
+				});
+			}
+
 			// Render all existing markers.
 			markers.forEach(function(mk) { addMarkerToMap(mk); });
+
+			// Add cluster group to map if used.
+			if (clusterGroup) {
+				map.addLayer(clusterGroup);
+			}
 
 			function addMarkerToMap(mk) {
 				// Convert percentage coords (0-100) to pixel coords.
@@ -271,7 +310,8 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 					iconAnchor: [12, 24],
 				});
 
-				var lm = L.marker([lat, lng], { icon: icon, draggable: isScribe }).addTo(map);
+				var markerTarget = clusterGroup || map;
+				var lm = L.marker([lat, lng], { icon: icon, draggable: isScribe }).addTo(markerTarget);
 
 				// Tooltip with marker name (escaped to prevent HTML injection).
 				lm.bindTooltip(escapeHtml(mk.name), { direction: 'top', offset: [0, -24] });
@@ -599,6 +639,13 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 	<!-- Minimal CSS for Leaflet marker icons -->
 	<style>
 		.chronicle-marker { background: none !important; border: none !important; }
+		.chronicle-cluster { background: none !important; border: none !important; }
+		.chronicle-cluster-icon {
+			width: 32px; height: 32px; line-height: 32px;
+			text-align: center; font-size: 13px; font-weight: 600;
+			color: #fff; background: rgba(59, 130, 246, 0.85);
+			border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+		}
 	</style>
 }
 
@@ -632,24 +679,61 @@ templ markerModal(data MapViewData) {
 					<div>
 						<label class="block text-xs font-medium text-fg-body mb-1">Icon</label>
 						<select name="icon" id="mk-icon" class="input w-full">
-							<option value="fa-map-pin">Pin</option>
-							<option value="fa-location-dot">Location</option>
-							<option value="fa-city">City</option>
-							<option value="fa-mountain">Mountain</option>
-							<option value="fa-tree">Forest</option>
-							<option value="fa-water">Water</option>
-							<option value="fa-dungeon">Dungeon</option>
-							<option value="fa-landmark">Landmark</option>
-							<option value="fa-house">House</option>
-							<option value="fa-castle">Castle</option>
-							<option value="fa-skull">Danger</option>
-							<option value="fa-star">Star</option>
-							<option value="fa-flag">Flag</option>
-							<option value="fa-campground">Camp</option>
-							<option value="fa-anchor">Port</option>
-							<option value="fa-cross">Temple</option>
-							<option value="fa-shop">Shop</option>
-							<option value="fa-gem">Treasure</option>
+							<optgroup label="General">
+								<option value="fa-map-pin">Pin</option>
+								<option value="fa-location-dot">Location</option>
+								<option value="fa-star">Star</option>
+								<option value="fa-flag">Flag</option>
+								<option value="fa-landmark">Landmark</option>
+							</optgroup>
+							<optgroup label="Settlements">
+								<option value="fa-city">City</option>
+								<option value="fa-house">House</option>
+								<option value="fa-shop">Shop</option>
+								<option value="fa-building">Town</option>
+								<option value="fa-tent">Village</option>
+								<option value="fa-campground">Camp</option>
+							</optgroup>
+							<optgroup label="Fortifications">
+								<option value="fa-castle">Castle</option>
+								<option value="fa-chess-rook">Tower</option>
+								<option value="fa-shield-halved">Fortress</option>
+								<option value="fa-tower-observation">Watchtower</option>
+							</optgroup>
+							<optgroup label="Dungeons &amp; Ruins">
+								<option value="fa-dungeon">Dungeon</option>
+								<option value="fa-skull">Danger</option>
+								<option value="fa-skull-crossbones">Ruins</option>
+								<option value="fa-door-open">Entrance</option>
+								<option value="fa-stairs">Underground</option>
+							</optgroup>
+							<optgroup label="Nature">
+								<option value="fa-mountain">Mountain</option>
+								<option value="fa-tree">Forest</option>
+								<option value="fa-water">Water</option>
+								<option value="fa-mountain-sun">Hills</option>
+								<option value="fa-mound">Cave</option>
+							</optgroup>
+							<optgroup label="Maritime">
+								<option value="fa-anchor">Port</option>
+								<option value="fa-ship">Ship</option>
+								<option value="fa-sailboat">Sailboat</option>
+								<option value="fa-bridge">Bridge</option>
+							</optgroup>
+							<optgroup label="Sacred &amp; Magic">
+								<option value="fa-cross">Temple</option>
+								<option value="fa-place-of-worship">Shrine</option>
+								<option value="fa-hat-wizard">Wizard</option>
+								<option value="fa-book-open">Library</option>
+								<option value="fa-gem">Treasure</option>
+								<option value="fa-wand-sparkles">Magic</option>
+							</optgroup>
+							<optgroup label="Resources">
+								<option value="fa-helmet-safety">Mine</option>
+								<option value="fa-wheat-awn">Farm</option>
+								<option value="fa-wine-glass">Tavern</option>
+								<option value="fa-hammer">Forge</option>
+							</optgroup>
 						</select>
 					</div>
 					<div>

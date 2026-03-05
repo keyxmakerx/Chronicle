@@ -12,6 +12,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -132,6 +133,145 @@ func (h *Handler) Show(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, CalendarPage(cc, data))
 }
 
+// ShowWeek renders the calendar week view.
+// GET /campaigns/:id/calendar/week
+func (h *Handler) ShowWeek(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	if cal == nil {
+		return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/calendar")
+	}
+
+	// Parse year/month/day query params, default to current date.
+	year := cal.CurrentYear
+	month := cal.CurrentMonth
+	day := cal.CurrentDay
+	if q := c.QueryParam("year"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil {
+			year = v
+		}
+	}
+	if q := c.QueryParam("month"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil && v >= 1 && v <= len(cal.Months) {
+			month = v
+		}
+	}
+	if q := c.QueryParam("day"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil && v >= 1 {
+			day = v
+		}
+	}
+
+	// Snap day to week start (find the most recent weekday 0).
+	weekLen := cal.WeekLength()
+	if weekLen == 0 {
+		weekLen = 7
+	}
+	// Calculate absolute day and find the week start.
+	yearLength := cal.YearLength()
+	absDay := year*yearLength
+	for i := 0; i < month-1 && i < len(cal.Months); i++ {
+		absDay += cal.Months[i].Days
+		if cal.IsLeapYear(year) {
+			absDay += cal.Months[i].LeapYearDays
+		}
+	}
+	absDay += day
+	weekdayIdx := absDay % weekLen
+	if weekdayIdx < 0 {
+		weekdayIdx += weekLen
+	}
+	// Move back to weekday 0.
+	startAbsDay := absDay - weekdayIdx
+
+	// Convert absolute day back to year/month/day.
+	startYear := year
+	startMonth := month
+	startDay := day - weekdayIdx
+	// Walk backwards if we went before day 1.
+	for startDay < 1 {
+		startMonth--
+		if startMonth < 1 {
+			startMonth = len(cal.Months)
+			startYear--
+		}
+		startDay += cal.MonthDays(startMonth-1, startYear)
+	}
+
+	// Calculate end date for the week.
+	endYear := startYear
+	endMonth := startMonth
+	endDay := startDay + weekLen - 1
+	monthDays := cal.MonthDays(endMonth-1, endYear)
+	for endDay > monthDays {
+		endDay -= monthDays
+		endMonth++
+		if endMonth > len(cal.Months) {
+			endMonth = 1
+			endYear++
+		}
+		monthDays = cal.MonthDays(endMonth-1, endYear)
+	}
+
+	role := int(cc.MemberRole)
+	userID := auth.GetUserID(c)
+
+	// Fetch events for the date range. If range crosses months, fetch both.
+	var events []Event
+	if startMonth == endMonth && startYear == endYear {
+		events, err = h.svc.ListEventsForDateRange(ctx, cal.ID, startYear, startMonth, startDay, endMonth, endDay, role, userID)
+	} else {
+		// Cross-month week: fetch from startMonth to end of start month, and from month 1 to endDay of endMonth.
+		events1, err1 := h.svc.ListEventsForDateRange(ctx, cal.ID, startYear, startMonth, startDay, startMonth, cal.MonthDays(startMonth-1, startYear), role, userID)
+		if err1 != nil {
+			return err1
+		}
+		events2, err2 := h.svc.ListEventsForDateRange(ctx, cal.ID, endYear, endMonth, 1, endMonth, endDay, role, userID)
+		if err2 != nil {
+			return err2
+		}
+		events = append(events1, events2...)
+	}
+	if err != nil {
+		return err
+	}
+
+	_ = startAbsDay // used for calculation only
+
+	data := WeekViewData{
+		Calendar:   cal,
+		Year:       startYear,
+		MonthIndex: startMonth,
+		StartDay:   startDay,
+		Events:     events,
+		CampaignID: cc.Campaign.ID,
+		UserID:     userID,
+		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
+		CSRFToken:  middleware.GetCSRFToken(c),
+	}
+
+	// For real-life calendars, fetch sessions.
+	if cal.Mode == "reallife" && h.sessionLister != nil {
+		startDate := fmt.Sprintf("%04d-%02d-%02d", startYear, startMonth, startDay)
+		endDate := fmt.Sprintf("%04d-%02d-%02d", endYear, endMonth, endDay)
+		sessions, err := h.sessionLister.ListSessionsForDateRange(ctx, cc.Campaign.ID, startDate, endDate)
+		if err == nil {
+			data.Sessions = sessions
+		}
+	}
+
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, WeekFragment(cc, data))
+	}
+	return middleware.Render(c, http.StatusOK, WeekPage(cc, data))
+}
+
 // SessionsFragment returns the sessions modal content as an HTMX fragment.
 // Used to refresh the session list inside the calendar's sessions overlay.
 // GET /campaigns/:id/calendar/sessions-fragment
@@ -228,7 +368,7 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var req struct {
@@ -247,7 +387,7 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 		LeapYearOffset   int     `json:"leap_year_offset"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
@@ -275,12 +415,12 @@ func (h *Handler) UpdateMonthsAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var months []MonthInput
 	if err := c.Bind(&months); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.SetMonths(ctx, cal.ID, months)
@@ -294,12 +434,12 @@ func (h *Handler) UpdateWeekdaysAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var weekdays []WeekdayInput
 	if err := c.Bind(&weekdays); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.SetWeekdays(ctx, cal.ID, weekdays)
@@ -313,12 +453,12 @@ func (h *Handler) UpdateMoonsAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var moons []MoonInput
 	if err := c.Bind(&moons); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.SetMoons(ctx, cal.ID, moons)
@@ -332,7 +472,7 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var req struct {
@@ -357,7 +497,7 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		Category        *string `json:"category"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	// Get user ID from session context.
@@ -408,7 +548,7 @@ func (h *Handler) requireEventInCampaign(c echo.Context, eventID, campaignID str
 	// Verify event's calendar belongs to this campaign.
 	cal, err := h.svc.GetCalendarByID(ctx, evt.CalendarID)
 	if err != nil || cal == nil || cal.CampaignID != campaignID {
-		return nil, echo.NewHTTPError(http.StatusNotFound, "event not found")
+		return nil, apperror.NewNotFound("event not found")
 	}
 	return evt, nil
 }
@@ -447,7 +587,7 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		Category        *string `json:"category"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.UpdateEvent(ctx, eventID, UpdateEventInput{
@@ -505,7 +645,7 @@ func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
 
 	var input UpdateEventVisibilityInput
 	if err := c.Bind(&input); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	if err := h.svc.UpdateEventVisibility(ctx, eventID, input); err != nil {
@@ -522,12 +662,12 @@ func (h *Handler) UpdateSeasonsAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var seasons []Season
 	if err := c.Bind(&seasons); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.SetSeasons(ctx, cal.ID, seasons)
@@ -541,12 +681,12 @@ func (h *Handler) UpdateErasAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var eras []EraInput
 	if err := c.Bind(&eras); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.SetEras(ctx, cal.ID, eras)
@@ -560,12 +700,12 @@ func (h *Handler) UpdateEventCategoriesAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var cats []EventCategoryInput
 	if err := c.Bind(&cats); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.SetEventCategories(ctx, cal.ID, cats)
@@ -579,7 +719,7 @@ func (h *Handler) GetEventCategoriesAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	cats, err := h.svc.GetEventCategories(ctx, cal.ID)
@@ -600,7 +740,7 @@ func (h *Handler) DeleteCalendarAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	if err := h.svc.DeleteCalendar(ctx, cal.ID); err != nil {
@@ -639,17 +779,17 @@ func (h *Handler) AdvanceDateAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var req struct {
 		Days int `json:"days"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 	if req.Days < 1 || req.Days > 3650 {
-		return echo.NewHTTPError(http.StatusBadRequest, "days must be between 1 and 3650")
+		return apperror.NewBadRequest("days must be between 1 and 3650")
 	}
 
 	return h.svc.AdvanceDate(ctx, cal.ID, req.Days)
@@ -664,7 +804,7 @@ func (h *Handler) AdvanceTimeAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	var req struct {
@@ -672,16 +812,16 @@ func (h *Handler) AdvanceTimeAPI(c echo.Context) error {
 		Minutes int `json:"minutes"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return apperror.NewBadRequest("invalid request")
 	}
 	if req.Hours < 0 || req.Minutes < 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "hours and minutes must be non-negative")
+		return apperror.NewBadRequest("hours and minutes must be non-negative")
 	}
 	if req.Hours == 0 && req.Minutes == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "must advance by at least 1 minute or 1 hour")
+		return apperror.NewBadRequest("must advance by at least 1 minute or 1 hour")
 	}
 	if req.Hours > 87600 { // ~10 years of 24-hour days
-		return echo.NewHTTPError(http.StatusBadRequest, "hours must be at most 87600")
+		return apperror.NewBadRequest("hours must be at most 87600")
 	}
 
 	return h.svc.AdvanceTime(ctx, cal.ID, req.Hours, req.Minutes)
@@ -807,7 +947,7 @@ func (h *Handler) ExportCalendarAPI(c echo.Context) error {
 
 	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
 	if err != nil || cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found")
+		return apperror.NewNotFound("calendar not found")
 	}
 
 	// Optionally include events.
@@ -838,7 +978,7 @@ func (h *Handler) ImportCalendarAPI(c echo.Context) error {
 		return err
 	}
 	if cal == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "calendar not found — create a calendar first")
+		return apperror.NewNotFound("calendar not found — create a calendar first")
 	}
 
 	// Read uploaded file (multipart form or raw JSON body).
@@ -848,25 +988,25 @@ func (h *Handler) ImportCalendarAPI(c echo.Context) error {
 		// Multipart upload.
 		src, openErr := file.Open()
 		if openErr != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+			return apperror.NewBadRequest("could not read uploaded file")
 		}
 		defer func() { _ = src.Close() }()
 		data, err = io.ReadAll(io.LimitReader(src, 10*1024*1024)) // 10MB limit
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+			return apperror.NewBadRequest("could not read uploaded file")
 		}
 	} else {
 		// Try raw JSON body.
 		data, err = io.ReadAll(io.LimitReader(c.Request().Body, 10*1024*1024))
 		if err != nil || len(data) == 0 {
-			return echo.NewHTTPError(http.StatusBadRequest, "no file uploaded and no JSON body")
+			return apperror.NewBadRequest("no file uploaded and no JSON body")
 		}
 	}
 
 	// Parse and detect format.
 	result, parseErr := DetectAndParse(data)
 	if parseErr != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, parseErr.Error())
+		return apperror.NewBadRequest(parseErr.Error())
 	}
 
 	// Check for preview mode — return what would be imported without applying.
@@ -877,7 +1017,7 @@ func (h *Handler) ImportCalendarAPI(c echo.Context) error {
 	// Apply the import to the existing calendar.
 	if err := h.svc.ApplyImport(ctx, cal.ID, result); err != nil {
 		slog.Error("import: failed to apply", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to apply import")
+		return apperror.NewInternal(fmt.Errorf("failed to apply import"))
 	}
 
 	// Return JSON response with summary.
@@ -904,23 +1044,23 @@ func (h *Handler) ImportPreviewAPI(c echo.Context) error {
 	if fileErr == nil {
 		src, openErr := file.Open()
 		if openErr != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+			return apperror.NewBadRequest("could not read uploaded file")
 		}
 		defer func() { _ = src.Close() }()
 		data, err = io.ReadAll(io.LimitReader(src, 10*1024*1024))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+			return apperror.NewBadRequest("could not read uploaded file")
 		}
 	} else {
 		data, err = io.ReadAll(io.LimitReader(c.Request().Body, 10*1024*1024))
 		if err != nil || len(data) == 0 {
-			return echo.NewHTTPError(http.StatusBadRequest, "no file uploaded")
+			return apperror.NewBadRequest("no file uploaded")
 		}
 	}
 
 	result, parseErr := DetectAndParse(data)
 	if parseErr != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, parseErr.Error())
+		return apperror.NewBadRequest(parseErr.Error())
 	}
 
 	// Return the parsed preview as JSON.
@@ -937,22 +1077,22 @@ func (h *Handler) ImportFromSetupAPI(c echo.Context) error {
 	// Read uploaded file.
 	file, fileErr := c.FormFile("file")
 	if fileErr != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "no file uploaded")
+		return apperror.NewBadRequest("no file uploaded")
 	}
 	src, err := file.Open()
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+		return apperror.NewBadRequest("could not read uploaded file")
 	}
 	defer func() { _ = src.Close() }()
 	data, err := io.ReadAll(io.LimitReader(src, 10*1024*1024))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "could not read uploaded file")
+		return apperror.NewBadRequest("could not read uploaded file")
 	}
 
 	// Parse the import.
 	result, parseErr := DetectAndParse(data)
 	if parseErr != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, parseErr.Error())
+		return apperror.NewBadRequest(parseErr.Error())
 	}
 
 	// Create a new fantasy calendar with the imported name.
@@ -980,7 +1120,7 @@ func (h *Handler) ImportFromSetupAPI(c echo.Context) error {
 	// Apply imported sub-resources.
 	if err := h.svc.ApplyImport(ctx, cal.ID, result); err != nil {
 		slog.Error("import-setup: failed to apply", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to apply import")
+		return apperror.NewInternal(fmt.Errorf("failed to apply import"))
 	}
 
 	// Auto-enable the calendar addon.
@@ -1166,6 +1306,164 @@ type TimelineMonth struct {
 	Index  int
 	Name   string
 	Events []Event
+}
+
+// WeekViewData holds data for the calendar week view.
+type WeekViewData struct {
+	Calendar   *Calendar
+	Year       int
+	MonthIndex int // 1-based month of the week's starting day
+	StartDay   int // 1-based day of the week's starting day
+	Events     []Event
+	Sessions   []CalendarSession
+	CampaignID string
+	UserID     string
+	IsOwner    bool
+	IsScribe   bool
+	CSRFToken  string
+}
+
+// WeekDay represents a single day in the week view.
+type WeekDay struct {
+	Year      int
+	Month     int // 1-based month index
+	Day       int
+	MonthName string
+	Events    []Event
+	Sessions  []CalendarSession
+	IsToday   bool
+	Season    *Season
+}
+
+// WeekDays returns the list of days in this week, each with their events.
+func (d WeekViewData) WeekDays() []WeekDay {
+	cal := d.Calendar
+	weekLen := cal.WeekLength()
+	if weekLen == 0 {
+		weekLen = 7
+	}
+
+	days := make([]WeekDay, 0, weekLen)
+	year := d.Year
+	month := d.MonthIndex
+	day := d.StartDay
+
+	for i := 0; i < weekLen; i++ {
+		// Get month name.
+		monthName := ""
+		if month >= 1 && month <= len(cal.Months) {
+			monthName = cal.Months[month-1].Name
+		}
+
+		// Filter events for this specific date.
+		var dayEvents []Event
+		for _, e := range d.Events {
+			if e.Year == year && e.Month == month && e.Day == day {
+				dayEvents = append(dayEvents, e)
+			}
+		}
+
+		// Filter sessions for this date.
+		var daySessions []CalendarSession
+		target := fmt.Sprintf("%04d-%02d-%02d", year, month, day)
+		for _, s := range d.Sessions {
+			if s.ScheduledDate == target {
+				daySessions = append(daySessions, s)
+			}
+		}
+
+		isToday := year == cal.CurrentYear && month == cal.CurrentMonth && day == cal.CurrentDay
+		season := cal.SeasonForDate(month, day)
+
+		days = append(days, WeekDay{
+			Year:      year,
+			Month:     month,
+			Day:       day,
+			MonthName: monthName,
+			Events:    dayEvents,
+			Sessions:  daySessions,
+			IsToday:   isToday,
+			Season:    season,
+		})
+
+		// Advance to next day.
+		day++
+		monthDays := cal.MonthDays(month-1, year)
+		if day > monthDays {
+			day = 1
+			month++
+			if month > len(cal.Months) {
+				month = 1
+				year++
+			}
+		}
+	}
+	return days
+}
+
+// WeekdayName returns the weekday name for the i-th day of the week (0-based).
+func (d WeekViewData) WeekdayName(i int) string {
+	if i >= 0 && i < len(d.Calendar.Weekdays) {
+		return d.Calendar.Weekdays[i].Name
+	}
+	return ""
+}
+
+// PrevWeek returns year, month, day for the start of the previous week.
+func (d WeekViewData) PrevWeek() (int, int, int) {
+	cal := d.Calendar
+	weekLen := cal.WeekLength()
+	if weekLen == 0 {
+		weekLen = 7
+	}
+	year := d.Year
+	month := d.MonthIndex
+	day := d.StartDay - weekLen
+
+	for day < 1 {
+		month--
+		if month < 1 {
+			month = len(cal.Months)
+			year--
+		}
+		monthDays := cal.MonthDays(month-1, year)
+		day += monthDays
+	}
+	return year, month, day
+}
+
+// NextWeek returns year, month, day for the start of the next week.
+func (d WeekViewData) NextWeek() (int, int, int) {
+	cal := d.Calendar
+	weekLen := cal.WeekLength()
+	if weekLen == 0 {
+		weekLen = 7
+	}
+	year := d.Year
+	month := d.MonthIndex
+	day := d.StartDay + weekLen
+
+	monthDays := cal.MonthDays(month-1, year)
+	for day > monthDays {
+		day -= monthDays
+		month++
+		if month > len(cal.Months) {
+			month = 1
+			year++
+		}
+		monthDays = cal.MonthDays(month-1, year)
+	}
+	return year, month, day
+}
+
+// EndDate returns the year, month, day of the last day in this week.
+func (d WeekViewData) EndDate() (int, int, int) {
+	days := d.WeekDays()
+	if len(days) == 0 {
+		return d.Year, d.MonthIndex, d.StartDay
+	}
+	last := days[len(days)-1]
+	return last.Year, last.Month, last.Day
 }
 
 // daysInGregorianMonth returns the number of days in a Gregorian calendar month.

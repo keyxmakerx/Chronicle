@@ -148,6 +148,7 @@ func (h *Handler) Index(c echo.Context) error {
 
 	role := int(cc.MemberRole)
 	campaignID := cc.Campaign.ID
+	userID := auth.GetUserID(c)
 
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	opts := DefaultListOptions()
@@ -180,12 +181,12 @@ func (h *Handler) Index(c echo.Context) error {
 	if err != nil {
 		slog.Warn("failed to load entity types for list page", slog.Any("error", err))
 	}
-	counts, err := h.service.CountByType(c.Request().Context(), campaignID, role)
+	counts, err := h.service.CountByType(c.Request().Context(), campaignID, role, userID)
 	if err != nil {
 		slog.Warn("failed to load entity counts for list page", slog.Any("error", err))
 	}
 
-	entities, total, err := h.service.List(c.Request().Context(), campaignID, typeID, role, opts)
+	entities, total, err := h.service.List(c.Request().Context(), campaignID, typeID, role, userID, opts)
 	if err != nil {
 		return err
 	}
@@ -266,6 +267,14 @@ func (h *Handler) Create(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
+	// Validate field lengths before processing.
+	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+		return err
+	}
+	if err := apperror.ValidateStringLength("name", req.Name, apperror.MaxNameLength); err != nil {
+		return err
+	}
+
 	fieldsData := h.parseFieldsFromForm(c, cc.Campaign.ID, req.EntityTypeID)
 
 	userID := auth.GetUserID(c)
@@ -317,8 +326,10 @@ func (h *Handler) Show(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
-	// Privacy check: private entities return 404 for Players.
-	if entity.IsPrivate && cc.MemberRole < campaigns.RoleScribe {
+	// Visibility check: verify the user can view this entity.
+	userID := auth.GetUserID(c)
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.MemberRole), userID)
+	if err != nil || !access.CanView {
 		return apperror.NewNotFound("entity not found")
 	}
 
@@ -330,8 +341,8 @@ func (h *Handler) Show(c echo.Context) error {
 	// Fetch ancestor chain for breadcrumbs, children for sub-page listing,
 	// and backlinks for "Referenced by" section.
 	ancestors, _ := h.service.GetAncestors(c.Request().Context(), entity.ID)
-	children, _ := h.service.GetChildren(c.Request().Context(), entity.ID, int(cc.MemberRole))
-	backlinks, _ := h.service.GetBacklinks(c.Request().Context(), entity.ID, int(cc.MemberRole))
+	children, _ := h.service.GetChildren(c.Request().Context(), entity.ID, int(cc.MemberRole), userID)
+	backlinks, _ := h.service.GetBacklinks(c.Request().Context(), entity.ID, int(cc.MemberRole), userID)
 
 	// Check if the "attributes" addon is enabled for this campaign.
 	// Defaults to true (show attributes) if addon checker is not wired or
@@ -528,6 +539,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	}
 
 	role := int(cc.MemberRole)
+	userID := auth.GetUserID(c)
 	query := c.QueryParam("q")
 	typeID, _ := strconv.Atoi(c.QueryParam("type"))
 
@@ -537,7 +549,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	// Check if the caller wants JSON (used by the editor @mention widget).
 	wantsJSON := strings.Contains(c.Request().Header.Get("Accept"), "application/json")
 
-	results, total, err := h.service.Search(c.Request().Context(), cc.Campaign.ID, query, typeID, role, opts)
+	results, total, err := h.service.Search(c.Request().Context(), cc.Campaign.ID, query, typeID, role, userID, opts)
 	if err != nil {
 		if _, ok := err.(*apperror.AppError); ok {
 			if wantsJSON {
@@ -1009,7 +1021,7 @@ func (h *Handler) EntityTypesPage(c echo.Context) error {
 
 	// Get entity counts per type so we can show usage and protect used types.
 	role := int(cc.MemberRole)
-	counts, _ := h.service.CountByType(c.Request().Context(), cc.Campaign.ID, role)
+	counts, _ := h.service.CountByType(c.Request().Context(), cc.Campaign.ID, role, auth.GetUserID(c))
 
 	csrfToken := middleware.GetCSRFToken(c)
 
@@ -1039,7 +1051,7 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 	et, err := h.service.CreateEntityType(c.Request().Context(), cc.Campaign.ID, input)
 	if err != nil {
 		entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
-		counts, _ := h.service.CountByType(c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole))
+		counts, _ := h.service.CountByType(c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole), auth.GetUserID(c))
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := "failed to create entity type"
 		if appErr, ok := err.(*apperror.AppError); ok {

@@ -432,23 +432,22 @@ type EntityRepository interface {
 	Delete(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
 
-	// ListByCampaign returns entities filtered by campaign, optional type, and privacy.
-	// When role < RoleScribe (2), private entities are excluded.
-	ListByCampaign(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
+	// ListByCampaign returns entities filtered by campaign, optional type, and visibility.
+	// Uses visibilityFilter to handle both legacy is_private and custom permissions.
+	ListByCampaign(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
 
-	// Search performs a FULLTEXT search on entity names. Falls back to LIKE
-	// for queries shorter than 4 characters (MariaDB ft_min_word_len default).
-	Search(ctx context.Context, campaignID, query string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
+	// Search performs a FULLTEXT search on entity names with visibility filtering.
+	Search(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
 
 	// CountByType returns entity counts per type for the sidebar badges.
-	CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error)
+	CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error)
 
 	// ListRecent returns the N most recently updated entities for a campaign,
 	// ordered by updated_at DESC. Used for the campaign dashboard "recent pages" section.
-	ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error)
+	ListRecent(ctx context.Context, campaignID string, role int, userID string, limit int) ([]Entity, error)
 
-	// FindChildren returns direct children of an entity, respecting privacy.
-	FindChildren(ctx context.Context, parentID string, role int) ([]Entity, error)
+	// FindChildren returns direct children of an entity, respecting visibility.
+	FindChildren(ctx context.Context, parentID string, role int, userID string) ([]Entity, error)
 
 	// FindAncestors returns the ancestor chain from an entity up to the root,
 	// ordered from immediate parent to furthest ancestor. Uses a recursive CTE.
@@ -458,8 +457,8 @@ type EntityRepository interface {
 	UpdateParent(ctx context.Context, entityID string, parentID *string) error
 
 	// FindBacklinks returns entities whose entry_html contains a @mention link
-	// pointing to the given entity. Respects privacy filtering by role.
-	FindBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error)
+	// pointing to the given entity. Respects visibility filtering.
+	FindBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
 
 	// UpdatePopupConfig persists the entity's hover preview configuration.
 	UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error
@@ -502,13 +501,16 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 	return nil
 }
 
+// entitySelectColumns is the standard column list for entity queries with joined type info.
+const entitySelectColumns = `e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
+	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
+	                 e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
+	                 e.created_by, e.created_at, e.updated_at,
+	                 et.name, et.icon, et.color, et.slug`
+
 // FindByID retrieves an entity with joined type info.
 func (r *entityRepository) FindByID(ctx context.Context, id string) (*Entity, error) {
-	query := `SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	                 e.created_by, e.created_at, e.updated_at,
-	                 et.name, et.icon, et.color, et.slug
+	query := `SELECT ` + entitySelectColumns + `
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          WHERE e.id = ?`
@@ -518,11 +520,7 @@ func (r *entityRepository) FindByID(ctx context.Context, id string) (*Entity, er
 
 // FindBySlug retrieves an entity by campaign ID and slug with joined type info.
 func (r *entityRepository) FindBySlug(ctx context.Context, campaignID, slug string) (*Entity, error) {
-	query := `SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	                 e.created_by, e.created_at, e.updated_at,
-	                 et.name, et.icon, et.color, et.slug
+	query := `SELECT ` + entitySelectColumns + `
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          WHERE e.campaign_id = ? AND e.slug = ?`
@@ -531,14 +529,14 @@ func (r *entityRepository) FindBySlug(ctx context.Context, campaignID, slug stri
 }
 
 // scanEntity scans a single entity row with joined type fields.
-// The column order must match the SELECT in FindByID/FindBySlug.
+// The column order must match entitySelectColumns.
 func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 	e := &Entity{}
 	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := row.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
 		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.ParentID, &e.TypeLabel,
-		&e.IsPrivate, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
+		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
@@ -727,10 +725,35 @@ func (r *entityRepository) SlugExists(ctx context.Context, campaignID, slug stri
 	return exists, nil
 }
 
+// visibilityFilter returns the WHERE clause fragment and args that enforce
+// entity visibility based on the viewer's role, user ID, and the entity's
+// visibility mode. Owners (role >= 3) see everything — returns empty string.
+//
+// For non-owners, the filter handles two visibility modes:
+//   - "default": uses the legacy is_private flag (Scribe+ sees all, Player sees public only)
+//   - "custom": checks entity_permissions for explicit grants to the user or their role level
+func visibilityFilter(role int, userID string) (string, []any) {
+	if role >= 3 {
+		return "", nil
+	}
+
+	filter := ` AND (
+		(e.visibility = 'default' AND (? >= 2 OR e.is_private = false))
+		OR (e.visibility = 'custom' AND EXISTS (
+			SELECT 1 FROM entity_permissions ep
+			WHERE ep.entity_id = e.id
+			AND (
+				(ep.subject_type = 'role' AND CAST(ep.subject_id AS UNSIGNED) <= ?)
+				OR (ep.subject_type = 'user' AND ep.subject_id = ?)
+			)
+		))
+	)`
+	return filter, []any{role, role, userID}
+}
+
 // ListByCampaign returns entities with pagination and optional type filtering.
-// Privacy filtering: when role < 2 (Scribe), private entities are excluded.
-func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error) {
-	// Build WHERE clause with privacy filtering.
+// Visibility filtering considers both legacy is_private and custom permissions.
+func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	where := "WHERE e.campaign_id = ?"
 	args := []any{campaignID}
 
@@ -738,9 +761,10 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 		where += " AND e.entity_type_id = ?"
 		args = append(args, typeID)
 	}
-	if role < 2 {
-		where += " AND e.is_private = false"
-	}
+
+	visFilter, visArgs := visibilityFilter(role, userID)
+	where += visFilter
+	args = append(args, visArgs...)
 
 	// Count total for pagination.
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM entities e %s", where)
@@ -750,11 +774,7 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 	}
 
 	// Fetch page.
-	query := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	                 e.created_by, e.created_at, e.updated_at,
-	                 et.name, et.icon, et.color, et.slug
+	query := fmt.Sprintf(`SELECT `+entitySelectColumns+`
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          %s
@@ -779,20 +799,18 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 	return entities, total, rows.Err()
 }
 
-// Search performs a text search on entity names with privacy filtering.
+// Search performs a text search on entity names with visibility filtering.
 // Uses FULLTEXT for queries >= 4 chars, LIKE for shorter queries.
-func (r *entityRepository) Search(ctx context.Context, campaignID, query string, typeID int, role int, opts ListOptions) ([]Entity, int, error) {
+func (r *entityRepository) Search(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	where := "WHERE e.campaign_id = ?"
 	args := []any{campaignID}
 
 	// FULLTEXT for longer queries, LIKE for short ones.
 	if len(query) >= 4 {
-		// Strip FULLTEXT boolean operators to prevent search manipulation.
 		cleaned := stripFTOperators(query)
 		where += " AND MATCH(e.name) AGAINST(? IN BOOLEAN MODE)"
 		args = append(args, cleaned+"*")
 	} else {
-		// Escape LIKE metacharacters to prevent wildcard injection.
 		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
 		where += " AND e.name LIKE ?"
 		args = append(args, "%"+escaped+"%")
@@ -802,9 +820,10 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 		where += " AND e.entity_type_id = ?"
 		args = append(args, typeID)
 	}
-	if role < 2 {
-		where += " AND e.is_private = false"
-	}
+
+	visFilter, visArgs := visibilityFilter(role, userID)
+	where += visFilter
+	args = append(args, visArgs...)
 
 	// Count total.
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM entities e %s", where)
@@ -814,11 +833,7 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 	}
 
 	// Fetch page.
-	selectQuery := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	                 e.created_by, e.created_at, e.updated_at,
-	                 et.name, et.icon, et.color, et.slug
+	selectQuery := fmt.Sprintf(`SELECT `+entitySelectColumns+`
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          %s
@@ -844,15 +859,16 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 }
 
 // CountByType returns a map of entity_type_id → count for sidebar badges.
-// Respects privacy: players don't see private entity counts.
-func (r *entityRepository) CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error) {
-	query := `SELECT entity_type_id, COUNT(*) FROM entities WHERE campaign_id = ?`
+// Respects visibility filtering for non-owner roles.
+func (r *entityRepository) CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error) {
+	// Use alias 'e' to match visibilityFilter expectations.
+	query := `SELECT e.entity_type_id, COUNT(*) FROM entities e WHERE e.campaign_id = ?`
 	args := []any{campaignID}
 
-	if role < 2 {
-		query += " AND is_private = false"
-	}
-	query += " GROUP BY entity_type_id"
+	visFilter, visArgs := visibilityFilter(role, userID)
+	query += visFilter
+	args = append(args, visArgs...)
+	query += " GROUP BY e.entity_type_id"
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -872,20 +888,16 @@ func (r *entityRepository) CountByType(ctx context.Context, campaignID string, r
 }
 
 // ListRecent returns the most recently updated entities for a campaign,
-// ordered by updated_at DESC. Respects privacy filtering based on role.
-func (r *entityRepository) ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error) {
+// ordered by updated_at DESC. Respects visibility filtering based on role.
+func (r *entityRepository) ListRecent(ctx context.Context, campaignID string, role int, userID string, limit int) ([]Entity, error) {
 	where := "WHERE e.campaign_id = ?"
 	args := []any{campaignID}
 
-	if role < 2 {
-		where += " AND e.is_private = false"
-	}
+	visFilter, visArgs := visibilityFilter(role, userID)
+	where += visFilter
+	args = append(args, visArgs...)
 
-	query := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	                 e.created_by, e.created_at, e.updated_at,
-	                 et.name, et.icon, et.color, et.slug
+	query := fmt.Sprintf(`SELECT `+entitySelectColumns+`
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          %s
@@ -910,21 +922,17 @@ func (r *entityRepository) ListRecent(ctx context.Context, campaignID string, ro
 	return entities, rows.Err()
 }
 
-// FindChildren returns direct children of an entity, respecting privacy.
+// FindChildren returns direct children of an entity, respecting visibility.
 // Results are ordered alphabetically by name.
-func (r *entityRepository) FindChildren(ctx context.Context, parentID string, role int) ([]Entity, error) {
+func (r *entityRepository) FindChildren(ctx context.Context, parentID string, role int, userID string) ([]Entity, error) {
 	where := "WHERE e.parent_id = ?"
 	args := []any{parentID}
 
-	if role < 2 {
-		where += " AND e.is_private = false"
-	}
+	visFilter, visArgs := visibilityFilter(role, userID)
+	where += visFilter
+	args = append(args, visArgs...)
 
-	query := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	                 e.created_by, e.created_at, e.updated_at,
-	                 et.name, et.icon, et.color, et.slug
+	query := fmt.Sprintf(`SELECT `+entitySelectColumns+`
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          %s
@@ -954,7 +962,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	query := `WITH RECURSIVE ancestors AS (
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	           e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	           e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
+	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.created_at, e.updated_at,
 	           1 AS depth
 	    FROM entities e
@@ -962,7 +970,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	    UNION ALL
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	           e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	           e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
+	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.created_at, e.updated_at,
 	           a.depth + 1
 	    FROM entities e
@@ -971,7 +979,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	)
 	SELECT a.id, a.campaign_id, a.entity_type_id, a.name, a.slug,
 	       a.entry, a.entry_html, a.image_path, a.parent_id, a.type_label,
-	       a.is_private, a.is_template, a.fields_data, a.field_overrides, a.popup_config,
+	       a.is_private, a.visibility, a.is_template, a.fields_data, a.field_overrides, a.popup_config,
 	       a.created_by, a.created_at, a.updated_at,
 	       et.name, et.icon, et.color, et.slug
 	FROM ancestors a
@@ -1015,22 +1023,18 @@ func (r *entityRepository) UpdateParent(ctx context.Context, entityID string, pa
 
 // FindBacklinks returns entities that mention the given entity via @mention links
 // in their entry_html. Searches for the data-mention-id="<entityID>" attribute
-// pattern. Respects privacy (role < 2 excludes private entities).
-func (r *entityRepository) FindBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error) {
+// pattern. Respects visibility filtering.
+func (r *entityRepository) FindBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
 	where := `WHERE e.entry_html LIKE ? AND e.id != ?`
-	// Pattern: search for the mention data attribute containing the entity ID.
-	pattern := `%data-mention-id="` + entityID + `"%`
+	escaped := strings.NewReplacer("%", `\%`, "_", `\_`).Replace(entityID)
+	pattern := `%data-mention-id="` + escaped + `"%`
 	args := []any{pattern, entityID}
 
-	if role < 2 {
-		where += " AND e.is_private = false"
-	}
+	visFilter, visArgs := visibilityFilter(role, userID)
+	where += visFilter
+	args = append(args, visArgs...)
 
-	query := fmt.Sprintf(`SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.type_label,
-	                 e.is_private, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	                 e.created_by, e.created_at, e.updated_at,
-	                 et.name, et.icon, et.color, et.slug
+	query := fmt.Sprintf(`SELECT `+entitySelectColumns+`
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          %s
@@ -1094,13 +1098,14 @@ func (r *entityRepository) CopyEntityTags(ctx context.Context, sourceEntityID, t
 }
 
 // scanEntityRow scans a single entity from a rows iterator.
+// The column order must match entitySelectColumns.
 func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 	e := &Entity{}
 	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := rows.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
 		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.ParentID, &e.TypeLabel,
-		&e.IsPrivate, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
+		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
@@ -1127,6 +1132,150 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 		}
 	}
 	return e, nil
+}
+
+// --- Entity Permission Repository ---
+
+// EntityPermissionRepository defines the data access contract for per-entity permission grants.
+type EntityPermissionRepository interface {
+	// ListByEntity returns all permission grants for an entity.
+	ListByEntity(ctx context.Context, entityID string) ([]EntityPermission, error)
+
+	// SetPermissions replaces all permissions for an entity in a single transaction.
+	SetPermissions(ctx context.Context, entityID string, grants []PermissionGrant) error
+
+	// DeleteByEntity removes all permission grants for an entity.
+	DeleteByEntity(ctx context.Context, entityID string) error
+
+	// GetEffectivePermission resolves the effective access level for a user on an entity
+	// by checking role-based and user-specific grants.
+	GetEffectivePermission(ctx context.Context, entityID string, role int, userID string) (*EffectivePermission, error)
+
+	// UpdateVisibility sets the visibility mode for an entity.
+	UpdateVisibility(ctx context.Context, entityID string, visibility VisibilityMode) error
+}
+
+// entityPermissionRepository implements EntityPermissionRepository with MariaDB queries.
+type entityPermissionRepository struct {
+	db *sql.DB
+}
+
+// NewEntityPermissionRepository creates a new entity permission repository.
+func NewEntityPermissionRepository(db *sql.DB) EntityPermissionRepository {
+	return &entityPermissionRepository{db: db}
+}
+
+// ListByEntity returns all permission grants for a specific entity.
+func (r *entityPermissionRepository) ListByEntity(ctx context.Context, entityID string) ([]EntityPermission, error) {
+	query := `SELECT id, entity_id, subject_type, subject_id, permission, created_at
+	          FROM entity_permissions WHERE entity_id = ? ORDER BY subject_type, subject_id`
+
+	rows, err := r.db.QueryContext(ctx, query, entityID)
+	if err != nil {
+		return nil, fmt.Errorf("listing entity permissions: %w", err)
+	}
+	defer rows.Close()
+
+	var perms []EntityPermission
+	for rows.Next() {
+		var p EntityPermission
+		if err := rows.Scan(&p.ID, &p.EntityID, &p.SubjectType, &p.SubjectID, &p.Permission, &p.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scanning entity permission: %w", err)
+		}
+		perms = append(perms, p)
+	}
+	return perms, rows.Err()
+}
+
+// SetPermissions replaces all permission grants for an entity atomically.
+func (r *entityPermissionRepository) SetPermissions(ctx context.Context, entityID string, grants []PermissionGrant) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Clear existing grants.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM entity_permissions WHERE entity_id = ?`, entityID); err != nil {
+		return fmt.Errorf("clearing entity permissions: %w", err)
+	}
+
+	// Insert new grants.
+	if len(grants) > 0 {
+		stmt, err := tx.PrepareContext(ctx,
+			`INSERT INTO entity_permissions (entity_id, subject_type, subject_id, permission) VALUES (?, ?, ?, ?)`)
+		if err != nil {
+			return fmt.Errorf("preparing permission insert: %w", err)
+		}
+		defer func() { _ = stmt.Close() }()
+
+		for _, g := range grants {
+			if _, err := stmt.ExecContext(ctx, entityID, g.SubjectType, g.SubjectID, g.Permission); err != nil {
+				return fmt.Errorf("inserting permission grant: %w", err)
+			}
+		}
+	}
+
+	return tx.Commit()
+}
+
+// DeleteByEntity removes all permission grants for an entity.
+func (r *entityPermissionRepository) DeleteByEntity(ctx context.Context, entityID string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM entity_permissions WHERE entity_id = ?`, entityID)
+	if err != nil {
+		return fmt.Errorf("deleting entity permissions: %w", err)
+	}
+	return nil
+}
+
+// GetEffectivePermission resolves the effective access for a user on an entity
+// by checking all applicable grants (role-based and user-specific).
+func (r *entityPermissionRepository) GetEffectivePermission(ctx context.Context, entityID string, role int, userID string) (*EffectivePermission, error) {
+	query := `SELECT permission FROM entity_permissions
+	          WHERE entity_id = ?
+	          AND (
+	              (subject_type = 'role' AND CAST(subject_id AS UNSIGNED) <= ?)
+	              OR (subject_type = 'user' AND subject_id = ?)
+	          )`
+
+	rows, err := r.db.QueryContext(ctx, query, entityID, role, userID)
+	if err != nil {
+		return nil, fmt.Errorf("querying effective permission: %w", err)
+	}
+	defer rows.Close()
+
+	ep := &EffectivePermission{}
+	for rows.Next() {
+		var perm string
+		if err := rows.Scan(&perm); err != nil {
+			return nil, fmt.Errorf("scanning permission: %w", err)
+		}
+		switch Permission(perm) {
+		case PermView:
+			ep.CanView = true
+		case PermEdit:
+			ep.CanView = true // Edit implies view.
+			ep.CanEdit = true
+		}
+	}
+	return ep, rows.Err()
+}
+
+// UpdateVisibility sets the visibility mode for an entity.
+func (r *entityPermissionRepository) UpdateVisibility(ctx context.Context, entityID string, visibility VisibilityMode) error {
+	query := `UPDATE entities SET visibility = ?, updated_at = NOW() WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, visibility, entityID)
+	if err != nil {
+		return fmt.Errorf("updating entity visibility: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
 }
 
 // ftOperatorReplacer strips MySQL FULLTEXT boolean mode operators from user input

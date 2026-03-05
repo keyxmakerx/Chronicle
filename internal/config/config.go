@@ -131,6 +131,10 @@ type UploadConfig struct {
 	// ServeRateLimit is the max requests per minute per IP for media serve
 	// routes (GET /media/:id). 0 means use default (300/min).
 	ServeRateLimit int
+
+	// ClamAVAddress is the TCP address of a clamd daemon for virus scanning
+	// uploads. Empty string disables scanning. Example: "chronicle-clamav:3310".
+	ClamAVAddress string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -167,6 +171,7 @@ func Load() (*Config, error) {
 			MediaPath:      getEnv("MEDIA_PATH", "./media"),
 			SigningSecret:  getEnv("MEDIA_SIGNING_SECRET", ""),
 			ServeRateLimit: getEnvInt("MEDIA_SERVE_RATE_LIMIT", 300),
+			ClamAVAddress:  getEnv("CLAMAV_ADDRESS", ""),
 		},
 	}
 

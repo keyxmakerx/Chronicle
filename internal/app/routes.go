@@ -66,8 +66,8 @@ type recentEntityListerAdapter struct {
 }
 
 // ListRecentForDashboard returns recently updated entities formatted for the dashboard.
-func (a *recentEntityListerAdapter) ListRecentForDashboard(ctx context.Context, campaignID string, role int, limit int) ([]campaigns.RecentEntity, error) {
-	ents, err := a.svc.ListRecent(ctx, campaignID, role, limit)
+func (a *recentEntityListerAdapter) ListRecentForDashboard(ctx context.Context, campaignID string, role int, userID string, limit int) ([]campaigns.RecentEntity, error) {
+	ents, err := a.svc.ListRecent(ctx, campaignID, role, userID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -573,7 +573,8 @@ func (a *App) RegisterRoutes() {
 	// campaigns so we can pass EntityService as the EntityTypeSeeder).
 	entityTypeRepo := entities.NewEntityTypeRepository(a.DB)
 	entityRepo := entities.NewEntityRepository(a.DB)
-	entityService := entities.NewEntityService(entityRepo, entityTypeRepo)
+	entityPermRepo := entities.NewEntityPermissionRepository(a.DB)
+	entityService := entities.NewEntityService(entityRepo, entityTypeRepo, entityPermRepo)
 
 	// Campaigns plugin: CRUD, membership, ownership transfer.
 	// EntityService is passed as EntityTypeSeeder to seed defaults on campaign creation.
@@ -615,6 +616,11 @@ func (a *App) RegisterRoutes() {
 	// but don't crash -- the rest of the app keeps running.
 	mediaRepo := media.NewMediaRepository(a.DB)
 	mediaService := media.NewMediaService(mediaRepo, a.Config.Upload.MediaPath, a.Config.Upload.MaxSize)
+	// Wire ClamAV virus scanner if configured.
+	if scanner := media.NewClamAVScanner(a.Config.Upload.ClamAVAddress); scanner != nil {
+		mediaService.SetVirusScanner(scanner)
+		slog.Info("ClamAV virus scanning enabled", slog.String("address", a.Config.Upload.ClamAVAddress))
+	}
 	mediaHandler := media.NewHandler(mediaService)
 
 	// Initialize HMAC URL signer for secure media access.
@@ -789,6 +795,24 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	tagHandler.SetAuditService(auditService)
 
+	// --- Campaign Export/Import ---
+	exportSvc := campaigns.NewExportImportService(campaignService)
+	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService})
+	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
+	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
+	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
+	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonService})
+	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
+	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService})
+	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
+	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
+	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
+	exportSvc.SetAddonImporter(&addonImportAdapter{svc: addonService})
+	exportHandler := campaigns.NewExportHandler(exportSvc)
+	campaigns.RegisterExportRoutes(e, exportHandler, campaignService, authService)
+
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {
 		return c.Redirect(http.StatusSeeOther, "/campaigns")
@@ -870,7 +894,12 @@ func (a *App) RegisterRoutes() {
 
 			// Entity counts per type for sidebar badges (use effectiveRole so
 			// "view as player" mode hides private entity counts).
-			if counts, err := entityService.CountByType(reqCtx, cc.Campaign.ID, effectiveRole); err == nil {
+			// Pass user ID for permission-aware entity counts.
+			layoutUserID := ""
+			if session := auth.GetSession(c); session != nil {
+				layoutUserID = session.UserID
+			}
+			if counts, err := entityService.CountByType(reqCtx, cc.Campaign.ID, effectiveRole, layoutUserID); err == nil {
 				ctx = layouts.SetEntityCounts(ctx, counts)
 			}
 

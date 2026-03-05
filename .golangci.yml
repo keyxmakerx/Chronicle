@@ -36,14 +36,13 @@ linters:
         - (*crypto/tls.Conn).Close
         # File handle cleanup — defer f.Close() after successful writes.
         - (*os.File).Close
+  exclusions:
+    # Exclude generated templ files and vendor directory from all linters.
+    paths:
+      - vendor
+      - ".*_templ\\.go$"
 
+# Don't limit the number of issues reported per linter.
 issues:
-  # Exclude generated templ files from all linters.
-  exclude-dirs:
-    - vendor
-  exclude-files:
-    - ".*_templ\\.go$"
-
-  # Don't limit the number of issues reported per linter.
   max-issues-per-linter: 0
   max-same-issues: 0

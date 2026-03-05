@@ -1,6 +1,7 @@
 package syncapi
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -103,7 +104,7 @@ func (h *MediaAPIHandler) ListMedia(c echo.Context) error {
 	files, total, err := h.mediaSvc.ListCampaignMedia(ctx, campaignID, page, perPage)
 	if err != nil {
 		slog.Error("api: failed to list media", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list media")
+		return apperror.NewInternal(fmt.Errorf("failed to list media"))
 	}
 
 	data := make([]apiMediaFileResponse, 0, len(files))
@@ -127,12 +128,12 @@ func (h *MediaAPIHandler) GetMedia(c echo.Context) error {
 
 	file, err := h.mediaSvc.GetByID(ctx, mediaID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "media file not found")
+		return apperror.NewNotFound("media file not found")
 	}
 
 	// IDOR protection: verify file belongs to this campaign.
 	if file.CampaignID == nil || *file.CampaignID != c.Param("id") {
-		return echo.NewHTTPError(http.StatusNotFound, "media file not found")
+		return apperror.NewNotFound("media file not found")
 	}
 
 	return c.JSON(http.StatusOK, h.toAPIResponse(file))
@@ -147,7 +148,7 @@ func (h *MediaAPIHandler) GetMediaStats(c echo.Context) error {
 	stats, err := h.mediaSvc.GetCampaignStats(ctx, campaignID)
 	if err != nil {
 		slog.Error("api: failed to get media stats", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get media stats")
+		return apperror.NewInternal(fmt.Errorf("failed to get media stats"))
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
@@ -173,25 +174,25 @@ func (h *MediaAPIHandler) UploadMedia(c echo.Context) error {
 
 	key := GetAPIKey(c)
 	if key == nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "api key required")
+		return apperror.NewUnauthorized("api key required")
 	}
 
 	campaignID := c.Param("id")
 
 	file, err := c.FormFile("file")
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "no file provided")
+		return apperror.NewBadRequest("no file provided")
 	}
 
 	src, err := file.Open()
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to read file")
+		return apperror.NewInternal(fmt.Errorf("failed to read file"))
 	}
 	defer func() { _ = src.Close() }()
 
 	fileBytes, err := io.ReadAll(src)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to read file")
+		return apperror.NewInternal(fmt.Errorf("failed to read file"))
 	}
 
 	usageType := c.FormValue("usage_type")
@@ -211,7 +212,7 @@ func (h *MediaAPIHandler) UploadMedia(c echo.Context) error {
 
 	mediaFile, err := h.mediaSvc.Upload(c.Request().Context(), input)
 	if err != nil {
-		return echo.NewHTTPError(apperror.SafeCode(err), apperror.SafeMessage(err))
+		return err
 	}
 
 	return c.JSON(http.StatusCreated, h.toAPIResponse(mediaFile))
@@ -227,15 +228,15 @@ func (h *MediaAPIHandler) DeleteMedia(c echo.Context) error {
 	// Verify file belongs to this campaign.
 	file, err := h.mediaSvc.GetByID(ctx, mediaID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "media file not found")
+		return apperror.NewNotFound("media file not found")
 	}
 	if file.CampaignID == nil || *file.CampaignID != campaignID {
-		return echo.NewHTTPError(http.StatusNotFound, "media file not found")
+		return apperror.NewNotFound("media file not found")
 	}
 
 	if err := h.mediaSvc.Delete(ctx, mediaID); err != nil {
 		slog.Error("api: failed to delete media", slog.Any("error", err))
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete media")
+		return apperror.NewInternal(fmt.Errorf("failed to delete media"))
 	}
 
 	return c.NoContent(http.StatusNoContent)

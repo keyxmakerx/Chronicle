@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -65,8 +66,11 @@ func bodyLimitMiddleware(maxBytes int64) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			if c.Request().ContentLength > maxBytes {
-				return echo.NewHTTPError(http.StatusRequestEntityTooLarge,
-					fmt.Sprintf("request body too large; maximum is %d MB", maxBytes/(1024*1024)))
+				return &apperror.AppError{
+					Code:    http.StatusRequestEntityTooLarge,
+					Type:    "request_too_large",
+					Message: fmt.Sprintf("request body too large; maximum is %d MB", maxBytes/(1024*1024)),
+				}
 			}
 			c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, maxBytes)
 			return next(c)

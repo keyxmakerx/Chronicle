@@ -71,6 +71,10 @@ type Session struct {
 	CreatorName string       `json:"creator_name,omitempty"`
 }
 
+// GetCampaignID returns the campaign this session belongs to. Implements
+// middleware.CampaignScoped for generic IDOR protection.
+func (s *Session) GetCampaignID() string { return s.CampaignID }
+
 // IsPlanned returns true if the session hasn't happened yet.
 func (s *Session) IsPlanned() bool {
 	return s.Status == StatusPlanned

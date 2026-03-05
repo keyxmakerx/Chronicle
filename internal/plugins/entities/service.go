@@ -33,25 +33,30 @@ type EntityService interface {
 	Delete(ctx context.Context, entityID string) error
 
 	// Hierarchy
-	GetChildren(ctx context.Context, entityID string, role int) ([]Entity, error)
+	GetChildren(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
 	GetAncestors(ctx context.Context, entityID string) ([]Entity, error)
 
 	// Backlinks
-	GetBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error)
+	GetBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
 
 	// Popup preview config
 	UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error
 
 	// Listing and search
-	List(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
-	ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error)
-	Search(ctx context.Context, campaignID, query string, typeID int, role int, opts ListOptions) ([]Entity, int, error)
+	List(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
+	ListRecent(ctx context.Context, campaignID string, role int, userID string, limit int) ([]Entity, error)
+	Search(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
 
 	// Entity types
 	GetEntityTypes(ctx context.Context, campaignID string) ([]EntityType, error)
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	GetEntityTypeByID(ctx context.Context, id int) (*EntityType, error)
-	CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error)
+	CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error)
+
+	// Per-entity permissions
+	GetEntityPermissions(ctx context.Context, entityID string) ([]EntityPermission, error)
+	SetEntityPermissions(ctx context.Context, entityID string, input SetPermissionsInput) error
+	CheckEntityAccess(ctx context.Context, entityID string, role int, userID string) (*EffectivePermission, error)
 	CreateEntityType(ctx context.Context, campaignID string, input CreateEntityTypeInput) (*EntityType, error)
 	UpdateEntityType(ctx context.Context, id int, input UpdateEntityTypeInput) (*EntityType, error)
 	DeleteEntityType(ctx context.Context, id int) error
@@ -84,17 +89,19 @@ func (NoopEntityEventPublisher) PublishEntityEvent(string, string, string, *Enti
 
 // entityService implements EntityService.
 type entityService struct {
-	entities EntityRepository
-	types    EntityTypeRepository
-	events   EntityEventPublisher
+	entities    EntityRepository
+	types       EntityTypeRepository
+	permissions EntityPermissionRepository
+	events      EntityEventPublisher
 }
 
 // NewEntityService creates a new entity service with the given dependencies.
-func NewEntityService(entities EntityRepository, types EntityTypeRepository) EntityService {
+func NewEntityService(entities EntityRepository, types EntityTypeRepository, permissions EntityPermissionRepository) EntityService {
 	return &entityService{
-		entities: entities,
-		types:    types,
-		events:   NoopEntityEventPublisher{},
+		entities:    entities,
+		types:       types,
+		permissions: permissions,
+		events:      NoopEntityEventPublisher{},
 	}
 }
 
@@ -351,9 +358,9 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 
 // --- Hierarchy ---
 
-// GetChildren returns the direct children of an entity, respecting privacy.
-func (s *entityService) GetChildren(ctx context.Context, entityID string, role int) ([]Entity, error) {
-	children, err := s.entities.FindChildren(ctx, entityID, role)
+// GetChildren returns the direct children of an entity, respecting visibility.
+func (s *entityService) GetChildren(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
+	children, err := s.entities.FindChildren(ctx, entityID, role, userID)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("finding children: %w", err))
 	}
@@ -370,9 +377,9 @@ func (s *entityService) GetAncestors(ctx context.Context, entityID string) ([]En
 }
 
 // GetBacklinks returns entities that reference the given entity via @mention
-// links in their entry content. Respects privacy by role.
-func (s *entityService) GetBacklinks(ctx context.Context, entityID string, role int) ([]Entity, error) {
-	backlinks, err := s.entities.FindBacklinks(ctx, entityID, role)
+// links in their entry content. Respects visibility filtering.
+func (s *entityService) GetBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
+	backlinks, err := s.entities.FindBacklinks(ctx, entityID, role, userID)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("finding backlinks: %w", err))
 	}
@@ -478,27 +485,27 @@ func (s *entityService) Delete(ctx context.Context, entityID string) error {
 
 // --- Listing and Search ---
 
-// List returns entities with pagination, optional type filter, and privacy enforcement.
-func (s *entityService) List(ctx context.Context, campaignID string, typeID int, role int, opts ListOptions) ([]Entity, int, error) {
+// List returns entities with pagination, optional type filter, and visibility enforcement.
+func (s *entityService) List(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	if opts.PerPage < 1 || opts.PerPage > 100 {
 		opts.PerPage = 24
 	}
 	if opts.Page < 1 {
 		opts.Page = 1
 	}
-	return s.entities.ListByCampaign(ctx, campaignID, typeID, role, opts)
+	return s.entities.ListByCampaign(ctx, campaignID, typeID, role, userID, opts)
 }
 
 // ListRecent returns the most recently updated entities for a campaign dashboard.
-func (s *entityService) ListRecent(ctx context.Context, campaignID string, role int, limit int) ([]Entity, error) {
+func (s *entityService) ListRecent(ctx context.Context, campaignID string, role int, userID string, limit int) ([]Entity, error) {
 	if limit < 1 || limit > 20 {
 		limit = 8
 	}
-	return s.entities.ListRecent(ctx, campaignID, role, limit)
+	return s.entities.ListRecent(ctx, campaignID, role, userID, limit)
 }
 
 // Search performs a text search on entity names with a minimum query length.
-func (s *entityService) Search(ctx context.Context, campaignID, query string, typeID int, role int, opts ListOptions) ([]Entity, int, error) {
+func (s *entityService) Search(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	q := strings.TrimSpace(query)
 	if len(q) < 2 {
 		return nil, 0, apperror.NewBadRequest("search query must be at least 2 characters")
@@ -509,7 +516,7 @@ func (s *entityService) Search(ctx context.Context, campaignID, query string, ty
 	if opts.Page < 1 {
 		opts.Page = 1
 	}
-	return s.entities.Search(ctx, campaignID, q, typeID, role, opts)
+	return s.entities.Search(ctx, campaignID, q, typeID, role, userID, opts)
 }
 
 // --- Entity Types ---
@@ -530,8 +537,8 @@ func (s *entityService) GetEntityTypeByID(ctx context.Context, id int) (*EntityT
 }
 
 // CountByType returns entity counts per entity type for sidebar badges.
-func (s *entityService) CountByType(ctx context.Context, campaignID string, role int) (map[int]int, error) {
-	return s.entities.CountByType(ctx, campaignID, role)
+func (s *entityService) CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error) {
+	return s.entities.CountByType(ctx, campaignID, role, userID)
 }
 
 // --- Entity Type CRUD ---
@@ -685,9 +692,9 @@ func (s *entityService) DeleteEntityType(ctx context.Context, id int) error {
 		return err
 	}
 
-	// Check if any entities use this type. Count with max permission (Owner=3)
-	// to include private entities in the check.
-	counts, err := s.entities.CountByType(ctx, et.CampaignID, 3)
+	// Check if any entities use this type. Count with Owner role (3) to include
+	// all entities regardless of visibility.
+	counts, err := s.entities.CountByType(ctx, et.CampaignID, 3, "")
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("counting entities by type: %w", err))
 	}
@@ -877,6 +884,107 @@ func (s *entityService) UpdateCategoryDashboardLayout(ctx context.Context, id in
 // entity type, reverting it to the hardcoded default.
 func (s *entityService) ResetCategoryDashboardLayout(ctx context.Context, id int) error {
 	return s.types.UpdateDashboardLayout(ctx, id, nil)
+}
+
+// --- Per-Entity Permissions ---
+
+// GetEntityPermissions returns all permission grants for an entity.
+func (s *entityService) GetEntityPermissions(ctx context.Context, entityID string) ([]EntityPermission, error) {
+	return s.permissions.ListByEntity(ctx, entityID)
+}
+
+// SetEntityPermissions replaces all permission grants and updates visibility mode.
+// When visibility is "default", existing custom permissions are cleared.
+// When visibility is "custom", the provided grants are validated and stored.
+func (s *entityService) SetEntityPermissions(ctx context.Context, entityID string, input SetPermissionsInput) error {
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return err
+	}
+
+	switch input.Visibility {
+	case VisibilityDefault:
+		// Switch to legacy mode: update is_private, clear custom permissions.
+		entity.IsPrivate = input.IsPrivate
+		entity.UpdatedAt = time.Now().UTC()
+		if err := s.entities.Update(ctx, entity); err != nil {
+			return apperror.NewInternal(fmt.Errorf("updating entity privacy: %w", err))
+		}
+		if err := s.permissions.DeleteByEntity(ctx, entityID); err != nil {
+			return apperror.NewInternal(fmt.Errorf("clearing permissions: %w", err))
+		}
+		if err := s.permissions.UpdateVisibility(ctx, entityID, VisibilityDefault); err != nil {
+			return apperror.NewInternal(fmt.Errorf("updating visibility mode: %w", err))
+		}
+
+	case VisibilityCustom:
+		// Validate grants.
+		for i, g := range input.Permissions {
+			if !ValidSubjectType(g.SubjectType) {
+				return apperror.NewBadRequest(fmt.Sprintf("permission %d: invalid subject type %q", i, g.SubjectType))
+			}
+			if !ValidPermission(g.Permission) {
+				return apperror.NewBadRequest(fmt.Sprintf("permission %d: invalid permission %q", i, g.Permission))
+			}
+			if g.SubjectID == "" {
+				return apperror.NewBadRequest(fmt.Sprintf("permission %d: subject_id is required", i))
+			}
+		}
+
+		if err := s.permissions.SetPermissions(ctx, entityID, input.Permissions); err != nil {
+			return apperror.NewInternal(fmt.Errorf("setting permissions: %w", err))
+		}
+		if err := s.permissions.UpdateVisibility(ctx, entityID, VisibilityCustom); err != nil {
+			return apperror.NewInternal(fmt.Errorf("updating visibility mode: %w", err))
+		}
+
+	default:
+		return apperror.NewBadRequest(fmt.Sprintf("invalid visibility mode %q", input.Visibility))
+	}
+
+	slog.Info("entity permissions updated",
+		slog.String("entity_id", entityID),
+		slog.String("visibility", string(input.Visibility)),
+		slog.Int("grants", len(input.Permissions)),
+	)
+	return nil
+}
+
+// CheckEntityAccess resolves whether a user can view/edit a specific entity.
+// For "default" visibility, uses the legacy is_private + role check.
+// For "custom" visibility, queries entity_permissions.
+// Owners (role >= 3) always have full access.
+func (s *entityService) CheckEntityAccess(ctx context.Context, entityID string, role int, userID string) (*EffectivePermission, error) {
+	// Owners always have full access.
+	if role >= 3 {
+		return &EffectivePermission{CanView: true, CanEdit: true}, nil
+	}
+
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return nil, err
+	}
+
+	if entity.Visibility == VisibilityCustom {
+		return s.permissions.GetEffectivePermission(ctx, entityID, role, userID)
+	}
+
+	// Legacy default mode.
+	ep := &EffectivePermission{}
+	if entity.IsPrivate {
+		// Only Scribe+ can see private entities in default mode.
+		if role >= 2 {
+			ep.CanView = true
+			ep.CanEdit = true
+		}
+	} else {
+		// Public entity: everyone can view, Scribe+ can edit.
+		ep.CanView = true
+		if role >= 2 {
+			ep.CanEdit = true
+		}
+	}
+	return ep, nil
 }
 
 // --- Seeder ---

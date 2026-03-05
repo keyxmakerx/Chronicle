@@ -159,6 +159,13 @@ func (c *Campaign) ParseSidebarConfig() SidebarConfig {
 	return cfg
 }
 
+// MemberLister provides campaign membership data. Defined here so plugins
+// (timeline, sessions, etc.) can depend on campaigns.MemberLister instead
+// of duplicating the interface.
+type MemberLister interface {
+	ListMembers(ctx context.Context, campaignID string) ([]CampaignMember, error)
+}
+
 // CampaignMember represents a user's membership in a campaign.
 type CampaignMember struct {
 	CampaignID string    `json:"campaign_id"`

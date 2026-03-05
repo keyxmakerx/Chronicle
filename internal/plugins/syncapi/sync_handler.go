@@ -1,11 +1,14 @@
 package syncapi
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // SyncHandler serves sync mapping CRUD endpoints under the REST API.
@@ -38,7 +41,7 @@ func (h *SyncHandler) ListMappings(c echo.Context) error {
 
 	mappings, total, err := h.syncMappingSvc.ListMappings(c.Request().Context(), campaignID, limit, offset)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list sync mappings")
+		return apperror.NewInternal(fmt.Errorf("failed to list sync mappings"))
 	}
 
 	if mappings == nil {
@@ -59,12 +62,12 @@ func (h *SyncHandler) GetMapping(c echo.Context) error {
 	mappingID := c.Param("mappingID")
 	mapping, err := h.syncMappingSvc.GetMapping(c.Request().Context(), mappingID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "sync mapping not found")
+		return apperror.NewNotFound("sync mapping not found")
 	}
 
 	// Verify campaign scope.
 	if mapping.CampaignID != c.Param("id") {
-		return echo.NewHTTPError(http.StatusNotFound, "sync mapping not found")
+		return apperror.NewNotFound("sync mapping not found")
 	}
 
 	return c.JSON(http.StatusOK, mapping)
@@ -77,12 +80,12 @@ func (h *SyncHandler) CreateMapping(c echo.Context) error {
 
 	var input CreateSyncMappingInput
 	if err := c.Bind(&input); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	mapping, err := h.syncMappingSvc.CreateMapping(c.Request().Context(), campaignID, input)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperror.NewBadRequest(err.Error())
 	}
 
 	return c.JSON(http.StatusCreated, mapping)
@@ -96,14 +99,14 @@ func (h *SyncHandler) DeleteMapping(c echo.Context) error {
 	// Verify campaign scope.
 	mapping, err := h.syncMappingSvc.GetMapping(c.Request().Context(), mappingID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "sync mapping not found")
+		return apperror.NewNotFound("sync mapping not found")
 	}
 	if mapping.CampaignID != c.Param("id") {
-		return echo.NewHTTPError(http.StatusNotFound, "sync mapping not found")
+		return apperror.NewNotFound("sync mapping not found")
 	}
 
 	if err := h.syncMappingSvc.DeleteMapping(c.Request().Context(), mappingID); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete sync mapping")
+		return apperror.NewInternal(fmt.Errorf("failed to delete sync mapping"))
 	}
 
 	return c.NoContent(http.StatusNoContent)
@@ -128,7 +131,7 @@ func (h *SyncHandler) LookupMapping(c echo.Context) error {
 		}
 		mapping, err := h.syncMappingSvc.GetMappingByChronicle(ctx, campaignID, chronicleType, chronicleID, externalSystem)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusNotFound, "sync mapping not found")
+			return apperror.NewNotFound("sync mapping not found")
 		}
 		return c.JSON(http.StatusOK, mapping)
 	}
@@ -137,12 +140,12 @@ func (h *SyncHandler) LookupMapping(c echo.Context) error {
 	if externalSystem != "" && externalID != "" {
 		mapping, err := h.syncMappingSvc.GetMappingByExternal(ctx, campaignID, externalSystem, externalID)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusNotFound, "sync mapping not found")
+			return apperror.NewNotFound("sync mapping not found")
 		}
 		return c.JSON(http.StatusOK, mapping)
 	}
 
-	return echo.NewHTTPError(http.StatusBadRequest, "provide either chronicle_type+chronicle_id or external_system+external_id")
+	return apperror.NewBadRequest("provide either chronicle_type+chronicle_id or external_system+external_id")
 }
 
 // PullMappings returns sync mappings modified since a given timestamp.
@@ -157,13 +160,13 @@ func (h *SyncHandler) PullMappings(c echo.Context) error {
 		var err error
 		since, err = time.Parse(time.RFC3339, sinceStr)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid since timestamp (use RFC3339)")
+			return apperror.NewBadRequest("invalid since timestamp (use RFC3339)")
 		}
 	}
 
 	resp, err := h.syncMappingSvc.PullModified(c.Request().Context(), campaignID, since, limit)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to pull sync mappings")
+		return apperror.NewInternal(fmt.Errorf("failed to pull sync mappings"))
 	}
 
 	return c.JSON(http.StatusOK, resp)

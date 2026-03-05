@@ -38,6 +38,12 @@
   // data-mention-id and data-entity-preview through the ProseMirror JSON
   // round-trip so hover preview cards work after save/reload.
   var Link = (Chronicle && Chronicle.MentionLink) || TipTap.Link;
+  var Table = TipTap.Table;
+  var TableRow = TipTap.TableRow;
+  var TableCell = TipTap.TableCell;
+  var TableHeader = TipTap.TableHeader;
+  var CodeBlockLowlight = TipTap.CodeBlockLowlight;
+  var lowlight = TipTap.lowlight;
 
   // Store editor instances for cleanup.
   var editors = new WeakMap();
@@ -101,6 +107,7 @@
           heading: { levels: [1, 2, 3] },
           link: false,
           underline: false,
+          codeBlock: false, // Replaced by CodeBlockLowlight for syntax highlighting.
         }),
         Placeholder.configure({
           placeholder: 'Begin writing your entry...',
@@ -111,6 +118,26 @@
         }),
         Underline,
       ];
+
+      // Add table extensions if available in the bundle.
+      if (Table) {
+        extensions.push(
+          Table.configure({ resizable: true, HTMLAttributes: { class: 'chronicle-table' } }),
+          TableRow,
+          TableCell,
+          TableHeader
+        );
+      }
+
+      // Add code block with syntax highlighting if lowlight is available.
+      if (CodeBlockLowlight && lowlight) {
+        extensions.push(
+          CodeBlockLowlight.configure({
+            lowlight: lowlight,
+            defaultLanguage: null, // Auto-detect.
+          })
+        );
+      }
 
       // Add inline secrets mark if extension is loaded.
       if (Chronicle.SecretMark) {
@@ -499,6 +526,7 @@
       { action: 'horizontalRule', icon: 'fa-minus',           label: 'Horizontal Rule', hint: '---' },
       { action: 'blockquote',     icon: 'fa-circle-info',     label: 'Callout Block',   hint: '>' },
       { action: 'code',           icon: 'fa-code',            label: 'Code Block',      hint: '```' },
+      { action: 'table',          icon: 'fa-table',           label: 'Insert Table',    hint: '' },
     ];
 
     items.forEach(function (item) {
@@ -604,6 +632,13 @@
 
       case 'code':
         editor.chain().focus().toggleCodeBlock().run();
+        break;
+
+      case 'table':
+        // Insert a 3x3 table with header row.
+        if (editor.can().insertTable) {
+          editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        }
         break;
     }
   }
@@ -791,6 +826,294 @@
         e.preventDefault();
         var state = editors.get(editorEl);
         if (state && state.dirty) saveContent(state);
+      }
+    }
+  });
+
+  // --- Find/Replace ---
+
+  /**
+   * Simple find/replace bar for the editor. Opens with Ctrl+F (find) or
+   * Ctrl+H (find and replace). Uses ProseMirror's text search under the hood.
+   */
+  var findBarState = null;
+
+  function openFindBar(editorEl, showReplace) {
+    var state = editors.get(editorEl);
+    if (!state || !state.isEditing) return;
+
+    // If already open, just toggle replace visibility.
+    if (findBarState && findBarState.bar.parentNode) {
+      if (showReplace) {
+        findBarState.replaceRow.style.display = '';
+      }
+      findBarState.findInput.focus();
+      findBarState.findInput.select();
+      return;
+    }
+
+    var bar = document.createElement('div');
+    bar.className = 'chronicle-find-bar';
+
+    // Find row.
+    var findRow = document.createElement('div');
+    findRow.className = 'chronicle-find-bar__row';
+
+    var findInput = document.createElement('input');
+    findInput.type = 'text';
+    findInput.className = 'chronicle-find-bar__input';
+    findInput.placeholder = 'Find...';
+    findInput.setAttribute('autocomplete', 'off');
+
+    var countLabel = document.createElement('span');
+    countLabel.className = 'chronicle-find-bar__count';
+    countLabel.textContent = '';
+
+    var prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = 'chronicle-find-bar__btn';
+    prevBtn.innerHTML = '<i class="fa-solid fa-chevron-up"></i>';
+    prevBtn.title = 'Previous (Shift+Enter)';
+
+    var nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'chronicle-find-bar__btn';
+    nextBtn.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
+    nextBtn.title = 'Next (Enter)';
+
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'chronicle-find-bar__btn chronicle-find-bar__close';
+    closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    closeBtn.title = 'Close (Esc)';
+
+    findRow.appendChild(findInput);
+    findRow.appendChild(countLabel);
+    findRow.appendChild(prevBtn);
+    findRow.appendChild(nextBtn);
+    findRow.appendChild(closeBtn);
+
+    // Replace row.
+    var replaceRow = document.createElement('div');
+    replaceRow.className = 'chronicle-find-bar__row';
+    if (!showReplace) replaceRow.style.display = 'none';
+
+    var replaceInput = document.createElement('input');
+    replaceInput.type = 'text';
+    replaceInput.className = 'chronicle-find-bar__input';
+    replaceInput.placeholder = 'Replace...';
+    replaceInput.setAttribute('autocomplete', 'off');
+
+    var replaceBtn = document.createElement('button');
+    replaceBtn.type = 'button';
+    replaceBtn.className = 'chronicle-find-bar__btn';
+    replaceBtn.textContent = 'Replace';
+    replaceBtn.title = 'Replace current match';
+
+    var replaceAllBtn = document.createElement('button');
+    replaceAllBtn.type = 'button';
+    replaceAllBtn.className = 'chronicle-find-bar__btn';
+    replaceAllBtn.textContent = 'All';
+    replaceAllBtn.title = 'Replace all matches';
+
+    replaceRow.appendChild(replaceInput);
+    replaceRow.appendChild(replaceBtn);
+    replaceRow.appendChild(replaceAllBtn);
+
+    bar.appendChild(findRow);
+    bar.appendChild(replaceRow);
+
+    // Insert bar above the content area.
+    var contentEl = editorEl.querySelector('.chronicle-editor__content');
+    if (contentEl) {
+      contentEl.parentNode.insertBefore(bar, contentEl);
+    } else {
+      editorEl.appendChild(bar);
+    }
+
+    // State for this find session.
+    findBarState = {
+      bar: bar,
+      findInput: findInput,
+      replaceInput: replaceInput,
+      replaceRow: replaceRow,
+      countLabel: countLabel,
+      matches: [],
+      currentIndex: -1,
+      editorState: state,
+    };
+
+    // Event handlers.
+    findInput.addEventListener('input', function () {
+      doFind(findInput.value);
+    });
+
+    findInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) { findPrev(); } else { findNext(); }
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeFindBar();
+      }
+    });
+
+    replaceInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeFindBar();
+      }
+    });
+
+    nextBtn.addEventListener('click', findNext);
+    prevBtn.addEventListener('click', findPrev);
+    closeBtn.addEventListener('click', closeFindBar);
+    replaceBtn.addEventListener('click', doReplace);
+    replaceAllBtn.addEventListener('click', doReplaceAll);
+
+    findInput.focus();
+  }
+
+  function closeFindBar() {
+    if (!findBarState) return;
+    clearHighlights();
+    if (findBarState.bar.parentNode) {
+      findBarState.bar.parentNode.removeChild(findBarState.bar);
+    }
+    if (findBarState.editorState && findBarState.editorState.editor) {
+      findBarState.editorState.editor.commands.focus();
+    }
+    findBarState = null;
+  }
+
+  function doFind(query) {
+    if (!findBarState) return;
+    clearHighlights();
+    findBarState.matches = [];
+    findBarState.currentIndex = -1;
+
+    if (!query) {
+      findBarState.countLabel.textContent = '';
+      return;
+    }
+
+    var editor = findBarState.editorState.editor;
+    var doc = editor.state.doc;
+    var queryLower = query.toLowerCase();
+    var matches = [];
+
+    // Walk through all text nodes in the ProseMirror document.
+    doc.descendants(function (node, pos) {
+      if (!node.isText) return;
+      var text = node.text.toLowerCase();
+      var idx = 0;
+      while (true) {
+        var found = text.indexOf(queryLower, idx);
+        if (found === -1) break;
+        matches.push({ from: pos + found, to: pos + found + query.length });
+        idx = found + 1;
+      }
+    });
+
+    findBarState.matches = matches;
+
+    if (matches.length > 0) {
+      findBarState.currentIndex = 0;
+      highlightMatches();
+      scrollToMatch(0);
+    }
+
+    findBarState.countLabel.textContent = matches.length > 0
+      ? (findBarState.currentIndex + 1) + '/' + matches.length
+      : 'No results';
+  }
+
+  function findNext() {
+    if (!findBarState || findBarState.matches.length === 0) return;
+    findBarState.currentIndex = (findBarState.currentIndex + 1) % findBarState.matches.length;
+    highlightMatches();
+    scrollToMatch(findBarState.currentIndex);
+    findBarState.countLabel.textContent =
+      (findBarState.currentIndex + 1) + '/' + findBarState.matches.length;
+  }
+
+  function findPrev() {
+    if (!findBarState || findBarState.matches.length === 0) return;
+    findBarState.currentIndex =
+      (findBarState.currentIndex - 1 + findBarState.matches.length) % findBarState.matches.length;
+    highlightMatches();
+    scrollToMatch(findBarState.currentIndex);
+    findBarState.countLabel.textContent =
+      (findBarState.currentIndex + 1) + '/' + findBarState.matches.length;
+  }
+
+  function doReplace() {
+    if (!findBarState || findBarState.matches.length === 0 || findBarState.currentIndex < 0) return;
+    var match = findBarState.matches[findBarState.currentIndex];
+    var replacement = findBarState.replaceInput.value;
+    var editor = findBarState.editorState.editor;
+
+    editor.chain().focus()
+      .insertContentAt({ from: match.from, to: match.to }, replacement)
+      .run();
+
+    // Re-search after replacement.
+    doFind(findBarState.findInput.value);
+  }
+
+  function doReplaceAll() {
+    if (!findBarState || findBarState.matches.length === 0) return;
+    var replacement = findBarState.replaceInput.value;
+    var editor = findBarState.editorState.editor;
+    var matches = findBarState.matches.slice().reverse(); // Replace from end to preserve positions.
+
+    var chain = editor.chain().focus();
+    matches.forEach(function (match) {
+      chain = chain.insertContentAt({ from: match.from, to: match.to }, replacement);
+    });
+    chain.run();
+
+    doFind(findBarState.findInput.value);
+  }
+
+  function highlightMatches() {
+    // Use ProseMirror decorations via CSS class on the editor content.
+    // For simplicity, we use the editor's setTextSelection to move to the
+    // current match. Full decoration-based highlighting would require a
+    // ProseMirror plugin; instead we just select the current match.
+    if (!findBarState || findBarState.matches.length === 0) return;
+    var match = findBarState.matches[findBarState.currentIndex];
+    var editor = findBarState.editorState.editor;
+    editor.commands.setTextSelection({ from: match.from, to: match.to });
+  }
+
+  function scrollToMatch(index) {
+    if (!findBarState || !findBarState.matches[index]) return;
+    var editor = findBarState.editorState.editor;
+    var view = editor.view;
+    var match = findBarState.matches[index];
+    var coords = view.coordsAtPos(match.from);
+    var editorEl = view.dom.closest('.chronicle-editor__content');
+    if (editorEl && coords) {
+      var rect = editorEl.getBoundingClientRect();
+      if (coords.top < rect.top || coords.bottom > rect.bottom) {
+        editorEl.scrollTop += coords.top - rect.top - rect.height / 3;
+      }
+    }
+  }
+
+  function clearHighlights() {
+    // No-op: we use selection-based highlighting rather than decorations.
+  }
+
+  // Ctrl+F / Ctrl+H to open find/replace.
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'h')) {
+      var editorEl = document.querySelector('.chronicle-editor--editing');
+      if (editorEl) {
+        e.preventDefault();
+        openFindBar(editorEl, e.key === 'h');
       }
     }
   });
