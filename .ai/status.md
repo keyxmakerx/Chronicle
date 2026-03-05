@@ -8,14 +8,19 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint I-1: Campaign Export/Import complete (batch 27).
+2026-03-05 -- Sprint I-2: Timeline Phase 2B complete (batch 28).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Sprint I-1 complete (batch 27).** Campaign export/import feature implemented.
-Ready for Sprint I-2 (Timeline Phase 2B).
+**Sprint I-2 complete (batch 28).** Timeline Phase 2B delivered.
+Ready for Sprint I-3 (Calendar Week View).
 
-### Summary of Recent Work (batches 25-27)
+### Summary of Recent Work (batches 25-28)
+- **Batch 28**: Sprint I-2 Timeline Phase 2B — Event connections (migration 000047,
+  model/repo/service/handler, D3 SVG lines/arrows with arrowhead markers, 4 line styles),
+  create-from-timeline (double-click empty space opens modal with date pre-filled),
+  visual polish (connection line CSS, event marker hover effects, ruler label improvements).
+  3 unit tests. Routes: GET/POST/DELETE /timelines/:tid/connections.
 - **Batch 27**: Sprint I-1 Campaign Export/Import — Full JSON export/import for campaigns
   including entity types, entities, tags, relations, calendar (config + events),
   timelines (standalone events), sessions, maps (markers, drawings, layers, tokens, fog),

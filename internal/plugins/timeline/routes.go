@@ -50,6 +50,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/timelines/:tid/groups/:gid/members", h.AddGroupMemberAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/timelines/:tid/groups/:gid/members/:eid", h.RemoveGroupMemberAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Event connections (Scribe+).
+	cg.GET("/timelines/:tid/connections", h.ListConnectionsAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/timelines/:tid/connections", h.CreateConnectionAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/timelines/:tid/connections/:cid", h.DeleteConnectionAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Visibility management (Owner only).
 	cg.PUT("/timelines/:tid/visibility", h.UpdateTimelineVisibilityAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/timelines/:tid/events/:eid/visibility", h.UpdateEventVisibilityAPI, campaigns.RequireRole(campaigns.RoleOwner))

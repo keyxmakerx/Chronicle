@@ -86,7 +86,7 @@ New capabilities ordered by priority for alpha release.
 - [x] **API documentation** — OpenAPI 3.0.3 spec at `docs/api/openapi.yaml`. 63 endpoints, 42 schemas, auth guide, rate limiting headers, sync protocol.
 - [x] **Foundry VTT Sync** — Bidirectional sync between Chronicle and Foundry VTT. Phases 1-4 complete (WebSocket, sync mappings, journal sync, map expansion, EventBus, Map API v1, calendar live sync). Phase 5 (shop entity type + Chronicle inventory widget + relation metadata, Foundry shop widget wiring, RequireAddonAPI permission hardening, E2E testing checklist) complete.
 - [x] **Maps Phase 2** — Layers, drawings, tokens, fog of war. Migration 000042, full CRUD service + repository + REST API handler. Role-based visibility filtering. Percentage-based coordinates for resolution independence.
-- [ ] **Timeline Phase 2B** — Event connections (visual lines between related events), create-from-timeline modal, beautification pass.
+- [x] **Timeline Phase 2B** — Event connections (migration 000047, SVG lines/arrows, 4 styles), create-from-timeline (double-click opens modal with date), visual polish (hover effects, ruler labels, connection CSS). 3 tests.
 - [x] **Campaign export/import** — JSON bundle for backup/migration. Export/import service with adapter pattern for 7 plugins (entities, calendar, timeline, sessions, maps, addons, media). Slug-based cross-references, ID remapping on import. 6 tests.
 - [x] **Image drag-and-drop upload** — Media browser has drag-and-drop + multi-file upload with per-file progress bars (Alpine.js + XHR). Entity image widget (`image_upload.js`) still click-only.
 - [ ] **Calendar week view** — Only month + timeline views exist. Week view is standard calendar UX expectation.
@@ -351,3 +351,15 @@ Summary of strengths/weaknesses for strategic positioning. Full analysis in `.ai
 - [x] Export adapters (`app/export_adapters.go`): adapter implementations for all plugins
 - [x] Route wiring in `campaigns/routes.go` and `app/routes.go`
 - [x] Tests: 6 unit tests for import detection and ID mapping
+
+### Phase I Sprint 2: Timeline Phase 2B (2026-03-05, batch 28)
+- [x] Migration 000047: `timeline_event_connections` table
+- [x] Model: `EventConnection` struct, `CreateConnectionInput`, connection style validation
+- [x] Repository: `CreateConnection`, `DeleteConnection`, `ListConnections` with IDOR protection
+- [x] Service: connection CRUD with validation (source/target type, self-connect, color, style)
+- [x] Handler: `CreateConnectionAPI`, `DeleteConnectionAPI`, `ListConnectionsAPI`
+- [x] Routes: GET/POST/DELETE `/timelines/:tid/connections` (Scribe+)
+- [x] D3 visualization: SVG arrowhead marker, quadratic Bézier curves, 4 line styles, labels
+- [x] Create-from-timeline: double-click empty space opens modal with date pre-filled
+- [x] Visual polish: connection line CSS (hover), event marker hover effects, ruler labels
+- [x] Tests: 3 unit tests for connection style validation and model fields

@@ -111,11 +111,17 @@ func (h *Handler) Show(c echo.Context) error {
 		}
 	}
 
+	connections, err := h.svc.ListConnections(ctx, timelineID)
+	if err != nil {
+		return err
+	}
+
 	data := TimelineViewData{
 		CampaignID:   cc.Campaign.ID,
 		Timeline:     t,
 		Events:       events,
 		EntityGroups: groups,
+		Connections:  connections,
 		IsOwner:      cc.MemberRole >= campaigns.RoleOwner,
 		IsScribe:     cc.MemberRole >= campaigns.RoleScribe,
 		CSRFToken:    middleware.GetCSRFToken(c),
@@ -459,11 +465,17 @@ func (h *Handler) TimelineDataAPI(c echo.Context) error {
 		eras, _ = h.svc.ListCalendarEras(ctx, *t.CalendarID)
 	}
 
+	connections, err := h.svc.ListConnections(ctx, timelineID)
+	if err != nil {
+		return err
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
-		"timeline": t,
-		"events":   events,
-		"groups":   groups,
-		"eras":     eras,
+		"timeline":    t,
+		"events":      events,
+		"groups":      groups,
+		"eras":        eras,
+		"connections": connections,
 	})
 }
 
@@ -849,6 +861,87 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	timelines = timelines[:limit]
 
 	return middleware.Render(c, http.StatusOK, timelinePreviewFragment(cc.Campaign.ID, timelines))
+}
+
+// --- Event Connection Handlers ---
+
+// CreateConnectionAPI creates a connection between two events on a timeline.
+// POST /campaigns/:id/timelines/:tid/connections
+func (h *Handler) CreateConnectionAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	timelineID := c.Param("tid")
+
+	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	var req struct {
+		SourceID   string  `json:"source_id"`
+		TargetID   string  `json:"target_id"`
+		SourceType string  `json:"source_type"`
+		TargetType string  `json:"target_type"`
+		Label      *string `json:"label"`
+		Color      *string `json:"color"`
+		Style      string  `json:"style"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	conn, err := h.svc.CreateConnection(ctx, timelineID, CreateConnectionInput{
+		SourceID:   req.SourceID,
+		TargetID:   req.TargetID,
+		SourceType: req.SourceType,
+		TargetType: req.TargetType,
+		Label:      req.Label,
+		Color:      req.Color,
+		Style:      req.Style,
+	})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, conn)
+}
+
+// DeleteConnectionAPI removes a connection between two events.
+// DELETE /campaigns/:id/timelines/:tid/connections/:cid
+func (h *Handler) DeleteConnectionAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	timelineID := c.Param("tid")
+
+	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	connID, err := parseIntParam(c, "cid")
+	if err != nil {
+		return err
+	}
+
+	if err := h.svc.DeleteConnection(ctx, timelineID, connID); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ListConnectionsAPI returns all connections for a timeline.
+// GET /campaigns/:id/timelines/:tid/connections
+func (h *Handler) ListConnectionsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	timelineID := c.Param("tid")
+
+	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	connections, err := h.svc.ListConnections(ctx, timelineID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, connections)
 }
 
 // parseIntParam extracts an integer path parameter, returning 400 on failure.

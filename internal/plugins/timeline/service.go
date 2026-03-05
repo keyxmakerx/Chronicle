@@ -107,6 +107,11 @@ type TimelineService interface {
 	AddGroupMember(ctx context.Context, timelineID string, groupID int, entityID string) error
 	RemoveGroupMember(ctx context.Context, timelineID string, groupID int, entityID string) error
 
+	// Event connections.
+	CreateConnection(ctx context.Context, timelineID string, input CreateConnectionInput) (*EventConnection, error)
+	DeleteConnection(ctx context.Context, timelineID string, connectionID int) error
+	ListConnections(ctx context.Context, timelineID string) ([]EventConnection, error)
+
 	// Search.
 	SearchTimelines(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
 
@@ -810,4 +815,56 @@ func validateVisibilityRules(rulesJSON *string) error {
 		return apperror.NewValidation("visibility_rules must be valid JSON: " + err.Error())
 	}
 	return nil
+}
+
+// --- Event Connections ---
+
+// CreateConnection creates a visual connection between two events on the timeline.
+func (s *timelineService) CreateConnection(ctx context.Context, timelineID string, input CreateConnectionInput) (*EventConnection, error) {
+	if input.SourceID == "" || input.TargetID == "" {
+		return nil, apperror.NewValidation("source_id and target_id are required")
+	}
+	if input.SourceID == input.TargetID {
+		return nil, apperror.NewValidation("cannot connect an event to itself")
+	}
+	if input.SourceType != "calendar" && input.SourceType != "standalone" {
+		return nil, apperror.NewValidation("source_type must be 'calendar' or 'standalone'")
+	}
+	if input.TargetType != "calendar" && input.TargetType != "standalone" {
+		return nil, apperror.NewValidation("target_type must be 'calendar' or 'standalone'")
+	}
+	if input.Style == "" {
+		input.Style = "arrow"
+	}
+	if !IsValidConnectionStyle(input.Style) {
+		return nil, apperror.NewValidation("invalid connection style")
+	}
+	if input.Color != nil && *input.Color != "" && !colorPattern.MatchString(*input.Color) {
+		return nil, apperror.NewValidation("color must be a valid hex color")
+	}
+
+	conn := &EventConnection{
+		TimelineID: timelineID,
+		SourceID:   input.SourceID,
+		TargetID:   input.TargetID,
+		SourceType: input.SourceType,
+		TargetType: input.TargetType,
+		Label:      input.Label,
+		Color:      input.Color,
+		Style:      input.Style,
+	}
+	if err := s.repo.CreateConnection(ctx, conn); err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("create connection: %w", err))
+	}
+	return conn, nil
+}
+
+// DeleteConnection removes a connection from a timeline.
+func (s *timelineService) DeleteConnection(ctx context.Context, timelineID string, connectionID int) error {
+	return s.repo.DeleteConnection(ctx, connectionID, timelineID)
+}
+
+// ListConnections returns all connections for a timeline.
+func (s *timelineService) ListConnections(ctx context.Context, timelineID string) ([]EventConnection, error) {
+	return s.repo.ListConnections(ctx, timelineID)
 }

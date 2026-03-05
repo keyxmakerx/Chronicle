@@ -44,6 +44,11 @@ type TimelineRepository interface {
 	ListEntityGroups(ctx context.Context, timelineID string) ([]EntityGroup, error)
 	AddGroupMember(ctx context.Context, groupID int, timelineID, entityID string) error
 	RemoveGroupMember(ctx context.Context, groupID int, timelineID, entityID string) error
+
+	// Event connections.
+	CreateConnection(ctx context.Context, c *EventConnection) error
+	DeleteConnection(ctx context.Context, connectionID int, timelineID string) error
+	ListConnections(ctx context.Context, timelineID string) ([]EventConnection, error)
 }
 
 // timelineRepo is the MariaDB implementation of TimelineRepository.
@@ -592,4 +597,70 @@ func (r *timelineRepo) RemoveGroupMember(ctx context.Context, groupID int, timel
 		groupID, entityID,
 	)
 	return err
+}
+
+// --- Event Connections ---
+
+// CreateConnection inserts a new event connection.
+func (r *timelineRepo) CreateConnection(ctx context.Context, c *EventConnection) error {
+	result, err := r.db.ExecContext(ctx,
+		`INSERT INTO timeline_event_connections
+			(timeline_id, source_id, target_id, source_type, target_type, label, color, style)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.TimelineID, c.SourceID, c.TargetID, c.SourceType, c.TargetType,
+		c.Label, c.Color, c.Style,
+	)
+	if err != nil {
+		return fmt.Errorf("create connection: %w", err)
+	}
+	id, _ := result.LastInsertId()
+	c.ID = int(id)
+	return nil
+}
+
+// DeleteConnection removes an event connection.
+// Verifies the connection belongs to the given timeline to prevent IDOR.
+func (r *timelineRepo) DeleteConnection(ctx context.Context, connectionID int, timelineID string) error {
+	result, err := r.db.ExecContext(ctx,
+		`DELETE FROM timeline_event_connections WHERE id = ? AND timeline_id = ?`,
+		connectionID, timelineID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete connection: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return apperror.NewNotFound("connection not found")
+	}
+	return nil
+}
+
+// ListConnections returns all event connections for a timeline.
+func (r *timelineRepo) ListConnections(ctx context.Context, timelineID string) ([]EventConnection, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, timeline_id, source_id, target_id, source_type, target_type,
+				label, color, style, created_at
+		 FROM timeline_event_connections
+		 WHERE timeline_id = ?
+		 ORDER BY created_at`,
+		timelineID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list connections: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var connections []EventConnection
+	for rows.Next() {
+		var c EventConnection
+		if err := rows.Scan(
+			&c.ID, &c.TimelineID, &c.SourceID, &c.TargetID,
+			&c.SourceType, &c.TargetType,
+			&c.Label, &c.Color, &c.Style, &c.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan connection: %w", err)
+		}
+		connections = append(connections, c)
+	}
+	return connections, rows.Err()
 }

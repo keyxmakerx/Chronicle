@@ -1161,6 +1161,35 @@
     bottom: 4px;
   }
 
+  /* Event connection lines */
+  .timeline-connection-line {
+    transition: stroke-opacity 150ms ease;
+  }
+  .timeline-connection-line:hover {
+    stroke-opacity: 1 !important;
+    stroke-width: 2.5;
+  }
+  .timeline-connection-label {
+    pointer-events: none;
+  }
+
+  /* Event marker hover effects */
+  .timeline-event .timeline-event-dot {
+    transition: r 150ms ease, filter 150ms ease;
+  }
+  .timeline-event:hover .timeline-event-dot {
+    filter: brightness(1.3) drop-shadow(0 0 4px currentColor);
+  }
+
+  /* Ruler label styling */
+  .ruler-label-primary {
+    fill: var(--color-fg-secondary, #a9b1d6);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: ui-monospace, monospace;
+    letter-spacing: 0.02em;
+  }
+
   /* Event list cards */
   .tl-event-card {
     @apply flex gap-3 p-3 rounded-lg border transition-all;

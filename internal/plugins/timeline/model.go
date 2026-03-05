@@ -358,6 +358,47 @@ func (e *TimelineEvent) ToEventLink() EventLink {
 	}
 }
 
+// --- Event Connections ---
+
+// ValidConnectionStyles lists the allowed line styles for event connections.
+var ValidConnectionStyles = []string{"arrow", "dashed", "dotted", "solid"}
+
+// IsValidConnectionStyle returns true if the given style is recognized.
+func IsValidConnectionStyle(s string) bool {
+	for _, v := range ValidConnectionStyles {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// EventConnection represents a visual link between two events on the
+// timeline visualization, rendered as an SVG line or arrow.
+type EventConnection struct {
+	ID         int       `json:"id"`
+	TimelineID string    `json:"timeline_id"`
+	SourceID   string    `json:"source_id"`
+	TargetID   string    `json:"target_id"`
+	SourceType string    `json:"source_type"`
+	TargetType string    `json:"target_type"`
+	Label      *string   `json:"label,omitempty"`
+	Color      *string   `json:"color,omitempty"`
+	Style      string    `json:"style"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// CreateConnectionInput is the validated input for creating an event connection.
+type CreateConnectionInput struct {
+	SourceID   string
+	TargetID   string
+	SourceType string
+	TargetType string
+	Label      *string
+	Color      *string
+	Style      string
+}
+
 // --- View Data ---
 
 // TimelineListData holds all data needed to render the timeline list page.
@@ -375,6 +416,7 @@ type TimelineViewData struct {
 	Timeline     *Timeline
 	Events       []EventLink
 	EntityGroups []EntityGroup
+	Connections  []EventConnection
 	IsOwner      bool
 	IsScribe     bool
 	CSRFToken    string
