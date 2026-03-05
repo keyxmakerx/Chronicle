@@ -196,8 +196,10 @@ func (h *APIHandler) GetEntity(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
-	// Enforce privacy: private entities require Owner role.
-	if entity.IsPrivate && role < int(campaigns.RoleOwner) {
+	// Enforce visibility: check both legacy is_private and custom permissions.
+	userID := h.resolveUserID(c)
+	access, accessErr := h.entitySvc.CheckEntityAccess(ctx, entity.ID, role, userID)
+	if accessErr != nil || !access.CanView {
 		return apperror.NewNotFound("entity not found")
 	}
 

@@ -345,7 +345,11 @@ templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
 		</td>
 		if cc.MemberRole >= campaigns.RoleScribe {
 			<td class="px-4 py-2.5 text-center">
-				if entity.IsPrivate {
+				if entity.Visibility == VisibilityCustom {
+					<span title="Custom permissions" style="color: #0d9488;">
+						<i class="fa-solid fa-shield-halved text-[10px]"></i>
+					</span>
+				} else if entity.IsPrivate {
 					<span class="text-amber-500 dark:text-amber-400" title="Private (DM only)">
 						<i class="fa-solid fa-lock text-[10px]"></i>
 					</span>
@@ -445,7 +449,9 @@ templ entityTreeLevel(cc *campaigns.CampaignContext, nodes []EntityTreeNode, dep
 							<span class="text-xs text-fg-muted hidden sm:inline">{ *node.Entity.TypeLabel }</span>
 						}
 
-						if node.Entity.IsPrivate {
+						if node.Entity.Visibility == VisibilityCustom {
+							<i class="fa-solid fa-shield-halved text-[10px] ml-auto shrink-0" title="Custom permissions" style="color: #0d9488;"></i>
+						} else if node.Entity.IsPrivate {
 							<i class="fa-solid fa-lock text-[10px] text-fg-muted ml-auto shrink-0" title="Private"></i>
 						}
 

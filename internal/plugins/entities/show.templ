@@ -339,7 +339,11 @@ templ blockDetails(entity *Entity) {
 			if entity.TypeLabel != nil && *entity.TypeLabel != "" {
 				<span class="text-sm text-fg-secondary">{ *entity.TypeLabel }</span>
 			}
-			if entity.IsPrivate {
+			if entity.Visibility == VisibilityCustom {
+				<span title="Custom permissions" style="color: #0d9488;">
+					<i class="fa-solid fa-shield-halved text-xs"></i>
+				</span>
+			} else if entity.IsPrivate {
 				<span class="text-fg-muted" title="Private (GM only)">
 					<i class="fa-solid fa-lock text-xs"></i>
 				</span>
@@ -624,7 +628,9 @@ templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []En
 									}
 								</div>
 							</div>
-							if child.IsPrivate {
+							if child.Visibility == VisibilityCustom {
+								<i class="fa-solid fa-shield-halved text-xs ml-auto shrink-0" title="Custom permissions" style="color: #0d9488;"></i>
+							} else if child.IsPrivate {
 								<i class="fa-solid fa-lock text-xs text-fg-muted ml-auto shrink-0" title="Private"></i>
 							}
 						</div>

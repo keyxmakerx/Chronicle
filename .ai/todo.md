@@ -109,7 +109,7 @@ New capabilities ordered by priority for alpha release.
 ### Phase K: Permissions & Competitive Gap Closers
 
 - [x] **Sprint K-1: Per-Entity Permissions Model** — Migration 000048: `entity_permissions` table + `visibility` column on entities. Models: VisibilityMode, SubjectType, Permission, EntityPermission, EffectivePermission, SetPermissionsInput, PermissionGrant. Repository: EntityPermissionRepository (ListByEntity, SetPermissions, DeleteByEntity, GetEffectivePermission, UpdateVisibility) + visibilityFilter() SQL helper. Service: CheckEntityAccess, SetEntityPermissions, GetEntityPermissions. All list/search/count queries updated with userID param for permission-aware filtering. 13 new unit tests.
-- [ ] **Sprint K-2: Per-Entity Permissions UI** — "Permissions" tab on entity edit page. Visibility selector (everyone/dm_only/custom). User/role picker with view/edit toggles. Entity list + sidebar filter by resolved permissions.
+- [x] **Sprint K-2: Per-Entity Permissions UI** — Permissions widget (`permissions.js`) with three visibility modes (Everyone/DM Only/Custom), per-role and per-user grant toggles (None/View/Edit), auto-save. Replaced `is_private` checkbox on entity edit form. API: GET/PUT `/entities/:eid/permissions` (Owner only). Multi-mode visibility indicators in entity cards, category dashboard table/tree, show page title+children. Fixed sync API `GetEntity` custom visibility gap. MemberLister interface for campaign member picker.
 - [ ] **Sprint K-3: Group-Based Visibility** — Migration: `campaign_groups` + `campaign_group_members`. Permission subject_type gains "group." Groups in Campaign Settings. Entity permission UI gets group selector.
 - [ ] **Sprint K-4: Auto-Linking in Editor** — Backend: entity-names API (Redis-cached). Frontend: TipTap InputRule matches entity names, inline suggestion popup. Per-campaign toggle. Whole-word, case-insensitive, min 3 chars.
 - [ ] **Sprint K-5: Relations Graph Visualization** — D3.js force-directed graph (`relation_graph.js`). Backend: relation-graph API (nodes/edges JSON). Dashboard block + standalone page `/campaigns/:id/relations`.
@@ -363,3 +363,16 @@ Summary of strengths/weaknesses for strategic positioning. Full analysis in `.ai
 - [x] View toggle: Grid/Week/Timeline button group added to all 3 calendar views
 - [x] Route: GET `/calendar/week` (public-capable)
 - [x] Tests: 5 unit tests for week data helpers (WeekDays, CrossMonth, PrevNext, WeekdayName)
+
+### Sprint K-2: Per-Entity Permissions UI (2026-03-05, batch 36)
+- [x] Fixed sync API `GetEntity` visibility gap (only checked `is_private`, now calls `CheckEntityAccess`)
+- [x] Added `MemberLister` interface + `SetMemberLister` setter to entities Handler for campaign member picker
+- [x] Permissions API: `GET/PUT /campaigns/:id/entities/:eid/permissions` (Owner only)
+- [x] Response shape: `{ visibility, is_private, members: [...], permissions: [...] }`
+- [x] Permissions widget (`static/js/widgets/permissions.js`): three-mode radio (Everyone/DM Only/Custom), role grants (Player/Scribe), user grants per campaign member, auto-save with abort controller
+- [x] Script tag added to `base.templ`
+- [x] Entity edit form: replaced `is_private` checkbox with permissions widget mount point + hidden field to preserve `is_private` during form submission
+- [x] Entity card: multi-mode visibility icon (shield-halved for custom, lock for DM-only)
+- [x] Category dashboard: updated table visibility column + tree view privacy indicator
+- [x] Show page: updated title block + blockChildren visibility indicators
+- [x] Export adapters: TODO comment for entity_permissions export

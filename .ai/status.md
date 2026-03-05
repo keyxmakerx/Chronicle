@@ -8,13 +8,23 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint K-1 (Per-Entity Permissions Model) complete (batch 35).
+2026-03-05 -- Sprint K-2 (Per-Entity Permissions UI) complete (batch 36).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Phase K: Permissions & Competitive Gap Closers.** Sprint K-1 delivered (batch 35). Next: Sprint K-2 (Per-Entity Permissions UI).
+**Phase K: Permissions & Competitive Gap Closers.** Sprint K-2 delivered (batch 36). Next: Sprint K-3 (Group-Based Visibility).
 
-### Summary of Recent Work (batches 25-35)
+### Summary of Recent Work (batches 25-36)
+- **Batch 36**: Sprint K-2 Per-Entity Permissions UI — Permissions widget
+  (`permissions.js`) with three visibility modes (Everyone/DM Only/Custom),
+  per-role and per-user grant toggles (None/View/Edit), auto-save. Replaced
+  `is_private` checkbox on entity edit form. API endpoints: GET/PUT
+  `/entities/:eid/permissions` (Owner only). Multi-mode visibility indicators
+  in entity cards (shield-halved for custom, lock for DM-only), category
+  dashboard table/tree, show page title block + children list. Fixed sync API
+  `GetEntity` to check custom visibility via `CheckEntityAccess`. Added
+  `MemberLister` interface + wiring for campaign member picker. Export TODO for
+  permissions data.
 - **Batch 35**: Sprint K-1 Per-Entity Permissions Model — Migration 000048
   (`entity_permissions` table, `visibility` ENUM column on entities). Permission
   model types (VisibilityMode, SubjectType, Permission, EntityPermission,
@@ -82,7 +92,7 @@ Branch: `claude/project-review-planning-Yr4CL`.
 ---
 
 ## Next Session Should
-Continue **Phase K** with Sprint K-2 (Per-Entity Permissions UI — "Permissions" tab on entity edit page, visibility selector, user/role picker with view/edit toggles, entity list + sidebar filter by resolved permissions). Full post-alpha roadmap (Phases K through O, 25 sprints) documented in `.ai/todo.md`.
+Continue **Phase K** with Sprint K-3 (Group-Based Visibility — `campaign_groups` + `campaign_group_members` tables, permission subject_type gains "group", groups managed from Campaign Settings, entity permission UI gets group selector). Full post-alpha roadmap (Phases K through O, 25 sprints) documented in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

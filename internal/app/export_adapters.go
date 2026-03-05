@@ -102,6 +102,9 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 				popupConfig, _ = json.Marshal(e.PopupConfig)
 			}
 
+			// TODO(K-2): Export entity_permissions rows and visibility mode
+			// for entities with custom permissions. Currently only exports
+			// is_private; custom grants are lost on export/import.
 			data.Entities = append(data.Entities, campaigns.ExportEntity{
 				OriginalID:     e.ID,
 				EntityTypeSlug: typeIDToSlug[e.EntityTypeID],

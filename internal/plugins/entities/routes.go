@@ -35,6 +35,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Popup preview config API (Scribe+).
 	cg.PUT("/entities/:eid/popup-config", h.UpdatePopupConfigAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// Per-entity permissions API (Owner only).
+	cg.GET("/entities/:eid/permissions", h.GetPermissionsAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/entities/:eid/permissions", h.SetPermissionsAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Scribe routes (create/edit).
 	cg.GET("/entities/new", h.NewForm, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities", h.Create, campaigns.RequireRole(campaigns.RoleScribe))

@@ -58,6 +58,12 @@ type SessionSearcher interface {
 	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 }
 
+// MemberLister retrieves campaign members for the permissions UI.
+// Satisfied by campaigns.CampaignService.
+type MemberLister interface {
+	ListMembers(ctx context.Context, campaignID string) ([]campaigns.CampaignMember, error)
+}
+
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
@@ -69,6 +75,7 @@ type Handler struct {
 	mapSearcher        MapSearcher
 	calendarSearcher   CalendarSearcher
 	sessionSearcher    SessionSearcher
+	memberLister       MemberLister
 }
 
 // NewHandler creates a new entity handler.
@@ -116,6 +123,12 @@ func (h *Handler) SetCalendarSearcher(cs CalendarSearcher) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetSessionSearcher(ss SessionSearcher) {
 	h.sessionSearcher = ss
+}
+
+// SetMemberLister sets the member lister for the permissions UI.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetMemberLister(ml MemberLister) {
+	h.memberLister = ml
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
@@ -998,6 +1011,126 @@ func (h *Handler) UpdatePopupConfigAPI(c echo.Context) error {
 	}
 
 	if err := h.service.UpdatePopupConfig(c.Request().Context(), entityID, &body); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// --- Per-Entity Permissions API ---
+
+// permissionsResponse is the JSON response for the GET permissions endpoint.
+type permissionsResponse struct {
+	Visibility  VisibilityMode       `json:"visibility"`
+	IsPrivate   bool                 `json:"is_private"`
+	Members     []permissionsMember  `json:"members"`
+	Permissions []EntityPermission   `json:"permissions"`
+}
+
+// permissionsMember is a campaign member summary for the permissions UI.
+type permissionsMember struct {
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+	Role        int    `json:"role"`
+	AvatarPath  string `json:"avatar_path,omitempty"`
+}
+
+// setPermissionsRequest is the JSON body for setting entity permissions.
+type setPermissionsRequest struct {
+	Visibility  VisibilityMode    `json:"visibility"`
+	IsPrivate   bool              `json:"is_private"`
+	Permissions []PermissionGrant `json:"permissions"`
+}
+
+// GetPermissionsAPI returns the entity's current visibility mode, campaign
+// members, and permission grants. Owner only.
+// GET /campaigns/:id/entities/:eid/permissions
+func (h *Handler) GetPermissionsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	ctx := c.Request().Context()
+
+	entity, err := h.service.GetByID(ctx, entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Fetch current permission grants.
+	grants, err := h.service.GetEntityPermissions(ctx, entityID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("get entity permissions: %w", err))
+	}
+	if grants == nil {
+		grants = []EntityPermission{}
+	}
+
+	// Fetch campaign members for the picker UI.
+	var members []permissionsMember
+	if h.memberLister != nil {
+		campaignMembers, err := h.memberLister.ListMembers(ctx, cc.Campaign.ID)
+		if err != nil {
+			slog.Error("failed to list campaign members for permissions", slog.Any("error", err))
+		} else {
+			for _, m := range campaignMembers {
+				pm := permissionsMember{
+					UserID:      m.UserID,
+					DisplayName: m.DisplayName,
+					Email:       m.Email,
+					Role:        int(m.Role),
+				}
+				if m.AvatarPath != nil {
+					pm.AvatarPath = *m.AvatarPath
+				}
+				members = append(members, pm)
+			}
+		}
+	}
+	if members == nil {
+		members = []permissionsMember{}
+	}
+
+	return c.JSON(http.StatusOK, permissionsResponse{
+		Visibility:  entity.Visibility,
+		IsPrivate:   entity.IsPrivate,
+		Members:     members,
+		Permissions: grants,
+	})
+}
+
+// SetPermissionsAPI updates an entity's visibility mode and permission grants.
+// Owner only.
+// PUT /campaigns/:id/entities/:eid/permissions
+func (h *Handler) SetPermissionsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	ctx := c.Request().Context()
+
+	entity, err := h.service.GetByID(ctx, entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var req setPermissionsRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.SetEntityPermissions(ctx, entityID, SetPermissionsInput(req)); err != nil {
 		return err
 	}
 
