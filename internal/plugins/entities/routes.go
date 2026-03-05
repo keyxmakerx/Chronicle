@@ -29,6 +29,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/entities/:eid/field-overrides", h.UpdateFieldOverridesAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/entities/:eid/field-overrides", h.ResetFieldOverridesAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// Per-entity permissions API (Owner only — permissions are a privileged operation).
+	cg.GET("/entities/:eid/permissions", h.GetPermissionsAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/entities/:eid/permissions", h.SetPermissionsAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.GET("/entities/members", h.GetMembersAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Image API.
 	cg.PUT("/entities/:eid/image", h.UpdateImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
 

@@ -213,7 +213,7 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 									<th class="text-left px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider hidden lg:table-cell">Updated</th>
 									if cc.MemberRole >= campaigns.RoleScribe {
 										<th class="text-center px-4 py-2.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider w-16">
-											<i class="fa-solid fa-lock text-[10px]" title="Visibility"></i>
+											<i class="fa-solid fa-eye text-[10px]" title="Visibility"></i>
 										</th>
 									}
 								</tr>
@@ -345,7 +345,11 @@ templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
 		</td>
 		if cc.MemberRole >= campaigns.RoleScribe {
 			<td class="px-4 py-2.5 text-center">
-				if entity.IsPrivate {
+				if entity.Visibility == VisibilityCustom {
+					<span class="text-blue-500 dark:text-blue-400" title="Custom permissions">
+						<i class="fa-solid fa-shield-halved text-[10px]"></i>
+					</span>
+				} else if entity.IsPrivate {
 					<span class="text-amber-500 dark:text-amber-400" title="Private (DM only)">
 						<i class="fa-solid fa-lock text-[10px]"></i>
 					</span>
@@ -445,7 +449,9 @@ templ entityTreeLevel(cc *campaigns.CampaignContext, nodes []EntityTreeNode, dep
 							<span class="text-xs text-fg-muted hidden sm:inline">{ *node.Entity.TypeLabel }</span>
 						}
 
-						if node.Entity.IsPrivate {
+						if node.Entity.Visibility == VisibilityCustom {
+							<i class="fa-solid fa-shield-halved text-[10px] text-fg-muted ml-auto shrink-0" title="Custom permissions"></i>
+						} else if node.Entity.IsPrivate {
 							<i class="fa-solid fa-lock text-[10px] text-fg-muted ml-auto shrink-0" title="Private"></i>
 						}
 

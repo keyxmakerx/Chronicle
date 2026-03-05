@@ -8,19 +8,27 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Roadmap reorganization complete. Phases K-M restructured around 3 interleaved tracks: Module Framework, Foundry VTT, Permissions + Content Depth.
+2026-03-05 -- Sprint K-2 (Per-Entity Permissions UI) complete (batch 36).
 Branch: `claude/plan-development-phases-G8Pwf`.
 
 ## Current Phase
-**Phase K: Permissions UI + Module Foundation.** Sprint K-1 delivered (batch 35). Roadmap reorganized into 3 interleaved tracks:
+**Phase K: Permissions UI + Module Foundation.** Sprints K-1 and K-2 delivered. Roadmap organized into 3 interleaved tracks:
 
 1. **Module Framework** — Build sandboxed module pack system before specific game content. K-3 (manifest/loader), K-4 (data API), L-1 (SDK docs), L-5 (packaging), M-4 (Draw Steel).
 2. **Foundry VTT** — Polish existing + add new features. K-5 (bug fixes), L-3 (multi-scene + combat), M-1 (character sheet linking).
-3. **Permissions + Content** — K-2 (permissions UI), K-6 (relations graph), L-2 (entity posts), L-4 (auto-linking), M-2 (notes rich text), M-3 (group visibility), M-5 (calendar DnD).
+3. **Permissions + Content** — ~~K-2 (permissions UI)~~, K-6 (relations graph), L-2 (entity posts), L-4 (auto-linking), M-2 (notes rich text), M-3 (group visibility), M-5 (calendar DnD).
 
-Next sprint: **K-2 (Per-Entity Permissions UI)**.
+Next sprint: **K-3 (Module Manifest & Loader Framework)**.
 
-### Summary of Recent Work (batches 25-35)
+### Summary of Recent Work (batches 25-36)
+- **Batch 36**: Sprint K-2 Per-Entity Permissions UI — Visibility section on
+  entity edit page (Alpine.js) with three modes: Everyone/GM Only/Custom
+  Permissions. Custom mode: dynamic permission grant builder with subject type
+  (role/user), subject ID picker, permission level (view/edit), auto-save via
+  API. Handler: GET/PUT `/entities/:eid/permissions`, GET `/entities/members`.
+  Visibility indicators updated across entity cards, table rows, tree view,
+  show page details block. Shield icon for custom permissions, lock for private.
+  MemberLister dependency wired into entity handler.
 - **Batch 35**: Sprint K-1 Per-Entity Permissions Model — Migration 000048
   (`entity_permissions` table, `visibility` ENUM column on entities). Permission
   model types (VisibilityMode, SubjectType, Permission, EntityPermission,
@@ -88,7 +96,7 @@ Next sprint: **K-2 (Per-Entity Permissions UI)**.
 ---
 
 ## Next Session Should
-Continue **Phase K** with Sprint K-2 (Per-Entity Permissions UI — "Permissions" tab on entity edit page, visibility selector, user/role picker with view/edit toggles, entity list + sidebar filter by resolved permissions). Then K-3 (Module Manifest & Loader Framework). Full reorganized roadmap (Phases K-M, 15 sprints across 3 tracks) in `.ai/todo.md`.
+Continue **Phase K** with Sprint K-3 (Module Manifest & Loader Framework — `ModuleManifest` JSON spec, `ModuleLoader`, `ModuleRegistry` rewrite with auto-discovery, sandboxed `Module` interface). Then K-4 (Module Data API & Widget Integration). Full reorganized roadmap (Phases K-M, 15 sprints across 3 tracks) in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -136,3 +144,4 @@ Continue **Phase K** with Sprint K-2 (Per-Entity Permissions UI — "Permissions
 - **2026-03-05: Sprint J-4** — ClamAV antivirus scanning, docker-compose ClamAV container.
 - **2026-03-05: ALL PHASES COMPLETE** — H (release readiness), I (core UX), J (polish & infra).
 - **2026-03-05: Sprint K-1** — Per-entity permissions model (backend): migration 000048, model types, permission repository, service methods, visibility filter, 13 tests.
+- **2026-03-05: Sprint K-2** — Per-entity permissions UI: visibility section on edit page (Everyone/GM Only/Custom), permission grant builder, API endpoints, visibility indicators across all views.

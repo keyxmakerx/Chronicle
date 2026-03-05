@@ -202,18 +202,24 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 				<p class="mt-1 text-xs text-fg-secondary">Plain text for now. Rich text editor coming soon.</p>
 			</div>
 
-			<div class="flex items-center">
-				<input type="hidden" name="is_private" value="false"/>
-				<input
-					type="checkbox"
-					id="is_private"
-					name="is_private"
-					value="true"
-					checked?={ entity.IsPrivate }
-					class="rounded border-edge text-blue-600 mr-2"
-				/>
-				<label for="is_private" class="text-sm text-fg-body">Private (visible to GM only)</label>
-			</div>
+			<!-- Visibility / Permissions -->
+			if cc.MemberRole >= campaigns.RoleOwner {
+				@visibilitySection(cc, entity)
+			} else {
+				<!-- Non-owners see legacy checkbox only -->
+				<div class="flex items-center">
+					<input type="hidden" name="is_private" value="false"/>
+					<input
+						type="checkbox"
+						id="is_private"
+						name="is_private"
+						value="true"
+						checked?={ entity.IsPrivate }
+						class="rounded border-edge text-blue-600 mr-2"
+					/>
+					<label for="is_private" class="text-sm text-fg-body">Private (visible to GM only)</label>
+				</div>
+			}
 
 			<!-- Popup Preview Config: controls what appears in the hover tooltip -->
 			@popupConfigSection(cc, entity)
@@ -396,6 +402,207 @@ func fieldValueMatches(fieldsData map[string]any, key, expected string) bool {
 		return false
 	}
 	return fmt.Sprintf("%v", val) == expected
+}
+
+// visibilityModeValue returns the current visibility mode for Alpine.js state init.
+// Maps the entity state to one of: "everyone", "dm_only", "custom".
+func visibilityModeValue(entity *Entity) string {
+	if entity.Visibility == VisibilityCustom {
+		return "custom"
+	}
+	if entity.IsPrivate {
+		return "dm_only"
+	}
+	return "everyone"
+}
+
+// visibilitySection renders the permissions/visibility control on the edit form.
+// Owners see a three-way selector (Everyone / GM Only / Custom Permissions).
+// Custom mode shows a permission grant builder that saves via the permissions API.
+templ visibilitySection(cc *campaigns.CampaignContext, entity *Entity) {
+	<fieldset
+		class="pt-4 border-t border-edge space-y-3"
+		x-data={ fmt.Sprintf(`{
+			mode: '%s',
+			grants: [],
+			members: [],
+			membersLoaded: false,
+			saving: false,
+			saved: false,
+			error: '',
+			init() {
+				// Load existing permissions if in custom mode.
+				if (this.mode === 'custom') { this.loadPermissions(); }
+			},
+			async loadPermissions() {
+				try {
+					const resp = await Chronicle.apiFetch('/campaigns/%s/entities/%s/permissions');
+					if (resp.ok) {
+						const data = await resp.json();
+						this.grants = data.permissions || [];
+					}
+				} catch(e) { console.error('Failed to load permissions', e); }
+			},
+			async loadMembers() {
+				if (this.membersLoaded) return;
+				try {
+					const resp = await Chronicle.apiFetch('/campaigns/%s/entities/members');
+					if (resp.ok) {
+						this.members = await resp.json();
+						this.membersLoaded = true;
+					}
+				} catch(e) { console.error('Failed to load members', e); }
+			},
+			async onModeChange() {
+				if (this.mode === 'custom') {
+					await this.loadMembers();
+					await this.loadPermissions();
+				}
+				await this.save();
+			},
+			addGrant() {
+				this.grants.push({ subject_type: 'role', subject_id: '1', permission: 'view' });
+			},
+			removeGrant(idx) {
+				this.grants.splice(idx, 1);
+				this.save();
+			},
+			async save() {
+				this.saving = true;
+				this.saved = false;
+				this.error = '';
+				try {
+					const body = {};
+					if (this.mode === 'everyone') {
+						body.visibility = 'default';
+						body.is_private = false;
+						body.permissions = [];
+					} else if (this.mode === 'dm_only') {
+						body.visibility = 'default';
+						body.is_private = true;
+						body.permissions = [];
+					} else {
+						body.visibility = 'custom';
+						body.is_private = false;
+						body.permissions = this.grants;
+					}
+					const resp = await Chronicle.apiFetch('/campaigns/%s/entities/%s/permissions', {
+						method: 'PUT',
+						body: JSON.stringify(body)
+					});
+					if (resp.ok) {
+						this.saved = true;
+						setTimeout(() => this.saved = false, 2000);
+					} else {
+						const data = await resp.json().catch(() => ({}));
+						this.error = data.message || 'Failed to save';
+					}
+				} catch(e) {
+					this.error = 'Network error';
+				} finally { this.saving = false; }
+			},
+			roleName(r) {
+				const names = { '1': 'Players', '2': 'Scribes', '3': 'Owners' };
+				return names[r] || r;
+			},
+			memberName(id) {
+				const m = this.members.find(m => m.user_id === id);
+				return m ? m.display_name : id;
+			}
+		}`, visibilityModeValue(entity), cc.Campaign.ID, entity.ID, cc.Campaign.ID, cc.Campaign.ID, entity.ID) }
+	>
+		<legend class="text-sm font-semibold text-fg">Visibility</legend>
+
+		<!-- Mode selector: radio buttons -->
+		<div class="space-y-2">
+			<label class="flex items-center gap-2 cursor-pointer">
+				<input type="radio" name="visibility_mode" value="everyone"
+					x-model="mode" @change="onModeChange()"
+					class="text-blue-600"/>
+				<span class="text-sm text-fg-body">
+					<i class="fa-solid fa-globe text-xs text-fg-muted mr-1"></i>
+					Everyone in campaign
+				</span>
+			</label>
+			<label class="flex items-center gap-2 cursor-pointer">
+				<input type="radio" name="visibility_mode" value="dm_only"
+					x-model="mode" @change="onModeChange()"
+					class="text-blue-600"/>
+				<span class="text-sm text-fg-body">
+					<i class="fa-solid fa-lock text-xs text-fg-muted mr-1"></i>
+					GM only (private)
+				</span>
+			</label>
+			<label class="flex items-center gap-2 cursor-pointer">
+				<input type="radio" name="visibility_mode" value="custom"
+					x-model="mode" @change="onModeChange()"
+					class="text-blue-600"/>
+				<span class="text-sm text-fg-body">
+					<i class="fa-solid fa-shield-halved text-xs text-fg-muted mr-1"></i>
+					Custom permissions
+				</span>
+			</label>
+		</div>
+
+		<!-- Hidden form fields so the main form submission also carries visibility state.
+		     The actual persistence happens via the permissions API, but these ensure
+		     the Update handler sets is_private correctly for the legacy column. -->
+		<input type="hidden" name="is_private" x-bind:value="mode === 'dm_only' ? 'true' : 'false'"/>
+
+		<!-- Custom permissions grant builder -->
+		<div x-show="mode === 'custom'" x-cloak class="mt-3 space-y-3 pl-5">
+			<p class="text-xs text-fg-secondary">Owners always have full access. Add grants for other roles or specific users.</p>
+
+			<!-- Existing grants -->
+			<template x-for="(grant, idx) in grants" :key="idx">
+				<div class="flex items-center gap-2 p-2 rounded-md bg-surface-alt border border-edge text-sm">
+					<!-- Subject type selector -->
+					<select x-model="grant.subject_type" @change="save()" class="input py-1 px-2 text-xs">
+						<option value="role">Role</option>
+						<option value="user">User</option>
+					</select>
+
+					<!-- Subject ID: role level or user picker -->
+					<template x-if="grant.subject_type === 'role'">
+						<select x-model="grant.subject_id" @change="save()" class="input py-1 px-2 text-xs flex-1">
+							<option value="1">Players & above</option>
+							<option value="2">Scribes & above</option>
+						</select>
+					</template>
+					<template x-if="grant.subject_type === 'user'">
+						<select x-model="grant.subject_id" @change="save()" class="input py-1 px-2 text-xs flex-1">
+							<template x-for="m in members" :key="m.user_id">
+								<option :value="m.user_id" x-text="m.display_name"></option>
+							</template>
+						</select>
+					</template>
+
+					<!-- Permission level -->
+					<select x-model="grant.permission" @change="save()" class="input py-1 px-2 text-xs">
+						<option value="view">View</option>
+						<option value="edit">Edit</option>
+					</select>
+
+					<!-- Remove button -->
+					<button type="button" @click="removeGrant(idx)" class="text-red-500 hover:text-red-700 transition-colors px-1" title="Remove grant">
+						<i class="fa-solid fa-xmark text-xs"></i>
+					</button>
+				</div>
+			</template>
+
+			<!-- Add grant button -->
+			<button type="button" @click="loadMembers(); addGrant()" class="text-xs text-accent hover:text-accent-hover transition-colors flex items-center gap-1">
+				<i class="fa-solid fa-plus text-[10px]"></i> Add permission grant
+			</button>
+
+			<!-- Status messages -->
+			<div class="text-xs h-4">
+				<span x-show="saving" class="text-fg-muted">Saving...</span>
+				<span x-show="saved" class="text-green-600">Saved</span>
+				<span x-show="error" class="text-red-600" x-text="error"></span>
+			</div>
+		</div>
+	</fieldset>
 }
 
 // popupConfigBool returns true/false string for Alpine.js data binding.

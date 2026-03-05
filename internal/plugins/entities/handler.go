@@ -65,6 +65,7 @@ type Handler struct {
 	auditSvc           audit.AuditService
 	tagFetcher         EntityTagFetcher
 	addonSvc           AddonChecker
+	memberLister       campaigns.MemberLister
 	timelineSearcher   TimelineSearcher
 	mapSearcher        MapSearcher
 	calendarSearcher   CalendarSearcher
@@ -92,6 +93,12 @@ func (h *Handler) SetAddonChecker(svc AddonChecker) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetTagFetcher(f EntityTagFetcher) {
 	h.tagFetcher = f
+}
+
+// SetMemberLister sets the campaign member lister for the permissions UI.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetMemberLister(ml campaigns.MemberLister) {
+	h.memberLister = ml
 }
 
 // SetTimelineSearcher sets the timeline searcher for @mention results.
@@ -1510,6 +1517,112 @@ func (h *Handler) ResetCategoryDashboardLayout(c echo.Context) error {
 }
 
 // --- Helpers ---
+
+// --- Per-Entity Permissions API ---
+
+// GetPermissionsAPI returns the current permissions for an entity as JSON.
+// GET /campaigns/:id/entities/:eid/permissions
+func (h *Handler) GetPermissionsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	perms, err := h.service.GetEntityPermissions(c.Request().Context(), entityID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("loading permissions: %w", err))
+	}
+
+	// Build grants list from stored permissions.
+	grants := make([]PermissionGrant, 0, len(perms))
+	for _, p := range perms {
+		grants = append(grants, PermissionGrant{
+			SubjectType: p.SubjectType,
+			SubjectID:   p.SubjectID,
+			Permission:  p.Permission,
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"visibility":  entity.Visibility,
+		"is_private":  entity.IsPrivate,
+		"permissions": grants,
+	})
+}
+
+// SetPermissionsAPI saves permissions for an entity from JSON.
+// PUT /campaigns/:id/entities/:eid/permissions
+func (h *Handler) SetPermissionsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var input SetPermissionsInput
+	if err := json.NewDecoder(c.Request().Body).Decode(&input); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.SetEntityPermissions(c.Request().Context(), entityID, input); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// GetMembersAPI returns the campaign members list as JSON for the permission
+// user picker. GET /campaigns/:id/entities/members
+func (h *Handler) GetMembersAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if h.memberLister == nil {
+		return c.JSON(http.StatusOK, []any{})
+	}
+
+	members, err := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("loading members: %w", err))
+	}
+
+	type memberJSON struct {
+		UserID      string `json:"user_id"`
+		DisplayName string `json:"display_name"`
+		Role        int    `json:"role"`
+	}
+
+	result := make([]memberJSON, 0, len(members))
+	for _, m := range members {
+		result = append(result, memberJSON{
+			UserID:      m.UserID,
+			DisplayName: m.DisplayName,
+			Role:        int(m.Role),
+		})
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
 
 // parseFieldsFromForm collects field_<key> form parameters and builds a
 // map of field values.

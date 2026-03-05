@@ -109,7 +109,7 @@ New capabilities ordered by priority for alpha release.
 ### Phase K: Permissions UI + Module Foundation (3 tracks interleaved)
 
 - [x] **Sprint K-1: Per-Entity Permissions Model** — Migration 000048: `entity_permissions` table + `visibility` column on entities. Models: VisibilityMode, SubjectType, Permission, EntityPermission, EffectivePermission, SetPermissionsInput, PermissionGrant. Repository: EntityPermissionRepository (ListByEntity, SetPermissions, DeleteByEntity, GetEffectivePermission, UpdateVisibility) + visibilityFilter() SQL helper. Service: CheckEntityAccess, SetEntityPermissions, GetEntityPermissions. All list/search/count queries updated with userID param for permission-aware filtering. 13 new unit tests.
-- [ ] **Sprint K-2: Per-Entity Permissions UI** _(Permissions)_ — "Permissions" tab on entity edit page. Visibility selector (everyone/dm_only/custom). User/role picker with view/edit toggles. Entity list + sidebar filter by resolved permissions. HTMX-powered save.
+- [x] **Sprint K-2: Per-Entity Permissions UI** _(Permissions)_ — Visibility section on entity edit page (Alpine.js) with three modes: Everyone/GM Only/Custom. Custom mode: dynamic grant builder (subject type role/user, subject ID picker, permission level view/edit) with auto-save via permissions API. Handler endpoints: GET/PUT `/entities/:eid/permissions` (Owner only), GET `/entities/members` for user picker. Visibility indicators updated across entity cards, table rows, tree view, show page details (shield icon for custom, lock for private). MemberLister wired into entity handler.
 - [ ] **Sprint K-3: Module Manifest & Loader Framework** _(Module Framework)_ — `ModuleManifest` JSON spec (id, name, version, author, license, categories, API version, data types, tooltip templates, entity type presets, field definitions). `ModuleLoader` reads/validates manifests. `ModuleRegistry` rewrite with auto-discovery. Sandboxed `Module` interface: `Info()`, `DataProvider()`, `TooltipRenderer()`. Modules can only register data providers, never access DB/Echo/services directly.
 - [ ] **Sprint K-4: Module Data API & Widget Integration** _(Module Framework)_ — `DataProvider` interface (List/Get/Search). `ReferenceItem` standard struct. Module HTTP handler: `GET /ref/:moduleID/`, category lists, detail pages, `GET /api/v1/ref/:moduleID/lookup?q=` tooltip API. Wire into `entity_tooltip.js` and `mentions` widget (`@ref:` prefix). Per-campaign enable/disable via existing addons plugin.
 - [ ] **Sprint K-5: Foundry Polish Sprint** _(Foundry VTT)_ — Fix shop icon (always null). Fix fog bidirectional (Foundry→Chronicle push via `canvas.fog` hooks). Connection status UI (sync indicator in Foundry sidebar). SimpleCalendar CRUD hook detection with graceful fallback.
@@ -363,3 +363,13 @@ Summary of strengths/weaknesses for strategic positioning. Full analysis in `.ai
 - [x] View toggle: Grid/Week/Timeline button group added to all 3 calendar views
 - [x] Route: GET `/calendar/week` (public-capable)
 - [x] Tests: 5 unit tests for week data helpers (WeekDays, CrossMonth, PrevNext, WeekdayName)
+
+### Sprint K-2: Per-Entity Permissions UI (2026-03-05, batch 36)
+- [x] Visibility section on entity edit page (Alpine.js, three modes: Everyone/GM Only/Custom)
+- [x] Custom mode: dynamic grant builder (subject type role/user, ID picker, view/edit permission)
+- [x] Auto-save via permissions API (PUT /entities/:eid/permissions)
+- [x] Handler: GetPermissionsAPI, SetPermissionsAPI, GetMembersAPI (all Owner-only)
+- [x] Routes: GET/PUT /entities/:eid/permissions, GET /entities/members
+- [x] MemberLister dependency wired into entity handler from app/routes.go
+- [x] Visibility indicators: shield icon (custom) / lock icon (private) across entity cards, table rows, tree view, show page details
+- [x] Non-owners see legacy is_private checkbox only (graceful degradation)

@@ -38,10 +38,16 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 		<div class="px-3 py-2.5">
 			<div class="flex items-start justify-between mb-1">
 				<h3 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">{ entity.Name }</h3>
-				if entity.IsPrivate && cc.MemberRole >= campaigns.RoleScribe {
-					<span class="text-fg-muted ml-1.5 shrink-0" title="Private (GM only)">
-						<i class="fa-solid fa-lock text-[10px]"></i>
-					</span>
+				if cc.MemberRole >= campaigns.RoleScribe {
+					if entity.Visibility == VisibilityCustom {
+						<span class="text-fg-muted ml-1.5 shrink-0" title="Custom permissions">
+							<i class="fa-solid fa-shield-halved text-[10px]"></i>
+						</span>
+					} else if entity.IsPrivate {
+						<span class="text-fg-muted ml-1.5 shrink-0" title="Private (GM only)">
+							<i class="fa-solid fa-lock text-[10px]"></i>
+						</span>
+					}
 				}
 			</div>
 

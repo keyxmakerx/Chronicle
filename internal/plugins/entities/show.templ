@@ -63,7 +63,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 						if showAttributes {
 							@blockAttributes(cc, entity, entityType, csrfToken)
 						}
-						@blockDetails(entity)
+						@blockDetails(cc, entity)
 					</div>
 				</div>
 			}
@@ -187,7 +187,7 @@ templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entit
 		case "attributes":
 			@blockAttributes(cc, entity, entityType, csrfToken)
 		case "details":
-			@blockDetails(entity)
+			@blockDetails(cc, entity)
 		case "tags":
 			@blockTags(cc, entity, csrfToken)
 		case "relations":
@@ -322,8 +322,8 @@ templ blockAttributes(cc *campaigns.CampaignContext, entity *Entity, entityType 
 	></div>
 }
 
-// blockDetails renders type badge, privacy indicator, and metadata timestamps.
-templ blockDetails(entity *Entity) {
+// blockDetails renders type badge, visibility indicator, and metadata timestamps.
+templ blockDetails(cc *campaigns.CampaignContext, entity *Entity) {
 	<div class="card p-4 space-y-4">
 		<!-- Type badge -->
 		<div class="flex items-center gap-2 flex-wrap">
@@ -339,11 +339,7 @@ templ blockDetails(entity *Entity) {
 			if entity.TypeLabel != nil && *entity.TypeLabel != "" {
 				<span class="text-sm text-fg-secondary">{ *entity.TypeLabel }</span>
 			}
-			if entity.IsPrivate {
-				<span class="text-fg-muted" title="Private (GM only)">
-					<i class="fa-solid fa-lock text-xs"></i>
-				</span>
-			}
+			@visibilityBadge(entity)
 		</div>
 
 		<!-- Metadata -->
@@ -352,6 +348,19 @@ templ blockDetails(entity *Entity) {
 			<div>Updated { entity.UpdatedAt.Format("Jan 2, 2006") }</div>
 		</div>
 	</div>
+}
+
+// visibilityBadge renders the appropriate icon for the entity's visibility mode.
+templ visibilityBadge(entity *Entity) {
+	if entity.Visibility == VisibilityCustom {
+		<span class="text-fg-muted" title="Custom permissions">
+			<i class="fa-solid fa-shield-halved text-xs"></i>
+		</span>
+	} else if entity.IsPrivate {
+		<span class="text-fg-muted" title="Private (GM only)">
+			<i class="fa-solid fa-lock text-xs"></i>
+		</span>
+	}
 }
 
 // blockTags renders the tag picker widget mount point.
@@ -624,7 +633,9 @@ templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []En
 									}
 								</div>
 							</div>
-							if child.IsPrivate {
+							if child.Visibility == VisibilityCustom {
+								<i class="fa-solid fa-shield-halved text-xs text-fg-muted ml-auto shrink-0" title="Custom permissions"></i>
+							} else if child.IsPrivate {
 								<i class="fa-solid fa-lock text-xs text-fg-muted ml-auto shrink-0" title="Private"></i>
 							}
 						</div>
