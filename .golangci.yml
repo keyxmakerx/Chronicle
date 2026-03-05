@@ -41,6 +41,8 @@ linters:
     paths:
       - vendor
       - ".*_templ\\.go$"
-    # Don't limit the number of issues reported per linter.
-    max-issues-per-linter: 0
-    max-same-issues: 0
+
+# Don't limit the number of issues reported per linter.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
