@@ -721,3 +721,104 @@ func TestGenerateID_Unique(t *testing.T) {
 		seen[id] = true
 	}
 }
+
+// --- Folder Tests ---
+
+func TestCreate_Folder(t *testing.T) {
+	var createdNote *Note
+	repo := &mockNoteRepo{
+		createFn: func(ctx context.Context, note *Note) error {
+			createdNote = note
+			return nil
+		},
+		findByIDFn: func(ctx context.Context, id string) (*Note, error) {
+			return createdNote, nil
+		},
+	}
+
+	svc := NewNoteService(repo)
+	note, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+		Title:    "My Folder",
+		IsFolder: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !note.IsFolder {
+		t.Error("expected IsFolder to be true")
+	}
+	if note.Title != "My Folder" {
+		t.Errorf("expected title 'My Folder', got %q", note.Title)
+	}
+}
+
+func TestCreate_NoteWithParentID(t *testing.T) {
+	parentID := "folder-1"
+	var createdNote *Note
+	repo := &mockNoteRepo{
+		createFn: func(ctx context.Context, note *Note) error {
+			createdNote = note
+			return nil
+		},
+		findByIDFn: func(ctx context.Context, id string) (*Note, error) {
+			return createdNote, nil
+		},
+	}
+
+	svc := NewNoteService(repo)
+	note, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+		Title:    "Child Note",
+		ParentID: &parentID,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if note.ParentID == nil || *note.ParentID != "folder-1" {
+		t.Errorf("expected parentId 'folder-1', got %v", note.ParentID)
+	}
+}
+
+func TestUpdate_MoveNoteToFolder(t *testing.T) {
+	existing := sampleNote()
+	repo := &mockNoteRepo{
+		findByIDFn: func(ctx context.Context, id string) (*Note, error) {
+			return existing, nil
+		},
+	}
+
+	svc := NewNoteService(repo)
+	parentID := "folder-1"
+	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
+		ParentID: &parentID,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if note.ParentID == nil || *note.ParentID != "folder-1" {
+		t.Errorf("expected parentId 'folder-1', got %v", note.ParentID)
+	}
+}
+
+func TestUpdate_MoveNoteToTopLevel(t *testing.T) {
+	parentID := "folder-1"
+	existing := sampleNote()
+	existing.ParentID = &parentID
+
+	repo := &mockNoteRepo{
+		findByIDFn: func(ctx context.Context, id string) (*Note, error) {
+			return existing, nil
+		},
+	}
+
+	svc := NewNoteService(repo)
+	emptyParent := ""
+	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
+		ParentID: &emptyParent,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if note.ParentID != nil {
+		t.Errorf("expected nil parentId, got %v", note.ParentID)
+	}
+}

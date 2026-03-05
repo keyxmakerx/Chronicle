@@ -66,8 +66,8 @@ func NewNoteRepository(db *sql.DB) NoteRepository {
 }
 
 // noteColumns is the SELECT column list for notes queries.
-const noteColumns = `id, campaign_id, user_id, entity_id, title, content,
-	entry, entry_html, color, pinned, is_shared, last_edited_by,
+const noteColumns = `id, campaign_id, user_id, entity_id, parent_id, is_folder,
+	title, content, entry, entry_html, color, pinned, is_shared, last_edited_by,
 	locked_by, locked_at, created_at, updated_at`
 
 // Create inserts a new note into the database.
@@ -78,12 +78,14 @@ func (r *noteRepository) Create(ctx context.Context, note *Note) error {
 	}
 
 	query := `INSERT INTO notes
-		(id, campaign_id, user_id, entity_id, title, content, entry, entry_html,
+		(id, campaign_id, user_id, entity_id, parent_id, is_folder,
+		 title, content, entry, entry_html,
 		 color, pinned, is_shared, last_edited_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err = r.db.ExecContext(ctx, query,
 		note.ID, note.CampaignID, note.UserID, note.EntityID,
+		note.ParentID, note.IsFolder,
 		note.Title, contentJSON, note.Entry, note.EntryHTML,
 		note.Color, note.Pinned, note.IsShared, note.LastEditedBy,
 	)
@@ -113,13 +115,13 @@ func (r *noteRepository) Update(ctx context.Context, note *Note) error {
 	query := `UPDATE notes
 		SET title = ?, content = ?, entry = ?, entry_html = ?,
 		    color = ?, pinned = ?, is_shared = ?, last_edited_by = ?,
-		    updated_at = CURRENT_TIMESTAMP
+		    parent_id = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query,
 		note.Title, contentJSON, note.Entry, note.EntryHTML,
 		note.Color, note.Pinned, note.IsShared, note.LastEditedBy,
-		note.ID,
+		note.ParentID, note.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating note: %w", err)
@@ -321,6 +323,7 @@ func (r *noteRepository) scanNote(row *sql.Row) (*Note, error) {
 
 	err := row.Scan(
 		&n.ID, &n.CampaignID, &n.UserID, &n.EntityID,
+		&n.ParentID, &n.IsFolder,
 		&n.Title, &contentRaw, &n.Entry, &n.EntryHTML,
 		&n.Color, &n.Pinned, &n.IsShared, &n.LastEditedBy,
 		&n.LockedBy, &n.LockedAt,
@@ -356,6 +359,7 @@ func (r *noteRepository) scanNotes(ctx context.Context, query string, args ...an
 
 		if err := rows.Scan(
 			&n.ID, &n.CampaignID, &n.UserID, &n.EntityID,
+			&n.ParentID, &n.IsFolder,
 			&n.Title, &contentRaw, &n.Entry, &n.EntryHTML,
 			&n.Color, &n.Pinned, &n.IsShared, &n.LastEditedBy,
 			&n.LockedBy, &n.LockedAt,

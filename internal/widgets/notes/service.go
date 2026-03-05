@@ -69,6 +69,8 @@ func (s *noteService) Create(ctx context.Context, campaignID, userID string, req
 		CampaignID:   campaignID,
 		UserID:       userID,
 		EntityID:     req.EntityID,
+		ParentID:     req.ParentID,
+		IsFolder:     req.IsFolder,
 		Title:        title,
 		Content:      content,
 		Color:        color,
@@ -126,6 +128,14 @@ func (s *noteService) Update(ctx context.Context, id, userID string, req UpdateN
 	}
 	if req.IsShared != nil {
 		note.IsShared = *req.IsShared
+	}
+	if req.ParentID != nil {
+		// Empty string means move to top-level.
+		if *req.ParentID == "" {
+			note.ParentID = nil
+		} else {
+			note.ParentID = req.ParentID
+		}
 	}
 
 	note.LastEditedBy = &userID

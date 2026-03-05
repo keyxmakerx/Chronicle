@@ -28,6 +28,8 @@ type Note struct {
 	CampaignID   string     `json:"campaignId"`
 	UserID       string     `json:"userId"`
 	EntityID     *string    `json:"entityId,omitempty"`    // nil = campaign-wide note
+	ParentID     *string    `json:"parentId,omitempty"`    // nil = top-level note/folder
+	IsFolder     bool       `json:"isFolder"`              // true = folder container
 	Title        string     `json:"title"`
 	Content      []Block    `json:"content"`               // Legacy block content
 	Entry        *string    `json:"entry,omitempty"`       // ProseMirror JSON (rich text)
@@ -85,6 +87,8 @@ type ChecklistItem struct {
 // CreateNoteRequest holds the data submitted when creating a new note.
 type CreateNoteRequest struct {
 	EntityID *string `json:"entityId,omitempty"`
+	ParentID *string `json:"parentId,omitempty"`
+	IsFolder bool    `json:"isFolder,omitempty"`
 	Title    string  `json:"title"`
 	Content  []Block `json:"content"`
 	Color    string  `json:"color,omitempty"`
@@ -100,6 +104,7 @@ type UpdateNoteRequest struct {
 	Color     *string  `json:"color,omitempty"`
 	Pinned    *bool    `json:"pinned,omitempty"`
 	IsShared  *bool    `json:"isShared,omitempty"`
+	ParentID  *string  `json:"parentId,omitempty"` // move note into/out of folder
 }
 
 // ToggleCheckRequest toggles a single checklist item's checked state.

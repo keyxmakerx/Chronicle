@@ -8,13 +8,22 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint L-2 (Notes Rich Text) complete (batch 41).
+2026-03-05 -- Sprint L-3 (Note Folders) complete (batch 42).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Phase L: Content Depth & Editor Power.** Sprint L-2 delivered (batch 41). Next: Sprint L-3 (Note Folders and Organization).
+**Phase L: Content Depth & Editor Power.** Sprint L-3 delivered (batch 42). Next: Sprint L-4 (Calendar Event Drag-and-Drop).
 
-### Summary of Recent Work (batches 25-41)
+### Summary of Recent Work (batches 25-42)
+- **Batch 42**: Sprint L-3 Note Folders — Migration 000051 adds `parent_id` (FK
+  with CASCADE) and `is_folder` columns to notes table. Backend: model, repository,
+  and service updated for folder create/update/move operations. JS widget (`notes.js`)
+  updated with tree view rendering: `buildTree()` groups notes by parentId, folders
+  render as collapsible containers with expand/collapse (persisted in localStorage),
+  child count badges, add-note-in-folder and rename-folder buttons. Move-to-folder
+  dropdown menu on note cards. "New Folder" button in quick-add row. Folder delete
+  with cascade warning. CSS styles for folders, move menu, collapse toggle. 4 new
+  unit tests (create folder, create with parentId, move to folder, move to top level).
 - **Batch 41**: Sprint L-2 Notes Rich Text (TipTap) — Replaced plain textarea
   editing in notes widget with mini TipTap editor instances. When entering edit
   mode, creates TipTap editor with StarterKit+Underline+Placeholder, populated
@@ -131,7 +140,7 @@ Branch: `claude/project-review-planning-Yr4CL`.
 ---
 
 ## Next Session Should
-Continue **Phase L** with Sprint L-3 (Note Folders and Organization — tree view, expand/collapse, drag-to-reorder). Full post-alpha roadmap (Phases L through O, 18 remaining sprints) documented in `.ai/todo.md`.
+Continue **Phase L** with Sprint L-4 (Calendar Event Drag-and-Drop — HTML5 DnD on monthly grid). Full post-alpha roadmap (Phases L through O, 17 remaining sprints) documented in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -184,3 +193,4 @@ Continue **Phase L** with Sprint L-3 (Note Folders and Organization — tree vie
 - **2026-03-05: Sprint K-5** — Relations graph visualization: D3.js force-directed graph widget, graph API + standalone page, dashboard block type. Phase K complete.
 - **2026-03-05: Sprint L-1** — Entity posts (sub-notes): migration 000050, full widget (model/repo/service/handler), JS widget with collapsible cards, drag-to-reorder, visibility toggle, layout block type.
 - **2026-03-05: Sprint L-2** — Notes rich text: TipTap mini editor instances replace plain textareas, legacy block→TipTap conversion, entry JSON + HTML saved to API.
+- **2026-03-05: Sprint L-3** — Note folders: migration 000051 (parent_id + is_folder), tree view rendering, collapsible folders, move-to-folder, create folder, 4 tests.

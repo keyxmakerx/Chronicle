@@ -959,6 +959,51 @@
   .note-entry-html em { @apply italic; }
   .note-entry-html a { @apply text-indigo-400 hover:underline; }
 
+  /* Folder cards. */
+  .note-folder {
+    @apply rounded-lg border border-edge overflow-hidden;
+  }
+  .note-folder-header {
+    @apply flex items-center gap-1.5 px-3 py-2 bg-surface-alt
+           cursor-pointer hover:bg-surface transition-colors;
+    font-size: var(--notes-font);
+  }
+  .note-folder-name {
+    @apply font-medium text-fg truncate flex-1;
+  }
+  .note-folder-count {
+    @apply shrink-0;
+  }
+  .note-folder-children {
+    @apply pl-2 pb-2 space-y-2 bg-surface/30 border-t border-edge-light;
+    padding-top: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  .note-folder-toggle {
+    @apply w-5 h-5 shrink-0;
+  }
+
+  /* Move-to-folder dropdown. */
+  .note-move-wrap {
+    @apply relative;
+  }
+  .note-move-menu {
+    @apply absolute right-0 top-full mt-1 bg-surface border border-edge
+           rounded-lg shadow-lg py-1 z-20 min-w-[140px] max-h-[160px] overflow-y-auto;
+  }
+  .note-move-hidden {
+    @apply hidden;
+  }
+  .note-move-opt {
+    @apply block w-full text-left px-3 py-1.5 text-xs text-fg-secondary
+           hover:text-fg hover:bg-surface-alt cursor-pointer transition-colors truncate;
+  }
+
+  /* New folder button in quick-add row. */
+  .notes-new-folder-btn {
+    @apply shrink-0 ml-1;
+  }
+
   /* Version history sub-panel. */
   .notes-versions-header {
     @apply flex items-center gap-2 px-1 py-2 border-b border-edge mb-2;

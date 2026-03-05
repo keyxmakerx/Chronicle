@@ -32,6 +32,8 @@ Chronicle.register('notes', {
 
     var HEARTBEAT_INTERVAL = 2 * 60 * 1000; // 2 minutes
 
+    var STORAGE_COLLAPSED = 'chronicle_notes_collapsed';
+
     var state = {
       open: false,
       tab: entityId ? 'page' : 'all',  // 'page' or 'all'
@@ -45,7 +47,9 @@ Chronicle.register('notes', {
       // Version history sub-panel.
       versionsNoteId: null,     // note whose history is shown (null = hidden)
       versions: [],
-      versionsLoading: false
+      versionsLoading: false,
+      // Folder collapse state: Set of folder IDs that are collapsed.
+      collapsedFolders: loadCollapsedFolders()
     };
 
     // Track mini TipTap editor instances per note ID for cleanup.
@@ -119,6 +123,33 @@ Chronicle.register('notes', {
     }
 
     restoreTextSize();
+
+    /** Load collapsed folder IDs from localStorage. */
+    function loadCollapsedFolders() {
+      try {
+        var saved = JSON.parse(localStorage.getItem(STORAGE_COLLAPSED));
+        if (Array.isArray(saved)) return new Set(saved);
+      } catch (e) { /* ignore */ }
+      return new Set();
+    }
+
+    /** Persist collapsed folder IDs to localStorage. */
+    function saveCollapsedFolders() {
+      try {
+        localStorage.setItem(STORAGE_COLLAPSED, JSON.stringify(Array.from(state.collapsedFolders)));
+      } catch (e) { /* ignore */ }
+    }
+
+    /** Toggle a folder's collapsed state. */
+    function toggleFolderCollapse(folderId) {
+      if (state.collapsedFolders.has(folderId)) {
+        state.collapsedFolders.delete(folderId);
+      } else {
+        state.collapsedFolders.add(folderId);
+      }
+      saveCollapsedFolders();
+      renderNotes();
+    }
 
     // --- Resize handle ---
     var resizeHandle = panel.querySelector('.notes-resize-handle');
@@ -205,6 +236,14 @@ Chronicle.register('notes', {
       state.versionsNoteId = null;
     });
 
+    // New folder button.
+    var newFolderBtn = panel.querySelector('.notes-new-folder-btn');
+    if (newFolderBtn) {
+      newFolderBtn.addEventListener('click', function () {
+        createFolder();
+      });
+    }
+
     // On mobile, dodge the virtual keyboard by adjusting panel bottom offset
     // when the visual viewport shrinks (keyboard opening).
     if (window.visualViewport && window.innerWidth < 640) {
@@ -256,13 +295,19 @@ Chronicle.register('notes', {
         });
       });
 
-      // Close popover when clicking outside.
+      // Close popover and move menus when clicking outside.
       document.addEventListener('click', function (e) {
         if (!settingsPopover.classList.contains('notes-settings-hidden') &&
             !settingsPopover.contains(e.target) &&
             e.target !== settingsBtn && !settingsBtn.contains(e.target)) {
           settingsPopover.classList.add('notes-settings-hidden');
         }
+        // Close any open move-to-folder menus.
+        panel.querySelectorAll('.note-move-menu:not(.note-move-hidden)').forEach(function (m) {
+          if (!m.contains(e.target) && !m.previousElementSibling.contains(e.target)) {
+            m.classList.add('note-move-hidden');
+          }
+        });
       });
     }
 
@@ -337,7 +382,7 @@ Chronicle.register('notes', {
     }
 
     /** Full create with editing mode (from + button). */
-    function createNote() {
+    function createNote(parentId) {
       var isPageNote = state.tab === 'page' && entityId;
       var body = {
         title: '',
@@ -345,6 +390,9 @@ Chronicle.register('notes', {
       };
       if (isPageNote) {
         body.entityId = entityId;
+      }
+      if (parentId) {
+        body.parentId = parentId;
       }
 
       fetch(apiUrl(), {
@@ -358,10 +406,59 @@ Chronicle.register('notes', {
           }
           state.notes.unshift(note);
           state.editingId = note.id;
+          // Expand parent folder if creating inside one.
+          if (parentId) {
+            state.collapsedFolders.delete(parentId);
+            saveCollapsedFolders();
+          }
           renderNotes();
           var titleInput = notesList.querySelector('.note-card[data-id="' + note.id + '"] .note-title-input');
           if (titleInput) titleInput.focus();
         });
+    }
+
+    /** Create a new folder. */
+    function createFolder(parentId) {
+      var name = prompt('Folder name:');
+      if (!name || !name.trim()) return;
+
+      var isPageNote = state.tab === 'page' && entityId;
+      var body = {
+        title: name.trim(),
+        isFolder: true,
+        content: []
+      };
+      if (isPageNote) {
+        body.entityId = entityId;
+      }
+      if (parentId) {
+        body.parentId = parentId;
+      }
+
+      fetch(apiUrl(), {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify(body)
+      }).then(function (r) { return r.json(); })
+        .then(function (folder) {
+          if (isPageNote) {
+            state.pageNotes.unshift(folder);
+          }
+          state.notes.unshift(folder);
+          if (parentId) {
+            state.collapsedFolders.delete(parentId);
+            saveCollapsedFolders();
+          }
+          renderNotes();
+        });
+    }
+
+    /** Move a note into or out of a folder. */
+    function moveNote(noteId, newParentId) {
+      var data = { parentId: newParentId || '' };
+      updateNote(noteId, data).then(function () {
+        renderNotes();
+      });
     }
 
     function updateNote(id, data) {
@@ -377,7 +474,11 @@ Chronicle.register('notes', {
     }
 
     function deleteNote(id) {
-      if (!confirm('Delete this note? This cannot be undone.')) return;
+      var note = findNote(id);
+      var msg = note && note.isFolder
+        ? 'Delete this folder and all notes inside it? This cannot be undone.'
+        : 'Delete this note? This cannot be undone.';
+      if (!confirm(msg)) return;
       // Release lock before deleting if we hold one.
       if (state.lockedNoteId === id) {
         releaseLockIfHeld();
@@ -513,6 +614,40 @@ Chronicle.register('notes', {
         : 'Quick note...';
     }
 
+    /**
+     * Build a tree structure from a flat list of notes.
+     * Returns array of root-level items, each with a `children` array.
+     */
+    function buildTree(notes) {
+      var byId = {};
+      var roots = [];
+      // Index all notes by ID.
+      notes.forEach(function (n) { byId[n.id] = Object.assign({}, n, { children: [] }); });
+      // Assign children to parents.
+      notes.forEach(function (n) {
+        var node = byId[n.id];
+        if (n.parentId && byId[n.parentId]) {
+          byId[n.parentId].children.push(node);
+        } else {
+          roots.push(node);
+        }
+      });
+      // Sort: folders first, then pinned, then by updatedAt.
+      var sortFn = function (a, b) {
+        if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        return 0;
+      };
+      roots.sort(sortFn);
+      Object.keys(byId).forEach(function (id) { byId[id].children.sort(sortFn); });
+      return roots;
+    }
+
+    /** Get all folders from the current note list (for move-to dropdown). */
+    function getFolders(list) {
+      return (list || []).filter(function (n) { return n.isFolder; });
+    }
+
     function renderNotes() {
       // If version history sub-panel is open, render that instead.
       if (state.versionsNoteId) {
@@ -538,9 +673,10 @@ Chronicle.register('notes', {
         return;
       }
 
+      var tree = buildTree(list);
       var html = '';
-      list.forEach(function (note) {
-        html += renderNoteCard(note);
+      tree.forEach(function (node) {
+        html += renderTreeNode(node, 0, list);
       });
       notesList.innerHTML = html;
 
@@ -548,14 +684,64 @@ Chronicle.register('notes', {
       initMiniEditors();
     }
 
-    function renderNoteCard(note) {
+    /** Render a tree node (folder or note) at a given depth. */
+    function renderTreeNode(node, depth, allNotes) {
+      if (node.isFolder) {
+        return renderFolderCard(node, depth, allNotes);
+      }
+      return renderNoteCard(node, depth, allNotes);
+    }
+
+    /** Render a folder as a collapsible container with children. */
+    function renderFolderCard(folder, depth, allNotes) {
+      var isOwner = folder.userId === currentUserId;
+      var isCollapsed = state.collapsedFolders.has(folder.id);
+      var indent = depth > 0 ? ' style="margin-left:' + (depth * 12) + 'px"' : '';
+      var chevron = isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down';
+      var childCount = folder.children ? folder.children.length : 0;
+
+      var html = '<div class="note-folder"' + indent + ' data-folder-id="' + Chronicle.escapeAttr(folder.id) + '">';
+      html += '<div class="note-folder-header" data-id="' + Chronicle.escapeAttr(folder.id) + '">';
+      html += '<button class="note-btn note-folder-toggle" data-folder="' + Chronicle.escapeAttr(folder.id) + '" title="' + (isCollapsed ? 'Expand' : 'Collapse') + '">';
+      html += '<i class="fa-solid ' + chevron + ' text-[10px]"></i></button>';
+      html += '<i class="fa-solid fa-folder' + (isCollapsed ? '' : '-open') + ' text-[11px] text-fg-muted mr-1"></i>';
+      html += '<span class="note-folder-name">' + Chronicle.escapeHtml(folder.title || 'Untitled Folder') + '</span>';
+      html += '<span class="note-folder-count text-fg-muted text-[10px] ml-1">(' + childCount + ')</span>';
+      html += '<div class="note-actions">';
+      // Add note inside folder.
+      html += '<button class="note-btn note-add-in-folder" data-folder="' + Chronicle.escapeAttr(folder.id) + '" title="Add note in folder"><i class="fa-solid fa-plus text-[10px]"></i></button>';
+      // Rename folder.
+      if (isOwner) {
+        html += '<button class="note-btn note-rename-folder" data-folder="' + Chronicle.escapeAttr(folder.id) + '" title="Rename folder"><i class="fa-solid fa-pen text-[10px]"></i></button>';
+      }
+      // Delete folder (owner only).
+      if (isOwner) {
+        html += '<button class="note-btn note-delete-btn" title="Delete folder"><i class="fa-solid fa-trash-can text-[10px]"></i></button>';
+      }
+      html += '</div></div>';
+
+      // Children (hidden when collapsed).
+      if (!isCollapsed && folder.children && folder.children.length > 0) {
+        html += '<div class="note-folder-children">';
+        folder.children.forEach(function (child) {
+          html += renderTreeNode(child, depth + 1, allNotes);
+        });
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    function renderNoteCard(note, depth, allNotes) {
       var isEditing = state.editingId === note.id;
       var isOwner = note.userId === currentUserId;
       var isShared = note.isShared;
       var isLockedByOther = isShared && note.lockedBy && note.lockedBy !== currentUserId && note.lockedAt;
       var pinClass = note.pinned ? ' note-pinned' : '';
       var sharedClass = isShared ? ' note-shared' : '';
-      var html = '<div class="note-card' + pinClass + sharedClass + '" data-id="' + Chronicle.escapeAttr(note.id) + '">';
+      var indent = depth > 0 ? ' style="margin-left:' + (depth * 12) + 'px"' : '';
+      var html = '<div class="note-card' + pinClass + sharedClass + '"' + indent + ' data-id="' + Chronicle.escapeAttr(note.id) + '">';
 
       // Header row.
       html += '<div class="note-card-header">';
@@ -585,6 +771,25 @@ Chronicle.register('notes', {
       // Pin button (owner only).
       if (isOwner) {
         html += '<button class="note-btn note-pin-btn" title="' + (note.pinned ? 'Unpin' : 'Pin') + '"><i class="fa-solid fa-thumbtack' + (note.pinned ? '' : ' fa-rotate-45') + '"></i></button>';
+      }
+
+      // Move to folder button (owner only, non-folder notes).
+      if (isOwner && !note.isFolder) {
+        var folders = getFolders(allNotes || []);
+        if (folders.length > 0 || note.parentId) {
+          html += '<div class="note-move-wrap">';
+          html += '<button class="note-btn note-move-btn" title="Move to folder"><i class="fa-solid fa-folder-tree text-[10px]"></i></button>';
+          html += '<div class="note-move-menu note-move-hidden">';
+          if (note.parentId) {
+            html += '<button class="note-move-opt" data-move-to="">— Top level —</button>';
+          }
+          folders.forEach(function (f) {
+            if (f.id !== note.id && f.id !== note.parentId) {
+              html += '<button class="note-move-opt" data-move-to="' + Chronicle.escapeAttr(f.id) + '">' + Chronicle.escapeHtml(f.title || 'Untitled') + '</button>';
+            }
+          });
+          html += '</div></div>';
+        }
       }
 
       // Version history button.
@@ -805,12 +1010,17 @@ Chronicle.register('notes', {
         });
       });
 
-      // Delete button.
+      // Delete button (works for both notes and folders).
       notesList.querySelectorAll('.note-delete-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
           var card = btn.closest('.note-card');
-          deleteNote(card.getAttribute('data-id'));
+          var folder = btn.closest('.note-folder-header');
+          if (card) {
+            deleteNote(card.getAttribute('data-id'));
+          } else if (folder) {
+            deleteNote(folder.getAttribute('data-id'));
+          }
         });
       });
 
@@ -887,6 +1097,74 @@ Chronicle.register('notes', {
               renderNotes();
             });
           }
+        });
+      });
+
+      // Folder toggle (expand/collapse).
+      notesList.querySelectorAll('.note-folder-toggle').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var folderId = btn.getAttribute('data-folder');
+          toggleFolderCollapse(folderId);
+        });
+      });
+
+      // Folder header click also toggles.
+      notesList.querySelectorAll('.note-folder-header').forEach(function (hdr) {
+        hdr.addEventListener('click', function (e) {
+          // Don't toggle if clicking on an action button.
+          if (e.target.closest('.note-actions') || e.target.closest('.note-btn')) return;
+          var folderId = hdr.getAttribute('data-id');
+          toggleFolderCollapse(folderId);
+        });
+      });
+
+      // Add note inside folder.
+      notesList.querySelectorAll('.note-add-in-folder').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var folderId = btn.getAttribute('data-folder');
+          createNote(folderId);
+        });
+      });
+
+      // Rename folder.
+      notesList.querySelectorAll('.note-rename-folder').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var folderId = btn.getAttribute('data-folder');
+          var folder = findNote(folderId);
+          if (!folder) return;
+          var newName = prompt('Rename folder:', folder.title);
+          if (newName !== null && newName.trim()) {
+            updateNote(folderId, { title: newName.trim() }).then(function () {
+              renderNotes();
+            });
+          }
+        });
+      });
+
+      // Move to folder dropdown toggle.
+      notesList.querySelectorAll('.note-move-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var menu = btn.nextElementSibling;
+          // Close all other open menus first.
+          notesList.querySelectorAll('.note-move-menu').forEach(function (m) {
+            if (m !== menu) m.classList.add('note-move-hidden');
+          });
+          menu.classList.toggle('note-move-hidden');
+        });
+      });
+
+      // Move option selected.
+      notesList.querySelectorAll('.note-move-opt').forEach(function (opt) {
+        opt.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var card = opt.closest('.note-card');
+          var noteId = card.getAttribute('data-id');
+          var targetId = opt.getAttribute('data-move-to');
+          moveNote(noteId, targetId);
         });
       });
     }
@@ -1067,6 +1345,7 @@ Chronicle.register('notes', {
         '<div class="notes-quick-add">' +
         '<i class="fa-solid fa-plus text-[10px] text-fg-muted"></i>' +
         '<input type="text" class="notes-quick-input" placeholder="' + Chronicle.escapeAttr(quickPlaceholder) + '" autocomplete="off">' +
+        '<button class="note-btn notes-new-folder-btn" title="New folder"><i class="fa-solid fa-folder-plus text-[11px]"></i></button>' +
         '</div>' +
         '<div class="notes-list"></div>';
     }
