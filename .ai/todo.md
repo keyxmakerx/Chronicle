@@ -111,7 +111,7 @@ New capabilities ordered by priority for alpha release.
 - [x] **Sprint K-1: Per-Entity Permissions Model** — Migration 000048: `entity_permissions` table + `visibility` column on entities. Models: VisibilityMode, SubjectType, Permission, EntityPermission, EffectivePermission, SetPermissionsInput, PermissionGrant. Repository: EntityPermissionRepository (ListByEntity, SetPermissions, DeleteByEntity, GetEffectivePermission, UpdateVisibility) + visibilityFilter() SQL helper. Service: CheckEntityAccess, SetEntityPermissions, GetEntityPermissions. All list/search/count queries updated with userID param for permission-aware filtering. 13 new unit tests.
 - [x] **Sprint K-2: Per-Entity Permissions UI** _(Permissions)_ — Visibility section on entity edit page (Alpine.js) with three modes: Everyone/GM Only/Custom. Custom mode: dynamic grant builder (subject type role/user, subject ID picker, permission level view/edit) with auto-save via permissions API. Handler endpoints: GET/PUT `/entities/:eid/permissions` (Owner only), GET `/entities/members` for user picker. Visibility indicators updated across entity cards, table rows, tree view, show page details (shield icon for custom, lock for private). MemberLister wired into entity handler.
 - [x] **Sprint K-3: Module Manifest & Loader Framework** _(Module Framework)_ — ModuleManifest JSON spec (id, name, version, author, license, icon, api_version, status, categories with field schemas, entity presets, tooltip template). ModuleLoader auto-discovers modules from `*/manifest.json`. ModuleRegistry rewrite: `Init(modulesDir)`, global loader. Sandboxed interfaces: Module (`Info/DataProvider/TooltipRenderer`), DataProvider (`List/Get/Search/Categories`), TooltipRenderer, ReferenceItem struct. manifest.json for dnd5e/pathfinder2e/drawsteel. Admin modules page shows author/license/API version. installedAddons updated. 13 tests. ADR-019.
-- [ ] **Sprint K-4: Module Data API & Widget Integration** _(Module Framework)_ — `DataProvider` interface (List/Get/Search). `ReferenceItem` standard struct. Module HTTP handler: `GET /ref/:moduleID/`, category lists, detail pages, `GET /api/v1/ref/:moduleID/lookup?q=` tooltip API. Wire into `entity_tooltip.js` and `mentions` widget (`@ref:` prefix). Per-campaign enable/disable via existing addons plugin.
+- [x] **Sprint K-4: Module Data API & Widget Integration** _(Module Framework)_ — JSONProvider (loads category JSON files into memory). D&D 5e module: first concrete Module implementation with 10 SRD spells, tooltip renderer. Factory registry pattern (RegisterFactory/init()). Generic module HTTP handler (Index/CategoryList/ItemDetail/SearchAPI/TooltipAPI). Templ reference pages (module_pages.templ). Module route registration with dynamic addon middleware. ModuleSearcher interface in entity handler, ModuleSearchAdapter. Entity SearchAPI includes module results in @mention/quick search. 20 new tests. ADR-020.
 - [ ] **Sprint K-5: Foundry Polish Sprint** _(Foundry VTT)_ — Fix shop icon (always null). Fix fog bidirectional (Foundry→Chronicle push via `canvas.fog` hooks). Connection status UI (sync indicator in Foundry sidebar). SimpleCalendar CRUD hook detection with graceful fallback.
 - [ ] **Sprint K-6: Relations Graph Visualization** _(Content)_ — D3.js force-directed graph (`relation_graph.js`). Backend: relation-graph API (nodes/edges JSON). Node colors by entity type, click-to-navigate. Dashboard block type `relation_graph`. Standalone page `/campaigns/:id/relations`.
 
@@ -386,3 +386,20 @@ Summary of strengths/weaknesses for strategic positioning. Full analysis in `.ai
 - [x] Module slugs (dnd5e, pathfinder2e, drawsteel) added to installedAddons
 - [x] 13 tests: manifest loading/validation (7), loader discovery (6)
 - [x] ADR-019: Manifest-Driven Module Framework
+
+### Sprint K-4: Module Data API & Widget Integration (2026-03-05, batch 38)
+- [x] `internal/modules/json_provider.go` — JSONProvider implementing DataProvider (loads data/*.json, memory-resident, category-per-file)
+- [x] `internal/modules/json_provider_test.go` — 20 table-driven tests (load, list, get, search, edge cases)
+- [x] `internal/modules/dnd5e/data/spells.json` — 10 SRD 5.1 spells (CC-licensed) with full properties
+- [x] `internal/modules/dnd5e/dnd5e.go` — D&D 5e Module implementation (DnD5eModule, TooltipRenderer, init() factory)
+- [x] `internal/modules/registry.go` — Extended: ModuleFactory type, RegisterFactory(), FindModule(), AllModules()
+- [x] `internal/modules/loader.go` — Module instances map, RegisterModule/GetModule/AllModules, factory-based instantiation in DiscoverAll
+- [x] `internal/modules/handler.go` — Generic module HTTP handler (Index, CategoryList, ItemDetail, SearchAPI, TooltipAPI)
+- [x] `internal/modules/module_pages.templ` — Reference page Templ components (ModuleIndexPage, CategoryListPage, ItemDetailPage with HTMX fragments)
+- [x] `internal/modules/template_helpers.go` — propString helper for template property rendering
+- [x] `internal/modules/routes.go` — RegisterRoutes with dynamic requireModuleAddon middleware
+- [x] `internal/modules/search.go` — ModuleSearchAdapter (searches enabled modules for campaign, formats results for entity SearchAPI)
+- [x] `internal/plugins/entities/handler.go` — ModuleSearcher interface + SetModuleSearcher setter + SearchAPI integration
+- [x] `internal/app/routes.go` — Blank import dnd5e (init factory), module handler + routes, ModuleSearchAdapter wired to entity handler
+- [x] `internal/modules/dnd5e/manifest.json` — Status changed from "coming_soon" to "available"
+- [x] ADR-020: JSON-File DataProvider with Factory Registry

@@ -28,6 +28,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	"github.com/keyxmakerx/chronicle/internal/modules"
+	_ "github.com/keyxmakerx/chronicle/internal/modules/dnd5e" // Register dnd5e module factory.
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
@@ -654,6 +655,9 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("module discovery skipped", slog.String("error", err.Error()))
 	}
 
+	// Module reference pages and API (registered after Init so factories run).
+	// Route registration deferred until addonService exists (see below).
+
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings, storage).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
 	adminHandler.SetMediaDeps(mediaRepo, mediaService, a.Config.Upload.MaxSize)
@@ -685,6 +689,10 @@ func (a *App) RegisterRoutes() {
 
 	// Wire addon checker into entity handler for conditional attributes rendering.
 	entityHandler.SetAddonChecker(addonService)
+
+	// Module reference pages and search API (needs addonService for per-campaign gating).
+	moduleHandler := modules.NewModuleHandler()
+	modules.RegisterRoutes(e, moduleHandler, addonService, authService, campaignService)
 
 	// Security admin: event logging, session management, user account actions.
 	securityRepo := admin.NewSecurityEventRepository(a.DB)
@@ -799,6 +807,7 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetMapSearcher(mapsService)
 	entityHandler.SetCalendarSearcher(calendarService)
 	entityHandler.SetSessionSearcher(sessionsService)
+	entityHandler.SetModuleSearcher(modules.NewModuleSearchAdapter(addonService))
 	entityHandler.SetMemberLister(campaignService)
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	tagHandler.SetAuditService(auditService)

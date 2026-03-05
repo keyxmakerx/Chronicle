@@ -7,7 +7,7 @@
   "license": "OGL-1.0a",
   "icon": "fa-dragon",
   "api_version": "1",
-  "status": "coming_soon",
+  "status": "available",
   "categories": [
     {
       "slug": "spells",

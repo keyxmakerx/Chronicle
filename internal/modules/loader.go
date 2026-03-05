@@ -11,8 +11,9 @@ import (
 // Each subdirectory containing a manifest.json is treated as a module.
 // Invalid manifests are logged as warnings but do not prevent startup.
 type ModuleLoader struct {
-	modulesDir string
-	modules    map[string]*loadedModule
+	modulesDir      string
+	modules         map[string]*loadedModule
+	moduleInstances map[string]Module
 }
 
 // loadedModule pairs a parsed manifest with its source directory path.
@@ -25,8 +26,9 @@ type loadedModule struct {
 // for module subdirectories containing manifest.json files.
 func NewModuleLoader(modulesDir string) *ModuleLoader {
 	return &ModuleLoader{
-		modulesDir: modulesDir,
-		modules:    make(map[string]*loadedModule),
+		modulesDir:      modulesDir,
+		modules:         make(map[string]*loadedModule),
+		moduleInstances: make(map[string]Module),
 	}
 }
 
@@ -59,9 +61,10 @@ func (l *ModuleLoader) DiscoverAll() error {
 			continue
 		}
 
+		modDir := filepath.Join(l.modulesDir, entry.Name())
 		l.modules[manifest.ID] = &loadedModule{
 			manifest: manifest,
-			dir:      filepath.Join(l.modulesDir, entry.Name()),
+			dir:      modDir,
 		}
 
 		slog.Info("discovered module",
@@ -70,6 +73,25 @@ func (l *ModuleLoader) DiscoverAll() error {
 			slog.String("version", manifest.Version),
 			slog.String("status", string(manifest.Status)),
 		)
+
+		// Attempt to instantiate available modules via registered factories.
+		if manifest.Status == StatusAvailable {
+			if factory, ok := factories[manifest.ID]; ok {
+				dataDir := filepath.Join(modDir, "data")
+				mod, err := factory(manifest, dataDir)
+				if err != nil {
+					slog.Warn("failed to instantiate module",
+						slog.String("id", manifest.ID),
+						slog.String("error", err.Error()),
+					)
+					continue
+				}
+				l.RegisterModule(mod)
+				slog.Info("instantiated module",
+					slog.String("id", manifest.ID),
+				)
+			}
+		}
 	}
 
 	return nil
@@ -106,4 +128,25 @@ func (l *ModuleLoader) Dir(id string) string {
 // Count returns the number of discovered modules.
 func (l *ModuleLoader) Count() int {
 	return len(l.modules)
+}
+
+// RegisterModule registers a live Module instance. Called during
+// discovery for modules with status "available" that have data loaded.
+func (l *ModuleLoader) RegisterModule(mod Module) {
+	l.moduleInstances[mod.Info().ID] = mod
+}
+
+// GetModule returns the live Module instance by ID, or nil if not
+// found or not instantiated.
+func (l *ModuleLoader) GetModule(id string) Module {
+	return l.moduleInstances[id]
+}
+
+// AllModules returns all live Module instances.
+func (l *ModuleLoader) AllModules() []Module {
+	result := make([]Module, 0, len(l.moduleInstances))
+	for _, m := range l.moduleInstances {
+		result = append(result, m)
+	}
+	return result
 }

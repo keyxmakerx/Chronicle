@@ -58,6 +58,13 @@ type SessionSearcher interface {
 	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 }
 
+// ModuleSearcher provides module reference content search results for
+// the @mention popup and quick search. Implemented by the modules
+// package and injected via SetModuleSearcher.
+type ModuleSearcher interface {
+	SearchModuleContent(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+}
+
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
@@ -70,6 +77,7 @@ type Handler struct {
 	mapSearcher        MapSearcher
 	calendarSearcher   CalendarSearcher
 	sessionSearcher    SessionSearcher
+	moduleSearcher     ModuleSearcher
 }
 
 // NewHandler creates a new entity handler.
@@ -123,6 +131,12 @@ func (h *Handler) SetCalendarSearcher(cs CalendarSearcher) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetSessionSearcher(ss SessionSearcher) {
 	h.sessionSearcher = ss
+}
+
+// SetModuleSearcher sets the module content searcher for @mention and
+// quick search results. Called after all plugins are wired.
+func (h *Handler) SetModuleSearcher(ms ModuleSearcher) {
+	h.moduleSearcher = ms
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
@@ -610,6 +624,14 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			); err == nil {
 				items = append(items, sessResults...)
 				total += len(sessResults)
+			}
+		}
+		if h.moduleSearcher != nil && query != "" {
+			if modResults, err := h.moduleSearcher.SearchModuleContent(
+				c.Request().Context(), cc.Campaign.ID, query,
+			); err == nil {
+				items = append(items, modResults...)
+				total += len(modResults)
 			}
 		}
 		return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total})

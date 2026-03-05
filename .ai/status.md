@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint K-3 (Module Manifest & Loader Framework) complete (batch 37).
+2026-03-05 -- Sprint K-4 (Module Data API & Widget Integration) complete (batch 38).
 Branch: `claude/plan-development-phases-G8Pwf`.
 
 ## Current Phase
@@ -18,9 +18,19 @@ Branch: `claude/plan-development-phases-G8Pwf`.
 2. **Foundry VTT** — K-5 (bug fixes), L-3 (multi-scene + combat), M-1 (character sheet linking).
 3. **Permissions + Content** — ~~K-2 (permissions UI)~~, K-6 (relations graph), L-2 (entity posts), L-4 (auto-linking), M-2 (notes rich text), M-3 (group visibility), M-5 (calendar DnD).
 
-Next sprint: **K-4 (Module Data API & Widget Integration)**.
+Next sprint: **K-5 (Foundry Polish Sprint)**.
 
-### Summary of Recent Work (batches 25-37)
+### Summary of Recent Work (batches 25-38)
+- **Batch 38**: Sprint K-4 Module Data API & Widget Integration — JSONProvider
+  (loads JSON data files into memory, implements DataProvider interface). D&D 5e
+  module: first concrete Module implementation with 10 SRD spells data, tooltip
+  renderer. Factory registry pattern (RegisterFactory/init()) avoids circular imports.
+  Generic module HTTP handler (Index/CategoryList/ItemDetail/SearchAPI/TooltipAPI).
+  Templ reference pages (category grid, item table, item detail with breadcrumbs).
+  Module route registration with dynamic addon middleware (per-module :mod param).
+  ModuleSearcher interface added to entity handler (follows existing searcher pattern).
+  ModuleSearchAdapter searches enabled modules for campaign. Entity SearchAPI includes
+  module results in @mention/quick search. 20 new tests (json_provider). ADR-020.
 - **Batch 37**: Sprint K-3 Module Manifest & Loader Framework — Manifest-driven
   module system replacing static hardcoded registry. ModuleManifest JSON spec
   (id, name, version, author, license, api_version, categories with field schemas,
@@ -105,7 +115,7 @@ Next sprint: **K-4 (Module Data API & Widget Integration)**.
 ---
 
 ## Next Session Should
-Continue **Phase K** with Sprint K-4 (Module Data API & Widget Integration — `DataProvider` implementations, module HTTP handler for reference pages + tooltip API, wire into mentions widget, per-campaign enable/disable via addons). Then K-5 (Foundry Polish Sprint). Full reorganized roadmap (Phases K-M, 15 sprints across 3 tracks) in `.ai/todo.md`.
+Continue **Phase K** with Sprint K-5 (Foundry Polish Sprint — shop icon fix, fog bidirectional sync, connection status UI, SimpleCalendar hooks). Then K-6 (Relations Graph Visualization). Full reorganized roadmap (Phases K-M, 15 sprints across 3 tracks) in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -155,3 +165,4 @@ Continue **Phase K** with Sprint K-4 (Module Data API & Widget Integration — `
 - **2026-03-05: Sprint K-1** — Per-entity permissions model (backend): migration 000048, model types, permission repository, service methods, visibility filter, 13 tests.
 - **2026-03-05: Sprint K-2** — Per-entity permissions UI: visibility section on edit page (Everyone/GM Only/Custom), permission grant builder, API endpoints, visibility indicators across all views.
 - **2026-03-05: Sprint K-3** — Module manifest & loader framework: ModuleManifest JSON spec, ModuleLoader auto-discovery, sandboxed Module/DataProvider/TooltipRenderer interfaces, manifest.json for 3 modules, admin page updated, installedAddons wired, 13 tests, ADR-019.
+- **2026-03-05: Sprint K-4** — Module data API & widget integration: JSONProvider (JSON-file DataProvider), D&D 5e module (10 SRD spells, tooltip renderer), factory registry pattern, generic module HTTP handler (5 endpoints), Templ reference pages, dynamic addon middleware, ModuleSearcher in entity search, 20 new tests, ADR-020.

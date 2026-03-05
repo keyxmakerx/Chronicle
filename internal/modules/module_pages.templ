@@ -1,0 +1,217 @@
+// module_pages.templ provides Templ components for the module reference
+// pages: category index, item list, and item detail views.
+
+package modules
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// categoryInfo is used by the handler to pass category data to templates.
+// Defined here so Templ can reference it (must be in same package).
+type categoryInfo struct {
+	Slug  string
+	Name  string
+	Icon  string
+	Count int
+}
+
+// ModuleIndexPage renders the full module category index page.
+templ ModuleIndexPage(cc *campaigns.CampaignContext, manifest *ModuleManifest, cats []categoryInfo) {
+	@layouts.App(manifest.Name + " - " + cc.Campaign.Name) {
+		@ModuleIndexContent(cc, manifest, cats)
+	}
+}
+
+// ModuleIndexContent renders the module category index (for HTMX swap).
+templ ModuleIndexContent(cc *campaigns.CampaignContext, manifest *ModuleManifest, cats []categoryInfo) {
+	<div id="module-content">
+		@components.Breadcrumbs([]components.BreadcrumbItem{
+			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
+			{Label: manifest.Name},
+		})
+
+		<!-- Module header -->
+		<div class="mb-6">
+			<div class="flex items-center gap-3 mb-2">
+				if manifest.Icon != "" {
+					<i class={ "fa-solid " + manifest.Icon + " text-2xl text-primary" }></i>
+				}
+				<h1 class="text-2xl font-bold text-fg">{ manifest.Name }</h1>
+			</div>
+			if manifest.Description != "" {
+				<p class="text-fg-secondary">{ manifest.Description }</p>
+			}
+		</div>
+
+		<!-- Category cards grid -->
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+			for _, cat := range cats {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/modules/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug)) }
+					class="block bg-surface border border-border rounded-lg p-5 hover:border-primary/50 hover:shadow-md transition-all group"
+					hx-get={ fmt.Sprintf("/campaigns/%s/modules/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug) }
+					hx-target="#module-content"
+					hx-swap="outerHTML"
+					hx-push-url="true"
+				>
+					<div class="flex items-center gap-3 mb-2">
+						if cat.Icon != "" {
+							<i class={ "fa-solid " + cat.Icon + " text-lg text-primary group-hover:scale-110 transition-transform" }></i>
+						}
+						<h2 class="text-lg font-semibold text-fg">{ cat.Name }</h2>
+					</div>
+					<p class="text-sm text-fg-secondary">
+						{ fmt.Sprintf("%d items", cat.Count) }
+					</p>
+				</a>
+			}
+		</div>
+	</div>
+}
+
+// CategoryListPage renders the full category item list page.
+templ CategoryListPage(cc *campaigns.CampaignContext, manifest *ModuleManifest, cat *CategoryDef, items []ReferenceItem) {
+	@layouts.App(cat.Name + " - " + manifest.Name) {
+		@CategoryListContent(cc, manifest, cat, items)
+	}
+}
+
+// CategoryListContent renders the category item list (for HTMX swap).
+templ CategoryListContent(cc *campaigns.CampaignContext, manifest *ModuleManifest, cat *CategoryDef, items []ReferenceItem) {
+	<div id="module-content">
+		@components.Breadcrumbs([]components.BreadcrumbItem{
+			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
+			{Label: manifest.Name, Href: fmt.Sprintf("/campaigns/%s/modules/%s", cc.Campaign.ID, manifest.ID)},
+			{Label: cat.Name},
+		})
+
+		<div class="mb-6">
+			<div class="flex items-center gap-3 mb-2">
+				if cat.Icon != "" {
+					<i class={ "fa-solid " + cat.Icon + " text-2xl text-primary" }></i>
+				}
+				<h1 class="text-2xl font-bold text-fg">{ cat.Name }</h1>
+				<span class="text-sm text-fg-secondary">({ fmt.Sprintf("%d", len(items)) })</span>
+			</div>
+		</div>
+
+		<!-- Item table -->
+		<div class="bg-surface border border-border rounded-lg overflow-hidden">
+			<table class="w-full text-sm">
+				<thead class="bg-surface-raised border-b border-border">
+					<tr>
+						<th class="text-left px-4 py-3 font-medium text-fg-secondary">Name</th>
+						<th class="text-left px-4 py-3 font-medium text-fg-secondary hidden sm:table-cell">Summary</th>
+						for _, field := range cat.Fields {
+							if field.Key != "classes" {
+								<th class="text-left px-4 py-3 font-medium text-fg-secondary hidden md:table-cell">{ field.Label }</th>
+							}
+						}
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-border">
+					for _, item := range items {
+						<tr
+							class="hover:bg-surface-raised/50 cursor-pointer transition-colors"
+							hx-get={ fmt.Sprintf("/campaigns/%s/modules/%s/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug, item.ID) }
+							hx-target="#module-content"
+							hx-swap="outerHTML"
+							hx-push-url="true"
+						>
+							<td class="px-4 py-3">
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/modules/%s/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug, item.ID)) }
+									class="font-medium text-primary hover:underline"
+								>
+									{ item.Name }
+								</a>
+							</td>
+							<td class="px-4 py-3 text-fg-secondary hidden sm:table-cell truncate max-w-xs">{ item.Summary }</td>
+							for _, field := range cat.Fields {
+								if field.Key != "classes" {
+									<td class="px-4 py-3 text-fg-secondary hidden md:table-cell">
+										{ propString(item.Properties, field.Key) }
+									</td>
+								}
+							}
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</div>
+}
+
+// ItemDetailPage renders the full item detail page.
+templ ItemDetailPage(cc *campaigns.CampaignContext, manifest *ModuleManifest, cat *CategoryDef, item *ReferenceItem) {
+	@layouts.App(item.Name + " - " + manifest.Name) {
+		@ItemDetailContent(cc, manifest, cat, item)
+	}
+}
+
+// ItemDetailContent renders the item detail view (for HTMX swap).
+templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *ModuleManifest, cat *CategoryDef, item *ReferenceItem) {
+	<div id="module-content">
+		@components.Breadcrumbs([]components.BreadcrumbItem{
+			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
+			{Label: manifest.Name, Href: fmt.Sprintf("/campaigns/%s/modules/%s", cc.Campaign.ID, manifest.ID)},
+			{Label: cat.Name, Href: fmt.Sprintf("/campaigns/%s/modules/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug)},
+			{Label: item.Name},
+		})
+
+		<div class="max-w-3xl">
+			<!-- Item header -->
+			<div class="mb-6">
+				<h1 class="text-2xl font-bold text-fg mb-1">{ item.Name }</h1>
+				<div class="flex items-center gap-2 text-sm text-fg-secondary">
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
+						if cat.Icon != "" {
+							<i class={ "fa-solid " + cat.Icon }></i>
+						}
+						{ cat.Name }
+					</span>
+					if item.Source != "" {
+						<span class="text-fg-muted">·</span>
+						<span>{ item.Source }</span>
+					}
+				</div>
+			</div>
+
+			<!-- Properties card -->
+			if len(item.Properties) > 0 && cat != nil && len(cat.Fields) > 0 {
+				<div class="bg-surface border border-border rounded-lg p-4 mb-6">
+					<div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+						for _, field := range cat.Fields {
+							if val := propString(item.Properties, field.Key); val != "" {
+								<div>
+									<dt class="text-xs font-medium text-fg-secondary uppercase tracking-wide">{ field.Label }</dt>
+									<dd class="text-sm text-fg mt-0.5">{ val }</dd>
+								</div>
+							}
+						}
+					</div>
+				</div>
+			}
+
+			<!-- Tags -->
+			if len(item.Tags) > 0 {
+				<div class="flex flex-wrap gap-1.5 mb-6">
+					for _, tag := range item.Tags {
+						<span class="inline-block px-2 py-0.5 bg-surface-raised text-fg-secondary rounded text-xs">{ tag }</span>
+					}
+				</div>
+			}
+
+			<!-- Description -->
+			if item.Description != "" {
+				<div class="prose prose-sm max-w-none text-fg">
+					<p class="whitespace-pre-line">{ item.Description }</p>
+				</div>
+			}
+		</div>
+	</div>
+}

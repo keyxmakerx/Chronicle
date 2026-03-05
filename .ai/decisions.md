@@ -572,3 +572,47 @@ to implement without accessing the database or Echo router.
 - Admin modules page shows manifest metadata (author, license, API version).
 - Module slugs added to installedAddons for per-campaign enable/disable.
 - K-4 will build HTTP handlers and DataProvider implementations on this foundation.
+
+---
+
+## ADR-020: JSON-File DataProvider with Factory Registry
+
+**Date:** 2026-03-05
+**Status:** Accepted
+
+**Context:** Sprint K-3 delivered the Module/DataProvider/TooltipRenderer interfaces
+and auto-discovery. K-4 needs a concrete DataProvider implementation, the first
+module (D&D 5e), and HTTP handlers. The challenge: module subpackages (dnd5e/)
+import the parent modules package for interfaces, but the loader in modules/
+cannot import subpackages without creating circular imports.
+
+**Decision:** Three key design choices:
+
+1. **JSONProvider** — Generic DataProvider implementation that loads `data/*.json`
+   files from a module's directory. Filename stem becomes the category slug.
+   Items loaded into memory at startup. Case-insensitive search across Name,
+   Summary, and Tags.
+
+2. **Factory Registry** — Modules register factory functions via
+   `modules.RegisterFactory(id, fn)` in their package `init()` functions.
+   The loader calls registered factories during DiscoverAll() for modules
+   with status "available". This avoids circular imports: the parent package
+   holds the factory map, subpackages register themselves, and `app/routes.go`
+   uses blank imports (`_ "modules/dnd5e"`) to trigger init().
+
+3. **Dynamic Addon Middleware** — Module routes use `/campaigns/:id/modules/:mod`
+   with middleware that reads the `:mod` param and checks `addonSvc.IsEnabledForCampaign()`
+   dynamically, rather than requiring a separate route group per module.
+
+**Alternatives Considered:**
+- Direct import of dnd5e in loader.go: creates circular import.
+- Plugin-style registration in app/routes.go: too much wiring code, doesn't scale.
+- Separate handler per module: unnecessary duplication since all modules share the
+  same reference page structure.
+
+**Consequences:**
+- Adding a new module requires: manifest.json, data/*.json, a Go file with init()
+  factory registration, and a blank import in app/routes.go.
+- Module reference pages are generic (same Templ templates for all modules).
+- Module content appears in entity @mention search when the module addon is enabled.
+- TooltipAPI returns module-specific HTML via the TooltipRenderer interface.

@@ -1,0 +1,172 @@
+[
+  {
+    "id": "acid-splash",
+    "name": "Acid Splash",
+    "summary": "You hurl a bubble of acid. Choose one or two creatures within range.",
+    "description": "You hurl a bubble of acid. Choose one creature within range, or choose two creatures within range that are within 5 feet of each other. A target must succeed on a Dexterity saving throw or take 1d6 acid damage.\n\nThis spell's damage increases by 1d6 when you reach 5th level (2d6), 11th level (3d6), and 17th level (4d6).",
+    "properties": {
+      "level": 0,
+      "school": "Conjuration",
+      "casting_time": "1 action",
+      "range": "60 feet",
+      "components": "V, S",
+      "duration": "Instantaneous",
+      "classes": "Sorcerer, Wizard"
+    },
+    "tags": ["cantrip", "conjuration", "acid", "damage"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "burning-hands",
+    "name": "Burning Hands",
+    "summary": "A thin sheet of flames shoots forth from your outstretched fingertips.",
+    "description": "As you hold your hands with thumbs touching and fingers spread, a thin sheet of flames shoots forth from your outstretched fingertips. Each creature in a 15-foot cone must make a Dexterity saving throw. A creature takes 3d6 fire damage on a failed save, or half as much damage on a successful one.\n\nThe fire ignites any flammable objects in the area that aren't being worn or carried.\n\nAt Higher Levels. When you cast this spell using a spell slot of 2nd level or higher, the damage increases by 1d6 for each slot level above 1st.",
+    "properties": {
+      "level": 1,
+      "school": "Evocation",
+      "casting_time": "1 action",
+      "range": "Self (15-foot cone)",
+      "components": "V, S",
+      "duration": "Instantaneous",
+      "classes": "Sorcerer, Wizard"
+    },
+    "tags": ["evocation", "fire", "damage"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "cure-wounds",
+    "name": "Cure Wounds",
+    "summary": "A creature you touch regains hit points equal to 1d8 + your spellcasting modifier.",
+    "description": "A creature you touch regains a number of hit points equal to 1d8 + your spellcasting ability modifier. This spell has no effect on undead or constructs.\n\nAt Higher Levels. When you cast this spell using a spell slot of 2nd level or higher, the healing increases by 1d8 for each slot level above 1st.",
+    "properties": {
+      "level": 1,
+      "school": "Evocation",
+      "casting_time": "1 action",
+      "range": "Touch",
+      "components": "V, S",
+      "duration": "Instantaneous",
+      "classes": "Bard, Cleric, Druid, Paladin, Ranger"
+    },
+    "tags": ["evocation", "healing"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "detect-magic",
+    "name": "Detect Magic",
+    "summary": "You sense the presence of magic within 30 feet of you for the duration.",
+    "description": "For the duration, you sense the presence of magic within 30 feet of you. If you sense magic in this way, you can use your action to see a faint aura around any visible creature or object in the area that bears magic, and you learn its school of magic, if any.\n\nThe spell can penetrate most barriers, but it is blocked by 1 foot of stone, 1 inch of common metal, a thin sheet of lead, or 3 feet of wood or dirt.",
+    "properties": {
+      "level": 1,
+      "school": "Divination",
+      "casting_time": "1 action",
+      "range": "Self",
+      "components": "V, S",
+      "duration": "Concentration, up to 10 minutes",
+      "classes": "Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Wizard"
+    },
+    "tags": ["divination", "detection", "ritual"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "fireball",
+    "name": "Fireball",
+    "summary": "A bright streak flashes to a point and then blossoms into an explosion of flame.",
+    "description": "A bright streak flashes from your pointing finger to a point you choose within range and then blossoms with a low roar into an explosion of flame. Each creature in a 20-foot-radius sphere centered on that point must make a Dexterity saving throw. A target takes 8d6 fire damage on a failed save, or half as much damage on a successful one.\n\nThe fire spreads around corners. It ignites flammable objects in the area that aren't being worn or carried.\n\nAt Higher Levels. When you cast this spell using a spell slot of 4th level or higher, the damage increases by 1d6 for each slot level above 3rd.",
+    "properties": {
+      "level": 3,
+      "school": "Evocation",
+      "casting_time": "1 action",
+      "range": "150 feet",
+      "components": "V, S, M (a tiny ball of bat guano and sulfur)",
+      "duration": "Instantaneous",
+      "classes": "Sorcerer, Wizard"
+    },
+    "tags": ["evocation", "fire", "damage", "area"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "light",
+    "name": "Light",
+    "summary": "You touch one object that is no larger than 10 feet in any dimension, causing it to shed bright light.",
+    "description": "You touch one object that is no larger than 10 feet in any dimension. Until the spell ends, the object sheds bright light in a 20-foot radius and dim light for an additional 20 feet. The light can be colored as you like. Completely covering the object with something opaque blocks the light. The spell ends if you cast it again or dismiss it as an action.\n\nIf you target an object held or worn by a hostile creature, that creature must succeed on a Dexterity saving throw to avoid the spell.",
+    "properties": {
+      "level": 0,
+      "school": "Evocation",
+      "casting_time": "1 action",
+      "range": "Touch",
+      "components": "V, M (a firefly or phosphorescent moss)",
+      "duration": "1 hour",
+      "classes": "Bard, Cleric, Sorcerer, Wizard"
+    },
+    "tags": ["cantrip", "evocation", "utility"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "magic-missile",
+    "name": "Magic Missile",
+    "summary": "You create three glowing darts of magical force that each automatically hit a target.",
+    "description": "You create three glowing darts of magical force. Each dart hits a creature of your choice that you can see within range. A dart deals 1d4 + 1 force damage to its target. The darts all strike simultaneously, and you can direct them to hit one creature or several.\n\nAt Higher Levels. When you cast this spell using a spell slot of 2nd level or higher, the spell creates one more dart for each slot level above 1st.",
+    "properties": {
+      "level": 1,
+      "school": "Evocation",
+      "casting_time": "1 action",
+      "range": "120 feet",
+      "components": "V, S",
+      "duration": "Instantaneous",
+      "classes": "Sorcerer, Wizard"
+    },
+    "tags": ["evocation", "force", "damage"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "mage-hand",
+    "name": "Mage Hand",
+    "summary": "A spectral, floating hand appears at a point you choose within range.",
+    "description": "A spectral, floating hand appears at a point you choose within range. The hand lasts for the duration or until you dismiss it as an action. The hand vanishes if it is ever more than 30 feet away from you or if you cast this spell again.\n\nYou can use your action to control the hand. You can use the hand to manipulate an object, open an unlocked door or container, stow or retrieve an item from an open container, or pour the contents out of a vial. You can move the hand up to 30 feet each time you use it.\n\nThe hand can't attack, activate magic items, or carry more than 10 pounds.",
+    "properties": {
+      "level": 0,
+      "school": "Conjuration",
+      "casting_time": "1 action",
+      "range": "30 feet",
+      "components": "V, S",
+      "duration": "1 minute",
+      "classes": "Bard, Sorcerer, Warlock, Wizard"
+    },
+    "tags": ["cantrip", "conjuration", "utility"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "shield",
+    "name": "Shield",
+    "summary": "An invisible barrier of magical force appears and protects you.",
+    "description": "An invisible barrier of magical force appears and protects you. Until the start of your next turn, you have a +5 bonus to AC, including against the triggering attack, and you take no damage from magic missile.",
+    "properties": {
+      "level": 1,
+      "school": "Abjuration",
+      "casting_time": "1 reaction, which you take when you are hit by an attack or targeted by the magic missile spell",
+      "range": "Self",
+      "components": "V, S",
+      "duration": "1 round",
+      "classes": "Sorcerer, Wizard"
+    },
+    "tags": ["abjuration", "defense", "reaction"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "thunderwave",
+    "name": "Thunderwave",
+    "summary": "A wave of thunderous force sweeps out from you in a 15-foot cube.",
+    "description": "A wave of thunderous force sweeps out from you. Each creature in a 15-foot cube originating from you must make a Constitution saving throw. On a failed save, a creature takes 2d8 thunder damage and is pushed 10 feet away from you. On a successful save, the creature takes half as much damage and isn't pushed.\n\nIn addition, unsecured objects that are completely within the area of effect are automatically pushed 10 feet away from you by the spell's effect, and the spell emits a thunderous boom audible out to 300 feet.\n\nAt Higher Levels. When you cast this spell using a spell slot of 2nd level or higher, the damage increases by 1d8 for each slot level above 1st.",
+    "properties": {
+      "level": 1,
+      "school": "Evocation",
+      "casting_time": "1 action",
+      "range": "Self (15-foot cube)",
+      "components": "V, S",
+      "duration": "Instantaneous",
+      "classes": "Bard, Druid, Sorcerer, Wizard"
+    },
+    "tags": ["evocation", "thunder", "damage", "area"],
+    "source": "SRD 5.1"
+  }
+]

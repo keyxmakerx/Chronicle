@@ -26,6 +26,21 @@ const (
 // globalLoader is the singleton module loader initialized by Init().
 var globalLoader *ModuleLoader
 
+// ModuleFactory creates a Module instance from its manifest and data
+// directory. Used by the factory registry to instantiate modules
+// without circular imports between the modules package and subpackages.
+type ModuleFactory func(manifest *ModuleManifest, dataDir string) (Module, error)
+
+// factories maps module IDs to their factory functions. Subpackages
+// register themselves via RegisterFactory in their init() functions.
+var factories = make(map[string]ModuleFactory)
+
+// RegisterFactory registers a module factory for a given module ID.
+// Called from subpackage init() functions (e.g., dnd5e.init()).
+func RegisterFactory(id string, factory ModuleFactory) {
+	factories[id] = factory
+}
+
 // Init initializes the module registry by scanning the given directory
 // for module subdirectories containing manifest.json files. Must be
 // called once at application startup before any Registry()/Find() calls.
@@ -56,4 +71,23 @@ func Find(id string) *ModuleManifest {
 		return nil
 	}
 	return globalLoader.Get(id)
+}
+
+// FindModule returns the live Module instance for a given module ID,
+// or nil if not found or not yet instantiated. Only modules with
+// status "available" have live instances.
+func FindModule(id string) Module {
+	if globalLoader == nil {
+		return nil
+	}
+	return globalLoader.GetModule(id)
+}
+
+// AllModules returns all live Module instances, for iteration.
+// Only includes modules that have been successfully instantiated.
+func AllModules() []Module {
+	if globalLoader == nil {
+		return nil
+	}
+	return globalLoader.AllModules()
 }
