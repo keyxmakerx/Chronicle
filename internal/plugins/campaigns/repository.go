@@ -619,3 +619,167 @@ func (r *campaignRepository) ForceTransferOwnership(ctx context.Context, campaig
 
 	return tx.Commit()
 }
+
+// --- Campaign Group Repository ---
+
+// GroupRepository manages campaign groups and their memberships.
+type GroupRepository interface {
+	// CreateGroup creates a new campaign group. Returns the created group with its ID.
+	CreateGroup(ctx context.Context, campaignID, name string, description *string) (*CampaignGroup, error)
+	// ListGroups returns all groups for a campaign, ordered by name.
+	ListGroups(ctx context.Context, campaignID string) ([]CampaignGroup, error)
+	// GetGroup returns a single group by ID.
+	GetGroup(ctx context.Context, groupID int) (*CampaignGroup, error)
+	// UpdateGroup updates a group's name and description.
+	UpdateGroup(ctx context.Context, groupID int, name string, description *string) error
+	// DeleteGroup deletes a group and its memberships (cascade).
+	DeleteGroup(ctx context.Context, groupID int) error
+	// AddGroupMember adds a user to a group.
+	AddGroupMember(ctx context.Context, groupID int, userID string) error
+	// RemoveGroupMember removes a user from a group.
+	RemoveGroupMember(ctx context.Context, groupID int, userID string) error
+	// ListGroupMembers returns all members of a group with display info.
+	ListGroupMembers(ctx context.Context, groupID int) ([]GroupMemberInfo, error)
+}
+
+// groupRepository implements GroupRepository with MariaDB queries.
+type groupRepository struct {
+	db *sql.DB
+}
+
+// NewGroupRepository creates a new group repository backed by the given DB pool.
+func NewGroupRepository(db *sql.DB) GroupRepository {
+	return &groupRepository{db: db}
+}
+
+// CreateGroup inserts a new group and returns it with the auto-generated ID.
+func (r *groupRepository) CreateGroup(ctx context.Context, campaignID, name string, description *string) (*CampaignGroup, error) {
+	result, err := r.db.ExecContext(ctx,
+		`INSERT INTO campaign_groups (campaign_id, name, description) VALUES (?, ?, ?)`,
+		campaignID, name, description,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("inserting campaign group: %w", err)
+	}
+
+	id, _ := result.LastInsertId()
+	return &CampaignGroup{
+		ID:          int(id),
+		CampaignID:  campaignID,
+		Name:        name,
+		Description: description,
+	}, nil
+}
+
+// ListGroups returns all groups for a campaign, ordered by name.
+func (r *groupRepository) ListGroups(ctx context.Context, campaignID string) ([]CampaignGroup, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, campaign_id, name, description, created_at, updated_at
+		 FROM campaign_groups WHERE campaign_id = ? ORDER BY name`,
+		campaignID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("listing campaign groups: %w", err)
+	}
+	defer rows.Close()
+
+	var groups []CampaignGroup
+	for rows.Next() {
+		var g CampaignGroup
+		if err := rows.Scan(&g.ID, &g.CampaignID, &g.Name, &g.Description, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scanning campaign group: %w", err)
+		}
+		groups = append(groups, g)
+	}
+	return groups, rows.Err()
+}
+
+// GetGroup returns a single group by ID.
+func (r *groupRepository) GetGroup(ctx context.Context, groupID int) (*CampaignGroup, error) {
+	var g CampaignGroup
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, campaign_id, name, description, created_at, updated_at
+		 FROM campaign_groups WHERE id = ?`, groupID,
+	).Scan(&g.ID, &g.CampaignID, &g.Name, &g.Description, &g.CreatedAt, &g.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("finding campaign group: %w", err)
+	}
+	return &g, nil
+}
+
+// UpdateGroup updates a group's name and description.
+func (r *groupRepository) UpdateGroup(ctx context.Context, groupID int, name string, description *string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_groups SET name = ?, description = ? WHERE id = ?`,
+		name, description, groupID,
+	)
+	if err != nil {
+		return fmt.Errorf("updating campaign group: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("group not found")
+	}
+	return nil
+}
+
+// DeleteGroup deletes a group. Memberships cascade via FK.
+func (r *groupRepository) DeleteGroup(ctx context.Context, groupID int) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM campaign_groups WHERE id = ?`, groupID)
+	if err != nil {
+		return fmt.Errorf("deleting campaign group: %w", err)
+	}
+	return nil
+}
+
+// AddGroupMember adds a user to a group. Ignores duplicates.
+func (r *groupRepository) AddGroupMember(ctx context.Context, groupID int, userID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT IGNORE INTO campaign_group_members (group_id, user_id) VALUES (?, ?)`,
+		groupID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("adding group member: %w", err)
+	}
+	return nil
+}
+
+// RemoveGroupMember removes a user from a group.
+func (r *groupRepository) RemoveGroupMember(ctx context.Context, groupID int, userID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM campaign_group_members WHERE group_id = ? AND user_id = ?`,
+		groupID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("removing group member: %w", err)
+	}
+	return nil
+}
+
+// ListGroupMembers returns all members of a group with display info from users table.
+func (r *groupRepository) ListGroupMembers(ctx context.Context, groupID int) ([]GroupMemberInfo, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT cgm.user_id, u.display_name, u.email, cm.role, u.avatar_path
+		 FROM campaign_group_members cgm
+		 JOIN users u ON u.id = cgm.user_id
+		 JOIN campaign_groups cg ON cg.id = cgm.group_id
+		 JOIN campaign_members cm ON cm.campaign_id = cg.campaign_id AND cm.user_id = cgm.user_id
+		 WHERE cgm.group_id = ?
+		 ORDER BY u.display_name`,
+		groupID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("listing group members: %w", err)
+	}
+	defer rows.Close()
+
+	var members []GroupMemberInfo
+	for rows.Next() {
+		var m GroupMemberInfo
+		if err := rows.Scan(&m.UserID, &m.DisplayName, &m.Email, &m.Role, &m.AvatarPath); err != nil {
+			return nil, fmt.Errorf("scanning group member: %w", err)
+		}
+		members = append(members, m)
+	}
+	return members, rows.Err()
+}

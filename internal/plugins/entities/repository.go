@@ -745,10 +745,15 @@ func visibilityFilter(role int, userID string) (string, []any) {
 			AND (
 				(ep.subject_type = 'role' AND CAST(ep.subject_id AS UNSIGNED) <= ?)
 				OR (ep.subject_type = 'user' AND ep.subject_id = ?)
+				OR (ep.subject_type = 'group' AND EXISTS (
+					SELECT 1 FROM campaign_group_members cgm
+					WHERE cgm.group_id = CAST(ep.subject_id AS UNSIGNED)
+					AND cgm.user_id = ?
+				))
 			)
 		))
 	)`
-	return filter, []any{role, role, userID}
+	return filter, []any{role, role, userID, userID}
 }
 
 // ListByCampaign returns entities with pagination and optional type filtering.
@@ -1236,9 +1241,14 @@ func (r *entityPermissionRepository) GetEffectivePermission(ctx context.Context,
 	          AND (
 	              (subject_type = 'role' AND CAST(subject_id AS UNSIGNED) <= ?)
 	              OR (subject_type = 'user' AND subject_id = ?)
+	              OR (subject_type = 'group' AND EXISTS (
+	                  SELECT 1 FROM campaign_group_members cgm
+	                  WHERE cgm.group_id = CAST(subject_id AS UNSIGNED)
+	                  AND cgm.user_id = ?
+	              ))
 	          )`
 
-	rows, err := r.db.QueryContext(ctx, query, entityID, role, userID)
+	rows, err := r.db.QueryContext(ctx, query, entityID, role, userID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("querying effective permission: %w", err)
 	}

@@ -16,6 +16,7 @@ Chronicle.register('permissions', {
       visibility: 'default',
       isPrivate: false,
       members: [],
+      groups: [],
       permissions: [],
       loading: true,
       saving: false,
@@ -241,6 +242,24 @@ Chronicle.register('permissions', {
           });
         }
 
+        // Group grants section.
+        if (state.groups.length > 0) {
+          var groupHeader = document.createElement('div');
+          groupHeader.className = 'perm-section-header';
+          groupHeader.style.marginTop = '12px';
+          groupHeader.textContent = 'Group Permissions';
+          grantsDiv.appendChild(groupHeader);
+
+          state.groups.forEach(function (group) {
+            var row = createGrantRow(
+              group.name, null, 'fa-users',
+              'group', String(group.id),
+              findGrant('group', String(group.id))
+            );
+            grantsDiv.appendChild(row);
+          });
+        }
+
         // Owner members (greyed out).
         var owners = state.members.filter(function (m) { return m.role >= 3; });
         if (owners.length > 0) {
@@ -401,6 +420,7 @@ Chronicle.register('permissions', {
           state.visibility = data.visibility || 'default';
           state.isPrivate = data.is_private || false;
           state.members = data.members || [];
+          state.groups = data.groups || [];
           state.permissions = (data.permissions || []).map(function (p) {
             return {
               subject_type: p.subject_type,

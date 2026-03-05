@@ -82,6 +82,7 @@ type AuditLogger interface {
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
 	service       CampaignService
+	groupSvc      GroupService
 	entityLister  EntityTypeLister
 	layoutFetcher EntityTypeLayoutFetcher
 	recentLister  RecentEntityLister
@@ -91,6 +92,11 @@ type Handler struct {
 // NewHandler creates a new campaign handler.
 func NewHandler(service CampaignService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetGroupService sets the group service for campaign group management.
+func (h *Handler) SetGroupService(svc GroupService) {
+	h.groupSvc = svc
 }
 
 // SetEntityLister sets the entity type lister for the settings page.
@@ -775,4 +781,270 @@ func (h *Handler) CancelTransfer(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
+}
+
+// --- Campaign Group Management ---
+
+// listGroupsResponse wraps the group list for JSON responses.
+type listGroupsResponse struct {
+	Groups []CampaignGroup `json:"groups"`
+}
+
+// createGroupRequest is the JSON payload for creating a group.
+type createGroupRequest struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+}
+
+// updateGroupRequest is the JSON payload for updating a group.
+type updateGroupRequest struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+}
+
+// addGroupMemberRequest is the JSON payload for adding a member to a group.
+type addGroupMemberRequest struct {
+	UserID string `json:"user_id"`
+}
+
+// ListGroupsAPI returns all groups for a campaign (GET /campaigns/:id/groups).
+func (h *Handler) ListGroupsAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	groups, err := h.groupSvc.ListGroups(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, listGroupsResponse{Groups: groups})
+}
+
+// CreateGroupAPI creates a new campaign group (POST /campaigns/:id/groups).
+func (h *Handler) CreateGroupAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req createGroupRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	group, err := h.groupSvc.CreateGroup(c.Request().Context(), cc.Campaign.ID, req.Name, req.Description)
+	if err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "group.created", map[string]any{
+		"group_id":   group.ID,
+		"group_name": group.Name,
+	})
+
+	return c.JSON(http.StatusCreated, group)
+}
+
+// GetGroupAPI returns a single group with its members (GET /campaigns/:id/groups/:gid).
+func (h *Handler) GetGroupAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	gid, err := strconv.Atoi(c.Param("gid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid group ID")
+	}
+
+	group, err := h.groupSvc.GetGroup(c.Request().Context(), gid)
+	if err != nil {
+		return err
+	}
+
+	// Verify group belongs to this campaign.
+	if group.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("group not found")
+	}
+
+	members, err := h.groupSvc.ListGroupMembers(c.Request().Context(), gid)
+	if err != nil {
+		return err
+	}
+	group.Members = members
+
+	return c.JSON(http.StatusOK, group)
+}
+
+// UpdateGroupAPI updates a campaign group (PUT /campaigns/:id/groups/:gid).
+func (h *Handler) UpdateGroupAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	gid, err := strconv.Atoi(c.Param("gid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid group ID")
+	}
+
+	// Verify group belongs to this campaign.
+	group, err := h.groupSvc.GetGroup(c.Request().Context(), gid)
+	if err != nil {
+		return err
+	}
+	if group.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("group not found")
+	}
+
+	var req updateGroupRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.groupSvc.UpdateGroup(c.Request().Context(), gid, req.Name, req.Description); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "group.updated", map[string]any{
+		"group_id":   gid,
+		"group_name": req.Name,
+	})
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// DeleteGroupAPI deletes a campaign group (DELETE /campaigns/:id/groups/:gid).
+func (h *Handler) DeleteGroupAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	gid, err := strconv.Atoi(c.Param("gid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid group ID")
+	}
+
+	// Verify group belongs to this campaign.
+	group, err := h.groupSvc.GetGroup(c.Request().Context(), gid)
+	if err != nil {
+		return err
+	}
+	if group.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("group not found")
+	}
+
+	if err := h.groupSvc.DeleteGroup(c.Request().Context(), gid); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "group.deleted", map[string]any{
+		"group_id":   gid,
+		"group_name": group.Name,
+	})
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// AddGroupMemberAPI adds a user to a campaign group (POST /campaigns/:id/groups/:gid/members).
+func (h *Handler) AddGroupMemberAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	gid, err := strconv.Atoi(c.Param("gid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid group ID")
+	}
+
+	// Verify group belongs to this campaign.
+	group, err := h.groupSvc.GetGroup(c.Request().Context(), gid)
+	if err != nil {
+		return err
+	}
+	if group.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("group not found")
+	}
+
+	var req addGroupMemberRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.groupSvc.AddGroupMember(c.Request().Context(), gid, req.UserID); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "group.member_added", map[string]any{
+		"group_id": gid,
+		"user_id":  req.UserID,
+	})
+
+	// Return updated member list.
+	members, err := h.groupSvc.ListGroupMembers(c.Request().Context(), gid)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"members": members})
+}
+
+// RemoveGroupMemberAPI removes a user from a campaign group (DELETE /campaigns/:id/groups/:gid/members/:uid).
+func (h *Handler) RemoveGroupMemberAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	gid, err := strconv.Atoi(c.Param("gid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid group ID")
+	}
+
+	// Verify group belongs to this campaign.
+	group, err := h.groupSvc.GetGroup(c.Request().Context(), gid)
+	if err != nil {
+		return err
+	}
+	if group.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("group not found")
+	}
+
+	targetUID := c.Param("uid")
+	if err := h.groupSvc.RemoveGroupMember(c.Request().Context(), gid, targetUID); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "group.member_removed", map[string]any{
+		"group_id": gid,
+		"user_id":  targetUID,
+	})
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// GroupsPage renders the groups management page (GET /campaigns/:id/groups/manage).
+func (h *Handler) GroupsPage(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	groups, err := h.groupSvc.ListGroups(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	members, err := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+
+	return middleware.Render(c, http.StatusOK, GroupsManagePage(cc, groups, members, csrfToken))
 }

@@ -470,6 +470,8 @@ const (
 	SubjectRole SubjectType = "role"
 	// SubjectUser grants access to a specific user by ID.
 	SubjectUser SubjectType = "user"
+	// SubjectGroup grants access to all members of a campaign group.
+	SubjectGroup SubjectType = "group"
 )
 
 // Permission represents an access level that can be granted on an entity.
@@ -516,7 +518,7 @@ type PermissionGrant struct {
 
 // ValidSubjectType returns true if s is a recognized subject type.
 func ValidSubjectType(s SubjectType) bool {
-	return s == SubjectRole || s == SubjectUser
+	return s == SubjectRole || s == SubjectUser || s == SubjectGroup
 }
 
 // ValidPermission returns true if p is a recognized permission level.

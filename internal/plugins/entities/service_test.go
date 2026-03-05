@@ -1108,7 +1108,8 @@ func TestValidSubjectType(t *testing.T) {
 	}{
 		{SubjectRole, true},
 		{SubjectUser, true},
-		{"group", false},
+		{SubjectGroup, true},
+		{"invalid", false},
 		{"", false},
 	}
 	for _, tt := range tests {

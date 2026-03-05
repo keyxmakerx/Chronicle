@@ -146,6 +146,22 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 				</p>
 			</div>
 
+			// Groups — manage user groups for entity permission grants.
+			<div class="card p-6 mb-6">
+				<div class="flex items-center justify-between mb-2">
+					<h2 class="text-lg font-semibold text-fg">Groups</h2>
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/groups/manage", cc.Campaign.ID)) }
+						class="text-sm link"
+					>
+						<i class="fa-solid fa-users-gear mr-1"></i> Manage Groups
+					</a>
+				</div>
+				<p class="text-sm text-fg-secondary">
+					Create groups of users and grant them access to entities with custom visibility.
+				</p>
+			</div>
+
 			// Transfer ownership section.
 			<div class="card p-6 mb-6">
 				<h2 class="text-lg font-semibold text-fg mb-4">Transfer Ownership</h2>

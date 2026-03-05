@@ -585,6 +585,9 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
 	campaignHandler.SetLayoutFetcher(&entityTypeLayoutFetcherAdapter{svc: entityService})
 	campaignHandler.SetRecentEntityLister(&recentEntityListerAdapter{svc: entityService})
+	groupRepo := campaigns.NewGroupRepository(a.DB)
+	groupService := campaigns.NewGroupService(groupRepo)
+	campaignHandler.SetGroupService(groupService)
 	campaigns.RegisterRoutes(e, campaignHandler, campaignService, authService)
 
 	// Discover page (/) -- browse public campaigns. Uses OptionalAuth so
@@ -793,6 +796,7 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetCalendarSearcher(calendarService)
 	entityHandler.SetSessionSearcher(sessionsService)
 	entityHandler.SetMemberLister(campaignService)
+	entityHandler.SetGroupLister(groupService)
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	tagHandler.SetAuditService(auditService)
 

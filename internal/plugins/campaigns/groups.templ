@@ -1,0 +1,54 @@
+// groups.templ renders the campaign groups management page. Groups are used
+// for entity permission grants — a group of users can be granted view or edit
+// access to entities with custom visibility.
+
+package campaigns
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// GroupsManagePage renders the full groups management page (Owner only).
+templ GroupsManagePage(cc *CampaignContext, groups []CampaignGroup, members []CampaignMember, csrfToken string) {
+	@layouts.App(cc.Campaign.Name + " — Groups") {
+		<div class="max-w-4xl mx-auto">
+			<div class="flex items-center justify-between mb-6">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Groups</h1>
+					<p class="text-sm text-fg-secondary mt-1">
+						Manage groups for entity permission grants. Assign members to groups, then grant groups access to specific entities.
+					</p>
+				</div>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
+					<i class="fa-solid fa-arrow-left mr-1"></i> Settings
+				</a>
+			</div>
+
+			// Group management widget mounts here.
+			<div
+				data-widget="groups"
+				data-campaign-id={ cc.Campaign.ID }
+				data-csrf={ csrfToken }
+				data-groups-endpoint={ fmt.Sprintf("/campaigns/%s/groups", cc.Campaign.ID) }
+				data-members-json={ membersJSON(members) }
+			></div>
+		</div>
+	}
+}
+
+// membersJSON serializes campaign members to a JSON string for the widget.
+func membersJSON(members []CampaignMember) string {
+	// Build a minimal JSON array: [{user_id, display_name, email, role}]
+	result := "["
+	for i, m := range members {
+		if i > 0 {
+			result += ","
+		}
+		roleName := m.Role.DisplayName()
+		result += fmt.Sprintf(`{"user_id":%q,"display_name":%q,"email":%q,"role":%q,"role_level":%d}`,
+			m.UserID, m.DisplayName, m.Email, roleName, int(m.Role))
+	}
+	result += "]"
+	return result
+}

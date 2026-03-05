@@ -61,6 +61,18 @@ type CampaignService interface {
 	AdminAddMember(ctx context.Context, campaignID, userID string, role Role) error
 }
 
+// GroupService handles business logic for campaign group operations.
+type GroupService interface {
+	CreateGroup(ctx context.Context, campaignID, name string, description *string) (*CampaignGroup, error)
+	ListGroups(ctx context.Context, campaignID string) ([]CampaignGroup, error)
+	GetGroup(ctx context.Context, groupID int) (*CampaignGroup, error)
+	UpdateGroup(ctx context.Context, groupID int, name string, description *string) error
+	DeleteGroup(ctx context.Context, groupID int) error
+	AddGroupMember(ctx context.Context, groupID int, userID string) error
+	RemoveGroupMember(ctx context.Context, groupID int, userID string) error
+	ListGroupMembers(ctx context.Context, groupID int) ([]GroupMemberInfo, error)
+}
+
 // campaignService implements CampaignService.
 type campaignService struct {
 	repo    CampaignRepository
@@ -746,4 +758,113 @@ func generateToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// --- Campaign Group Service ---
+
+// groupService implements GroupService.
+type groupService struct {
+	repo GroupRepository
+}
+
+// NewGroupService creates a new group service.
+func NewGroupService(repo GroupRepository) GroupService {
+	return &groupService{repo: repo}
+}
+
+// CreateGroup creates a new campaign group with validation.
+func (s *groupService) CreateGroup(ctx context.Context, campaignID, name string, description *string) (*CampaignGroup, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, apperror.NewBadRequest("group name is required")
+	}
+	if len(name) > 100 {
+		return nil, apperror.NewBadRequest("group name must be 100 characters or less")
+	}
+
+	group, err := s.repo.CreateGroup(ctx, campaignID, name, description)
+	if err != nil {
+		if strings.Contains(err.Error(), "Duplicate entry") {
+			return nil, apperror.NewBadRequest("a group with this name already exists")
+		}
+		return nil, apperror.NewInternal(err)
+	}
+	return group, nil
+}
+
+// ListGroups returns all groups for a campaign with their members.
+func (s *groupService) ListGroups(ctx context.Context, campaignID string) ([]CampaignGroup, error) {
+	groups, err := s.repo.ListGroups(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	// Populate members for each group.
+	for i := range groups {
+		members, err := s.repo.ListGroupMembers(ctx, groups[i].ID)
+		if err != nil {
+			slog.Error("failed to list group members", slog.Int("group_id", groups[i].ID), slog.Any("error", err))
+			continue
+		}
+		groups[i].Members = members
+	}
+	return groups, nil
+}
+
+// GetGroup returns a single group by ID with its members.
+func (s *groupService) GetGroup(ctx context.Context, groupID int) (*CampaignGroup, error) {
+	group, err := s.repo.GetGroup(ctx, groupID)
+	if err != nil {
+		return nil, apperror.NewNotFound("group not found")
+	}
+	members, _ := s.repo.ListGroupMembers(ctx, groupID)
+	group.Members = members
+	return group, nil
+}
+
+// UpdateGroup updates a group's name and description.
+func (s *groupService) UpdateGroup(ctx context.Context, groupID int, name string, description *string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return apperror.NewBadRequest("group name is required")
+	}
+	if err := s.repo.UpdateGroup(ctx, groupID, name, description); err != nil {
+		if strings.Contains(err.Error(), "Duplicate entry") {
+			return apperror.NewBadRequest("a group with this name already exists")
+		}
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+// DeleteGroup deletes a group.
+func (s *groupService) DeleteGroup(ctx context.Context, groupID int) error {
+	if err := s.repo.DeleteGroup(ctx, groupID); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+// AddGroupMember adds a user to a group.
+func (s *groupService) AddGroupMember(ctx context.Context, groupID int, userID string) error {
+	if err := s.repo.AddGroupMember(ctx, groupID, userID); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+// RemoveGroupMember removes a user from a group.
+func (s *groupService) RemoveGroupMember(ctx context.Context, groupID int, userID string) error {
+	if err := s.repo.RemoveGroupMember(ctx, groupID, userID); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+// ListGroupMembers returns all members of a group.
+func (s *groupService) ListGroupMembers(ctx context.Context, groupID int) ([]GroupMemberInfo, error) {
+	members, err := s.repo.ListGroupMembers(ctx, groupID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return members, nil
 }

@@ -68,6 +68,16 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.GET("/transfer", h.TransferForm, RequireRole(RoleOwner))
 	cg.POST("/transfer", h.Transfer, RequireRole(RoleOwner))
 	cg.POST("/cancel-transfer", h.CancelTransfer, RequireRole(RoleOwner))
+
+	// Campaign groups (Owner only).
+	cg.GET("/groups/manage", h.GroupsPage, RequireRole(RoleOwner))
+	cg.GET("/groups", h.ListGroupsAPI, RequireRole(RoleOwner))
+	cg.POST("/groups", h.CreateGroupAPI, RequireRole(RoleOwner))
+	cg.GET("/groups/:gid", h.GetGroupAPI, RequireRole(RoleOwner))
+	cg.PUT("/groups/:gid", h.UpdateGroupAPI, RequireRole(RoleOwner))
+	cg.DELETE("/groups/:gid", h.DeleteGroupAPI, RequireRole(RoleOwner))
+	cg.POST("/groups/:gid/members", h.AddGroupMemberAPI, RequireRole(RoleOwner))
+	cg.DELETE("/groups/:gid/members/:uid", h.RemoveGroupMemberAPI, RequireRole(RoleOwner))
 }
 
 // RegisterExportRoutes sets up campaign export/import routes.

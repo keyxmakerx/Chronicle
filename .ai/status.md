@@ -8,13 +8,22 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint K-2 (Per-Entity Permissions UI) complete (batch 36).
+2026-03-05 -- Sprint K-3 (Group-Based Visibility) complete (batch 37).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Phase K: Permissions & Competitive Gap Closers.** Sprint K-2 delivered (batch 36). Next: Sprint K-3 (Group-Based Visibility).
+**Phase K: Permissions & Competitive Gap Closers.** Sprint K-3 delivered (batch 37). Next: Sprint K-4 (Auto-Linking in Editor).
 
-### Summary of Recent Work (batches 25-36)
+### Summary of Recent Work (batches 25-37)
+- **Batch 37**: Sprint K-3 Group-Based Visibility — Migration 000049
+  (`campaign_groups` + `campaign_group_members` tables, subject_type ENUM gains
+  "group"). Full GroupRepository (8 methods) and GroupService (validation, CRUD).
+  Group CRUD handlers (list/create/get/update/delete groups + add/remove members)
+  with Owner-only routes. Groups management page (`groups.templ`) with JS widget
+  (`groups.js`) — collapsible group cards, member add/remove, inline rename. Entity
+  permissions widget updated with "Group Permissions" section. `visibilityFilter()`
+  SQL extended for group membership subquery. Settings page "Groups" link. 7 unit
+  tests. Entity handler gains `GroupLister` interface for permissions API.
 - **Batch 36**: Sprint K-2 Per-Entity Permissions UI — Permissions widget
   (`permissions.js`) with three visibility modes (Everyone/DM Only/Custom),
   per-role and per-user grant toggles (None/View/Edit), auto-save. Replaced
@@ -92,7 +101,7 @@ Branch: `claude/project-review-planning-Yr4CL`.
 ---
 
 ## Next Session Should
-Continue **Phase K** with Sprint K-3 (Group-Based Visibility — `campaign_groups` + `campaign_group_members` tables, permission subject_type gains "group", groups managed from Campaign Settings, entity permission UI gets group selector). Full post-alpha roadmap (Phases K through O, 25 sprints) documented in `.ai/todo.md`.
+Continue **Phase K** with Sprint K-4 (Auto-Linking in Editor — entity-names API with Redis cache, TipTap InputRule for inline entity suggestions, per-campaign toggle). Full post-alpha roadmap (Phases K through O, 25 sprints) documented in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -139,3 +148,5 @@ Continue **Phase K** with Sprint K-3 (Group-Based Visibility — `campaign_group
 - **2026-03-05: Sprint J-4** — ClamAV antivirus scanning, docker-compose ClamAV container.
 - **2026-03-05: ALL PHASES COMPLETE** — H (release readiness), I (core UX), J (polish & infra).
 - **2026-03-05: Sprint K-1** — Per-entity permissions model (backend): migration 000048, model types, permission repository, service methods, visibility filter, 13 tests.
+- **2026-03-05: Sprint K-2** — Per-entity permissions UI: permissions widget (permissions.js), visibility modes, role/user grants, auto-save. Sync API GetEntity custom visibility fix.
+- **2026-03-05: Sprint K-3** — Group-based visibility: migration 000049 (campaign_groups/members), GroupRepository, GroupService, group CRUD handlers, groups management page + widget, permissions widget group grants, 7 tests.

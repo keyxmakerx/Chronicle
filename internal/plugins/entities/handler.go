@@ -64,6 +64,12 @@ type MemberLister interface {
 	ListMembers(ctx context.Context, campaignID string) ([]campaigns.CampaignMember, error)
 }
 
+// GroupLister retrieves campaign groups for the permissions UI.
+// Satisfied by campaigns.GroupService.
+type GroupLister interface {
+	ListGroups(ctx context.Context, campaignID string) ([]campaigns.CampaignGroup, error)
+}
+
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
@@ -76,6 +82,7 @@ type Handler struct {
 	calendarSearcher   CalendarSearcher
 	sessionSearcher    SessionSearcher
 	memberLister       MemberLister
+	groupLister        GroupLister
 }
 
 // NewHandler creates a new entity handler.
@@ -129,6 +136,12 @@ func (h *Handler) SetSessionSearcher(ss SessionSearcher) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetMemberLister(ml MemberLister) {
 	h.memberLister = ml
+}
+
+// SetGroupLister sets the group lister for the permissions UI.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetGroupLister(gl GroupLister) {
+	h.groupLister = gl
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
@@ -1024,7 +1037,14 @@ type permissionsResponse struct {
 	Visibility  VisibilityMode       `json:"visibility"`
 	IsPrivate   bool                 `json:"is_private"`
 	Members     []permissionsMember  `json:"members"`
+	Groups      []permissionsGroup   `json:"groups"`
 	Permissions []EntityPermission   `json:"permissions"`
+}
+
+// permissionsGroup is a campaign group summary for the permissions UI.
+type permissionsGroup struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 // permissionsMember is a campaign member summary for the permissions UI.
@@ -1097,10 +1117,30 @@ func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 		members = []permissionsMember{}
 	}
 
+	// Fetch campaign groups for the group grants selector.
+	var groups []permissionsGroup
+	if h.groupLister != nil {
+		campaignGroups, err := h.groupLister.ListGroups(ctx, cc.Campaign.ID)
+		if err != nil {
+			slog.Error("failed to list campaign groups for permissions", slog.Any("error", err))
+		} else {
+			for _, g := range campaignGroups {
+				groups = append(groups, permissionsGroup{
+					ID:   g.ID,
+					Name: g.Name,
+				})
+			}
+		}
+	}
+	if groups == nil {
+		groups = []permissionsGroup{}
+	}
+
 	return c.JSON(http.StatusOK, permissionsResponse{
 		Visibility:  entity.Visibility,
 		IsPrivate:   entity.IsPrivate,
 		Members:     members,
+		Groups:      groups,
 		Permissions: grants,
 	})
 }
