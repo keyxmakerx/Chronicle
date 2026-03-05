@@ -797,6 +797,7 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetSessionSearcher(sessionsService)
 	entityHandler.SetMemberLister(campaignService)
 	entityHandler.SetGroupLister(groupService)
+	entityHandler.SetCache(a.Redis)
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	tagHandler.SetAuditService(auditService)
 

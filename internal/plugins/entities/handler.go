@@ -10,8 +10,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
@@ -83,6 +85,7 @@ type Handler struct {
 	sessionSearcher    SessionSearcher
 	memberLister       MemberLister
 	groupLister        GroupLister
+	cache              *redis.Client
 }
 
 // NewHandler creates a new entity handler.
@@ -142,6 +145,11 @@ func (h *Handler) SetMemberLister(ml MemberLister) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetGroupLister(gl GroupLister) {
 	h.groupLister = gl
+}
+
+// SetCache sets the Redis client for API response caching (e.g., entity names).
+func (h *Handler) SetCache(rdb *redis.Client) {
+	h.cache = rdb
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
@@ -1178,6 +1186,59 @@ func (h *Handler) SetPermissionsAPI(c echo.Context) error {
 }
 
 // --- Entity Type CRUD ---
+
+// --- Auto-Linking API ---
+
+// entityNamesCacheTTL is how long entity names are cached in Redis.
+const entityNamesCacheTTL = 5 * time.Minute
+
+// EntityNamesAPI returns a lightweight list of all visible entity names for
+// auto-linking in the editor. Results are cached in Redis for 5 minutes.
+// GET /campaigns/:id/entity-names
+func (h *Handler) EntityNamesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	ctx := c.Request().Context()
+	role := int(cc.MemberRole)
+	userID := auth.GetUserID(c)
+	cacheKey := fmt.Sprintf("entity-names:%s:%d:%s", cc.Campaign.ID, role, userID)
+
+	// Try Redis cache first.
+	if h.cache != nil {
+		cached, err := h.cache.Get(ctx, cacheKey).Result()
+		if err == nil {
+			c.Response().Header().Set("Content-Type", "application/json")
+			c.Response().Header().Set("X-Cache", "HIT")
+			return c.String(http.StatusOK, cached)
+		}
+	}
+
+	names, err := h.service.ListEntityNames(ctx, cc.Campaign.ID, role, userID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("list entity names: %w", err))
+	}
+	if names == nil {
+		names = []EntityNameEntry{}
+	}
+
+	result, err := json.Marshal(map[string]any{"names": names})
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshal entity names: %w", err))
+	}
+
+	// Cache in Redis.
+	if h.cache != nil {
+		if err := h.cache.Set(ctx, cacheKey, string(result), entityNamesCacheTTL).Err(); err != nil {
+			slog.Error("failed to cache entity names", slog.Any("error", err))
+		}
+	}
+
+	c.Response().Header().Set("X-Cache", "MISS")
+	return c.JSONBlob(http.StatusOK, result)
+}
 
 // EntityTypesPage renders the entity type management page.
 // GET /campaigns/:id/entity-types

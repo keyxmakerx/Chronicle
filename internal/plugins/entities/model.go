@@ -525,3 +525,17 @@ func ValidSubjectType(s SubjectType) bool {
 func ValidPermission(p Permission) bool {
 	return p == PermView || p == PermEdit
 }
+
+// --- Auto-Linking ---
+
+// EntityNameEntry is a lightweight entity record for auto-linking.
+// Contains just enough data to detect entity names in editor text and
+// create links. Sorted by name length descending so longer names match first.
+type EntityNameEntry struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Slug     string `json:"slug"`
+	TypeName string `json:"type_name"`
+	TypeIcon string `json:"type_icon"`
+	TypeSlug string `json:"type_slug"`
+}

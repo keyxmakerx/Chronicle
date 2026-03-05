@@ -69,6 +69,9 @@ type EntityService interface {
 	UpdateCategoryDashboardLayout(ctx context.Context, id int, layoutJSON string) error
 	ResetCategoryDashboardLayout(ctx context.Context, id int) error
 
+	// Auto-linking — returns lightweight name entries for all visible entities.
+	ListEntityNames(ctx context.Context, campaignID string, role int, userID string) ([]EntityNameEntry, error)
+
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
 
@@ -1025,6 +1028,12 @@ func (s *entityService) generateSlug(ctx context.Context, campaignID, name strin
 		return "", fmt.Errorf("generating random slug suffix: %w", err)
 	}
 	return fmt.Sprintf("%s-%s", base, hex.EncodeToString(b)), nil
+}
+
+// ListEntityNames returns lightweight name entries for all visible entities
+// in a campaign. Used by the auto-linking feature in the editor.
+func (s *entityService) ListEntityNames(ctx context.Context, campaignID string, role int, userID string) ([]EntityNameEntry, error) {
+	return s.entities.ListNames(ctx, campaignID, role, userID)
 }
 
 // generateUUID creates a new v4 UUID string using crypto/rand.

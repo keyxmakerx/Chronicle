@@ -191,6 +191,7 @@
       var state = {
         editor: editor,
         endpoint: endpoint,
+        campaignId: campaignId,
         csrfToken: csrfToken,
         autosaveTimer: null,
         dirty: false,
@@ -527,6 +528,7 @@
       { action: 'blockquote',     icon: 'fa-circle-info',     label: 'Callout Block',   hint: '>' },
       { action: 'code',           icon: 'fa-code',            label: 'Code Block',      hint: '```' },
       { action: 'table',          icon: 'fa-table',           label: 'Insert Table',    hint: '' },
+      { action: 'autolink',       icon: 'fa-wand-magic-sparkles', label: 'Auto-link Entities', hint: 'Ctrl+Shift+L' },
     ];
 
     items.forEach(function (item) {
@@ -638,6 +640,19 @@
         // Insert a 3x3 table with header row.
         if (editor.can().insertTable) {
           editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        }
+        break;
+
+      case 'autolink':
+        // Auto-link entity names in the editor content.
+        if (Chronicle.autoLinkEntities && state.campaignId) {
+          Chronicle.autoLinkEntities(editor, state.campaignId).then(function (count) {
+            if (count > 0) {
+              Chronicle.markDirty && Chronicle.markDirty('editor');
+            }
+          }).catch(function (err) {
+            console.error('[Editor] Auto-link failed:', err);
+          });
         }
         break;
     }
@@ -826,6 +841,19 @@
         e.preventDefault();
         var state = editors.get(editorEl);
         if (state && state.dirty) saveContent(state);
+      }
+    }
+    // Ctrl+Shift+L to auto-link entities.
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'L') {
+      var editorEl = document.querySelector('.chronicle-editor');
+      if (editorEl) {
+        e.preventDefault();
+        var state = editors.get(editorEl);
+        if (state && state.isEditing && state.campaignId && Chronicle.autoLinkEntities) {
+          Chronicle.autoLinkEntities(state.editor, state.campaignId).then(function (count) {
+            if (count > 0) Chronicle.markDirty && Chronicle.markDirty('editor');
+          });
+        }
       }
     }
   });

@@ -254,6 +254,10 @@ func (m *mockEntityRepo) CopyEntityTags(ctx context.Context, sourceEntityID, tar
 	return nil
 }
 
+func (m *mockEntityRepo) ListNames(_ context.Context, _ string, _ int, _ string) ([]EntityNameEntry, error) {
+	return nil, nil
+}
+
 // --- Test Helpers ---
 
 // mockPermissionRepo implements EntityPermissionRepository for testing.

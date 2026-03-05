@@ -465,6 +465,11 @@ type EntityRepository interface {
 
 	// CopyEntityTags copies all entity_tags associations from one entity to another.
 	CopyEntityTags(ctx context.Context, sourceEntityID, targetEntityID string) error
+
+	// ListNames returns lightweight name entries for all visible entities in a
+	// campaign. Used for auto-linking in the editor. Sorted by name length DESC
+	// so longer names match first (prevents partial matches).
+	ListNames(ctx context.Context, campaignID string, role int, userID string) ([]EntityNameEntry, error)
 }
 
 // entityRepository implements EntityRepository with MariaDB queries.
@@ -1299,4 +1304,38 @@ var ftOperatorReplacer = strings.NewReplacer(
 // stripFTOperators removes FULLTEXT boolean operators from a search query.
 func stripFTOperators(query string) string {
 	return ftOperatorReplacer.Replace(query)
+}
+
+// ListNames returns lightweight name entries for auto-linking. Only returns
+// entities with names >= 3 chars. Sorted by name length DESC so longer names
+// match first in the auto-linker (prevents "King" matching before "King Arthur").
+func (r *entityRepository) ListNames(ctx context.Context, campaignID string, role int, userID string) ([]EntityNameEntry, error) {
+	where := "WHERE e.campaign_id = ? AND CHAR_LENGTH(e.name) >= 3"
+	args := []any{campaignID}
+
+	visFilter, visArgs := visibilityFilter(role, userID)
+	where += visFilter
+	args = append(args, visArgs...)
+
+	query := fmt.Sprintf(`SELECT e.id, e.name, e.slug, et.name, et.icon, et.slug
+		FROM entities e
+		INNER JOIN entity_types et ON et.id = e.entity_type_id
+		%s
+		ORDER BY CHAR_LENGTH(e.name) DESC, e.name`, where)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing entity names: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []EntityNameEntry
+	for rows.Next() {
+		var entry EntityNameEntry
+		if err := rows.Scan(&entry.ID, &entry.Name, &entry.Slug, &entry.TypeName, &entry.TypeIcon, &entry.TypeSlug); err != nil {
+			return nil, fmt.Errorf("scanning entity name: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	return entries, rows.Err()
 }

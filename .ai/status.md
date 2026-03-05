@@ -8,13 +8,22 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint K-3 (Group-Based Visibility) complete (batch 37).
+2026-03-05 -- Sprint K-4 (Auto-Linking in Editor) complete (batch 38).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Phase K: Permissions & Competitive Gap Closers.** Sprint K-3 delivered (batch 37). Next: Sprint K-4 (Auto-Linking in Editor).
+**Phase K: Permissions & Competitive Gap Closers.** Sprint K-4 delivered (batch 38). Next: Sprint K-5 (Relations Graph Visualization).
 
-### Summary of Recent Work (batches 25-37)
+### Summary of Recent Work (batches 25-38)
+- **Batch 38**: Sprint K-4 Auto-Linking in Editor — Entity names API endpoint
+  (`GET /entity-names`) with Redis caching (5-min TTL). Repository `ListNames`
+  method returns lightweight name entries (id, name, slug, type info) sorted by
+  name length DESC for longest-first matching. Auto-link JS module
+  (`editor_autolink.js`) scans editor text nodes for entity names, creates
+  @mention links with data-mention-id attributes. Integrated into Insert menu
+  ("Auto-link Entities" with wand icon) and Ctrl+Shift+L shortcut. Whole-word,
+  case-insensitive matching, min 3 chars, skips text already inside links.
+  `EntityNameEntry` model type. Handler gains Redis `cache` field.
 - **Batch 37**: Sprint K-3 Group-Based Visibility — Migration 000049
   (`campaign_groups` + `campaign_group_members` tables, subject_type ENUM gains
   "group"). Full GroupRepository (8 methods) and GroupService (validation, CRUD).
@@ -101,7 +110,7 @@ Branch: `claude/project-review-planning-Yr4CL`.
 ---
 
 ## Next Session Should
-Continue **Phase K** with Sprint K-4 (Auto-Linking in Editor — entity-names API with Redis cache, TipTap InputRule for inline entity suggestions, per-campaign toggle). Full post-alpha roadmap (Phases K through O, 25 sprints) documented in `.ai/todo.md`.
+Continue **Phase K** with Sprint K-5 (Relations Graph Visualization — D3.js force-directed graph, relation-graph API, dashboard block + standalone page). Full post-alpha roadmap (Phases K through O, 25 sprints) documented in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -150,3 +159,4 @@ Continue **Phase K** with Sprint K-4 (Auto-Linking in Editor — entity-names AP
 - **2026-03-05: Sprint K-1** — Per-entity permissions model (backend): migration 000048, model types, permission repository, service methods, visibility filter, 13 tests.
 - **2026-03-05: Sprint K-2** — Per-entity permissions UI: permissions widget (permissions.js), visibility modes, role/user grants, auto-save. Sync API GetEntity custom visibility fix.
 - **2026-03-05: Sprint K-3** — Group-based visibility: migration 000049 (campaign_groups/members), GroupRepository, GroupService, group CRUD handlers, groups management page + widget, permissions widget group grants, 7 tests.
+- **2026-03-05: Sprint K-4** — Auto-linking in editor: entity names API with Redis caching, auto-link JS module (text scanner, mention link creation), Insert menu + Ctrl+Shift+L shortcut.
