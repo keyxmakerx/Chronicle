@@ -106,55 +106,55 @@ New capabilities ordered by priority for alpha release.
 - [ ] **Toast notification grouping** — Duplicate toasts stack separately instead of grouping.
 - [ ] **Entity image gallery** — Only one image per entity; no carousel/gallery for multiple images.
 
-### Phase K: Permissions & Competitive Gap Closers
+### Phase K: Permissions UI + Module Foundation (3 tracks interleaved)
 
 - [x] **Sprint K-1: Per-Entity Permissions Model** — Migration 000048: `entity_permissions` table + `visibility` column on entities. Models: VisibilityMode, SubjectType, Permission, EntityPermission, EffectivePermission, SetPermissionsInput, PermissionGrant. Repository: EntityPermissionRepository (ListByEntity, SetPermissions, DeleteByEntity, GetEffectivePermission, UpdateVisibility) + visibilityFilter() SQL helper. Service: CheckEntityAccess, SetEntityPermissions, GetEntityPermissions. All list/search/count queries updated with userID param for permission-aware filtering. 13 new unit tests.
-- [ ] **Sprint K-2: Per-Entity Permissions UI** — "Permissions" tab on entity edit page. Visibility selector (everyone/dm_only/custom). User/role picker with view/edit toggles. Entity list + sidebar filter by resolved permissions.
-- [ ] **Sprint K-3: Group-Based Visibility** — Migration: `campaign_groups` + `campaign_group_members`. Permission subject_type gains "group." Groups in Campaign Settings. Entity permission UI gets group selector.
-- [ ] **Sprint K-4: Auto-Linking in Editor** — Backend: entity-names API (Redis-cached). Frontend: TipTap InputRule matches entity names, inline suggestion popup. Per-campaign toggle. Whole-word, case-insensitive, min 3 chars.
-- [ ] **Sprint K-5: Relations Graph Visualization** — D3.js force-directed graph (`relation_graph.js`). Backend: relation-graph API (nodes/edges JSON). Dashboard block + standalone page `/campaigns/:id/relations`.
+- [ ] **Sprint K-2: Per-Entity Permissions UI** _(Permissions)_ — "Permissions" tab on entity edit page. Visibility selector (everyone/dm_only/custom). User/role picker with view/edit toggles. Entity list + sidebar filter by resolved permissions. HTMX-powered save.
+- [ ] **Sprint K-3: Module Manifest & Loader Framework** _(Module Framework)_ — `ModuleManifest` JSON spec (id, name, version, author, license, categories, API version, data types, tooltip templates, entity type presets, field definitions). `ModuleLoader` reads/validates manifests. `ModuleRegistry` rewrite with auto-discovery. Sandboxed `Module` interface: `Info()`, `DataProvider()`, `TooltipRenderer()`. Modules can only register data providers, never access DB/Echo/services directly.
+- [ ] **Sprint K-4: Module Data API & Widget Integration** _(Module Framework)_ — `DataProvider` interface (List/Get/Search). `ReferenceItem` standard struct. Module HTTP handler: `GET /ref/:moduleID/`, category lists, detail pages, `GET /api/v1/ref/:moduleID/lookup?q=` tooltip API. Wire into `entity_tooltip.js` and `mentions` widget (`@ref:` prefix). Per-campaign enable/disable via existing addons plugin.
+- [ ] **Sprint K-5: Foundry Polish Sprint** _(Foundry VTT)_ — Fix shop icon (always null). Fix fog bidirectional (Foundry→Chronicle push via `canvas.fog` hooks). Connection status UI (sync indicator in Foundry sidebar). SimpleCalendar CRUD hook detection with graceful fallback.
+- [ ] **Sprint K-6: Relations Graph Visualization** _(Content)_ — D3.js force-directed graph (`relation_graph.js`). Backend: relation-graph API (nodes/edges JSON). Node colors by entity type, click-to-navigate. Dashboard block type `relation_graph`. Standalone page `/campaigns/:id/relations`.
 
-### Phase L: Content Depth & Editor Power
+### Phase L: Module SDK + Foundry Features + Content Depth
 
-- [ ] **Sprint L-1: Entity Sub-Notes (Posts) UI** — `entity_posts` table exists but no UI. Full CRUD: list below entry, create/edit modal with TipTap, per-post visibility, drag-to-reorder.
-- [ ] **Sprint L-2: Notes Rich Text (TipTap)** — Replace plain-text blocks with TipTap in notes widget. `entry`/`entry_html` columns exist. Support bold, italic, lists, links, @mentions. Block→TipTap migration on first edit.
-- [ ] **Sprint L-3: Note Folders and Organization** — Migration: `parent_id` + `folder` boolean. Tree view in notes panel, expand/collapse, drag-to-reorder within/between folders.
-- [ ] **Sprint L-4: Calendar Event Drag-and-Drop** — HTML5 DnD on monthly grid. Events draggable, date cells as drop targets. HTMX PUT on drop. Ghost element + drop zone highlighting. Scribe+ only.
-- [ ] **Sprint L-5: Calendar Day View + Recurring Events** — Single-day view with hourly time blocks. Expand event recurrence to monthly/weekly/daily/custom matching session recurrence.
+- [ ] **Sprint L-1: Module SDK Documentation & Example Module** _(Module Framework)_ — `docs/modules/README.md` Module Author Guide. `manifest-schema.json` for validation. Example module: `internal/modules/example/` ("Tavern Generator" — 20 items demonstrating all interfaces). `make module-new NAME=` scaffolding. `make module-validate NAME=` compliance check.
+- [ ] **Sprint L-2: Entity Sub-Notes (Posts) UI** _(Content Depth)_ — `entity_posts` table exists, build frontend. List below entry, create/edit modal with TipTap, per-post visibility (everyone/dm_only), drag-to-reorder, HTMX fragment loading.
+- [ ] **Sprint L-3: Foundry Multi-Scene + Combat Sync** _(Foundry VTT)_ — Multi-scene sync (scene↔map mappings, per-scene drawings/tokens/fog, scene selector). Combat tracker sync (hook `Combat` document, push initiative/round/turn via WS: `combat.started`/`combat.turn`/`combat.ended`). Active combat state on session detail page.
+- [ ] **Sprint L-4: Auto-Linking in Editor** _(Content)_ — Backend: `GET /api/v1/campaigns/:id/entities/names` (Redis-cached 5min). Frontend: TipTap InputRule matching entity names, inline suggestion popup. Whole-word, case-insensitive, min 3 chars. Per-campaign toggle.
+- [ ] **Sprint L-5: Module Packaging & Distribution** _(Module Framework)_ — `.chronicle-module` package format (ZIP: manifest.json + data/ + templates/). Admin "Install Module" UI with validation. Security: size limits, no executable code (data + Templ only), checksum verification. Module versioning/upgrade path.
 
-### Phase M: Game System Modules & Worldbuilding Tools
+### Phase M: Foundry Power + Content Polish
 
-- [ ] **Sprint M-1: D&D 5e Module — Data & Tooltip API** — SRD-legal JSON (spells, monsters, items, conditions, classes, races). Tooltip endpoint. Wire into entity_tooltip widget. Register as addon.
-- [ ] **Sprint M-2: D&D 5e Module — Reference Pages** — Browsable pages at `/modules/dnd5e/`. Category cards, searchable lists, formatted stat block detail pages. Quick-search integration.
-- [ ] **Sprint M-3: Pathfinder 2e Module** — ORC-licensed data following D&D 5e pattern. Spells, monsters, ancestries, classes, conditions, feats.
-- [ ] **Sprint M-4: Guided Worldbuilding Prompts** — `worldbuilding_prompts` table. "Writing Prompts" collapsible panel on entity edit page. Default prompt packs per entity type. Owner-customizable.
-- [ ] **Sprint M-5: Entity Type Template Library** — Genre presets (fantasy, sci-fi, horror, modern, historical) as JSON fixtures. Campaign creation genre selection. "Import preset" in Customization Hub.
+- [ ] **Sprint M-1: Foundry Character Sheet Linking** _(Foundry VTT)_ — Actor↔Entity mapping via sync mappings. "View in Chronicle" button on character sheets. "Foundry Status" entity page widget (HP, conditions, last scene). Bidirectional name/image sync.
+- [ ] **Sprint M-2: Notes Rich Text + Folders** _(Content Depth)_ — TipTap in notes widget (entry/entry_html columns exist). Block→TipTap migration on first edit. Migration: `parent_id` + `is_folder`. Tree view, expand/collapse, drag-to-reorder within/between folders.
+- [ ] **Sprint M-3: Group-Based Visibility** _(Permissions)_ — Migration: `campaign_groups` + `campaign_group_members`. Groups CRUD in Campaign Settings. Permission subject_type gains `group`. Entity permission UI gains group selector. Virtual groups: "All Players", "All Scribes".
+- [ ] **Sprint M-4: Draw Steel Module** _(Module Framework)_ — First real module using the Module interface. `internal/modules/drawsteel/`: abilities, creatures, ancestries, classes, conditions, equipment (MCDM SRD/CC content). Entity type presets, tooltip templates, reference pages. Mention integration (`@ref:drawsteel:ability:telekinetic-strike`).
+- [ ] **Sprint M-5: Calendar Drag-and-Drop + Day View** _(Content Depth)_ — HTML5 DnD on monthly grid (events draggable, date cells as drop targets, HTMX PUT on drop). Single-day view with hourly time blocks. Expand recurrence to monthly/weekly/daily/custom.
 
-### Phase N: Collaboration & Platform Maturity
+### Phase N+: Collaboration, Platform Maturity & Polish (future)
 
-- [ ] **Sprint N-1: Role-Aware Dashboards** — Role-keyed dashboard layouts. Dashboard editor gains role selector. Players see role-specific dashboard or default fallback.
-- [ ] **Sprint N-2: Invite System** — Migration: `campaign_invites` table. Email invitations with one-click accept link. Non-public campaigns require invitation. Invite management UI.
-- [ ] **Sprint N-3: 2FA/TOTP Support** — TOTP enrollment with QR code (`pquerna/otp`). Login redirect to TOTP input. Recovery codes (8 hashed). Admin force-disable.
-- [ ] **Sprint N-4: Accessibility Audit (WCAG 2.1 AA)** — ARIA labels, focus traps, skip-to-content, color contrast 4.5:1, keyboard nav, screen reader announcements, axe-core scanning.
-- [ ] **Sprint N-5: Infrastructure & Deployment** — Docker-compose full stack verification with health checks. Makefile full-stack target. `CONTRIBUTING.md`. CI against docker-compose.
+- [ ] Role-aware dashboards (role-keyed layouts, dashboard editor role selector)
+- [ ] Invite system (email invitations, one-click accept, invite management)
+- [ ] 2FA/TOTP support (QR enrollment, recovery codes, admin force-disable)
+- [ ] Accessibility audit (WCAG 2.1 AA — ARIA, focus traps, color contrast, axe-core)
+- [ ] Infrastructure & deployment (docker-compose verification, CONTRIBUTING.md, CI)
+- [ ] Command palette & saved filters (Ctrl+Shift+P, fuzzy search, saved presets)
+- [ ] Map drawing tools (Leaflet.Draw, freehand/polygons, existing `map_drawings` table)
+- [ ] Discord bot integration (webhook notifications, reaction RSVP)
+- [ ] Bulk operations (multi-select entity lists, batch tag/move/visibility/delete)
+- [ ] Editor import/export & themes (Markdown via goldmark, sepia/high-contrast themes)
+- [ ] D&D 5e module (SRD spells, monsters, items — using module framework from K-3/K-4)
+- [ ] Pathfinder 2e module (ORC-licensed data following same pattern)
+- [ ] Guided worldbuilding prompts (prompt packs per entity type, owner-customizable)
+- [ ] Entity type template library (genre presets: fantasy, sci-fi, horror, modern)
 
-### Phase O: Polish, Ecosystem & Delight
+### Deferred to Community Contributions / Far Future
 
-- [ ] **Sprint O-1: Command Palette & Saved Filters** — Ctrl+Shift+P action palette with fuzzy search. Saved entity list filter presets as sidebar links in `saved_filters` table.
-- [ ] **Sprint O-2: Map Drawing Tools** — Leaflet.Draw integration (freehand, polygons, circles, rectangles, text). Uses existing `map_drawings` table. Per-drawing visibility, color/opacity.
-- [ ] **Sprint O-3: Discord Bot Integration** — Plugin at `internal/plugins/discord/`. Bot token config. Webhook session notifications. Reaction-based RSVP per ADR-012.
-- [ ] **Sprint O-4: Bulk Operations & Persistent Filters** — Multi-select entity lists with batch actions (tag, move, visibility, delete). Persistent filters per category in localStorage.
-- [ ] **Sprint O-5: Editor Import/Export & Additional Themes** — Markdown import/export via `goldmark`. Sepia + high-contrast themes. Custom accent color picker.
-
-### Deferred to Phase P+ (or community contributions)
-
-- [ ] Draw Steel module
 - [ ] Whiteboards / freeform canvas (Tldraw/Excalidraw)
 - [ ] Offline mode / service worker caching
 - [ ] Collaborative editing presence indicators
 - [ ] Calendar timezone support / print-PDF export
 - [ ] Map hex/square grid overlay / measurement tool
-- [~] Fog of war Foundry→Chronicle push (Chronicle→Foundry done)
 - [ ] Webhook support for external event notifications
 - [ ] Widget inline CSS → CSS classes migration
 - [ ] Reusable modal/dropdown component library

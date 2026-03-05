@@ -8,11 +8,17 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint K-1 (Per-Entity Permissions Model) complete (batch 35).
-Branch: `claude/project-review-planning-Yr4CL`.
+2026-03-05 -- Roadmap reorganization complete. Phases K-M restructured around 3 interleaved tracks: Module Framework, Foundry VTT, Permissions + Content Depth.
+Branch: `claude/plan-development-phases-G8Pwf`.
 
 ## Current Phase
-**Phase K: Permissions & Competitive Gap Closers.** Sprint K-1 delivered (batch 35). Next: Sprint K-2 (Per-Entity Permissions UI).
+**Phase K: Permissions UI + Module Foundation.** Sprint K-1 delivered (batch 35). Roadmap reorganized into 3 interleaved tracks:
+
+1. **Module Framework** — Build sandboxed module pack system before specific game content. K-3 (manifest/loader), K-4 (data API), L-1 (SDK docs), L-5 (packaging), M-4 (Draw Steel).
+2. **Foundry VTT** — Polish existing + add new features. K-5 (bug fixes), L-3 (multi-scene + combat), M-1 (character sheet linking).
+3. **Permissions + Content** — K-2 (permissions UI), K-6 (relations graph), L-2 (entity posts), L-4 (auto-linking), M-2 (notes rich text), M-3 (group visibility), M-5 (calendar DnD).
+
+Next sprint: **K-2 (Per-Entity Permissions UI)**.
 
 ### Summary of Recent Work (batches 25-35)
 - **Batch 35**: Sprint K-1 Per-Entity Permissions Model — Migration 000048
@@ -82,7 +88,7 @@ Branch: `claude/project-review-planning-Yr4CL`.
 ---
 
 ## Next Session Should
-Continue **Phase K** with Sprint K-2 (Per-Entity Permissions UI — "Permissions" tab on entity edit page, visibility selector, user/role picker with view/edit toggles, entity list + sidebar filter by resolved permissions). Full post-alpha roadmap (Phases K through O, 25 sprints) documented in `.ai/todo.md`.
+Continue **Phase K** with Sprint K-2 (Per-Entity Permissions UI — "Permissions" tab on entity edit page, visibility selector, user/role picker with view/edit toggles, entity list + sidebar filter by resolved permissions). Then K-3 (Module Manifest & Loader Framework). Full reorganized roadmap (Phases K-M, 15 sprints across 3 tracks) in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -90,8 +96,9 @@ Continue **Phase K** with Sprint K-2 (Per-Entity Permissions UI — "Permissions
   must run before build on a fresh clone
 - Tailwind CSS output (`static/css/app.css`) is gitignored, needs `make tailwind`
 - Tailwind standalone CLI (`tailwindcss`) is v3; do NOT use `npx @tailwindcss/cli` (v4 syntax)
-- Fog-of-war sync is one-way only (Chronicle → Foundry). Foundry → Chronicle not implemented.
-- SimpleCalendar events are limited (managed as journal notes, no CRUD hooks).
+- Fog-of-war sync is one-way only (Chronicle → Foundry). Foundry → Chronicle planned in Sprint K-5.
+- SimpleCalendar events are limited (managed as journal notes, no CRUD hooks). Improvement planned in Sprint K-5.
+- Foundry shop icon field always returns null. Fix planned in Sprint K-5.
 
 ## Completed Phases
 - **2026-02-19: Phase 0** — Project scaffolding, AI docs, build config
