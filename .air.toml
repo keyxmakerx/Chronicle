@@ -1,0 +1,36 @@
+# .air.toml — Hot reload configuration for Chronicle development.
+#
+# Usage: make dev (or: air)
+# Requires: go install github.com/air-verse/air@latest
+#
+# Watches Go, Templ, and SQL files. Rebuilds and restarts on changes.
+# Static files (JS/CSS) are served directly and don't need a restart.
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+# Build command: generate templ files, then build the binary.
+cmd = "go run github.com/a-h/templ/cmd/templ@latest generate && go build -o ./tmp/chronicle ./cmd/chronicle"
+bin = "./tmp/chronicle"
+# Watch these file extensions for changes.
+include_ext = ["go", "templ", "sql"]
+# Exclude generated files, vendor, and test files.
+exclude_dir = ["tmp", "node_modules", "static/vendor", ".git"]
+exclude_regex = ["_templ\\.go$", "_test\\.go$"]
+# Delay before rebuilding (debounce rapid saves).
+delay = 1000
+
+[log]
+# Show build output.
+time = false
+
+[color]
+main = "cyan"
+watcher = "magenta"
+build = "yellow"
+runner = "green"
+
+[misc]
+# Clean tmp dir on exit.
+clean_on_exit = true

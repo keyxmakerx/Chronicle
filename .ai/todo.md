@@ -61,7 +61,7 @@ Known broken or missing things, ordered by severity.
 - [x] **LIKE metacharacter in backlinks** — Added `strings.NewReplacer` to escape `%` and `_` in entityID before LIKE pattern in `entities/repository.go:FindBacklinks`.
 - [x] **No Content Security Policy headers** — CSP implemented in `middleware/security.go` (default-src 'self', script-src, style-src, img-src, font-src, connect-src, frame-ancestors, base-uri, form-action). Alpine.js requires 'unsafe-inline'/'unsafe-eval'; documented tradeoff.
 - [x] **No input size validation on text fields** — Added `apperror/validate.go` helpers (ValidateStringLength, ValidateRequired) and wired into entities, campaigns, maps, timeline, sessions create handlers.
-- [ ] **Package-level Go doc comments missing** — ~80% of .go files lack `// Package ...` comments (handler.go, service.go, repository.go, routes.go across all plugins).
+- [x] **Package-level Go doc comments** — All Go packages have `// Package ...` comments. Added `doc.go` for `templates/components`. Widget "packages" are JS-only (`.ai.md` docs).
 - [x] **Missing JS widget .ai.md docs** — All done: image_upload, timeline_viz, dashboard_editor, template_editor, entity_tooltip, foundry-module, websocket, attributes, mentions, title, boot.js, editor, tags. Relations and notes already existed.
 
 ---
@@ -159,7 +159,7 @@ New capabilities ordered by priority for alpha release.
 - [x] Audit service tests (12 tests: Log validation, pagination, entity history, stats)
 - [x] Media service tests (20+ tests: CRUD, upload validation, quotas, storage stats)
 - [x] Settings service tests (30+ tests: limit resolution, override chain, bypass validation)
-- [ ] HTMX fragment edge cases (CSRF propagation, double-init, nested targets)
+- [x] HTMX fragment edge cases — Verified: CSRF via `htmx:configRequest` (global), double-init prevented by WeakMap, widget cleanup on `htmx:beforeSwap`, form tracking on `htmx:afterSettle`
 
 ### Game System Modules
 

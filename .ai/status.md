@@ -8,14 +8,19 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint J-2: Editor Enhancements complete (batch 32).
+2026-03-05 -- Sprint J-3: Testing & Infrastructure complete (batch 33).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Sprint J-2 complete (batch 32).** Code syntax highlighting + find/replace delivered.
-Ready for Sprint J-3 (Testing & Infrastructure).
+**Sprint J-3 complete (batch 33).** Testing verified, air config created, docker-compose fixed.
+Ready for Sprint J-4 (File Security).
 
-### Summary of Recent Work (batches 25-32)
+### Summary of Recent Work (batches 25-33)
+- **Batch 33**: Sprint J-3 Testing & Infrastructure — Verified HTMX edge cases (CSRF
+  propagation, double-init prevention, widget cleanup, form tracking all covered by boot.js).
+  Created `.air.toml` for hot reload config. Fixed docker-compose.yml em-dash in error
+  message. Added `doc.go` for templates/components package. Verified all Go packages have
+  package doc comments.
 - **Batch 32**: Sprint J-2 Editor Enhancements — Code block syntax highlighting via
   @tiptap/extension-code-block-lowlight with highlight.js common languages (JS, Python,
   Go, SQL, etc.). Tokyo Night-inspired dark/light syntax theme in input.css. Find/replace
@@ -63,8 +68,7 @@ Ready for Sprint J-3 (Testing & Infrastructure).
 ---
 
 ## Next Session Should
-1. **Testing & Infrastructure** (Sprint J-3) — HTMX edge cases, docker-compose verification, Go doc comments.
-2. **File Security** (Sprint J-4) — ClamAV, MIME allowlist, SVG blocking.
+1. **File Security** (Sprint J-4) — ClamAV, MIME allowlist, SVG blocking.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -107,3 +111,4 @@ Ready for Sprint J-3 (Testing & Infrastructure).
   Sprint I-3 (calendar week view), Sprint I-4 (map marker clustering + expanded POI icons).
 - **2026-03-05: Sprint J-1** — Breadcrumbs on all non-entity pages, recently viewed entities sidebar widget.
 - **2026-03-05: Sprint J-2** — Code syntax highlighting (lowlight + highlight.js), find/replace bar (Ctrl+F/H).
+- **2026-03-05: Sprint J-3** — HTMX verification, `.air.toml`, docker-compose fix, package doc comments.
