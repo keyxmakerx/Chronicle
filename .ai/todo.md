@@ -55,6 +55,9 @@ _See `.ai/audit.md` for the full feature parity & completeness audit._
 - [ ] **Export missing entity_permissions** — Campaign export loses custom visibility grants. Need EntityPermission export adapter. `is_private` preserved but custom per-user/role/group grants are lost.
 - [ ] **Export missing campaign_groups** — Campaign export loses group definitions and memberships. Need groups export adapter.
 - [ ] **Export missing entity_posts** — Campaign export loses all entity sub-notes. Need posts export adapter.
+- [ ] **Export missing timeline_event_connections** — Connection type defined in export.go but ExportTimelines() never calls ListConnections(). Visual arrows/lines lost.
+- [ ] **Export missing timeline_entity_groups** — ExportEntityGroup type defined but export adapter never calls ListEntityGroups(). Swim lanes lost.
+- [ ] **Export: entity parent reimport broken** — Exported as ParentSlug but import second-pass only handles entry/image, not parent_id. Hierarchies flattened on import.
 - [ ] **Export missing session_attendees** — Campaign export loses RSVP tracking. ExportSession struct lacks attendees field.
 - [ ] **Relations have no visibility controls** — Unlike tags, posts, calendar events, and markers, relations have zero visibility filtering. At minimum needs `dm_only` flag for parity.
 - [ ] **JS apiFetch migration incomplete** — notes.js (10), attributes.js (5), relations.js (6), tag_picker.js (6) still use raw fetch(). Should migrate to Chronicle.apiFetch() for consistent headers/CSRF/error handling.
@@ -66,6 +69,10 @@ _See `.ai/audit.md` for the full feature parity & completeness audit._
 - [ ] **Calendar service tests incomplete** — Only 10 domain-logic tests (day/week). 23+ endpoints have no service tests.
 - [ ] **Timeline service tests incomplete** — Only 3 connection tests. 20+ endpoints have no service tests.
 - [ ] **Posts widget missing .ai.md** — Only Go widget without documentation file.
+- [ ] **Alert styling inconsistent** — login.templ and entities/form.templ use inline Tailwind instead of alert-success/alert-error classes.
+- [ ] **Admin pagination inline** — admin/users.templ and admin/campaigns.templ have hand-rolled pagination instead of using components.Pagination.
+- [ ] **Rate limiting on mutations** — Campaign/entity/widget mutation endpoints have no rate limiting (auth + media do).
+- [ ] **Modal approach mixed** — Sessions uses dialog element; calendar/other modals use Alpine.js. Should standardize.
 
 ### Low (Original)
 

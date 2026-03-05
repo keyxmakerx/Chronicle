@@ -159,15 +159,18 @@ image_upload, relations, attributes, permissions, groups, shop_inventory
 ## 4. Export/Import Gaps
 
 Campaign export covers entities (types, entities, tags, relations), calendar (full),
-timelines (full including connections), sessions (partial), maps (full), addons, media manifest.
+sessions (partial), maps (full), addons, media manifest.
 
 ### Data NOT exported
 
 | Missing Data | Table(s) | Impact | Priority |
 |-------------|----------|--------|----------|
-| Entity permissions | `entity_permissions` | Custom visibility grants lost | **HIGH** |
+| Entity permissions | `entity_permissions` | Custom visibility grants lost (TODO in code) | **HIGH** |
 | Campaign groups | `campaign_groups`, `campaign_group_members` | Group-based permissions lost | **HIGH** |
 | Entity posts | `entity_posts` | Sub-notes completely lost | **HIGH** |
+| Timeline event connections | `timeline_event_connections` | Visual arrows/lines between events lost | **MEDIUM** |
+| Timeline entity groups | `timeline_entity_groups` | Swim lane organization lost (type defined in export.go but never populated) | **MEDIUM** |
+| Entity parent refs (import) | `entities.parent_id` | Exported as `ParentSlug` but NOT reimported — hierarchies flattened | **MEDIUM** |
 | Session attendees | `session_attendees` | RSVP tracking lost | **LOW** |
 | Media file bytes | Disk files | JSON-only; no file backup | **MEDIUM** |
 
@@ -175,13 +178,15 @@ timelines (full including connections), sessions (partial), maps (full), addons,
 
 - Campaign metadata (name, desc, public, settings, sidebar, dashboard) ✓
 - Entity types (all fields including layout, colors, dashboard) ✓
-- Timeline event connections (migration 000047) ✓
 - Calendar event categories ✓
+- Calendar events (all fields) ✓
 - Map layers, drawings, tokens, fog ✓
+- Timeline definitions + standalone events ✓
 
 ### Intentionally excluded
 
 - Player notes (per-user; NoteService lacks `ListSharedByCampaign`)
+- Note folders (covered under notes exclusion)
 - Foundry sync metadata (external system coupling)
 
 ---
@@ -215,7 +220,56 @@ timelines (full including connections), sessions (partial), maps (full), addons,
 
 ---
 
-## 6. Module System
+## 6. Route Security (206 routes audited)
+
+**Overall: EXCELLENT.** 100% of routes properly protected. No critical vulnerabilities.
+
+### Verified patterns (all passing)
+
+- [x] CSRF on all POST/PUT/DELETE routes (constant-time double-submit cookie)
+- [x] API routes correctly exempt from CSRF (use Bearer token auth)
+- [x] WebSocket exempt from CSRF (separate auth)
+- [x] All campaign-scoped routes use `RequireCampaignAccess` middleware
+- [x] Role hierarchy enforced: Player < Scribe < Owner
+- [x] Admin bypass does NOT elevate campaign role (correct)
+- [x] Addon-dependent routes gated by `RequireAddon` middleware
+- [x] Public routes use `OptionalAuth + AllowPublicCampaignAccess`
+- [x] Media files protected by HMAC-signed URLs + rate limiting
+- [x] API keys scoped to single campaign with IP/fingerprint controls
+
+### Minor gaps
+
+- [ ] **Rate limiting on mutations** — Auth (10/min), media (30/min), and API routes have rate limits, but campaign/entity/widget mutations have none. Authenticated user could exhaust server resources.
+- [ ] **No integration tests for CSRF rejection** — Global middleware should handle it, but no test verifies DELETE requests are rejected without CSRF token.
+
+---
+
+## 7. Template/UI Consistency (53 .templ files audited)
+
+**Overall: GOOD.** Consistent layout structure, HTMX patterns, and role-based visibility.
+
+### Verified patterns (all passing)
+
+- [x] All pages use Base → App → Content 3-layer structure
+- [x] Flash messages auto-dismiss (5s success, 8s error) with Alpine.js
+- [x] Role-based visibility checks consistent across 12 files (52 checks)
+- [x] ARIA roles on alerts (role="alert", role="status")
+- [x] Confirmation dialogs on all destructive actions (14 files)
+- [x] Reusable pagination component available and used
+
+### Inconsistencies found
+
+- [ ] **Alert styling mixed** — `login.templ` and `entities/form.templ` use inline Tailwind classes instead of `alert-success`/`alert-error` component classes
+- [ ] **Admin pagination inline** — `admin/users.templ` and `admin/campaigns.templ` have hand-rolled pagination instead of using `components.Pagination`
+- [ ] **Modal approach mixed** — Sessions uses `<dialog>` element; calendar/other modals use Alpine.js custom HTML. Should standardize.
+- [ ] **Button sizing inconsistent** — Some add `py-2.5`, `text-sm`, `w-full`; no standard size variants
+- [ ] **Card padding varies** — `p-4`, `p-6`, `p-8` used inconsistently across similar contexts
+- [ ] **Empty state styling** — Only 4 files use `.empty-state` class; others use inline cards
+- [ ] **Form autocomplete** — Login form has proper `autocomplete` attributes; entity forms don't
+
+---
+
+## 8. Module System
 
 All 3 modules (dnd5e, drawsteel, pathfinder2e) are scaffold-only:
 
@@ -234,20 +288,28 @@ This is Phase M planned work, not a parity issue.
 ### Must Fix (data correctness / user-facing bugs)
 
 1. Export: entity_permissions, campaign_groups, entity_posts adapters
-2. Relations: add visibility controls (at minimum `dm_only` flag for parity)
-3. JS error handling: notes.js, tag_picker.js (most-used widgets with silent failures)
+2. Export: timeline_event_connections + timeline_entity_groups (defined but never populated)
+3. Export: entity parent_id reimport (exported as ParentSlug but import ignores it)
+4. Relations: add visibility controls (at minimum `dm_only` flag for parity)
+5. JS error handling: notes.js, tag_picker.js (most-used widgets with silent failures)
 
 ### Should Fix (consistency / quality)
 
-4. Migrate notes.js, attributes.js, relations.js to Chronicle.apiFetch()
-5. Remove utility duplication in groups.js and relation_graph.js
-6. Add service tests for maps and sessions plugins
-7. Add service tests for calendar and timeline (beyond domain-logic tests)
+6. Migrate notes.js, attributes.js, relations.js to Chronicle.apiFetch()
+7. Remove utility duplication in groups.js and relation_graph.js
+8. Add service tests for maps and sessions plugins
+9. Add service tests for calendar and timeline (beyond domain-logic tests)
+10. Standardize alert styling (inline → component classes)
+11. Admin pages: use reusable Pagination component
+12. Rate limiting on campaign/entity mutation endpoints
 
 ### Nice to Have (polish / documentation)
 
-8. Posts widget .ai.md
-9. Add toast error feedback to remaining widgets
-10. Add .ai.md to 16 undocumented JS widgets
-11. Fix CI `-short` flag (either add Short() checks or remove flag)
-12. Create actual integration test infrastructure
+13. Posts widget .ai.md
+14. Add toast error feedback to remaining widgets
+15. Add .ai.md to 16 undocumented JS widgets
+16. Fix CI `-short` flag (either add Short() checks or remove flag)
+17. Create actual integration test infrastructure
+18. Standardize modal approach (dialog vs Alpine.js)
+19. Define consistent button size / card padding CSS variants
+20. Add autocomplete attributes to entity forms
