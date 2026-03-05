@@ -48,6 +48,9 @@ Chronicle.register('notes', {
       versionsLoading: false
     };
 
+    // Track mini TipTap editor instances per note ID for cleanup.
+    var miniEditors = {};
+
     // --- DOM Construction ---
 
     // Floating button (minimized state).
@@ -542,6 +545,7 @@ Chronicle.register('notes', {
       notesList.innerHTML = html;
 
       bindCardEvents();
+      initMiniEditors();
     }
 
     function renderNoteCard(note) {
@@ -603,47 +607,56 @@ Chronicle.register('notes', {
       // Content blocks.
       html += '<div class="note-card-body">';
 
-      // Rich text content takes priority over legacy blocks.
-      if (note.entryHtml && !isEditing) {
-        html += '<div class="note-entry-html">' + note.entryHtml + '</div>';
-      } else if (note.content && note.content.length > 0) {
-        note.content.forEach(function (block, bIdx) {
-          if (block.type === 'text') {
-            if (isEditing) {
-              html += '<textarea class="note-text-input" data-block="' + bIdx + '" placeholder="Write something...">' + Chronicle.escapeHtml(block.value || '') + '</textarea>';
-            } else if (block.value) {
-              html += '<p class="note-text">' + Chronicle.escapeHtml(block.value) + '</p>';
-            }
-          } else if (block.type === 'checklist') {
-            html += '<div class="note-checklist" data-block="' + bIdx + '">';
-            if (block.items) {
-              block.items.forEach(function (item, iIdx) {
-                var checked = item.checked ? ' checked' : '';
-                var strikeClass = item.checked ? ' note-checked' : '';
-                html += '<label class="note-check-item' + strikeClass + '">';
-                html += '<input type="checkbox"' + checked + ' data-block="' + bIdx + '" data-item="' + iIdx + '" class="note-checkbox">';
-                if (isEditing) {
-                  html += '<input type="text" class="note-check-text-input" value="' + Chronicle.escapeAttr(item.text) + '" data-block="' + bIdx + '" data-item="' + iIdx + '" placeholder="List item...">';
-                } else {
-                  html += '<span>' + Chronicle.escapeHtml(item.text) + '</span>';
-                }
-                html += '</label>';
-              });
-            }
-            if (isEditing) {
-              html += '<button class="note-add-check-item" data-block="' + bIdx + '"><i class="fa-solid fa-plus text-[9px]"></i> Add item</button>';
-            }
-            html += '</div>';
-          }
-        });
-      }
-
-      // In editing mode, buttons to add blocks.
       if (isEditing) {
-        html += '<div class="note-add-block">';
-        html += '<button class="note-add-text-block" title="Add text"><i class="fa-solid fa-paragraph text-[10px]"></i></button>';
-        html += '<button class="note-add-checklist-block" title="Add checklist"><i class="fa-solid fa-list-check text-[10px]"></i></button>';
-        html += '</div>';
+        // TipTap rich text editor mount point (initialized after DOM insertion).
+        html += '<div class="note-tiptap-mount" data-note-editor="' + Chronicle.escapeAttr(note.id) + '"></div>';
+
+        // Checklist blocks remain as interactive checkboxes (not TipTap).
+        if (note.content && note.content.length > 0) {
+          note.content.forEach(function (block, bIdx) {
+            if (block.type === 'checklist') {
+              html += '<div class="note-checklist" data-block="' + bIdx + '">';
+              if (block.items) {
+                block.items.forEach(function (item, iIdx) {
+                  var checked = item.checked ? ' checked' : '';
+                  var strikeClass = item.checked ? ' note-checked' : '';
+                  html += '<label class="note-check-item' + strikeClass + '">';
+                  html += '<input type="checkbox"' + checked + ' data-block="' + bIdx + '" data-item="' + iIdx + '" class="note-checkbox">';
+                  html += '<input type="text" class="note-check-text-input" value="' + Chronicle.escapeAttr(item.text) + '" data-block="' + bIdx + '" data-item="' + iIdx + '" placeholder="List item...">';
+                  html += '</label>';
+                });
+              }
+              html += '<button class="note-add-check-item" data-block="' + bIdx + '"><i class="fa-solid fa-plus text-[9px]"></i> Add item</button>';
+              html += '</div>';
+            }
+          });
+        }
+      } else {
+        // Display mode: show rendered HTML or legacy blocks.
+        if (note.entryHtml) {
+          html += '<div class="note-entry-html">' + note.entryHtml + '</div>';
+        } else if (note.content && note.content.length > 0) {
+          note.content.forEach(function (block, bIdx) {
+            if (block.type === 'text') {
+              if (block.value) {
+                html += '<p class="note-text">' + Chronicle.escapeHtml(block.value) + '</p>';
+              }
+            } else if (block.type === 'checklist') {
+              html += '<div class="note-checklist" data-block="' + bIdx + '">';
+              if (block.items) {
+                block.items.forEach(function (item, iIdx) {
+                  var checked = item.checked ? ' checked' : '';
+                  var strikeClass = item.checked ? ' note-checked' : '';
+                  html += '<label class="note-check-item' + strikeClass + '">';
+                  html += '<input type="checkbox"' + checked + ' data-block="' + bIdx + '" data-item="' + iIdx + '" class="note-checkbox">';
+                  html += '<span>' + Chronicle.escapeHtml(item.text) + '</span>';
+                  html += '</label>';
+                });
+              }
+              html += '</div>';
+            }
+          });
+        }
       }
 
       html += '</div></div>';
@@ -897,13 +910,21 @@ Chronicle.register('notes', {
         note.title = titleInput.value.trim() || 'Untitled';
       }
 
-      card.querySelectorAll('.note-text-input').forEach(function (ta) {
-        var bIdx = parseInt(ta.getAttribute('data-block'), 10);
-        if (note.content[bIdx]) {
-          note.content[bIdx].value = ta.value;
-        }
-      });
+      // Read TipTap editor content if present.
+      var editor = miniEditors[noteId];
+      var updateData = { title: note.title };
 
+      if (editor) {
+        var entryJSON = JSON.stringify(editor.getJSON());
+        var entryHTML = editor.getHTML();
+        updateData.entry = entryJSON;
+        updateData.entryHtml = entryHTML;
+        // Update local note state for display after save.
+        note.entry = entryJSON;
+        note.entryHtml = entryHTML;
+      }
+
+      // Read checklist block edits (checklists remain outside TipTap).
       card.querySelectorAll('.note-check-text-input').forEach(function (inp) {
         var bIdx = parseInt(inp.getAttribute('data-block'), 10);
         var iIdx = parseInt(inp.getAttribute('data-item'), 10);
@@ -912,7 +933,95 @@ Chronicle.register('notes', {
         }
       });
 
-      updateNote(noteId, { title: note.title, content: note.content });
+      // Include checklist content updates if any checklists exist.
+      if (note.content && note.content.some(function (b) { return b.type === 'checklist'; })) {
+        updateData.content = note.content;
+      }
+
+      updateNote(noteId, updateData);
+    }
+
+    /**
+     * Initialize mini TipTap editors for notes currently in edit mode.
+     * Called after DOM rendering. Creates a TipTap instance in each
+     * .note-tiptap-mount element, populated with the note's entry content
+     * or converted from legacy text blocks.
+     */
+    function initMiniEditors() {
+      // Destroy stale editors for notes no longer editing.
+      Object.keys(miniEditors).forEach(function (noteId) {
+        if (noteId !== state.editingId) {
+          destroyMiniEditor(noteId);
+        }
+      });
+
+      if (!state.editingId) return;
+      if (!window.TipTap) return; // TipTap bundle not loaded.
+
+      var mount = panel.querySelector('[data-note-editor="' + state.editingId + '"]');
+      if (!mount || miniEditors[state.editingId]) return;
+
+      var note = findNote(state.editingId);
+      if (!note) return;
+
+      // Determine initial content: prefer entry JSON, then convert legacy blocks.
+      var initialContent = null;
+      if (note.entry) {
+        try {
+          initialContent = typeof note.entry === 'string' ? JSON.parse(note.entry) : note.entry;
+        } catch (e) {
+          initialContent = null;
+        }
+      }
+      if (!initialContent && note.entryHtml) {
+        initialContent = note.entryHtml;
+      }
+      if (!initialContent) {
+        initialContent = legacyBlocksToHTML(note);
+      }
+
+      var editor = new TipTap.Editor({
+        element: mount,
+        extensions: [
+          TipTap.StarterKit,
+          TipTap.Underline,
+          TipTap.Placeholder.configure({ placeholder: 'Write something...' })
+        ],
+        editable: true,
+        content: initialContent || '<p></p>',
+        editorProps: {
+          attributes: {
+            class: 'prose prose-sm max-w-none focus:outline-none min-h-[60px] p-2 text-fg-body'
+          }
+        }
+      });
+
+      miniEditors[state.editingId] = editor;
+    }
+
+    /** Destroy a mini TipTap editor instance for a note. */
+    function destroyMiniEditor(noteId) {
+      if (miniEditors[noteId]) {
+        miniEditors[noteId].destroy();
+        delete miniEditors[noteId];
+      }
+    }
+
+    /** Convert legacy text blocks to HTML for TipTap initialization. */
+    function legacyBlocksToHTML(note) {
+      if (!note.content || note.content.length === 0) return '';
+      var html = '';
+      note.content.forEach(function (block) {
+        if (block.type === 'text' && block.value) {
+          // Convert newlines to paragraphs.
+          var lines = block.value.split('\n');
+          lines.forEach(function (line) {
+            html += '<p>' + Chronicle.escapeHtml(line || '') + '</p>';
+          });
+        }
+        // Checklist blocks are rendered separately, not in TipTap.
+      });
+      return html || '<p></p>';
     }
 
     function findNote(id) {
@@ -1000,6 +1109,7 @@ Chronicle.register('notes', {
     el._notesState = state;
     el._notesFab = fab;
     el._notesPanel = panel;
+    el._notesMiniEditors = miniEditors;
     el._notesNavHandler = onNavigated;
   },
 
@@ -1027,6 +1137,13 @@ Chronicle.register('notes', {
         }
         // We can't reliably call the API during page unload, but try anyway.
       }
+    }
+    // Destroy mini TipTap editors.
+    if (el._notesMiniEditors) {
+      Object.keys(el._notesMiniEditors).forEach(function (id) {
+        if (el._notesMiniEditors[id]) el._notesMiniEditors[id].destroy();
+      });
+      delete el._notesMiniEditors;
     }
     if (el._notesFab) el._notesFab.remove();
     if (el._notesPanel) el._notesPanel.remove();

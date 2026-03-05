@@ -8,13 +8,20 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint L-1 (Entity Posts/Sub-Notes) complete (batch 40).
+2026-03-05 -- Sprint L-2 (Notes Rich Text) complete (batch 41).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Phase L: Content Depth & Editor Power.** Sprint L-1 delivered (batch 40). Next: Sprint L-2 (Notes Rich Text with TipTap).
+**Phase L: Content Depth & Editor Power.** Sprint L-2 delivered (batch 41). Next: Sprint L-3 (Note Folders and Organization).
 
-### Summary of Recent Work (batches 25-40)
+### Summary of Recent Work (batches 25-41)
+- **Batch 41**: Sprint L-2 Notes Rich Text (TipTap) — Replaced plain textarea
+  editing in notes widget with mini TipTap editor instances. When entering edit
+  mode, creates TipTap editor with StarterKit+Underline+Placeholder, populated
+  from note's `entry` JSON or converted from legacy text blocks to HTML. Saves
+  TipTap content (entry JSON + entryHtml) to API. Legacy block→TipTap conversion
+  on first edit. Checklists remain as interactive checkboxes (separate from TipTap).
+  Editor instances tracked in `miniEditors` map, cleaned up on note save/destroy.
 - **Batch 40**: Sprint L-1 Entity Posts (Sub-Notes) UI — Migration 000050
   (`entity_posts` table). Full widget: PostRepository (CRUD + reorder),
   PostService (validation, sort order), Handler (list/create/update/delete/reorder).
@@ -124,7 +131,7 @@ Branch: `claude/project-review-planning-Yr4CL`.
 ---
 
 ## Next Session Should
-Continue **Phase L** with Sprint L-2 (Notes Rich Text — upgrade notes widget from plain text blocks to TipTap editor). Full post-alpha roadmap (Phases L through O, 19 remaining sprints) documented in `.ai/todo.md`.
+Continue **Phase L** with Sprint L-3 (Note Folders and Organization — tree view, expand/collapse, drag-to-reorder). Full post-alpha roadmap (Phases L through O, 18 remaining sprints) documented in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -176,3 +183,4 @@ Continue **Phase L** with Sprint L-2 (Notes Rich Text — upgrade notes widget f
 - **2026-03-05: Sprint K-4** — Auto-linking in editor: entity names API with Redis caching, auto-link JS module (text scanner, mention link creation), Insert menu + Ctrl+Shift+L shortcut.
 - **2026-03-05: Sprint K-5** — Relations graph visualization: D3.js force-directed graph widget, graph API + standalone page, dashboard block type. Phase K complete.
 - **2026-03-05: Sprint L-1** — Entity posts (sub-notes): migration 000050, full widget (model/repo/service/handler), JS widget with collapsible cards, drag-to-reorder, visibility toggle, layout block type.
+- **2026-03-05: Sprint L-2** — Notes rich text: TipTap mini editor instances replace plain textareas, legacy block→TipTap conversion, entry JSON + HTML saved to API.
