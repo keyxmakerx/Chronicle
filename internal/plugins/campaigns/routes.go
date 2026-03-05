@@ -69,3 +69,18 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.POST("/transfer", h.Transfer, RequireRole(RoleOwner))
 	cg.POST("/cancel-transfer", h.CancelTransfer, RequireRole(RoleOwner))
 }
+
+// RegisterExportRoutes sets up campaign export/import routes.
+// Export is campaign-scoped (owner only). Import is auth-only (creates new campaign).
+func RegisterExportRoutes(e *echo.Echo, eh *ExportHandler, svc CampaignService, authSvc auth.AuthService) {
+	// Import creates a new campaign (auth only, no campaign scope needed).
+	authed := e.Group("", auth.RequireAuth(authSvc))
+	authed.POST("/campaigns/import", eh.ImportCampaign)
+
+	// Export requires campaign owner access.
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		RequireCampaignAccess(svc),
+	)
+	cg.GET("/export", eh.ExportCampaign, RequireRole(RoleOwner))
+}

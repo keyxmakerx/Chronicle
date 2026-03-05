@@ -8,23 +8,24 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-04 -- Phase H: Release Readiness complete (batch 26).
+2026-03-05 -- Sprint I-1: Campaign Export/Import complete (batch 27).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Phase H complete (batch 26).** Release readiness: error standardization, code dedup,
-API documentation, extension docs all done. Ready for Phase I (Core UX Features).
+**Sprint I-1 complete (batch 27).** Campaign export/import feature implemented.
+Ready for Sprint I-2 (Timeline Phase 2B).
 
-### Summary of Recent Work (batches 24-26)
-- **Batch 26**: Phase H Release Readiness — (H-1) 249 `echo.NewHTTPError` → `apperror`
-  across 15+ files, (H-2) `MemberLister` interface extraction + LIKE metacharacter
-  escaping, (H-3) OpenAPI 3.0.3 spec (63 endpoints, 42 schemas), (H-4) extension
-  `.ai.md` docs (syncapi, maps, editor, tags).
-- **Batch 25**: Alpha Hardening — CI pipeline (golangci-lint + govulncheck), 3 new
-  service test suites (audit, media, settings), generic IDOR helper, input size
-  validation helpers, JS widget `.ai.md` docs, TipTap table support.
-- **Batch 24**: Security hardening (input sanitization, rate limit bounds, fail-closed
-  addon middleware) + fog-of-war Chronicle→Foundry sync (polygon drawings).
+### Summary of Recent Work (batches 25-27)
+- **Batch 27**: Sprint I-1 Campaign Export/Import — Full JSON export/import for campaigns
+  including entity types, entities, tags, relations, calendar (config + events),
+  timelines (standalone events), sessions, maps (markers, drawings, layers, tokens, fog),
+  addons, media manifest. 6 new files (export.go, import.go, export_service.go,
+  export_handler.go, export_adapters.go, import_test.go). Adapter pattern for 7 plugin
+  services. Routes: GET /campaigns/:id/export, POST /campaigns/import.
+- **Batch 26**: Phase H Release Readiness — error standardization (249 calls), code dedup,
+  OpenAPI 3.0.3 spec, extension docs.
+- **Batch 25**: Alpha Hardening — CI pipeline, 3 service test suites, IDOR helper,
+  input validation, TipTap table support.
 
 ### Earlier Batches (summary)
 - **Batch 20**: Fixed duplicate migration 000041, mobile nav cleanup, 3 dashboard widgets.
@@ -38,10 +39,10 @@ API documentation, extension docs all done. Ready for Phase I (Core UX Features)
 ---
 
 ## Next Session Should
-1. **Campaign export/import** (Sprint I-1) — JSON bundle for backup/migration. High complexity.
-2. **Timeline Phase 2B** (Sprint I-2) — Event connections, create-from-timeline modal, beautification.
-3. **Calendar week view** (Sprint I-3) — 7-day grid with time blocks.
-4. **Map UX polish** (Sprint I-4) — Marker clustering + POI icon picker.
+1. **Timeline Phase 2B** (Sprint I-2) — Event connections, create-from-timeline modal, beautification.
+2. **Calendar week view** (Sprint I-3) — 7-day grid with time blocks.
+3. **Map UX polish** (Sprint I-4) — Marker clustering + POI icon picker.
+4. **Phase J** — Breadcrumbs, editor enhancements, testing, file security.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -78,3 +79,5 @@ API documentation, extension docs all done. Ready for Phase I (Core UX Features)
   TipTap table extensions
 - **2026-03-04: Phase H Release Readiness** — Error standardization (249 calls, 15+ files),
   code dedup (MemberLister, LIKE escape), OpenAPI 3.0.3 spec (63 endpoints), extension docs
+- **2026-03-05: Sprint I-1 Campaign Export/Import** — Full JSON export/import for campaigns
+  (entities, calendar, timelines, sessions, maps, addons, media manifest). 7 adapter services.

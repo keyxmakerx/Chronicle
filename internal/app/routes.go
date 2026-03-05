@@ -789,6 +789,24 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	tagHandler.SetAuditService(auditService)
 
+	// --- Campaign Export/Import ---
+	exportSvc := campaigns.NewExportImportService(campaignService)
+	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService})
+	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
+	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
+	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
+	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonService})
+	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
+	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService})
+	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
+	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
+	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
+	exportSvc.SetAddonImporter(&addonImportAdapter{svc: addonService})
+	exportHandler := campaigns.NewExportHandler(exportSvc)
+	campaigns.RegisterExportRoutes(e, exportHandler, campaignService, authService)
+
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {
 		return c.Redirect(http.StatusSeeOther, "/campaigns")
