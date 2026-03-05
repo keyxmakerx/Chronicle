@@ -94,9 +94,9 @@ New capabilities ordered by priority for alpha release.
 - [ ] **Calendar day view** — No single-day detailed view with time blocks.
 - [x] **Map marker clustering** — Leaflet.markercluster integration on both map widget and full map page. Auto-clustering when >5 markers with custom cluster icons. CDN-loaded.
 - [x] **Map marker icon picker** — Expanded from 18 to 39 POI icons in 8 organized groups (General, Settlements, Fortifications, Dungeons & Ruins, Nature, Maritime, Sacred & Magic, Resources).
-- [ ] **Recent entities sidebar** — No "recently viewed" quick-access list.
+- [x] **Recent entities sidebar** — localStorage-backed "recently viewed" list in sidebar drill panel. Tracks entity visits, renders last 10 with clock icons. `recent_entities.js`.
 - [ ] **Command palette (Ctrl+Shift+P)** — Quick action palette beyond Ctrl+K search.
-- [ ] **Breadcrumb consistency** — Breadcrumbs exist on entity pages but not calendar/timeline/maps.
+- [x] **Breadcrumb consistency** — Shared breadcrumb component (`components/breadcrumbs.templ`). Added to maps list/detail, timeline list/detail, sessions list/detail, calendar grid/timeline/week views.
 - [ ] **Timeline search/filter** — No search within timeline events by name/text.
 - [ ] **Timeline zoom-to-era** — No button to jump viewport to a specific era.
 - [ ] **Editor find/replace** — No Ctrl+F within editor content.

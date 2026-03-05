@@ -256,6 +256,11 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 			</div>
 			<!-- Month name + year -->
 			<div>
+				<nav class="text-xs text-fg-muted mb-0.5" aria-label="Breadcrumb">
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", data.CampaignID)) } class="hover:text-fg-body">{ cc.Campaign.Name }</a>
+					<span class="mx-1">/</span>
+					<span class="text-fg-secondary">Calendar</span>
+				</nav>
 				<h1 class="text-lg font-semibold text-fg">
 					if data.CurrentMonthDef() != nil {
 						{ data.CurrentMonthDef().Name }
@@ -1672,6 +1677,13 @@ templ TimelineFragment(cc *campaigns.CampaignContext, data TimelineViewData) {
 
 // timelineContent renders the timeline header and event list grouped by month.
 templ timelineContent(cc *campaigns.CampaignContext, data TimelineViewData) {
+	<nav class="text-xs text-fg-muted mb-3" aria-label="Breadcrumb">
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", data.CampaignID)) } class="hover:text-fg-body">{ cc.Campaign.Name }</a>
+		<span class="mx-1">/</span>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) } class="hover:text-fg-body">Calendar</a>
+		<span class="mx-1">/</span>
+		<span class="text-fg-secondary">Timeline</span>
+	</nav>
 	<!-- Header with year nav and view toggle -->
 	<div class="flex items-center justify-between mb-6">
 		<div class="flex items-center gap-3">
@@ -1910,6 +1922,13 @@ templ WeekFragment(cc *campaigns.CampaignContext, data WeekViewData) {
 
 // weekContent renders the week header and day grid.
 templ weekContent(cc *campaigns.CampaignContext, data WeekViewData) {
+	<nav class="text-xs text-fg-muted mb-3" aria-label="Breadcrumb">
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", data.CampaignID)) } class="hover:text-fg-body">{ cc.Campaign.Name }</a>
+		<span class="mx-1">/</span>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) } class="hover:text-fg-body">Calendar</a>
+		<span class="mx-1">/</span>
+		<span class="text-fg-secondary">Week</span>
+	</nav>
 	<!-- Header with week nav and view toggle -->
 	<div class="flex items-center justify-between mb-6">
 		<div class="flex items-center gap-3">

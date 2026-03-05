@@ -6,6 +6,7 @@ package sessions
 import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -13,6 +14,10 @@ import (
 templ SessionListPage(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool, userID string) {
 	@layouts.App(cc.Campaign.Name + " - Sessions") {
 		<div class="max-w-4xl mx-auto">
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+				{Label: "Sessions"},
+			})
 			@SessionListFragment(cc, sessions, csrfToken, isOwner, isScribe, userID)
 		</div>
 	}
@@ -198,11 +203,11 @@ templ createSessionModal(cc *campaigns.CampaignContext, csrfToken string) {
 templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfToken string, isOwner, isScribe bool, userID string) {
 	@layouts.App(session.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-4xl mx-auto">
-			<!-- Back link -->
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions", cc.Campaign.ID)) }
-				class="inline-flex items-center text-sm text-fg-secondary hover:text-fg mb-4">
-				<i class="fa-solid fa-arrow-left mr-1.5 text-xs"></i> All Sessions
-			</a>
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+				{Label: "Sessions", Href: fmt.Sprintf("/campaigns/%s/sessions", cc.Campaign.ID)},
+				{Label: session.Name},
+			})
 			<!-- Header -->
 			<div class="flex items-start justify-between mb-6">
 				<div>

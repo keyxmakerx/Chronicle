@@ -8,14 +8,19 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint I-4: Map UX Polish complete (batch 30).
+2026-03-05 -- Sprint J-1: Breadcrumbs + Navigation complete (batch 31).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Sprint I-4 complete (batch 30).** Phase I fully delivered.
-Ready for Phase J (Polish & Infrastructure).
+**Sprint J-1 complete (batch 31).** Breadcrumbs and recent entities delivered.
+Ready for Sprint J-2 (Editor Enhancements).
 
-### Summary of Recent Work (batches 25-30)
+### Summary of Recent Work (batches 25-31)
+- **Batch 31**: Sprint J-1 Breadcrumbs + Navigation — Shared breadcrumb component
+  (`components/breadcrumbs.templ`). Added breadcrumbs to: maps list, map detail, timeline
+  list, timeline detail, sessions list, session detail, calendar grid header, calendar
+  timeline view, calendar week view. Recently Viewed Entities tracker
+  (`recent_entities.js`) using localStorage, renders in sidebar drill panel.
 - **Batch 30**: Sprint I-4 Map UX Polish — Leaflet.markercluster integration for both
   map widget and full map page (auto-clustering when >5 markers). Expanded POI icon
   picker from 18 to 39 icons organized in 8 groups (General, Settlements, Fortifications,
@@ -53,10 +58,9 @@ Ready for Phase J (Polish & Infrastructure).
 ---
 
 ## Next Session Should
-1. **Breadcrumbs + Navigation** (Sprint J-1) — Breadcrumbs on calendar/timeline/maps/sessions. Recent entities sidebar widget.
-2. **Editor Enhancements** (Sprint J-2) — Code syntax highlighting, find/replace.
-3. **Testing & Infrastructure** (Sprint J-3) — HTMX edge cases, docker-compose verification, Go doc comments.
-4. **File Security** (Sprint J-4) — ClamAV, MIME allowlist, SVG blocking.
+1. **Editor Enhancements** (Sprint J-2) — Code syntax highlighting, find/replace.
+2. **Testing & Infrastructure** (Sprint J-3) — HTMX edge cases, docker-compose verification, Go doc comments.
+3. **File Security** (Sprint J-4) — ClamAV, MIME allowlist, SVG blocking.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -97,3 +101,4 @@ Ready for Phase J (Polish & Infrastructure).
   (entities, calendar, timelines, sessions, maps, addons, media manifest). 7 adapter services.
 - **2026-03-05: Phase I Core UX** — Sprint I-2 (timeline connections + create-from-timeline),
   Sprint I-3 (calendar week view), Sprint I-4 (map marker clustering + expanded POI icons).
+- **2026-03-05: Sprint J-1** — Breadcrumbs on all non-entity pages, recently viewed entities sidebar widget.

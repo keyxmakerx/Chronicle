@@ -1,0 +1,39 @@
+// breadcrumbs.templ provides a reusable breadcrumb navigation component.
+// Used by calendar, timeline, maps, and sessions pages. Entity pages have
+// their own ancestor-based breadcrumb in entities/show.templ.
+
+package components
+
+// BreadcrumbItem represents a single segment in the breadcrumb trail.
+type BreadcrumbItem struct {
+	Label string // Display text.
+	Href  string // URL. Empty for the current (last) item.
+	Icon  string // Optional FontAwesome icon class (e.g. "fa-calendar-days").
+}
+
+// Breadcrumbs renders a breadcrumb trail from a slice of items.
+// The last item is rendered as plain text (current page); all others are links.
+templ Breadcrumbs(items []BreadcrumbItem) {
+	<nav class="text-sm text-fg-secondary mb-4" aria-label="Breadcrumb">
+		for i, item := range items {
+			if i > 0 {
+				<span class="mx-1 text-fg-muted">/</span>
+			}
+			if item.Href != "" {
+				<a href={ templ.SafeURL(item.Href) } class="hover:text-fg-body transition-colors">
+					if item.Icon != "" {
+						<i class={ "fa-solid " + item.Icon + " mr-1" }></i>
+					}
+					{ item.Label }
+				</a>
+			} else {
+				<span class="text-fg">
+					if item.Icon != "" {
+						<i class={ "fa-solid " + item.Icon + " mr-1" }></i>
+					}
+					{ item.Label }
+				</span>
+			}
+		}
+	</nav>
+}

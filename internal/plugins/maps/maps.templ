@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -27,6 +28,10 @@ templ MapListFragment(cc *campaigns.CampaignContext, data MapListData) {
 // mapListContent renders the map list body.
 templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
 	<div class="max-w-4xl mx-auto py-6 px-4">
+		@components.Breadcrumbs([]components.BreadcrumbItem{
+			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+			{Label: "Maps"},
+		})
 		<div class="flex items-center justify-between mb-6">
 			<div>
 				<h1 class="text-xl font-bold text-fg">Maps</h1>
@@ -165,6 +170,13 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 					</svg>
 				</a>
 				<div>
+					<nav class="text-xs text-fg-muted mb-0.5" aria-label="Breadcrumb">
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", data.CampaignID)) } class="hover:text-fg-body">{ cc.Campaign.Name }</a>
+						<span class="mx-1">/</span>
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", data.CampaignID)) } class="hover:text-fg-body">Maps</a>
+						<span class="mx-1">/</span>
+						<span class="text-fg-secondary">{ data.Map.Name }</span>
+					</nav>
 					<h1 class="text-lg font-semibold text-fg">{ data.Map.Name }</h1>
 					if data.Map.Description != nil && *data.Map.Description != "" {
 						<p class="text-xs text-fg-muted">{ *data.Map.Description }</p>
