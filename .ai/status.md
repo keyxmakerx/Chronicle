@@ -8,13 +8,20 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint K-5 (Relations Graph Visualization) complete (batch 39).
+2026-03-05 -- Sprint L-1 (Entity Posts/Sub-Notes) complete (batch 40).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Phase K: Permissions & Competitive Gap Closers — COMPLETE.** All 5 sprints delivered. Next: Phase L (Content Depth & Editor Power).
+**Phase L: Content Depth & Editor Power.** Sprint L-1 delivered (batch 40). Next: Sprint L-2 (Notes Rich Text with TipTap).
 
-### Summary of Recent Work (batches 25-39)
+### Summary of Recent Work (batches 25-40)
+- **Batch 40**: Sprint L-1 Entity Posts (Sub-Notes) UI — Migration 000050
+  (`entity_posts` table). Full widget: PostRepository (CRUD + reorder),
+  PostService (validation, sort order), Handler (list/create/update/delete/reorder).
+  JS widget (`entity_posts.js`) with collapsible post cards, drag-to-reorder,
+  visibility toggle (DM only), inline rename, delete confirmation. Integrated into
+  entity show page below main entry. Added as layout block type `posts` in
+  template editor. Public-capable read route, Scribe+ write routes. 13 unit tests.
 - **Batch 39**: Sprint K-5 Relations Graph Visualization — D3.js force-directed graph
   widget (`relation_graph.js`) with dynamic CDN loading, zoom/pan, drag, node coloring
   by entity type, edge labels, tooltips, click-to-navigate, type legend. Backend:
@@ -117,7 +124,7 @@ Branch: `claude/project-review-planning-Yr4CL`.
 ---
 
 ## Next Session Should
-Start **Phase L: Content Depth & Editor Power** with Sprint L-1 (Entity Sub-Notes/Posts UI). Phase K is complete. Full post-alpha roadmap (Phases L through O, 20 sprints) documented in `.ai/todo.md`.
+Continue **Phase L** with Sprint L-2 (Notes Rich Text — upgrade notes widget from plain text blocks to TipTap editor). Full post-alpha roadmap (Phases L through O, 19 remaining sprints) documented in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -168,3 +175,4 @@ Start **Phase L: Content Depth & Editor Power** with Sprint L-1 (Entity Sub-Note
 - **2026-03-05: Sprint K-3** — Group-based visibility: migration 000049 (campaign_groups/members), GroupRepository, GroupService, group CRUD handlers, groups management page + widget, permissions widget group grants, 7 tests.
 - **2026-03-05: Sprint K-4** — Auto-linking in editor: entity names API with Redis caching, auto-link JS module (text scanner, mention link creation), Insert menu + Ctrl+Shift+L shortcut.
 - **2026-03-05: Sprint K-5** — Relations graph visualization: D3.js force-directed graph widget, graph API + standalone page, dashboard block type. Phase K complete.
+- **2026-03-05: Sprint L-1** — Entity posts (sub-notes): migration 000050, full widget (model/repo/service/handler), JS widget with collapsible cards, drag-to-reorder, visibility toggle, layout block type.

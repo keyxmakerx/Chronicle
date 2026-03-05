@@ -29,6 +29,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
+	"github.com/keyxmakerx/chronicle/internal/widgets/posts"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
@@ -749,6 +750,12 @@ func (a *App) RegisterRoutes() {
 	relService := relations.NewRelationService(relRepo)
 	relHandler := relations.NewHandler(relService)
 	relations.RegisterRoutes(e, relHandler, campaignService, authService)
+
+	// Posts widget: entity sub-notes with rich text, visibility, and reorder.
+	postRepo := posts.NewPostRepository(a.DB)
+	postService := posts.NewPostService(postRepo)
+	postHandler := posts.NewHandler(postService)
+	posts.RegisterRoutes(e, postHandler, campaignService, authService)
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.

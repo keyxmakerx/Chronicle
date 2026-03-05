@@ -73,6 +73,9 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				@blockChildren(cc, entity, children)
 			}
 
+			// Entity posts (sub-notes): additional content sections below the main entry.
+			@blockPosts(cc, entity, csrfToken)
+
 			// Backlinks: entities that reference this one via @mentions.
 			if len(backlinks) > 0 {
 				@blockBacklinks(cc, backlinks)
@@ -206,6 +209,8 @@ templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entit
 			@blockUpcomingEvents(cc, block.Config)
 		case "text_block":
 			@blockTextBlock(block.Config)
+		case "posts":
+			@blockPosts(cc, entity, csrfToken)
 	}
 }
 
@@ -407,6 +412,21 @@ templ blockShopInventory(cc *campaigns.CampaignContext, entity *Entity, csrfToke
 // blockDivider renders a visual separator between content sections.
 templ blockDivider() {
 	<hr class="border-edge my-2"/>
+}
+
+// blockPosts renders the entity posts (sub-notes) widget mount point.
+// Posts are additional named content sections displayed below the main entry.
+templ blockPosts(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
+	<div
+		data-widget="entity-posts"
+		data-entity-id={ entity.ID }
+		data-campaign-id={ cc.Campaign.ID }
+		data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/posts", cc.Campaign.ID, entity.ID) }
+		if cc.MemberRole >= campaigns.RoleScribe {
+			data-editable="true"
+		}
+		data-csrf={ csrfToken }
+	></div>
 }
 
 // blockCalendarEvents renders a lazy-loaded calendar events section for this entity.

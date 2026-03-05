@@ -60,6 +60,7 @@ Chronicle.register('template-editor', {
     { type: 'timeline',     label: 'Timeline',      icon: 'fa-timeline',      desc: 'Timeline preview with events' },
     { type: 'map_preview',  label: 'Map',           icon: 'fa-map',           desc: 'Embedded map viewer' },
     { type: 'shop_inventory', label: 'Shop Inventory', icon: 'fa-store',      desc: 'Shop items with prices' },
+    { type: 'posts',        label: 'Posts',         icon: 'fa-layer-group',   desc: 'Sub-notes and additional content sections' },
     { type: 'text_block',   label: 'Text Block',    icon: 'fa-align-left',    desc: 'Custom static HTML content' },
     { type: 'two_column',   label: '2 Columns',     icon: 'fa-columns',       desc: 'Side-by-side columns', container: true },
     { type: 'three_column', label: '3 Columns',     icon: 'fa-table-columns', desc: 'Three equal columns', container: true },

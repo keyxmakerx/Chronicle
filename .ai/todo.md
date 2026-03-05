@@ -116,7 +116,7 @@ New capabilities ordered by priority for alpha release.
 
 ### Phase L: Content Depth & Editor Power
 
-- [ ] **Sprint L-1: Entity Sub-Notes (Posts) UI** — `entity_posts` table exists but no UI. Full CRUD: list below entry, create/edit modal with TipTap, per-post visibility, drag-to-reorder.
+- [x] **Sprint L-1: Entity Sub-Notes (Posts) UI** — Migration 000050 (`entity_posts` table). Full posts widget: PostRepository (CRUD + reorder), PostService (validation, sort order), Handler (list/create/update/delete/reorder). JS widget (`entity_posts.js`) with collapsible post cards, drag-to-reorder, visibility toggle, inline rename, delete confirmation. Integrated into entity show page. Layout block type `posts` in template editor. Public-capable read route, Scribe+ write routes. 13 unit tests.
 - [ ] **Sprint L-2: Notes Rich Text (TipTap)** — Replace plain-text blocks with TipTap in notes widget. `entry`/`entry_html` columns exist. Support bold, italic, lists, links, @mentions. Block→TipTap migration on first edit.
 - [ ] **Sprint L-3: Note Folders and Organization** — Migration: `parent_id` + `folder` boolean. Tree view in notes panel, expand/collapse, drag-to-reorder within/between folders.
 - [ ] **Sprint L-4: Calendar Event Drag-and-Drop** — HTML5 DnD on monthly grid. Events draggable, date cells as drop targets. HTMX PUT on drop. Ghost element + drop zone highlighting. Scribe+ only.
