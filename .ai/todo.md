@@ -90,7 +90,7 @@ New capabilities ordered by priority for alpha release.
 - [x] **Campaign export/import** — JSON bundle for backup/migration. Export/import service with adapter pattern for 7 plugins (entities, calendar, timeline, sessions, maps, addons, media). Slug-based cross-references, ID remapping on import. 6 tests.
 - [x] **Image drag-and-drop upload** — Media browser has drag-and-drop + multi-file upload with per-file progress bars (Alpine.js + XHR). Entity image widget (`image_upload.js`) still click-only.
 - [x] **Calendar week view** — 7-column day grid with event cards, cross-month handling, prev/next/today navigation. View toggle added to all calendar views. 5 tests.
-- [ ] **Calendar event drag-and-drop** — Can't drag events between dates (standard Google Calendar UX).
+- [x] **Calendar event drag-and-drop** — HTML5 DnD on monthly grid view. Scribe+ only.
 - [ ] **Calendar day view** — No single-day detailed view with time blocks.
 - [x] **Map marker clustering** — Leaflet.markercluster integration on both map widget and full map page. Auto-clustering when >5 markers with custom cluster icons. CDN-loaded.
 - [x] **Map marker icon picker** — Expanded from 18 to 39 POI icons in 8 organized groups (General, Settlements, Fortifications, Dungeons & Ruins, Nature, Maritime, Sacred & Magic, Resources).
@@ -119,7 +119,7 @@ New capabilities ordered by priority for alpha release.
 - [x] **Sprint L-1: Entity Sub-Notes (Posts) UI** — Migration 000050 (`entity_posts` table). Full posts widget: PostRepository (CRUD + reorder), PostService (validation, sort order), Handler (list/create/update/delete/reorder). JS widget (`entity_posts.js`) with collapsible post cards, drag-to-reorder, visibility toggle, inline rename, delete confirmation. Integrated into entity show page. Layout block type `posts` in template editor. Public-capable read route, Scribe+ write routes. 13 unit tests.
 - [x] **Sprint L-2: Notes Rich Text (TipTap)** — Replaced plain textarea editing with mini TipTap editor instances. StarterKit+Underline+Placeholder. Saves entry JSON + entryHtml to API. Legacy text block→TipTap HTML conversion on first edit. Checklists remain as interactive checkboxes. Editor instances tracked and cleaned up on save/destroy.
 - [x] **Sprint L-3: Note Folders and Organization** — Migration 000051: `parent_id` + `is_folder`. Tree view in notes panel, collapsible folders, move-to-folder dropdown, create folder button. 4 tests.
-- [ ] **Sprint L-4: Calendar Event Drag-and-Drop** — HTML5 DnD on monthly grid. Events draggable, date cells as drop targets. HTMX PUT on drop. Ghost element + drop zone highlighting. Scribe+ only.
+- [x] **Sprint L-4: Calendar Event Drag-and-Drop** — HTML5 DnD on monthly grid. Event chips draggable (Scribe+), day cells as drop zones. Full PUT on drop with all event fields preserved. Drop zone highlighting via `cal-drop-highlight` CSS. No backend changes needed.
 - [ ] **Sprint L-5: Calendar Day View + Recurring Events** — Single-day view with hourly time blocks. Expand event recurrence to monthly/weekly/daily/custom matching session recurrence.
 
 ### Phase M: Game System Modules & Worldbuilding Tools

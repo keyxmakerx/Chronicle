@@ -8,13 +8,20 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint L-3 (Note Folders) complete (batch 42).
+2026-03-05 -- Sprint L-4 (Calendar Event DnD) complete (batch 43).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Phase L: Content Depth & Editor Power.** Sprint L-3 delivered (batch 42). Next: Sprint L-4 (Calendar Event Drag-and-Drop).
+**Phase L: Content Depth & Editor Power.** Sprint L-4 delivered (batch 43). Next: Sprint L-5 (Calendar Day View + Recurring Events).
 
-### Summary of Recent Work (batches 25-42)
+### Summary of Recent Work (batches 25-43)
+- **Batch 43**: Sprint L-4 Calendar Event Drag-and-Drop — HTML5 DnD on monthly
+  grid view. Event chips gain `draggable="true"` (Scribe+ only), day cells become
+  drop zones with `data-drop-year/month/day` attributes. Drag handlers: dragStart
+  captures event ID + applies opacity, dragOver highlights cell, drop reads all
+  event data attributes and sends full PUT to `/calendar/events/:eid` with new
+  date. Visual feedback via `cal-drop-highlight` CSS class (accent ring + tint).
+  Same-date drops ignored. No backend changes needed (existing PUT handler works).
 - **Batch 42**: Sprint L-3 Note Folders — Migration 000051 adds `parent_id` (FK
   with CASCADE) and `is_folder` columns to notes table. Backend: model, repository,
   and service updated for folder create/update/move operations. JS widget (`notes.js`)
@@ -140,7 +147,7 @@ Branch: `claude/project-review-planning-Yr4CL`.
 ---
 
 ## Next Session Should
-Continue **Phase L** with Sprint L-4 (Calendar Event Drag-and-Drop — HTML5 DnD on monthly grid). Full post-alpha roadmap (Phases L through O, 17 remaining sprints) documented in `.ai/todo.md`.
+Continue **Phase L** with Sprint L-5 (Calendar Day View + Recurring Events). Full post-alpha roadmap (Phases L through O, 16 remaining sprints) documented in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -194,3 +201,4 @@ Continue **Phase L** with Sprint L-4 (Calendar Event Drag-and-Drop — HTML5 DnD
 - **2026-03-05: Sprint L-1** — Entity posts (sub-notes): migration 000050, full widget (model/repo/service/handler), JS widget with collapsible cards, drag-to-reorder, visibility toggle, layout block type.
 - **2026-03-05: Sprint L-2** — Notes rich text: TipTap mini editor instances replace plain textareas, legacy block→TipTap conversion, entry JSON + HTML saved to API.
 - **2026-03-05: Sprint L-3** — Note folders: migration 000051 (parent_id + is_folder), tree view rendering, collapsible folders, move-to-folder, create folder, 4 tests.
+- **2026-03-05: Sprint L-4** — Calendar event drag-and-drop: HTML5 DnD on monthly grid, draggable event chips, drop zone highlighting, full PUT on drop. Pure frontend.

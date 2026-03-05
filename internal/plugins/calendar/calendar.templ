@@ -419,6 +419,12 @@ templ dayCell(data CalendarViewData, day int) {
 		style={ seasonBorderStyle(data.CurrentSeason(day)) }
 		if data.IsScribe {
 			onclick={ templ.ComponentScript{Call: fmt.Sprintf("dayCellClick(event, %d, %d, %d)", data.Year, data.MonthIndex, day)} }
+			data-drop-year={ strconv.Itoa(data.Year) }
+			data-drop-month={ strconv.Itoa(data.MonthIndex) }
+			data-drop-day={ strconv.Itoa(day) }
+			ondragover="handleDragOver(event)"
+			ondragleave="handleDragLeave(event)"
+			ondrop="handleDrop(event)"
 		}
 	>
 		<!-- Day number + add button -->
@@ -466,6 +472,11 @@ templ dayCell(data CalendarViewData, day int) {
 				data-event-category={ derefStr(evt.Category) }
 				data-event-recurring={ strconv.FormatBool(evt.IsRecurring) }
 				data-event-entity-id={ derefStr(evt.EntityID) }
+				if data.IsScribe {
+					draggable="true"
+					ondragstart="handleDragStart(event)"
+					ondragend="handleDragEnd(event)"
+				}
 				onclick="openViewEventModal(this)"
 			>
 				if evt.HasTime() {
@@ -1273,6 +1284,109 @@ templ eventModal(data CalendarViewData) {
 							alert('Network error: ' + err.message);
 						}
 					});
+
+					// --- Drag-and-Drop for Event Rescheduling ---
+
+					// Handle drag start: store event data and apply visual feedback.
+					window.handleDragStart = function(e) {
+						var el = e.target.closest('button[data-event-id]');
+						if (!el) return;
+						e.dataTransfer.effectAllowed = 'move';
+						e.dataTransfer.setData('text/plain', el.dataset.eventId);
+						// Store the source element for dragend cleanup.
+						el.classList.add('opacity-30');
+						window._dragSource = el;
+					};
+
+					// Handle drag end: remove visual feedback.
+					window.handleDragEnd = function(e) {
+						var el = e.target.closest('button[data-event-id]');
+						if (el) el.classList.remove('opacity-30');
+						window._dragSource = null;
+						// Remove all drop highlights.
+						document.querySelectorAll('.cal-drop-highlight').forEach(function(c) {
+							c.classList.remove('cal-drop-highlight');
+						});
+					};
+
+					// Handle drag over: allow drop and highlight the cell.
+					window.handleDragOver = function(e) {
+						e.preventDefault();
+						e.dataTransfer.dropEffect = 'move';
+						var cell = e.currentTarget;
+						cell.classList.add('cal-drop-highlight');
+					};
+
+					// Handle drag leave: remove highlight.
+					window.handleDragLeave = function(e) {
+						var cell = e.currentTarget;
+						// Only remove if actually leaving the cell (not entering a child).
+						if (!cell.contains(e.relatedTarget)) {
+							cell.classList.remove('cal-drop-highlight');
+						}
+					};
+
+					// Handle drop: move event to new date via PUT API.
+					window.handleDrop = async function(e) {
+						e.preventDefault();
+						var cell = e.currentTarget;
+						cell.classList.remove('cal-drop-highlight');
+
+						var eventId = e.dataTransfer.getData('text/plain');
+						if (!eventId) return;
+
+						var newYear = parseInt(cell.dataset.dropYear, 10);
+						var newMonth = parseInt(cell.dataset.dropMonth, 10);
+						var newDay = parseInt(cell.dataset.dropDay, 10);
+
+						// Find the source event chip to read all data attributes.
+						var src = window._dragSource;
+						if (!src) return;
+
+						// Skip if dropped on the same date.
+						var oldYear = parseInt(src.dataset.eventYear, 10);
+						var oldMonth = parseInt(src.dataset.eventMonth, 10);
+						var oldDay = parseInt(src.dataset.eventDay, 10);
+						if (newYear === oldYear && newMonth === oldMonth && newDay === oldDay) return;
+
+						// Build full event payload (PUT requires all fields).
+						var payload = {
+							name: src.dataset.eventName || '',
+							year: newYear,
+							month: newMonth,
+							day: newDay,
+							visibility: src.dataset.eventVisibility || 'everyone',
+							is_recurring: src.dataset.eventRecurring === 'true'
+						};
+
+						// Optional fields.
+						if (src.dataset.eventDescription) payload.description = src.dataset.eventDescription;
+						if (src.dataset.eventDescriptionHtml) payload.description_html = src.dataset.eventDescriptionHtml;
+						if (src.dataset.eventEntityId) payload.entity_id = src.dataset.eventEntityId;
+						if (src.dataset.eventCategory) payload.category = src.dataset.eventCategory;
+						if (src.dataset.eventVisibilityRules) payload.visibility_rules = src.dataset.eventVisibilityRules;
+						if (src.dataset.eventStartHour) payload.start_hour = parseInt(src.dataset.eventStartHour, 10);
+						if (src.dataset.eventStartMinute) payload.start_minute = parseInt(src.dataset.eventStartMinute, 10);
+						if (src.dataset.eventEndHour) payload.end_hour = parseInt(src.dataset.eventEndHour, 10);
+						if (src.dataset.eventEndMinute) payload.end_minute = parseInt(src.dataset.eventEndMinute, 10);
+						if (src.dataset.eventRecurrenceType) payload.recurrence_type = src.dataset.eventRecurrenceType;
+
+						try {
+							var resp = await fetch('/campaigns/' + campaignID + '/calendar/events/' + eventId, {
+								method: 'PUT',
+								headers: getHeaders(),
+								body: JSON.stringify(payload),
+							});
+							if (resp.ok) {
+								window.location.reload();
+							} else {
+								var data = await resp.json().catch(function() { return {}; });
+								alert(data.message || 'Failed to move event');
+							}
+						} catch (err) {
+							alert('Network error: ' + err.message);
+						}
+					};
 
 					// Click on empty space in a date cell to create event.
 					// Ignores clicks on event chips or buttons (they handle themselves).

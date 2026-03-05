@@ -1032,6 +1032,14 @@
   }
 }
 
+/* --- Calendar drag-and-drop --- */
+@layer components {
+  /* Drop zone highlight when dragging an event over a day cell. */
+  .cal-drop-highlight {
+    @apply ring-2 ring-inset ring-accent/50 bg-accent/5;
+  }
+}
+
 /* --- Utility additions --- */
 @layer utilities {
   /* HTMX loading indicator */
