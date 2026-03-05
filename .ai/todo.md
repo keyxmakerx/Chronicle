@@ -99,8 +99,8 @@ New capabilities ordered by priority for alpha release.
 - [x] **Breadcrumb consistency** — Shared breadcrumb component (`components/breadcrumbs.templ`). Added to maps list/detail, timeline list/detail, sessions list/detail, calendar grid/timeline/week views.
 - [ ] **Timeline search/filter** — No search within timeline events by name/text.
 - [ ] **Timeline zoom-to-era** — No button to jump viewport to a specific era.
-- [ ] **Editor find/replace** — No Ctrl+F within editor content.
-- [ ] **Editor code syntax highlighting** — Code blocks have no language-aware highlighting.
+- [x] **Editor find/replace** — Ctrl+F opens find bar, Ctrl+H opens find+replace. Match navigation, replace, replace-all. Selection-based highlighting.
+- [x] **Editor code syntax highlighting** — @tiptap/extension-code-block-lowlight with highlight.js common languages. Tokyo Night-inspired dark/light theme in input.css.
 - [ ] **Entity version history UI** — Audit log exists but no "view diff / restore version" for entities.
 - [ ] **Notes search/filter** — No search within notes panel.
 - [ ] **Toast notification grouping** — Duplicate toasts stack separately instead of grouping.

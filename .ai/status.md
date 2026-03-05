@@ -8,14 +8,19 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint J-1: Breadcrumbs + Navigation complete (batch 31).
+2026-03-05 -- Sprint J-2: Editor Enhancements complete (batch 32).
 Branch: `claude/project-review-planning-Yr4CL`.
 
 ## Current Phase
-**Sprint J-1 complete (batch 31).** Breadcrumbs and recent entities delivered.
-Ready for Sprint J-2 (Editor Enhancements).
+**Sprint J-2 complete (batch 32).** Code syntax highlighting + find/replace delivered.
+Ready for Sprint J-3 (Testing & Infrastructure).
 
-### Summary of Recent Work (batches 25-31)
+### Summary of Recent Work (batches 25-32)
+- **Batch 32**: Sprint J-2 Editor Enhancements — Code block syntax highlighting via
+  @tiptap/extension-code-block-lowlight with highlight.js common languages (JS, Python,
+  Go, SQL, etc.). Tokyo Night-inspired dark/light syntax theme in input.css. Find/replace
+  bar (Ctrl+F find, Ctrl+H replace) with match navigation, replace, replace-all.
+  TipTap bundle rebuilt with lowlight extension (~558KB).
 - **Batch 31**: Sprint J-1 Breadcrumbs + Navigation — Shared breadcrumb component
   (`components/breadcrumbs.templ`). Added breadcrumbs to: maps list, map detail, timeline
   list, timeline detail, sessions list, session detail, calendar grid header, calendar
@@ -58,9 +63,8 @@ Ready for Sprint J-2 (Editor Enhancements).
 ---
 
 ## Next Session Should
-1. **Editor Enhancements** (Sprint J-2) — Code syntax highlighting, find/replace.
-2. **Testing & Infrastructure** (Sprint J-3) — HTMX edge cases, docker-compose verification, Go doc comments.
-3. **File Security** (Sprint J-4) — ClamAV, MIME allowlist, SVG blocking.
+1. **Testing & Infrastructure** (Sprint J-3) — HTMX edge cases, docker-compose verification, Go doc comments.
+2. **File Security** (Sprint J-4) — ClamAV, MIME allowlist, SVG blocking.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
@@ -102,3 +106,4 @@ Ready for Sprint J-2 (Editor Enhancements).
 - **2026-03-05: Phase I Core UX** — Sprint I-2 (timeline connections + create-from-timeline),
   Sprint I-3 (calendar week view), Sprint I-4 (map marker clustering + expanded POI icons).
 - **2026-03-05: Sprint J-1** — Breadcrumbs on all non-entity pages, recently viewed entities sidebar widget.
+- **2026-03-05: Sprint J-2** — Code syntax highlighting (lowlight + highlight.js), find/replace bar (Ctrl+F/H).

@@ -16,6 +16,12 @@ import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import { common, createLowlight } from 'lowlight';
+
+// Create lowlight instance with common languages (JS, Python, HTML, CSS,
+// JSON, SQL, Bash, Ruby, Go, Java, C, C++, TypeScript, Markdown, YAML, XML).
+var lowlight = createLowlight(common);
 
 // Expose on window.TipTap for use by Chronicle widgets.
 window.TipTap = {
@@ -28,4 +34,6 @@ window.TipTap = {
   TableRow,
   TableCell,
   TableHeader,
+  CodeBlockLowlight,
+  lowlight,
 };
