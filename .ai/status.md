@@ -161,8 +161,8 @@ Continue with **Phase M** (Game System Modules & Worldbuilding Tools). Sprint M-
   must run before build on a fresh clone
 - Tailwind CSS output (`static/css/app.css`) is gitignored, needs `make tailwind`
 - Tailwind standalone CLI (`tailwindcss`) is v3; do NOT use `npx @tailwindcss/cli` (v4 syntax)
-- Fog-of-war sync is one-way only (Chronicle → Foundry). Foundry → Chronicle not implemented.
-- SimpleCalendar events are limited (managed as journal notes, no CRUD hooks).
+- Fog-of-war sync is bidirectional (Chronicle ↔ Foundry) using dark-polygon heuristic with pixel↔percentage conversion.
+- SimpleCalendar integration uses journal listeners with SC flag detection for CRUD hooks.
 
 ## Completed Phases
 - **2026-02-19: Phase 0** — Project scaffolding, AI docs, build config

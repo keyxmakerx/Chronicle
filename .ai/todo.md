@@ -155,7 +155,7 @@ New capabilities ordered by priority for alpha release.
 - [ ] Collaborative editing presence indicators
 - [ ] Calendar timezone support / print-PDF export
 - [ ] Map hex/square grid overlay / measurement tool
-- [~] Fog of war Foundry→Chronicle push (Chronicle→Foundry done)
+- [x] Fog of war bidirectional sync (Chronicle ↔ Foundry)
 - [ ] Webhook support for external event notifications
 - [ ] Widget inline CSS → CSS classes migration
 - [ ] Reusable modal/dropdown component library
