@@ -8,11 +8,89 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-06 -- Phase Q: Widget Extensions (Layer 2) — Sprints Q-1 and Q-2 COMPLETE.
-Branch: `claude/fix-calendar-shop-widgets-45iz7`.
+2026-03-06 -- Generic module framework + Sprint M-1 D&D 5e data COMPLETE.
+Branch: `claude/phase-r-logic-extensions-HybRz`.
 
 ## Current Phase
-**Phase Q: Widget Extensions (Layer 2) — Q-1 and Q-2 complete.** Next: Phase R (Logic Extensions Layer 3/WASM) or further Q polish.
+**Phase M: Game System Modules — Sprint M-1 COMPLETE + Generic Module Framework.** Any game system can now be added with just a `manifest.json` + data files — zero custom Go code required.
+
+### Generic Module Framework (COMPLETE)
+- **GenericTooltipRenderer** (`generic_tooltip.go`): Reads field definitions from the manifest's `categories[].fields[]` to render tooltips. Shows only manifest-declared fields in manifest-defined order. Works for any game system.
+- **GenericModule** (`generic_module.go`): Wraps JSONProvider + GenericTooltipRenderer. Implements the Module interface with zero game-system-specific code.
+- **Auto-instantiation** (`loader.go`): When a module directory has `manifest.json` + `data/` but no registered Go factory, the loader automatically creates a GenericModule instance. New game systems work by just dropping files.
+- **Tests**: 6 new tests — generic renderer (supported categories, render with manifest fields, field filtering, field ordering, nil item), generic module end-to-end, loader auto-instantiation.
+- **D&D 5e** retains its custom `TooltipRenderer` as an override for richer formatting, but could also work with the generic renderer.
+
+### Sprint M-1: D&D 5e Module — Data & Tooltip API (COMPLETE)
+- **Module wiring**: `modules.Init("internal/modules")` in main.go with blank import of dnd5e for factory registration, `modules.RegisterRoutes()` in app/routes.go
+- **SRD data files** (6 categories, 87 items):
+  - `spells.json`: 27 spells across levels 0-9 (cantrips through Wish)
+  - `monsters.json`: 14 monsters (Goblin through Lich, CR 1/4 to 21)
+  - `items.json`: 10 magic items (Potion of Healing through Vorpal Sword)
+  - `classes.json`: All 12 SRD classes with hit die, primary ability, saving throws, proficiencies
+  - `races.json`: 9 SRD races with speed, size, ability bonuses, traits, languages
+  - `conditions.json`: All 15 SRD conditions with effect summaries
+- **Manifest**: Added conditions category (slug, name, icon, fields) to dnd5e manifest.json
+- **Tooltip renderer**: Category-specific `writeCategoryProperties()` switch — each category shows only its relevant fields
+- **Tests**: 9 tests in dnd5e_test.go
+- **Build**: Full project compiles clean, all module tests pass
+
+### Sprint R-1: WASM Runtime Integration (COMPLETE)
+- Added Extism Go SDK v1.7.1 + wazero v1.9.0 dependencies
+- **WASM model types** (`wasm_model.go`): WASMPlugin, WASMContribution, WASMCapability, WASMCallRequest/Response, HookEvent, WASMPluginInfo, WASMLimits — full type system for WASM logic extensions
+- **Manifest integration**: Added `WASMPlugins` to `ManifestContributes`, validation for slug/name/file (.wasm required), capabilities (5 types), hooks (8 event types), memory limits (max 256 MB), timeouts (max 300s)
+- **PluginManager** (`wasm_manager.go`): Load/Unload/Reload/Call lifecycle with capability-based host function filtering, timeout enforcement, concurrent-safe plugin map, error state tracking
+- **Host functions** (`wasm_host.go`): 10 host functions across 5 capability groups:
+  - `log`: chronicle_log (with message truncation)
+  - `entity_read`: get_entity, search_entities, list_entity_types
+  - `calendar_read`: get_calendar, list_events
+  - `tag_read`: list_tags
+  - `kv_store`: kv_get, kv_set (64KB limit), kv_delete
+- **Service adapter interfaces**: EntityReader, CalendarReader, TagReader — read-only data access for WASM plugins via adapter pattern
+- **KV store** (`wasm_kvstore.go`): Per-plugin key-value storage backed by existing `extension_data` table (namespace "wasm_kv"), no new DB tables needed
+- **Hook dispatcher** (`wasm_hooks.go`): Fire-and-forget async dispatch to WASM plugins registered for events. 8 convenience methods (DispatchEntityCreated/Updated/Deleted, DispatchCalendarEvent*, DispatchTag*)
+- **WASM handler** (`wasm_handler.go`): Admin endpoints (list/get/reload/stop plugins) + campaign endpoints (list campaign plugins, call plugin function with Scribe+ role)
+- **Routes** (`routes.go`): RegisterWASMAdminRoutes, RegisterWASMCampaignRoutes with proper auth/role middleware
+- **Security**: .wasm added to allowedFileExts, capability-based host function filtering (principle of least privilege), memory/timeout limits, log truncation, KV value size cap
+- **Repository**: Added DeleteDataByKey method for per-key KV deletion
+- **Tests**: 26 new tests — manifest validation (15 cases), model defaults, capabilities, hook types, plugin key generation, serialization, manager lifecycle, security allowlist, zip entry validation, context helpers, log drain/limit
+- **New files**: wasm_model.go, wasm_manager.go, wasm_host.go, wasm_kvstore.go, wasm_hooks.go, wasm_handler.go, wasm_test.go
+
+### Sprint R-4: Plugin SDK & Developer Tools (COMPLETE)
+- **Example Rust plugin** (`extensions/example-wasm-rust/`): Auto-tagger that hooks into entity.created, looks up entity type, and applies matching tags. Demonstrates Extism Rust PDK with host function declarations, hook handling, dice roller export, and messaging.
+- **Example Go plugin** (`extensions/example-wasm-go/`): Session logger that records entity activity to KV store, creates calendar event summaries. Demonstrates Extism Go PDK with `//go:wasmimport` host functions, KV storage, and calendar write.
+- **Go SDK** (`sdk/go/chronicle/`): Type definitions for all host function inputs/outputs, hook events, capability constants, and `MockHost` test harness with in-memory implementations of all host functions.
+- **MockHost test harness**: Entity/tag/calendar/relation/KV/log/message mocks with setup helpers and inspection methods. 9 unit tests.
+- **Plugin development guide** (`.ai/plugin-development.md`): Complete documentation covering capabilities, all 16 host functions, hooks, building (Rust/Go/TinyGo), testing with MockHost, resource limits, API endpoints.
+- **Manifest tests**: 7 new test cases — 5 example manifests validated + 2 WASM-specific assertion tests (capabilities, hooks, config, limits).
+- **AI docs**: `.ai.md` files for both example plugins, README index updated.
+
+### Sprint R-3: Write Host Functions & Messaging (COMPLETE)
+- **5 new write capabilities**: entity_write, calendar_write, tag_write, relation_write, message
+- **6 new host function builders** (`wasm_host.go`):
+  - `update_entity_fields` — updates entity custom fields via EntityWriter adapter
+  - `create_event` — creates calendar events via CalendarWriter adapter
+  - `set_entity_tags` — replaces entity tag set via TagWriter adapter
+  - `get_entity_tags` — reads entity tags via TagWriter adapter
+  - `create_relation` — creates entity relations via RelationWriter adapter
+  - `send_message` — async plugin-to-plugin messaging via PluginManager back-reference
+- **4 new write interfaces**: EntityWriter, CalendarWriter, TagWriter, RelationWriter
+- **4 new write adapters** (`wasm_adapters.go`): NewWASMEntityWriteAdapter, NewWASMCalendarWriteAdapter, NewWASMTagWriteAdapter, NewWASMRelationWriteAdapter
+- **App wiring** (`app/routes.go`): All write adapters wired with closure-based JSON marshaling/unmarshaling, PluginManager back-reference set for messaging
+- **Security**: Input size limits on all write functions (256KB fields, 64KB events/relations/messages), required field validation
+- **Total host functions**: 16 across 10 capability groups (was 10 across 5)
+- **Tests**: 10 new tests — write adapter delegates (4), write capability counts (6), nil-adapter guard tests (2)
+- **AllCapabilities** updated from 5 to 10 entries
+
+### Sprint R-2: App Wiring & Admin UI (COMPLETE)
+- **App wiring** (`app/routes.go`): EntityReader, CalendarReader, TagReader adapters with JSON serialization closures wrapping concrete services. KV store backed by extension_data. PluginManager, HookDispatcher, WASMHandler all instantiated and registered
+- **Adapters** (`wasm_adapters.go`): NewWASMEntityAdapter, NewWASMCalendarAdapter, NewWASMTagAdapter — closure-based adapters avoiding direct plugin imports
+- **Auto-loading**: Content applier now auto-loads WASM plugins when extensions are enabled (SetWASMLoader interface on ContentApplier)
+- **Graceful shutdown**: main.go unloads all WASM plugins before stopping server
+- **App struct**: WASMPluginManager + WASMHookDispatcher fields for lifecycle management
+- **Admin UI**: Extension detail page now shows Widgets and WASM Plugins in the contributes section (capabilities as violet badges, hooks as amber badges)
+- **Tests**: 12 new tests — adapter delegates (entity/calendar/tag), capability-based host function filtering (8 cases), call context lifecycle, unload/reload/call error paths
+- **New files**: wasm_adapters.go, wasm_adapters_test.go
 
 ### Phase P Summary (Sprints P-1 through P-6)
 - **P-1**: Extension infrastructure — migration 000055 (4 tables), manifest parser/validator, zip security, repository (16 methods), service, handler, routes, config
@@ -232,7 +310,11 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - Example test updated to validate dice-roller manifest
 
 ## Next Session Should
-Continue with **Phase R: Logic Extensions (Layer 3/WASM)** via Extism/wazero, or polish Phase Q further (JS validation for widget scripts, widget sandboxing). Full roadmap in `.ai/todo.md`.
+**Sprint M-1 is complete.** Next priorities from `.ai/todo.md`:
+- Sprint M-2: D&D 5e Module — Reference Pages (browsable pages at `/modules/dnd5e/`, category cards, searchable lists, stat block detail pages)
+- Quick wins from the UX audit (export button, password change, sort controls, etc.)
+- Phase S+ deferred items (Draw Steel module, whiteboards, offline mode)
+- Test coverage gaps (handler/repository tests for maps, sessions, admin, smtp)
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

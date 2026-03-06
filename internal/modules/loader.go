@@ -75,9 +75,12 @@ func (l *ModuleLoader) DiscoverAll() error {
 		)
 
 		// Attempt to instantiate available modules via registered factories.
+		// If no factory is registered, fall back to the generic module
+		// (manifest + JSON data + generic tooltip renderer). This allows
+		// new game system modules to work with zero custom Go code.
 		if manifest.Status == StatusAvailable {
+			dataDir := filepath.Join(modDir, "data")
 			if factory, ok := factories[manifest.ID]; ok {
-				dataDir := filepath.Join(modDir, "data")
 				mod, err := factory(manifest, dataDir)
 				if err != nil {
 					slog.Warn("failed to instantiate module",
@@ -88,6 +91,20 @@ func (l *ModuleLoader) DiscoverAll() error {
 				}
 				l.RegisterModule(mod)
 				slog.Info("instantiated module",
+					slog.String("id", manifest.ID),
+				)
+			} else {
+				// No custom factory — try generic module with JSON data.
+				mod, err := NewGenericModule(manifest, dataDir)
+				if err != nil {
+					slog.Warn("failed to instantiate generic module",
+						slog.String("id", manifest.ID),
+						slog.String("error", err.Error()),
+					)
+					continue
+				}
+				l.RegisterModule(mod)
+				slog.Info("instantiated generic module",
 					slog.String("id", manifest.ID),
 				)
 			}

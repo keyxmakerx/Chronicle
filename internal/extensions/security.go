@@ -23,6 +23,7 @@ const (
 // allowedFileExts is the strict allowlist of file extensions for extensions.
 // Layer 1 (content) extensions use JSON/CSS/images. Layer 2 (widget)
 // extensions additionally use .js files that register via Chronicle.registerWidget().
+// Layer 3 (logic) extensions use .wasm files executed via Extism/wazero sandbox.
 var allowedFileExts = map[string]bool{
 	".json": true,
 	".css":  true,
@@ -34,6 +35,7 @@ var allowedFileExts = map[string]bool{
 	".txt":  true,
 	".md":   true,
 	".js":   true,
+	".wasm": true,
 }
 
 // ValidateZipEntry checks that a zip entry path is safe (no traversal,

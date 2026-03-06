@@ -1,0 +1,137 @@
+[
+  {
+    "id": "dwarf",
+    "name": "Dwarf",
+    "summary": "Bold and hardy, dwarves are known as skilled warriors, miners, and workers of stone and metal.",
+    "description": "Kingdoms rich in ancient grandeur, halls carved into the roots of mountains, the echoing of picks and hammers in deep mines and blazing forges, a commitment to clan and tradition — these common threads unite all dwarves.",
+    "properties": {
+      "speed": "25 ft.",
+      "size": "Medium",
+      "ability_bonuses": "Constitution +2",
+      "traits": "Darkvision, Dwarven Resilience, Stonecunning",
+      "languages": "Common, Dwarvish"
+    },
+    "tags": ["core", "constitution", "resilient"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "elf",
+    "name": "Elf",
+    "summary": "Elves are a magical people of otherworldly grace, living in the world but not entirely part of it.",
+    "description": "Elves are a magical people of otherworldly grace, living in places of ethereal beauty, in the midst of ancient forests or in silvery spires glittering with faerie light, where soft music drifts through the air and gentle fragrances waft on the breeze.",
+    "properties": {
+      "speed": "30 ft.",
+      "size": "Medium",
+      "ability_bonuses": "Dexterity +2",
+      "traits": "Darkvision, Keen Senses, Fey Ancestry, Trance",
+      "languages": "Common, Elvish"
+    },
+    "tags": ["core", "dexterity", "magical"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "halfling",
+    "name": "Halfling",
+    "summary": "The diminutive halflings survive in a world full of larger creatures by avoiding notice or, barring that, avoiding offense.",
+    "description": "The comforts of home are the goals of most halflings' lives: a place to settle in peace and quiet, far from marauding monsters and clashing armies. Others form nomadic bands that travel constantly, lured by the open road.",
+    "properties": {
+      "speed": "25 ft.",
+      "size": "Small",
+      "ability_bonuses": "Dexterity +2",
+      "traits": "Lucky, Brave, Halfling Nimbleness",
+      "languages": "Common, Halfling"
+    },
+    "tags": ["core", "dexterity", "lucky"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "human",
+    "name": "Human",
+    "summary": "The most adaptable and ambitious people among the common races.",
+    "description": "In the reckonings of most worlds, humans are the youngest of the common races, late to arrive on the world scene. But humans are the most adaptable and ambitious people among the common races.",
+    "properties": {
+      "speed": "30 ft.",
+      "size": "Medium",
+      "ability_bonuses": "All ability scores +1",
+      "traits": "Extra Language",
+      "languages": "Common, one extra"
+    },
+    "tags": ["core", "versatile", "adaptable"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "dragonborn",
+    "name": "Dragonborn",
+    "summary": "Born of dragons, dragonborn walk proudly through a world that greets them with fearful incomprehension.",
+    "description": "Dragonborn look very much like dragons standing erect in humanoid form, though they lack wings or a tail. They have draconic ancestry that grants them a breath weapon and damage resistance.",
+    "properties": {
+      "speed": "30 ft.",
+      "size": "Medium",
+      "ability_bonuses": "Strength +2, Charisma +1",
+      "traits": "Draconic Ancestry, Breath Weapon, Damage Resistance",
+      "languages": "Common, Draconic"
+    },
+    "tags": ["core", "strength", "breath-weapon"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "gnome",
+    "name": "Gnome",
+    "summary": "A gnome's energy and enthusiasm for living shines through every inch of their tiny body.",
+    "description": "A constant hum of busy activity pervades the warrens and neighborhoods where gnomes form their close-knit communities. Gnomes take delight in life, enjoying every moment of invention, exploration, investigation, creation, and play.",
+    "properties": {
+      "speed": "25 ft.",
+      "size": "Small",
+      "ability_bonuses": "Intelligence +2",
+      "traits": "Darkvision, Gnome Cunning",
+      "languages": "Common, Gnomish"
+    },
+    "tags": ["core", "intelligence", "magic-resistant"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "half-elf",
+    "name": "Half-Elf",
+    "summary": "Half-elves combine what some say are the best qualities of their elf and human parents.",
+    "description": "Walking in two worlds but truly belonging to neither, half-elves combine what some say are the best qualities of their elf and human parents: human curiosity, inventiveness, and ambition tempered by the refined senses, love of nature, and artistic tastes of the elves.",
+    "properties": {
+      "speed": "30 ft.",
+      "size": "Medium",
+      "ability_bonuses": "Charisma +2, two others +1",
+      "traits": "Darkvision, Fey Ancestry, Skill Versatility",
+      "languages": "Common, Elvish, one extra"
+    },
+    "tags": ["core", "charisma", "versatile"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "half-orc",
+    "name": "Half-Orc",
+    "summary": "Half-orcs' grayish pigmentation, sloping foreheads, jutting jaws, and prominent teeth mark them as half-orcs.",
+    "description": "Whether united under the leadership of a mighty warlock or having fought to a standstill after years of conflict, orc and human tribes sometimes form alliances, joining forces into a larger horde to the terror of civilized lands.",
+    "properties": {
+      "speed": "30 ft.",
+      "size": "Medium",
+      "ability_bonuses": "Strength +2, Constitution +1",
+      "traits": "Darkvision, Menacing, Relentless Endurance, Savage Attacks",
+      "languages": "Common, Orc"
+    },
+    "tags": ["core", "strength", "durable"],
+    "source": "SRD 5.1"
+  },
+  {
+    "id": "tiefling",
+    "name": "Tiefling",
+    "summary": "Tieflings are derived from human bloodlines touched by the Lower Planes.",
+    "description": "To be greeted with stares and whispers, to suffer violence and insult on the street, to see mistrust and fear in every eye: this is the lot of the tiefling. Their infernal heritage has left a clear imprint on their appearance.",
+    "properties": {
+      "speed": "30 ft.",
+      "size": "Medium",
+      "ability_bonuses": "Intelligence +1, Charisma +2",
+      "traits": "Darkvision, Hellish Resistance, Infernal Legacy",
+      "languages": "Common, Infernal"
+    },
+    "tags": ["core", "charisma", "fire-resistant", "spellcasting"],
+    "source": "SRD 5.1"
+  }
+]

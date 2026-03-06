@@ -1,0 +1,33 @@
+{
+  "manifest_version": 1,
+  "id": "example-wasm-rust",
+  "name": "Example WASM Plugin (Rust)",
+  "version": "1.0.0",
+  "description": "Demonstrates a Rust WASM plugin that auto-tags new entities and provides a roll function.",
+  "author": {
+    "name": "Chronicle Team"
+  },
+  "license": "MIT",
+  "keywords": ["example", "wasm", "rust", "auto-tag"],
+  "contributes": {
+    "wasm_plugins": [
+      {
+        "slug": "auto-tagger",
+        "name": "Auto Tagger",
+        "description": "Automatically tags new entities based on their entity type.",
+        "file": "dist/auto_tagger.wasm",
+        "capabilities": ["log", "entity_read", "tag_read", "tag_write"],
+        "hooks": ["entity.created"],
+        "config": [
+          {
+            "key": "default_tag",
+            "label": "Default Tag Name",
+            "type": "string"
+          }
+        ],
+        "memory_limit_mb": 16,
+        "timeout_secs": 30
+      }
+    ]
+  }
+}

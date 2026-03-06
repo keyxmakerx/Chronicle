@@ -1,0 +1,36 @@
+{
+  "manifest_version": 1,
+  "id": "example-wasm-go",
+  "name": "Example WASM Plugin (Go)",
+  "version": "1.0.0",
+  "description": "Demonstrates a Go/TinyGo WASM plugin with KV storage and calendar integration.",
+  "author": {
+    "name": "Chronicle Team"
+  },
+  "license": "MIT",
+  "keywords": ["example", "wasm", "go", "session-log"],
+  "requires_addons": ["calendar"],
+  "contributes": {
+    "wasm_plugins": [
+      {
+        "slug": "session-logger",
+        "name": "Session Logger",
+        "description": "Logs entity activity to KV store and can create calendar events for session summaries.",
+        "file": "dist/session_logger.wasm",
+        "capabilities": ["log", "entity_read", "calendar_write", "kv_store"],
+        "hooks": ["entity.created", "entity.updated"],
+        "config": [
+          {
+            "key": "auto_calendar",
+            "label": "Auto-create calendar events",
+            "type": "select",
+            "default": "true",
+            "options": ["true", "false"]
+          }
+        ],
+        "memory_limit_mb": 16,
+        "timeout_secs": 30
+      }
+    ]
+  }
+}

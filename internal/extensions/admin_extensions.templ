@@ -504,6 +504,53 @@ templ extensionContributesSection(c *ManifestContributes) {
 					</div>
 				</div>
 			}
+
+			if len(c.Widgets) > 0 {
+				<div>
+					<p class="text-xs font-medium text-fg-secondary uppercase tracking-wider mb-2">
+						<i class="fa-solid fa-cube mr-1"></i> Widgets ({ fmt.Sprintf("%d", len(c.Widgets)) })
+					</p>
+					<div class="space-y-1.5">
+						for _, w := range c.Widgets {
+							<div class="text-sm">
+								if w.Icon != "" {
+									<i class={ "fa-solid " + w.Icon + " text-fg-muted text-xs w-4 text-center mr-1" }></i>
+								}
+								<span class="text-fg">{ w.Name }</span>
+								<span class="text-xs text-fg-muted">({ w.Slug })</span>
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			if len(c.WASMPlugins) > 0 {
+				<div>
+					<p class="text-xs font-medium text-fg-secondary uppercase tracking-wider mb-2">
+						<i class="fa-solid fa-microchip mr-1"></i> WASM Plugins ({ fmt.Sprintf("%d", len(c.WASMPlugins)) })
+					</p>
+					<div class="space-y-1.5">
+						for _, wp := range c.WASMPlugins {
+							<div class="text-sm">
+								<span class="text-fg">{ wp.Name }</span>
+								<span class="text-xs text-fg-muted">({ wp.Slug })</span>
+								<div class="flex flex-wrap gap-1 mt-0.5">
+									for _, cap := range wp.Capabilities {
+										<span class="inline-flex items-center px-1.5 py-0 text-[10px] rounded bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400">
+											{ cap }
+										</span>
+									}
+									for _, hook := range wp.Hooks {
+										<span class="inline-flex items-center px-1.5 py-0 text-[10px] rounded bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400">
+											{ hook }
+										</span>
+									}
+								</div>
+							</div>
+						}
+					</div>
+				</div>
+			}
 		</div>
 	</div>
 }

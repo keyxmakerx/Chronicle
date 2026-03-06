@@ -85,16 +85,7 @@ func (r *TooltipRenderer) RenderTooltip(item *modules.ReferenceItem) (string, er
 	// Properties table (varies by category).
 	if len(item.Properties) > 0 {
 		b.WriteString(`<div class="module-tooltip__props">`)
-		writeProperty(&b, item.Properties, "level", "Level")
-		writeProperty(&b, item.Properties, "school", "School")
-		writeProperty(&b, item.Properties, "casting_time", "Casting Time")
-		writeProperty(&b, item.Properties, "range", "Range")
-		writeProperty(&b, item.Properties, "components", "Components")
-		writeProperty(&b, item.Properties, "duration", "Duration")
-		writeProperty(&b, item.Properties, "cr", "CR")
-		writeProperty(&b, item.Properties, "type", "Type")
-		writeProperty(&b, item.Properties, "size", "Size")
-		writeProperty(&b, item.Properties, "rarity", "Rarity")
+		writeCategoryProperties(&b, item)
 		b.WriteString(`</div>`)
 	}
 
@@ -118,7 +109,48 @@ func (r *TooltipRenderer) RenderTooltip(item *modules.ReferenceItem) (string, er
 
 // SupportedCategories returns all D&D 5e category slugs.
 func (r *TooltipRenderer) SupportedCategories() []string {
-	return []string{"spells", "monsters", "items", "classes", "races"}
+	return []string{"spells", "monsters", "items", "classes", "races", "conditions"}
+}
+
+// writeCategoryProperties renders the appropriate property rows based on
+// the item's category. Each category shows only its relevant fields.
+func writeCategoryProperties(b *strings.Builder, item *modules.ReferenceItem) {
+	switch item.Category {
+	case "spells":
+		writeProperty(b, item.Properties, "level", "Level")
+		writeProperty(b, item.Properties, "school", "School")
+		writeProperty(b, item.Properties, "casting_time", "Casting Time")
+		writeProperty(b, item.Properties, "range", "Range")
+		writeProperty(b, item.Properties, "components", "Components")
+		writeProperty(b, item.Properties, "duration", "Duration")
+	case "monsters":
+		writeProperty(b, item.Properties, "cr", "CR")
+		writeProperty(b, item.Properties, "type", "Type")
+		writeProperty(b, item.Properties, "size", "Size")
+		writeProperty(b, item.Properties, "alignment", "Alignment")
+		writeProperty(b, item.Properties, "hp", "HP")
+		writeProperty(b, item.Properties, "ac", "AC")
+	case "items":
+		writeProperty(b, item.Properties, "rarity", "Rarity")
+		writeProperty(b, item.Properties, "type", "Type")
+		writeProperty(b, item.Properties, "attunement", "Attunement")
+	case "classes":
+		writeProperty(b, item.Properties, "hit_die", "Hit Die")
+		writeProperty(b, item.Properties, "primary_ability", "Primary Ability")
+		writeProperty(b, item.Properties, "saving_throws", "Saving Throws")
+	case "races":
+		writeProperty(b, item.Properties, "speed", "Speed")
+		writeProperty(b, item.Properties, "size", "Size")
+		writeProperty(b, item.Properties, "ability_bonuses", "Ability Bonuses")
+	case "conditions":
+		writeProperty(b, item.Properties, "effect", "Effect")
+	default:
+		// Unknown category: render all properties generically.
+		for k, v := range item.Properties {
+			writeProperty(b, item.Properties, k, k)
+			_ = v
+		}
+	}
 }
 
 // writeProperty appends a label/value row if the property exists.

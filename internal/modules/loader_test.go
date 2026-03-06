@@ -165,3 +165,53 @@ func TestModuleLoader_Dir(t *testing.T) {
 		t.Error("Dir(\"nonexistent\") should return empty string")
 	}
 }
+
+func TestModuleLoader_GenericAutoInstantiation(t *testing.T) {
+	base := t.TempDir()
+
+	// Create a module directory with manifest + data (no Go factory).
+	modDir := filepath.Join(base, "custom-rpg")
+	writeTestManifest(t, modDir, "custom-rpg", "Custom RPG")
+
+	// Create data directory with a JSON file.
+	dataDir := filepath.Join(modDir, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatalf("creating data dir: %v", err)
+	}
+	writeTestData(t, dataDir, "items", []ReferenceItem{
+		{ID: "sword", Name: "Sword", Summary: "A sharp blade"},
+	})
+
+	loader := NewModuleLoader(base)
+	if err := loader.DiscoverAll(); err != nil {
+		t.Fatalf("DiscoverAll() error = %v", err)
+	}
+
+	// Should auto-instantiate as a generic module.
+	mod := loader.GetModule("custom-rpg")
+	if mod == nil {
+		t.Fatal("expected generic module to be auto-instantiated")
+	}
+
+	if mod.Info().ID != "custom-rpg" {
+		t.Errorf("module ID = %q, want %q", mod.Info().ID, "custom-rpg")
+	}
+
+	// Data provider should work.
+	items, err := mod.DataProvider().List("items")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(items) != 1 {
+		t.Errorf("got %d items, want 1", len(items))
+	}
+
+	// Tooltip renderer should work.
+	if mod.TooltipRenderer() == nil {
+		t.Fatal("expected non-nil tooltip renderer")
+	}
+	cats := mod.TooltipRenderer().SupportedCategories()
+	if len(cats) != 1 || cats[0] != "items" {
+		t.Errorf("supported categories = %v, want [items]", cats)
+	}
+}

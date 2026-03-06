@@ -1,7 +1,7 @@
 {
   "id": "dnd5e",
   "name": "D&D 5th Edition",
-  "description": "SRD reference content for Dungeons & Dragons 5th Edition. Includes spells, monsters, items, classes, and races from the System Reference Document.",
+  "description": "SRD reference content for Dungeons & Dragons 5th Edition. Includes spells, monsters, items, classes, races, and conditions from the System Reference Document.",
   "version": "0.1.0",
   "author": "Chronicle",
   "license": "OGL-1.0a",
@@ -63,6 +63,14 @@
         { "key": "speed", "label": "Speed", "type": "string" },
         { "key": "size", "label": "Size", "type": "string" },
         { "key": "ability_bonuses", "label": "Ability Bonuses", "type": "string" }
+      ]
+    },
+    {
+      "slug": "conditions",
+      "name": "Conditions",
+      "icon": "fa-heart-crack",
+      "fields": [
+        { "key": "effect", "label": "Effect", "type": "string" }
       ]
     }
   ],

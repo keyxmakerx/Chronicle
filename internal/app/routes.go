@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/modules"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
@@ -968,6 +969,167 @@ func (a *App) RegisterRoutes() {
 		}),
 	)
 	extService.SetApplier(extApplier)
+
+	// --- WASM Runtime (Layer 3 Logic Extensions) ---
+	// Wire the WASM plugin manager with read-only host functions that let
+	// sandboxed WASM plugins query entities, calendar, and tags.
+	wasmEntityReader := extensions.NewWASMEntityAdapter(
+		// get_entity: returns entity JSON by ID.
+		func(ctx context.Context, id string) (json.RawMessage, error) {
+			ent, err := entityService.GetByID(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(ent)
+		},
+		// search_entities: returns matching entities as JSON array.
+		func(ctx context.Context, campaignID, query string, limit int) (json.RawMessage, error) {
+			results, _, err := entityService.Search(ctx, campaignID, query, 0, int(campaigns.RoleOwner), "", entities.ListOptions{Page: 1, PerPage: limit})
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(results)
+		},
+		// list_entity_types: returns entity types as JSON array.
+		func(ctx context.Context, campaignID string) (json.RawMessage, error) {
+			types, err := entityService.GetEntityTypes(ctx, campaignID)
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(types)
+		},
+	)
+
+	wasmCalendarReader := extensions.NewWASMCalendarAdapter(
+		// get_calendar: returns calendar config JSON.
+		func(ctx context.Context, campaignID string) (json.RawMessage, error) {
+			cal, err := calendarService.GetCalendar(ctx, campaignID)
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(cal)
+		},
+		// list_events: returns upcoming calendar events as JSON.
+		func(ctx context.Context, campaignID string, limit int) (json.RawMessage, error) {
+			cal, err := calendarService.GetCalendar(ctx, campaignID)
+			if err != nil {
+				return nil, err
+			}
+			events, err := calendarService.ListUpcomingEvents(ctx, cal.ID, limit, int(campaigns.RoleOwner), "")
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(events)
+		},
+	)
+
+	wasmTagReader := extensions.NewWASMTagAdapter(
+		// list_tags: returns all campaign tags as JSON.
+		func(ctx context.Context, campaignID string) (json.RawMessage, error) {
+			tags, err := tagService.ListByCampaign(ctx, campaignID, true)
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(tags)
+		},
+	)
+
+	wasmKVStore := extensions.NewKVStore(extRepo)
+	wasmHostEnv := extensions.NewHostEnvironment(wasmEntityReader, wasmCalendarReader, wasmTagReader, wasmKVStore)
+
+	// Wire write adapters for WASM host functions.
+	wasmHostEnv.SetEntityWriter(extensions.NewWASMEntityWriteAdapter(
+		// update_entity_fields: unmarshal JSON fields and delegate to entity service.
+		func(ctx context.Context, entityID string, fieldsData json.RawMessage) error {
+			var fields map[string]any
+			if err := json.Unmarshal(fieldsData, &fields); err != nil {
+				return fmt.Errorf("invalid fields JSON: %w", err)
+			}
+			return entityService.UpdateFields(ctx, entityID, fields)
+		},
+	))
+
+	wasmHostEnv.SetCalendarWriter(extensions.NewWASMCalendarWriteAdapter(
+		// create_event: unmarshal JSON input and delegate to calendar service.
+		func(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error) {
+			cal, err := calendarService.GetCalendar(ctx, campaignID)
+			if err != nil {
+				return nil, fmt.Errorf("getting calendar: %w", err)
+			}
+			var eventInput calendar.CreateEventInput
+			if err := json.Unmarshal(input, &eventInput); err != nil {
+				return nil, fmt.Errorf("invalid event input: %w", err)
+			}
+			event, err := calendarService.CreateEvent(ctx, cal.ID, eventInput)
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(event)
+		},
+	))
+
+	wasmHostEnv.SetTagWriter(extensions.NewWASMTagWriteAdapter(
+		// set_entity_tags: unmarshal tag IDs and delegate to tag service.
+		func(ctx context.Context, entityID, campaignID string, tagIDsJSON json.RawMessage) error {
+			var tagIDs []int
+			if err := json.Unmarshal(tagIDsJSON, &tagIDs); err != nil {
+				return fmt.Errorf("invalid tag_ids JSON: %w", err)
+			}
+			return tagService.SetEntityTags(ctx, entityID, campaignID, tagIDs)
+		},
+		// get_entity_tags: return tags as JSON (include DM-only for WASM plugins).
+		func(ctx context.Context, entityID string) (json.RawMessage, error) {
+			entityTags, err := tagService.GetEntityTags(ctx, entityID, true)
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(entityTags)
+		},
+	))
+
+	wasmHostEnv.SetRelationWriter(extensions.NewWASMRelationWriteAdapter(
+		// create_relation: unmarshal relation input and delegate to relation service.
+		func(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error) {
+			var req struct {
+				SourceEntityID      string          `json:"source_entity_id"`
+				TargetEntityID      string          `json:"target_entity_id"`
+				RelationType        string          `json:"relation_type"`
+				ReverseRelationType string          `json:"reverse_relation_type"`
+				CreatedBy           string          `json:"created_by"`
+				Metadata            json.RawMessage `json:"metadata"`
+				DmOnly              bool            `json:"dm_only"`
+			}
+			if err := json.Unmarshal(input, &req); err != nil {
+				return nil, fmt.Errorf("invalid relation input: %w", err)
+			}
+			rel, err := relService.Create(ctx, campaignID, req.SourceEntityID, req.TargetEntityID,
+				req.RelationType, req.ReverseRelationType, req.CreatedBy, req.Metadata, req.DmOnly)
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(rel)
+		},
+	))
+
+	wasmPluginMgr := extensions.NewPluginManager(a.Config.ExtensionsPath, wasmHostEnv)
+	wasmHostEnv.SetPluginManager(wasmPluginMgr)
+	wasmHookDispatcher := extensions.NewHookDispatcher(wasmPluginMgr)
+	wasmHandler := extensions.NewWASMHandler(wasmPluginMgr, wasmHookDispatcher, extService)
+	extensions.RegisterWASMAdminRoutes(adminGroup, wasmHandler)
+	extensions.RegisterWASMCampaignRoutes(e, wasmHandler, campaignService, authService)
+
+	// Wire WASM loader into the content applier so enabling an extension
+	// with WASM plugins automatically loads them into the plugin manager.
+	extApplier.SetWASMLoader(wasmPluginMgr)
+
+	// Store references for graceful shutdown and auto-loading.
+	a.WASMPluginManager = wasmPluginMgr
+	a.WASMHookDispatcher = wasmHookDispatcher
+
+	// --- Game System Modules ---
+	// Module reference pages and tooltip API, gated by per-campaign addon checks.
+	moduleHandler := modules.NewModuleHandler()
+	modules.RegisterRoutes(e, moduleHandler, addonService, authService, campaignService)
 
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {

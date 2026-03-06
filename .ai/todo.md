@@ -154,7 +154,7 @@ _Fill the biggest test gaps — zero-test plugins and incomplete service tests._
 
 ### Phase M: Game System Modules & Worldbuilding Tools
 
-- [ ] **Sprint M-1: D&D 5e Module — Data & Tooltip API** — SRD-legal JSON (spells, monsters, items, conditions, classes, races). Tooltip endpoint. Wire into entity_tooltip widget. Register as addon.
+- [x] **Sprint M-1: D&D 5e Module — Data & Tooltip API** — SRD-legal JSON (spells 27, monsters 14, items 10, classes 12, races 9, conditions 15). Module init wiring, route registration, category-specific tooltip rendering, 9 tests.
 - [ ] **Sprint M-2: D&D 5e Module — Reference Pages** — Browsable pages at `/modules/dnd5e/`. Category cards, searchable lists, formatted stat block detail pages. Quick-search integration.
 - [ ] **Sprint M-3: Pathfinder 2e Module** — ORC-licensed data following D&D 5e pattern. Spells, monsters, ancestries, classes, conditions, feats.
 - [ ] **Sprint M-4: Guided Worldbuilding Prompts** — `worldbuilding_prompts` table. "Writing Prompts" collapsible panel on entity edit page. Default prompt packs per entity type. Owner-customizable.
@@ -227,17 +227,18 @@ _Browser-sandboxed JS widgets that extend the UI. See ADR-021._
 - [ ] **Sprint Q-1: Widget Extension API** — `Chronicle.registerWidget(name, {mount, unmount, config})` API in boot.js. Extension widget discovery and auto-mounting. Widget config schema in manifest.
 - [ ] **Sprint Q-2: Widget Extension Distribution** — Allow `.js` files in extension zips (scoped to widget registration pattern). Extension widget blocks appear in template editor palette.
 
-### Phase R: Extension System (Logic Extensions — Layer 3, Future)
+### Phase R: Extension System (Logic Extensions — Layer 3/WASM)
 
-_WASM-sandboxed backend logic via Extism/wazero. See ADR-021. Build only when Layers 1-2 prove insufficient._
+_WASM-sandboxed backend logic via Extism/wazero. See ADR-021._
 
-- [ ] **Sprint R-1: WASM Runtime Integration** — Extism Go SDK + wazero. PluginManager (load/unload/reload). Read-only host functions (get_entity, search_entities, get_calendar, list_events, log). Per-plugin KV store.
-- [ ] **Sprint R-2: Capability-Based Security** — PluginCapabilities model. Host function filtering by declared capabilities. Memory limits (16MB default), execution timeouts (30s), fuel metering. Rate limiting per plugin.
-- [ ] **Sprint R-3: Write Host Functions** — create_event, update_entity_fields, add_tag. Hook system (plugins register for entity/calendar events). Plugin-to-plugin message passing via host.
-- [ ] **Sprint R-4: Plugin SDK & Developer Tools** — `chronicle-sdk` CLI tool for local testing with mock host functions. Example plugins in Rust, Go/TinyGo, JS. Plugin development documentation.
+- [x] **Sprint R-1: WASM Runtime Integration** — Extism Go SDK v1.7.1 + wazero v1.9.0. PluginManager (load/unload/reload/call). 10 read-only host functions across 5 capability groups (log, entity_read, calendar_read, tag_read, kv_store). Per-plugin KV store via extension_data. WASMHandler with admin + campaign endpoints. HookDispatcher with 8 event types. Manifest integration with validation. 26 tests.
+- [x] **Sprint R-2: App Wiring & Admin UI** — Closure-based WASM adapters (EntityReader/CalendarReader/TagReader). Full app/routes.go wiring with PluginManager, HookDispatcher, WASMHandler. Auto-load WASM plugins on extension enable. Graceful shutdown. Admin UI contributes section shows widgets + WASM plugins. 12 new tests (38 total).
+- [x] **Sprint R-3: Write Host Functions** — 6 write host functions (update_entity_fields, create_event, set_entity_tags, get_entity_tags, create_relation, send_message). 5 new capabilities. 4 write adapters. Plugin-to-plugin async messaging. 10 new tests (48 total).
+- [x] **Sprint R-4: Plugin SDK & Developer Tools** — Example WASM plugins (Rust auto-tagger, Go session-logger). Go SDK with MockHost test harness (9 tests). Plugin development guide. 7 new manifest tests. **Phase R complete.**
 
 ### Deferred to Phase S+ (or community contributions)
 
+- [ ] **Module Builder UI** — Guided wizard that helps users create custom game system modules through the web UI. Step-by-step: name/metadata → define categories → define fields per category → paste/upload reference data → preview tooltips → export as module directory. Eliminates need to hand-write manifest.json + data files.
 - [ ] Draw Steel module
 - [ ] Whiteboards / freeform canvas (Tldraw/Excalidraw)
 - [ ] Offline mode / service worker caching

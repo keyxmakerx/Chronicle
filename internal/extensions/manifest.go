@@ -62,6 +62,7 @@ type ManifestContributes struct {
 	Themes              []Theme              `json:"themes,omitempty"`
 	ReferenceData       []ReferenceDataPack  `json:"reference_data,omitempty"`
 	Widgets             []WidgetContribution `json:"widgets,omitempty"`
+	WASMPlugins         []WASMContribution   `json:"wasm_plugins,omitempty"`
 }
 
 // EntityTypeTemplate is a pre-configured entity type with fields.
@@ -349,6 +350,43 @@ func validateContributes(c *ManifestContributes) error {
 		}
 		if !strings.HasSuffix(strings.ToLower(w.File), ".js") {
 			return fmt.Errorf("widgets[%d].file: must be a .js file", i)
+		}
+	}
+
+	for i, wp := range c.WASMPlugins {
+		if wp.Slug == "" {
+			return fmt.Errorf("wasm_plugins[%d]: slug is required", i)
+		}
+		if wp.Name == "" {
+			return fmt.Errorf("wasm_plugins[%d]: name is required", i)
+		}
+		if wp.File == "" {
+			return fmt.Errorf("wasm_plugins[%d]: file is required", i)
+		}
+		if err := validateFilePath(wp.File); err != nil {
+			return fmt.Errorf("wasm_plugins[%d].file: %w", i, err)
+		}
+		if !strings.HasSuffix(strings.ToLower(wp.File), ".wasm") {
+			return fmt.Errorf("wasm_plugins[%d].file: must be a .wasm file", i)
+		}
+		if len(wp.Capabilities) == 0 {
+			return fmt.Errorf("wasm_plugins[%d]: at least one capability is required", i)
+		}
+		for j, cap := range wp.Capabilities {
+			if !AllCapabilities[cap] {
+				return fmt.Errorf("wasm_plugins[%d].capabilities[%d]: unknown capability %q", i, j, cap)
+			}
+		}
+		for j, hook := range wp.Hooks {
+			if !ValidHookTypes[hook] {
+				return fmt.Errorf("wasm_plugins[%d].hooks[%d]: unknown hook type %q", i, j, hook)
+			}
+		}
+		if wp.MemoryLimitMB > 256 {
+			return fmt.Errorf("wasm_plugins[%d]: memory_limit_mb cannot exceed 256", i)
+		}
+		if wp.TimeoutSecs > 300 {
+			return fmt.Errorf("wasm_plugins[%d]: timeout_secs cannot exceed 300", i)
 		}
 	}
 

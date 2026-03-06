@@ -40,6 +40,7 @@ type ExtensionRepository interface {
 	GetData(ctx context.Context, campaignID, extensionID, namespace, key string) (*ExtensionData, error)
 	ListData(ctx context.Context, campaignID, extensionID, namespace string) ([]ExtensionData, error)
 	DeleteData(ctx context.Context, campaignID, extensionID string) error
+	DeleteDataByKey(ctx context.Context, campaignID, extensionID, namespace, key string) error
 }
 
 // extensionRepository implements ExtensionRepository with MariaDB.
@@ -382,6 +383,15 @@ func (r *extensionRepository) DeleteData(ctx context.Context, campaignID, extens
 	_, err := r.db.ExecContext(ctx,
 		`DELETE FROM extension_data WHERE campaign_id = ? AND extension_id = ?`,
 		campaignID, extensionID,
+	)
+	return err
+}
+
+// DeleteDataByKey removes a single data record by namespace+key.
+func (r *extensionRepository) DeleteDataByKey(ctx context.Context, campaignID, extensionID, namespace, key string) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM extension_data WHERE campaign_id = ? AND extension_id = ? AND namespace = ? AND data_key = ?`,
+		campaignID, extensionID, namespace, key,
 	)
 	return err
 }

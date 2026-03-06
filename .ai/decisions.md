@@ -709,3 +709,59 @@ host functions.
 - Manifest format and extension installer are shared infrastructure across all layers.
 - Extension signing (SHA-256 checksums in signed manifest, inspired by Grafana)
   should be implemented for all layers as defense-in-depth.
+
+---
+
+## ADR-022: WASM Runtime via Extism SDK + wazero
+
+**Date:** 2026-03-06
+**Status:** Accepted
+
+**Context:** Layer 3 of ADR-021 called for WASM-sandboxed backend logic. With
+Layers 1 (content) and 2 (widgets) proven, we need to implement the WASM runtime
+to allow community-authored backend logic (custom validation, calculators,
+automation) without giving extensions direct access to the database or filesystem.
+
+**Decision:** Use the Extism Go SDK (v1.7.1) with wazero (v1.9.0) as the WASM
+runtime. Key design choices:
+
+1. **Capability-based security** — Plugins declare required capabilities in their
+   manifest (`contributes.wasm_plugins[].capabilities`). The PluginManager only
+   exposes host functions matching declared capabilities. Five capability groups:
+   `log`, `entity_read`, `calendar_read`, `tag_read`, `kv_store`.
+
+2. **Read-only host functions first** — Initial host functions are all read-only
+   (get_entity, search_entities, list_entity_types, get_calendar, list_events,
+   list_tags, kv_get/set/delete, chronicle_log). Write functions deferred to R-3.
+
+3. **Per-plugin KV store via extension_data** — Reuses the existing `extension_data`
+   table with namespace "wasm_kv" instead of creating new tables. Each plugin's
+   data is scoped by campaign_id + extension_id.
+
+4. **Async hook dispatch** — WASM plugins register for events via manifest `hooks`
+   field. Events are dispatched fire-and-forget in goroutines. Plugin failures
+   never affect the originating operation.
+
+5. **Resource limits** — Default 16 MB memory, 30s timeout per call. Manifests
+   can override up to 256 MB memory and 300s timeout. Fuel metering planned for R-2.
+
+6. **Adapter interfaces** — EntityReader, CalendarReader, TagReader interfaces
+   decouple WASM host functions from concrete plugin implementations, following
+   the existing adapter pattern used throughout Chronicle.
+
+**Alternatives Considered:**
+- Direct wazero without Extism: More control but requires reimplementing plugin
+  manifest handling, host function registration, and memory management that Extism
+  provides out of the box.
+- GopherLua: Lighter weight but Lua-only. WASM supports Rust, Go/TinyGo, JS,
+  Python, and any language with a WASM target.
+- gRPC subprocess model (HashiCorp go-plugin): Better for operator-installed
+  plugins but too heavy for user-uploaded community extensions.
+
+**Consequences:**
+- WASM plugins are truly sandboxed: no filesystem, no network, no database access
+  except through explicitly declared host functions.
+- Community can author plugins in any language that compiles to WASM.
+- Plugin lifecycle (load/unload/reload) managed centrally by PluginManager.
+- Hook system enables reactive plugins without polling.
+- KV store provides durable per-plugin state without new database tables.

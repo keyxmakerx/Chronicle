@@ -18,6 +18,9 @@ import (
 type ContentApplier interface {
 	// Apply reads the extension manifest and creates content in the campaign.
 	Apply(ctx context.Context, campaignID string, ext *Extension, manifest *ExtensionManifest) error
+
+	// SetWASMLoader injects the WASM plugin loader for auto-loading plugins.
+	SetWASMLoader(loader WASMPluginLoader)
 }
 
 // EntityTypeCreator is the subset of the entity service needed by the applier.
@@ -50,12 +53,19 @@ type TagResult struct {
 	ID int
 }
 
+// WASMPluginLoader loads WASM plugins when extensions are enabled.
+// Set via SetWASMLoader after the plugin manager is created.
+type WASMPluginLoader interface {
+	Load(ctx context.Context, extID string, contrib WASMContribution) error
+}
+
 // contentApplier implements ContentApplier using domain service interfaces.
 type contentApplier struct {
 	extDir         string
 	repo           ExtensionRepository
 	entityTypes    EntityTypeCreator
 	tags           TagCreator
+	wasmLoader     WASMPluginLoader
 }
 
 // NewContentApplier creates an applier with the given service dependencies.
@@ -73,6 +83,13 @@ func NewContentApplier(
 		entityTypes: entityTypes,
 		tags:        tags,
 	}
+}
+
+// SetWASMLoader injects the WASM plugin loader for auto-loading logic
+// plugins when extensions are enabled. Called during app startup after
+// the plugin manager is created.
+func (a *contentApplier) SetWASMLoader(loader WASMPluginLoader) {
+	a.wasmLoader = loader
 }
 
 // Apply applies extension content to a campaign.
@@ -132,6 +149,19 @@ func (a *contentApplier) Apply(ctx context.Context, campaignID string, ext *Exte
 	// Register widgets.
 	if len(c.Widgets) > 0 {
 		a.registerWidgets(ctx, campaignID, ext.ID, ext.ExtID, c.Widgets)
+	}
+
+	// Load WASM plugins.
+	if a.wasmLoader != nil && len(c.WASMPlugins) > 0 {
+		for _, wp := range c.WASMPlugins {
+			if err := a.wasmLoader.Load(ctx, ext.ExtID, wp); err != nil {
+				slog.Warn("failed to load WASM plugin from extension",
+					slog.String("ext_id", ext.ExtID),
+					slog.String("slug", wp.Slug),
+					slog.Any("error", err),
+				)
+			}
+		}
 	}
 
 	return nil

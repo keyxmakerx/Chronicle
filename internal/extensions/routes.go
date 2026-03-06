@@ -20,6 +20,32 @@ func RegisterAdminRoutes(adminGroup *echo.Group, h *Handler) {
 	g.DELETE("/:extID", h.UninstallExtension)
 }
 
+// RegisterWASMAdminRoutes adds WASM plugin management routes to the admin group.
+// All routes require site admin authentication.
+func RegisterWASMAdminRoutes(adminGroup *echo.Group, wh *WASMHandler) {
+	g := adminGroup.Group("/extensions/wasm")
+
+	g.GET("/plugins", wh.ListWASMPlugins)
+	g.GET("/plugins/:extID/:slug", wh.GetWASMPlugin)
+	g.POST("/plugins/:extID/:slug/reload", wh.ReloadWASMPlugin)
+	g.POST("/plugins/:extID/:slug/stop", wh.StopWASMPlugin)
+}
+
+// RegisterWASMCampaignRoutes adds per-campaign WASM plugin routes.
+// Requires campaign membership for listing and Scribe+ for calling.
+func RegisterWASMCampaignRoutes(e *echo.Echo, wh *WASMHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+	g := e.Group("/campaigns/:id/extensions/wasm",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+	)
+
+	g.GET("/plugins", wh.ListCampaignWASMPlugins)
+
+	// Scribe+ required to invoke WASM plugin functions.
+	scribe := g.Group("", campaigns.RequireRole(campaigns.RoleScribe))
+	scribe.POST("/:extID/:slug/call", wh.CallWASMPlugin)
+}
+
 // RegisterCampaignRoutes adds per-campaign extension routes.
 // Requires campaign Owner role for enable/disable operations.
 func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {

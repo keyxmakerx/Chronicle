@@ -17,6 +17,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/config"
+	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 )
@@ -35,6 +36,14 @@ type App struct {
 
 	// Echo is the HTTP server instance.
 	Echo *echo.Echo
+
+	// WASMPluginManager manages loaded WASM logic extension plugins.
+	// Set during route registration; nil until then.
+	WASMPluginManager *extensions.PluginManager
+
+	// WASMHookDispatcher dispatches events to WASM plugins.
+	// Set during route registration; nil until then.
+	WASMHookDispatcher *extensions.HookDispatcher
 }
 
 // New creates a new App instance with the given dependencies and configures

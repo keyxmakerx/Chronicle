@@ -14,6 +14,10 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/app"
 	"github.com/keyxmakerx/chronicle/internal/config"
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/modules"
+
+	// Import module packages for their init() factory registrations.
+	_ "github.com/keyxmakerx/chronicle/internal/modules/dnd5e"
 )
 
 func main() {
@@ -59,6 +63,13 @@ func main() {
 	defer func() { _ = rdb.Close() }()
 	slog.Info("connected to Redis")
 
+	// --- Initialize Game Modules ---
+	// Discover and load module manifests + data from internal/modules/.
+	// Modules register their factories via init() (blank imports above).
+	if err := modules.Init("internal/modules"); err != nil {
+		slog.Warn("module initialization failed", slog.Any("error", err))
+	}
+
 	// --- Create Application ---
 	application := app.New(cfg, db, rdb)
 
@@ -78,6 +89,11 @@ func main() {
 		// Give in-flight requests 10 seconds to complete.
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+
+		// Unload all WASM plugins before stopping the server.
+		if application.WASMPluginManager != nil {
+			application.WASMPluginManager.UnloadAll(ctx)
+		}
 
 		if err := application.Echo.Shutdown(ctx); err != nil {
 			slog.Error("server forced shutdown", slog.Any("error", err))
