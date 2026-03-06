@@ -42,7 +42,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 
 	// Security dashboard.
 	admin.GET("/security", h.Security)
-	admin.DELETE("/security/sessions/:token", h.TerminateSession)
+	admin.DELETE("/security/sessions/:hash", h.TerminateSession)
 	admin.POST("/security/users/:id/force-logout", h.ForceLogoutUser)
 	admin.PUT("/security/users/:id/disable", h.DisableUser)
 	admin.PUT("/security/users/:id/enable", h.EnableUser)

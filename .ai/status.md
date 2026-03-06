@@ -309,6 +309,18 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - Example extension: `dice-roller` with `widgets/dice-roller.js` — d4-d100 roller with history, nat1/natMax highlighting
 - Example test updated to validate dice-roller manifest
 
+### Security Audit Remediation (2026-03-06) (COMPLETE)
+- Full codebase security audit performed (`.ai/security-audit-2026-03-06.md`)
+- **H-1 FIXED**: Session tokens no longer exposed in admin HTML — uses SHA-256 hash-based lookup
+- **H-2 FIXED**: RecapHTML sanitized via `sanitize.HTML()` before storage (stored XSS)
+- **M-1 FIXED**: `ChangePassword()` now invalidates all existing sessions
+- **M-3 FIXED**: Session cookie MaxAge uses configured `SESSION_TTL` instead of hardcoded 30 days
+- **M-4 SKIPPED**: Registration already has rate limiting (`middleware.RateLimit(5, time.Minute)`)
+- **M-5 FIXED**: Per-email rate limit (3 req/15 min) on password reset via Redis
+- **L-1 FIXED**: Avatar upload validates MIME via `http.DetectContentType()` on file bytes
+- **L-7 FIXED**: Dockerfile runs as non-root `chronicle` user
+- Remaining (accepted/deferred): M-2 (CSP unsafe-inline, Alpine.js dependency), L-2 (ClamAV for avatars), L-3 (in-memory rate limiter), L-4 (CSRF cookie binding), L-5 (query string logging), L-6 (default DB password)
+
 ## Next Session Should
 **Sprint M-1 is complete.** Next priorities from `.ai/todo.md`:
 - Sprint M-2: D&D 5e Module — Reference Pages (browsable pages at `/modules/dnd5e/`, category cards, searchable lists, stat block detail pages)

@@ -617,7 +617,7 @@ func (a *App) RegisterRoutes() {
 	// Auth plugin: login, register, logout (public routes).
 	authRepo := auth.NewUserRepository(a.DB)
 	authService := auth.NewAuthService(authRepo, a.Redis, a.Config.Auth.SessionTTL)
-	authHandler := auth.NewHandler(authService)
+	authHandler := auth.NewHandler(authService, a.Config.Auth.SessionTTL)
 	auth.RegisterRoutes(e, authHandler)
 
 	// SMTP plugin: outbound email for transfers, password resets.

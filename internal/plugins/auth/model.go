@@ -77,6 +77,7 @@ type Session struct {
 // SessionInfo extends Session with metadata for the admin active sessions view.
 type SessionInfo struct {
 	Token     string        `json:"-"`          // Full token (for termination). Never expose in UI.
+	TokenHash string        `json:"-"`          // SHA-256 hash of token for safe URL references.
 	TokenHint string        `json:"token_hint"` // First 8 chars for display.
 	UserID    string        `json:"user_id"`
 	Email     string        `json:"email"`

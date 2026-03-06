@@ -448,22 +448,24 @@ func (h *Handler) Security(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, AdminSecurityPage(data))
 }
 
-// TerminateSession destroys a specific session (DELETE /admin/security/sessions/:token).
+// TerminateSession destroys a specific session by its token hash
+// (DELETE /admin/security/sessions/:hash). Uses hash-based lookup to avoid
+// exposing raw session tokens in admin HTML.
 func (h *Handler) TerminateSession(c echo.Context) error {
 	if h.securityService == nil {
 		return apperror.NewMissingContext()
 	}
 
-	token := c.Param("token")
+	tokenHash := c.Param("hash")
 	currentUserID := auth.GetUserID(c)
 
-	if err := h.securityService.TerminateSession(c.Request().Context(), token); err != nil {
+	if err := h.securityService.TerminateSessionByHash(c.Request().Context(), tokenHash); err != nil {
 		return err
 	}
 
 	_ = h.securityService.LogEvent(c.Request().Context(), EventSessionTerminated,
 		"", currentUserID, c.RealIP(), c.Request().UserAgent(),
-		map[string]any{"token_hint": token[:8]})
+		map[string]any{"token_hash": tokenHash})
 
 	slog.Info("admin terminated session",
 		slog.String("by", currentUserID),

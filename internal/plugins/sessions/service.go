@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // EntityCampaignChecker verifies that an entity belongs to a given campaign.
@@ -236,7 +237,12 @@ func (s *sessionService) DeleteSession(ctx context.Context, id string) error {
 }
 
 // UpdateSessionRecap saves the post-session recap (visible to all members).
+// Sanitizes HTML before storage to prevent stored XSS.
 func (s *sessionService) UpdateSessionRecap(ctx context.Context, id string, recap, recapHTML *string) error {
+	if recapHTML != nil && *recapHTML != "" {
+		sanitized := sanitize.HTML(*recapHTML)
+		recapHTML = &sanitized
+	}
 	return s.repo.UpdateRecap(ctx, id, recap, recapHTML)
 }
 

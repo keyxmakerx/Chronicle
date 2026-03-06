@@ -27,8 +27,9 @@ type SecurityService interface {
 	// GetActiveSessions returns all active sessions from the session store.
 	GetActiveSessions(ctx context.Context) ([]auth.SessionInfo, error)
 
-	// TerminateSession destroys a specific session by token.
-	TerminateSession(ctx context.Context, token string) error
+	// TerminateSessionByHash destroys a specific session identified by the
+	// SHA-256 hash of its token. Avoids exposing raw tokens in admin UI.
+	TerminateSessionByHash(ctx context.Context, tokenHash string) error
 
 	// ForceLogoutUser destroys all sessions for a user.
 	ForceLogoutUser(ctx context.Context, userID string) (int, error)
@@ -123,12 +124,13 @@ func (s *securityService) GetActiveSessions(ctx context.Context) ([]auth.Session
 	return sessions, nil
 }
 
-// TerminateSession destroys a specific session.
-func (s *securityService) TerminateSession(ctx context.Context, token string) error {
-	if token == "" {
-		return apperror.NewBadRequest("session token is required")
+// TerminateSessionByHash destroys a specific session identified by the
+// SHA-256 hash of its token. Scans active sessions to find the matching token.
+func (s *securityService) TerminateSessionByHash(ctx context.Context, tokenHash string) error {
+	if tokenHash == "" {
+		return apperror.NewBadRequest("session token hash is required")
 	}
-	return s.authService.DestroySession(ctx, token)
+	return s.authService.DestroySessionByHash(ctx, tokenHash)
 }
 
 // ForceLogoutUser destroys all sessions for a user.

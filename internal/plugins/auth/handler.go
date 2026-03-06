@@ -34,11 +34,12 @@ type SecurityEventLogger interface {
 type Handler struct {
 	service        AuthService
 	securityLogger SecurityEventLogger
+	sessionTTL     time.Duration // Cookie MaxAge matches Redis session TTL.
 }
 
-// NewHandler creates a new auth handler with the given service.
-func NewHandler(service AuthService) *Handler {
-	return &Handler{service: service}
+// NewHandler creates a new auth handler with the given service and session TTL.
+func NewHandler(service AuthService, sessionTTL time.Duration) *Handler {
+	return &Handler{service: service, sessionTTL: sessionTTL}
 }
 
 // SetSecurityLogger wires a security event logger for recording auth events.
@@ -105,7 +106,7 @@ func (h *Handler) Login(c echo.Context) error {
 	h.logSecurityEvent(c.Request().Context(), "login.success", user.ID, "", ip, ua, nil)
 
 	// Set the session cookie.
-	setSessionCookie(c, token)
+	setSessionCookie(c, token, h.sessionTTL)
 
 	// HTMX requests get a redirect header; browser forms get a 303 redirect.
 	if middleware.IsHTMX(c) {
@@ -178,7 +179,7 @@ func (h *Handler) Register(c echo.Context) error {
 		return c.Redirect(http.StatusSeeOther, "/login")
 	}
 
-	setSessionCookie(c, token)
+	setSessionCookie(c, token, h.sessionTTL)
 
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect", "/dashboard")
@@ -382,24 +383,38 @@ func (h *Handler) UploadAvatarAPI(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "avatar must be under 2MB"})
 	}
 
-	// Validate MIME type.
-	contentType := file.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "image/") {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "file must be an image"})
+	// Read file bytes for content-based MIME detection.
+	src, err := file.Open()
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("opening uploaded file: %w", err))
+	}
+	defer func() { _ = src.Close() }()
+
+	fileBytes, err := io.ReadAll(io.LimitReader(src, 2*1024*1024+1))
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("reading uploaded file: %w", err))
 	}
 
-	// Determine file extension.
-	ext := filepath.Ext(file.Filename)
-	if ext == "" {
-		switch contentType {
-		case "image/png":
-			ext = ".png"
-		case "image/gif":
-			ext = ".gif"
-		case "image/webp":
-			ext = ".webp"
-		default:
-			ext = ".jpg"
+	// Validate MIME type using magic bytes, not client-provided Content-Type.
+	contentType := http.DetectContentType(fileBytes)
+	allowedAvatarTypes := map[string]string{
+		"image/jpeg": ".jpg",
+		"image/png":  ".png",
+		"image/gif":  ".gif",
+		"image/webp": ".webp",
+	}
+	ext, ok := allowedAvatarTypes[contentType]
+	if !ok {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "file must be a JPEG, PNG, GIF, or WebP image"})
+	}
+
+	// Use file extension from filename if it matches the detected type.
+	if fileExt := filepath.Ext(file.Filename); fileExt != "" {
+		for _, allowed := range allowedAvatarTypes {
+			if strings.EqualFold(fileExt, allowed) {
+				ext = allowed
+				break
+			}
 		}
 	}
 
@@ -417,20 +432,8 @@ func (h *Handler) UploadAvatarAPI(c echo.Context) error {
 	}
 
 	// Save file.
-	src, err := file.Open()
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("opening uploaded file: %w", err))
-	}
-	defer func() { _ = src.Close() }()
-
 	destPath := filepath.Join(avatarDir, filename)
-	dst, err := os.Create(destPath)
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("creating avatar file: %w", err))
-	}
-	defer func() { _ = dst.Close() }()
-
-	if _, err := io.Copy(dst, src); err != nil {
+	if err := os.WriteFile(destPath, fileBytes, 0o644); err != nil {
 		return apperror.NewInternal(fmt.Errorf("saving avatar file: %w", err))
 	}
 
@@ -542,7 +545,7 @@ func getSessionToken(c echo.Context) string {
 
 // setSessionCookie sets the session cookie on the response. The cookie is
 // HttpOnly (JS can't read it), Secure if behind TLS, and SameSite=Lax.
-func setSessionCookie(c echo.Context, token string) {
+func setSessionCookie(c echo.Context, token string, ttl time.Duration) {
 	req := c.Request()
 	c.SetCookie(&http.Cookie{
 		Name:     sessionCookieName,
@@ -551,7 +554,7 @@ func setSessionCookie(c echo.Context, token string) {
 		HttpOnly: true,
 		Secure:   req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https",
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   30 * 24 * 60 * 60, // 30 days in seconds
+		MaxAge:   int(ttl.Seconds()),
 	})
 }
 

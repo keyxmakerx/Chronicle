@@ -45,6 +45,9 @@ FROM alpine:3.20
 # Install CA certificates for HTTPS calls (if needed) and timezone data.
 RUN apk add --no-cache ca-certificates tzdata
 
+# Create non-root user for runtime security.
+RUN adduser -D -H -s /sbin/nologin chronicle
+
 # Copy the compiled binary.
 COPY --from=builder /chronicle /usr/local/bin/chronicle
 
@@ -54,7 +57,13 @@ COPY --from=builder /src/static /app/static
 # Copy database migrations for auto-migration on startup.
 COPY --from=builder /src/db/migrations /app/db/migrations
 
+# Create uploads directory owned by the non-root user.
+RUN mkdir -p /app/uploads && chown chronicle:chronicle /app/uploads
+
 WORKDIR /app
+
+# Run as non-root user.
+USER chronicle
 
 # The Go binary serves HTTP directly on this port.
 EXPOSE 8080

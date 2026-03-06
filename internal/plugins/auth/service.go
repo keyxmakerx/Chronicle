@@ -77,6 +77,10 @@ type AuthService interface {
 	// Admin session management.
 	ListAllSessions(ctx context.Context) ([]SessionInfo, error)
 	DestroyAllUserSessions(ctx context.Context, userID string) (int, error)
+
+	// DestroySessionByHash finds a session by the SHA-256 hash of its token
+	// and destroys it. Used by the admin dashboard to avoid exposing raw tokens.
+	DestroySessionByHash(ctx context.Context, tokenHash string) error
 }
 
 // authService implements AuthService with argon2id hashing and Redis sessions.
@@ -322,6 +326,7 @@ func (s *authService) ListAllSessions(ctx context.Context) ([]SessionInfo, error
 
 			sessions = append(sessions, SessionInfo{
 				Token:     token,
+				TokenHash: hashToken(token),
 				TokenHint: hint,
 				UserID:    session.UserID,
 				Email:     session.Email,
@@ -371,6 +376,20 @@ func (s *authService) DestroyAllUserSessions(ctx context.Context, userID string)
 // the email exists (timing-safe: we always do the same work).
 func (s *authService) InitiatePasswordReset(ctx context.Context, email string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
+
+	// Per-email rate limit: max 3 reset requests per 15 minutes.
+	// Silently succeed when rate-limited to avoid leaking email existence.
+	if s.redis != nil {
+		rateLimitKey := "reset_rate:" + email
+		count, _ := s.redis.Incr(ctx, rateLimitKey).Result()
+		if count == 1 {
+			s.redis.Expire(ctx, rateLimitKey, 15*time.Minute)
+		}
+		if count > 3 {
+			slog.Debug("password reset rate-limited", slog.String("email", email))
+			return nil
+		}
+	}
 
 	// Always generate a token regardless of whether the email exists.
 	// This prevents timing side-channel attacks that could reveal email existence
@@ -587,7 +606,45 @@ func (s *authService) ChangePassword(ctx context.Context, userID, currentPasswor
 	if err != nil {
 		return fmt.Errorf("hashing new password: %w", err)
 	}
-	return s.repo.UpdatePassword(ctx, userID, hash)
+	if err := s.repo.UpdatePassword(ctx, userID, hash); err != nil {
+		return err
+	}
+
+	// Invalidate all existing sessions so any compromised session is terminated.
+	// The caller is responsible for creating a fresh session for the current user.
+	s.destroyUserSessions(ctx, userID)
+	return nil
+}
+
+// DestroySessionByHash finds a session by the SHA-256 hash of its token
+// and destroys it. Prevents exposing raw session tokens in admin UI URLs.
+func (s *authService) DestroySessionByHash(ctx context.Context, tokenHash string) error {
+	if s.redis == nil {
+		return apperror.NewInternal(fmt.Errorf("redis not available"))
+	}
+
+	// Scan all sessions to find the one matching the hash.
+	var cursor uint64
+	for {
+		keys, nextCursor, err := s.redis.Scan(ctx, cursor, sessionKeyPrefix+"*", 100).Result()
+		if err != nil {
+			return apperror.NewInternal(fmt.Errorf("scanning sessions: %w", err))
+		}
+
+		for _, key := range keys {
+			token := strings.TrimPrefix(key, sessionKeyPrefix)
+			if hashToken(token) == tokenHash {
+				return s.DestroySession(ctx, token)
+			}
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return apperror.NewNotFound("session not found")
 }
 
 // --- Password Hashing (argon2id) ---
