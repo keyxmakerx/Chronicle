@@ -56,7 +56,12 @@ func (h *Handler) GetExtension(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, ext)
+	manifest := parseManifestFromExtension(ext)
+
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, adminExtensionDetailFragment(ext, manifest))
+	}
+	return middleware.Render(c, http.StatusOK, adminExtensionDetailPage(ext, manifest))
 }
 
 // InstallExtension handles zip upload for installing a new extension.
@@ -150,6 +155,11 @@ func (h *Handler) UpdateExtension(c echo.Context) error {
 		return err
 	}
 
+	if middleware.IsHTMX(c) {
+		manifest := parseManifestFromExtension(ext)
+		return middleware.Render(c, http.StatusOK, adminExtensionDetailFragment(ext, manifest))
+	}
+
 	return c.JSON(http.StatusOK, ext)
 }
 
@@ -181,8 +191,21 @@ func (h *Handler) RescanExtensions(c echo.Context) error {
 		return err
 	}
 
-	total, _ := h.svc.List(c.Request().Context())
+	if discovered > 0 {
+		slog.Info("rescan discovered new extensions",
+			slog.Int("count", discovered),
+		)
+	}
 
+	if middleware.IsHTMX(c) {
+		exts, _ := h.svc.List(c.Request().Context())
+		if exts == nil {
+			exts = []Extension{}
+		}
+		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts))
+	}
+
+	total, _ := h.svc.List(c.Request().Context())
 	return c.JSON(http.StatusOK, map[string]int{
 		"discovered": discovered,
 		"total":      len(total),
