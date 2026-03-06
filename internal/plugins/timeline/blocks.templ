@@ -1,0 +1,38 @@
+// blocks.templ defines entity page block renderers provided by the timeline plugin.
+// Registered with the block registry at startup; rendered on entity profile pages
+// when the timeline addon is enabled.
+package timeline
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// BlockTimeline renders a lazy-loaded timeline preview for an entity's campaign.
+// Uses the same HTMX pattern as the dashboard timeline_preview block.
+templ BlockTimeline(cc *campaigns.CampaignContext) {
+	<div
+		data-widget="timeline-widget"
+		data-campaign-id={ cc.Campaign.ID }
+	>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-timeline mr-1.5"></i>Timelines
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				View all
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/timelines/preview?limit=5", cc.Campaign.ID) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card divide-y divide-edge min-h-[60px]"
+		>
+			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+		</div>
+	</div>
+}

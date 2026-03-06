@@ -72,6 +72,12 @@ type GroupLister interface {
 	ListGroups(ctx context.Context, campaignID string) ([]campaigns.CampaignGroup, error)
 }
 
+// WidgetBlockLister returns extension widget block metadata for the template
+// editor palette. Implemented by the extensions handler.
+type WidgetBlockLister interface {
+	GetWidgetBlockMetas(ctx context.Context, campaignID string) []BlockMeta
+}
+
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
@@ -85,6 +91,8 @@ type Handler struct {
 	sessionSearcher    SessionSearcher
 	memberLister       MemberLister
 	groupLister        GroupLister
+	widgetBlockLister  WidgetBlockLister
+	blockRegistry      *BlockRegistry
 	cache              *redis.Client
 }
 
@@ -103,6 +111,12 @@ func (h *Handler) SetAuditService(svc audit.AuditService) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetAddonChecker(svc AddonChecker) {
 	h.addonSvc = svc
+}
+
+// SetBlockRegistry sets the block registry for the block-types API endpoint.
+// Called after all plugins have registered their block types.
+func (h *Handler) SetBlockRegistry(reg *BlockRegistry) {
+	h.blockRegistry = reg
 }
 
 // SetTagFetcher sets the tag fetcher for populating entity tags in list views.
@@ -145,6 +159,12 @@ func (h *Handler) SetMemberLister(ml MemberLister) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetGroupLister(gl GroupLister) {
 	h.groupLister = gl
+}
+
+// SetWidgetBlockLister sets the extension widget block lister for the template
+// editor palette. Extension widgets appear as additional block types.
+func (h *Handler) SetWidgetBlockLister(wbl WidgetBlockLister) {
+	h.widgetBlockLister = wbl
 }
 
 // SetCache sets the Redis client for API response caching (e.g., entity names).
@@ -1427,6 +1447,31 @@ func (h *Handler) DeleteEntityType(c echo.Context) error {
 }
 
 // --- Template Editor ---
+
+// BlockTypesAPI returns the available block types for the template editor,
+// filtered by which addons are enabled for the current campaign.
+// Also includes extension widget blocks from enabled extensions.
+// GET /campaigns/:id/entity-types/block-types
+func (h *Handler) BlockTypesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if h.blockRegistry == nil {
+		return c.JSON(http.StatusOK, []BlockMeta{})
+	}
+
+	types := h.blockRegistry.TypesForCampaign(c.Request().Context(), cc.Campaign.ID, h.addonSvc)
+
+	// Append extension widget blocks from enabled extensions.
+	if h.widgetBlockLister != nil {
+		extWidgets := h.widgetBlockLister.GetWidgetBlockMetas(c.Request().Context(), cc.Campaign.ID)
+		types = append(types, extWidgets...)
+	}
+
+	return c.JSON(http.StatusOK, types)
+}
 
 // TemplateEditor renders the visual template editor for an entity type.
 // GET /campaigns/:id/entity-types/:etid/template

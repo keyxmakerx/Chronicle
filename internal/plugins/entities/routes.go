@@ -73,6 +73,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Customize Hub fragment: attributes field editor (used in Extensions tab).
 	cg.GET("/entity-types/:etid/attributes-fragment", h.EntityTypeAttributesFragment, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Block types API — returns available block types filtered by campaign addons.
+	cg.GET("/entity-types/block-types", h.BlockTypesAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Entity type layout/color/dashboard API (Owner only).
 	cg.GET("/entity-types/:etid/layout", h.GetEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/entity-types/:etid/layout", h.UpdateEntityTypeLayout, campaigns.RequireRole(campaigns.RoleOwner))

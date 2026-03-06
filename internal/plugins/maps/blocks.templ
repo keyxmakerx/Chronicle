@@ -1,0 +1,44 @@
+// blocks.templ defines entity page block renderers provided by the maps plugin.
+// Registered with the block registry at startup; rendered on entity profile pages
+// when the maps addon is enabled.
+package maps
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// BlockMapPreview renders an embedded map viewer for entity pages.
+// If a specific mapID is provided it shows that map; otherwise the
+// map-widget JS will show a map picker.
+templ BlockMapPreview(cc *campaigns.CampaignContext, mapID string) {
+	<div
+		data-widget="map-widget"
+		data-campaign-id={ cc.Campaign.ID }
+		data-map-id={ mapID }
+	>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-map mr-1.5"></i>Map
+			</h2>
+			if mapID != "" {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, mapID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					Open map
+				</a>
+			} else {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", cc.Campaign.ID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					View all maps
+				</a>
+			}
+		</div>
+		<div class="card min-h-[200px] overflow-hidden rounded-lg">
+			<div class="px-4 py-3 text-sm text-fg-muted">Loading map...</div>
+		</div>
+	</div>
+}

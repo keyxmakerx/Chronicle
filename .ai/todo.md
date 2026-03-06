@@ -209,7 +209,34 @@ _Lower-priority items to pick up during related sprints or as standalone tasks._
 - [ ] **Toast notification grouping** — Duplicate toasts stack separately instead of grouping.
 - [ ] **Entity image gallery** — Only one image per entity; no carousel/gallery for multiple images.
 
-### Deferred to Phase P+ (or community contributions)
+### Phase P: Extension System (Content Extensions — Layer 1)
+
+_Declarative content packs: no code execution, manifest-only. See ADR-021._
+
+- [ ] **Sprint P-1: Extension Infrastructure** — Migration (extensions, campaign_extensions, extension_records, extension_assets tables). Extension model/repository/service. Manifest parser + validator. Zip installer with security checks (file type allowlist, path traversal prevention, SVG sanitization, size limits).
+- [ ] **Sprint P-2: Admin Extension Management** — Admin UI for listing/installing/uninstalling extensions. `GET/POST/DELETE /admin/extensions`. Extension detail page showing manifest metadata. On-disk storage in `extensions/` directory.
+- [ ] **Sprint P-3: Campaign Extension Enable/Disable** — Campaign settings "Extensions" tab. `GET/POST/DELETE /campaigns/:id/extensions/:ext_id`. Preview endpoint showing what enabling will do. Addon requirement checking.
+- [ ] **Sprint P-4: Content Appliers** — Calendar preset applier (replaces calendar config). Entity type template applier (creates entity type). Entity preset applier (creates entities). Tag collection applier (merge). Provenance tracking in extension_records for clean uninstall.
+- [ ] **Sprint P-5: Marker Icons & Themes** — Marker icon pack registration (namespaced IDs). Theme variant registration (CSS custom property overrides). Asset serving endpoint (`GET /extensions/:ext_id/assets/*path`).
+- [ ] **Sprint P-6: Example Extensions** — Forgotten Realms Calendar (Harptos) pack. D&D 5e Character Sheet entity type template. Sample monster pack. Package as reference implementations for extension authors.
+
+### Phase Q: Extension System (Widget Extensions — Layer 2)
+
+_Browser-sandboxed JS widgets that extend the UI. See ADR-021._
+
+- [ ] **Sprint Q-1: Widget Extension API** — `Chronicle.registerWidget(name, {mount, unmount, config})` API in boot.js. Extension widget discovery and auto-mounting. Widget config schema in manifest.
+- [ ] **Sprint Q-2: Widget Extension Distribution** — Allow `.js` files in extension zips (scoped to widget registration pattern). Extension widget blocks appear in template editor palette.
+
+### Phase R: Extension System (Logic Extensions — Layer 3, Future)
+
+_WASM-sandboxed backend logic via Extism/wazero. See ADR-021. Build only when Layers 1-2 prove insufficient._
+
+- [ ] **Sprint R-1: WASM Runtime Integration** — Extism Go SDK + wazero. PluginManager (load/unload/reload). Read-only host functions (get_entity, search_entities, get_calendar, list_events, log). Per-plugin KV store.
+- [ ] **Sprint R-2: Capability-Based Security** — PluginCapabilities model. Host function filtering by declared capabilities. Memory limits (16MB default), execution timeouts (30s), fuel metering. Rate limiting per plugin.
+- [ ] **Sprint R-3: Write Host Functions** — create_event, update_entity_fields, add_tag. Hook system (plugins register for entity/calendar events). Plugin-to-plugin message passing via host.
+- [ ] **Sprint R-4: Plugin SDK & Developer Tools** — `chronicle-sdk` CLI tool for local testing with mock host functions. Example plugins in Rust, Go/TinyGo, JS. Plugin development documentation.
+
+### Deferred to Phase S+ (or community contributions)
 
 - [ ] Draw Steel module
 - [ ] Whiteboards / freeform canvas (Tldraw/Excalidraw)

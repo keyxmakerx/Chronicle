@@ -77,6 +77,7 @@ type EntityService interface {
 
 	// Wiring.
 	SetEventPublisher(pub EntityEventPublisher)
+	SetBlockRegistry(reg *BlockRegistry)
 }
 
 // EntityEventPublisher emits domain events when entities change.
@@ -92,10 +93,11 @@ func (NoopEntityEventPublisher) PublishEntityEvent(string, string, string, *Enti
 
 // entityService implements EntityService.
 type entityService struct {
-	entities    EntityRepository
-	types       EntityTypeRepository
-	permissions EntityPermissionRepository
-	events      EntityEventPublisher
+	entities      EntityRepository
+	types         EntityTypeRepository
+	permissions   EntityPermissionRepository
+	events        EntityEventPublisher
+	blockRegistry *BlockRegistry
 }
 
 // NewEntityService creates a new entity service with the given dependencies.
@@ -111,6 +113,12 @@ func NewEntityService(entities EntityRepository, types EntityTypeRepository, per
 // SetEventPublisher sets the event publisher for real-time sync.
 func (s *entityService) SetEventPublisher(pub EntityEventPublisher) {
 	s.events = pub
+}
+
+// SetBlockRegistry sets the block registry for layout validation.
+// Called after all plugins have registered their block types.
+func (s *entityService) SetBlockRegistry(reg *BlockRegistry) {
+	s.blockRegistry = reg
 }
 
 // --- Entity CRUD ---
@@ -753,11 +761,22 @@ const (
 	gridWidth           = 12
 )
 
-// validBlockTypes are the allowed values for TemplateBlock.Type.
-var validBlockTypes = map[string]bool{
+// isValidBlockType checks the block registry for allowed block types.
+// Falls back to a minimal hardcoded set if no registry is configured (tests).
+func (s *entityService) isValidBlockType(blockType string) bool {
+	if s.blockRegistry != nil {
+		return s.blockRegistry.IsValid(blockType)
+	}
+	// Fallback for tests that don't wire a registry.
+	return defaultBlockTypes[blockType]
+}
+
+// defaultBlockTypes is used when no block registry is set (e.g., unit tests).
+var defaultBlockTypes = map[string]bool{
 	"title": true, "image": true, "entry": true,
 	"attributes": true, "details": true, "divider": true,
-	"posts": true,
+	"posts": true, "tags": true, "relations": true,
+	"shop_inventory": true, "text_block": true,
 }
 
 // UpdateEntityTypeLayout validates and persists a new layout for an entity type.
@@ -797,7 +816,7 @@ func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layo
 					return apperror.NewBadRequest("duplicate block ID: " + blk.ID)
 				}
 				seenBlockIDs[blk.ID] = true
-				if !validBlockTypes[blk.Type] {
+				if !s.isValidBlockType(blk.Type) {
 					return apperror.NewBadRequest("invalid block type: " + blk.Type)
 				}
 			}

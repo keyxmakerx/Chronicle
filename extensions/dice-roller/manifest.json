@@ -1,0 +1,32 @@
+{
+  "manifest_version": 1,
+  "id": "dice-roller",
+  "name": "Dice Roller",
+  "version": "1.0.0",
+  "description": "A simple dice roller widget for TTRPG campaigns. Roll standard dice (d4, d6, d8, d10, d12, d20, d100) with results displayed inline.",
+  "author": {
+    "name": "Chronicle Team"
+  },
+  "license": "MIT",
+  "keywords": ["dice", "roller", "ttrpg", "widget"],
+  "contributes": {
+    "widgets": [
+      {
+        "slug": "dice-roller",
+        "name": "Dice Roller",
+        "description": "Roll dice with standard TTRPG notation",
+        "icon": "fa-dice-d20",
+        "file": "widgets/dice-roller.js",
+        "config": [
+          {
+            "key": "default_dice",
+            "label": "Default Dice",
+            "type": "select",
+            "default": "d20",
+            "options": ["d4", "d6", "d8", "d10", "d12", "d20", "d100"]
+          }
+        ]
+      }
+    ]
+  }
+}

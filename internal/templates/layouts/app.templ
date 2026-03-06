@@ -405,6 +405,17 @@ templ AdminSidebarNav() {
 				Extensions
 			</a>
 			<a
+				href="/admin/extensions"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/extensions")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/extensions")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-puzzle-piece text-xs"></i>
+				</span>
+				Content Packs
+			</a>
+			<a
 				href="/admin/api"
 				class={ sidebarNavLink,
 					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/api")),

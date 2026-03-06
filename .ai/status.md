@@ -8,11 +8,33 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-06 -- Sprint M3: Test coverage complete (batch 54).
-Branch: `claude/plan-project-phases-8CPw5`.
+2026-03-06 -- Phase Q: Widget Extensions (Layer 2) — Sprints Q-1 and Q-2 COMPLETE.
+Branch: `claude/fix-calendar-shop-widgets-45iz7`.
 
 ## Current Phase
-**Phase M3: Test Coverage — COMPLETE.** Maps (45 tests), Calendar (40+ tests), Sessions (40+ tests), Timeline (50+ tests). Next: M (Game System Modules).
+**Phase Q: Widget Extensions (Layer 2) — Q-1 and Q-2 complete.** Next: Phase R (Logic Extensions Layer 3/WASM) or further Q polish.
+
+### Phase P Summary (Sprints P-1 through P-6)
+- **P-1**: Extension infrastructure — migration 000055 (4 tables), manifest parser/validator, zip security, repository (16 methods), service, handler, routes, config
+- **P-2**: Admin UI — polished extension list with card layout, extension detail page (manifest metadata, author, contributes breakdown, dependencies), admin sidebar link, HTMX rescan/update
+- **P-3**: Campaign integration — content extensions lazy-loaded in campaign addons settings page and customization hub extensions tab
+- **P-4**: Content appliers — entity type templates and tag collections applied on enable with provenance tracking. Adapter pattern bridges entity/tag services
+- **P-5**: Marker icons and themes — icon pack registration in extension_data, theme CSS registration, API endpoints for marker-icons and themes
+- **P-6**: Example extensions — Harptos Calendar (Forgotten Realms) and D&D 5e Character Sheet with 4 entity types, creature tags, relation types. Unit tests validate manifests
+- **Package**: `internal/extensions/` — 11 files (model, manifest, security, repository, service, handler, routes, applier, adapters, templ, tests)
+- **Tests**: 41 tests (manifest parsing, security, SVG/CSS validation, UUID, example manifests)
+
+### Extension System Research (batch 56)
+- **ADR-021**: Layered third-party extension strategy recorded in `.ai/decisions.md`.
+- **Decision**: Three layers — (1) Content Extensions (manifest-only, no code), (2) Widget Extensions (browser-sandboxed JS), (3) Logic Extensions (WASM via Extism/wazero, future).
+
+### Entity Block Registry (batch 55-56)
+- **Bug fix**: `validBlockTypes` in entities/service.go was missing most block types, causing "invalid block type" errors for shop_inventory, calendar, timeline, etc.
+- **Architecture**: Replaced hardcoded block type lists with a self-registering `BlockRegistry`. Plugins register their block types at startup; validation, rendering, and the template editor palette all derive from the registry.
+- **New files**: `entities/block_registry.go` (registry types + config helpers), `entities/block_registry_core.go` (core block registrations), `calendar/blocks.templ`, `timeline/blocks.templ`, `maps/blocks.templ` (plugin block renderers moved to owning plugin packages).
+- **Modified**: `entities/show.templ` (switch → registry dispatch), `entities/service.go` (registry-based validation), `entities/handler.go` (block-types API), `entities/routes.go` (new endpoint), `app/routes.go` (registry wiring), `template_editor.js` (fetches block types from API), `template_editor.templ` + `entity_type_config.templ` (added data-campaign-id).
+- **API**: `GET /campaigns/:id/entity-types/block-types` — returns available block types filtered by campaign addons.
+- **Build fix**: Renamed `blockEntry` struct to `registeredBlock` in `block_registry.go` to resolve naming collision with `blockEntry` templ function in `show.templ`.
 
 ### Sprint M0-4: dm_only Visibility on Entity Relations (batch 48)
 - Migration 000052: `dm_only BOOLEAN NOT NULL DEFAULT FALSE` on `entity_relations`
@@ -187,8 +209,30 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 
 ---
 
+### Sprint Q-1: Widget Extension API (COMPLETE)
+- Added `WidgetContribution` type to `ManifestContributes` with slug, name, description, icon, file, config fields
+- Added `WidgetConfigField` type for configurable data-* attributes (key, label, type, default, options)
+- Validation in `validateContributes()`: slug, name, file required; file must be `.js`; path traversal blocked
+- `.js` files added to `allowedFileExts` allowlist in security.go and asset serving handler
+- Widget registration in `applier.go`: stores widget metadata in `extension_data` (namespace "widgets") with script URLs
+- New handler: `ListWidgets` (GET /campaigns/:id/extensions/widgets) — returns all enabled extension widgets
+- New handler: `GetWidgetScriptURLs` — used by layout injector to discover widget scripts
+- Layout integration: `SetExtWidgetScripts`/`GetExtWidgetScripts` in data.go, `<script>` injection in base.templ
+- Layout injector in app/routes.go wires extension widget script discovery per campaign
+- Tests updated: security test accepts .js, manifest test covers widget validation (6 new cases)
+
+### Sprint Q-2: Widget Extension Distribution (COMPLETE)
+- `ext_widget` block type registered in block registry with generic renderer (`blockExtWidget` templ)
+- `BlockMeta.WidgetSlug` field added for template editor to identify extension widgets
+- `WidgetBlockLister` interface in entities handler, wired via `widgetBlockListerAdapter`
+- `BlockTypesAPI` now appends extension widget blocks from enabled extensions
+- `GetWidgetBlockInfos` method on extensions handler returns widget metadata
+- Template editor JS updated: palette shows "Extension Widgets" section, drag data includes `widget_slug`, drop handlers set `config.widget_slug`
+- Example extension: `dice-roller` with `widgets/dice-roller.js` — d4-d100 roller with history, nat1/natMax highlighting
+- Example test updated to validate dice-roller manifest
+
 ## Next Session Should
-Continue with **Phase M: Game System Modules** (Sprint M-1: D&D 5e module — SRD data + tooltip API). Full roadmap in `.ai/todo.md`.
+Continue with **Phase R: Logic Extensions (Layer 3/WASM)** via Extism/wazero, or polish Phase Q further (JS validation for widget scripts, widget sandboxing). Full roadmap in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

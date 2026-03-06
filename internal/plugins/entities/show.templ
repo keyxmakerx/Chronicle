@@ -178,40 +178,10 @@ templ entityBlockWithBadge(block TemplateBlock, cc *campaigns.CampaignContext, e
 	}
 }
 
-// entityBlockInner renders the actual block content without the height wrapper.
+// entityBlockInner renders the actual block content via the block registry.
+// Each block type's renderer was registered at startup by its owning plugin.
 templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
-	switch block.Type {
-		case "title":
-			@blockTitle(cc, entity, csrfToken)
-		case "image":
-			@blockImage(cc, entity, csrfToken)
-		case "entry":
-			@blockEntry(cc, entity, csrfToken)
-		case "attributes":
-			@blockAttributes(cc, entity, entityType, csrfToken)
-		case "details":
-			@blockDetails(entity)
-		case "tags":
-			@blockTags(cc, entity, csrfToken)
-		case "relations":
-			@blockRelations(cc, entity, csrfToken)
-		case "shop_inventory":
-			@blockShopInventory(cc, entity, csrfToken)
-		case "divider":
-			@blockDivider()
-		case "calendar":
-			@blockCalendarEvents(cc, entity)
-		case "timeline":
-			@blockTimeline(cc)
-		case "map_preview":
-			@blockMapPreview(cc, block.Config)
-		case "upcoming_events":
-			@blockUpcomingEvents(cc, block.Config)
-		case "text_block":
-			@blockTextBlock(block.Config)
-		case "posts":
-			@blockPosts(cc, entity, csrfToken)
-	}
+	@RenderBlock(block, cc, entity, entityType, csrfToken)
 }
 
 // blockTitle renders the entity name heading with edit/delete actions.
@@ -427,6 +397,22 @@ templ blockDivider() {
 	<hr class="border-edge my-2"/>
 }
 
+// blockExtWidget renders a mount point for an extension widget.
+// The widget slug comes from block config and maps to a JS widget
+// registered via Chronicle.register() by the extension's script.
+templ blockExtWidget(cc *campaigns.CampaignContext, entity *Entity, block TemplateBlock) {
+	if widgetSlug := BlockConfigString(block.Config, "widget_slug"); widgetSlug != "" {
+		<div
+			data-widget={ widgetSlug }
+			data-campaign-id={ cc.Campaign.ID }
+			data-entity-id={ entity.ID }
+			class="ext-widget-block"
+		></div>
+	} else {
+		<div class="text-fg-muted text-sm italic py-2">Extension widget not configured</div>
+	}
+}
+
 // blockPosts renders the entity posts (sub-notes) widget mount point.
 // Posts are additional named content sections displayed below the main entry.
 templ blockPosts(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
@@ -440,148 +426,6 @@ templ blockPosts(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 		}
 		data-csrf={ csrfToken }
 	></div>
-}
-
-// blockCalendarEvents renders a lazy-loaded calendar events section for this entity.
-// The block is only present if the user explicitly added it to the layout;
-// the HTMX endpoint handles the no-calendar case gracefully (returns NoContent).
-templ blockCalendarEvents(cc *campaigns.CampaignContext, entity *Entity) {
-	<div
-		hx-get={ fmt.Sprintf("/campaigns/%s/calendar/entity-events/%s", cc.Campaign.ID, entity.ID) }
-		hx-trigger="load"
-		hx-swap="innerHTML"
-	></div>
-}
-
-// blockTimeline renders a lazy-loaded timeline preview for this entity's campaign.
-// Uses the same HTMX pattern as the dashboard timeline_preview block.
-// The timeline addon middleware on the endpoint handles access control.
-templ blockTimeline(cc *campaigns.CampaignContext) {
-	<div
-		data-widget="timeline-widget"
-		data-campaign-id={ cc.Campaign.ID }
-	>
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-				<i class="fa-solid fa-timeline mr-1.5"></i>Timelines
-			</h2>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
-			>
-				View all
-			</a>
-		</div>
-		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/timelines/preview?limit=5", cc.Campaign.ID) }
-			hx-trigger="intersect once"
-			hx-swap="innerHTML"
-			class="card divide-y divide-edge min-h-[60px]"
-		>
-			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
-		</div>
-	</div>
-}
-
-// blockMapPreview renders an embedded map viewer for entity pages.
-// Uses the same HTMX + Leaflet pattern as the dashboard map_preview block.
-// If a specific map_id is set in the block config it shows that map;
-// otherwise the map-widget JS will show a map picker.
-templ blockMapPreview(cc *campaigns.CampaignContext, config map[string]any) {
-	<div
-		data-widget="map-widget"
-		data-campaign-id={ cc.Campaign.ID }
-		data-map-id={ entityBlockMapID(config) }
-	>
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-				<i class="fa-solid fa-map mr-1.5"></i>Map
-			</h2>
-			if entityBlockMapID(config) != "" {
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, entityBlockMapID(config))) }
-					class="text-xs text-accent hover:underline"
-				>
-					Open map
-				</a>
-			} else {
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", cc.Campaign.ID)) }
-					class="text-xs text-accent hover:underline"
-				>
-					View all maps
-				</a>
-			}
-		</div>
-		<div class="card min-h-[200px] overflow-hidden rounded-lg">
-			<div class="px-4 py-3 text-sm text-fg-muted">Loading map...</div>
-		</div>
-	</div>
-}
-
-// entityBlockMapID extracts the map_id from a block config, or empty string.
-func entityBlockMapID(config map[string]any) string {
-	if config == nil {
-		return ""
-	}
-	v, ok := config["map_id"]
-	if !ok {
-		return ""
-	}
-	s, _ := v.(string)
-	return s
-}
-
-// blockUpcomingEvents renders a lazy-loaded upcoming calendar events preview.
-// Similar to the dashboard calendar_preview but scoped to the entity page context.
-templ blockUpcomingEvents(cc *campaigns.CampaignContext, config map[string]any) {
-	<div
-		data-widget="calendar-widget"
-		data-campaign-id={ cc.Campaign.ID }
-		data-limit={ fmt.Sprintf("%d", entityBlockLimit(config, 5)) }
-	>
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
-			</h2>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
-			>
-				View calendar
-			</a>
-		</div>
-		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendar/upcoming?limit=%d", cc.Campaign.ID, entityBlockLimit(config, 5)) }
-			hx-trigger="intersect once"
-			hx-swap="innerHTML"
-			class="card divide-y divide-edge min-h-[60px]"
-		>
-			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
-		</div>
-	</div>
-}
-
-// entityBlockLimit extracts a numeric limit from a block config, with a default.
-func entityBlockLimit(config map[string]any, defaultLimit int) int {
-	if config == nil {
-		return defaultLimit
-	}
-	v, ok := config["limit"]
-	if !ok {
-		return defaultLimit
-	}
-	switch n := v.(type) {
-	case float64:
-		if n > 0 {
-			return int(n)
-		}
-	case int:
-		if n > 0 {
-			return n
-		}
-	}
-	return defaultLimit
 }
 
 // blockTextBlock renders a static rich text / HTML content block.

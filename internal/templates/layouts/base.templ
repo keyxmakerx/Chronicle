@@ -144,6 +144,11 @@ templ Base(title string) {
 
 		<!-- Keyboard shortcuts help overlay (press ?) -->
 		<script src="/static/js/shortcuts_help.js" defer></script>
+
+		<!-- Extension widget scripts (injected per-campaign, loaded after boot.js) -->
+		for _, scriptURL := range GetExtWidgetScripts(ctx) {
+			<script src={ scriptURL } defer></script>
+		}
 	</body>
 	</html>
 }

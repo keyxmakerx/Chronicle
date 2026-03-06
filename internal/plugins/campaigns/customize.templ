@@ -341,6 +341,17 @@ templ extensionsTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 			</div>
 		</div>
 
+		<!-- Content extensions (lazy-loaded from extensions handler) -->
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+		>
+			<div class="text-sm text-fg-secondary text-center py-4">
+				<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Loading content packs...
+			</div>
+		</div>
+
 		<!-- Calendar display settings (shown when calendar addon exists) -->
 		<div class="border-t border-edge pt-6">
 			<div class="flex items-center gap-2 mb-1">

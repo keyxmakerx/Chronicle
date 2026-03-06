@@ -1,0 +1,49 @@
+// blocks.templ defines entity page block renderers provided by the calendar plugin.
+// These are registered with the block registry at startup and rendered on entity
+// profile pages when the calendar addon is enabled.
+package calendar
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// BlockCalendarEvents renders a lazy-loaded calendar events section for an entity.
+// The HTMX endpoint handles the no-calendar case gracefully (returns NoContent).
+templ BlockCalendarEvents(cc *campaigns.CampaignContext, entityID string) {
+	<div
+		hx-get={ fmt.Sprintf("/campaigns/%s/calendar/entity-events/%s", cc.Campaign.ID, entityID) }
+		hx-trigger="load"
+		hx-swap="innerHTML"
+	></div>
+}
+
+// BlockUpcomingEvents renders a lazy-loaded upcoming calendar events preview.
+// Shows the next N events for the campaign's calendar.
+templ BlockUpcomingEvents(cc *campaigns.CampaignContext, limit int) {
+	<div
+		data-widget="calendar-widget"
+		data-campaign-id={ cc.Campaign.ID }
+		data-limit={ fmt.Sprintf("%d", limit) }
+	>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				View calendar
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendar/upcoming?limit=%d", cc.Campaign.ID, limit) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card divide-y divide-edge min-h-[60px]"
+		>
+			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+		</div>
+	</div>
+}

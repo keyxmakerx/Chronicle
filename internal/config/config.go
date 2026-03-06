@@ -40,6 +40,9 @@ type Config struct {
 
 	// Upload holds file upload settings.
 	Upload UploadConfig
+
+	// ExtensionsPath is the root directory for user-installed content extensions.
+	ExtensionsPath string
 }
 
 // DatabaseConfig holds MariaDB connection parameters. Individual fields
@@ -165,6 +168,8 @@ func Load() (*Config, error) {
 			SecretKey:  getEnv("SECRET_KEY", ""),
 			SessionTTL: getEnvDuration("SESSION_TTL", 720*time.Hour),
 		},
+
+		ExtensionsPath: getEnv("EXTENSIONS_PATH", "./extensions"),
 
 		Upload: UploadConfig{
 			MaxSize:        getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB

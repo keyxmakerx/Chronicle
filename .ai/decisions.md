@@ -616,3 +616,96 @@ cannot import subpackages without creating circular imports.
 - Module reference pages are generic (same Templ templates for all modules).
 - Module content appears in entity @mention search when the module addon is enabled.
 - TooltipAPI returns module-specific HTML via the TooltipRenderer interface.
+
+---
+
+## ADR-021: Layered Third-Party Extension Strategy
+
+**Date:** 2026-03-06
+**Status:** Proposed
+
+**Context:** Chronicle's three-tier architecture (Plugins, Modules, Widgets) is
+currently internal-only — all extensions ship with the Go binary. Users and the
+community want to create and share content packs, custom widgets, and eventually
+custom backend logic without forking the codebase. Research was conducted across
+WordPress, Grafana, Discourse, Obsidian, Foundry VTT, and Shopify, plus Go-specific
+approaches (HashiCorp go-plugin, WASM/Extism/wazero, GopherLua).
+
+**Key findings from research:**
+- No mainstream self-hosted platform truly sandboxes plugins except Grafana
+  (subprocess isolation via gRPC) and Shopify (restricted Liquid rendering).
+- WordPress, Discourse, Obsidian, and Foundry VTT all run plugins in-process
+  with full access — security relies entirely on trust and code review.
+- WASM (via Extism + wazero) is the most promising approach for a Go backend
+  wanting user-uploadable extensions with real sandboxing: memory-safe isolation,
+  capability-based security, language-agnostic authoring, pure Go runtime.
+- Foundry VTT's patterns are directly relevant as a TTRPG competitor: manifest
+  format, Flags storage, hook-based events, manifest URL updates.
+
+**Decision:** Three layers of third-party extensibility, implemented incrementally:
+
+### Layer 1: Content Extensions (Manifest-Only, No Code)
+Declarative content packs distributed as zip archives containing a `manifest.json`
+plus static assets (JSON data files, images, CSS). No executable code. Examples:
+monster packs, map tile sets, pre-built entity templates, custom field definitions,
+calendar presets, theme variants.
+
+- **Manifest**: JSON declaring id, name, version, author, compatibility, contents.
+- **Installation**: Upload zip via admin UI or place in `extensions/` directory.
+- **Storage**: Extension data stored in DB via a generic extension data table.
+  Inspired by Foundry VTT's Flags system (namespaced key-value on documents).
+- **Security**: No code execution. Manifest validated, file types allowlisted.
+- **Covers**: ~60% of what TTRPG users actually want to share.
+
+### Layer 2: Widget Extensions (Browser-Sandboxed JS)
+Custom widgets that self-register via `Chronicle.registerWidget()` and mount to
+DOM elements. They run in the browser, can only hit existing API endpoints, and
+are naturally sandboxed by the browser same-origin policy.
+
+- **Distribution**: Bundled in content extension zips (a JS file in the package).
+- **API**: `Chronicle.registerWidget(name, { mount, unmount, config })`.
+- **Security**: Browser sandbox. Widgets use Chronicle.apiFetch() which includes
+  CSRF tokens. Cannot access server filesystem or database directly.
+- **Covers**: Custom UI blocks, visualization widgets, interactive tools.
+
+### Layer 3: Logic Extensions (WASM-Sandboxed Backend, Future)
+Custom backend logic compiled to WebAssembly and executed via Extism + wazero.
+Plugins are `.wasm` files with capability-based security: no filesystem, no
+network, no database unless the host explicitly grants it through defined
+host functions.
+
+- **Runtime**: wazero (pure Go, zero CGO) via Extism SDK.
+- **Host functions**: Chronicle exposes specific APIs (read entity, list tags,
+  create event) as host functions. Plugins can only call what's exposed.
+- **Distribution**: `.wasm` files in extension packages, hash-verified.
+- **Use cases**: Custom validation rules, automated entity generation,
+  game-system-specific calculators, webhook processors.
+- **Deferred**: This layer is complex and should only be built when Layers 1-2
+  prove insufficient for user needs.
+
+**Alternatives Considered:**
+- HashiCorp go-plugin (gRPC subprocess per plugin): Battle-tested by Terraform
+  and Grafana but designed for operator-installed compiled binaries, not
+  user-uploaded extensions. Per-process overhead is heavy for many small TTRPG
+  extensions.
+- GopherLua (embedded Lua VM): Lightweight and familiar to game/modding
+  communities. Could serve as intermediate between Layers 2 and 3 for simple
+  automation/macros. May be added as Layer 2.5 if demand warrants.
+- No sandboxing (WordPress/Foundry model): Unacceptable for a self-hosted
+  platform where users upload community content. Security-by-trust doesn't scale.
+- Signing-only (Grafana model): Good defense-in-depth but insufficient alone.
+  Chronicle should implement SHA-256 manifest signing regardless of sandbox choice.
+
+**Implementation order:**
+1. Layer 1 first (content extensions) — highest value, lowest risk.
+2. Layer 2 second (widget extensions) — builds on existing widget infrastructure.
+3. Layer 3 only when needed — complex, can be deferred indefinitely.
+
+**Consequences:**
+- Content extensions cover the majority of community sharing needs without code.
+- Widget extensions leverage the existing boot.js auto-mounter and apiFetch infrastructure.
+- WASM layer provides a future path for backend extensibility with real security.
+- Each layer can be shipped independently; later layers don't block earlier ones.
+- Manifest format and extension installer are shared infrastructure across all layers.
+- Extension signing (SHA-256 checksums in signed manifest, inspired by Grafana)
+  should be implemented for all layers as defense-in-depth.

@@ -32,6 +32,7 @@ const (
 	keyIsOwner           ctxKey = "layout_is_owner"
 	keyMediaURLFunc      ctxKey = "layout_media_url_func"
 	keyMediaThumbFunc    ctxKey = "layout_media_thumb_func"
+	keyExtWidgetScripts  ctxKey = "layout_ext_widget_scripts"
 )
 
 // SidebarEntityType holds the minimum entity type info needed for sidebar
@@ -392,4 +393,18 @@ func MediaThumbURL(ctx context.Context, fileID, size string) string {
 		}
 	}
 	return "/media/" + fileID + "/thumb/" + size
+}
+
+// --- Extension Widget Scripts ---
+
+// SetExtWidgetScripts stores the list of extension widget script URLs
+// that should be injected into campaign pages.
+func SetExtWidgetScripts(ctx context.Context, urls []string) context.Context {
+	return context.WithValue(ctx, keyExtWidgetScripts, urls)
+}
+
+// GetExtWidgetScripts returns extension widget script URLs for the current campaign.
+func GetExtWidgetScripts(ctx context.Context) []string {
+	urls, _ := ctx.Value(keyExtWidgetScripts).([]string)
+	return urls
 }

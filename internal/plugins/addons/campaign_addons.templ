@@ -115,6 +115,18 @@ templ CampaignAddonsListFragment(campaignID string, addons []CampaignAddon, csrf
 			<p class="text-fg-muted">No extensions available yet.</p>
 		</div>
 	}
+
+	// Content extensions (loaded lazily via HTMX from extension handler).
+	<div class="mt-6"
+		hx-get={ fmt.Sprintf("/campaigns/%s/extensions", campaignID) }
+		hx-trigger="load"
+		hx-swap="innerHTML"
+	>
+		<div class="text-center py-4">
+			<i class="fa-solid fa-spinner fa-spin text-fg-muted"></i>
+			<span class="text-sm text-fg-muted ml-2">Loading content packs...</span>
+		</div>
+	</div>
 }
 
 // campaignAddonRow renders a single addon toggle row. Uninstalled addons

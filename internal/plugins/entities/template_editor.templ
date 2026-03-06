@@ -58,6 +58,7 @@ templ TemplateEditorPage(cc *campaigns.CampaignContext, et *EntityType, csrfToke
 				class="flex-1 overflow-hidden"
 				data-widget="template-editor"
 				data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/layout", cc.Campaign.ID, et.ID) }
+				data-campaign-id={ cc.Campaign.ID }
 				data-layout={ layoutJSON(et) }
 				data-fields={ fieldsJSON(et) }
 				data-entity-type-name={ et.Name }

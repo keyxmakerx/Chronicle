@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
@@ -541,6 +543,36 @@ func sessionsToCalendarSessions(sess []sessions.Session, userID string) []calend
 	return result
 }
 
+// widgetBlockListerAdapter bridges extensions.Handler to entities.WidgetBlockLister.
+// Converts extension widget metadata into entity block metadata for the template editor.
+type widgetBlockListerAdapter struct {
+	extHandler *extensions.Handler
+}
+
+// GetWidgetBlockMetas returns extension widget blocks as entity block metadata.
+func (a *widgetBlockListerAdapter) GetWidgetBlockMetas(ctx context.Context, campaignID string) []entities.BlockMeta {
+	infos := a.extHandler.GetWidgetBlockInfos(ctx, campaignID)
+	if len(infos) == 0 {
+		return nil
+	}
+
+	metas := make([]entities.BlockMeta, 0, len(infos))
+	for _, info := range infos {
+		icon := info.Icon
+		if icon == "" {
+			icon = "fa-puzzle-piece"
+		}
+		metas = append(metas, entities.BlockMeta{
+			Type:        "ext_widget",
+			Label:       info.Name,
+			Icon:        icon,
+			Description: info.Description,
+			WidgetSlug:  info.Slug,
+		})
+	}
+	return metas
+}
+
 // RegisterRoutes sets up all application routes. It registers public routes
 // directly and delegates to each plugin's route registration function.
 //
@@ -708,6 +740,15 @@ func (a *App) RegisterRoutes() {
 	// Wire addon checker into entity handler for conditional attributes rendering.
 	entityHandler.SetAddonChecker(addonService)
 
+	// Content extensions: user-installable content packs (calendar presets,
+	// entity type templates, entity packs, tag collections, marker icons, themes).
+	extRepo := extensions.NewExtensionRepository(a.DB)
+	extService := extensions.NewExtensionService(extRepo, a.Config.ExtensionsPath)
+	extHandler := extensions.NewHandler(extService, a.Config.ExtensionsPath)
+	extensions.RegisterAdminRoutes(adminGroup, extHandler)
+	extensions.RegisterCampaignRoutes(e, extHandler, campaignService, authService)
+	extensions.RegisterAssetRoutes(e, extHandler)
+
 	// Security admin: event logging, session management, user account actions.
 	securityRepo := admin.NewSecurityEventRepository(a.DB)
 	securityService := admin.NewSecurityService(securityRepo, authRepo, authService)
@@ -830,6 +871,49 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetMemberLister(campaignService)
 	entityHandler.SetGroupLister(groupService)
 	entityHandler.SetCache(a.Redis)
+
+	// --- Entity Block Registry ---
+	// Create the block registry and let each plugin register its block types.
+	// This drives validation, rendering, and the template editor palette.
+	blockRegistry := entities.NewBlockRegistry()
+	entities.RegisterCoreBlocks(blockRegistry)
+
+	// Calendar plugin blocks (requires "calendar" addon).
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "calendar", Label: "Calendar", Icon: "fa-calendar-days",
+		Description: "Entity calendar events", Addon: "calendar",
+	}, func(ctx entities.BlockRenderContext) templ.Component {
+		return calendar.BlockCalendarEvents(ctx.CC, ctx.Entity.ID)
+	})
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "upcoming_events", Label: "Upcoming Events", Icon: "fa-calendar-check",
+		Description: "Upcoming calendar events list", Addon: "calendar",
+	}, func(ctx entities.BlockRenderContext) templ.Component {
+		return calendar.BlockUpcomingEvents(ctx.CC, entities.BlockConfigLimit(ctx.Block.Config, "limit", 5))
+	})
+
+	// Timeline plugin blocks (requires "timeline" addon).
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "timeline", Label: "Timeline", Icon: "fa-timeline",
+		Description: "Timeline preview with events", Addon: "timeline",
+	}, func(ctx entities.BlockRenderContext) templ.Component {
+		return timeline.BlockTimeline(ctx.CC)
+	})
+
+	// Maps plugin blocks (requires "maps" addon).
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "map_preview", Label: "Map", Icon: "fa-map",
+		Description: "Embedded map viewer", Addon: "maps",
+	}, func(ctx entities.BlockRenderContext) templ.Component {
+		return maps.BlockMapPreview(ctx.CC, entities.BlockConfigString(ctx.Block.Config, "map_id"))
+	})
+
+	// Set the registry on the entity service (validation) and as the global (rendering).
+	entityService.SetBlockRegistry(blockRegistry)
+	entities.SetGlobalBlockRegistry(blockRegistry)
+	entityHandler.SetBlockRegistry(blockRegistry)
+	entityHandler.SetWidgetBlockLister(&widgetBlockListerAdapter{extHandler: extHandler})
+
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	tagHandler.SetAuditService(auditService)
@@ -855,6 +939,35 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetPostImporter(&postImportAdapter{svc: postService})
 	exportHandler := campaigns.NewExportHandler(exportSvc)
 	campaigns.RegisterExportRoutes(e, exportHandler, campaignService, authService)
+
+	// --- Content Extension Applier ---
+	// Wire the content applier now that entity and tag services are available.
+	// The applier creates campaign content (entity types, tags, etc.) when an
+	// extension is enabled, with provenance tracking for clean removal.
+	extApplier := extensions.NewContentApplier(
+		a.Config.ExtensionsPath,
+		extRepo,
+		extensions.NewEntityTypeAdapter(func(ctx context.Context, campaignID string, name, namePlural, icon, color string) (int, string, error) {
+			et, err := entityService.CreateEntityType(ctx, campaignID, entities.CreateEntityTypeInput{
+				Name:       name,
+				NamePlural: namePlural,
+				Icon:       icon,
+				Color:      color,
+			})
+			if err != nil {
+				return 0, "", err
+			}
+			return et.ID, et.Slug, nil
+		}),
+		extensions.NewTagAdapter(func(ctx context.Context, campaignID string, name, color string, dmOnly bool) (int, error) {
+			t, err := tagService.Create(ctx, campaignID, name, color, dmOnly)
+			if err != nil {
+				return 0, err
+			}
+			return t.ID, nil
+		}),
+	)
+	extService.SetApplier(extApplier)
 
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {
@@ -955,6 +1068,11 @@ func (a *App) RegisterRoutes() {
 					}
 				}
 				ctx = layouts.SetEnabledAddons(ctx, enabledSlugs)
+			}
+
+			// Extension widget scripts for campaign pages.
+			if widgetURLs := extHandler.GetWidgetScriptURLs(reqCtx, cc.Campaign.ID); len(widgetURLs) > 0 {
+				ctx = layouts.SetExtWidgetScripts(ctx, widgetURLs)
 			}
 		}
 

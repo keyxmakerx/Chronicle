@@ -1,0 +1,609 @@
+package extensions
+
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// adminExtensionListPage renders the full admin extensions management page.
+templ adminExtensionListPage(exts []Extension) {
+	@layouts.App("Content Extensions - Admin") {
+		<div class="max-w-5xl mx-auto space-y-6">
+			@adminExtensionListFragment(exts)
+		</div>
+	}
+}
+
+// adminExtensionListFragment renders the extension list content (for HTMX swap).
+templ adminExtensionListFragment(exts []Extension) {
+	<div class="admin-extensions" id="admin-extensions">
+		<div class="flex items-center justify-between">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">Content Extensions</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					Install and manage declarative content packs for your campaigns.
+				</p>
+			</div>
+			<div class="flex items-center gap-3">
+				<span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-surface-alt text-fg-secondary">
+					<i class="fa-solid fa-puzzle-piece text-[10px]"></i>
+					{ fmt.Sprintf("%d", len(exts)) } installed
+				</span>
+			</div>
+		</div>
+
+		<!-- Actions bar -->
+		<div class="flex items-center justify-end gap-2 mt-4">
+			<button
+				class="btn btn-secondary btn-sm"
+				hx-post="/admin/extensions/rescan"
+				hx-target="#admin-extensions"
+				hx-swap="outerHTML"
+			>
+				<i class="fa-solid fa-rotate mr-1"></i> Rescan
+			</button>
+			<label class="btn btn-primary btn-sm cursor-pointer">
+				<i class="fa-solid fa-upload mr-1"></i> Install Extension
+				<input
+					type="file"
+					name="file"
+					accept=".zip"
+					class="hidden"
+					hx-post="/admin/extensions/install"
+					hx-encoding="multipart/form-data"
+					hx-target="#admin-extensions"
+					hx-swap="outerHTML"
+				/>
+			</label>
+		</div>
+
+		if len(exts) == 0 {
+			<div class="card p-12 text-center mt-4">
+				<div class="text-fg-muted mb-2">
+					<i class="fa-solid fa-puzzle-piece text-2xl"></i>
+				</div>
+				<div class="text-sm font-medium text-fg mb-1">No extensions installed</div>
+				<div class="text-xs text-fg-secondary">
+					Upload a <code class="bg-surface-alt px-1 py-0.5 rounded text-xs">.zip</code> extension
+					package or place extension directories in the extensions folder and click Rescan.
+				</div>
+			</div>
+		} else {
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+				for _, ext := range exts {
+					@adminExtensionCard(ext)
+				}
+			</div>
+		}
+
+		<!-- Info panel -->
+		<div class="card p-6 mt-4">
+			<div class="flex items-start gap-4">
+				<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+					<i class="fa-solid fa-circle-info text-accent"></i>
+				</span>
+				<div>
+					<h3 class="text-sm font-semibold text-fg mb-1">About Content Extensions</h3>
+					<p class="text-sm text-fg-secondary leading-relaxed">
+						Content extensions are declarative content packs that add calendar presets,
+						entity type templates, entity collections, tag sets, marker icons, themes,
+						and reference data to Chronicle. They contain no executable code.
+					</p>
+					<p class="text-sm text-fg-secondary leading-relaxed mt-2">
+						Extensions are installed site-wide by administrators. Campaign owners can then
+						enable or disable each extension from their campaign settings.
+					</p>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// adminExtensionCard renders a single extension in the admin list.
+templ adminExtensionCard(ext Extension) {
+	<div class="card p-5 flex flex-col">
+		<div class="flex items-start justify-between mb-3">
+			<div class="flex items-center gap-3">
+				<span class="w-10 h-10 rounded-lg bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center">
+					<i class="fa-solid fa-puzzle-piece text-teal-500"></i>
+				</span>
+				<div>
+					<h3 class="text-sm font-semibold text-fg">{ ext.Name }</h3>
+					<p class="text-xs text-fg-muted">{ ext.ExtID }</p>
+				</div>
+			</div>
+			if ext.Status == StatusActive {
+				<span class="badge-green text-xs">Active</span>
+			} else {
+				<span class="badge-gray text-xs">Disabled</span>
+			}
+		</div>
+		<p class="text-sm text-fg-secondary leading-relaxed flex-1 mb-3">
+			{ ext.Description }
+		</p>
+		<div class="pt-3 border-t border-edge flex items-center justify-between">
+			<div class="flex items-center gap-2">
+				<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md bg-surface-alt text-fg-secondary">
+					<i class="fa-solid fa-code-branch text-[10px]"></i>
+					v{ ext.Version }
+				</span>
+				<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md bg-surface-alt text-fg-secondary">
+					<i class="fa-solid fa-calendar text-[10px]"></i>
+					{ ext.CreatedAt.Format("Jan 2, 2006") }
+				</span>
+			</div>
+			<div class="flex items-center gap-1">
+				<a
+					href={ templ.SafeURL("/admin/extensions/" + ext.ExtID) }
+					class="text-xs text-accent hover:text-accent-hover transition-colors"
+				>
+					Details
+				</a>
+				<span class="text-fg-muted mx-1">|</span>
+				<button
+					class="text-xs text-red-500 hover:text-red-600 transition-colors"
+					hx-delete={ "/admin/extensions/" + ext.ExtID }
+					hx-target="#admin-extensions"
+					hx-swap="outerHTML"
+					hx-confirm={ "Uninstall " + ext.Name + "? This will remove the extension and all its data from every campaign." }
+				>
+					Uninstall
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// adminExtensionDetailPage renders the full extension detail page.
+templ adminExtensionDetailPage(ext *Extension, manifest *ExtensionManifest) {
+	@layouts.App(ext.Name + " - Extensions - Admin") {
+		<div class="max-w-5xl mx-auto space-y-6">
+			@adminExtensionDetailFragment(ext, manifest)
+		</div>
+	}
+}
+
+// adminExtensionDetailFragment renders extension detail content (for HTMX swap).
+templ adminExtensionDetailFragment(ext *Extension, manifest *ExtensionManifest) {
+	<div id="extension-detail">
+		<!-- Header -->
+		<div class="flex items-center justify-between">
+			<div class="flex items-center gap-4">
+				<span class="w-12 h-12 rounded-lg bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center">
+					<i class="fa-solid fa-puzzle-piece text-teal-500 text-xl"></i>
+				</span>
+				<div>
+					<h1 class="text-2xl font-bold text-fg">{ ext.Name }</h1>
+					<p class="text-sm text-fg-secondary mt-0.5">
+						{ ext.ExtID } &middot; v{ ext.Version }
+					</p>
+				</div>
+			</div>
+			<div class="flex items-center gap-2">
+				if ext.Status == StatusActive {
+					<span class="badge-green text-xs">Active</span>
+				} else {
+					<span class="badge-gray text-xs">Disabled</span>
+				}
+				<label class="btn btn-secondary btn-sm cursor-pointer">
+					<i class="fa-solid fa-arrow-up-from-bracket mr-1"></i> Update
+					<input
+						type="file"
+						name="file"
+						accept=".zip"
+						class="hidden"
+						hx-put={ "/admin/extensions/" + ext.ExtID }
+						hx-encoding="multipart/form-data"
+						hx-target="#extension-detail"
+						hx-swap="outerHTML"
+					/>
+				</label>
+				<button
+					class="btn btn-danger btn-sm"
+					hx-delete={ "/admin/extensions/" + ext.ExtID }
+					hx-confirm={ "Uninstall " + ext.Name + "? This will remove the extension and all its data from every campaign." }
+				>
+					<i class="fa-solid fa-trash mr-1"></i> Uninstall
+				</button>
+			</div>
+		</div>
+
+		<!-- Description -->
+		<div class="card p-5 mt-6">
+			<p class="text-sm text-fg-secondary leading-relaxed">{ ext.Description }</p>
+		</div>
+
+		<!-- Metadata grid -->
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+			<!-- Extension Info -->
+			<div class="card p-5">
+				<div class="flex items-center gap-2 mb-3">
+					<span class="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+						<i class="fa-solid fa-circle-info text-blue-500 text-xs"></i>
+					</span>
+					<h3 class="text-sm font-semibold text-fg">Extension Info</h3>
+				</div>
+				<dl class="space-y-2 text-sm">
+					<div class="flex justify-between">
+						<dt class="text-fg-secondary">Manifest Version</dt>
+						<dd class="text-fg font-medium">{ fmt.Sprintf("%d", manifest.ManifestVersion) }</dd>
+					</div>
+					<div class="flex justify-between">
+						<dt class="text-fg-secondary">Version</dt>
+						<dd class="text-fg font-medium">{ manifest.Version }</dd>
+					</div>
+					if manifest.License != "" {
+						<div class="flex justify-between">
+							<dt class="text-fg-secondary">License</dt>
+							<dd class="text-fg font-medium">{ manifest.License }</dd>
+						</div>
+					}
+					<div class="flex justify-between">
+						<dt class="text-fg-secondary">Installed</dt>
+						<dd class="text-fg font-medium">{ ext.CreatedAt.Format("Jan 2, 2006 15:04") }</dd>
+					</div>
+					<div class="flex justify-between">
+						<dt class="text-fg-secondary">Updated</dt>
+						<dd class="text-fg font-medium">{ ext.UpdatedAt.Format("Jan 2, 2006 15:04") }</dd>
+					</div>
+				</dl>
+			</div>
+
+			<!-- Author Info -->
+			<div class="card p-5">
+				<div class="flex items-center gap-2 mb-3">
+					<span class="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
+						<i class="fa-solid fa-user text-indigo-500 text-xs"></i>
+					</span>
+					<h3 class="text-sm font-semibold text-fg">Author</h3>
+				</div>
+				if manifest.Author != nil {
+					<dl class="space-y-2 text-sm">
+						<div class="flex justify-between">
+							<dt class="text-fg-secondary">Name</dt>
+							<dd class="text-fg font-medium">{ manifest.Author.Name }</dd>
+						</div>
+						if manifest.Author.Email != "" {
+							<div class="flex justify-between">
+								<dt class="text-fg-secondary">Email</dt>
+								<dd class="text-fg font-medium">{ manifest.Author.Email }</dd>
+							</div>
+						}
+						if manifest.Author.URL != "" {
+							<div class="flex justify-between">
+								<dt class="text-fg-secondary">Website</dt>
+								<dd>
+									<a href={ templ.SafeURL(manifest.Author.URL) } target="_blank" rel="noopener" class="text-accent hover:text-accent-hover text-sm transition-colors">
+										{ manifest.Author.URL }
+									</a>
+								</dd>
+							</div>
+						}
+					</dl>
+				} else {
+					<p class="text-sm text-fg-muted">No author information provided.</p>
+				}
+
+				if len(manifest.Keywords) > 0 {
+					<div class="mt-4 pt-3 border-t border-edge">
+						<p class="text-xs text-fg-secondary mb-2">Keywords</p>
+						<div class="flex flex-wrap gap-1.5">
+							for _, kw := range manifest.Keywords {
+								<span class="inline-flex items-center px-2 py-0.5 text-xs rounded-md bg-surface-alt text-fg-secondary">
+									{ kw }
+								</span>
+							}
+						</div>
+					</div>
+				}
+			</div>
+		</div>
+
+		<!-- Contributes section -->
+		if manifest.Contributes != nil {
+			@extensionContributesSection(manifest.Contributes)
+		}
+
+		<!-- Dependencies & Requirements -->
+		if len(manifest.RequiresAddons) > 0 || len(manifest.Dependencies) > 0 {
+			<div class="card p-5 mt-4">
+				<div class="flex items-center gap-2 mb-3">
+					<span class="w-7 h-7 rounded-lg bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center">
+						<i class="fa-solid fa-link text-orange-500 text-xs"></i>
+					</span>
+					<h3 class="text-sm font-semibold text-fg">Requirements</h3>
+				</div>
+				if len(manifest.RequiresAddons) > 0 {
+					<div class="mb-3">
+						<p class="text-xs text-fg-secondary mb-1.5">Required Addons</p>
+						<div class="flex flex-wrap gap-1.5">
+							for _, addon := range manifest.RequiresAddons {
+								<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400">
+									<i class="fa-solid fa-plug text-[10px]"></i>
+									{ addon }
+								</span>
+							}
+						</div>
+					</div>
+				}
+				if len(manifest.Dependencies) > 0 {
+					<div>
+						<p class="text-xs text-fg-secondary mb-1.5">Extension Dependencies</p>
+						<div class="flex flex-wrap gap-1.5">
+							for _, dep := range manifest.Dependencies {
+								<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md bg-surface-alt text-fg-secondary">
+									<i class="fa-solid fa-puzzle-piece text-[10px]"></i>
+									{ dep.ID }
+									if dep.Version != "" {
+										<span class="text-fg-muted">&gt;={ dep.Version }</span>
+									}
+								</span>
+							}
+						</div>
+					</div>
+				}
+			</div>
+		}
+
+		<!-- Back link -->
+		<div class="mt-4">
+			<a href="/admin/extensions" class="text-sm text-accent hover:text-accent-hover transition-colors">
+				<i class="fa-solid fa-arrow-left mr-1"></i> Back to Extensions
+			</a>
+		</div>
+	</div>
+}
+
+// extensionContributesSection renders what content an extension provides.
+templ extensionContributesSection(c *ManifestContributes) {
+	<div class="card p-5 mt-4">
+		<div class="flex items-center gap-2 mb-4">
+			<span class="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
+				<i class="fa-solid fa-gift text-emerald-500 text-xs"></i>
+			</span>
+			<h3 class="text-sm font-semibold text-fg">Content Provided</h3>
+		</div>
+
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			if len(c.EntityTypeTemplates) > 0 {
+				<div>
+					<p class="text-xs font-medium text-fg-secondary uppercase tracking-wider mb-2">
+						<i class="fa-solid fa-shapes mr-1"></i> Entity Types ({ fmt.Sprintf("%d", len(c.EntityTypeTemplates)) })
+					</p>
+					<div class="space-y-1.5">
+						for _, t := range c.EntityTypeTemplates {
+							<div class="flex items-center gap-2 text-sm">
+								if t.Icon != "" {
+									<i class={ "fa-solid " + t.Icon + " text-fg-muted text-xs w-4 text-center" }></i>
+								}
+								<span class="text-fg">{ t.Name }</span>
+								<span class="text-xs text-fg-muted">({ t.Slug })</span>
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			if len(c.EntityPacks) > 0 {
+				<div>
+					<p class="text-xs font-medium text-fg-secondary uppercase tracking-wider mb-2">
+						<i class="fa-solid fa-box-open mr-1"></i> Entity Packs ({ fmt.Sprintf("%d", len(c.EntityPacks)) })
+					</p>
+					<div class="space-y-1.5">
+						for _, p := range c.EntityPacks {
+							<div class="text-sm">
+								<span class="text-fg">{ p.Name }</span>
+								if p.Count > 0 {
+									<span class="text-xs text-fg-muted">({ fmt.Sprintf("%d", p.Count) } entities)</span>
+								}
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			if len(c.CalendarPresets) > 0 {
+				<div>
+					<p class="text-xs font-medium text-fg-secondary uppercase tracking-wider mb-2">
+						<i class="fa-solid fa-calendar-days mr-1"></i> Calendar Presets ({ fmt.Sprintf("%d", len(c.CalendarPresets)) })
+					</p>
+					<div class="space-y-1.5">
+						for _, p := range c.CalendarPresets {
+							<div class="text-sm">
+								<span class="text-fg">{ p.Name }</span>
+								if p.Description != "" {
+									<p class="text-xs text-fg-muted">{ p.Description }</p>
+								}
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			if len(c.TagCollections) > 0 {
+				<div>
+					<p class="text-xs font-medium text-fg-secondary uppercase tracking-wider mb-2">
+						<i class="fa-solid fa-tags mr-1"></i> Tag Collections ({ fmt.Sprintf("%d", len(c.TagCollections)) })
+					</p>
+					<div class="space-y-1.5">
+						for _, t := range c.TagCollections {
+							<div class="text-sm">
+								<span class="text-fg">{ t.Name }</span>
+								<span class="text-xs text-fg-muted">({ fmt.Sprintf("%d", len(t.Tags)) } tags)</span>
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			if len(c.RelationTypes) > 0 {
+				<div>
+					<p class="text-xs font-medium text-fg-secondary uppercase tracking-wider mb-2">
+						<i class="fa-solid fa-arrows-left-right mr-1"></i> Relation Types ({ fmt.Sprintf("%d", len(c.RelationTypes)) })
+					</p>
+					<div class="space-y-1.5">
+						for _, r := range c.RelationTypes {
+							<div class="text-sm">
+								<span class="text-fg">{ r.Type }</span>
+								<span class="text-fg-muted">&harr;</span>
+								<span class="text-fg">{ r.ReverseType }</span>
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			if len(c.MarkerIconPacks) > 0 {
+				<div>
+					<p class="text-xs font-medium text-fg-secondary uppercase tracking-wider mb-2">
+						<i class="fa-solid fa-location-dot mr-1"></i> Marker Icon Packs ({ fmt.Sprintf("%d", len(c.MarkerIconPacks)) })
+					</p>
+					<div class="space-y-1.5">
+						for _, p := range c.MarkerIconPacks {
+							<div class="text-sm">
+								<span class="text-fg">{ p.Name }</span>
+								<span class="text-xs text-fg-muted">({ fmt.Sprintf("%d", len(p.Icons)) } icons)</span>
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			if len(c.Themes) > 0 {
+				<div>
+					<p class="text-xs font-medium text-fg-secondary uppercase tracking-wider mb-2">
+						<i class="fa-solid fa-palette mr-1"></i> Themes ({ fmt.Sprintf("%d", len(c.Themes)) })
+					</p>
+					<div class="space-y-1.5">
+						for _, t := range c.Themes {
+							<div class="text-sm">
+								<span class="text-fg">{ t.Name }</span>
+								if t.Description != "" {
+									<p class="text-xs text-fg-muted">{ t.Description }</p>
+								}
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			if len(c.ReferenceData) > 0 {
+				<div>
+					<p class="text-xs font-medium text-fg-secondary uppercase tracking-wider mb-2">
+						<i class="fa-solid fa-book mr-1"></i> Reference Data ({ fmt.Sprintf("%d", len(c.ReferenceData)) })
+					</p>
+					<div class="space-y-1.5">
+						for _, r := range c.ReferenceData {
+							<div class="text-sm">
+								<span class="text-fg">{ r.Name }</span>
+								<span class="text-xs text-fg-muted">({ fmt.Sprintf("%d", len(r.Categories)) } categories)</span>
+							</div>
+						}
+					</div>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+// campaignExtensionListFragment renders extensions for a campaign's settings page.
+templ campaignExtensionListFragment(cc *campaigns.CampaignContext, exts []CampaignExtension) {
+	<div class="campaign-extensions" id="campaign-extensions">
+		<div class="flex items-center justify-between mb-4">
+			<div class="flex items-center gap-2">
+				<span class="w-7 h-7 rounded-lg bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center">
+					<i class="fa-solid fa-puzzle-piece text-teal-500 text-xs"></i>
+				</span>
+				<h3 class="text-sm font-semibold text-fg">Content Extensions</h3>
+			</div>
+			if len(exts) > 0 {
+				<span class="text-xs text-fg-muted">
+					{ fmt.Sprintf("%d", countEnabled(exts)) } of { fmt.Sprintf("%d", len(exts)) } enabled
+				</span>
+			}
+		</div>
+
+		if len(exts) == 0 {
+			<div class="card p-8 text-center">
+				<div class="text-fg-muted mb-2"><i class="fa-solid fa-puzzle-piece text-lg"></i></div>
+				<div class="text-sm text-fg-secondary">
+					No content extensions available. Ask your site administrator to install extensions.
+				</div>
+			</div>
+		} else {
+			<div class="space-y-2">
+				for _, ext := range exts {
+					<div class="card p-4">
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-3">
+								<span class="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center">
+									<i class="fa-solid fa-puzzle-piece text-teal-500 text-xs"></i>
+								</span>
+								<div>
+									<span class="text-sm font-medium text-fg">{ ext.ExtName }</span>
+									<div class="flex items-center gap-2 mt-0.5">
+										<span class="text-xs text-fg-muted">v{ ext.ExtVersion }</span>
+										if ext.Enabled {
+											<span class="inline-flex items-center px-1.5 py-0 text-[10px] font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+												Enabled
+											</span>
+										}
+									</div>
+								</div>
+							</div>
+							<div>
+								if ext.Enabled {
+									<button
+										class="btn btn-secondary btn-sm"
+										hx-post={ "/campaigns/" + cc.Campaign.ID + "/extensions/" + ext.ExtID + "/disable" }
+										hx-target="#campaign-extensions"
+										hx-swap="outerHTML"
+									>
+										Disable
+									</button>
+								} else {
+									<button
+										class="btn btn-primary btn-sm"
+										hx-post={ "/campaigns/" + cc.Campaign.ID + "/extensions/" + ext.ExtID + "/enable" }
+										hx-target="#campaign-extensions"
+										hx-swap="outerHTML"
+									>
+										Enable
+									</button>
+								}
+							</div>
+						</div>
+					</div>
+				}
+			</div>
+		}
+	</div>
+}
+
+// countEnabled returns the number of enabled extensions.
+func countEnabled(exts []CampaignExtension) int {
+	n := 0
+	for _, e := range exts {
+		if e.Enabled {
+			n++
+		}
+	}
+	return n
+}
+
+// parseManifestFromExtension parses the stored manifest JSON from an extension.
+func parseManifestFromExtension(ext *Extension) *ExtensionManifest {
+	var m ExtensionManifest
+	if err := json.Unmarshal(ext.Manifest, &m); err != nil {
+		return &ExtensionManifest{
+			ManifestVersion: 1,
+			ID:              ext.ExtID,
+			Name:            ext.Name,
+			Version:         ext.Version,
+			Description:     ext.Description,
+		}
+	}
+	return &m
+}
