@@ -9,9 +9,10 @@
 # --- Stage 1: Tailwind CSS ---
 FROM alpine:3.20 AS tailwind
 
-# Download the standalone Tailwind CSS CLI v3.4.17 (no Node.js required).
-RUN wget -O /usr/local/bin/tailwindcss \
-    https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64-musl \
+# The standalone Tailwind CLI is a glibc binary; install compat layer for Alpine.
+RUN apk add --no-cache libc6-compat \
+    && wget -O /usr/local/bin/tailwindcss \
+    https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64 \
     && chmod +x /usr/local/bin/tailwindcss
 
 COPY . /src
