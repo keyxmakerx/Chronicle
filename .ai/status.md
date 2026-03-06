@@ -8,11 +8,20 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-06 -- Comprehensive UX & feature gap audit (batch 46).
-Branch: `claude/audit-feature-parity-2vyXh`.
+2026-03-06 -- Sprint M0-1: Export adapters for permissions, groups, posts (batch 47).
+Branch: `claude/plan-project-phases-8CPw5`.
 
 ## Current Phase
-**Between Phase L and M.** Phase L complete (batch 44). Feature parity audit completed (batch 45). Comprehensive UX/feature gap audit completed (batch 46). Next: Phase M (Game System Modules) or address audit/gap findings.
+**Phase M0: Data Integrity & Export Completeness.** Sprint M0-1 complete. Next: Sprint M0-2 (timeline connections, entity groups, session attendees export).
+
+### Sprint M0-1: Export Adapters — Permissions, Groups, Posts (batch 47)
+- Added `ExportEntityPermission`, `ExportGroup`, `ExportPost` types to `export.go`
+- Entity export now includes `visibility` mode and custom permission grants for entities with `VisibilityCustom`
+- New `GroupExporter`/`GroupImporter` adapter interfaces + implementations (groups + member user IDs)
+- New `PostExporter`/`PostImporter` adapter interfaces + implementations (iterates entities, collects sub-notes)
+- Entity import now restores custom permissions via `SetEntityPermissions()`
+- Wired all adapters in `routes.go`. All tests pass, zero lint issues.
+- **Files changed**: `export.go`, `export_service.go`, `export_adapters.go`, `routes.go`
 
 ### UX & Feature Gap Audit (batch 46)
 Deep audit of player/DM experience, account settings, campaign management, and missing UI surfaces:

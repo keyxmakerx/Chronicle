@@ -17,6 +17,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/widgets/posts"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
@@ -102,10 +103,7 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 				popupConfig, _ = json.Marshal(e.PopupConfig)
 			}
 
-			// TODO(K-2): Export entity_permissions rows and visibility mode
-			// for entities with custom permissions. Currently only exports
-			// is_private; custom grants are lost on export/import.
-			data.Entities = append(data.Entities, campaigns.ExportEntity{
+			exportEntity := campaigns.ExportEntity{
 				OriginalID:     e.ID,
 				EntityTypeSlug: typeIDToSlug[e.EntityTypeID],
 				Name:           e.Name,
@@ -116,10 +114,27 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 				TypeLabel:      e.TypeLabel,
 				IsPrivate:      e.IsPrivate,
 				IsTemplate:     e.IsTemplate,
+				Visibility:     string(e.Visibility),
 				FieldsData:     fieldsData,
 				FieldOverrides: fieldOverrides,
 				PopupConfig:    popupConfig,
-			})
+			}
+
+			// Export per-entity permissions when visibility is custom.
+			if e.Visibility == entities.VisibilityCustom {
+				perms, err := a.entitySvc.GetEntityPermissions(ctx, e.ID)
+				if err == nil {
+					for _, p := range perms {
+						exportEntity.Permissions = append(exportEntity.Permissions, campaigns.ExportEntityPermission{
+							SubjectType: string(p.SubjectType),
+							SubjectID:   p.SubjectID,
+							Permission:  string(p.Permission),
+						})
+					}
+				}
+			}
+
+			data.Entities = append(data.Entities, exportEntity)
 		}
 
 		page++
@@ -748,6 +763,25 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 				}
 			}
 		}
+
+		// Apply entity permissions and visibility mode.
+		if e.Visibility == string(entities.VisibilityCustom) && len(e.Permissions) > 0 {
+			grants := make([]entities.PermissionGrant, 0, len(e.Permissions))
+			for _, p := range e.Permissions {
+				grants = append(grants, entities.PermissionGrant{
+					SubjectType: entities.SubjectType(p.SubjectType),
+					SubjectID:   p.SubjectID,
+					Permission:  entities.Permission(p.Permission),
+				})
+			}
+			err := a.entitySvc.SetEntityPermissions(ctx, newEntity.ID, entities.SetPermissionsInput{
+				Visibility:  entities.VisibilityCustom,
+				Permissions: grants,
+			})
+			if err != nil {
+				slog.Warn("import: set entity permissions failed", slog.String("entity", e.Name), slog.Any("error", err))
+			}
+		}
 	}
 
 	// 3. Create tags.
@@ -1211,6 +1245,149 @@ func (a *addonImportAdapter) ImportAddons(ctx context.Context, campaignID, userI
 			if err := json.Unmarshal(ad.Config, &config); err == nil {
 				_ = a.svc.UpdateCampaignConfig(ctx, campaignID, addon.ID, config)
 			}
+		}
+	}
+	return nil
+}
+
+// --- Group Export/Import Adapters ---
+
+// groupExportAdapter implements campaigns.GroupExporter.
+type groupExportAdapter struct {
+	svc campaigns.GroupService
+}
+
+// ExportGroups gathers campaign groups with their member user IDs.
+func (a *groupExportAdapter) ExportGroups(ctx context.Context, campaignID string) ([]campaigns.ExportGroup, error) {
+	groups, err := a.svc.ListGroups(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []campaigns.ExportGroup
+	for _, g := range groups {
+		eg := campaigns.ExportGroup{
+			Name:        g.Name,
+			Description: g.Description,
+		}
+
+		members, err := a.svc.ListGroupMembers(ctx, g.ID)
+		if err == nil {
+			for _, m := range members {
+				eg.MemberIDs = append(eg.MemberIDs, m.UserID)
+			}
+		}
+
+		result = append(result, eg)
+	}
+
+	return result, nil
+}
+
+// groupImportAdapter implements campaigns.GroupImporter.
+type groupImportAdapter struct {
+	svc campaigns.GroupService
+}
+
+// ImportGroups creates campaign groups from import data.
+// Member user IDs that don't exist on the target instance are skipped.
+func (a *groupImportAdapter) ImportGroups(ctx context.Context, campaignID string, data []campaigns.ExportGroup) error {
+	for _, g := range data {
+		newGroup, err := a.svc.CreateGroup(ctx, campaignID, g.Name, g.Description)
+		if err != nil {
+			slog.Warn("import: create group failed", slog.String("name", g.Name), slog.Any("error", err))
+			continue
+		}
+
+		for _, userID := range g.MemberIDs {
+			if err := a.svc.AddGroupMember(ctx, newGroup.ID, userID); err != nil {
+				slog.Warn("import: add group member skipped (user may not exist)",
+					slog.String("group", g.Name), slog.String("user_id", userID))
+			}
+		}
+	}
+	return nil
+}
+
+// --- Post Export/Import Adapters ---
+
+// postExportAdapter implements campaigns.PostExporter.
+type postExportAdapter struct {
+	postSvc   posts.PostService
+	entitySvc entities.EntityService
+}
+
+// ExportPosts gathers all entity posts for a campaign. Iterates all entities
+// and collects their posts.
+func (a *postExportAdapter) ExportPosts(ctx context.Context, campaignID string, entitySlugLookup func(string) string) ([]campaigns.ExportPost, error) {
+	// Paginate through all entities to collect their IDs.
+	const ownerRole = 3
+	var result []campaigns.ExportPost
+	page := 1
+
+	for {
+		ents, _, err := a.entitySvc.List(ctx, campaignID, 0, ownerRole, "", entities.ListOptions{
+			Page:    page,
+			PerPage: 100,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if len(ents) == 0 {
+			break
+		}
+
+		for _, e := range ents {
+			entityPosts, err := a.postSvc.ListByEntity(ctx, e.ID, true)
+			if err != nil {
+				continue
+			}
+
+			slug := entitySlugLookup(e.ID)
+			if slug == "" {
+				continue
+			}
+
+			for _, p := range entityPosts {
+				result = append(result, campaigns.ExportPost{
+					EntitySlug: slug,
+					Name:       p.Name,
+					Entry:      p.Entry,
+					EntryHTML:  p.EntryHTML,
+					IsPrivate:  p.IsPrivate,
+					SortOrder:  p.SortOrder,
+				})
+			}
+		}
+
+		page++
+	}
+
+	return result, nil
+}
+
+// postImportAdapter implements campaigns.PostImporter.
+type postImportAdapter struct {
+	svc posts.PostService
+}
+
+// ImportPosts creates entity posts from import data, resolving entity slugs
+// to new IDs via the IDMap.
+func (a *postImportAdapter) ImportPosts(ctx context.Context, campaignID, userID string, data []campaigns.ExportPost, idMap *campaigns.IDMap) error {
+	for _, p := range data {
+		entityID, ok := idMap.EntitySlugToID[p.EntitySlug]
+		if !ok {
+			slog.Warn("import: post entity not found", slog.String("entity_slug", p.EntitySlug), slog.String("post", p.Name))
+			continue
+		}
+
+		_, err := a.svc.Create(ctx, campaignID, entityID, userID, p.Name, posts.CreatePostRequest{
+			Entry:     p.Entry,
+			EntryHTML: p.EntryHTML,
+			IsPrivate: p.IsPrivate,
+		})
+		if err != nil {
+			slog.Warn("import: create post failed", slog.String("post", p.Name), slog.Any("error", err))
 		}
 	}
 	return nil

@@ -65,6 +65,16 @@ type MediaExporter interface {
 	ExportMedia(ctx context.Context, campaignID string) ([]ExportMediaFile, error)
 }
 
+// GroupExporter gathers campaign groups for export.
+type GroupExporter interface {
+	ExportGroups(ctx context.Context, campaignID string) ([]ExportGroup, error)
+}
+
+// PostExporter gathers entity posts (sub-notes) for export.
+type PostExporter interface {
+	ExportPosts(ctx context.Context, campaignID string, entitySlugLookup func(string) string) ([]ExportPost, error)
+}
+
 // --- Import adapter interfaces ---
 
 // EntityImporter creates entities from import data. Returns the ID map
@@ -103,6 +113,16 @@ type AddonImporter interface {
 	ImportAddons(ctx context.Context, campaignID, userID string, data []ExportAddon) error
 }
 
+// GroupImporter creates campaign groups from import data.
+type GroupImporter interface {
+	ImportGroups(ctx context.Context, campaignID string, data []ExportGroup) error
+}
+
+// PostImporter creates entity posts from import data.
+type PostImporter interface {
+	ImportPosts(ctx context.Context, campaignID, userID string, data []ExportPost, idMap *IDMap) error
+}
+
 // --- Export/Import Service ---
 
 // ExportImportService handles campaign export and import operations.
@@ -118,6 +138,8 @@ type ExportImportService struct {
 	noteExp     NoteExporter
 	addonExp    AddonExporter
 	mediaExp    MediaExporter
+	groupExp    GroupExporter
+	postExp     PostExporter
 
 	// Import adapters.
 	entityImp   EntityImporter
@@ -127,6 +149,8 @@ type ExportImportService struct {
 	mapImp      MapImporter
 	noteImp     NoteImporter
 	addonImp    AddonImporter
+	groupImp    GroupImporter
+	postImp     PostImporter
 }
 
 // NewExportImportService creates a new export/import service.
@@ -180,6 +204,18 @@ func (s *ExportImportService) SetNoteImporter(i NoteImporter) { s.noteImp = i }
 
 // SetAddonImporter wires the addon import adapter.
 func (s *ExportImportService) SetAddonImporter(i AddonImporter) { s.addonImp = i }
+
+// SetGroupExporter wires the group export adapter.
+func (s *ExportImportService) SetGroupExporter(e GroupExporter) { s.groupExp = e }
+
+// SetGroupImporter wires the group import adapter.
+func (s *ExportImportService) SetGroupImporter(i GroupImporter) { s.groupImp = i }
+
+// SetPostExporter wires the post export adapter.
+func (s *ExportImportService) SetPostExporter(e PostExporter) { s.postExp = e }
+
+// SetPostImporter wires the post import adapter.
+func (s *ExportImportService) SetPostImporter(i PostImporter) { s.postImp = i }
 
 // Export generates a complete campaign export as a CampaignExport struct.
 // Requires the caller to have owner access to the campaign.
@@ -311,6 +347,26 @@ func (s *ExportImportService) Export(ctx context.Context, campaignID string) (*C
 		}
 	}
 
+	// Export campaign groups.
+	if s.groupExp != nil {
+		groups, err := s.groupExp.ExportGroups(ctx, campaignID)
+		if err != nil {
+			slog.Warn("export groups skipped", slog.Any("error", err))
+		} else {
+			export.Groups = groups
+		}
+	}
+
+	// Export entity posts (sub-notes).
+	if s.postExp != nil {
+		posts, err := s.postExp.ExportPosts(ctx, campaignID, slugLookup)
+		if err != nil {
+			slog.Warn("export posts skipped", slog.Any("error", err))
+		} else {
+			export.Posts = posts
+		}
+	}
+
 	return export, nil
 }
 
@@ -367,6 +423,14 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 		idMap = NewIDMap(campaignID)
 	}
 
+	// Import campaign groups (before calendar, since group-based permission
+	// grants may reference group IDs).
+	if s.groupImp != nil && len(data.Groups) > 0 {
+		if err := s.groupImp.ImportGroups(ctx, campaignID, data.Groups); err != nil {
+			slog.Warn("import groups failed", slog.Any("error", err))
+		}
+	}
+
 	// Import calendar.
 	if s.calendarImp != nil && data.Calendar != nil {
 		if err := s.calendarImp.ImportCalendar(ctx, campaignID, data.Calendar, idMap); err != nil {
@@ -399,6 +463,13 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 	if s.noteImp != nil && len(data.Notes) > 0 {
 		if err := s.noteImp.ImportNotes(ctx, campaignID, userID, data.Notes, idMap); err != nil {
 			slog.Warn("import notes failed", slog.Any("error", err))
+		}
+	}
+
+	// Import entity posts (after entities are created).
+	if s.postImp != nil && len(data.Posts) > 0 {
+		if err := s.postImp.ImportPosts(ctx, campaignID, userID, data.Posts, idMap); err != nil {
+			slog.Warn("import posts failed", slog.Any("error", err))
 		}
 	}
 

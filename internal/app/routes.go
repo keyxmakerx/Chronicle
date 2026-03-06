@@ -823,6 +823,10 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
 	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
 	exportSvc.SetAddonImporter(&addonImportAdapter{svc: addonService})
+	exportSvc.SetGroupExporter(&groupExportAdapter{svc: groupService})
+	exportSvc.SetGroupImporter(&groupImportAdapter{svc: groupService})
+	exportSvc.SetPostExporter(&postExportAdapter{postSvc: postService, entitySvc: entityService})
+	exportSvc.SetPostImporter(&postImportAdapter{svc: postService})
 	exportHandler := campaigns.NewExportHandler(exportSvc)
 	campaigns.RegisterExportRoutes(e, exportHandler, campaignService, authService)
 

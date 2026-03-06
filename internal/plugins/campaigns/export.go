@@ -30,6 +30,8 @@ type CampaignExport struct {
 	Tags       []ExportTag           `json:"tags"`
 	EntityTags []ExportEntityTag     `json:"entity_tags"`
 	Relations  []ExportRelation      `json:"relations"`
+	Groups     []ExportGroup         `json:"groups,omitempty"`
+	Posts      []ExportPost          `json:"posts,omitempty"`
 	Calendar   *ExportCalendarData   `json:"calendar,omitempty"`
 	Timelines  []ExportTimeline      `json:"timelines,omitempty"`
 	Sessions   []ExportSession       `json:"sessions,omitempty"`
@@ -88,11 +90,13 @@ type ExportEntity struct {
 	ImagePath      *string         `json:"image_path,omitempty"`
 	ParentSlug     *string         `json:"parent_slug,omitempty"`
 	TypeLabel      *string         `json:"type_label,omitempty"`
-	IsPrivate      bool            `json:"is_private"`
-	IsTemplate     bool            `json:"is_template"`
-	FieldsData     json.RawMessage `json:"fields_data,omitempty"`
-	FieldOverrides json.RawMessage `json:"field_overrides,omitempty"`
-	PopupConfig    json.RawMessage `json:"popup_config,omitempty"`
+	IsPrivate      bool                     `json:"is_private"`
+	IsTemplate     bool                     `json:"is_template"`
+	Visibility     string                   `json:"visibility,omitempty"`
+	Permissions    []ExportEntityPermission  `json:"permissions,omitempty"`
+	FieldsData     json.RawMessage          `json:"fields_data,omitempty"`
+	FieldOverrides json.RawMessage          `json:"field_overrides,omitempty"`
+	PopupConfig    json.RawMessage          `json:"popup_config,omitempty"`
 }
 
 // --- Tags ---
@@ -411,6 +415,38 @@ type ExportAddon struct {
 	Slug    string          `json:"slug"`
 	Enabled bool            `json:"enabled"`
 	Config  json.RawMessage `json:"config,omitempty"`
+}
+
+// --- Groups ---
+
+// ExportGroup captures a campaign group with its member user IDs.
+// Member IDs are user UUIDs; they are only meaningful if the same users
+// exist on the import target instance.
+type ExportGroup struct {
+	Name        string   `json:"name"`
+	Description *string  `json:"description,omitempty"`
+	MemberIDs   []string `json:"member_ids,omitempty"`
+}
+
+// --- Entity Permissions ---
+
+// ExportEntityPermission captures a single permission grant on an entity.
+type ExportEntityPermission struct {
+	SubjectType string `json:"subject_type"` // "role", "user", "group"
+	SubjectID   string `json:"subject_id"`
+	Permission  string `json:"permission"` // "view", "edit"
+}
+
+// --- Posts ---
+
+// ExportPost captures an entity sub-note (post).
+type ExportPost struct {
+	EntitySlug string          `json:"entity_slug"`
+	Name       string          `json:"name"`
+	Entry      json.RawMessage `json:"entry,omitempty"`
+	EntryHTML  *string         `json:"entry_html,omitempty"`
+	IsPrivate  bool            `json:"is_private"`
+	SortOrder  int             `json:"sort_order"`
 }
 
 // --- Media Manifest ---

@@ -122,7 +122,7 @@ New capabilities ordered by priority for alpha release.
 
 _Fix export/import so backups don't lose data. Highest-priority work._
 
-- [ ] **Sprint M0-1: Export Adapters — Permissions, Groups, Posts** — Add EntityPermission export adapter (entity_permissions table), CampaignGroup + CampaignGroupMember export adapter, EntityPost export adapter. Update import service with corresponding import handlers. Extend import_test.go.
+- [x] **Sprint M0-1: Export Adapters — Permissions, Groups, Posts** — Added ExportEntityPermission, ExportGroup, ExportPost types. Entity export now includes visibility mode and custom permission grants. Group export/import adapter (ListGroups + ListGroupMembers, CreateGroup + AddGroupMember). Post export/import adapter (iterates entities, ListByEntity for posts). Wired in routes.go. All tests pass, zero lint issues.
 - [ ] **Sprint M0-2: Export Adapters — Timeline & Sessions** — Wire ExportTimelines() to call ListConnections() (type exists, never populated). Wire ExportEntityGroup adapter to call ListEntityGroups(). Add SessionAttendee export adapter.
 - [ ] **Sprint M0-3: Import Parent Hierarchy Fix** — Fix entity parent reimport: second-pass currently only handles entry/image, not parent_id. Add parent_id resolution via ParentSlug. Test round-trip.
 - [ ] **Sprint M0-4: Relations Visibility Controls** — Add `dm_only` column to entity_relations (migration 000052). Update model/repo/service/handler. Update relations.js widget with DM-only toggle. Update export adapter.
