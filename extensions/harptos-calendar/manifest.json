@@ -1,0 +1,36 @@
+{
+  "manifest_version": 1,
+  "id": "harptos-calendar",
+  "name": "Forgotten Realms Calendar (Harptos)",
+  "version": "1.0.0",
+  "description": "The Calendar of Harptos used in the Forgotten Realms setting. Includes 12 months of 30 days, 5 annual holidays, and the Shieldmeet leap day.",
+  "author": {
+    "name": "Chronicle Team"
+  },
+  "license": "MIT",
+  "keywords": ["forgotten-realms", "calendar", "harptos", "dnd", "faerun"],
+  "requires_addons": ["calendar"],
+  "contributes": {
+    "calendar_presets": [
+      {
+        "slug": "harptos",
+        "name": "Calendar of Harptos",
+        "description": "The standard Faer\u00fbnian calendar with 12 months, 5 holidays, and Shieldmeet.",
+        "file": "data/harptos.json"
+      }
+    ],
+    "tag_collections": [
+      {
+        "slug": "fr-seasons",
+        "name": "Faer\u00fbnian Seasons",
+        "tags": [
+          {"name": "Spring", "color": "#10b981"},
+          {"name": "Summer", "color": "#f59e0b"},
+          {"name": "Autumn", "color": "#ef4444"},
+          {"name": "Winter", "color": "#3b82f6"},
+          {"name": "Festival", "color": "#8b5cf6"}
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "name": "Calendar of Harptos",
+  "mode": "fantasy",
+  "year_length": 365,
+  "hours_per_day": 24,
+  "minutes_per_hour": 60,
+  "seconds_per_minute": 60,
+  "current_year": 1492,
+  "current_month": 1,
+  "current_day": 1,
+  "months": [
+    {"name": "Hammer",    "days": 30, "description": "Deepwinter"},
+    {"name": "Alturiak",  "days": 30, "description": "The Claw of Winter"},
+    {"name": "Ches",      "days": 30, "description": "The Claw of Sunsets"},
+    {"name": "Tarsakh",   "days": 30, "description": "The Claw of Storms"},
+    {"name": "Mirtul",    "days": 30, "description": "The Melting"},
+    {"name": "Kythorn",   "days": 30, "description": "The Time of Flowers"},
+    {"name": "Flamerule", "days": 30, "description": "Summertide"},
+    {"name": "Eleasis",   "days": 30, "description": "Highsun"},
+    {"name": "Eleint",    "days": 30, "description": "The Fading"},
+    {"name": "Marpenoth", "days": 30, "description": "Leaffall"},
+    {"name": "Uktar",     "days": 30, "description": "The Rotting"},
+    {"name": "Nightal",   "days": 30, "description": "The Drawing Down"}
+  ],
+  "weekdays": [
+    {"name": "First-day"},
+    {"name": "Second-day"},
+    {"name": "Third-day"},
+    {"name": "Fourth-day"},
+    {"name": "Fifth-day"},
+    {"name": "Sixth-day"},
+    {"name": "Seventh-day"},
+    {"name": "Eighth-day"},
+    {"name": "Ninth-day"},
+    {"name": "Tenth-day"}
+  ],
+  "holidays": [
+    {"name": "Midwinter",   "after_month": 1, "description": "Festival between Hammer and Alturiak"},
+    {"name": "Greengrass",  "after_month": 4, "description": "Festival between Tarsakh and Mirtul"},
+    {"name": "Midsummer",   "after_month": 7, "description": "Festival between Flamerule and Eleasis"},
+    {"name": "Highharvestide", "after_month": 9, "description": "Festival between Eleint and Marpenoth"},
+    {"name": "Feast of the Moon", "after_month": 11, "description": "Festival between Uktar and Nightal"}
+  ],
+  "leap_day": {
+    "name": "Shieldmeet",
+    "after_holiday": "Midsummer",
+    "every": 4,
+    "description": "A day of open council between nobles and people, occurring once every four years"
+  },
+  "seasons": [
+    {"name": "Winter",  "start_month": 11, "start_day": 1,  "color": "#93c5fd"},
+    {"name": "Spring",  "start_month": 3,  "start_day": 1,  "color": "#86efac"},
+    {"name": "Summer",  "start_month": 6,  "start_day": 1,  "color": "#fcd34d"},
+    {"name": "Autumn",  "start_month": 9,  "start_day": 1,  "color": "#fca5a5"}
+  ],
+  "eras": [
+    {"name": "Dalereckoning (DR)", "start_year": 1, "description": "The most common calendar system in Faerûn"}
+  ]
+}

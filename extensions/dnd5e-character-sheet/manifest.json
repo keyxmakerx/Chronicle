@@ -1,0 +1,129 @@
+{
+  "manifest_version": 1,
+  "id": "dnd5e-character-sheet",
+  "name": "D&D 5e Character Sheet",
+  "version": "1.0.0",
+  "description": "Entity type templates for D&D 5th Edition characters, monsters, items, and spells with appropriate custom fields.",
+  "author": {
+    "name": "Chronicle Team"
+  },
+  "license": "MIT",
+  "keywords": ["dnd", "dnd5e", "character", "monster", "spell", "item"],
+  "contributes": {
+    "entity_type_templates": [
+      {
+        "slug": "character",
+        "name": "Character",
+        "name_plural": "Characters",
+        "icon": "fa-user-shield",
+        "color": "#3b82f6",
+        "fields": [
+          {"key": "race", "label": "Race", "type": "string"},
+          {"key": "class", "label": "Class", "type": "string"},
+          {"key": "level", "label": "Level", "type": "number"},
+          {"key": "alignment", "label": "Alignment", "type": "select", "options": ["Lawful Good", "Neutral Good", "Chaotic Good", "Lawful Neutral", "True Neutral", "Chaotic Neutral", "Lawful Evil", "Neutral Evil", "Chaotic Evil"]},
+          {"key": "str", "label": "Strength", "type": "number", "group": "Ability Scores"},
+          {"key": "dex", "label": "Dexterity", "type": "number", "group": "Ability Scores"},
+          {"key": "con", "label": "Constitution", "type": "number", "group": "Ability Scores"},
+          {"key": "int", "label": "Intelligence", "type": "number", "group": "Ability Scores"},
+          {"key": "wis", "label": "Wisdom", "type": "number", "group": "Ability Scores"},
+          {"key": "cha", "label": "Charisma", "type": "number", "group": "Ability Scores"},
+          {"key": "hp_max", "label": "Max HP", "type": "number", "group": "Combat"},
+          {"key": "ac", "label": "Armor Class", "type": "number", "group": "Combat"},
+          {"key": "speed", "label": "Speed", "type": "string", "group": "Combat"},
+          {"key": "proficiency_bonus", "label": "Proficiency Bonus", "type": "number", "group": "Combat"},
+          {"key": "background", "label": "Background", "type": "string"},
+          {"key": "player_name", "label": "Player Name", "type": "string"}
+        ]
+      },
+      {
+        "slug": "monster",
+        "name": "Monster",
+        "name_plural": "Monsters",
+        "icon": "fa-skull",
+        "color": "#ef4444",
+        "fields": [
+          {"key": "size", "label": "Size", "type": "select", "options": ["Tiny", "Small", "Medium", "Large", "Huge", "Gargantuan"]},
+          {"key": "type", "label": "Type", "type": "select", "options": ["Aberration", "Beast", "Celestial", "Construct", "Dragon", "Elemental", "Fey", "Fiend", "Giant", "Humanoid", "Monstrosity", "Ooze", "Plant", "Undead"]},
+          {"key": "alignment", "label": "Alignment", "type": "string"},
+          {"key": "challenge_rating", "label": "Challenge Rating", "type": "string"},
+          {"key": "hit_points", "label": "Hit Points", "type": "string"},
+          {"key": "armor_class", "label": "Armor Class", "type": "string"},
+          {"key": "speed", "label": "Speed", "type": "string"},
+          {"key": "str", "label": "STR", "type": "number", "group": "Ability Scores"},
+          {"key": "dex", "label": "DEX", "type": "number", "group": "Ability Scores"},
+          {"key": "con", "label": "CON", "type": "number", "group": "Ability Scores"},
+          {"key": "int", "label": "INT", "type": "number", "group": "Ability Scores"},
+          {"key": "wis", "label": "WIS", "type": "number", "group": "Ability Scores"},
+          {"key": "cha", "label": "CHA", "type": "number", "group": "Ability Scores"},
+          {"key": "environment", "label": "Environment", "type": "string"},
+          {"key": "source", "label": "Source", "type": "string"}
+        ]
+      },
+      {
+        "slug": "spell",
+        "name": "Spell",
+        "name_plural": "Spells",
+        "icon": "fa-wand-sparkles",
+        "color": "#8b5cf6",
+        "fields": [
+          {"key": "level", "label": "Level", "type": "number"},
+          {"key": "school", "label": "School", "type": "select", "options": ["Abjuration", "Conjuration", "Divination", "Enchantment", "Evocation", "Illusion", "Necromancy", "Transmutation"]},
+          {"key": "casting_time", "label": "Casting Time", "type": "string"},
+          {"key": "range", "label": "Range", "type": "string"},
+          {"key": "components", "label": "Components", "type": "string"},
+          {"key": "duration", "label": "Duration", "type": "string"},
+          {"key": "concentration", "label": "Concentration", "type": "checkbox"},
+          {"key": "ritual", "label": "Ritual", "type": "checkbox"},
+          {"key": "classes", "label": "Classes", "type": "string"}
+        ]
+      },
+      {
+        "slug": "magic-item",
+        "name": "Magic Item",
+        "name_plural": "Magic Items",
+        "icon": "fa-gem",
+        "color": "#f59e0b",
+        "fields": [
+          {"key": "rarity", "label": "Rarity", "type": "select", "options": ["Common", "Uncommon", "Rare", "Very Rare", "Legendary", "Artifact"]},
+          {"key": "type", "label": "Type", "type": "select", "options": ["Armor", "Potion", "Ring", "Rod", "Scroll", "Staff", "Wand", "Weapon", "Wondrous Item"]},
+          {"key": "attunement", "label": "Requires Attunement", "type": "checkbox"},
+          {"key": "attunement_by", "label": "Attunement By", "type": "string"},
+          {"key": "source", "label": "Source", "type": "string"}
+        ]
+      }
+    ],
+    "tag_collections": [
+      {
+        "slug": "dnd5e-creature-types",
+        "name": "D&D 5e Creature Types",
+        "tags": [
+          {"name": "Aberration", "color": "#7c3aed"},
+          {"name": "Beast", "color": "#65a30d"},
+          {"name": "Celestial", "color": "#fbbf24"},
+          {"name": "Construct", "color": "#6b7280"},
+          {"name": "Dragon", "color": "#dc2626"},
+          {"name": "Elemental", "color": "#06b6d4"},
+          {"name": "Fey", "color": "#a855f7"},
+          {"name": "Fiend", "color": "#991b1b"},
+          {"name": "Giant", "color": "#92400e"},
+          {"name": "Humanoid", "color": "#3b82f6"},
+          {"name": "Monstrosity", "color": "#be123c"},
+          {"name": "Ooze", "color": "#16a34a"},
+          {"name": "Plant", "color": "#15803d"},
+          {"name": "Undead", "color": "#1e293b"}
+        ]
+      }
+    ],
+    "relation_types": [
+      {"type": "Ally", "reverse_type": "Ally", "description": "Allied with each other"},
+      {"type": "Enemy", "reverse_type": "Enemy", "description": "Opposed to each other"},
+      {"type": "Patron", "reverse_type": "Servant", "description": "Patron/servant relationship"},
+      {"type": "Leader", "reverse_type": "Follower", "description": "Leads or follows"},
+      {"type": "Mentor", "reverse_type": "Student", "description": "Teacher/student relationship"},
+      {"type": "Worships", "reverse_type": "Worshipped By", "description": "Religious devotion"},
+      {"type": "Created", "reverse_type": "Created By", "description": "Creator and creation"},
+      {"type": "Owns", "reverse_type": "Owned By", "description": "Item ownership"}
+    ]
+  }
+}
