@@ -168,15 +168,18 @@ type MemberLister interface {
 
 // CampaignMember represents a user's membership in a campaign.
 type CampaignMember struct {
-	CampaignID string    `json:"campaign_id"`
-	UserID     string    `json:"user_id"`
-	Role       Role      `json:"role"`
-	JoinedAt   time.Time `json:"joined_at"`
+	CampaignID        string    `json:"campaign_id"`
+	UserID            string    `json:"user_id"`
+	Role              Role      `json:"role"`
+	CharacterEntityID *string   `json:"character_entity_id,omitempty"`
+	JoinedAt          time.Time `json:"joined_at"`
 
 	// Joined from users table for display purposes.
-	DisplayName string  `json:"display_name,omitempty"`
-	Email       string  `json:"email,omitempty"`
-	AvatarPath  *string `json:"avatar_path,omitempty"`
+	DisplayName   string  `json:"display_name,omitempty"`
+	Email         string  `json:"email,omitempty"`
+	AvatarPath    *string `json:"avatar_path,omitempty"`
+	// Joined from entities table for character display.
+	CharacterName *string `json:"character_name,omitempty"`
 }
 
 // CampaignContext holds the resolved campaign and the requesting user's

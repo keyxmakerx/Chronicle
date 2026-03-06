@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-06 -- Sprint M0-4: dm_only visibility on entity relations (batch 48).
+2026-03-06 -- Sprint M1-2: Entity list & sidebar quick wins (batch 50).
 Branch: `claude/plan-project-phases-8CPw5`.
 
 ## Current Phase
-**Phase M0: Data Integrity & Export Completeness — COMPLETE.** All 4 sprints done. Next: Phase M1 (Quick Wins).
+**Phase M1: Quick Wins — IN PROGRESS.** M1-1 and M1-2 complete. Next: M1-3 (Session & Member Quick Wins).
 
 ### Sprint M0-4: dm_only Visibility on Entity Relations (batch 48)
 - Migration 000052: `dm_only BOOLEAN NOT NULL DEFAULT FALSE` on `entity_relations`
@@ -188,7 +188,7 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 ---
 
 ## Next Session Should
-Start with **Phase M1: Quick Wins**. Phase M0 (Data Integrity) is complete. M1 has 5 sprints: M1-1 (export button + notes search), M1-2 (entity sort/filter controls), M1-3 (favorites/bookmarks), M1-4 (RSVP sidebar visibility), M1-5 (plugin hub page). Full roadmap in `.ai/todo.md`.
+Continue with **M1-3: Session & Member Quick Wins** (session recap, member removal dialog, avatar upload, character assignment). Then M1-4 (RSVP sidebar), M1-5 (plugin hub). Full roadmap in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

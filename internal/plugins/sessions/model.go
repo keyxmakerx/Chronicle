@@ -47,6 +47,8 @@ type Session struct {
 	Summary       *string    `json:"summary,omitempty"`
 	Notes         *string    `json:"-"`         // ProseMirror JSON, GM-only.
 	NotesHTML     *string    `json:"notes_html,omitempty"` // Pre-rendered HTML.
+	Recap         *string    `json:"-"`         // ProseMirror JSON, visible to all members.
+	RecapHTML     *string    `json:"recap_html,omitempty"` // Pre-rendered HTML.
 	ScheduledDate *string    `json:"scheduled_date,omitempty"` // YYYY-MM-DD format.
 	CalendarYear  *int       `json:"calendar_year,omitempty"`
 	CalendarMonth *int       `json:"calendar_month,omitempty"`

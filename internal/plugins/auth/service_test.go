@@ -135,6 +135,10 @@ func (m *mockUserRepo) UpdateDisplayName(ctx context.Context, userID, displayNam
 	return nil
 }
 
+func (m *mockUserRepo) UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error {
+	return nil
+}
+
 // --- Mock Mail Sender ---
 
 // mockMailSender implements MailSender for testing.

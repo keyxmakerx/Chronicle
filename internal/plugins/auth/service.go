@@ -71,6 +71,7 @@ type AuthService interface {
 	GetUser(ctx context.Context, userID string) (*User, error)
 	UpdateTimezone(ctx context.Context, userID, timezone string) error
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
+	UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 
 	// Admin session management.
@@ -554,6 +555,11 @@ func (s *authService) UpdateDisplayName(ctx context.Context, userID, displayName
 		return apperror.NewBadRequest("display name must be at most 100 characters")
 	}
 	return s.repo.UpdateDisplayName(ctx, userID, displayName)
+}
+
+// UpdateAvatarPath sets or clears the user's avatar image path.
+func (s *authService) UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error {
+	return s.repo.UpdateAvatarPath(ctx, userID, avatarPath)
 }
 
 // ChangePassword verifies the current password and sets a new one.

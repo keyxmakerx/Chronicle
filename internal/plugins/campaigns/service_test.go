@@ -143,6 +143,10 @@ func (m *mockCampaignRepo) UpdateMemberRole(ctx context.Context, campaignID, use
 	return nil
 }
 
+func (m *mockCampaignRepo) UpdateMemberCharacter(ctx context.Context, campaignID, userID string, characterEntityID *string) error {
+	return nil
+}
+
 func (m *mockCampaignRepo) FindOwnerMember(ctx context.Context, campaignID string) (*CampaignMember, error) {
 	if m.findOwnerMemberFn != nil {
 		return m.findOwnerMemberFn(ctx, campaignID)

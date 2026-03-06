@@ -445,6 +445,8 @@ func (a *sessionExportAdapter) ExportSessions(ctx context.Context, campaignID st
 			Summary:            sess.Summary,
 			Notes:              sess.Notes,
 			NotesHTML:          sess.NotesHTML,
+			Recap:              sess.Recap,
+			RecapHTML:          sess.RecapHTML,
 			ScheduledDate:      sess.ScheduledDate,
 			CalendarYear:       sess.CalendarYear,
 			CalendarMonth:      sess.CalendarMonth,
@@ -1102,6 +1104,11 @@ func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, u
 				RecurrenceType:     sess.RecurrenceType,
 				RecurrenceInterval: sess.RecurrenceInterval,
 			})
+		}
+
+		// Apply recap if present.
+		if sess.Recap != nil || sess.RecapHTML != nil {
+			_ = a.svc.UpdateSessionRecap(ctx, newSession.ID, sess.Recap, sess.RecapHTML)
 		}
 
 		// Link entities (LinkEntity requires campaignID for IDOR checks).

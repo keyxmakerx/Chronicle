@@ -298,6 +298,33 @@ func (h *Handler) DeleteSessionAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// UpdateRecapAPI saves the session recap (post-session write-up visible to all members).
+// PUT /campaigns/:id/sessions/:sid/recap
+func (h *Handler) UpdateRecapAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	sessionID := c.Param("sid")
+
+	if _, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	var req struct {
+		Recap     *string `json:"recap"`
+		RecapHTML *string `json:"recap_html"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	}
+
+	if err := h.svc.UpdateSessionRecap(c.Request().Context(), sessionID, req.Recap, req.RecapHTML); err != nil {
+		if appErr, ok := err.(*apperror.AppError); ok {
+			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "update failed"})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- RSVP ---
 
 // RSVPSession updates the current user's attendance status.

@@ -35,4 +35,5 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	e.PUT("/account/timezone", h.UpdateTimezoneAPI, RequireAuth(h.service))
 	e.PUT("/account/password", h.ChangePasswordAPI, RequireAuth(h.service))
 	e.PUT("/account/display-name", h.UpdateDisplayNameAPI, RequireAuth(h.service))
+	e.POST("/account/avatar", h.UploadAvatarAPI, RequireAuth(h.service))
 }

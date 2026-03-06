@@ -690,6 +690,32 @@ func (h *Handler) UpdateRole(c echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/members")
 }
 
+// UpdateMemberCharacterAPI sets a member's character entity assignment.
+// PUT /campaigns/:id/members/:uid/character
+func (h *Handler) UpdateMemberCharacterAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	targetUserID := c.Param("uid")
+	var req struct {
+		CharacterEntityID *string `json:"character_entity_id"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	}
+
+	if err := h.service.UpdateMemberCharacter(c.Request().Context(), cc.Campaign.ID, targetUserID, req.CharacterEntityID); err != nil {
+		if appErr, ok := err.(*apperror.AppError); ok {
+			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update character"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- Ownership Transfer ---
 
 // TransferForm renders the ownership transfer form (GET /campaigns/:id/transfer).

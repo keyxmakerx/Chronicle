@@ -30,6 +30,7 @@ type CampaignRepository interface {
 	FindMember(ctx context.Context, campaignID, userID string) (*CampaignMember, error)
 	ListMembers(ctx context.Context, campaignID string) ([]CampaignMember, error)
 	UpdateMemberRole(ctx context.Context, campaignID, userID string, role Role) error
+	UpdateMemberCharacter(ctx context.Context, campaignID, userID string, characterEntityID *string) error
 	FindOwnerMember(ctx context.Context, campaignID string) (*CampaignMember, error)
 
 	// Ownership transfer
@@ -349,7 +350,7 @@ func (r *campaignRepository) RemoveMember(ctx context.Context, campaignID, userI
 
 // FindMember retrieves a user's membership with their display info.
 func (r *campaignRepository) FindMember(ctx context.Context, campaignID, userID string) (*CampaignMember, error) {
-	query := `SELECT cm.campaign_id, cm.user_id, cm.role, cm.joined_at,
+	query := `SELECT cm.campaign_id, cm.user_id, cm.role, cm.character_entity_id, cm.joined_at,
 	                 u.display_name, u.email, u.avatar_path
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
@@ -358,7 +359,7 @@ func (r *campaignRepository) FindMember(ctx context.Context, campaignID, userID 
 	m := &CampaignMember{}
 	var roleStr string
 	err := r.db.QueryRowContext(ctx, query, campaignID, userID).Scan(
-		&m.CampaignID, &m.UserID, &roleStr, &m.JoinedAt,
+		&m.CampaignID, &m.UserID, &roleStr, &m.CharacterEntityID, &m.JoinedAt,
 		&m.DisplayName, &m.Email, &m.AvatarPath,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -373,10 +374,12 @@ func (r *campaignRepository) FindMember(ctx context.Context, campaignID, userID 
 
 // ListMembers returns all members of a campaign with their display info.
 func (r *campaignRepository) ListMembers(ctx context.Context, campaignID string) ([]CampaignMember, error) {
-	query := `SELECT cm.campaign_id, cm.user_id, cm.role, cm.joined_at,
-	                 u.display_name, u.email, u.avatar_path
+	query := `SELECT cm.campaign_id, cm.user_id, cm.role, cm.character_entity_id, cm.joined_at,
+	                 u.display_name, u.email, u.avatar_path,
+	                 e.name
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
+	          LEFT JOIN entities e ON e.id = cm.character_entity_id
 	          WHERE cm.campaign_id = ?
 	          ORDER BY FIELD(cm.role, 'owner', 'scribe', 'player'), u.display_name`
 
@@ -391,8 +394,9 @@ func (r *campaignRepository) ListMembers(ctx context.Context, campaignID string)
 		var m CampaignMember
 		var roleStr string
 		if err := rows.Scan(
-			&m.CampaignID, &m.UserID, &roleStr, &m.JoinedAt,
+			&m.CampaignID, &m.UserID, &roleStr, &m.CharacterEntityID, &m.JoinedAt,
 			&m.DisplayName, &m.Email, &m.AvatarPath,
+			&m.CharacterName,
 		); err != nil {
 			return nil, fmt.Errorf("scanning member row: %w", err)
 		}
@@ -419,9 +423,25 @@ func (r *campaignRepository) UpdateMemberRole(ctx context.Context, campaignID, u
 	return nil
 }
 
+// UpdateMemberCharacter sets or clears the character entity assignment for a member.
+func (r *campaignRepository) UpdateMemberCharacter(ctx context.Context, campaignID, userID string, characterEntityID *string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_members SET character_entity_id = ? WHERE campaign_id = ? AND user_id = ?`,
+		characterEntityID, campaignID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("updating member character: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("member not found")
+	}
+	return nil
+}
+
 // FindOwnerMember returns the member with role='owner' for a campaign.
 func (r *campaignRepository) FindOwnerMember(ctx context.Context, campaignID string) (*CampaignMember, error) {
-	query := `SELECT cm.campaign_id, cm.user_id, cm.role, cm.joined_at,
+	query := `SELECT cm.campaign_id, cm.user_id, cm.role, cm.character_entity_id, cm.joined_at,
 	                 u.display_name, u.email, u.avatar_path
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
@@ -430,7 +450,7 @@ func (r *campaignRepository) FindOwnerMember(ctx context.Context, campaignID str
 	m := &CampaignMember{}
 	var roleStr string
 	err := r.db.QueryRowContext(ctx, query, campaignID).Scan(
-		&m.CampaignID, &m.UserID, &roleStr, &m.JoinedAt,
+		&m.CampaignID, &m.UserID, &roleStr, &m.CharacterEntityID, &m.JoinedAt,
 		&m.DisplayName, &m.Email, &m.AvatarPath,
 	)
 	if errors.Is(err, sql.ErrNoRows) {

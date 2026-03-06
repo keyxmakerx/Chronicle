@@ -300,6 +300,8 @@ type ExportSession struct {
 	Summary       *string               `json:"summary,omitempty"`
 	Notes         *string               `json:"notes,omitempty"`
 	NotesHTML     *string               `json:"notes_html,omitempty"`
+	Recap         *string               `json:"recap,omitempty"`
+	RecapHTML     *string               `json:"recap_html,omitempty"`
 	ScheduledDate *string               `json:"scheduled_date,omitempty"`
 	CalendarYear  *int                  `json:"calendar_year,omitempty"`
 	CalendarMonth *int                  `json:"calendar_month,omitempty"`

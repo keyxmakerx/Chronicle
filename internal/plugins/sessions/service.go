@@ -28,6 +28,7 @@ type SessionService interface {
 	// if no new session was created.
 	UpdateSession(ctx context.Context, id string, input UpdateSessionInput) (*Session, error)
 	DeleteSession(ctx context.Context, id string) error
+	UpdateSessionRecap(ctx context.Context, id string, recap, recapHTML *string) error
 	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
 	// Attendees / RSVP.
@@ -232,6 +233,11 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 // DeleteSession removes a session.
 func (s *sessionService) DeleteSession(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
+}
+
+// UpdateSessionRecap saves the post-session recap (visible to all members).
+func (s *sessionService) UpdateSessionRecap(ctx context.Context, id string, recap, recapHTML *string) error {
+	return s.repo.UpdateRecap(ctx, id, recap, recapHTML)
 }
 
 // --- Attendees / RSVP ---

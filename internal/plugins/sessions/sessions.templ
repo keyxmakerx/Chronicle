@@ -272,6 +272,81 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 					<p class="text-sm text-fg-body whitespace-pre-wrap">{ *session.Summary }</p>
 				</div>
 			}
+			<!-- Session Recap (visible to all members, editable by Scribes+) -->
+			if session.Status == StatusCompleted {
+				<div class="card p-4 mb-6">
+					<div class="flex items-center justify-between mb-2">
+						<h2 class="text-sm font-semibold text-fg">
+							<i class="fa-solid fa-scroll mr-1 text-accent"></i> Session Recap
+						</h2>
+						if isScribe {
+							<button
+								type="button"
+								class="text-xs text-accent hover:text-accent-hover"
+								id="recap-edit-btn"
+								onclick="toggleRecapEdit()"
+							>
+								<i class="fa-solid fa-pen mr-0.5"></i> Edit
+							</button>
+						}
+					</div>
+					<div id="recap-display">
+						if session.RecapHTML != nil && *session.RecapHTML != "" {
+							<div class="prose prose-sm text-fg-body">
+								@templ.Raw(*session.RecapHTML)
+							</div>
+						} else {
+							<p class="text-sm text-fg-muted italic">No recap written yet.</p>
+						}
+					</div>
+					if isScribe {
+						<div
+							id="recap-editor"
+							class="hidden"
+							data-campaign-id={ cc.Campaign.ID }
+							data-session-id={ session.ID }
+							data-csrf={ csrfToken }
+						>
+							<textarea
+								id="recap-textarea"
+								class="input w-full min-h-[120px] text-sm font-mono"
+								placeholder="Write a recap of what happened this session..."
+							>{ derefStr(session.Recap) }</textarea>
+							<div class="flex justify-end gap-2 mt-2">
+								<button type="button" class="btn-ghost text-xs" onclick="toggleRecapEdit()">Cancel</button>
+								<button type="button" class="btn-primary text-xs" onclick="saveRecap()">Save Recap</button>
+							</div>
+						</div>
+						<script>
+							function toggleRecapEdit() {
+								var display = document.getElementById('recap-display');
+								var editor = document.getElementById('recap-editor');
+								display.classList.toggle('hidden');
+								editor.classList.toggle('hidden');
+							}
+							function saveRecap() {
+								var el = document.getElementById('recap-editor');
+								var campaignId = el.dataset.campaignId;
+								var sessionId = el.dataset.sessionId;
+								var csrf = el.dataset.csrf;
+								var textarea = document.getElementById('recap-textarea');
+								var text = textarea.value;
+								var html = text.split('\n').filter(function(l) { return l.trim(); })
+									.map(function(l) { return '<p>' + l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>'; })
+									.join('');
+								fetch('/campaigns/' + campaignId + '/sessions/' + sessionId + '/recap', {
+									method: 'PUT',
+									headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf},
+									body: JSON.stringify({recap: text, recap_html: html})
+								}).then(function(r) {
+									if (r.ok) { location.reload(); }
+									else { alert('Failed to save recap'); }
+								});
+							}
+						</script>
+					}
+				</div>
+			}
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 				<!-- Attendees / RSVP -->
 				<div class="card p-4">
@@ -429,4 +504,12 @@ func countAccepted(attendees []Attendee) int {
 		}
 	}
 	return count
+}
+
+// derefStr safely dereferences a *string, returning "" if nil.
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

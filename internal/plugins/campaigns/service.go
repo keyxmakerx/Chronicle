@@ -39,6 +39,7 @@ type CampaignService interface {
 	AddMember(ctx context.Context, campaignID, email string, role Role) error
 	RemoveMember(ctx context.Context, campaignID, userID string) error
 	UpdateMemberRole(ctx context.Context, campaignID, userID string, role Role) error
+	UpdateMemberCharacter(ctx context.Context, campaignID, userID string, characterEntityID *string) error
 	ListMembers(ctx context.Context, campaignID string) ([]CampaignMember, error)
 
 	// Ownership transfer
@@ -372,6 +373,11 @@ func (s *campaignService) UpdateMemberRole(ctx context.Context, campaignID, user
 		slog.String("new_role", role.String()),
 	)
 	return nil
+}
+
+// UpdateMemberCharacter sets a member's character entity assignment.
+func (s *campaignService) UpdateMemberCharacter(ctx context.Context, campaignID, userID string, characterEntityID *string) error {
+	return s.repo.UpdateMemberCharacter(ctx, campaignID, userID, characterEntityID)
 }
 
 // ListMembers returns all members of a campaign.

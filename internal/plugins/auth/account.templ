@@ -16,6 +16,33 @@ templ AccountPage(user *User, csrfToken string, timezones []string) {
 				<h1 class="text-2xl font-bold text-fg">Account Settings</h1>
 				<p class="text-sm text-fg-secondary mt-1">Manage your personal preferences.</p>
 			</div>
+			<!-- Avatar -->
+			<div class="card p-6 mb-6" x-data={ avatarData(user, csrfToken) }>
+				<h2 class="text-lg font-semibold text-fg mb-4">Avatar</h2>
+				<div class="flex items-center gap-4">
+					<div class="w-16 h-16 rounded-full bg-surface-alt flex items-center justify-center overflow-hidden border-2 border-edge">
+						if user.AvatarPath != nil && *user.AvatarPath != "" {
+							<img x-bind:src="avatarUrl" class="w-full h-full object-cover" alt="Avatar"/>
+						} else {
+							<i x-show="!avatarUrl" class="fa-solid fa-user text-2xl text-fg-muted"></i>
+							<img x-show="avatarUrl" x-bind:src="avatarUrl" class="w-full h-full object-cover" alt="Avatar"/>
+						}
+					</div>
+					<div>
+						<label class="btn-secondary text-sm cursor-pointer">
+							<i class="fa-solid fa-camera mr-1"></i> Upload Photo
+							<input
+								type="file"
+								accept="image/*"
+								class="hidden"
+								@change="uploadAvatar($event)"
+							/>
+						</label>
+						<p x-show="avatarMsg" x-transition class="text-xs mt-1" x-bind:class="avatarError ? 'text-red-500' : 'text-green-500'" x-text="avatarMsg"></p>
+						<p class="text-xs text-fg-muted mt-1">Max 2MB. JPG, PNG, or WebP.</p>
+					</div>
+				</div>
+			</div>
 			<!-- Profile Info -->
 			<div class="card p-6 mb-6" x-data={ profileData(user, csrfToken) }>
 				<h2 class="text-lg font-semibold text-fg mb-4">Profile</h2>
@@ -121,6 +148,41 @@ templ AccountPage(user *User, csrfToken string, timezones []string) {
 			</div>
 		</div>
 	}
+}
+
+// avatarData returns the Alpine.js x-data JSON for the avatar uploader.
+func avatarData(user *User, csrfToken string) string {
+	avatarURL := ""
+	if user.AvatarPath != nil {
+		avatarURL = *user.AvatarPath
+	}
+	return fmt.Sprintf(`{
+		avatarUrl: %q,
+		avatarMsg: '',
+		avatarError: false,
+		csrf: %q,
+		uploadAvatar(e) {
+			var file = e.target.files[0];
+			if (!file) return;
+			if (file.size > 2*1024*1024) { this.avatarMsg = 'File must be under 2MB'; this.avatarError = true; return; }
+			var fd = new FormData();
+			fd.append('avatar', file);
+			this.avatarMsg = 'Uploading...'; this.avatarError = false;
+			fetch('/account/avatar', {
+				method: 'POST',
+				headers: { 'X-CSRF-Token': this.csrf },
+				credentials: 'same-origin',
+				body: fd
+			}).then(r => r.json().then(d => {
+				if (!r.ok) throw new Error(d.error || 'Upload failed');
+				this.avatarUrl = d.avatar_path;
+				this.avatarMsg = 'Avatar updated';
+				this.avatarError = false;
+				setTimeout(() => this.avatarMsg = '', 3000);
+			}))
+			.catch(e => { this.avatarMsg = e.message; this.avatarError = true; });
+		}
+	}`, avatarURL, csrfToken)
 }
 
 // profileData returns the Alpine.js x-data JSON for the profile editor.

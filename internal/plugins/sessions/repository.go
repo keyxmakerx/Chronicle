@@ -17,6 +17,7 @@ type SessionRepository interface {
 	ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error)
 	Update(ctx context.Context, s *Session) error
+	UpdateRecap(ctx context.Context, id string, recap, recapHTML *string) error
 	Delete(ctx context.Context, id string) error
 
 	// Attendee management.
@@ -70,6 +71,7 @@ func (r *sessionRepository) Create(ctx context.Context, campaignID string, s *Se
 // FindByID retrieves a session by its UUID.
 func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, error) {
 	query := `SELECT s.id, s.campaign_id, s.name, s.summary, s.notes, s.notes_html,
+	                 s.recap, s.recap_html,
 	                 s.scheduled_date, s.calendar_year, s.calendar_month, s.calendar_day,
 	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	                 s.recurrence_day_of_week, s.recurrence_end_date,
@@ -82,6 +84,7 @@ func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, 
 	s := &Session{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&s.ID, &s.CampaignID, &s.Name, &s.Summary, &s.Notes, &s.NotesHTML,
+		&s.Recap, &s.RecapHTML,
 		&s.ScheduledDate, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
 		&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 		&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
@@ -183,6 +186,7 @@ func (r *sessionRepository) SearchByCampaign(ctx context.Context, campaignID, qu
 func (r *sessionRepository) Update(ctx context.Context, s *Session) error {
 	query := `UPDATE sessions SET
 		name = ?, summary = ?, notes = ?, notes_html = ?,
+		recap = ?, recap_html = ?,
 		scheduled_date = ?, calendar_year = ?, calendar_month = ?, calendar_day = ?,
 		status = ?, is_recurring = ?, recurrence_type = ?, recurrence_interval = ?,
 		recurrence_day_of_week = ?, recurrence_end_date = ?, updated_at = ?
@@ -190,12 +194,29 @@ func (r *sessionRepository) Update(ctx context.Context, s *Session) error {
 
 	result, err := r.db.ExecContext(ctx, query,
 		s.Name, s.Summary, s.Notes, s.NotesHTML,
+		s.Recap, s.RecapHTML,
 		s.ScheduledDate, s.CalendarYear, s.CalendarMonth, s.CalendarDay,
 		s.Status, s.IsRecurring, s.RecurrenceType, s.RecurrenceInterval,
 		s.RecurrenceDayOfWeek, s.RecurrenceEndDate, time.Now().UTC(), s.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating session: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return apperror.NewNotFound("session not found")
+	}
+	return nil
+}
+
+// UpdateRecap saves the post-session recap content.
+func (r *sessionRepository) UpdateRecap(ctx context.Context, id string, recap, recapHTML *string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE sessions SET recap = ?, recap_html = ?, updated_at = ? WHERE id = ?`,
+		recap, recapHTML, time.Now().UTC(), id,
+	)
+	if err != nil {
+		return fmt.Errorf("updating session recap: %w", err)
 	}
 	n, _ := result.RowsAffected()
 	if n == 0 {
