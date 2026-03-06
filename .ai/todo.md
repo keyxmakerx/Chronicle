@@ -233,7 +233,7 @@ _WASM-sandboxed backend logic via Extism/wazero. See ADR-021._
 
 - [x] **Sprint R-1: WASM Runtime Integration** — Extism Go SDK v1.7.1 + wazero v1.9.0. PluginManager (load/unload/reload/call). 10 read-only host functions across 5 capability groups (log, entity_read, calendar_read, tag_read, kv_store). Per-plugin KV store via extension_data. WASMHandler with admin + campaign endpoints. HookDispatcher with 8 event types. Manifest integration with validation. 26 tests.
 - [x] **Sprint R-2: App Wiring & Admin UI** — Closure-based WASM adapters (EntityReader/CalendarReader/TagReader). Full app/routes.go wiring with PluginManager, HookDispatcher, WASMHandler. Auto-load WASM plugins on extension enable. Graceful shutdown. Admin UI contributes section shows widgets + WASM plugins. 12 new tests (38 total).
-- [ ] **Sprint R-3: Write Host Functions** — create_event, update_entity_fields, add_tag. Plugin-to-plugin message passing via host.
+- [x] **Sprint R-3: Write Host Functions** — 6 write host functions (update_entity_fields, create_event, set_entity_tags, get_entity_tags, create_relation, send_message). 5 new capabilities. 4 write adapters. Plugin-to-plugin async messaging. 10 new tests (48 total).
 - [ ] **Sprint R-4: Plugin SDK & Developer Tools** — `chronicle-sdk` CLI tool for local testing with mock host functions. Example plugins in Rust, Go/TinyGo, JS. Plugin development documentation.
 
 ### Deferred to Phase S+ (or community contributions)

@@ -28,6 +28,27 @@ type TagReader interface {
 	ListTagsJSON(ctx context.Context, campaignID string) (json.RawMessage, error)
 }
 
+// EntityWriter provides write access to entity fields for WASM host functions.
+type EntityWriter interface {
+	UpdateFieldsJSON(ctx context.Context, entityID string, fieldsData json.RawMessage) error
+}
+
+// CalendarWriter provides write access to calendar events for WASM host functions.
+type CalendarWriter interface {
+	CreateEventJSON(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error)
+}
+
+// TagWriter provides write access to entity tags for WASM host functions.
+type TagWriter interface {
+	SetEntityTagsJSON(ctx context.Context, entityID, campaignID string, tagIDs json.RawMessage) error
+	GetEntityTagsJSON(ctx context.Context, entityID string) (json.RawMessage, error)
+}
+
+// RelationWriter provides write access to entity relations for WASM host functions.
+type RelationWriter interface {
+	CreateRelationJSON(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error)
+}
+
 // KVStore provides per-plugin key-value storage backed by the extension_data table.
 type KVStore interface {
 	Get(ctx context.Context, campaignID, extensionID, key string) (json.RawMessage, error)
@@ -40,9 +61,16 @@ type KVStore interface {
 // and collects plugin log output.
 type HostEnvironment struct {
 	entityReader   EntityReader
+	entityWriter   EntityWriter
 	calendarReader CalendarReader
+	calendarWriter CalendarWriter
 	tagReader      TagReader
+	tagWriter      TagWriter
+	relationWriter RelationWriter
 	kvStore        KVStore
+
+	// pluginManager is a back-reference for plugin-to-plugin messaging.
+	pluginManager *PluginManager
 
 	// Per-call state, keyed by "extID:slug".
 	mu          sync.RWMutex
@@ -57,6 +85,8 @@ type callState struct {
 }
 
 // NewHostEnvironment creates a new host environment with the given service adapters.
+// Write adapters are set via setter methods after construction (they may not be
+// available during initial wiring).
 func NewHostEnvironment(
 	entityReader EntityReader,
 	calendarReader CalendarReader,
@@ -71,6 +101,21 @@ func NewHostEnvironment(
 		callContext:    make(map[string]*callState),
 	}
 }
+
+// SetEntityWriter injects the entity write adapter.
+func (h *HostEnvironment) SetEntityWriter(w EntityWriter) { h.entityWriter = w }
+
+// SetCalendarWriter injects the calendar write adapter.
+func (h *HostEnvironment) SetCalendarWriter(w CalendarWriter) { h.calendarWriter = w }
+
+// SetTagWriter injects the tag write adapter.
+func (h *HostEnvironment) SetTagWriter(w TagWriter) { h.tagWriter = w }
+
+// SetRelationWriter injects the relation write adapter.
+func (h *HostEnvironment) SetRelationWriter(w RelationWriter) { h.relationWriter = w }
+
+// SetPluginManager sets the back-reference for plugin-to-plugin messaging.
+func (h *HostEnvironment) SetPluginManager(pm *PluginManager) { h.pluginManager = pm }
 
 // SetCallContext sets the campaign and extension context for a plugin call.
 // Must be called before invoking a WASM function.
@@ -157,11 +202,37 @@ func (h *HostEnvironment) BuildHostFunctions(capabilities map[string]bool) []ext
 		funcs = append(funcs, h.buildListTagsFunction())
 	}
 
+	// Entity write capability.
+	if capabilities[string(CapEntityWrite)] && h.entityWriter != nil {
+		funcs = append(funcs, h.buildUpdateEntityFieldsFunction())
+	}
+
+	// Calendar write capability.
+	if capabilities[string(CapCalendarWrite)] && h.calendarWriter != nil {
+		funcs = append(funcs, h.buildCreateEventFunction())
+	}
+
+	// Tag write capability.
+	if capabilities[string(CapTagWrite)] && h.tagWriter != nil {
+		funcs = append(funcs, h.buildSetEntityTagsFunction())
+		funcs = append(funcs, h.buildGetEntityTagsFunction())
+	}
+
+	// Relation write capability.
+	if capabilities[string(CapRelationWrite)] && h.relationWriter != nil {
+		funcs = append(funcs, h.buildCreateRelationFunction())
+	}
+
 	// KV store capability.
 	if capabilities[string(CapKVStore)] {
 		funcs = append(funcs, h.buildKVGetFunction())
 		funcs = append(funcs, h.buildKVSetFunction())
 		funcs = append(funcs, h.buildKVDeleteFunction())
+	}
+
+	// Message capability (plugin-to-plugin).
+	if capabilities[string(CapMessage)] && h.pluginManager != nil {
+		funcs = append(funcs, h.buildSendMessageFunction())
 	}
 
 	return funcs
@@ -545,6 +616,296 @@ func (h *HostEnvironment) buildKVDeleteFunction() extism.HostFunction {
 				h.writeHostError(p, stack, fmt.Sprintf("kv_delete failed: %v", err))
 				return
 			}
+
+			h.writeHostResult(p, stack, json.RawMessage(`{"ok":true}`))
+		},
+		[]extism.ValueType{extism.ValueTypePTR},
+		[]extism.ValueType{extism.ValueTypePTR},
+	)
+}
+
+// --- Write Host Function Builders ---
+
+// buildUpdateEntityFieldsFunction creates the update_entity_fields host function.
+// Input: JSON {"entity_id": "...", "fields": {...}}
+// Output: JSON {"ok": true} or error.
+func (h *HostEnvironment) buildUpdateEntityFieldsFunction() extism.HostFunction {
+	return extism.NewHostFunctionWithStack(
+		"update_entity_fields",
+		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			input, err := p.ReadBytes(stack[0])
+			if err != nil {
+				h.writeHostError(p, stack, "failed to read input")
+				return
+			}
+
+			var req struct {
+				EntityID string          `json:"entity_id"`
+				Fields   json.RawMessage `json:"fields"`
+			}
+			if err := json.Unmarshal(input, &req); err != nil {
+				h.writeHostError(p, stack, "invalid input JSON")
+				return
+			}
+
+			if req.EntityID == "" {
+				h.writeHostError(p, stack, "entity_id is required")
+				return
+			}
+			if len(req.Fields) == 0 {
+				h.writeHostError(p, stack, "fields is required")
+				return
+			}
+			// Limit fields payload size.
+			if len(req.Fields) > 256*1024 {
+				h.writeHostError(p, stack, "fields too large (max 256 KB)")
+				return
+			}
+
+			if err := h.entityWriter.UpdateFieldsJSON(ctx, req.EntityID, req.Fields); err != nil {
+				h.writeHostError(p, stack, fmt.Sprintf("update_entity_fields failed: %v", err))
+				return
+			}
+
+			h.writeHostResult(p, stack, json.RawMessage(`{"ok":true}`))
+		},
+		[]extism.ValueType{extism.ValueTypePTR},
+		[]extism.ValueType{extism.ValueTypePTR},
+	)
+}
+
+// buildCreateEventFunction creates the create_event host function.
+// Input: JSON with event fields (title, description, date, etc.)
+// Output: JSON created event or error.
+func (h *HostEnvironment) buildCreateEventFunction() extism.HostFunction {
+	return extism.NewHostFunctionWithStack(
+		"create_event",
+		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			input, err := p.ReadBytes(stack[0])
+			if err != nil {
+				h.writeHostError(p, stack, "failed to read input")
+				return
+			}
+
+			// Validate it's valid JSON.
+			if !json.Valid(input) {
+				h.writeHostError(p, stack, "invalid input JSON")
+				return
+			}
+
+			// Limit input size.
+			if len(input) > 64*1024 {
+				h.writeHostError(p, stack, "input too large (max 64 KB)")
+				return
+			}
+
+			campaignID := h.getCampaignIDFromContext(ctx)
+			if campaignID == "" {
+				h.writeHostError(p, stack, "no campaign context")
+				return
+			}
+
+			result, err := h.calendarWriter.CreateEventJSON(ctx, campaignID, json.RawMessage(input))
+			if err != nil {
+				h.writeHostError(p, stack, fmt.Sprintf("create_event failed: %v", err))
+				return
+			}
+
+			h.writeHostResult(p, stack, result)
+		},
+		[]extism.ValueType{extism.ValueTypePTR},
+		[]extism.ValueType{extism.ValueTypePTR},
+	)
+}
+
+// buildSetEntityTagsFunction creates the set_entity_tags host function.
+// Input: JSON {"entity_id": "...", "tag_ids": [1, 2, 3]}
+// Output: JSON {"ok": true} or error.
+func (h *HostEnvironment) buildSetEntityTagsFunction() extism.HostFunction {
+	return extism.NewHostFunctionWithStack(
+		"set_entity_tags",
+		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			input, err := p.ReadBytes(stack[0])
+			if err != nil {
+				h.writeHostError(p, stack, "failed to read input")
+				return
+			}
+
+			var req struct {
+				EntityID string          `json:"entity_id"`
+				TagIDs   json.RawMessage `json:"tag_ids"`
+			}
+			if err := json.Unmarshal(input, &req); err != nil {
+				h.writeHostError(p, stack, "invalid input JSON")
+				return
+			}
+
+			if req.EntityID == "" {
+				h.writeHostError(p, stack, "entity_id is required")
+				return
+			}
+
+			campaignID := h.getCampaignIDFromContext(ctx)
+			if campaignID == "" {
+				h.writeHostError(p, stack, "no campaign context")
+				return
+			}
+
+			if err := h.tagWriter.SetEntityTagsJSON(ctx, req.EntityID, campaignID, req.TagIDs); err != nil {
+				h.writeHostError(p, stack, fmt.Sprintf("set_entity_tags failed: %v", err))
+				return
+			}
+
+			h.writeHostResult(p, stack, json.RawMessage(`{"ok":true}`))
+		},
+		[]extism.ValueType{extism.ValueTypePTR},
+		[]extism.ValueType{extism.ValueTypePTR},
+	)
+}
+
+// buildGetEntityTagsFunction creates the get_entity_tags host function.
+// Input: JSON {"entity_id": "..."}
+// Output: JSON array of tags.
+func (h *HostEnvironment) buildGetEntityTagsFunction() extism.HostFunction {
+	return extism.NewHostFunctionWithStack(
+		"get_entity_tags",
+		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			input, err := p.ReadBytes(stack[0])
+			if err != nil {
+				h.writeHostError(p, stack, "failed to read input")
+				return
+			}
+
+			var req struct {
+				EntityID string `json:"entity_id"`
+			}
+			if err := json.Unmarshal(input, &req); err != nil {
+				h.writeHostError(p, stack, "invalid input JSON")
+				return
+			}
+
+			if req.EntityID == "" {
+				h.writeHostError(p, stack, "entity_id is required")
+				return
+			}
+
+			result, err := h.tagWriter.GetEntityTagsJSON(ctx, req.EntityID)
+			if err != nil {
+				h.writeHostError(p, stack, fmt.Sprintf("get_entity_tags failed: %v", err))
+				return
+			}
+
+			h.writeHostResult(p, stack, result)
+		},
+		[]extism.ValueType{extism.ValueTypePTR},
+		[]extism.ValueType{extism.ValueTypePTR},
+	)
+}
+
+// buildCreateRelationFunction creates the create_relation host function.
+// Input: JSON with relation fields (source_entity_id, target_entity_id, relation_type, etc.)
+// Output: JSON created relation or error.
+func (h *HostEnvironment) buildCreateRelationFunction() extism.HostFunction {
+	return extism.NewHostFunctionWithStack(
+		"create_relation",
+		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			input, err := p.ReadBytes(stack[0])
+			if err != nil {
+				h.writeHostError(p, stack, "failed to read input")
+				return
+			}
+
+			// Validate it's valid JSON.
+			if !json.Valid(input) {
+				h.writeHostError(p, stack, "invalid input JSON")
+				return
+			}
+
+			// Limit input size.
+			if len(input) > 64*1024 {
+				h.writeHostError(p, stack, "input too large (max 64 KB)")
+				return
+			}
+
+			campaignID := h.getCampaignIDFromContext(ctx)
+			if campaignID == "" {
+				h.writeHostError(p, stack, "no campaign context")
+				return
+			}
+
+			result, err := h.relationWriter.CreateRelationJSON(ctx, campaignID, json.RawMessage(input))
+			if err != nil {
+				h.writeHostError(p, stack, fmt.Sprintf("create_relation failed: %v", err))
+				return
+			}
+
+			h.writeHostResult(p, stack, result)
+		},
+		[]extism.ValueType{extism.ValueTypePTR},
+		[]extism.ValueType{extism.ValueTypePTR},
+	)
+}
+
+// buildSendMessageFunction creates the send_message host function for
+// plugin-to-plugin communication. The target plugin's "on_message" function
+// is called asynchronously.
+// Input: JSON {"target_ext_id": "...", "target_slug": "...", "payload": {...}}
+// Output: JSON {"ok": true} or error.
+func (h *HostEnvironment) buildSendMessageFunction() extism.HostFunction {
+	return extism.NewHostFunctionWithStack(
+		"send_message",
+		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			input, err := p.ReadBytes(stack[0])
+			if err != nil {
+				h.writeHostError(p, stack, "failed to read input")
+				return
+			}
+
+			var req struct {
+				TargetExtID string          `json:"target_ext_id"`
+				TargetSlug  string          `json:"target_slug"`
+				Payload     json.RawMessage `json:"payload"`
+			}
+			if err := json.Unmarshal(input, &req); err != nil {
+				h.writeHostError(p, stack, "invalid input JSON")
+				return
+			}
+
+			if req.TargetExtID == "" || req.TargetSlug == "" {
+				h.writeHostError(p, stack, "target_ext_id and target_slug are required")
+				return
+			}
+
+			// Limit message size.
+			if len(req.Payload) > 64*1024 {
+				h.writeHostError(p, stack, "payload too large (max 64 KB)")
+				return
+			}
+
+			// Build the message envelope with sender info.
+			senderExtID := h.getExtensionIDFromContext(ctx)
+			envelope, _ := json.Marshal(map[string]any{
+				"sender_ext_id": senderExtID,
+				"payload":       req.Payload,
+			})
+
+			// Dispatch asynchronously — fire and forget.
+			go func() {
+				callCtx := ctx
+				if campaignID := h.getCampaignIDFromContext(ctx); campaignID != "" {
+					callCtx = WithCampaignID(context.Background(), campaignID)
+				} else {
+					callCtx = context.Background()
+				}
+
+				_, err := h.pluginManager.Call(callCtx, req.TargetExtID, req.TargetSlug, "on_message", json.RawMessage(envelope))
+				if err != nil {
+					slog.Warn("plugin message delivery failed",
+						slog.String("target", pluginKey(req.TargetExtID, req.TargetSlug)),
+						slog.Any("error", err),
+					)
+				}
+			}()
 
 			h.writeHostResult(p, stack, json.RawMessage(`{"ok":true}`))
 		},

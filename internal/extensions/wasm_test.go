@@ -223,11 +223,16 @@ func TestWASMModelDefaults(t *testing.T) {
 // TestWASMCapabilities tests the capability constants.
 func TestWASMCapabilities(t *testing.T) {
 	expected := map[string]bool{
-		"log":           true,
-		"entity_read":   true,
-		"calendar_read": true,
-		"tag_read":      true,
-		"kv_store":      true,
+		"log":            true,
+		"entity_read":    true,
+		"entity_write":   true,
+		"calendar_read":  true,
+		"calendar_write": true,
+		"tag_read":       true,
+		"tag_write":      true,
+		"relation_write": true,
+		"kv_store":       true,
+		"message":        true,
 	}
 
 	if len(AllCapabilities) != len(expected) {

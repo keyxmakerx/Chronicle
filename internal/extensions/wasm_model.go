@@ -65,23 +65,43 @@ const (
 	// CapEntityRead allows get_entity, search_entities, list_entity_types.
 	CapEntityRead WASMCapability = "entity_read"
 
+	// CapEntityWrite allows update_entity_fields.
+	CapEntityWrite WASMCapability = "entity_write"
+
 	// CapCalendarRead allows get_calendar, list_events.
 	CapCalendarRead WASMCapability = "calendar_read"
 
-	// CapTagRead allows list_tags.
+	// CapCalendarWrite allows create_event.
+	CapCalendarWrite WASMCapability = "calendar_write"
+
+	// CapTagRead allows list_tags, get_entity_tags.
 	CapTagRead WASMCapability = "tag_read"
+
+	// CapTagWrite allows set_entity_tags.
+	CapTagWrite WASMCapability = "tag_write"
+
+	// CapRelationWrite allows create_relation.
+	CapRelationWrite WASMCapability = "relation_write"
 
 	// CapKVStore allows kv_get, kv_set, kv_delete for per-plugin storage.
 	CapKVStore WASMCapability = "kv_store"
+
+	// CapMessage allows send_message for plugin-to-plugin communication.
+	CapMessage WASMCapability = "message"
 )
 
 // AllCapabilities lists all valid capability strings for validation.
 var AllCapabilities = map[string]bool{
-	string(CapLog):          true,
-	string(CapEntityRead):   true,
-	string(CapCalendarRead): true,
-	string(CapTagRead):      true,
-	string(CapKVStore):      true,
+	string(CapLog):           true,
+	string(CapEntityRead):    true,
+	string(CapEntityWrite):   true,
+	string(CapCalendarRead):  true,
+	string(CapCalendarWrite): true,
+	string(CapTagRead):       true,
+	string(CapTagWrite):      true,
+	string(CapRelationWrite): true,
+	string(CapKVStore):       true,
+	string(CapMessage):       true,
 }
 
 // WASMCallRequest is sent from the host to invoke a WASM plugin function.

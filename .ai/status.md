@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-06 -- Phase R: Logic Extensions (Layer 3/WASM) — Sprints R-1 and R-2 COMPLETE.
+2026-03-06 -- Phase R: Logic Extensions (Layer 3/WASM) — Sprints R-1, R-2, and R-3 COMPLETE.
 Branch: `claude/phase-r-logic-extensions-HybRz`.
 
 ## Current Phase
-**Phase R: Logic Extensions (Layer 3/WASM) — R-1 and R-2 complete.** Full WASM runtime integration wired into app with service adapters, auto-loading, graceful shutdown, admin UI. Next: Sprint R-3 (Write Host Functions) or R-4 (Plugin SDK).
+**Phase R: Logic Extensions (Layer 3/WASM) — R-1, R-2, and R-3 complete.** Full WASM runtime with read + write host functions, plugin-to-plugin messaging, capability-based security. Next: Sprint R-4 (Plugin SDK & Developer Tools).
 
 ### Sprint R-1: WASM Runtime Integration (COMPLETE)
 - Added Extism Go SDK v1.7.1 + wazero v1.9.0 dependencies
@@ -34,6 +34,23 @@ Branch: `claude/phase-r-logic-extensions-HybRz`.
 - **Repository**: Added DeleteDataByKey method for per-key KV deletion
 - **Tests**: 26 new tests — manifest validation (15 cases), model defaults, capabilities, hook types, plugin key generation, serialization, manager lifecycle, security allowlist, zip entry validation, context helpers, log drain/limit
 - **New files**: wasm_model.go, wasm_manager.go, wasm_host.go, wasm_kvstore.go, wasm_hooks.go, wasm_handler.go, wasm_test.go
+
+### Sprint R-3: Write Host Functions & Messaging (COMPLETE)
+- **5 new write capabilities**: entity_write, calendar_write, tag_write, relation_write, message
+- **6 new host function builders** (`wasm_host.go`):
+  - `update_entity_fields` — updates entity custom fields via EntityWriter adapter
+  - `create_event` — creates calendar events via CalendarWriter adapter
+  - `set_entity_tags` — replaces entity tag set via TagWriter adapter
+  - `get_entity_tags` — reads entity tags via TagWriter adapter
+  - `create_relation` — creates entity relations via RelationWriter adapter
+  - `send_message` — async plugin-to-plugin messaging via PluginManager back-reference
+- **4 new write interfaces**: EntityWriter, CalendarWriter, TagWriter, RelationWriter
+- **4 new write adapters** (`wasm_adapters.go`): NewWASMEntityWriteAdapter, NewWASMCalendarWriteAdapter, NewWASMTagWriteAdapter, NewWASMRelationWriteAdapter
+- **App wiring** (`app/routes.go`): All write adapters wired with closure-based JSON marshaling/unmarshaling, PluginManager back-reference set for messaging
+- **Security**: Input size limits on all write functions (256KB fields, 64KB events/relations/messages), required field validation
+- **Total host functions**: 16 across 10 capability groups (was 10 across 5)
+- **Tests**: 10 new tests — write adapter delegates (4), write capability counts (6), nil-adapter guard tests (2)
+- **AllCapabilities** updated from 5 to 10 entries
 
 ### Sprint R-2: App Wiring & Admin UI (COMPLETE)
 - **App wiring** (`app/routes.go`): EntityReader, CalendarReader, TagReader adapters with JSON serialization closures wrapping concrete services. KV store backed by extension_data. PluginManager, HookDispatcher, WASMHandler all instantiated and registered
@@ -263,7 +280,7 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - Example test updated to validate dice-roller manifest
 
 ## Next Session Should
-Continue with **Sprint R-3: Write Host Functions** — create_event, update_entity_fields, add_tag host functions with write capability. Plugin-to-plugin messaging. OR **Sprint R-4: Plugin SDK** — CLI tool for local testing, example plugins in Rust/Go/JS. Full roadmap in `.ai/todo.md`.
+Continue with **Sprint R-4: Plugin SDK & Developer Tools** — CLI tool for local plugin testing, example WASM plugins (Rust/Go/AssemblyScript), developer documentation. Full roadmap in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

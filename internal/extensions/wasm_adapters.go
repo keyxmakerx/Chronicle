@@ -85,3 +85,80 @@ func NewWASMTagAdapter(
 func (a *wasmTagAdapter) ListTagsJSON(ctx context.Context, campaignID string) (json.RawMessage, error) {
 	return a.listTags(ctx, campaignID)
 }
+
+// --- Write Adapters ---
+
+// wasmEntityWriteAdapter implements EntityWriter by delegating to a function closure.
+type wasmEntityWriteAdapter struct {
+	updateFields func(ctx context.Context, entityID string, fieldsData json.RawMessage) error
+}
+
+// NewWASMEntityWriteAdapter creates an EntityWriter from a function closure.
+func NewWASMEntityWriteAdapter(
+	updateFields func(ctx context.Context, entityID string, fieldsData json.RawMessage) error,
+) EntityWriter {
+	return &wasmEntityWriteAdapter{updateFields: updateFields}
+}
+
+// UpdateFieldsJSON implements EntityWriter.
+func (a *wasmEntityWriteAdapter) UpdateFieldsJSON(ctx context.Context, entityID string, fieldsData json.RawMessage) error {
+	return a.updateFields(ctx, entityID, fieldsData)
+}
+
+// wasmCalendarWriteAdapter implements CalendarWriter by delegating to a function closure.
+type wasmCalendarWriteAdapter struct {
+	createEvent func(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error)
+}
+
+// NewWASMCalendarWriteAdapter creates a CalendarWriter from a function closure.
+func NewWASMCalendarWriteAdapter(
+	createEvent func(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error),
+) CalendarWriter {
+	return &wasmCalendarWriteAdapter{createEvent: createEvent}
+}
+
+// CreateEventJSON implements CalendarWriter.
+func (a *wasmCalendarWriteAdapter) CreateEventJSON(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error) {
+	return a.createEvent(ctx, campaignID, input)
+}
+
+// wasmTagWriteAdapter implements TagWriter by delegating to function closures.
+type wasmTagWriteAdapter struct {
+	setTags func(ctx context.Context, entityID, campaignID string, tagIDs json.RawMessage) error
+	getTags func(ctx context.Context, entityID string) (json.RawMessage, error)
+}
+
+// NewWASMTagWriteAdapter creates a TagWriter from function closures.
+func NewWASMTagWriteAdapter(
+	setTags func(ctx context.Context, entityID, campaignID string, tagIDs json.RawMessage) error,
+	getTags func(ctx context.Context, entityID string) (json.RawMessage, error),
+) TagWriter {
+	return &wasmTagWriteAdapter{setTags: setTags, getTags: getTags}
+}
+
+// SetEntityTagsJSON implements TagWriter.
+func (a *wasmTagWriteAdapter) SetEntityTagsJSON(ctx context.Context, entityID, campaignID string, tagIDs json.RawMessage) error {
+	return a.setTags(ctx, entityID, campaignID, tagIDs)
+}
+
+// GetEntityTagsJSON implements TagWriter.
+func (a *wasmTagWriteAdapter) GetEntityTagsJSON(ctx context.Context, entityID string) (json.RawMessage, error) {
+	return a.getTags(ctx, entityID)
+}
+
+// wasmRelationWriteAdapter implements RelationWriter by delegating to a function closure.
+type wasmRelationWriteAdapter struct {
+	createRelation func(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error)
+}
+
+// NewWASMRelationWriteAdapter creates a RelationWriter from a function closure.
+func NewWASMRelationWriteAdapter(
+	createRelation func(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error),
+) RelationWriter {
+	return &wasmRelationWriteAdapter{createRelation: createRelation}
+}
+
+// CreateRelationJSON implements RelationWriter.
+func (a *wasmRelationWriteAdapter) CreateRelationJSON(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error) {
+	return a.createRelation(ctx, campaignID, input)
+}
