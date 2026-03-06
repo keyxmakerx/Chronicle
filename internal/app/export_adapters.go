@@ -837,6 +837,40 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		}
 	}
 
+	// 2b. Resolve parent references (second pass: all entities now exist).
+	for _, e := range data.Entities {
+		if e.ParentSlug == nil {
+			continue
+		}
+		entityNewID, ok := entitySlugToNewID[e.Slug]
+		if !ok {
+			continue
+		}
+		parentNewID, ok := entitySlugToNewID[*e.ParentSlug]
+		if !ok {
+			slog.Warn("import: parent entity not found", slog.String("entity", e.Name), slog.String("parent_slug", *e.ParentSlug))
+			continue
+		}
+
+		var fieldsData map[string]any
+		if len(e.FieldsData) > 0 {
+			_ = json.Unmarshal(e.FieldsData, &fieldsData)
+		}
+
+		_, err := a.entitySvc.Update(ctx, entityNewID, entities.UpdateEntityInput{
+			Name:       e.Name,
+			TypeLabel:  ptrString(e.TypeLabel),
+			ParentID:   parentNewID,
+			IsPrivate:  e.IsPrivate,
+			Entry:      ptrString(e.Entry),
+			ImagePath:  ptrString(e.ImagePath),
+			FieldsData: fieldsData,
+		})
+		if err != nil {
+			slog.Warn("import: set parent failed", slog.String("entity", e.Name), slog.Any("error", err))
+		}
+	}
+
 	// 3. Create tags.
 	tagSlugToNewID := make(map[string]int)
 	for _, t := range data.Tags {

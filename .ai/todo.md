@@ -124,7 +124,7 @@ _Fix export/import so backups don't lose data. Highest-priority work._
 
 - [x] **Sprint M0-1: Export Adapters — Permissions, Groups, Posts** — Added ExportEntityPermission, ExportGroup, ExportPost types. Entity export now includes visibility mode and custom permission grants. Group export/import adapter (ListGroups + ListGroupMembers, CreateGroup + AddGroupMember). Post export/import adapter (iterates entities, ListByEntity for posts). Wired in routes.go. All tests pass, zero lint issues.
 - [x] **Sprint M0-2: Export Adapters — Timeline & Sessions** — Timeline export now includes event connections (index-based references), entity groups with member slugs. Session export now includes attendee RSVP statuses. Import side creates connections, entity groups with members, and attendees with status restoration.
-- [ ] **Sprint M0-3: Import Parent Hierarchy Fix** — Fix entity parent reimport: second-pass currently only handles entry/image, not parent_id. Add parent_id resolution via ParentSlug. Test round-trip.
+- [x] **Sprint M0-3: Import Parent Hierarchy Fix** — Added second pass after entity creation that resolves ParentSlug → new entity ID and calls Update to set parent_id. All entities exist before parent resolution runs.
 - [ ] **Sprint M0-4: Relations Visibility Controls** — Add `dm_only` column to entity_relations (migration 000052). Update model/repo/service/handler. Update relations.js widget with DM-only toggle. Update export adapter.
 
 ### Phase M1: Quick Wins Sprint
