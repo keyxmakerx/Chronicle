@@ -217,7 +217,17 @@ templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entit
 // blockTitle renders the entity name heading with edit/delete actions.
 templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	<div class="flex items-center justify-between">
-		<h1 class="text-3xl font-bold text-fg">{ entity.Name }</h1>
+		<div class="flex items-center gap-2">
+			<h1 class="text-3xl font-bold text-fg">{ entity.Name }</h1>
+			<button
+				class="text-fg-muted hover:text-amber-400 transition-colors"
+				data-favorite-toggle={ entity.ID }
+				data-entity-name={ entity.Name }
+				title="Toggle favorite"
+			>
+				<i class="fa-regular fa-star text-lg"></i>
+			</button>
+		</div>
 		if cc.MemberRole >= campaigns.RoleScribe {
 			<div class="flex space-x-2">
 				<a

@@ -114,11 +114,26 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 						hx-trigger="keyup changed delay:300ms"
 						hx-target="#entity-list"
 						hx-swap="outerHTML"
+						hx-include="[name='sort']"
 						name="q"
 						autocomplete="off"
 					/>
 					<i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-muted text-xs pointer-events-none"></i>
 				</div>
+				<!-- Sort control -->
+				<select
+					name="sort"
+					class="input py-1.5 text-sm w-auto"
+					hx-get={ fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, et.ID) }
+					hx-trigger="change"
+					hx-target="#entity-list"
+					hx-swap="outerHTML"
+					hx-include="[name='q']"
+				>
+					<option value="name" selected?={ opts.Sort == "name" }>A-Z</option>
+					<option value="updated" selected?={ opts.Sort == "updated" }>Recently Updated</option>
+					<option value="created" selected?={ opts.Sort == "created" }>Recently Created</option>
+				</select>
 			</div>
 
 			<!-- Grid/Table/Tree toggle -->

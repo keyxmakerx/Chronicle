@@ -41,6 +41,7 @@ Chronicle.register('notes', {
       pageNotes: [],
       editingId: null,
       loading: true,
+      searchFilter: '',
       // Locking state.
       lockHeartbeatTimer: null,
       lockedNoteId: null,       // note we currently hold a lock on
@@ -215,6 +216,7 @@ Chronicle.register('notes', {
     var tabBtns = panel.querySelectorAll('.notes-tab');
     var quickInput = panel.querySelector('.notes-quick-input');
     var notesList = panel.querySelector('.notes-list');
+    var searchInput = panel.querySelector('.notes-search-input');
 
     // --- Event Handlers ---
 
@@ -264,6 +266,18 @@ Chronicle.register('notes', {
           quickInput.value = '';
           quickCreateNote(text);
         }
+      });
+    }
+
+    // Search filter: re-render on input with debounce.
+    if (searchInput) {
+      var searchTimer = null;
+      searchInput.addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () {
+          state.searchFilter = searchInput.value.trim().toLowerCase();
+          renderNotes();
+        }, 150);
       });
     }
 
@@ -673,7 +687,30 @@ Chronicle.register('notes', {
         return;
       }
 
-      var tree = buildTree(list);
+      // Apply search filter: keep notes whose title matches, plus any
+      // folders that contain matching children.
+      var filtered = list;
+      if (state.searchFilter) {
+        var q = state.searchFilter;
+        // Collect IDs of notes that match the query.
+        var matchIds = new Set();
+        list.forEach(function (n) {
+          if (!n.isFolder && n.title && n.title.toLowerCase().indexOf(q) !== -1) {
+            matchIds.add(n.id);
+            // Also include the parent folder so the tree stays intact.
+            if (n.parentId) matchIds.add(n.parentId);
+          }
+        });
+        filtered = list.filter(function (n) {
+          return matchIds.has(n.id);
+        });
+        if (filtered.length === 0) {
+          notesList.innerHTML = '<div class="notes-empty">No matching notes</div>';
+          return;
+        }
+      }
+
+      var tree = buildTree(filtered);
       var html = '';
       tree.forEach(function (node) {
         html += renderTreeNode(node, 0, list);
@@ -1346,6 +1383,9 @@ Chronicle.register('notes', {
         '<i class="fa-solid fa-plus text-[10px] text-fg-muted"></i>' +
         '<input type="text" class="notes-quick-input" placeholder="' + Chronicle.escapeAttr(quickPlaceholder) + '" autocomplete="off">' +
         '<button class="note-btn notes-new-folder-btn" title="New folder"><i class="fa-solid fa-folder-plus text-[11px]"></i></button>' +
+        '</div>' +
+        '<div class="notes-search" style="padding:4px 8px">' +
+        '<input type="text" class="notes-search-input" placeholder="Filter notes..." autocomplete="off" style="width:100%;padding:4px 8px;font-size:12px;border:1px solid var(--border-color,#e5e7eb);border-radius:4px;outline:none;background:transparent;color:inherit;">' +
         '</div>' +
         '<div class="notes-list"></div>';
     }

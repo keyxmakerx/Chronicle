@@ -189,6 +189,9 @@ func (h *Handler) Index(c echo.Context) error {
 	if page > 0 {
 		opts.Page = page
 	}
+	if sort := c.QueryParam("sort"); sort == "updated" || sort == "created" || sort == "name" {
+		opts.Sort = sort
+	}
 
 	// Resolve entity type filter from shortcut route or query param.
 	var typeID int

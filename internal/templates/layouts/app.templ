@@ -565,6 +565,11 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 		</div>
 		<!-- Search results area -->
 		<div id="sidebar-cat-results" class="px-2"></div>
+		<!-- Favorites section (populated by favorites.js) -->
+		<div id="sidebar-cat-favorites-header" class="px-4 mt-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600" style="display:none">
+			<i class="fa-solid fa-star text-amber-400 mr-0.5"></i> Favorites
+		</div>
+		<div id="sidebar-cat-favorites"></div>
 		<!-- Recent pages section -->
 		<div class="px-4 mt-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">Recent</div>
 		<div id="sidebar-cat-recent" class="text-xs text-gray-500 px-4 py-2 italic">

@@ -375,15 +375,28 @@ type UpdateEntityInput struct {
 
 // --- Pagination ---
 
-// ListOptions holds pagination parameters for list queries.
+// ListOptions holds pagination and sorting parameters for list queries.
 type ListOptions struct {
 	Page    int
 	PerPage int
+	Sort    string // "name" (default), "updated", "created"
 }
 
 // DefaultListOptions returns sensible defaults for pagination.
 func DefaultListOptions() ListOptions {
-	return ListOptions{Page: 1, PerPage: 24}
+	return ListOptions{Page: 1, PerPage: 24, Sort: "name"}
+}
+
+// OrderByClause returns a safe SQL ORDER BY clause based on the Sort field.
+func (o ListOptions) OrderByClause() string {
+	switch o.Sort {
+	case "updated":
+		return "ORDER BY e.updated_at DESC"
+	case "created":
+		return "ORDER BY e.created_at DESC"
+	default:
+		return "ORDER BY e.name ASC"
+	}
 }
 
 // Offset returns the SQL OFFSET value for the current page.

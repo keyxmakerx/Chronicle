@@ -788,8 +788,8 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          %s
-	          ORDER BY e.name
-	          LIMIT ? OFFSET ?`, where)
+	          %s
+	          LIMIT ? OFFSET ?`, where, opts.OrderByClause())
 
 	pageArgs := append(args, opts.PerPage, opts.Offset())
 	rows, err := r.db.QueryContext(ctx, query, pageArgs...)

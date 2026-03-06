@@ -317,6 +317,17 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 					}
 				</div>
 			}
+			<!-- Event search -->
+			<div class="relative">
+				<input
+					type="text"
+					id="cal-event-search"
+					class="input text-xs py-1.5 pl-7 pr-2 w-40"
+					placeholder="Search events..."
+					autocomplete="off"
+				/>
+				<i class="fa-solid fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-fg-muted pointer-events-none"></i>
+			</div>
 			<!-- View toggle: Grid / Week / Timeline -->
 			<div class="flex items-center border border-edge rounded-md overflow-hidden">
 				<span
@@ -691,6 +702,28 @@ templ eventViewModal(data CalendarViewData) {
 				var s = String(n);
 				return s.length < 2 ? '0' + s : s;
 			}
+
+			// Event search: client-side filter on event chips.
+			(function() {
+				var searchInput = document.getElementById('cal-event-search');
+				if (!searchInput) return;
+				var timer = null;
+				searchInput.addEventListener('input', function() {
+					clearTimeout(timer);
+					timer = setTimeout(function() {
+						var q = searchInput.value.toLowerCase().trim();
+						var chips = document.querySelectorAll('button[data-event-id]');
+						for (var i = 0; i < chips.length; i++) {
+							var name = (chips[i].dataset.eventName || '').toLowerCase();
+							var desc = (chips[i].dataset.eventDescription || '').toLowerCase();
+							var cat = (chips[i].dataset.eventCategory || '').toLowerCase();
+							var match = !q || name.indexOf(q) !== -1 || desc.indexOf(q) !== -1 || cat.indexOf(q) !== -1;
+							chips[i].style.opacity = match ? '' : '0.15';
+							chips[i].style.pointerEvents = match ? '' : 'none';
+						}
+					}, 150);
+				});
+			})();
 		})();
 	</script>
 }
