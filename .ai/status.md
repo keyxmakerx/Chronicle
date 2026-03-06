@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-06 -- Phase R: Logic Extensions (Layer 3/WASM) — Sprints R-1, R-2, and R-3 COMPLETE.
+2026-03-06 -- Phase R: Logic Extensions (Layer 3/WASM) — ALL SPRINTS COMPLETE (R-1 through R-4).
 Branch: `claude/phase-r-logic-extensions-HybRz`.
 
 ## Current Phase
-**Phase R: Logic Extensions (Layer 3/WASM) — R-1, R-2, and R-3 complete.** Full WASM runtime with read + write host functions, plugin-to-plugin messaging, capability-based security. Next: Sprint R-4 (Plugin SDK & Developer Tools).
+**Phase R: Logic Extensions (Layer 3/WASM) — COMPLETE.** Full WASM runtime with 16 host functions across 10 capabilities, plugin-to-plugin messaging, example plugins (Rust + Go), Go SDK with mock test harness, comprehensive developer documentation.
 
 ### Sprint R-1: WASM Runtime Integration (COMPLETE)
 - Added Extism Go SDK v1.7.1 + wazero v1.9.0 dependencies
@@ -34,6 +34,15 @@ Branch: `claude/phase-r-logic-extensions-HybRz`.
 - **Repository**: Added DeleteDataByKey method for per-key KV deletion
 - **Tests**: 26 new tests — manifest validation (15 cases), model defaults, capabilities, hook types, plugin key generation, serialization, manager lifecycle, security allowlist, zip entry validation, context helpers, log drain/limit
 - **New files**: wasm_model.go, wasm_manager.go, wasm_host.go, wasm_kvstore.go, wasm_hooks.go, wasm_handler.go, wasm_test.go
+
+### Sprint R-4: Plugin SDK & Developer Tools (COMPLETE)
+- **Example Rust plugin** (`extensions/example-wasm-rust/`): Auto-tagger that hooks into entity.created, looks up entity type, and applies matching tags. Demonstrates Extism Rust PDK with host function declarations, hook handling, dice roller export, and messaging.
+- **Example Go plugin** (`extensions/example-wasm-go/`): Session logger that records entity activity to KV store, creates calendar event summaries. Demonstrates Extism Go PDK with `//go:wasmimport` host functions, KV storage, and calendar write.
+- **Go SDK** (`sdk/go/chronicle/`): Type definitions for all host function inputs/outputs, hook events, capability constants, and `MockHost` test harness with in-memory implementations of all host functions.
+- **MockHost test harness**: Entity/tag/calendar/relation/KV/log/message mocks with setup helpers and inspection methods. 9 unit tests.
+- **Plugin development guide** (`.ai/plugin-development.md`): Complete documentation covering capabilities, all 16 host functions, hooks, building (Rust/Go/TinyGo), testing with MockHost, resource limits, API endpoints.
+- **Manifest tests**: 7 new test cases — 5 example manifests validated + 2 WASM-specific assertion tests (capabilities, hooks, config, limits).
+- **AI docs**: `.ai.md` files for both example plugins, README index updated.
 
 ### Sprint R-3: Write Host Functions & Messaging (COMPLETE)
 - **5 new write capabilities**: entity_write, calendar_write, tag_write, relation_write, message
@@ -280,7 +289,10 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - Example test updated to validate dice-roller manifest
 
 ## Next Session Should
-Continue with **Sprint R-4: Plugin SDK & Developer Tools** — CLI tool for local plugin testing, example WASM plugins (Rust/Go/AssemblyScript), developer documentation. Full roadmap in `.ai/todo.md`.
+**Phase R is complete.** Next priorities from `.ai/todo.md`:
+- Quick wins from the UX audit (export button, password change, sort controls, etc.)
+- Phase S+ deferred items (Draw Steel module, whiteboards, offline mode)
+- Test coverage gaps (handler/repository tests for maps, sessions, admin, smtp)
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
