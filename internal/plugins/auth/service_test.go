@@ -139,6 +139,18 @@ func (m *mockUserRepo) UpdateAvatarPath(ctx context.Context, userID string, avat
 	return nil
 }
 
+func (m *mockUserRepo) SetPendingEmail(ctx context.Context, userID, pendingEmail, tokenHash string, expiresAt time.Time) error {
+	return nil
+}
+
+func (m *mockUserRepo) FindByEmailVerifyToken(ctx context.Context, tokenHash string) (string, string, time.Time, error) {
+	return "", "", time.Time{}, nil
+}
+
+func (m *mockUserRepo) ConfirmEmailChange(ctx context.Context, userID, newEmail string) error {
+	return nil
+}
+
 // --- Mock Mail Sender ---
 
 // mockMailSender implements MailSender for testing.
