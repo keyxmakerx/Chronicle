@@ -48,7 +48,9 @@ Known broken or missing things, ordered by severity.
 - [x] **Map marker search** — Fixed: added search input in map header. Client-side filtering dims non-matching markers (opacity 0.15). Enter pans to first match and opens tooltip. Searches name and description.
 - [x] **Timeline event creation from timeline page** — Already implemented: "Create Event" button in header opens modal with full form (name, date, description, category, visibility, color, multi-day, recurrence). POST to standalone-events API.
 
-### Low
+### Low (Original)
+
+_See `.ai/audit.md` for the full feature parity & completeness audit. Audit items now organized into Phases M0-M3 and Backlog below._
 
 - [x] **API endpoints ignore addon disabled state** — RequireAddon middleware gates calendar, maps, sessions, timeline routes. RequireAddonAPI middleware gates API v1 routes (syncapi). Fail-closed on DB errors.
 - [x] **API technical documentation missing** — Created OpenAPI 3.0.3 spec at `docs/api/openapi.yaml` with 63 endpoints, 42 schemas, auth details, and error responses.
@@ -95,16 +97,9 @@ New capabilities ordered by priority for alpha release.
 - [x] **Map marker clustering** — Leaflet.markercluster integration on both map widget and full map page. Auto-clustering when >5 markers with custom cluster icons. CDN-loaded.
 - [x] **Map marker icon picker** — Expanded from 18 to 39 POI icons in 8 organized groups (General, Settlements, Fortifications, Dungeons & Ruins, Nature, Maritime, Sacred & Magic, Resources).
 - [x] **Recent entities sidebar** — localStorage-backed "recently viewed" list in sidebar drill panel. Tracks entity visits, renders last 10 with clock icons. `recent_entities.js`.
-- [ ] **Command palette (Ctrl+Shift+P)** — Quick action palette beyond Ctrl+K search.
 - [x] **Breadcrumb consistency** — Shared breadcrumb component (`components/breadcrumbs.templ`). Added to maps list/detail, timeline list/detail, sessions list/detail, calendar grid/timeline/week views.
-- [ ] **Timeline search/filter** — No search within timeline events by name/text.
-- [ ] **Timeline zoom-to-era** — No button to jump viewport to a specific era.
 - [x] **Editor find/replace** — Ctrl+F opens find bar, Ctrl+H opens find+replace. Match navigation, replace, replace-all. Selection-based highlighting.
 - [x] **Editor code syntax highlighting** — @tiptap/extension-code-block-lowlight with highlight.js common languages. Tokyo Night-inspired dark/light theme in input.css.
-- [ ] **Entity version history UI** — Audit log exists but no "view diff / restore version" for entities.
-- [ ] **Notes search/filter** — No search within notes panel.
-- [ ] **Toast notification grouping** — Duplicate toasts stack separately instead of grouping.
-- [ ] **Entity image gallery** — Only one image per entity; no carousel/gallery for multiple images.
 
 ### Phase K: Permissions & Competitive Gap Closers
 
@@ -122,6 +117,38 @@ New capabilities ordered by priority for alpha release.
 - [x] **Sprint L-3: Note Folders and Organization** — Migration 000051: `parent_id` + `is_folder`. Tree view in notes panel, collapsible folders, move-to-folder dropdown, create folder button. 4 tests.
 - [x] **Sprint L-4: Calendar Event Drag-and-Drop** — HTML5 DnD on monthly grid. Event chips draggable (Scribe+), day cells as drop zones. Full PUT on drop with all event fields preserved. Drop zone highlighting via `cal-drop-highlight` CSS. No backend changes needed.
 - [x] **Sprint L-5: Calendar Day View** — Single-day detailed view at `/calendar/day`. DayViewData struct with PrevDay/NextDay/WeekdayName/Season helpers. Event cards with time, category, entity links, description. Day view icon in all view toggles. Sessions support. 5 unit tests.
+
+### Phase M0: Data Integrity & Export Completeness ← START HERE
+
+_Fix export/import so backups don't lose data. Highest-priority work._
+
+- [ ] **Sprint M0-1: Export Adapters — Permissions, Groups, Posts** — Add EntityPermission export adapter (entity_permissions table), CampaignGroup + CampaignGroupMember export adapter, EntityPost export adapter. Update import service with corresponding import handlers. Extend import_test.go.
+- [ ] **Sprint M0-2: Export Adapters — Timeline & Sessions** — Wire ExportTimelines() to call ListConnections() (type exists, never populated). Wire ExportEntityGroup adapter to call ListEntityGroups(). Add SessionAttendee export adapter.
+- [ ] **Sprint M0-3: Import Parent Hierarchy Fix** — Fix entity parent reimport: second-pass currently only handles entry/image, not parent_id. Add parent_id resolution via ParentSlug. Test round-trip.
+- [ ] **Sprint M0-4: Relations Visibility Controls** — Add `dm_only` column to entity_relations (migration 000052). Update model/repo/service/handler. Update relations.js widget with DM-only toggle. Update export adapter.
+
+### Phase M1: Quick Wins Sprint
+
+_High-impact, low-effort items that immediately improve the user experience._
+
+- [ ] **Sprint M1-1: Account & Settings Quick Wins** — Export/Import button on campaign settings page (handler exists, needs UI). In-app password change form + handler. Display name editing on account page. Theme preference persistence (save to user settings).
+- [ ] **Sprint M1-2: Entity List & Sidebar Quick Wins** — Entity list sort controls (name/date/type dropdown + localStorage). Entity favorites/bookmarks (star icon, localStorage sidebar section). Notes search/filter (client-side on titles). Calendar event search/filter (like map marker search).
+- [ ] **Sprint M1-3: Session & Member Quick Wins** — Session recap field (migration + model + UI). Member removal confirmation dialog. Avatar upload UI (handler + account page). Character assignment (character_entity_id on campaign_members + UI picker).
+
+### Phase M2: JS Code Quality
+
+_Consistency and reliability across all JS widgets._
+
+- [ ] **Sprint M2-1: apiFetch Migration & Utility Dedup** — Migrate notes.js (10), attributes.js (5), relations.js (6), tag_picker.js (6), permissions.js (2), editor.js (2) to Chronicle.apiFetch(). Remove local escHtml/escAttr from groups.js and relation_graph.js. Remove local apiFetch from groups.js.
+- [ ] **Sprint M2-2: Error Handling — Toast on Failure** — Add toast feedback to notes.js, tag_picker.js, timeline_viz.js, entity_tooltip.js, editor_autolink.js, editor_mention.js, template_editor.js, relation_graph.js, search_modal.js. All catch blocks show Chronicle.toast() instead of console.error alone.
+
+### Phase M3: Test Coverage
+
+_Fill the biggest test gaps — zero-test plugins and incomplete service tests._
+
+- [ ] **Sprint M3-1: Maps Service Tests** — 27+ endpoints, 0 tests. Mock MapRepository, test service CRUD for maps, markers, layers, drawings, tokens, fog. Target: 40+ tests.
+- [ ] **Sprint M3-2: Sessions & Calendar Service Tests** — Sessions: 8+ endpoints, 0 tests. Calendar: extend beyond day/week domain tests. Target: 20+ each.
+- [ ] **Sprint M3-3: Timeline Service Tests & CI Fix** — Extend beyond 3 connection tests. Fix CI `-short` flag (add testing.Short() skips or remove flag). Target: 15+ tests.
 
 ### Phase M: Game System Modules & Worldbuilding Tools
 
@@ -147,6 +174,39 @@ New capabilities ordered by priority for alpha release.
 - [ ] **Sprint O-4: Bulk Operations & Persistent Filters** — Multi-select entity lists with batch actions (tag, move, visibility, delete). Persistent filters per category in localStorage.
 - [ ] **Sprint O-5: Editor Import/Export & Additional Themes** — Markdown import/export via `goldmark`. Sepia + high-contrast themes. Custom accent color picker.
 
+### Backlog: Remaining Audit Items (address opportunistically)
+
+_Lower-priority items to pick up during related sprints or as standalone tasks._
+
+**UI Consistency:**
+- [ ] **Alert styling inconsistent** — login.templ and entities/form.templ use inline Tailwind instead of alert-success/alert-error classes.
+- [ ] **Admin pagination inline** — admin/users.templ and admin/campaigns.templ have hand-rolled pagination instead of using components.Pagination.
+- [ ] **Modal approach mixed** — Sessions uses dialog element; calendar/other modals use Alpine.js. Should standardize.
+- [ ] **Rate limiting on mutations** — Campaign/entity/widget mutation endpoints have no rate limiting (auth + media do).
+- [ ] **Recurring calendar events (beyond yearly)** — Sessions support weekly/biweekly/monthly, but calendar events only support yearly.
+
+**Documentation:**
+- [ ] **Posts widget missing .ai.md** — Only Go widget without documentation file.
+- [ ] **16 JS widgets missing .ai.md** — calendar_widget, map_widget, relation_graph, entity_type_config, entity_type_editor, groups, permissions, shop_inventory, sidebar_config, timeline_widget, entity_posts, recent_entities, notifications, shortcuts_help, editor_autolink, editor_secret.
+
+**Player & DM Experience Gaps:**
+- [ ] **Entity tag/field filtering** — Entity list only has type tabs. No filter by tag, custom field value, or visibility mode.
+- [ ] **Entity print/PDF export** — No per-entity print stylesheet or PDF generation.
+- [ ] **Share link for entities** — Campaign-level public mode exists but no per-entity shareable links.
+- [ ] **Soft delete / entity archive** — Entities are hard-deleted only. Add `archived_at` column or trash/recycle bin pattern.
+- [ ] **Map measurement tool** — Can't measure distance between markers. Leaflet supports this via plugins.
+- [ ] **Map fog of war native UI** — Backend exists for Foundry sync but no Chronicle-native fog controls.
+- [ ] **Initiative tracker** — No combat ordering tool for session management.
+- [ ] **Session prep checklist** — No per-session task list for DM prep items.
+- [ ] **NPC quick generator** — Random name/trait generator for improvisation.
+- [ ] **Account deletion** — No self-service account removal option.
+- [ ] **Member activity tracking** — No last-seen, activity feed, or engagement metrics.
+- [ ] **Timeline search/filter** — No search within timeline events by name/text.
+- [ ] **Timeline zoom-to-era** — No button to jump viewport to a specific era.
+- [ ] **Entity version history UI** — Audit log exists but no "view diff / restore version" for entities.
+- [ ] **Toast notification grouping** — Duplicate toasts stack separately instead of grouping.
+- [ ] **Entity image gallery** — Only one image per entity; no carousel/gallery for multiple images.
+
 ### Deferred to Phase P+ (or community contributions)
 
 - [ ] Draw Steel module
@@ -154,17 +214,16 @@ New capabilities ordered by priority for alpha release.
 - [ ] Offline mode / service worker caching
 - [ ] Collaborative editing presence indicators
 - [ ] Calendar timezone support / print-PDF export
-- [ ] Map hex/square grid overlay / measurement tool
+- [ ] Map hex/square grid overlay
 - [x] Fog of war bidirectional sync (Chronicle ↔ Foundry)
 - [ ] Webhook support for external event notifications
 - [ ] Widget inline CSS → CSS classes migration
 - [ ] Reusable modal/dropdown component library
-- [ ] Toast notification grouping
-- [ ] Entity image gallery (multi-image carousel)
-- [ ] Entity version history UI (view diff / restore)
-- [ ] Timeline search/filter + zoom-to-era
-- [ ] Notes search/filter
 - [ ] Dice roller widget
+- [ ] Encounter difficulty calculator
+- [ ] Family tree / genealogy builder
+- [ ] Cross-campaign search
+- [ ] Mobile-optimized modals (full-screen on small screens)
 
 ---
 

@@ -48,14 +48,18 @@ func TestNewJSONProvider(t *testing.T) {
 		{
 			name: "invalid JSON returns error",
 			setup: func(t *testing.T, dir string) {
-				os.WriteFile(filepath.Join(dir, "bad.json"), []byte("{not valid json"), 0o644)
+				if err := os.WriteFile(filepath.Join(dir, "bad.json"), []byte("{not valid json"), 0o644); err != nil {
+					t.Fatalf("write bad.json: %v", err)
+				}
 			},
 			wantErr: true,
 		},
 		{
 			name: "non-json files are skipped",
 			setup: func(t *testing.T, dir string) {
-				os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("hello"), 0o644)
+				if err := os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("hello"), 0o644); err != nil {
+					t.Fatalf("write readme.txt: %v", err)
+				}
 				writeTestData(t, dir, "items", []ReferenceItem{
 					{ID: "sword", Name: "Sword"},
 				})

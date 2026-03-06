@@ -8,11 +8,30 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-05 -- Sprint L-5 (Calendar Day View) complete (batch 44).
-Branch: `claude/project-review-planning-Yr4CL`.
+2026-03-06 -- Comprehensive UX & feature gap audit (batch 46).
+Branch: `claude/audit-feature-parity-2vyXh`.
 
 ## Current Phase
-**Phase L: Content Depth & Editor Power.** Phase L complete (batch 44). Next: Phase M (Game System Modules & Worldbuilding Tools).
+**Between Phase L and M.** Phase L complete (batch 44). Feature parity audit completed (batch 45). Comprehensive UX/feature gap audit completed (batch 46). Next: Phase M (Game System Modules) or address audit/gap findings.
+
+### UX & Feature Gap Audit (batch 46)
+Deep audit of player/DM experience, account settings, campaign management, and missing UI surfaces:
+- **Account gaps**: No in-app password change (only email reset), display name read-only after registration, avatar infrastructure exists (DB column + media service) but no upload UI, 2FA DB columns exist but incomplete.
+- **Player experience**: No entity favorites/bookmarks, no sort controls on entity lists, no tag/field filtering, no character assignment to campaign members, no session recap field, no dice roller.
+- **DM tools**: No soft delete/archive (hard delete only), no bulk entity operations, no map measurement/drawing/fog UI (backend exists for Foundry sync), no initiative tracker, no session prep checklist.
+- **Campaign settings**: Export/import handlers exist but no visible button on settings page, no invite link system (email-add only), no member kick confirmation dialog.
+- **Quick wins identified**: 10 small-but-impactful items added to todo.md (export button, password change, sort controls, notes search, calendar search, favorites, etc.).
+- **17 new items** added to `.ai/todo.md` under "Quick Wins" and "Player & DM Experience Gaps" sections.
+- Fixed errcheck lint errors in `json_provider_test.go` (2 unchecked `os.WriteFile` calls that failed CI).
+
+### Audit Summary (batch 45)
+Created `.ai/audit.md` — comprehensive feature parity and completeness audit covering:
+- **Test coverage**: 530+ tests but 4 plugins have zero tests (maps, sessions, admin, smtp), calendar/timeline have only domain-logic tests. No handler or repository tests anywhere.
+- **Export gaps**: entity_permissions, campaign_groups, entity_posts not exported (data loss on backup).
+- **JS consistency**: 17 widgets still use raw fetch() instead of Chronicle.apiFetch(). Only 2 widgets show toast on error; rest log to console silently. groups.js and relation_graph.js duplicate escHtml().
+- **Feature parity**: Relations lack visibility controls (unlike tags, posts, markers). Notes and posts have no search.
+- **Documentation**: 16 JS widgets lack .ai.md files. Posts Go widget has no .ai.md.
+- 14 new items added to `.ai/todo.md` under "Low (Audit-Discovered)" section.
 
 ### Summary of Recent Work (batches 25-44)
 - **Batch 44**: Sprint L-5 Calendar Day View — Single-day detailed view at
@@ -153,7 +172,7 @@ Branch: `claude/project-review-planning-Yr4CL`.
 ---
 
 ## Next Session Should
-Continue with **Phase M** (Game System Modules & Worldbuilding Tools). Sprint M-1: D&D 5e Module with SRD data, tooltip API, reference pages. Full post-alpha roadmap (Phases M through O, 15 remaining sprints) documented in `.ai/todo.md`.
+Start with **Phase M0: Data Integrity & Export Completeness** (Sprint M0-1: export adapters for permissions, groups, posts). This is the highest-priority work — campaign backups currently lose data. After M0 (4 sprints), proceed to M1 (Quick Wins), M2 (JS Code Quality), M3 (Test Coverage), then original Phase M (Game System Modules). Full 27-sprint roadmap in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
