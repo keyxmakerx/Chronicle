@@ -47,6 +47,15 @@ Known broken or missing things, ordered by severity.
 - [x] **Entity cloning** — Fixed: Clone button on entity show page (Scribe+). POST creates copy with "(Copy)" suffix, clones entry, image, fields, field overrides, popup config, tags via INSERT...SELECT. Redirects to edit page. Does NOT copy relations.
 - [x] **Map marker search** — Fixed: added search input in map header. Client-side filtering dims non-matching markers (opacity 0.15). Enter pans to first match and opens tooltip. Searches name and description.
 - [x] **Timeline event creation from timeline page** — Already implemented: "Create Event" button in header opens modal with full form (name, date, description, category, visibility, color, multi-day, recurrence). POST to standalone-events API.
+- [x] **Calendar shows as pending plugin in admin** — Fixed: set calendar and API to PluginActive, added 5 missing active plugins to registry.
+- [x] **False "confirm before leaving" dialog** — Fixed: added htmx:beforeRedirect listener to clear dirty form state before HTMX redirects.
+- [x] **Image upload 500 error (ClamAV)** — Removed ClamAV entirely, added structured error logging to upload pipeline.
+- [x] **Nav panel not showing new entities** — Fixed: sidebar drill panel refreshes content on navigation instead of closing.
+- [x] **Shop inventory "entity type not found" in template editor** — Fixed: added missing data-campaign-id to layout editor fragment widget mount.
+- [x] **Duplicate admin plugin management pages** — Removed Plugins page, renamed Addons→Features, Modules→Game Systems. Full terminology consolidation across admin and campaign pages.
+- [x] **SMTP diagnostics insufficient** — Added step-by-step logging and actionable error messages to TestConnection.
+- [x] **Email change feature** — Full email change with password verification, verification link to new email, session invalidation on confirm. Migration 000056.
+- [x] **SMTP test should ask which email** — Added SendTestEmail endpoint with recipient input field and actionable error wrapping.
 
 ### Low (Original)
 

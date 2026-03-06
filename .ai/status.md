@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-06 -- Generic module framework + Sprint M-1 D&D 5e data COMPLETE.
-Branch: `claude/phase-r-logic-extensions-HybRz`.
+2026-03-06 -- Admin UI bug fixes, email change verification, terminology consolidation.
+Branch: `claude/fix-admin-ui-bugs-0Fiqm`.
 
 ## Current Phase
-**Phase M: Game System Modules — Sprint M-1 COMPLETE + Generic Module Framework.** Any game system can now be added with just a `manifest.json` + data files — zero custom Go code required.
+**Bug fix & feature sprint — 9 issues resolved.**
 
 ### Generic Module Framework (COMPLETE)
 - **GenericTooltipRenderer** (`generic_tooltip.go`): Reads field definitions from the manifest's `categories[].fields[]` to render tooltips. Shows only manifest-declared fields in manifest-defined order. Works for any game system.
@@ -321,12 +321,23 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - **L-7 FIXED**: Dockerfile runs as non-root `chronicle` user
 - Remaining (accepted/deferred): M-2 (CSP unsafe-inline, Alpine.js dependency), L-2 (ClamAV for avatars), L-3 (in-memory rate limiter), L-4 (CSRF cookie binding), L-5 (query string logging), L-6 (default DB password)
 
+### Admin UI Bug Fixes & Features (2026-03-06) (COMPLETE)
+- **Bug 1**: Calendar and API plugins now show as Active in admin registry. Added 5 missing active plugins (timeline, sessions, addons, extensions, syncapi).
+- **Bug 2**: Fixed false "confirm before leaving" dialog — `htmx:beforeRedirect` listener clears dirty form state before HTMX redirects.
+- **Bug 3**: Removed ClamAV entirely (rely on magic bytes, CDR, MIME allowlist). Added structured error logging to media upload pipeline.
+- **Bug 4**: Sidebar drill panel now refreshes content on navigation instead of closing, so newly created entities appear immediately.
+- **Bug 5**: Added missing `data-campaign-id` to template editor widget mount in layout editor fragment.
+- **Bug 7**: SMTP TestConnection now has step-by-step logging and actionable error messages for each phase (TCP, TLS, auth).
+- **Bug 8**: Email change with verification — migration 000056 (pending_email/verify_token columns), full service/handler/template flow. Verifies new email first, requires password re-entry, invalidates all sessions on confirm.
+- **Bug 9**: SMTP test email — SendTestEmail endpoint with recipient input, actionable error wrapping for TLS/auth/connection failures.
+- **Bug 6**: Terminology consolidation — removed Plugins admin page, renamed Addons→Features, kept Content Packs, renamed Modules→Game Systems across admin sidebar, dashboard, admin pages, and campaign-level pages.
+
 ## Next Session Should
-**Sprint M-1 is complete.** Next priorities from `.ai/todo.md`:
-- Sprint M-2: D&D 5e Module — Reference Pages (browsable pages at `/modules/dnd5e/`, category cards, searchable lists, stat block detail pages)
-- Quick wins from the UX audit (export button, password change, sort controls, etc.)
+- Sprint M-2: D&D 5e Module — Reference Pages (browsable pages at `/modules/dnd5e/`)
+- Quick wins from the UX audit (export button, sort controls, etc.)
 - Phase S+ deferred items (Draw Steel module, whiteboards, offline mode)
 - Test coverage gaps (handler/repository tests for maps, sessions, admin, smtp)
+- Bug 6 Sprint 2: Campaign owner page consolidation (if needed beyond what was done)
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
