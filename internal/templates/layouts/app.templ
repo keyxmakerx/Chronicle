@@ -208,6 +208,17 @@ templ Sidebar() {
 				</div>
 			</div>
 
+			<!-- Session RSVP sidebar (lazy-loaded, members only, calendar addon required) -->
+			if IsAuthenticated(ctx) && GetCampaignRole(ctx) >= 1 && IsAddonEnabled(ctx, "calendar") {
+				<div
+					id="sidebar-sessions-rsvp"
+					class="shrink-0 border-t border-gray-700"
+					hx-get={ fmt.Sprintf("/campaigns/%s/sidebar/sessions-rsvp", GetCampaignID(ctx)) }
+					hx-trigger="load"
+					hx-swap="innerHTML"
+				></div>
+			}
+
 			<!-- Zone 3: Manage section (static, campaign-scoped, owner only) -->
 			if IsAuthenticated(ctx) {
 				<div class="shrink-0 border-t border-gray-700 py-1" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
@@ -224,6 +235,17 @@ templ Sidebar() {
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
 						</svg>
 						Members
+					</a>
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/plugins", GetCampaignID(ctx))) }
+						class={ sidebarNavLink,
+							templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/plugins", GetCampaignID(ctx)))),
+							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/plugins", GetCampaignID(ctx)))) }
+					>
+						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+							<i class="fa-solid fa-puzzle-piece text-xs"></i>
+						</span>
+						Plugins
 					</a>
 					if GetCampaignRole(ctx) >= 3 {
 						<a

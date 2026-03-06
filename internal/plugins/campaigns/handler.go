@@ -78,6 +78,21 @@ type AuditLogger interface {
 	LogEvent(ctx context.Context, campaignID, userID, action string, details map[string]any) error
 }
 
+// PluginHubAddon is a minimal addon representation for the plugin hub page.
+type PluginHubAddon struct {
+	Slug     string
+	Name     string
+	Icon     string
+	Category string
+	Enabled  bool
+}
+
+// AddonLister lists addons for the plugin hub page. Avoids importing the addons
+// package directly.
+type AddonLister interface {
+	ListForPluginHub(ctx context.Context, campaignID string) ([]PluginHubAddon, error)
+}
+
 // Handler handles HTTP requests for campaign operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
@@ -87,6 +102,7 @@ type Handler struct {
 	layoutFetcher EntityTypeLayoutFetcher
 	recentLister  RecentEntityLister
 	auditLogger   AuditLogger
+	addonLister   AddonLister
 }
 
 // NewHandler creates a new campaign handler.
@@ -121,6 +137,11 @@ func (h *Handler) SetRecentEntityLister(lister RecentEntityLister) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetAuditLogger(logger AuditLogger) {
 	h.auditLogger = logger
+}
+
+// SetAddonLister sets the addon lister for the plugin hub page.
+func (h *Handler) SetAddonLister(lister AddonLister) {
+	h.addonLister = lister
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
@@ -336,6 +357,28 @@ func (h *Handler) Settings(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, ""))
+}
+
+// PluginHub renders the campaign plugin hub page, showing all enabled
+// addons with quick links to their main pages.
+// GET /campaigns/:id/plugins
+func (h *Handler) PluginHub(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var addons []PluginHubAddon
+	if h.addonLister != nil {
+		var err error
+		addons, err = h.addonLister.ListForPluginHub(c.Request().Context(), cc.Campaign.ID)
+		if err != nil {
+			slog.Warn("plugin hub: list addons failed", slog.Any("error", err))
+		}
+	}
+
+	isOwner := cc.MemberRole >= RoleOwner
+	return middleware.Render(c, http.StatusOK, PluginHubPage(cc, addons, isOwner))
 }
 
 // --- Customization Hub ---

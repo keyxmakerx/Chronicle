@@ -254,3 +254,144 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 		</div>
 	}
 }
+
+// pluginURL returns the main page URL for a given addon slug within a campaign.
+func pluginURL(campaignID, slug string) string {
+	switch slug {
+	case "calendar":
+		return fmt.Sprintf("/campaigns/%s/calendar", campaignID)
+	case "maps":
+		return fmt.Sprintf("/campaigns/%s/maps", campaignID)
+	case "timeline":
+		return fmt.Sprintf("/campaigns/%s/timelines", campaignID)
+	case "sessions":
+		return fmt.Sprintf("/campaigns/%s/sessions", campaignID)
+	case "notes":
+		return fmt.Sprintf("/campaigns/%s/entities", campaignID) // Notes are per-entity.
+	case "sync-api":
+		return fmt.Sprintf("/campaigns/%s/settings", campaignID) // API keys are in settings.
+	default:
+		return fmt.Sprintf("/campaigns/%s", campaignID)
+	}
+}
+
+// pluginDescription returns a short description for each addon.
+func pluginDescription(slug string) string {
+	switch slug {
+	case "calendar":
+		return "Track in-world dates, events, seasons, and eras."
+	case "maps":
+		return "Upload maps, place markers, and link entities to locations."
+	case "timeline":
+		return "Visualize events on interactive timelines with connections."
+	case "sessions":
+		return "Plan game sessions, track attendance, and manage RSVPs."
+	case "notes":
+		return "Personal and shared notes attached to entities."
+	case "attributes":
+		return "Custom fields and stats for entity pages."
+	case "sync-api":
+		return "REST API and Foundry VTT synchronization."
+	case "dnd5e":
+		return "D&D 5th Edition reference data and tooltips."
+	case "pathfinder2e":
+		return "Pathfinder 2e reference data and tooltips."
+	case "drawsteel":
+		return "Draw Steel reference data and tooltips."
+	default:
+		return "Campaign extension."
+	}
+}
+
+// PluginHubPage renders the plugin hub showing all addons with quick access links.
+templ PluginHubPage(cc *CampaignContext, addons []PluginHubAddon, isOwner bool) {
+	@layouts.App(cc.Campaign.Name + " - Plugins") {
+		<div class="max-w-3xl mx-auto">
+			<div class="flex items-center justify-between mb-6">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Plugins</h1>
+					<p class="text-sm text-fg-muted mt-1">Quick access to all campaign extensions.</p>
+				</div>
+				if isOwner {
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/addons/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
+						<i class="fa-solid fa-gear mr-1.5"></i> Manage
+					</a>
+				}
+			</div>
+
+			<!-- Enabled plugins -->
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+				for _, addon := range addons {
+					if addon.Enabled {
+						<a
+							href={ templ.SafeURL(pluginURL(cc.Campaign.ID, addon.Slug)) }
+							class="card p-4 flex items-start gap-3 hover:ring-2 hover:ring-accent/50 transition-all group"
+						>
+							<div class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0 group-hover:bg-accent/20 transition-colors">
+								if addon.Icon != "" {
+									<i class={ "fa-solid " + addon.Icon, "text-accent text-lg" }></i>
+								} else {
+									<i class="fa-solid fa-puzzle-piece text-accent text-lg"></i>
+								}
+							</div>
+							<div class="flex-1 min-w-0">
+								<div class="font-semibold text-fg group-hover:text-accent transition-colors">{ addon.Name }</div>
+								<p class="text-xs text-fg-muted mt-0.5">{ pluginDescription(addon.Slug) }</p>
+							</div>
+							<i class="fa-solid fa-arrow-right text-fg-muted text-xs mt-1 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+						</a>
+					}
+				}
+			</div>
+
+			<!-- Disabled plugins (show for owners) -->
+			if isOwner {
+				@disabledPlugins(cc.Campaign.ID, addons)
+			}
+		</div>
+	}
+}
+
+// disabledPlugins shows addons that are not enabled, with a prompt to enable them.
+templ disabledPlugins(campaignID string, addons []PluginHubAddon) {
+	if hasDisabled(addons) {
+		<div class="mt-4">
+			<h2 class="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">Available Extensions</h2>
+			<div class="space-y-2">
+				for _, addon := range addons {
+					if !addon.Enabled {
+						<div class="card p-3 flex items-center gap-3 opacity-60">
+							<div class="w-8 h-8 rounded-lg bg-surface-alt flex items-center justify-center shrink-0">
+								if addon.Icon != "" {
+									<i class={ "fa-solid " + addon.Icon, "text-fg-muted" }></i>
+								} else {
+									<i class="fa-solid fa-puzzle-piece text-fg-muted"></i>
+								}
+							</div>
+							<div class="flex-1 min-w-0">
+								<span class="text-sm text-fg">{ addon.Name }</span>
+								<span class="text-xs text-fg-muted ml-2">Disabled</span>
+							</div>
+							<a
+								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/addons/settings", campaignID)) }
+								class="text-xs text-accent hover:underline"
+							>
+								Enable
+							</a>
+						</div>
+					}
+				}
+			</div>
+		</div>
+	}
+}
+
+// hasDisabled checks if any addon in the list is disabled.
+func hasDisabled(addons []PluginHubAddon) bool {
+	for _, a := range addons {
+		if !a.Enabled {
+			return true
+		}
+	}
+	return false
+}

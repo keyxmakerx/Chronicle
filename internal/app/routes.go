@@ -133,6 +133,31 @@ func (a *campaignAuditAdapter) LogEvent(ctx context.Context, campaignID, userID,
 	})
 }
 
+// addonListerAdapter wraps addons.AddonService to implement the
+// campaigns.AddonLister interface for the plugin hub page.
+type addonListerAdapter struct {
+	svc addons.AddonService
+}
+
+// ListForPluginHub returns all addons formatted for the plugin hub page.
+func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID string) ([]campaigns.PluginHubAddon, error) {
+	addonList, err := a.svc.ListForCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]campaigns.PluginHubAddon, len(addonList))
+	for i, ca := range addonList {
+		result[i] = campaigns.PluginHubAddon{
+			Slug:     ca.AddonSlug,
+			Name:     ca.AddonName,
+			Icon:     ca.AddonIcon,
+			Category: string(ca.AddonCategory),
+			Enabled:  ca.Enabled,
+		}
+	}
+	return result, nil
+}
+
 // entityTagFetcherAdapter wraps tags.TagService to implement the
 // entities.EntityTagFetcher interface for batch tag loading in list views.
 type entityTagFetcherAdapter struct {
@@ -806,6 +831,7 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetGroupLister(groupService)
 	entityHandler.SetCache(a.Redis)
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
+	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	tagHandler.SetAuditService(auditService)
 
 	// --- Campaign Export/Import ---

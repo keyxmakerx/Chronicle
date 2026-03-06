@@ -513,3 +513,58 @@ func derefStr(s *string) string {
 	}
 	return *s
 }
+
+// SidebarSessionsRSVP renders a collapsible sidebar section showing planned sessions
+// with RSVP status counts. Collapsed by default, state persisted in localStorage.
+templ SidebarSessionsRSVP(campaignID string, sessions []Session, userID string) {
+	<div
+		x-data={ fmt.Sprintf(`{ open: JSON.parse(localStorage.getItem('chronicle_sidebar_rsvp_%s') || 'false') }`, campaignID) }
+		class="py-1"
+	>
+		<button
+			class="w-full px-4 py-1.5 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+			@click={ fmt.Sprintf(`open = !open; localStorage.setItem('chronicle_sidebar_rsvp_%s', open)`, campaignID) }
+		>
+			<span class="flex items-center gap-1.5">
+				<i class="fa-solid fa-dice-d20 text-[10px]"></i>
+				Sessions
+			</span>
+			<i class="fa-solid fa-chevron-right text-[9px] transition-transform duration-200" :class="open && 'rotate-90'"></i>
+		</button>
+		<div x-show="open" x-collapse>
+			<nav class="px-2 pb-1 space-y-0.5" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+				for _, s := range sessions {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions/%s", campaignID, s.ID)) }
+						class="flex items-center gap-2 px-2 py-1.5 rounded text-sm text-fg-muted hover:bg-sidebar-hover hover:text-fg transition-colors group"
+					>
+						<span class="flex-1 truncate">{ s.Name }</span>
+						<span class="flex items-center gap-1 shrink-0">
+							@sidebarRSVPBadge(s.Attendees, userID)
+							<span class="text-[10px] text-gray-500">
+								{ fmt.Sprintf("%d/%d", countAccepted(s.Attendees), len(s.Attendees)) }
+							</span>
+						</span>
+					</a>
+				}
+			</nav>
+		</div>
+	</div>
+}
+
+// sidebarRSVPBadge shows a small colored dot for the current user's RSVP status.
+templ sidebarRSVPBadge(attendees []Attendee, userID string) {
+	for _, a := range attendees {
+		if a.UserID == userID {
+			if a.Status == RSVPAccepted {
+				<span class="w-2 h-2 rounded-full bg-green-500" title="Going"></span>
+			} else if a.Status == RSVPTentative {
+				<span class="w-2 h-2 rounded-full bg-yellow-500" title="Maybe"></span>
+			} else if a.Status == RSVPDeclined {
+				<span class="w-2 h-2 rounded-full bg-red-500" title="Can't go"></span>
+			} else {
+				<span class="w-2 h-2 rounded-full bg-gray-500" title="No response"></span>
+			}
+		}
+	}
+}
