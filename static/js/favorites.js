@@ -63,13 +63,6 @@
     return true;
   }
 
-  /** Escape HTML for safe rendering. */
-  function escapeHtml(s) {
-    if (!s) return '';
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-
   /** Update the star button icon to reflect current state. */
   function updateStarButton(btn, favorited) {
     var icon = btn.querySelector('i');
@@ -124,7 +117,7 @@
       html += '<a href="' + href + '" ' +
         'class="flex items-center px-4 py-1.5 text-xs transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active truncate">' +
         '<i class="fa-solid fa-star text-[10px] text-amber-400 mr-2 shrink-0"></i>' +
-        '<span class="truncate">' + escapeHtml(item.name) + '</span>' +
+        '<span class="truncate">' + Chronicle.escapeHtml(item.name) + '</span>' +
         '</a>';
     });
 

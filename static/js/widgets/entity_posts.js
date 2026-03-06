@@ -30,29 +30,13 @@
         editingPostId: null
       };
 
-      // --- API Helpers ---
-
-      function apiFetch(url, opts) {
-        opts = opts || {};
-        opts.headers = Object.assign({
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }, opts.headers || {});
-        if (csrf) opts.headers['X-CSRF-Token'] = csrf;
-        opts.credentials = 'same-origin';
-        return fetch(url, opts).then(function (r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        });
-      }
-
       // --- Load Posts ---
 
       function loadPosts() {
         state.loading = true;
         render();
 
-        apiFetch(endpoint)
+        Chronicle.apiFetch(endpoint)
           .then(function (posts) {
             state.posts = posts || [];
             state.loading = false;
@@ -68,7 +52,7 @@
       // --- Create Post ---
 
       function createPost(name) {
-        apiFetch(endpoint, {
+        Chronicle.apiFetch(endpoint, {
           method: 'POST',
           body: JSON.stringify({ name: name, isPrivate: false })
         })
@@ -86,7 +70,7 @@
       // --- Update Post ---
 
       function updatePost(postId, data) {
-        apiFetch(endpoint + '/' + postId, {
+        Chronicle.apiFetch(endpoint + '/' + postId, {
           method: 'PUT',
           body: JSON.stringify(data)
         })
@@ -108,7 +92,7 @@
       // --- Delete Post ---
 
       function deletePost(postId) {
-        apiFetch(endpoint + '/' + postId, { method: 'DELETE' })
+        Chronicle.apiFetch(endpoint + '/' + postId, { method: 'DELETE' })
           .then(function () {
             state.posts = state.posts.filter(function (p) { return p.id !== postId; });
             if (state.expandedPostId === postId) state.expandedPostId = null;
@@ -123,7 +107,7 @@
       // --- Reorder Posts ---
 
       function reorderPosts(postIds) {
-        apiFetch(endpoint + '/reorder', {
+        Chronicle.apiFetch(endpoint + '/reorder', {
           method: 'PUT',
           body: JSON.stringify({ postIds: postIds })
         })

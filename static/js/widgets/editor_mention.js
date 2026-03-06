@@ -335,6 +335,8 @@
         // Ignore abort errors (expected when query changes rapidly).
         if (err.name === 'AbortError') return;
         console.warn('[Mention] Search error:', err);
+        // No toast here -- mention search failures are transient and a popup
+        // would be disruptive while the user is mid-sentence typing a mention.
         self.abortController = null;
         self.items = [];
         self._renderHint('Search unavailable');

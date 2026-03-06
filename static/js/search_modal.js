@@ -195,6 +195,7 @@
       .catch(function (err) {
         if (err.name !== 'AbortError') {
           console.error('[Search] Fetch failed:', err);
+          Chronicle.notify('Search failed. Please try again.', 'error');
           results = [];
           activeIndex = -1;
           renderHint('Search failed. Please try again.');

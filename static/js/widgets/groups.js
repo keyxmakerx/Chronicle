@@ -31,32 +31,11 @@ Chronicle.register('groups', {
     var csrf = config.csrf || '';
     var endpoint = config.groupsEndpoint || '';
 
-    // --- API helpers ---
-
-    function apiFetch(url, opts) {
-      opts = opts || {};
-      opts.headers = opts.headers || {};
-      opts.headers['Content-Type'] = 'application/json';
-      if (csrf) opts.headers['X-CSRF-Token'] = csrf;
-      opts.credentials = 'same-origin';
-      return fetch(url, opts).then(function (r) {
-        if (!r.ok) {
-          return r.text().then(function (t) {
-            var msg;
-            try { msg = JSON.parse(t).message; } catch (e) { msg = t; }
-            throw new Error(msg || 'Request failed');
-          });
-        }
-        if (r.status === 204) return null;
-        return r.json();
-      });
-    }
-
     function loadGroups() {
       state.loading = true;
       state.error = null;
       render();
-      apiFetch(endpoint).then(function (data) {
+      Chronicle.apiFetch(endpoint).then(function (data) {
         state.groups = data.groups || [];
         state.loading = false;
         render();
@@ -79,7 +58,7 @@ Chronicle.register('groups', {
       }
 
       if (state.error) {
-        html += '<div class="alert-error mb-4" role="alert">' + escHtml(state.error) + '</div>';
+        html += '<div class="alert-error mb-4" role="alert">' + Chronicle.escapeHtml(state.error) + '</div>';
       }
 
       // Create group form.
@@ -125,8 +104,8 @@ Chronicle.register('groups', {
       html += '<div class="flex items-center justify-between px-4 py-3 bg-surface-alt border-b border-edge">';
       if (isEditing) {
         html += '<div class="flex items-center gap-2 flex-1">';
-        html += '<input type="text" class="input text-sm flex-1" data-edit-name value="' + escAttr(group.name) + '" maxlength="100"/>';
-        html += '<input type="text" class="input text-sm flex-1" data-edit-desc value="' + escAttr(group.description || '') + '" placeholder="Description"/>';
+        html += '<input type="text" class="input text-sm flex-1" data-edit-name value="' + Chronicle.escapeAttr(group.name) + '" maxlength="100"/>';
+        html += '<input type="text" class="input text-sm flex-1" data-edit-desc value="' + Chronicle.escapeAttr(group.description || '') + '" placeholder="Description"/>';
         html += '<button class="text-xs text-accent hover:text-accent-hover" data-action="save-edit" data-gid="' + group.id + '">Save</button>';
         html += '<button class="text-xs text-fg-muted hover:text-fg" data-action="cancel-edit">Cancel</button>';
         html += '</div>';
@@ -134,15 +113,15 @@ Chronicle.register('groups', {
         html += '<div class="flex items-center gap-2 cursor-pointer flex-1" data-action="toggle" data-gid="' + group.id + '">';
         html += '<i class="fa-solid fa-chevron-' + (isExpanded ? 'down' : 'right') + ' text-xs text-fg-muted w-3"></i>';
         html += '<i class="fa-solid fa-users text-fg-secondary text-sm"></i>';
-        html += '<span class="font-medium text-fg text-sm">' + escHtml(group.name) + '</span>';
+        html += '<span class="font-medium text-fg text-sm">' + Chronicle.escapeHtml(group.name) + '</span>';
         if (group.description) {
-          html += '<span class="text-fg-secondary text-xs ml-2">— ' + escHtml(group.description) + '</span>';
+          html += '<span class="text-fg-secondary text-xs ml-2">— ' + Chronicle.escapeHtml(group.description) + '</span>';
         }
         html += '<span class="text-xs text-fg-muted ml-2">(' + memberCount + ' member' + (memberCount !== 1 ? 's' : '') + ')</span>';
         html += '</div>';
         html += '<div class="flex items-center gap-2">';
         html += '<button class="text-xs text-fg-secondary hover:text-fg" data-action="edit" data-gid="' + group.id + '" title="Rename"><i class="fa-solid fa-pen text-xs"></i></button>';
-        html += '<button class="text-xs text-red-600 dark:text-red-400 hover:text-red-500" data-action="delete" data-gid="' + group.id + '" data-gname="' + escAttr(group.name) + '" title="Delete"><i class="fa-solid fa-trash text-xs"></i></button>';
+        html += '<button class="text-xs text-red-600 dark:text-red-400 hover:text-red-500" data-action="delete" data-gid="' + group.id + '" data-gname="' + Chronicle.escapeAttr(group.name) + '" title="Delete"><i class="fa-solid fa-trash text-xs"></i></button>';
         html += '</div>';
       }
       html += '</div>';
@@ -159,7 +138,7 @@ Chronicle.register('groups', {
           html += '<option value="">Add a member…</option>';
           for (var j = 0; j < availableMembers.length; j++) {
             var am = availableMembers[j];
-            html += '<option value="' + escAttr(am.user_id) + '">' + escHtml(am.display_name) + ' (' + escHtml(am.email) + ') — ' + escHtml(am.role) + '</option>';
+            html += '<option value="' + Chronicle.escapeAttr(am.user_id) + '">' + Chronicle.escapeHtml(am.display_name) + ' (' + Chronicle.escapeHtml(am.email) + ') — ' + Chronicle.escapeHtml(am.role) + '</option>';
           }
           html += '</select>';
           html += '<button class="btn-primary text-xs" data-action="add-member" data-gid="' + group.id + '">Add</button>';
@@ -173,11 +152,11 @@ Chronicle.register('groups', {
             var gm = group.members[k];
             html += '<div class="flex items-center justify-between py-2">';
             html += '<div>';
-            html += '<span class="text-sm text-fg">' + escHtml(gm.display_name) + '</span>';
-            html += '<span class="text-xs text-fg-secondary ml-2">' + escHtml(gm.email) + '</span>';
-            html += '<span class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-surface-alt text-fg-muted">' + escHtml(gm.role) + '</span>';
+            html += '<span class="text-sm text-fg">' + Chronicle.escapeHtml(gm.display_name) + '</span>';
+            html += '<span class="text-xs text-fg-secondary ml-2">' + Chronicle.escapeHtml(gm.email) + '</span>';
+            html += '<span class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-surface-alt text-fg-muted">' + Chronicle.escapeHtml(gm.role) + '</span>';
             html += '</div>';
-            html += '<button class="text-xs text-red-600 dark:text-red-400 hover:text-red-500" data-action="remove-member" data-gid="' + group.id + '" data-uid="' + escAttr(gm.user_id) + '" title="Remove from group"><i class="fa-solid fa-xmark"></i></button>';
+            html += '<button class="text-xs text-red-600 dark:text-red-400 hover:text-red-500" data-action="remove-member" data-gid="' + group.id + '" data-uid="' + Chronicle.escapeAttr(gm.user_id) + '" title="Remove from group"><i class="fa-solid fa-xmark"></i></button>';
             html += '</div>';
           }
           html += '</div>';
@@ -267,7 +246,7 @@ Chronicle.register('groups', {
       if (desc) body.description = desc;
 
       state.error = null;
-      apiFetch(endpoint, { method: 'POST', body: JSON.stringify(body) })
+      Chronicle.apiFetch(endpoint, { method: 'POST', body: JSON.stringify(body) })
         .then(function () {
           loadGroups();
         })
@@ -285,7 +264,7 @@ Chronicle.register('groups', {
       }
       // Load members for this group.
       state.expandedGroup = gid;
-      apiFetch(endpoint + '/' + gid).then(function (data) {
+      Chronicle.apiFetch(endpoint + '/' + gid).then(function (data) {
         // Update group in state with members.
         for (var i = 0; i < state.groups.length; i++) {
           if (state.groups[i].id === gid) {
@@ -317,7 +296,7 @@ Chronicle.register('groups', {
       else body.description = null;
 
       state.editingGroup = null;
-      apiFetch(endpoint + '/' + gid, { method: 'PUT', body: JSON.stringify(body) })
+      Chronicle.apiFetch(endpoint + '/' + gid, { method: 'PUT', body: JSON.stringify(body) })
         .then(function () {
           loadGroups();
         })
@@ -331,7 +310,7 @@ Chronicle.register('groups', {
       if (!confirm('Delete group "' + (gname || 'this group') + '"? Any entity permission grants for this group will also be removed.')) {
         return;
       }
-      apiFetch(endpoint + '/' + gid, { method: 'DELETE' })
+      Chronicle.apiFetch(endpoint + '/' + gid, { method: 'DELETE' })
         .then(function () {
           if (state.expandedGroup === gid) state.expandedGroup = null;
           loadGroups();
@@ -349,7 +328,7 @@ Chronicle.register('groups', {
       if (!select || !select.value) return;
       var uid = select.value;
 
-      apiFetch(endpoint + '/' + gid + '/members', {
+      Chronicle.apiFetch(endpoint + '/' + gid + '/members', {
         method: 'POST',
         body: JSON.stringify({ user_id: uid })
       }).then(function (data) {
@@ -368,7 +347,7 @@ Chronicle.register('groups', {
     }
 
     function removeMember(gid, uid) {
-      apiFetch(endpoint + '/' + gid + '/members/' + uid, { method: 'DELETE' })
+      Chronicle.apiFetch(endpoint + '/' + gid + '/members/' + uid, { method: 'DELETE' })
         .then(function () {
           // Remove from local state.
           for (var i = 0; i < state.groups.length; i++) {
@@ -385,18 +364,6 @@ Chronicle.register('groups', {
           state.error = err.message;
           render();
         });
-    }
-
-    // --- Helpers ---
-
-    function escHtml(s) {
-      var d = document.createElement('div');
-      d.textContent = s || '';
-      return d.innerHTML;
-    }
-
-    function escAttr(s) {
-      return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     // Initial load.

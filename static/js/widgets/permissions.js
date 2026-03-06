@@ -8,7 +8,6 @@
  * Config (from data-* attributes):
  *   data-endpoint  - Permissions API endpoint (GET/PUT), e.g. /campaigns/:id/entities/:eid/permissions
  *   data-editable  - "true" if user can modify permissions (Owner only)
- *   data-csrf      - CSRF token for mutating requests
  */
 Chronicle.register('permissions', {
   init: function (el, config) {
@@ -367,20 +366,9 @@ Chronicle.register('permissions', {
         })
       };
 
-      var csrf = config.csrf || '';
-      if (!csrf) {
-        var csrfInput = document.querySelector('input[name=csrf_token]');
-        if (csrfInput) csrf = csrfInput.value;
-      }
-
-      fetch(config.endpoint, {
+      Chronicle.apiFetch(config.endpoint, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrf
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(body),
+        body: body,
         signal: state.abortController.signal
       })
         .then(function (resp) {
@@ -398,6 +386,7 @@ Chronicle.register('permissions', {
           state.saving = false;
           showStatus('error', 'Error saving permissions');
           console.error('permissions: save error', err);
+          Chronicle.notify('Failed to save permissions', 'error');
         });
     }
 
@@ -408,10 +397,7 @@ Chronicle.register('permissions', {
         return;
       }
 
-      fetch(config.endpoint, {
-        headers: { 'Accept': 'application/json' },
-        credentials: 'same-origin'
-      })
+      Chronicle.apiFetch(config.endpoint)
         .then(function (resp) {
           if (!resp.ok) throw new Error('Failed to load permissions');
           return resp.json();
@@ -436,6 +422,7 @@ Chronicle.register('permissions', {
           state.error = err.message;
           el.innerHTML = '<div class="perm-status perm-status-error">Failed to load permissions</div>';
           console.error('permissions: load error', err);
+          Chronicle.notify('Failed to load permissions', 'error');
         });
     }
 

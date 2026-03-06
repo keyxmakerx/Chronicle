@@ -11,7 +11,6 @@
  *   data-endpoint   - Fields API endpoint (GET/PUT),
  *                     e.g. /campaigns/:id/entities/:eid/fields
  *   data-editable   - "true" if user can modify fields (Scribe+)
- *   data-csrf-token - CSRF token for mutating requests
  */
 Chronicle.register('attributes', {
   init: function (el, config) {
@@ -32,9 +31,7 @@ Chronicle.register('attributes', {
     var overridesEndpoint = config.endpoint.replace(/\/fields$/, '/field-overrides');
 
     // Load field definitions and current values.
-    var headers = { 'Accept': 'application/json' };
-
-    fetch(config.endpoint, { headers: headers, credentials: 'same-origin' })
+    Chronicle.apiFetch(config.endpoint)
       .then(function (r) {
         if (!r.ok) throw new Error('Failed to load fields');
         return r.json();
@@ -438,15 +435,8 @@ Chronicle.register('attributes', {
       if (state.isSaving) return;
       state.isSaving = true;
 
-      var reqHeaders = { 'Accept': 'application/json' };
-      if (config.csrfToken) {
-        reqHeaders['X-CSRF-Token'] = config.csrfToken;
-      }
-
-      fetch(overridesEndpoint, {
-        method: 'DELETE',
-        headers: reqHeaders,
-        credentials: 'same-origin'
+      Chronicle.apiFetch(overridesEndpoint, {
+        method: 'DELETE'
       })
         .then(function (r) {
           if (!r.ok) throw new Error('Failed to reset overrides');
@@ -454,7 +444,7 @@ Chronicle.register('attributes', {
           state.isCustomizing = false;
           state.isSaving = false;
           // Reload to get type-level fields without overrides.
-          return fetch(config.endpoint, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+          return Chronicle.apiFetch(config.endpoint);
         })
         .then(function (r) {
           if (!r.ok) throw new Error('Failed to reload fields');
@@ -479,19 +469,9 @@ Chronicle.register('attributes', {
       if (state.isSaving) return;
       state.isSaving = true;
 
-      var reqHeaders = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-      if (config.csrfToken) {
-        reqHeaders['X-CSRF-Token'] = config.csrfToken;
-      }
-
-      fetch(overridesEndpoint, {
+      Chronicle.apiFetch(overridesEndpoint, {
         method: 'PUT',
-        headers: reqHeaders,
-        credentials: 'same-origin',
-        body: JSON.stringify(overrides)
+        body: overrides
       })
         .then(function (r) {
           if (!r.ok) throw new Error('Failed to save overrides');
@@ -499,7 +479,7 @@ Chronicle.register('attributes', {
           state.isCustomizing = false;
           state.isSaving = false;
           // Reload to get merged fields.
-          return fetch(config.endpoint, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+          return Chronicle.apiFetch(config.endpoint);
         })
         .then(function (r) {
           if (!r.ok) throw new Error('Failed to reload fields');
@@ -539,19 +519,9 @@ Chronicle.register('attributes', {
         }
       });
 
-      var reqHeaders = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-      if (config.csrfToken) {
-        reqHeaders['X-CSRF-Token'] = config.csrfToken;
-      }
-
-      fetch(config.endpoint, {
+      Chronicle.apiFetch(config.endpoint, {
         method: 'PUT',
-        headers: reqHeaders,
-        credentials: 'same-origin',
-        body: JSON.stringify({ fields_data: newData })
+        body: { fields_data: newData }
       })
         .then(function (r) {
           if (!r.ok) throw new Error('Failed to save fields');

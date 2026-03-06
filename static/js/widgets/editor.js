@@ -9,7 +9,6 @@
  *   data-campaign-id - Campaign ID for @mention entity search (required for mentions)
  *   data-editable    - "true" to enable editing, "false" for read-only (default: false)
  *   data-autosave    - Autosave interval in seconds, 0 to disable (default: 30)
- *   data-csrf-token  - CSRF token for PUT requests
  *
  * Content is stored as ProseMirror JSON in the entity's `entry` column
  * and pre-rendered to HTML in `entry_html` for display performance.
@@ -65,8 +64,6 @@
       var campaignId = config.campaignId || '';
       var canEdit = config.editable === true; // user has permission to edit
       var autosaveInterval = config.autosave || 30;
-      var csrfToken = config.csrfToken || '';
-
       // Create editor container structure.
       el.innerHTML = '';
       el.classList.add('chronicle-editor');
@@ -192,7 +189,6 @@
         editor: editor,
         endpoint: endpoint,
         campaignId: campaignId,
-        csrfToken: csrfToken,
         autosaveTimer: null,
         dirty: false,
         saving: false,
@@ -652,6 +648,7 @@
             }
           }).catch(function (err) {
             console.error('[Editor] Auto-link failed:', err);
+            Chronicle.notify('Failed to auto-link entities', 'error');
           });
         }
         break;
@@ -722,11 +719,7 @@
    * Load content from the API endpoint.
    */
   function loadContent(state) {
-    fetch(state.endpoint, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      credentials: 'same-origin',
-    })
+    Chronicle.apiFetch(state.endpoint)
       .then(function (res) {
         if (!res.ok) throw new Error('Failed to load: ' + res.status);
         return res.json();
@@ -744,6 +737,7 @@
       })
       .catch(function (err) {
         console.error('[Editor] Load error:', err);
+        Chronicle.notify('Failed to load editor content', 'error');
         setStatus(state.statusEl, 'error', 'Failed to load content');
       });
   }
@@ -759,17 +753,12 @@
     var json = state.editor.getJSON();
     var html = state.editor.getHTML();
 
-    fetch(state.endpoint, {
+    Chronicle.apiFetch(state.endpoint, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': state.csrfToken,
-      },
-      credentials: 'same-origin',
-      body: JSON.stringify({
+      body: {
         entry: JSON.stringify(json),
         entry_html: html,
-      }),
+      },
     })
       .then(function (res) {
         if (!res.ok) throw new Error('Save failed: ' + res.status);
@@ -781,6 +770,7 @@
       })
       .catch(function (err) {
         console.error('[Editor] Save error:', err);
+        Chronicle.notify('Failed to save content', 'error');
         state.saving = false;
         setStatus(state.statusEl, 'error', 'Failed to save');
       });

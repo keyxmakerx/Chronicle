@@ -28,7 +28,6 @@ Chronicle.register('notes', {
     var campaignId = config.campaignId || '';
     var entityId = config.entityId || '';
     var currentUserId = config.userId || '';
-    var csrfToken = Chronicle.getCsrf();
 
     var HEARTBEAT_INTERVAL = 2 * 60 * 1000; // 2 minutes
 
@@ -331,25 +330,17 @@ Chronicle.register('notes', {
       return '/campaigns/' + campaignId + '/notes' + (path || '');
     }
 
-    function apiHeaders() {
-      return {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-CSRF-Token': csrfToken
-      };
-    }
-
     function loadNotes() {
       state.loading = true;
       renderNotes();
 
       var promises = [
-        fetch(apiUrl('?scope=all'), { headers: apiHeaders() }).then(function (r) { return r.ok ? r.json() : []; })
+        Chronicle.apiFetch(apiUrl('?scope=all')).then(function (r) { return r.ok ? r.json() : []; })
       ];
 
       if (entityId) {
         promises.push(
-          fetch(apiUrl('?scope=entity&entity_id=' + entityId), { headers: apiHeaders() }).then(function (r) { return r.ok ? r.json() : []; })
+          Chronicle.apiFetch(apiUrl('?scope=entity&entity_id=' + entityId)).then(function (r) { return r.ok ? r.json() : []; })
         );
       }
 
@@ -377,10 +368,9 @@ Chronicle.register('notes', {
         body.entityId = entityId;
       }
 
-      fetch(apiUrl(), {
+      Chronicle.apiFetch(apiUrl(), {
         method: 'POST',
-        headers: apiHeaders(),
-        body: JSON.stringify(body)
+        body: body
       }).then(function (r) { return r.json(); })
         .then(function (note) {
           if (isPageNote) {
@@ -391,6 +381,7 @@ Chronicle.register('notes', {
         })
         .catch(function (err) {
           console.error('[notes] Failed to create note:', err);
+          Chronicle.notify('Failed to save note', 'error');
           renderNotes();
         });
     }
@@ -409,10 +400,9 @@ Chronicle.register('notes', {
         body.parentId = parentId;
       }
 
-      fetch(apiUrl(), {
+      Chronicle.apiFetch(apiUrl(), {
         method: 'POST',
-        headers: apiHeaders(),
-        body: JSON.stringify(body)
+        body: body
       }).then(function (r) { return r.json(); })
         .then(function (note) {
           if (isPageNote) {
@@ -449,10 +439,9 @@ Chronicle.register('notes', {
         body.parentId = parentId;
       }
 
-      fetch(apiUrl(), {
+      Chronicle.apiFetch(apiUrl(), {
         method: 'POST',
-        headers: apiHeaders(),
-        body: JSON.stringify(body)
+        body: body
       }).then(function (r) { return r.json(); })
         .then(function (folder) {
           if (isPageNote) {
@@ -476,10 +465,9 @@ Chronicle.register('notes', {
     }
 
     function updateNote(id, data) {
-      return fetch(apiUrl('/' + id), {
+      return Chronicle.apiFetch(apiUrl('/' + id), {
         method: 'PUT',
-        headers: apiHeaders(),
-        body: JSON.stringify(data)
+        body: data
       }).then(function (r) { return r.json(); })
         .then(function (updated) {
           replaceNoteInState(updated);
@@ -497,9 +485,8 @@ Chronicle.register('notes', {
       if (state.lockedNoteId === id) {
         releaseLockIfHeld();
       }
-      fetch(apiUrl('/' + id), {
-        method: 'DELETE',
-        headers: apiHeaders()
+      Chronicle.apiFetch(apiUrl('/' + id), {
+        method: 'DELETE'
       }).then(function () {
         state.notes = state.notes.filter(function (n) { return n.id !== id; });
         state.pageNotes = state.pageNotes.filter(function (n) { return n.id !== id; });
@@ -509,10 +496,9 @@ Chronicle.register('notes', {
     }
 
     function toggleCheck(noteId, blockIdx, itemIdx) {
-      fetch(apiUrl('/' + noteId + '/toggle'), {
+      Chronicle.apiFetch(apiUrl('/' + noteId + '/toggle'), {
         method: 'POST',
-        headers: apiHeaders(),
-        body: JSON.stringify({ blockIndex: blockIdx, itemIndex: itemIdx })
+        body: { blockIndex: blockIdx, itemIndex: itemIdx }
       }).then(function (r) { return r.json(); })
         .then(function (updated) {
           replaceNoteInState(updated);
@@ -529,9 +515,8 @@ Chronicle.register('notes', {
 
     /** Acquire edit lock on a shared note. Returns the refreshed note or null. */
     function acquireLock(noteId) {
-      return fetch(apiUrl('/' + noteId + '/lock'), {
-        method: 'POST',
-        headers: apiHeaders()
+      return Chronicle.apiFetch(apiUrl('/' + noteId + '/lock'), {
+        method: 'POST'
       }).then(function (r) {
         if (!r.ok) return null;
         return r.json();
@@ -549,9 +534,8 @@ Chronicle.register('notes', {
     function releaseLock(noteId) {
       stopHeartbeat();
       state.lockedNoteId = null;
-      return fetch(apiUrl('/' + noteId + '/unlock'), {
-        method: 'POST',
-        headers: apiHeaders()
+      return Chronicle.apiFetch(apiUrl('/' + noteId + '/unlock'), {
+        method: 'POST'
       }).catch(function () { /* best effort */ });
     }
 
@@ -564,9 +548,8 @@ Chronicle.register('notes', {
 
     /** Send heartbeat to keep the lock alive. */
     function sendHeartbeat(noteId) {
-      fetch(apiUrl('/' + noteId + '/heartbeat'), {
-        method: 'POST',
-        headers: apiHeaders()
+      Chronicle.apiFetch(apiUrl('/' + noteId + '/heartbeat'), {
+        method: 'POST'
       }).catch(function () { /* best effort */ });
     }
 
@@ -592,9 +575,7 @@ Chronicle.register('notes', {
       state.versions = [];
       renderNotes();
 
-      fetch(apiUrl('/' + noteId + '/versions'), {
-        headers: apiHeaders()
-      }).then(function (r) { return r.ok ? r.json() : []; })
+      Chronicle.apiFetch(apiUrl('/' + noteId + '/versions')).then(function (r) { return r.ok ? r.json() : []; })
         .then(function (versions) {
           state.versions = versions || [];
           state.versionsLoading = false;
@@ -607,9 +588,8 @@ Chronicle.register('notes', {
     }
 
     function restoreVersion(noteId, versionId) {
-      fetch(apiUrl('/' + noteId + '/versions/' + versionId + '/restore'), {
-        method: 'POST',
-        headers: apiHeaders()
+      Chronicle.apiFetch(apiUrl('/' + noteId + '/versions/' + versionId + '/restore'), {
+        method: 'POST'
       }).then(function (r) { return r.json(); })
         .then(function (note) {
           replaceNoteInState(note);

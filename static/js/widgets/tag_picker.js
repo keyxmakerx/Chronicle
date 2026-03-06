@@ -8,7 +8,6 @@
  *   data-tags-endpoint  - Tag list endpoint (GET), e.g. /campaigns/:id/tags
  *   data-entity-tags-endpoint - Entity tags endpoint (GET/PUT), e.g. /campaigns/:id/entities/:eid/tags
  *   data-editable        - "true" if user can modify tags (Scribe+)
- *   data-csrf-token      - CSRF token for mutating requests
  */
 Chronicle.register('tag-picker', {
   init: function (el, config) {
@@ -62,20 +61,16 @@ Chronicle.register('tag-picker', {
     el._tagPickerState = state;
 
     // Fetch both tag lists in parallel.
-    var headers = { 'Accept': 'application/json' };
-    if (config.csrfToken) {
-      headers['X-CSRF-Token'] = config.csrfToken;
-    }
-
     Promise.all([
-      fetch(config.tagsEndpoint, { headers: headers }).then(function (r) { return r.json(); }),
-      fetch(config.entityTagsEndpoint, { headers: headers }).then(function (r) { return r.json(); })
+      Chronicle.apiFetch(config.tagsEndpoint).then(function (r) { return r.json(); }),
+      Chronicle.apiFetch(config.entityTagsEndpoint).then(function (r) { return r.json(); })
     ]).then(function (results) {
       state.allTags = results[0] || [];
       state.entityTags = results[1] || [];
       render();
     }).catch(function (err) {
       console.error('[tag-picker] Failed to load tags:', err);
+      Chronicle.notify('Failed to load tags', 'error');
     });
 
     function render() {
@@ -300,18 +295,9 @@ Chronicle.register('tag-picker', {
     }
 
     function saveEntityTags(tagIds) {
-      var reqHeaders = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-      if (config.csrfToken) {
-        reqHeaders['X-CSRF-Token'] = config.csrfToken;
-      }
-
-      fetch(config.entityTagsEndpoint, {
+      Chronicle.apiFetch(config.entityTagsEndpoint, {
         method: 'PUT',
-        headers: reqHeaders,
-        body: JSON.stringify({ tagIds: tagIds })
+        body: { tagIds: tagIds }
       })
         .then(function (r) {
           if (!r.ok) throw new Error('Failed to update tags');
@@ -323,6 +309,7 @@ Chronicle.register('tag-picker', {
         })
         .catch(function (err) {
           console.error('[tag-picker] Failed to save tags:', err);
+          Chronicle.notify('Failed to save tags', 'error');
         });
     }
 
@@ -334,18 +321,9 @@ Chronicle.register('tag-picker', {
       var colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6'];
       var color = colors[Math.floor(Math.random() * colors.length)];
 
-      var reqHeaders = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-      if (config.csrfToken) {
-        reqHeaders['X-CSRF-Token'] = config.csrfToken;
-      }
-
-      fetch(config.tagsEndpoint, {
+      Chronicle.apiFetch(config.tagsEndpoint, {
         method: 'POST',
-        headers: reqHeaders,
-        body: JSON.stringify({ name: name, color: color, dmOnly: !!dmOnly })
+        body: { name: name, color: color, dmOnly: !!dmOnly }
       })
         .then(function (r) {
           if (!r.ok) throw new Error('Failed to create tag');
@@ -362,6 +340,7 @@ Chronicle.register('tag-picker', {
         })
         .catch(function (err) {
           console.error('[tag-picker] Failed to create tag:', err);
+          Chronicle.notify('Failed to create tag', 'error');
           state.creating = false;
         });
     }

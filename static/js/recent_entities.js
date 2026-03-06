@@ -141,20 +141,11 @@
       html += '<a href="' + href + '" ' +
         'class="flex items-center px-4 py-1.5 text-xs transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active truncate">' +
         '<i class="fa-solid fa-clock text-[10px] text-gray-600 mr-2 shrink-0"></i>' +
-        '<span class="truncate">' + escapeHtml(item.name) + '</span>' +
+        '<span class="truncate">' + Chronicle.escapeHtml(item.name) + '</span>' +
         '</a>';
     });
 
     container.innerHTML = html;
-  }
-
-  /**
-   * Escape HTML to prevent XSS from stored entity names.
-   */
-  function escapeHtml(s) {
-    if (!s) return '';
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   /**

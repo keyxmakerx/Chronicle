@@ -56,6 +56,7 @@
           .catch(function (err) {
             el.innerHTML = '<div class="text-center py-12 text-red-500 text-sm">Failed to load graph data</div>';
             console.error('[RelationGraph] Load error:', err);
+            Chronicle.notify('Failed to load graph data', 'error');
           });
       }
 
@@ -202,8 +203,8 @@
 
         nodes.on('mouseenter', function (event, d) {
           tooltip.style('display', 'block')
-            .html('<strong>' + escHtml(d.name) + '</strong>' +
-              (d.type ? '<br><span style="color:var(--color-fg-muted)">' + escHtml(d.type) + '</span>' : ''));
+            .html('<strong>' + Chronicle.escapeHtml(d.name) + '</strong>' +
+              (d.type ? '<br><span style="color:var(--color-fg-muted)">' + Chronicle.escapeHtml(d.type) + '</span>' : ''));
         });
         nodes.on('mousemove', function (event) {
           var rect = el.getBoundingClientRect();
@@ -271,7 +272,7 @@
           typeKeys.forEach(function (type) {
             var item = document.createElement('span');
             item.style.cssText = 'display:flex;align-items:center;gap:4px;';
-            item.innerHTML = '<span style="width:10px;height:10px;border-radius:50%;background:' + escHtml(typeColors[type]) + ';display:inline-block;"></span>' + escHtml(type);
+            item.innerHTML = '<span style="width:10px;height:10px;border-radius:50%;background:' + Chronicle.escapeHtml(typeColors[type]) + ';display:inline-block;"></span>' + Chronicle.escapeHtml(type);
             legend.appendChild(item);
           });
           el.appendChild(legend);
@@ -279,12 +280,6 @@
 
         // Store ref for cleanup.
         el._graphSimulation = simulation;
-      }
-
-      function escHtml(s) {
-        var d = document.createElement('div');
-        d.textContent = s || '';
-        return d.innerHTML;
       }
 
       ensureD3(loadAndRender);

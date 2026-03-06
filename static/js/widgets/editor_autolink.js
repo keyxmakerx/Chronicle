@@ -54,6 +54,8 @@
       })
       .catch(function (err) {
         delete fetchInFlight[campaignId];
+        console.error('[AutoLink] Failed to fetch entity names:', err);
+        Chronicle.notify('Could not load entity names for auto-linking.', 'error');
         throw err;
       });
 

@@ -309,8 +309,10 @@
           });
         }
       })
-      .catch(function () {
-        // Silently fail: hide tooltip if fetch fails.
+      .catch(function (err) {
+        // Quietly log tooltip fetch failures -- a toast would be too noisy
+        // since hovering over stale/deleted entity links is common.
+        console.warn('[Tooltip] Preview fetch failed:', err);
         if (activeTarget === target) {
           hideTooltip();
         }
