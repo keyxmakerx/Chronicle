@@ -8,11 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-06 -- Sprint M1-5: Plugin hub page (batch 52).
+2026-03-06 -- Sprint M3: Test coverage complete (batch 54).
 Branch: `claude/plan-project-phases-8CPw5`.
 
 ## Current Phase
-**Phase M1: Quick Wins — COMPLETE.** All 5 sprints done (M1-1 through M1-5). Next: M2 (JS Code Quality).
+**Phase M3: Test Coverage — COMPLETE.** Maps (45 tests), Calendar (40+ tests), Sessions (40+ tests), Timeline (50+ tests). Next: M (Game System Modules).
 
 ### Sprint M0-4: dm_only Visibility on Entity Relations (batch 48)
 - Migration 000052: `dm_only BOOLEAN NOT NULL DEFAULT FALSE` on `entity_relations`
@@ -188,7 +188,7 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 ---
 
 ## Next Session Should
-Continue with **M2-1: apiFetch Migration & Utility Dedup** (migrate remaining widgets to Chronicle.apiFetch, remove duplicated helpers). Full roadmap in `.ai/todo.md`.
+Continue with **Phase M: Game System Modules** (Sprint M-1: D&D 5e module — SRD data + tooltip API). Full roadmap in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

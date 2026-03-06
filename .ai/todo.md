@@ -141,16 +141,16 @@ _High-impact, low-effort items that immediately improve the user experience._
 
 _Consistency and reliability across all JS widgets._
 
-- [ ] **Sprint M2-1: apiFetch Migration & Utility Dedup** — Migrate notes.js (10), attributes.js (5), relations.js (6), tag_picker.js (6), permissions.js (2), editor.js (2) to Chronicle.apiFetch(). Remove local escHtml/escAttr from groups.js and relation_graph.js. Remove local apiFetch from groups.js.
-- [ ] **Sprint M2-2: Error Handling — Toast on Failure** — Add toast feedback to notes.js, tag_picker.js, timeline_viz.js, entity_tooltip.js, editor_autolink.js, editor_mention.js, template_editor.js, relation_graph.js, search_modal.js. All catch blocks show Chronicle.toast() instead of console.error alone.
+- [x] **Sprint M2-1: apiFetch Migration & Utility Dedup** — Migrated all raw fetch() to Chronicle.apiFetch() across 9 widgets. Removed local escHtml/escAttr/apiFetch from groups.js, entity_posts.js, relation_graph.js, favorites.js, recent_entities.js (-290 lines).
+- [x] **Sprint M2-2: Error Handling — Toast on Failure** — Added Chronicle.notify() toasts to catch blocks in notes, tag_picker, relations, relation_graph, editor, permissions, search_modal, editor_autolink. Tooltip/mention use console.warn only (too noisy for toasts).
 
 ### Phase M3: Test Coverage
 
 _Fill the biggest test gaps — zero-test plugins and incomplete service tests._
 
-- [ ] **Sprint M3-1: Maps Service Tests** — 27+ endpoints, 0 tests. Mock MapRepository, test service CRUD for maps, markers, layers, drawings, tokens, fog. Target: 40+ tests.
-- [ ] **Sprint M3-2: Sessions & Calendar Service Tests** — Sessions: 8+ endpoints, 0 tests. Calendar: extend beyond day/week domain tests. Target: 20+ each.
-- [ ] **Sprint M3-3: Timeline Service Tests & CI Fix** — Extend beyond 3 connection tests. Fix CI `-short` flag (add testing.Short() skips or remove flag). Target: 15+ tests.
+- [x] **Sprint M3-1: Maps Service Tests** — 45 tests covering maps/markers CRUD, validation, XSS prevention (icon/color patterns), coordinate boundary checks, search results formatting.
+- [x] **Sprint M3-2: Sessions & Calendar Service Tests** — Sessions: 40+ tests (CRUD, recurrence, RSVP, entity linking, RSVP tokens, model methods). Calendar: 40+ tests (calendar CRUD, events, date helpers, week view).
+- [x] **Sprint M3-3: Timeline Service Tests** — 50+ tests covering timeline CRUD, standalone events, entity groups, event connections, search, visibility filtering, event linking.
 
 ### Phase M: Game System Modules & Worldbuilding Tools
 
