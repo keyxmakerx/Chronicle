@@ -8,18 +8,21 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-06 -- Sprint P-1: Content Extension Infrastructure complete.
+2026-03-06 -- Phase P: Content Extensions (Layer 1) — ALL SPRINTS COMPLETE.
 Branch: `claude/fix-calendar-shop-widgets-45iz7`.
 
 ## Current Phase
-**Phase P: Content Extensions (Layer 1).** Sprint P-1 complete. Next: Sprint P-2 (Admin Extension Management UI).
+**Phase P: Content Extensions (Layer 1) — COMPLETE.** Next: Phase Q (Widget Extensions Layer 2).
 
-### Sprint P-1: Extension Infrastructure (batch 57) — COMPLETE
-- **Migration 000055**: 4 tables — `extensions`, `campaign_extensions`, `extension_provenance`, `extension_data`
-- **Package `internal/extensions/`**: Complete extension system with model, manifest parser/validator, security (zip extraction, path traversal prevention, file type allowlist, CSS/SVG sanitization), repository (16 methods), service (install/uninstall/update/rescan + per-campaign enable/disable), handler (admin + campaign HTTP endpoints), templ templates, routes
-- **Config**: Added `ExtensionsPath` to config with `EXTENSIONS_PATH` env var
-- **Wiring**: Extension service/handler/routes integrated in `app/routes.go`
-- **Build**: Clean — 0 lint issues, all tests pass
+### Phase P Summary (Sprints P-1 through P-6)
+- **P-1**: Extension infrastructure — migration 000055 (4 tables), manifest parser/validator, zip security, repository (16 methods), service, handler, routes, config
+- **P-2**: Admin UI — polished extension list with card layout, extension detail page (manifest metadata, author, contributes breakdown, dependencies), admin sidebar link, HTMX rescan/update
+- **P-3**: Campaign integration — content extensions lazy-loaded in campaign addons settings page and customization hub extensions tab
+- **P-4**: Content appliers — entity type templates and tag collections applied on enable with provenance tracking. Adapter pattern bridges entity/tag services
+- **P-5**: Marker icons and themes — icon pack registration in extension_data, theme CSS registration, API endpoints for marker-icons and themes
+- **P-6**: Example extensions — Harptos Calendar (Forgotten Realms) and D&D 5e Character Sheet with 4 entity types, creature tags, relation types. Unit tests validate manifests
+- **Package**: `internal/extensions/` — 11 files (model, manifest, security, repository, service, handler, routes, applier, adapters, templ, tests)
+- **Tests**: 41 tests (manifest parsing, security, SVG/CSS validation, UUID, example manifests)
 
 ### Extension System Research (batch 56)
 - **ADR-021**: Layered third-party extension strategy recorded in `.ai/decisions.md`.
@@ -207,7 +210,7 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 ---
 
 ## Next Session Should
-Continue with **Phase P: Content Extensions** — Sprint P-2 (Admin Extension Management UI polish), then P-3 through P-6 (content type applicators), Q (Widget Extensions Layer 2), R (Logic Extensions Layer 3/WASM). Full roadmap in `.ai/todo.md`.
+Continue with **Phase Q: Widget Extensions (Layer 2)** — browser-sandboxed JS widgets that can render custom UI. Then Phase R (Logic Extensions Layer 3/WASM). Full roadmap in `.ai/todo.md`.
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
