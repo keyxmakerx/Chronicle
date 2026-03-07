@@ -14,6 +14,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/modules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -31,7 +32,7 @@ func NewHandler(svc ExtensionService, extDir string) *Handler {
 
 // --- Admin Endpoints ---
 
-// ListExtensions returns all installed extensions.
+// ListExtensions returns all installed extensions and built-in game systems.
 // GET /admin/extensions
 func (h *Handler) ListExtensions(c echo.Context) error {
 	exts, err := h.svc.List(c.Request().Context())
@@ -42,10 +43,16 @@ func (h *Handler) ListExtensions(c echo.Context) error {
 		exts = []Extension{}
 	}
 
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts))
+	// Include built-in game systems on the same page.
+	mods := modules.Registry()
+	if mods == nil {
+		mods = []*modules.ModuleManifest{}
 	}
-	return middleware.Render(c, http.StatusOK, adminExtensionListPage(exts))
+
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts, mods))
+	}
+	return middleware.Render(c, http.StatusOK, adminExtensionListPage(exts, mods))
 }
 
 // GetExtension returns details for a single extension.
@@ -114,7 +121,11 @@ func (h *Handler) InstallExtension(c echo.Context) error {
 		if exts == nil {
 			exts = []Extension{}
 		}
-		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts))
+		mods := modules.Registry()
+		if mods == nil {
+			mods = []*modules.ModuleManifest{}
+		}
+		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts, mods))
 	}
 
 	return c.JSON(http.StatusCreated, ext)
@@ -179,7 +190,11 @@ func (h *Handler) UninstallExtension(c echo.Context) error {
 		if exts == nil {
 			exts = []Extension{}
 		}
-		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts))
+		mods := modules.Registry()
+		if mods == nil {
+			mods = []*modules.ModuleManifest{}
+		}
+		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts, mods))
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "uninstalled"})
@@ -204,7 +219,11 @@ func (h *Handler) RescanExtensions(c echo.Context) error {
 		if exts == nil {
 			exts = []Extension{}
 		}
-		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts))
+		mods := modules.Registry()
+		if mods == nil {
+			mods = []*modules.ModuleManifest{}
+		}
+		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts, mods))
 	}
 
 	total, _ := h.svc.List(c.Request().Context())
