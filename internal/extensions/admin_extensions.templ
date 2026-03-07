@@ -3,21 +3,22 @@ package extensions
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/modules"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // adminExtensionListPage renders the full admin extensions management page.
-templ adminExtensionListPage(exts []Extension) {
+templ adminExtensionListPage(exts []Extension, mods []*modules.ModuleManifest) {
 	@layouts.App("Content Packs - Admin") {
 		<div class="max-w-5xl mx-auto space-y-6">
-			@adminExtensionListFragment(exts)
+			@adminExtensionListFragment(exts, mods)
 		</div>
 	}
 }
 
 // adminExtensionListFragment renders the extension list content (for HTMX swap).
-templ adminExtensionListFragment(exts []Extension) {
+templ adminExtensionListFragment(exts []Extension, mods []*modules.ModuleManifest) {
 	<div class="admin-extensions" id="admin-extensions">
 		<div class="flex items-center justify-between">
 			<div>
@@ -78,6 +79,28 @@ templ adminExtensionListFragment(exts []Extension) {
 			</div>
 		}
 
+		<!-- Built-in Game Systems -->
+		if len(mods) > 0 {
+			<div class="mt-6">
+				<div class="flex items-center justify-between mb-3">
+					<div class="flex items-center gap-2">
+						<h2 class="text-lg font-semibold text-fg">Built-in Game Systems</h2>
+						<span class="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-full bg-surface-alt text-fg-secondary">
+							{ fmt.Sprintf("%d", len(mods)) } available
+						</span>
+					</div>
+				</div>
+				<p class="text-sm text-fg-secondary mb-4">
+					Game system reference data that ships with Chronicle. Campaign owners can enable these from their campaign settings.
+				</p>
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+					for _, mod := range mods {
+						@builtinModuleCard(mod)
+					}
+				</div>
+			</div>
+		}
+
 		<!-- Info panel -->
 		<div class="card p-6 mt-4">
 			<div class="flex items-start gap-4">
@@ -92,8 +115,13 @@ templ adminExtensionListFragment(exts []Extension) {
 						and reference data to Chronicle. They contain no executable code.
 					</p>
 					<p class="text-sm text-fg-secondary leading-relaxed mt-2">
-						Content packs are installed site-wide by administrators. Campaign owners can then
-						enable or disable each extension from their campaign settings.
+						Built-in game systems provide read-only reference content like spell descriptions,
+						monster stat blocks, and item properties. They ship with Chronicle and are
+						always available for campaigns to enable.
+					</p>
+					<p class="text-sm text-fg-secondary leading-relaxed mt-2">
+						All content packs are managed site-wide by administrators. Campaign owners can
+						enable or disable them from their campaign settings.
 					</p>
 				</div>
 			</div>
@@ -152,6 +180,68 @@ templ adminExtensionCard(ext Extension) {
 					Uninstall
 				</button>
 			</div>
+		</div>
+	</div>
+}
+
+// builtinModuleCard renders a built-in game system module card on the content packs page.
+templ builtinModuleCard(mod *modules.ModuleManifest) {
+	<div class="card p-5 flex flex-col">
+		<div class="flex items-start justify-between mb-3">
+			<div class="flex items-center gap-3">
+				<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+					<i class={ "fa-solid " + mod.Icon + " text-accent" }></i>
+				</span>
+				<div>
+					<h3 class="text-sm font-semibold text-fg">{ mod.Name }</h3>
+					<p class="text-xs text-fg-muted">{ mod.ID }</p>
+				</div>
+			</div>
+			if mod.Status == modules.StatusAvailable {
+				<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+					Available
+				</span>
+			} else {
+				<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-surface-alt text-fg-muted">
+					Coming Soon
+				</span>
+			}
+		</div>
+		<p class="text-sm text-fg-secondary leading-relaxed flex-1 mb-3">
+			{ mod.Description }
+		</p>
+		if len(mod.Categories) > 0 {
+			<div class="pt-3 border-t border-edge mb-3">
+				<p class="text-xs font-medium text-fg-muted uppercase tracking-wider mb-2">Content</p>
+				<div class="flex flex-wrap gap-1.5">
+					for _, cat := range mod.Categories {
+						<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md bg-surface-alt text-fg-secondary">
+							if cat.Icon != "" {
+								<i class={ "fa-solid " + cat.Icon + " text-[10px]" }></i>
+							}
+							{ cat.Name }
+						</span>
+					}
+				</div>
+			</div>
+		}
+		<div class="pt-3 border-t border-edge">
+			<div class="flex items-center justify-between">
+				if mod.Version != "" {
+					<span class="text-xs text-fg-muted">v{ mod.Version }</span>
+				}
+				<div class="flex items-center gap-3 text-[11px] text-fg-muted">
+					if mod.Author != "" {
+						<span><i class="fa-solid fa-user mr-1"></i>{ mod.Author }</span>
+					}
+					if mod.License != "" {
+						<span><i class="fa-solid fa-scale-balanced mr-1"></i>{ mod.License }</span>
+					}
+				</div>
+			</div>
+			<p class="text-[11px] text-fg-muted mt-1">
+				<i class="fa-solid fa-cube mr-1"></i>Built-in
+			</p>
 		</div>
 	</div>
 }

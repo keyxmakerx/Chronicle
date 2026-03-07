@@ -34,9 +34,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.GET("/storage", h.Storage)
 	admin.DELETE("/media/:fileID", h.DeleteMedia)
 
-	// Game system management.
-	admin.GET("/modules", h.Modules)
-
 	// Security dashboard.
 	admin.GET("/security", h.Security)
 	admin.DELETE("/security/sessions/:hash", h.TerminateSession)
