@@ -575,7 +575,7 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 					type="search"
 					placeholder={ fmt.Sprintf("Search %s...", et.NamePlural) }
 					class="w-full px-3 py-1.5 pl-8 text-xs rounded-md bg-gray-800 border border-gray-700 text-gray-300 placeholder-gray-500 focus:outline-none focus:border-gray-500 transition-colors"
-					hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d", campaignID, et.ID) }
+					hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, et.ID) }
 					hx-trigger="keyup changed delay:300ms"
 					hx-target="#sidebar-cat-results"
 					hx-swap="innerHTML"
@@ -585,8 +585,16 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 				<i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-[10px] pointer-events-none"></i>
 			</div>
 		</div>
-		<!-- Search results area -->
-		<div id="sidebar-cat-results" class="px-2"></div>
+		<!-- Search results / page listing (auto-loads all pages on panel open) -->
+		<div id="sidebar-cat-results">
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, et.ID) }
+				hx-trigger="load"
+				hx-swap="outerHTML"
+			>
+				<div class="px-4 py-2 text-xs text-gray-500 italic">Loading...</div>
+			</div>
+		</div>
 		<!-- Favorites section (populated by favorites.js) -->
 		<div id="sidebar-cat-favorites-header" class="px-4 mt-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600" style="display:none">
 			<i class="fa-solid fa-star text-amber-400 mr-0.5"></i> Favorites

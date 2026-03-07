@@ -77,7 +77,11 @@ Chronicle.register('image-upload', {
         }
       })
         .then(function (res) {
-          if (!res.ok) throw new Error('Upload failed: ' + res.status);
+          if (!res.ok) {
+            return res.json().catch(function () { return {}; }).then(function (body) {
+              throw new Error(body.message || 'Upload failed: ' + res.status);
+            });
+          }
           return res.json();
         })
         .then(function (data) {
@@ -98,7 +102,7 @@ Chronicle.register('image-upload', {
         })
         .catch(function (err) {
           console.error('[image-upload] Error:', err);
-          alert('Failed to upload image. Please try again.');
+          alert('Image upload failed: ' + (err.message || 'Unknown error'));
           el.style.opacity = '';
           el.style.pointerEvents = '';
         })

@@ -8,8 +8,8 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-06 -- Admin UI bug fixes, email change verification, terminology consolidation.
-Branch: `claude/fix-admin-ui-bugs-0Fiqm`.
+2026-03-07 -- Category nav page listing, shop widget create items, image upload fix, dirty form fix, admin features filtering.
+Branch: `claude/fix-category-nav-shops-i99oq`.
 
 ## Current Phase
 **Bug fix & feature sprint — 9 issues resolved.**
@@ -332,12 +332,19 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - **Bug 9**: SMTP test email — SendTestEmail endpoint with recipient input, actionable error wrapping for TLS/auth/connection failures.
 - **Bug 6**: Terminology consolidation — removed Plugins admin page, renamed Addons→Features, kept Content Packs, renamed Modules→Game Systems across admin sidebar, dashboard, admin pages, and campaign-level pages.
 
+### Bug Fixes & UX Improvements (2026-03-07)
+- **Category Nav Page Listing**: Sidebar drill panel now auto-loads entity pages when a category is opened. Uses HTMX `hx-trigger="load"` to fetch entities via the search endpoint with `sidebar=1` rendering mode. New `SidebarEntityList` template renders compact entity links.
+- **Shop Widget Create Items**: Added "Create & Add" functionality to shop inventory widget. New `QuickCreateAPI` endpoint (`POST /entities/quick-create`) creates entities from JSON. Shop widget now shows "or create a new item" section in the add panel with inline name input.
+- **Image Upload Error Handling**: Improved upload handler with structured error logging at each failure point. Added MIME type fallback to `http.DetectContentType` when browser sends empty/generic Content-Type. `MaxBytesReader` errors now return 400 instead of 500. Frontend shows server error messages.
+- **Dirty Form Fix**: Added document-level `htmx:afterRequest` listener that checks for `HX-Redirect` response header and clears all dirty sources. This catches cases where `htmx:beforeRedirect` doesn't fire due to timing differences.
+- **Admin Features Page**: Filtered module-category addons (dnd5e, drawsteel, pathfinder2e) from the admin Features page. These game systems are managed on the Content Packs page. Added `CountFeatures` method to exclude modules from the dashboard count.
+
 ## Next Session Should
 - Sprint M-2: D&D 5e Module — Reference Pages (browsable pages at `/modules/dnd5e/`)
+- Obsidian-style notes (see `.ai/obsidian-notes-plan.md`)
 - Quick wins from the UX audit (export button, sort controls, etc.)
 - Phase S+ deferred items (Draw Steel module, whiteboards, offline mode)
 - Test coverage gaps (handler/repository tests for maps, sessions, admin, smtp)
-- Bug 6 Sprint 2: Campaign owner page consolidation (if needed beyond what was done)
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

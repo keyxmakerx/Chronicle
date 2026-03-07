@@ -19,6 +19,7 @@ Chronicle.register('shop_inventory', {
   init: function (el) {
     var relationsEndpoint = el.dataset.relationsEndpoint;
     var entitySearchEndpoint = el.dataset.entitySearchEndpoint;
+    var quickCreateEndpoint = el.dataset.quickCreateEndpoint;
     var campaignUrl = el.dataset.campaignUrl;
     var editable = el.dataset.editable === 'true';
     var csrfToken = el.dataset.csrfToken || '';
@@ -74,6 +75,14 @@ Chronicle.register('shop_inventory', {
       '.dark .shop-inv-price-input { background: #374151; border-color: #4b5563; color: #e5e7eb; }',
       '.shop-inv-add-panel { border: 1px solid #e5e7eb; border-radius: 0.375rem; padding: 0.75rem; margin-bottom: 0.75rem; }',
       '.dark .shop-inv-add-panel { border-color: #374151; }',
+      '.shop-inv-create-form { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #e5e7eb; }',
+      '.dark .shop-inv-create-form { border-color: #374151; }',
+      '.shop-inv-create-input { flex: 1; padding: 0.375rem 0.5rem; border: 1px solid #d1d5db; border-radius: 0.25rem; font-size: 0.8125rem; }',
+      '.dark .shop-inv-create-input { background: #374151; border-color: #4b5563; color: #e5e7eb; }',
+      '.shop-inv-create-btn { font-size: 0.75rem; padding: 0.375rem 0.75rem; border-radius: 0.25rem; background: #10b981; color: #fff; border: none; cursor: pointer; white-space: nowrap; }',
+      '.shop-inv-create-btn:hover { background: #059669; }',
+      '.shop-inv-create-btn:disabled { opacity: 0.5; cursor: not-allowed; }',
+      '.shop-inv-or-divider { text-align: center; font-size: 0.6875rem; color: #9ca3af; margin-top: 0.5rem; }',
     ].join('\n');
     el.appendChild(style);
 
@@ -266,7 +275,7 @@ Chronicle.register('shop_inventory', {
       var searchInput = document.createElement('input');
       searchInput.className = 'shop-inv-search';
       searchInput.type = 'text';
-      searchInput.placeholder = 'Search items to add...';
+      searchInput.placeholder = 'Search existing items to add...';
       searchInput.value = state.searchQuery;
       searchInput.oninput = function () {
         state.searchQuery = searchInput.value;
@@ -284,6 +293,48 @@ Chronicle.register('shop_inventory', {
       resultsDiv.className = 'shop-inv-search-results';
       renderSearchResults(resultsDiv);
       panel.appendChild(resultsDiv);
+
+      // "Or create new" section.
+      if (quickCreateEndpoint) {
+        var orDiv = document.createElement('div');
+        orDiv.className = 'shop-inv-or-divider';
+        orDiv.textContent = '— or create a new item —';
+        panel.appendChild(orDiv);
+
+        var createForm = document.createElement('div');
+        createForm.className = 'shop-inv-create-form';
+
+        var nameInput = document.createElement('input');
+        nameInput.className = 'shop-inv-create-input';
+        nameInput.type = 'text';
+        nameInput.placeholder = 'New item name...';
+
+        var createBtn = document.createElement('button');
+        createBtn.className = 'shop-inv-create-btn';
+        createBtn.textContent = 'Create & Add';
+        createBtn.onclick = function () {
+          var name = nameInput.value.trim();
+          if (!name) return;
+          createBtn.disabled = true;
+          createBtn.textContent = 'Creating...';
+          quickCreateItem(name, function () {
+            createBtn.disabled = false;
+            createBtn.textContent = 'Create & Add';
+          });
+        };
+
+        // Allow Enter key to create.
+        nameInput.onkeydown = function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            createBtn.click();
+          }
+        };
+
+        createForm.appendChild(nameInput);
+        createForm.appendChild(createBtn);
+        panel.appendChild(createForm);
+      }
 
       // Auto-focus the search input.
       setTimeout(function () { searchInput.focus(); }, 50);
@@ -367,7 +418,7 @@ Chronicle.register('shop_inventory', {
         metadata: { price: 0, quantity: null, in_stock: true },
       };
 
-      Chronicle.apiFetch(relationsEndpoint, {
+      return Chronicle.apiFetch(relationsEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
         body: JSON.stringify(body),
@@ -415,6 +466,26 @@ Chronicle.register('shop_inventory', {
         })
         .catch(function (err) {
           console.error('Shop inventory: search failed', err);
+        });
+    }
+
+    function quickCreateItem(name, onDone) {
+      Chronicle.apiFetch(quickCreateEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ name: name, entity_type_id: 0 }),
+      })
+        .then(function (data) {
+          // Add the newly created entity to the shop.
+          return addItem(data.id);
+        })
+        .then(function () {
+          if (onDone) onDone();
+        })
+        .catch(function (err) {
+          console.error('Shop inventory: failed to create item', err);
+          if (onDone) onDone();
+          Chronicle.showToast && Chronicle.showToast('Failed to create item', 'error');
         });
     }
 

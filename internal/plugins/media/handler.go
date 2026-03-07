@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -78,25 +79,47 @@ func (h *Handler) Upload(c echo.Context) error {
 
 	file, err := c.FormFile("file")
 	if err != nil {
+		slog.Warn("media upload: FormFile error",
+			slog.String("user_id", userID),
+			slog.Any("error", err),
+		)
 		return apperror.NewBadRequest("no file provided")
 	}
 
 	src, err := file.Open()
 	if err != nil {
+		slog.Error("media upload: file open error",
+			slog.String("user_id", userID),
+			slog.Any("error", err),
+		)
 		return apperror.NewInternal(err)
 	}
 	defer func() { _ = src.Close() }()
 
 	fileBytes, err := io.ReadAll(src)
 	if err != nil {
+		// MaxBytesReader returns a specific error when body exceeds limit.
+		if err.Error() == "http: request body too large" {
+			return apperror.NewBadRequest("file too large")
+		}
+		slog.Error("media upload: read error",
+			slog.String("user_id", userID),
+			slog.Any("error", err),
+		)
 		return apperror.NewInternal(err)
+	}
+
+	// Detect MIME type from file content if browser didn't provide one.
+	declaredMime := file.Header.Get("Content-Type")
+	if declaredMime == "" || declaredMime == "application/octet-stream" {
+		declaredMime = http.DetectContentType(fileBytes)
 	}
 
 	input := UploadInput{
 		CampaignID:   c.FormValue("campaign_id"),
 		UploadedBy:   userID,
 		OriginalName: file.Filename,
-		MimeType:     file.Header.Get("Content-Type"),
+		MimeType:     declaredMime,
 		FileSize:     int64(len(fileBytes)),
 		UsageType:    c.FormValue("usage_type"),
 		FileBytes:    fileBytes,

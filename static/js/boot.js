@@ -351,6 +351,18 @@
     dirtySources = {};
   });
 
+  // Also clear dirty state when any HTMX request completes with a
+  // redirect header. This catches cases where htmx:beforeRedirect
+  // doesn't fire due to timing or response handling differences.
+  document.addEventListener('htmx:afterRequest', function (event) {
+    if (event.detail && event.detail.xhr) {
+      var redirect = event.detail.xhr.getResponseHeader('HX-Redirect');
+      if (redirect) {
+        dirtySources = {};
+      }
+    }
+  });
+
   // Clear form dirty sources when HTMX swaps out tracked forms.
   document.addEventListener('htmx:beforeSwap', function (event) {
     if (event.detail && event.detail.target) {

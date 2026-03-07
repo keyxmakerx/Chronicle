@@ -21,8 +21,11 @@ import (
 )
 
 // AddonCounter provides a count of registered addons for the admin dashboard.
+// CountFeatures excludes module-category addons (game systems) which are
+// shown on the Content Packs page instead.
 type AddonCounter interface {
 	CountAddons(ctx context.Context) (int, error)
+	CountFeatures(ctx context.Context) (int, error)
 }
 
 // Handler handles admin dashboard HTTP requests. Depends on other plugins'
@@ -112,7 +115,7 @@ func (h *Handler) Dashboard(c echo.Context) error {
 
 	var addonCount int
 	if h.addonCounter != nil {
-		addonCount, _ = h.addonCounter.CountAddons(ctx)
+		addonCount, _ = h.addonCounter.CountFeatures(ctx)
 	}
 
 	var securityStats *SecurityStats

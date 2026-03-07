@@ -26,11 +26,22 @@ func NewHandler(service AddonService) *Handler {
 // --- Admin Routes (site admin) ---
 
 // AdminAddonsPage renders the admin addon management page (GET /admin/addons).
+// Filters out "module" category addons since those are game systems managed
+// on the Content Packs page (/admin/extensions).
 func (h *Handler) AdminAddonsPage(c echo.Context) error {
-	addons, err := h.service.List(c.Request().Context())
+	allAddons, err := h.service.List(c.Request().Context())
 	if err != nil {
 		return err
 	}
+
+	// Exclude module-category addons (game systems like dnd5e, drawsteel).
+	addons := make([]Addon, 0, len(allAddons))
+	for _, a := range allAddons {
+		if a.Category != CategoryModule {
+			addons = append(addons, a)
+		}
+	}
+
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, AdminAddonsPageTempl(addons, csrfToken))
 }

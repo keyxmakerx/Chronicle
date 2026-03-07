@@ -1,0 +1,34 @@
+// sidebar_list.templ renders a compact entity list for the sidebar drill panel.
+// Used by SearchAPI with ?sidebar=1 to display category pages inline.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// SidebarEntityList renders entity results as compact links for the sidebar panel.
+templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignContext) {
+	if len(results) == 0 {
+		<div class="px-4 py-2 text-xs text-gray-500 italic">No pages yet</div>
+	} else {
+		for _, entity := range results {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+				class="flex items-center px-4 py-1.5 text-sm transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active group"
+			>
+				<span
+					class="w-1.5 h-1.5 rounded-full mr-2.5 shrink-0"
+					style={ fmt.Sprintf("background-color: %s", entity.TypeColor) }
+				></span>
+				<span class="flex-1 truncate text-xs">{ entity.Name }</span>
+			</a>
+		}
+		if total > len(results) {
+			<div class="px-4 py-1.5 text-[10px] text-gray-600 italic">
+				{ fmt.Sprintf("and %d more...", total-len(results)) }
+			</div>
+		}
+	}
+}
