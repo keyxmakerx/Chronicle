@@ -114,19 +114,19 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 				</a>
 			</div>
 
-			// Campaign extensions.
+			// Campaign features.
 			<div class="card p-6 mb-6">
 				<div class="flex items-center justify-between mb-2">
-					<h2 class="text-lg font-semibold text-fg">Extensions</h2>
+					<h2 class="text-lg font-semibold text-fg">Features</h2>
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/addons/settings", cc.Campaign.ID)) }
 						class="text-sm link"
 					>
-						<i class="fa-solid fa-plug mr-1"></i> Manage Extensions
+						<i class="fa-solid fa-plug mr-1"></i> Manage Features
 					</a>
 				</div>
 				<p class="text-sm text-fg-secondary">
-					Enable or disable extensions like game modules, widgets, and external integrations for this campaign.
+					Enable or disable features like calendars, maps, game systems, and integrations for this campaign.
 				</p>
 			</div>
 
@@ -303,14 +303,14 @@ func pluginDescription(slug string) string {
 	}
 }
 
-// PluginHubPage renders the plugin hub showing all addons with quick access links.
+// PluginHubPage renders the features hub showing all enabled features with quick access links.
 templ PluginHubPage(cc *CampaignContext, addons []PluginHubAddon, isOwner bool) {
-	@layouts.App(cc.Campaign.Name + " - Plugins") {
+	@layouts.App(cc.Campaign.Name + " - Features") {
 		<div class="max-w-3xl mx-auto">
 			<div class="flex items-center justify-between mb-6">
 				<div>
-					<h1 class="text-2xl font-bold text-fg">Plugins</h1>
-					<p class="text-sm text-fg-muted mt-1">Quick access to all campaign extensions.</p>
+					<h1 class="text-2xl font-bold text-fg">Features</h1>
+					<p class="text-sm text-fg-muted mt-1">Quick access to all campaign features.</p>
 				</div>
 				if isOwner {
 					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/addons/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
@@ -319,7 +319,7 @@ templ PluginHubPage(cc *CampaignContext, addons []PluginHubAddon, isOwner bool) 
 				}
 			</div>
 
-			<!-- Enabled plugins -->
+			<!-- Enabled features -->
 			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
 				for _, addon := range addons {
 					if addon.Enabled {
@@ -344,7 +344,7 @@ templ PluginHubPage(cc *CampaignContext, addons []PluginHubAddon, isOwner bool) 
 				}
 			</div>
 
-			<!-- Disabled plugins (show for owners) -->
+			<!-- Disabled features (show for owners) -->
 			if isOwner {
 				@disabledPlugins(cc.Campaign.ID, addons)
 			}
@@ -352,11 +352,11 @@ templ PluginHubPage(cc *CampaignContext, addons []PluginHubAddon, isOwner bool) 
 	}
 }
 
-// disabledPlugins shows addons that are not enabled, with a prompt to enable them.
+// disabledPlugins shows features that are not enabled, with a prompt to enable them.
 templ disabledPlugins(campaignID string, addons []PluginHubAddon) {
 	if hasDisabled(addons) {
 		<div class="mt-4">
-			<h2 class="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">Available Extensions</h2>
+			<h2 class="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">Available Features</h2>
 			<div class="space-y-2">
 				for _, addon := range addons {
 					if !addon.Enabled {
