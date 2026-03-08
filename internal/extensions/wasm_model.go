@@ -136,6 +136,7 @@ const (
 	HookCalendarEventDeleted = "calendar.event_deleted"
 	HookTagAdded             = "tag.added"
 	HookTagRemoved           = "tag.removed"
+	HookCampaignDeleted      = "campaign.deleted"
 )
 
 // ValidHookTypes lists all valid hook event types.
@@ -148,6 +149,7 @@ var ValidHookTypes = map[string]bool{
 	HookCalendarEventDeleted: true,
 	HookTagAdded:             true,
 	HookTagRemoved:           true,
+	HookCampaignDeleted:      true,
 }
 
 // WASMPluginInfo is a summary returned by the plugin manager for admin display.

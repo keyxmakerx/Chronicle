@@ -41,6 +41,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.PUT("/security/users/:id/disable", h.DisableUser)
 	admin.PUT("/security/users/:id/enable", h.EnableUser)
 
+	// Data hygiene dashboard.
+	admin.GET("/data-hygiene", h.DataHygiene)
+	admin.DELETE("/data-hygiene/orphaned-media", h.PurgeOrphanedMediaAPI)
+	admin.DELETE("/data-hygiene/orphaned-api-keys", h.PurgeOrphanedAPIKeysAPI)
+	admin.DELETE("/data-hygiene/stale-files", h.PurgeStaleFilesAPI)
+
 	// SMTP settings (delegates to SMTP plugin handler).
 	if smtpHandler != nil {
 		smtp.RegisterRoutes(admin, smtpHandler)

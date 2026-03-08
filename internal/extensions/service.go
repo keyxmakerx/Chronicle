@@ -40,13 +40,15 @@ type ExtensionService interface {
 
 	// Configuration.
 	SetApplier(applier ContentApplier)
+	SetMigrationRunner(runner *MigrationRunner)
 }
 
 // extensionService implements ExtensionService.
 type extensionService struct {
-	repo    ExtensionRepository
-	extDir  string         // Root directory for extension files (e.g., "data/extensions").
-	applier ContentApplier // Optional content applier for campaign enable.
+	repo      ExtensionRepository
+	extDir    string           // Root directory for extension files (e.g., "data/extensions").
+	applier   ContentApplier   // Optional content applier for campaign enable.
+	migRunner *MigrationRunner // Optional migration runner for extension schema management.
 }
 
 // NewExtensionService creates a new extension service.
@@ -62,6 +64,12 @@ func NewExtensionService(repo ExtensionRepository, extDir string) ExtensionServi
 // are wired.
 func (s *extensionService) SetApplier(applier ContentApplier) {
 	s.applier = applier
+}
+
+// SetMigrationRunner configures the per-extension migration runner.
+// Called during app startup after the database is connected.
+func (s *extensionService) SetMigrationRunner(runner *MigrationRunner) {
+	s.migRunner = runner
 }
 
 // Install processes a zip upload: extracts, validates, and registers the extension.
@@ -128,6 +136,29 @@ func (s *extensionService) Install(ctx context.Context, zipPath, userID string) 
 		return nil, apperror.NewInternal(fmt.Errorf("saving extension: %w", err))
 	}
 
+	// Run extension migrations if the extension has a migrations/ directory.
+	if s.migRunner != nil {
+		migDir := filepath.Join(s.extDir, manifest.ID, "migrations")
+		if info, err := os.Stat(migDir); err == nil && info.IsDir() {
+			migrations, err := ParseMigrations(migDir)
+			if err != nil {
+				slog.Warn("failed to parse extension migrations",
+					slog.String("ext_id", manifest.ID),
+					slog.Any("error", err),
+				)
+			} else if len(migrations) > 0 {
+				slug := sanitizeSlug(manifest.ID)
+				if err := s.migRunner.RunUp(ctx, ext.ID, slug, migrations); err != nil {
+					slog.Error("extension migration failed",
+						slog.String("ext_id", manifest.ID),
+						slog.Any("error", err),
+					)
+					return nil, apperror.NewInternal(fmt.Errorf("running extension migrations: %w", err))
+				}
+			}
+		}
+	}
+
 	slog.Info("extension installed",
 		slog.String("ext_id", manifest.ID),
 		slog.String("name", manifest.Name),
@@ -145,6 +176,35 @@ func (s *extensionService) Uninstall(ctx context.Context, extID string) error {
 	}
 	if ext == nil {
 		return apperror.NewNotFound("extension not found")
+	}
+
+	// Run down migrations before DB delete (needs extension_schema_versions rows).
+	if s.migRunner != nil {
+		slug := sanitizeSlug(ext.ExtID)
+		migDir := filepath.Join(s.extDir, ext.ExtID, "migrations")
+		if info, err := os.Stat(migDir); err == nil && info.IsDir() {
+			migrations, err := ParseMigrations(migDir)
+			if err != nil {
+				slog.Warn("failed to parse extension migrations for rollback",
+					slog.String("ext_id", ext.ExtID),
+					slog.Any("error", err),
+				)
+			} else if len(migrations) > 0 {
+				if err := s.migRunner.RunDown(ctx, ext.ID, slug, migrations); err != nil {
+					slog.Warn("extension down-migration failed",
+						slog.String("ext_id", ext.ExtID),
+						slog.Any("error", err),
+					)
+				}
+			}
+		}
+		// Safety net: drop any remaining ext_<slug>_* tables.
+		if err := s.migRunner.DropExtensionTables(ctx, slug); err != nil {
+			slog.Warn("failed to drop extension tables",
+				slog.String("ext_id", ext.ExtID),
+				slog.Any("error", err),
+			)
+		}
 	}
 
 	// Delete from database (CASCADE handles campaign_extensions, provenance, data).
@@ -471,6 +531,23 @@ func (s *extensionService) ListData(ctx context.Context, campaignID, extensionID
 }
 
 // --- Helpers ---
+
+// sanitizeSlug converts an extension ID (e.g., "my-cool-extension") into a
+// safe table prefix component (e.g., "my_cool_extension") by replacing
+// non-alphanumeric characters with underscores.
+func sanitizeSlug(extID string) string {
+	var result []byte
+	for _, ch := range []byte(extID) {
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' {
+			result = append(result, ch)
+		} else if ch >= 'A' && ch <= 'Z' {
+			result = append(result, ch+32) // lowercase
+		} else {
+			result = append(result, '_')
+		}
+	}
+	return string(result)
+}
 
 // generateUUID creates a new v4 UUID.
 func generateUUID() string {

@@ -60,6 +60,10 @@ type CampaignService interface {
 	// Admin operations
 	ForceTransferOwnership(ctx context.Context, campaignID, newOwnerID string) error
 	AdminAddMember(ctx context.Context, campaignID, userID string, role Role) error
+
+	// Lifecycle hooks — set after construction to avoid circular initialization.
+	SetMediaCleaner(cleaner MediaCleaner)
+	SetHookDispatcher(dispatcher CampaignHookDispatcher)
 }
 
 // GroupService handles business logic for campaign group operations.
@@ -74,13 +78,27 @@ type GroupService interface {
 	ListGroupMembers(ctx context.Context, groupID int) ([]GroupMemberInfo, error)
 }
 
+// MediaCleaner handles bulk media file cleanup during campaign deletion.
+// Implemented by the media service.
+type MediaCleaner interface {
+	DeleteCampaignFiles(ctx context.Context, campaignID string) (int, error)
+}
+
+// CampaignHookDispatcher fires lifecycle events for WASM plugin notification.
+// Implemented by the extensions HookDispatcher.
+type CampaignHookDispatcher interface {
+	DispatchCampaignDeleted(ctx context.Context, campaignID string)
+}
+
 // campaignService implements CampaignService.
 type campaignService struct {
-	repo    CampaignRepository
-	users   UserFinder
-	mail    MailService        // May be nil if SMTP is not configured.
-	seeder  EntityTypeSeeder   // Seeds default entity types on campaign creation. May be nil.
-	baseURL string
+	repo           CampaignRepository
+	users          UserFinder
+	mail           MailService            // May be nil if SMTP is not configured.
+	seeder         EntityTypeSeeder       // Seeds default entity types on campaign creation. May be nil.
+	mediaCleaner   MediaCleaner           // Cleans up media files on campaign delete. May be nil.
+	hookDispatcher CampaignHookDispatcher // Dispatches WASM lifecycle events. May be nil.
+	baseURL        string
 }
 
 // NewCampaignService creates a new campaign service with the given dependencies.
@@ -93,6 +111,18 @@ func NewCampaignService(repo CampaignRepository, users UserFinder, mail MailServ
 		seeder:  seeder,
 		baseURL: baseURL,
 	}
+}
+
+// SetMediaCleaner sets the media cleaner for campaign deletion cleanup.
+// Called after all plugins are wired to avoid initialization order issues.
+func (s *campaignService) SetMediaCleaner(cleaner MediaCleaner) {
+	s.mediaCleaner = cleaner
+}
+
+// SetHookDispatcher sets the WASM hook dispatcher for campaign lifecycle events.
+// Called after all plugins are wired to avoid initialization order issues.
+func (s *campaignService) SetHookDispatcher(dispatcher CampaignHookDispatcher) {
+	s.hookDispatcher = dispatcher
 }
 
 // --- Campaign CRUD ---
@@ -256,8 +286,36 @@ func (s *campaignService) Update(ctx context.Context, campaignID string, input U
 	return campaign, nil
 }
 
-// Delete removes a campaign and all its data (via FK CASCADE).
+// Delete removes a campaign and all its data. Performs multi-step cleanup:
+// 1. Delete media files from disk (before SQL CASCADE nullifies campaign_id)
+// 2. Dispatch campaign.deleted hook to WASM plugins for cache cleanup
+// 3. SQL DELETE with FK CASCADE handles remaining database rows
 func (s *campaignService) Delete(ctx context.Context, campaignID string) error {
+	// Step 1: Clean up media files from disk before the SQL DELETE.
+	// The media_files FK uses ON DELETE SET NULL, so we must delete files
+	// while we still know which campaign they belong to.
+	if s.mediaCleaner != nil {
+		deleted, err := s.mediaCleaner.DeleteCampaignFiles(ctx, campaignID)
+		if err != nil {
+			// Log but don't fail — orphaned files are preferable to a stuck campaign.
+			slog.Warn("media cleanup failed during campaign deletion",
+				slog.String("campaign_id", campaignID),
+				slog.Any("error", err),
+			)
+		} else if deleted > 0 {
+			slog.Info("cleaned up campaign media files",
+				slog.String("campaign_id", campaignID),
+				slog.Int("deleted", deleted),
+			)
+		}
+	}
+
+	// Step 2: Notify WASM plugins so they can clean up in-memory state.
+	if s.hookDispatcher != nil {
+		s.hookDispatcher.DispatchCampaignDeleted(ctx, campaignID)
+	}
+
+	// Step 3: SQL DELETE — FK CASCADE handles all remaining DB rows.
 	if err := s.repo.Delete(ctx, campaignID); err != nil {
 		return err
 	}

@@ -170,3 +170,14 @@ func (d *HookDispatcher) DispatchTagRemoved(ctx context.Context, campaignID stri
 		Timestamp:  time.Now().UTC(),
 	})
 }
+
+// DispatchCampaignDeleted fires the campaign.deleted hook so WASM plugins
+// can clean up in-memory caches or other campaign-scoped state.
+func (d *HookDispatcher) DispatchCampaignDeleted(ctx context.Context, campaignID string) {
+	d.Dispatch(ctx, HookEvent{
+		Type:       HookCampaignDeleted,
+		CampaignID: campaignID,
+		Payload:    json.RawMessage(`{}`),
+		Timestamp:  time.Now().UTC(),
+	})
+}

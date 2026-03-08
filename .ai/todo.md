@@ -161,13 +161,13 @@ _Fill the biggest test gaps — zero-test plugins and incomplete service tests._
 - [x] **Sprint M3-2: Sessions & Calendar Service Tests** — Sessions: 40+ tests (CRUD, recurrence, RSVP, entity linking, RSVP tokens, model methods). Calendar: 40+ tests (calendar CRUD, events, date helpers, week view).
 - [x] **Sprint M3-3: Timeline Service Tests** — 50+ tests covering timeline CRUD, standalone events, entity groups, event connections, search, visibility filtering, event linking.
 
-### Phase S: Data Integrity & Admin Tooling ← START HERE
+### Phase S: Data Integrity & Admin Tooling (COMPLETE)
 
 _Fix orphaned data, cascade gaps, and admin DB visibility. See `.ai/phases.md`._
 
-- [ ] **Sprint S-1: Campaign Deletion Cleanup (ADR-025)** — API key FK cascade, media file disk cleanup, multi-step delete service, WASM hook dispatch, orphan extension cleanup.
-- [ ] **Sprint S-2: Extension Migration System (ADR-024)** — `extension_schema_versions` table, per-extension migration runner, namespaced table enforcement (`ext_<slug>_*`), install/uninstall lifecycle.
-- [ ] **Sprint S-3: Admin Data Hygiene Dashboard (ADR-026)** — Orphan detection queries, `/admin/data-hygiene` page, guarded cleanup actions, safety guardrails. All actions audit-logged.
+- [x] **Sprint S-1: Campaign Deletion Cleanup (ADR-025)** — API key FK cascade, media file disk cleanup, multi-step delete service, WASM hook dispatch, orphan extension cleanup.
+- [x] **Sprint S-2: Extension Migration System (ADR-024)** — `extension_schema_versions` table, per-extension migration runner, namespaced table enforcement (`ext_<slug>_*`), install/uninstall lifecycle.
+- [x] **Sprint S-3: Admin Data Hygiene Dashboard (ADR-026)** — Orphan detection queries, `/admin/data-hygiene` page, guarded cleanup actions, safety guardrails. All actions audit-logged.
 
 ### Phase T: Game System Modules & Worldbuilding Tools
 

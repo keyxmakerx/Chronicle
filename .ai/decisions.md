@@ -769,7 +769,7 @@ runtime. Key design choices:
 ## ADR-024: Extension Migration System (Dynamic Schema)
 
 **Date:** 2026-03-08
-**Status:** Proposed
+**Status:** Accepted
 
 **Context:** The current migration system (sequential numbered SQL files via
 golang-migrate) works for core schema but cannot handle dynamic extensions. When
@@ -827,7 +827,7 @@ Extensions use a **separate, per-extension migration system** alongside core:
 ## ADR-025: Campaign Deletion Cascade and Cleanup
 
 **Date:** 2026-03-08
-**Status:** Proposed
+**Status:** Accepted
 
 **Context:** When a campaign is deleted, database CASCADE handles most rows, but
 several gaps exist: media files are orphaned on disk (SET NULL, not CASCADE),
@@ -877,7 +877,7 @@ SQL DELETE:
 ## ADR-026: Admin Data Hygiene Dashboard
 
 **Date:** 2026-03-08
-**Status:** Proposed
+**Status:** Accepted
 
 **Context:** Over time, the database accumulates orphaned data: media files
 without campaigns, API keys pointing to deleted campaigns, extension records

@@ -748,6 +748,7 @@ func (a *App) RegisterRoutes() {
 	// entity type templates, entity packs, tag collections, marker icons, themes).
 	extRepo := extensions.NewExtensionRepository(a.DB)
 	extService := extensions.NewExtensionService(extRepo, a.Config.ExtensionsPath)
+	extService.SetMigrationRunner(extensions.NewMigrationRunner(a.DB))
 	extHandler := extensions.NewHandler(extService, a.Config.ExtensionsPath)
 	extensions.RegisterAdminRoutes(adminGroup, extHandler)
 	extensions.RegisterCampaignRoutes(e, extHandler, campaignService, authService)
@@ -757,6 +758,10 @@ func (a *App) RegisterRoutes() {
 	securityRepo := admin.NewSecurityEventRepository(a.DB)
 	securityService := admin.NewSecurityService(securityRepo, authRepo, authService)
 	adminHandler.SetSecurityService(securityService)
+
+	// Data hygiene scanner: orphan detection and cleanup for media, API keys, stale files.
+	hygieneScanner := admin.NewHygieneService(a.DB, mediaRepo, mediaService, a.Config.Upload.MediaPath, securityRepo)
+	adminHandler.SetHygieneScanner(hygieneScanner)
 
 	// Wire security event logging into the auth handler so logins, logouts,
 	// failed attempts, and password resets are recorded automatically.
@@ -1128,6 +1133,10 @@ func (a *App) RegisterRoutes() {
 	// Store references for graceful shutdown and auto-loading.
 	a.WASMPluginManager = wasmPluginMgr
 	a.WASMHookDispatcher = wasmHookDispatcher
+
+	// Wire campaign deletion cleanup: media files and WASM hooks.
+	campaignService.SetMediaCleaner(mediaService)
+	campaignService.SetHookDispatcher(wasmHookDispatcher)
 
 	// --- Game System Modules ---
 	// Module reference pages and tooltip API, gated by per-campaign addon checks.

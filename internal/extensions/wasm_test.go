@@ -252,6 +252,7 @@ func TestWASMHookTypes(t *testing.T) {
 		"entity.created", "entity.updated", "entity.deleted",
 		"calendar.event_created", "calendar.event_updated", "calendar.event_deleted",
 		"tag.added", "tag.removed",
+		"campaign.deleted",
 	}
 
 	if len(ValidHookTypes) != len(expected) {

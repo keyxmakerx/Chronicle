@@ -50,6 +50,10 @@ type MediaRepository interface {
 	// in the database. Used by the orphan cleanup job to find disk files without
 	// a corresponding DB record.
 	ListAllFilenames(ctx context.Context) (map[string]bool, error)
+
+	// ListFilesByCampaign returns all media files for a campaign without
+	// pagination. Used for bulk cleanup during campaign deletion.
+	ListFilesByCampaign(ctx context.Context, campaignID string) ([]MediaFile, error)
 }
 
 // mediaRepository implements MediaRepository with MariaDB queries.
@@ -332,4 +336,41 @@ func (r *mediaRepository) FindReferences(ctx context.Context, campaignID, mediaI
 		refs = append(refs, ref)
 	}
 	return refs, rows.Err()
+}
+
+// ListFilesByCampaign returns all media files for a campaign without pagination.
+// Used for bulk cleanup during campaign deletion — returns lightweight records
+// with just the fields needed for disk + DB deletion.
+func (r *mediaRepository) ListFilesByCampaign(ctx context.Context, campaignID string) ([]MediaFile, error) {
+	query := `SELECT id, campaign_id, uploaded_by, filename, original_name,
+	                 mime_type, file_size, usage_type, thumbnail_paths, created_at
+	          FROM media_files WHERE campaign_id = ?`
+
+	rows, err := r.db.QueryContext(ctx, query, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("listing campaign media files: %w", err)
+	}
+	defer rows.Close()
+
+	var files []MediaFile
+	for rows.Next() {
+		var f MediaFile
+		var thumbJSON string
+		if err := rows.Scan(
+			&f.ID, &f.CampaignID, &f.UploadedBy,
+			&f.Filename, &f.OriginalName, &f.MimeType,
+			&f.FileSize, &f.UsageType, &thumbJSON,
+			&f.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning media file row: %w", err)
+		}
+		f.ThumbnailPaths = make(map[string]string)
+		if thumbJSON != "" && thumbJSON != "{}" {
+			if err := json.Unmarshal([]byte(thumbJSON), &f.ThumbnailPaths); err != nil {
+				return nil, fmt.Errorf("unmarshaling thumbnail paths: %w", err)
+			}
+		}
+		files = append(files, f)
+	}
+	return files, rows.Err()
 }

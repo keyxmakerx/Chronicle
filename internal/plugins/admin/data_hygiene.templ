@@ -1,0 +1,215 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// DataHygienePage renders the admin data hygiene dashboard with orphan
+// detection results and guarded cleanup actions.
+templ DataHygienePage(data DataHygieneData) {
+	@layouts.App("Data Hygiene") {
+		<div class="max-w-5xl mx-auto space-y-6">
+			<div class="flex items-center justify-between">
+				<h1 class="text-2xl font-bold text-fg">Data Hygiene</h1>
+				<a href="/admin" class="text-sm text-fg-muted hover:text-accent">
+					<i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard
+				</a>
+			</div>
+			<p class="text-sm text-fg-secondary">
+				Detect and clean up orphaned data across your Chronicle instance.
+				All cleanup actions require confirmation and are logged for auditing.
+			</p>
+
+			<!-- Summary Cards -->
+			if data.Stats != nil {
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+					<div class="card">
+						<p class="text-sm font-medium text-fg-secondary">Disk Usage</p>
+						<p class="text-2xl font-bold text-fg mt-1">{ formatBytes(data.Stats.TotalDiskBytes) }</p>
+						<p class="text-xs text-fg-muted mt-1">{ formatBytes(data.Stats.TrackedDBBytes) } tracked in DB</p>
+					</div>
+					<div class="card">
+						<p class="text-sm font-medium text-fg-secondary">Orphaned Media</p>
+						<p class="text-2xl font-bold text-fg mt-1">{ fmt.Sprintf("%d", data.Stats.OrphanMediaCount) }</p>
+						<p class="text-xs text-fg-muted mt-1">{ formatBytes(data.Stats.OrphanMediaBytes) } recoverable</p>
+					</div>
+					<div class="card">
+						<p class="text-sm font-medium text-fg-secondary">Orphaned API Keys</p>
+						<p class="text-2xl font-bold text-fg mt-1">{ fmt.Sprintf("%d", data.Stats.OrphanAPIKeys) }</p>
+						<p class="text-xs text-fg-muted mt-1">Keys for deleted campaigns</p>
+					</div>
+					<div class="card">
+						<p class="text-sm font-medium text-fg-secondary">Stale Files</p>
+						<p class="text-2xl font-bold text-fg mt-1">{ fmt.Sprintf("%d", data.Stats.StaleFileCount) }</p>
+						<p class="text-xs text-fg-muted mt-1">{ formatBytes(data.Stats.StaleFileBytes) } on disk</p>
+					</div>
+				</div>
+			}
+
+			<!-- Orphaned Media Section -->
+			<div class="card space-y-4">
+				<div class="flex items-center justify-between">
+					<h2 class="text-lg font-semibold text-fg">
+						<i class="fa-solid fa-image text-amber-500 mr-2"></i>
+						Orphaned Media Files
+					</h2>
+					if len(data.OrphanedMedia) > 0 {
+						<button
+							hx-delete="/admin/data-hygiene/orphaned-media"
+							hx-confirm={ fmt.Sprintf("Purge %d unreferenced orphaned media files? This cannot be undone.", countUnreferenced(data.OrphanedMedia)) }
+							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+							hx-swap="innerHTML"
+							hx-target="#hygiene-content"
+							class="btn btn-sm btn-danger"
+						>
+							<i class="fa-solid fa-trash mr-1"></i> Purge Unreferenced
+						</button>
+					}
+				</div>
+				if len(data.OrphanedMedia) == 0 {
+					<p class="text-sm text-fg-muted">No orphaned media files found.</p>
+				} else {
+					<div class="overflow-x-auto">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="border-b border-edge text-left text-fg-muted">
+									<th class="pb-2">Filename</th>
+									<th class="pb-2">Size</th>
+									<th class="pb-2">Created</th>
+									<th class="pb-2">Status</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-edge">
+								for _, item := range data.OrphanedMedia {
+									<tr>
+										<td class="py-2 font-mono text-xs">{ item.Filename }</td>
+										<td class="py-2">{ formatBytes(item.FileSize) }</td>
+										<td class="py-2">{ item.CreatedAt.Format("2006-01-02") }</td>
+										<td class="py-2">
+											if item.Referenced {
+												<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+													<i class="fa-solid fa-link mr-1"></i> Referenced
+												</span>
+											} else {
+												<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+													<i class="fa-solid fa-unlink mr-1"></i> Orphaned
+												</span>
+											}
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
+			</div>
+
+			<!-- Orphaned API Keys Section -->
+			<div class="card space-y-4">
+				<div class="flex items-center justify-between">
+					<h2 class="text-lg font-semibold text-fg">
+						<i class="fa-solid fa-key text-red-500 mr-2"></i>
+						Orphaned API Keys
+					</h2>
+					if len(data.OrphanedAPIKeys) > 0 {
+						<button
+							hx-delete="/admin/data-hygiene/orphaned-api-keys"
+							hx-confirm={ fmt.Sprintf("Purge %d orphaned API keys? This cannot be undone.", len(data.OrphanedAPIKeys)) }
+							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+							hx-swap="innerHTML"
+							hx-target="#hygiene-content"
+							class="btn btn-sm btn-danger"
+						>
+							<i class="fa-solid fa-trash mr-1"></i> Purge All
+						</button>
+					}
+				</div>
+				if len(data.OrphanedAPIKeys) == 0 {
+					<p class="text-sm text-fg-muted">No orphaned API keys found.</p>
+				} else {
+					<div class="overflow-x-auto">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="border-b border-edge text-left text-fg-muted">
+									<th class="pb-2">Key Prefix</th>
+									<th class="pb-2">Name</th>
+									<th class="pb-2">Campaign ID</th>
+									<th class="pb-2">Created</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-edge">
+								for _, item := range data.OrphanedAPIKeys {
+									<tr>
+										<td class="py-2 font-mono">{ item.KeyPrefix }...</td>
+										<td class="py-2">{ item.Name }</td>
+										<td class="py-2 font-mono text-xs text-fg-muted">{ item.CampaignID }</td>
+										<td class="py-2">{ item.CreatedAt.Format("2006-01-02") }</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
+			</div>
+
+			<!-- Stale Files Section -->
+			<div class="card space-y-4">
+				<div class="flex items-center justify-between">
+					<h2 class="text-lg font-semibold text-fg">
+						<i class="fa-solid fa-ghost text-purple-500 mr-2"></i>
+						Stale Filesystem Files
+					</h2>
+					if len(data.StaleFiles) > 0 {
+						<button
+							hx-delete="/admin/data-hygiene/stale-files"
+							hx-confirm={ fmt.Sprintf("Purge %d stale files from disk? This cannot be undone.", len(data.StaleFiles)) }
+							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+							hx-swap="innerHTML"
+							hx-target="#hygiene-content"
+							class="btn btn-sm btn-danger"
+						>
+							<i class="fa-solid fa-trash mr-1"></i> Purge All
+						</button>
+					}
+				</div>
+				if len(data.StaleFiles) == 0 {
+					<p class="text-sm text-fg-muted">No stale files found on disk.</p>
+				} else {
+					<div class="overflow-x-auto">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="border-b border-edge text-left text-fg-muted">
+									<th class="pb-2">Path</th>
+									<th class="pb-2">Size</th>
+									<th class="pb-2">Modified</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-edge">
+								for _, item := range data.StaleFiles {
+									<tr>
+										<td class="py-2 font-mono text-xs">{ item.Path }</td>
+										<td class="py-2">{ formatBytes(item.Size) }</td>
+										<td class="py-2">{ item.ModTime.Format("2006-01-02 15:04") }</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
+// countUnreferenced returns the number of orphaned media items that are not
+// referenced by any entity and can safely be purged.
+func countUnreferenced(items []OrphanedMediaItem) int {
+	count := 0
+	for _, item := range items {
+		if !item.Referenced {
+			count++
+		}
+	}
+	return count
+}

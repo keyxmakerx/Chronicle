@@ -5,6 +5,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -40,6 +41,7 @@ type Handler struct {
 	settingsService settings.SettingsService
 	addonCounter    AddonCounter
 	securityService SecurityService
+	hygieneScanner  DataHygieneScanner
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
@@ -88,6 +90,89 @@ func (h *Handler) SetAddonCounter(counter AddonCounter) {
 // SetSecurityService wires the security service for the security dashboard.
 func (h *Handler) SetSecurityService(svc SecurityService) {
 	h.securityService = svc
+}
+
+// SetHygieneScanner wires the data hygiene scanner for the hygiene dashboard.
+func (h *Handler) SetHygieneScanner(scanner DataHygieneScanner) {
+	h.hygieneScanner = scanner
+}
+
+// --- Data Hygiene ---
+
+// DataHygiene renders the data hygiene dashboard (GET /admin/data-hygiene).
+func (h *Handler) DataHygiene(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	data := DataHygieneData{
+		CSRFToken: middleware.GetCSRFToken(c),
+	}
+
+	if h.hygieneScanner != nil {
+		stats, err := h.hygieneScanner.GetDiskUsageStats(ctx)
+		if err != nil {
+			slog.Warn("failed to get hygiene stats", slog.Any("error", err))
+		}
+		data.Stats = stats
+
+		orphanedMedia, err := h.hygieneScanner.ScanOrphanedMedia(ctx)
+		if err != nil {
+			slog.Warn("failed to scan orphaned media", slog.Any("error", err))
+		}
+		data.OrphanedMedia = orphanedMedia
+
+		orphanedKeys, err := h.hygieneScanner.ScanOrphanedAPIKeys(ctx)
+		if err != nil {
+			slog.Warn("failed to scan orphaned API keys", slog.Any("error", err))
+		}
+		data.OrphanedAPIKeys = orphanedKeys
+
+		staleFiles, err := h.hygieneScanner.ScanStaleFiles(ctx)
+		if err != nil {
+			slog.Warn("failed to scan stale files", slog.Any("error", err))
+		}
+		data.StaleFiles = staleFiles
+	}
+
+	return middleware.Render(c, http.StatusOK, DataHygienePage(data))
+}
+
+// PurgeOrphanedMediaAPI handles DELETE /admin/data-hygiene/orphaned-media.
+func (h *Handler) PurgeOrphanedMediaAPI(c echo.Context) error {
+	if h.hygieneScanner == nil {
+		return apperror.NewInternal(fmt.Errorf("hygiene scanner not configured"))
+	}
+	purged, err := h.hygieneScanner.PurgeOrphanedMedia(c.Request().Context())
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("purging orphaned media: %w", err))
+	}
+	slog.Info("admin purged orphaned media", slog.Int("purged", purged))
+	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
+}
+
+// PurgeOrphanedAPIKeysAPI handles DELETE /admin/data-hygiene/orphaned-api-keys.
+func (h *Handler) PurgeOrphanedAPIKeysAPI(c echo.Context) error {
+	if h.hygieneScanner == nil {
+		return apperror.NewInternal(fmt.Errorf("hygiene scanner not configured"))
+	}
+	purged, err := h.hygieneScanner.PurgeOrphanedAPIKeys(c.Request().Context())
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("purging orphaned API keys: %w", err))
+	}
+	slog.Info("admin purged orphaned API keys", slog.Int("purged", purged))
+	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
+}
+
+// PurgeStaleFilesAPI handles DELETE /admin/data-hygiene/stale-files.
+func (h *Handler) PurgeStaleFilesAPI(c echo.Context) error {
+	if h.hygieneScanner == nil {
+		return apperror.NewInternal(fmt.Errorf("hygiene scanner not configured"))
+	}
+	purged, err := h.hygieneScanner.PurgeStaleFiles(c.Request().Context())
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("purging stale files: %w", err))
+	}
+	slog.Info("admin purged stale files", slog.Int("purged", purged))
+	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
 }
 
 // --- Dashboard ---

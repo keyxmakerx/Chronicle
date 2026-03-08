@@ -1398,6 +1398,119 @@ func TestDelete_RepoError(t *testing.T) {
 	assertAppError(t, err, 404)
 }
 
+// --- Mock MediaCleaner ---
+
+type mockMediaCleaner struct {
+	deleteFn func(ctx context.Context, campaignID string) (int, error)
+	called   bool
+}
+
+func (m *mockMediaCleaner) DeleteCampaignFiles(ctx context.Context, campaignID string) (int, error) {
+	m.called = true
+	if m.deleteFn != nil {
+		return m.deleteFn(ctx, campaignID)
+	}
+	return 0, nil
+}
+
+// --- Mock HookDispatcher ---
+
+type mockHookDispatcher struct {
+	called     bool
+	campaignID string
+}
+
+func (m *mockHookDispatcher) DispatchCampaignDeleted(_ context.Context, campaignID string) {
+	m.called = true
+	m.campaignID = campaignID
+}
+
+func TestDelete_CleanupMediaBeforeSQLDelete(t *testing.T) {
+	var callOrder []string
+	cleaner := &mockMediaCleaner{
+		deleteFn: func(_ context.Context, _ string) (int, error) {
+			callOrder = append(callOrder, "media")
+			return 3, nil
+		},
+	}
+	repo := &mockCampaignRepo{
+		deleteFn: func(_ context.Context, _ string) error {
+			callOrder = append(callOrder, "sql")
+			return nil
+		},
+	}
+	svc := NewCampaignService(repo, &mockUserFinder{}, nil, nil, "http://localhost:8080")
+	svc.SetMediaCleaner(cleaner)
+
+	err := svc.Delete(context.Background(), "camp-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cleaner.called {
+		t.Error("media cleaner was not called")
+	}
+	if len(callOrder) != 2 || callOrder[0] != "media" || callOrder[1] != "sql" {
+		t.Errorf("expected [media, sql], got %v", callOrder)
+	}
+}
+
+func TestDelete_SucceedsEvenIfMediaCleanupFails(t *testing.T) {
+	cleaner := &mockMediaCleaner{
+		deleteFn: func(_ context.Context, _ string) (int, error) {
+			return 0, errors.New("disk failure")
+		},
+	}
+	repo := &mockCampaignRepo{
+		deleteFn: func(_ context.Context, _ string) error {
+			return nil
+		},
+	}
+	svc := NewCampaignService(repo, &mockUserFinder{}, nil, nil, "http://localhost:8080")
+	svc.SetMediaCleaner(cleaner)
+
+	err := svc.Delete(context.Background(), "camp-1")
+	if err != nil {
+		t.Fatalf("delete should succeed even if media cleanup fails: %v", err)
+	}
+}
+
+func TestDelete_DispatchesHook(t *testing.T) {
+	dispatcher := &mockHookDispatcher{}
+	repo := &mockCampaignRepo{
+		deleteFn: func(_ context.Context, _ string) error {
+			return nil
+		},
+	}
+	svc := NewCampaignService(repo, &mockUserFinder{}, nil, nil, "http://localhost:8080")
+	svc.SetHookDispatcher(dispatcher)
+
+	err := svc.Delete(context.Background(), "camp-42")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !dispatcher.called {
+		t.Error("hook dispatcher was not called")
+	}
+	if dispatcher.campaignID != "camp-42" {
+		t.Errorf("expected campaign ID camp-42, got %s", dispatcher.campaignID)
+	}
+}
+
+func TestDelete_NilCleanerAndDispatcher(t *testing.T) {
+	// Ensure Delete works fine when no cleaner or dispatcher is set (backward compat).
+	repo := &mockCampaignRepo{
+		deleteFn: func(_ context.Context, _ string) error {
+			return nil
+		},
+	}
+	svc := NewCampaignService(repo, &mockUserFinder{}, nil, nil, "http://localhost:8080")
+
+	err := svc.Delete(context.Background(), "camp-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // ============================================================
 // Model Tests
 // ============================================================
