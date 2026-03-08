@@ -665,7 +665,68 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total})
 	}
 
+	// Sidebar mode returns a compact list for the sidebar drill panel.
+	if c.QueryParam("sidebar") == "1" {
+		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, total, cc))
+	}
+
 	return middleware.Render(c, http.StatusOK, SearchResultsFragment(results, total, cc))
+}
+
+// --- Quick Create API (JSON endpoint for shop widget) ---
+
+// QuickCreateAPI creates a new entity from a JSON request and returns its data.
+// POST /campaigns/:id/entities/quick-create
+// Used by the shop inventory widget to create items inline.
+func (h *Handler) QuickCreateAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		Name         string `json:"name"`
+		EntityTypeID int    `json:"entity_type_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+		return err
+	}
+	if err := apperror.ValidateStringLength("name", req.Name, apperror.MaxNameLength); err != nil {
+		return err
+	}
+
+	// If no entity type specified, use the first available type.
+	if req.EntityTypeID == 0 {
+		types, err := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
+		if err != nil || len(types) == 0 {
+			return apperror.NewBadRequest("no entity types available")
+		}
+		req.EntityTypeID = types[0].ID
+	}
+
+	userID := auth.GetUserID(c)
+	input := CreateEntityInput{
+		Name:         req.Name,
+		EntityTypeID: req.EntityTypeID,
+	}
+
+	entity, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, userID, input)
+	if err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityCreated, entity.ID, entity.Name)
+
+	return c.JSON(http.StatusCreated, map[string]string{
+		"id":         entity.ID,
+		"name":       entity.Name,
+		"type_name":  entity.TypeName,
+		"type_icon":  entity.TypeIcon,
+		"type_color": entity.TypeColor,
+	})
 }
 
 // --- Entry API (JSON endpoints for editor widget) ---

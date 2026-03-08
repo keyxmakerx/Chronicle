@@ -17,6 +17,7 @@ import (
 type AddonService interface {
 	// Global registry (admin only).
 	CountAddons(ctx context.Context) (int, error)
+	CountFeatures(ctx context.Context) (int, error)
 	List(ctx context.Context) ([]Addon, error)
 	GetByID(ctx context.Context, id int) (*Addon, error)
 	GetBySlug(ctx context.Context, slug string) (*Addon, error)
@@ -46,6 +47,22 @@ func NewAddonService(repo AddonRepository) AddonService {
 // CountAddons returns the total number of registered addons.
 func (s *addonService) CountAddons(ctx context.Context) (int, error) {
 	return s.repo.Count(ctx)
+}
+
+// CountFeatures returns the number of feature addons (excluding module-category
+// game systems which are managed on the Content Packs page).
+func (s *addonService) CountFeatures(ctx context.Context) (int, error) {
+	addons, err := s.repo.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, a := range addons {
+		if a.Category != CategoryModule {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // List returns all registered addons with installation status annotated.
