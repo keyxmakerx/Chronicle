@@ -8,11 +8,19 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-08 -- Media Gallery addon conversion, category nav page listing, shop widget create items, image upload fix, dirty form fix, admin features filtering.
+2026-03-08 -- Phase & sprint plan created. ADR-026 documented. Bug fixes complete.
 Branch: `claude/fix-category-nav-shops-i99oq`.
 
+## Phase & Sprint Plan
+See `.ai/phases.md` for the full roadmap. Phases S through W organized by theme:
+- **S**: Data Integrity & Admin Tooling (ADRs 024-026)
+- **T**: Game System Modules & Worldbuilding Tools
+- **U**: Collaboration & Platform Maturity
+- **V**: Obsidian-Style Notes & Discovery
+- **W**: Polish, Ecosystem & Delight
+
 ## Current Phase
-**Bug fix & feature sprint — 9 issues resolved.**
+**Planning complete — ready to start Phase S (Data Integrity & Admin Tooling).**
 
 ### Generic Module Framework (COMPLETE)
 - **GenericTooltipRenderer** (`generic_tooltip.go`): Reads field definitions from the manifest's `categories[].fields[]` to render tooltips. Shows only manifest-declared fields in manifest-defined order. Works for any game system.
@@ -349,13 +357,11 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - **Media Gallery as Addon**: The existing media plugin (`internal/plugins/media/`) is now properly registered as the `media-gallery` addon. Campaign media browser routes (`/campaigns/:id/media*`) are gated behind `RequireAddon("media-gallery")`. Sidebar "Media" link conditionally shown via `IsAddonEnabled`. Base upload/serve routes remain ungated (avatars, backdrops work regardless). Migration 000057 updates addon description and sets status to active. Future expansion: albums, tagging, lightbox.
 
 ## Next Session Should
-- **Campaign deletion cleanup** (ADR-025) — media file disk cleanup, API key FK cascade fix, multi-step delete service
-- **Extension migration system** (ADR-024) — per-extension schema tracking, namespaced `ext_*` tables, install/uninstall lifecycle
-- **Admin Data Hygiene dashboard** (ADR-026) — orphan detection queries, guarded cleanup actions, safety guardrails
-- Sprint M-2: D&D 5e Module — Reference Pages (browsable pages at `/modules/dnd5e/`)
-- Obsidian-style notes (see `.ai/obsidian-notes-plan.md`)
-- Quick wins from the UX audit (export button, sort controls, etc.)
-- Test coverage gaps (handler/repository tests for maps, sessions, admin, smtp)
+- **Sprint S-1: Campaign Deletion Cleanup** (ADR-025) — API key FK cascade, media disk cleanup, multi-step delete service
+- **Sprint S-2: Extension Migration System** (ADR-024) — schema tracking, namespaced tables, install/uninstall lifecycle
+- **Sprint S-3: Admin Data Hygiene Dashboard** (ADR-026) — orphan detection, guarded cleanup, safety guardrails
+- Then: Sprint T-1 (D&D 5e reference pages), Sprint U-2 (invite system), Sprint V-1 (quick capture)
+- See `.ai/phases.md` for full execution order
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)

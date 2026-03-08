@@ -38,6 +38,8 @@ re-reading every source file in the project.
 | `troubleshooting.md` | Semi-static | Known gotchas and their solutions | Debugging non-obvious issues |
 | `roadmap.md` | Semi-static | Competitive analysis (WorldAnvil/Kanka/LegendKeeper), feature brainstorm organized by tier (Core/Plugin/Module/Widget/External), priority phases, Foundry VTT integration plans | Planning features, understanding competitive landscape, checking priorities |
 | `audit.md` | Dynamic | Feature parity & completeness audit: test coverage gaps, JS widget consistency, export/import holes, documentation gaps, permission parity | Fixing quality/consistency issues, planning test sprints |
+| `phases.md` | Dynamic | Phase & sprint plan (S through W) with execution order, completed phase history, backlog | Planning work, understanding roadmap priorities |
+| `obsidian-notes-plan.md` | Semi-static | Obsidian-style notes feature analysis and implementation plan (Phase V) | Working on notes/discovery features |
 | `plugin-development.md` | Semi-static | WASM plugin development guide: capabilities, host functions, hooks, building, testing, API | Building WASM logic extensions |
 
 ## Category Definitions
