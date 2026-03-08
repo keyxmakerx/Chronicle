@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-07 -- Category nav page listing, shop widget create items, image upload fix, dirty form fix, admin features filtering.
+2026-03-08 -- Media Gallery addon conversion, category nav page listing, shop widget create items, image upload fix, dirty form fix, admin features filtering.
 Branch: `claude/fix-category-nav-shops-i99oq`.
 
 ## Current Phase
@@ -346,6 +346,7 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - **Shop Widget Fix (root cause)**: `Chronicle.apiFetch` returns a raw Response object, but all shop widget API calls treated it as parsed JSON (missing `.json()` chains). Every API call was silently failing. Fixed all calls with proper `.then(res => res.json())` chains. Redesigned add panel: single search bar with inline "Create & Add" section (name input + entity type dropdown).
 - **Admin Features Fix**: Planned addons without backing code (Media Gallery, Player Notes) were showing on the Features page. Now filtered out — only active/installed addons appear. Dashboard count updated to match.
 - **New API**: `GET /campaigns/:id/entities/types` — returns entity types as JSON for widget dropdowns (used by shop widget create flow).
+- **Media Gallery as Addon**: The existing media plugin (`internal/plugins/media/`) is now properly registered as the `media-gallery` addon. Campaign media browser routes (`/campaigns/:id/media*`) are gated behind `RequireAddon("media-gallery")`. Sidebar "Media" link conditionally shown via `IsAddonEnabled`. Base upload/serve routes remain ungated (avatars, backdrops work regardless). Migration 000057 updates addon description and sets status to active. Future expansion: albums, tagging, lightbox.
 
 ## Next Session Should
 - Sprint M-2: D&D 5e Module — Reference Pages (browsable pages at `/modules/dnd5e/`)

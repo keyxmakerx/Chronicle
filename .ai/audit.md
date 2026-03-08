@@ -151,7 +151,7 @@ image_upload, relations, attributes, permissions, groups, shop_inventory
 - [x] Breadcrumbs — maps, timelines, sessions, calendar, entities all have them
 - [x] HTMX fragment detection — all plugins use `middleware.IsHTMX()` or `HX-Request`
 - [x] CSRF on state-changing routes — all plugins
-- [x] RequireAddon gating — calendar, maps, sessions, timeline all gated
+- [x] RequireAddon gating — calendar, maps, sessions, timeline, media-gallery all gated
 - [x] Error types — all 249 echo.NewHTTPError replaced with apperror
 
 ---

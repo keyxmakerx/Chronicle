@@ -508,7 +508,7 @@ sidebar link was confusing — sessions are fundamentally a calendar feature.
   Each invitation generates single-use tokens (7-day expiry) for one-click
   accept/decline links without requiring login.
 - **RequireAddon middleware**: Route-level addon gating via AddonService.IsEnabledForCampaign
-  query. Applied to calendar, maps, sessions, and timeline route groups.
+  query. Applied to calendar, maps, sessions, timeline, and media-gallery route groups.
 - **Date formatting**: Session dates use `FormatScheduledDate()` returning
   "Mon, Jan 2, 2006" instead of raw ISO 8601.
 

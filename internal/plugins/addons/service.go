@@ -121,16 +121,17 @@ var validStatuses = map[AddonStatus]bool{
 // codebase. Only installed addons can be activated by admins or enabled
 // by campaign owners. Update this set as new addons are built.
 var installedAddons = map[string]bool{
-	"sync-api":     true,
-	"notes":        true,
-	"attributes":   true,
-	"calendar":     true,
-	"maps":         true,
-	"sessions":     true,
-	"timeline":     true,
-	"dnd5e":        true,
-	"pathfinder2e": true,
-	"drawsteel":    true,
+	"sync-api":       true,
+	"notes":          true,
+	"attributes":     true,
+	"calendar":       true,
+	"maps":           true,
+	"sessions":       true,
+	"timeline":       true,
+	"media-gallery":  true,
+	"dnd5e":          true,
+	"pathfinder2e":   true,
+	"drawsteel":      true,
 }
 
 // IsInstalled reports whether an addon slug has backing code in the codebase.
