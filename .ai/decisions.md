@@ -873,3 +873,66 @@ SQL DELETE:
 - Extensions can trust that campaign deletion is thorough.
 - The media `CleanupOrphans()` method becomes a safety net, not the primary
   cleanup mechanism.
+
+## ADR-026: Admin Data Hygiene Dashboard
+
+**Date:** 2026-03-08
+**Status:** Proposed
+
+**Context:** Over time, the database accumulates orphaned data: media files
+without campaigns, API keys pointing to deleted campaigns, extension records
+with no parent, etc. Admins need visibility into this and tools to clean it up
+safely — but also guardrails to prevent accidentally deleting data that active
+campaigns still depend on.
+
+**Decision:**
+Add an admin "Data Hygiene" page at `/admin/data-hygiene` with read-only
+diagnostics and guarded cleanup actions:
+
+1. **Orphan detection queries** — Read-only scans that identify:
+   - Media files with `campaign_id IS NULL` that aren't avatars/backdrops
+     (orphaned by campaign deletion or SET NULL)
+   - Media files on disk with no matching DB record (stale filesystem artifacts)
+   - API keys referencing non-existent campaigns (pre-FK-fix orphans)
+   - Extension provenance records pointing to deleted records
+   - `ext_*` tables with no matching installed extension
+   - Notes/note_versions for deleted campaigns (if any escaped CASCADE)
+   - Users with no campaign memberships (not necessarily orphaned — could be new)
+
+2. **Safety guardrails** — Cleanup actions are blocked when data is still
+   referenced:
+   - Cannot delete a media file that is referenced by any entity's `image_path`
+     or `entry_html`
+   - Cannot delete an extension that has campaigns with it enabled
+   - Cannot purge API keys for campaigns that still exist
+   - Each action shows a preview of what will be affected before confirming
+   - All cleanup actions are logged to `security_events` for audit trail
+
+3. **Cleanup actions** (admin-only, confirmation required):
+   - "Purge orphaned media" — deletes files from disk + DB rows for
+     campaign-less media not referenced by any entity
+   - "Purge stale filesystem files" — deletes files on disk with no DB record
+   - "Purge orphaned API keys" — deletes keys for non-existent campaigns
+   - "Run media orphan scan" — invokes `CleanupOrphans()` with dry-run option
+
+4. **Dashboard stats** — Summary cards showing:
+   - Total disk usage vs DB-tracked usage (delta = stale files)
+   - Orphaned media count + size
+   - Orphaned API key count
+   - Extension table count vs installed extension count
+
+5. **No automated cleanup** — All actions are manual and admin-initiated.
+   No cron jobs or background workers that silently delete data. The admin
+   decides when to clean up and reviews what will be affected.
+
+**Alternatives Considered:**
+- Automated background cleanup on schedule: too risky — could delete data
+  during a race condition (e.g., campaign being restored from backup).
+- Per-campaign cleanup page: campaigns already cascade; the problem is
+  cross-campaign orphans that only a site admin can see.
+
+**Consequences:**
+- Admins have full visibility into database/filesystem health.
+- No data is ever deleted without explicit admin action + confirmation.
+- Safety checks prevent accidental deletion of in-use data.
+- Complements ADR-025 (campaign deletion cleanup) as a catch-all safety net.

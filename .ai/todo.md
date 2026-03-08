@@ -227,6 +227,15 @@ _Fix orphaned data when campaigns are deleted. See ADR-025._
 - [ ] **Campaign delete service refactor** — Convert single-SQL delete to multi-step service operation: media cleanup → extension hook dispatch → SQL DELETE (cascades handle the rest). WASM plugins receive `campaign.deleted` hook event.
 - [ ] **Orphan extension cleanup** — Background job: after campaign delete, check uploaded extensions only enabled for that campaign. If no other campaign uses the extension, queue uninstall (drop `ext_*` tables, remove zip).
 
+### Admin Data Hygiene Dashboard (ADR-026)
+
+_Admin tools for detecting and cleaning up orphaned data. See ADR-026._
+
+- [ ] **Orphan detection queries** — Read-only scans: orphaned media files (campaign_id NULL, not avatars/backdrops), stale filesystem files (no DB record), orphaned API keys (non-existent campaigns), stale extension provenance records. Summary stats cards (disk vs DB usage delta, orphan counts).
+- [ ] **Data Hygiene admin page** — `/admin/data-hygiene` with diagnostic results table, per-category orphan counts, disk usage delta. Preview-before-delete for all actions.
+- [ ] **Guarded cleanup actions** — "Purge orphaned media" (disk + DB, blocked if referenced by entities), "Purge stale files" (disk only), "Purge orphaned API keys" (blocked if campaign exists), dry-run mode. All actions logged to security_events.
+- [ ] **Safety guardrails** — Cannot delete media referenced by entity image_path or entry_html. Cannot delete extensions with active campaigns. Confirmation dialog with affected item count. Admin audit trail.
+
 ### Phase P: Extension System (Content Extensions — Layer 1)
 
 _Declarative content packs: no code execution, manifest-only. See ADR-021._

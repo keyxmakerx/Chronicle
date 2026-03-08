@@ -351,6 +351,7 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 ## Next Session Should
 - **Campaign deletion cleanup** (ADR-025) — media file disk cleanup, API key FK cascade fix, multi-step delete service
 - **Extension migration system** (ADR-024) — per-extension schema tracking, namespaced `ext_*` tables, install/uninstall lifecycle
+- **Admin Data Hygiene dashboard** (ADR-026) — orphan detection queries, guarded cleanup actions, safety guardrails
 - Sprint M-2: D&D 5e Module — Reference Pages (browsable pages at `/modules/dnd5e/`)
 - Obsidian-style notes (see `.ai/obsidian-notes-plan.md`)
 - Quick wins from the UX audit (export button, sort controls, etc.)
