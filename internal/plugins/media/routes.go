@@ -9,6 +9,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -47,12 +48,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authSvc auth.AuthService, maxUploa
 }
 
 // RegisterCampaignRoutes sets up campaign-scoped media management routes.
-// The media browser is Owner-only -- allows browsing, deleting, and
-// checking which entities reference each file.
-func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+// The media browser is Owner-only and gated behind the media-gallery addon.
+// When the addon is disabled for a campaign, these routes return 404.
+func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "media-gallery"),
 	)
 
 	cg.GET("/media", h.CampaignMedia, campaigns.RequireRole(campaigns.RoleOwner))

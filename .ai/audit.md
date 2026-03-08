@@ -129,7 +129,7 @@ image_upload, relations, attributes, permissions, groups, shop_inventory
 | Map markers | DM-only flag | OK |
 | Tags | `dm_only` flag | OK |
 | Posts | `dm_only` toggle | OK |
-| **Relations** | **None** | **Gap** |
+| Relations | `dm_only` flag (migration 000052) | OK |
 | Sessions | Campaign membership only | By design |
 | Notes | Per-user ownership + locking | By design |
 
@@ -151,7 +151,7 @@ image_upload, relations, attributes, permissions, groups, shop_inventory
 - [x] Breadcrumbs — maps, timelines, sessions, calendar, entities all have them
 - [x] HTMX fragment detection — all plugins use `middleware.IsHTMX()` or `HX-Request`
 - [x] CSRF on state-changing routes — all plugins
-- [x] RequireAddon gating — calendar, maps, sessions, timeline all gated
+- [x] RequireAddon gating — calendar, maps, sessions, timeline, media-gallery all gated
 - [x] Error types — all 249 echo.NewHTTPError replaced with apperror
 
 ---
@@ -271,15 +271,13 @@ sessions (partial), maps (full), addons, media manifest.
 
 ## 8. Module System
 
-All 3 modules (dnd5e, drawsteel, pathfinder2e) are scaffold-only:
-
 | Module | manifest.json | handler.go | data/ | Routes | Tooltip API | Pages |
 |--------|:---:|:---:|:---:|:---:|:---:|:---:|
-| dnd5e | ✓ | stub | spells.json | — | — | — |
+| dnd5e | ✓ | ✓ | 6 categories (87 items) | ✓ | ✓ (category-specific) | ✓ (browsable reference) |
 | drawsteel | ✓ | stub | empty | — | — | — |
 | pathfinder2e | ✓ | stub | empty | — | — | — |
 
-This is Phase M planned work, not a parity issue.
+D&D 5e module completed in Sprint M-1. Draw Steel and Pathfinder 2e remain scaffold-only.
 
 ---
 
@@ -290,7 +288,7 @@ This is Phase M planned work, not a parity issue.
 1. Export: entity_permissions, campaign_groups, entity_posts adapters
 2. Export: timeline_event_connections + timeline_entity_groups (defined but never populated)
 3. Export: entity parent_id reimport (exported as ParentSlug but import ignores it)
-4. Relations: add visibility controls (at minimum `dm_only` flag for parity)
+4. ~~Relations: add visibility controls~~ — Done: `dm_only` flag added (migration 000052)
 5. JS error handling: notes.js, tag_picker.js (most-used widgets with silent failures)
 
 ### Should Fix (consistency / quality)

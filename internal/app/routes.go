@@ -678,6 +678,11 @@ func (a *App) RegisterRoutes() {
 	// but don't crash -- the rest of the app keeps running.
 	mediaRepo := media.NewMediaRepository(a.DB)
 	mediaService := media.NewMediaService(mediaRepo, a.Config.Upload.MediaPath, a.Config.Upload.MaxSize)
+	if err := mediaService.ValidateMediaPath(); err != nil {
+		slog.Warn("media storage validation failed; uploads may not work",
+			slog.Any("error", err),
+		)
+	}
 	mediaHandler := media.NewHandler(mediaService)
 
 	// Initialize HMAC URL signer for secure media access.
@@ -702,7 +707,7 @@ func (a *App) RegisterRoutes() {
 	mediaHandler.SetMemberChecker(&mediaMemberCheckerAdapter{svc: campaignService})
 
 	media.RegisterRoutes(e, mediaHandler, authService, a.Config.Upload.MaxSize, a.Config.Upload.ServeRateLimit)
-	media.RegisterCampaignRoutes(e, mediaHandler, campaignService, authService)
+	// Campaign media routes registered after addon service init (needs media-gallery addon gating).
 
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings, storage).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
@@ -729,6 +734,9 @@ func (a *App) RegisterRoutes() {
 	addonHandler := addons.NewHandler(addonService)
 	addons.RegisterAdminRoutes(adminGroup, addonHandler)
 	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)
+
+	// Campaign media browser routes (gated behind media-gallery addon).
+	media.RegisterCampaignRoutes(e, mediaHandler, campaignService, authService, addonService)
 
 	// Wire addon count into admin dashboard for the Extensions stat card.
 	adminHandler.SetAddonCounter(addonService)

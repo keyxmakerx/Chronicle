@@ -49,8 +49,9 @@ func (s *addonService) CountAddons(ctx context.Context) (int, error) {
 	return s.repo.Count(ctx)
 }
 
-// CountFeatures returns the number of feature addons (excluding module-category
-// game systems which are managed on the Content Packs page).
+// CountFeatures returns the number of feature addons visible on the admin
+// Features page. Excludes module-category game systems (Content Packs page)
+// and planned addons without backing code (future work, not actionable).
 func (s *addonService) CountFeatures(ctx context.Context) (int, error) {
 	addons, err := s.repo.List(ctx)
 	if err != nil {
@@ -58,9 +59,13 @@ func (s *addonService) CountFeatures(ctx context.Context) (int, error) {
 	}
 	count := 0
 	for _, a := range addons {
-		if a.Category != CategoryModule {
-			count++
+		if a.Category == CategoryModule {
+			continue
 		}
+		if a.Status == StatusPlanned && !installedAddons[a.Slug] {
+			continue
+		}
+		count++
 	}
 	return count, nil
 }
@@ -116,16 +121,17 @@ var validStatuses = map[AddonStatus]bool{
 // codebase. Only installed addons can be activated by admins or enabled
 // by campaign owners. Update this set as new addons are built.
 var installedAddons = map[string]bool{
-	"sync-api":     true,
-	"notes":        true,
-	"attributes":   true,
-	"calendar":     true,
-	"maps":         true,
-	"sessions":     true,
-	"timeline":     true,
-	"dnd5e":        true,
-	"pathfinder2e": true,
-	"drawsteel":    true,
+	"sync-api":       true,
+	"notes":          true,
+	"attributes":     true,
+	"calendar":       true,
+	"maps":           true,
+	"sessions":       true,
+	"timeline":       true,
+	"media-gallery":  true,
+	"dnd5e":          true,
+	"pathfinder2e":   true,
+	"drawsteel":      true,
 }
 
 // IsInstalled reports whether an addon slug has backing code in the codebase.

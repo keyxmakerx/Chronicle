@@ -363,6 +363,19 @@
     }
   });
 
+  // Clear form dirty state as soon as a tracked form submits via HTMX.
+  // The user is explicitly saving, so the form is clean from this point.
+  // This prevents the beforeunload dialog from firing during the redirect
+  // that follows a successful HTMX form submission (e.g. entity creation).
+  document.addEventListener('htmx:beforeRequest', function (event) {
+    var el = event.detail && event.detail.elt;
+    if (!el) return;
+    var form = el.closest ? el.closest('form[data-track-changes]') : null;
+    if (!form) return;
+    var formId = form.getAttribute('data-track-changes');
+    if (formId) Chronicle.markClean('form:' + formId);
+  });
+
   // Clear form dirty sources when HTMX swaps out tracked forms.
   document.addEventListener('htmx:beforeSwap', function (event) {
     if (event.detail && event.detail.target) {

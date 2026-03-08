@@ -38,6 +38,8 @@ re-reading every source file in the project.
 | `troubleshooting.md` | Semi-static | Known gotchas and their solutions | Debugging non-obvious issues |
 | `roadmap.md` | Semi-static | Competitive analysis (WorldAnvil/Kanka/LegendKeeper), feature brainstorm organized by tier (Core/Plugin/Module/Widget/External), priority phases, Foundry VTT integration plans | Planning features, understanding competitive landscape, checking priorities |
 | `audit.md` | Dynamic | Feature parity & completeness audit: test coverage gaps, JS widget consistency, export/import holes, documentation gaps, permission parity | Fixing quality/consistency issues, planning test sprints |
+| `phases.md` | Dynamic | Phase & sprint plan (S through W) with execution order, completed phase history, backlog | Planning work, understanding roadmap priorities |
+| `obsidian-notes-plan.md` | Semi-static | Obsidian-style notes feature analysis and implementation plan (Phase V) | Working on notes/discovery features |
 | `plugin-development.md` | Semi-static | WASM plugin development guide: capabilities, host functions, hooks, building, testing, API | Building WASM logic extensions |
 
 ## Category Definitions
@@ -54,9 +56,9 @@ The `templates/` subdirectory contains templates for creating new documentation:
 - `module-ai.md.tmpl` -- Copy this when creating a new module's `.ai.md` file
 - `decision-record.md.tmpl` -- Copy this format when adding a new ADR entry
 
-## Module-Level Documentation
+## Extension-Level Documentation
 
-Each module at `internal/modules/<name>/` contains an `.ai.md` file describing
-that module's purpose, internal structure, dependencies, routes, business rules,
-and current implementation state. These are the files to read when you are about
-to work on a specific module.
+Each plugin (`internal/plugins/<name>/`), module (`internal/modules/<name>/`), and
+widget (`internal/widgets/<name>/`) contains an `.ai.md` file describing its purpose,
+internal structure, dependencies, routes, business rules, and current implementation
+state. These are the files to read when you are about to work on a specific extension.

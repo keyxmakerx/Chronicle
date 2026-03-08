@@ -486,7 +486,7 @@ is designed for geographic tile-based rendering and is unsuitable for time-axis 
 
 ---
 
-## ADR-012: Sessions-Calendar Integration and RSVP Email System
+## ADR-023: Sessions-Calendar Integration and RSVP Email System
 
 **Date:** 2026-03-04
 **Status:** Accepted
@@ -508,7 +508,7 @@ sidebar link was confusing — sessions are fundamentally a calendar feature.
   Each invitation generates single-use tokens (7-day expiry) for one-click
   accept/decline links without requiring login.
 - **RequireAddon middleware**: Route-level addon gating via AddonService.IsEnabledForCampaign
-  query. Applied to calendar, maps, sessions, and timeline route groups.
+  query. Applied to calendar, maps, sessions, timeline, and media-gallery route groups.
 - **Date formatting**: Session dates use `FormatScheduledDate()` returning
   "Mon, Jan 2, 2006" instead of raw ISO 8601.
 
@@ -765,3 +765,174 @@ runtime. Key design choices:
 - Plugin lifecycle (load/unload/reload) managed centrally by PluginManager.
 - Hook system enables reactive plugins without polling.
 - KV store provides durable per-plugin state without new database tables.
+
+## ADR-024: Extension Migration System (Dynamic Schema)
+
+**Date:** 2026-03-08
+**Status:** Proposed
+
+**Context:** The current migration system (sequential numbered SQL files via
+golang-migrate) works for core schema but cannot handle dynamic extensions. When
+a user uploads an extension that needs its own tables, and later disables or
+removes it, the core migration pipeline has no mechanism for this. Extensions
+should not modify the core migration sequence.
+
+**Decision:**
+Extensions use a **separate, per-extension migration system** alongside core:
+
+1. **Core migrations** — remain as-is (sequential `000NNN_*.sql` files). These
+   define the platform schema and run on every startup.
+
+2. **Extension migrations** — each extension's zip manifest declares a `migrations/`
+   directory containing numbered SQL files scoped to that extension. When an
+   extension is installed, its migrations run against a tracking table
+   (`extension_schema_versions`) keyed by `(extension_id, version)`.
+
+3. **Namespaced tables** — extension-created tables MUST be prefixed with `ext_`
+   followed by the extension slug (e.g., `ext_knowledge_graph_nodes`). This
+   prevents collisions with core tables and makes cleanup straightforward.
+
+4. **Install/uninstall lifecycle**:
+   - **Install**: Run extension's `up` migrations in order.
+   - **Uninstall**: Run extension's `down` migrations in reverse, then delete
+     tracking rows. All `ext_<slug>_*` tables are dropped.
+   - **Disable**: Tables and data stay intact (campaign-level toggle only).
+   - **Enable**: No migration action needed (data preserved).
+
+5. **Campaign deletion**: When a campaign is deleted, extension data in
+   `ext_*` tables is cleaned up via `ON DELETE CASCADE` foreign keys to
+   `campaigns.id`. Extensions that create non-campaign-scoped data use the
+   existing `extension_data` table (already cascaded).
+
+6. **Validation**: Extension migrations are validated before execution:
+   - Only `CREATE TABLE ext_<slug>_*` and `ALTER TABLE ext_<slug>_*` allowed
+   - No `DROP TABLE` on core tables
+   - No `ALTER TABLE` on core tables
+   - SQL statements parsed and validated server-side
+
+**Alternatives Considered:**
+- Let extensions use only `extension_data` JSON blobs: simpler but doesn't
+  support efficient queries, indexes, or foreign keys for complex extensions.
+- Give extensions full migration access: too dangerous — a malicious extension
+  could `DROP TABLE users`.
+- Schema-per-extension (MySQL databases): MariaDB doesn't truly isolate, and
+  cross-database JOINs are needed for host functions.
+
+**Consequences:**
+- Extensions can define proper relational schemas when JSON blobs aren't enough.
+- Core migration system stays simple and predictable.
+- Uninstalling an extension cleanly removes all its schema artifacts.
+- The `ext_` prefix convention makes it trivial to audit what extensions own.
+
+## ADR-025: Campaign Deletion Cascade and Cleanup
+
+**Date:** 2026-03-08
+**Status:** Proposed
+
+**Context:** When a campaign is deleted, database CASCADE handles most rows, but
+several gaps exist: media files are orphaned on disk (SET NULL, not CASCADE),
+API keys lack foreign key constraints entirely, and extension-provisioned content
+(entities, tags created by extensions) remains even after provenance records
+are cascaded.
+
+**Decision:**
+Campaign deletion becomes a **multi-step service operation** instead of a single
+SQL DELETE:
+
+1. **Media file cleanup** — Before the SQL DELETE, query all `media_files` where
+   `campaign_id = ?`, delete physical files from disk (main + thumbnails), then
+   delete the DB rows. This replaces the current `ON DELETE SET NULL` behavior
+   for campaign-scoped media. Avatars and backdrops (campaign_id IS NULL) are
+   unaffected.
+
+2. **API key cascade** — Add proper `FOREIGN KEY (campaign_id) REFERENCES
+   campaigns(id) ON DELETE CASCADE` to `api_keys`. API request logs get
+   `ON DELETE SET NULL` (retain for audit trail, but disassociate from campaign).
+
+3. **Extension content cleanup** — Before delete, query `extension_provenance`
+   for the campaign to find extension-created records (entity types, entities,
+   tags, etc.). These are already CASCADE'd through their own campaign_id FKs,
+   so no extra work needed. The provenance records themselves cascade.
+
+4. **Extension table cleanup** — For extensions with `ext_*` tables, rows with
+   the campaign_id are cleaned up via CASCADE FKs (required by ADR-024).
+
+5. **WASM plugin state** — `extension_data` rows are already CASCADE'd. WASM
+   plugins with in-memory state receive a `campaign.deleted` hook event so they
+   can clean up caches.
+
+6. **Non-default uploaded extensions** — When a campaign is deleted, uploaded
+   extensions that are ONLY enabled for that campaign are flagged for cleanup.
+   If no other campaign uses the extension, the extension zip and its `ext_*`
+   tables can be uninstalled. This is a background job, not synchronous.
+
+**Consequences:**
+- Campaign deletion is slightly slower (disk I/O for media) but leaves no
+  orphaned data.
+- API keys are properly invalidated on campaign delete (security fix).
+- Extensions can trust that campaign deletion is thorough.
+- The media `CleanupOrphans()` method becomes a safety net, not the primary
+  cleanup mechanism.
+
+## ADR-026: Admin Data Hygiene Dashboard
+
+**Date:** 2026-03-08
+**Status:** Proposed
+
+**Context:** Over time, the database accumulates orphaned data: media files
+without campaigns, API keys pointing to deleted campaigns, extension records
+with no parent, etc. Admins need visibility into this and tools to clean it up
+safely — but also guardrails to prevent accidentally deleting data that active
+campaigns still depend on.
+
+**Decision:**
+Add an admin "Data Hygiene" page at `/admin/data-hygiene` with read-only
+diagnostics and guarded cleanup actions:
+
+1. **Orphan detection queries** — Read-only scans that identify:
+   - Media files with `campaign_id IS NULL` that aren't avatars/backdrops
+     (orphaned by campaign deletion or SET NULL)
+   - Media files on disk with no matching DB record (stale filesystem artifacts)
+   - API keys referencing non-existent campaigns (pre-FK-fix orphans)
+   - Extension provenance records pointing to deleted records
+   - `ext_*` tables with no matching installed extension
+   - Notes/note_versions for deleted campaigns (if any escaped CASCADE)
+   - Users with no campaign memberships (not necessarily orphaned — could be new)
+
+2. **Safety guardrails** — Cleanup actions are blocked when data is still
+   referenced:
+   - Cannot delete a media file that is referenced by any entity's `image_path`
+     or `entry_html`
+   - Cannot delete an extension that has campaigns with it enabled
+   - Cannot purge API keys for campaigns that still exist
+   - Each action shows a preview of what will be affected before confirming
+   - All cleanup actions are logged to `security_events` for audit trail
+
+3. **Cleanup actions** (admin-only, confirmation required):
+   - "Purge orphaned media" — deletes files from disk + DB rows for
+     campaign-less media not referenced by any entity
+   - "Purge stale filesystem files" — deletes files on disk with no DB record
+   - "Purge orphaned API keys" — deletes keys for non-existent campaigns
+   - "Run media orphan scan" — invokes `CleanupOrphans()` with dry-run option
+
+4. **Dashboard stats** — Summary cards showing:
+   - Total disk usage vs DB-tracked usage (delta = stale files)
+   - Orphaned media count + size
+   - Orphaned API key count
+   - Extension table count vs installed extension count
+
+5. **No automated cleanup** — All actions are manual and admin-initiated.
+   No cron jobs or background workers that silently delete data. The admin
+   decides when to clean up and reviews what will be affected.
+
+**Alternatives Considered:**
+- Automated background cleanup on schedule: too risky — could delete data
+  during a race condition (e.g., campaign being restored from backup).
+- Per-campaign cleanup page: campaigns already cascade; the problem is
+  cross-campaign orphans that only a site admin can see.
+
+**Consequences:**
+- Admins have full visibility into database/filesystem health.
+- No data is ever deleted without explicit admin action + confirmation.
+- Safety checks prevent accidental deletion of in-use data.
+- Complements ADR-025 (campaign deletion cleanup) as a catch-all safety net.

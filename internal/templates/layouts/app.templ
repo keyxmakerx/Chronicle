@@ -259,6 +259,7 @@ templ Sidebar() {
 							</svg>
 							Activity Log
 						</a>
+						if IsAddonEnabled(ctx, "media-gallery") {
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/media", GetCampaignID(ctx))) }
 							class={ sidebarNavLink,
@@ -270,6 +271,7 @@ templ Sidebar() {
 							</span>
 							Media
 						</a>
+						}
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx))) }
 							class={ sidebarNavLink,

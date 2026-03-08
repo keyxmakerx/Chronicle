@@ -161,29 +161,46 @@ _Fill the biggest test gaps — zero-test plugins and incomplete service tests._
 - [x] **Sprint M3-2: Sessions & Calendar Service Tests** — Sessions: 40+ tests (CRUD, recurrence, RSVP, entity linking, RSVP tokens, model methods). Calendar: 40+ tests (calendar CRUD, events, date helpers, week view).
 - [x] **Sprint M3-3: Timeline Service Tests** — 50+ tests covering timeline CRUD, standalone events, entity groups, event connections, search, visibility filtering, event linking.
 
-### Phase M: Game System Modules & Worldbuilding Tools
+### Phase S: Data Integrity & Admin Tooling ← START HERE
 
-- [x] **Sprint M-1: D&D 5e Module — Data & Tooltip API** — SRD-legal JSON (spells 27, monsters 14, items 10, classes 12, races 9, conditions 15). Module init wiring, route registration, category-specific tooltip rendering, 9 tests.
-- [ ] **Sprint M-2: D&D 5e Module — Reference Pages** — Browsable pages at `/modules/dnd5e/`. Category cards, searchable lists, formatted stat block detail pages. Quick-search integration.
-- [ ] **Sprint M-3: Pathfinder 2e Module** — ORC-licensed data following D&D 5e pattern. Spells, monsters, ancestries, classes, conditions, feats.
-- [ ] **Sprint M-4: Guided Worldbuilding Prompts** — `worldbuilding_prompts` table. "Writing Prompts" collapsible panel on entity edit page. Default prompt packs per entity type. Owner-customizable.
-- [ ] **Sprint M-5: Entity Type Template Library** — Genre presets (fantasy, sci-fi, horror, modern, historical) as JSON fixtures. Campaign creation genre selection. "Import preset" in Customization Hub.
+_Fix orphaned data, cascade gaps, and admin DB visibility. See `.ai/phases.md`._
 
-### Phase N: Collaboration & Platform Maturity
+- [ ] **Sprint S-1: Campaign Deletion Cleanup (ADR-025)** — API key FK cascade, media file disk cleanup, multi-step delete service, WASM hook dispatch, orphan extension cleanup.
+- [ ] **Sprint S-2: Extension Migration System (ADR-024)** — `extension_schema_versions` table, per-extension migration runner, namespaced table enforcement (`ext_<slug>_*`), install/uninstall lifecycle.
+- [ ] **Sprint S-3: Admin Data Hygiene Dashboard (ADR-026)** — Orphan detection queries, `/admin/data-hygiene` page, guarded cleanup actions, safety guardrails. All actions audit-logged.
 
-- [ ] **Sprint N-1: Role-Aware Dashboards** — Role-keyed dashboard layouts. Dashboard editor gains role selector. Players see role-specific dashboard or default fallback.
-- [ ] **Sprint N-2: Invite System** — Migration: `campaign_invites` table. Email invitations with one-click accept link. Non-public campaigns require invitation. Invite management UI.
-- [ ] **Sprint N-3: 2FA/TOTP Support** — TOTP enrollment with QR code (`pquerna/otp`). Login redirect to TOTP input. Recovery codes (8 hashed). Admin force-disable.
-- [ ] **Sprint N-4: Accessibility Audit (WCAG 2.1 AA)** — ARIA labels, focus traps, skip-to-content, color contrast 4.5:1, keyboard nav, screen reader announcements, axe-core scanning.
-- [ ] **Sprint N-5: Infrastructure & Deployment** — Docker-compose full stack verification with health checks. Makefile full-stack target. `CONTRIBUTING.md`. CI against docker-compose.
+### Phase T: Game System Modules & Worldbuilding Tools
 
-### Phase O: Polish, Ecosystem & Delight
+- [x] **Sprint T-0 (M-1): D&D 5e Module — Data & Tooltip API** — SRD-legal JSON (spells 27, monsters 14, items 10, classes 12, races 9, conditions 15). Module init wiring, route registration, category-specific tooltip rendering, 9 tests.
+- [ ] **Sprint T-1: D&D 5e Module — Reference Pages** — Browsable pages at `/modules/dnd5e/`. Category cards, searchable lists, formatted stat block detail pages. Quick-search integration.
+- [ ] **Sprint T-2: Pathfinder 2e Module** — ORC-licensed data following D&D 5e pattern. Spells, monsters, ancestries, classes, conditions, feats.
+- [ ] **Sprint T-3: Guided Worldbuilding Prompts** — `worldbuilding_prompts` table. "Writing Prompts" collapsible panel on entity edit page. Default prompt packs per entity type. Owner-customizable.
+- [ ] **Sprint T-4: Entity Type Template Library** — Genre presets (fantasy, sci-fi, horror, modern, historical) as JSON fixtures. Campaign creation genre selection. "Import preset" in Customization Hub.
 
-- [ ] **Sprint O-1: Command Palette & Saved Filters** — Ctrl+Shift+P action palette with fuzzy search. Saved entity list filter presets as sidebar links in `saved_filters` table.
-- [ ] **Sprint O-2: Map Drawing Tools** — Leaflet.Draw integration (freehand, polygons, circles, rectangles, text). Uses existing `map_drawings` table. Per-drawing visibility, color/opacity.
-- [ ] **Sprint O-3: Discord Bot Integration** — Plugin at `internal/plugins/discord/`. Bot token config. Webhook session notifications. Reaction-based RSVP per ADR-012.
-- [ ] **Sprint O-4: Bulk Operations & Persistent Filters** — Multi-select entity lists with batch actions (tag, move, visibility, delete). Persistent filters per category in localStorage.
-- [ ] **Sprint O-5: Editor Import/Export & Additional Themes** — Markdown import/export via `goldmark`. Sepia + high-contrast themes. Custom accent color picker.
+### Phase U: Collaboration & Platform Maturity
+
+- [ ] **Sprint U-1: Role-Aware Dashboards** — Role-keyed dashboard layouts. Dashboard editor gains role selector. Players see role-specific dashboard or default fallback.
+- [ ] **Sprint U-2: Invite System** — Migration: `campaign_invites` table. Email invitations with one-click accept link. Non-public campaigns require invitation. Invite management UI.
+- [ ] **Sprint U-3: 2FA/TOTP Support** — TOTP enrollment with QR code (`pquerna/otp`). Login redirect to TOTP input. Recovery codes (8 hashed). Admin force-disable.
+- [ ] **Sprint U-4: Accessibility Audit (WCAG 2.1 AA)** — ARIA labels, focus traps, skip-to-content, color contrast 4.5:1, keyboard nav, screen reader announcements, axe-core scanning.
+- [ ] **Sprint U-5: Infrastructure & Deployment** — Docker-compose full stack verification with health checks. Makefile full-stack target. `CONTRIBUTING.md`. CI against docker-compose.
+
+### Phase V: Obsidian-Style Notes & Discovery
+
+_Quick capture, backlinks, enhanced graph. See `.ai/obsidian-notes-plan.md`._
+
+- [ ] **Sprint V-1: Quick Capture & Session Journal** — Quick-capture modal (Ctrl+Shift+N), "Session Journal" topbar button, player notes in quick search.
+- [ ] **Sprint V-2: Backlinks Panel** — "Referenced By" on entity show pages, `entry_html` mention scan, context snippets, Redis caching.
+- [ ] **Sprint V-3: Content Templates** — Pre-fill editor with structured content (Session Recap, etc.). Template picker in create flow + editor insert.
+- [ ] **Sprint V-4: Enhanced Graph View** — @mention links in graph, entity type/tag filtering, local graph (N hops), clustering, orphan detection.
+
+### Phase W: Polish, Ecosystem & Delight
+
+- [ ] **Sprint W-1: Command Palette & Saved Filters** — Ctrl+Shift+P action palette with fuzzy search. Saved entity list filter presets as sidebar links in `saved_filters` table.
+- [ ] **Sprint W-2: Map Drawing Tools** — Leaflet.Draw integration (freehand, polygons, circles, rectangles, text). Uses existing `map_drawings` table. Per-drawing visibility, color/opacity.
+- [ ] **Sprint W-3: Discord Bot Integration** — Plugin at `internal/plugins/discord/`. Bot token config. Webhook session notifications. Reaction-based RSVP per ADR-012.
+- [ ] **Sprint W-4: Bulk Operations & Persistent Filters** — Multi-select entity lists with batch actions (tag, move, visibility, delete). Persistent filters per category in localStorage.
+- [ ] **Sprint W-5: Editor Import/Export & Additional Themes** — Markdown import/export via `goldmark`. Sepia + high-contrast themes. Custom accent color picker.
 
 ### Backlog: Remaining Audit Items (address opportunistically)
 
@@ -263,6 +280,7 @@ _WASM-sandboxed backend logic via Extism/wazero. See ADR-021._
 - [ ] Family tree / genealogy builder
 - [ ] Cross-campaign search
 - [ ] Mobile-optimized modals (full-screen on small screens)
+- [ ] **Knowledge Graph / Mind Map addon** — Interactive graph visualization showing how campaign content is interconnected. Primary view: **Tag Graph** — nodes are tags, edges connect entities that share tags, click a tag to see all entities tagged with it, click an entity to see all its tags. Additional views: **Mention Graph** — nodes are entities, edges are @mention references between them. **Timeline Graph** — nodes are timeline events, edges show event connections and entity involvement. **Relation Graph** (existing, expand) — add tag-based clustering. Designed as a **self-hosted extension addon** — uploadable via the content extension system (Layer 2: widget extension), not built into core. Ships as a reference implementation of the widget extension API. Uses D3.js or Cytoscape.js. Data sourced from existing APIs (tags, relations, entity-names, timeline). Register as addon (`knowledge-graph` slug) with per-campaign enable/disable.
 
 ---
 

@@ -2,14 +2,14 @@
  * shop_inventory.js -- Chronicle Shop Inventory Widget
  *
  * Displays a shop's inventory as a list of items with price, quantity, and
- * stock controls. Items are entity relations with type "sells", and inventory
- * metadata (price, quantity, in_stock) is stored in the relation's metadata
- * JSON column.
+ * stock controls. Items can be entity relations (type "sells") or custom
+ * items (name stored in relation metadata, no linked entity page).
  *
  * Mount via:
  *   <div data-widget="shop_inventory"
  *        data-relations-endpoint="/campaigns/:id/entities/:eid/relations"
  *        data-entity-search-endpoint="/campaigns/:id/entities/search"
+ *        data-quick-create-endpoint="/campaigns/:id/entities/quick-create"
  *        data-campaign-url="/campaigns/:id"
  *        data-editable="true"
  *        data-csrf-token="..."
@@ -32,6 +32,7 @@ Chronicle.register('shop_inventory', {
       searchQuery: '',
       searchResults: [],
       searchTimer: null,
+      entityTypes: [],
     };
     el._shopState = state;
 
@@ -53,7 +54,8 @@ Chronicle.register('shop_inventory', {
       '.shop-inv-item-info { flex: 1; min-width: 0; }',
       '.shop-inv-item-name { font-weight: 500; color: var(--text-primary, #1f2937); text-decoration: none; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
       '.shop-inv-item-name:hover { text-decoration: underline; }',
-      '.dark .shop-inv-item-name { color: #e5e7eb; }',
+      '.shop-inv-item-name-plain { font-weight: 500; color: var(--text-primary, #1f2937); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+      '.dark .shop-inv-item-name, .dark .shop-inv-item-name-plain { color: #e5e7eb; }',
       '.shop-inv-item-meta { font-size: 0.75rem; color: #6b7280; margin-top: 0.125rem; }',
       '.shop-inv-item-controls { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }',
       '.shop-inv-price { font-weight: 600; color: #d97706; white-space: nowrap; }',
@@ -75,14 +77,20 @@ Chronicle.register('shop_inventory', {
       '.dark .shop-inv-price-input { background: #374151; border-color: #4b5563; color: #e5e7eb; }',
       '.shop-inv-add-panel { border: 1px solid #e5e7eb; border-radius: 0.375rem; padding: 0.75rem; margin-bottom: 0.75rem; }',
       '.dark .shop-inv-add-panel { border-color: #374151; }',
-      '.shop-inv-create-form { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #e5e7eb; }',
-      '.dark .shop-inv-create-form { border-color: #374151; }',
-      '.shop-inv-create-input { flex: 1; padding: 0.375rem 0.5rem; border: 1px solid #d1d5db; border-radius: 0.25rem; font-size: 0.8125rem; }',
+      '.shop-inv-create-section { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #e5e7eb; }',
+      '.dark .shop-inv-create-section { border-color: #374151; }',
+      '.shop-inv-create-row { display: flex; gap: 0.375rem; align-items: center; margin-top: 0.375rem; }',
+      '.shop-inv-create-input { flex: 1; padding: 0.3rem 0.5rem; border: 1px solid #d1d5db; border-radius: 0.25rem; font-size: 0.8125rem; }',
       '.dark .shop-inv-create-input { background: #374151; border-color: #4b5563; color: #e5e7eb; }',
-      '.shop-inv-create-btn { font-size: 0.75rem; padding: 0.375rem 0.75rem; border-radius: 0.25rem; background: #10b981; color: #fff; border: none; cursor: pointer; white-space: nowrap; }',
-      '.shop-inv-create-btn:hover { background: #059669; }',
-      '.shop-inv-create-btn:disabled { opacity: 0.5; cursor: not-allowed; }',
-      '.shop-inv-or-divider { text-align: center; font-size: 0.6875rem; color: #9ca3af; margin-top: 0.5rem; }',
+      '.shop-inv-type-select { padding: 0.3rem 0.375rem; border: 1px solid #d1d5db; border-radius: 0.25rem; font-size: 0.75rem; max-width: 7rem; }',
+      '.dark .shop-inv-type-select { background: #374151; border-color: #4b5563; color: #e5e7eb; }',
+      '.shop-inv-action-btn { font-size: 0.75rem; padding: 0.3rem 0.625rem; border-radius: 0.25rem; color: #fff; border: none; cursor: pointer; white-space: nowrap; }',
+      '.shop-inv-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }',
+      '.shop-inv-action-btn.green { background: #10b981; }',
+      '.shop-inv-action-btn.green:hover:not(:disabled) { background: #059669; }',
+      '.shop-inv-action-btn.blue { background: #3b82f6; }',
+      '.shop-inv-action-btn.blue:hover:not(:disabled) { background: #2563eb; }',
+      '.shop-inv-label { font-size: 0.6875rem; color: #6b7280; font-weight: 500; }',
     ].join('\n');
     el.appendChild(style);
 
@@ -149,32 +157,48 @@ Chronicle.register('shop_inventory', {
 
     function renderItem(item) {
       var meta = item.metadata || {};
+      var isCustom = !item.targetEntityID;
       var row = document.createElement('div');
       row.className = 'shop-inv-item';
 
       // Icon.
       var iconWrap = document.createElement('div');
       iconWrap.className = 'shop-inv-item-icon';
-      iconWrap.style.backgroundColor = (item.targetEntityColor || '#6b7280') + '20';
-      iconWrap.style.color = item.targetEntityColor || '#6b7280';
-      iconWrap.innerHTML = '<i class="fas ' + Chronicle.escapeHtml(item.targetEntityIcon || 'fa-box') + '"></i>';
+      var iconColor = isCustom ? '#6b7280' : (item.targetEntityColor || '#6b7280');
+      var iconClass = isCustom ? 'fa-box' : (item.targetEntityIcon || 'fa-box');
+      iconWrap.style.backgroundColor = iconColor + '20';
+      iconWrap.style.color = iconColor;
+      iconWrap.innerHTML = '<i class="fas ' + Chronicle.escapeHtml(iconClass) + '"></i>';
       row.appendChild(iconWrap);
 
       // Info.
       var info = document.createElement('div');
       info.className = 'shop-inv-item-info';
-      var nameLink = document.createElement('a');
-      nameLink.className = 'shop-inv-item-name';
-      nameLink.href = campaignUrl + '/entities/' + item.targetEntitySlug;
-      nameLink.setAttribute('data-hx-boost', 'true');
-      nameLink.textContent = item.targetEntityName;
-      info.appendChild(nameLink);
 
-      if (item.targetEntityType) {
-        var typeBadge = document.createElement('div');
-        typeBadge.className = 'shop-inv-item-meta';
-        typeBadge.textContent = item.targetEntityType;
-        info.appendChild(typeBadge);
+      if (isCustom) {
+        // Custom item (no entity page) — plain text name, editable inline.
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'shop-inv-item-name-plain';
+        nameSpan.textContent = meta.custom_name || 'Unnamed item';
+        info.appendChild(nameSpan);
+        var customBadge = document.createElement('div');
+        customBadge.className = 'shop-inv-item-meta';
+        customBadge.textContent = 'Custom item';
+        info.appendChild(customBadge);
+      } else {
+        var nameLink = document.createElement('a');
+        nameLink.className = 'shop-inv-item-name';
+        nameLink.href = campaignUrl + '/entities/' + item.targetEntitySlug;
+        nameLink.setAttribute('data-hx-boost', 'true');
+        nameLink.textContent = item.targetEntityName;
+        info.appendChild(nameLink);
+
+        if (item.targetEntityType) {
+          var typeBadge = document.createElement('div');
+          typeBadge.className = 'shop-inv-item-meta';
+          typeBadge.textContent = item.targetEntityType;
+          info.appendChild(typeBadge);
+        }
       }
       row.appendChild(info);
 
@@ -272,10 +296,11 @@ Chronicle.register('shop_inventory', {
       var panel = document.createElement('div');
       panel.className = 'shop-inv-add-panel';
 
+      // Single search input for finding existing entities.
       var searchInput = document.createElement('input');
       searchInput.className = 'shop-inv-search';
       searchInput.type = 'text';
-      searchInput.placeholder = 'Search existing items to add...';
+      searchInput.placeholder = 'Search for an item to add...';
       searchInput.value = state.searchQuery;
       searchInput.oninput = function () {
         state.searchQuery = searchInput.value;
@@ -289,51 +314,73 @@ Chronicle.register('shop_inventory', {
       };
       panel.appendChild(searchInput);
 
+      // Search results.
       var resultsDiv = document.createElement('div');
       resultsDiv.className = 'shop-inv-search-results';
       renderSearchResults(resultsDiv);
       panel.appendChild(resultsDiv);
 
-      // "Or create new" section.
+      // "Create new item" section — always visible below search results.
+      // Creates a new entity page and adds it to the shop in one step.
       if (quickCreateEndpoint) {
-        var orDiv = document.createElement('div');
-        orDiv.className = 'shop-inv-or-divider';
-        orDiv.textContent = '— or create a new item —';
-        panel.appendChild(orDiv);
+        var createSection = document.createElement('div');
+        createSection.className = 'shop-inv-create-section';
 
-        var createForm = document.createElement('div');
-        createForm.className = 'shop-inv-create-form';
+        var createLabel = document.createElement('div');
+        createLabel.className = 'shop-inv-label';
+        createLabel.textContent = 'Or create a new item:';
+        createSection.appendChild(createLabel);
+
+        var createRow = document.createElement('div');
+        createRow.className = 'shop-inv-create-row';
 
         var nameInput = document.createElement('input');
         nameInput.className = 'shop-inv-create-input';
         nameInput.type = 'text';
-        nameInput.placeholder = 'New item name...';
+        nameInput.placeholder = 'Item name...';
+
+        // Entity type dropdown.
+        var typeSelect = document.createElement('select');
+        typeSelect.className = 'shop-inv-type-select';
+        if (state.entityTypes.length === 0) {
+          var defOpt = document.createElement('option');
+          defOpt.value = '0';
+          defOpt.textContent = 'Default';
+          typeSelect.appendChild(defOpt);
+        } else {
+          for (var t = 0; t < state.entityTypes.length; t++) {
+            var et = state.entityTypes[t];
+            var opt = document.createElement('option');
+            opt.value = et.id;
+            opt.textContent = et.name;
+            typeSelect.appendChild(opt);
+          }
+        }
 
         var createBtn = document.createElement('button');
-        createBtn.className = 'shop-inv-create-btn';
+        createBtn.className = 'shop-inv-action-btn green';
         createBtn.textContent = 'Create & Add';
         createBtn.onclick = function () {
           var name = nameInput.value.trim();
           if (!name) return;
+          var typeId = parseInt(typeSelect.value, 10) || 0;
           createBtn.disabled = true;
           createBtn.textContent = 'Creating...';
-          quickCreateItem(name, function () {
+          quickCreateItem(name, typeId, function () {
             createBtn.disabled = false;
             createBtn.textContent = 'Create & Add';
           });
         };
 
-        // Allow Enter key to create.
         nameInput.onkeydown = function (e) {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            createBtn.click();
-          }
+          if (e.key === 'Enter') { e.preventDefault(); createBtn.click(); }
         };
 
-        createForm.appendChild(nameInput);
-        createForm.appendChild(createBtn);
-        panel.appendChild(createForm);
+        createRow.appendChild(nameInput);
+        createRow.appendChild(typeSelect);
+        createRow.appendChild(createBtn);
+        createSection.appendChild(createRow);
+        panel.appendChild(createSection);
       }
 
       // Auto-focus the search input.
@@ -359,8 +406,8 @@ Chronicle.register('shop_inventory', {
         row.dataset.entityId = result.id;
 
         var icon = document.createElement('span');
-        icon.style.color = result.color || '#6b7280';
-        icon.innerHTML = '<i class="fas ' + Chronicle.escapeHtml(result.icon || 'fa-box') + '"></i>';
+        icon.style.color = result.type_color || '#6b7280';
+        icon.innerHTML = '<i class="fas ' + Chronicle.escapeHtml(result.type_icon || 'fa-box') + '"></i>';
         row.appendChild(icon);
 
         var name = document.createElement('span');
@@ -376,9 +423,9 @@ Chronicle.register('shop_inventory', {
           row.appendChild(badge);
         }
 
-        (function (entityId, entityName) {
-          row.onclick = function () { addItem(entityId, entityName); };
-        })(result.id, result.name);
+        (function (entityId) {
+          row.onclick = function () { addItem(entityId); };
+        })(result.id);
 
         container.appendChild(row);
       }
@@ -388,6 +435,10 @@ Chronicle.register('shop_inventory', {
 
     function loadInventory() {
       Chronicle.apiFetch(relationsEndpoint, { method: 'GET' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Failed to load inventory: ' + res.status);
+          return res.json();
+        })
         .then(function (data) {
           // Filter to only "sells" relations.
           state.items = (data || []).filter(function (r) {
@@ -410,20 +461,19 @@ Chronicle.register('shop_inventory', {
         });
     }
 
+    // Add an existing entity to the shop as an inventory item.
     function addItem(entityId) {
-      var body = {
-        targetEntityId: entityId,
-        relationType: 'sells',
-        reverseRelationType: 'sold by',
-        metadata: { price: 0, quantity: null, in_stock: true },
-      };
-
       return Chronicle.apiFetch(relationsEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify(body),
+        body: {
+          targetEntityId: entityId,
+          relationType: 'sells',
+          reverseRelationType: 'sold by',
+          metadata: { price: 0, quantity: null, in_stock: true },
+        },
       })
-        .then(function () {
+        .then(function (res) {
+          if (!res.ok) throw new Error('Failed to add item: ' + res.status);
           state.addMode = false;
           state.searchQuery = '';
           state.searchResults = [];
@@ -435,12 +485,13 @@ Chronicle.register('shop_inventory', {
     }
 
     function removeItem(relationId) {
-      // The relations endpoint expects DELETE /relations/:rid (with entity eid in path).
       Chronicle.apiFetch(relationsEndpoint + '/' + relationId, {
         method: 'DELETE',
-        headers: { 'X-CSRF-Token': csrfToken },
       })
-        .then(function () { loadInventory(); })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Failed to remove: ' + res.status);
+          loadInventory();
+        })
         .catch(function (err) {
           console.error('Shop inventory: failed to remove item', err);
         });
@@ -449,8 +500,7 @@ Chronicle.register('shop_inventory', {
     function updateMetadata(relationId, meta) {
       Chronicle.apiFetch(relationsEndpoint + '/' + relationId + '/metadata', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ metadata: meta }),
+        body: { metadata: meta },
       })
         .catch(function (err) {
           console.error('Shop inventory: failed to update metadata', err);
@@ -459,8 +509,12 @@ Chronicle.register('shop_inventory', {
 
     function searchItems(query) {
       Chronicle.apiFetch(entitySearchEndpoint + '?q=' + encodeURIComponent(query), { method: 'GET' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Search failed: ' + res.status);
+          return res.json();
+        })
         .then(function (data) {
-          state.searchResults = data || [];
+          state.searchResults = data.results || data || [];
           var resultsDiv = el.querySelector('.shop-inv-search-results');
           if (resultsDiv) renderSearchResults(resultsDiv);
         })
@@ -469,12 +523,20 @@ Chronicle.register('shop_inventory', {
         });
     }
 
-    function quickCreateItem(name, onDone) {
+    // Create a new entity page and add it to the shop.
+    function quickCreateItem(name, entityTypeId, onDone) {
       Chronicle.apiFetch(quickCreateEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ name: name, entity_type_id: 0 }),
+        body: { name: name, entity_type_id: entityTypeId },
       })
+        .then(function (res) {
+          if (!res.ok) {
+            return res.json().catch(function () { return {}; }).then(function (body) {
+              throw new Error(body.message || 'Create failed: ' + res.status);
+            });
+          }
+          return res.json();
+        })
         .then(function (data) {
           // Add the newly created entity to the shop.
           return addItem(data.id);
@@ -484,13 +546,40 @@ Chronicle.register('shop_inventory', {
         })
         .catch(function (err) {
           console.error('Shop inventory: failed to create item', err);
+          alert('Failed to create item: ' + (err.message || 'Unknown error'));
           if (onDone) onDone();
-          Chronicle.showToast && Chronicle.showToast('Failed to create item', 'error');
+        });
+    }
+
+    // Load entity types for the "Create entity page" dropdown.
+    function loadEntityTypes() {
+      // Use the search endpoint with empty query to discover available types.
+      // The response includes type info per entity. We extract unique types.
+      // Alternatively, fetch from a dedicated types endpoint if available.
+      if (!quickCreateEndpoint) return;
+
+      // Derive types endpoint from quick-create endpoint path.
+      // quick-create: /campaigns/:id/entities/quick-create
+      // types: /campaigns/:id/entities/types (if it exists), otherwise skip
+      var typesUrl = quickCreateEndpoint.replace('/quick-create', '/types');
+      Chronicle.apiFetch(typesUrl, { method: 'GET' })
+        .then(function (res) {
+          if (!res.ok) return;
+          return res.json();
+        })
+        .then(function (data) {
+          if (data && Array.isArray(data)) {
+            state.entityTypes = data;
+          }
+        })
+        .catch(function () {
+          // Silently fail — dropdown will show "Default" fallback.
         });
     }
 
     // Initial load.
     loadInventory();
+    loadEntityTypes();
   },
 
   destroy: function (el) {

@@ -55,6 +55,9 @@ type MediaService interface {
 	// CleanupOrphans finds files on disk without a corresponding DB record and
 	// deletes them. Returns the number of files removed.
 	CleanupOrphans(ctx context.Context) (int, error)
+
+	// ValidateMediaPath ensures the storage directory exists and is writable.
+	ValidateMediaPath() error
 }
 
 // maxConcurrentUploadsPerUser limits simultaneous uploads per user to prevent
@@ -118,6 +121,23 @@ func NewMediaService(repo MediaRepository, mediaPath string, maxSize int64) Medi
 // Called after all plugins are wired to avoid initialization order issues.
 func (s *mediaService) SetStorageLimiter(limiter StorageLimiter) {
 	s.limiter = limiter
+}
+
+// ValidateMediaPath ensures the media storage directory exists and is writable.
+// Call at startup to surface configuration issues early instead of failing on
+// the first upload with a 500 error.
+func (s *mediaService) ValidateMediaPath() error {
+	if err := os.MkdirAll(s.mediaPath, 0750); err != nil {
+		return fmt.Errorf("media path %q: cannot create directory: %w", s.mediaPath, err)
+	}
+	// Write and remove a test file to verify write permissions.
+	testFile := filepath.Join(s.mediaPath, ".write-test")
+	if err := os.WriteFile(testFile, []byte("ok"), 0640); err != nil {
+		return fmt.Errorf("media path %q: not writable: %w", s.mediaPath, err)
+	}
+	_ = os.Remove(testFile)
+	slog.Info("media storage path validated", slog.String("path", s.mediaPath))
+	return nil
 }
 
 // Upload validates, stores, and records a new media file.

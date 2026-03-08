@@ -8,11 +8,19 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-07 -- Category nav page listing, shop widget create items, image upload fix, dirty form fix, admin features filtering.
+2026-03-08 -- Phase & sprint plan created. ADR-026 documented. Bug fixes complete.
 Branch: `claude/fix-category-nav-shops-i99oq`.
 
+## Phase & Sprint Plan
+See `.ai/phases.md` for the full roadmap. Phases S through W organized by theme:
+- **S**: Data Integrity & Admin Tooling (ADRs 024-026)
+- **T**: Game System Modules & Worldbuilding Tools
+- **U**: Collaboration & Platform Maturity
+- **V**: Obsidian-Style Notes & Discovery
+- **W**: Polish, Ecosystem & Delight
+
 ## Current Phase
-**Bug fix & feature sprint — 9 issues resolved.**
+**Planning complete — ready to start Phase S (Data Integrity & Admin Tooling).**
 
 ### Generic Module Framework (COMPLETE)
 - **GenericTooltipRenderer** (`generic_tooltip.go`): Reads field definitions from the manifest's `categories[].fields[]` to render tooltips. Shows only manifest-declared fields in manifest-defined order. Works for any game system.
@@ -339,12 +347,21 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - **Dirty Form Fix**: Added document-level `htmx:afterRequest` listener that checks for `HX-Redirect` response header and clears all dirty sources. This catches cases where `htmx:beforeRedirect` doesn't fire due to timing differences.
 - **Admin Features Page**: Filtered module-category addons (dnd5e, drawsteel, pathfinder2e) from the admin Features page. These game systems are managed on the Content Packs page. Added `CountFeatures` method to exclude modules from the dashboard count.
 
+### Bug Fixes Round 2 (2026-03-08)
+- **Category Nav Fix (root cause)**: The `Search()` service method required queries >= 2 characters, but sidebar auto-load sent no query. Fixed `SearchAPI` to use `List()` (no search filter) when query is empty, correctly returning all entities of the selected type.
+- **Image Upload 500 Fix (root cause)**: `isAPIRequest()` in error handler only checked Content-Type, not Accept header. Image uploads use `multipart/form-data`, so 500 errors returned HTML error pages that the JS couldn't parse. Fixed `isAPIRequest` to also check Accept header. Switched `image_upload.js` to use `Chronicle.apiFetch` (sends Accept: application/json). Added `ValidateMediaPath()` startup check to verify media directory exists and is writable.
+- **Dirty Form Fix (root cause)**: Form change tracking marked forms dirty on input, but dirty state wasn't cleared until response redirect. Added `htmx:beforeRequest` listener that clears form dirty state when a tracked form submits — the user is saving, so the form is clean from that point.
+- **Shop Widget Fix (root cause)**: `Chronicle.apiFetch` returns a raw Response object, but all shop widget API calls treated it as parsed JSON (missing `.json()` chains). Every API call was silently failing. Fixed all calls with proper `.then(res => res.json())` chains. Redesigned add panel: single search bar with inline "Create & Add" section (name input + entity type dropdown).
+- **Admin Features Fix**: Planned addons without backing code were showing on the Features page. Now filtered out — only active/installed addons appear. Dashboard count updated to match. (Media Gallery was subsequently converted to a proper addon — see below.)
+- **New API**: `GET /campaigns/:id/entities/types` — returns entity types as JSON for widget dropdowns (used by shop widget create flow).
+- **Media Gallery as Addon**: The existing media plugin (`internal/plugins/media/`) is now properly registered as the `media-gallery` addon. Campaign media browser routes (`/campaigns/:id/media*`) are gated behind `RequireAddon("media-gallery")`. Sidebar "Media" link conditionally shown via `IsAddonEnabled`. Base upload/serve routes remain ungated (avatars, backdrops work regardless). Migration 000057 updates addon description and sets status to active. Future expansion: albums, tagging, lightbox.
+
 ## Next Session Should
-- Sprint M-2: D&D 5e Module — Reference Pages (browsable pages at `/modules/dnd5e/`)
-- Obsidian-style notes (see `.ai/obsidian-notes-plan.md`)
-- Quick wins from the UX audit (export button, sort controls, etc.)
-- Phase S+ deferred items (Draw Steel module, whiteboards, offline mode)
-- Test coverage gaps (handler/repository tests for maps, sessions, admin, smtp)
+- **Sprint S-1: Campaign Deletion Cleanup** (ADR-025) — API key FK cascade, media disk cleanup, multi-step delete service
+- **Sprint S-2: Extension Migration System** (ADR-024) — schema tracking, namespaced tables, install/uninstall lifecycle
+- **Sprint S-3: Admin Data Hygiene Dashboard** (ADR-026) — orphan detection, guarded cleanup, safety guardrails
+- Then: Sprint T-1 (D&D 5e reference pages), Sprint U-2 (invite system), Sprint V-1 (quick capture)
+- See `.ai/phases.md` for full execution order
 
 ## Known Issues Right Now
 - `make dev` requires `air` to be installed (`go install github.com/air-verse/air@latest`)
