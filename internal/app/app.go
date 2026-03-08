@@ -243,7 +243,13 @@ func isAPIRequest(c echo.Context) bool {
 		return true
 	}
 	ct := c.Request().Header.Get("Content-Type")
-	return strings.Contains(ct, "application/json")
+	if strings.Contains(ct, "application/json") {
+		return true
+	}
+	// Check Accept header so that fetch() callers (e.g. image upload widget)
+	// receive JSON error responses instead of HTML error pages.
+	accept := c.Request().Header.Get("Accept")
+	return strings.Contains(accept, "application/json")
 }
 
 // isHTMXRequest returns true if the request was initiated by HTMX.

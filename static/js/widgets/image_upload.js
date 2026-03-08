@@ -69,12 +69,11 @@ Chronicle.register('image-upload', {
         formData.append('campaign_id', campMatch[1]);
       }
 
-      fetch(config.uploadUrl, {
+      // Use Chronicle.apiFetch so Accept: application/json is sent,
+      // ensuring error responses come back as JSON (not HTML error pages).
+      Chronicle.apiFetch(config.uploadUrl, {
         method: 'POST',
         body: formData,
-        headers: {
-          'X-CSRF-Token': config.csrfToken
-        }
       })
         .then(function (res) {
           if (!res.ok) {
@@ -86,13 +85,9 @@ Chronicle.register('image-upload', {
         })
         .then(function (data) {
           // Step 2: Set the uploaded image path on the entity.
-          return fetch(config.endpoint, {
+          return Chronicle.apiFetch(config.endpoint, {
             method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-Token': config.csrfToken
-            },
-            body: JSON.stringify({ image_path: data.id })
+            body: { image_path: data.id },
           });
         })
         .then(function (res) {

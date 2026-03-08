@@ -339,6 +339,14 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - **Dirty Form Fix**: Added document-level `htmx:afterRequest` listener that checks for `HX-Redirect` response header and clears all dirty sources. This catches cases where `htmx:beforeRedirect` doesn't fire due to timing differences.
 - **Admin Features Page**: Filtered module-category addons (dnd5e, drawsteel, pathfinder2e) from the admin Features page. These game systems are managed on the Content Packs page. Added `CountFeatures` method to exclude modules from the dashboard count.
 
+### Bug Fixes Round 2 (2026-03-08)
+- **Category Nav Fix (root cause)**: The `Search()` service method required queries >= 2 characters, but sidebar auto-load sent no query. Fixed `SearchAPI` to use `List()` (no search filter) when query is empty, correctly returning all entities of the selected type.
+- **Image Upload 500 Fix (root cause)**: `isAPIRequest()` in error handler only checked Content-Type, not Accept header. Image uploads use `multipart/form-data`, so 500 errors returned HTML error pages that the JS couldn't parse. Fixed `isAPIRequest` to also check Accept header. Switched `image_upload.js` to use `Chronicle.apiFetch` (sends Accept: application/json). Added `ValidateMediaPath()` startup check to verify media directory exists and is writable.
+- **Dirty Form Fix (root cause)**: Form change tracking marked forms dirty on input, but dirty state wasn't cleared until response redirect. Added `htmx:beforeRequest` listener that clears form dirty state when a tracked form submits — the user is saving, so the form is clean from that point.
+- **Shop Widget Fix (root cause)**: `Chronicle.apiFetch` returns a raw Response object, but all shop widget API calls treated it as parsed JSON (missing `.json()` chains). Every API call was silently failing. Fixed all calls with proper `.then(res => res.json())` chains. Redesigned add panel: single search bar with inline "Create & Add" section (name input + entity type dropdown).
+- **Admin Features Fix**: Planned addons without backing code (Media Gallery, Player Notes) were showing on the Features page. Now filtered out — only active/installed addons appear. Dashboard count updated to match.
+- **New API**: `GET /campaigns/:id/entities/types` — returns entity types as JSON for widget dropdowns (used by shop widget create flow).
+
 ## Next Session Should
 - Sprint M-2: D&D 5e Module — Reference Pages (browsable pages at `/modules/dnd5e/`)
 - Obsidian-style notes (see `.ai/obsidian-notes-plan.md`)

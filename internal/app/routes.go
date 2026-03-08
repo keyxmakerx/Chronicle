@@ -678,6 +678,11 @@ func (a *App) RegisterRoutes() {
 	// but don't crash -- the rest of the app keeps running.
 	mediaRepo := media.NewMediaRepository(a.DB)
 	mediaService := media.NewMediaService(mediaRepo, a.Config.Upload.MediaPath, a.Config.Upload.MaxSize)
+	if err := mediaService.ValidateMediaPath(); err != nil {
+		slog.Warn("media storage validation failed; uploads may not work",
+			slog.Any("error", err),
+		)
+	}
 	mediaHandler := media.NewHandler(mediaService)
 
 	// Initialize HMAC URL signer for secure media access.

@@ -606,7 +606,21 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	// Check if the caller wants JSON (used by the editor @mention widget).
 	wantsJSON := strings.Contains(c.Request().Header.Get("Accept"), "application/json")
 
-	results, total, err := h.service.Search(c.Request().Context(), cc.Campaign.ID, query, typeID, role, userID, opts)
+	// Use List (no search filter) when query is empty, Search when the user
+	// has typed a query. This allows the sidebar drill panel to auto-load
+	// all pages of a category without requiring a search term.
+	var results []Entity
+	var total int
+	var err error
+
+	if q := strings.TrimSpace(query); len(q) >= 2 {
+		results, total, err = h.service.Search(c.Request().Context(), cc.Campaign.ID, query, typeID, role, userID, opts)
+	} else if q == "" {
+		results, total, err = h.service.List(c.Request().Context(), cc.Campaign.ID, typeID, role, userID, opts)
+	} else {
+		// 1 character — not enough for search, return empty results.
+		results, total = nil, 0
+	}
 	if err != nil {
 		if _, ok := err.(*apperror.AppError); ok {
 			if wantsJSON {
@@ -727,6 +741,30 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 		"type_icon":  entity.TypeIcon,
 		"type_color": entity.TypeColor,
 	})
+}
+
+// EntityTypesAPI returns entity types as JSON for widget dropdowns.
+// GET /campaigns/:id/entities/types
+func (h *Handler) EntityTypesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	types, err := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	items := make([]map[string]any, len(types))
+	for i, t := range types {
+		items[i] = map[string]any{
+			"id":   t.ID,
+			"name": t.Name,
+			"icon": t.Icon,
+		}
+	}
+	return c.JSON(http.StatusOK, items)
 }
 
 // --- Entry API (JSON endpoints for editor widget) ---
