@@ -77,74 +77,30 @@ Everything below is organized by WHERE it lives in Chronicle's architecture:
 - Pagination
 - Landing/discover page (split public/auth)
 
-### Planned -- Mandatory (Table Stakes)
+### Built (since initial roadmap)
+- Quick search (Ctrl+K) -- search modal with entity/category results
+- Entity hierarchy -- parent selector, tree view, breadcrumbs
+- Campaign export/import -- JSON bundle with 7 plugin adapters, slug-based cross-refs
+- "View as Player" toggle -- topbar switch to preview player-visible content
+- Keyboard shortcuts -- Ctrl+K (search), Ctrl+N (new entity), Ctrl+Shift+L (auto-link)
+- Editor find/replace -- Ctrl+F/Ctrl+H with match navigation
 
-#### Quick Search (Ctrl+K) -- CRITICAL
-**What**: Global search modal activated by Ctrl+K. Searches entities, categories, notes.
-**Why**: Every competitor has search. LegendKeeper's speed is their brand identity.
-**Competitors**: WorldAnvil full-text across all content. Kanka global search. LK auto-linking.
-**Implementation**: HTMX-powered modal with debounced input → `GET /campaigns/:id/search?q=`.
-Returns entities (with type badge), categories, notes. Keyboard navigation (arrow keys + Enter).
-Recent searches in localStorage. No dependency on other features -- can build immediately.
-**Tier**: Core (new route + shared templ component + JS in boot.js or new widget)
-
-#### Entity Hierarchy (Parent/Child) -- CRITICAL
-**What**: Parent selector on entity create/edit, tree view on category dashboard, breadcrumbs.
-**Why**: Every competitor has entity nesting. Serious worldbuilders need hierarchy.
-**Competitors**: WorldAnvil infinitely nestable categories. Kanka parent entities. LK tree sidebar.
-**Status**: `parent_id` column already in entities table. Zero UI built.
-**Implementation**: Parent dropdown in entity form (search existing entities in same category),
-breadcrumb trail on entity profile (Campaign > Category > Parent > Entity), tree view toggle
-on category dashboard (indented, collapsible), "Create sub-page" button on entity profile.
-**Tier**: Core entities plugin enhancement
+### Planned -- Quality of Life
 
 #### hx-boost Sidebar Navigation -- HIGH
 **What**: Add `hx-boost="true"` to sidebar links for instant navigation.
 **Why**: Biggest perceived performance improvement. Makes Chronicle feel fast like LK.
-**Status**: On backlog (Sprint 5).
-**Implementation**: Single attribute on sidebar link container. Main content area swaps
-without full page reload. Need to handle page title updates and active state.
 **Tier**: Core (sidebar templ + boot.js adjustments)
-
-#### "View as Player" Toggle -- HIGH
-**What**: Toggle in topbar that shows only what a Player-role member would see.
-**Why**: GMs need confidence that secrets/DM-only blocks are actually hidden.
-**Competitors**: WorldAnvil subscriber group previews. Kanka permission previews.
-**Status**: On backlog (Sprint 5).
-**Implementation**: Toggle button in topbar sets a session/cookie flag. Go templates
-check flag + role to filter dm_only blocks, private entities, and (future) inline secrets.
-**Tier**: Core (middleware + templ layouts)
-
-#### Campaign Export/Import -- HIGH
-**What**: Full JSON export of all campaign data. Import with conflict resolution.
-**Why**: Self-hosted users need backup/migration capability. All competitors offer export.
-**Competitors**: Kanka export (premium). WorldAnvil export. LK HTML/JSON export.
-**Implementation**: `GET /campaigns/:id/export` → JSON bundle (entities, types, layouts,
-tags, relations, media manifest). `POST /campaigns/import` with conflict resolution
-(skip/overwrite/rename). Media files as separate zip or URL references.
-**Tier**: Core (campaigns plugin enhancement)
-
-### Planned -- Quality of Life
-
-#### Keyboard Shortcuts
-**What**: Beyond Ctrl+K: Ctrl+N (new entity), Ctrl+E (edit), Ctrl+S (save).
-**Why**: No competitor does this well. Power user differentiator.
-**Tier**: Core (boot.js enhancement)
 
 #### Bulk Entity Operations
 **What**: Multi-select on entity lists with batch tag, move, delete, privacy toggle.
 **Why**: No competitor does this well either. Essential for large worlds.
 **Tier**: Core (entities plugin enhancement)
 
-#### Persistent Category Filters
-**What**: Per-category filter state saved in localStorage.
-**Status**: On backlog.
-**Tier**: Core (client-side, minimal backend)
-
 #### Concurrent Editing Safeguards
 **What**: Prevent two users from silently overwriting each other's changes.
 **Phase 1**: Optimistic concurrency with `updated_at` check (409 Conflict if stale).
-**Phase 2**: Pessimistic edit locking with auto-expire (planned for Notes overhaul).
+**Phase 2**: Pessimistic edit locking with auto-expire (implemented for Notes).
 **Phase 3**: Real-time co-editing (LegendKeeper-level, very complex -- long-term).
 **Tier**: Core (middleware + service layer)
 
@@ -153,118 +109,26 @@ tags, relations, media manifest). `POST /campaigns/import` with conflict resolut
 ## PLUGIN Features
 
 ### Built
-- **auth** -- registration, login, logout, password reset, admin users
-- **campaigns** -- CRUD, roles, membership, ownership transfer, customization hub
-- **entities** -- dynamic types, CRUD, images, layouts, field overrides
-- **media** -- upload, thumbnails, validation, rate limiting, storage limits
+- **auth** -- registration, login, logout, password reset, 2FA-ready, admin users
+- **campaigns** -- CRUD, roles, membership, ownership transfer, customization hub, export/import
+- **entities** -- dynamic types, CRUD, images, layouts, field overrides, per-entity permissions, groups
+- **media** -- upload, thumbnails, validation, rate limiting, storage limits, signed URLs (addon: media-gallery)
 - **addons** -- extension framework, per-campaign toggle, admin management
-- **syncapi** -- API keys, REST v1 endpoints, rate limiting, security events
-- **admin** -- dashboard, user/campaign management, settings
-- **settings** -- storage limits, per-user/campaign overrides
+- **syncapi** -- API keys, REST v1 endpoints, rate limiting, security events, Foundry VTT sync
+- **admin** -- dashboard, user/campaign management, settings, security events
+- **settings** -- storage limits, per-user/campaign overrides, storage bypass
 - **smtp** -- encrypted SMTP config, email sending
 - **audit** -- campaign activity timeline
-
-### Planned -- New Plugins
-
-#### Calendar Plugin -- DIRE NEED
-**Location**: `internal/plugins/calendar/`
-**What**: Custom calendars with non-Gregorian months, moons, eras, events linked to entities.
-**Why**: Essential for campaign play. Fantasy worlds need 13-month calendars with 3 moons.
-**Competitors**: Kanka has the gold standard (custom months, moons, intercalary months,
-weather, eras, -2B to +2B year range, entity age auto-calculation). WorldAnvil has
-Chronicles combining calendar + map.
-
-**Data model**:
-```
-calendars:           id, campaign_id, name, description, year_length,
-                     week_length, start_year, current_year, current_month,
-                     current_day, era_name, created_at, updated_at
-calendar_months:     id, calendar_id, name, days, sort_order, is_intercalary
-calendar_weekdays:   id, calendar_id, name, sort_order
-calendar_moons:      id, calendar_id, name, cycle_days, phase_offset, color
-calendar_seasons:    id, calendar_id, name, start_month, start_day,
-                     end_month, end_day, description
-calendar_events:     id, calendar_id, entity_id (nullable), name,
-                     description, year, month, day, is_recurring,
-                     recurrence_type, visibility, created_at
-```
-
-**UI**: Monthly grid view (like a real calendar), event dots/chips, year overview,
-moon phase indicators, era headers, "today" marker for current in-game date.
-**Entity integration**: "Born: Day 15 of Flamerule, 1492 DR (age: 34)" on profile.
-**Dashboard block**: "Upcoming events" widget for campaign dashboard.
-**API**: Calendar endpoints for Foundry VTT sync (see External section).
-**Extension**: Register as addon (`calendar` slug) so owners can enable per-campaign.
-
-#### Maps Plugin -- HIGH PRIORITY
-**Location**: `internal/plugins/maps/`
-**What**: Interactive maps with entity-linked pins, layers, and privacy controls.
-**Why**: Genre-defining feature. 2 of 3 competitors treat maps as core.
-**Competitors**: LegendKeeper WebGL maps (best-in-class). WorldAnvil Leaflet-based with
-pins, layers, marker groups. Kanka basic pin-on-image.
-
-**Phase 1 (Kanka-level)**: Image upload as map base, Leaflet.js viewer, draggable pins
-with entity linking, pin popup shows entity tooltip, DM-only pins.
-**Phase 2**: Layers with separate images, marker groups with toggle visibility,
-polygon regions, nested maps (world → continent → city → dungeon).
-**Phase 3 (LK-level)**: WebGL rendering, navigation mode, zoom-dependent visibility.
-
-**Data model**:
-```
-maps:        id, campaign_id, name, image_path, width, height, parent_map_id,
-             bounds_json, created_at, updated_at
-map_layers:  id, map_id, name, image_path, sort_order, is_visible, visibility
-map_pins:    id, map_id, layer_id, entity_id (nullable), name, description,
-             lat, lng, icon, color, visibility, created_at
-map_regions: id, map_id, layer_id, entity_id (nullable), name, geojson,
-             fill_color, visibility
-```
-
-**Extension**: Register as addon (`interactive-maps` slug).
-
-#### Timeline Plugin -- MEDIUM PRIORITY
-**Location**: `internal/plugins/timeline/`
-**What**: Chronological event display with eras, entity linking, visual layout.
-**Why**: WorldAnvil has 3 timeline modes. Kanka has era-based timelines.
-**Competitors**: WorldAnvil timescale, list, and Chronicles modes. Kanka era-based.
-
-**Implementation**: Shares infrastructure with calendar plugin (events are time-anchored).
-Horizontal scrolling timeline with era sections, event cards linked to entities, zoom
-levels (century → decade → year → month). Could be a view mode of the calendar rather
-than a fully separate plugin.
-
-**Data model**: Reuses `calendar_events` + adds era definitions.
-**Extension**: Register as addon (`timelines` slug).
-
-#### Sessions Plugin -- MEDIUM PRIORITY
-**Location**: `internal/plugins/sessions/`
-**What**: Session CRUD with date/summary, linked entities, session reports.
-**Why**: Bridges worldbuilding and actual play. WorldAnvil's DSTS is a major feature.
-**Competitors**: WorldAnvil Digital Storyteller Screen. Kanka session logs.
-
-**MVP**: Session CRUD (date, title, summary), linked entities (NPCs encountered,
-locations visited), session report/recap (TipTap editor). No dice roller or live
-GM screen in v1 -- that's a much larger undertaking.
-
-**Data model**:
-```
-sessions:         id, campaign_id, name, date, summary, notes, sort_order,
-                  created_at, updated_at
-session_entities: session_id, entity_id, role (encountered/mentioned/key)
-```
-
-**Extension**: Register as addon (`session-tracker` slug).
+- **calendar** -- custom months, moons, eras, seasons, events, time system, fantasy/reallife modes, week/day views, drag-and-drop, event categories (addon: calendar)
+- **maps** -- Leaflet.js viewer, markers, layers, drawings, tokens, fog of war, marker clustering, Foundry sync (addon: maps)
+- **timeline** -- D3.js visualization, standalone events, event connections, entity groups, zoom/pan/drag (addon: timeline)
+- **sessions** -- CRUD, attendees, RSVP, recurrence, session recap, entity linking, RSVP sidebar (addon: sessions/calendar)
+- **extensions** -- content extension system (Layer 1: declarative packs), WASM runtime (Layer 3: Extism/wazero)
+- **relations** -- bi-directional linking, typed connections, D3.js force-directed graph, dm_only
+- **tags** -- picker, search, create, colored chips, dm_only, hierarchical
+- **posts** -- entity sub-notes with separate visibility, drag-to-reorder
 
 ### Planned -- Plugin Enhancements
-
-#### Entity Sub-Notes / Posts
-**What**: Sub-documents attached to entities with separate visibility and pinning.
-**Why**: Kanka's "entity notes" let you attach session notes, GM observations, and
-player theories without cluttering the main entry content.
-**Status**: Database schema for `entity_posts` referenced in codebase but UI not built.
-**Implementation**: Expand existing posts infrastructure. List on entity profile,
-CRUD with visibility (everyone/dm_only), pinning, TipTap editor per post.
-**Tier**: Entities plugin enhancement
 
 #### Backlinks / "Referenced by"
 **What**: Entity B shows "Referenced by: Entity A" when A @mentions B.
@@ -293,60 +157,56 @@ layout JSON per role. Natural extension of existing dashboard system.
 ## MODULE Features
 
 ### Built
-- **dnd5e** -- Directory structure exists (`internal/modules/dnd5e/`), no reference data populated
-- **Module registry** -- `internal/modules/registry.go` with registration system
+- **Module framework** -- manifest-driven with factory registry, JSON data provider, route registration
+- **dnd5e** -- SRD-legal reference data (spells 27, monsters 14, items 10, classes 12, races 9, conditions 15). Category-specific tooltip rendering. 9 tests. Browsable reference pages at `/modules/dnd5e/` (Sprint M-2 in progress)
+- **pathfinder2e** -- Scaffold with manifest, no data populated
+- **drawsteel** -- Scaffold with manifest, no data populated
 
 ### Planned
 
-#### D&D 5e SRD Reference Data -- MEDIUM PRIORITY
-**Location**: `internal/modules/dnd5e/data/`
-**What**: SRD spells, monsters, items, conditions, classes, races as JSON reference data.
-Served as searchable reference pages with tooltip integration in the editor.
-**Why**: WorldAnvil supports 45+ systems via community statblocks. None of the
-competitors serve reference data natively -- this is Chronicle's planned differentiator.
-**Implementation**: Populate JSON data files from SRD 5.1 (OGL content). Handler serves
-search/list/detail pages. Tooltip API returns summary data for @mention hover previews.
-Register as addon (`dnd5e-srd` slug).
+#### D&D 5e Reference Pages -- IN PROGRESS
+**What**: Browsable pages at `/modules/dnd5e/`. Category cards, searchable lists,
+formatted stat block detail pages. Quick-search integration.
 
 #### Pathfinder 2e Module
 **Location**: `internal/modules/pathfinder/`
 **What**: Same pattern as D&D 5e but for PF2e ORC content.
-**Status**: Slot exists in architecture, not started.
 
 #### Draw Steel Module
 **Location**: `internal/modules/drawsteel/`
 **What**: MCDM's Draw Steel reference data.
-**Status**: Slot exists, not started.
 
 ---
 
 ## WIDGET Features
 
 ### Built
-- **editor** -- TipTap rich text with auto-save, view/edit toggle, @mentions
+- **editor** -- TipTap rich text with auto-save, view/edit toggle, @mentions, find/replace, code syntax highlighting
 - **title** -- Inline entity name editor
-- **tags** -- Picker with search, create, colored chips
+- **tags** -- Picker with search, create, colored chips, dm_only toggle
 - **attributes** -- Dynamic field editor for all types (text, number, select, etc.)
-- **relations** -- Bi-directional linking with typed connections
+- **relations** -- Bi-directional linking with typed connections, dm_only toggle
+- **relation_graph** -- D3.js force-directed graph, zoom/pan/drag, entity tooltips, dashboard block + standalone page
 - **mentions** -- @mention search popup with keyboard nav
-- **notes** -- Floating panel with quick-capture, dual modes, checklists
+- **notes** -- Floating panel, TipTap rich text, folders, locking, versions, shared notes
 - **dashboard_editor** -- Drag-and-drop layout builder (campaign + category)
-- **template_editor** -- Page template builder with 12 block types
+- **template_editor** -- Page template builder with 12+ block types
 - **entity_type_editor** -- Field definition CRUD
 - **sidebar_config** -- Entity type reorder
 - **sidebar_nav_editor** -- Custom sections/links CRUD
 - **image_upload** -- Drag-and-drop with progress
+- **entity_posts** -- Sub-notes with visibility, drag-to-reorder
+- **editor_secret** -- Inline secrets (TipTap mark extension, server-side role filtering)
+- **editor_autolink** -- Auto-linking entity names (LegendKeeper-style, Ctrl+Shift+L)
+- **permissions** -- Per-entity visibility (Everyone/DM Only/Custom with role/user/group grants)
+- **groups** -- Campaign group management
+- **favorites** -- Entity bookmarks with localStorage
+- **recent_entities** -- Recently viewed entities in sidebar
+- **search_modal** -- Ctrl+K global search
+- **shop_inventory** -- Shop entity type with relation-based inventory
+- **shortcuts_help** -- Keyboard shortcuts help panel
 
 ### Planned -- New Widgets
-
-#### Relation Graph Visualization -- MEDIUM PRIORITY
-**Location**: `static/js/widgets/relation_graph.js`
-**What**: Force-directed graph showing entity relationships. Filter by type, category, depth.
-**Why**: Kanka has relation explorer (premium). WorldAnvil has family trees and diplomacy webs.
-**Implementation**: D3.js or Cytoscape.js. Data from existing relations API.
-Render as a template block type AND standalone page (`/campaigns/:id/relations/graph`).
-Filter controls: relation type checkboxes, category filter, depth slider (1-3 hops).
-**Tier**: Widget (JS) + template block type
 
 #### Dice Roller -- LOW PRIORITY
 **Location**: `static/js/widgets/dice_roller.js`
@@ -366,21 +226,6 @@ on campaign. Lower priority since relation graph covers the primary use case.
 
 ### Planned -- Widget Enhancements
 
-#### Inline Secrets (TipTap Extension) -- HIGH PRIORITY
-**What**: `<secret>` marks in TipTap content filtered server-side by role.
-**Why**: WorldAnvil's most loved feature. Chronicle has block-level dm_only but not inline.
-**Phase 1**: TipTap custom mark for `secret` text. Styled with lock icon + dotted border.
-Server-side: strip `<secret>` marks from HTML before rendering for Player role.
-**Phase 2**: Per-player reveals (group-based visibility, like WorldAnvil subscriber groups).
-**Tier**: Editor widget enhancement + service-layer filtering
-
-#### Auto-Linking (LegendKeeper-style) -- MEDIUM PRIORITY
-**What**: Editor automatically recognizes entity names and suggests/creates links.
-**Why**: LegendKeeper's auto-linking makes cross-referencing feel magical.
-**Implementation**: TipTap extension that fetches campaign entity names on editor init,
-matches text patterns, shows suggestion popup. Could be opt-in per campaign.
-**Tier**: Editor widget enhancement
-
 #### Guided Worldbuilding Prompts -- LOW PRIORITY
 **What**: Collapsible "Inspiration" sidebar when editing entities with contextual questions.
 **Why**: WorldAnvil's "smart questions" cure blank-page syndrome. Unique to them.
@@ -399,51 +244,14 @@ attributes + first 200 chars. CSS: wider tooltip with image on left.
 
 ## EXTERNAL Features
 
-### API Technical Documentation -- HIGH PRIORITY
-**What**: Full REST API documentation (OpenAPI/Swagger spec or handwritten reference).
-**Why**: The API exists and works, but has no public documentation. Third-party integrations
-(Foundry VTT, mobile apps, custom tools) need documentation to build against.
-**Deliverables**:
-- OpenAPI 3.0 spec file (`docs/openapi.yaml`) OR handwritten API reference
-- Authentication guide (API key creation, Bearer token usage)
-- Endpoint reference (request/response schemas, error codes)
-- Rate limiting documentation
-- Sync protocol documentation (pull/push, conflict resolution)
-- Hosted at `/docs/api` or as static site
+### Built
+- **API documentation** -- OpenAPI 3.0.3 spec at `docs/api/openapi.yaml` (63 endpoints, 42 schemas)
+- **Foundry VTT Sync** -- Bidirectional sync: journal entries, maps, calendar events, fog of war.
+  WebSocket + REST. Sync mappings, EventBus, shop widget. SimpleCalendar CRUD hooks.
 
-### Foundry VTT Sync Module -- HIGH PRIORITY
-**What**: Foundry VTT module that syncs journal entries, actors, and scenes with Chronicle.
-**Why**: The Sync API exists specifically for this use case. Notes sync is the immediate goal,
-calendar sync with Foundry calendar modules is the next step.
-
-**Phase 1 -- Notes/Journal Sync**:
-- Foundry module connects to Chronicle API using API key
-- Syncs journal entries ↔ Chronicle entities (bidirectional)
-- Supports pull-on-demand and push-on-save
-- Maps Foundry journal folders to Chronicle entity types
-
-**Phase 2 -- Calendar Sync (after Calendar Plugin)**:
-- Chronicle calendar ↔ Foundry calendar module (Simple Calendar / Calendaria)
-- Sync events, current date, moon phases
-- Chronicle is the source of truth; Foundry reflects it during play
-- Requires Calendar Plugin API endpoints to be built first
-
-**Phase 3 -- Actor/Entity Sync**:
-- Foundry actors ↔ Chronicle character entities
-- Sync NPC statblocks, HP, conditions
-- Requires D&D 5e module reference data
-
-**Architecture**: Separate git repository (`chronicle-foundryvtt`). Node.js Foundry module
-format. Communicates via Chronicle's REST API v1 `/api/v1/` endpoints + sync endpoint.
-
-### Foundry VTT Calendar Integration (Calendaria/Simple Calendar)
-**What**: Chronicle calendar data synced to Foundry's calendar plugins via the Foundry module.
-**Why**: During play, GMs advance the calendar in Foundry. After play, it syncs back to
-Chronicle so the worldbuilding tool and VTT stay in sync.
-**Dependencies**: Calendar plugin + Foundry module Phase 2.
-**Shenanigans**: The Foundry module acts as a bridge -- it reads Chronicle's calendar API
-and writes to Calendaria/Simple Calendar's API, and vice versa. Chronicle defines the
-canonical calendar structure; Foundry modules consume it during play.
+### Planned
+- **Foundry Actor Sync** -- Sync character entities with Foundry actors
+- **Discord Bot Integration** -- Webhook session notifications, reaction-based RSVP
 
 ---
 
@@ -469,12 +277,13 @@ Widgets to audit for missing destroy() / cleanup:
 Check for: global event listeners without cleanup, setInterval/setTimeout without clear,
 fetch requests without abort controllers, DOM references to removed elements.
 
-### Service Test Coverage (Zero Tests)
+### Service Test Coverage
+Tests added for: maps (45), sessions (40+), calendar (40+), timeline (50+), media,
+addons, entities, notes, auth. Remaining gaps:
 - [ ] Campaigns service -- membership, transfers, dashboard layouts, sidebar config
 - [ ] Relations service -- bi-directional create/delete, validation
 - [ ] Tags service -- CRUD, slug generation, diff-based assignment
 - [ ] Audit service -- pagination, validation, fire-and-forget
-- [ ] Media service -- file validation, thumbnail generation
 - [ ] Settings service -- limit resolution, override priority
 
 ### Plugin System Robustness
@@ -499,65 +308,50 @@ fetch requests without abort controllers, DOM references to removed elements.
 ## Refinement Ideas (From Competitor Analysis)
 
 These are polish ideas inspired by what works well in competing platforms.
-Not new features -- ways to deepen what Chronicle already has.
 
+**Done:**
+- ~~Auto-linking~~ -- built (editor_autolink.js, Ctrl+Shift+L)
+- ~~Entity sub-notes~~ -- built (entity_posts widget)
+- ~~Auto-save indicator~~ -- built (editor auto-save with visual feedback)
+
+**Remaining:**
 1. **Backlinks / "Referenced by"** -- surface @mention reverse references on entity pages
-2. **Auto-linking** -- TipTap extension to auto-detect entity names (LegendKeeper-style)
-3. **Guided prompts** -- "smart questions" per entity type (WorldAnvil-style)
-4. **Entity sub-notes** -- sub-documents with separate visibility (Kanka-style)
-5. **Richer tooltips** -- image + key attributes + excerpt in hover preview
-6. **Saved filters** -- filter presets as sidebar smart links
-7. **Role-aware dashboards** -- different views per campaign role
-8. **Entity type template library** -- genre presets (Fantasy, Sci-Fi, Modern)
-9. **Bulk operations** -- multi-select for batch tag/move/delete
-10. **Auto-save indicator** -- clear visual feedback for save state
+2. **Guided prompts** -- "smart questions" per entity type (WorldAnvil-style)
+3. **Richer tooltips** -- image + key attributes + excerpt in hover preview
+4. **Saved filters** -- filter presets as sidebar smart links
+5. **Role-aware dashboards** -- different views per campaign role
+6. **Entity type template library** -- genre presets (Fantasy, Sci-Fi, Modern)
+7. **Bulk operations** -- multi-select for batch tag/move/delete
 
 ---
 
-## Priority Phases (Revised)
+## Priority Phases
 
-### Phase D (Current -- Finishing)
-- [ ] Player Notes Overhaul (Sprint 4: locking, rich text, versions, shared)
-- [ ] hx-boost sidebar navigation (Sprint 5)
-- [ ] "View as player" toggle (Sprint 5)
-- [ ] Widget lifecycle audit
+### Completed Phases (D through R)
+All major feature phases have been completed. See `.ai/todo.md` for the detailed
+sprint-by-sprint completion log. Key milestones:
 
-### Phase E: Core UX & Discovery
-- [ ] Quick Search (Ctrl+K)
-- [ ] Entity hierarchy (parent_id UI, tree view, breadcrumbs)
-- [ ] Backlinks ("Referenced by" on entity profiles)
-- [ ] API technical documentation (OpenAPI spec or reference docs)
+- **Phase D**: Notes overhaul (locking, rich text, versions, shared)
+- **Phase E**: Quick search (Ctrl+K), entity hierarchy, inline secrets
+- **Phase F-G**: Calendar + maps plugins (full feature set)
+- **Phase H**: Per-entity permissions with groups, campaign export/import
+- **Phase I**: Foundry VTT sync (journals, maps, calendar, fog of war)
+- **Phase J**: Relation graph, sessions plugin, timeline plugin
+- **Phase K**: Auto-linking, per-entity permissions UI, group-based visibility
+- **Phase L**: Entity posts, notes folders, calendar day view, DnD
+- **Phase M0-M3**: Data integrity, quick wins, JS code quality, test coverage
+- **Phase M**: D&D 5e module (data + tooltips, Sprint M-1)
+- **Phase P-R**: Extension system (content packs, widget extensions, WASM runtime)
 
-### Phase F: Calendar & Time
-- [ ] Calendar plugin (custom months, moons, eras, events, entity linking)
-- [ ] Timeline view (chronological event display, may be a calendar view mode)
-- [ ] Dashboard block: "Upcoming events"
+### Current Focus
+- Sprint M-2: D&D 5e Reference Pages (browsable `/modules/dnd5e/`)
+- Obsidian-style notes (see `.ai/obsidian-notes-plan.md`)
+- Quick wins from UX audit
 
-### Phase G: Maps & Geography
-- [ ] Maps plugin Phase 1 (Leaflet.js, image upload, pins, entity linking)
-- [ ] Maps plugin Phase 2 (layers, marker groups, privacy, nested maps)
-
-### Phase H: Secrets & Permissions
-- [ ] Inline secrets (TipTap extension, server-side role filtering)
-- [ ] Per-entity permissions (beyond everyone/dm_only)
-- [ ] Campaign export/import
-
-### Phase I: External Integrations
-- [ ] Foundry VTT module Phase 1 (notes/journal sync)
-- [ ] Foundry VTT module Phase 2 (calendar sync with Calendaria/Simple Calendar)
-- [ ] D&D 5e SRD reference data
-
-### Phase J: Visualization & Play
-- [ ] Relation graph visualization
-- [ ] Session management plugin
-- [ ] Dice roller widget
-
-### Phase K: Delight
-- [ ] Auto-linking in editor
-- [ ] Guided worldbuilding prompts
-- [ ] Role-aware dashboards
-- [ ] Entity type template library
-- [ ] Whiteboards
+### Future Phases
+- **Phase N**: Collaboration & Platform Maturity (role-aware dashboards, invites, 2FA, a11y)
+- **Phase O**: Polish & Ecosystem (command palette, map drawing tools, Discord, bulk ops)
+- **Phase S+**: Draw Steel module, whiteboards, offline mode, collaborative editing
 
 ---
 
@@ -574,11 +368,10 @@ depth, Kanka's structure, and LegendKeeper's speed -- with full data ownership a
 - Game system modules with native reference data
 - REST API with sync protocol
 
-**Close these gaps urgently**:
-- Quick search (every competitor has it)
-- Entity hierarchy (every competitor has it)
-- Calendar (essential for campaign play)
-- Maps (genre-defining feature)
-- Inline secrets (WorldAnvil's most loved feature)
-- API documentation (API exists but undocumented)
-- Faster navigation via hx-boost
+**Remaining competitive gaps**:
+- hx-boost for faster navigation (perceived performance)
+- Richer entity tooltips (image + attributes + excerpt)
+- Guided worldbuilding prompts (WorldAnvil-style)
+- Bulk entity operations
+- Family tree / genealogy visualization
+- Dice roller widget

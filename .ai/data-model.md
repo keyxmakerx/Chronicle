@@ -17,20 +17,37 @@ User --< CampaignMember >-- Campaign
          |                      +--< Entity --< EntityPost
          |                      |       |---< EntityTag >-- Tag
          |                      |       |---< EntityRelation
+         |                      |       |---< EntityPermission
          |                      |       |---< CalendarEvent (via entity_id)
          |                      |       |---< MapMarker (via entity_id)
+         |                      |       |---< MapToken (via entity_id)
          |                      +--< Calendar --< CalendarMonth
          |                      |       |---< CalendarWeekday
          |                      |       |---< CalendarMoon
          |                      |       |---< CalendarSeason
          |                      |       |---< CalendarEvent
+         |                      |       |---< CalendarEra
+         |                      |       |---< CalendarEventCategory
          |                      +--< Map --< MapMarker
+         |                      |      |---< MapLayer --< MapDrawing
+         |                      |      |---< MapToken
+         |                      |      |---< MapFog
+         |                      +--< Timeline --< TimelineEvent
+         |                      |       |---< TimelineEventLink >-- CalendarEvent
+         |                      |       |---< TimelineEntityGroup --< TimelineEntityGroupMember
+         |                      |       |---< TimelineEventConnection
          |                      +--< Session --< SessionAttendee >-- User
          |                      |       |---< SessionEntity >-- Entity
+         |                      |       |---< SessionRSVPToken
+         |                      +--< CampaignGroup --< CampaignGroupMember >-- User
+         |                      +--< SyncMapping
          |                      +--< AuditLog
          |                      +--< SecurityEvent (site-wide)
          |                      +--< Addon --< CampaignAddon
          |                      +--< ApiKey --< ApiRequestLog
+         |                      +--< Extension --< CampaignExtension
+         |                                          |---< ExtensionProvenance
+         |                                          |---< ExtensionData
          +--< PasswordResetToken
 
 (--< means "has many")
@@ -52,6 +69,9 @@ User --< CampaignMember >-- Campaign
 | totp_secret | VARCHAR(255) | NULL | 2FA secret |
 | totp_enabled | BOOLEAN | DEFAULT false | |
 | timezone | VARCHAR(50) | NULL | IANA timezone string (added 000031) |
+| pending_email | VARCHAR(255) | NULL | Email change pending verification (added 000056) |
+| email_verify_token | CHAR(64) | UNIQUE, NULL | Token for email change (added 000056) |
+| email_verify_expires | DATETIME | NULL | Token expiry (added 000056) |
 | created_at | DATETIME | NOT NULL, DEFAULT NOW() | |
 | last_login_at | DATETIME | NULL | |
 
@@ -71,12 +91,13 @@ User --< CampaignMember >-- Campaign
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
 
-### campaign_members (implemented -- migration 000002)
+### campaign_members (implemented -- migrations 000002, 000054)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | campaign_id | CHAR(36) | PK (composite), FK -> campaigns.id ON DELETE CASCADE | |
 | user_id | CHAR(36) | PK (composite), FK -> users.id ON DELETE CASCADE | |
 | role | VARCHAR(20) | NOT NULL, DEFAULT 'player', CHECK IN ('owner','scribe','player') | |
+| character_entity_id | VARCHAR(36) | NULL, FK -> entities.id ON DELETE SET NULL | Assigned character (added 000054) |
 | joined_at | DATETIME | NOT NULL, DEFAULT NOW() | |
 
 ### ownership_transfers (implemented -- migration 000002)
@@ -124,7 +145,7 @@ User --< CampaignMember >-- Campaign
 | enabled | BOOLEAN | DEFAULT true | |
 | UNIQUE(campaign_id, slug) | | | |
 
-### entities (implemented -- migrations 000004, 000014, 000023)
+### entities (implemented -- migrations 000004, 000014, 000023, 000048)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | CHAR(36) | PK | UUID |
@@ -137,11 +158,12 @@ User --< CampaignMember >-- Campaign
 | image_path | VARCHAR(500) | NULL | Header image |
 | parent_id | CHAR(36) | FK -> entities.id, NULL | Nesting |
 | type_label | VARCHAR(100) | NULL | Freeform subtype ("City") |
-| is_private | BOOLEAN | DEFAULT false | GM-only |
+| is_private | BOOLEAN | DEFAULT false | GM-only (legacy, see visibility) |
 | is_template | BOOLEAN | DEFAULT false | |
 | fields_data | JSON | DEFAULT '{}' | Type-specific field values |
 | field_overrides | JSON | DEFAULT NULL | Per-entity field customization (added 000014) |
 | popup_config | JSON | DEFAULT NULL | Hover preview toggle config (added 000023) |
+| visibility | ENUM('default','custom') | DEFAULT 'default' | Permission mode (added 000048) |
 | created_by | CHAR(36) | FK -> users.id | |
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
@@ -162,11 +184,12 @@ User --< CampaignMember >-- Campaign
 | thumbnail_paths | JSON | NULL | Generated thumbnail paths |
 | created_at | TIMESTAMP | NOT NULL, DEFAULT NOW() | |
 
-### entity_posts (implemented)
+### entity_posts (implemented -- migration 000050)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | CHAR(36) | PK | UUID |
 | entity_id | CHAR(36) | FK -> entities.id ON DELETE CASCADE | |
+| campaign_id | CHAR(36) | FK -> campaigns.id ON DELETE CASCADE | |
 | name | VARCHAR(200) | NOT NULL | |
 | entry | JSON | NULL | TipTap JSON |
 | entry_html | LONGTEXT | NULL | Pre-rendered |
@@ -176,7 +199,7 @@ User --< CampaignMember >-- Campaign
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
 
-### tags (implemented)
+### tags (implemented -- migrations 000009, 000038)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | CHAR(36) | PK | UUID |
@@ -185,6 +208,7 @@ User --< CampaignMember >-- Campaign
 | slug | VARCHAR(100) | NOT NULL | |
 | color | VARCHAR(7) | DEFAULT '#6b7280' | |
 | parent_id | CHAR(36) | FK -> tags.id, NULL | Nested tags |
+| dm_only | BOOLEAN | DEFAULT false | GM-only visibility (added 000038) |
 | UNIQUE(campaign_id, slug) | | | |
 
 ### entity_tags (implemented)
@@ -194,7 +218,7 @@ User --< CampaignMember >-- Campaign
 | tag_id | CHAR(36) | FK -> tags.id ON DELETE CASCADE | |
 | PRIMARY KEY (entity_id, tag_id) | | | |
 
-### entity_relations (implemented)
+### entity_relations (implemented -- migrations 000010, 000046, 000052)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | CHAR(36) | PK | UUID |
@@ -202,6 +226,8 @@ User --< CampaignMember >-- Campaign
 | target_id | CHAR(36) | FK -> entities.id ON DELETE CASCADE | |
 | type | VARCHAR(100) | NOT NULL | 'ally', 'enemy', 'parent', etc. |
 | reverse_type | VARCHAR(100) | NULL | Auto-created reverse label |
+| metadata | JSON | NULL | Relation-specific data (added 000046) |
+| dm_only | BOOLEAN | DEFAULT false | GM-only visibility (added 000052) |
 | created_at | DATETIME | NOT NULL | |
 
 ### audit_log (implemented)
@@ -217,28 +243,33 @@ User --< CampaignMember >-- Campaign
 | details | JSON | NULL | Extra context |
 | created_at | DATETIME | NOT NULL | |
 
-### addons (implemented -- migration 000015)
+### addons (implemented -- migrations 000015, 000027)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
-| id | CHAR(36) | PK | UUID |
+| id | INT | PK, AUTO_INCREMENT | |
 | slug | VARCHAR(100) | UNIQUE, NOT NULL | URL-safe identifier |
 | name | VARCHAR(200) | NOT NULL | Display name |
 | description | TEXT | NULL | |
+| version | VARCHAR(50) | DEFAULT '0.1.0' | |
 | category | ENUM | NOT NULL | 'module', 'widget', 'integration', 'plugin' (added in 000027) |
-| status | VARCHAR(20) | NOT NULL, DEFAULT 'planned' | 'active', 'planned', 'deprecated' |
-| icon | VARCHAR(50) | DEFAULT 'fa-puzzle-piece' | |
-| version | VARCHAR(20) | DEFAULT '1.0.0' | |
+| status | ENUM | NOT NULL, DEFAULT 'planned' | 'active', 'planned', 'deprecated' |
+| icon | VARCHAR(100) | DEFAULT 'fa-puzzle-piece' | Font Awesome icon |
+| author | VARCHAR(200) | NULL | Creator/maintainer |
+| config_schema | JSON | NULL | Optional JSON schema for addon config |
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
 
 ### campaign_addons (implemented -- migration 000015)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
-| campaign_id | CHAR(36) | PK (composite), FK -> campaigns.id ON DELETE CASCADE | |
-| addon_id | CHAR(36) | PK (composite), FK -> addons.id ON DELETE CASCADE | |
-| enabled | BOOLEAN | NOT NULL, DEFAULT true | |
-| settings | JSON | DEFAULT '{}' | Per-campaign addon config |
-| enabled_at | DATETIME | NOT NULL | |
+| id | INT | PK, AUTO_INCREMENT | |
+| campaign_id | CHAR(36) | FK -> campaigns.id ON DELETE CASCADE | |
+| addon_id | INT | FK -> addons.id ON DELETE CASCADE | |
+| enabled | BOOLEAN | DEFAULT true | |
+| config_json | JSON | NULL | Per-campaign addon config |
+| enabled_at | TIMESTAMP | DEFAULT NOW() | |
+| enabled_by | CHAR(36) | NULL | User who enabled it |
+| UNIQUE(campaign_id, addon_id) | | | |
 
 ### api_keys (implemented -- migration 000016)
 | Column | Type | Constraints | Notes |
@@ -257,13 +288,15 @@ User --< CampaignMember >-- Campaign
 | last_used_at | DATETIME | NULL | |
 | created_at | DATETIME | NOT NULL | |
 
-### notes (implemented -- migrations 000017, 000022)
+### notes (implemented -- migrations 000017, 000022, 000051)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | CHAR(36) | PK | UUID |
 | campaign_id | CHAR(36) | FK -> campaigns.id ON DELETE CASCADE, NOT NULL | |
 | user_id | CHAR(36) | FK -> users.id ON DELETE CASCADE, NOT NULL | Note creator |
 | entity_id | CHAR(36) | NULL | NULL = campaign-wide note |
+| parent_id | CHAR(36) | FK -> notes.id, NULL | Folder nesting (added 000051) |
+| is_folder | BOOLEAN | DEFAULT false | Folder vs note (added 000051) |
 | title | VARCHAR(200) | NOT NULL, DEFAULT '' | |
 | content | JSON | NOT NULL | Block array [{type, value/items}] |
 | entry | JSON | DEFAULT NULL | ProseMirror JSON (added 000022) |
@@ -310,20 +343,6 @@ User --< CampaignMember >-- Campaign
 | max_total_storage | BIGINT | DEFAULT 1073741824 | Per-campaign limit (bytes) |
 | allowed_types | JSON | NOT NULL | Allowed MIME types |
 | updated_at | DATETIME | NOT NULL | |
-
-### user_storage_limits (implemented)
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| user_id | CHAR(36) | PK, FK -> users.id ON DELETE CASCADE | |
-| max_upload_size | BIGINT | NULL | Override (NULL = use global) |
-| max_total_storage | BIGINT | NULL | Override (NULL = use global) |
-
-### campaign_storage_limits (implemented)
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| campaign_id | CHAR(36) | PK, FK -> campaigns.id ON DELETE CASCADE | |
-| max_upload_size | BIGINT | NULL | Override |
-| max_total_storage | BIGINT | NULL | Override |
 
 ### security_events (implemented -- migration 000024)
 | Column | Type | Constraints | Notes |
@@ -414,7 +433,7 @@ User --< CampaignMember >-- Campaign
 | color | VARCHAR(20) | NOT NULL, DEFAULT '#6366f1' | |
 | sort_order | INT | NOT NULL, DEFAULT 0 | |
 
-### calendar_events (implemented -- migrations 000027, 000028, 000030, 000034)
+### calendar_events (implemented -- migrations 000027, 000028, 000030, 000034, 000037)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | VARCHAR(36) | PK | UUID |
@@ -436,12 +455,13 @@ User --< CampaignMember >-- Campaign
 | is_recurring | TINYINT(1) | NOT NULL, DEFAULT 0 | |
 | recurrence_type | VARCHAR(20) | NULL | yearly, monthly |
 | visibility | VARCHAR(20) | NOT NULL, DEFAULT 'everyone' | |
+| visibility_rules | JSON | NULL | Fine-grained visibility rules (added 000037) |
 | category | VARCHAR(50) | NULL | holiday, battle, quest, etc. (added 000028) |
 | created_by | VARCHAR(36) | NULL | |
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
 
-### maps (implemented -- migration 000029)
+### maps (implemented -- migrations 000029, 000045)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | VARCHAR(36) | PK | UUID |
@@ -451,6 +471,16 @@ User --< CampaignMember >-- Campaign
 | image_id | VARCHAR(36) | NULL, FK -> media_files.id ON DELETE SET NULL | Background image |
 | image_width | INT | NOT NULL, DEFAULT 0 | |
 | image_height | INT | NOT NULL, DEFAULT 0 | |
+| grid_type | VARCHAR(20) | NULL | Grid overlay type (added 000045) |
+| grid_size | INT | NULL | Grid cell size (added 000045) |
+| grid_color | VARCHAR(7) | NULL | Grid line color (added 000045) |
+| grid_opacity | FLOAT | NULL | Grid opacity (added 000045) |
+| background_color | VARCHAR(7) | NULL | Canvas background (added 000045) |
+| fog_exploration | BOOLEAN | DEFAULT false | Enable fog of war (added 000045) |
+| initial_view_x | DOUBLE | NULL | Default viewport X (added 000045) |
+| initial_view_y | DOUBLE | NULL | Default viewport Y (added 000045) |
+| initial_zoom | INT | NULL | Default zoom level (added 000045) |
+| foundry_scene_id | VARCHAR(100) | NULL | Foundry VTT scene ID (added 000045) |
 | sort_order | INT | NOT NULL, DEFAULT 0 | |
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
@@ -472,7 +502,7 @@ User --< CampaignMember >-- Campaign
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
 
-### sessions (implemented -- migration 000032)
+### sessions (implemented -- migrations 000032, 000041, 000053)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | VARCHAR(36) | PK | UUID |
@@ -481,10 +511,17 @@ User --< CampaignMember >-- Campaign
 | summary | TEXT | NULL | Brief description |
 | notes | JSON | NULL | ProseMirror JSON (GM notes) |
 | notes_html | TEXT | NULL | Pre-rendered HTML |
+| recap | TEXT | NULL | Session recap (added 000053) |
+| recap_html | TEXT | NULL | Pre-rendered recap HTML (added 000053) |
 | scheduled_date | DATE | NULL | Real-world date |
 | calendar_year | INT | NULL | In-game year |
 | calendar_month | INT | NULL | In-game month |
 | calendar_day | INT | NULL | In-game day |
+| is_recurring | TINYINT(1) | DEFAULT 0 | Recurring session (added 000041) |
+| recurrence_type | VARCHAR(20) | NULL | weekly, biweekly, monthly (added 000041) |
+| recurrence_interval | INT | NULL | Interval between recurrences (added 000041) |
+| recurrence_day_of_week | INT | NULL | Day of week for recurrence (added 000041) |
+| recurrence_end_date | DATE | NULL | End date for recurrence (added 000041) |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'planned' | planned, completed, cancelled |
 | sort_order | INT | NOT NULL, DEFAULT 0 | Manual ordering |
 | created_by | VARCHAR(36) | FK -> users.id | Session creator |
@@ -510,6 +547,310 @@ User --< CampaignMember >-- Campaign
 | role | VARCHAR(50) | NOT NULL, DEFAULT 'mentioned' | mentioned, encountered, key |
 | UNIQUE(session_id, entity_id) | | | |
 
+### timelines (implemented -- migrations 000035, 000036)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | VARCHAR(36) | PK | UUID |
+| campaign_id | VARCHAR(36) | FK -> campaigns.id ON DELETE CASCADE | |
+| calendar_id | VARCHAR(36) | NULL, FK -> calendars.id ON DELETE SET NULL | Optional calendar link |
+| name | VARCHAR(255) | NOT NULL | |
+| description | TEXT | NULL | |
+| description_html | TEXT | NULL | Pre-rendered HTML |
+| color | VARCHAR(20) | NULL | Theme color |
+| icon | VARCHAR(100) | NULL | FA icon |
+| visibility | VARCHAR(20) | DEFAULT 'everyone' | |
+| visibility_rules | JSON | NULL | Fine-grained rules |
+| zoom_default | INT | NULL | Default zoom level |
+| sort_order | INT | DEFAULT 0 | |
+| created_by | VARCHAR(36) | NULL | |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+
+### timeline_events (implemented -- migration 000036)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | VARCHAR(36) | PK | UUID |
+| timeline_id | VARCHAR(36) | FK -> timelines.id ON DELETE CASCADE | |
+| entity_id | VARCHAR(36) | NULL, FK -> entities.id ON DELETE SET NULL | |
+| name | VARCHAR(255) | NOT NULL | |
+| description | TEXT | NULL | |
+| description_html | TEXT | NULL | |
+| year | INT | NOT NULL | |
+| month | INT | NULL | |
+| day | INT | NULL | |
+| start_hour | INT | NULL | |
+| start_minute | INT | NULL | |
+| end_year | INT | NULL | |
+| end_month | INT | NULL | |
+| end_day | INT | NULL | |
+| end_hour | INT | NULL | |
+| end_minute | INT | NULL | |
+| is_recurring | BOOLEAN | DEFAULT false | |
+| recurrence_type | VARCHAR(20) | NULL | |
+| category | VARCHAR(50) | NULL | |
+| visibility | VARCHAR(20) | DEFAULT 'everyone' | |
+| visibility_rules | JSON | NULL | Added by 000037 |
+| display_order | INT | DEFAULT 0 | |
+| label | VARCHAR(100) | NULL | |
+| color | VARCHAR(20) | NULL | |
+| created_by | VARCHAR(36) | NULL | |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+
+### timeline_event_links (implemented -- migration 000035)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| timeline_id | VARCHAR(36) | FK -> timelines.id ON DELETE CASCADE | |
+| event_id | VARCHAR(36) | FK -> calendar_events.id ON DELETE CASCADE | |
+| display_order | INT | DEFAULT 0 | |
+| visibility_override | VARCHAR(20) | NULL | |
+| visibility_rules | JSON | NULL | |
+| label | VARCHAR(100) | NULL | |
+| color_override | VARCHAR(20) | NULL | |
+| created_at | DATETIME | NOT NULL | |
+
+### timeline_entity_groups (implemented -- migration 000035)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| timeline_id | VARCHAR(36) | FK -> timelines.id ON DELETE CASCADE | |
+| name | VARCHAR(255) | NOT NULL | |
+| color | VARCHAR(20) | NULL | |
+| sort_order | INT | DEFAULT 0 | |
+
+### timeline_entity_group_members (implemented -- migration 000035)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| group_id | INT | FK -> timeline_entity_groups.id ON DELETE CASCADE | |
+| entity_id | VARCHAR(36) | FK -> entities.id ON DELETE CASCADE | |
+
+### timeline_event_connections (implemented -- migration 000047)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| timeline_id | VARCHAR(36) | FK -> timelines.id ON DELETE CASCADE | |
+| source_id | VARCHAR(36) | NOT NULL | Source event/link ID |
+| target_id | VARCHAR(36) | NOT NULL | Target event/link ID |
+| source_type | VARCHAR(20) | NOT NULL | 'event' or 'link' |
+| target_type | VARCHAR(20) | NOT NULL | 'event' or 'link' |
+| label | VARCHAR(255) | NULL | |
+| color | VARCHAR(20) | NULL | |
+| style | VARCHAR(20) | DEFAULT 'solid' | solid, dashed, dotted, arrow |
+| created_at | DATETIME | NOT NULL | |
+| UNIQUE(timeline_id, source_id, target_id) | | | |
+
+### calendar_event_categories (implemented -- migration 000039)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| calendar_id | VARCHAR(36) | FK -> calendars.id ON DELETE CASCADE | |
+| slug | VARCHAR(100) | NOT NULL | |
+| name | VARCHAR(255) | NOT NULL | |
+| icon | VARCHAR(100) | NULL | |
+| color | VARCHAR(20) | NULL | |
+| sort_order | INT | DEFAULT 0 | |
+| UNIQUE(calendar_id, slug) | | | |
+
+### session_rsvp_tokens (implemented -- migration 000041)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| token | VARCHAR(64) | NOT NULL | Single-use RSVP token |
+| session_id | VARCHAR(36) | FK -> sessions.id ON DELETE CASCADE | |
+| user_id | VARCHAR(36) | FK -> users.id ON DELETE CASCADE | |
+| action | VARCHAR(20) | NOT NULL | accept, decline, tentative |
+| used_at | DATETIME | NULL | |
+| expires_at | DATETIME | NOT NULL | 7-day expiry |
+| created_at | DATETIME | NOT NULL | |
+
+### sync_mappings (implemented -- migration 000044)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| campaign_id | VARCHAR(36) | FK -> campaigns.id ON DELETE CASCADE | |
+| chronicle_type | VARCHAR(50) | NOT NULL | entity, calendar_event, map, etc. |
+| chronicle_id | VARCHAR(36) | NOT NULL | Chronicle object ID |
+| external_system | VARCHAR(50) | NOT NULL | 'foundry' |
+| external_id | VARCHAR(255) | NOT NULL | External system ID |
+| sync_version | INT | DEFAULT 0 | Conflict detection counter |
+| last_synced_at | DATETIME | NULL | |
+| sync_direction | VARCHAR(20) | DEFAULT 'bidirectional' | |
+| sync_metadata | JSON | NULL | |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+| UNIQUE(campaign_id, chronicle_type, chronicle_id, external_system) | | | |
+
+### map_layers (implemented -- migration 000045)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | VARCHAR(36) | PK | UUID |
+| map_id | VARCHAR(36) | FK -> maps.id ON DELETE CASCADE | |
+| name | VARCHAR(255) | NOT NULL | |
+| layer_type | VARCHAR(50) | NOT NULL | drawing, token, fog |
+| sort_order | INT | DEFAULT 0 | |
+| is_visible | BOOLEAN | DEFAULT true | |
+| opacity | FLOAT | DEFAULT 1.0 | |
+| is_locked | BOOLEAN | DEFAULT false | |
+| created_at | DATETIME | NOT NULL | |
+
+### map_drawings (implemented -- migration 000045)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | VARCHAR(36) | PK | UUID |
+| map_id | VARCHAR(36) | FK -> maps.id ON DELETE CASCADE | |
+| layer_id | VARCHAR(36) | FK -> map_layers.id ON DELETE CASCADE | |
+| drawing_type | VARCHAR(50) | NOT NULL | freehand, polygon, circle, rect, text |
+| points | JSON | NOT NULL | Coordinate array |
+| stroke_color | VARCHAR(7) | DEFAULT '#000000' | |
+| stroke_width | INT | DEFAULT 2 | |
+| fill_color | VARCHAR(7) | NULL | |
+| fill_alpha | FLOAT | DEFAULT 0.5 | |
+| text_content | TEXT | NULL | For text drawings |
+| font_size | INT | NULL | |
+| rotation | FLOAT | DEFAULT 0 | |
+| visibility | VARCHAR(20) | DEFAULT 'everyone' | |
+| created_by | VARCHAR(36) | NULL | |
+| foundry_id | VARCHAR(100) | NULL | Foundry VTT sync ID |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+
+### map_tokens (implemented -- migration 000045)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | VARCHAR(36) | PK | UUID |
+| map_id | VARCHAR(36) | FK -> maps.id ON DELETE CASCADE | |
+| layer_id | VARCHAR(36) | FK -> map_layers.id ON DELETE SET NULL | |
+| entity_id | VARCHAR(36) | NULL, FK -> entities.id ON DELETE SET NULL | |
+| name | VARCHAR(255) | NOT NULL | |
+| image_path | VARCHAR(500) | NULL | |
+| x | DOUBLE | NOT NULL | Percentage 0-100 |
+| y | DOUBLE | NOT NULL | Percentage 0-100 |
+| width | INT | DEFAULT 1 | Grid cells |
+| height | INT | DEFAULT 1 | Grid cells |
+| rotation | FLOAT | DEFAULT 0 | |
+| scale | FLOAT | DEFAULT 1.0 | |
+| is_hidden | BOOLEAN | DEFAULT false | |
+| is_locked | BOOLEAN | DEFAULT false | |
+| vision_enabled | BOOLEAN | DEFAULT false | |
+| vision_range | INT | NULL | |
+| elevation | INT | DEFAULT 0 | |
+| sort_order | INT | DEFAULT 0 | |
+| status_effects | JSON | NULL | |
+| flags | JSON | NULL | |
+| foundry_id | VARCHAR(100) | NULL | Foundry VTT sync ID |
+| created_by | VARCHAR(36) | NULL | |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+
+### map_fog (implemented -- migration 000045)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | VARCHAR(36) | PK | UUID |
+| map_id | VARCHAR(36) | FK -> maps.id ON DELETE CASCADE | |
+| points | JSON | NOT NULL | Polygon coordinates |
+| is_explored | BOOLEAN | DEFAULT false | |
+| created_at | DATETIME | NOT NULL | |
+
+### entity_permissions (implemented -- migration 000048)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| entity_id | CHAR(36) | FK -> entities.id ON DELETE CASCADE | |
+| subject_type | ENUM('role','user','group') | NOT NULL | Permission target type (group added 000049) |
+| subject_id | VARCHAR(36) | NOT NULL | Role name, user ID, or group ID |
+| permission | ENUM('view','edit') | NOT NULL | |
+| created_at | DATETIME | NOT NULL | |
+| UNIQUE(entity_id, subject_type, subject_id) | | | |
+
+### campaign_groups (implemented -- migration 000049)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | CHAR(36) | PK | UUID |
+| campaign_id | CHAR(36) | FK -> campaigns.id ON DELETE CASCADE | |
+| name | VARCHAR(200) | NOT NULL | |
+| description | TEXT | NULL | |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+| UNIQUE(campaign_id, name) | | | |
+
+### campaign_group_members (implemented -- migration 000049)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| group_id | CHAR(36) | PK (composite), FK -> campaign_groups.id ON DELETE CASCADE | |
+| user_id | CHAR(36) | PK (composite), FK -> users.id ON DELETE CASCADE | |
+| joined_at | DATETIME | NOT NULL, DEFAULT NOW() | |
+
+### extensions (implemented -- migration 000055)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| ext_id | VARCHAR(200) | UNIQUE, NOT NULL | Extension identifier |
+| name | VARCHAR(200) | NOT NULL | |
+| version | VARCHAR(50) | NOT NULL | |
+| description | TEXT | NULL | |
+| manifest | JSON | NOT NULL | Full manifest |
+| installed_by | CHAR(36) | NULL | |
+| status | VARCHAR(20) | DEFAULT 'active' | |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
+
+### campaign_extensions (implemented -- migration 000055)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| campaign_id | CHAR(36) | PK (composite), FK -> campaigns.id ON DELETE CASCADE | |
+| extension_id | INT | PK (composite), FK -> extensions.id ON DELETE CASCADE | |
+| enabled | BOOLEAN | DEFAULT true | |
+| applied_contents | JSON | NULL | Tracks what was applied |
+| enabled_at | DATETIME | NOT NULL | |
+| enabled_by | CHAR(36) | NULL | |
+
+### extension_provenance (implemented -- migration 000055)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| campaign_id | CHAR(36) | NOT NULL | |
+| extension_id | INT | NOT NULL | |
+| table_name | VARCHAR(100) | NOT NULL | Target table |
+| record_id | VARCHAR(36) | NOT NULL | Created record ID |
+| record_type | VARCHAR(50) | NULL | Record subtype |
+| created_at | DATETIME | NOT NULL | |
+
+### extension_data (implemented -- migration 000055)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| campaign_id | CHAR(36) | NOT NULL | |
+| extension_id | INT | NOT NULL | |
+| namespace | VARCHAR(100) | NOT NULL | Plugin/scope identifier |
+| data_key | VARCHAR(200) | NOT NULL | |
+| data_value | JSON | NULL | |
+| UNIQUE(campaign_id, extension_id, namespace, data_key) | | | |
+
+### user_storage_limits (implemented -- migrations 000012, 000040)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| user_id | CHAR(36) | PK, FK -> users.id ON DELETE CASCADE | |
+| max_upload_size | BIGINT | NULL | Override (NULL = use global) |
+| max_total_storage | BIGINT | NULL | Override (NULL = use global) |
+| bypass_max_upload | BIGINT | NULL | Temporary bypass limit (added 000040) |
+| bypass_expires_at | TIMESTAMP | NULL | Bypass expiry (added 000040) |
+| bypass_reason | VARCHAR(255) | NULL | Admin note (added 000040) |
+| bypass_granted_by | CHAR(36) | NULL | Admin who granted bypass (added 000040) |
+
+### campaign_storage_limits (implemented -- migrations 000012, 000040)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| campaign_id | CHAR(36) | PK, FK -> campaigns.id ON DELETE CASCADE | |
+| max_upload_size | BIGINT | NULL | Override |
+| max_total_storage | BIGINT | NULL | Override |
+| bypass_max_storage | BIGINT | NULL | Temporary bypass limit (added 000040) |
+| bypass_max_files | INT | NULL | Temporary file count bypass (added 000040) |
+| bypass_expires_at | TIMESTAMP | NULL | Bypass expiry (added 000040) |
+| bypass_reason | VARCHAR(255) | NULL | Admin note (added 000040) |
+| bypass_granted_by | CHAR(36) | NULL | Admin who granted bypass (added 000040) |
+
 ## MariaDB-Specific Notes
 
 - **JSON columns:** MariaDB validates JSON on write. Use `JSON_EXTRACT()` for
@@ -523,12 +864,12 @@ User --< CampaignMember >-- Campaign
 
 ## Indexes
 
-- `users`: UNIQUE on email
+- `users`: UNIQUE on email, UNIQUE on email_verify_token
 - `campaigns`: INDEX on created_by, UNIQUE on slug
 - `entity_types`: UNIQUE on (campaign_id, slug)
 - `entities`: INDEX on (campaign_id, entity_type_id), UNIQUE on (campaign_id, slug), FULLTEXT on name
-- `tags`: UNIQUE on (campaign_id, slug)
-- `notes`: INDEX on (locked_by, locked_at), INDEX on (campaign_id, is_shared)
+- `tags`: UNIQUE on (campaign_id, slug), INDEX on (campaign_id, dm_only)
+- `notes`: INDEX on (locked_by, locked_at), INDEX on (campaign_id, is_shared), INDEX on parent_id
 - `note_versions`: INDEX on (note_id, created_at DESC)
 - `security_events`: INDEX on (event_type, created_at DESC), (user_id, created_at DESC), (ip_address, created_at DESC), (created_at DESC), (actor_id, created_at DESC)
 - `calendars`: UNIQUE on campaign_id
@@ -538,11 +879,21 @@ User --< CampaignMember >-- Campaign
 - `calendar_seasons`: INDEX on calendar_id
 - `calendar_eras`: INDEX on calendar_id
 - `calendar_events`: INDEX on (calendar_id, year, month, day), INDEX on entity_id
+- `calendar_event_categories`: UNIQUE on (calendar_id, slug)
 - `maps`: INDEX on (campaign_id, sort_order)
 - `map_markers`: INDEX on map_id, INDEX on entity_id
 - `sessions`: INDEX on (campaign_id, status), INDEX on campaign_id
 - `session_attendees`: UNIQUE on (session_id, user_id), INDEX on session_id
 - `session_entities`: UNIQUE on (session_id, entity_id), INDEX on session_id, INDEX on entity_id
+- `session_rsvp_tokens`: INDEX on token, INDEX on (session_id, user_id)
+- `sync_mappings`: UNIQUE on (campaign_id, chronicle_type, chronicle_id, external_system), INDEX on (external_system, external_id)
+- `timeline_event_connections`: UNIQUE on (timeline_id, source_id, target_id), INDEX on timeline_id
+- `entity_permissions`: UNIQUE on (entity_id, subject_type, subject_id), INDEX on entity_id, INDEX on subject_id
+- `campaign_groups`: UNIQUE on (campaign_id, name)
+- `campaign_group_members`: INDEX on user_id
+- `entity_posts`: INDEX on entity_id, INDEX on campaign_id
+- `extension_provenance`: INDEX on (campaign_id, extension_id), INDEX on (table_name, record_id)
+- `extension_data`: UNIQUE on (campaign_id, extension_id, namespace, data_key)
 
 ## Migration Log
 
@@ -582,3 +933,24 @@ User --< CampaignMember >-- Campaign
 | 32 | 000032_sessions_plugin | Sessions, session_attendees, session_entities tables + addon | 2026-03-01 |
 | 33 | 000033_calendar_eras_weather | calendar_eras table + season weather_effect column | 2026-03-01 |
 | 34 | 000034_calendar_event_rich_text | Add description_html column to calendar_events | 2026-03-01 |
+| 35 | 000035_timeline_plugin | timelines, timeline_event_links, timeline_entity_groups/members tables + addon | 2026-03-02 |
+| 36 | 000036_timeline_standalone_events | timeline_events table, calendar_id nullable on timelines | 2026-03-02 |
+| 37 | 000037_event_visibility_rules | visibility_rules JSON on calendar_events + timeline_events | 2026-03-02 |
+| 38 | 000038_tag_visibility | dm_only on tags + index | 2026-03-02 |
+| 39 | 000039_calendar_event_categories | calendar_event_categories table | 2026-03-02 |
+| 40 | 000040_storage_bypass | Bypass columns on user/campaign storage limits | 2026-03-03 |
+| 41 | 000041_session_recurrence_and_rsvp_tokens | Recurrence on sessions + session_rsvp_tokens table | 2026-03-04 |
+| 44 | 000044_sync_mappings | sync_mappings table for Foundry VTT sync | 2026-03-04 |
+| 45 | 000045_map_expansion | map_layers, map_drawings, map_tokens, map_fog + expansion columns on maps | 2026-03-04 |
+| 46 | 000046_relation_metadata | metadata JSON on entity_relations | 2026-03-04 |
+| 47 | 000047_timeline_event_connections | timeline_event_connections table | 2026-03-05 |
+| 48 | 000048_entity_permissions | entity_permissions table + visibility on entities | 2026-03-05 |
+| 49 | 000049_campaign_groups | campaign_groups + campaign_group_members + group subject type | 2026-03-05 |
+| 50 | 000050_entity_posts | entity_posts table (replaces placeholder from 000008) | 2026-03-06 |
+| 51 | 000051_notes_folders | parent_id + is_folder on notes | 2026-03-06 |
+| 52 | 000052_relations_dm_only | dm_only on entity_relations | 2026-03-06 |
+| 53 | 000053_session_recap | recap + recap_html on sessions | 2026-03-07 |
+| 54 | 000054_character_assignment | character_entity_id on campaign_members | 2026-03-07 |
+| 55 | 000055_content_extensions | extensions, campaign_extensions, extension_provenance, extension_data | 2026-03-07 |
+| 56 | 000056_email_change_verification | pending_email, email_verify_token/expires on users | 2026-03-07 |
+| 57 | 000057_media_gallery_addon | media-gallery addon → active + plugin category | 2026-03-08 |
