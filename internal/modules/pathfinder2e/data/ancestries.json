@@ -1,0 +1,114 @@
+[
+  {
+    "id": "human",
+    "name": "Human",
+    "summary": "Ambitious, versatile, and numerous, humans are the most common ancestry.",
+    "description": "Humans are the most common ancestry in most regions. Their ambition, versatility, and sheer force of will have allowed them to build civilizations across the world. Humans receive a free ability boost to any ability score, reflecting their diverse potential. Their relatively short lifespans drive them to achieve great things quickly.",
+    "properties": {
+      "hp": 8,
+      "size": "Medium",
+      "speed": "25 feet",
+      "boosts": "Two free ability boosts"
+    },
+    "tags": ["humanoid", "core"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "elf",
+    "name": "Elf",
+    "summary": "Long-lived and graceful, with keen senses and an affinity for magic.",
+    "description": "Elves are a long-lived ancestry known for their grace, keen senses, and deep connection to magic and the natural world. They typically stand taller than humans but with more slender builds. Elves have a lifespan measured in centuries, giving them a patient, long-term perspective that shorter-lived ancestries often find frustrating.",
+    "properties": {
+      "hp": 6,
+      "size": "Medium",
+      "speed": "30 feet",
+      "boosts": "Dexterity, Intelligence, Free"
+    },
+    "tags": ["humanoid", "elf", "core"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "dwarf",
+    "name": "Dwarf",
+    "summary": "Stout and hardy, with a strong connection to stone and tradition.",
+    "description": "Dwarves are a stout, hardy ancestry with a deep connection to stone, metalwork, and tradition. They are renowned as master craftspeople and tireless warriors who never forget a grudge. Dwarves have darkvision and a natural resistance to poison that reflects their constitution-heavy physiology.",
+    "properties": {
+      "hp": 10,
+      "size": "Medium",
+      "speed": "20 feet",
+      "boosts": "Constitution, Wisdom, Free"
+    },
+    "tags": ["humanoid", "dwarf", "core"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "gnome",
+    "name": "Gnome",
+    "summary": "Small, curious, and deeply connected to the First World's magic.",
+    "description": "Gnomes are a small, curious ancestry with a deep connection to the First World — the realm of the fey. They require novel experiences to maintain their emotional health; without them, a gnome can enter a dangerous fugue state known as the Bleaching. Gnomes are known for their vibrant personalities and eclectic interests.",
+    "properties": {
+      "hp": 8,
+      "size": "Small",
+      "speed": "25 feet",
+      "boosts": "Constitution, Charisma, Free"
+    },
+    "tags": ["humanoid", "gnome", "core"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "goblin",
+    "name": "Goblin",
+    "summary": "Small, scrappy survivors with a penchant for fire and bold action.",
+    "description": "Goblins are a small, scrappy ancestry that has recently begun integrating into wider society. Historically feared for their love of fire and tendency toward destructive mischief, modern goblins channel their energy into all manner of adventuring pursuits. They have darkvision and a natural agility that belies their chaotic reputation.",
+    "properties": {
+      "hp": 6,
+      "size": "Small",
+      "speed": "25 feet",
+      "boosts": "Dexterity, Charisma, Free"
+    },
+    "tags": ["humanoid", "goblin", "core"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "halfling",
+    "name": "Halfling",
+    "summary": "Small and unassuming, blessed with remarkable luck and bravery.",
+    "description": "Halflings are a small, unassuming ancestry known for their remarkable luck, bravery, and quiet competence. They are naturally stealthy and have an uncanny ability to avoid danger — many halflings credit this to their goddess's blessing. Halflings integrate well into other societies and are valued for their keen perceptions.",
+    "properties": {
+      "hp": 6,
+      "size": "Small",
+      "speed": "25 feet",
+      "boosts": "Dexterity, Wisdom, Free"
+    },
+    "tags": ["humanoid", "halfling", "core"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "orc",
+    "name": "Orc",
+    "summary": "Strong and resilient, with a fierce will to survive and thrive.",
+    "description": "Orcs are a strong, resilient ancestry with a fierce cultural emphasis on survival and self-determination. They possess darkvision and the iconic Orc Ferocity, which allows them to remain standing after receiving a devastating blow. Modern orcs have diverse cultures ranging from nomadic tribes to settled communities.",
+    "properties": {
+      "hp": 10,
+      "size": "Medium",
+      "speed": "25 feet",
+      "boosts": "Strength, Free"
+    },
+    "tags": ["humanoid", "orc", "core"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "leshy",
+    "name": "Leshy",
+    "summary": "Small plant creatures given sentience by primal magic.",
+    "description": "Leshies are small, plant-based creatures brought to sentient life through primal magic. Originally created as guardians of natural places, many leshies have since developed their own communities and cultures. They have a natural connection to the primal magical tradition and come in a dazzling variety of plant-based forms, from fungal to leafy to fruit-bearing.",
+    "properties": {
+      "hp": 8,
+      "size": "Small",
+      "speed": "25 feet",
+      "boosts": "Constitution, Wisdom, Free"
+    },
+    "tags": ["plant", "leshy", "core"],
+    "source": "Player Core (ORC)"
+  }
+]

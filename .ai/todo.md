@@ -173,7 +173,7 @@ _Fix orphaned data, cascade gaps, and admin DB visibility. See `.ai/phases.md`._
 
 - [x] **Sprint T-0 (M-1): D&D 5e Module — Data & Tooltip API** — SRD-legal JSON (spells 27, monsters 14, items 10, classes 12, races 9, conditions 15). Module init wiring, route registration, category-specific tooltip rendering, 9 tests.
 - [x] **Sprint T-1: D&D 5e Module — Reference Pages** — Browsable pages at `/modules/dnd5e/`. Category cards, searchable lists, formatted stat block detail pages. Quick-search (Ctrl+K) integration via ModuleSearchAdapter wiring into entity SearchAPI.
-- [ ] **Sprint T-2: Pathfinder 2e Module** — ORC-licensed data following D&D 5e pattern. Spells, monsters, ancestries, classes, conditions, feats.
+- [x] **Sprint T-2: Pathfinder 2e Module** — ORC-licensed data (82 items across 6 categories: spells, creatures, equipment, ancestries, classes, conditions). GenericModule auto-instantiation, no custom Go code needed.
 - [ ] **Sprint T-3: Guided Worldbuilding Prompts** — `worldbuilding_prompts` table. "Writing Prompts" collapsible panel on entity edit page. Default prompt packs per entity type. Owner-customizable.
 - [ ] **Sprint T-4: Entity Type Template Library** — Genre presets (fantasy, sci-fi, horror, modern, historical) as JSON fixtures. Campaign creation genre selection. "Import preset" in Customization Hub.
 

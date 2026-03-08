@@ -368,8 +368,15 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - **New**: Wired `ModuleSearchAdapter` into entity handler `SearchAPI` so Ctrl+K quick search now returns game system module results alongside entity/timeline/map/calendar/session results
 - **Files modified**: `entities/handler.go` (added `ModuleSearcher` interface + field + setter + search call), `app/routes.go` (wired adapter)
 
+### Sprint T-2: Pathfinder 2e Module (COMPLETE)
+- **Zero Go code** — GenericModule auto-instantiation picks up the module from manifest + data files
+- **6 data categories** (82 items total): spells (20), creatures (14), equipment (12), ancestries (8), classes (12), conditions (16)
+- **Manifest updated**: Added classes and conditions categories, set status to "available", bumped version to 1.0.0
+- **All ORC-licensed**: Content from Player Core and GM Core only
+- **Auto-features**: Reference pages, tooltips, and Ctrl+K search all work via GenericModule infrastructure
+
 ## Next Session Should
-- **Sprint T-2: Pathfinder 2e Module** — ORC-licensed data using GenericModule auto-instantiation
+- **Sprint T-3: Guided Worldbuilding Prompts** — Writing prompts panel on entity edit page
 - **Sprint U-2: Invite System** — campaign invite links for easier player onboarding
 - **Sprint V-1: Quick Capture** — Obsidian-style notes rapid entry
 - See `.ai/phases.md` for full execution order

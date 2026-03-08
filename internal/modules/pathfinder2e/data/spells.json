@@ -1,0 +1,302 @@
+[
+  {
+    "id": "electric-arc",
+    "name": "Electric Arc",
+    "summary": "An arc of lightning leaps from one target to another.",
+    "description": "An arc of lightning leaps from one target to another. You deal 1d4 electricity damage to each target with a basic Reflex save. The targets must be within 30 feet of each other.\n\nHeightened (+1) The damage increases by 1d4.",
+    "properties": {
+      "level": 1,
+      "traditions": "Arcane, Primal",
+      "school": "Evocation",
+      "cast": "2 actions",
+      "range": "30 feet"
+    },
+    "tags": ["cantrip", "evocation", "electricity", "damage"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "shield",
+    "name": "Shield",
+    "summary": "You raise a magical shield of force.",
+    "description": "You raise a magical shield of force. This counts as using the Raise a Shield action, giving you a +1 circumstance bonus to AC until the start of your next turn, but it doesn't require a hand to use.\n\nWhile the spell is in effect, you can use the Shield Block reaction with your magic shield. The shield has Hardness 5. After you use Shield Block, the spell ends and you can't cast it again for 10 minutes.",
+    "properties": {
+      "level": 1,
+      "traditions": "Arcane, Divine, Occult",
+      "school": "Abjuration",
+      "cast": "1 action",
+      "range": "Self"
+    },
+    "tags": ["cantrip", "abjuration", "force", "defense"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "heal",
+    "name": "Heal",
+    "summary": "You channel positive energy to heal the living or damage the undead.",
+    "description": "You channel positive energy to heal the living or damage the undead. If the target is a willing living creature, you restore 1d8 Hit Points. If the target is undead, you deal 1d8 vitality damage to it, with a basic Fortitude save.\n\nThe number of actions you spend when Casting this Spell determines its targets, range, area, and other parameters.\n\n1 action (somatic): The spell has a range of touch.\n2 actions (somatic, verbal): The spell has a range of 30 feet.\n3 actions (material, somatic, verbal): You disperse positive energy in a 30-foot emanation. This targets all living and undead creatures in the area.\n\nHeightened (+1) The amount of healing or damage increases by 1d8.",
+    "properties": {
+      "level": 1,
+      "traditions": "Divine, Primal",
+      "school": "Necromancy",
+      "cast": "1 to 3 actions",
+      "range": "Varies"
+    },
+    "tags": ["healing", "necromancy", "vitality"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "magic-missile",
+    "name": "Magic Missile",
+    "summary": "You send a dart of force streaking toward a creature.",
+    "description": "You send a dart of force streaking toward a creature that you can see. It automatically hits and deals 1d4+1 force damage. For each additional action you use when Casting the Spell, increase the number of missiles you shoot by one, to a maximum of three missiles for 3 actions.\n\nHeightened (+2) You shoot one additional missile with each action you spend.",
+    "properties": {
+      "level": 1,
+      "traditions": "Arcane, Occult",
+      "school": "Evocation",
+      "cast": "1 to 3 actions",
+      "range": "120 feet"
+    },
+    "tags": ["evocation", "force", "damage"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "fireball",
+    "name": "Fireball",
+    "summary": "A roaring explosion of fire appears at a spot you designate.",
+    "description": "A roaring explosion of fire appears at a spot you designate, dealing 6d6 fire damage to every creature in a 20-foot burst. Each creature must attempt a basic Reflex save.\n\nHeightened (+1) The damage increases by 2d6.",
+    "properties": {
+      "level": 3,
+      "traditions": "Arcane, Primal",
+      "school": "Evocation",
+      "cast": "2 actions",
+      "range": "500 feet"
+    },
+    "tags": ["evocation", "fire", "damage"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "fear",
+    "name": "Fear",
+    "summary": "You plant fear in the target's mind.",
+    "description": "You plant fear in the target; it must attempt a Will save. On a critical failure, the target is frightened 3. On a failure, the target is frightened 2. On a success, the target is frightened 1. On a critical success, the target is unaffected.\n\nHeightened (3rd) You can target up to five creatures.",
+    "properties": {
+      "level": 1,
+      "traditions": "Arcane, Divine, Occult, Primal",
+      "school": "Enchantment",
+      "cast": "2 actions",
+      "range": "30 feet"
+    },
+    "tags": ["enchantment", "emotion", "fear", "mental"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "haste",
+    "name": "Haste",
+    "summary": "Magic empowers the target to act faster.",
+    "description": "Magic empowers the target to act faster. It gains the quickened condition and can use the extra action each round only to Strike, Stride, or Step.\n\nHeightened (7th) You can target up to 6 creatures.",
+    "properties": {
+      "level": 3,
+      "traditions": "Arcane, Occult, Primal",
+      "school": "Transmutation",
+      "cast": "2 actions",
+      "range": "30 feet"
+    },
+    "tags": ["transmutation", "buff"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "invisibility",
+    "name": "Invisibility",
+    "summary": "Cloaked in illusion, the target becomes invisible.",
+    "description": "Cloaked in illusion, the target becomes invisible. This makes it undetected to all creatures, though the creatures can attempt to find the target, making it hidden to them instead. If the target uses a hostile action, the spell ends after that hostile action is completed.\n\nHeightened (4th) The spell lasts 1 minute, but it doesn't end if the target uses a hostile action.",
+    "properties": {
+      "level": 2,
+      "traditions": "Arcane, Occult",
+      "school": "Illusion",
+      "cast": "2 actions",
+      "range": "Touch"
+    },
+    "tags": ["illusion", "stealth"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "slow",
+    "name": "Slow",
+    "summary": "You dilate the flow of time around the target.",
+    "description": "You dilate the flow of time around the target, slowing its actions. The target must attempt a Fortitude save. The target becomes slowed 1 on a failure, or slowed 2 on a critical failure. It's unaffected on a success.\n\nHeightened (6th) You can target up to 10 creatures.",
+    "properties": {
+      "level": 3,
+      "traditions": "Arcane, Occult, Primal",
+      "school": "Transmutation",
+      "cast": "2 actions",
+      "range": "30 feet"
+    },
+    "tags": ["transmutation", "debuff"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "telekinetic-projectile",
+    "name": "Telekinetic Projectile",
+    "summary": "You hurl a loose, unattended object that deals bludgeoning damage.",
+    "description": "You hurl a loose, unattended object that is within range and that has 1 Bulk or less at the target. Make a spell attack roll against the target. If you hit, you deal 1d6 bludgeoning, piercing, or slashing damage — as appropriate for the object you hurled.\n\nHeightened (+1) The damage increases by 1d6.",
+    "properties": {
+      "level": 1,
+      "traditions": "Arcane, Occult",
+      "school": "Evocation",
+      "cast": "2 actions",
+      "range": "30 feet"
+    },
+    "tags": ["cantrip", "evocation", "attack"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "guidance",
+    "name": "Guidance",
+    "summary": "You ask for divine guidance, granting the target a +1 status bonus to a skill check.",
+    "description": "You ask for divine guidance, granting the target a +1 status bonus to one attack roll, Perception check, saving throw, or skill check the target attempts before the duration ends. The target chooses which roll to use the bonus on before rolling. If the target uses the bonus, the spell ends.\n\nA creature can't benefit from guidance more than once per hour.",
+    "properties": {
+      "level": 1,
+      "traditions": "Divine, Occult, Primal",
+      "school": "Divination",
+      "cast": "1 action",
+      "range": "30 feet"
+    },
+    "tags": ["cantrip", "divination", "buff"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "heroism",
+    "name": "Heroism",
+    "summary": "You imbue the target with a powerful sense of heroism.",
+    "description": "You imbue the target with a powerful sense of purpose and heroism. The target gains a +1 status bonus to attack rolls, Perception checks, saving throws, and skill checks.\n\nHeightened (6th) The status bonus increases to +2.\nHeightened (9th) The status bonus increases to +3.",
+    "properties": {
+      "level": 3,
+      "traditions": "Divine, Occult",
+      "school": "Enchantment",
+      "cast": "2 actions",
+      "range": "Touch"
+    },
+    "tags": ["enchantment", "buff", "mental"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "wall-of-fire",
+    "name": "Wall of Fire",
+    "summary": "You raise a blazing wall of fire.",
+    "description": "You raise a blazing wall that burns creatures that pass through it. The wall is a thin sheet of flame up to 20 feet high, either a straight line up to 60 feet long or a ring with a 10-foot radius. The wall deals 4d6 fire damage to any creature that passes through the wall. A creature can take this damage only once per turn.\n\nHeightened (+1) The damage increases by 1d6.",
+    "properties": {
+      "level": 4,
+      "traditions": "Arcane, Primal",
+      "school": "Evocation",
+      "cast": "3 actions",
+      "range": "120 feet"
+    },
+    "tags": ["evocation", "fire"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "cone-of-cold",
+    "name": "Cone of Cold",
+    "summary": "Icy cold rushes forth from your hands in a 60-foot cone.",
+    "description": "Icy cold rushes forth from your hands. You deal 12d6 cold damage to creatures in a 60-foot cone; each creature must attempt a basic Reflex save.\n\nHeightened (+1) The damage increases by 2d6.",
+    "properties": {
+      "level": 5,
+      "traditions": "Arcane, Primal",
+      "school": "Evocation",
+      "cast": "2 actions",
+      "range": "Self (60-foot cone)"
+    },
+    "tags": ["evocation", "cold", "damage"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "true-strike",
+    "name": "True Strike",
+    "summary": "A flash of insight gives you the ability to strike with precision.",
+    "description": "A flash of divine or arcane insight gives you an edge. The next time you make an attack roll before the end of your turn, roll the attack twice and use the better result. The attack ignores circumstance penalties to the attack roll and any flat check required due to the target being concealed or hidden.",
+    "properties": {
+      "level": 1,
+      "traditions": "Arcane, Occult",
+      "school": "Divination",
+      "cast": "1 action",
+      "range": "Self"
+    },
+    "tags": ["divination", "fortune", "attack"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "restoration",
+    "name": "Restoration",
+    "summary": "Restorative energy flows through the target, removing conditions.",
+    "description": "Restorative energy counteracts the effects harming the target. You can attempt to counteract a single affliction or condition affecting the target. If the condition is clumsy, drained, enfeebled, or stupefied, reduce the condition value by 2 (minimum 0).\n\nHeightened (4th) Add blinded, deafened, doomed, and fatigued to the list of conditions.",
+    "properties": {
+      "level": 2,
+      "traditions": "Divine, Occult, Primal",
+      "school": "Necromancy",
+      "cast": "2 actions",
+      "range": "Touch"
+    },
+    "tags": ["necromancy", "healing"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "raise-dead",
+    "name": "Raise Dead",
+    "summary": "You attempt to call forth the target's soul and return it to its body.",
+    "description": "You attempt to call forth the target's soul and return it to its body. The target must have died within the past 3 days. If Pharasma has decided that the target's time has come or the soul doesn't wish to return, this spell automatically fails.\n\nThe target returns to life with 1 Hit Point, no spells prepared or spell slots available, no points in any pools or Focus Points, and still with any long-term debilities. The target is also clumsy 2, drained 1, and enfeebled 2 for 1 week.",
+    "properties": {
+      "level": 6,
+      "traditions": "Divine",
+      "school": "Necromancy",
+      "cast": "10 minutes",
+      "range": "Touch"
+    },
+    "tags": ["necromancy", "healing"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "detect-magic",
+    "name": "Detect Magic",
+    "summary": "You send out a pulse that detects magic.",
+    "description": "You send out a pulse that registers the presence of magic. You receive no information beyond the presence or absence of magic. You can choose to ignore magic you're fully aware of, such as the magic items and ongoing spells of your allies.\n\nHeightened (3rd) You learn the school of magic for the highest-level effect within range the GM considers most dangerous or living. If the highest-level effect is a common effect, you also learn its name.\nHeightened (4th) As 3rd level, but for all magical effects you can detect.",
+    "properties": {
+      "level": 1,
+      "traditions": "Arcane, Divine, Occult, Primal",
+      "school": "Divination",
+      "cast": "2 actions",
+      "range": "30 feet"
+    },
+    "tags": ["cantrip", "divination", "detection"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "dispel-magic",
+    "name": "Dispel Magic",
+    "summary": "You unravel the magic behind a spell or effect.",
+    "description": "You unravel the magic behind a spell or effect. Attempt a counteract check against the target. If you succeed, the spell or effect ends.",
+    "properties": {
+      "level": 2,
+      "traditions": "Arcane, Divine, Occult, Primal",
+      "school": "Abjuration",
+      "cast": "2 actions",
+      "range": "120 feet"
+    },
+    "tags": ["abjuration", "counteract"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "summon-animal",
+    "name": "Summon Animal",
+    "summary": "You conjure an animal to fight for you.",
+    "description": "You conjure an animal to fight for you. You summon a common creature that has the animal trait and whose level is -1, which appears in an unoccupied space within range. The creature gains the summoned trait. It can't be used to satisfy any component of the spell's casting.\n\nHeightened (2nd) Level 1.\nHeightened (3rd) Level 2.\nHeightened (4th) Level 3.\nHeightened (5th) Level 5.\nHeightened (6th) Level 7.\nHeightened (7th) Level 9.\nHeightened (8th) Level 11.\nHeightened (9th) Level 13.\nHeightened (10th) Level 15.",
+    "properties": {
+      "level": 1,
+      "traditions": "Arcane, Primal",
+      "school": "Conjuration",
+      "cast": "3 actions",
+      "range": "30 feet"
+    },
+    "tags": ["conjuration", "summoning"],
+    "source": "Player Core (ORC)"
+  }
+]

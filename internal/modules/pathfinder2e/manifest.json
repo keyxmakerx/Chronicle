@@ -1,13 +1,13 @@
 {
   "id": "pathfinder2e",
   "name": "Pathfinder 2e",
-  "description": "ORC reference content for Pathfinder 2nd Edition. Includes spells, creatures, equipment, and ancestries from the ORC-licensed content.",
-  "version": "0.1.0",
+  "description": "ORC reference content for Pathfinder 2nd Edition. Includes spells, creatures, equipment, ancestries, classes, and conditions from the ORC-licensed Player Core and GM Core.",
+  "version": "1.0.0",
   "author": "Chronicle",
   "license": "ORC",
   "icon": "fa-shield-halved",
   "api_version": "1",
-  "status": "coming_soon",
+  "status": "available",
   "categories": [
     {
       "slug": "spells",
@@ -51,6 +51,27 @@
         { "key": "size", "label": "Size", "type": "string" },
         { "key": "speed", "label": "Speed", "type": "string" },
         { "key": "boosts", "label": "Ability Boosts", "type": "string" }
+      ]
+    },
+    {
+      "slug": "classes",
+      "name": "Classes",
+      "icon": "fa-hat-wizard",
+      "fields": [
+        { "key": "key_ability", "label": "Key Ability", "type": "string" },
+        { "key": "hp", "label": "HP per Level", "type": "number" },
+        { "key": "perception", "label": "Perception", "type": "string" },
+        { "key": "fortitude", "label": "Fortitude", "type": "string" },
+        { "key": "reflex", "label": "Reflex", "type": "string" },
+        { "key": "will", "label": "Will", "type": "string" }
+      ]
+    },
+    {
+      "slug": "conditions",
+      "name": "Conditions",
+      "icon": "fa-heart-crack",
+      "fields": [
+        { "key": "effect", "label": "Effect", "type": "string" }
       ]
     }
   ]
