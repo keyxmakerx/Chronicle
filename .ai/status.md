@@ -8,8 +8,8 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-09 -- Sidebar Navigation Overhaul. Added auto-collapse sidebar with pin/unpin (Alpine.js + CSS), fixed icon shrinking in collapsed state (48px strip, explicit 16x16 icons), prefetch-on-hover for category drill-down, skeleton shimmer loading, restructured drill panel layout (compact action bar, section headers), collapsible tree view for entity hierarchy (sidebar_tree.js), drag-and-drop reorder + reparent with new API endpoint, sort_order migration (000062).
-Branch: `claude/review-project-plans-ZIfD6`.
+2026-03-09 -- Multi-calendar Sprint 2 complete. Full route restructuring from `/calendar` to `/calendars/:calId`. Handler rewrite: all handlers extract calId param, IDOR protection via requireCalendarInCampaign, new Index handler (list/redirect/setup), EmbedCalendar/UpcomingEvents/CreateEvent support fallback to default calendar for dashboard blocks. New calendar_list.templ with card grid. All templ/JS URL references updated across calendar, campaigns, entities, timeline plugins. Sync API: added ListCalendars endpoint, kept old `/calendar` routes for Foundry backward compat. calendarListerAdapter now uses ListCalendars. Tests fixed for multi-calendar (removed single-calendar constraint test, updated mocks).
+Branch: `claude/fix-journal-button-placement-UF4hD`. Next: Sprint 3 — calendar list UI polish, calendar switcher in views, Sprint 4 — sessions calendar FK integration.
 
 ## Phase & Sprint Plan
 See `.ai/phases.md` for the full roadmap. Phases organized by priority:

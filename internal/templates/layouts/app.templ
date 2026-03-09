@@ -60,8 +60,9 @@ templ App(title string) {
 			</div>
 		</div>
 		<!-- Notes widget mount point (floating panel, bottom-right).
-		     Gated behind the "notes" addon — off by default. -->
-		if InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes") {
+		     Gated behind the "notes" addon — off by default.
+		     Hidden on the full-page journal to avoid sync conflicts. -->
+		if InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes") && !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx))) {
 			@NotesWidget()
 		}
 	}
@@ -152,6 +153,19 @@ templ Sidebar() {
 						</svg>
 						Dashboard
 					</a>
+					if IsAddonEnabled(ctx, "notes") {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx)))) }
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-book-open text-xs"></i>
+							</span>
+							Journal
+						</a>
+					}
 				</div>
 
 				<!-- Categories drill-down zone -->
@@ -540,49 +554,46 @@ templ entityTypeLink(slug string, label string, color string, icon string, count
 }
 
 // SidebarDrillPanel renders the slide-over panel content for a category.
-// Includes header, action bar, search, entity list, favorites, and recent.
+// Header doubles as navigation: clicking the category name opens the full
+// category page (replacing the old "View All" button). The "New" action is
+// a compact icon button in the header row.
 templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
-	<!-- Category header -->
-	<div class="px-4 py-3 border-b border-gray-700/50 shrink-0">
+	<!-- Category header — clickable name navigates to full category page -->
+	<div class="px-4 py-2.5 border-b border-gray-700/50 shrink-0">
 		<div class="flex items-center gap-2">
-			<span class="w-5 h-5 rounded flex items-center justify-center">
-				if et.Icon != "" {
-					<i class={ "fa-solid " + et.Icon, "text-sm" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
-				} else {
-					<span class="w-2.5 h-2.5 rounded-full" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", campaignID, et.Slug)) }
+				class="flex items-center gap-2 flex-1 min-w-0 group"
+				title={ fmt.Sprintf("Open %s page", et.NamePlural) }
+			>
+				<span class="w-5 h-5 rounded flex items-center justify-center shrink-0">
+					if et.Icon != "" {
+						<i class={ "fa-solid " + et.Icon, "text-sm" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
+					} else {
+						<span class="w-2.5 h-2.5 rounded-full" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
+					}
+				</span>
+				<span class="text-sm font-semibold text-white truncate group-hover:underline">{ et.NamePlural }</span>
+				if count > 0 {
+					<span
+						class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-gray-800 text-gray-400"
+					>{ strconv.Itoa(count) }</span>
 				}
-			</span>
-			<span class="text-sm font-semibold text-white truncate">{ et.NamePlural }</span>
-			<span class="text-[10px] text-gray-500 ml-auto">
-				{ strconv.Itoa(count) }
-				if count == 1 {
-					page
-				} else {
-					pages
-				}
-			</span>
+			</a>
+			<!-- New entity button -->
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", campaignID)) }
+				class="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white transition-colors shrink-0"
+				style={ fmt.Sprintf("background-color: %s15", et.Color) }
+				title={ fmt.Sprintf("New %s", et.Slug) }
+				hx-boost="false"
+			>
+				<i class="fa-solid fa-plus text-[9px]"></i>
+			</a>
 		</div>
 	</div>
 	<!-- Scrollable content -->
 	<div class="flex-1 overflow-y-auto">
-		<!-- Action bar -->
-		<div class="flex items-center gap-1.5 px-4 py-2" hx-boost="false">
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", campaignID, et.Slug)) }
-				class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-medium rounded bg-gray-800/60 border border-gray-700/50 text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
-			>
-				<i class="fa-solid fa-th-large text-[9px]" style={ fmt.Sprintf("color: %s", et.Color) }></i>
-				View All
-			</a>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", campaignID)) }
-				class="flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-medium rounded border text-gray-400 hover:text-white transition-colors"
-				style={ fmt.Sprintf("border-color: %s30; background-color: %s10", et.Color, et.Color) }
-			>
-				<i class="fa-solid fa-plus text-[9px]"></i>
-				New
-			</a>
-		</div>
 		<!-- Search -->
 		<div class="px-4 pb-2">
 			<div class="relative">
@@ -756,15 +767,6 @@ templ Topbar() {
 					>
 						<i class="fa-solid fa-bolt text-xs"></i>
 						<span class="hidden lg:inline">Note</span>
-					</button>
-					<!-- Session Journal trigger -->
-					<button
-						onclick="Chronicle.openSessionJournal()"
-						class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors"
-						title="Session Journal"
-					>
-						<i class="fa-solid fa-book-open text-xs"></i>
-						<span class="hidden lg:inline">Journal</span>
 					</button>
 				}
 			}

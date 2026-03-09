@@ -181,14 +181,14 @@ templ dashCalendarPreview(cc *CampaignContext, config map[string]any) {
 				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
 			</h2>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) }
 				class="text-xs text-accent hover:underline"
 			>
 				View calendar
 			</a>
 		</div>
 		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendar/upcoming?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
 			hx-trigger="intersect once"
 			hx-swap="innerHTML"
 			class="card divide-y divide-edge min-h-[60px]"
@@ -398,14 +398,14 @@ templ dashCalendarFull(cc *CampaignContext, config map[string]any) {
 				<i class="fa-solid fa-calendar-days mr-1.5"></i>Calendar
 			</h2>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) }
 				class="text-xs text-accent hover:underline"
 			>
 				Open full page
 			</a>
 		</div>
 		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendar/embed", cc.Campaign.ID) }
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/embed", cc.Campaign.ID) }
 			hx-trigger="intersect once"
 			hx-swap="innerHTML"
 			class="card overflow-hidden rounded-lg"

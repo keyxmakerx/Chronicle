@@ -11,7 +11,10 @@ type CalendarRepository interface {
 	// Calendar CRUD.
 	Create(ctx context.Context, cal *Calendar) error
 	GetByCampaignID(ctx context.Context, campaignID string) (*Calendar, error)
+	GetDefaultByCampaignID(ctx context.Context, campaignID string) (*Calendar, error)
 	GetByID(ctx context.Context, id string) (*Calendar, error)
+	ListByCampaignID(ctx context.Context, campaignID string) ([]Calendar, error)
+	SetDefault(ctx context.Context, campaignID, calendarID string) error
 	Update(ctx context.Context, cal *Calendar) error
 	Delete(ctx context.Context, id string) error
 
@@ -68,7 +71,8 @@ func NewCalendarRepository(db *sql.DB) CalendarRepository {
 // calendarCols is the column list for calendar queries.
 const calendarCols = `id, campaign_id, mode, name, description, epoch_name, current_year,
         current_month, current_day, hours_per_day, minutes_per_hour, seconds_per_minute,
-        current_hour, current_minute, leap_year_every, leap_year_offset, created_at, updated_at`
+        current_hour, current_minute, leap_year_every, leap_year_offset,
+        sort_order, is_default, created_at, updated_at`
 
 // scanCalendar reads a row into a Calendar struct.
 func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
@@ -79,6 +83,7 @@ func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 		&cal.HoursPerDay, &cal.MinutesPerHour, &cal.SecondsPerMinute,
 		&cal.CurrentHour, &cal.CurrentMinute,
 		&cal.LeapYearEvery, &cal.LeapYearOffset,
+		&cal.SortOrder, &cal.IsDefault,
 		&cal.CreatedAt, &cal.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -93,27 +98,72 @@ func (r *calendarRepo) Create(ctx context.Context, cal *Calendar) error {
 		        current_year, current_month, current_day,
 		        hours_per_day, minutes_per_hour, seconds_per_minute,
 		        current_hour, current_minute,
-		        leap_year_every, leap_year_offset)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        leap_year_every, leap_year_offset,
+		        sort_order, is_default)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cal.ID, cal.CampaignID, cal.Mode, cal.Name, cal.Description, cal.EpochName,
 		cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay,
 		cal.HoursPerDay, cal.MinutesPerHour, cal.SecondsPerMinute,
 		cal.CurrentHour, cal.CurrentMinute,
 		cal.LeapYearEvery, cal.LeapYearOffset,
+		cal.SortOrder, cal.IsDefault,
 	)
 	return err
 }
 
-// GetByCampaignID returns the calendar for a campaign (one per campaign).
+// GetByCampaignID returns the first calendar for a campaign (backward compat).
+// Prefers the default calendar; falls back to oldest if none is marked default.
 func (r *calendarRepo) GetByCampaignID(ctx context.Context, campaignID string) (*Calendar, error) {
 	return scanCalendar(r.db.QueryRowContext(ctx,
-		`SELECT `+calendarCols+` FROM calendars WHERE campaign_id = ?`, campaignID))
+		`SELECT `+calendarCols+` FROM calendars WHERE campaign_id = ? ORDER BY is_default DESC, sort_order ASC LIMIT 1`, campaignID))
+}
+
+// GetDefaultByCampaignID returns the default calendar for a campaign.
+func (r *calendarRepo) GetDefaultByCampaignID(ctx context.Context, campaignID string) (*Calendar, error) {
+	return scanCalendar(r.db.QueryRowContext(ctx,
+		`SELECT `+calendarCols+` FROM calendars WHERE campaign_id = ? AND is_default = 1`, campaignID))
 }
 
 // GetByID returns a calendar by its ID.
 func (r *calendarRepo) GetByID(ctx context.Context, id string) (*Calendar, error) {
 	return scanCalendar(r.db.QueryRowContext(ctx,
 		`SELECT `+calendarCols+` FROM calendars WHERE id = ?`, id))
+}
+
+// ListByCampaignID returns all calendars for a campaign, ordered by sort_order.
+func (r *calendarRepo) ListByCampaignID(ctx context.Context, campaignID string) ([]Calendar, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+calendarCols+` FROM calendars WHERE campaign_id = ? ORDER BY sort_order, name`, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var calendars []Calendar
+	for rows.Next() {
+		cal, err := scanCalendar(rows)
+		if err != nil {
+			return nil, err
+		}
+		if cal != nil {
+			calendars = append(calendars, *cal)
+		}
+	}
+	return calendars, rows.Err()
+}
+
+// SetDefault marks one calendar as the default for its campaign, unsetting
+// the default flag on all other calendars in the same campaign.
+func (r *calendarRepo) SetDefault(ctx context.Context, campaignID, calendarID string) error {
+	// Unset all defaults in campaign.
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE calendars SET is_default = 0 WHERE campaign_id = ?`, campaignID); err != nil {
+		return err
+	}
+	// Set the chosen one.
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE calendars SET is_default = 1 WHERE id = ? AND campaign_id = ?`, calendarID, campaignID)
+	return err
 }
 
 // Update modifies an existing calendar's settings and current date/time.

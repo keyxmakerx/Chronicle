@@ -3,9 +3,13 @@
  *
  * Transforms the flat entity list rendered by SidebarEntityList into a
  * collapsible tree using data-parent-id attributes. Supports:
- *   - Collapsible folders (entities with children)
+ *   - Collapsible folders (entities with children get folder icons)
+ *   - Leaf nodes get page icons
+ *   - Vertical guide lines for visual hierarchy
+ *   - Smooth CSS transitions for collapse/expand
  *   - Drag-and-drop reordering within the same level
  *   - Drag-and-drop reparenting (drop onto an entity to nest it)
+ *   - Visual feedback distinguishing reorder vs reparent operations
  *   - Collapse state persisted in localStorage per campaign
  *
  * Listens for HTMX afterSwap events on #sidebar-cat-results to re-initialize
@@ -14,11 +18,13 @@
 (function () {
   'use strict';
 
-  var INDENT_PX = 16;
+  var INDENT_PX = 14;
   var STORAGE_KEY_PREFIX = 'chronicle-tree-collapsed-';
 
   /**
    * Initialize the tree for a freshly loaded entity list.
+   * Reads the flat list of .sidebar-tree-item links, builds a parent-child
+   * graph, and re-renders them as a nested tree with toggle buttons and icons.
    */
   function initTree() {
     var container = document.getElementById('sidebar-entity-tree');
@@ -46,7 +52,7 @@
       };
     });
 
-    // Build tree relationships.
+    // Build tree relationships — link children to their parents.
     Object.keys(nodes).forEach(function (id) {
       var node = nodes[id];
       if (node.parentId && nodes[node.parentId]) {
@@ -56,7 +62,7 @@
       }
     });
 
-    // Sort children by sort_order, then name.
+    // Sort children by sort_order, then alphabetically by name.
     function sortChildren(childNodes) {
       childNodes.sort(function (a, b) {
         if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
@@ -72,74 +78,144 @@
     try {
       var stored = localStorage.getItem(storageKey);
       if (stored) collapsedSet = JSON.parse(stored);
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* ignore corrupt localStorage */ }
 
     function saveCollapsed() {
       try {
         localStorage.setItem(storageKey, JSON.stringify(collapsedSet));
-      } catch (e) { /* ignore */ }
+      } catch (e) { /* ignore quota errors */ }
     }
 
     // Clear container and re-render as tree.
     container.innerHTML = '';
 
+    /**
+     * Render a single tree node: clones the link element, adds indent,
+     * toggle button (for parents) or spacer (for nested leaves), and
+     * swaps the icon to folder/page as appropriate.
+     */
     function renderNode(node, depth) {
       var hasChildren = node.children.length > 0;
       var isCollapsed = !!collapsedSet[node.id];
 
-      // Create wrapper div for the tree item.
+      // Create wrapper div for the tree node.
       var wrapper = document.createElement('div');
       wrapper.className = 'sidebar-tree-node';
       wrapper.setAttribute('data-entity-id', node.id);
       if (node.parentId) wrapper.setAttribute('data-parent-id', node.parentId);
-      wrapper.setAttribute('data-depth', depth);
+      wrapper.setAttribute('data-depth', String(depth));
 
-      // Clone the original link element.
+      // Clone the original link element and apply indentation.
       var link = node.el.cloneNode(true);
-      link.style.paddingLeft = (16 + depth * INDENT_PX) + 'px';
+      link.style.paddingLeft = (12 + depth * INDENT_PX) + 'px';
 
-      // Add toggle button for items with children.
+      // Swap the default page icon based on whether this node has children.
+      var iconEl = link.querySelector('.sidebar-tree-icon i');
+      if (iconEl) {
+        if (hasChildren) {
+          // Folder icon: open when expanded, closed when collapsed.
+          iconEl.className = isCollapsed
+            ? 'fa-solid fa-folder text-[10px]'
+            : 'fa-solid fa-folder-open text-[10px]';
+          link.setAttribute('data-has-children', 'true');
+        }
+        // Leaves keep the default fa-file-lines icon from the template.
+      }
+
+      // Add toggle button (chevron) for items with children.
       if (hasChildren) {
         var toggle = document.createElement('span');
-        toggle.className = 'sidebar-tree-toggle inline-flex items-center justify-center w-3 h-3 mr-1 cursor-pointer text-gray-500 hover:text-gray-300 transition-colors shrink-0';
-        toggle.innerHTML = isCollapsed
-          ? '<i class="fa-solid fa-chevron-right text-[8px]"></i>'
-          : '<i class="fa-solid fa-chevron-down text-[8px]"></i>';
+        toggle.className = 'sidebar-tree-toggle inline-flex items-center justify-center w-4 h-4 cursor-pointer text-gray-500 hover:text-gray-300 shrink-0';
+        toggle.setAttribute('data-collapsed', String(isCollapsed));
+        // Use a single right-chevron that rotates via CSS transform.
+        toggle.innerHTML = '<i class="fa-solid fa-chevron-right text-[7px]"></i>';
+        if (!isCollapsed) {
+          toggle.style.transform = 'rotate(90deg)';
+        }
+
         toggle.addEventListener('click', function (e) {
           e.preventDefault();
           e.stopPropagation();
           isCollapsed = !isCollapsed;
+
+          // Update collapsed state and persist.
           if (isCollapsed) {
             collapsedSet[node.id] = true;
-            toggle.innerHTML = '<i class="fa-solid fa-chevron-right text-[8px]"></i>';
           } else {
             delete collapsedSet[node.id];
-            toggle.innerHTML = '<i class="fa-solid fa-chevron-down text-[8px]"></i>';
           }
           saveCollapsed();
-          // Toggle visibility of children container.
+
+          // Rotate toggle chevron.
+          toggle.style.transform = isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+          toggle.setAttribute('data-collapsed', String(isCollapsed));
+
+          // Swap folder icon between open/closed.
+          var folderIcon = link.querySelector('.sidebar-tree-icon i');
+          if (folderIcon) {
+            folderIcon.className = isCollapsed
+              ? 'fa-solid fa-folder text-[10px]'
+              : 'fa-solid fa-folder-open text-[10px]';
+          }
+
+          // Animate children container collapse/expand.
           var childContainer = wrapper.querySelector('.sidebar-tree-children');
           if (childContainer) {
-            childContainer.style.display = isCollapsed ? 'none' : 'block';
+            if (isCollapsed) {
+              // Collapse: set explicit height then animate to 0.
+              childContainer.style.maxHeight = childContainer.scrollHeight + 'px';
+              // Force reflow so the browser registers the starting height.
+              childContainer.offsetHeight; // eslint-disable-line no-unused-expressions
+              childContainer.setAttribute('data-collapsed', 'true');
+              childContainer.style.maxHeight = '0';
+            } else {
+              // Expand: animate from 0 to scrollHeight, then remove max-height.
+              childContainer.setAttribute('data-collapsed', 'false');
+              childContainer.style.maxHeight = childContainer.scrollHeight + 'px';
+              setTimeout(function () {
+                childContainer.style.maxHeight = '';
+              }, 220);
+            }
           }
         });
-        // Insert toggle before the color dot.
-        link.insertBefore(toggle, link.firstChild);
+
+        // Insert toggle before the icon span.
+        var iconSpan = link.querySelector('.sidebar-tree-icon');
+        if (iconSpan) {
+          link.insertBefore(toggle, iconSpan);
+        } else {
+          link.insertBefore(toggle, link.firstChild);
+        }
       } else if (depth > 0) {
-        // Add spacer for leaf nodes at depth > 0 to align with toggled siblings.
+        // Leaf nodes at depth > 0 get a spacer to align with toggled siblings.
         var spacer = document.createElement('span');
-        spacer.className = 'inline-block w-3 mr-1 shrink-0';
-        link.insertBefore(spacer, link.firstChild);
+        spacer.className = 'inline-block w-4 shrink-0';
+        var iconSpan2 = link.querySelector('.sidebar-tree-icon');
+        if (iconSpan2) {
+          link.insertBefore(spacer, iconSpan2);
+        } else {
+          link.insertBefore(spacer, link.firstChild);
+        }
+      }
+
+      // Set guide line position for nested nodes via inline style.
+      if (depth > 0) {
+        wrapper.style.setProperty('--guide-left', (11 + (depth - 1) * INDENT_PX) + 'px');
+        // Use the CSS ::before pseudo-element positioned by --guide-left.
+        wrapper.style.position = 'relative';
       }
 
       wrapper.appendChild(link);
 
-      // Render children.
+      // Render children into a collapsible container.
       if (hasChildren) {
         sortChildren(node.children);
         var childContainer = document.createElement('div');
         childContainer.className = 'sidebar-tree-children';
-        childContainer.style.display = isCollapsed ? 'none' : 'block';
+        if (isCollapsed) {
+          childContainer.style.maxHeight = '0';
+          childContainer.setAttribute('data-collapsed', 'true');
+        }
         node.children.forEach(function (child) {
           renderNode(child, depth + 1);
           childContainer.appendChild(child._wrapper);
@@ -164,15 +240,22 @@
 
   /**
    * Setup drag-and-drop for reordering and reparenting.
+   *
+   * Drop zones are determined by mouse position relative to the target node:
+   *   - Top third: reorder (insert before target, same parent)
+   *   - Bottom two-thirds: reparent (nest inside target)
+   *
+   * Visual feedback differs: reorder shows an indigo line between items,
+   * reparent highlights the target with a left-border accent.
    */
   function setupDragAndDrop(container, campaignId) {
     var dragSrcId = null;
     var dropIndicator = null;
 
-    // Create drop indicator line.
+    // Create drop indicator line element (reused across drag operations).
     dropIndicator = document.createElement('div');
     dropIndicator.className = 'sidebar-drop-indicator';
-    dropIndicator.style.cssText = 'display:none; height:2px; background:#6366f1; margin:0 8px; border-radius:1px; pointer-events:none;';
+    dropIndicator.style.display = 'none';
 
     container.addEventListener('dragstart', function (e) {
       var item = e.target.closest('.sidebar-tree-item');
@@ -180,7 +263,8 @@
       dragSrcId = item.getAttribute('data-entity-id');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', dragSrcId);
-      item.style.opacity = '0.4';
+      // Fade the source item to indicate it's being dragged.
+      setTimeout(function () { item.style.opacity = '0.35'; }, 0);
     });
 
     container.addEventListener('dragend', function (e) {
@@ -203,22 +287,25 @@
 
       clearDropTargets(container);
 
-      // Determine drop position: top half = insert before, bottom half = nest inside.
+      // Determine drop position: top third = reorder, bottom two-thirds = reparent.
       var rect = target.getBoundingClientRect();
-      var midY = rect.top + rect.height / 2;
+      var thirdY = rect.top + rect.height / 3;
 
-      if (e.clientY < midY) {
-        // Insert before — show indicator line above.
+      if (e.clientY < thirdY) {
+        // Reorder: insert before — show indicator line above target.
         showDropIndicator(target, 'before');
       } else {
-        // Drop onto — highlight as parent.
-        target.classList.add('sidebar-drop-target');
+        // Reparent: nest inside — highlight target with accent border.
+        target.classList.add('sidebar-drop-reparent');
       }
     });
 
     container.addEventListener('dragleave', function (e) {
       var target = e.target.closest('.sidebar-tree-node');
-      if (target) target.classList.remove('sidebar-drop-target');
+      if (target) {
+        target.classList.remove('sidebar-drop-target');
+        target.classList.remove('sidebar-drop-reparent');
+      }
     });
 
     container.addEventListener('drop', function (e) {
@@ -236,16 +323,15 @@
       if (targetId === droppedId) return;
 
       var rect = target.getBoundingClientRect();
-      var midY = rect.top + rect.height / 2;
+      var thirdY = rect.top + rect.height / 3;
 
-      if (e.clientY < midY) {
+      if (e.clientY < thirdY) {
         // Reorder: place before target (same parent).
         var targetParentId = target.getAttribute('data-parent-id') || null;
         var sortOrder = calculateSortOrder(target, 'before');
         reorderEntity(campaignId, droppedId, targetParentId, sortOrder);
       } else {
-        // Reparent: nest inside target.
-        // Place as first child (sort_order 0).
+        // Reparent: nest inside target as first child (sort_order 0).
         reorderEntity(campaignId, droppedId, targetId, 0);
       }
     });
@@ -265,9 +351,10 @@
     }
 
     function clearDropTargets(el) {
-      var targets = el.querySelectorAll('.sidebar-drop-target');
+      var targets = el.querySelectorAll('.sidebar-drop-target, .sidebar-drop-reparent');
       for (var i = 0; i < targets.length; i++) {
         targets[i].classList.remove('sidebar-drop-target');
+        targets[i].classList.remove('sidebar-drop-reparent');
       }
     }
   }
@@ -275,6 +362,8 @@
   /**
    * Calculate the sort order for an entity being dropped relative to a target.
    * Looks at sibling sort_order values to place the entity in the right position.
+   * If there's no room between siblings, returns the target's order (server
+   * will re-normalize the sequence on save).
    */
   function calculateSortOrder(targetNode, position) {
     var siblings = targetNode.parentNode.querySelectorAll(':scope > .sidebar-tree-node');
@@ -294,8 +383,7 @@
       var targetItem = targetNode.querySelector('.sidebar-tree-item');
       var prevOrder = parseInt(prevItem?.getAttribute('data-sort-order') || '0', 10);
       var targetOrder2 = parseInt(targetItem?.getAttribute('data-sort-order') || '0', 10);
-      // If there's room between them, use the midpoint. Otherwise use target's order
-      // (server will re-normalize).
+      // Use midpoint if there's room, otherwise server re-normalizes.
       if (targetOrder2 > prevOrder + 1) {
         return Math.floor((prevOrder + targetOrder2) / 2);
       }
@@ -305,7 +393,8 @@
   }
 
   /**
-   * Send reorder/reparent request to the API.
+   * Send reorder/reparent request to the API. On success, refreshes the
+   * sidebar entity list via HTMX to reflect the new ordering.
    */
   function reorderEntity(campaignId, entityId, newParentId, sortOrder) {
     var body = {
@@ -320,7 +409,7 @@
     })
     .then(function (resp) {
       if (!resp.ok) throw new Error('Reorder failed');
-      // Refresh the sidebar entity list.
+      // Refresh the sidebar entity list to show updated hierarchy.
       var results = document.getElementById('sidebar-cat-results');
       if (results) {
         var searchInput = document.querySelector('#sidebar-cat-content input[name="q"]');
@@ -337,12 +426,23 @@
     });
   }
 
-  // Add CSS for drop target highlighting.
+  // Inject CSS for guide lines (uses custom property set per-node).
   var style = document.createElement('style');
-  style.textContent = '.sidebar-drop-target { background-color: rgba(99, 102, 241, 0.15) !important; outline: 1px dashed rgba(99, 102, 241, 0.5); outline-offset: -1px; }';
+  style.textContent = [
+    '.sidebar-tree-node[data-depth]:not([data-depth="0"])::before {',
+    '  content: "";',
+    '  position: absolute;',
+    '  top: 0;',
+    '  bottom: 0;',
+    '  left: var(--guide-left, 11px);',
+    '  width: 1px;',
+    '  background: rgba(75, 85, 99, 0.2);',
+    '  pointer-events: none;',
+    '}'
+  ].join('\n');
   document.head.appendChild(style);
 
-  // Listen for HTMX content swaps to re-initialize tree.
+  // Listen for HTMX content swaps to re-initialize tree after list refreshes.
   document.addEventListener('htmx:afterSwap', function (e) {
     if (e.detail.target && (
       e.detail.target.id === 'sidebar-cat-results' ||

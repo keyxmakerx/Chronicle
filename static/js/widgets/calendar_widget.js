@@ -72,7 +72,7 @@
             '<i class="fa-solid fa-xmark"></i>' +
           '</button>' +
         '</div>' +
-        '<a href="/campaigns/' + encodeURIComponent(this.campaignId) + '/calendar" ' +
+        '<a href="/campaigns/' + encodeURIComponent(this.campaignId) + '/calendars" ' +
            'class="text-xs text-accent hover:underline">' +
           '<i class="fa-solid fa-arrow-right mr-1"></i>Edit in Calendar' +
         '</a>';
@@ -171,7 +171,7 @@
      */
     _submitQuickAdd: function (name, formEl) {
       var self = this;
-      var url = '/campaigns/' + encodeURIComponent(this.campaignId) + '/calendar/events';
+      var url = '/campaigns/' + encodeURIComponent(this.campaignId) + '/calendars/events';
 
       Chronicle.apiFetch(url, {
         method: 'POST',

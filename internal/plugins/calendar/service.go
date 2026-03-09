@@ -29,6 +29,8 @@ type CalendarService interface {
 	GetCalendarByID(ctx context.Context, calendarID string) (*Calendar, error)
 	UpdateCalendar(ctx context.Context, calendarID string, input UpdateCalendarInput) error
 	DeleteCalendar(ctx context.Context, calendarID string) error
+	ListCalendars(ctx context.Context, campaignID string) ([]Calendar, error)
+	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
 
 	// Sub-resource bulk updates (replace all).
 	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
@@ -95,7 +97,8 @@ func (s *calendarService) SetEventPublisher(pub CalendarEventPublisher) {
 }
 
 // CreateCalendar creates a new calendar for a campaign with default months and
-// weekdays seeded based on the mode. Only one calendar per campaign is allowed.
+// weekdays seeded based on the mode. Multiple calendars per campaign are supported.
+// The first calendar created for a campaign is automatically set as the default.
 //
 // For real-life mode: seeds Gregorian months (with correct day counts), standard
 // weekdays, 24/60/60 time system, leap year every 4, and syncs current date/time
@@ -104,14 +107,12 @@ func (s *calendarService) SetEventPublisher(pub CalendarEventPublisher) {
 // For fantasy mode: seeds 12 generic months (30 days each) and 7 generic weekdays
 // with 24/60/60 time system defaults.
 func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string, input CreateCalendarInput) (*Calendar, error) {
-	// Check if calendar already exists.
-	existing, err := s.repo.GetByCampaignID(ctx, campaignID)
+	// Check if any calendars already exist to determine default status.
+	existing, err := s.repo.ListByCampaignID(ctx, campaignID)
 	if err != nil {
-		return nil, fmt.Errorf("check existing calendar: %w", err)
+		return nil, fmt.Errorf("check existing calendars: %w", err)
 	}
-	if existing != nil {
-		return nil, apperror.NewValidation("campaign already has a calendar")
-	}
+	isFirst := len(existing) == 0
 
 	if input.Name == "" {
 		input.Name = "Campaign Calendar"
@@ -165,6 +166,8 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 		SecondsPerMinute: input.SecondsPerMinute,
 		LeapYearEvery:    input.LeapYearEvery,
 		LeapYearOffset:   input.LeapYearOffset,
+		SortOrder:        len(existing), // append after existing calendars
+		IsDefault:        isFirst,       // first calendar is the default
 	}
 
 	if err := s.repo.Create(ctx, cal); err != nil {
@@ -373,9 +376,61 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID string,
 	return nil
 }
 
-// DeleteCalendar removes a calendar and all its data.
+// DeleteCalendar removes a calendar and all its data. If the deleted calendar
+// was the default, the first remaining calendar (by sort_order) becomes the new default.
 func (s *calendarService) DeleteCalendar(ctx context.Context, calendarID string) error {
-	return s.repo.Delete(ctx, calendarID)
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+	wasDefault := cal.IsDefault
+	campaignID := cal.CampaignID
+
+	if err := s.repo.Delete(ctx, calendarID); err != nil {
+		return err
+	}
+
+	// If the deleted calendar was the default, promote the first remaining one.
+	if wasDefault {
+		remaining, err := s.repo.ListByCampaignID(ctx, campaignID)
+		if err != nil {
+			return fmt.Errorf("list remaining calendars: %w", err)
+		}
+		if len(remaining) > 0 {
+			if err := s.repo.SetDefault(ctx, campaignID, remaining[0].ID); err != nil {
+				return fmt.Errorf("set new default: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+// ListCalendars returns all calendars for a campaign, ordered by sort_order then name.
+func (s *calendarService) ListCalendars(ctx context.Context, campaignID string) ([]Calendar, error) {
+	cals, err := s.repo.ListByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list calendars: %w", err)
+	}
+	return cals, nil
+}
+
+// SetDefaultCalendar marks a calendar as the campaign's default, unsetting all others.
+func (s *calendarService) SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error {
+	// Verify the calendar belongs to this campaign (IDOR protection).
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+	if cal.CampaignID != campaignID {
+		return apperror.NewForbidden("calendar does not belong to this campaign")
+	}
+	return s.repo.SetDefault(ctx, campaignID, calendarID)
 }
 
 // SetMonths replaces all months. Validates at least one month exists.
@@ -1011,31 +1066,39 @@ func validateVisibilityRules(rulesJSON *string) error {
 }
 
 // SearchCalendarEvents returns calendar events matching a query for the quick search system.
-// Looks up the campaign's calendar first, then searches events by name with role-based filtering.
+// Searches across all calendars in the campaign, including the calendar name in results
+// when the campaign has multiple calendars.
 func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error) {
-	cal, err := s.repo.GetByCampaignID(ctx, campaignID)
+	cals, err := s.repo.ListByCampaignID(ctx, campaignID)
 	if err != nil {
 		return nil, fmt.Errorf("search calendar events: %w", err)
 	}
-	if cal == nil {
+	if len(cals) == 0 {
 		return nil, nil
 	}
 
-	events, err := s.repo.SearchEvents(ctx, cal.ID, query, role)
-	if err != nil {
-		return nil, fmt.Errorf("search calendar events: %w", err)
-	}
+	hasMultiple := len(cals) > 1
+	var results []map[string]string
 
-	results := make([]map[string]string, 0, len(events))
-	for _, e := range events {
-		results = append(results, map[string]string{
-			"id":         e.ID,
-			"name":       e.Name,
-			"type_name":  "Event",
-			"type_icon":  "fa-calendar",
-			"type_color": "#f59e0b",
-			"url":        fmt.Sprintf("/campaigns/%s/calendar", campaignID),
-		})
+	for _, cal := range cals {
+		events, err := s.repo.SearchEvents(ctx, cal.ID, query, role)
+		if err != nil {
+			return nil, fmt.Errorf("search calendar events: %w", err)
+		}
+		for _, e := range events {
+			typeName := "Event"
+			if hasMultiple {
+				typeName = fmt.Sprintf("Event [%s]", cal.Name)
+			}
+			results = append(results, map[string]string{
+				"id":         e.ID,
+				"name":       e.Name,
+				"type_name":  typeName,
+				"type_icon":  "fa-calendar",
+				"type_color": "#f59e0b",
+				"url":        fmt.Sprintf("/campaigns/%s/calendars/%s", campaignID, cal.ID),
+			})
+		}
 	}
 	return results, nil
 }

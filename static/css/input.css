@@ -748,6 +748,74 @@
     100% { background-position: -200% 0; }
   }
 
+  /* --- Sidebar Entity Tree --- */
+
+  /* Tree node wrapper with smooth collapse/expand transition. */
+  .sidebar-tree-children {
+    overflow: hidden;
+    transition: max-height 200ms ease-in-out, opacity 200ms ease-in-out;
+  }
+  .sidebar-tree-children[data-collapsed="true"] {
+    max-height: 0 !important;
+    opacity: 0;
+  }
+
+  /* Guide lines: subtle vertical connector for nested items. */
+  .sidebar-tree-node[data-depth]:not([data-depth="0"]) {
+    position: relative;
+  }
+  .sidebar-tree-node[data-depth]:not([data-depth="0"])::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(75, 85, 99, 0.25);
+    pointer-events: none;
+  }
+  /* Position guide lines based on depth level (set inline by JS). */
+
+  /* Folder icon for parent items (has children). */
+  .sidebar-tree-item[data-has-children="true"] .sidebar-tree-icon i {
+    /* JS swaps to fa-folder / fa-folder-open */
+  }
+
+  /* Drag-and-drop feedback: highlighted drop zone. */
+  .sidebar-drop-target {
+    background-color: rgba(99, 102, 241, 0.12) !important;
+    outline: 1px dashed rgba(99, 102, 241, 0.4);
+    outline-offset: -1px;
+    border-radius: 4px;
+  }
+
+  /* Drop indicator line between items. */
+  .sidebar-drop-indicator {
+    height: 2px;
+    background: #6366f1;
+    margin: 0 8px;
+    border-radius: 1px;
+    pointer-events: none;
+    transition: opacity 150ms ease;
+  }
+
+  /* Reparent indicator: shows when dropping onto bottom half of item. */
+  .sidebar-drop-reparent {
+    background-color: rgba(99, 102, 241, 0.08) !important;
+    box-shadow: inset 2px 0 0 #6366f1;
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* Tree toggle button styling. */
+  .sidebar-tree-toggle {
+    transition: transform 150ms ease;
+  }
+  .sidebar-tree-toggle[data-collapsed="true"] {
+    transform: rotate(0deg);
+  }
+  .sidebar-tree-toggle[data-collapsed="false"] {
+    transform: rotate(90deg);
+  }
+
   /* --- Notes Widget --- */
 
   /* Floating action button (bottom-right). */

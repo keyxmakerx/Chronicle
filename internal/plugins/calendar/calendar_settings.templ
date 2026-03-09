@@ -19,7 +19,7 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 			<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
 				<div class="flex items-center gap-3">
 					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", cc.Campaign.ID, cal.ID)) }
 						class="text-fg-muted hover:text-fg transition-colors"
 					>
 						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -33,7 +33,7 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 				</div>
 				<div class="flex items-center gap-2">
 					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/export?events=true", cc.Campaign.ID)) }
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/export?events=true", cc.Campaign.ID, cal.ID)) }
 						class="btn-ghost text-xs flex items-center gap-1.5"
 						download
 					>
@@ -221,7 +221,7 @@ templ generalSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 					:disabled="saving"
 					@click={ fmt.Sprintf(`
 						saving = true; saved = false; error = '';
-						fetch('/campaigns/%s/calendar/settings', {
+						fetch('/campaigns/%s/calendars/%s/settings', {
 							method: 'PUT',
 							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
 							credentials: 'same-origin',
@@ -236,7 +236,7 @@ templ generalSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID, csrfToken) }
 				>
 					<span x-show="!saving">Save Settings</span>
 					<span x-show="saving">Saving...</span>
@@ -323,7 +323,7 @@ templ monthsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken 
 							name: m.name, days: m.days, sort_order: i,
 							is_intercalary: m.is_intercalary, leap_year_days: m.leap_year_days || 0
 						}));
-						fetch('/campaigns/%s/calendar/months', {
+						fetch('/campaigns/%s/calendars/%s/months', {
 							method: 'PUT',
 							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
 							credentials: 'same-origin',
@@ -331,7 +331,7 @@ templ monthsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken 
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID, csrfToken) }
 				>
 					<span x-show="!saving">Save All Months</span>
 					<span x-show="saving">Saving...</span>
@@ -382,7 +382,7 @@ templ weekdaysSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToke
 					@click={ fmt.Sprintf(`
 						saving = true; saved = false; error = '';
 						const payload = weekdays.map((w, i) => ({ name: w.name, sort_order: i }));
-						fetch('/campaigns/%s/calendar/weekdays', {
+						fetch('/campaigns/%s/calendars/%s/weekdays', {
 							method: 'PUT',
 							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
 							credentials: 'same-origin',
@@ -390,7 +390,7 @@ templ weekdaysSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToke
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID, csrfToken) }
 				>
 					<span x-show="!saving">Save All Weekdays</span>
 					<span x-show="saving">Saving...</span>
@@ -459,7 +459,7 @@ templ moonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken s
 						const payload = moons.map(m => ({
 							name: m.name, cycle_days: m.cycle_days, phase_offset: m.phase_offset, color: m.color
 						}));
-						fetch('/campaigns/%s/calendar/moons', {
+						fetch('/campaigns/%s/calendars/%s/moons', {
 							method: 'PUT',
 							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
 							credentials: 'same-origin',
@@ -467,7 +467,7 @@ templ moonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken s
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID, csrfToken) }
 				>
 					<span x-show="!saving">Save All Moons</span>
 					<span x-show="saving">Saving...</span>
@@ -560,7 +560,7 @@ templ seasonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 							description: s.description || null,
 								weather_effect: s.weather_effect || null
 						}));
-						fetch('/campaigns/%s/calendar/seasons', {
+						fetch('/campaigns/%s/calendars/%s/seasons', {
 							method: 'PUT',
 							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
 							credentials: 'same-origin',
@@ -568,7 +568,7 @@ templ seasonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID, csrfToken) }
 				>
 					<span x-show="!saving">Save All Seasons</span>
 					<span x-show="saving">Saving...</span>
@@ -649,7 +649,7 @@ templ erasSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken st
 							color: e.color, description: e.description || null,
 							sort_order: i
 						}));
-						fetch('/campaigns/%s/calendar/eras', {
+						fetch('/campaigns/%s/calendars/%s/eras', {
 							method: 'PUT',
 							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
 							credentials: 'same-origin',
@@ -657,7 +657,7 @@ templ erasSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken st
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID, csrfToken) }
 				>
 					<span x-show="!saving">Save All Eras</span>
 					<span x-show="saving">Saving...</span>
@@ -857,7 +857,7 @@ templ categoriesSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfTo
 							icon: c.icon || '', color: c.color || '#6b7280',
 							sort_order: i
 						}));
-						fetch('/campaigns/%s/calendar/event-categories', {
+						fetch('/campaigns/%s/calendars/%s/event-categories', {
 							method: 'PUT',
 							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
 							credentials: 'same-origin',
@@ -865,7 +865,7 @@ templ categoriesSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfTo
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID, csrfToken) }
 				>
 					<span x-show="!saving">Save Categories</span>
 					<span x-show="saving">Saving...</span>

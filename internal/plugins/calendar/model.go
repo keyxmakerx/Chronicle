@@ -1,7 +1,8 @@
 // Package calendar provides a custom fantasy calendar system for campaigns.
 // Supports non-Gregorian months, named weekdays, moons with phase tracking,
-// named seasons, and events linked to entities. Each campaign has at most
-// one calendar; the addon must be enabled per-campaign.
+// named seasons, and events linked to entities. Each campaign can have
+// multiple calendars (one marked as default); the addon must be enabled
+// per-campaign.
 package calendar
 
 import (
@@ -51,6 +52,8 @@ type Calendar struct {
 	CurrentMinute  int     `json:"current_minute"`
 	LeapYearEvery  int     `json:"leap_year_every"`
 	LeapYearOffset int     `json:"leap_year_offset"`
+	SortOrder      int     `json:"sort_order"`
+	IsDefault      bool    `json:"is_default"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 
@@ -61,6 +64,12 @@ type Calendar struct {
 	Seasons  []Season  `json:"seasons,omitempty"`
 	Eras            []Era            `json:"eras,omitempty"`
 	EventCategories []EventCategory  `json:"event_categories,omitempty"`
+}
+
+// GetCampaignID returns the campaign ID this calendar belongs to.
+// Implements middleware.CampaignScoped for IDOR protection.
+func (c *Calendar) GetCampaignID() string {
+	return c.CampaignID
 }
 
 // IsRealLife returns true if this calendar syncs to real-world time.

@@ -232,20 +232,18 @@ type calendarListerAdapter struct {
 	svc calendar.CalendarService
 }
 
-// ListCalendars returns all calendars for a campaign as lightweight refs.
-// Currently returns at most one (one-per-campaign constraint), but is
-// forward-compatible with future multi-calendar support.
+// ListCalendars returns all calendars for a campaign as lightweight refs
+// for the timeline create form's calendar selector dropdown.
 func (a *calendarListerAdapter) ListCalendars(ctx context.Context, campaignID string) ([]timeline.CalendarRef, error) {
-	cal, err := a.svc.GetCalendar(ctx, campaignID)
+	cals, err := a.svc.ListCalendars(ctx, campaignID)
 	if err != nil {
 		return nil, err
 	}
-	if cal == nil {
-		return nil, nil
+	refs := make([]timeline.CalendarRef, len(cals))
+	for i, cal := range cals {
+		refs[i] = timeline.CalendarRef{ID: cal.ID, Name: cal.Name}
 	}
-	return []timeline.CalendarRef{
-		{ID: cal.ID, Name: cal.Name},
-	}, nil
+	return refs, nil
 }
 
 // calendarEventListerAdapter wraps calendar.CalendarService to implement the

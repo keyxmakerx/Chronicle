@@ -18,6 +18,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 
 	player := campaigns.RequireRole(campaigns.RolePlayer)
 
+	// Full-page journal view.
+	cg.GET("/journal", h.ShowJournal, player)
+
 	// CRUD — own notes + shared note access.
 	cg.GET("/notes", h.List, player)
 	cg.POST("/notes", h.Create, player)

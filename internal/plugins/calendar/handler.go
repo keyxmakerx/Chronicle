@@ -64,24 +64,59 @@ func (h *Handler) SetSessionLister(sl SessionLister) {
 	h.sessionLister = sl
 }
 
-// Show renders the calendar page (monthly grid view).
-// GET /campaigns/:id/calendar
-func (h *Handler) Show(c echo.Context) error {
+// requireCalendarInCampaign fetches a calendar by ID and verifies it belongs
+// to the given campaign. Returns 404 if not found or mismatched, preventing
+// cross-campaign IDOR attacks.
+func (h *Handler) requireCalendarInCampaign(c echo.Context, calendarID, campaignID string) (*Calendar, error) {
+	return middleware.RequireInCampaign(c.Request().Context(), h.svc.GetCalendarByID, calendarID, campaignID, "calendar")
+}
+
+// Index lists all calendars for a campaign. If none exist, shows the setup page.
+// If exactly one exists, redirects to that calendar's detail view.
+// GET /campaigns/:id/calendars
+func (h *Handler) Index(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	cals, err := h.svc.ListCalendars(ctx, cc.Campaign.ID)
 	if err != nil {
 		return err
 	}
 
-	// If no calendar exists, show setup page.
-	if cal == nil {
+	// No calendars: show setup page.
+	if len(cals) == 0 {
 		csrfToken := middleware.GetCSRFToken(c)
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
 		}
 		return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
+	}
+
+	// Single calendar: redirect directly to it.
+	if len(cals) == 1 {
+		return c.Redirect(http.StatusSeeOther,
+			fmt.Sprintf("/campaigns/%s/calendars/%s", cc.Campaign.ID, cals[0].ID))
+	}
+
+	// Multiple calendars: show list page.
+	isOwner := cc.MemberRole >= campaigns.RoleOwner
+	csrfToken := middleware.GetCSRFToken(c)
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, CalendarListFragment(cc, cals, isOwner, csrfToken))
+	}
+	return middleware.Render(c, http.StatusOK, CalendarListPage(cc, cals, isOwner, csrfToken))
+}
+
+// Show renders the calendar page (monthly grid view).
+// GET /campaigns/:id/calendars/:calId
+func (h *Handler) Show(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	calID := c.Param("calId")
+
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	// Parse optional year/month query params, default to current date.
@@ -134,14 +169,31 @@ func (h *Handler) Show(c echo.Context) error {
 }
 
 // EmbedCalendar returns a compact calendar grid fragment for dashboard embedding.
-// GET /campaigns/:id/calendar/embed
+// Accepts calId as a route param or query param for dashboard block config.
+// GET /campaigns/:id/calendars/:calId/embed
 func (h *Handler) EmbedCalendar(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil {
-		return err
+	// Support both route param and query param for backward compat with dashboard blocks.
+	calID := c.Param("calId")
+	if calID == "" {
+		calID = c.QueryParam("calendarId")
+	}
+
+	var cal *Calendar
+	var err error
+	if calID != "" {
+		cal, err = h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+		if err != nil {
+			return middleware.Render(c, http.StatusOK, CalendarEmbedEmpty(cc))
+		}
+	} else {
+		// No calendar specified: use the default/first calendar.
+		cal, err = h.svc.GetCalendar(ctx, cc.Campaign.ID)
+		if err != nil {
+			return err
+		}
 	}
 
 	// No calendar exists — return a setup prompt.
@@ -185,17 +237,15 @@ func (h *Handler) EmbedCalendar(c echo.Context) error {
 }
 
 // ShowWeek renders the calendar week view.
-// GET /campaigns/:id/calendar/week
+// GET /campaigns/:id/calendars/:calId/week
 func (h *Handler) ShowWeek(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
 	if err != nil {
 		return err
-	}
-	if cal == nil {
-		return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/calendar")
 	}
 
 	// Parse year/month/day query params, default to current date.
@@ -324,17 +374,15 @@ func (h *Handler) ShowWeek(c echo.Context) error {
 }
 
 // ShowDay renders the calendar day view for a single day.
-// GET /campaigns/:id/calendar/day
+// GET /campaigns/:id/calendars/:calId/day
 func (h *Handler) ShowDay(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
 	if err != nil {
 		return err
-	}
-	if cal == nil {
-		return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/calendar")
 	}
 
 	// Parse year/month/day query params, default to current date.
@@ -400,14 +448,15 @@ func (h *Handler) ShowDay(c echo.Context) error {
 
 // SessionsFragment returns the sessions modal content as an HTMX fragment.
 // Used to refresh the session list inside the calendar's sessions overlay.
-// GET /campaigns/:id/calendar/sessions-fragment
+// GET /campaigns/:id/calendars/:calId/sessions-fragment
 func (h *Handler) SessionsFragment(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	userID := auth.GetUserID(c)
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
 		return c.NoContent(http.StatusNotFound)
 	}
 
@@ -432,7 +481,7 @@ func (h *Handler) SessionsFragment(c echo.Context) error {
 }
 
 // CreateCalendar handles calendar creation from the setup form.
-// POST /campaigns/:id/calendar
+// POST /campaigns/:id/calendars
 func (h *Handler) CreateCalendar(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
@@ -454,7 +503,7 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 	}
 
 	// Service handles mode-specific defaults and seeds months/weekdays.
-	_, err := h.svc.CreateCalendar(ctx, cc.Campaign.ID, CreateCalendarInput{
+	cal, err := h.svc.CreateCalendar(ctx, cc.Campaign.ID, CreateCalendarInput{
 		Mode:        mode,
 		Name:        name,
 		EpochName:   epoch,
@@ -480,21 +529,22 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 	// months, weekdays, etc. Real-life mode goes straight to the calendar.
 	if mode == ModeRealLife {
 		return c.Redirect(http.StatusSeeOther,
-			fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID))
+			fmt.Sprintf("/campaigns/%s/calendars/%s", cc.Campaign.ID, cal.ID))
 	}
 	return c.Redirect(http.StatusSeeOther,
-		fmt.Sprintf("/campaigns/%s/calendar/settings", cc.Campaign.ID))
+		fmt.Sprintf("/campaigns/%s/calendars/%s/settings", cc.Campaign.ID, cal.ID))
 }
 
 // UpdateCalendarAPI updates calendar settings.
-// PUT /campaigns/:id/calendar/settings
+// PUT /campaigns/:id/calendars/:calId/settings
 func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	var req struct {
@@ -534,14 +584,15 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 }
 
 // UpdateMonthsAPI replaces all months.
-// PUT /campaigns/:id/calendar/months
+// PUT /campaigns/:id/calendars/:calId/months
 func (h *Handler) UpdateMonthsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	var months []MonthInput
@@ -553,14 +604,15 @@ func (h *Handler) UpdateMonthsAPI(c echo.Context) error {
 }
 
 // UpdateWeekdaysAPI replaces all weekdays.
-// PUT /campaigns/:id/calendar/weekdays
+// PUT /campaigns/:id/calendars/:calId/weekdays
 func (h *Handler) UpdateWeekdaysAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	var weekdays []WeekdayInput
@@ -572,14 +624,15 @@ func (h *Handler) UpdateWeekdaysAPI(c echo.Context) error {
 }
 
 // UpdateMoonsAPI replaces all moons.
-// PUT /campaigns/:id/calendar/moons
+// PUT /campaigns/:id/calendars/:calId/moons
 func (h *Handler) UpdateMoonsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	var moons []MoonInput
@@ -591,14 +644,28 @@ func (h *Handler) UpdateMoonsAPI(c echo.Context) error {
 }
 
 // CreateEventAPI creates a new event.
-// POST /campaigns/:id/calendar/events
+// POST /campaigns/:id/calendars/:calId/events
 func (h *Handler) CreateEventAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	var cal *Calendar
+	var err error
+	if calID != "" {
+		cal, err = h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+		if err != nil {
+			return err
+		}
+	} else {
+		// No calendar specified: use the default calendar (for dashboard widget quick-add).
+		cal, err = h.svc.GetCalendar(ctx, cc.Campaign.ID)
+		if err != nil {
+			return err
+		}
+		if cal == nil {
+			return apperror.NewNotFound("no default calendar found")
+		}
 	}
 
 	var req struct {
@@ -781,14 +848,15 @@ func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
 }
 
 // UpdateSeasonsAPI replaces all seasons.
-// PUT /campaigns/:id/calendar/seasons
+// PUT /campaigns/:id/calendars/:calId/seasons
 func (h *Handler) UpdateSeasonsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	var seasons []Season
@@ -800,14 +868,15 @@ func (h *Handler) UpdateSeasonsAPI(c echo.Context) error {
 }
 
 // UpdateErasAPI replaces all eras.
-// PUT /campaigns/:id/calendar/eras
+// PUT /campaigns/:id/calendars/:calId/eras
 func (h *Handler) UpdateErasAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	var eras []EraInput
@@ -819,14 +888,15 @@ func (h *Handler) UpdateErasAPI(c echo.Context) error {
 }
 
 // UpdateEventCategoriesAPI replaces all event categories.
-// PUT /campaigns/:id/calendar/event-categories
+// PUT /campaigns/:id/calendars/:calId/event-categories
 func (h *Handler) UpdateEventCategoriesAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	var cats []EventCategoryInput
@@ -838,14 +908,15 @@ func (h *Handler) UpdateEventCategoriesAPI(c echo.Context) error {
 }
 
 // GetEventCategoriesAPI returns all event categories for a calendar.
-// GET /campaigns/:id/calendar/event-categories
+// GET /campaigns/:id/calendars/:calId/event-categories
 func (h *Handler) GetEventCategoriesAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	cats, err := h.svc.GetEventCategories(ctx, cal.ID)
@@ -859,35 +930,31 @@ func (h *Handler) GetEventCategoriesAPI(c echo.Context) error {
 }
 
 // DeleteCalendarAPI removes the calendar and all its data.
-// DELETE /campaigns/:id/calendar
+// DELETE /campaigns/:id/calendars/:calId
 func (h *Handler) DeleteCalendarAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	if _, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID); err != nil {
+		return err
 	}
 
-	if err := h.svc.DeleteCalendar(ctx, cal.ID); err != nil {
+	if err := h.svc.DeleteCalendar(ctx, calID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
 }
 
 // ShowSettings renders the calendar settings page.
-// GET /campaigns/:id/calendar/settings
+// GET /campaigns/:id/calendars/:calId/settings
 func (h *Handler) ShowSettings(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
 	if err != nil {
 		return err
-	}
-	if cal == nil {
-		return c.Redirect(http.StatusSeeOther,
-			fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID))
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
@@ -898,14 +965,15 @@ func (h *Handler) ShowSettings(c echo.Context) error {
 }
 
 // AdvanceDateAPI moves the current date forward by N days.
-// POST /campaigns/:id/calendar/advance
+// POST /campaigns/:id/calendars/:calId/advance
 func (h *Handler) AdvanceDateAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	var req struct {
@@ -923,14 +991,15 @@ func (h *Handler) AdvanceDateAPI(c echo.Context) error {
 
 // AdvanceTimeAPI moves the current time forward by hours and/or minutes,
 // rolling over into days as needed.
-// POST /campaigns/:id/calendar/advance-time
+// POST /campaigns/:id/calendars/:calId/advance-time
 func (h *Handler) AdvanceTimeAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	var req struct {
@@ -955,7 +1024,9 @@ func (h *Handler) AdvanceTimeAPI(c echo.Context) error {
 
 // EntityEventsFragment returns a small HTMX fragment listing calendar events
 // linked to a specific entity. Loaded lazily from entity show pages.
-// GET /campaigns/:id/calendar/entity-events/:eid
+// Uses the default calendar for the campaign since entity pages don't know which
+// calendar context to use; events from all calendars are included.
+// GET /campaigns/:id/calendars/entity-events/:eid
 func (h *Handler) EntityEventsFragment(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
@@ -985,14 +1056,25 @@ func (h *Handler) EntityEventsFragment(c echo.Context) error {
 
 // UpcomingEventsFragment returns an HTMX fragment with upcoming calendar events.
 // Used by the calendar_preview dashboard block via lazy-loading.
-// GET /campaigns/:id/calendar/upcoming
+// Supports both /calendars/:calId/upcoming and /calendars/upcoming (default calendar).
+// GET /campaigns/:id/calendars/:calId/upcoming
 func (h *Handler) UpcomingEventsFragment(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil {
-		return err
+	calID := c.Param("calId")
+	var cal *Calendar
+	var err error
+	if calID != "" {
+		cal, err = h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+		if err != nil {
+			return middleware.Render(c, http.StatusOK, UpcomingEventsEmpty())
+		}
+	} else {
+		cal, err = h.svc.GetCalendar(ctx, cc.Campaign.ID)
+		if err != nil {
+			return err
+		}
 	}
 	if cal == nil {
 		return middleware.Render(c, http.StatusOK, UpcomingEventsEmpty())
@@ -1016,22 +1098,15 @@ func (h *Handler) UpcomingEventsFragment(c echo.Context) error {
 }
 
 // ShowTimeline renders the timeline (list) view of calendar events.
-// GET /campaigns/:id/calendar/timeline
+// GET /campaigns/:id/calendars/:calId/timeline
 func (h *Handler) ShowTimeline(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
 	if err != nil {
 		return err
-	}
-
-	if cal == nil {
-		csrfToken := middleware.GetCSRFToken(c)
-		if middleware.IsHTMX(c) {
-			return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
-		}
-		return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
 	}
 
 	// Default to current year, allow override via query param.
@@ -1066,14 +1141,15 @@ func (h *Handler) ShowTimeline(c echo.Context) error {
 }
 
 // ExportCalendarAPI returns the calendar as a downloadable JSON file.
-// GET /campaigns/:id/calendar/export
+// GET /campaigns/:id/calendars/:calId/export
 func (h *Handler) ExportCalendarAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
 	}
 
 	// Optionally include events.
@@ -1094,17 +1170,15 @@ func (h *Handler) ExportCalendarAPI(c echo.Context) error {
 
 // ImportCalendarAPI handles calendar import from an uploaded JSON file.
 // Accepts Simple Calendar, Calendaria, Fantasy-Calendar, and Chronicle formats.
-// POST /campaigns/:id/calendar/import
+// POST /campaigns/:id/calendars/:calId/import
 func (h *Handler) ImportCalendarAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
+	calID := c.Param("calId")
 
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
 	if err != nil {
 		return err
-	}
-	if cal == nil {
-		return apperror.NewNotFound("calendar not found — create a calendar first")
 	}
 
 	// Read uploaded file (multipart form or raw JSON body).
@@ -1195,7 +1269,7 @@ func (h *Handler) ImportPreviewAPI(c echo.Context) error {
 
 // ImportFromSetupAPI handles import during calendar setup (no existing calendar).
 // Creates a new calendar and applies the imported configuration.
-// POST /campaigns/:id/calendar/import-setup
+// POST /campaigns/:id/calendars/import-setup
 func (h *Handler) ImportFromSetupAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
@@ -1262,7 +1336,7 @@ func (h *Handler) ImportFromSetupAPI(c echo.Context) error {
 
 	// Redirect to settings page so user can review the import.
 	return c.Redirect(http.StatusSeeOther,
-		fmt.Sprintf("/campaigns/%s/calendar/settings", cc.Campaign.ID))
+		fmt.Sprintf("/campaigns/%s/calendars/%s/settings", cc.Campaign.ID, cal.ID))
 }
 
 // Silence unused import warnings for json and io packages.

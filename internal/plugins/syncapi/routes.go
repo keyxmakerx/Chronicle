@@ -70,6 +70,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 
 	// Calendar read endpoints (require "read" permission + calendar addon).
 	calGroup := cg.Group("", RequireAddonAPI(addonChecker, "calendar"))
+	calGroup.GET("/calendars", calAPI.ListCalendars, RequirePermission(PermRead))
 	calGroup.GET("/calendar", calAPI.GetCalendar, RequirePermission(PermRead))
 	calGroup.GET("/calendar/date", calAPI.GetCurrentDate, RequirePermission(PermRead))
 	calGroup.GET("/calendar/events", calAPI.ListEvents, RequirePermission(PermRead))
