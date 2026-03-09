@@ -1,11 +1,11 @@
-// Package modules defines the module registry for Chronicle.
-// Modules are game-system content packs (e.g., D&D 5e, Pathfinder) that
+// Package modules defines the system registry for Chronicle.
+// Modules are game system content packs (e.g., D&D 5e, Pathfinder) that
 // provide reference data, tooltips, and stat blocks. They are read-only
 // and enabled per campaign via campaign settings.
 //
 // The registry auto-discovers modules by scanning subdirectories for
-// manifest.json files at startup. See ModuleManifest for the JSON spec.
-package modules
+// manifest.json files at startup. See SystemManifest for the JSON spec.
+package systems
 
 import (
 	"fmt"
@@ -24,32 +24,32 @@ const (
 )
 
 // globalLoader is the singleton module loader initialized by Init().
-var globalLoader *ModuleLoader
+var globalLoader *SystemLoader
 
-// ModuleFactory creates a Module instance from its manifest and data
+// SystemFactory creates a System instance from its manifest and data
 // directory. Used by the factory registry to instantiate modules
 // without circular imports between the modules package and subpackages.
-type ModuleFactory func(manifest *ModuleManifest, dataDir string) (Module, error)
+type SystemFactory func(manifest *SystemManifest, dataDir string) (System, error)
 
 // factories maps module IDs to their factory functions. Subpackages
 // register themselves via RegisterFactory in their init() functions.
-var factories = make(map[string]ModuleFactory)
+var factories = make(map[string]SystemFactory)
 
-// RegisterFactory registers a module factory for a given module ID.
+// RegisterFactory registers a system factory for a given module ID.
 // Called from subpackage init() functions (e.g., dnd5e.init()).
-func RegisterFactory(id string, factory ModuleFactory) {
+func RegisterFactory(id string, factory SystemFactory) {
 	factories[id] = factory
 }
 
-// Init initializes the module registry by scanning the given directory
+// Init initializes the system registry by scanning the given directory
 // for module subdirectories containing manifest.json files. Must be
 // called once at application startup before any Registry()/Find() calls.
 func Init(modulesDir string) error {
-	globalLoader = NewModuleLoader(modulesDir)
+	globalLoader = NewSystemLoader(modulesDir)
 	if err := globalLoader.DiscoverAll(); err != nil {
-		return fmt.Errorf("module discovery failed: %w", err)
+		return fmt.Errorf("system discovery failed: %w", err)
 	}
-	slog.Info("module registry initialized",
+	slog.Info("system registry initialized",
 		slog.Int("count", globalLoader.Count()),
 	)
 	return nil
@@ -57,7 +57,7 @@ func Init(modulesDir string) error {
 
 // Registry returns all discovered module manifests, sorted by name.
 // Returns nil if Init() has not been called.
-func Registry() []*ModuleManifest {
+func Registry() []*SystemManifest {
 	if globalLoader == nil {
 		return nil
 	}
@@ -66,28 +66,28 @@ func Registry() []*ModuleManifest {
 
 // Find returns the manifest for a given module ID, or nil if not found.
 // Returns nil if Init() has not been called.
-func Find(id string) *ModuleManifest {
+func Find(id string) *SystemManifest {
 	if globalLoader == nil {
 		return nil
 	}
 	return globalLoader.Get(id)
 }
 
-// FindModule returns the live Module instance for a given module ID,
+// FindSystem returns the live System instance for a given module ID,
 // or nil if not found or not yet instantiated. Only modules with
 // status "available" have live instances.
-func FindModule(id string) Module {
+func FindSystem(id string) System { 
 	if globalLoader == nil {
 		return nil
 	}
-	return globalLoader.GetModule(id)
+	return globalLoader.GetSystem(id)
 }
 
-// AllModules returns all live Module instances, for iteration.
+// AllSystems returns all live System instances, for iteration.
 // Only includes modules that have been successfully instantiated.
-func AllModules() []Module {
+func AllSystems() []System {
 	if globalLoader == nil {
 		return nil
 	}
-	return globalLoader.AllModules()
+	return globalLoader.AllSystems()
 }

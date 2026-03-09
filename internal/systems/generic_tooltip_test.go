@@ -1,4 +1,4 @@
-package modules
+package systems
 
 import (
 	"strings"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestGenericTooltipRenderer_SupportedCategories(t *testing.T) {
-	manifest := &ModuleManifest{
+	manifest := &SystemManifest{
 		ID: "test-system",
 		Categories: []CategoryDef{
 			{Slug: "spells", Name: "Spells"},
@@ -30,7 +30,7 @@ func TestGenericTooltipRenderer_SupportedCategories(t *testing.T) {
 }
 
 func TestGenericTooltipRenderer_RenderTooltip(t *testing.T) {
-	manifest := &ModuleManifest{
+	manifest := &SystemManifest{
 		ID: "pf2e",
 		Categories: []CategoryDef{
 			{
@@ -157,7 +157,7 @@ func TestGenericTooltipRenderer_RenderTooltip(t *testing.T) {
 }
 
 func TestGenericTooltipRenderer_OnlyShowsManifestFields(t *testing.T) {
-	manifest := &ModuleManifest{
+	manifest := &SystemManifest{
 		ID: "test",
 		Categories: []CategoryDef{
 			{
@@ -206,7 +206,7 @@ func TestGenericTooltipRenderer_OnlyShowsManifestFields(t *testing.T) {
 }
 
 func TestGenericTooltipRenderer_FieldOrder(t *testing.T) {
-	manifest := &ModuleManifest{
+	manifest := &SystemManifest{
 		ID: "test",
 		Categories: []CategoryDef{
 			{
@@ -250,7 +250,7 @@ func TestGenericTooltipRenderer_FieldOrder(t *testing.T) {
 	}
 }
 
-func TestGenericModule(t *testing.T) {
+func TestGenericSystem(t *testing.T) {
 	// Create a temp data directory with test data.
 	dir := t.TempDir()
 	writeTestData(t, dir, "creatures", []ReferenceItem{
@@ -258,7 +258,7 @@ func TestGenericModule(t *testing.T) {
 		{ID: "goblin", Name: "Goblin", Summary: "A small pest", Properties: map[string]any{"cr": "1/4"}},
 	})
 
-	manifest := &ModuleManifest{
+	manifest := &SystemManifest{
 		ID:      "custom-system",
 		Name:    "Custom RPG",
 		Version: "1.0.0",
@@ -273,9 +273,9 @@ func TestGenericModule(t *testing.T) {
 		},
 	}
 
-	mod, err := NewGenericModule(manifest, dir)
+	mod, err := NewGenericSystem(manifest, dir)
 	if err != nil {
-		t.Fatalf("NewGenericModule: %v", err)
+		t.Fatalf("NewGenericSystem: %v", err)
 	}
 
 	// Verify interface compliance.

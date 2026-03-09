@@ -1,4 +1,4 @@
-package modules
+package systems
 
 import (
 	"os"
@@ -109,12 +109,12 @@ func TestLoadManifest_InvalidJSON(t *testing.T) {
 func TestValidateManifest(t *testing.T) {
 	tests := []struct {
 		name    string
-		m       ModuleManifest
+		m       SystemManifest
 		wantErr bool
 	}{
 		{
 			name: "valid minimal",
-			m: ModuleManifest{
+			m: SystemManifest{
 				ID:         "test",
 				Name:       "Test",
 				Version:    "1.0.0",
@@ -124,7 +124,7 @@ func TestValidateManifest(t *testing.T) {
 		},
 		{
 			name: "missing id",
-			m: ModuleManifest{
+			m: SystemManifest{
 				Name:       "Test",
 				Version:    "1.0.0",
 				APIVersion: "1",
@@ -133,7 +133,7 @@ func TestValidateManifest(t *testing.T) {
 		},
 		{
 			name: "missing name",
-			m: ModuleManifest{
+			m: SystemManifest{
 				ID:         "test",
 				Version:    "1.0.0",
 				APIVersion: "1",
@@ -142,7 +142,7 @@ func TestValidateManifest(t *testing.T) {
 		},
 		{
 			name: "missing version",
-			m: ModuleManifest{
+			m: SystemManifest{
 				ID:         "test",
 				Name:       "Test",
 				APIVersion: "1",
@@ -151,7 +151,7 @@ func TestValidateManifest(t *testing.T) {
 		},
 		{
 			name: "missing api_version",
-			m: ModuleManifest{
+			m: SystemManifest{
 				ID:      "test",
 				Name:    "Test",
 				Version: "1.0.0",
@@ -160,7 +160,7 @@ func TestValidateManifest(t *testing.T) {
 		},
 		{
 			name: "invalid status",
-			m: ModuleManifest{
+			m: SystemManifest{
 				ID:         "test",
 				Name:       "Test",
 				Version:    "1.0.0",
@@ -171,7 +171,7 @@ func TestValidateManifest(t *testing.T) {
 		},
 		{
 			name: "empty status defaults to coming_soon",
-			m: ModuleManifest{
+			m: SystemManifest{
 				ID:         "test",
 				Name:       "Test",
 				Version:    "1.0.0",
@@ -182,7 +182,7 @@ func TestValidateManifest(t *testing.T) {
 		},
 		{
 			name: "category missing slug",
-			m: ModuleManifest{
+			m: SystemManifest{
 				ID:         "test",
 				Name:       "Test",
 				Version:    "1.0.0",
@@ -193,7 +193,7 @@ func TestValidateManifest(t *testing.T) {
 		},
 		{
 			name: "category missing name",
-			m: ModuleManifest{
+			m: SystemManifest{
 				ID:         "test",
 				Name:       "Test",
 				Version:    "1.0.0",
@@ -204,7 +204,7 @@ func TestValidateManifest(t *testing.T) {
 		},
 		{
 			name: "valid with categories",
-			m: ModuleManifest{
+			m: SystemManifest{
 				ID:         "test",
 				Name:       "Test",
 				Version:    "1.0.0",
@@ -225,8 +225,8 @@ func TestValidateManifest(t *testing.T) {
 	}
 }
 
-func TestModuleManifest_CategoryNames(t *testing.T) {
-	m := &ModuleManifest{
+func TestSystemManifest_CategoryNames(t *testing.T) {
+	m := &SystemManifest{
 		Categories: []CategoryDef{
 			{Slug: "spells", Name: "Spells"},
 			{Slug: "monsters", Name: "Monsters"},
@@ -243,7 +243,7 @@ func TestModuleManifest_CategoryNames(t *testing.T) {
 }
 
 func TestValidateManifest_DefaultsEmptyStatus(t *testing.T) {
-	m := ModuleManifest{
+	m := SystemManifest{
 		ID:         "test",
 		Name:       "Test",
 		Version:    "1.0.0",

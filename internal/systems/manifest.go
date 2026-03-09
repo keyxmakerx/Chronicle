@@ -1,4 +1,4 @@
-package modules
+package systems
 
 import (
 	"encoding/json"
@@ -6,11 +6,11 @@ import (
 	"os"
 )
 
-// ModuleManifest describes a module's metadata, capabilities, and content
+// SystemManifest describes a module's metadata, capabilities, and content
 // structure. Each module declares its manifest in a manifest.json file
 // in its directory root. The manifest is the single source of truth for
 // what a module provides.
-type ModuleManifest struct {
+type SystemManifest struct {
 	// ID is the unique machine-readable identifier (e.g., "dnd5e").
 	ID string `json:"id"`
 
@@ -32,7 +32,7 @@ type ModuleManifest struct {
 	// Icon is the Font Awesome icon class (e.g., "fa-dragon").
 	Icon string `json:"icon"`
 
-	// APIVersion is the module framework API version this manifest targets.
+	// APIVersion is the system framework API version this manifest targets.
 	// Used for forward compatibility checks (e.g., "1").
 	APIVersion string `json:"api_version"`
 
@@ -104,7 +104,7 @@ type EntityPresetDef struct {
 
 // CategoryNames returns a flat list of category display names.
 // Convenience method for backward-compatible display on admin pages.
-func (m *ModuleManifest) CategoryNames() []string {
+func (m *SystemManifest) CategoryNames() []string {
 	names := make([]string, len(m.Categories))
 	for i, c := range m.Categories {
 		names[i] = c.Name
@@ -114,13 +114,13 @@ func (m *ModuleManifest) CategoryNames() []string {
 
 // LoadManifest reads a manifest.json file from disk, unmarshals it, and
 // validates required fields. Returns the parsed manifest or an error.
-func LoadManifest(path string) (*ModuleManifest, error) {
+func LoadManifest(path string) (*SystemManifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading manifest %s: %w", path, err)
 	}
 
-	var m ModuleManifest
+	var m SystemManifest
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("parsing manifest %s: %w", path, err)
 	}
@@ -134,7 +134,7 @@ func LoadManifest(path string) (*ModuleManifest, error) {
 
 // ValidateManifest checks that a manifest has all required fields and
 // valid values. Returns a descriptive error for the first violation found.
-func ValidateManifest(m *ModuleManifest) error {
+func ValidateManifest(m *SystemManifest) error {
 	if m.ID == "" {
 		return fmt.Errorf("id is required")
 	}

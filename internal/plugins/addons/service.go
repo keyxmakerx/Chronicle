@@ -59,7 +59,7 @@ func (s *addonService) CountFeatures(ctx context.Context) (int, error) {
 	}
 	count := 0
 	for _, a := range addons {
-		if a.Category == CategoryModule {
+		if a.Category == CategorySystem {
 			continue
 		}
 		if a.Status == StatusPlanned && !installedAddons[a.Slug] {
@@ -104,7 +104,7 @@ func (s *addonService) GetBySlug(ctx context.Context, slug string) (*Addon, erro
 // Must stay in sync with the ENUM on addons.category in the database.
 // See migration 000027 for the ALTER TABLE that added 'plugin'.
 var validCategories = map[AddonCategory]bool{
-	CategoryModule:      true,
+	CategorySystem:      true,
 	CategoryWidget:      true,
 	CategoryIntegration: true,
 	CategoryPlugin:      true,
@@ -289,13 +289,13 @@ func (s *addonService) EnableForCampaign(ctx context.Context, campaignID string,
 	}
 
 	// Game systems are mutually exclusive — disable any other enabled module.
-	if addon.Category == CategoryModule {
+	if addon.Category == CategorySystem {
 		campaignAddons, err := s.repo.ListForCampaign(ctx, campaignID)
 		if err != nil {
 			return apperror.NewInternal(fmt.Errorf("listing campaign addons: %w", err))
 		}
 		for _, ca := range campaignAddons {
-			if ca.AddonCategory == CategoryModule && ca.Enabled && ca.AddonID != addonID {
+			if ca.AddonCategory == CategorySystem && ca.Enabled && ca.AddonID != addonID {
 				if err := s.repo.DisableForCampaign(ctx, campaignID, ca.AddonID); err != nil {
 					return apperror.NewInternal(fmt.Errorf("disabling previous game system: %w", err))
 				}

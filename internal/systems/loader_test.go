@@ -1,4 +1,4 @@
-package modules
+package systems
 
 import (
 	"os"
@@ -26,12 +26,12 @@ func writeTestManifest(t *testing.T, dir, id, name string) {
 	}
 }
 
-func TestModuleLoader_DiscoverAll_HappyPath(t *testing.T) {
+func TestSystemLoader_DiscoverAll_HappyPath(t *testing.T) {
 	base := t.TempDir()
-	writeTestManifest(t, filepath.Join(base, "alpha"), "alpha", "Alpha Module")
-	writeTestManifest(t, filepath.Join(base, "beta"), "beta", "Beta Module")
+	writeTestManifest(t, filepath.Join(base, "alpha"), "alpha", "Alpha System")
+	writeTestManifest(t, filepath.Join(base, "beta"), "beta", "Beta System")
 
-	loader := NewModuleLoader(base)
+	loader := NewSystemLoader(base)
 	if err := loader.DiscoverAll(); err != nil {
 		t.Fatalf("DiscoverAll() error = %v", err)
 	}
@@ -46,18 +46,18 @@ func TestModuleLoader_DiscoverAll_HappyPath(t *testing.T) {
 	}
 
 	// All() should be sorted by name.
-	if all[0].Name != "Alpha Module" {
-		t.Errorf("All()[0].Name = %q, want %q", all[0].Name, "Alpha Module")
+	if all[0].Name != "Alpha System" {
+		t.Errorf("All()[0].Name = %q, want %q", all[0].Name, "Alpha System")
 	}
-	if all[1].Name != "Beta Module" {
-		t.Errorf("All()[1].Name = %q, want %q", all[1].Name, "Beta Module")
+	if all[1].Name != "Beta System" {
+		t.Errorf("All()[1].Name = %q, want %q", all[1].Name, "Beta System")
 	}
 }
 
-func TestModuleLoader_DiscoverAll_EmptyDir(t *testing.T) {
+func TestSystemLoader_DiscoverAll_EmptyDir(t *testing.T) {
 	base := t.TempDir()
 
-	loader := NewModuleLoader(base)
+	loader := NewSystemLoader(base)
 	if err := loader.DiscoverAll(); err != nil {
 		t.Fatalf("DiscoverAll() error = %v", err)
 	}
@@ -67,7 +67,7 @@ func TestModuleLoader_DiscoverAll_EmptyDir(t *testing.T) {
 	}
 }
 
-func TestModuleLoader_DiscoverAll_SkipsInvalidManifest(t *testing.T) {
+func TestSystemLoader_DiscoverAll_SkipsInvalidManifest(t *testing.T) {
 	base := t.TempDir()
 
 	// Create a valid module.
@@ -83,7 +83,7 @@ func TestModuleLoader_DiscoverAll_SkipsInvalidManifest(t *testing.T) {
 		t.Fatalf("writing invalid manifest: %v", err)
 	}
 
-	loader := NewModuleLoader(base)
+	loader := NewSystemLoader(base)
 	if err := loader.DiscoverAll(); err != nil {
 		t.Fatalf("DiscoverAll() error = %v", err)
 	}
@@ -94,7 +94,7 @@ func TestModuleLoader_DiscoverAll_SkipsInvalidManifest(t *testing.T) {
 	}
 }
 
-func TestModuleLoader_DiscoverAll_SkipsDirWithoutManifest(t *testing.T) {
+func TestSystemLoader_DiscoverAll_SkipsDirWithoutManifest(t *testing.T) {
 	base := t.TempDir()
 
 	// Create a directory without manifest.json.
@@ -105,7 +105,7 @@ func TestModuleLoader_DiscoverAll_SkipsDirWithoutManifest(t *testing.T) {
 	// Create a valid module.
 	writeTestManifest(t, filepath.Join(base, "valid"), "valid", "Valid Module")
 
-	loader := NewModuleLoader(base)
+	loader := NewSystemLoader(base)
 	if err := loader.DiscoverAll(); err != nil {
 		t.Fatalf("DiscoverAll() error = %v", err)
 	}
@@ -115,19 +115,19 @@ func TestModuleLoader_DiscoverAll_SkipsDirWithoutManifest(t *testing.T) {
 	}
 }
 
-func TestModuleLoader_DiscoverAll_NonexistentDir(t *testing.T) {
-	loader := NewModuleLoader("/nonexistent/path")
+func TestSystemLoader_DiscoverAll_NonexistentDir(t *testing.T) {
+	loader := NewSystemLoader("/nonexistent/path")
 	err := loader.DiscoverAll()
 	if err == nil {
 		t.Fatal("expected error for nonexistent dir, got nil")
 	}
 }
 
-func TestModuleLoader_Get(t *testing.T) {
+func TestSystemLoader_Get(t *testing.T) {
 	base := t.TempDir()
 	writeTestManifest(t, filepath.Join(base, "test"), "test", "Test Module")
 
-	loader := NewModuleLoader(base)
+	loader := NewSystemLoader(base)
 	if err := loader.DiscoverAll(); err != nil {
 		t.Fatalf("DiscoverAll() error = %v", err)
 	}
@@ -146,11 +146,11 @@ func TestModuleLoader_Get(t *testing.T) {
 	}
 }
 
-func TestModuleLoader_Dir(t *testing.T) {
+func TestSystemLoader_Dir(t *testing.T) {
 	base := t.TempDir()
 	writeTestManifest(t, filepath.Join(base, "test"), "test", "Test Module")
 
-	loader := NewModuleLoader(base)
+	loader := NewSystemLoader(base)
 	if err := loader.DiscoverAll(); err != nil {
 		t.Fatalf("DiscoverAll() error = %v", err)
 	}
@@ -166,15 +166,15 @@ func TestModuleLoader_Dir(t *testing.T) {
 	}
 }
 
-func TestModuleLoader_GenericAutoInstantiation(t *testing.T) {
+func TestSystemLoader_GenericAutoInstantiation(t *testing.T) {
 	base := t.TempDir()
 
 	// Create a module directory with manifest + data (no Go factory).
-	modDir := filepath.Join(base, "custom-rpg")
-	writeTestManifest(t, modDir, "custom-rpg", "Custom RPG")
+	sysDir := filepath.Join(base, "custom-rpg")
+	writeTestManifest(t, sysDir, "custom-rpg", "Custom RPG")
 
 	// Create data directory with a JSON file.
-	dataDir := filepath.Join(modDir, "data")
+	dataDir := filepath.Join(sysDir, "data")
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		t.Fatalf("creating data dir: %v", err)
 	}
@@ -182,13 +182,13 @@ func TestModuleLoader_GenericAutoInstantiation(t *testing.T) {
 		{ID: "sword", Name: "Sword", Summary: "A sharp blade"},
 	})
 
-	loader := NewModuleLoader(base)
+	loader := NewSystemLoader(base)
 	if err := loader.DiscoverAll(); err != nil {
 		t.Fatalf("DiscoverAll() error = %v", err)
 	}
 
 	// Should auto-instantiate as a generic module.
-	mod := loader.GetModule("custom-rpg")
+	mod := loader.GetSystem("custom-rpg")
 	if mod == nil {
 		t.Fatal("expected generic module to be auto-instantiated")
 	}

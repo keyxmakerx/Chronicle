@@ -60,10 +60,10 @@ type SessionSearcher interface {
 	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 }
 
-// ModuleSearcher provides game system module search results for the quick
-// search popup. Implemented by modules.ModuleSearchAdapter.
-type ModuleSearcher interface {
-	SearchModuleContent(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+// SystemSearcher provides game system search results for the quick
+// search popup. Implemented by systems.SystemSearchAdapter.
+type SystemSearcher interface {
+	SearchSystemContent(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 }
 
 // MemberLister retrieves campaign members for the permissions UI.
@@ -95,7 +95,7 @@ type Handler struct {
 	mapSearcher        MapSearcher
 	calendarSearcher   CalendarSearcher
 	sessionSearcher    SessionSearcher
-	moduleSearcher     ModuleSearcher
+	systemSearcher     SystemSearcher
 	memberLister       MemberLister
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
@@ -156,10 +156,10 @@ func (h *Handler) SetSessionSearcher(ss SessionSearcher) {
 	h.sessionSearcher = ss
 }
 
-// SetModuleSearcher sets the module searcher for quick search results.
+// SetSystemSearcher sets the system searcher for quick search results.
 // Called after all plugins are wired to avoid initialization order issues.
-func (h *Handler) SetModuleSearcher(ms ModuleSearcher) {
-	h.moduleSearcher = ms
+func (h *Handler) SetSystemSearcher(ms SystemSearcher) {
+	h.systemSearcher = ms
 }
 
 // SetMemberLister sets the member lister for the permissions UI.
@@ -701,8 +701,8 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 				total += len(sessResults)
 			}
 		}
-		if h.moduleSearcher != nil && query != "" {
-			if modResults, err := h.moduleSearcher.SearchModuleContent(
+		if h.systemSearcher != nil && query != "" {
+			if modResults, err := h.systemSearcher.SearchSystemContent(
 				c.Request().Context(), cc.Campaign.ID, query,
 			); err == nil {
 				items = append(items, modResults...)

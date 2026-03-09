@@ -1,4 +1,4 @@
-// Package dnd5e implements the D&D 5th Edition module for Chronicle.
+// Package dnd5e implements the D&D 5th Edition game system for Chronicle.
 // It loads SRD reference data (spells, monsters, items, etc.) from JSON
 // files and provides tooltip rendering for hover previews.
 package dnd5e
@@ -8,51 +8,51 @@ import (
 	"html"
 	"strings"
 
-	"github.com/keyxmakerx/chronicle/internal/modules"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
 func init() {
-	modules.RegisterFactory("dnd5e", func(manifest *modules.ModuleManifest, dataDir string) (modules.Module, error) {
+	systems.RegisterFactory("dnd5e", func(manifest *systems.SystemManifest, dataDir string) (systems.System, error) {
 		return New(manifest, dataDir)
 	})
 }
 
-// DnD5eModule is the concrete Module implementation for D&D 5th Edition.
+// DnD5eSystem is the concrete System implementation for D&D 5th Edition.
 // It wraps a JSONProvider for data access and a tooltip renderer for
 // hover preview HTML fragments.
-type DnD5eModule struct {
-	manifest *modules.ModuleManifest
-	provider *modules.JSONProvider
+type DnD5eSystem struct {
+	manifest *systems.SystemManifest
+	provider *systems.JSONProvider
 	renderer *TooltipRenderer
 }
 
-// New creates and initializes a D&D 5e module from its manifest and
+// New creates and initializes a D&D 5e system from its manifest and
 // data directory. Returns an error if the data files cannot be loaded.
-func New(manifest *modules.ModuleManifest, dataDir string) (*DnD5eModule, error) {
-	provider, err := modules.NewJSONProvider(manifest.ID, dataDir)
+func New(manifest *systems.SystemManifest, dataDir string) (*DnD5eSystem, error) {
+	provider, err := systems.NewJSONProvider(manifest.ID, dataDir)
 	if err != nil {
 		return nil, fmt.Errorf("dnd5e: loading data: %w", err)
 	}
 
-	return &DnD5eModule{
+	return &DnD5eSystem{
 		manifest: manifest,
 		provider: provider,
 		renderer: &TooltipRenderer{},
 	}, nil
 }
 
-// Info returns the module's manifest metadata.
-func (m *DnD5eModule) Info() *modules.ModuleManifest {
+// Info returns the system's manifest metadata.
+func (m *DnD5eSystem) Info() *systems.SystemManifest {
 	return m.manifest
 }
 
 // DataProvider returns the JSON-file data provider for SRD content.
-func (m *DnD5eModule) DataProvider() modules.DataProvider {
+func (m *DnD5eSystem) DataProvider() systems.DataProvider {
 	return m.provider
 }
 
 // TooltipRenderer returns the D&D-specific tooltip renderer.
-func (m *DnD5eModule) TooltipRenderer() modules.TooltipRenderer {
+func (m *DnD5eSystem) TooltipRenderer() systems.TooltipRenderer {
 	return m.renderer
 }
 
@@ -63,42 +63,42 @@ type TooltipRenderer struct{}
 
 // RenderTooltip returns an HTML fragment for a D&D 5e reference item.
 // The output is a self-contained tooltip card suitable for hover previews.
-func (r *TooltipRenderer) RenderTooltip(item *modules.ReferenceItem) (string, error) {
+func (r *TooltipRenderer) RenderTooltip(item *systems.ReferenceItem) (string, error) {
 	if item == nil {
 		return "", fmt.Errorf("nil reference item")
 	}
 
 	var b strings.Builder
 
-	b.WriteString(`<div class="module-tooltip module-tooltip--dnd5e">`)
-	b.WriteString(`<div class="module-tooltip__header">`)
+	b.WriteString(`<div class="system-tooltip system-tooltip--dnd5e">`)
+	b.WriteString(`<div class="system-tooltip__header">`)
 	b.WriteString(`<strong>`)
 	b.WriteString(html.EscapeString(item.Name))
 	b.WriteString(`</strong>`)
 
 	// Category badge.
-	b.WriteString(`<span class="module-tooltip__badge">`)
+	b.WriteString(`<span class="system-tooltip__badge">`)
 	b.WriteString(html.EscapeString(item.Category))
 	b.WriteString(`</span>`)
 	b.WriteString(`</div>`)
 
 	// Properties table (varies by category).
 	if len(item.Properties) > 0 {
-		b.WriteString(`<div class="module-tooltip__props">`)
+		b.WriteString(`<div class="system-tooltip__props">`)
 		writeCategoryProperties(&b, item)
 		b.WriteString(`</div>`)
 	}
 
 	// Summary.
 	if item.Summary != "" {
-		b.WriteString(`<div class="module-tooltip__summary">`)
+		b.WriteString(`<div class="system-tooltip__summary">`)
 		b.WriteString(html.EscapeString(item.Summary))
 		b.WriteString(`</div>`)
 	}
 
 	// Source badge.
 	if item.Source != "" {
-		b.WriteString(`<div class="module-tooltip__source">`)
+		b.WriteString(`<div class="system-tooltip__source">`)
 		b.WriteString(html.EscapeString(item.Source))
 		b.WriteString(`</div>`)
 	}
@@ -114,7 +114,7 @@ func (r *TooltipRenderer) SupportedCategories() []string {
 
 // writeCategoryProperties renders the appropriate property rows based on
 // the item's category. Each category shows only its relevant fields.
-func writeCategoryProperties(b *strings.Builder, item *modules.ReferenceItem) {
+func writeCategoryProperties(b *strings.Builder, item *systems.ReferenceItem) {
 	switch item.Category {
 	case "spells":
 		writeProperty(b, item.Properties, "level", "Level")
@@ -146,9 +146,8 @@ func writeCategoryProperties(b *strings.Builder, item *modules.ReferenceItem) {
 		writeProperty(b, item.Properties, "effect", "Effect")
 	default:
 		// Unknown category: render all properties generically.
-		for k, v := range item.Properties {
+		for k := range item.Properties {
 			writeProperty(b, item.Properties, k, k)
-			_ = v
 		}
 	}
 }
@@ -159,8 +158,8 @@ func writeProperty(b *strings.Builder, props map[string]any, key, label string) 
 	if !ok {
 		return
 	}
-	b.WriteString(`<div class="module-tooltip__prop">`)
-	b.WriteString(`<span class="module-tooltip__label">`)
+	b.WriteString(`<div class="system-tooltip__prop">`)
+	b.WriteString(`<span class="system-tooltip__label">`)
 	b.WriteString(html.EscapeString(label))
 	b.WriteString(`:</span> `)
 	b.WriteString(html.EscapeString(fmt.Sprintf("%v", val)))

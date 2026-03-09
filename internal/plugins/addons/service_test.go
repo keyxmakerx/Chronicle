@@ -207,7 +207,7 @@ func TestCreate_EmptySlug(t *testing.T) {
 	_, err := svc.Create(context.Background(), CreateAddonInput{
 		Slug:     "",
 		Name:     "Test",
-		Category: CategoryModule,
+		Category: CategorySystem,
 	})
 	assertAppError(t, err, 400)
 }
@@ -217,7 +217,7 @@ func TestCreate_EmptyName(t *testing.T) {
 	_, err := svc.Create(context.Background(), CreateAddonInput{
 		Slug:     "test",
 		Name:     "",
-		Category: CategoryModule,
+		Category: CategorySystem,
 	})
 	assertAppError(t, err, 400)
 }
@@ -243,7 +243,7 @@ func TestCreate_DuplicateSlug(t *testing.T) {
 	_, err := svc.Create(context.Background(), CreateAddonInput{
 		Slug:     "existing",
 		Name:     "Test",
-		Category: CategoryModule,
+		Category: CategorySystem,
 	})
 	assertAppError(t, err, 409)
 }
@@ -262,7 +262,7 @@ func TestCreate_RepoError(t *testing.T) {
 	_, err := svc.Create(context.Background(), CreateAddonInput{
 		Slug:     "test",
 		Name:     "Test",
-		Category: CategoryModule,
+		Category: CategorySystem,
 	})
 	assertAppError(t, err, 500)
 }
@@ -328,7 +328,7 @@ func TestCreate_EmptyDescription(t *testing.T) {
 		Slug:        "test",
 		Name:        "Test",
 		Description: "   ", // Whitespace-only should become nil.
-		Category:    CategoryModule,
+		Category:    CategorySystem,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -341,7 +341,7 @@ func TestCreate_EmptyDescription(t *testing.T) {
 // --- Update Tests ---
 
 func TestUpdate_Success(t *testing.T) {
-	existing := &Addon{ID: 1, Slug: "test", Name: "Old", Status: StatusActive, Category: CategoryModule}
+	existing := &Addon{ID: 1, Slug: "test", Name: "Old", Status: StatusActive, Category: CategorySystem}
 	repo := &mockAddonRepo{
 		findByIDFn: func(ctx context.Context, id int) (*Addon, error) {
 			return existing, nil

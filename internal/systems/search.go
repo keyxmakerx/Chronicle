@@ -1,4 +1,4 @@
-package modules
+package systems
 
 import (
 	"context"
@@ -7,29 +7,29 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 )
 
-// ModuleSearchAdapter adapts module DataProvider.Search() results to the
-// entity handler's ModuleSearcher interface. It checks which modules are
+// SystemSearchAdapter adapts module DataProvider.Search() results to the
+// entity handler's SystemSearcher interface. It checks which modules are
 // enabled as addons for the campaign before searching.
-type ModuleSearchAdapter struct {
+type SystemSearchAdapter struct {
 	addonSvc addons.AddonService
 }
 
-// NewModuleSearchAdapter creates an adapter that will check addon
+// NewSystemSearchAdapter creates an adapter that will check addon
 // enablement before searching module content.
-func NewModuleSearchAdapter(addonSvc addons.AddonService) *ModuleSearchAdapter {
-	return &ModuleSearchAdapter{addonSvc: addonSvc}
+func NewSystemSearchAdapter(addonSvc addons.AddonService) *SystemSearchAdapter {
+	return &SystemSearchAdapter{addonSvc: addonSvc}
 }
 
-// SearchModuleContent searches all enabled modules for the given campaign
+// SearchSystemContent searches all enabled modules for the given campaign
 // and returns results formatted for the entity search API response.
-func (a *ModuleSearchAdapter) SearchModuleContent(ctx context.Context, campaignID, query string) ([]map[string]string, error) {
+func (a *SystemSearchAdapter) SearchSystemContent(ctx context.Context, campaignID, query string) ([]map[string]string, error) {
 	if query == "" {
 		return nil, nil
 	}
 
 	var results []map[string]string
 
-	for _, mod := range AllModules() {
+	for _, mod := range AllSystems() {
 		info := mod.Info()
 
 		// Check if this module's addon is enabled for the campaign.
@@ -56,7 +56,7 @@ func (a *ModuleSearchAdapter) SearchModuleContent(ctx context.Context, campaignI
 				"type_name": info.Name + " · " + item.Category,
 				"type_icon": info.Icon,
 				"type_color": "#6B7280",
-				"url":       fmt.Sprintf("/campaigns/%s/modules/%s/%s/%s", campaignID, info.ID, item.Category, item.ID),
+				"url":       fmt.Sprintf("/campaigns/%s/systems/%s/%s/%s", campaignID, info.ID, item.Category, item.ID),
 			})
 		}
 	}

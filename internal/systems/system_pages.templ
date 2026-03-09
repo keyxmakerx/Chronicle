@@ -1,7 +1,7 @@
-// module_pages.templ provides Templ components for the module reference
+// module_pages.templ provides Templ components for the system reference
 // pages: category index, item list, and item detail views.
 
-package modules
+package systems
 
 import (
 	"fmt"
@@ -19,22 +19,22 @@ type categoryInfo struct {
 	Count int
 }
 
-// ModuleIndexPage renders the full module category index page.
-templ ModuleIndexPage(cc *campaigns.CampaignContext, manifest *ModuleManifest, cats []categoryInfo) {
+// SystemIndexPage renders the full module category index page.
+templ SystemIndexPage(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo) {
 	@layouts.App(manifest.Name + " - " + cc.Campaign.Name) {
-		@ModuleIndexContent(cc, manifest, cats)
+		@SystemIndexContent(cc, manifest, cats)
 	}
 }
 
-// ModuleIndexContent renders the module category index (for HTMX swap).
-templ ModuleIndexContent(cc *campaigns.CampaignContext, manifest *ModuleManifest, cats []categoryInfo) {
+// SystemIndexContent renders the module category index (for HTMX swap).
+templ SystemIndexContent(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo) {
 	<div id="module-content">
 		@components.Breadcrumbs([]components.BreadcrumbItem{
 			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
 			{Label: manifest.Name},
 		})
 
-		<!-- Module header -->
+		<!-- System header -->
 		<div class="mb-6">
 			<div class="flex items-center gap-3 mb-2">
 				if manifest.Icon != "" {
@@ -51,9 +51,9 @@ templ ModuleIndexContent(cc *campaigns.CampaignContext, manifest *ModuleManifest
 		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 			for _, cat := range cats {
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/modules/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug)) }
 					class="block bg-surface border border-border rounded-lg p-5 hover:border-primary/50 hover:shadow-md transition-all group"
-					hx-get={ fmt.Sprintf("/campaigns/%s/modules/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug) }
+					hx-get={ fmt.Sprintf("/campaigns/%s/systems/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug) }
 					hx-target="#module-content"
 					hx-swap="outerHTML"
 					hx-push-url="true"
@@ -74,18 +74,18 @@ templ ModuleIndexContent(cc *campaigns.CampaignContext, manifest *ModuleManifest
 }
 
 // CategoryListPage renders the full category item list page.
-templ CategoryListPage(cc *campaigns.CampaignContext, manifest *ModuleManifest, cat *CategoryDef, items []ReferenceItem) {
+templ CategoryListPage(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, items []ReferenceItem) {
 	@layouts.App(cat.Name + " - " + manifest.Name) {
 		@CategoryListContent(cc, manifest, cat, items)
 	}
 }
 
 // CategoryListContent renders the category item list (for HTMX swap).
-templ CategoryListContent(cc *campaigns.CampaignContext, manifest *ModuleManifest, cat *CategoryDef, items []ReferenceItem) {
+templ CategoryListContent(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, items []ReferenceItem) {
 	<div id="module-content">
 		@components.Breadcrumbs([]components.BreadcrumbItem{
 			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
-			{Label: manifest.Name, Href: fmt.Sprintf("/campaigns/%s/modules/%s", cc.Campaign.ID, manifest.ID)},
+			{Label: manifest.Name, Href: fmt.Sprintf("/campaigns/%s/systems/%s", cc.Campaign.ID, manifest.ID)},
 			{Label: cat.Name},
 		})
 
@@ -117,14 +117,14 @@ templ CategoryListContent(cc *campaigns.CampaignContext, manifest *ModuleManifes
 					for _, item := range items {
 						<tr
 							class="hover:bg-surface-raised/50 cursor-pointer transition-colors"
-							hx-get={ fmt.Sprintf("/campaigns/%s/modules/%s/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug, item.ID) }
+							hx-get={ fmt.Sprintf("/campaigns/%s/systems/%s/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug, item.ID) }
 							hx-target="#module-content"
 							hx-swap="outerHTML"
 							hx-push-url="true"
 						>
 							<td class="px-4 py-3">
 								<a
-									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/modules/%s/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug, item.ID)) }
+									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug, item.ID)) }
 									class="font-medium text-primary hover:underline"
 								>
 									{ item.Name }
@@ -147,19 +147,19 @@ templ CategoryListContent(cc *campaigns.CampaignContext, manifest *ModuleManifes
 }
 
 // ItemDetailPage renders the full item detail page.
-templ ItemDetailPage(cc *campaigns.CampaignContext, manifest *ModuleManifest, cat *CategoryDef, item *ReferenceItem) {
+templ ItemDetailPage(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, item *ReferenceItem) {
 	@layouts.App(item.Name + " - " + manifest.Name) {
 		@ItemDetailContent(cc, manifest, cat, item)
 	}
 }
 
 // ItemDetailContent renders the item detail view (for HTMX swap).
-templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *ModuleManifest, cat *CategoryDef, item *ReferenceItem) {
+templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest, cat *CategoryDef, item *ReferenceItem) {
 	<div id="module-content">
 		@components.Breadcrumbs([]components.BreadcrumbItem{
 			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
-			{Label: manifest.Name, Href: fmt.Sprintf("/campaigns/%s/modules/%s", cc.Campaign.ID, manifest.ID)},
-			{Label: cat.Name, Href: fmt.Sprintf("/campaigns/%s/modules/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug)},
+			{Label: manifest.Name, Href: fmt.Sprintf("/campaigns/%s/systems/%s", cc.Campaign.ID, manifest.ID)},
+			{Label: cat.Name, Href: fmt.Sprintf("/campaigns/%s/systems/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug)},
 			{Label: item.Name},
 		})
 

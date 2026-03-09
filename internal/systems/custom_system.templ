@@ -1,13 +1,13 @@
-// custom_module.templ renders the custom game system upload and management
+// custom_system.templ renders the custom game system upload and management
 // section on the campaign settings page.
-package modules
+package systems
 
 import "fmt"
 
-// CustomModuleSection renders the custom game system panel. Shows the
-// upload form if no custom module is installed, or the installed module
+// CustomSystemSection renders the custom game system panel. Shows the
+// upload form if no custom system is installed, or the installed module
 // info with a remove button if one exists.
-templ CustomModuleSection(campaignID string, manifest *ModuleManifest, totalItems int, csrfToken string) {
+templ CustomSystemSection(campaignID string, manifest *SystemManifest, totalItems int, csrfToken string) {
 	<div class="mb-2">
 		<h2 class="section-header mb-3">
 			<i class="fa-solid fa-wand-magic-sparkles mr-2 text-fg-muted"></i>Custom Game System
@@ -17,7 +17,7 @@ templ CustomModuleSection(campaignID string, manifest *ModuleManifest, totalItem
 		</p>
 
 		if manifest != nil {
-			// Show installed custom module.
+			// Show installed custom system.
 			<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
 				<div class="flex items-center gap-3">
 					<span class="w-8 h-8 rounded-lg flex items-center justify-center bg-violet-100 dark:bg-violet-900/30">
@@ -39,16 +39,16 @@ templ CustomModuleSection(campaignID string, manifest *ModuleManifest, totalItem
 				</div>
 				<div class="flex items-center gap-2">
 					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/modules/%s", campaignID, manifest.ID)) }
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s", campaignID, manifest.ID)) }
 						class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors"
 					>
 						<i class="fa-solid fa-book-open text-[10px]"></i>
 						Browse
 					</a>
 					<button
-						hx-delete={ fmt.Sprintf("/campaigns/%s/modules/custom", campaignID) }
+						hx-delete={ fmt.Sprintf("/campaigns/%s/systems/custom", campaignID) }
 						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-						hx-target="#custom-module-section"
+						hx-target="#custom-system-section"
 						hx-swap="innerHTML"
 						hx-confirm="Remove this custom game system? Your campaign data is not affected."
 						class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
@@ -78,9 +78,9 @@ templ CustomModuleSection(campaignID string, manifest *ModuleManifest, totalItem
 						name="file"
 						accept=".zip"
 						class="hidden"
-						hx-post={ fmt.Sprintf("/campaigns/%s/modules/upload", campaignID) }
+						hx-post={ fmt.Sprintf("/campaigns/%s/systems/upload", campaignID) }
 						hx-encoding="multipart/form-data"
-						hx-target="#custom-module-section"
+						hx-target="#custom-system-section"
 						hx-swap="innerHTML"
 						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
 					/>

@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/keyxmakerx/chronicle/internal/modules"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
 func TestNew(t *testing.T) {
-	manifest := &modules.ModuleManifest{
+	manifest := &systems.SystemManifest{
 		ID:   "dnd5e",
 		Name: "D&D 5th Edition",
 	}
@@ -30,7 +30,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestNew_DataLoading(t *testing.T) {
-	manifest := &modules.ModuleManifest{
+	manifest := &systems.SystemManifest{
 		ID:   "dnd5e",
 		Name: "D&D 5th Edition",
 	}
@@ -80,7 +80,7 @@ func TestNew_DataLoading(t *testing.T) {
 }
 
 func TestNew_SpecificItems(t *testing.T) {
-	manifest := &modules.ModuleManifest{
+	manifest := &systems.SystemManifest{
 		ID:   "dnd5e",
 		Name: "D&D 5th Edition",
 	}
@@ -120,8 +120,8 @@ func TestNew_SpecificItems(t *testing.T) {
 			if item.Name != tt.wantName {
 				t.Errorf("name = %q, want %q", item.Name, tt.wantName)
 			}
-			if item.ModuleID != "dnd5e" {
-				t.Errorf("module_id = %q, want %q", item.ModuleID, "dnd5e")
+			if item.SystemID != "dnd5e" {
+				t.Errorf("system_id = %q, want %q", item.SystemID, "dnd5e")
 			}
 			if val, ok := item.Properties[tt.wantProp]; ok {
 				if s, ok := val.(string); ok && s != tt.wantVal {
@@ -135,7 +135,7 @@ func TestNew_SpecificItems(t *testing.T) {
 }
 
 func TestNew_Search(t *testing.T) {
-	manifest := &modules.ModuleManifest{
+	manifest := &systems.SystemManifest{
 		ID:   "dnd5e",
 		Name: "D&D 5th Edition",
 	}
@@ -167,7 +167,7 @@ func TestNew_Search(t *testing.T) {
 }
 
 func TestNew_InvalidDataDir(t *testing.T) {
-	manifest := &modules.ModuleManifest{
+	manifest := &systems.SystemManifest{
 		ID:   "dnd5e",
 		Name: "D&D 5th Edition",
 	}
@@ -198,13 +198,13 @@ func TestTooltipRenderer_RenderTooltip(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		item     *modules.ReferenceItem
+		item     *systems.ReferenceItem
 		contains []string
 		wantErr  bool
 	}{
 		{
 			name: "spell tooltip",
-			item: &modules.ReferenceItem{
+			item: &systems.ReferenceItem{
 				Name:     "Fireball",
 				Category: "spells",
 				Summary:  "A ball of fire",
@@ -221,12 +221,12 @@ func TestTooltipRenderer_RenderTooltip(t *testing.T) {
 				"Evocation",
 				"150 feet",
 				"SRD 5.1",
-				"module-tooltip--dnd5e",
+				"system-tooltip--dnd5e",
 			},
 		},
 		{
 			name: "monster tooltip",
-			item: &modules.ReferenceItem{
+			item: &systems.ReferenceItem{
 				Name:     "Goblin",
 				Category: "monsters",
 				Summary:  "A small creature",
@@ -245,7 +245,7 @@ func TestTooltipRenderer_RenderTooltip(t *testing.T) {
 		},
 		{
 			name: "condition tooltip",
-			item: &modules.ReferenceItem{
+			item: &systems.ReferenceItem{
 				Name:     "Blinded",
 				Category: "conditions",
 				Summary:  "Can't see",
@@ -262,7 +262,7 @@ func TestTooltipRenderer_RenderTooltip(t *testing.T) {
 		},
 		{
 			name: "class tooltip",
-			item: &modules.ReferenceItem{
+			item: &systems.ReferenceItem{
 				Name:     "Wizard",
 				Category: "classes",
 				Properties: map[string]any{
@@ -279,7 +279,7 @@ func TestTooltipRenderer_RenderTooltip(t *testing.T) {
 		},
 		{
 			name: "race tooltip",
-			item: &modules.ReferenceItem{
+			item: &systems.ReferenceItem{
 				Name:     "Elf",
 				Category: "races",
 				Properties: map[string]any{
@@ -295,7 +295,7 @@ func TestTooltipRenderer_RenderTooltip(t *testing.T) {
 		},
 		{
 			name: "item tooltip",
-			item: &modules.ReferenceItem{
+			item: &systems.ReferenceItem{
 				Name:     "Bag of Holding",
 				Category: "items",
 				Properties: map[string]any{
@@ -341,7 +341,7 @@ func TestTooltipRenderer_CategoryIsolation(t *testing.T) {
 	r := &TooltipRenderer{}
 
 	// A spell tooltip should NOT render monster-specific properties.
-	spellItem := &modules.ReferenceItem{
+	spellItem := &systems.ReferenceItem{
 		Name:     "Fireball",
 		Category: "spells",
 		Properties: map[string]any{

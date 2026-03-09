@@ -66,7 +66,7 @@ templ CampaignAddonsListFragment(campaignID string, addons []CampaignAddon, csrf
 		</div>
 	}
 
-	if countCampaignAddonsByCategory(addons, CategoryModule) > 0 {
+	if countCampaignAddonsByCategory(addons, CategorySystem) > 0 {
 		<div class="mb-6">
 			<h2 class="section-header mb-3">
 				<i class="fa-solid fa-dice-d20 mr-2 text-fg-muted"></i>Game Systems
@@ -76,7 +76,7 @@ templ CampaignAddonsListFragment(campaignID string, addons []CampaignAddon, csrf
 			</p>
 			<div class="space-y-2">
 				for _, a := range addons {
-					if a.AddonCategory == CategoryModule {
+					if a.AddonCategory == CategorySystem {
 						@campaignAddonRow(campaignID, a, csrfToken)
 					}
 				}
@@ -84,12 +84,12 @@ templ CampaignAddonsListFragment(campaignID string, addons []CampaignAddon, csrf
 		</div>
 	}
 
-	// Custom game system upload section (lazy-loaded from modules handler).
+	// Custom game system upload section (lazy-loaded from systems handler).
 	<div class="mb-6"
-		hx-get={ fmt.Sprintf("/campaigns/%s/modules/custom", campaignID) }
+		hx-get={ fmt.Sprintf("/campaigns/%s/systems/custom", campaignID) }
 		hx-trigger="load"
 		hx-swap="innerHTML"
-		id="custom-module-section"
+		id="custom-system-section"
 	>
 	</div>
 

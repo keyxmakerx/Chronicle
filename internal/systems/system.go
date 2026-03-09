@@ -1,19 +1,19 @@
-// Package modules defines the module framework for Chronicle.
-// Modules are read-only game-system content packs that provide
+// Package modules defines the system framework for Chronicle.
+// Modules are read-only game system content packs that provide
 // reference data (spells, monsters, items, stat blocks) and tooltip
 // rendering. They implement sandboxed interfaces and never access
 // the database, Echo router, or plugin services directly.
-package modules
+package systems
 
-// Module is the sandboxed interface that every game-system content pack
+// System is the sandboxed interface that every game system content pack
 // must implement. It provides metadata, reference data access, and
 // tooltip rendering without any access to Chronicle's infrastructure.
-type Module interface {
+type System interface {
 	// Info returns the module's manifest metadata.
-	Info() *ModuleManifest
+	Info() *SystemManifest
 
 	// DataProvider returns the module's reference data provider, or nil
-	// if the module has no data loaded yet (coming_soon modules).
+	// if the system has no data loaded yet (coming_soon modules).
 	DataProvider() DataProvider
 
 	// TooltipRenderer returns the module's tooltip renderer, or nil
@@ -51,7 +51,7 @@ type TooltipRenderer interface {
 	SupportedCategories() []string
 }
 
-// ReferenceItem is the standard struct for all module reference data.
+// ReferenceItem is the standard struct for all system reference data.
 // It provides a uniform shape regardless of game system, with
 // system-specific details in the Properties map.
 type ReferenceItem struct {
@@ -80,6 +80,6 @@ type ReferenceItem struct {
 	// Source identifies where this data comes from (e.g., "SRD 5.1", "ORC").
 	Source string `json:"source,omitempty"`
 
-	// ModuleID identifies which module owns this item.
-	ModuleID string `json:"module_id"`
+	// SystemID identifies which module owns this item.
+	SystemID string `json:"system_id"`
 }

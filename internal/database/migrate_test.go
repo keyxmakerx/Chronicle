@@ -13,10 +13,11 @@ import (
 
 // validAddonCategories must match the ENUM values on addons.category.
 // Update this set when adding new ENUM values via ALTER TABLE.
-// Current ENUM: ENUM('module', 'widget', 'integration', 'plugin')
-// Defined in 000015, extended in 000027.
+// Current ENUM: ENUM('system', 'widget', 'integration', 'plugin')
+// Defined in 000015, extended in 000027, renamed module→system in 000060.
 var validAddonCategories = map[string]bool{
-	"module":      true,
+	"system":      true,
+	"module":      true, // Legacy: referenced in old migrations.
 	"widget":      true,
 	"integration": true,
 	"plugin":      true,

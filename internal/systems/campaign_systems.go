@@ -1,8 +1,8 @@
-// campaign_modules.go manages per-campaign custom game system modules.
+// campaign_modules.go manages per-campaign custom game systems.
 // Campaign owners can upload ZIP files containing manifest.json + data/*.json
 // to create custom reference content for their campaign. These modules use
-// GenericModule (no Go code needed) and are stored in the media directory.
-package modules
+// GenericSystem (no Go code needed) and are stored in the media directory.
+package systems
 
 import (
 	"archive/zip"
@@ -16,29 +16,29 @@ import (
 	"sync"
 )
 
-// maxModuleZipSize limits custom module ZIP uploads to 50 MB.
-const maxModuleZipSize = 50 * 1024 * 1024
+// maxSystemZipSize limits custom system ZIP uploads to 50 MB.
+const maxSystemZipSize = 50 * 1024 * 1024
 
 // maxDataFileSize limits individual JSON data files to 10 MB.
 const maxDataFileSize = 10 * 1024 * 1024
 
-// CampaignModuleManager manages custom game system modules uploaded by
-// campaign owners. Each campaign can have at most one custom module.
-// Modules are stored on disk and loaded into memory as GenericModule instances.
-type CampaignModuleManager struct {
+// CampaignSystemManager manages custom game systems uploaded by
+// campaign owners. Each campaign can have at most one custom system.
+// Modules are stored on disk and loaded into memory as GenericSystem instances.
+type CampaignSystemManager struct {
 	mu       sync.RWMutex
 	baseDir  string                    // Root storage dir (e.g., ./media/modules).
-	modules  map[string]*GenericModule // campaignID → loaded module instance.
-	manifests map[string]*ModuleManifest // campaignID → manifest (even if module failed to load).
+	modules  map[string]*GenericSystem // campaignID → loaded module instance.
+	manifests map[string]*SystemManifest // campaignID → manifest (even if module failed to load).
 }
 
-// NewCampaignModuleManager creates a manager that stores custom modules
+// NewCampaignSystemManager creates a manager that stores custom systems
 // under baseDir/<campaignID>/. Discovers and loads any existing modules.
-func NewCampaignModuleManager(baseDir string) *CampaignModuleManager {
-	mgr := &CampaignModuleManager{
+func NewCampaignSystemManager(baseDir string) *CampaignSystemManager {
+	mgr := &CampaignSystemManager{
 		baseDir:   baseDir,
-		modules:   make(map[string]*GenericModule),
-		manifests: make(map[string]*ModuleManifest),
+		modules:   make(map[string]*GenericSystem),
+		manifests: make(map[string]*SystemManifest),
 	}
 
 	// Discover existing uploads on startup.
@@ -47,8 +47,8 @@ func NewCampaignModuleManager(baseDir string) *CampaignModuleManager {
 	return mgr
 }
 
-// GetModule returns the custom module for a campaign, or nil if none.
-func (m *CampaignModuleManager) GetModule(campaignID string) Module {
+// GetSystem returns the custom system for a campaign, or nil if none.
+func (m *CampaignSystemManager) GetSystem(campaignID string) System { 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	mod := m.modules[campaignID]
@@ -58,19 +58,19 @@ func (m *CampaignModuleManager) GetModule(campaignID string) Module {
 	return mod
 }
 
-// GetManifest returns the custom module manifest for a campaign, or nil.
-func (m *CampaignModuleManager) GetManifest(campaignID string) *ModuleManifest {
+// GetManifest returns the custom system manifest for a campaign, or nil.
+func (m *CampaignSystemManager) GetManifest(campaignID string) *SystemManifest {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.manifests[campaignID]
 }
 
-// Install extracts a ZIP file containing a custom game system module,
+// Install extracts a ZIP file containing a custom game system,
 // validates it, stores it on disk, and loads it into memory.
 // Returns the parsed manifest on success.
-func (m *CampaignModuleManager) Install(campaignID string, zipData io.ReaderAt, zipSize int64) (*ModuleManifest, error) {
-	if zipSize > maxModuleZipSize {
-		return nil, fmt.Errorf("module ZIP exceeds maximum size of %d MB", maxModuleZipSize/(1024*1024))
+func (m *CampaignSystemManager) Install(campaignID string, zipData io.ReaderAt, zipSize int64) (*SystemManifest, error) {
+	if zipSize > maxSystemZipSize {
+		return nil, fmt.Errorf("module ZIP exceeds maximum size of %d MB", maxSystemZipSize/(1024*1024))
 	}
 
 	zr, err := zip.NewReader(zipData, zipSize)
@@ -121,7 +121,7 @@ func (m *CampaignModuleManager) Install(campaignID string, zipData io.ReaderAt, 
 		}
 	}
 
-	// Prefix custom module ID to avoid collisions with built-in modules.
+	// Prefix custom system ID to avoid collisions with built-in modules.
 	if !strings.HasPrefix(manifest.ID, "custom-") {
 		manifest.ID = "custom-" + manifest.ID
 	}
@@ -132,8 +132,8 @@ func (m *CampaignModuleManager) Install(campaignID string, zipData io.ReaderAt, 
 	m.removeFromDisk(campaignID)
 
 	// Extract to disk.
-	modDir := m.campaignModuleDir(campaignID)
-	if err := os.MkdirAll(filepath.Join(modDir, "data"), 0o755); err != nil {
+	sysDir := m.campaignModuleDir(campaignID)
+	if err := os.MkdirAll(filepath.Join(sysDir, "data"), 0o755); err != nil {
 		return nil, fmt.Errorf("creating module directory: %w", err)
 	}
 
@@ -142,24 +142,24 @@ func (m *CampaignModuleManager) Install(campaignID string, zipData io.ReaderAt, 
 	if err != nil {
 		return nil, fmt.Errorf("marshaling manifest: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(modDir, "manifest.json"), manifestBytes, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sysDir, "manifest.json"), manifestBytes, 0o644); err != nil {
 		return nil, fmt.Errorf("writing manifest: %w", err)
 	}
 
 	// Extract data files.
 	for _, df := range dataFiles {
-		destPath := filepath.Join(modDir, df.Name)
+		destPath := filepath.Join(sysDir, df.Name)
 		if err := m.extractFile(df, destPath); err != nil {
 			// Cleanup on failure.
-			_ = os.RemoveAll(modDir)
+			_ = os.RemoveAll(sysDir)
 			return nil, fmt.Errorf("extracting %s: %w", df.Name, err)
 		}
 	}
 
 	// Load into memory.
-	mod, err := NewGenericModule(manifest, filepath.Join(modDir, "data"))
+	mod, err := NewGenericSystem(manifest, filepath.Join(sysDir, "data"))
 	if err != nil {
-		_ = os.RemoveAll(modDir)
+		_ = os.RemoveAll(sysDir)
 		return nil, fmt.Errorf("loading module: %w", err)
 	}
 
@@ -170,7 +170,7 @@ func (m *CampaignModuleManager) Install(campaignID string, zipData io.ReaderAt, 
 
 	slog.Info("custom game system installed",
 		slog.String("campaign_id", campaignID),
-		slog.String("module_id", manifest.ID),
+		slog.String("system_id", manifest.ID),
 		slog.String("module_name", manifest.Name),
 	)
 
@@ -178,7 +178,7 @@ func (m *CampaignModuleManager) Install(campaignID string, zipData io.ReaderAt, 
 }
 
 // Uninstall removes a campaign's custom game system from disk and memory.
-func (m *CampaignModuleManager) Uninstall(campaignID string) error {
+func (m *CampaignSystemManager) Uninstall(campaignID string) error {
 	m.mu.Lock()
 	delete(m.modules, campaignID)
 	delete(m.manifests, campaignID)
@@ -192,27 +192,27 @@ func (m *CampaignModuleManager) Uninstall(campaignID string) error {
 	return nil
 }
 
-// campaignModuleDir returns the storage path for a campaign's custom module.
-func (m *CampaignModuleManager) campaignModuleDir(campaignID string) string {
+// campaignModuleDir returns the storage path for a campaign's custom system.
+func (m *CampaignSystemManager) campaignModuleDir(campaignID string) string {
 	return filepath.Join(m.baseDir, campaignID)
 }
 
 // removeFromDisk deletes the campaign module directory.
-func (m *CampaignModuleManager) removeFromDisk(campaignID string) {
+func (m *CampaignSystemManager) removeFromDisk(campaignID string) {
 	dir := m.campaignModuleDir(campaignID)
 	if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
-		slog.Warn("failed to remove custom module directory",
+		slog.Warn("failed to remove custom system directory",
 			slog.String("dir", dir),
 			slog.String("error", err.Error()),
 		)
 	}
 }
 
-// discoverAll scans the base directory for existing custom modules.
-func (m *CampaignModuleManager) discoverAll() {
+// discoverAll scans the base directory for existing custom systems.
+func (m *CampaignSystemManager) discoverAll() {
 	entries, err := os.ReadDir(m.baseDir)
 	if err != nil {
-		// Directory doesn't exist yet — no custom modules.
+		// Directory doesn't exist yet — no custom systems.
 		return
 	}
 
@@ -221,22 +221,22 @@ func (m *CampaignModuleManager) discoverAll() {
 			continue
 		}
 		campaignID := entry.Name()
-		modDir := filepath.Join(m.baseDir, campaignID)
-		manifestPath := filepath.Join(modDir, "manifest.json")
+		sysDir := filepath.Join(m.baseDir, campaignID)
+		manifestPath := filepath.Join(sysDir, "manifest.json")
 
 		manifest, err := LoadManifest(manifestPath)
 		if err != nil {
-			slog.Warn("skipping invalid custom module",
+			slog.Warn("skipping invalid custom system",
 				slog.String("campaign_id", campaignID),
 				slog.String("error", err.Error()),
 			)
 			continue
 		}
 
-		dataDir := filepath.Join(modDir, "data")
-		mod, err := NewGenericModule(manifest, dataDir)
+		dataDir := filepath.Join(sysDir, "data")
+		mod, err := NewGenericSystem(manifest, dataDir)
 		if err != nil {
-			slog.Warn("failed to load custom module",
+			slog.Warn("failed to load custom system",
 				slog.String("campaign_id", campaignID),
 				slog.String("error", err.Error()),
 			)
@@ -248,13 +248,13 @@ func (m *CampaignModuleManager) discoverAll() {
 		m.manifests[campaignID] = manifest
 		slog.Info("loaded custom game system",
 			slog.String("campaign_id", campaignID),
-			slog.String("module_id", manifest.ID),
+			slog.String("system_id", manifest.ID),
 		)
 	}
 }
 
 // readManifestFromZip reads and validates a manifest from a ZIP entry.
-func (m *CampaignModuleManager) readManifestFromZip(f *zip.File) (*ModuleManifest, error) {
+func (m *CampaignSystemManager) readManifestFromZip(f *zip.File) (*SystemManifest, error) {
 	rc, err := f.Open()
 	if err != nil {
 		return nil, fmt.Errorf("opening manifest: %w", err)
@@ -266,7 +266,7 @@ func (m *CampaignModuleManager) readManifestFromZip(f *zip.File) (*ModuleManifes
 		return nil, fmt.Errorf("reading manifest: %w", err)
 	}
 
-	var manifest ModuleManifest
+	var manifest SystemManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return nil, fmt.Errorf("parsing manifest: %w", err)
 	}
@@ -284,7 +284,7 @@ func (m *CampaignModuleManager) readManifestFromZip(f *zip.File) (*ModuleManifes
 
 // validateDataFile checks that a ZIP data file contains valid JSON
 // that can be parsed as a ReferenceItem array.
-func (m *CampaignModuleManager) validateDataFile(f *zip.File) error {
+func (m *CampaignSystemManager) validateDataFile(f *zip.File) error {
 	rc, err := f.Open()
 	if err != nil {
 		return err
@@ -309,7 +309,7 @@ func (m *CampaignModuleManager) validateDataFile(f *zip.File) error {
 }
 
 // extractFile writes a ZIP entry to disk.
-func (m *CampaignModuleManager) extractFile(f *zip.File, destPath string) error {
+func (m *CampaignSystemManager) extractFile(f *zip.File, destPath string) error {
 	rc, err := f.Open()
 	if err != nil {
 		return err

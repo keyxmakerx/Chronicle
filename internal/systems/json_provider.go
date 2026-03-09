@@ -1,4 +1,4 @@
-package modules
+package systems
 
 import (
 	"encoding/json"
@@ -55,7 +55,7 @@ func NewJSONProvider(moduleID, dataDir string) (*JSONProvider, error) {
 
 		// Stamp each item with the module ID and category.
 		for i := range items {
-			items[i].ModuleID = moduleID
+			items[i].SystemID = moduleID
 			items[i].Category = category
 		}
 

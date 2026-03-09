@@ -1,4 +1,4 @@
-package modules
+package systems
 
 import (
 	"encoding/json"
@@ -114,8 +114,8 @@ func TestJSONProvider_List(t *testing.T) {
 
 	// Verify module ID is stamped.
 	for _, item := range items {
-		if item.ModuleID != "test" {
-			t.Errorf("item %s: module_id = %q, want %q", item.ID, item.ModuleID, "test")
+		if item.SystemID != "test" {
+			t.Errorf("item %s: system_id = %q, want %q", item.ID, item.SystemID, "test")
 		}
 	}
 

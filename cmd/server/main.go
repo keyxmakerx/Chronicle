@@ -1,6 +1,6 @@
 // Package main is the entry point for the Chronicle server. It loads
 // configuration, establishes database connections, wires together all
-// plugins/modules/widgets, and starts the HTTP server.
+// plugins/systems/widgets, and starts the HTTP server.
 package main
 
 import (
@@ -14,10 +14,10 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/app"
 	"github.com/keyxmakerx/chronicle/internal/config"
 	"github.com/keyxmakerx/chronicle/internal/database"
-	"github.com/keyxmakerx/chronicle/internal/modules"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 
-	// Import module packages for their init() factory registrations.
-	_ "github.com/keyxmakerx/chronicle/internal/modules/dnd5e"
+	// Import system packages for their init() factory registrations.
+	_ "github.com/keyxmakerx/chronicle/internal/systems/dnd5e"
 )
 
 func main() {
@@ -63,17 +63,17 @@ func main() {
 	defer func() { _ = rdb.Close() }()
 	slog.Info("connected to Redis")
 
-	// --- Initialize Game Modules ---
-	// Discover and load module manifests + data from internal/modules/.
-	// Modules register their factories via init() (blank imports above).
-	if err := modules.Init("internal/modules"); err != nil {
-		slog.Warn("module initialization failed", slog.Any("error", err))
+	// --- Initialize Game Systems ---
+	// Discover and load system manifests + data from internal/systems/.
+	// Systems register their factories via init() (blank imports above).
+	if err := systems.Init("internal/systems"); err != nil {
+		slog.Warn("system initialization failed", slog.Any("error", err))
 	}
 
 	// --- Create Application ---
 	application := app.New(cfg, db, rdb)
 
-	// Register all routes (public, plugin, module, widget, API).
+	// Register all routes (public, plugin, system, widget, API).
 	application.RegisterRoutes()
 
 	// --- Graceful Shutdown ---

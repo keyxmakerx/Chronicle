@@ -1,4 +1,4 @@
-package modules
+package systems
 
 import (
 	"net/http"
@@ -11,39 +11,39 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// ModuleHandler serves reference pages and JSON API endpoints for any
-// module. It checks both global built-in modules and per-campaign custom
-// modules uploaded by campaign owners.
-type ModuleHandler struct {
-	campaignModules *CampaignModuleManager
+// SystemHandler serves reference pages and JSON API endpoints for any
+// system. It checks both global built-in systems and per-campaign custom
+// systems uploaded by campaign owners.
+type SystemHandler struct {
+	campaignSystems *CampaignSystemManager
 }
 
-// NewModuleHandler creates a new module handler.
-func NewModuleHandler() *ModuleHandler {
-	return &ModuleHandler{}
+// NewSystemHandler creates a new system handler.
+func NewSystemHandler() *SystemHandler {
+	return &SystemHandler{}
 }
 
-// SetCampaignModules wires the per-campaign custom module manager.
-func (h *ModuleHandler) SetCampaignModules(mgr *CampaignModuleManager) {
-	h.campaignModules = mgr
+// SetCampaignSystems wires the per-campaign custom system manager.
+func (h *SystemHandler) SetCampaignSystems(mgr *CampaignSystemManager) {
+	h.campaignSystems = mgr
 }
 
-// resolveModule extracts the :mod param and looks up the live module.
-// Checks global registry first, then campaign-specific custom modules.
-func (h *ModuleHandler) resolveModule(c echo.Context) Module {
-	modID := c.Param("mod")
+// resolveSystem extracts the :mod param and looks up the live system.
+// Checks global registry first, then campaign-specific custom systems.
+func (h *SystemHandler) resolveSystem(c echo.Context) System { 
+	sysID := c.Param("mod")
 
-	// Check global built-in modules first.
-	if mod := FindModule(modID); mod != nil {
+	// Check global built-in systems first.
+	if mod := FindSystem(sysID); mod != nil {
 		return mod
 	}
 
-	// Check campaign-specific custom modules.
-	if h.campaignModules != nil {
+	// Check campaign-specific custom systems.
+	if h.campaignSystems != nil {
 		cc := campaigns.GetCampaignContext(c)
 		if cc != nil {
-			if mod := h.campaignModules.GetModule(cc.Campaign.ID); mod != nil {
-				if mod.Info().ID == modID {
+			if mod := h.campaignSystems.GetSystem(cc.Campaign.ID); mod != nil {
+				if mod.Info().ID == sysID {
 					return mod
 				}
 			}
@@ -53,17 +53,17 @@ func (h *ModuleHandler) resolveModule(c echo.Context) Module {
 	return nil
 }
 
-// Index lists all categories for a module.
-// GET /campaigns/:id/modules/:mod
-func (h *ModuleHandler) Index(c echo.Context) error {
+// Index lists all categories for a system.
+// GET /campaigns/:id/systems/:mod
+func (h *SystemHandler) Index(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	mod := h.resolveModule(c)
+	mod := h.resolveSystem(c)
 	if mod == nil {
-		return apperror.NewNotFound("module not found")
+		return apperror.NewNotFound("system not found")
 	}
 
 	manifest := mod.Info()
@@ -87,28 +87,28 @@ func (h *ModuleHandler) Index(c echo.Context) error {
 	}
 
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, ModuleIndexContent(cc, manifest, cats))
+		return middleware.Render(c, http.StatusOK, SystemIndexContent(cc, manifest, cats))
 	}
-	return middleware.Render(c, http.StatusOK, ModuleIndexPage(cc, manifest, cats))
+	return middleware.Render(c, http.StatusOK, SystemIndexPage(cc, manifest, cats))
 }
 
-// CategoryList lists items in a module category.
-// GET /campaigns/:id/modules/:mod/:cat
-func (h *ModuleHandler) CategoryList(c echo.Context) error {
+// CategoryList lists items in a system category.
+// GET /campaigns/:id/systems/:mod/:cat
+func (h *SystemHandler) CategoryList(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	mod := h.resolveModule(c)
+	mod := h.resolveSystem(c)
 	if mod == nil {
-		return apperror.NewNotFound("module not found")
+		return apperror.NewNotFound("system not found")
 	}
 
 	catSlug := c.Param("cat")
 	dp := mod.DataProvider()
 	if dp == nil {
-		return apperror.NewNotFound("module has no data")
+		return apperror.NewNotFound("system has no data")
 	}
 
 	items, err := dp.List(catSlug)
@@ -136,23 +136,23 @@ func (h *ModuleHandler) CategoryList(c echo.Context) error {
 }
 
 // ItemDetail shows a single reference item.
-// GET /campaigns/:id/modules/:mod/:cat/:item
-func (h *ModuleHandler) ItemDetail(c echo.Context) error {
+// GET /campaigns/:id/systems/:mod/:cat/:item
+func (h *SystemHandler) ItemDetail(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	mod := h.resolveModule(c)
+	mod := h.resolveSystem(c)
 	if mod == nil {
-		return apperror.NewNotFound("module not found")
+		return apperror.NewNotFound("system not found")
 	}
 
 	catSlug := c.Param("cat")
 	itemID := c.Param("item")
 	dp := mod.DataProvider()
 	if dp == nil {
-		return apperror.NewNotFound("module has no data")
+		return apperror.NewNotFound("system has no data")
 	}
 
 	item, err := dp.Get(catSlug, itemID)
@@ -179,17 +179,17 @@ func (h *ModuleHandler) ItemDetail(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, ItemDetailPage(cc, manifest, catDef, item))
 }
 
-// SearchAPI returns JSON search results across all module categories.
-// GET /campaigns/:id/modules/:mod/search?q=...
-func (h *ModuleHandler) SearchAPI(c echo.Context) error {
+// SearchAPI returns JSON search results across all system categories.
+// GET /campaigns/:id/systems/:mod/search?q=...
+func (h *SystemHandler) SearchAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	mod := h.resolveModule(c)
+	mod := h.resolveSystem(c)
 	if mod == nil {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "module not found"})
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "system not found"})
 	}
 
 	query := strings.TrimSpace(c.QueryParam("q"))
@@ -211,8 +211,8 @@ func (h *ModuleHandler) SearchAPI(c echo.Context) error {
 			"name":      r.Name,
 			"category":  r.Category,
 			"summary":   r.Summary,
-			"module_id": manifest.ID,
-			"url":       "/campaigns/" + cc.Campaign.ID + "/modules/" + manifest.ID + "/" + r.Category + "/" + r.ID,
+			"system_id": manifest.ID,
+			"url":       "/campaigns/" + cc.Campaign.ID + "/systems/" + manifest.ID + "/" + r.Category + "/" + r.ID,
 		}
 	}
 
@@ -223,16 +223,16 @@ func (h *ModuleHandler) SearchAPI(c echo.Context) error {
 }
 
 // TooltipAPI returns a JSON tooltip payload for a specific item.
-// GET /campaigns/:id/modules/:mod/:cat/:item/tooltip
-func (h *ModuleHandler) TooltipAPI(c echo.Context) error {
+// GET /campaigns/:id/systems/:mod/:cat/:item/tooltip
+func (h *SystemHandler) TooltipAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	mod := h.resolveModule(c)
+	mod := h.resolveSystem(c)
 	if mod == nil {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "module not found"})
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "system not found"})
 	}
 
 	catSlug := c.Param("cat")
@@ -250,7 +250,7 @@ func (h *ModuleHandler) TooltipAPI(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "item not found"})
 	}
 
-	// Try the module's tooltip renderer for rich HTML.
+	// Try the system's tooltip renderer for rich HTML.
 	var tooltipHTML string
 	if tr := mod.TooltipRenderer(); tr != nil {
 		if html, err := tr.RenderTooltip(item); err == nil {
@@ -258,7 +258,7 @@ func (h *ModuleHandler) TooltipAPI(c echo.Context) error {
 		}
 	}
 
-	// Short cache — module data is static.
+	// Short cache — system data is static.
 	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
 
 	return c.JSON(http.StatusOK, map[string]any{

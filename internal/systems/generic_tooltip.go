@@ -7,7 +7,7 @@
 //
 // Game-system modules can override this by implementing their own
 // TooltipRenderer for richer formatting (e.g., stat blocks, icons).
-package modules
+package systems
 
 import (
 	"fmt"
@@ -32,7 +32,7 @@ type GenericTooltipRenderer struct {
 
 // NewGenericTooltipRenderer creates a tooltip renderer that uses the
 // manifest's field definitions to render properties for each category.
-func NewGenericTooltipRenderer(manifest *ModuleManifest) *GenericTooltipRenderer {
+func NewGenericTooltipRenderer(manifest *SystemManifest) *GenericTooltipRenderer {
 	fields := make(map[string][]FieldDef, len(manifest.Categories))
 	cats := make([]string, 0, len(manifest.Categories))
 

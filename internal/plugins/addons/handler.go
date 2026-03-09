@@ -37,7 +37,7 @@ func (h *Handler) AdminAddonsPage(c echo.Context) error {
 	addons := make([]Addon, 0, len(allAddons))
 	for _, a := range allAddons {
 		// Game system modules belong on the Content Packs page.
-		if a.Category == CategoryModule {
+		if a.Category == CategorySystem {
 			continue
 		}
 		// Planned addons without backing code are future work, not

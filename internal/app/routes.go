@@ -13,7 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
-	"github.com/keyxmakerx/chronicle/internal/modules"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
@@ -878,7 +878,7 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetMapSearcher(mapsService)
 	entityHandler.SetCalendarSearcher(calendarService)
 	entityHandler.SetSessionSearcher(sessionsService)
-	entityHandler.SetModuleSearcher(modules.NewModuleSearchAdapter(addonService))
+	entityHandler.SetSystemSearcher(systems.NewSystemSearchAdapter(addonService))
 	entityHandler.SetMemberLister(campaignService)
 	entityHandler.SetGroupLister(groupService)
 	entityHandler.SetCache(a.Redis)
@@ -1140,15 +1140,15 @@ func (a *App) RegisterRoutes() {
 	campaignService.SetMediaCleaner(mediaService)
 	campaignService.SetHookDispatcher(wasmHookDispatcher)
 
-	// --- Game System Modules ---
-	// Module reference pages and tooltip API, gated by per-campaign addon checks.
-	// Custom module manager stores per-campaign uploads under media/modules/.
-	campaignModuleMgr := modules.NewCampaignModuleManager(filepath.Join(a.Config.Upload.MediaPath, "modules"))
-	moduleHandler := modules.NewModuleHandler()
-	moduleHandler.SetCampaignModules(campaignModuleMgr)
-	modules.RegisterRoutes(e, moduleHandler, addonService, authService, campaignService)
-	campaignModuleHandler := modules.NewCampaignModuleHandler(campaignModuleMgr)
-	modules.RegisterCustomModuleRoutes(e, campaignModuleHandler, authService, campaignService)
+	// --- Game Systems ---
+	// System reference pages and tooltip API, gated by per-campaign addon checks.
+	// Custom system manager stores per-campaign uploads under media/systems/.
+	campaignSystemMgr := systems.NewCampaignSystemManager(filepath.Join(a.Config.Upload.MediaPath, "systems"))
+	systemHandler := systems.NewSystemHandler()
+	systemHandler.SetCampaignSystems(campaignSystemMgr)
+	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
+	campaignSystemHandler := systems.NewCampaignSystemHandler(campaignSystemMgr)
+	systems.RegisterCustomSystemRoutes(e, campaignSystemHandler, authService, campaignService)
 
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {
