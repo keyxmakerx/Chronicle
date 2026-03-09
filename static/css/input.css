@@ -653,22 +653,19 @@
     justify-content: center;
   }
 
-  /* Remove icon margin when there's no text next to it. */
+  /* Remove icon margin when there's no text next to it.
+     Uses !important to beat Tailwind utility classes (e.g. mr-3). */
   .sidebar-collapsed a > span:first-child,
   .sidebar-collapsed a > svg:first-child {
-    margin-right: 0;
+    margin-right: 0 !important;
   }
 
   /* Explicit icon sizing: icons must stay 16x16 in all states. */
-  .sidebar-collapsed a > span:first-child {
-    width: 16px !important;
-    height: 16px !important;
-    flex-shrink: 0;
-  }
+  .sidebar-collapsed a > span:first-child,
   .sidebar-collapsed a > svg:first-child {
     width: 16px !important;
     height: 16px !important;
-    flex-shrink: 0;
+    flex-shrink: 0 !important;
   }
 
   /* Pin button visibility: only show when expanded. */
@@ -682,59 +679,22 @@
      show only icons. A gradient shadow is cast over the icon strip to
      create the impression that the overlay panel is casting a shadow. */
 
-  /* Icon-only mode: hide text labels, section headers, counts, chevrons.
-     Keep only the icon spans visible. The list becomes a narrow icon strip. */
+  /* Icon-only mode: when drilled, the category list is hidden behind the
+     overlay panel. No need for an icon strip since the panel covers it. */
   .sidebar-icon-only {
     @apply cursor-pointer;
     position: relative;
-    width: 48px !important;
+    width: 0 !important;
     overflow: hidden !important;
-    pointer-events: auto;
-    border-top: 1px solid rgba(107, 114, 128, 0.3);
-  }
-
-  /* Hide text, counts, chevrons, section headers in icon-only mode. */
-  .sidebar-icon-only a > span.flex-1,
-  .sidebar-icon-only a > svg:not(.sidebar-icon-only-keep),
-  .sidebar-icon-only a > span.ml-auto,
-  .sidebar-icon-only a > svg.ml-1,
-  .sidebar-icon-only > .sidebar-cat-list-label {
-    display: none;
-  }
-
-  /* Compact link padding for icon strip. */
-  .sidebar-icon-only a {
-    padding-left: 12px;
-    padding-right: 12px;
-    justify-content: center;
-  }
-
-  /* Icons should center in the narrow strip and stay 16x16. */
-  .sidebar-icon-only a > span:first-child {
-    margin-right: 0;
-    width: 16px !important;
-    height: 16px !important;
-    flex-shrink: 0;
-  }
-
-  /* Gradient shadow overlay: gives the "paper casting shadow" effect
-     over the collapsed icon strip. Uses a pseudo-element for the shadow. */
-  .sidebar-icon-only::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 48px;
-    background: linear-gradient(to left, rgba(0, 0, 0, 0.35), transparent);
     pointer-events: none;
-    z-index: 5;
   }
 
-  /* Hover glow on icon strip to indicate it's clickable. */
-  .sidebar-icon-only:hover {
-    background-color: rgba(255, 255, 255, 0.03);
+  /* When drilled, hide all category list content since the panel covers it. */
+  .sidebar-icon-only * {
+    visibility: hidden;
   }
+
+  /* No shadow overlay needed — the drill panel covers the full area. */
 
   /* Category overlay panel: slides in from the right with paper effect. */
   #sidebar-category {
