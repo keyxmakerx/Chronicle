@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -137,10 +138,11 @@ templ catEntityGrid(cc *campaigns.CampaignContext, et *EntityType, entities []En
 }
 
 // catTextBlock renders custom HTML content from the block config.
+// Content is sanitized to prevent stored XSS from layout JSON.
 templ catTextBlock(config map[string]any) {
 	if content, ok := config["content"].(string); ok && content != "" {
 		<div class="prose prose-sm max-w-none text-fg-body">
-			@templ.Raw(content)
+			@templ.Raw(sanitize.HTML(content))
 		</div>
 	}
 }

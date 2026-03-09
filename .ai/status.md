@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-09 -- Addon isolation audit. Fixed 2 gaps: (1) map drawing routes (28 endpoints) missing RequireAddon middleware — drawings/tokens/layers/fog accessible when maps disabled, (2) entity search returning results from disabled addons. Added ADR-027 documenting fail-open RequireAddon convention. Also completed codebase cleanup: Chronicle.toast() bug, raw fetch→apiFetch, missing widget destroy, HTMX detection. Tech debt items in .ai/todo.md.
+2026-03-09 -- Security audit + addon block gating. Fixed posts widget missing HTML sanitization (XSS via API bypass). Added sanitize.HTML() to text_block rendering in 3 templ files (defense-in-depth). Block registry now skips addon blocks when addon is disabled (no more blank gaps). Previously: addon isolation fixes, codebase cleanup, ADR-027.
 Branch: `claude/dynamic-database-setup-1QSPA`.
 
 ## Phase & Sprint Plan

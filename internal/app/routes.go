@@ -943,6 +943,8 @@ func (a *App) RegisterRoutes() {
 	})
 
 	// Set the registry on the entity service (validation) and as the global (rendering).
+	// The addon checker lets Render() skip blocks whose addon is disabled.
+	blockRegistry.SetAddonChecker(addonService)
 	entityService.SetBlockRegistry(blockRegistry)
 	entities.SetGlobalBlockRegistry(blockRegistry)
 	entityHandler.SetBlockRegistry(blockRegistry)

@@ -44,9 +44,10 @@ type registeredBlock struct {
 // BlockRegistry maps block type names to metadata and renderers.
 // Safe for concurrent reads after startup (writes happen only during init).
 type BlockRegistry struct {
-	mu      sync.RWMutex
-	entries map[string]registeredBlock
-	order   []string // insertion order for stable palette ordering
+	mu           sync.RWMutex
+	entries      map[string]registeredBlock
+	order        []string // insertion order for stable palette ordering
+	addonChecker blockAddonChecker
 }
 
 // NewBlockRegistry creates an empty registry.
@@ -54,6 +55,12 @@ func NewBlockRegistry() *BlockRegistry {
 	return &BlockRegistry{
 		entries: make(map[string]registeredBlock),
 	}
+}
+
+// SetAddonChecker sets the addon checker used by Render() to skip blocks
+// whose addon is disabled. Must be called after addon service is initialized.
+func (r *BlockRegistry) SetAddonChecker(ac blockAddonChecker) {
+	r.addonChecker = ac
 }
 
 // Register adds a block type to the registry. If a type with the same name
@@ -118,8 +125,8 @@ func (r *BlockRegistry) TypesForCampaign(ctx context.Context, campaignID string,
 }
 
 // Render dispatches to the registered renderer for the block type.
-// Returns nil if the block type is not registered.
-func (r *BlockRegistry) Render(ctx BlockRenderContext) templ.Component {
+// Returns nil if the block type is not registered or if its addon is disabled.
+func (r *BlockRegistry) Render(goCtx context.Context, ctx BlockRenderContext) templ.Component {
 	r.mu.RLock()
 	entry, ok := r.entries[ctx.Block.Type]
 	r.mu.RUnlock()
@@ -127,6 +134,15 @@ func (r *BlockRegistry) Render(ctx BlockRenderContext) templ.Component {
 	if !ok {
 		return nil
 	}
+
+	// Skip blocks whose addon is disabled for this campaign.
+	if entry.meta.Addon != "" && r.addonChecker != nil && ctx.CC != nil {
+		enabled, err := r.addonChecker.IsEnabledForCampaign(goCtx, ctx.CC.Campaign.ID, entry.meta.Addon)
+		if err == nil && !enabled {
+			return nil
+		}
+	}
+
 	return entry.renderer(ctx)
 }
 
@@ -192,8 +208,9 @@ func GetGlobalBlockRegistry() *BlockRegistry {
 }
 
 // RenderBlock dispatches to the global registry. Called by templ components.
-// Returns an empty component if the block type is unregistered.
-func RenderBlock(block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) templ.Component {
+// Returns an empty component if the block type is unregistered or its addon
+// is disabled. The goCtx is the request context from the templ render call.
+func RenderBlock(goCtx context.Context, block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) templ.Component {
 	reg := GetGlobalBlockRegistry()
 	if reg == nil {
 		return templ.NopComponent
@@ -205,7 +222,7 @@ func RenderBlock(block TemplateBlock, cc *campaigns.CampaignContext, entity *Ent
 		EntityType: entityType,
 		CSRFToken:  csrfToken,
 	}
-	comp := reg.Render(ctx)
+	comp := reg.Render(goCtx, ctx)
 	if comp == nil {
 		return templ.NopComponent
 	}

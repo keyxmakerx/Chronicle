@@ -15,6 +15,7 @@ package campaigns
 import (
 	"fmt"
 	"strconv"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -141,11 +142,11 @@ templ dashEntityList(cc *CampaignContext, config map[string]any) {
 }
 
 // dashTextBlock renders custom HTML content.
-// Config: content (string).
+// Config: content (string). Content is sanitized to prevent stored XSS.
 templ dashTextBlock(config map[string]any) {
 	<div class="card p-4 prose prose-sm dark:prose-invert max-w-none">
 		if content, ok := config["content"].(string); ok && content != "" {
-			@templ.Raw(content)
+			@templ.Raw(sanitize.HTML(content))
 		} else {
 			<p class="text-fg-muted text-sm italic">Empty text block</p>
 		}

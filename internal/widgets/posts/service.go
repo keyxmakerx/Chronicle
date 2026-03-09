@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // PostService defines the business logic interface for entity posts.
@@ -55,7 +56,7 @@ func (s *postService) Create(ctx context.Context, campaignID, entityID, userID, 
 		CampaignID: campaignID,
 		Name:       name,
 		Entry:      req.Entry,
-		EntryHTML:  req.EntryHTML,
+		EntryHTML:  sanitizeEntryHTML(req.EntryHTML),
 		IsPrivate:  req.IsPrivate,
 		SortOrder:  len(existing),
 		CreatedBy:  userID,
@@ -105,7 +106,8 @@ func (s *postService) Update(ctx context.Context, id string, req UpdatePostReque
 		post.Entry = req.Entry
 	}
 	if req.EntryHTML != nil {
-		post.EntryHTML = req.EntryHTML
+		sanitized := sanitizeEntryHTML(req.EntryHTML)
+		post.EntryHTML = sanitized
 	}
 	if req.IsPrivate != nil {
 		post.IsPrivate = *req.IsPrivate
@@ -141,4 +143,14 @@ func (s *postService) Reorder(ctx context.Context, entityID string, postIDs []st
 	}
 
 	return nil
+}
+
+// sanitizeEntryHTML strips dangerous HTML from post content. Matches the
+// sanitization applied by notes, entities, calendar, and sessions services.
+func sanitizeEntryHTML(html *string) *string {
+	if html == nil || *html == "" {
+		return html
+	}
+	sanitized := sanitize.HTML(*html)
+	return &sanitized
 }

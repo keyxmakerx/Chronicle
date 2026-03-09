@@ -7,6 +7,7 @@ package entities
 import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -180,8 +181,9 @@ templ entityBlockWithBadge(block TemplateBlock, cc *campaigns.CampaignContext, e
 
 // entityBlockInner renders the actual block content via the block registry.
 // Each block type's renderer was registered at startup by its owning plugin.
+// Passes the request context so addon checks can query the database.
 templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
-	@RenderBlock(block, cc, entity, entityType, csrfToken)
+	@RenderBlock(ctx, block, cc, entity, entityType, csrfToken)
 }
 
 // blockTitle renders the entity name heading with edit/delete actions.
@@ -441,7 +443,8 @@ templ blockTextBlock(config map[string]any) {
 	</div>
 }
 
-// entityBlockTextContent extracts the HTML content from a text_block config.
+// entityBlockTextContent extracts and sanitizes the HTML content from a
+// text_block config. Sanitization prevents stored XSS from layout JSON.
 func entityBlockTextContent(config map[string]any) string {
 	if config == nil {
 		return ""
@@ -451,7 +454,10 @@ func entityBlockTextContent(config map[string]any) string {
 		return ""
 	}
 	s, _ := v.(string)
-	return s
+	if s == "" {
+		return ""
+	}
+	return sanitize.HTML(s)
 }
 
 // blockChildren renders a sub-pages section showing direct children of this entity,
