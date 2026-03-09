@@ -675,13 +675,16 @@
 
   /* ---- Drill-Down Slide-Over Panel ---- */
 
-  /* When drilled into a category, the icon list collapses to show only icons.
-     The overlay panel slides over in two stages:
-     Stage 1: panel at left:48px (icons visible) for ~500ms
-     Stage 2: panel at left:0 (covers icons)
-     Hovering the left edge peeks the icons back out. */
+  /* When drilled into a category, the icon list is hidden behind the panel.
+     The panel slides in from the right, briefly pauses showing the category
+     icons, then covers everything. */
 
-  /* Icon-only mode: hide text, keep icons centered in a narrow strip. */
+  /* Icon-only mode: constrain to 48px strip with icons only. */
+  .sidebar-icon-only {
+    width: 48px !important;
+    overflow: hidden !important;
+  }
+
   .sidebar-icon-only a > span.flex-1,
   .sidebar-icon-only a > span.ml-auto,
   .sidebar-icon-only > .sidebar-cat-list-label {
@@ -699,11 +702,6 @@
     width: 16px !important;
     height: 16px !important;
     flex-shrink: 0 !important;
-  }
-
-  /* Active icon highlight when drilled into that category. */
-  .sidebar-icon-only a.sidebar-nav-active {
-    background: rgba(255, 255, 255, 0.08);
   }
 
   /* The slide-over panel (absolutely positioned inside categories zone). */
@@ -726,26 +724,16 @@
     left: 48px;
   }
 
-  /* Stage 2: panel fully covers icons (left: 0). Overrides stage 1. */
+  /* Stage 2: panel fully covers icons (left: 0). */
   .sidebar-drill-panel.sidebar-drill-full {
     left: 0;
   }
 
-  /* Peeking: hover reveals icons (back to 48px). Overrides stage 2. */
+  /* Peek: panel nudges right ~20px so icons are partially visible.
+     Only about 1/3 of the 48px strip shows — enough to hint at icons
+     but not enough to be in the way. */
   .sidebar-drill-panel.sidebar-drill-peeking {
-    left: 48px;
-  }
-
-  /* Peek zone: invisible strip on the left edge of the panel.
-     Only visible when panel is in full-cover mode. */
-  .sidebar-peek-zone {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: 8px;
-    z-index: 15;
-    cursor: w-resize;
+    left: 20px;
   }
 
   /* Skeleton shimmer for loading states. */

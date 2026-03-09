@@ -2,11 +2,14 @@
  * sidebar_drill.js -- Two-Stage Slide-Over Category Panel
  *
  * When a category is clicked, the panel slides over in two stages:
- *   Stage 1: Panel appears at left:48px, category icons still visible (~500ms)
+ *   Stage 1: Panel appears at left:48px, category icons briefly visible (~500ms)
  *   Stage 2: Panel slides to left:0, fully covering the icon strip
  *
- * Hovering the left edge of the panel (peek zone) reveals the icon strip
- * so users can click a different category without using Back.
+ * Back button returns to the category list.
+ *
+ * Subtle peek: when mouse reaches the left edge of the panel (~12px),
+ * the panel nudges right ~20px so icons are partially visible (about 1/3).
+ * Moving the mouse away from the sidebar ends the peek.
  *
  * Prefetch: hovers on category links trigger a background fetch after 100ms.
  * On click, prefetched content is swapped instantly if available.
@@ -16,10 +19,10 @@
 
   var catList = null;
   var catPanel = null;
-  var peekZone = null;
   var isDrilled = false;
   var stage2Timer = null;
   var isPeeking = false;
+  var PEEK_EDGE_PX = 12; // Mouse must be within this many px of the panel's left edge
 
   // Prefetch cache: Map<drillUrl, htmlString>
   var prefetchCache = {};
@@ -31,7 +34,6 @@
   function init() {
     catList = document.getElementById('sidebar-cat-list');
     catPanel = document.getElementById('sidebar-category');
-    peekZone = document.getElementById('sidebar-peek-zone');
 
     if (!catList || !catPanel) return;
 
@@ -67,40 +69,46 @@
       });
     });
 
-    // Peek zone: hovering the left edge reveals the icon strip.
-    if (peekZone) {
-      peekZone.addEventListener('mouseenter', function () {
-        if (!isDrilled) return;
-        startPeek();
-      });
-    }
-
-    // When mouse leaves the sidebar entirely, end peek.
-    var sidebar = document.getElementById('sidebar');
-    if (sidebar) {
-      sidebar.addEventListener('mouseleave', function () {
-        if (isPeeking) endPeek();
-      });
-    }
-
-    // Clicking an icon in the cat-list while peeking switches categories.
-    catList.addEventListener('click', function (e) {
-      if (!isDrilled || !isPeeking) return;
-
-      var link = e.target.closest('.sidebar-category-link');
-      if (!link) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-      loadAndDrill(link);
-    });
-
     // Auto-drill: if server pre-rendered the active state, mark as drilled.
     if (catPanel.classList.contains('sidebar-drill-active')) {
       isDrilled = true;
       // Go straight to stage 2 on page load (no pause needed).
       catPanel.classList.add('sidebar-drill-full');
     }
+
+    // Subtle peek: detect mouse near the left edge of the panel.
+    catPanel.addEventListener('mousemove', function (e) {
+      if (!isDrilled || !catPanel.classList.contains('sidebar-drill-full')) return;
+      var panelRect = catPanel.getBoundingClientRect();
+      var distFromLeft = e.clientX - panelRect.left;
+      if (distFromLeft <= PEEK_EDGE_PX && !isPeeking) {
+        isPeeking = true;
+        catPanel.classList.add('sidebar-drill-peeking');
+      }
+    });
+
+    // End peek when mouse leaves the sidebar entirely.
+    var sidebar = document.getElementById('sidebar');
+    if (sidebar) {
+      sidebar.addEventListener('mouseleave', function () {
+        if (isPeeking) {
+          isPeeking = false;
+          catPanel.classList.remove('sidebar-drill-peeking');
+        }
+      });
+    }
+
+    // Also end peek when mouse moves away from the left edge into the panel body.
+    catPanel.addEventListener('mousemove', function (e) {
+      if (!isPeeking) return;
+      var panelRect = catPanel.getBoundingClientRect();
+      var distFromLeft = e.clientX - panelRect.left;
+      // Once mouse is well into the panel (past 40px), end peek.
+      if (distFromLeft > 40) {
+        isPeeking = false;
+        catPanel.classList.remove('sidebar-drill-peeking');
+      }
+    });
 
     // On hx-boost navigation, refresh or close the drill panel.
     window.addEventListener('chronicle:navigated', function () {
@@ -147,12 +155,13 @@
       });
     }
 
-    // Stage 1: slide in, icons visible.
+    // Stage 1: slide in, icons briefly visible.
     drillIn();
   }
 
   /**
-   * Stage 1: slide panel in (icons still visible at left:48px).
+   * Stage 1: slide panel in (icons visible at left:48px for 500ms).
+   * Stage 2: slide to left:0 after delay.
    */
   function drillIn() {
     if (!catList || !catPanel) return;
@@ -197,24 +206,6 @@
   }
 
   /**
-   * Start peeking: reveal the icon strip behind the panel.
-   */
-  function startPeek() {
-    if (!catPanel) return;
-    isPeeking = true;
-    catPanel.classList.add('sidebar-drill-peeking');
-  }
-
-  /**
-   * End peeking: panel covers icons again.
-   */
-  function endPeek() {
-    if (!catPanel) return;
-    isPeeking = false;
-    catPanel.classList.remove('sidebar-drill-peeking');
-  }
-
-  /**
    * Ensure sidebar is expanded when drilling.
    */
   function ensureSidebarExpanded() {
@@ -234,7 +225,7 @@
     init();
   }
 
-  // Expose drillOut for the back button (used via onclick or event delegation).
+  // Expose drillOut for the back button (used via onclick).
   window.Chronicle = window.Chronicle || {};
   window.Chronicle.drillOut = function () {
     drillOut();
