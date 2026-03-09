@@ -936,3 +936,42 @@ diagnostics and guarded cleanup actions:
 - No data is ever deleted without explicit admin action + confirmation.
 - Safety checks prevent accidental deletion of in-use data.
 - Complements ADR-025 (campaign deletion cleanup) as a catch-all safety net.
+
+---
+
+## ADR-027: RequireAddon Middleware Fail-Open on DB Errors
+
+**Date:** 2026-03-09
+**Status:** Accepted
+
+**Context:** The `RequireAddon` middleware checks whether an addon (calendar,
+maps, timeline, sessions, etc.) is enabled for a campaign before allowing access
+to its routes. When the database query fails, the middleware must decide whether
+to block (fail-closed) or allow (fail-open) the request.
+
+**Decision:**
+`RequireAddon` fails open on DB errors — if the addon-check query fails, the
+request is allowed through. Rationale:
+
+1. If the database is down, nothing downstream works anyway (service calls,
+   repo queries all fail). Blocking at the middleware level just changes the
+   error from a 500 to a redirect/404, which is less informative.
+2. Fail-open matches the principle of least surprise for self-hosted instances:
+   a transient DB blip doesn't lock users out of features they have enabled.
+3. The companion `RequireAddonAPI` middleware (for API v1 routes) uses
+   fail-closed because API callers are programmatic and can handle 503 retries.
+
+This convention is also used by `Handler.isAddonEnabled()` in the entity search
+endpoint, which skips addon-specific search results on DB errors rather than
+failing the entire search.
+
+**Alternatives Considered:**
+- Fail-closed everywhere: too disruptive for a self-hosted app where DB might
+  have brief connectivity issues during backups or maintenance.
+- Cache addon state in Redis: adds complexity; the DB query is a single indexed
+  row lookup that takes <1ms.
+
+**Consequences:**
+- During DB outages, disabled addons may briefly appear enabled (routes accessible).
+- This is acceptable because the underlying service calls will fail anyway.
+- API routes use stricter fail-closed behavior (ADR-025 batch 24).

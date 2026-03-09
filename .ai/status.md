@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-09 -- Codebase cleanup audit. Fixed Chronicle.toast() bug (undefined function), standardized 8 raw fetch() calls to Chronicle.apiFetch(), added missing widget destroy() method, replaced 4 raw HX-Request header checks with middleware.IsHTMX(). Documented tech debt items in .ai/todo.md.
+2026-03-09 -- Addon isolation audit. Fixed 2 gaps: (1) map drawing routes (28 endpoints) missing RequireAddon middleware — drawings/tokens/layers/fog accessible when maps disabled, (2) entity search returning results from disabled addons. Added ADR-027 documenting fail-open RequireAddon convention. Also completed codebase cleanup: Chronicle.toast() bug, raw fetch→apiFetch, missing widget destroy, HTMX detection. Tech debt items in .ai/todo.md.
 Branch: `claude/dynamic-database-setup-1QSPA`.
 
 ## Phase & Sprint Plan

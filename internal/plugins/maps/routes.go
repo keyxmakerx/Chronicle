@@ -43,11 +43,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 // RegisterDrawingRoutes sets up API routes for drawings, tokens, layers, and fog.
 // These are the real-time map collaboration endpoints used by both the Chronicle
 // web UI and the Foundry VTT sync module.
-func RegisterDrawingRoutes(e *echo.Echo, dh *DrawingHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+func RegisterDrawingRoutes(e *echo.Echo, dh *DrawingHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	// All drawing/token/layer/fog routes require authentication and campaign access.
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "maps"),
 	)
 
 	// Drawings (Scribe+ can create/edit, Owner can delete).

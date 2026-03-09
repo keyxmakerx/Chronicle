@@ -821,7 +821,7 @@ func (a *App) RegisterRoutes() {
 	drawingRepo := maps.NewDrawingRepository(a.DB)
 	drawingService := maps.NewDrawingService(drawingRepo)
 	drawingHandler := maps.NewDrawingHandler(mapsService, drawingService)
-	maps.RegisterDrawingRoutes(e, drawingHandler, campaignService, authService)
+	maps.RegisterDrawingRoutes(e, drawingHandler, campaignService, authService, addonService)
 
 	// Sessions plugin: game session scheduling, linked entities, RSVP tracking.
 	// Entity campaign checker prevents cross-campaign entity linking (IDOR).

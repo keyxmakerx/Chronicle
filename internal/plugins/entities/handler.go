@@ -120,6 +120,17 @@ func (h *Handler) SetAddonChecker(svc AddonChecker) {
 	h.addonSvc = svc
 }
 
+// isAddonEnabled checks whether a specific addon is enabled for the campaign.
+// Fails open (returns true) if the addon service is not wired or on DB errors,
+// matching the fail-open convention used by RequireAddon middleware.
+func (h *Handler) isAddonEnabled(ctx context.Context, campaignID, slug string) bool {
+	if h.addonSvc == nil {
+		return true
+	}
+	enabled, err := h.addonSvc.IsEnabledForCampaign(ctx, campaignID, slug)
+	return err != nil || enabled
+}
+
 // SetBlockRegistry sets the block registry for the block-types API endpoint.
 // Called after all plugins have registered their block types.
 func (h *Handler) SetBlockRegistry(reg *BlockRegistry) {
@@ -669,33 +680,36 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			}
 		}
 		// Append cross-plugin search results from registered searchers.
-		if h.timelineSearcher != nil && query != "" {
+		// Each searcher is gated by its addon being enabled for the campaign,
+		// so disabled features don't leak results into search.
+		ctx := c.Request().Context()
+		if h.timelineSearcher != nil && query != "" && h.isAddonEnabled(ctx, cc.Campaign.ID, "timeline") {
 			if tlResults, err := h.timelineSearcher.SearchTimelines(
-				c.Request().Context(), cc.Campaign.ID, query, role,
+				ctx, cc.Campaign.ID, query, role,
 			); err == nil {
 				items = append(items, tlResults...)
 				total += len(tlResults)
 			}
 		}
-		if h.mapSearcher != nil && query != "" {
+		if h.mapSearcher != nil && query != "" && h.isAddonEnabled(ctx, cc.Campaign.ID, "maps") {
 			if mapResults, err := h.mapSearcher.SearchMaps(
-				c.Request().Context(), cc.Campaign.ID, query,
+				ctx, cc.Campaign.ID, query,
 			); err == nil {
 				items = append(items, mapResults...)
 				total += len(mapResults)
 			}
 		}
-		if h.calendarSearcher != nil && query != "" {
+		if h.calendarSearcher != nil && query != "" && h.isAddonEnabled(ctx, cc.Campaign.ID, "calendar") {
 			if calResults, err := h.calendarSearcher.SearchCalendarEvents(
-				c.Request().Context(), cc.Campaign.ID, query, role,
+				ctx, cc.Campaign.ID, query, role,
 			); err == nil {
 				items = append(items, calResults...)
 				total += len(calResults)
 			}
 		}
-		if h.sessionSearcher != nil && query != "" {
+		if h.sessionSearcher != nil && query != "" && h.isAddonEnabled(ctx, cc.Campaign.ID, "calendar") {
 			if sessResults, err := h.sessionSearcher.SearchSessions(
-				c.Request().Context(), cc.Campaign.ID, query,
+				ctx, cc.Campaign.ID, query,
 			); err == nil {
 				items = append(items, sessResults...)
 				total += len(sessResults)
