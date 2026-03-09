@@ -169,7 +169,7 @@ func Load() (*Config, error) {
 
 		Upload: UploadConfig{
 			MaxSize:        getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
-			MediaPath:      getEnv("MEDIA_PATH", "./media"),
+			MediaPath:      getEnv("MEDIA_PATH", "./data/media"),
 			SigningSecret:  getEnv("MEDIA_SIGNING_SECRET", ""),
 			ServeRateLimit: getEnvInt("MEDIA_SERVE_RATE_LIMIT", 300),
 		},
