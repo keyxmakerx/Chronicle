@@ -57,8 +57,9 @@ COPY --from=builder /src/static /app/static
 # Copy database migrations for auto-migration on startup.
 COPY --from=builder /src/db/migrations /app/db/migrations
 
-# Create uploads directory owned by the non-root user.
-RUN mkdir -p /app/uploads && chown chronicle:chronicle /app/uploads
+# Create media storage directory owned by the non-root user.
+# Must match MEDIA_PATH config default ("./media" resolves to /app/media).
+RUN mkdir -p /app/media && chown chronicle:chronicle /app/media
 
 WORKDIR /app
 
