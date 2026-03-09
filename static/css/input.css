@@ -673,27 +673,79 @@
     display: none;
   }
 
-  /* ---- Sidebar Category Accordion ---- */
+  /* ---- Drill-Down Slide-Over Panel ---- */
 
-  /* Accordion body: hidden by default, slides open with max-height animation. */
-  .sidebar-accordion-body {
-    max-height: 0;
-    overflow: hidden;
-    opacity: 0;
-    transition: max-height 250ms ease-out, opacity 200ms ease-out;
+  /* When drilled into a category, the icon list collapses to show only icons.
+     The overlay panel slides over in two stages:
+     Stage 1: panel at left:48px (icons visible) for ~500ms
+     Stage 2: panel at left:0 (covers icons)
+     Hovering the left edge peeks the icons back out. */
+
+  /* Icon-only mode: hide text, keep icons centered in a narrow strip. */
+  .sidebar-icon-only a > span.flex-1,
+  .sidebar-icon-only a > span.ml-auto,
+  .sidebar-icon-only > .sidebar-cat-list-label {
+    display: none;
   }
 
-  /* Open state: expand to fit content (capped for scroll). */
-  .sidebar-accordion-body.sidebar-accordion-open {
-    max-height: 50vh;
-    overflow-y: auto;
-    opacity: 1;
+  .sidebar-icon-only a {
+    padding-left: 14px;
+    padding-right: 14px;
+    justify-content: center;
   }
 
-  /* Subtle left border accent on expanded accordion. */
-  .sidebar-accordion:has(.sidebar-accordion-open) {
-    border-left: 2px solid rgba(99, 102, 241, 0.3);
-    margin-left: -2px;
+  .sidebar-icon-only a > span:first-child {
+    margin-right: 0 !important;
+    width: 16px !important;
+    height: 16px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Active icon highlight when drilled into that category. */
+  .sidebar-icon-only a.sidebar-nav-active {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* The slide-over panel (absolutely positioned inside categories zone). */
+  .sidebar-drill-panel {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    left: 100%; /* Hidden off-screen to the right */
+    background: var(--color-sidebar-bg);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    transition: left 300ms ease-in-out;
+    box-shadow: -4px 0 12px -2px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Stage 1: panel visible, icons still showing (left: 48px). */
+  .sidebar-drill-panel.sidebar-drill-active {
+    left: 48px;
+  }
+
+  /* Stage 2: panel fully covers icons (left: 0). Overrides stage 1. */
+  .sidebar-drill-panel.sidebar-drill-full {
+    left: 0;
+  }
+
+  /* Peeking: hover reveals icons (back to 48px). Overrides stage 2. */
+  .sidebar-drill-panel.sidebar-drill-peeking {
+    left: 48px;
+  }
+
+  /* Peek zone: invisible strip on the left edge of the panel.
+     Only visible when panel is in full-cover mode. */
+  .sidebar-peek-zone {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 8px;
+    z-index: 15;
+    cursor: w-resize;
   }
 
   /* Skeleton shimmer for loading states. */

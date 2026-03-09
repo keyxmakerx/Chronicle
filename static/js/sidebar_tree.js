@@ -320,16 +320,14 @@
     })
     .then(function (resp) {
       if (!resp.ok) throw new Error('Reorder failed');
-      // Refresh the sidebar entity list in the accordion that contains this tree.
-      var treeEl = document.getElementById('sidebar-entity-tree');
-      var resultsContainer = treeEl ? treeEl.closest('.sidebar-accordion-results') : null;
-      if (resultsContainer) {
-        var accordion = resultsContainer.closest('.sidebar-accordion');
-        var searchInput = accordion && accordion.querySelector('input[name="q"]');
+      // Refresh the sidebar entity list.
+      var results = document.getElementById('sidebar-cat-results');
+      if (results) {
+        var searchInput = document.querySelector('#sidebar-cat-content input[name="q"]');
         if (searchInput) {
           var loadUrl = searchInput.getAttribute('hx-get');
           if (loadUrl) {
-            htmx.ajax('GET', loadUrl, { target: resultsContainer, swap: 'innerHTML' });
+            htmx.ajax('GET', loadUrl, { target: results, swap: 'innerHTML' });
           }
         }
       }
@@ -345,11 +343,10 @@
   document.head.appendChild(style);
 
   // Listen for HTMX content swaps to re-initialize tree.
-  // Matches any sidebar-results-{slug} container or accordion results.
   document.addEventListener('htmx:afterSwap', function (e) {
     if (e.detail.target && (
-      (e.detail.target.id && e.detail.target.id.indexOf('sidebar-results-') === 0) ||
-      e.detail.target.classList.contains('sidebar-accordion-results')
+      e.detail.target.id === 'sidebar-cat-results' ||
+      e.detail.target.id === 'sidebar-cat-content'
     )) {
       setTimeout(initTree, 10);
     }

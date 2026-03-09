@@ -96,28 +96,20 @@
     });
   }
 
-  /** Render favorites list in all sidebar accordion sections. */
+  /** Render favorites list in the sidebar drill panel. */
   function renderFavorites(campaignId) {
-    // Find all favorites containers (one per category accordion).
-    var containers = document.querySelectorAll('[id^="sidebar-fav-"]:not([id$="-header"])');
-    var headers = document.querySelectorAll('[id^="sidebar-fav-header-"]');
-
-    // Fallback: legacy single container.
-    var legacy = document.getElementById('sidebar-cat-favorites');
-    if (legacy) containers = [legacy];
-    var legacyHeader = document.getElementById('sidebar-cat-favorites-header');
-    if (legacyHeader) headers = [legacyHeader];
-
-    if (!containers.length) return;
+    var container = document.getElementById('sidebar-cat-favorites');
+    var header = document.getElementById('sidebar-cat-favorites-header');
+    if (!container) return;
 
     var list = loadFavorites(campaignId);
     if (list.length === 0) {
-      containers.forEach(function (c) { c.innerHTML = ''; });
-      headers.forEach(function (h) { h.style.display = 'none'; });
+      container.innerHTML = '';
+      if (header) header.style.display = 'none';
       return;
     }
 
-    headers.forEach(function (h) { h.style.display = ''; });
+    if (header) header.style.display = '';
 
     var html = '';
     list.forEach(function (item) {
@@ -129,7 +121,7 @@
         '</a>';
     });
 
-    containers.forEach(function (c) { c.innerHTML = html; });
+    container.innerHTML = html;
   }
 
   /** Initialize favorites on page load. */
