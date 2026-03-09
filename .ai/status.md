@@ -8,8 +8,8 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-09 -- Multi-calendar Sprint 1 complete. Dropped UNIQUE constraint on calendars.campaign_id, added sort_order/is_default columns with migration backfill. Added calendar_id FK to sessions. Repository: ListByCampaignID, GetDefaultByCampaignID, SetDefault. Service: removed single-calendar validation, auto-set first as default, ListCalendars/SetDefaultCalendar, search spans all calendars, default promotion on deletion. Previous session: full-page journal, category nav redesign, sidebar tree with drag-and-drop.
-Branch: `claude/fix-journal-button-placement-UF4hD`. Next: Sprint 2 — handler/route restructuring (`/calendar` → `/calendars/:calId`).
+2026-03-09 -- Multi-calendar Sprint 2 complete. Full route restructuring from `/calendar` to `/calendars/:calId`. Handler rewrite: all handlers extract calId param, IDOR protection via requireCalendarInCampaign, new Index handler (list/redirect/setup), EmbedCalendar/UpcomingEvents/CreateEvent support fallback to default calendar for dashboard blocks. New calendar_list.templ with card grid. All templ/JS URL references updated across calendar, campaigns, entities, timeline plugins. Sync API: added ListCalendars endpoint, kept old `/calendar` routes for Foundry backward compat. calendarListerAdapter now uses ListCalendars. Tests fixed for multi-calendar (removed single-calendar constraint test, updated mocks).
+Branch: `claude/fix-journal-button-placement-UF4hD`. Next: Sprint 3 — calendar list UI polish, calendar switcher in views, Sprint 4 — sessions calendar FK integration.
 
 ## Phase & Sprint Plan
 See `.ai/phases.md` for the full roadmap. Phases organized by priority:

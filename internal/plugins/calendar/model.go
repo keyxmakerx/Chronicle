@@ -66,6 +66,12 @@ type Calendar struct {
 	EventCategories []EventCategory  `json:"event_categories,omitempty"`
 }
 
+// GetCampaignID returns the campaign ID this calendar belongs to.
+// Implements middleware.CampaignScoped for IDOR protection.
+func (c *Calendar) GetCampaignID() string {
+	return c.CampaignID
+}
+
 // IsRealLife returns true if this calendar syncs to real-world time.
 func (c *Calendar) IsRealLife() bool {
 	return c.Mode == ModeRealLife

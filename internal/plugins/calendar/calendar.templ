@@ -98,7 +98,7 @@ templ calendarSetupChooser(cc *campaigns.CampaignContext, csrfToken string) {
 			</p>
 			<form
 				method="POST"
-				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) }
 				class="space-y-4"
 			>
 				<input type="hidden" name="csrf_token" value={ csrfToken }/>
@@ -121,7 +121,7 @@ templ calendarSetupChooser(cc *campaigns.CampaignContext, csrfToken string) {
 			</p>
 			<form
 				method="POST"
-				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) }
 				class="space-y-4"
 			>
 				<input type="hidden" name="csrf_token" value={ csrfToken }/>
@@ -165,7 +165,7 @@ templ calendarSetupChooser(cc *campaigns.CampaignContext, csrfToken string) {
 			</p>
 			<form
 				method="POST"
-				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/import-setup", cc.Campaign.ID)) }
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/import-setup", cc.Campaign.ID)) }
 				enctype="multipart/form-data"
 				class="space-y-4"
 			>
@@ -236,7 +236,7 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 			<!-- Prev/Next month navigation -->
 			<div class="flex items-center gap-1">
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", data.CampaignID, prevYear(data), prevMonth(data))) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s?year=%d&month=%d", data.CampaignID, data.Calendar.ID, prevYear(data), prevMonth(data))) }
 					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 					title="Previous month"
 				>
@@ -245,7 +245,7 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 					</svg>
 				</a>
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", data.CampaignID, nextYear(data), nextMonth(data))) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s?year=%d&month=%d", data.CampaignID, data.Calendar.ID, nextYear(data), nextMonth(data))) }
 					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 					title="Next month"
 				>
@@ -298,7 +298,7 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 			<!-- "Today" button to jump to current date -->
 			if data.Year != data.Calendar.CurrentYear || data.MonthIndex != data.Calendar.CurrentMonth {
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.Calendar.ID)) }
 					class="btn-secondary text-xs"
 				>
 					<i class="fa-solid fa-crosshairs mr-1"></i> Today
@@ -337,21 +337,21 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 					<i class="fa-solid fa-calendar text-xs"></i>
 				</span>
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/week?year=%d&month=%d&day=1", data.CampaignID, data.Year, data.MonthIndex)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/week?year=%d&month=%d&day=1", data.CampaignID, data.Calendar.ID, data.Year, data.MonthIndex)) }
 					class="p-1.5 px-2 text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors"
 					title="Week view"
 				>
 					<i class="fa-solid fa-calendar-week text-xs"></i>
 				</a>
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/day?year=%d&month=%d&day=%d", data.CampaignID, data.Year, data.MonthIndex, data.Calendar.CurrentDay)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/day?year=%d&month=%d&day=%d", data.CampaignID, data.Calendar.ID, data.Year, data.MonthIndex, data.Calendar.CurrentDay)) }
 					class="p-1.5 px-2 text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors"
 					title="Day view"
 				>
 					<i class="fa-solid fa-calendar-day text-xs"></i>
 				</a>
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/timeline?year=%d", data.CampaignID, data.Year)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/timeline?year=%d", data.CampaignID, data.Calendar.ID, data.Year)) }
 					class="p-1.5 px-2 text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors"
 					title="Timeline view"
 				>
@@ -361,7 +361,7 @@ templ calendarHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
 			<!-- Settings link (Owner only) -->
 			if data.IsOwner {
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/settings", data.CampaignID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/settings", data.CampaignID, data.Calendar.ID)) }
 					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 					title="Calendar settings"
 				>
@@ -763,7 +763,7 @@ templ sessionsModal(data CalendarViewData) {
 			<div
 				id="sessions-modal-content"
 				class="flex-1 overflow-y-auto p-5"
-				hx-get={ fmt.Sprintf("/campaigns/%s/calendar/sessions-fragment", data.CampaignID) }
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/%s/sessions-fragment", data.CampaignID, data.Calendar.ID) }
 				hx-trigger="sessions-refresh from:body"
 				hx-swap="innerHTML"
 			>
@@ -1150,6 +1150,7 @@ templ eventModal(data CalendarViewData) {
 				(function() {
 					var form = document.getElementById('event-form');
 					var campaignID = window.location.pathname.split('/')[2];
+					var calendarID = window.location.pathname.split('/')[4];
 
 					// --- TipTap rich text editor for event descriptions ---
 					var evtEditor = null;
@@ -1299,10 +1300,10 @@ templ eventModal(data CalendarViewData) {
 						var eventID = fd.get('event_id');
 						var url, method;
 						if (eventID) {
-							url = '/campaigns/' + campaignID + '/calendar/events/' + eventID;
+							url = '/campaigns/' + campaignID + '/calendars/' + calendarID + '/events/' + eventID;
 							method = 'PUT';
 						} else {
-							url = '/campaigns/' + campaignID + '/calendar/events';
+							url = '/campaigns/' + campaignID + '/calendars/' + calendarID + '/events';
 							method = 'POST';
 						}
 
@@ -1409,7 +1410,7 @@ templ eventModal(data CalendarViewData) {
 						if (src.dataset.eventRecurrenceType) payload.recurrence_type = src.dataset.eventRecurrenceType;
 
 						try {
-							var resp = await fetch('/campaigns/' + campaignID + '/calendar/events/' + eventId, {
+							var resp = await fetch('/campaigns/' + campaignID + '/calendars/' + calendarID + '/events/' + eventId, {
 								method: 'PUT',
 								headers: getHeaders(),
 								body: JSON.stringify(payload),
@@ -1550,7 +1551,7 @@ templ eventModal(data CalendarViewData) {
 						if (!eventID) return;
 
 						try {
-							var resp = await fetch('/campaigns/' + campaignID + '/calendar/events/' + eventID, {
+							var resp = await fetch('/campaigns/' + campaignID + '/calendars/' + calendarID + '/events/' + eventID, {
 								method: 'DELETE', headers: getHeaders(),
 							});
 							if (resp.ok) {
@@ -1619,7 +1620,7 @@ templ EntityEventsSection(cc *campaigns.CampaignContext, cal *Calendar, events [
 		<div class="card divide-y divide-edge">
 			for _, evt := range events {
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", cc.Campaign.ID, evt.Year, evt.Month)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s?year=%d&month=%d", cc.Campaign.ID, cal.ID, evt.Year, evt.Month)) }
 					class="flex items-center justify-between px-4 py-2.5 hover:bg-surface-alt transition-colors"
 				>
 					<div class="flex items-center gap-2 min-w-0">
@@ -1771,7 +1772,7 @@ templ UpcomingEventsBlock(cc *campaigns.CampaignContext, cal *Calendar, events [
 		<div class="px-4 py-6 text-center">
 			<p class="text-sm text-fg-muted">No upcoming events</p>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", cc.Campaign.ID, cal.ID)) }
 				class="text-xs text-accent hover:underline mt-1 inline-block"
 			>
 				Open calendar
@@ -1780,7 +1781,7 @@ templ UpcomingEventsBlock(cc *campaigns.CampaignContext, cal *Calendar, events [
 	} else {
 		for _, evt := range events {
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", cc.Campaign.ID, evt.Year, evt.Month)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s?year=%d&month=%d", cc.Campaign.ID, cal.ID, evt.Year, evt.Month)) }
 				class="flex items-center justify-between px-4 py-2.5 hover:bg-surface-alt transition-colors"
 			>
 				<div class="flex items-center gap-2 min-w-0">
@@ -1831,7 +1832,7 @@ templ timelineContent(cc *campaigns.CampaignContext, data TimelineViewData) {
 	<nav class="text-xs text-fg-muted mb-3" aria-label="Breadcrumb">
 		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", data.CampaignID)) } class="hover:text-fg-body">{ cc.Campaign.Name }</a>
 		<span class="mx-1">/</span>
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) } class="hover:text-fg-body">Calendar</a>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.Calendar.ID)) } class="hover:text-fg-body">Calendar</a>
 		<span class="mx-1">/</span>
 		<span class="text-fg-secondary">Timeline</span>
 	</nav>
@@ -1839,7 +1840,7 @@ templ timelineContent(cc *campaigns.CampaignContext, data TimelineViewData) {
 	<div class="flex items-center justify-between mb-6">
 		<div class="flex items-center gap-3">
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/timeline?year=%d", data.CampaignID, data.Year-1)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/timeline?year=%d", data.CampaignID, data.Calendar.ID, data.Year-1)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Previous year"
 			>
@@ -1859,7 +1860,7 @@ templ timelineContent(cc *campaigns.CampaignContext, data TimelineViewData) {
 				</span>
 			}
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/timeline?year=%d", data.CampaignID, data.Year+1)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/timeline?year=%d", data.CampaignID, data.Calendar.ID, data.Year+1)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Next year"
 			>
@@ -1871,21 +1872,21 @@ templ timelineContent(cc *campaigns.CampaignContext, data TimelineViewData) {
 		<div class="flex items-center gap-2">
 			<!-- View toggle: Grid / Week / Day / Timeline -->
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.Calendar.ID)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Calendar grid view"
 			>
 				<i class="fa-solid fa-calendar text-sm"></i>
 			</a>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/week?year=%d", data.CampaignID, data.Year)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/week?year=%d", data.CampaignID, data.Calendar.ID, data.Year)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Week view"
 			>
 				<i class="fa-solid fa-calendar-week text-sm"></i>
 			</a>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/day?year=%d&month=1&day=1", data.CampaignID, data.Year)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/day?year=%d&month=1&day=1", data.CampaignID, data.Calendar.ID, data.Year)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Day view"
 			>
@@ -1899,7 +1900,7 @@ templ timelineContent(cc *campaigns.CampaignContext, data TimelineViewData) {
 			</span>
 			if data.IsOwner {
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/settings", data.CampaignID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/settings", data.CampaignID, data.Calendar.ID)) }
 					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 					title="Calendar settings"
 				>
@@ -2083,7 +2084,7 @@ templ weekContent(cc *campaigns.CampaignContext, data WeekViewData) {
 	<nav class="text-xs text-fg-muted mb-3" aria-label="Breadcrumb">
 		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", data.CampaignID)) } class="hover:text-fg-body">{ cc.Campaign.Name }</a>
 		<span class="mx-1">/</span>
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) } class="hover:text-fg-body">Calendar</a>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.Calendar.ID)) } class="hover:text-fg-body">Calendar</a>
 		<span class="mx-1">/</span>
 		<span class="text-fg-secondary">Week</span>
 	</nav>
@@ -2091,7 +2092,7 @@ templ weekContent(cc *campaigns.CampaignContext, data WeekViewData) {
 	<div class="flex items-center justify-between mb-6">
 		<div class="flex items-center gap-3">
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/week?year=%d&month=%d&day=%d", data.CampaignID, weekPrevYear(data), weekPrevMonth(data), weekPrevDay(data))) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/week?year=%d&month=%d&day=%d", data.CampaignID, data.Calendar.ID, weekPrevYear(data), weekPrevMonth(data), weekPrevDay(data))) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Previous week"
 			>
@@ -2108,7 +2109,7 @@ templ weekContent(cc *campaigns.CampaignContext, data WeekViewData) {
 				</span>
 			}
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/week?year=%d&month=%d&day=%d", data.CampaignID, weekNextYear(data), weekNextMonth(data), weekNextDay(data))) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/week?year=%d&month=%d&day=%d", data.CampaignID, data.Calendar.ID, weekNextYear(data), weekNextMonth(data), weekNextDay(data))) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Next week"
 			>
@@ -2118,7 +2119,7 @@ templ weekContent(cc *campaigns.CampaignContext, data WeekViewData) {
 			</a>
 			<!-- Today button -->
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/week", data.CampaignID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/week", data.CampaignID, data.Calendar.ID)) }
 				class="text-xs font-medium px-2.5 py-1 rounded-md border border-edge hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Go to current week"
 			>
@@ -2128,7 +2129,7 @@ templ weekContent(cc *campaigns.CampaignContext, data WeekViewData) {
 		<div class="flex items-center gap-2">
 			<!-- View toggle: Grid / Week / Day / Timeline -->
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", data.CampaignID, data.Year, data.MonthIndex)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s?year=%d&month=%d", data.CampaignID, data.Calendar.ID, data.Year, data.MonthIndex)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Calendar grid view"
 			>
@@ -2141,14 +2142,14 @@ templ weekContent(cc *campaigns.CampaignContext, data WeekViewData) {
 				<i class="fa-solid fa-calendar-week text-sm"></i>
 			</span>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/day?year=%d&month=%d&day=%d", data.CampaignID, data.Year, data.MonthIndex, data.StartDay)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/day?year=%d&month=%d&day=%d", data.CampaignID, data.Calendar.ID, data.Year, data.MonthIndex, data.StartDay)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Day view"
 			>
 				<i class="fa-solid fa-calendar-day text-sm"></i>
 			</a>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/timeline?year=%d", data.CampaignID, data.Year)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/timeline?year=%d", data.CampaignID, data.Calendar.ID, data.Year)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Timeline view"
 			>
@@ -2156,7 +2157,7 @@ templ weekContent(cc *campaigns.CampaignContext, data WeekViewData) {
 			</a>
 			if data.IsOwner {
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/settings", data.CampaignID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/settings", data.CampaignID, data.Calendar.ID)) }
 					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 					title="Calendar settings"
 				>
@@ -2286,7 +2287,7 @@ templ dayContent(cc *campaigns.CampaignContext, data DayViewData) {
 	<nav class="text-xs text-fg-muted mb-3" aria-label="Breadcrumb">
 		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", data.CampaignID)) } class="hover:text-fg-body">{ cc.Campaign.Name }</a>
 		<span class="mx-1">/</span>
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", data.CampaignID)) } class="hover:text-fg-body">Calendar</a>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.Calendar.ID)) } class="hover:text-fg-body">Calendar</a>
 		<span class="mx-1">/</span>
 		<span class="text-fg-secondary">Day</span>
 	</nav>
@@ -2294,7 +2295,7 @@ templ dayContent(cc *campaigns.CampaignContext, data DayViewData) {
 	<div class="flex items-center justify-between mb-6">
 		<div class="flex items-center gap-3">
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/day?year=%d&month=%d&day=%d", data.CampaignID, dayPrevYear(data), dayPrevMonth(data), dayPrevDayNum(data))) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/day?year=%d&month=%d&day=%d", data.CampaignID, data.Calendar.ID, dayPrevYear(data), dayPrevMonth(data), dayPrevDayNum(data))) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Previous day"
 			>
@@ -2316,7 +2317,7 @@ templ dayContent(cc *campaigns.CampaignContext, data DayViewData) {
 				</span>
 			}
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/day?year=%d&month=%d&day=%d", data.CampaignID, dayNextYear(data), dayNextMonth(data), dayNextDayNum(data))) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/day?year=%d&month=%d&day=%d", data.CampaignID, data.Calendar.ID, dayNextYear(data), dayNextMonth(data), dayNextDayNum(data))) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Next day"
 			>
@@ -2326,7 +2327,7 @@ templ dayContent(cc *campaigns.CampaignContext, data DayViewData) {
 			</a>
 			<!-- Today button -->
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/day", data.CampaignID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/day", data.CampaignID, data.Calendar.ID)) }
 				class="text-xs font-medium px-2.5 py-1 rounded-md border border-edge hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Go to today"
 			>
@@ -2336,14 +2337,14 @@ templ dayContent(cc *campaigns.CampaignContext, data DayViewData) {
 		<div class="flex items-center gap-2">
 			<!-- View toggle: Grid / Week / Day / Timeline -->
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar?year=%d&month=%d", data.CampaignID, data.Year, data.MonthIndex)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s?year=%d&month=%d", data.CampaignID, data.Calendar.ID, data.Year, data.MonthIndex)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Calendar grid view"
 			>
 				<i class="fa-solid fa-calendar text-sm"></i>
 			</a>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/week?year=%d&month=%d&day=%d", data.CampaignID, data.Year, data.MonthIndex, data.Day)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/week?year=%d&month=%d&day=%d", data.CampaignID, data.Calendar.ID, data.Year, data.MonthIndex, data.Day)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Week view"
 			>
@@ -2356,7 +2357,7 @@ templ dayContent(cc *campaigns.CampaignContext, data DayViewData) {
 				<i class="fa-solid fa-calendar-day text-sm"></i>
 			</span>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/timeline?year=%d", data.CampaignID, data.Year)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/timeline?year=%d", data.CampaignID, data.Calendar.ID, data.Year)) }
 				class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 				title="Timeline view"
 			>
@@ -2364,7 +2365,7 @@ templ dayContent(cc *campaigns.CampaignContext, data DayViewData) {
 			</a>
 			if data.IsOwner {
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/settings", data.CampaignID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/settings", data.CampaignID, data.Calendar.ID)) }
 					class="p-2 rounded-md hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
 					title="Calendar settings"
 				>

@@ -1,0 +1,115 @@
+// calendar_list.templ renders the calendar list page for campaigns with
+// multiple calendars. Shows a card grid with each calendar's name, mode,
+// current date, and a "New Calendar" button for owners.
+
+package calendar
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CalendarListPage renders the full calendar list page.
+templ CalendarListPage(cc *campaigns.CampaignContext, cals []Calendar, isOwner bool, csrfToken string) {
+	@layouts.App("Calendars") {
+		@calendarListContent(cc, cals, isOwner, csrfToken)
+	}
+}
+
+// CalendarListFragment renders the calendar list as an HTMX fragment.
+templ CalendarListFragment(cc *campaigns.CampaignContext, cals []Calendar, isOwner bool, csrfToken string) {
+	@calendarListContent(cc, cals, isOwner, csrfToken)
+}
+
+// calendarListContent renders the calendar list body.
+templ calendarListContent(cc *campaigns.CampaignContext, cals []Calendar, isOwner bool, csrfToken string) {
+	<div class="sm:max-w-4xl mx-auto py-6 px-2 sm:px-4">
+		@components.Breadcrumbs([]components.BreadcrumbItem{
+			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+			{Label: "Calendars"},
+		})
+		<div class="flex items-center justify-between mb-6">
+			<div>
+				<h1 class="text-xl font-bold text-fg">Calendars</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					{ fmt.Sprintf("%d calendar(s)", len(cals)) }
+				</p>
+			</div>
+			if isOwner {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) }
+					class="btn-primary text-sm"
+					hx-get={ fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID) }
+					hx-target="body"
+					hx-push-url="true"
+					onclick="document.getElementById('create-calendar-modal').classList.remove('hidden'); event.preventDefault();"
+				>
+					<i class="fa-solid fa-plus mr-1"></i> New Calendar
+				</a>
+			}
+		</div>
+
+		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+			for _, cal := range cals {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", cc.Campaign.ID, cal.ID)) }
+					class="card p-4 hover:ring-2 hover:ring-accent/40 transition-all group"
+				>
+					<div class="flex items-start gap-3">
+						<div class="w-10 h-10 rounded-lg bg-accent/10 text-accent flex items-center justify-center flex-shrink-0">
+							if cal.Mode == ModeRealLife {
+								<i class="fa-solid fa-clock text-lg"></i>
+							} else {
+								<i class="fa-solid fa-calendar-alt text-lg"></i>
+							}
+						</div>
+						<div class="min-w-0 flex-1">
+							<div class="flex items-center gap-2">
+								<h3 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">
+									{ cal.Name }
+								</h3>
+								if cal.IsDefault {
+									<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium">Default</span>
+								}
+							</div>
+							<div class="text-xs text-fg-muted mt-1">
+								if cal.Mode == ModeRealLife {
+									Real-life calendar
+								} else {
+									Fantasy calendar
+								}
+							</div>
+							<div class="text-xs text-fg-secondary mt-2">
+								if len(cal.Months) > 0 && cal.CurrentMonth >= 1 && cal.CurrentMonth <= len(cal.Months) {
+									{ fmt.Sprintf("%s %d, Year %d", cal.Months[cal.CurrentMonth-1].Name, cal.CurrentDay, cal.CurrentYear) }
+								} else {
+									{ fmt.Sprintf("Day %d, Month %d, Year %d", cal.CurrentDay, cal.CurrentMonth, cal.CurrentYear) }
+								}
+							</div>
+						</div>
+					</div>
+				</a>
+			}
+		</div>
+
+		// Create calendar modal (same setup chooser, reused from setup page).
+		if isOwner {
+			<div id="create-calendar-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+				<div class="card max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto p-6">
+					<div class="flex items-center justify-between mb-4">
+						<h2 class="text-lg font-bold text-fg">Create New Calendar</h2>
+						<button
+							class="text-fg-muted hover:text-fg"
+							onclick="document.getElementById('create-calendar-modal').classList.add('hidden')"
+						>
+							<i class="fa-solid fa-xmark"></i>
+						</button>
+					</div>
+					@calendarSetupChooser(cc, csrfToken)
+				</div>
+			</div>
+		}
+	</div>
+}

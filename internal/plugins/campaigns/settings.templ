@@ -282,7 +282,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 func pluginURL(campaignID, slug string) string {
 	switch slug {
 	case "calendar":
-		return fmt.Sprintf("/campaigns/%s/calendar", campaignID)
+		return fmt.Sprintf("/campaigns/%s/calendars", campaignID)
 	case "maps":
 		return fmt.Sprintf("/campaigns/%s/maps", campaignID)
 	case "timeline":

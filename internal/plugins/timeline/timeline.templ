@@ -333,7 +333,7 @@ templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) 
 					if data.IsOwner {
 						if data.Timeline.HasCalendar() {
 							<a
-								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/settings?tab=eras", data.CampaignID)) }
+								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/settings?tab=eras", data.CampaignID, *data.Timeline.CalendarID)) }
 								class="btn-secondary text-xs"
 								title="Edit eras in calendar settings"
 							>

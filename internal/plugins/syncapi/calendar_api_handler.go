@@ -30,8 +30,26 @@ func NewCalendarAPIHandler(syncSvc SyncAPIService, calendarSvc calendar.Calendar
 
 // --- Calendar Read ---
 
+// ListCalendars returns all calendars for a campaign.
+// GET /api/v1/campaigns/:id/calendars
+func (h *CalendarAPIHandler) ListCalendars(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cals, err := h.calendarSvc.ListCalendars(ctx, campaignID)
+	if err != nil {
+		slog.Error("api: failed to list calendars", slog.Any("error", err))
+		return apperror.NewInternal(fmt.Errorf("failed to list calendars"))
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"data":  cals,
+		"total": len(cals),
+	})
+}
+
 // GetCalendar returns the full calendar structure for a campaign.
-// GET /api/v1/campaigns/:id/calendar
+// GET /api/v1/campaigns/:id/calendar (default calendar, backward compat)
 func (h *CalendarAPIHandler) GetCalendar(c echo.Context) error {
 	campaignID := c.Param("id")
 	ctx := c.Request().Context()

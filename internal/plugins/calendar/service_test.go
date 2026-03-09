@@ -39,6 +39,7 @@ type mockCalendarRepo struct {
 	listUpcomingEventsFn func(ctx context.Context, calendarID string, year, month, day int, role int, limit int) ([]Event, error)
 	searchEventsFn       func(ctx context.Context, calendarID, query string, role int) ([]Event, error)
 	updateEventVisFn     func(ctx context.Context, eventID string, visibility string, visRules *string) error
+	listByCampaignIDFn   func(ctx context.Context, campaignID string) ([]Calendar, error)
 }
 
 func (m *mockCalendarRepo) Create(ctx context.Context, cal *Calendar) error {
@@ -53,6 +54,25 @@ func (m *mockCalendarRepo) GetByCampaignID(ctx context.Context, campaignID strin
 		return m.getByCampaignIDFn(ctx, campaignID)
 	}
 	return nil, nil
+}
+
+func (m *mockCalendarRepo) GetDefaultByCampaignID(ctx context.Context, campaignID string) (*Calendar, error) {
+	// Falls back to GetByCampaignID for test backward compat.
+	if m.getByCampaignIDFn != nil {
+		return m.getByCampaignIDFn(ctx, campaignID)
+	}
+	return nil, nil
+}
+
+func (m *mockCalendarRepo) ListByCampaignID(ctx context.Context, campaignID string) ([]Calendar, error) {
+	if m.listByCampaignIDFn != nil {
+		return m.listByCampaignIDFn(ctx, campaignID)
+	}
+	return nil, nil
+}
+
+func (m *mockCalendarRepo) SetDefault(ctx context.Context, campaignID, calendarID string) error {
+	return nil
 }
 
 func (m *mockCalendarRepo) GetByID(ctx context.Context, id string) (*Calendar, error) {
@@ -303,20 +323,6 @@ func TestCreateCalendar_DefaultName(t *testing.T) {
 	}
 }
 
-func TestCreateCalendar_AlreadyExists(t *testing.T) {
-	repo := &mockCalendarRepo{
-		getByCampaignIDFn: func(_ context.Context, _ string) (*Calendar, error) {
-			return &Calendar{ID: "cal-existing"}, nil
-		},
-	}
-	svc := newTestCalendarService(repo)
-
-	_, err := svc.CreateCalendar(context.Background(), "camp-1", CreateCalendarInput{
-		Name: "Second Calendar",
-	})
-	assertAppError(t, err, 422)
-}
-
 func TestCreateCalendar_RepoError(t *testing.T) {
 	repo := &mockCalendarRepo{
 		createFn: func(_ context.Context, _ *Calendar) error {
@@ -469,6 +475,9 @@ func TestUpdateCalendar_InvalidCurrentMonth(t *testing.T) {
 func TestDeleteCalendar_Success(t *testing.T) {
 	deleted := false
 	repo := &mockCalendarRepo{
+		getByIDFn: func(_ context.Context, id string) (*Calendar, error) {
+			return &Calendar{ID: id, CampaignID: "camp-1"}, nil
+		},
 		deleteFn: func(_ context.Context, id string) error {
 			deleted = true
 			if id != "cal-1" {
@@ -955,8 +964,8 @@ func TestSearchCalendarEvents_NoCal(t *testing.T) {
 
 func TestSearchCalendarEvents_Success(t *testing.T) {
 	repo := &mockCalendarRepo{
-		getByCampaignIDFn: func(_ context.Context, _ string) (*Calendar, error) {
-			return &Calendar{ID: "cal-1", CampaignID: "camp-1"}, nil
+		listByCampaignIDFn: func(_ context.Context, _ string) ([]Calendar, error) {
+			return []Calendar{{ID: "cal-1", CampaignID: "camp-1", Name: "Main"}}, nil
 		},
 		searchEventsFn: func(_ context.Context, _ string, _ string, _ int) ([]Event, error) {
 			return []Event{
