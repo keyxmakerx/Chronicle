@@ -154,48 +154,82 @@ templ Sidebar() {
 					</a>
 				</div>
 
-				<!-- Categories accordion zone: inline expandable sections -->
-				<div id="sidebar-categories-zone" class="flex-1 overflow-y-auto min-h-0 py-2"
-					hx-boost="true"
-					hx-target="#main-content"
-					hx-select="#main-content"
-					hx-swap="innerHTML show:window:top"
-				>
-					<div class="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
-						Categories
-					</div>
-					for _, et := range GetEntityTypes(ctx) {
-						@categoryAccordion(et, activeDrillSlug(ctx) == et.Slug)
-					}
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
-							templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
+				<!-- Categories drill-down zone -->
+				<div id="sidebar-categories-zone" class="flex-1 overflow-hidden relative min-h-0">
+					<!-- Category icon list (always present, visible behind overlay panel) -->
+					<div
+						id="sidebar-cat-list"
+						class={ "h-full overflow-y-auto py-2",
+							templ.KV("sidebar-icon-only", activeDrillSlug(ctx) != "") }
+						hx-boost="true"
+						hx-target="#main-content"
+						hx-select="#main-content"
+						hx-swap="innerHTML show:window:top"
 					>
-						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-							<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
-						</span>
-						<span class="flex-1">All Pages</span>
-					</a>
-					<!-- Custom sidebar sections and links -->
-					if len(GetCustomSections(ctx)) > 0 || len(GetCustomLinks(ctx)) > 0 {
-						for _, link := range GetCustomLinks(ctx) {
-							if link.Section == "" {
-								@customNavLink(link)
-							}
+						<div class="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
+							Categories
+						</div>
+						for _, et := range GetEntityTypes(ctx) {
+							@entityTypeLink(et.Slug, et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID))
 						}
-						for _, section := range GetCustomSections(ctx) {
-							<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
-								{ section.Label }
-							</div>
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
+							</span>
+							<span class="flex-1">All Pages</span>
+						</a>
+						<!-- Custom sidebar sections and links -->
+						if len(GetCustomSections(ctx)) > 0 || len(GetCustomLinks(ctx)) > 0 {
 							for _, link := range GetCustomLinks(ctx) {
-								if link.Section == section.ID {
+								if link.Section == "" {
 									@customNavLink(link)
 								}
 							}
+							for _, section := range GetCustomSections(ctx) {
+								<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
+									{ section.Label }
+								</div>
+								for _, link := range GetCustomLinks(ctx) {
+									if link.Section == section.ID {
+										@customNavLink(link)
+									}
+								}
+							}
 						}
-					}
+					</div>
+
+					<!-- Category slide-over panel (overlays icon list) -->
+					<div
+						id="sidebar-category"
+						class={ "sidebar-drill-panel",
+							templ.KV("sidebar-drill-active", activeDrillSlug(ctx) != "") }
+					>
+						<!-- Peek zone: thin left-edge strip, hovering reveals icon list -->
+						<div id="sidebar-peek-zone" class="sidebar-peek-zone"></div>
+						<!-- Back button -->
+						<div
+							class="flex items-center px-4 py-2 border-b border-gray-700/50 cursor-pointer hover:bg-sidebar-hover transition-colors shrink-0"
+							onclick="Chronicle.drillOut()"
+						>
+							<svg class="w-3.5 h-3.5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+							</svg>
+							<span class="text-xs text-gray-400">Categories</span>
+						</div>
+						<!-- Panel content area -->
+						<div id="sidebar-cat-content" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+							for _, et := range GetEntityTypes(ctx) {
+								if activeDrillSlug(ctx) == et.Slug {
+									@SidebarDrillPanel(GetCampaignID(ctx), et, GetEntityCount(ctx, et.ID))
+								}
+							}
+						</div>
+					</div>
 				</div>
 			</div>
 
@@ -480,129 +514,121 @@ templ DefaultSidebarNav() {
 	</a>
 }
 
-// categoryAccordion renders a single entity type as an expandable accordion
-// section in the sidebar. The header is always visible with icon, label, and
-// count. Clicking toggles an inline body with search, entity list, and actions.
-// Entity list is lazy-loaded on first expand via HTMX.
-templ categoryAccordion(et SidebarEntityType, isActive bool) {
-	<div
-		class="sidebar-accordion"
-		data-cat-slug={ et.Slug }
-		data-cat-url={ fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), et.Slug) }
+// entityTypeLink renders a single category link in the sidebar icon list.
+// Clicking triggers the slide-over panel via sidebar_drill.js.
+templ entityTypeLink(slug string, label string, color string, icon string, count int) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug)) }
+		hx-boost="false"
+		data-drill-url={ fmt.Sprintf("/campaigns/%s/sidebar/drill/%s", GetCampaignID(ctx), slug) }
+		class={ "sidebar-category-link", sidebarNavLink,
+			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))),
+			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))) }
+		data-cat-slug={ slug }
+		data-cat-url={ fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug) }
 	>
-		<!-- Accordion header: always visible, click to toggle body -->
-		<button
-			type="button"
-			class={ "sidebar-accordion-toggle w-full flex items-center px-4 py-2 text-sm transition-colors hover:bg-sidebar-hover group",
-				templ.KV("text-sidebar-active bg-sidebar-hover/50", isActive),
-				templ.KV("text-sidebar-text", !isActive) }
-			data-cat-slug={ et.Slug }
-			hx-boost="false"
-		>
-			<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-				if et.Icon != "" {
-					<i class={ "fa-solid " + et.Icon, "text-xs" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
-				} else {
-					<span class="w-2 h-2 rounded-full" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
-				}
-			</span>
-			<span class="flex-1 text-left truncate">{ et.NamePlural }</span>
-			if GetEntityCount(ctx, et.ID) > 0 {
-				<span class="text-xs text-gray-500 mr-2">{ strconv.Itoa(GetEntityCount(ctx, et.ID)) }</span>
+		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+			if icon != "" {
+				<i class={ "fa-solid " + icon, "text-xs" } style={ fmt.Sprintf("color: %s", color) }></i>
+			} else {
+				<span class="w-2 h-2 rounded-full" style={ fmt.Sprintf("background-color: %s", color) }></span>
 			}
-			<i class={ "fa-solid fa-chevron-right text-[9px] text-gray-600 transition-transform duration-200 sidebar-accordion-chevron",
-				templ.KV("rotate-90", isActive) }></i>
-		</button>
-		<!-- Accordion body: expandable inline content -->
-		<div
-			class={ "sidebar-accordion-body",
-				templ.KV("sidebar-accordion-open", isActive) }
-		>
-			<div class="pb-2 border-b border-gray-700/30 mb-1">
-				<!-- Action bar -->
-				<div class="flex items-center gap-1.5 px-4 pt-2 pb-1.5" hx-boost="false">
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), et.Slug)) }
-						class="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[11px] font-medium rounded bg-gray-800/60 border border-gray-700/50 text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
-					>
-						<i class="fa-solid fa-th-large text-[9px]" style={ fmt.Sprintf("color: %s", et.Color) }></i>
-						View All
-					</a>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", GetCampaignID(ctx))) }
-						class="flex items-center justify-center gap-1 px-2 py-1 text-[11px] font-medium rounded border text-gray-400 hover:text-white transition-colors"
-						style={ fmt.Sprintf("border-color: %s30; background-color: %s10", et.Color, et.Color) }
-					>
-						<i class="fa-solid fa-plus text-[9px]"></i>
-						New
-					</a>
-				</div>
-				<!-- Quick search -->
-				<div class="px-4 pb-1">
-					<div class="relative">
-						<input
-							type="search"
-							placeholder={ fmt.Sprintf("Search %s...", et.NamePlural) }
-							class="w-full px-2.5 py-1.5 pl-7 text-[11px] rounded bg-gray-800/50 border border-gray-700/50 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
-							hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", GetCampaignID(ctx), et.ID) }
-							hx-trigger="keyup changed delay:300ms"
-							hx-target={ fmt.Sprintf("#sidebar-results-%s", et.Slug) }
-							hx-swap="innerHTML"
-							name="q"
-							autocomplete="off"
-						/>
-						<i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600 text-[9px] pointer-events-none"></i>
-					</div>
-				</div>
-			</div>
-			<!-- Entity list (lazy-loaded on first expand) -->
-			<div id={ fmt.Sprintf("sidebar-results-%s", et.Slug) } class="sidebar-accordion-results">
-				if isActive {
-					<!-- Active category: load entities immediately -->
-					<div
-						hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", GetCampaignID(ctx), et.ID) }
-						hx-trigger="load"
-						hx-swap="outerHTML"
-					>
-						<div class="px-4 py-2 space-y-1.5">
-							<div class="skeleton-shimmer h-3 w-3/4"></div>
-							<div class="skeleton-shimmer h-3 w-1/2"></div>
-							<div class="skeleton-shimmer h-3 w-2/3"></div>
-						</div>
-					</div>
-				} else {
-					<!-- Inactive: placeholder replaced on first expand -->
-					<div class="sidebar-accordion-placeholder"
-						data-load-url={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", GetCampaignID(ctx), et.ID) }
-					>
-						<div class="px-4 py-2 space-y-1.5">
-							<div class="skeleton-shimmer h-3 w-3/4"></div>
-							<div class="skeleton-shimmer h-3 w-1/2"></div>
-							<div class="skeleton-shimmer h-3 w-2/3"></div>
-						</div>
-					</div>
-				}
-			</div>
-			<!-- Favorites (populated by favorites.js) -->
-			<div id={ fmt.Sprintf("sidebar-fav-header-%s", et.Slug) } class="px-4 mt-2 mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600" style="display:none">
-				<i class="fa-solid fa-star text-amber-400/70 mr-0.5"></i> Favorites
-			</div>
-			<div id={ fmt.Sprintf("sidebar-fav-%s", et.Slug) }></div>
-			<!-- Recent -->
-			<div class="px-4 mt-2 mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
-				<i class="fa-solid fa-clock-rotate-left text-gray-600/70 mr-0.5"></i> Recent
-			</div>
-			<div id={ fmt.Sprintf("sidebar-recent-%s", et.Slug) } class="text-[11px] text-gray-600 px-4 py-1 italic">
-				No recently viewed
-			</div>
-		</div>
-	</div>
+		</span>
+		<span class="flex-1">{ label }</span>
+		if count > 0 {
+			<span class="ml-auto text-xs text-gray-500">{ strconv.Itoa(count) }</span>
+		}
+	</a>
 }
 
-// SidebarDrillPanel renders the drill-down panel content for a sidebar entity
-// type category. Kept for the HTMX endpoint that returns drill panel fragments.
+// SidebarDrillPanel renders the slide-over panel content for a category.
+// Includes header, action bar, search, entity list, favorites, and recent.
 templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
-	@categoryAccordion(et, true)
+	<!-- Category header -->
+	<div class="px-4 py-3 border-b border-gray-700/50 shrink-0">
+		<div class="flex items-center gap-2">
+			<span class="w-5 h-5 rounded flex items-center justify-center">
+				if et.Icon != "" {
+					<i class={ "fa-solid " + et.Icon, "text-sm" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
+				} else {
+					<span class="w-2.5 h-2.5 rounded-full" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
+				}
+			</span>
+			<span class="text-sm font-semibold text-white truncate">{ et.NamePlural }</span>
+			<span class="text-[10px] text-gray-500 ml-auto">
+				{ strconv.Itoa(count) }
+				if count == 1 {
+					page
+				} else {
+					pages
+				}
+			</span>
+		</div>
+	</div>
+	<!-- Scrollable content -->
+	<div class="flex-1 overflow-y-auto">
+		<!-- Action bar -->
+		<div class="flex items-center gap-1.5 px-4 py-2" hx-boost="false">
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", campaignID, et.Slug)) }
+				class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-medium rounded bg-gray-800/60 border border-gray-700/50 text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
+			>
+				<i class="fa-solid fa-th-large text-[9px]" style={ fmt.Sprintf("color: %s", et.Color) }></i>
+				View All
+			</a>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new", campaignID)) }
+				class="flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-medium rounded border text-gray-400 hover:text-white transition-colors"
+				style={ fmt.Sprintf("border-color: %s30; background-color: %s10", et.Color, et.Color) }
+			>
+				<i class="fa-solid fa-plus text-[9px]"></i>
+				New
+			</a>
+		</div>
+		<!-- Search -->
+		<div class="px-4 pb-2">
+			<div class="relative">
+				<input
+					type="search"
+					placeholder={ fmt.Sprintf("Search %s...", et.NamePlural) }
+					class="w-full px-2.5 py-1.5 pl-7 text-[11px] rounded bg-gray-800/50 border border-gray-700/50 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
+					hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, et.ID) }
+					hx-trigger="keyup changed delay:300ms"
+					hx-target="#sidebar-cat-results"
+					hx-swap="innerHTML"
+					name="q"
+					autocomplete="off"
+				/>
+				<i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600 text-[9px] pointer-events-none"></i>
+			</div>
+		</div>
+		<!-- Entity list (lazy-loaded) -->
+		<div id="sidebar-cat-results">
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, et.ID) }
+				hx-trigger="load"
+				hx-swap="outerHTML"
+			>
+				<div class="px-4 py-2 space-y-1.5">
+					<div class="skeleton-shimmer h-3 w-3/4"></div>
+					<div class="skeleton-shimmer h-3 w-1/2"></div>
+					<div class="skeleton-shimmer h-3 w-2/3"></div>
+				</div>
+			</div>
+		</div>
+		<!-- Favorites -->
+		<div id="sidebar-cat-favorites-header" class="px-4 mt-3 mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600" style="display:none">
+			<i class="fa-solid fa-star text-amber-400/70 mr-0.5"></i> Favorites
+		</div>
+		<div id="sidebar-cat-favorites"></div>
+		<!-- Recent -->
+		<div class="px-4 mt-3 mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+			<i class="fa-solid fa-clock-rotate-left text-gray-600/70 mr-0.5"></i> Recent
+		</div>
+		<div id="sidebar-cat-recent" class="text-[11px] text-gray-600 px-4 py-1 italic">
+			No recently viewed
+		</div>
+	</div>
 }
 
 // SidebarDrillFragment is the HTMX endpoint component. Finds the entity type by

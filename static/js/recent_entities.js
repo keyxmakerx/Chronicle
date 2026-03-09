@@ -123,22 +123,15 @@
   }
 
   /**
-   * Render recent entities into all sidebar accordion sections.
+   * Render recent entities into the sidebar drill panel.
    */
   function renderRecent(campaignId) {
-    // Find all recent containers (one per category accordion).
-    var containers = document.querySelectorAll('[id^="sidebar-recent-"]');
-
-    // Fallback: legacy single container.
-    var legacy = document.getElementById('sidebar-cat-recent');
-    if (legacy) containers = [legacy];
-
-    if (!containers.length) return;
+    var container = document.getElementById('sidebar-cat-recent');
+    if (!container) return;
 
     var list = loadRecent(campaignId);
     if (list.length === 0) {
-      var emptyHtml = '<div class="text-[11px] text-gray-600 px-4 py-1 italic">No recently viewed</div>';
-      containers.forEach(function (c) { c.innerHTML = emptyHtml; });
+      container.innerHTML = '<div class="text-[11px] text-gray-600 px-4 py-1 italic">No recently viewed</div>';
       return;
     }
 
@@ -152,7 +145,7 @@
         '</a>';
     });
 
-    containers.forEach(function (c) { c.innerHTML = html; });
+    container.innerHTML = html;
   }
 
   /**
