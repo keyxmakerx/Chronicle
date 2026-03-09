@@ -39,32 +39,147 @@
 
 ## Upcoming Phases
 
+### Phase V: Obsidian-Style Notes & Discovery ← NEXT
+
+_Quick capture, backlinks, enhanced graph, content templates, editor power-ups.
+Priority: **Highest** — DM workflow & competitive parity with LegendKeeper/Obsidian.
+See `.ai/obsidian-notes-plan.md` and `.ai/competitive-gap-analysis.md` for details._
+
+#### Sprint V-1: Quick Capture, Session Journal & Slash Commands
+
+Quick-capture modal (Ctrl+Shift+N) creates a timestamped note instantly.
+"Session Journal" button in topbar: append to today's journal entry. Add player
+notes to Ctrl+K quick search results.
+
+**Also:** TipTap slash command menu (`/` trigger). Commands: heading levels,
+bulleted/numbered list, callout, table, image, horizontal rule, code block.
+Inspired by LegendKeeper's `/secret`, `/layout`, `/help` pattern.
+
+**Key files:** `static/js/widgets/editor.js`, topbar template, notes widget
+
+#### Sprint V-1.5: Inline Secrets / DM-Only Blocks in Editor (NEW)
+
+Inline secret blocks within the TipTap editor — content visible only to
+Owner/Scribe roles, hidden from Players. Rendered with a lock icon and subtle
+border in edit mode. Stripped from HTML in read mode for unauthorized roles.
+
+Competitive gap: World Anvil has inline secrets, LegendKeeper has `/secret`
+blocks, Kanka has secret posts. Chronicle only has entity-level visibility
+and DM-only posts — no inline content hiding within the main editor.
+
+**Key files:** `editor.js` (custom TipTap node), `editor_secret.js`, `sanitize/`
+
+#### Sprint V-2: Backlinks Panel & Entity Aliases
+
+"Referenced By" section on entity show pages (layout block type). Query scans
+`entry_html` for `data-mention-id` matching current entity. Collapsible panel
+with source entity + context snippet. Redis caching.
+
+**Also:** Entity aliases (migration: `entity_aliases` table). Multiple canonical
+names per entity for auto-linking and search. Aliases appear in Ctrl+K results
+and auto-linker name detection. Inspired by LegendKeeper's alias system.
+
+**Key files:** entities repo/service/handler, `editor_autolink.js`, search
+
+#### Sprint V-3: Content Templates
+
+Pre-fill editor with structured content (e.g., Session Recap template with
+headings). Template picker in entity create flow and editor insert menu.
+Per-campaign or global. Owner-customizable.
+
+**Key files:** migration, entities handler/templates, editor widget
+
+#### Sprint V-4: Enhanced Graph View & Cover Images
+
+Include @mention links in graph (not just explicit relations). Filter by entity
+type, tag, search. Local graph view (N hops). Cluster by type/tag. Orphan
+detection.
+
+**Also:** Cover/banner images on entity pages as a layout block type. Currently
+entities show a single avatar image. Add `cover_image` layout block that renders
+a full-width hero banner at the top of the entity page. Inspired by World Anvil
+and LegendKeeper's page headers.
+
+**Key files:** `relation_graph.js`, layout block types, entity templates
+
+---
+
+### Phase W: Polish, Ecosystem & Delight
+
+_Power-user features, map tools, integrations, bulk operations.
+Priority: High — power users & map parity with LegendKeeper._
+
+#### Sprint W-1: Command Palette & Saved Filters
+
+Ctrl+Shift+P action palette with fuzzy search. Saved entity list filter presets
+as sidebar links (`saved_filters` table).
+
+#### Sprint W-2: Map Drawing Tools, Regions & Measurement
+
+Leaflet.Draw integration (freehand, polygons, circles, rectangles, text). Uses
+existing `map_drawings` table. Per-drawing visibility, color/opacity.
+
+**Also (competitive gaps):**
+- **Map regions / territory outlines** — polygon drawing with customizable fills,
+  strokes, and labels. Inspired by LegendKeeper's region tool.
+- **Map measurement / distance** — calibrate map scale, measure between points.
+  Leaflet.Measure plugin or custom ruler tool.
+- **Map embed layout block** — embed a mini-map in entity pages that auto-centers
+  on the entity's marker. New layout block type `map_embed`.
+
+#### Sprint W-2.5: Nested / Linked Maps (NEW)
+
+Click a map marker to open a sub-map (world → region → city → dungeon). Map
+markers gain an optional `linked_map_id` field. Breadcrumb navigation between
+map levels. Both World Anvil and LegendKeeper have this — Chronicle maps are
+currently flat.
+
+**Key files:** migration (markers), maps handler/templates, `map_widget.js`
+
+#### Sprint W-3: Discord Bot Integration
+
+Plugin at `internal/plugins/discord/`. Bot token config. Webhook session
+notifications. Reaction-based RSVP (ADR-012).
+
+#### Sprint W-4: Bulk Operations & Persistent Filters
+
+Multi-select entity lists with batch actions (tag, move, visibility, delete).
+Persistent filters per category in localStorage.
+
+**Also:** Entity tag/field filtering on entity list pages (currently only type
+tabs exist). Filter by tag, custom field value, or visibility mode.
+
+#### Sprint W-5: Editor Import/Export & Additional Themes
+
+Markdown import/export via `goldmark`. Sepia + high-contrast themes. Custom
+accent color picker.
+
+**Also:** Embed media blocks in editor (video/audio URLs). World Anvil embeds
+SFX and ambient audio — a simple URL embed block covers the gap.
+
+#### Sprint W-6: Timeline List View & Meter Blocks (NEW)
+
+**Timeline list view** — simple chronological list of events alongside the D3
+visualization. LegendKeeper offers list/gantt/calendar views; a list view is
+low-effort, high-value for scanning events quickly.
+
+**Meter / tracker blocks** — layout block type for tracking numeric values
+(HP, spell slots, ability scores). Configurable min/max, bar/circle/dot styles.
+Inspired by LegendKeeper's meter block with 6 visualization styles.
+
+---
+
 ### Phase T: Game Systems & Worldbuilding Tools
 
 _Expand reference content and add worldbuilding aids.
-Priority: High — content depth._
+Priority: Medium — content depth. T-0 through T-2 already complete._
 
-#### Sprint T-1: D&D 5e Reference Pages
-
-Browsable pages at `/systems/dnd5e/` — category index with cards, searchable
-lists per category, formatted stat block detail pages. Quick-search integration
-(Ctrl+K returns game system reference results).
-
-**Key files:** `systems/dnd5e/handler.go`, `systems/dnd5e/templates/` (new), `systems/dnd5e/routes.go`
-
-#### Sprint T-2: Pathfinder 2e System
-
-ORC-licensed data following D&D 5e pattern: spells, creatures, ancestries,
-classes, conditions, equipment. Uses GenericModule (auto-instantiation via
-`manifest.json` + `data/`).
-
-**Key files:** `systems/pathfinder2e/` (new directory)
-
-#### Sprint T-3: Worldbuilding Prompts
+#### Sprint T-3: Guided Worldbuilding Prompts
 
 `worldbuilding_prompts` table with genre-aware writing prompts per entity type.
 "Writing Prompts" collapsible panel on entity edit page. Default prompt packs
-(fantasy, sci-fi, horror). Owner-customizable.
+(fantasy, sci-fi, horror). Owner-customizable. Inspired by World Anvil's
+worldbuilding meta tool.
 
 **Key files:** migration, `entities/handler.go`, `entities/templates/`, `entities/service.go`
 
@@ -80,7 +195,7 @@ Campaign creation genre selection. "Import preset" in Customization Hub.
 ### Phase U: Collaboration & Platform Maturity
 
 _Multi-user collaboration, invites, security hardening, accessibility.
-Priority: High — multi-user & security._
+Priority: Medium — multi-user features._
 
 #### Sprint U-1: Role-Aware Dashboards
 
@@ -111,69 +226,6 @@ Docker-compose full stack with health checks. Makefile full-stack target.
 
 ---
 
-### Phase V: Obsidian-Style Notes & Discovery
-
-_Quick capture, backlinks, enhanced graph, content templates.
-Priority: Medium — DM workflow. See `.ai/obsidian-notes-plan.md` for details._
-
-#### Sprint V-1: Quick Capture & Session Journal
-
-Quick-capture modal (Ctrl+Shift+N) creates a timestamped note instantly.
-"Session Journal" button in topbar: append to today's journal entry. Add player
-notes to Ctrl+K quick search results.
-
-#### Sprint V-2: Backlinks Panel
-
-"Referenced By" section on entity show pages (layout block type). Query scans
-`entry_html` for `data-mention-id` matching current entity. Collapsible panel
-with source entity + context snippet. Redis caching.
-
-#### Sprint V-3: Content Templates
-
-Pre-fill editor with structured content (e.g., Session Recap template with
-headings). Template picker in entity create flow and editor insert menu.
-Per-campaign or global. Owner-customizable.
-
-#### Sprint V-4: Enhanced Graph View
-
-Include @mention links in graph (not just explicit relations). Filter by entity
-type, tag, search. Local graph view (N hops). Cluster by type/tag. Orphan
-detection.
-
----
-
-### Phase W: Polish, Ecosystem & Delight
-
-_Power-user features, map tools, integrations, bulk operations.
-Priority: Medium — power users._
-
-#### Sprint W-1: Command Palette & Saved Filters
-
-Ctrl+Shift+P action palette with fuzzy search. Saved entity list filter presets
-as sidebar links (`saved_filters` table).
-
-#### Sprint W-2: Map Drawing Tools
-
-Leaflet.Draw integration (freehand, polygons, circles, rectangles, text). Uses
-existing `map_drawings` table. Per-drawing visibility, color/opacity.
-
-#### Sprint W-3: Discord Bot Integration
-
-Plugin at `internal/plugins/discord/`. Bot token config. Webhook session
-notifications. Reaction-based RSVP (ADR-012).
-
-#### Sprint W-4: Bulk Operations
-
-Multi-select entity lists with batch actions (tag, move, visibility, delete).
-Persistent filters per category in localStorage.
-
-#### Sprint W-5: Editor Import/Export & Themes
-
-Markdown import/export via `goldmark`. Sepia + high-contrast themes. Custom
-accent color picker.
-
----
-
 ## Backlog (Address Opportunistically)
 
 Items to pick up during related sprints or as standalone tasks. Full details
@@ -185,7 +237,7 @@ limiting on mutations, recurring calendar events (beyond yearly).
 **Documentation:** Posts widget .ai.md, 16 JS widgets missing .ai.md.
 
 **Player & DM Experience Gaps:** Entity tag/field filtering, print/PDF export,
-share links, soft delete/archive, map measurement, fog of war native UI,
+share links, soft delete/archive, fog of war native UI,
 initiative tracker, session prep checklist, NPC generator, account deletion,
 activity tracking, timeline search/zoom-to-era, entity version history, toast
 grouping, entity image gallery.
@@ -193,25 +245,35 @@ grouping, entity image gallery.
 **Deferred / Community:** System Builder UI, Draw Steel system, whiteboards,
 offline mode, collaborative editing, calendar timezones, map grids, webhooks,
 Knowledge Graph addon, dice roller, family tree, cross-campaign search, mobile
-modals.
+modals, moons/seasons/weather in calendar, character sheets, combat tracker.
 
 ---
 
 ## Recommended Execution Order
 
 ```
-T-1 (D&D 5e pages) ──── Content depth (Ctrl+K integration remaining)
+V-1 (quick capture + slash commands) ─┐
+V-1.5 (inline secrets)                │
+V-2 (backlinks + aliases)             ├── DM workflow & discovery
+V-3 (content templates)               │
+V-4 (enhanced graph + cover images)   ┘
         │
         ▼
-U-2 (invite system) ──── Collaboration unlock
+W-1 (command palette + saved filters) ─┐
+W-2 (map drawing + regions + measure)  │
+W-2.5 (nested maps)                    ├── Power tools & map parity
+W-4 (bulk ops + entity filtering)      │
+W-5 (markdown import/export + themes)  │
+W-6 (timeline list + meter blocks)     ┘
         │
         ▼
-V-1 (quick capture) ─┐
-V-2 (backlinks)      ├── DM workflow
-        │             ┘
+W-3 (Discord) ──── Integration (lower priority)
+        │
         ▼
-    Fill remaining sprints by priority
-    (T-2, U-1, U-3, V-3, V-4, W-*, T-3, T-4, U-4, U-5)
+T-3 (prompts) → T-4 (genre presets) ──── Content depth
+        │
+        ▼
+U-1 → U-2 → U-3 → U-4 → U-5 ──── Collaboration & platform
 ```
 
 ---
