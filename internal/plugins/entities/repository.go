@@ -467,9 +467,16 @@ type EntityRepository interface {
 	CopyEntityTags(ctx context.Context, sourceEntityID, targetEntityID string) error
 
 	// ListNames returns lightweight name entries for all visible entities in a
-	// campaign. Used for auto-linking in the editor. Sorted by name length DESC
-	// so longer names match first (prevents partial matches).
+	// campaign, including aliases. Used for auto-linking in the editor. Sorted
+	// by name length DESC so longer names match first (prevents partial matches).
 	ListNames(ctx context.Context, campaignID string, role int, userID string) ([]EntityNameEntry, error)
+
+	// ListAliases returns all aliases for a given entity.
+	ListAliases(ctx context.Context, entityID string) ([]EntityAlias, error)
+
+	// SetAliases replaces all aliases for an entity with the given list.
+	// Deletes existing aliases and inserts new ones in a single transaction.
+	SetAliases(ctx context.Context, entityID string, aliases []string) error
 }
 
 // entityRepository implements EntityRepository with MariaDB queries.
@@ -816,15 +823,24 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 	args := []any{campaignID}
 
 	// FULLTEXT for longer queries, LIKE for short ones.
+	var nameCondition string
+	var nameArg string
 	if len(query) >= 4 {
 		cleaned := stripFTOperators(query)
-		where += " AND MATCH(e.name) AGAINST(? IN BOOLEAN MODE)"
-		args = append(args, cleaned+"*")
+		nameCondition = "MATCH(e.name) AGAINST(? IN BOOLEAN MODE)"
+		nameArg = cleaned + "*"
 	} else {
 		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
-		where += " AND e.name LIKE ?"
-		args = append(args, "%"+escaped+"%")
+		nameCondition = "e.name LIKE ?"
+		nameArg = "%" + escaped + "%"
 	}
+
+	// Match entity name OR any alias.
+	aliasEscaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
+	where += fmt.Sprintf(` AND (%s OR e.id IN (
+		SELECT ea.entity_id FROM entity_aliases ea WHERE ea.alias LIKE ?
+	))`, nameCondition)
+	args = append(args, nameArg, "%"+aliasEscaped+"%")
 
 	if typeID > 0 {
 		where += " AND e.entity_type_id = ?"
@@ -1306,9 +1322,10 @@ func stripFTOperators(query string) string {
 	return ftOperatorReplacer.Replace(query)
 }
 
-// ListNames returns lightweight name entries for auto-linking. Only returns
-// entities with names >= 3 chars. Sorted by name length DESC so longer names
-// match first in the auto-linker (prevents "King" matching before "King Arthur").
+// ListNames returns lightweight name entries for auto-linking, including entity
+// aliases as separate rows. Only returns names >= 3 chars. Sorted by name
+// length DESC so longer names match first (prevents "King" matching before
+// "King Arthur"). Alias entries have IsAlias=true.
 func (r *entityRepository) ListNames(ctx context.Context, campaignID string, role int, userID string) ([]EntityNameEntry, error) {
 	where := "WHERE e.campaign_id = ? AND CHAR_LENGTH(e.name) >= 3"
 	args := []any{campaignID}
@@ -1317,13 +1334,28 @@ func (r *entityRepository) ListNames(ctx context.Context, campaignID string, rol
 	where += visFilter
 	args = append(args, visArgs...)
 
-	query := fmt.Sprintf(`SELECT e.id, e.name, e.slug, et.name, et.icon, et.slug
-		FROM entities e
-		INNER JOIN entity_types et ON et.id = e.entity_type_id
-		%s
-		ORDER BY CHAR_LENGTH(e.name) DESC, e.name`, where)
+	// UNION entity names with aliases. Aliases get is_alias=1.
+	aliasWhere := "WHERE e.campaign_id = ? AND CHAR_LENGTH(ea.alias) >= 3"
+	aliasArgs := []any{campaignID}
+	aliasArgs = append(aliasArgs, visArgs...)
 
-	rows, err := r.db.QueryContext(ctx, query, args...)
+	query := fmt.Sprintf(`
+		SELECT id, name, slug, type_name, type_icon, type_slug, is_alias FROM (
+			SELECT e.id, e.name AS name, e.slug, et.name AS type_name, et.icon AS type_icon, et.slug AS type_slug, 0 AS is_alias
+			FROM entities e
+			INNER JOIN entity_types et ON et.id = e.entity_type_id
+			%s
+			UNION ALL
+			SELECT e.id, ea.alias AS name, e.slug, et.name AS type_name, et.icon AS type_icon, et.slug AS type_slug, 1 AS is_alias
+			FROM entity_aliases ea
+			INNER JOIN entities e ON e.id = ea.entity_id
+			INNER JOIN entity_types et ON et.id = e.entity_type_id
+			%s %s
+		) combined
+		ORDER BY CHAR_LENGTH(name) DESC, name`, where, aliasWhere, visFilter)
+
+	allArgs := append(args, aliasArgs...)
+	rows, err := r.db.QueryContext(ctx, query, allArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("listing entity names: %w", err)
 	}
@@ -1332,10 +1364,62 @@ func (r *entityRepository) ListNames(ctx context.Context, campaignID string, rol
 	var entries []EntityNameEntry
 	for rows.Next() {
 		var entry EntityNameEntry
-		if err := rows.Scan(&entry.ID, &entry.Name, &entry.Slug, &entry.TypeName, &entry.TypeIcon, &entry.TypeSlug); err != nil {
+		var isAlias int
+		if err := rows.Scan(&entry.ID, &entry.Name, &entry.Slug, &entry.TypeName, &entry.TypeIcon, &entry.TypeSlug, &isAlias); err != nil {
 			return nil, fmt.Errorf("scanning entity name: %w", err)
 		}
+		entry.IsAlias = isAlias == 1
 		entries = append(entries, entry)
 	}
 	return entries, rows.Err()
+}
+
+// ListAliases returns all aliases for a given entity, ordered alphabetically.
+func (r *entityRepository) ListAliases(ctx context.Context, entityID string) ([]EntityAlias, error) {
+	query := `SELECT id, entity_id, alias, created_at FROM entity_aliases WHERE entity_id = ? ORDER BY alias`
+	rows, err := r.db.QueryContext(ctx, query, entityID)
+	if err != nil {
+		return nil, fmt.Errorf("listing aliases: %w", err)
+	}
+	defer rows.Close()
+
+	var aliases []EntityAlias
+	for rows.Next() {
+		var a EntityAlias
+		if err := rows.Scan(&a.ID, &a.EntityID, &a.Alias, &a.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scanning alias: %w", err)
+		}
+		aliases = append(aliases, a)
+	}
+	return aliases, rows.Err()
+}
+
+// SetAliases replaces all aliases for an entity. Deletes existing and batch
+// inserts new ones. Caller must validate alias count and length limits.
+func (r *entityRepository) SetAliases(ctx context.Context, entityID string, aliases []string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin alias tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM entity_aliases WHERE entity_id = ?`, entityID); err != nil {
+		return fmt.Errorf("deleting old aliases: %w", err)
+	}
+
+	if len(aliases) > 0 {
+		stmt, err := tx.PrepareContext(ctx, `INSERT INTO entity_aliases (entity_id, alias) VALUES (?, ?)`)
+		if err != nil {
+			return fmt.Errorf("preparing alias insert: %w", err)
+		}
+		defer stmt.Close()
+
+		for _, alias := range aliases {
+			if _, err := stmt.ExecContext(ctx, entityID, alias); err != nil {
+				return fmt.Errorf("inserting alias %q: %w", alias, err)
+			}
+		}
+	}
+
+	return tx.Commit()
 }

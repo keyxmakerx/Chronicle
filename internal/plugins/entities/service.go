@@ -72,6 +72,13 @@ type EntityService interface {
 	// Auto-linking — returns lightweight name entries for all visible entities.
 	ListEntityNames(ctx context.Context, campaignID string, role int, userID string) ([]EntityNameEntry, error)
 
+	// Entity aliases — alternative names for auto-linking, search, and mentions.
+	GetAliases(ctx context.Context, entityID string) ([]EntityAlias, error)
+	SetAliases(ctx context.Context, entityID string, aliases []string) error
+
+	// Backlinks with context snippets.
+	GetBacklinksWithSnippets(ctx context.Context, entityID string, role int, userID string) ([]BacklinkEntry, error)
+
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
 
@@ -1051,9 +1058,119 @@ func (s *entityService) generateSlug(ctx context.Context, campaignID, name strin
 }
 
 // ListEntityNames returns lightweight name entries for all visible entities
-// in a campaign. Used by the auto-linking feature in the editor.
+// in a campaign, including aliases. Used by the auto-linking feature in the editor.
 func (s *entityService) ListEntityNames(ctx context.Context, campaignID string, role int, userID string) ([]EntityNameEntry, error) {
 	return s.entities.ListNames(ctx, campaignID, role, userID)
+}
+
+// GetAliases returns all aliases for a given entity.
+func (s *entityService) GetAliases(ctx context.Context, entityID string) ([]EntityAlias, error) {
+	aliases, err := s.entities.ListAliases(ctx, entityID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing aliases: %w", err))
+	}
+	return aliases, nil
+}
+
+// SetAliases replaces an entity's aliases. Validates count (max 10) and
+// length (2-200 chars per alias). Trims whitespace and deduplicates.
+func (s *entityService) SetAliases(ctx context.Context, entityID string, aliases []string) error {
+	// Trim and deduplicate.
+	seen := make(map[string]bool, len(aliases))
+	cleaned := make([]string, 0, len(aliases))
+	for _, a := range aliases {
+		a = strings.TrimSpace(a)
+		lower := strings.ToLower(a)
+		if a == "" || seen[lower] {
+			continue
+		}
+		seen[lower] = true
+		cleaned = append(cleaned, a)
+	}
+
+	if len(cleaned) > MaxAliasesPerEntity {
+		return apperror.NewBadRequest(fmt.Sprintf("maximum %d aliases allowed", MaxAliasesPerEntity))
+	}
+	for _, a := range cleaned {
+		if len(a) < MinAliasLength || len(a) > MaxAliasLength {
+			return apperror.NewBadRequest(fmt.Sprintf("alias must be %d-%d characters", MinAliasLength, MaxAliasLength))
+		}
+	}
+
+	if err := s.entities.SetAliases(ctx, entityID, cleaned); err != nil {
+		return apperror.NewInternal(fmt.Errorf("setting aliases: %w", err))
+	}
+	slog.Info("entity aliases updated", slog.String("entity_id", entityID), slog.Int("count", len(cleaned)))
+	return nil
+}
+
+// GetBacklinksWithSnippets returns backlink entities with context snippets
+// showing text around the @mention. Builds on the existing GetBacklinks by
+// extracting snippets from each referencing entity's entry_html.
+func (s *entityService) GetBacklinksWithSnippets(ctx context.Context, entityID string, role int, userID string) ([]BacklinkEntry, error) {
+	backlinks, err := s.entities.FindBacklinks(ctx, entityID, role, userID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("finding backlinks: %w", err))
+	}
+
+	entries := make([]BacklinkEntry, 0, len(backlinks))
+	for _, bl := range backlinks {
+		snippet := extractMentionSnippet(bl.EntryHTML, entityID)
+		entries = append(entries, BacklinkEntry{Entity: bl, Snippet: snippet})
+	}
+	return entries, nil
+}
+
+// extractMentionSnippet extracts a plain-text snippet around a mention link
+// in HTML content. Returns ~120 chars of context surrounding the mention.
+func extractMentionSnippet(html *string, entityID string) string {
+	if html == nil || *html == "" {
+		return ""
+	}
+
+	// Find the mention anchor in the HTML.
+	needle := `data-mention-id="` + entityID + `"`
+	idx := strings.Index(*html, needle)
+	if idx < 0 {
+		return ""
+	}
+
+	// Expand to surrounding context: take a window around the mention.
+	const windowSize = 200
+	start := idx - windowSize
+	if start < 0 {
+		start = 0
+	}
+	end := idx + windowSize
+	if end > len(*html) {
+		end = len(*html)
+	}
+	window := (*html)[start:end]
+
+	// Strip HTML tags to get plain text.
+	plain := stripHTMLTags(window)
+
+	// Trim to ~120 chars at word boundaries.
+	plain = strings.TrimSpace(plain)
+	if len(plain) > 120 {
+		// Find last space before limit.
+		cut := strings.LastIndex(plain[:120], " ")
+		if cut < 40 {
+			cut = 120
+		}
+		plain = plain[:cut] + "…"
+	}
+	if start > 0 {
+		plain = "…" + plain
+	}
+	return plain
+}
+
+// stripHTMLTags removes HTML tags from a string, leaving only text content.
+var htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
+
+func stripHTMLTags(s string) string {
+	return htmlTagRegex.ReplaceAllString(s, "")
 }
 
 // generateUUID creates a new v4 UUID string using crypto/rand.

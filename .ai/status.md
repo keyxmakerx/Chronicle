@@ -8,8 +8,8 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-09 -- Documentation & backlog update. Verified 3-phase security hardening plan fully complete (all items implemented or intentionally excluded — ClamAV evaluated and removed in favor of CDR/magic-byte/MIME pipeline). Added feature request: Session Journal audio attachments (Sprint V-5) — upload, share/private visibility, inline player. Marked Sprint V-1 complete in todo.md. Previously: Sprint V-1 (Quick Capture, Session Journal, Slash Commands), competitive gap analysis, phase reordering.
-Branch: `claude/dynamic-database-setup-1QSPA`.
+2026-03-09 -- Sprint V-2 (Backlinks Panel & Entity Aliases). Fixed migration 060 bug (bad ENUM rename). Added entity_aliases table (migration 061), alias CRUD (repo/service/handler), aliases widget JS, backlinks HTMX lazy-load with Redis caching, context snippets in backlinks, search/auto-linker alias integration. Also marked Sprint V-1.5 (Inline Secrets) as complete (was already implemented). 11 new tests, all passing.
+Branch: `claude/review-project-plans-ZIfD6`.
 
 ## Phase & Sprint Plan
 See `.ai/phases.md` for the full roadmap. Phases organized by priority:
@@ -19,7 +19,19 @@ See `.ai/phases.md` for the full roadmap. Phases organized by priority:
 - **U**: Collaboration & Platform Maturity
 
 ## Current Phase
-**Phase V (Obsidian-Style Notes & Discovery) — Sprint V-1 COMPLETE.**
+**Phase V (Obsidian-Style Notes & Discovery) — Sprint V-2 COMPLETE.**
+
+### Sprint V-2: Backlinks Panel & Entity Aliases (COMPLETE)
+- **Fixed migration 060**: Removed incorrect first ALTER that tried to drop 'module' from ENUM directly, causing Error 1265. Kept correct 3-step approach.
+- **Migration 061**: `entity_aliases` table with FULLTEXT index, FK cascade to entities.
+- **Entity Aliases** (model/repo/service/handler): `EntityAlias` struct, `SetAliasesInput` with validation (max 10, length 2-200, case-insensitive dedup). CRUD via `GET/PUT /campaigns/:id/entities/:eid/aliases` (Scribe+ for write).
+- **Alias search integration**: `Search()` now includes alias LIKE matches via subquery. `ListNames()` returns alias entries as separate `EntityNameEntry` rows with `IsAlias=true` — auto-linker and @mention popup match aliases with zero JS changes.
+- **Backlinks HTMX lazy-load**: Removed synchronous `GetBacklinks()` from Show handler. Added `GET /campaigns/:id/entities/:eid/backlinks` endpoint returning HTMX fragment or JSON. Show page uses `hx-get` + `hx-trigger="load"`.
+- **Backlinks Redis caching**: 5-minute TTL, cache key `backlinks:<entityID>:<role>:<userID>`.
+- **Context snippets**: `BacklinkEntry` struct pairs entity + text snippet. `extractMentionSnippet()` finds mention in HTML, strips tags, extracts ~120 chars around mention.
+- **Aliases widget** (`aliases.js`): Tag-chip UI below entity title. Add/remove aliases inline. Invalidates auto-link cache on change.
+- **Cache invalidation**: `invalidateCachePattern()` helper for Redis SCAN+DEL. Entity names cache invalidated on alias change.
+- **Tests**: 11 new tests — alias validation (7 cases), alias dedup, snippet extraction (2), backlinks with snippets.
 
 ### Sprint V-1: Quick Capture, Session Journal & Slash Commands (COMPLETE)
 - **Slash command menu** (`editor_slash.js`): TipTap `/` trigger shows command palette with 9 block commands (3 heading levels, bullet/numbered list, callout, table, horizontal rule, code block). Filters as user types, keyboard navigation, follows mention extension pattern.

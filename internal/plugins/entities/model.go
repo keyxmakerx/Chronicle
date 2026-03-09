@@ -544,6 +544,8 @@ func ValidPermission(p Permission) bool {
 // EntityNameEntry is a lightweight entity record for auto-linking.
 // Contains just enough data to detect entity names in editor text and
 // create links. Sorted by name length descending so longer names match first.
+// Alias entries appear as separate rows with IsAlias=true, pointing to the
+// same entity ID so the auto-linker matches them naturally.
 type EntityNameEntry struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
@@ -551,4 +553,39 @@ type EntityNameEntry struct {
 	TypeName string `json:"type_name"`
 	TypeIcon string `json:"type_icon"`
 	TypeSlug string `json:"type_slug"`
+	IsAlias  bool   `json:"is_alias,omitempty"`
+}
+
+// --- Entity Aliases ---
+
+// EntityAlias represents an alternative name for an entity. Aliases appear
+// in auto-linking, search, and @mention results alongside the primary name.
+type EntityAlias struct {
+	ID        int       `json:"id"`
+	EntityID  string    `json:"entity_id"`
+	Alias     string    `json:"alias"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// SetAliasesInput is the request body for replacing an entity's aliases.
+type SetAliasesInput struct {
+	Aliases []string `json:"aliases"`
+}
+
+// MaxAliasesPerEntity is the maximum number of aliases allowed per entity.
+const MaxAliasesPerEntity = 10
+
+// MinAliasLength is the minimum character length for an alias.
+const MinAliasLength = 2
+
+// MaxAliasLength is the maximum character length for an alias.
+const MaxAliasLength = 200
+
+// --- Backlinks ---
+
+// BacklinkEntry pairs an entity that references the current entity with
+// a text snippet showing the context around the @mention.
+type BacklinkEntry struct {
+	Entity  Entity `json:"entity"`
+	Snippet string `json:"snippet"`
 }
