@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/middleware"
-	"github.com/keyxmakerx/chronicle/internal/modules"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
@@ -159,6 +160,29 @@ func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID st
 		}
 	}
 	return result, nil
+}
+
+// backdropUploaderAdapter wraps the media service to implement the
+// campaigns.MediaUploader interface for backdrop image uploads.
+type backdropUploaderAdapter struct {
+	svc media.MediaService
+}
+
+// UploadBackdrop uploads an image via the media service with backdrop usage type.
+func (a *backdropUploaderAdapter) UploadBackdrop(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (string, error) {
+	mf, err := a.svc.Upload(ctx, media.UploadInput{
+		CampaignID:   campaignID,
+		UploadedBy:   userID,
+		OriginalName: originalName,
+		MimeType:     mimeType,
+		FileSize:     int64(len(fileBytes)),
+		UsageType:    media.UsageBackdrop,
+		FileBytes:    fileBytes,
+	})
+	if err != nil {
+		return "", err
+	}
+	return mf.Filename, nil
 }
 
 // entityTagFetcherAdapter wraps tags.TagService to implement the
@@ -748,6 +772,7 @@ func (a *App) RegisterRoutes() {
 	// entity type templates, entity packs, tag collections, marker icons, themes).
 	extRepo := extensions.NewExtensionRepository(a.DB)
 	extService := extensions.NewExtensionService(extRepo, a.Config.ExtensionsPath)
+	extService.SetMigrationRunner(extensions.NewMigrationRunner(a.DB))
 	extHandler := extensions.NewHandler(extService, a.Config.ExtensionsPath)
 	extensions.RegisterAdminRoutes(adminGroup, extHandler)
 	extensions.RegisterCampaignRoutes(e, extHandler, campaignService, authService)
@@ -757,6 +782,10 @@ func (a *App) RegisterRoutes() {
 	securityRepo := admin.NewSecurityEventRepository(a.DB)
 	securityService := admin.NewSecurityService(securityRepo, authRepo, authService)
 	adminHandler.SetSecurityService(securityService)
+
+	// Data hygiene scanner: orphan detection and cleanup for media, API keys, stale files.
+	hygieneScanner := admin.NewHygieneService(a.DB, mediaRepo, mediaService, a.Config.Upload.MediaPath, securityRepo)
+	adminHandler.SetHygieneScanner(hygieneScanner)
 
 	// Wire security event logging into the auth handler so logins, logouts,
 	// failed attempts, and password resets are recorded automatically.
@@ -872,6 +901,7 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetMapSearcher(mapsService)
 	entityHandler.SetCalendarSearcher(calendarService)
 	entityHandler.SetSessionSearcher(sessionsService)
+	entityHandler.SetSystemSearcher(systems.NewSystemSearchAdapter(addonService))
 	entityHandler.SetMemberLister(campaignService)
 	entityHandler.SetGroupLister(groupService)
 	entityHandler.SetCache(a.Redis)
@@ -920,6 +950,7 @@ func (a *App) RegisterRoutes() {
 
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
+	campaignHandler.SetMediaUploader(&backdropUploaderAdapter{svc: mediaService})
 	tagHandler.SetAuditService(auditService)
 
 	// --- Campaign Export/Import ---
@@ -1129,10 +1160,19 @@ func (a *App) RegisterRoutes() {
 	a.WASMPluginManager = wasmPluginMgr
 	a.WASMHookDispatcher = wasmHookDispatcher
 
-	// --- Game System Modules ---
-	// Module reference pages and tooltip API, gated by per-campaign addon checks.
-	moduleHandler := modules.NewModuleHandler()
-	modules.RegisterRoutes(e, moduleHandler, addonService, authService, campaignService)
+	// Wire campaign deletion cleanup: media files and WASM hooks.
+	campaignService.SetMediaCleaner(mediaService)
+	campaignService.SetHookDispatcher(wasmHookDispatcher)
+
+	// --- Game Systems ---
+	// System reference pages and tooltip API, gated by per-campaign addon checks.
+	// Custom system manager stores per-campaign uploads under media/systems/.
+	campaignSystemMgr := systems.NewCampaignSystemManager(filepath.Join(a.Config.Upload.MediaPath, "systems"))
+	systemHandler := systems.NewSystemHandler()
+	systemHandler.SetCampaignSystems(campaignSystemMgr)
+	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
+	campaignSystemHandler := systems.NewCampaignSystemHandler(campaignSystemMgr)
+	systems.RegisterCustomSystemRoutes(e, campaignSystemHandler, authService, campaignService)
 
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {
@@ -1157,6 +1197,11 @@ func (a *App) RegisterRoutes() {
 		if cc := campaigns.GetCampaignContext(c); cc != nil {
 			ctx = layouts.SetCampaignID(ctx, cc.Campaign.ID)
 			ctx = layouts.SetCampaignName(ctx, cc.Campaign.Name)
+
+			// Accent color from campaign settings.
+			if accentColor := cc.Campaign.ParseSettings().AccentColor; accentColor != "" {
+				ctx = layouts.SetAccentColor(ctx, accentColor)
+			}
 
 			// "View as player" override: when an owner has the toggle active,
 			// templates see RolePlayer instead of RoleOwner. Access control

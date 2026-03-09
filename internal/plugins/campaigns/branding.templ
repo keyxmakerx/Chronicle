@@ -1,0 +1,125 @@
+// branding.templ renders the backdrop upload section and accent color picker
+// for campaign settings.
+
+package campaigns
+
+import "fmt"
+
+// BackdropUploadSection renders the backdrop image upload/remove UI fragment.
+// Used as both the initial render and the HTMX swap target after upload/remove.
+templ BackdropUploadSection(campaignID string, backdropPath *string, csrfToken string) {
+	<div id="backdrop-section">
+		if backdropPath != nil && *backdropPath != "" {
+			// Show current backdrop with remove button.
+			<div class="relative rounded-lg overflow-hidden border border-edge">
+				<img
+					src={ "/media/" + *backdropPath }
+					alt="Campaign backdrop"
+					class="w-full h-32 object-cover"
+				/>
+				<div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+				<div class="absolute bottom-2 right-2 flex gap-2">
+					<label class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-white/90 text-gray-700 hover:bg-white cursor-pointer transition-colors">
+						<i class="fa-solid fa-arrows-rotate text-[10px]"></i>
+						Replace
+						<input
+							type="file"
+							name="file"
+							accept="image/jpeg,image/png,image/webp"
+							class="hidden"
+							hx-post={ fmt.Sprintf("/campaigns/%s/backdrop", campaignID) }
+							hx-encoding="multipart/form-data"
+							hx-target="#backdrop-section"
+							hx-swap="outerHTML"
+							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+						/>
+					</label>
+					<button
+						hx-delete={ fmt.Sprintf("/campaigns/%s/backdrop", campaignID) }
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+						hx-target="#backdrop-section"
+						hx-swap="outerHTML"
+						hx-confirm="Remove the backdrop image?"
+						class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-red-500/90 text-white hover:bg-red-600 transition-colors"
+					>
+						<i class="fa-solid fa-trash text-[10px]"></i>
+						Remove
+					</button>
+				</div>
+			</div>
+		} else {
+			// Show upload prompt.
+			<label class="flex items-center justify-center h-24 rounded-lg border-2 border-dashed border-edge hover:border-accent/50 bg-surface-alt cursor-pointer transition-colors group">
+				<div class="text-center">
+					<i class="fa-solid fa-image text-lg text-fg-muted group-hover:text-accent transition-colors mb-1"></i>
+					<p class="text-xs text-fg-muted group-hover:text-fg-secondary transition-colors">Click to upload a backdrop image</p>
+					<p class="text-[10px] text-fg-muted mt-0.5">JPEG, PNG, or WebP. Recommended 1200×400px.</p>
+				</div>
+				<input
+					type="file"
+					name="file"
+					accept="image/jpeg,image/png,image/webp"
+					class="hidden"
+					hx-post={ fmt.Sprintf("/campaigns/%s/backdrop", campaignID) }
+					hx-encoding="multipart/form-data"
+					hx-target="#backdrop-section"
+					hx-swap="outerHTML"
+					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+				/>
+			</label>
+		}
+	</div>
+}
+
+// accentColorPresets returns the preset color options for the accent color picker.
+var accentColorPresets = []struct {
+	Name  string
+	Color string
+}{
+	{"Indigo", "#6366f1"},
+	{"Blue", "#3b82f6"},
+	{"Cyan", "#06b6d4"},
+	{"Emerald", "#10b981"},
+	{"Amber", "#f59e0b"},
+	{"Rose", "#f43f5e"},
+	{"Purple", "#a855f7"},
+	{"Orange", "#f97316"},
+}
+
+// AccentColorPicker renders a color picker for the campaign accent color.
+templ AccentColorPicker(campaignID string, currentColor string, csrfToken string) {
+	<div class="space-y-3">
+		<div class="flex flex-wrap gap-2">
+			for _, preset := range accentColorPresets {
+				<button
+					hx-put={ fmt.Sprintf("/campaigns/%s/accent-color", campaignID) }
+					hx-vals={ fmt.Sprintf(`{"accent_color":"%s"}`, preset.Color) }
+					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+					class="w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 shrink-0"
+					style={ fmt.Sprintf("background-color: %s", preset.Color) }
+					if currentColor == preset.Color {
+						class="w-8 h-8 rounded-full border-2 border-white ring-2 ring-offset-2 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0"
+					} else {
+						class="w-8 h-8 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0"
+					}
+					title={ preset.Name }
+				></button>
+			}
+			// Reset to default button.
+			<button
+				hx-put={ fmt.Sprintf("/campaigns/%s/accent-color", campaignID) }
+				hx-vals={ `{"accent_color":""}` }
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+				class="w-8 h-8 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0"
+				title="Reset to default"
+			>
+				<i class="fa-solid fa-xmark text-[10px] text-fg-muted"></i>
+			</button>
+		</div>
+		if currentColor != "" {
+			<p class="text-[10px] text-fg-muted">Current: { currentColor }</p>
+		} else {
+			<p class="text-[10px] text-fg-muted">Using default theme color</p>
+		}
+	</div>
+}

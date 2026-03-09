@@ -3,13 +3,13 @@ package extensions
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/keyxmakerx/chronicle/internal/modules"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // adminExtensionListPage renders the full admin extensions management page.
-templ adminExtensionListPage(exts []Extension, mods []*modules.ModuleManifest) {
+templ adminExtensionListPage(exts []Extension, mods []*systems.SystemManifest) {
 	@layouts.App("Content Packs - Admin") {
 		<div class="max-w-5xl mx-auto space-y-6">
 			@adminExtensionListFragment(exts, mods)
@@ -18,7 +18,7 @@ templ adminExtensionListPage(exts []Extension, mods []*modules.ModuleManifest) {
 }
 
 // adminExtensionListFragment renders the extension list content (for HTMX swap).
-templ adminExtensionListFragment(exts []Extension, mods []*modules.ModuleManifest) {
+templ adminExtensionListFragment(exts []Extension, mods []*systems.SystemManifest) {
 	<div class="admin-extensions" id="admin-extensions">
 		<div class="flex items-center justify-between">
 			<div>
@@ -95,7 +95,7 @@ templ adminExtensionListFragment(exts []Extension, mods []*modules.ModuleManifes
 				</p>
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 					for _, mod := range mods {
-						@builtinModuleCard(mod)
+						@builtinSystemCard(mod)
 					}
 				</div>
 			</div>
@@ -184,8 +184,8 @@ templ adminExtensionCard(ext Extension) {
 	</div>
 }
 
-// builtinModuleCard renders a built-in game system module card on the content packs page.
-templ builtinModuleCard(mod *modules.ModuleManifest) {
+// builtinSystemCard renders a built-in game system module card on the content packs page.
+templ builtinSystemCard(mod *systems.SystemManifest) {
 	<div class="card p-5 flex flex-col">
 		<div class="flex items-start justify-between mb-3">
 			<div class="flex items-center gap-3">
@@ -197,7 +197,7 @@ templ builtinModuleCard(mod *modules.ModuleManifest) {
 					<p class="text-xs text-fg-muted">{ mod.ID }</p>
 				</div>
 			</div>
-			if mod.Status == modules.StatusAvailable {
+			if mod.Status == systems.StatusAvailable {
 				<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
 					Available
 				</span>

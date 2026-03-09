@@ -14,7 +14,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
-	"github.com/keyxmakerx/chronicle/internal/modules"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -44,9 +44,9 @@ func (h *Handler) ListExtensions(c echo.Context) error {
 	}
 
 	// Include built-in game systems on the same page.
-	mods := modules.Registry()
+	mods := systems.Registry()
 	if mods == nil {
-		mods = []*modules.ModuleManifest{}
+		mods = []*systems.SystemManifest{}
 	}
 
 	if middleware.IsHTMX(c) {
@@ -121,9 +121,9 @@ func (h *Handler) InstallExtension(c echo.Context) error {
 		if exts == nil {
 			exts = []Extension{}
 		}
-		mods := modules.Registry()
+		mods := systems.Registry()
 		if mods == nil {
-			mods = []*modules.ModuleManifest{}
+			mods = []*systems.SystemManifest{}
 		}
 		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts, mods))
 	}
@@ -190,9 +190,9 @@ func (h *Handler) UninstallExtension(c echo.Context) error {
 		if exts == nil {
 			exts = []Extension{}
 		}
-		mods := modules.Registry()
+		mods := systems.Registry()
 		if mods == nil {
-			mods = []*modules.ModuleManifest{}
+			mods = []*systems.SystemManifest{}
 		}
 		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts, mods))
 	}
@@ -219,9 +219,9 @@ func (h *Handler) RescanExtensions(c echo.Context) error {
 		if exts == nil {
 			exts = []Extension{}
 		}
-		mods := modules.Registry()
+		mods := systems.Registry()
 		if mods == nil {
-			mods = []*modules.ModuleManifest{}
+			mods = []*systems.SystemManifest{}
 		}
 		return middleware.Render(c, http.StatusOK, adminExtensionListFragment(exts, mods))
 	}

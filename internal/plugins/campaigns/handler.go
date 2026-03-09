@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -93,6 +94,12 @@ type AddonLister interface {
 	ListForPluginHub(ctx context.Context, campaignID string) ([]PluginHubAddon, error)
 }
 
+// MediaUploader uploads media files for campaign backdrops. Avoids importing the
+// media package directly.
+type MediaUploader interface {
+	UploadBackdrop(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (filename string, err error)
+}
+
 // Handler handles HTTP requests for campaign operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
@@ -103,6 +110,7 @@ type Handler struct {
 	recentLister  RecentEntityLister
 	auditLogger   AuditLogger
 	addonLister   AddonLister
+	mediaUploader MediaUploader
 }
 
 // NewHandler creates a new campaign handler.
@@ -142,6 +150,11 @@ func (h *Handler) SetAuditLogger(logger AuditLogger) {
 // SetAddonLister sets the addon lister for the plugin hub page.
 func (h *Handler) SetAddonLister(lister AddonLister) {
 	h.addonLister = lister
+}
+
+// SetMediaUploader sets the media uploader for backdrop image uploads.
+func (h *Handler) SetMediaUploader(uploader MediaUploader) {
+	h.mediaUploader = uploader
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
@@ -336,6 +349,119 @@ func (h *Handler) Delete(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.Redirect(http.StatusSeeOther, "/campaigns")
+}
+
+// --- Backdrop & Branding ---
+
+// UploadBackdrop handles POST /campaigns/:id/backdrop. Accepts an image file,
+// stores it via the media service, and sets the campaign's backdrop_path.
+func (h *Handler) UploadBackdrop(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can change the backdrop")
+	}
+
+	if h.mediaUploader == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		return apperror.NewBadRequest("no file provided")
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	defer func() { _ = src.Close() }()
+
+	fileBytes, err := io.ReadAll(src)
+	if err != nil {
+		return apperror.NewBadRequest("failed to read file")
+	}
+
+	mimeType := http.DetectContentType(fileBytes)
+
+	filename, err := h.mediaUploader.UploadBackdrop(
+		c.Request().Context(), cc.Campaign.ID,
+		auth.GetUserID(c), fileBytes, file.Filename, mimeType,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := h.service.UpdateBackdropPath(c.Request().Context(), cc.Campaign.ID, &filename); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.backdrop.uploaded", nil)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Trigger", "backdrop-updated")
+		return middleware.Render(c, http.StatusOK, BackdropUploadSection(cc.Campaign.ID, &filename, middleware.GetCSRFToken(c)))
+	}
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
+}
+
+// RemoveBackdrop handles DELETE /campaigns/:id/backdrop. Clears the campaign's
+// backdrop image.
+func (h *Handler) RemoveBackdrop(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can change the backdrop")
+	}
+
+	if err := h.service.UpdateBackdropPath(c.Request().Context(), cc.Campaign.ID, nil); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.backdrop.removed", nil)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Trigger", "backdrop-updated")
+		return middleware.Render(c, http.StatusOK, BackdropUploadSection(cc.Campaign.ID, nil, middleware.GetCSRFToken(c)))
+	}
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
+}
+
+// UpdateAccentColorAPI handles PUT /campaigns/:id/accent-color. Sets the
+// campaign's accent color for branding customization.
+func (h *Handler) UpdateAccentColorAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can change branding")
+	}
+
+	color := c.FormValue("accent_color")
+	// Validate hex color format (allow empty to reset).
+	if color != "" && (len(color) != 7 || color[0] != '#') {
+		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
+	}
+
+	if err := h.service.UpdateAccentColor(c.Request().Context(), cc.Campaign.ID, color); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.accent_color.updated", map[string]any{"color": color})
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Refresh", "true")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
 // --- Settings ---

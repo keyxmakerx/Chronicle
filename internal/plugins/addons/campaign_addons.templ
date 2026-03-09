@@ -66,20 +66,32 @@ templ CampaignAddonsListFragment(campaignID string, addons []CampaignAddon, csrf
 		</div>
 	}
 
-	if countCampaignAddonsByCategory(addons, CategoryModule) > 0 {
+	if countCampaignAddonsByCategory(addons, CategorySystem) > 0 {
 		<div class="mb-6">
 			<h2 class="section-header mb-3">
 				<i class="fa-solid fa-dice-d20 mr-2 text-fg-muted"></i>Game Systems
 			</h2>
+			<p class="text-xs text-fg-muted mb-2">
+				Only one game system can be active at a time. Enabling a new one will automatically disable the current one.
+			</p>
 			<div class="space-y-2">
 				for _, a := range addons {
-					if a.AddonCategory == CategoryModule {
+					if a.AddonCategory == CategorySystem {
 						@campaignAddonRow(campaignID, a, csrfToken)
 					}
 				}
 			</div>
 		</div>
 	}
+
+	// Custom game system upload section (lazy-loaded from systems handler).
+	<div class="mb-6"
+		hx-get={ fmt.Sprintf("/campaigns/%s/systems/custom", campaignID) }
+		hx-trigger="load"
+		hx-swap="innerHTML"
+		id="custom-system-section"
+	>
+	</div>
 
 	if countCampaignAddonsByCategory(addons, CategoryWidget) > 0 {
 		<div class="mb-6">

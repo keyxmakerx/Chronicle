@@ -145,11 +145,28 @@ All routes require `auth.RequireAuth` + `auth.RequireSiteAdmin`.
 | GET | `/api/v1/search/entities` | mentions | Search entities for @mentions |
 | GET | `/api/v1/search/tags` | tags | Search tags for tag picker |
 
-### Module (Game System) Routes -- planned
+### Dashboard Embed Endpoints -- implemented
 
-| Method | Path | Module | Description |
-|--------|------|--------|-------------|
-| GET | `/ref/:system/` | * | Reference index page |
-| GET | `/ref/:system/:category` | * | Category listing (spells, monsters) |
-| GET | `/ref/:system/:category/:slug` | * | Individual entry page |
-| GET | `/api/v1/ref/:system/lookup` | * | Tooltip API (query param: `q`) |
+Campaign-scoped HTMX fragments used by dashboard blocks via `hx-trigger="intersect once"`.
+
+| Method | Path | Plugin | Handler | Min Role | Description |
+|--------|------|--------|---------|----------|-------------|
+| GET | `/campaigns/:id/calendar/embed` | calendar | EmbedCalendar | Player | Compact calendar grid fragment |
+| GET | `/campaigns/:id/timelines/embed` | timeline | EmbedTimeline | Player | Timeline D3 widget fragment |
+| GET | `/campaigns/:id/sessions/embed` | sessions | EmbedSessions | Player | Upcoming sessions list fragment |
+| GET | `/campaigns/:id/activity/embed` | audit | EmbedActivity | Owner | Activity feed fragment |
+| GET | `/campaigns/:id/sync-status` | syncapi | SyncStatusEmbed | Owner | API key/sync status fragment |
+
+### Game System (Content Pack) Routes -- implemented
+
+| Method | Path | Handler | Description |
+|--------|------|---------|-------------|
+| GET | `/campaigns/:cid/systems` | SystemIndex | List enabled game systems |
+| GET | `/campaigns/:cid/systems/:mid` | CategoryList | System category cards |
+| GET | `/campaigns/:cid/systems/:mid/:cat` | ItemList | Searchable item list |
+| GET | `/campaigns/:cid/systems/:mid/:cat/:id` | ItemDetail | Full reference page |
+| GET | `/campaigns/:cid/systems/:mid/search` | SearchAPI | JSON search results |
+| GET | `/campaigns/:cid/systems/:mid/tooltip` | TooltipAPI | HTML tooltip fragment |
+| POST | `/campaigns/:id/systems/upload` | UploadCustom | Upload custom system ZIP (Owner) |
+| DELETE | `/campaigns/:id/systems/custom` | DeleteCustom | Remove custom system (Owner) |
+| GET | `/campaigns/:id/systems/custom` | CustomStatus | Custom system status (Owner) |

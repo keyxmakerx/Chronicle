@@ -8,6 +8,45 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// TimelineEmbedFragment renders a compact timeline D3 visualization for dashboard embedding.
+// Mounts the timeline-viz widget using the existing data API endpoint.
+templ TimelineEmbedFragment(cc *campaigns.CampaignContext, t *Timeline) {
+	<div id="timeline-embed" class="p-4">
+		<div class="flex items-center justify-between mb-3">
+			<span class="text-sm font-medium text-fg">{ t.Name }</span>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines/%s", cc.Campaign.ID, t.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				Open
+			</a>
+		</div>
+		<div
+			data-widget="timeline-viz"
+			data-campaign-id={ cc.Campaign.ID }
+			data-timeline-id={ t.ID }
+			data-api-url={ fmt.Sprintf("/campaigns/%s/timelines/%s/data", cc.Campaign.ID, t.ID) }
+			data-height="400"
+			data-compact="true"
+			class="w-full"
+		></div>
+	</div>
+}
+
+// TimelineEmbedEmpty renders a prompt when no timelines exist for the campaign.
+templ TimelineEmbedEmpty(cc *campaigns.CampaignContext) {
+	<div class="flex flex-col items-center justify-center py-12 text-center">
+		<i class="fa-solid fa-timeline text-3xl text-fg-muted mb-3"></i>
+		<p class="text-sm text-fg-secondary mb-2">No timelines created yet.</p>
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", cc.Campaign.ID)) }
+			class="text-sm text-accent hover:underline"
+		>
+			Create a timeline
+		</a>
+	</div>
+}
+
 // BlockTimeline renders a lazy-loaded timeline preview for an entity's campaign.
 // Uses the same HTMX pattern as the dashboard timeline_preview block.
 templ BlockTimeline(cc *campaigns.CampaignContext) {

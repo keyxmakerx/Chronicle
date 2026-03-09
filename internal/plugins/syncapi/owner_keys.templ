@@ -5,6 +5,7 @@ package syncapi
 
 import (
 	"fmt"
+	"time"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"strings"
 )
@@ -273,4 +274,91 @@ func keyStatusIcon(k APIKey) string {
 		return "fa-clock text-red-500"
 	}
 	return "fa-key text-emerald-600 dark:text-emerald-400"
+}
+
+// SyncStatusFragment renders a compact Foundry VTT sync status for dashboard embedding.
+// Shows active key count, last activity, and 24h request stats.
+templ SyncStatusFragment(campaignID string, keys []APIKey, stats *APIStats) {
+	<div class="p-4 space-y-3">
+		if len(keys) == 0 {
+			<div class="text-center py-4">
+				<i class="fa-solid fa-plug text-xl text-fg-muted mb-2"></i>
+				<p class="text-sm text-fg-secondary">No API keys configured.</p>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", campaignID)) }
+					class="text-xs text-accent hover:underline mt-1 inline-block"
+				>
+					Set up Foundry sync
+				</a>
+			</div>
+		} else {
+			<div class="grid grid-cols-2 gap-3">
+				<!-- Active keys -->
+				<div class="text-center">
+					<div class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", countActiveKeys(keys)) }</div>
+					<div class="text-[10px] text-fg-muted uppercase tracking-wider">Active Keys</div>
+				</div>
+				<!-- 24h requests -->
+				<div class="text-center">
+					if stats != nil {
+						<div class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", stats.TotalRequests) }</div>
+					} else {
+						<div class="text-2xl font-bold text-fg">0</div>
+					}
+					<div class="text-[10px] text-fg-muted uppercase tracking-wider">24h Requests</div>
+				</div>
+			</div>
+			<!-- Key status list -->
+			<div class="space-y-1.5 pt-1">
+				for _, k := range keys {
+					<div class="flex items-center gap-2 text-xs">
+						<i class={ "fa-solid text-[10px]", syncStatusKeyIcon(k) }></i>
+						<span class="flex-1 truncate text-fg">{ k.Name }</span>
+						if k.LastUsedAt != nil {
+							<span class="text-fg-muted shrink-0">{ syncRelativeTime(*k.LastUsedAt) }</span>
+						} else {
+							<span class="text-fg-muted shrink-0">Never used</span>
+						}
+					</div>
+				}
+			</div>
+		}
+	</div>
+}
+
+// countActiveKeys counts active, non-expired API keys.
+func countActiveKeys(keys []APIKey) int {
+	count := 0
+	for _, k := range keys {
+		if k.IsActive && !k.IsExpired() {
+			count++
+		}
+	}
+	return count
+}
+
+// syncStatusKeyIcon returns the icon class for a key based on its status.
+func syncStatusKeyIcon(k APIKey) string {
+	if !k.IsActive {
+		return "fa-pause text-fg-muted"
+	}
+	if k.IsExpired() {
+		return "fa-clock text-red-400"
+	}
+	return "fa-circle-check text-emerald-400"
+}
+
+// syncRelativeTime formats a timestamp as a compact relative time.
+func syncRelativeTime(t time.Time) string {
+	diff := time.Since(t)
+	switch {
+	case diff < time.Minute:
+		return "just now"
+	case diff < time.Hour:
+		return fmt.Sprintf("%dm ago", int(diff.Minutes()))
+	case diff < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(diff.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(diff.Hours()/24))
+	}
 }

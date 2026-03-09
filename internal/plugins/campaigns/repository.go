@@ -39,6 +39,12 @@ type CampaignRepository interface {
 	FindTransferByCampaign(ctx context.Context, campaignID string) (*OwnershipTransfer, error)
 	DeleteTransfer(ctx context.Context, id string) error
 
+	// UpdateBackdropPath updates only the backdrop_path column.
+	UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error
+
+	// UpdateSettings updates only the settings JSON column.
+	UpdateSettings(ctx context.Context, campaignID, settingsJSON string) error
+
 	// UpdateSidebarConfig updates only the sidebar_config JSON column.
 	UpdateSidebarConfig(ctx context.Context, campaignID, configJSON string) error
 
@@ -280,6 +286,38 @@ func (r *campaignRepository) CountAll(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("counting campaigns: %w", err)
 	}
 	return count, nil
+}
+
+// UpdateBackdropPath updates only the backdrop_path for a campaign.
+func (r *campaignRepository) UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaigns SET backdrop_path = ?, updated_at = NOW() WHERE id = ?`,
+		path, campaignID,
+	)
+	if err != nil {
+		return fmt.Errorf("updating backdrop path: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("campaign not found")
+	}
+	return nil
+}
+
+// UpdateSettings updates only the settings JSON for a campaign.
+func (r *campaignRepository) UpdateSettings(ctx context.Context, campaignID, settingsJSON string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaigns SET settings = ?, updated_at = NOW() WHERE id = ?`,
+		settingsJSON, campaignID,
+	)
+	if err != nil {
+		return fmt.Errorf("updating settings: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("campaign not found")
+	}
+	return nil
 }
 
 // UpdateSidebarConfig updates only the sidebar_config JSON for a campaign.

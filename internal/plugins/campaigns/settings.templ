@@ -99,19 +99,42 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 				</form>
 			</div>
 
-			// Appearance & Layout -- links to the Customize page which owns all
-			// sidebar ordering, dashboard layout, and category configuration.
+			// Appearance & Layout.
 			<div class="card p-6 mb-6">
-				<h2 class="text-lg font-semibold text-fg mb-2">Appearance &amp; Layout</h2>
-				<p class="text-sm text-fg-secondary mb-3">
-					Customize sidebar navigation, dashboard layout, and category settings.
-				</p>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) }
-					class="btn-primary text-sm inline-flex items-center gap-1.5"
-				>
-					<i class="fa-solid fa-paintbrush text-xs"></i> Open Customization Hub
-				</a>
+				<h2 class="text-lg font-semibold text-fg mb-4">Appearance &amp; Layout</h2>
+
+				// Backdrop image upload.
+				<div class="mb-5">
+					<h3 class="text-sm font-medium text-fg-body mb-2">
+						<i class="fa-solid fa-image mr-1.5 text-xs text-fg-muted"></i> Backdrop Image
+					</h3>
+					<p class="text-xs text-fg-muted mb-2">
+						Displayed as a header banner on your campaign dashboard.
+					</p>
+					@BackdropUploadSection(cc.Campaign.ID, cc.Campaign.BackdropPath, csrfToken)
+				</div>
+
+				// Accent color picker.
+				<div class="mb-5">
+					<h3 class="text-sm font-medium text-fg-body mb-2">
+						<i class="fa-solid fa-palette mr-1.5 text-xs text-fg-muted"></i> Accent Color
+					</h3>
+					<p class="text-xs text-fg-muted mb-2">
+						Customize the highlight color for buttons, links, and active elements.
+					</p>
+					@AccentColorPicker(cc.Campaign.ID, cc.Campaign.ParseSettings().AccentColor, csrfToken)
+				</div>
+
+				// Link to full customization hub.
+				<div class="pt-3 border-t border-edge">
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) }
+						class="btn-primary text-sm inline-flex items-center gap-1.5"
+					>
+						<i class="fa-solid fa-paintbrush text-xs"></i> Open Customization Hub
+					</a>
+					<p class="text-xs text-fg-muted mt-1.5">Sidebar navigation, dashboard layout, and category settings.</p>
+				</div>
 			</div>
 
 			// Campaign features.

@@ -561,6 +561,47 @@ func (h *Handler) SidebarRSVP(c echo.Context) error {
 		SidebarSessionsRSVP(cc.Campaign.ID, planned, userID))
 }
 
+// EmbedSessions returns an HTMX fragment for the dashboard session tracker block.
+// Shows upcoming planned sessions with RSVP counts in a compact format.
+// GET /campaigns/:id/sessions/embed
+func (h *Handler) EmbedSessions(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	userID := auth.GetUserID(c)
+
+	planned, err := h.svc.ListPlannedSessions(ctx, cc.Campaign.ID)
+	if err != nil {
+		slog.Warn("embed sessions: list planned sessions failed", slog.Any("error", err))
+		return c.HTML(http.StatusOK, "")
+	}
+
+	// Apply limit from query param (default 5, max 20).
+	limit := 5
+	if l := c.QueryParam("limit"); l != "" {
+		if v, parseErr := strconv.Atoi(l); parseErr == nil && v >= 1 {
+			limit = v
+		}
+		if limit > 20 {
+			limit = 20
+		}
+	}
+	if limit > len(planned) {
+		limit = len(planned)
+	}
+	planned = planned[:limit]
+
+	// Fetch attendees for each session.
+	for i := range planned {
+		attendees, err := h.svc.ListAttendees(ctx, planned[i].ID)
+		if err == nil {
+			planned[i].Attendees = attendees
+		}
+	}
+
+	return middleware.Render(c, http.StatusOK,
+		SessionsEmbedFragment(cc.Campaign.ID, planned, userID))
+}
+
 // --- Helpers ---
 
 // requireSessionInCampaign fetches a session and verifies it belongs to the campaign.

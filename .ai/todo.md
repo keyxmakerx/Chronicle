@@ -161,19 +161,19 @@ _Fill the biggest test gaps — zero-test plugins and incomplete service tests._
 - [x] **Sprint M3-2: Sessions & Calendar Service Tests** — Sessions: 40+ tests (CRUD, recurrence, RSVP, entity linking, RSVP tokens, model methods). Calendar: 40+ tests (calendar CRUD, events, date helpers, week view).
 - [x] **Sprint M3-3: Timeline Service Tests** — 50+ tests covering timeline CRUD, standalone events, entity groups, event connections, search, visibility filtering, event linking.
 
-### Phase S: Data Integrity & Admin Tooling ← START HERE
+### Phase S: Data Integrity & Admin Tooling (COMPLETE)
 
 _Fix orphaned data, cascade gaps, and admin DB visibility. See `.ai/phases.md`._
 
-- [ ] **Sprint S-1: Campaign Deletion Cleanup (ADR-025)** — API key FK cascade, media file disk cleanup, multi-step delete service, WASM hook dispatch, orphan extension cleanup.
-- [ ] **Sprint S-2: Extension Migration System (ADR-024)** — `extension_schema_versions` table, per-extension migration runner, namespaced table enforcement (`ext_<slug>_*`), install/uninstall lifecycle.
-- [ ] **Sprint S-3: Admin Data Hygiene Dashboard (ADR-026)** — Orphan detection queries, `/admin/data-hygiene` page, guarded cleanup actions, safety guardrails. All actions audit-logged.
+- [x] **Sprint S-1: Campaign Deletion Cleanup (ADR-025)** — API key FK cascade, media file disk cleanup, multi-step delete service, WASM hook dispatch, orphan extension cleanup.
+- [x] **Sprint S-2: Extension Migration System (ADR-024)** — `extension_schema_versions` table, per-extension migration runner, namespaced table enforcement (`ext_<slug>_*`), install/uninstall lifecycle.
+- [x] **Sprint S-3: Admin Data Hygiene Dashboard (ADR-026)** — Orphan detection queries, `/admin/data-hygiene` page, guarded cleanup actions, safety guardrails. All actions audit-logged.
 
 ### Phase T: Game System Modules & Worldbuilding Tools
 
 - [x] **Sprint T-0 (M-1): D&D 5e Module — Data & Tooltip API** — SRD-legal JSON (spells 27, monsters 14, items 10, classes 12, races 9, conditions 15). Module init wiring, route registration, category-specific tooltip rendering, 9 tests.
-- [ ] **Sprint T-1: D&D 5e Module — Reference Pages** — Browsable pages at `/modules/dnd5e/`. Category cards, searchable lists, formatted stat block detail pages. Quick-search integration.
-- [ ] **Sprint T-2: Pathfinder 2e Module** — ORC-licensed data following D&D 5e pattern. Spells, monsters, ancestries, classes, conditions, feats.
+- [x] **Sprint T-1: D&D 5e Module — Reference Pages** — Browsable pages at `/modules/dnd5e/`. Category cards, searchable lists, formatted stat block detail pages. Quick-search (Ctrl+K) integration via ModuleSearchAdapter wiring into entity SearchAPI.
+- [x] **Sprint T-2: Pathfinder 2e Module** — ORC-licensed data (82 items across 6 categories: spells, creatures, equipment, ancestries, classes, conditions). GenericModule auto-instantiation, no custom Go code needed.
 - [ ] **Sprint T-3: Guided Worldbuilding Prompts** — `worldbuilding_prompts` table. "Writing Prompts" collapsible panel on entity edit page. Default prompt packs per entity type. Owner-customizable.
 - [ ] **Sprint T-4: Entity Type Template Library** — Genre presets (fantasy, sci-fi, horror, modern, historical) as JSON fixtures. Campaign creation genre selection. "Import preset" in Customization Hub.
 

@@ -26,7 +26,14 @@
     { type: 'pinned_pages',   label: 'Pinned Pages',    icon: 'fa-thumbtack',  desc: 'Hand-picked entity cards' },
     { type: 'calendar_preview', label: 'Calendar',     icon: 'fa-calendar-days', desc: 'Upcoming calendar events' },
     { type: 'timeline_preview', label: 'Timeline',     icon: 'fa-timeline',      desc: 'Timeline list with event counts' },
-    { type: 'map_preview',      label: 'Map',          icon: 'fa-map',           desc: 'Embedded map viewer' }
+    { type: 'map_preview',      label: 'Map',          icon: 'fa-map',           desc: 'Embedded map viewer' },
+    { type: 'calendar_full',    label: 'Full Calendar',  icon: 'fa-calendar',      desc: 'Full interactive calendar grid' },
+    { type: 'timeline_full',    label: 'Full Timeline',  icon: 'fa-timeline',      desc: 'Full timeline D3 visualization' },
+    { type: 'relations_graph_full', label: 'Full Relations Graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph' },
+    { type: 'map_full',           label: 'Full Map',       icon: 'fa-map-location-dot', desc: 'Full map with drawings & tokens' },
+    { type: 'session_tracker',    label: 'Sessions',       icon: 'fa-dice-d20',         desc: 'Upcoming sessions with RSVP' },
+    { type: 'activity_feed',      label: 'Activity Feed',  icon: 'fa-clock-rotate-left', desc: 'Recent campaign activity log' },
+    { type: 'sync_status',        label: 'Foundry Sync',   icon: 'fa-plug',             desc: 'Foundry VTT sync status' }
   ];
 
   /** Column layout presets for adding new rows. */
@@ -588,6 +595,61 @@
             var tl = parseInt(tlLimit);
             if (tl >= 1 && tl <= 20) {
               block.config.limit = tl;
+              this.dirty = true;
+              this.render();
+            }
+          }
+          break;
+
+        case 'calendar_full':
+        case 'timeline_full':
+        case 'relations_graph_full':
+        case 'map_full':
+          var fullHeight = prompt('Block height in pixels (300-1000):', cfg.height || '500');
+          if (fullHeight !== null) {
+            var fh = parseInt(fullHeight);
+            if (fh >= 300 && fh <= 1000) {
+              block.config.height = fh;
+              this.dirty = true;
+              this.render();
+            }
+          }
+          if (block.type === 'timeline_full') {
+            var tlId = prompt('Timeline ID (leave empty for first available):', cfg.timeline_id || '');
+            if (tlId !== null) {
+              block.config.timeline_id = tlId;
+              this.dirty = true;
+              this.render();
+            }
+          }
+          if (block.type === 'map_full') {
+            var mapIdCfg = prompt('Map ID (leave empty for map picker):', cfg.map_id || '');
+            if (mapIdCfg !== null) {
+              block.config.map_id = mapIdCfg;
+              this.dirty = true;
+              this.render();
+            }
+          }
+          break;
+
+        case 'session_tracker':
+          var sessLimit = prompt('Number of sessions to show (1-20):', cfg.limit || '5');
+          if (sessLimit !== null) {
+            var sl = parseInt(sessLimit);
+            if (sl >= 1 && sl <= 20) {
+              block.config.limit = sl;
+              this.dirty = true;
+              this.render();
+            }
+          }
+          break;
+
+        case 'activity_feed':
+          var actLimit = prompt('Number of activity entries to show (1-30):', cfg.limit || '10');
+          if (actLimit !== null) {
+            var al = parseInt(actLimit);
+            if (al >= 1 && al <= 30) {
+              block.config.limit = al;
               this.dirty = true;
               this.render();
             }

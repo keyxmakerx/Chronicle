@@ -288,3 +288,42 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 		</div>
 	}
 }
+
+// ActivityEmbedFragment renders a compact activity feed for dashboard embedding.
+// Shows recent audit entries with user avatar, action, and relative time.
+templ ActivityEmbedFragment(cc *campaigns.CampaignContext, entries []AuditEntry) {
+	if len(entries) == 0 {
+		<div class="px-4 py-6 text-center">
+			<i class="fa-solid fa-clock-rotate-left text-xl text-fg-muted mb-2"></i>
+			<p class="text-sm text-fg-secondary">No recent activity.</p>
+		</div>
+	} else {
+		for _, entry := range entries {
+			<div class="flex items-start gap-3 px-4 py-2.5 hover:bg-surface-alt/50 transition-colors">
+				<div class="shrink-0 mt-0.5">
+					<div class={ "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white", actionColor(entry.Action) }>
+						{ avatarInitial(entry.UserName) }
+					</div>
+				</div>
+				<div class="flex-1 min-w-0">
+					<div class="flex items-baseline flex-wrap gap-x-1 text-xs">
+						<span class="font-semibold text-fg">{ entry.UserName }</span>
+						<span class="text-fg-secondary">{ actionLabel(entry.Action) }</span>
+						if entry.EntityName != "" && entry.EntityID != "" {
+							<a
+								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entry.EntityID)) }
+								class="font-medium text-accent hover:underline truncate max-w-[150px] inline-block align-bottom"
+								title={ entry.EntityName }
+							>
+								{ entry.EntityName }
+							</a>
+						} else if entry.EntityName != "" {
+							<span class="font-medium text-fg-body">{ entry.EntityName }</span>
+						}
+					</div>
+					<p class="text-[10px] text-fg-muted mt-0.5">{ relativeTime(entry.CreatedAt) }</p>
+				</div>
+			</div>
+		}
+	}
+}

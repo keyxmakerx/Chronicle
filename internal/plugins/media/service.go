@@ -52,6 +52,11 @@ type MediaService interface {
 	// DeleteCampaignMedia deletes a media file after verifying it belongs to the campaign.
 	DeleteCampaignMedia(ctx context.Context, campaignID, mediaID string) error
 
+	// DeleteCampaignFiles removes all media files belonging to a campaign from
+	// both disk and database. Used during campaign deletion to prevent orphaned
+	// files. Returns the number of files deleted.
+	DeleteCampaignFiles(ctx context.Context, campaignID string) (int, error)
+
 	// CleanupOrphans finds files on disk without a corresponding DB record and
 	// deletes them. Returns the number of files removed.
 	CleanupOrphans(ctx context.Context) (int, error)
@@ -405,6 +410,37 @@ func (s *mediaService) DeleteCampaignMedia(ctx context.Context, campaignID, medi
 	}
 
 	return s.Delete(ctx, mediaID)
+}
+
+// DeleteCampaignFiles removes all media files belonging to a campaign.
+// Deletes physical files from disk (main + thumbnails) and then removes
+// the database records. Called before campaign SQL DELETE to prevent orphaned
+// media. Errors on individual files are logged but do not abort the operation.
+func (s *mediaService) DeleteCampaignFiles(ctx context.Context, campaignID string) (int, error) {
+	files, err := s.repo.ListFilesByCampaign(ctx, campaignID)
+	if err != nil {
+		return 0, fmt.Errorf("listing campaign files: %w", err)
+	}
+
+	deleted := 0
+	for _, f := range files {
+		if err := s.Delete(ctx, f.ID); err != nil {
+			slog.Warn("failed to delete media file during campaign cleanup",
+				slog.String("file_id", f.ID),
+				slog.String("campaign_id", campaignID),
+				slog.Any("error", err),
+			)
+			continue
+		}
+		deleted++
+	}
+
+	slog.Info("campaign media cleanup completed",
+		slog.String("campaign_id", campaignID),
+		slog.Int("total", len(files)),
+		slog.Int("deleted", deleted),
+	)
+	return deleted, nil
 }
 
 // CleanupOrphans walks the media directory, checks each file against the

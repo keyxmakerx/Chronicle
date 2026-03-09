@@ -26,9 +26,13 @@ templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignConte
 			</a>
 		}
 		if total > len(results) {
-			<div class="px-4 py-1.5 text-[10px] text-gray-600 italic">
-				{ fmt.Sprintf("and %d more...", total-len(results)) }
-			</div>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, results[0].EntityTypeID)) }
+				class="flex items-center px-4 py-1.5 text-[10px] text-accent hover:text-accent/80 transition-colors"
+			>
+				<i class="fa-solid fa-arrow-right mr-1 text-[8px]"></i>
+				{ fmt.Sprintf("View all %d", total) }
+			</a>
 		}
 	}
 }

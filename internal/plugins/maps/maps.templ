@@ -495,10 +495,10 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 						window.location.reload();
 					} else {
 						var data = await resp.json().catch(function() { return {}; });
-						alert(data.message || 'Failed to save marker');
+						Chronicle.notify(data.message || 'Failed to save marker', 'error');
 					}
 				} catch (err) {
-					alert('Network error: ' + err.message);
+					Chronicle.notify('Network error: ' + err.message, 'error');
 				}
 			});
 
@@ -545,10 +545,10 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 						window.location.reload();
 					} else {
 						var data = await resp.json().catch(function() { return {}; });
-						alert(data.message || 'Failed to delete marker');
+						Chronicle.notify(data.message || 'Failed to delete marker', 'error');
 					}
 				} catch (err) {
-					alert('Network error: ' + err.message);
+					Chronicle.notify('Network error: ' + err.message, 'error');
 				}
 			};
 
@@ -573,10 +573,10 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 						window.location.reload();
 					} else {
 						var data = await resp.json().catch(function() { return {}; });
-						alert(data.message || 'Failed to save settings');
+						Chronicle.notify(data.message || 'Failed to save settings', 'error');
 					}
 				} catch (err) {
-					alert('Network error: ' + err.message);
+					Chronicle.notify('Network error: ' + err.message, 'error');
 				}
 			};
 
@@ -610,10 +610,10 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 						};
 						img.src = data.url;
 					} else {
-						alert('Upload failed');
+						Chronicle.notify('Upload failed', 'error');
 					}
 				} catch (err) {
-					alert('Upload error: ' + err.message);
+					Chronicle.notify('Upload error: ' + err.message, 'error');
 				}
 			};
 
@@ -627,10 +627,10 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 					if (resp.ok) {
 						window.location.href = '/campaigns/' + campaignID + '/maps';
 					} else {
-						alert('Failed to delete map');
+						Chronicle.notify('Failed to delete map', 'error');
 					}
 				} catch (err) {
-					alert('Network error: ' + err.message);
+					Chronicle.notify('Network error: ' + err.message, 'error');
 				}
 			};
 		})();

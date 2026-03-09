@@ -59,7 +59,7 @@ func (s *addonService) CountFeatures(ctx context.Context) (int, error) {
 	}
 	count := 0
 	for _, a := range addons {
-		if a.Category == CategoryModule {
+		if a.Category == CategorySystem {
 			continue
 		}
 		if a.Status == StatusPlanned && !installedAddons[a.Slug] {
@@ -104,7 +104,7 @@ func (s *addonService) GetBySlug(ctx context.Context, slug string) (*Addon, erro
 // Must stay in sync with the ENUM on addons.category in the database.
 // See migration 000027 for the ALTER TABLE that added 'plugin'.
 var validCategories = map[AddonCategory]bool{
-	CategoryModule:      true,
+	CategorySystem:      true,
 	CategoryWidget:      true,
 	CategoryIntegration: true,
 	CategoryPlugin:      true,
@@ -272,7 +272,9 @@ func (s *addonService) ListForCampaign(ctx context.Context, campaignID string) (
 	return addons, nil
 }
 
-// EnableForCampaign enables an addon for a campaign.
+// EnableForCampaign enables an addon for a campaign. Game systems (module
+// category) are mutually exclusive — enabling one auto-disables any other
+// active game system for that campaign.
 func (s *addonService) EnableForCampaign(ctx context.Context, campaignID string, addonID int, userID string) error {
 	// Verify addon exists, is active, and has backing code.
 	addon, err := s.repo.FindByID(ctx, addonID)
@@ -284,6 +286,26 @@ func (s *addonService) EnableForCampaign(ctx context.Context, campaignID string,
 	}
 	if !IsInstalled(addon.Slug) {
 		return apperror.NewBadRequest("cannot enable: extension code is not installed")
+	}
+
+	// Game systems are mutually exclusive — disable any other enabled module.
+	if addon.Category == CategorySystem {
+		campaignAddons, err := s.repo.ListForCampaign(ctx, campaignID)
+		if err != nil {
+			return apperror.NewInternal(fmt.Errorf("listing campaign addons: %w", err))
+		}
+		for _, ca := range campaignAddons {
+			if ca.AddonCategory == CategorySystem && ca.Enabled && ca.AddonID != addonID {
+				if err := s.repo.DisableForCampaign(ctx, campaignID, ca.AddonID); err != nil {
+					return apperror.NewInternal(fmt.Errorf("disabling previous game system: %w", err))
+				}
+				slog.Info("auto-disabled game system (mutual exclusivity)",
+					slog.String("campaign_id", campaignID),
+					slog.String("disabled_slug", ca.AddonSlug),
+					slog.String("replacing_with", addon.Slug),
+				)
+			}
+		}
 	}
 
 	if err := s.repo.EnableForCampaign(ctx, campaignID, addonID, userID); err != nil {

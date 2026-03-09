@@ -8,8 +8,8 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-08 -- Phase & sprint plan created. ADR-026 documented. Bug fixes complete.
-Branch: `claude/fix-category-nav-shops-i99oq`.
+2026-03-09 -- Modules→Systems rename, campaign customization (backdrop/accent), dashboard blocks (7 new types), map Phase 2 objects, documentation update.
+Branch: `claude/review-work-plan-hT8UX`.
 
 ## Phase & Sprint Plan
 See `.ai/phases.md` for the full roadmap. Phases S through W organized by theme:
@@ -20,7 +20,7 @@ See `.ai/phases.md` for the full roadmap. Phases S through W organized by theme:
 - **W**: Polish, Ecosystem & Delight
 
 ## Current Phase
-**Planning complete — ready to start Phase S (Data Integrity & Admin Tooling).**
+**Phase S (Data Integrity & Admin Tooling) — COMPLETE.**
 
 ### Generic Module Framework (COMPLETE)
 - **GenericTooltipRenderer** (`generic_tooltip.go`): Reads field definitions from the manifest's `categories[].fields[]` to render tooltips. Shows only manifest-declared fields in manifest-defined order. Works for any game system.
@@ -347,6 +347,13 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - **Dirty Form Fix**: Added document-level `htmx:afterRequest` listener that checks for `HX-Redirect` response header and clears all dirty sources. This catches cases where `htmx:beforeRedirect` doesn't fire due to timing differences.
 - **Admin Features Page**: Filtered module-category addons (dnd5e, drawsteel, pathfinder2e) from the admin Features page. These game systems are managed on the Content Packs page. Added `CountFeatures` method to exclude modules from the dashboard count.
 
+### Phase S: Data Integrity & Admin Tooling (COMPLETE)
+- **Sprint S-1: Campaign Deletion Cleanup** (ADR-025) — Migration 000058 adds FK CASCADE on `api_keys.campaign_id` and SET NULL FK on `api_request_log.campaign_id`. `DeleteCampaignFiles()` on media service cleans disk files before SQL DELETE. Multi-step `Delete()` on campaign service: media cleanup → WASM hook dispatch (`campaign.deleted`) → SQL CASCADE. 4 new tests.
+- **Sprint S-2: Extension Migration System** (ADR-024) — Migration 000059 creates `extension_schema_versions` tracking table. SQL validator enforces `ext_<slug>_*` namespace on all DDL/DML. `MigrationRunner` with `RunUp`/`RunDown`/`DropExtensionTables`. Integrated into extension `Install()` and `Uninstall()` lifecycle. 23 tests (17 validator + 6 runner).
+- **Sprint S-3: Admin Data Hygiene Dashboard** (ADR-026) — `DataHygieneScanner` interface with scan and purge for orphaned media, API keys, and stale files. Dashboard at `/admin/data-hygiene` with summary cards, data tables, HTMX purge buttons with confirmation. Safety guardrails: referenced media protected from purge, recent files skipped, security event audit logging. 7 new tests.
+- **New files**: 2 migrations (up/down each), `sql_validator.go`, `migration_runner.go`, `hygiene_service.go`, `data_hygiene.templ`, plus test files
+- **Modified**: campaign service (multi-step delete), media service/repo (bulk cleanup), extension service (migration lifecycle), admin handler/routes/dashboard (hygiene UI), wasm hooks (campaign.deleted event), app routes (wiring)
+
 ### Bug Fixes Round 2 (2026-03-08)
 - **Category Nav Fix (root cause)**: The `Search()` service method required queries >= 2 characters, but sidebar auto-load sent no query. Fixed `SearchAPI` to use `List()` (no search filter) when query is empty, correctly returning all entities of the selected type.
 - **Image Upload 500 Fix (root cause)**: `isAPIRequest()` in error handler only checked Content-Type, not Accept header. Image uploads use `multipart/form-data`, so 500 errors returned HTML error pages that the JS couldn't parse. Fixed `isAPIRequest` to also check Accept header. Switched `image_upload.js` to use `Chronicle.apiFetch` (sends Accept: application/json). Added `ValidateMediaPath()` startup check to verify media directory exists and is writable.
@@ -356,11 +363,87 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - **New API**: `GET /campaigns/:id/entities/types` — returns entity types as JSON for widget dropdowns (used by shop widget create flow).
 - **Media Gallery as Addon**: The existing media plugin (`internal/plugins/media/`) is now properly registered as the `media-gallery` addon. Campaign media browser routes (`/campaigns/:id/media*`) are gated behind `RequireAddon("media-gallery")`. Sidebar "Media" link conditionally shown via `IsAddonEnabled`. Base upload/serve routes remain ungated (avatars, backdrops work regardless). Migration 000057 updates addon description and sets status to active. Future expansion: albums, tagging, lightbox.
 
+### Sprint T-1: D&D 5e Reference Pages (COMPLETE)
+- Module handler, routes, shared templates (`module_pages.templ`), and all D&D 5e data files were already built in earlier sprints
+- **New**: Wired `ModuleSearchAdapter` into entity handler `SearchAPI` so Ctrl+K quick search now returns game system module results alongside entity/timeline/map/calendar/session results
+- **Files modified**: `entities/handler.go` (added `ModuleSearcher` interface + field + setter + search call), `app/routes.go` (wired adapter)
+
+### Sprint T-2: Pathfinder 2e Module (COMPLETE)
+- **Zero Go code** — GenericModule auto-instantiation picks up the module from manifest + data files
+- **6 data categories** (82 items total): spells (20), creatures (14), equipment (12), ancestries (8), classes (12), conditions (16)
+- **Manifest updated**: Added classes and conditions categories, set status to "available", bumped version to 1.0.0
+- **All ORC-licensed**: Content from Player Core and GM Core only
+- **Auto-features**: Reference pages, tooltips, and Ctrl+K search all work via GenericModule infrastructure
+
+### Custom Game System Upload (2026-03-09)
+- **CampaignModuleManager** (`campaign_modules.go`): Per-campaign custom module storage under `media/modules/<campaignID>/`. ZIP upload with validation (manifest + data/*.json), security checks (path traversal, size limits), auto-prefixes ID with `custom-` to avoid collisions. Discovers existing uploads on startup. Install/Uninstall lifecycle.
+- **CampaignModuleHandler** (`campaign_handler.go`): Upload (POST), delete (DELETE), and status (GET) endpoints at `/campaigns/:id/modules/upload|custom`. Owner-only. Returns HTMX fragments for inline UI updates.
+- **Module handler updated**: `resolveModule` now checks campaign-specific custom modules after global registry. All 5 handler methods use the new resolution path.
+- **Route middleware updated**: `requireModuleAddon` now also checks if the requested module is the campaign's custom module (bypasses addon check).
+- **UI**: Custom Game System section on campaign addons page with upload form (empty state) or installed module info card with Browse/Remove buttons. HTMX-powered upload and delete with inline swap.
+- **Templ component**: `CustomModuleSection` renders the upload/manage UI.
+- **App wiring**: `CampaignModuleManager` initialized at startup under `media/modules/`, wired into module handler and custom module routes.
+- **Files**: `campaign_modules.go`, `campaign_handler.go`, `custom_module.templ` (new), `handler.go`, `routes.go`, `campaign_addons.templ`, `app/routes.go`
+
+### Bug Fixes Round 3 (2026-03-09)
+- **Single Game System per Campaign**: Game systems (module category) are now mutually exclusive — enabling one auto-disables any other active game system for that campaign. Service logs the swap. Campaign addons page shows explanatory text.
+- **"Register New Feature" Restyled**: The admin features page form was confusing (created empty DB records with no backing code). Restyled as a collapsed `<details>` element with red/warning styling, danger icon, and clear warnings. Renamed to "Manual DB Record (Advanced)". Removed "Module" from category dropdown (game systems come from code, not DB forms). Button changed from "Register Feature" to "Create DB Record".
+- **Alert() → Toast Conversion**: All 23 raw `alert()` calls across the codebase converted to `Chronicle.notify()` toasts:
+  - Calendar plugin (6 calls): save/move/delete event errors + network errors
+  - Maps plugin (10 calls): marker save/delete, settings save, upload, map delete + network errors
+  - Sessions plugin (1 call): recap save error
+  - Settings plugin (2 calls): user ID / campaign ID validation
+  - Image upload widget (3 calls): file type/size validation, upload error
+  - Shop inventory widget (1 call): item creation error
+- **Files modified**: `addons/service.go` (mutual exclusivity), `addons/admin_addons.templ` (failover restyle), `addons/campaign_addons.templ` (info text), `calendar/calendar.templ`, `maps/maps.templ`, `sessions/sessions.templ`, `settings/storage_settings.templ`, `image_upload.js`, `shop_inventory.js`
+
+### Terminology Rename: Modules → Systems (2026-03-09)
+- Renamed `internal/modules/` → `internal/systems/` across the entire codebase
+- All Go package references, import paths, route paths, template references, JS widget references updated
+- Admin UI labels: "Content Packs" / "Game Systems" (no longer uses "Module" anywhere user-facing)
+- Documentation updated: CLAUDE.md, architecture.md, phases.md, README.md, api-routes.md, plugin .ai.md files
+
+### Campaign Customization: Backdrop & Accent Color (2026-03-09)
+- **Backdrop image**: Campaign-level hero image upload stored as `backdrop_path` in campaigns table
+- **Accent color**: Per-campaign CSS custom property (`--color-accent`) override via `accent_color` column
+- Campaign settings page gains image upload and color picker sections
+- Layout injects `<style>` tag with accent color override when set
+
+### Dashboard Blocks: 7 New Types (2026-03-09)
+- **calendar_full**: Full calendar grid embed via `/calendar/embed` with HTMX lazy-loading
+- **timeline_full**: Timeline D3 widget embed via `/timelines/embed`
+- **relations_graph_full**: Full-height relations graph (reuses existing D3 widget)
+- **map_full**: Interactive Leaflet map embed with configurable map_id and Phase 2 objects
+- **session_tracker**: Upcoming sessions list via `/sessions/embed`
+- **activity_feed**: Campaign activity feed via `/activity/embed` (Owner only)
+- **sync_status**: API key status via `/sync-status` (Owner only)
+- All use HTMX `hx-trigger="intersect once"` for lazy-loading
+- Dashboard editor updated with new block type options and config fields
+
+### Embed Endpoints Pattern (2026-03-09)
+- New lightweight handler endpoints return HTMX fragments for dashboard block lazy-loading
+- calendar: `EmbedCalendar` — compact calendar grid with inline month navigation
+- timeline: `EmbedTimeline` — mounts timeline-viz D3 widget, auto-selects first timeline
+- sessions: `EmbedSessions` — lists planned sessions with RSVP badges
+- audit: `EmbedActivity` — compact activity feed with avatars and relative time
+- syncapi: `SyncStatusEmbed` — active key count, 24h request stats, per-key status
+
+### Map Widget Phase 2 Objects (2026-03-09)
+- Map widget now supports optional Phase 2 object rendering via `data-show-drawings` and `data-show-tokens` attributes
+- Drawings rendered as Leaflet shapes (polylines, polygons, rectangles, circles)
+- Tokens rendered as icon markers with HP popup tooltips
+- Configurable height via `data-height` attribute
+
+### Documentation Update (2026-03-09)
+- Updated 15+ documentation files for modules→systems terminology
+- Added new embed endpoint routes to api-routes.md
+- Updated plugin .ai.md files with new embed handlers and dashboard block info
+- Updated architecture.md directory structure to reflect systems/ path
+
 ## Next Session Should
-- **Sprint S-1: Campaign Deletion Cleanup** (ADR-025) — API key FK cascade, media disk cleanup, multi-step delete service
-- **Sprint S-2: Extension Migration System** (ADR-024) — schema tracking, namespaced tables, install/uninstall lifecycle
-- **Sprint S-3: Admin Data Hygiene Dashboard** (ADR-026) — orphan detection, guarded cleanup, safety guardrails
-- Then: Sprint T-1 (D&D 5e reference pages), Sprint U-2 (invite system), Sprint V-1 (quick capture)
+- **Sprint U-2: Invite System** — campaign invite links for easier player onboarding
+- **Sprint V-1: Quick Capture** — Obsidian-style notes rapid entry
+- **Sprint T-3: Guided Worldbuilding Prompts** — Writing prompts panel on entity edit page (deferred)
 - See `.ai/phases.md` for full execution order
 
 ## Known Issues Right Now

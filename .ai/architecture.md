@@ -10,7 +10,7 @@
 ## System Overview
 
 Chronicle is a monolithic Go application with a modular internal structure
-organized into three extension tiers: **Plugins**, **Modules**, and **Widgets**.
+organized into three extension tiers: **Plugins**, **Systems**, and **Widgets**.
 The core handles bootstrapping, configuration, database connections, middleware,
 and route aggregation. Everything else is a self-contained unit in one of the
 three tiers.
@@ -35,8 +35,8 @@ three tiers.
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │  MODULES -- Game System Content Packs                  │    │
-│  │  dnd5e/  pathfinder/  drawsteel/                       │    │
+│  │  SYSTEMS -- Game System Content Packs                  │    │
+│  │  dnd5e/  pathfinder2e/  drawsteel/                     │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
@@ -57,7 +57,7 @@ three tiers.
 | Tier | What It Is | Has Backend? | Has Frontend? | Can Disable? |
 |------|-----------|-------------|--------------|-------------|
 | **Plugin** | Self-contained feature app with handler/service/repo/templates | Yes | Yes | Core: no. Optional: per-campaign |
-| **Module** | Game system content pack. Reference data, tooltips, dedicated pages | Yes (data serving) | Yes (tooltips, pages) | Per-campaign |
+| **System** | Game system content pack. Reference data, tooltips, dedicated pages | Yes (data serving) | Yes (tooltips, pages) | Per-campaign |
 | **Widget** | Reusable UI block. Mounts to DOM element, fetches own data | Minimal (API endpoints) | Primarily | Always available |
 
 ### How They Interact on a Page
@@ -69,14 +69,14 @@ Entity Profile Page Load:
   3. Widget (tags) renders the tag picker
   4. Widget (editor) mounts TipTap for entry content
   5. Widget (attributes) renders configurable entity fields
-  6. Module (dnd5e) provides tooltip data when hovering @mentions
+  6. System (dnd5e) provides tooltip data when hovering @mentions
      that reference game content (spells, monsters, items, etc.)
 ```
 
 **Communication rules:**
 - Plugins talk to each other through **service interfaces** (never direct repo access)
 - Widgets communicate via **DOM events** and **API endpoints**
-- Modules are **read-only content providers** -- they never modify campaign state
+- Systems are **read-only content providers** -- they never modify campaign state
 
 ## Directory Structure
 
@@ -139,13 +139,15 @@ chronicle/
 │   │       ├── routes.go
 │   │       └── maps.templ
 │   │
-│   ├── modules/                      # MODULES: Game system content packs
-│   │   └── dnd5e/                    #   D&D 5th Edition (first module)
-│   │       ├── .ai.md
-│   │       ├── handler.go            #   Serves reference pages & tooltip API
-│   │       ├── data/                 #   Static reference data (JSON/YAML)
-│   │       ├── routes.go
-│   │       └── templates/
+│   ├── systems/                      # SYSTEMS: Game system content packs
+│   │   ├── dnd5e/                    #   D&D 5th Edition
+│   │   │   ├── .ai.md
+│   │   │   └── data/                 #   Static reference data (JSON)
+│   │   ├── pathfinder2e/             #   Pathfinder 2nd Edition
+│   │   │   ├── .ai.md
+│   │   │   └── data/                 #   Static reference data (JSON)
+│   │   └── drawsteel/                #   Draw Steel (coming soon)
+│   │       └── .ai.md
 │   │
 │   ├── widgets/                      # WIDGETS: Reusable UI building blocks
 │   │   ├── editor/                   #   TipTap rich text editor
@@ -235,24 +237,23 @@ internal/plugins/<name>/
       detail_panel.templ
 ```
 
-## Module (Game System) Internal Structure
+## System (Game System) Internal Structure
 
-Modules are simpler than plugins -- primarily data serving.
+Systems are simpler than plugins -- primarily data serving. Most systems use the
+GenericModule auto-instantiation (zero Go code — just manifest + data files).
 
 ```
-internal/modules/<name>/
-  .ai.md              # Module-level AI documentation
-  handler.go          # Serves reference pages & tooltip API
-  data/               # Static reference data (JSON/YAML files)
+internal/systems/<name>/
+  .ai.md              # System-level AI documentation
+  manifest.json       # Categories, fields, metadata
+  data/               # Static reference data (JSON files)
     spells.json
-    monsters.json
-    items.json
-  routes.go           # Route registration
-  templates/          # Templ components for reference pages
-    index.templ       #   Category listing
-    show.templ        #   Individual reference entry
-    tooltip.templ     #   Hover tooltip fragment
+    creatures.json
+    equipment.json
 ```
+
+For custom tooltip formatting, add a Go file with `init()` that calls
+`systems.RegisterFactory()` (e.g., D&D 5e uses this for stat-block formatting).
 
 ## Widget Internal Structure
 
@@ -297,5 +298,5 @@ cmd/server/main.go
 - Services depend on repository **interfaces** (not concrete types)
 - Cross-plugin communication goes through service interfaces
 - A plugin NEVER imports another plugin's internal types
-- Modules NEVER write to the database
+- Systems NEVER write to the database
 - Widgets are self-contained; backend is optional

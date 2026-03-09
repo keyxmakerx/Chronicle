@@ -184,6 +184,26 @@ func (h *Handler) RevokeKey(c echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/api-keys")
 }
 
+// SyncStatusEmbed returns an HTMX fragment showing Foundry sync health for a campaign.
+// Displays active keys, last sync time, and request stats.
+// GET /campaigns/:id/sync-status
+func (h *Handler) SyncStatusEmbed(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewForbidden("campaign context required")
+	}
+
+	keys, err := h.service.ListKeysByCampaign(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	since := time.Now().Add(-24 * time.Hour)
+	stats, _ := h.service.GetCampaignStats(c.Request().Context(), cc.Campaign.ID, since)
+
+	return middleware.Render(c, http.StatusOK, SyncStatusFragment(cc.Campaign.ID, keys, stats))
+}
+
 // --- Admin: API Monitoring Dashboard ---
 
 // AdminDashboard renders the admin API monitoring page (GET /admin/api).

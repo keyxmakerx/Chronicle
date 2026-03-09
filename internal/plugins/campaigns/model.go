@@ -265,6 +265,23 @@ func (c *Campaign) ParseDashboardLayout() *DashboardLayout {
 	return &layout
 }
 
+// CampaignSettings holds campaign-level configuration stored as JSON in
+// the campaigns.settings column. Accent color, display preferences, etc.
+type CampaignSettings struct {
+	AccentColor string `json:"accent_color,omitempty"` // Hex color, e.g. "#6366f1".
+}
+
+// ParseSettings parses the campaign's settings JSON into a CampaignSettings
+// struct. Returns a zero-value struct if parsing fails or settings are empty.
+func (c *Campaign) ParseSettings() CampaignSettings {
+	var s CampaignSettings
+	if c.Settings == "" || c.Settings == "{}" {
+		return s
+	}
+	_ = json.Unmarshal([]byte(c.Settings), &s)
+	return s
+}
+
 // Supported dashboard block types. Each maps to a Templ component that knows
 // how to render the block with its config. Used by both campaign and category
 // dashboard editors.
@@ -280,6 +297,13 @@ const (
 	BlockTimelinePreview = "timeline_preview" // Timeline visualization preview.
 	BlockMapPreview      = "map_preview"      // Embedded map viewer.
 	BlockRelationsGraph  = "relations_graph"  // Entity relations force-directed graph.
+	BlockCalendarFull    = "calendar_full"    // Full interactive calendar grid view.
+	BlockTimelineFull    = "timeline_full"    // Full timeline visualization with D3.
+	BlockRelationsGraphFull = "relations_graph_full" // Large relations graph view.
+	BlockMapFull         = "map_full"         // Full interactive map viewer with Phase 2 objects.
+	BlockSessionTracker  = "session_tracker"  // Upcoming sessions with RSVP status.
+	BlockActivityFeed    = "activity_feed"    // Recent campaign activity log.
+	BlockSyncStatus      = "sync_status"      // Foundry VTT sync health/status.
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -300,6 +324,13 @@ var ValidBlockTypes = map[string]bool{
 	BlockTimelinePreview: true,
 	BlockMapPreview:      true,
 	BlockRelationsGraph:  true,
+	BlockCalendarFull:    true,
+	BlockTimelineFull:    true,
+	BlockRelationsGraphFull: true,
+	BlockMapFull:         true,
+	BlockSessionTracker:  true,
+	BlockActivityFeed:    true,
+	BlockSyncStatus:      true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
 	BlockSearchBar:      true,

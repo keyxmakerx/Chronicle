@@ -1318,10 +1318,10 @@ templ eventModal(data CalendarViewData) {
 								window.location.reload();
 							} else {
 								var data = await resp.json().catch(function() { return {}; });
-								alert(data.message || 'Failed to save event');
+								Chronicle.notify(data.message || 'Failed to save event', 'error');
 							}
 						} catch (err) {
-							alert('Network error: ' + err.message);
+							Chronicle.notify('Network error: ' + err.message, 'error');
 						}
 					});
 
@@ -1421,10 +1421,10 @@ templ eventModal(data CalendarViewData) {
 								window.location.reload();
 							} else {
 								var data = await resp.json().catch(function() { return {}; });
-								alert(data.message || 'Failed to move event');
+								Chronicle.notify(data.message || 'Failed to move event', 'error');
 							}
 						} catch (err) {
-							alert('Network error: ' + err.message);
+							Chronicle.notify('Network error: ' + err.message, 'error');
 						}
 					};
 
@@ -1561,10 +1561,10 @@ templ eventModal(data CalendarViewData) {
 								window.location.reload();
 							} else {
 								var data = await resp.json().catch(function() { return {}; });
-								alert(data.message || 'Failed to delete event');
+								Chronicle.notify(data.message || 'Failed to delete event', 'error');
 							}
 						} catch (err) {
-							alert('Network error: ' + err.message);
+							Chronicle.notify('Network error: ' + err.message, 'error');
 						}
 					};
 				})();

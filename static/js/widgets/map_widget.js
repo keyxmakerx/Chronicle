@@ -22,6 +22,9 @@
       this.el = el;
       this.campaignId = config.campaignId;
       this.mapId = config.mapId;
+      this.showDrawings = config.showDrawings === 'true';
+      this.showTokens = config.showTokens === 'true';
+      this.customHeight = parseInt(config.height, 10) || 0;
       this._leafletMap = null;
 
       if (this.mapId) {
@@ -121,12 +124,13 @@
 
       // Clear loading text.
       container.innerHTML = '';
-      container.style.minHeight = '250px';
+      var height = self.customHeight || 250;
+      container.style.minHeight = height + 'px';
       container.style.position = 'relative';
 
       // Create map div.
       var mapDiv = document.createElement('div');
-      mapDiv.style.cssText = 'width:100%;height:250px;';
+      mapDiv.style.cssText = 'width:100%;height:' + height + 'px;';
       container.appendChild(mapDiv);
 
       // Check if Leaflet is loaded.
@@ -209,6 +213,11 @@
 
       if (markerTarget !== map) {
         map.addLayer(markerTarget);
+      }
+
+      // Load Phase 2 objects (drawings and tokens) if enabled.
+      if (self.showDrawings || self.showTokens) {
+        self._loadPhase2Objects(map, imageW, imageH, mapId);
       }
 
       // Add "Open map" overlay link.
@@ -357,6 +366,135 @@
       script.src = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js';
       script.onload = callback;
       document.head.appendChild(script);
+    },
+
+    /**
+     * Load Phase 2 map objects (drawings and tokens) from the API.
+     */
+    _loadPhase2Objects: function (map, imageW, imageH, mapId) {
+      var self = this;
+      var baseUrl = '/campaigns/' + encodeURIComponent(this.campaignId) +
+        '/maps/' + encodeURIComponent(mapId);
+
+      if (this.showDrawings) {
+        Chronicle.apiFetch(baseUrl + '/drawings')
+          .then(function (res) { return res.ok ? res.json() : []; })
+          .then(function (drawings) {
+            self._renderDrawings(map, drawings, imageW, imageH);
+          })
+          .catch(function () { /* Graceful degradation */ });
+      }
+
+      if (this.showTokens) {
+        Chronicle.apiFetch(baseUrl + '/tokens')
+          .then(function (res) { return res.ok ? res.json() : []; })
+          .then(function (tokens) {
+            self._renderTokens(map, tokens, imageW, imageH);
+          })
+          .catch(function () { /* Graceful degradation */ });
+      }
+    },
+
+    /**
+     * Render drawings as SVG overlays on the Leaflet map.
+     */
+    _renderDrawings: function (map, drawings, imageW, imageH) {
+      if (!drawings || !Array.isArray(drawings)) return;
+
+      drawings.forEach(function (d) {
+        if (!d.points) return;
+        var points;
+        try {
+          points = typeof d.points === 'string' ? JSON.parse(d.points) : d.points;
+        } catch (e) { return; }
+        if (!Array.isArray(points) || points.length < 2) return;
+
+        // Convert percentage coords to pixel coords for Leaflet CRS.Simple.
+        var latlngs = points.map(function (p) {
+          return [imageH - (p.y / 100) * imageH, (p.x / 100) * imageW];
+        });
+
+        var opts = {
+          color: d.stroke_color || '#000',
+          weight: d.stroke_width || 2,
+          opacity: 0.8,
+          interactive: false
+        };
+
+        if (d.fill_color) {
+          opts.fillColor = d.fill_color;
+          opts.fillOpacity = d.fill_alpha || 0.3;
+          opts.fill = true;
+        }
+
+        switch (d.drawing_type) {
+          case 'rectangle':
+            if (latlngs.length >= 2) {
+              L.rectangle([latlngs[0], latlngs[1]], opts).addTo(map);
+            }
+            break;
+          case 'ellipse':
+            if (latlngs.length >= 2) {
+              // Approximate ellipse as a circle centered between two points.
+              var cx = (latlngs[0][0] + latlngs[1][0]) / 2;
+              var cy = (latlngs[0][1] + latlngs[1][1]) / 2;
+              var rx = Math.abs(latlngs[1][1] - latlngs[0][1]) / 2;
+              L.circle([cx, cy], { radius: rx, ...opts }).addTo(map);
+            }
+            break;
+          case 'polygon':
+            L.polygon(latlngs, opts).addTo(map);
+            break;
+          default:
+            // freehand, line
+            L.polyline(latlngs, opts).addTo(map);
+            break;
+        }
+      });
+    },
+
+    /**
+     * Render tokens as icon markers on the Leaflet map.
+     */
+    _renderTokens: function (map, tokens, imageW, imageH) {
+      if (!tokens || !Array.isArray(tokens)) return;
+
+      tokens.forEach(function (t) {
+        if (t.is_hidden) return; // Skip GM-only tokens.
+
+        var lat = imageH - (t.y / 100) * imageH;
+        var lng = (t.x / 100) * imageW;
+
+        var icon;
+        if (t.image_path) {
+          icon = L.icon({
+            iconUrl: t.image_path,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+            className: 'chronicle-token'
+          });
+        } else {
+          icon = L.divIcon({
+            className: 'chronicle-token',
+            html: '<div style="width:28px;height:28px;border-radius:50%;background:var(--color-accent,#3b82f6);' +
+              'display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:600;' +
+              'border:2px solid rgba(255,255,255,0.8);box-shadow:0 1px 3px rgba(0,0,0,0.4);">' +
+              Chronicle.escapeHtml((t.name || '?').charAt(0).toUpperCase()) + '</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+          });
+        }
+
+        var marker = L.marker([lat, lng], { icon: icon, interactive: true }).addTo(map);
+
+        // Tooltip with token name.
+        var tooltip = '<div class="text-xs"><strong>' + Chronicle.escapeHtml(t.name || 'Token') + '</strong>';
+        if (t.bar1_value !== null && t.bar1_max !== null) {
+          tooltip += '<br/>HP: ' + t.bar1_value + '/' + t.bar1_max;
+        }
+        tooltip += '</div>';
+        marker.bindPopup(tooltip, { maxWidth: 150 });
+      });
     },
 
     destroy: function (el) {

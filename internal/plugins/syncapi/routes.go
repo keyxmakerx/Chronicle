@@ -41,6 +41,9 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 	cg.POST("/api-keys", h.CreateKey, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/api-keys/:keyID/toggle", h.ToggleKey, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/api-keys/:keyID", h.RevokeKey, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// Sync status embed (owner only — used by dashboard sync status block).
+	cg.GET("/sync-status", h.SyncStatusEmbed, campaigns.RequireRole(campaigns.RoleOwner))
 }
 
 // RegisterAPIRoutes adds the public REST API endpoints under /api/v1/.

@@ -1,0 +1,91 @@
+// custom_system.templ renders the custom game system upload and management
+// section on the campaign settings page.
+package systems
+
+import "fmt"
+
+// CustomSystemSection renders the custom game system panel. Shows the
+// upload form if no custom system is installed, or the installed module
+// info with a remove button if one exists.
+templ CustomSystemSection(campaignID string, manifest *SystemManifest, totalItems int, csrfToken string) {
+	<div class="mb-2">
+		<h2 class="section-header mb-3">
+			<i class="fa-solid fa-wand-magic-sparkles mr-2 text-fg-muted"></i>Custom Game System
+		</h2>
+		<p class="text-xs text-fg-muted mb-3">
+			Upload your own game system reference data (spells, monsters, items, etc.) as a ZIP file.
+		</p>
+
+		if manifest != nil {
+			// Show installed custom system.
+			<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
+				<div class="flex items-center gap-3">
+					<span class="w-8 h-8 rounded-lg flex items-center justify-center bg-violet-100 dark:bg-violet-900/30">
+						if manifest.Icon != "" {
+							<i class={ "fa-solid " + manifest.Icon + " text-sm text-violet-600 dark:text-violet-400" }></i>
+						} else {
+							<i class="fa-solid fa-dice-d20 text-sm text-violet-600 dark:text-violet-400"></i>
+						}
+					</span>
+					<div>
+						<div class="text-sm font-medium text-fg">{ manifest.Name }</div>
+						<div class="text-xs text-fg-muted">
+							{ fmt.Sprintf("%d categories, %d items", len(manifest.Categories), totalItems) }
+							if manifest.Version != "" {
+								<span class="ml-1">v{ manifest.Version }</span>
+							}
+						</div>
+					</div>
+				</div>
+				<div class="flex items-center gap-2">
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s", campaignID, manifest.ID)) }
+						class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors"
+					>
+						<i class="fa-solid fa-book-open text-[10px]"></i>
+						Browse
+					</a>
+					<button
+						hx-delete={ fmt.Sprintf("/campaigns/%s/systems/custom", campaignID) }
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+						hx-target="#custom-system-section"
+						hx-swap="innerHTML"
+						hx-confirm="Remove this custom game system? Your campaign data is not affected."
+						class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+					>
+						<i class="fa-solid fa-trash text-[10px]"></i>
+						Remove
+					</button>
+				</div>
+			</div>
+		} else {
+			// Show upload form.
+			<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
+				<div class="flex items-center gap-3">
+					<span class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-alt border border-dashed border-edge">
+						<i class="fa-solid fa-upload text-sm text-fg-muted"></i>
+					</span>
+					<div>
+						<div class="text-sm font-medium text-fg-muted">No custom game system</div>
+						<div class="text-xs text-fg-muted">Upload a ZIP with manifest.json + data/*.json</div>
+					</div>
+				</div>
+				<label class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-accent/10 text-accent hover:bg-accent/20 transition-colors cursor-pointer">
+					<i class="fa-solid fa-upload text-[10px]"></i>
+					Upload
+					<input
+						type="file"
+						name="file"
+						accept=".zip"
+						class="hidden"
+						hx-post={ fmt.Sprintf("/campaigns/%s/systems/upload", campaignID) }
+						hx-encoding="multipart/form-data"
+						hx-target="#custom-system-section"
+						hx-swap="innerHTML"
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+					/>
+				</label>
+			</div>
+		}
+	</div>
+}

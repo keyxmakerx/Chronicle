@@ -76,21 +76,44 @@ templ customDashboard(cc *CampaignContext, layout *DashboardLayout, recentEntiti
 // defaultDashboard renders the original hardcoded campaign dashboard (the fallback
 // when dashboard_layout is NULL).
 templ defaultDashboard(cc *CampaignContext, recentEntities []RecentEntity, csrfToken string) {
-	<!-- Campaign header -->
-	<div class="flex items-center justify-between mb-8">
-		<div>
-			<h1 class="text-3xl font-bold text-fg">{ cc.Campaign.Name }</h1>
-			if cc.Campaign.Description != nil && *cc.Campaign.Description != "" {
-				<p class="text-fg-secondary mt-2 max-w-2xl">{ *cc.Campaign.Description }</p>
+	<!-- Campaign header with optional backdrop -->
+	if cc.Campaign.BackdropPath != nil && *cc.Campaign.BackdropPath != "" {
+		<div class="relative rounded-xl overflow-hidden mb-8 -mt-4 -mx-5 md:-mx-0 md:mt-0">
+			<img
+				src={ "/media/" + *cc.Campaign.BackdropPath }
+				alt=""
+				class="w-full h-48 md:h-56 object-cover"
+			/>
+			<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+			<div class="absolute bottom-0 left-0 right-0 p-6 flex items-end justify-between">
+				<div>
+					<h1 class="text-3xl font-bold text-white drop-shadow-lg">{ cc.Campaign.Name }</h1>
+					if cc.Campaign.Description != nil && *cc.Campaign.Description != "" {
+						<p class="text-white/80 mt-1 max-w-2xl text-sm drop-shadow">{ *cc.Campaign.Description }</p>
+					}
+				</div>
+				if cc.MemberRole >= RoleOwner {
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm transition-colors">
+						<i class="fa-solid fa-gear text-xs"></i> Settings
+					</a>
+				}
+			</div>
+		</div>
+	} else {
+		<div class="flex items-center justify-between mb-8">
+			<div>
+				<h1 class="text-3xl font-bold text-fg">{ cc.Campaign.Name }</h1>
+				if cc.Campaign.Description != nil && *cc.Campaign.Description != "" {
+					<p class="text-fg-secondary mt-2 max-w-2xl">{ *cc.Campaign.Description }</p>
+				}
+			</div>
+			if cc.MemberRole >= RoleOwner {
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
+					<i class="fa-solid fa-gear mr-1.5 text-xs"></i> Settings
+				</a>
 			}
 		</div>
-
-		if cc.MemberRole >= RoleOwner {
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
-				<i class="fa-solid fa-gear mr-1.5 text-xs"></i> Settings
-			</a>
-		}
-	</div>
+	}
 
 	<!-- Quick actions row -->
 	<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">

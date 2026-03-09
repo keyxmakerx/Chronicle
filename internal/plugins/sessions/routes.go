@@ -36,6 +36,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	pub.GET("/sessions", h.ListSessions, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/sessions/:sid", h.ShowSession, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/sidebar/sessions-rsvp", h.SidebarRSVP, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/sessions/embed", h.EmbedSessions, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// RSVP token redemption — public endpoint, no auth required.
 	// Token itself is the credential (emailed to the user).

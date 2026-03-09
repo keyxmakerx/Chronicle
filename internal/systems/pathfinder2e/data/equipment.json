@@ -1,0 +1,158 @@
+[
+  {
+    "id": "healing-potion-minor",
+    "name": "Healing Potion (Minor)",
+    "summary": "A vial of red liquid that restores a small amount of Hit Points when consumed.",
+    "description": "A healing potion is a vial of red liquid that restores Hit Points when consumed. A minor healing potion restores 1d8 Hit Points when you Interact to drink it.",
+    "properties": {
+      "level": 1,
+      "price": "4 gp",
+      "bulk": "L"
+    },
+    "tags": ["consumable", "healing", "magical", "potion"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "healing-potion-lesser",
+    "name": "Healing Potion (Lesser)",
+    "summary": "A vial of red liquid that restores a moderate amount of Hit Points.",
+    "description": "A healing potion is a vial of red liquid that restores Hit Points when consumed. A lesser healing potion restores 2d8+5 Hit Points when you Interact to drink it.",
+    "properties": {
+      "level": 3,
+      "price": "12 gp",
+      "bulk": "L"
+    },
+    "tags": ["consumable", "healing", "magical", "potion"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "healing-potion-moderate",
+    "name": "Healing Potion (Moderate)",
+    "summary": "A vial of red liquid that restores a significant amount of Hit Points.",
+    "description": "A healing potion is a vial of red liquid that restores Hit Points when consumed. A moderate healing potion restores 3d8+10 Hit Points when you Interact to drink it.",
+    "properties": {
+      "level": 6,
+      "price": "50 gp",
+      "bulk": "L"
+    },
+    "tags": ["consumable", "healing", "magical", "potion"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "potency-crystal",
+    "name": "Potency Crystal",
+    "summary": "A small gemstone that temporarily improves a weapon's accuracy.",
+    "description": "This small gemstone can be affixed to a weapon or attached to a handwraps of mighty blows to add a temporary +1 item bonus to attack rolls made with the weapon. The crystal crumbles to dust after 1 minute.",
+    "properties": {
+      "level": 1,
+      "price": "4 gp",
+      "bulk": "—"
+    },
+    "tags": ["consumable", "talisman", "weapon"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "weapon-potency-rune-1",
+    "name": "+1 Weapon Potency Rune",
+    "summary": "A fundamental rune that grants a +1 item bonus to attack rolls.",
+    "description": "Magical enhancements to a weapon are carved as runes onto the weapon. A +1 weapon potency rune is a fundamental rune that grants a +1 item bonus to attack rolls made with the weapon.",
+    "properties": {
+      "level": 2,
+      "price": "35 gp",
+      "bulk": "—"
+    },
+    "tags": ["rune", "fundamental", "weapon"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "striking-rune",
+    "name": "Striking Rune",
+    "summary": "A fundamental rune that increases a weapon's damage dice.",
+    "description": "A striking rune is a fundamental rune that increases the number of weapon damage dice by one. For example, a longsword with a striking rune deals 2d8 damage instead of 1d8.",
+    "properties": {
+      "level": 4,
+      "price": "65 gp",
+      "bulk": "—"
+    },
+    "tags": ["rune", "fundamental", "weapon"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "armor-potency-rune-1",
+    "name": "+1 Armor Potency Rune",
+    "summary": "A fundamental rune that grants a +1 item bonus to AC.",
+    "description": "Magical enhancements to armor are carved as runes onto the armor. A +1 armor potency rune is a fundamental rune that grants a +1 item bonus to AC. It also grants the armor a +1 item bonus to saving throws against effects that target the armor specifically.",
+    "properties": {
+      "level": 5,
+      "price": "160 gp",
+      "bulk": "—"
+    },
+    "tags": ["rune", "fundamental", "armor"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "resilient-rune",
+    "name": "Resilient Rune",
+    "summary": "A fundamental rune that grants a +1 item bonus to saving throws.",
+    "description": "A resilient rune is a fundamental rune that increases the armor's item bonus to saving throws. A standard resilient rune grants a +1 item bonus to all saving throws while wearing the armor.",
+    "properties": {
+      "level": 8,
+      "price": "340 gp",
+      "bulk": "—"
+    },
+    "tags": ["rune", "fundamental", "armor"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "flaming-rune",
+    "name": "Flaming Rune",
+    "summary": "A property rune that adds fire damage to weapon attacks.",
+    "description": "A flaming rune causes a weapon to burst into flame when wielded. A weapon with a flaming rune deals an additional 1d6 fire damage on a hit. On a critical hit, the weapon deals 1d10 persistent fire damage.",
+    "properties": {
+      "level": 8,
+      "price": "500 gp",
+      "bulk": "—"
+    },
+    "tags": ["rune", "property", "weapon", "fire"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "bag-of-holding-type-i",
+    "name": "Bag of Holding (Type I)",
+    "summary": "An extradimensional bag that holds far more than its size suggests.",
+    "description": "This sturdy bag has an extradimensional space inside that can hold up to 25 Bulk of items. The bag itself weighs only 1 Bulk regardless of its contents. Retrieving an item from the bag requires an Interact action. If the bag is overloaded, broken, or turned inside out, all items inside spill out and the bag must be repaired before it can be used again.",
+    "properties": {
+      "level": 4,
+      "price": "75 gp",
+      "bulk": "1"
+    },
+    "tags": ["held", "extradimensional", "magical"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "cloak-of-elvenkind",
+    "name": "Cloak of Elvenkind",
+    "summary": "A cloak that helps the wearer blend into natural environments.",
+    "description": "This cloak is deep green with a voluminous hood. While wearing the cloak with the hood up, you gain a +1 item bonus to Stealth checks. In addition, when you use the cloak's hood to hide in natural terrain, you can Hide without needing cover or concealment.",
+    "properties": {
+      "level": 7,
+      "price": "360 gp",
+      "bulk": "L"
+    },
+    "tags": ["worn", "magical", "stealth"],
+    "source": "Player Core (ORC)"
+  },
+  {
+    "id": "staff-of-fire",
+    "name": "Staff of Fire",
+    "summary": "A staff that allows the wielder to cast fire spells.",
+    "description": "This staff is made of charred wood and smolders at the tip. While wielding the staff, you can cast the following spells using charges from the staff:\n\nCantrip: produce flame\n1st: burning hands\n2nd: flaming sphere\n3rd: fireball",
+    "properties": {
+      "level": 6,
+      "price": "250 gp",
+      "bulk": "1"
+    },
+    "tags": ["held", "magical", "staff", "fire"],
+    "source": "Player Core (ORC)"
+  }
+]

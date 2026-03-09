@@ -20,7 +20,8 @@ type mockMediaRepo struct {
 	listAllFn          func(ctx context.Context, limit, offset int) ([]AdminMediaFile, int, error)
 	getCampaignUsageFn func(ctx context.Context, campaignID string) (int64, int, error)
 	findReferencesFn   func(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error)
-	listAllFilenamesFn func(ctx context.Context) (map[string]bool, error)
+	listAllFilenamesFn    func(ctx context.Context) (map[string]bool, error)
+	listFilesByCampaignFn func(ctx context.Context, campaignID string) ([]MediaFile, error)
 }
 
 func (m *mockMediaRepo) Create(ctx context.Context, file *MediaFile) error {
@@ -84,6 +85,13 @@ func (m *mockMediaRepo) ListAllFilenames(ctx context.Context) (map[string]bool, 
 		return m.listAllFilenamesFn(ctx)
 	}
 	return make(map[string]bool), nil
+}
+
+func (m *mockMediaRepo) ListFilesByCampaign(ctx context.Context, campaignID string) ([]MediaFile, error) {
+	if m.listFilesByCampaignFn != nil {
+		return m.listFilesByCampaignFn(ctx, campaignID)
+	}
+	return nil, nil
 }
 
 // --- Mock Storage Limiter ---

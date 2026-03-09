@@ -60,6 +60,12 @@ type SessionSearcher interface {
 	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 }
 
+// SystemSearcher provides game system search results for the quick
+// search popup. Implemented by systems.SystemSearchAdapter.
+type SystemSearcher interface {
+	SearchSystemContent(ctx context.Context, campaignID, query string) ([]map[string]string, error)
+}
+
 // MemberLister retrieves campaign members for the permissions UI.
 // Satisfied by campaigns.CampaignService.
 type MemberLister interface {
@@ -89,6 +95,7 @@ type Handler struct {
 	mapSearcher        MapSearcher
 	calendarSearcher   CalendarSearcher
 	sessionSearcher    SessionSearcher
+	systemSearcher     SystemSearcher
 	memberLister       MemberLister
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
@@ -147,6 +154,12 @@ func (h *Handler) SetCalendarSearcher(cs CalendarSearcher) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetSessionSearcher(ss SessionSearcher) {
 	h.sessionSearcher = ss
+}
+
+// SetSystemSearcher sets the system searcher for quick search results.
+// Called after all plugins are wired to avoid initialization order issues.
+func (h *Handler) SetSystemSearcher(ms SystemSearcher) {
+	h.systemSearcher = ms
 }
 
 // SetMemberLister sets the member lister for the permissions UI.
@@ -603,6 +616,18 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	opts := DefaultListOptions()
 	opts.PerPage = 20
 
+	// Sidebar drill panel loads all pages for a category. Use a higher
+	// limit so categories aren't silently truncated at 20.
+	isSidebar := c.QueryParam("sidebar") == "1"
+	if isSidebar {
+		opts.PerPage = 200
+	}
+
+	// Pagination: allow callers to request a specific page.
+	if p, _ := strconv.Atoi(c.QueryParam("page")); p > 1 {
+		opts.Page = p
+	}
+
 	// Check if the caller wants JSON (used by the editor @mention widget).
 	wantsJSON := strings.Contains(c.Request().Header.Get("Accept"), "application/json")
 
@@ -674,6 +699,14 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			); err == nil {
 				items = append(items, sessResults...)
 				total += len(sessResults)
+			}
+		}
+		if h.systemSearcher != nil && query != "" {
+			if modResults, err := h.systemSearcher.SearchSystemContent(
+				c.Request().Context(), cc.Campaign.ID, query,
+			); err == nil {
+				items = append(items, modResults...)
+				total += len(modResults)
 			}
 		}
 		return c.JSON(http.StatusOK, map[string]any{"results": items, "total": total})

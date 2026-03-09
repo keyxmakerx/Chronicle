@@ -217,7 +217,7 @@ templ StorageSettingsFormFragment(global *GlobalStorageLimits, userLimits []User
 				class="p-4 bg-surface-alt rounded-lg mb-4"
 				x-data="{ userId: '' }"
 				@submit.prevent="
-					if (!userId.trim()) { alert('Please enter a user ID'); return; }
+					if (!userId.trim()) { Chronicle.notify('Please enter a user ID', 'warning'); return; }
 					$el.setAttribute('hx-put', '/admin/users/' + userId.trim() + '/storage');
 					htmx.trigger($el, 'submit');
 				"
@@ -342,7 +342,7 @@ templ StorageSettingsFormFragment(global *GlobalStorageLimits, userLimits []User
 				class="p-4 bg-surface-alt rounded-lg mb-4"
 				x-data="{ campaignId: '' }"
 				@submit.prevent="
-					if (!campaignId.trim()) { alert('Please enter a campaign ID'); return; }
+					if (!campaignId.trim()) { Chronicle.notify('Please enter a campaign ID', 'warning'); return; }
 					$el.setAttribute('hx-put', '/admin/campaigns/' + campaignId.trim() + '/storage');
 					htmx.trigger($el, 'submit');
 				"

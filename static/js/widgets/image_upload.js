@@ -41,14 +41,14 @@ Chronicle.register('image-upload', {
       // Validate file type client-side.
       var allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
       if (allowed.indexOf(file.type) === -1) {
-        alert('Please select a JPEG, PNG, WebP, or GIF image.');
+        Chronicle.notify('Please select a JPEG, PNG, WebP, or GIF image.', 'warning');
         fileInput.value = '';
         return;
       }
 
       // Validate file size client-side (10 MB max).
       if (file.size > 10 * 1024 * 1024) {
-        alert('Image must be smaller than 10 MB.');
+        Chronicle.notify('Image must be smaller than 10 MB.', 'warning');
         fileInput.value = '';
         return;
       }
@@ -97,7 +97,7 @@ Chronicle.register('image-upload', {
         })
         .catch(function (err) {
           console.error('[image-upload] Error:', err);
-          alert('Image upload failed: ' + (err.message || 'Unknown error'));
+          Chronicle.notify('Image upload failed: ' + (err.message || 'Unknown error'), 'error');
           el.style.opacity = '';
           el.style.pointerEvents = '';
         })

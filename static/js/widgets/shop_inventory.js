@@ -546,7 +546,7 @@ Chronicle.register('shop_inventory', {
         })
         .catch(function (err) {
           console.error('Shop inventory: failed to create item', err);
-          alert('Failed to create item: ' + (err.message || 'Unknown error'));
+          Chronicle.notify('Failed to create item: ' + (err.message || 'Unknown error'), 'error');
           if (onDone) onDone();
         });
     }

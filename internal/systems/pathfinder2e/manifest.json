@@ -1,0 +1,78 @@
+{
+  "id": "pathfinder2e",
+  "name": "Pathfinder 2e",
+  "description": "ORC reference content for Pathfinder 2nd Edition. Includes spells, creatures, equipment, ancestries, classes, and conditions from the ORC-licensed Player Core and GM Core.",
+  "version": "1.0.0",
+  "author": "Chronicle",
+  "license": "ORC",
+  "icon": "fa-shield-halved",
+  "api_version": "1",
+  "status": "available",
+  "categories": [
+    {
+      "slug": "spells",
+      "name": "Spells",
+      "icon": "fa-wand-sparkles",
+      "fields": [
+        { "key": "level", "label": "Spell Level", "type": "number" },
+        { "key": "traditions", "label": "Traditions", "type": "list" },
+        { "key": "school", "label": "School", "type": "string" },
+        { "key": "cast", "label": "Cast", "type": "string" },
+        { "key": "range", "label": "Range", "type": "string" }
+      ]
+    },
+    {
+      "slug": "creatures",
+      "name": "Creatures",
+      "icon": "fa-skull",
+      "fields": [
+        { "key": "level", "label": "Level", "type": "number" },
+        { "key": "type", "label": "Type", "type": "string" },
+        { "key": "size", "label": "Size", "type": "string" },
+        { "key": "hp", "label": "Hit Points", "type": "number" }
+      ]
+    },
+    {
+      "slug": "equipment",
+      "name": "Equipment",
+      "icon": "fa-gem",
+      "fields": [
+        { "key": "level", "label": "Item Level", "type": "number" },
+        { "key": "price", "label": "Price", "type": "string" },
+        { "key": "bulk", "label": "Bulk", "type": "string" }
+      ]
+    },
+    {
+      "slug": "ancestries",
+      "name": "Ancestries",
+      "icon": "fa-users",
+      "fields": [
+        { "key": "hp", "label": "Hit Points", "type": "number" },
+        { "key": "size", "label": "Size", "type": "string" },
+        { "key": "speed", "label": "Speed", "type": "string" },
+        { "key": "boosts", "label": "Ability Boosts", "type": "string" }
+      ]
+    },
+    {
+      "slug": "classes",
+      "name": "Classes",
+      "icon": "fa-hat-wizard",
+      "fields": [
+        { "key": "key_ability", "label": "Key Ability", "type": "string" },
+        { "key": "hp", "label": "HP per Level", "type": "number" },
+        { "key": "perception", "label": "Perception", "type": "string" },
+        { "key": "fortitude", "label": "Fortitude", "type": "string" },
+        { "key": "reflex", "label": "Reflex", "type": "string" },
+        { "key": "will", "label": "Will", "type": "string" }
+      ]
+    },
+    {
+      "slug": "conditions",
+      "name": "Conditions",
+      "icon": "fa-heart-crack",
+      "fields": [
+        { "key": "effect", "label": "Effect", "type": "string" }
+      ]
+    }
+  ]
+}

@@ -340,7 +340,7 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 									body: JSON.stringify({recap: text, recap_html: html})
 								}).then(function(r) {
 									if (r.ok) { location.reload(); }
-									else { alert('Failed to save recap'); }
+									else { Chronicle.notify('Failed to save recap', 'error'); }
 								});
 							}
 						</script>
@@ -550,6 +550,40 @@ templ SidebarSessionsRSVP(campaignID string, sessions []Session, userID string) 
 			</nav>
 		</div>
 	</div>
+}
+
+// SessionsEmbedFragment renders a compact list of planned sessions for dashboard embedding.
+// Shows session name, date, and RSVP counts. Empty state if no planned sessions.
+templ SessionsEmbedFragment(campaignID string, sessions []Session, userID string) {
+	if len(sessions) == 0 {
+		<div class="px-4 py-6 text-center">
+			<i class="fa-solid fa-dice-d20 text-xl text-fg-muted mb-2"></i>
+			<p class="text-sm text-fg-secondary">No upcoming sessions.</p>
+		</div>
+	} else {
+		for _, s := range sessions {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions/%s", campaignID, s.ID)) }
+				class="flex items-center gap-3 px-4 py-3 hover:bg-surface-alt/50 transition-colors group"
+			>
+				<div class="shrink-0">
+					@sidebarRSVPBadge(s.Attendees, userID)
+				</div>
+				<div class="flex-1 min-w-0">
+					<div class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ s.Name }</div>
+					if s.ScheduledDate != nil && *s.ScheduledDate != "" {
+						<div class="text-xs text-fg-muted">{ s.FormatScheduledDate() }</div>
+					}
+				</div>
+				<div class="shrink-0 text-xs text-fg-muted">
+					<span class="inline-flex items-center gap-1">
+						<i class="fa-solid fa-users text-[10px]"></i>
+						{ fmt.Sprintf("%d/%d", countAccepted(s.Attendees), len(s.Attendees)) }
+					</span>
+				</div>
+			</a>
+		}
+	}
 }
 
 // sidebarRSVPBadge shows a small colored dot for the current user's RSVP status.

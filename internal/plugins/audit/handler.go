@@ -55,6 +55,39 @@ func (h *Handler) Activity(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, ActivityPage(cc, stats, entries, total, page, perPage))
 }
 
+// EmbedActivity returns an HTMX fragment for the dashboard activity feed block.
+// Shows recent campaign activity entries in a compact feed format.
+// GET /campaigns/:id/activity/embed
+func (h *Handler) EmbedActivity(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(fmt.Errorf("missing campaign context"))
+	}
+
+	limit := 10
+	if l := c.QueryParam("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v >= 1 {
+			limit = v
+		}
+		if limit > 30 {
+			limit = 30
+		}
+	}
+
+	ctx := c.Request().Context()
+	entries, _, err := h.service.GetCampaignActivity(ctx, cc.Campaign.ID, 1)
+	if err != nil {
+		return err
+	}
+
+	// Trim to requested limit.
+	if limit < len(entries) {
+		entries = entries[:limit]
+	}
+
+	return middleware.Render(c, http.StatusOK, ActivityEmbedFragment(cc, entries))
+}
+
 // EntityHistory returns JSON history for a specific entity
 // (GET /campaigns/:id/entities/:eid/history). Used by HTMX or API clients
 // to display per-entity change logs.

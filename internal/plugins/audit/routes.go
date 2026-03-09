@@ -20,6 +20,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Activity page -- campaign owner only.
 	cg.GET("/activity", h.Activity, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Activity embed -- owner only (used by dashboard activity feed block).
+	cg.GET("/activity/embed", h.EmbedActivity, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Entity history -- any campaign member can view change history.
 	cg.GET("/entities/:eid/history", h.EntityHistory, campaigns.RequireRole(campaigns.RolePlayer))
 }

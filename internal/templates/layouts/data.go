@@ -33,6 +33,7 @@ const (
 	keyMediaURLFunc      ctxKey = "layout_media_url_func"
 	keyMediaThumbFunc    ctxKey = "layout_media_thumb_func"
 	keyExtWidgetScripts  ctxKey = "layout_ext_widget_scripts"
+	keyAccentColor       ctxKey = "layout_accent_color"
 )
 
 // SidebarEntityType holds the minimum entity type info needed for sidebar
@@ -407,4 +408,15 @@ func SetExtWidgetScripts(ctx context.Context, urls []string) context.Context {
 func GetExtWidgetScripts(ctx context.Context) []string {
 	urls, _ := ctx.Value(keyExtWidgetScripts).([]string)
 	return urls
+}
+
+// SetAccentColor stores the campaign's custom accent color in the context.
+func SetAccentColor(ctx context.Context, color string) context.Context {
+	return context.WithValue(ctx, keyAccentColor, color)
+}
+
+// GetAccentColor returns the campaign's custom accent color, or empty string for default.
+func GetAccentColor(ctx context.Context) string {
+	color, _ := ctx.Value(keyAccentColor).(string)
+	return color
 }

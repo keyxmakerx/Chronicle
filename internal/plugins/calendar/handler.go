@@ -133,6 +133,57 @@ func (h *Handler) Show(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, CalendarPage(cc, data))
 }
 
+// EmbedCalendar returns a compact calendar grid fragment for dashboard embedding.
+// GET /campaigns/:id/calendar/embed
+func (h *Handler) EmbedCalendar(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	// No calendar exists — return a setup prompt.
+	if cal == nil {
+		return middleware.Render(c, http.StatusOK, CalendarEmbedEmpty(cc))
+	}
+
+	year := cal.CurrentYear
+	month := cal.CurrentMonth
+	if q := c.QueryParam("year"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil {
+			year = v
+		}
+	}
+	if q := c.QueryParam("month"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil && v >= 1 && v <= len(cal.Months) {
+			month = v
+		}
+	}
+
+	role := int(cc.MemberRole)
+	userID := auth.GetUserID(c)
+	events, err := h.svc.ListEventsForMonth(ctx, cal.ID, year, month, role, userID)
+	if err != nil {
+		return err
+	}
+
+	data := CalendarViewData{
+		Calendar:   cal,
+		Year:       year,
+		MonthIndex: month,
+		Events:     events,
+		CampaignID: cc.Campaign.ID,
+		UserID:     userID,
+		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
+		CSRFToken:  middleware.GetCSRFToken(c),
+	}
+
+	return middleware.Render(c, http.StatusOK, CalendarEmbedFragment(cc, data))
+}
+
 // ShowWeek renders the calendar week view.
 // GET /campaigns/:id/calendar/week
 func (h *Handler) ShowWeek(c echo.Context) error {

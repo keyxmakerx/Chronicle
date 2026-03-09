@@ -43,6 +43,20 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashMapPreview(cc, block.Config)
 		case "relations_graph":
 			@dashRelationsGraph(cc, block.Config)
+		case "calendar_full":
+			@dashCalendarFull(cc, block.Config)
+		case "timeline_full":
+			@dashTimelineFull(cc, block.Config)
+		case "relations_graph_full":
+			@dashRelationsGraphFull(cc, block.Config)
+		case "map_full":
+			@dashMapFull(cc, block.Config)
+		case "session_tracker":
+			@dashSessionTracker(cc, block.Config)
+		case "activity_feed":
+			@dashActivityFeed(cc, block.Config)
+		case "sync_status":
+			@dashSyncStatus(cc, block.Config)
 	}
 }
 
@@ -371,4 +385,260 @@ func dashGraphHeight(config map[string]any) int {
 		height = 800
 	}
 	return height
+}
+
+// dashCalendarFull renders a full interactive calendar grid embedded in the dashboard.
+// Uses HTMX to lazy-load the calendar grid fragment from the calendar plugin.
+// Config: height (int, default 500).
+templ dashCalendarFull(cc *CampaignContext, config map[string]any) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-calendar-days mr-1.5"></i>Calendar
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				Open full page
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendar/embed", cc.Campaign.ID) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card overflow-hidden rounded-lg"
+			style={ fmt.Sprintf("min-height: %dpx", dashFullBlockHeight(config, 500)) }
+		>
+			<div class="flex items-center justify-center h-full text-sm text-fg-muted py-8">
+				<i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading calendar...
+			</div>
+		</div>
+	</div>
+}
+
+// dashTimelineFull renders a full interactive timeline visualization in the dashboard.
+// Mounts the timeline-viz D3 widget for interactive timeline display.
+// Config: height (int, default 500), timeline_id (string, optional — first timeline if not set).
+templ dashTimelineFull(cc *CampaignContext, config map[string]any) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-timeline mr-1.5"></i>Timeline
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				Open full page
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/timelines/embed?timeline_id=%s", cc.Campaign.ID, dashTimelineID(config)) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card overflow-hidden rounded-lg"
+			style={ fmt.Sprintf("min-height: %dpx", dashFullBlockHeight(config, 500)) }
+		>
+			<div class="flex items-center justify-center h-full text-sm text-fg-muted py-8">
+				<i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading timeline...
+			</div>
+		</div>
+	</div>
+}
+
+// dashRelationsGraphFull renders a large entity relations graph in the dashboard.
+// Same as relations_graph but with a larger default height for full-view display.
+// Config: height (int, default 600).
+templ dashRelationsGraphFull(cc *CampaignContext, config map[string]any) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-diagram-project mr-1.5"></i>Relations Graph
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/relations-graph/page", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				Open full page
+			</a>
+		</div>
+		<div
+			data-widget="relation-graph"
+			data-campaign-id={ cc.Campaign.ID }
+			data-api-url={ fmt.Sprintf("/campaigns/%s/relations-graph", cc.Campaign.ID) }
+			data-height={ fmt.Sprintf("%d", dashFullBlockHeight(config, 600)) }
+			class="card overflow-hidden rounded-lg"
+		></div>
+	</div>
+}
+
+// dashFullBlockHeight extracts the height from block config with a custom default.
+func dashFullBlockHeight(config map[string]any, defaultHeight int) int {
+	height := defaultHeight
+	if v, ok := config["height"]; ok {
+		switch h := v.(type) {
+		case float64:
+			height = int(h)
+		case int:
+			height = h
+		}
+	}
+	if height < 300 {
+		height = 300
+	}
+	if height > 1000 {
+		height = 1000
+	}
+	return height
+}
+
+// dashTimelineID extracts the timeline_id from block config (empty if not set).
+func dashTimelineID(config map[string]any) string {
+	if id, ok := config["timeline_id"].(string); ok {
+		return id
+	}
+	return ""
+}
+
+// dashMapFull renders a full interactive map viewer embedded in the dashboard.
+// Shows the map image with markers, drawings, and tokens via the enhanced map widget.
+// Config: map_id (string), height (int, default 500).
+templ dashMapFull(cc *CampaignContext, config map[string]any) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-map mr-1.5"></i>Map
+			</h2>
+			if dashMapID(config) != "" {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, dashMapID(config))) }
+					class="text-xs text-accent hover:underline"
+				>
+					Open full editor
+				</a>
+			} else {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", cc.Campaign.ID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					View all maps
+				</a>
+			}
+		</div>
+		<div
+			data-widget="map-widget"
+			data-campaign-id={ cc.Campaign.ID }
+			data-map-id={ dashMapID(config) }
+			data-height={ fmt.Sprintf("%d", dashFullBlockHeight(config, 500)) }
+			data-show-drawings="true"
+			data-show-tokens="true"
+			class="card overflow-hidden rounded-lg"
+			style={ fmt.Sprintf("min-height: %dpx", dashFullBlockHeight(config, 500)) }
+		>
+			<div class="flex items-center justify-center h-full text-sm text-fg-muted py-8">
+				<i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading map...
+			</div>
+		</div>
+	</div>
+}
+
+// dashSessionTracker renders upcoming game sessions with RSVP status.
+// Lazy-loads via HTMX from the sessions plugin sidebar endpoint.
+// Config: limit (int, default 5).
+templ dashSessionTracker(cc *CampaignContext, config map[string]any) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-dice-d20 mr-1.5"></i>Upcoming Sessions
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				View all
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/sessions/embed?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card divide-y divide-edge min-h-[60px]"
+		>
+			<div class="px-4 py-3 text-sm text-fg-muted">Loading sessions...</div>
+		</div>
+	</div>
+}
+
+// dashActivityFeed renders recent campaign activity (audit log) as a feed.
+// Lazy-loads via HTMX from the audit plugin embed endpoint.
+// Config: limit (int, default 10).
+templ dashActivityFeed(cc *CampaignContext, config map[string]any) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-clock-rotate-left mr-1.5"></i>Recent Activity
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/activity", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				View all
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/activity/embed?limit=%d", cc.Campaign.ID, dashActivityLimit(config)) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card divide-y divide-edge min-h-[60px]"
+		>
+			<div class="px-4 py-3 text-sm text-fg-muted">Loading activity...</div>
+		</div>
+	</div>
+}
+
+// dashSyncStatus renders Foundry VTT sync connection health and status.
+// Lazy-loads via HTMX from the sync API status endpoint.
+templ dashSyncStatus(cc *CampaignContext, config map[string]any) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-plug mr-1.5"></i>Foundry VTT Sync
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				Manage keys
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/sync-status", cc.Campaign.ID) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card min-h-[60px]"
+		>
+			<div class="px-4 py-3 text-sm text-fg-muted">Checking sync status...</div>
+		</div>
+	</div>
+}
+
+// dashActivityLimit extracts the activity feed limit from block config (default 10).
+func dashActivityLimit(config map[string]any) int {
+	limit := 10
+	if v, ok := config["limit"]; ok {
+		switch l := v.(type) {
+		case float64:
+			limit = int(l)
+		case int:
+			limit = l
+		}
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 30 {
+		limit = 30
+	}
+	return limit
 }
