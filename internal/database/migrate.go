@@ -36,6 +36,13 @@ func RunMigrations(appDB *sql.DB, dsn string, migrationsPath string) error {
 	}
 	defer db.Close()
 
+	// Pre-flight: validate pending migrations against the live schema before
+	// executing anything. This catches MariaDB-specific pitfalls (Error 1553,
+	// FK-backed column drops, etc.) that would leave the DB in a dirty state.
+	if err := runPreflightValidation(db, migrationsPath); err != nil {
+		return fmt.Errorf("migration preflight failed: %w", err)
+	}
+
 	driver, err := mysql.WithInstance(db, &mysql.Config{})
 	if err != nil {
 		return fmt.Errorf("creating migration driver: %w", err)
