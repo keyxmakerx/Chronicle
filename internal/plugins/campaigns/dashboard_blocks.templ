@@ -43,6 +43,12 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 			@dashMapPreview(cc, block.Config)
 		case "relations_graph":
 			@dashRelationsGraph(cc, block.Config)
+		case "calendar_full":
+			@dashCalendarFull(cc, block.Config)
+		case "timeline_full":
+			@dashTimelineFull(cc, block.Config)
+		case "relations_graph_full":
+			@dashRelationsGraphFull(cc, block.Config)
 	}
 }
 
@@ -371,4 +377,118 @@ func dashGraphHeight(config map[string]any) int {
 		height = 800
 	}
 	return height
+}
+
+// dashCalendarFull renders a full interactive calendar grid embedded in the dashboard.
+// Uses HTMX to lazy-load the calendar grid fragment from the calendar plugin.
+// Config: height (int, default 500).
+templ dashCalendarFull(cc *CampaignContext, config map[string]any) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-calendar-days mr-1.5"></i>Calendar
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				Open full page
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendar/embed", cc.Campaign.ID) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card overflow-hidden rounded-lg"
+			style={ fmt.Sprintf("min-height: %dpx", dashFullBlockHeight(config, 500)) }
+		>
+			<div class="flex items-center justify-center h-full text-sm text-fg-muted py-8">
+				<i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading calendar...
+			</div>
+		</div>
+	</div>
+}
+
+// dashTimelineFull renders a full interactive timeline visualization in the dashboard.
+// Mounts the timeline-viz D3 widget for interactive timeline display.
+// Config: height (int, default 500), timeline_id (string, optional — first timeline if not set).
+templ dashTimelineFull(cc *CampaignContext, config map[string]any) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-timeline mr-1.5"></i>Timeline
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				Open full page
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/timelines/embed?timeline_id=%s", cc.Campaign.ID, dashTimelineID(config)) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card overflow-hidden rounded-lg"
+			style={ fmt.Sprintf("min-height: %dpx", dashFullBlockHeight(config, 500)) }
+		>
+			<div class="flex items-center justify-center h-full text-sm text-fg-muted py-8">
+				<i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading timeline...
+			</div>
+		</div>
+	</div>
+}
+
+// dashRelationsGraphFull renders a large entity relations graph in the dashboard.
+// Same as relations_graph but with a larger default height for full-view display.
+// Config: height (int, default 600).
+templ dashRelationsGraphFull(cc *CampaignContext, config map[string]any) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-diagram-project mr-1.5"></i>Relations Graph
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/relations-graph/page", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				Open full page
+			</a>
+		</div>
+		<div
+			data-widget="relation-graph"
+			data-campaign-id={ cc.Campaign.ID }
+			data-api-url={ fmt.Sprintf("/campaigns/%s/relations-graph", cc.Campaign.ID) }
+			data-height={ fmt.Sprintf("%d", dashFullBlockHeight(config, 600)) }
+			class="card overflow-hidden rounded-lg"
+		></div>
+	</div>
+}
+
+// dashFullBlockHeight extracts the height from block config with a custom default.
+func dashFullBlockHeight(config map[string]any, defaultHeight int) int {
+	height := defaultHeight
+	if v, ok := config["height"]; ok {
+		switch h := v.(type) {
+		case float64:
+			height = int(h)
+		case int:
+			height = h
+		}
+	}
+	if height < 300 {
+		height = 300
+	}
+	if height > 1000 {
+		height = 1000
+	}
+	return height
+}
+
+// dashTimelineID extracts the timeline_id from block config (empty if not set).
+func dashTimelineID(config map[string]any) string {
+	if id, ok := config["timeline_id"].(string); ok {
+		return id
+	}
+	return ""
 }

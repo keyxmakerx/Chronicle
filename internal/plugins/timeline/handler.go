@@ -863,6 +863,37 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, timelinePreviewFragment(cc.Campaign.ID, timelines))
 }
 
+// EmbedTimeline returns a compact timeline visualization fragment for dashboard embedding.
+// GET /campaigns/:id/timelines/embed
+func (h *Handler) EmbedTimeline(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	role := effectiveRole(c, cc)
+	userID := auth.GetUserID(c)
+
+	// If a specific timeline_id is provided, show that timeline.
+	// Otherwise, show the first available timeline.
+	timelineID := c.QueryParam("timeline_id")
+
+	if timelineID == "" {
+		timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, role, userID)
+		if err != nil {
+			return err
+		}
+		if len(timelines) == 0 {
+			return middleware.Render(c, http.StatusOK, TimelineEmbedEmpty(cc))
+		}
+		timelineID = timelines[0].ID
+	}
+
+	t, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID)
+	if err != nil {
+		return middleware.Render(c, http.StatusOK, TimelineEmbedEmpty(cc))
+	}
+
+	return middleware.Render(c, http.StatusOK, TimelineEmbedFragment(cc, t))
+}
+
 // --- Event Connection Handlers ---
 
 // CreateConnectionAPI creates a connection between two events on a timeline.

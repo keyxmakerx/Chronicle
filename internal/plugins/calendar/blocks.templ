@@ -5,6 +5,7 @@ package calendar
 
 import (
 	"fmt"
+	"strconv"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -16,6 +17,67 @@ templ BlockCalendarEvents(cc *campaigns.CampaignContext, entityID string) {
 		hx-trigger="load"
 		hx-swap="innerHTML"
 	></div>
+}
+
+// CalendarEmbedFragment renders a compact calendar grid for dashboard embedding.
+// Includes month navigation via HTMX that swaps within the embed container.
+templ CalendarEmbedFragment(cc *campaigns.CampaignContext, data CalendarViewData) {
+	<div id="calendar-embed" data-calendar-months={ calendarMonthNamesJSON(data.Calendar) } data-calendar-categories={ calendarCategoriesJSON(data.Calendar) }>
+		@calendarEmbedHeader(cc, data)
+		<div class="overflow-y-auto px-4 py-3" style="max-height: 450px">
+			@calendarGrid(cc, data)
+		</div>
+	</div>
+}
+
+// CalendarEmbedEmpty renders a prompt when no calendar exists yet.
+templ CalendarEmbedEmpty(cc *campaigns.CampaignContext) {
+	<div class="flex flex-col items-center justify-center py-12 text-center">
+		<i class="fa-solid fa-calendar-days text-3xl text-fg-muted mb-3"></i>
+		<p class="text-sm text-fg-secondary mb-2">No calendar configured yet.</p>
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar", cc.Campaign.ID)) }
+			class="text-sm text-accent hover:underline"
+		>
+			Set up calendar
+		</a>
+	</div>
+}
+
+// calendarEmbedHeader renders a compact navigation header for the embedded calendar.
+templ calendarEmbedHeader(cc *campaigns.CampaignContext, data CalendarViewData) {
+	<div class="border-b border-edge px-4 py-2 flex items-center justify-between">
+		<div class="flex items-center gap-2">
+			<a
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendar/embed?year=%d&month=%d", cc.Campaign.ID, prevYear(data), prevMonth(data)) }
+				hx-target="#calendar-embed"
+				hx-swap="outerHTML"
+				class="p-1.5 rounded hover:bg-surface-alt text-fg-secondary hover:text-fg cursor-pointer"
+			>
+				<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+				</svg>
+			</a>
+			<a
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendar/embed?year=%d&month=%d", cc.Campaign.ID, nextYear(data), nextMonth(data)) }
+				hx-target="#calendar-embed"
+				hx-swap="outerHTML"
+				class="p-1.5 rounded hover:bg-surface-alt text-fg-secondary hover:text-fg cursor-pointer"
+			>
+				<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+				</svg>
+			</a>
+		</div>
+		<span class="text-sm font-semibold text-fg">
+			if data.CurrentMonthDef() != nil {
+				{ data.CurrentMonthDef().Name }
+			}
+			{ " " }
+			{ strconv.Itoa(data.Year) }
+		</span>
+		<span class="text-xs text-fg-muted">{ data.Calendar.FormatCurrentTime() }</span>
+	</div>
 }
 
 // BlockUpcomingEvents renders a lazy-loaded upcoming calendar events preview.

@@ -65,6 +65,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		addons.RequireAddon(addonSvc, "calendar"),
 	)
 	pub.GET("/calendar", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendar/embed", h.EmbedCalendar, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/calendar/timeline", h.ShowTimeline, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/calendar/week", h.ShowWeek, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/calendar/day", h.ShowDay, campaigns.RequireRole(campaigns.RolePlayer))

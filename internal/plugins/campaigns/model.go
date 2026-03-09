@@ -297,6 +297,9 @@ const (
 	BlockTimelinePreview = "timeline_preview" // Timeline visualization preview.
 	BlockMapPreview      = "map_preview"      // Embedded map viewer.
 	BlockRelationsGraph  = "relations_graph"  // Entity relations force-directed graph.
+	BlockCalendarFull    = "calendar_full"    // Full interactive calendar grid view.
+	BlockTimelineFull    = "timeline_full"    // Full timeline visualization with D3.
+	BlockRelationsGraphFull = "relations_graph_full" // Large relations graph view.
 
 	// Category dashboard blocks.
 	BlockCategoryHeader = "category_header" // Category name, icon, count, description.
@@ -317,6 +320,9 @@ var ValidBlockTypes = map[string]bool{
 	BlockTimelinePreview: true,
 	BlockMapPreview:      true,
 	BlockRelationsGraph:  true,
+	BlockCalendarFull:    true,
+	BlockTimelineFull:    true,
+	BlockRelationsGraphFull: true,
 	BlockCategoryHeader:  true,
 	BlockEntityGrid:     true,
 	BlockSearchBar:      true,
