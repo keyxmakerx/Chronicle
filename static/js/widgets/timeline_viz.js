@@ -1723,7 +1723,7 @@ var _impl = {
     if (d.event_entity_name) {
       html += '<div style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--color-fg-secondary); margin-bottom:3px">';
       if (d.event_entity_icon) {
-        html += '<i class="fa-solid ' + d.event_entity_icon + '"></i>';
+        html += '<i class="fa-solid ' + this._escapeHTML(d.event_entity_icon) + '"></i>';
       }
       html += this._escapeHTML(d.event_entity_name) + '</div>';
     }
@@ -1791,7 +1791,7 @@ var _impl = {
     if (d.event_entity_name) {
       html += '<div class="timeline-viz-detail-entity">';
       if (d.event_entity_icon) {
-        html += '<i class="fa-solid ' + d.event_entity_icon + '"></i> ';
+        html += '<i class="fa-solid ' + this._escapeHTML(d.event_entity_icon) + '"></i> ';
       }
       html += this._escapeHTML(d.event_entity_name) + '</div>';
     }

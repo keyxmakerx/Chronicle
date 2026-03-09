@@ -158,14 +158,11 @@ JavaScript.
 the actual file type, not the client-declared Content-Type. The main media upload
 path already validates MIME types against an allowlist — apply the same to avatars.
 
-### L-2: Avatar Upload Not Scanned by ClamAV
+### L-2: Avatar Upload Not Scanned by ClamAV — N/A
 
-**File:** `internal/plugins/auth/handler.go:369-444`
-**Issue:** The avatar upload handler bypasses the media service (and its ClamAV
-integration) entirely. It writes directly to disk without virus scanning.
-
-**Recommendation:** Route avatar uploads through the media service, or at minimum
-call the ClamAV scanner if configured.
+**Status:** ClamAV was removed from Chronicle (too heavyweight for self-hosted).
+Avatar uploads use `http.DetectContentType()` magic byte validation and image
+re-encoding (CDR) which strips embedded payloads. No action needed.
 
 ### L-3: In-Memory Rate Limiter Not Suitable for Multi-Instance
 
@@ -331,7 +328,7 @@ validation. No injection issues found.
 | M-2 | Medium   | Medium | Plan for next sprint |
 | M-3 | Medium   | Low    | Fix this sprint |
 | L-1 | Low      | Low    | Fix when touching auth |
-| L-2 | Low      | Low    | Fix when touching auth |
+| L-2 | Low      | N/A    | N/A — ClamAV removed |
 | L-5 | Low      | Low    | Fix when convenient |
 | L-6 | Low      | Low    | Fix when convenient |
 | L-7 | Low      | Low    | Fix when convenient |

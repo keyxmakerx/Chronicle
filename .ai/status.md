@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-09 -- Security audit + addon block gating. Fixed posts widget missing HTML sanitization (XSS via API bypass). Added sanitize.HTML() to text_block rendering in 3 templ files (defense-in-depth). Block registry now skips addon blocks when addon is disabled (no more blank gaps). Previously: addon isolation fixes, codebase cleanup, ADR-027.
+2026-03-09 -- 3-phase security hardening sprint. Phase 1: HTMX config hardening (selfRequestsOnly, allowScriptTags=false, historyCacheSize=0), COOP header, CSP tightened (removed unpkg.com by vendoring Leaflet), CSRF deduplication in 7 templ files. Phase 2: __Host- CSRF cookie prefix (HTTPS), sensitive query param redaction in logs, production DB password hard-fail, bluemonday hx-* attribute verification. Phase 3: innerHTML XSS audit (all safe, 2 icon escaping fixes), per-email login throttling in Redis, Leaflet/MarkerCluster vendored locally, XML-based SVG sanitizer replacing regex. Also: NewTooManyRequests apperror type, ClamAV references cleaned from docs. Previously: security audit fixes, addon isolation, codebase cleanup.
 Branch: `claude/dynamic-database-setup-1QSPA`.
 
 ## Phase & Sprint Plan

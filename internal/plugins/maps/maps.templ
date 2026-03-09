@@ -149,12 +149,12 @@ templ MapShowFragment(cc *campaigns.CampaignContext, data MapViewData) {
 
 // mapShowContent renders the Leaflet map viewer with markers and controls.
 templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
-	<!-- Leaflet CSS + JS (loaded only on map pages) -->
-	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+	<!-- Leaflet CSS + JS (vendored locally for CSP compliance) -->
+	<link rel="stylesheet" href="/static/vendor/leaflet.css"/>
+	<script src="/static/vendor/leaflet.js"></script>
 	<!-- MarkerCluster plugin for auto-grouping dense markers at low zoom -->
-	<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-	<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+	<link rel="stylesheet" href="/static/vendor/MarkerCluster.css"/>
+	<script src="/static/vendor/leaflet.markercluster.js"></script>
 
 	<div class="h-full flex flex-col -mx-5 -my-4">
 		<!-- Map header with name, back link, and controls -->
@@ -408,10 +408,7 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 			});
 
 			function getHeaders() {
-				var headers = { 'Content-Type': 'application/json' };
-				var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-				if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
-				return headers;
+				return { 'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf() };
 			}
 
 			// Create marker modal handlers.
@@ -589,13 +586,11 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 				fd.append('campaign_id', campaignID);
 				fd.append('usage_type', 'attachment');
 
-				var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-				var headers = {};
-				if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
+				var csrfHeaders = { 'X-CSRF-Token': Chronicle.getCsrf() };
 
 				try {
 					var resp = await fetch('/media/upload', {
-						method: 'POST', headers: headers, body: fd,
+						method: 'POST', headers: csrfHeaders, body: fd,
 					});
 					if (resp.ok) {
 						var data = await resp.json();

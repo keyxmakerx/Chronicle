@@ -145,15 +145,24 @@
 
   // --- CSRF Integration ---
   // Automatically attach the CSRF token to all HTMX mutating requests.
-  // Reads the token from the chronicle_csrf cookie (set by CSRF middleware).
+  // The CSRF middleware uses __Host-chronicle_csrf over HTTPS (prevents
+  // subdomain cookie injection) and falls back to chronicle_csrf over
+  // plain HTTP (development).
   document.addEventListener('htmx:configRequest', function (evt) {
-    var match = document.cookie.match(
-      '(?:^|; )chronicle_csrf=([^;]*)'
-    );
-    if (match) {
-      evt.detail.headers['X-CSRF-Token'] = decodeURIComponent(match[1]);
+    var token = Chronicle.getCsrf();
+    if (token) {
+      evt.detail.headers['X-CSRF-Token'] = token;
     }
   });
+
+  // --- HTMX Security Hardening ---
+  // Restrict HTMX to same-origin requests only, preventing injected hx-get/hx-post
+  // attributes from making cross-origin requests.
+  htmx.config.selfRequestsOnly = true;
+  // Do not execute <script> tags found in HTMX-swapped content.
+  htmx.config.allowScriptTags = false;
+  // Do not cache pages in localStorage (prevents sensitive data leakage on shared browsers).
+  htmx.config.historyCacheSize = 0;
 
   // --- HTMX Loading Indicator ---
   // Toggle body.htmx-request class to show/hide the global progress bar.
@@ -461,12 +470,14 @@
   };
 
   /**
-   * Read the CSRF token from the chronicle_csrf cookie.
+   * Read the CSRF token from the CSRF cookie.
+   * Checks __Host-chronicle_csrf first (HTTPS), then chronicle_csrf (HTTP dev).
    *
    * @returns {string} CSRF token value or empty string.
    */
   Chronicle.getCsrf = function () {
-    var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
+    var m = document.cookie.match('(?:^|; )__Host-chronicle_csrf=([^;]*)');
+    if (!m) m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
     return m ? decodeURIComponent(m[1]) : '';
   };
 

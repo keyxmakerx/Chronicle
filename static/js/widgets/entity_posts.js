@@ -208,6 +208,7 @@
         if (isExpanded) {
           h += '<div class="border-t border-edge">';
           if (post.entryHtml) {
+            // entryHtml is sanitized server-side via sanitize.HTML() before storage.
             h += '<div class="px-4 py-3 prose prose-sm dark:prose-invert max-w-none">' + post.entryHtml + '</div>';
           } else {
             h += '<div class="px-4 py-3 text-sm text-fg-muted italic">No content yet.</div>';

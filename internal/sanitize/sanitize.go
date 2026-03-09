@@ -50,6 +50,11 @@ func getPolicy() *bluemonday.Policy {
 
 		// Allow inline secrets (GM-only text wrapped in <span data-secret>).
 		policy.AllowAttrs("data-secret").OnElements("span")
+
+		// SECURITY NOTE: bluemonday uses an allowlist model. All attributes not
+		// explicitly allowed above are stripped. This includes HTMX attributes
+		// (hx-get, hx-post, hx-on:*, data-hx-*) and <meta> tags, which could
+		// otherwise be used for request forgery or HTMX config override.
 	})
 	return policy
 }

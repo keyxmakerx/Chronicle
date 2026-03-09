@@ -1240,10 +1240,7 @@ templ eventModal(data CalendarViewData) {
 					}
 
 					function getHeaders() {
-						var headers = { 'Content-Type': 'application/json' };
-						var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-						if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
-						return headers;
+						return { 'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf() };
 					}
 
 					// Get visibility rules JSON from the Alpine per-user UI (if present).

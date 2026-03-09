@@ -303,16 +303,14 @@
       if (!document.querySelector('link[href*="leaflet.css"]')) {
         var link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
-        link.crossOrigin = '';
+        link.href = '/static/vendor/leaflet.css';
         document.head.appendChild(link);
       }
       // MarkerCluster CSS.
       if (!document.querySelector('link[href*="MarkerCluster"]')) {
         var mcLink = document.createElement('link');
         mcLink.rel = 'stylesheet';
-        mcLink.href = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css';
+        mcLink.href = '/static/vendor/MarkerCluster.css';
         document.head.appendChild(mcLink);
       }
     },
@@ -336,9 +334,7 @@
         return;
       }
       var script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
-      script.crossOrigin = '';
+      script.src = '/static/vendor/leaflet.js';
       script.onload = function () {
         self._loadMarkerClusterJS(callback);
       };
@@ -363,7 +359,7 @@
         return;
       }
       var script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js';
+      script.src = '/static/vendor/leaflet.markercluster.js';
       script.onload = callback;
       document.head.appendChild(script);
     },

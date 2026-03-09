@@ -130,6 +130,15 @@ func SafeCode(err error) int {
 	return http.StatusInternalServerError
 }
 
+// NewTooManyRequests creates a 429 Too Many Requests error for rate limiting.
+func NewTooManyRequests(message string) *AppError {
+	return &AppError{
+		Code:    http.StatusTooManyRequests,
+		Type:    "too_many_requests",
+		Message: message,
+	}
+}
+
 // NewValidation creates a 422 Unprocessable Entity error for validation failures.
 func NewValidation(message string) *AppError {
 	return &AppError{

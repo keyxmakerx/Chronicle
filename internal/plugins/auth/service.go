@@ -164,15 +164,39 @@ func (s *authService) Register(ctx context.Context, input RegisterInput) (*User,
 	return user, nil
 }
 
+// loginThrottleMax is the maximum number of failed login attempts per email
+// before throttling kicks in. Uses progressive delay after this threshold.
+const loginThrottleMax = 10
+
+// loginThrottleWindow is how long failed attempt counters persist in Redis.
+const loginThrottleWindow = 15 * time.Minute
+
+// loginFailureKeyPrefix is the Redis key prefix for per-email failure counters.
+// Uses SHA-256 of the email to avoid storing plaintext emails in Redis.
+const loginFailureKeyPrefix = "login_failures:"
+
 // Login authenticates a user by email and password. On success it creates a
 // new session in Redis and returns the session token for the cookie.
+//
+// Per-email throttling: after 10 failed attempts within 15 minutes, further
+// login attempts are rejected regardless of password correctness. This
+// defends against credential stuffing from distributed IPs that bypass
+// per-IP rate limiting.
 func (s *authService) Login(ctx context.Context, input LoginInput) (string, *User, error) {
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+
+	// Check per-email login throttle before doing any expensive work.
+	if s.isLoginThrottled(ctx, email) {
+		return "", nil, apperror.NewTooManyRequests("too many login attempts — please try again later")
+	}
+
 	// Find user by email. Returns apperror.NotFound if no match.
-	user, err := s.repo.FindByEmail(ctx, strings.ToLower(strings.TrimSpace(input.Email)))
+	user, err := s.repo.FindByEmail(ctx, email)
 	if err != nil {
 		// Don't reveal whether the email exists -- use generic message.
 		var appErr *apperror.AppError
 		if isNotFound(err, &appErr) {
+			s.recordLoginFailure(ctx, email)
 			return "", nil, apperror.NewUnauthorized("invalid email or password")
 		}
 		return "", nil, apperror.NewInternal(fmt.Errorf("finding user: %w", err))
@@ -185,8 +209,12 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (string, *Use
 
 	// Verify the password against the stored argon2id hash.
 	if !verifyPassword(input.Password, user.PasswordHash) {
+		s.recordLoginFailure(ctx, email)
 		return "", nil, apperror.NewUnauthorized("invalid email or password")
 	}
+
+	// Successful login — clear any failure counter.
+	s.clearLoginFailures(ctx, email)
 
 	// Create a new session in Redis with client metadata.
 	token, err := s.createSession(ctx, user, input.IP, input.UserAgent)
@@ -208,6 +236,57 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (string, *Use
 	)
 
 	return token, user, nil
+}
+
+// loginFailureKey returns the Redis key for tracking login failures for an email.
+// Uses SHA-256 hash to avoid storing plaintext email addresses in Redis.
+func loginFailureKey(email string) string {
+	h := sha256.Sum256([]byte(email))
+	return loginFailureKeyPrefix + hex.EncodeToString(h[:])
+}
+
+// isLoginThrottled checks whether the email has exceeded the failed attempt threshold.
+// Fails open on Redis errors (logs warning, allows the attempt).
+func (s *authService) isLoginThrottled(ctx context.Context, email string) bool {
+	if s.redis == nil {
+		return false
+	}
+	count, err := s.redis.Get(ctx, loginFailureKey(email)).Int()
+	if err != nil {
+		// Key doesn't exist or Redis error — allow the attempt.
+		return false
+	}
+	return count >= loginThrottleMax
+}
+
+// recordLoginFailure increments the failed attempt counter for an email.
+// The counter auto-expires after the throttle window.
+func (s *authService) recordLoginFailure(ctx context.Context, email string) {
+	if s.redis == nil {
+		return
+	}
+	key := loginFailureKey(email)
+	pipe := s.redis.Pipeline()
+	pipe.Incr(ctx, key)
+	pipe.Expire(ctx, key, loginThrottleWindow)
+	if _, err := pipe.Exec(ctx); err != nil {
+		slog.Warn("failed to record login failure",
+			slog.String("key", key),
+			slog.Any("error", err),
+		)
+	}
+}
+
+// clearLoginFailures removes the failure counter on successful login.
+func (s *authService) clearLoginFailures(ctx context.Context, email string) {
+	if s.redis == nil {
+		return
+	}
+	if err := s.redis.Del(ctx, loginFailureKey(email)).Err(); err != nil {
+		slog.Warn("failed to clear login failures",
+			slog.Any("error", err),
+		)
+	}
 }
 
 // ValidateSession looks up a session token in Redis and returns the session

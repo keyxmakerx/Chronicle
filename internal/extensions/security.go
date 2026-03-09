@@ -2,6 +2,7 @@ package extensions
 
 import (
 	"archive/zip"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"os"
@@ -249,21 +250,69 @@ func ValidateCSS(content []byte) error {
 	return nil
 }
 
-// ValidateSVG checks that an SVG file doesn't contain embedded scripts.
+// ValidateSVG checks that an SVG file doesn't contain embedded scripts by
+// parsing it as XML. This is more robust than string matching because it
+// handles character encoding, CDATA sections, XML entities, and other
+// tricks that can bypass regex-based detection.
 func ValidateSVG(content []byte) error {
-	lower := strings.ToLower(string(content))
+	decoder := xml.NewDecoder(strings.NewReader(string(content)))
+	// Permit non-standard entities that SVGs may reference.
+	decoder.Strict = false
+	decoder.AutoClose = xml.HTMLAutoClose
+	decoder.Entity = xml.HTMLEntity
 
-	if strings.Contains(lower, "<script") {
-		return fmt.Errorf("SVG must not contain <script> tags")
-	}
-	if strings.Contains(lower, "javascript:") {
-		return fmt.Errorf("SVG must not contain javascript: URIs")
-	}
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			// Malformed XML — reject to be safe.
+			return fmt.Errorf("SVG is not valid XML: %w", err)
+		}
 
-	// Check for event handler attributes (onclick, onload, onerror, etc.).
-	eventPattern := regexp.MustCompile(`\bon\w+\s*=`)
-	if eventPattern.MatchString(lower) {
-		return fmt.Errorf("SVG must not contain event handler attributes")
+		switch t := tok.(type) {
+		case xml.StartElement:
+			localLower := strings.ToLower(t.Name.Local)
+
+			// Block dangerous elements.
+			switch localLower {
+			case "script":
+				return fmt.Errorf("SVG must not contain <script> tags")
+			case "foreignobject":
+				return fmt.Errorf("SVG must not contain <foreignObject> elements")
+			case "iframe", "object", "embed", "applet":
+				return fmt.Errorf("SVG must not contain <%s> elements", localLower)
+			}
+
+			// Check attributes for event handlers and dangerous URIs.
+			for _, attr := range t.Attr {
+				attrLower := strings.ToLower(attr.Name.Local)
+				valueLower := strings.ToLower(strings.TrimSpace(attr.Value))
+
+				// Block on* event handler attributes.
+				if strings.HasPrefix(attrLower, "on") {
+					return fmt.Errorf("SVG must not contain event handler attributes (found %s)", attr.Name.Local)
+				}
+
+				// Block javascript: and data: URIs in href/xlink:href/src attributes.
+				if attrLower == "href" || attrLower == "src" || attrLower == "action" ||
+					(attr.Name.Space == "http://www.w3.org/1999/xlink" && attrLower == "href") {
+					if strings.HasPrefix(valueLower, "javascript:") ||
+						strings.HasPrefix(valueLower, "data:text/html") ||
+						strings.HasPrefix(valueLower, "vbscript:") {
+						return fmt.Errorf("SVG must not contain dangerous URIs (found %s:)", strings.SplitN(valueLower, ":", 2)[0])
+					}
+				}
+
+				// Block set/animate targeting event handlers.
+				if (localLower == "set" || localLower == "animate") && attrLower == "attributename" {
+					if strings.HasPrefix(valueLower, "on") {
+						return fmt.Errorf("SVG must not animate event handler attributes")
+					}
+				}
+			}
+		}
 	}
 
 	return nil

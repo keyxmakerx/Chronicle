@@ -964,9 +964,7 @@ templ createStandaloneEventModal(data TimelineViewData) {
 						body.recurrence_type = self.recurrenceType;
 					}
 
-					var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-					var headers = {'Content-Type': 'application/json'};
-					if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
+					var headers = {'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf()};
 
 					fetch('/campaigns/' + campaignID + '/timelines/' + timelineID + '/standalone-events', {
 						method: 'POST',
@@ -1127,9 +1125,7 @@ templ editStandaloneEventModal(data TimelineViewData) {
 					if (self.color) body.color = self.color;
 					if (self.label) body.label = self.label;
 
-					var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-					var headers = {'Content-Type': 'application/json'};
-					if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
+					var headers = {'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf()};
 
 					fetch('/campaigns/' + campaignID + '/timelines/' + timelineID + '/standalone-events/' + self.eventID, {
 						method: 'PUT',
@@ -1296,9 +1292,7 @@ templ eventVisibilityModal(data TimelineViewData) {
 					} else {
 						body.visibility_override = self.visibility === 'dm_only' ? self.visibility : null;
 					}
-					var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-					var headers = { 'Content-Type': 'application/json' };
-					if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
+					var headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf() };
 					fetch(url, { method: 'PUT', headers: headers, body: JSON.stringify(body) })
 						.then(function(r) {
 							self.saving = false;
@@ -1390,9 +1384,7 @@ templ eventPickerModal(data TimelineViewData) {
 				},
 				linkEvent(evt) {
 					var self = this;
-					var m = document.cookie.match('(?:^|; )chronicle_csrf=([^;]*)');
-					var headers = {'Content-Type': 'application/json'};
-					if (m) headers['X-CSRF-Token'] = decodeURIComponent(m[1]);
+					var headers = {'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf()};
 					fetch(self.apiBase + '/events', {
 						method: 'POST',
 						headers: headers,

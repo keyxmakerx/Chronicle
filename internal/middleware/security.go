@@ -25,11 +25,13 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			// to nonce-based CSP or replace Alpine.js with a CSP-compatible alternative.
 			//
 			// Google Fonts + Font Awesome CDN are explicitly allowed.
+			// All scripts are self-hosted (vendored). No external script CDNs needed.
+			// Google Fonts + Font Awesome CDN are explicitly allowed for fonts/styles.
 			h.Set("Content-Security-Policy",
 				"default-src 'self'; "+
-					"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "+
-					"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://unpkg.com; "+
-					"img-src 'self' data: blob: https://unpkg.com; "+
+					"script-src 'self' 'unsafe-inline' 'unsafe-eval'; "+
+					"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "+
+					"img-src 'self' data: blob:; "+
 					"font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "+
 					"connect-src 'self'; "+
 					"frame-ancestors 'none'; "+
@@ -37,7 +39,14 @@ func SecurityHeaders() echo.MiddlewareFunc {
 					"form-action 'self'",
 			)
 
-			// Strict-Transport-Security: enforce HTTPS for 1 year including subdomains.
+			// Cross-Origin-Opener-Policy: isolate the browsing context from
+		// cross-origin popups. Mitigates Spectre-class side-channel attacks
+		// and XS-Leaks. Safe for same-origin self-hosted apps.
+		// NOTE: We do NOT set Cross-Origin-Resource-Policy because external
+		// clients (Foundry VTT) make cross-origin API requests via CORS.
+		h.Set("Cross-Origin-Opener-Policy", "same-origin")
+
+		// Strict-Transport-Security: enforce HTTPS for 1 year including subdomains.
 			// Chronicle runs behind a reverse proxy that terminates TLS; this header
 			// tells browsers to always use HTTPS for subsequent requests.
 			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")

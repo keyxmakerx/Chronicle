@@ -16,14 +16,30 @@ import (
 // csrfTokenLength is the number of random bytes in a CSRF token (32 bytes = 64 hex chars).
 const csrfTokenLength = 32
 
-// csrfCookieName is the name of the cookie that stores the CSRF token.
-const csrfCookieName = "chronicle_csrf"
+// csrfCookieBaseName is the base name of the CSRF cookie. When served over
+// HTTPS the cookie uses the __Host- prefix to prevent subdomain cookie
+// injection attacks. Over plain HTTP (development) the base name is used
+// without the prefix.
+const csrfCookieBaseName = "chronicle_csrf"
+
+// csrfCookieSecureName is the prefixed name used over HTTPS.
+const csrfCookieSecureName = "__Host-chronicle_csrf"
 
 // csrfHeaderName is the header that HTMX sends the CSRF token in.
 const csrfHeaderName = "X-CSRF-Token"
 
 // csrfFormField is the hidden form field name for non-HTMX form submissions.
 const csrfFormField = "csrf_token"
+
+// csrfCookieName returns the appropriate cookie name based on whether the
+// connection is secure. The __Host- prefix enforces Secure, no Domain, Path=/
+// at the browser level, preventing subdomain cookie injection.
+func csrfCookieName(isSecure bool) string {
+	if isSecure {
+		return csrfCookieSecureName
+	}
+	return csrfCookieBaseName
+}
 
 // CSRF returns middleware that implements the double-submit cookie pattern
 // for CSRF protection on all state-changing requests (POST, PUT, PATCH, DELETE).
@@ -35,12 +51,8 @@ const csrfFormField = "csrf_token"
 //     - The csrf_token form field (for traditional form submissions)
 //  3. If they don't match, reject with 403 Forbidden.
 //
-// HTMX integration: Configure HTMX to send the cookie value as a header:
-//
-//	document.addEventListener('htmx:configRequest', function(evt) {
-//	    const token = getCookie('chronicle_csrf');
-//	    if (token) evt.detail.headers['X-CSRF-Token'] = token;
-//	});
+// The cookie name uses the __Host- prefix over HTTPS for defense against
+// subdomain cookie injection. Over plain HTTP (dev only) the prefix is omitted.
 func CSRF() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -54,8 +66,11 @@ func CSRF() echo.MiddlewareFunc {
 				return next(c)
 			}
 
+			isSecure := req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https"
+			cookieName := csrfCookieName(isSecure)
+
 			// Ensure a CSRF token cookie exists.
-			cookie, err := req.Cookie(csrfCookieName)
+			cookie, err := req.Cookie(cookieName)
 			if err != nil || cookie.Value == "" {
 				// Generate a new CSRF token and set it as a cookie.
 				token, genErr := generateCSRFToken()
@@ -64,11 +79,11 @@ func CSRF() echo.MiddlewareFunc {
 				}
 
 				c.SetCookie(&http.Cookie{
-					Name:     csrfCookieName,
+					Name:     cookieName,
 					Value:    token,
 					Path:     "/",
 					HttpOnly: false, // Must be readable by JS for HTMX to send it.
-					Secure:   req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https",
+					Secure:   isSecure,
 					SameSite: http.SameSiteLaxMode,
 				})
 
