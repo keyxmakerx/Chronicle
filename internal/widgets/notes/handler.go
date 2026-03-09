@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -338,6 +339,20 @@ func (h *Handler) RestoreVersion(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, note)
+}
+
+// ShowJournal renders the full-page journal view (GET /campaigns/:id/journal).
+// Returns full page or HTMX fragment based on request headers.
+func (h *Handler) ShowJournal(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if middleware.IsHTMX(c) {
+		return JournalFragment(cc).Render(c.Request().Context(), c.Response())
+	}
+	return JournalPage(cc).Render(c.Request().Context(), c.Response())
 }
 
 // canAccessNote checks if a user can access a note: owner or shared member.

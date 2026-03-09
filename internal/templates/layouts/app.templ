@@ -60,8 +60,9 @@ templ App(title string) {
 			</div>
 		</div>
 		<!-- Notes widget mount point (floating panel, bottom-right).
-		     Gated behind the "notes" addon — off by default. -->
-		if InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes") {
+		     Gated behind the "notes" addon — off by default.
+		     Hidden on the full-page journal to avoid sync conflicts. -->
+		if InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes") && !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx))) {
 			@NotesWidget()
 		}
 	}
@@ -152,6 +153,19 @@ templ Sidebar() {
 						</svg>
 						Dashboard
 					</a>
+					if IsAddonEnabled(ctx, "notes") {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx)))) }
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-book-open text-xs"></i>
+							</span>
+							Journal
+						</a>
+					}
 				</div>
 
 				<!-- Categories drill-down zone -->

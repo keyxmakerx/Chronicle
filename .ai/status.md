@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-09 -- Journal button removal + Category nav redesign. Removed "Session Journal" button from topbar (journal will become expanded notes section, not a topbar action). Redesigned sidebar drill panel: merged header and action bar into single compact row, category name is now clickable to open full category page (replacing "View All" button), count shown as pill badge, "New" button condensed to inline icon. Updated entity tree: folder/page icons, vertical guide lines for depth, smooth CSS transitions for collapse/expand, improved drag-and-drop feedback with distinct reorder vs reparent visual states. Updated sidebar_list.templ with better empty state and subtle "Show all N pages" footer.
+2026-03-09 -- Full-page Journal + Category nav redesign. Added full-page journal view at `/campaigns/:id/journal` with two-panel Obsidian-like layout (note tree sidebar + TipTap editor). Journal link in sidebar nav (gated on notes addon). Notes FAB hidden on journal page to avoid sync conflicts. Removed "Session Journal" topbar button. Redesigned sidebar drill panel: merged header + action bar, clickable category name replaces "View All", count as pill badge. Entity tree now has folder/page icons, guide lines, smooth transitions, and distinct reorder vs reparent drag-and-drop feedback.
 Branch: `claude/fix-journal-button-placement-UF4hD`.
 
 ## Phase & Sprint Plan

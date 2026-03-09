@@ -1,0 +1,150 @@
+// journal.templ renders the full-page Journal view. This is the expanded
+// version of the floating notes panel, providing an Obsidian-like notebook
+// experience for pre/during/post session note-taking. The actual note
+// management is handled client-side by the journal.js widget, which
+// communicates with the existing notes API endpoints.
+
+package notes
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// JournalPage renders the full-page journal wrapped in the app layout.
+templ JournalPage(cc *campaigns.CampaignContext) {
+	@layouts.App("Journal") {
+		@journalContent(cc)
+	}
+}
+
+// JournalFragment renders the journal content as an HTMX fragment.
+templ JournalFragment(cc *campaigns.CampaignContext) {
+	@journalContent(cc)
+}
+
+// journalContent renders the journal page body with a two-panel layout:
+// sidebar for note navigation/tree and main area for the active note editor.
+templ journalContent(cc *campaigns.CampaignContext) {
+	<div class="h-full flex flex-col" data-journal-page="true">
+		<!-- Header -->
+		<div class="shrink-0 px-6 py-4 border-b border-edge">
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+				{Label: "Journal"},
+			})
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-xl font-bold text-fg">Journal</h1>
+					<p class="text-sm text-fg-secondary mt-0.5">Session notebook &amp; notes</p>
+				</div>
+				<div class="flex items-center gap-2">
+					<button
+						id="journal-new-note"
+						class="btn-primary text-sm flex items-center gap-1.5"
+					>
+						<i class="fa-solid fa-plus text-xs"></i>
+						New Note
+					</button>
+					<button
+						id="journal-new-folder"
+						class="btn-secondary text-sm flex items-center gap-1.5"
+					>
+						<i class="fa-solid fa-folder-plus text-xs"></i>
+						New Folder
+					</button>
+				</div>
+			</div>
+		</div>
+		<!-- Two-panel layout: note list + editor -->
+		<div class="flex-1 flex min-h-0 overflow-hidden">
+			<!-- Left panel: note list / tree -->
+			<div class="w-72 shrink-0 border-r border-edge flex flex-col bg-surface-alt">
+				<!-- Search -->
+				<div class="p-3 border-b border-edge">
+					<div class="relative">
+						<input
+							type="search"
+							id="journal-search"
+							placeholder="Search notes..."
+							class="w-full px-3 py-1.5 pl-8 text-sm rounded-md bg-surface border border-edge text-fg placeholder-fg-muted focus:outline-none focus:border-accent transition-colors"
+							autocomplete="off"
+						/>
+						<i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-muted text-xs pointer-events-none"></i>
+					</div>
+				</div>
+				<!-- Filter tabs -->
+				<div class="flex border-b border-edge text-xs">
+					<button class="journal-tab flex-1 py-2 text-center text-fg-muted hover:text-fg transition-colors border-b-2 border-transparent" data-tab="all">
+						All
+					</button>
+					<button class="journal-tab flex-1 py-2 text-center text-fg-muted hover:text-fg transition-colors border-b-2 border-transparent" data-tab="campaign">
+						Campaign
+					</button>
+					<button class="journal-tab flex-1 py-2 text-center text-fg-muted hover:text-fg transition-colors border-b-2 border-transparent" data-tab="session">
+						Session
+					</button>
+				</div>
+				<!-- Note list -->
+				<div id="journal-note-list" class="flex-1 overflow-y-auto p-2">
+					<!-- Populated by journal.js -->
+					<div class="flex items-center justify-center py-12 text-fg-muted text-sm">
+						<i class="fa-solid fa-spinner fa-spin mr-2"></i>
+						Loading...
+					</div>
+				</div>
+			</div>
+			<!-- Right panel: note editor -->
+			<div class="flex-1 flex flex-col min-w-0">
+				<div
+					id="journal-editor"
+					class="flex-1 overflow-y-auto"
+					data-widget="journal"
+					data-campaign-id={ cc.Campaign.ID }
+					data-user-id={ layouts.GetUserID(ctx) }
+				>
+					<!-- Empty state shown when no note is selected -->
+					<div id="journal-empty-state" class="flex flex-col items-center justify-center h-full text-fg-muted">
+						<i class="fa-solid fa-book-open text-4xl mb-4 opacity-30"></i>
+						<p class="text-lg font-medium mb-1">No note selected</p>
+						<p class="text-sm">Select a note from the sidebar or create a new one</p>
+					</div>
+					<!-- Active note content (hidden until a note is selected) -->
+					<div id="journal-note-content" class="hidden h-full flex flex-col">
+						<!-- Note header -->
+						<div class="shrink-0 px-6 py-3 border-b border-edge flex items-center gap-3">
+							<input
+								type="text"
+								id="journal-note-title"
+								class="flex-1 text-lg font-semibold bg-transparent text-fg border-none outline-none placeholder-fg-muted"
+								placeholder="Untitled note"
+							/>
+							<div class="flex items-center gap-1.5">
+								<button id="journal-note-share" class="p-1.5 rounded text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors" title="Share note">
+									<i class="fa-solid fa-share-nodes text-sm"></i>
+								</button>
+								<button id="journal-note-pin" class="p-1.5 rounded text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors" title="Pin note">
+									<i class="fa-solid fa-thumbtack text-sm"></i>
+								</button>
+								<button id="journal-note-delete" class="p-1.5 rounded text-fg-muted hover:text-red-400 hover:bg-surface-alt transition-colors" title="Delete note">
+									<i class="fa-solid fa-trash text-sm"></i>
+								</button>
+							</div>
+						</div>
+						<!-- Editor area -->
+						<div id="journal-editor-area" class="flex-1 overflow-y-auto px-6 py-4">
+							<!-- TipTap editor mounts here -->
+						</div>
+						<!-- Status bar -->
+						<div class="shrink-0 px-6 py-1.5 border-t border-edge text-[11px] text-fg-muted flex items-center gap-3">
+							<span id="journal-note-status">Ready</span>
+							<span class="ml-auto" id="journal-note-updated"></span>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
