@@ -118,8 +118,11 @@ func TestSystemLoader_DiscoverAll_SkipsDirWithoutManifest(t *testing.T) {
 func TestSystemLoader_DiscoverAll_NonexistentDir(t *testing.T) {
 	loader := NewSystemLoader("/nonexistent/path")
 	err := loader.DiscoverAll()
-	if err == nil {
-		t.Fatal("expected error for nonexistent dir, got nil")
+	if err != nil {
+		t.Fatalf("expected nil error for nonexistent dir, got %v", err)
+	}
+	if loader.Count() != 0 {
+		t.Errorf("Count() = %d, want 0", loader.Count())
 	}
 }
 
