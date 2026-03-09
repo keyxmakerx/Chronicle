@@ -8,8 +8,8 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-09 -- Sidebar Navigation Overhaul. Added auto-collapse sidebar with pin/unpin (Alpine.js + CSS), fixed icon shrinking in collapsed state (48px strip, explicit 16x16 icons), prefetch-on-hover for category drill-down, skeleton shimmer loading, restructured drill panel layout (compact action bar, section headers), collapsible tree view for entity hierarchy (sidebar_tree.js), drag-and-drop reorder + reparent with new API endpoint, sort_order migration (000062).
-Branch: `claude/review-project-plans-ZIfD6`.
+2026-03-09 -- Journal button removal + Category nav redesign. Removed "Session Journal" button from topbar (journal will become expanded notes section, not a topbar action). Redesigned sidebar drill panel: merged header and action bar into single compact row, category name is now clickable to open full category page (replacing "View All" button), count shown as pill badge, "New" button condensed to inline icon. Updated entity tree: folder/page icons, vertical guide lines for depth, smooth CSS transitions for collapse/expand, improved drag-and-drop feedback with distinct reorder vs reparent visual states. Updated sidebar_list.templ with better empty state and subtle "Show all N pages" footer.
+Branch: `claude/fix-journal-button-placement-UF4hD`.
 
 ## Phase & Sprint Plan
 See `.ai/phases.md` for the full roadmap. Phases organized by priority:

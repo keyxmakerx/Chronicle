@@ -11,20 +11,25 @@ import (
 )
 
 // SidebarEntityList renders entity results as compact links for the sidebar panel.
-// Each link includes data-parent-id and data-sort-order for tree structure and reordering.
+// Each link includes data-parent-id and data-sort-order for tree structure and
+// reordering. The sidebar_tree.js script transforms this flat list into a
+// collapsible tree with folder/page icons and drag-and-drop support.
 templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignContext) {
 	if len(results) == 0 {
-		<div class="px-4 py-2 text-xs text-gray-500 italic">No pages yet</div>
+		<div class="px-4 py-6 text-center">
+			<i class="fa-solid fa-file-circle-plus text-lg text-gray-600 mb-2 block"></i>
+			<span class="text-xs text-gray-500">No pages yet</span>
+		</div>
 	} else {
 		<div
 			id="sidebar-entity-tree"
-			class="sidebar-entity-list"
+			class="sidebar-entity-list py-1"
 			data-campaign-id={ cc.Campaign.ID }
 		>
 			for _, entity := range results {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-					class="sidebar-tree-item flex items-center px-4 py-1.5 text-sm transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active group"
+					class="sidebar-tree-item flex items-center px-4 py-1 text-sm transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active group"
 					data-entity-id={ entity.ID }
 					if entity.ParentID != nil {
 						data-parent-id={ *entity.ParentID }
@@ -34,21 +39,24 @@ templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignConte
 					draggable="true"
 				>
 					<span
-						class="w-1.5 h-1.5 rounded-full mr-2.5 shrink-0"
-						style={ fmt.Sprintf("background-color: %s", entity.TypeColor) }
-					></span>
+						class="sidebar-tree-icon w-3.5 h-3.5 flex items-center justify-center mr-2 shrink-0 text-gray-600 group-hover:text-gray-400 transition-colors"
+					>
+						<i class="fa-solid fa-file-lines text-[10px]"></i>
+					</span>
 					<span class="flex-1 truncate text-xs">{ entity.Name }</span>
 				</a>
 			}
 		</div>
 		if total > len(results) {
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, results[0].EntityTypeID)) }
-				class="flex items-center px-4 py-1.5 text-[10px] text-accent hover:text-accent/80 transition-colors"
-			>
-				<i class="fa-solid fa-arrow-right mr-1 text-[8px]"></i>
-				{ fmt.Sprintf("View all %d", total) }
-			</a>
+			<div class="px-4 py-2 border-t border-gray-700/30">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, results[0].EntityTypeID)) }
+					class="flex items-center justify-center py-1 text-[11px] text-gray-500 hover:text-gray-300 transition-colors rounded hover:bg-gray-800/50"
+				>
+					{ fmt.Sprintf("Show all %d pages", total) }
+					<i class="fa-solid fa-chevron-right ml-1.5 text-[8px]"></i>
+				</a>
+			</div>
 		}
 	}
 }
