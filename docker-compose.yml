@@ -37,6 +37,8 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-chronicle}
       - DB_NAME=chronicle
       - REDIS_URL=redis://chronicle-redis:6379
+    volumes:
+      - chronicle-data:/app/data
     depends_on:
       chronicle-db:
         condition: service_healthy
@@ -92,6 +94,8 @@ services:
       cosmos-stack: chronicle
 
 volumes:
+  chronicle-data:
+    driver: local
   chronicle-dbdata:
     driver: local
   chronicle-redisdata:
