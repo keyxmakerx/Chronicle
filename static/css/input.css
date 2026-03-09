@@ -673,39 +673,27 @@
     display: none;
   }
 
-  /* ---- Drill-Down Sidebar (Overlay + Icon-Only) ---- */
+  /* ---- Sidebar Category Accordion ---- */
 
-  /* When drilled into a category, the main category list collapses to
-     show only icons. A gradient shadow is cast over the icon strip to
-     create the impression that the overlay panel is casting a shadow. */
-
-  /* Icon-only mode: when drilled, the category list is hidden behind the
-     overlay panel. No need for an icon strip since the panel covers it. */
-  .sidebar-icon-only {
-    @apply cursor-pointer;
-    position: relative;
-    width: 0 !important;
-    overflow: hidden !important;
-    pointer-events: none;
+  /* Accordion body: hidden by default, slides open with max-height animation. */
+  .sidebar-accordion-body {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 250ms ease-out, opacity 200ms ease-out;
   }
 
-  /* When drilled, hide all category list content since the panel covers it. */
-  .sidebar-icon-only * {
-    visibility: hidden;
+  /* Open state: expand to fit content (capped for scroll). */
+  .sidebar-accordion-body.sidebar-accordion-open {
+    max-height: 50vh;
+    overflow-y: auto;
+    opacity: 1;
   }
 
-  /* No shadow overlay needed — the drill panel covers the full area. */
-
-  /* Category overlay panel: slides in from the right with paper effect. */
-  #sidebar-category {
-    z-index: 10;
-  }
-
-  /* Active state: panel is visible (slides from translateX(100%) to 0). */
-  #sidebar-category.sidebar-cat-active {
-    transform: translateX(0);
-    /* Paper shadow on left edge — looks like the panel is layered on top. */
-    box-shadow: -6px 0 16px -4px rgba(0, 0, 0, 0.4);
+  /* Subtle left border accent on expanded accordion. */
+  .sidebar-accordion:has(.sidebar-accordion-open) {
+    border-left: 2px solid rgba(99, 102, 241, 0.3);
+    margin-left: -2px;
   }
 
   /* Skeleton shimmer for loading states. */

@@ -96,32 +96,40 @@
     });
   }
 
-  /** Render favorites list in the sidebar. */
+  /** Render favorites list in all sidebar accordion sections. */
   function renderFavorites(campaignId) {
-    var container = document.getElementById('sidebar-cat-favorites');
-    var header = document.getElementById('sidebar-cat-favorites-header');
-    if (!container) return;
+    // Find all favorites containers (one per category accordion).
+    var containers = document.querySelectorAll('[id^="sidebar-fav-"]:not([id$="-header"])');
+    var headers = document.querySelectorAll('[id^="sidebar-fav-header-"]');
+
+    // Fallback: legacy single container.
+    var legacy = document.getElementById('sidebar-cat-favorites');
+    if (legacy) containers = [legacy];
+    var legacyHeader = document.getElementById('sidebar-cat-favorites-header');
+    if (legacyHeader) headers = [legacyHeader];
+
+    if (!containers.length) return;
 
     var list = loadFavorites(campaignId);
     if (list.length === 0) {
-      container.innerHTML = '';
-      if (header) header.style.display = 'none';
+      containers.forEach(function (c) { c.innerHTML = ''; });
+      headers.forEach(function (h) { h.style.display = 'none'; });
       return;
     }
 
-    if (header) header.style.display = '';
+    headers.forEach(function (h) { h.style.display = ''; });
 
     var html = '';
     list.forEach(function (item) {
       var href = '/campaigns/' + encodeURIComponent(campaignId) + '/entities/' + encodeURIComponent(item.id);
       html += '<a href="' + href + '" ' +
-        'class="flex items-center px-4 py-1.5 text-xs transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active truncate">' +
-        '<i class="fa-solid fa-star text-[10px] text-amber-400 mr-2 shrink-0"></i>' +
+        'class="flex items-center px-4 py-1.5 text-[11px] transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active truncate">' +
+        '<i class="fa-solid fa-star text-[9px] text-amber-400/70 mr-2 shrink-0"></i>' +
         '<span class="truncate">' + Chronicle.escapeHtml(item.name) + '</span>' +
         '</a>';
     });
 
-    container.innerHTML = html;
+    containers.forEach(function (c) { c.innerHTML = html; });
   }
 
   /** Initialize favorites on page load. */

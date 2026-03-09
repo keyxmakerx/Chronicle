@@ -123,15 +123,22 @@
   }
 
   /**
-   * Render recent entities into the sidebar element.
+   * Render recent entities into all sidebar accordion sections.
    */
   function renderRecent(campaignId) {
-    var container = document.getElementById('sidebar-cat-recent');
-    if (!container) return;
+    // Find all recent containers (one per category accordion).
+    var containers = document.querySelectorAll('[id^="sidebar-recent-"]');
+
+    // Fallback: legacy single container.
+    var legacy = document.getElementById('sidebar-cat-recent');
+    if (legacy) containers = [legacy];
+
+    if (!containers.length) return;
 
     var list = loadRecent(campaignId);
     if (list.length === 0) {
-      container.innerHTML = '<div class="text-xs text-gray-500 px-4 py-2 italic">No recently viewed pages</div>';
+      var emptyHtml = '<div class="text-[11px] text-gray-600 px-4 py-1 italic">No recently viewed</div>';
+      containers.forEach(function (c) { c.innerHTML = emptyHtml; });
       return;
     }
 
@@ -139,13 +146,13 @@
     list.forEach(function (item) {
       var href = '/campaigns/' + encodeURIComponent(campaignId) + '/entities/' + encodeURIComponent(item.id);
       html += '<a href="' + href + '" ' +
-        'class="flex items-center px-4 py-1.5 text-xs transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active truncate">' +
-        '<i class="fa-solid fa-clock text-[10px] text-gray-600 mr-2 shrink-0"></i>' +
+        'class="flex items-center px-4 py-1 text-[11px] transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active truncate">' +
+        '<i class="fa-solid fa-clock-rotate-left text-[9px] text-gray-600/70 mr-2 shrink-0"></i>' +
         '<span class="truncate">' + Chronicle.escapeHtml(item.name) + '</span>' +
         '</a>';
     });
 
-    container.innerHTML = html;
+    containers.forEach(function (c) { c.innerHTML = html; });
   }
 
   /**
