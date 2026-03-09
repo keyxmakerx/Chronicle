@@ -241,10 +241,12 @@
       if (e.clientY < midY) {
         // Reorder: place before target (same parent).
         var targetParentId = target.getAttribute('data-parent-id') || null;
-        reorderEntity(campaignId, droppedId, targetParentId, targetId, 'before');
+        var sortOrder = calculateSortOrder(target, 'before');
+        reorderEntity(campaignId, droppedId, targetParentId, sortOrder);
       } else {
         // Reparent: nest inside target.
-        reorderEntity(campaignId, droppedId, targetId, null, 'inside');
+        // Place as first child (sort_order 0).
+        reorderEntity(campaignId, droppedId, targetId, 0);
       }
     });
 
@@ -271,13 +273,44 @@
   }
 
   /**
+   * Calculate the sort order for an entity being dropped relative to a target.
+   * Looks at sibling sort_order values to place the entity in the right position.
+   */
+  function calculateSortOrder(targetNode, position) {
+    var siblings = targetNode.parentNode.querySelectorAll(':scope > .sidebar-tree-node');
+    var targetIdx = -1;
+    for (var i = 0; i < siblings.length; i++) {
+      if (siblings[i] === targetNode) { targetIdx = i; break; }
+    }
+
+    if (position === 'before') {
+      if (targetIdx === 0) {
+        // Placing before the first sibling: use target's order - 1 (min 0).
+        var targetOrder = parseInt(targetNode.querySelector('.sidebar-tree-item')?.getAttribute('data-sort-order') || '0', 10);
+        return Math.max(0, targetOrder - 1);
+      }
+      // Place between previous sibling and target.
+      var prevItem = siblings[targetIdx - 1].querySelector('.sidebar-tree-item');
+      var targetItem = targetNode.querySelector('.sidebar-tree-item');
+      var prevOrder = parseInt(prevItem?.getAttribute('data-sort-order') || '0', 10);
+      var targetOrder2 = parseInt(targetItem?.getAttribute('data-sort-order') || '0', 10);
+      // If there's room between them, use the midpoint. Otherwise use target's order
+      // (server will re-normalize).
+      if (targetOrder2 > prevOrder + 1) {
+        return Math.floor((prevOrder + targetOrder2) / 2);
+      }
+      return targetOrder2;
+    }
+    return 0;
+  }
+
+  /**
    * Send reorder/reparent request to the API.
    */
-  function reorderEntity(campaignId, entityId, newParentId, beforeEntityId, mode) {
+  function reorderEntity(campaignId, entityId, newParentId, sortOrder) {
     var body = {
       parent_id: newParentId || null,
-      before_entity_id: beforeEntityId || null,
-      mode: mode
+      sort_order: sortOrder
     };
 
     fetch('/campaigns/' + campaignId + '/entities/' + entityId + '/reorder', {

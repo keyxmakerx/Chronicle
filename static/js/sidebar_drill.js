@@ -93,14 +93,8 @@
       });
     }
 
-    // Click the collapsed icon strip to go back.
-    catList.addEventListener('click', function (e) {
-      if (isDrilled) {
-        e.preventDefault();
-        e.stopPropagation();
-        drillOut();
-      }
-    });
+    // The drill panel now covers the full sidebar area. The Back button
+    // in the panel header is the primary way to drill out.
 
     // Auto-drill: if server pre-rendered the active state, mark as drilled.
     if (catPanel.classList.contains('sidebar-cat-active')) {
