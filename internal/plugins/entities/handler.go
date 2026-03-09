@@ -419,11 +419,10 @@ func (h *Handler) Show(c echo.Context) error {
 		return apperror.NewInternal(fmt.Errorf("get entity type %d: %w", entity.EntityTypeID, err))
 	}
 
-	// Fetch ancestor chain for breadcrumbs, children for sub-page listing,
-	// and backlinks for "Referenced by" section.
+	// Fetch ancestor chain for breadcrumbs and children for sub-page listing.
+	// Backlinks load asynchronously via HTMX to keep page load fast.
 	ancestors, _ := h.service.GetAncestors(c.Request().Context(), entity.ID)
 	children, _ := h.service.GetChildren(c.Request().Context(), entity.ID, int(cc.MemberRole), userID)
-	backlinks, _ := h.service.GetBacklinks(c.Request().Context(), entity.ID, int(cc.MemberRole), userID)
 
 	// Check if the "attributes" addon is enabled for this campaign.
 	// Defaults to true (show attributes) if addon checker is not wired or
@@ -450,7 +449,7 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, backlinks, showAttributes, showCalendar, csrfToken))
+	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, csrfToken))
 }
 
 // Clone creates a copy of an entity (POST /campaigns/:id/entities/:eid/clone).
@@ -1994,4 +1993,127 @@ func (h *Handler) parseFieldsFromForm(c echo.Context, campaignID string, entityT
 	}
 
 	return fieldsData
+}
+
+// --- Entity Aliases API ---
+
+// GetAliasesAPI returns all aliases for an entity.
+// GET /campaigns/:id/entities/:eid/aliases
+func (h *Handler) GetAliasesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	aliases, err := h.service.GetAliases(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if aliases == nil {
+		aliases = []EntityAlias{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"aliases": aliases})
+}
+
+// SetAliasesAPI replaces all aliases for an entity.
+// PUT /campaigns/:id/entities/:eid/aliases
+func (h *Handler) SetAliasesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	var input SetAliasesInput
+	if err := c.Bind(&input); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.service.SetAliases(c.Request().Context(), entityID, input.Aliases); err != nil {
+		return err
+	}
+
+	// Invalidate entity names cache for the campaign so auto-linker picks up changes.
+	if h.cache != nil {
+		pattern := fmt.Sprintf("entity-names:%s:*", cc.Campaign.ID)
+		h.invalidateCachePattern(c.Request().Context(), pattern)
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// --- Backlinks API ---
+
+// backlinksCacheTTL is how long backlink results are cached in Redis.
+const backlinksCacheTTL = 5 * time.Minute
+
+// BacklinksFragment returns the "Referenced by" section as an HTMX fragment
+// or JSON. Results are cached in Redis for 5 minutes.
+// GET /campaigns/:id/entities/:eid/backlinks
+func (h *Handler) BacklinksFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	ctx := c.Request().Context()
+	role := int(cc.MemberRole)
+	userID := auth.GetUserID(c)
+
+	// Try Redis cache for JSON response.
+	cacheKey := fmt.Sprintf("backlinks:%s:%d:%s", entityID, role, userID)
+	var entries []BacklinkEntry
+
+	if h.cache != nil {
+		cached, err := h.cache.Get(ctx, cacheKey).Result()
+		if err == nil {
+			if err := json.Unmarshal([]byte(cached), &entries); err == nil {
+				if isHTMX(c) {
+					return middleware.Render(c, http.StatusOK, blockBacklinks(cc, entries))
+				}
+				return c.JSON(http.StatusOK, map[string]any{"backlinks": entries})
+			}
+		}
+	}
+
+	entries, err := h.service.GetBacklinksWithSnippets(ctx, entityID, role, userID)
+	if err != nil {
+		return err
+	}
+	if entries == nil {
+		entries = []BacklinkEntry{}
+	}
+
+	// Cache in Redis.
+	if h.cache != nil {
+		if data, err := json.Marshal(entries); err == nil {
+			if err := h.cache.Set(ctx, cacheKey, string(data), backlinksCacheTTL).Err(); err != nil {
+				slog.Error("failed to cache backlinks", slog.Any("error", err))
+			}
+		}
+	}
+
+	if isHTMX(c) {
+		return middleware.Render(c, http.StatusOK, blockBacklinks(cc, entries))
+	}
+	return c.JSON(http.StatusOK, map[string]any{"backlinks": entries})
+}
+
+// isHTMX returns true if the request was sent by HTMX.
+func isHTMX(c echo.Context) bool {
+	return c.Request().Header.Get("HX-Request") != ""
+}
+
+// invalidateCachePattern deletes all Redis keys matching a glob pattern.
+// Used for cache invalidation when entity data changes.
+func (h *Handler) invalidateCachePattern(ctx context.Context, pattern string) {
+	iter := h.cache.Scan(ctx, 0, pattern, 100).Iterator()
+	for iter.Next(ctx) {
+		h.cache.Del(ctx, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		slog.Error("failed to invalidate cache", slog.String("pattern", pattern), slog.Any("error", err))
+	}
 }

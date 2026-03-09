@@ -47,6 +47,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Auto-linking API (Scribe+, used by editor widget).
 	cg.GET("/entity-names", h.EntityNamesAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// Entity aliases API (Scribe+ for write, Player+ for read).
+	cg.GET("/entities/:eid/aliases", h.GetAliasesAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/entities/:eid/aliases", h.SetAliasesAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Scribe routes (create/edit).
 	cg.GET("/entities/new", h.NewForm, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/entities", h.Create, campaigns.RequireRole(campaigns.RoleScribe))
@@ -99,6 +103,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/entities/search", h.SearchAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/entities/:eid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/entities/:eid/backlinks", h.BacklinksFragment, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Widget data endpoints (read-only) — needed so public campaign visitors
 	// can load editor content, attribute fields, etc. Handlers already enforce

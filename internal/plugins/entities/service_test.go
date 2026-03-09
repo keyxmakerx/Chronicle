@@ -124,6 +124,7 @@ type mockEntityRepo struct {
 	findAncestorsFn  func(ctx context.Context, entityID string) ([]Entity, error)
 	updateParentFn   func(ctx context.Context, entityID string, parentID *string) error
 	findBacklinksFn  func(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
+	setAliasesFn     func(ctx context.Context, entityID string, aliases []string) error
 }
 
 func (m *mockEntityRepo) Create(ctx context.Context, entity *Entity) error {
@@ -256,6 +257,17 @@ func (m *mockEntityRepo) CopyEntityTags(ctx context.Context, sourceEntityID, tar
 
 func (m *mockEntityRepo) ListNames(_ context.Context, _ string, _ int, _ string) ([]EntityNameEntry, error) {
 	return nil, nil
+}
+
+func (m *mockEntityRepo) ListAliases(_ context.Context, _ string) ([]EntityAlias, error) {
+	return nil, nil
+}
+
+func (m *mockEntityRepo) SetAliases(ctx context.Context, entityID string, aliases []string) error {
+	if m.setAliasesFn != nil {
+		return m.setAliasesFn(ctx, entityID, aliases)
+	}
+	return nil
 }
 
 // --- Test Helpers ---
@@ -1100,6 +1112,101 @@ func TestGetBacklinks_DelegatesToRepo(t *testing.T) {
 	}
 	if len(backlinks) != 3 {
 		t.Errorf("expected 3 backlinks, got %d", len(backlinks))
+	}
+}
+
+// --- Alias Validation Tests ---
+
+func TestSetAliases_ValidationLimits(t *testing.T) {
+	tests := []struct {
+		name    string
+		aliases []string
+		wantErr bool
+	}{
+		{"empty is ok", []string{}, false},
+		{"single alias", []string{"Mithrandir"}, false},
+		{"max aliases", []string{"a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10"}, false},
+		{"too many aliases", []string{"a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10", "a11"}, true},
+		{"too short alias", []string{"x"}, true},
+		{"dedup case-insensitive", []string{"Gandalf", "gandalf"}, false},
+		{"trims whitespace", []string{"  Gandalf  "}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entityRepo := &mockEntityRepo{}
+			svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+			err := svc.SetAliases(context.Background(), "entity-1", tt.aliases)
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestSetAliases_Dedup(t *testing.T) {
+	var savedAliases []string
+	entityRepo := &mockEntityRepo{
+		setAliasesFn: func(_ context.Context, _ string, aliases []string) error {
+			savedAliases = aliases
+			return nil
+		},
+	}
+
+	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+	err := svc.SetAliases(context.Background(), "entity-1", []string{"Gandalf", "gandalf", "GANDALF", "Mithrandir"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(savedAliases) != 2 {
+		t.Errorf("expected 2 deduped aliases, got %d: %v", len(savedAliases), savedAliases)
+	}
+}
+
+func TestExtractMentionSnippet(t *testing.T) {
+	html := `<p>The wizard <a data-mention-id="entity-123" href="/entities/entity-123">@Gandalf</a> arrived at the village of Bree.</p>`
+	snippet := extractMentionSnippet(&html, "entity-123")
+	if snippet == "" {
+		t.Fatal("expected non-empty snippet")
+	}
+	if len(snippet) > 130 {
+		t.Errorf("snippet too long: %d chars", len(snippet))
+	}
+}
+
+func TestExtractMentionSnippet_Nil(t *testing.T) {
+	snippet := extractMentionSnippet(nil, "entity-123")
+	if snippet != "" {
+		t.Error("expected empty snippet for nil HTML")
+	}
+}
+
+func TestGetBacklinksWithSnippets(t *testing.T) {
+	html := `<p>See <a data-mention-id="target-1" href="/e/target-1">@Target</a> for details.</p>`
+	entityRepo := &mockEntityRepo{
+		findBacklinksFn: func(_ context.Context, _ string, _ int, _ string) ([]Entity, error) {
+			return []Entity{
+				{ID: "ref-1", Name: "Source", EntryHTML: &html},
+			}, nil
+		},
+	}
+
+	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+	entries, err := svc.GetBacklinksWithSnippets(context.Background(), "target-1", 2, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 backlink entry, got %d", len(entries))
+	}
+	if entries[0].Snippet == "" {
+		t.Error("expected non-empty snippet")
+	}
+	if entries[0].Entity.ID != "ref-1" {
+		t.Errorf("expected entity ID ref-1, got %s", entries[0].Entity.ID)
 	}
 }
 

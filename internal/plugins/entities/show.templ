@@ -15,7 +15,7 @@ import (
 // showAttributes controls whether the attributes block is rendered (based on addon state).
 // showCalendar gates the lazy-loaded calendar events section to prevent HTMX errors
 // from replacing the page body via HX-Retarget when the calendar addon is not enabled.
-templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, backlinks []Entity, showAttributes bool, showCalendar bool, csrfToken string) {
+templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, csrfToken string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-6xl mx-auto">
 			<!-- Breadcrumb with ancestor chain -->
@@ -78,9 +78,12 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			@blockPosts(cc, entity, csrfToken)
 
 			// Backlinks: entities that reference this one via @mentions.
-			if len(backlinks) > 0 {
-				@blockBacklinks(cc, backlinks)
-			}
+			// Loaded asynchronously via HTMX to keep page load fast.
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/entities/%s/backlinks", cc.Campaign.ID, entity.ID) }
+				hx-trigger="load"
+				hx-swap="innerHTML"
+			></div>
 
 			// Calendar events linked to this entity (lazy-loaded from calendar plugin).
 			// Only rendered when the calendar addon is enabled AND the layout doesn't
@@ -200,6 +203,13 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				<i class="fa-regular fa-star text-lg"></i>
 			</button>
 		</div>
+		// Aliases widget: displays alternative names for this entity.
+		<div
+			data-widget="aliases"
+			data-entity-id={ entity.ID }
+			data-campaign-id={ cc.Campaign.ID }
+			data-editable={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RoleScribe) }
+		></div>
 		if cc.MemberRole >= campaigns.RoleScribe {
 			<div class="flex space-x-2">
 				<a
@@ -528,38 +538,48 @@ templ blockChildren(cc *campaigns.CampaignContext, entity *Entity, children []En
 }
 
 // blockBacklinks renders the "Referenced by" section showing entities that
-// link to this one via @mentions in their entry content.
-templ blockBacklinks(cc *campaigns.CampaignContext, backlinks []Entity) {
-	<div class="mt-8">
-		<div class="flex items-center gap-2 mb-3">
-			<i class="fa-solid fa-arrow-left text-xs text-fg-muted"></i>
-			<h2 class="text-lg font-semibold text-fg">
-				Referenced by
-				<span class="text-sm font-normal text-fg-muted ml-1">({ fmt.Sprintf("%d", len(backlinks)) })</span>
-			</h2>
-		</div>
-		<div class="flex flex-wrap gap-2">
-			for _, bl := range backlinks {
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, bl.ID)) }
-					class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-alt hover:bg-surface border border-edge-light hover:border-edge transition-colors group"
-				>
-					<span
-						class="w-6 h-6 rounded flex items-center justify-center shrink-0"
-						style={ fmt.Sprintf("background-color: %s20; color: %s", bl.TypeColor, bl.TypeColor) }
+// link to this one via @mentions in their entry content. Includes context
+// snippets showing text around the mention.
+templ blockBacklinks(cc *campaigns.CampaignContext, backlinks []BacklinkEntry) {
+	if len(backlinks) > 0 {
+		<div class="mt-8">
+			<div class="flex items-center gap-2 mb-3">
+				<i class="fa-solid fa-arrow-left text-xs text-fg-muted"></i>
+				<h2 class="text-lg font-semibold text-fg">
+					Referenced by
+					<span class="text-sm font-normal text-fg-muted ml-1">({ fmt.Sprintf("%d", len(backlinks)) })</span>
+				</h2>
+			</div>
+			<div class="space-y-2">
+				for _, bl := range backlinks {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, bl.Entity.ID)) }
+						class="flex items-start gap-3 px-3 py-2 rounded-lg bg-surface-alt hover:bg-surface border border-edge-light hover:border-edge transition-colors group"
 					>
-						if bl.TypeIcon != "" {
-							<i class={ "fa-solid " + bl.TypeIcon, "text-[10px]" }></i>
-						}
-					</span>
-					<span class="text-sm font-medium text-fg group-hover:text-accent transition-colors">
-						{ bl.Name }
-					</span>
-					<span class="text-[10px] text-fg-muted">{ bl.TypeName }</span>
-				</a>
-			}
+						<span
+							class="w-6 h-6 rounded flex items-center justify-center shrink-0 mt-0.5"
+							style={ fmt.Sprintf("background-color: %s20; color: %s", bl.Entity.TypeColor, bl.Entity.TypeColor) }
+						>
+							if bl.Entity.TypeIcon != "" {
+								<i class={ "fa-solid " + bl.Entity.TypeIcon, "text-[10px]" }></i>
+							}
+						</span>
+						<div class="min-w-0">
+							<div class="flex items-center gap-2">
+								<span class="text-sm font-medium text-fg group-hover:text-accent transition-colors">
+									{ bl.Entity.Name }
+								</span>
+								<span class="text-[10px] text-fg-muted">{ bl.Entity.TypeName }</span>
+							</div>
+							if bl.Snippet != "" {
+								<p class="text-xs text-fg-muted mt-0.5 line-clamp-2">{ bl.Snippet }</p>
+							}
+						</div>
+					</a>
+				}
+			</div>
 		</div>
-	</div>
+	}
 }
 
 // entityColSpan returns responsive Tailwind CSS classes for entity layout columns.
