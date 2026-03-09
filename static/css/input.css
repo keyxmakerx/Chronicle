@@ -729,6 +729,13 @@
     left: 0;
   }
 
+  /* Peek: panel nudges right ~20px so icons are partially visible.
+     Only about 1/3 of the 48px strip shows — enough to hint at icons
+     but not enough to be in the way. */
+  .sidebar-drill-panel.sidebar-drill-peeking {
+    left: 20px;
+  }
+
   /* Skeleton shimmer for loading states. */
   .skeleton-shimmer {
     background: linear-gradient(90deg, rgba(75, 85, 99, 0.3) 25%, rgba(75, 85, 99, 0.5) 50%, rgba(75, 85, 99, 0.3) 75%);
