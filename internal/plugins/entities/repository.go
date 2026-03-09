@@ -1412,7 +1412,7 @@ func (r *entityRepository) SetAliases(ctx context.Context, entityID string, alia
 		if err != nil {
 			return fmt.Errorf("preparing alias insert: %w", err)
 		}
-		defer stmt.Close()
+		defer func() { _ = stmt.Close() }()
 
 		for _, alias := range aliases {
 			if _, err := stmt.ExecContext(ctx, entityID, alias); err != nil {
