@@ -39,6 +39,12 @@ func NewSystemLoader(systemsDir string) *SystemLoader {
 func (l *SystemLoader) DiscoverAll() error {
 	entries, err := os.ReadDir(l.systemsDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			slog.Info("systems directory not found, skipping discovery",
+				slog.String("dir", l.systemsDir),
+			)
+			return nil
+		}
 		return err
 	}
 
