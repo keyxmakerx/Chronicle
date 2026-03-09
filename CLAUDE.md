@@ -3,7 +3,7 @@
 Chronicle is a self-hosted TTRPG worldbuilding platform. Go backend with Echo v4
 framework, Templ templates, HTMX for interactivity, MariaDB for persistence, Redis
 for caching/sessions. Frontend uses a **three-tier extension architecture**:
-Plugins (feature apps), Modules (game system content), and Widgets (reusable UI blocks).
+Plugins (feature apps), Systems (game system content), and Widgets (reusable UI blocks).
 
 ## Quick Commands
 
@@ -29,12 +29,12 @@ make clean          # Remove built artifacts
 ## Architecture at a Glance
 
 **Three-tier extension architecture.** Everything beyond core infrastructure is
-a Plugin, Module, or Widget:
+a Plugin, System, or Widget:
 
 | Tier | Location | What It Is | Examples |
 |------|----------|-----------|---------|
 | **Plugin** | `internal/plugins/<name>/` | Feature app with handler/service/repo/templates | auth, campaigns, entities, calendar, maps |
-| **Module** | `internal/modules/<name>/` | Game system content pack (reference data, tooltips) | dnd5e, pathfinder, drawsteel |
+| **System** | `internal/systems/<name>/` | Game system content pack (reference data, tooltips) | dnd5e, pathfinder2e, drawsteel |
 | **Widget** | `internal/widgets/<name>/` | Reusable UI building block (mounts to DOM) | editor, title, tags, attributes, mentions |
 
 **Request flow:**
@@ -73,12 +73,12 @@ the full index. Key files:
 |------|-------------|
 | `.ai/status.md` | **Every session start** -- current state and next priorities |
 | `.ai/todo.md` | When planning work -- prioritized backlog |
-| `.ai/architecture.md` | When designing new features or modules |
+| `.ai/architecture.md` | When designing new features or systems |
 | `.ai/conventions.md` | When writing any code -- patterns with examples |
 | `.ai/decisions.md` | When questioning a design choice -- ADRs with rationale |
 | `.ai/data-model.md` | When writing queries or migrations |
 
-Each plugin/module/widget has its own `.ai.md` in its directory.
+Each plugin/system/widget has its own `.ai.md` in its directory.
 
 ## IMPORTANT RULES
 
@@ -90,5 +90,5 @@ Each plugin/module/widget has its own `.ai.md` in its directory.
 6. When making an architecture decision, record it in `.ai/decisions.md`.
 7. Add comments to every package, exported type, and non-obvious code block.
 8. Plugins talk to each other via **service interfaces**, never direct repo access.
-9. Modules are **read-only** -- they serve reference content but never modify campaign data.
+9. Systems are **read-only** -- they serve reference content but never modify campaign data.
 10. Widgets communicate via **DOM events** and **API endpoints**.

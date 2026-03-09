@@ -17,8 +17,8 @@ re-reading every source file in the project.
    what is in progress, and what to do next.
 2. **When planning:** Read `todo.md` for the prioritized backlog.
 3. **When coding:** Read `conventions.md` for patterns with code examples.
-4. **When working on a module:** Read `internal/modules/<name>/.ai.md` for that
-   module's specific docs.
+4. **When working on a system:** Read `internal/systems/<name>/.ai.md` for that
+   system's specific docs.
 5. **When making design choices:** Read `decisions.md` to see what has already
    been decided and why.
 
@@ -46,19 +46,19 @@ re-reading every source file in the project.
 
 - **Static:** Rarely changes. Reference material established once.
 - **Semi-static:** Changes when architecture evolves, new patterns are set, or
-  new modules are added. Maybe once per sprint.
+  new systems are added. Maybe once per sprint.
 - **Dynamic:** Changes every session. Status and backlog tracking.
 
 ## Templates
 
 The `templates/` subdirectory contains templates for creating new documentation:
 
-- `module-ai.md.tmpl` -- Copy this when creating a new module's `.ai.md` file
+- `module-ai.md.tmpl` -- Copy this when creating a new system's `.ai.md` file
 - `decision-record.md.tmpl` -- Copy this format when adding a new ADR entry
 
 ## Extension-Level Documentation
 
-Each plugin (`internal/plugins/<name>/`), module (`internal/modules/<name>/`), and
+Each plugin (`internal/plugins/<name>/`), system (`internal/systems/<name>/`), and
 widget (`internal/widgets/<name>/`) contains an `.ai.md` file describing its purpose,
 internal structure, dependencies, routes, business rules, and current implementation
 state. These are the files to read when you are about to work on a specific extension.

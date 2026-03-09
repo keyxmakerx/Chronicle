@@ -39,26 +39,26 @@
 
 ## Upcoming Phases
 
-### Phase T: Game System Modules & Worldbuilding Tools
+### Phase T: Game Systems & Worldbuilding Tools
 
 _Expand reference content and add worldbuilding aids.
 Priority: High — content depth._
 
 #### Sprint T-1: D&D 5e Reference Pages
 
-Browsable pages at `/modules/dnd5e/` — category index with cards, searchable
+Browsable pages at `/systems/dnd5e/` — category index with cards, searchable
 lists per category, formatted stat block detail pages. Quick-search integration
-(Ctrl+K returns module reference results).
+(Ctrl+K returns game system reference results).
 
-**Key files:** `modules/dnd5e/handler.go`, `modules/dnd5e/templates/` (new), `modules/dnd5e/routes.go`
+**Key files:** `systems/dnd5e/handler.go`, `systems/dnd5e/templates/` (new), `systems/dnd5e/routes.go`
 
-#### Sprint T-2: Pathfinder 2e Module
+#### Sprint T-2: Pathfinder 2e System
 
-ORC-licensed data following D&D 5e pattern: spells, monsters, ancestries,
-classes, conditions, feats. Uses GenericModule (auto-instantiation via
+ORC-licensed data following D&D 5e pattern: spells, creatures, ancestries,
+classes, conditions, equipment. Uses GenericModule (auto-instantiation via
 `manifest.json` + `data/`).
 
-**Key files:** `modules/pathfinder2e/` (new directory)
+**Key files:** `systems/pathfinder2e/` (new directory)
 
 #### Sprint T-3: Worldbuilding Prompts
 
@@ -190,7 +190,7 @@ initiative tracker, session prep checklist, NPC generator, account deletion,
 activity tracking, timeline search/zoom-to-era, entity version history, toast
 grouping, entity image gallery.
 
-**Deferred / Community:** Module Builder UI, Draw Steel module, whiteboards,
+**Deferred / Community:** System Builder UI, Draw Steel system, whiteboards,
 offline mode, collaborative editing, calendar timezones, map grids, webhooks,
 Knowledge Graph addon, dice roller, family tree, cross-campaign search, mobile
 modals.

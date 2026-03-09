@@ -8,7 +8,7 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-09 -- Bug fix round 3: single game system per campaign, admin failover restyle, alert→toast conversion.
+2026-03-09 -- Modules→Systems rename, campaign customization (backdrop/accent), dashboard blocks (7 new types), map Phase 2 objects, documentation update.
 Branch: `claude/review-work-plan-hT8UX`.
 
 ## Phase & Sprint Plan
@@ -396,6 +396,49 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
   - Image upload widget (3 calls): file type/size validation, upload error
   - Shop inventory widget (1 call): item creation error
 - **Files modified**: `addons/service.go` (mutual exclusivity), `addons/admin_addons.templ` (failover restyle), `addons/campaign_addons.templ` (info text), `calendar/calendar.templ`, `maps/maps.templ`, `sessions/sessions.templ`, `settings/storage_settings.templ`, `image_upload.js`, `shop_inventory.js`
+
+### Terminology Rename: Modules → Systems (2026-03-09)
+- Renamed `internal/modules/` → `internal/systems/` across the entire codebase
+- All Go package references, import paths, route paths, template references, JS widget references updated
+- Admin UI labels: "Content Packs" / "Game Systems" (no longer uses "Module" anywhere user-facing)
+- Documentation updated: CLAUDE.md, architecture.md, phases.md, README.md, api-routes.md, plugin .ai.md files
+
+### Campaign Customization: Backdrop & Accent Color (2026-03-09)
+- **Backdrop image**: Campaign-level hero image upload stored as `backdrop_path` in campaigns table
+- **Accent color**: Per-campaign CSS custom property (`--color-accent`) override via `accent_color` column
+- Campaign settings page gains image upload and color picker sections
+- Layout injects `<style>` tag with accent color override when set
+
+### Dashboard Blocks: 7 New Types (2026-03-09)
+- **calendar_full**: Full calendar grid embed via `/calendar/embed` with HTMX lazy-loading
+- **timeline_full**: Timeline D3 widget embed via `/timelines/embed`
+- **relations_graph_full**: Full-height relations graph (reuses existing D3 widget)
+- **map_full**: Interactive Leaflet map embed with configurable map_id and Phase 2 objects
+- **session_tracker**: Upcoming sessions list via `/sessions/embed`
+- **activity_feed**: Campaign activity feed via `/activity/embed` (Owner only)
+- **sync_status**: API key status via `/sync-status` (Owner only)
+- All use HTMX `hx-trigger="intersect once"` for lazy-loading
+- Dashboard editor updated with new block type options and config fields
+
+### Embed Endpoints Pattern (2026-03-09)
+- New lightweight handler endpoints return HTMX fragments for dashboard block lazy-loading
+- calendar: `EmbedCalendar` — compact calendar grid with inline month navigation
+- timeline: `EmbedTimeline` — mounts timeline-viz D3 widget, auto-selects first timeline
+- sessions: `EmbedSessions` — lists planned sessions with RSVP badges
+- audit: `EmbedActivity` — compact activity feed with avatars and relative time
+- syncapi: `SyncStatusEmbed` — active key count, 24h request stats, per-key status
+
+### Map Widget Phase 2 Objects (2026-03-09)
+- Map widget now supports optional Phase 2 object rendering via `data-show-drawings` and `data-show-tokens` attributes
+- Drawings rendered as Leaflet shapes (polylines, polygons, rectangles, circles)
+- Tokens rendered as icon markers with HP popup tooltips
+- Configurable height via `data-height` attribute
+
+### Documentation Update (2026-03-09)
+- Updated 15+ documentation files for modules→systems terminology
+- Added new embed endpoint routes to api-routes.md
+- Updated plugin .ai.md files with new embed handlers and dashboard block info
+- Updated architecture.md directory structure to reflect systems/ path
 
 ## Next Session Should
 - **Sprint U-2: Invite System** — campaign invite links for easier player onboarding
