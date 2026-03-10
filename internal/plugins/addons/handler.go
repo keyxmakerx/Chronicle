@@ -130,22 +130,6 @@ func (h *Handler) CampaignAddonsAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, addons)
 }
 
-// CampaignAddonsPage renders the campaign addons settings section (GET /campaigns/:id/addons/settings).
-func (h *Handler) CampaignAddonsPage(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewForbidden("campaign context required")
-	}
-
-	addons, err := h.service.ListForCampaign(c.Request().Context(), cc.Campaign.ID)
-	if err != nil {
-		return err
-	}
-
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, CampaignAddonsPageTempl(cc.Campaign.ID, addons, csrfToken))
-}
-
 // CampaignAddonsFragment returns the addons list fragment for embedding in the
 // Customization Hub Extensions tab (GET /campaigns/:id/addons/fragment).
 func (h *Handler) CampaignAddonsFragment(c echo.Context) error {
@@ -210,5 +194,5 @@ func (h *Handler) ToggleCampaignAddon(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, CampaignAddonsListFragment(cc.Campaign.ID, addons, csrfToken))
 	}
 
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/addons/settings")
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/plugins")
 }

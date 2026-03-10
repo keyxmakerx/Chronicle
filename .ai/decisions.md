@@ -1019,3 +1019,34 @@ is skipped for trusted built-in plugins but enforced for user extensions via
   (calendar before sessions/timeline).
 - Removed migrate_preflight.go and bandaid lint tests from migrate_test.go.
 - Fresh DB only — no backward compatibility with the old 63-migration sequence.
+
+---
+
+## ADR-029: Features Page Consolidation (Plugin Hub + Addon Settings → Single Page)
+
+**Date:** 2026-03-10
+**Status:** Accepted
+
+**Context:** Campaign feature management was split across two pages:
+1. **Plugin Hub** (`/campaigns/:id/plugins`) — read-only card grid visible to all members.
+2. **Addon Settings** (`/campaigns/:id/addons/settings`) — owner-only toggle list.
+
+This created confusion: owners had two "features" pages with different layouts and
+capabilities. Non-owners could see features but couldn't tell which were enabled.
+
+**Decision:** Consolidate into a single Features page at `/campaigns/:id/plugins`.
+- All members see the card grid with enable/disable status.
+- Owners see inline toggle buttons on each card.
+- The old `/addons/settings` route, handler, and full-page template are removed.
+- The addons fragment route (`/addons/fragment`) remains for the Customization Hub.
+- Toggle forms include `redirect_to=plugins` so the handler redirects back to the
+  unified page after toggling.
+
+**Alternatives considered:**
+- Keep both pages with cross-links: still confusing, maintenance burden.
+- Merge into the Customization Hub: too buried, features deserve top-level access.
+
+**Consequences:**
+- Single source of truth for feature management.
+- Owners can manage features directly from the same page all members see.
+- Future enhancements (per-addon entity usage, "offline" banners) have one target page.

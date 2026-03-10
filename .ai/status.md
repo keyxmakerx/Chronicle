@@ -8,6 +8,19 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
+2026-03-10 -- **Cleanup & consolidation pass after bug fixes.**
+
+7. **JSON injection fix**: HX-Trigger header in `CreateEntityType` error path used string concatenation to build JSON. Replaced with `json.Marshal()` to prevent malformed JSON from error messages containing special characters.
+
+8. **Orphaned addon settings page removed**: Deleted `/addons/settings` route, `CampaignAddonsPage` handler, and `CampaignAddonsPageTempl` template — all superseded by the unified Plugin Hub at `/plugins`. Fragment route (`/addons/fragment`) kept for Customization Hub.
+
+9. **Fallback redirect updated**: `ToggleCampaignAddon` non-HTMX fallback now redirects to `/plugins` instead of the removed `/addons/settings`.
+
+10. **Dead HTMX attributes cleaned**: Removed `hx-target`/`hx-swap` from Plugin Hub toggle forms since the handler always responds with `HX-Redirect` (the swap targets were never used).
+
+11. **ADR-029 recorded**: Features page consolidation decision documented in `.ai/decisions.md`.
+
+### Previous Update
 2026-03-10 -- **Bug fixes & UX improvements (navbar, features page, entity templates).**
 
 1. **Drag-and-drop CSRF fix**: `sidebar_tree.js` reorderEntity() was using raw `fetch()` without CSRF token, causing 403 on drag-drop reorder. Added `Chronicle.getCsrf()` header.

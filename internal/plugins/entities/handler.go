@@ -1527,7 +1527,12 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 		if middleware.IsHTMX(c) {
 			c.Response().Header().Set("HX-Retarget", "#entity-type-list")
 			c.Response().Header().Set("HX-Reswap", "innerHTML")
-			c.Response().Header().Set("HX-Trigger", `{"chronicle:notify":{"message":"`+errMsg+`","type":"error"}}`)
+			triggerData := map[string]any{
+				"chronicle:notify": map[string]string{"message": errMsg, "type": "error"},
+			}
+			if triggerJSON, err := json.Marshal(triggerData); err == nil {
+				c.Response().Header().Set("HX-Trigger", string(triggerJSON))
+			}
 			return middleware.Render(c, http.StatusOK,
 				EntityTypeListContent(cc, entityTypes, counts, csrfToken))
 		}

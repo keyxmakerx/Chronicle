@@ -516,8 +516,6 @@ templ pluginHubCard(cc *CampaignContext, addon PluginHubAddon, isOwner bool, csr
 				<form
 					method="POST"
 					hx-put={ fmt.Sprintf("/campaigns/%s/addons/%s/toggle", cc.Campaign.ID, strconv.Itoa(addon.AddonID)) }
-					hx-target="#plugin-hub-list"
-					hx-swap="innerHTML"
 					class="shrink-0"
 				>
 					<input type="hidden" name="csrf_token" value={ csrfToken }/>

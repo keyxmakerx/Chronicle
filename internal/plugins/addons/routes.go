@@ -24,9 +24,6 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
 
-	// Addon settings page (campaign owner only).
-	cg.GET("/addons/settings", h.CampaignAddonsPage, campaigns.RequireRole(campaigns.RoleOwner))
-
 	// Addon list fragment for Customization Hub Extensions tab (HTMX).
 	cg.GET("/addons/fragment", h.CampaignAddonsFragment, campaigns.RequireRole(campaigns.RoleOwner))
 

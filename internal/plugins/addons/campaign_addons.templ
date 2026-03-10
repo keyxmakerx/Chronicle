@@ -1,52 +1,12 @@
-// campaign_addons.templ renders the per-campaign features & content packs page.
-// Campaign owners use this to enable/disable features for their campaign.
+// campaign_addons.templ renders per-campaign addon list fragments.
+// The full features page is now handled by the campaigns plugin's Plugin Hub
+// at /campaigns/:id/plugins. This file provides fragments for the Customization Hub.
 
 package addons
 
 import (
 	"fmt"
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
-
-// CampaignAddonsPageTempl renders the full campaign addons settings page.
-templ CampaignAddonsPageTempl(campaignID string, addons []CampaignAddon, csrfToken string) {
-	@layouts.App("Features & Content Packs") {
-		<div class="max-w-3xl mx-auto space-y-6">
-			<div class="flex items-center justify-between">
-				<div>
-					<h1 class="text-2xl font-bold text-fg">Features & Content Packs</h1>
-					<p class="text-sm text-fg-secondary mt-1">
-						Enable or disable features and content packs for this campaign.
-					</p>
-				</div>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/edit", campaignID)) } class="btn-secondary text-sm">
-					Back to Settings
-				</a>
-			</div>
-
-			<div id="addons-list">
-				@CampaignAddonsListFragment(campaignID, addons, csrfToken)
-			</div>
-
-			// Info panel.
-			<div class="card p-6">
-				<div class="flex items-start gap-4">
-					<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-						<i class="fa-solid fa-circle-info text-accent"></i>
-					</span>
-					<div>
-						<h3 class="text-sm font-semibold text-fg mb-1">About Features & Content Packs</h3>
-						<p class="text-sm text-fg-secondary leading-relaxed">
-							Features add optional capabilities to your campaign like calendars, maps, and timelines.
-							Content packs provide pre-made entity types, tag sets, and reference data.
-							Toggle them on or off at any time — disabling does not delete your data.
-						</p>
-					</div>
-				</div>
-			</div>
-		</div>
-	}
-}
 
 // CampaignAddonsListFragment renders just the addon list (for HTMX swaps).
 templ CampaignAddonsListFragment(campaignID string, addons []CampaignAddon, csrfToken string) {
