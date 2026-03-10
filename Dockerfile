@@ -42,8 +42,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /chronicle ./cmd/server
 # --- Stage 3: Runtime ---
 FROM alpine:3.20
 
-# Install CA certificates for HTTPS calls (if needed) and timezone data.
-RUN apk add --no-cache ca-certificates tzdata
+# Install CA certificates for HTTPS calls, timezone data, and su-exec for
+# dropping privileges in the entrypoint.
+RUN apk add --no-cache ca-certificates tzdata su-exec
 
 # Create non-root user for runtime security.
 RUN adduser -D -H -s /sbin/nologin chronicle
@@ -64,8 +65,10 @@ RUN mkdir -p /app/data/media && chown -R chronicle:chronicle /app/data
 
 WORKDIR /app
 
-# Run as the unprivileged chronicle user.
-USER chronicle
+# Copy entrypoint script that fixes bind-mount permissions, then drops to
+# the unprivileged chronicle user via su-exec.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # The Go binary serves HTTP directly on this port.
 EXPOSE 8080
@@ -74,5 +77,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:8080/healthz || exit 1
 
-# Run the Chronicle server.
+# Container starts as root; the entrypoint fixes permissions then exec's
+# the server as the chronicle user.
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["chronicle"]
