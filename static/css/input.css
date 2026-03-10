@@ -1142,7 +1142,7 @@
     @apply flex items-center gap-1.5 cursor-pointer hover:text-fg transition-colors;
   }
   .note-share-opt input[type="radio"] {
-    @apply accent-primary;
+    accent-color: var(--color-accent, #6366f1);
   }
   .note-share-members {
     @apply mt-2 pt-2 border-t border-edge flex flex-col gap-1 max-h-[120px] overflow-y-auto;
@@ -1152,7 +1152,7 @@
            hover:text-fg transition-colors;
   }
   .note-share-member input[type="checkbox"] {
-    @apply accent-primary;
+    accent-color: var(--color-accent, #6366f1);
   }
   .note-share-no-members {
     @apply text-[10px] text-fg-muted italic;

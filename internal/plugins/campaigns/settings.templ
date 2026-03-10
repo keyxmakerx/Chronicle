@@ -305,7 +305,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 					<div class="space-y-2">
 						<template x-for="m in members" :key="m.user_id">
 							<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
-								<input type="checkbox" class="accent-primary" :checked="isGranted(m.user_id)" @change="toggle(m.user_id)"/>
+								<input type="checkbox" class="accent-accent" :checked="isGranted(m.user_id)" @change="toggle(m.user_id)"/>
 								<div class="flex-1 min-w-0">
 									<span class="text-sm font-medium text-fg" x-text="m.display_name || m.email"></span>
 									<span class="text-xs text-fg-muted ml-1" x-text="m.role === 2 ? '(Scribe)' : '(Player)'"></span>
