@@ -602,3 +602,85 @@ func entityColSpan(width int) string {
 	}
 	return classes[width]
 }
+
+// coverImageHeight returns the Tailwind height class based on block config.
+func coverImageHeight(config map[string]any) string {
+	switch BlockConfigString(config, "height") {
+	case "sm":
+		return "h-32"
+	case "lg":
+		return "h-72"
+	default:
+		return "h-48"
+	}
+}
+
+// coverImageOverlayClass returns the gradient overlay CSS based on block config.
+func coverImageOverlayClass(config map[string]any) string {
+	switch BlockConfigString(config, "overlay") {
+	case "gradient":
+		return "absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"
+	case "dark":
+		return "absolute inset-0 bg-black/30"
+	default:
+		return ""
+	}
+}
+
+// blockCoverImage renders a full-width banner/hero image for the entity.
+// Uses the entity's cover_image_path field. Supports height and overlay config.
+templ blockCoverImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string, config map[string]any) {
+	<div class="w-full overflow-hidden rounded-lg">
+		if entity.CoverImagePath != nil && *entity.CoverImagePath != "" {
+			<div class="relative group">
+				<img
+					src={ layouts.MediaURL(ctx, *entity.CoverImagePath) }
+					alt={ entity.Name + " cover" }
+					class={ "w-full object-cover " + coverImageHeight(config) }
+				/>
+				if overlayClass := coverImageOverlayClass(config); overlayClass != "" {
+					<div class={ overlayClass }></div>
+				}
+				if cc.MemberRole >= campaigns.RoleScribe {
+					<div
+						class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+						data-widget="image-upload"
+						data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/cover-image", cc.Campaign.ID, entity.ID) }
+						data-upload-url="/media/upload"
+						data-csrf-token={ csrfToken }
+					>
+						<span class="text-white text-sm font-medium">Change Cover Image</span>
+					</div>
+				}
+			</div>
+		} else {
+			if cc.MemberRole >= campaigns.RoleScribe {
+				<div
+					class={ "w-full bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors rounded-lg " + coverImageHeight(config) }
+					data-widget="image-upload"
+					data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/cover-image", cc.Campaign.ID, entity.ID) }
+					data-upload-url="/media/upload"
+					data-csrf-token={ csrfToken }
+				>
+					<i class="fa-solid fa-panorama text-2xl text-fg-faint mb-2"></i>
+					<span class="text-fg-faint text-sm">Add cover image</span>
+				</div>
+			}
+		}
+	</div>
+}
+
+// blockLocalGraph renders a mini relations graph showing the entity's
+// neighborhood (N hops). Reuses the relation-graph widget with focus mode.
+templ blockLocalGraph(cc *campaigns.CampaignContext, entity *Entity, config map[string]any) {
+	<div class="card p-0 overflow-hidden">
+		<div
+			data-widget="relation-graph"
+			data-campaign-id={ cc.Campaign.ID }
+			data-api-url={ fmt.Sprintf("/campaigns/%s/relations-graph", cc.Campaign.ID) }
+			data-focus-entity={ entity.ID }
+			data-hops={ BlockConfigString(config, "hops") }
+			data-height="300"
+		></div>
+	</div>
+}

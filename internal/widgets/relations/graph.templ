@@ -1,16 +1,32 @@
 // graph.templ renders the standalone relations graph page for a campaign.
 // The D3 visualization widget auto-mounts on the data-widget element.
+// Entity types are passed for the filter dropdown.
 
 package relations
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// GraphPage renders the full-page relations graph visualization.
-templ GraphPage(cc *campaigns.CampaignContext) {
+// entityTypesJSON serializes entity type summaries to a JSON string for the
+// data-entity-types attribute consumed by the graph widget JS.
+func entityTypesJSON(types []EntityTypeSummary) string {
+	if len(types) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(types)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+// GraphPage renders the full-page relations graph visualization with filter
+// controls. Entity types populate the type filter dropdown.
+templ GraphPage(cc *campaigns.CampaignContext, entityTypes []EntityTypeSummary) {
 	@layouts.App(cc.Campaign.Name + " — Relations Graph") {
 		<div class="max-w-7xl mx-auto">
 			<div class="flex items-center justify-between mb-4">
@@ -30,6 +46,8 @@ templ GraphPage(cc *campaigns.CampaignContext) {
 				data-campaign-id={ cc.Campaign.ID }
 				data-api-url={ fmt.Sprintf("/campaigns/%s/relations-graph", cc.Campaign.ID) }
 				data-height="600"
+				data-entity-types={ entityTypesJSON(entityTypes) }
+				data-show-filters="true"
 			></div>
 		</div>
 	}

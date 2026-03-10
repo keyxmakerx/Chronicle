@@ -31,6 +31,7 @@ type EntityService interface {
 	UpdateFields(ctx context.Context, entityID string, fieldsData map[string]any) error
 	UpdateFieldOverrides(ctx context.Context, entityID string, overrides *FieldOverrides) error
 	UpdateImage(ctx context.Context, entityID, imagePath string) error
+	UpdateCoverImage(ctx context.Context, entityID, coverImagePath string) error
 	Delete(ctx context.Context, entityID string) error
 
 	// Hierarchy
@@ -80,6 +81,10 @@ type EntityService interface {
 
 	// Backlinks with context snippets.
 	GetBacklinksWithSnippets(ctx context.Context, entityID string, role int, userID string) ([]BacklinkEntry, error)
+
+	// GetMentionLinks returns all @mention references across a campaign for the
+	// relations graph. Each link is a source→target pair extracted from entry_html.
+	GetMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error)
 
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
@@ -494,6 +499,23 @@ func (s *entityService) UpdateImage(ctx context.Context, entityID, imagePath str
 	slog.Info("entity image updated",
 		slog.String("entity_id", entityID),
 		slog.String("image_path", imagePath),
+	)
+	return nil
+}
+
+// UpdateCoverImage updates the cover/banner image for an entity.
+func (s *entityService) UpdateCoverImage(ctx context.Context, entityID, coverImagePath string) error {
+	if coverImagePath != "" {
+		if strings.HasPrefix(coverImagePath, "/") || strings.Contains(coverImagePath, "..") {
+			return apperror.NewBadRequest("invalid cover image path")
+		}
+	}
+	if err := s.entities.UpdateCoverImage(ctx, entityID, coverImagePath); err != nil {
+		return err
+	}
+	slog.Info("entity cover image updated",
+		slog.String("entity_id", entityID),
+		slog.String("cover_image_path", coverImagePath),
 	)
 	return nil
 }
@@ -1132,6 +1154,16 @@ func (s *entityService) GetBacklinksWithSnippets(ctx context.Context, entityID s
 		entries = append(entries, BacklinkEntry{Entity: bl, Snippet: snippet})
 	}
 	return entries, nil
+}
+
+// GetMentionLinks returns all @mention references across a campaign. Delegates
+// to the repository which scans entry_html for data-mention-id attributes.
+func (s *entityService) GetMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error) {
+	links, err := s.entities.FindAllMentionLinks(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("finding mention links: %w", err))
+	}
+	return links, nil
 }
 
 // extractMentionSnippet extracts a plain-text snippet around a mention link

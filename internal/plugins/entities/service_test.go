@@ -274,6 +274,14 @@ func (m *mockEntityRepo) SetAliases(ctx context.Context, entityID string, aliase
 	return nil
 }
 
+func (m *mockEntityRepo) FindAllMentionLinks(_ context.Context, _ string, _ int, _ string) ([]MentionLink, error) {
+	return nil, nil
+}
+
+func (m *mockEntityRepo) UpdateCoverImage(_ context.Context, _, _ string) error {
+	return nil
+}
+
 // --- Test Helpers ---
 
 // mockPermissionRepo implements EntityPermissionRepository for testing.

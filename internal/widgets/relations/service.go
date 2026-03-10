@@ -41,12 +41,21 @@ type RelationService interface {
 	// campaign. Used by the relations graph visualization widget.
 	// When includeDmOnly is false, dm_only relations are excluded from the graph.
 	GetGraphData(ctx context.Context, campaignID string, includeDmOnly bool) (*GraphData, error)
+
+	// GetFilteredGraphData returns graph data with filtering, mention edges,
+	// local graph (BFS), and orphan detection support.
+	GetFilteredGraphData(ctx context.Context, campaignID string, filter GraphFilter, includeDmOnly bool, userID string) (*GraphData, error)
+
+	// SetMentionLinkProvider injects the mention link provider for graph
+	// visualization. Called during app wiring.
+	SetMentionLinkProvider(p MentionLinkProvider)
 }
 
 // relationService implements RelationService with validation and
 // bi-directional relation management.
 type relationService struct {
-	repo RelationRepository
+	repo            RelationRepository
+	mentionProvider MentionLinkProvider
 }
 
 // NewRelationService creates a new RelationService backed by the given
@@ -230,6 +239,7 @@ func (s *relationService) GetGraphData(ctx context.Context, campaignID string, i
 			Source: r.SourceEntityID,
 			Target: r.TargetEntityID,
 			Type:   r.RelationType,
+			Kind:   "relation",
 		})
 	}
 
@@ -243,4 +253,207 @@ func (s *relationService) GetGraphData(ctx context.Context, campaignID string, i
 	}
 
 	return &GraphData{Nodes: nodes, Edges: edges}, nil
+}
+
+// SetMentionLinkProvider injects the provider for @mention link data.
+func (s *relationService) SetMentionLinkProvider(p MentionLinkProvider) {
+	s.mentionProvider = p
+}
+
+// GetFilteredGraphData builds graph data with optional mention edges, type/search
+// filtering, BFS local graph, and orphan detection.
+func (s *relationService) GetFilteredGraphData(ctx context.Context, campaignID string, filter GraphFilter, includeDmOnly bool, userID string) (*GraphData, error) {
+	// Start with the base relation graph data.
+	data, err := s.GetGraphData(ctx, campaignID, includeDmOnly)
+	if err != nil {
+		return nil, err
+	}
+
+	// Merge @mention edges if requested and provider is available.
+	if filter.IncludeMentions && s.mentionProvider != nil {
+		mentions, err := s.mentionProvider.GetMentionLinksForGraph(ctx, campaignID, includeDmOnly, userID)
+		if err != nil {
+			return nil, fmt.Errorf("getting mention links: %w", err)
+		}
+
+		// Build a node lookup from existing graph nodes.
+		nodeMap := make(map[string]GraphNode, len(data.Nodes))
+		for _, n := range data.Nodes {
+			nodeMap[n.ID] = n
+		}
+
+		// Dedup mention edges against existing relation edges.
+		edgeSet := make(map[string]bool)
+		for _, e := range data.Edges {
+			// Use sorted pair key to avoid duplicating A→B vs B→A.
+			key := e.Source + "|" + e.Target
+			if e.Source > e.Target {
+				key = e.Target + "|" + e.Source
+			}
+			edgeSet[key] = true
+		}
+
+		for _, m := range mentions {
+			key := m.SourceEntityID + "|" + m.TargetEntityID
+			if m.SourceEntityID > m.TargetEntityID {
+				key = m.TargetEntityID + "|" + m.SourceEntityID
+			}
+			// Skip if this pair already has a relation edge.
+			if edgeSet[key] {
+				continue
+			}
+			edgeSet[key] = true
+
+			data.Edges = append(data.Edges, GraphEdge{
+				Source: m.SourceEntityID,
+				Target: m.TargetEntityID,
+				Type:   "mentioned in",
+				Kind:   "mention",
+			})
+
+			// Ensure both source and target appear as nodes.
+			// Note: mention targets that don't have full node data yet will be
+			// added by the frontend when it resolves the IDs. For now we track
+			// that they exist in the node map.
+			if _, ok := nodeMap[m.SourceEntityID]; !ok {
+				// Placeholder node — entity exists but wasn't in a relation.
+				nodeMap[m.SourceEntityID] = GraphNode{ID: m.SourceEntityID}
+			}
+			if _, ok := nodeMap[m.TargetEntityID]; !ok {
+				nodeMap[m.TargetEntityID] = GraphNode{ID: m.TargetEntityID}
+			}
+		}
+
+		// Rebuild nodes from map.
+		data.Nodes = make([]GraphNode, 0, len(nodeMap))
+		for _, n := range nodeMap {
+			data.Nodes = append(data.Nodes, n)
+		}
+	}
+
+	// Apply type filter: keep only nodes matching the requested types.
+	if len(filter.Types) > 0 {
+		typeSet := make(map[string]bool, len(filter.Types))
+		for _, t := range filter.Types {
+			typeSet[strings.ToLower(t)] = true
+		}
+
+		allowedNodes := make(map[string]bool)
+		var filtered []GraphNode
+		for _, n := range data.Nodes {
+			if typeSet[strings.ToLower(n.Type)] {
+				filtered = append(filtered, n)
+				allowedNodes[n.ID] = true
+			}
+		}
+		data.Nodes = filtered
+
+		// Remove edges that reference removed nodes.
+		var filteredEdges []GraphEdge
+		for _, e := range data.Edges {
+			if allowedNodes[e.Source] && allowedNodes[e.Target] {
+				filteredEdges = append(filteredEdges, e)
+			}
+		}
+		data.Edges = filteredEdges
+	}
+
+	// Apply search filter: keep only nodes whose name matches (case-insensitive).
+	if filter.Search != "" {
+		search := strings.ToLower(filter.Search)
+		allowedNodes := make(map[string]bool)
+		var filtered []GraphNode
+		for _, n := range data.Nodes {
+			if strings.Contains(strings.ToLower(n.Name), search) {
+				filtered = append(filtered, n)
+				allowedNodes[n.ID] = true
+			}
+		}
+		data.Nodes = filtered
+
+		var filteredEdges []GraphEdge
+		for _, e := range data.Edges {
+			if allowedNodes[e.Source] && allowedNodes[e.Target] {
+				filteredEdges = append(filteredEdges, e)
+			}
+		}
+		data.Edges = filteredEdges
+	}
+
+	// Apply BFS local graph if a focus entity is specified.
+	if filter.FocusEntityID != "" {
+		hops := filter.Hops
+		if hops <= 0 {
+			hops = 2
+		}
+		data = bfsSubgraph(data, filter.FocusEntityID, hops)
+	}
+
+	// Ensure non-nil slices for JSON serialization.
+	if data.Nodes == nil {
+		data.Nodes = []GraphNode{}
+	}
+	if data.Edges == nil {
+		data.Edges = []GraphEdge{}
+	}
+
+	return data, nil
+}
+
+// bfsSubgraph returns the subgraph reachable within maxHops from the focus
+// entity. Uses breadth-first search treating all edges as undirected.
+func bfsSubgraph(data *GraphData, focusID string, maxHops int) *GraphData {
+	// Build adjacency list.
+	adj := make(map[string][]string)
+	for _, e := range data.Edges {
+		adj[e.Source] = append(adj[e.Source], e.Target)
+		adj[e.Target] = append(adj[e.Target], e.Source)
+	}
+
+	// BFS from focus.
+	visited := map[string]int{focusID: 0}
+	queue := []string{focusID}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		depth := visited[current]
+		if depth >= maxHops {
+			continue
+		}
+		for _, neighbor := range adj[current] {
+			if _, seen := visited[neighbor]; !seen {
+				visited[neighbor] = depth + 1
+				queue = append(queue, neighbor)
+			}
+		}
+	}
+
+	// Build node lookup for filtering.
+	nodeMap := make(map[string]GraphNode, len(data.Nodes))
+	for _, n := range data.Nodes {
+		nodeMap[n.ID] = n
+	}
+
+	// Collect reachable nodes.
+	nodes := make([]GraphNode, 0, len(visited))
+	for id := range visited {
+		if n, ok := nodeMap[id]; ok {
+			nodes = append(nodes, n)
+		}
+	}
+
+	// Collect edges where both endpoints are reachable.
+	var edges []GraphEdge
+	for _, e := range data.Edges {
+		if _, srcOk := visited[e.Source]; srcOk {
+			if _, tgtOk := visited[e.Target]; tgtOk {
+				edges = append(edges, e)
+			}
+		}
+	}
+	if edges == nil {
+		edges = []GraphEdge{}
+	}
+
+	return &GraphData{Nodes: nodes, Edges: edges}
 }

@@ -1114,6 +1114,39 @@ func (h *Handler) UpdateImageAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// UpdateCoverImageAPI updates the entity's cover/banner image path.
+// PUT /campaigns/:id/entities/:eid/cover-image
+func (h *Handler) UpdateCoverImageAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+
+	// IDOR protection.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var body struct {
+		ImagePath string `json:"image_path"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdateCoverImage(c.Request().Context(), entityID, body.ImagePath); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- Preview API ---
 
 // htmlTagPattern matches HTML tags for stripping in entry excerpts.

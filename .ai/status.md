@@ -8,19 +8,24 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
+2026-03-10 -- **Sprint V-4: Enhanced Graph View & Cover Images (COMPLETE).**
+
+18. **@Mention edges in graph**: `FindAllMentionLinks()` in entity repository scans `entry_html` for `data-mention-id` attributes across a campaign. `MentionLink` model. `GetMentionLinks()` service method. `MentionLinkProvider` interface bridges entities→relations without circular imports. Mention edges appear as dashed purple lines in the D3 graph.
+
+19. **Graph API filtering**: `GetFilteredGraphData()` with `GraphFilter` struct supporting `types` (entity type slugs), `search` (name match), `focus`+`hops` (BFS local/ego graph), `include_mentions`, `include_orphans`. BFS subgraph extraction via `bfsSubgraph()`. `GraphEdge.Kind` field distinguishes "relation" vs "mention" edges.
+
+20. **Graph UI enhancements**: Updated `relation_graph.js` with: filter toolbar (type multi-select, search input, mention toggle, orphan toggle), dashed mention edges with purple color, node sizing by connection count, type-based clustering via `d3.forceX/forceY`, orphan nodes with dotted borders, enhanced legend showing edge types and orphan indicator.
+
+21. **Graph page template updates**: `GraphPage` handler now fetches entity types for filter dropdown. Template passes entity types as JSON via `data-entity-types` attribute. `EntityTypeListerForGraph` interface with adapter.
+
+22. **Cover image layout block**: Migration `000004_cover_image` adds `cover_image_path` column to entities. `cover_image` block type registered in block registry. `blockCoverImage()` templ component with configurable height (sm/md/lg) and overlay (none/gradient/dark). `UpdateCoverImageAPI` endpoint at `PUT /campaigns/:id/entities/:eid/cover-image`. Reuses `image-upload` widget for upload.
+
+23. **Local graph block**: `local_graph` block type registered in block registry. `blockLocalGraph()` renders a mini `relation-graph` widget with `data-focus-entity` and `data-hops` attributes for ego-graph mode on entity profile pages.
+
+### Previous Update
 2026-03-10 -- **Sprint V-3: Content Templates (COMPLETE).**
 
-12. **Content templates migration**: `content_templates` table with campaign_id FK, entity_type_id FK, TipTap JSON/HTML content, icon, sort order, and global flag.
-
-13. **Content template CRUD**: `ContentTemplateRepository` (Create, FindByID, ListForCampaign, ListForCampaignAndType, Update, Delete), `ContentTemplateService` (validation, CRUD, SeedDefaults), `ContentTemplateHandler` (REST API: GET/POST/PUT/DELETE at `/content-templates`).
-
-14. **Template picker on entity create form**: Dropdown appears when entity type is selected, populated via API. Selected template content is applied to the entity entry after creation.
-
-15. **Editor slash command**: `/template` or `/insert template` in the editor shows a floating menu of available templates. Selecting one inserts the template's ProseMirror content at the cursor position.
-
-16. **Default templates**: Four built-in templates (Session Recap, NPC Profile, Location, Quest Log) are seeded on campaign creation via `ContentTemplateSeeder` interface.
-
-17. **Customization Hub tab**: "Content Templates" tab shows all campaign templates with create/edit/delete for campaign-scoped templates. Built-in templates show read-only badge.
+12-17. Content templates: migration, CRUD, template picker, editor slash command, default templates, Customization Hub tab.
 
 ### Previous Update
 2026-03-10 -- **Cleanup & consolidation pass after bug fixes.**

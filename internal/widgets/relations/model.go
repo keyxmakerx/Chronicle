@@ -10,6 +10,7 @@
 package relations
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 )
@@ -129,23 +130,62 @@ type GraphRelation struct {
 
 // GraphNode represents an entity in the relations graph.
 type GraphNode struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Icon  string `json:"icon"`
-	Color string `json:"color"`
-	Slug  string `json:"slug"`
-	Type  string `json:"type"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Icon   string `json:"icon"`
+	Color  string `json:"color"`
+	Slug   string `json:"slug"`
+	Type   string `json:"type"`
+	Orphan bool   `json:"orphan,omitempty"` // True if entity has no connections.
 }
 
-// GraphEdge represents a relation in the relations graph.
+// GraphEdge represents a relation or mention link in the relations graph.
 type GraphEdge struct {
 	Source string `json:"source"`
 	Target string `json:"target"`
 	Type   string `json:"type"`
+	Kind   string `json:"kind"` // "relation" (default) or "mention"
+}
+
+// MentionLinkData holds a directional @mention reference for the graph.
+// Defined here to avoid importing the entities package.
+type MentionLinkData struct {
+	SourceEntityID string
+	TargetEntityID string
+}
+
+// MentionLinkProvider supplies @mention link data for the graph visualization.
+// Implemented by the entities service.
+type MentionLinkProvider interface {
+	GetMentionLinksForGraph(ctx context.Context, campaignID string, includeDmOnly bool, userID string) ([]MentionLinkData, error)
+}
+
+// EntityTypeSummary holds minimal entity type info for the graph filter UI.
+type EntityTypeSummary struct {
+	Slug  string `json:"slug"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
+	Icon  string `json:"icon"`
+}
+
+// EntityTypeListerForGraph provides entity type listings for the graph page.
+// Implemented by an adapter wrapping the entity service.
+type EntityTypeListerForGraph interface {
+	ListEntityTypesForGraph(ctx context.Context, campaignID string) ([]EntityTypeSummary, error)
 }
 
 // GraphData is the JSON response for the relations graph API.
 type GraphData struct {
 	Nodes []GraphNode `json:"nodes"`
 	Edges []GraphEdge `json:"edges"`
+}
+
+// GraphFilter holds query parameters for filtering the relations graph.
+type GraphFilter struct {
+	Types           []string // Filter nodes by entity type slugs.
+	Search          string   // Filter nodes whose name matches (case-insensitive).
+	FocusEntityID   string   // Ego-graph center: show only N hops from this entity.
+	Hops            int      // Number of hops from focus entity (default 2).
+	IncludeMentions bool     // Include @mention edges alongside explicit relations.
+	IncludeOrphans  bool     // Include entities with zero connections.
 }

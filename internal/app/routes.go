@@ -606,6 +606,64 @@ func (a *widgetBlockListerAdapter) GetWidgetBlockMetas(ctx context.Context, camp
 	return metas
 }
 
+// mentionLinkAdapter wraps entities.EntityService to implement the
+// relations.MentionLinkProvider interface, supplying @mention link data
+// for the graph visualization without creating a circular import.
+type mentionLinkAdapter struct {
+	svc entities.EntityService
+}
+
+// GetMentionLinksForGraph returns @mention references across a campaign for
+// the relations graph. Converts between entity and relations package types.
+func (a *mentionLinkAdapter) GetMentionLinksForGraph(ctx context.Context, campaignID string, includeDmOnly bool, userID string) ([]relations.MentionLinkData, error) {
+	// Determine role for visibility filtering: DM sees everything, others
+	// see only entities they have access to.
+	role := permissions.RolePlayer
+	if includeDmOnly {
+		role = permissions.RoleOwner
+	}
+
+	links, err := a.svc.GetMentionLinks(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]relations.MentionLinkData, len(links))
+	for i, l := range links {
+		result[i] = relations.MentionLinkData{
+			SourceEntityID: l.SourceEntityID,
+			TargetEntityID: l.TargetEntityID,
+		}
+	}
+	return result, nil
+}
+
+// entityTypeListerForGraphAdapter wraps entities.EntityService to implement the
+// relations.EntityTypeListerForGraph interface for the graph filter dropdown.
+type entityTypeListerForGraphAdapter struct {
+	svc entities.EntityService
+}
+
+// ListEntityTypesForGraph returns entity types as lightweight summaries.
+func (a *entityTypeListerForGraphAdapter) ListEntityTypesForGraph(ctx context.Context, campaignID string) ([]relations.EntityTypeSummary, error) {
+	etypes, err := a.svc.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]relations.EntityTypeSummary, 0, len(etypes))
+	for _, et := range etypes {
+		if !et.Enabled {
+			continue
+		}
+		result = append(result, relations.EntityTypeSummary{
+			Slug:  et.Slug,
+			Name:  et.Name,
+			Color: et.Color,
+			Icon:  et.Icon,
+		})
+	}
+	return result, nil
+}
+
 // RegisterRoutes sets up all application routes. It registers public routes
 // directly and delegates to each plugin's route registration function.
 //
@@ -882,7 +940,9 @@ func (a *App) RegisterRoutes() {
 	// so it can be injected into the API handler for shop inventory support.
 	relRepo := relations.NewRelationRepository(a.DB)
 	relService := relations.NewRelationService(relRepo)
+	relService.SetMentionLinkProvider(&mentionLinkAdapter{svc: entityService})
 	relHandler := relations.NewHandler(relService)
+	relHandler.SetEntityTypeLister(&entityTypeListerForGraphAdapter{svc: entityService})
 	relations.RegisterRoutes(e, relHandler, campaignService, authService)
 
 	// Posts widget: entity sub-notes with rich text, visibility, and reorder.

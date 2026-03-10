@@ -219,6 +219,7 @@ type Entity struct {
 	Entry          *string         `json:"entry,omitempty"`     // TipTap/ProseMirror JSON document.
 	EntryHTML      *string         `json:"entry_html,omitempty"` // Pre-rendered HTML from entry.
 	ImagePath      *string         `json:"image_path,omitempty"`
+	CoverImagePath *string         `json:"cover_image_path,omitempty"` // Full-width banner image.
 	ParentID       *string         `json:"parent_id,omitempty"`
 	SortOrder      int             `json:"sort_order"`            // Manual ordering within parent/category (0 = default).
 	TypeLabel      *string         `json:"type_label,omitempty"` // Freeform subtype (e.g., "City" for a Location).
@@ -592,4 +593,14 @@ const MaxAliasLength = 200
 type BacklinkEntry struct {
 	Entity  Entity `json:"entity"`
 	Snippet string `json:"snippet"`
+}
+
+// --- Mention Links (for graph visualization) ---
+
+// MentionLink represents a directional @mention reference from one entity to
+// another, extracted from entry_html. Used by the relations graph to show
+// mention-based edges alongside explicit relations.
+type MentionLink struct {
+	SourceEntityID string `json:"sourceEntityId"`
+	TargetEntityID string `json:"targetEntityId"`
 }

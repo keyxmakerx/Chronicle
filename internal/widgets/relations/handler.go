@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -17,12 +18,18 @@ import (
 // thin: bind request, call service, render response. No business logic lives
 // here.
 type Handler struct {
-	service RelationService
+	service    RelationService
+	typeLister EntityTypeListerForGraph
 }
 
 // NewHandler creates a new relation handler backed by the given service.
 func NewHandler(service RelationService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetEntityTypeLister injects the entity type lister for the graph page.
+func (h *Handler) SetEntityTypeLister(lister EntityTypeListerForGraph) {
+	h.typeLister = lister
 }
 
 // ListRelations returns all relations for an entity as JSON
@@ -180,6 +187,15 @@ func (h *Handler) GetCommonTypes(c echo.Context) error {
 
 // GraphAPI returns the relations graph data (nodes + edges) for a campaign
 // as JSON. Used by the D3 force-directed graph widget.
+//
+// Query parameters:
+//   - types:            comma-separated entity type slugs to filter by
+//   - search:           filter nodes whose name matches (case-insensitive)
+//   - focus:            entity ID for local/ego graph (BFS from this node)
+//   - hops:             number of hops from focus entity (default 2)
+//   - include_mentions: include @mention edges (default "true")
+//   - include_orphans:  include entities with no connections (default "false")
+//
 // GET /campaigns/:id/relations-graph
 func (h *Handler) GraphAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -188,7 +204,37 @@ func (h *Handler) GraphAPI(c echo.Context) error {
 	}
 
 	includeDmOnly := cc.MemberRole == campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted
-	data, err := h.service.GetGraphData(c.Request().Context(), cc.Campaign.ID, includeDmOnly)
+
+	// Parse filter parameters.
+	filter := GraphFilter{
+		Search:          c.QueryParam("search"),
+		FocusEntityID:   c.QueryParam("focus"),
+		IncludeMentions: c.QueryParam("include_mentions") != "false", // default true
+		IncludeOrphans:  c.QueryParam("include_orphans") == "true",
+	}
+
+	if typesParam := c.QueryParam("types"); typesParam != "" {
+		for _, t := range strings.Split(typesParam, ",") {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				filter.Types = append(filter.Types, t)
+			}
+		}
+	}
+
+	if hopsParam := c.QueryParam("hops"); hopsParam != "" {
+		if n, err := strconv.Atoi(hopsParam); err == nil && n > 0 && n <= 10 {
+			filter.Hops = n
+		}
+	}
+	if filter.Hops == 0 {
+		filter.Hops = 2
+	}
+
+	// Determine user ID for visibility filtering of mention links.
+	userID := auth.GetUserID(c)
+
+	data, err := h.service.GetFilteredGraphData(c.Request().Context(), cc.Campaign.ID, filter, includeDmOnly, userID)
 	if err != nil {
 		return apperror.NewInternal(err)
 	}
@@ -204,5 +250,15 @@ func (h *Handler) GraphPage(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
-	return middleware.Render(c, http.StatusOK, GraphPage(cc))
+	// Fetch entity types for the filter dropdown.
+	var entityTypes []EntityTypeSummary
+	if h.typeLister != nil {
+		var err error
+		entityTypes, err = h.typeLister.ListEntityTypesForGraph(c.Request().Context(), cc.Campaign.ID)
+		if err != nil {
+			return apperror.NewInternal(err)
+		}
+	}
+
+	return middleware.Render(c, http.StatusOK, GraphPage(cc, entityTypes))
 }

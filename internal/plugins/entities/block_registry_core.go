@@ -95,6 +95,22 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return blockExtWidget(ctx.CC, ctx.Entity, ctx.Block)
 	})
 
+	// Cover image block — full-width banner/hero image for entity pages.
+	r.Register(BlockMeta{
+		Type: "cover_image", Label: "Cover Image", Icon: "fa-panorama",
+		Description: "Full-width banner image",
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockCoverImage(ctx.CC, ctx.Entity, ctx.CSRFToken, ctx.Block.Config)
+	})
+
+	// Local graph block — mini-graph showing entity's neighborhood.
+	r.Register(BlockMeta{
+		Type: "local_graph", Label: "Local Graph", Icon: "fa-diagram-project",
+		Description: "Entity relationship neighborhood",
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockLocalGraph(ctx.CC, ctx.Entity, ctx.Block.Config)
+	})
+
 	// Container layout types — rendered by the template editor JS, not by
 	// server-side templ. Registered here so they pass validation.
 	r.Register(BlockMeta{

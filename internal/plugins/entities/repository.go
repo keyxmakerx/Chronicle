@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -430,6 +431,7 @@ type EntityRepository interface {
 	UpdateFields(ctx context.Context, id string, fieldsData map[string]any) error
 	UpdateFieldOverrides(ctx context.Context, id string, overrides *FieldOverrides) error
 	UpdateImage(ctx context.Context, id, imagePath string) error
+	UpdateCoverImage(ctx context.Context, id, coverImagePath string) error
 	Delete(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
 
@@ -481,6 +483,11 @@ type EntityRepository interface {
 	// SetAliases replaces all aliases for an entity with the given list.
 	// Deletes existing aliases and inserts new ones in a single transaction.
 	SetAliases(ctx context.Context, entityID string, aliases []string) error
+
+	// FindAllMentionLinks returns all @mention references across a campaign by
+	// scanning entry_html for data-mention-id attributes. Each result is a
+	// source→target pair. Used by the graph visualization to show mention edges.
+	FindAllMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error)
 }
 
 // entityRepository implements EntityRepository with MariaDB queries.
@@ -519,7 +526,7 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 
 // entitySelectColumns is the standard column list for entity queries with joined type info.
 const entitySelectColumns = `e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	                 e.entry, e.entry_html, e.image_path, e.parent_id, e.sort_order, e.type_label,
+	                 e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.sort_order, e.type_label,
 	                 e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug`
@@ -551,7 +558,7 @@ func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := row.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
-		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.ParentID, &e.SortOrder, &e.TypeLabel,
+		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
@@ -699,6 +706,30 @@ func (r *entityRepository) UpdateImage(ctx context.Context, id, imagePath string
 	result, err := r.db.ExecContext(ctx, query, imgVal, id)
 	if err != nil {
 		return fmt.Errorf("updating entity image: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
+// UpdateCoverImage updates only the cover_image_path for an entity.
+// Used by the cover image upload API.
+func (r *entityRepository) UpdateCoverImage(ctx context.Context, id, coverImagePath string) error {
+	var val any
+	if coverImagePath != "" {
+		val = coverImagePath
+	}
+
+	query := `UPDATE entities SET cover_image_path = ?, updated_at = NOW() WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, val, id)
+	if err != nil {
+		return fmt.Errorf("updating entity cover image: %w", err)
 	}
 
 	rows, err := result.RowsAffected()
@@ -1152,7 +1183,7 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := rows.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
-		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.ParentID, &e.SortOrder, &e.TypeLabel,
+		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
@@ -1444,4 +1475,56 @@ func (r *entityRepository) SetAliases(ctx context.Context, entityID string, alia
 	}
 
 	return tx.Commit()
+}
+
+// mentionIDPattern matches data-mention-id="<uuid>" attributes in entry_html.
+var mentionIDPattern = regexp.MustCompile(`data-mention-id="([a-f0-9-]+)"`)
+
+// FindAllMentionLinks scans all entities in a campaign for @mention references
+// in their entry_html and returns source→target pairs. Respects visibility
+// filtering so players only see links from/to entities they can access.
+func (r *entityRepository) FindAllMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error) {
+	where := `WHERE e.campaign_id = ? AND e.entry_html LIKE '%data-mention-id=%'`
+	args := []any{campaignID}
+
+	visFilter, visArgs := visibilityFilter(role, userID)
+	where += visFilter
+	args = append(args, visArgs...)
+
+	query := fmt.Sprintf(`SELECT e.id, e.entry_html FROM entities e %s`, where)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("finding mention links: %w", err)
+	}
+	defer rows.Close()
+
+	var links []MentionLink
+	for rows.Next() {
+		var sourceID string
+		var entryHTML *string
+		if err := rows.Scan(&sourceID, &entryHTML); err != nil {
+			return nil, fmt.Errorf("scanning mention row: %w", err)
+		}
+		if entryHTML == nil {
+			continue
+		}
+
+		// Extract all mention target IDs from the HTML.
+		matches := mentionIDPattern.FindAllStringSubmatch(*entryHTML, -1)
+		seen := make(map[string]bool)
+		for _, match := range matches {
+			targetID := match[1]
+			// Skip self-mentions and dedup within same entity.
+			if targetID == sourceID || seen[targetID] {
+				continue
+			}
+			seen[targetID] = true
+			links = append(links, MentionLink{
+				SourceEntityID: sourceID,
+				TargetEntityID: targetID,
+			})
+		}
+	}
+	return links, rows.Err()
 }
