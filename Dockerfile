@@ -42,8 +42,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /chronicle ./cmd/server
 # --- Stage 3: Runtime ---
 FROM alpine:3.20
 
-# Install CA certificates for HTTPS calls (if needed) and timezone data.
-RUN apk add --no-cache ca-certificates tzdata
+# Install CA certificates for HTTPS calls (if needed), timezone data, and
+# su-exec for dropping privileges in the entrypoint.
+RUN apk add --no-cache ca-certificates tzdata su-exec
 
 # Create non-root user for runtime security.
 RUN adduser -D -H -s /sbin/nologin chronicle
@@ -62,10 +63,16 @@ COPY --from=builder /src/db/migrations /app/db/migrations
 # Mount a volume at /app/data to persist media across container rebuilds.
 RUN mkdir -p /app/data/media && chown -R chronicle:chronicle /app/data
 
+# Copy entrypoint script that fixes bind-mount permissions before dropping to
+# the non-root chronicle user.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 WORKDIR /app
 
-# Run as non-root user.
-USER chronicle
+# Container starts as root so the entrypoint can fix bind-mount ownership,
+# then drops to the chronicle user via su-exec.
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 # The Go binary serves HTTP directly on this port.
 EXPOSE 8080
