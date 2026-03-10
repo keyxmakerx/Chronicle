@@ -67,8 +67,8 @@ func NewNoteRepository(db *sql.DB) NoteRepository {
 
 // noteColumns is the SELECT column list for notes queries.
 const noteColumns = `id, campaign_id, user_id, entity_id, parent_id, is_folder,
-	title, content, entry, entry_html, color, pinned, is_shared, last_edited_by,
-	locked_by, locked_at, created_at, updated_at`
+	title, content, entry, entry_html, color, pinned, is_shared, shared_with,
+	last_edited_by, locked_by, locked_at, created_at, updated_at`
 
 // Create inserts a new note into the database.
 func (r *noteRepository) Create(ctx context.Context, note *Note) error {
@@ -80,14 +80,16 @@ func (r *noteRepository) Create(ctx context.Context, note *Note) error {
 	query := `INSERT INTO notes
 		(id, campaign_id, user_id, entity_id, parent_id, is_folder,
 		 title, content, entry, entry_html,
-		 color, pinned, is_shared, last_edited_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		 color, pinned, is_shared, shared_with, last_edited_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	sharedWithJSON := MarshalSharedWith(note.SharedWith)
 
 	_, err = r.db.ExecContext(ctx, query,
 		note.ID, note.CampaignID, note.UserID, note.EntityID,
 		note.ParentID, note.IsFolder,
 		note.Title, contentJSON, note.Entry, note.EntryHTML,
-		note.Color, note.Pinned, note.IsShared, note.LastEditedBy,
+		note.Color, note.Pinned, note.IsShared, sharedWithJSON, note.LastEditedBy,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting note: %w", err)
@@ -112,16 +114,18 @@ func (r *noteRepository) Update(ctx context.Context, note *Note) error {
 		return fmt.Errorf("marshaling note content: %w", err)
 	}
 
+	sharedWithJSON := MarshalSharedWith(note.SharedWith)
+
 	query := `UPDATE notes
 		SET title = ?, content = ?, entry = ?, entry_html = ?,
-		    color = ?, pinned = ?, is_shared = ?, last_edited_by = ?,
-		    parent_id = ?, updated_at = CURRENT_TIMESTAMP
+		    color = ?, pinned = ?, is_shared = ?, shared_with = ?,
+		    last_edited_by = ?, parent_id = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query,
 		note.Title, contentJSON, note.Entry, note.EntryHTML,
-		note.Color, note.Pinned, note.IsShared, note.LastEditedBy,
-		note.ParentID, note.ID,
+		note.Color, note.Pinned, note.IsShared, sharedWithJSON,
+		note.LastEditedBy, note.ParentID, note.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating note: %w", err)
@@ -148,28 +152,32 @@ func (r *noteRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// noteVisFilter is the WHERE fragment for note visibility: own notes, shared
+// with everyone (is_shared), or shared with this specific user (shared_with JSON).
+const noteVisFilter = `(user_id = ? OR is_shared = TRUE OR JSON_CONTAINS(shared_with, JSON_QUOTE(?), '$'))`
+
 // ListByUserAndCampaign returns own + shared notes for a user in a campaign.
 func (r *noteRepository) ListByUserAndCampaign(ctx context.Context, userID, campaignID string) ([]Note, error) {
 	query := `SELECT ` + noteColumns + `
-		FROM notes WHERE campaign_id = ? AND (user_id = ? OR is_shared = TRUE)
+		FROM notes WHERE campaign_id = ? AND ` + noteVisFilter + `
 		ORDER BY pinned DESC, updated_at DESC`
-	return r.scanNotes(ctx, query, campaignID, userID)
+	return r.scanNotes(ctx, query, campaignID, userID, userID)
 }
 
 // ListByEntity returns own + shared notes scoped to a specific entity.
 func (r *noteRepository) ListByEntity(ctx context.Context, userID, campaignID, entityID string) ([]Note, error) {
 	query := `SELECT ` + noteColumns + `
-		FROM notes WHERE campaign_id = ? AND (user_id = ? OR is_shared = TRUE) AND entity_id = ?
+		FROM notes WHERE campaign_id = ? AND ` + noteVisFilter + ` AND entity_id = ?
 		ORDER BY pinned DESC, updated_at DESC`
-	return r.scanNotes(ctx, query, campaignID, userID, entityID)
+	return r.scanNotes(ctx, query, campaignID, userID, userID, entityID)
 }
 
 // ListCampaignWide returns own + shared campaign-wide notes (not entity-scoped).
 func (r *noteRepository) ListCampaignWide(ctx context.Context, userID, campaignID string) ([]Note, error) {
 	query := `SELECT ` + noteColumns + `
-		FROM notes WHERE campaign_id = ? AND (user_id = ? OR is_shared = TRUE) AND entity_id IS NULL
+		FROM notes WHERE campaign_id = ? AND ` + noteVisFilter + ` AND entity_id IS NULL
 		ORDER BY pinned DESC, updated_at DESC`
-	return r.scanNotes(ctx, query, campaignID, userID)
+	return r.scanNotes(ctx, query, campaignID, userID, userID)
 }
 
 // AcquireLock tries to take the edit lock. Stale locks (older than 5 min)
@@ -320,13 +328,14 @@ func (r *noteRepository) PruneVersions(ctx context.Context, noteID string, keep 
 func (r *noteRepository) scanNote(row *sql.Row) (*Note, error) {
 	n := &Note{}
 	var contentRaw []byte
+	var sharedWithRaw *string
 
 	err := row.Scan(
 		&n.ID, &n.CampaignID, &n.UserID, &n.EntityID,
 		&n.ParentID, &n.IsFolder,
 		&n.Title, &contentRaw, &n.Entry, &n.EntryHTML,
-		&n.Color, &n.Pinned, &n.IsShared, &n.LastEditedBy,
-		&n.LockedBy, &n.LockedAt,
+		&n.Color, &n.Pinned, &n.IsShared, &sharedWithRaw,
+		&n.LastEditedBy, &n.LockedBy, &n.LockedAt,
 		&n.CreatedAt, &n.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -341,6 +350,7 @@ func (r *noteRepository) scanNote(row *sql.Row) (*Note, error) {
 			return nil, fmt.Errorf("unmarshaling note content: %w", err)
 		}
 	}
+	n.SharedWith = UnmarshalSharedWith(sharedWithRaw)
 	return n, nil
 }
 
@@ -356,13 +366,14 @@ func (r *noteRepository) scanNotes(ctx context.Context, query string, args ...an
 	for rows.Next() {
 		n := Note{}
 		var contentRaw []byte
+		var sharedWithRaw *string
 
 		if err := rows.Scan(
 			&n.ID, &n.CampaignID, &n.UserID, &n.EntityID,
 			&n.ParentID, &n.IsFolder,
 			&n.Title, &contentRaw, &n.Entry, &n.EntryHTML,
-			&n.Color, &n.Pinned, &n.IsShared, &n.LastEditedBy,
-			&n.LockedBy, &n.LockedAt,
+			&n.Color, &n.Pinned, &n.IsShared, &sharedWithRaw,
+			&n.LastEditedBy, &n.LockedBy, &n.LockedAt,
 			&n.CreatedAt, &n.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning note row: %w", err)
@@ -373,6 +384,7 @@ func (r *noteRepository) scanNotes(ctx context.Context, query string, args ...an
 				return nil, fmt.Errorf("unmarshaling note content: %w", err)
 			}
 		}
+		n.SharedWith = UnmarshalSharedWith(sharedWithRaw)
 		notes = append(notes, n)
 	}
 	return notes, rows.Err()

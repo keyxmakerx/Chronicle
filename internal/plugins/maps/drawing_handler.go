@@ -57,7 +57,7 @@ func (h *DrawingHandler) ListDrawings(c echo.Context) error {
 		return err
 	}
 
-	role := int(cc.MemberRole)
+	role := cc.VisibilityRole()
 	drawings, err := h.drawingSvc.ListDrawings(c.Request().Context(), mapID, role)
 	if err != nil {
 		return err
@@ -204,7 +204,7 @@ func (h *DrawingHandler) ListTokens(c echo.Context) error {
 		return err
 	}
 
-	role := int(cc.MemberRole)
+	role := cc.VisibilityRole()
 	tokens, err := h.drawingSvc.ListTokens(c.Request().Context(), mapID, role)
 	if err != nil {
 		return err

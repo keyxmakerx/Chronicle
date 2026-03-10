@@ -1124,6 +1124,43 @@
            hover:text-fg hover:bg-surface-alt cursor-pointer transition-colors truncate;
   }
 
+  /* Share popover dropdown. */
+  .note-share-wrap {
+    @apply relative;
+  }
+  .note-share-popover {
+    @apply absolute right-0 top-full mt-1 bg-surface border border-edge
+           rounded-lg shadow-lg py-2 px-3 z-20 min-w-[180px];
+  }
+  .note-share-hidden {
+    @apply hidden;
+  }
+  .note-share-opts {
+    @apply flex flex-col gap-1.5 text-xs text-fg-secondary;
+  }
+  .note-share-opt {
+    @apply flex items-center gap-1.5 cursor-pointer hover:text-fg transition-colors;
+  }
+  .note-share-opt input[type="radio"] {
+    @apply accent-primary;
+  }
+  .note-share-members {
+    @apply mt-2 pt-2 border-t border-edge flex flex-col gap-1 max-h-[120px] overflow-y-auto;
+  }
+  .note-share-member {
+    @apply flex items-center gap-1.5 text-xs text-fg-secondary cursor-pointer
+           hover:text-fg transition-colors;
+  }
+  .note-share-member input[type="checkbox"] {
+    @apply accent-primary;
+  }
+  .note-share-no-members {
+    @apply text-[10px] text-fg-muted italic;
+  }
+  .note-share-members-loading {
+    @apply text-[10px] text-fg-muted;
+  }
+
   /* New folder button in quick-add row. */
   .notes-new-folder-btn {
     @apply shrink-0 ml-1;

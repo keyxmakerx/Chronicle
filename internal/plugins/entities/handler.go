@@ -224,7 +224,7 @@ func (h *Handler) Index(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
-	role := int(cc.MemberRole)
+	role := cc.VisibilityRole()
 	campaignID := cc.Campaign.ID
 	userID := auth.GetUserID(c)
 
@@ -280,7 +280,7 @@ func (h *Handler) Index(c echo.Context) error {
 		}
 		// Scribes+ see all tags including dm_only; Players see only public tags.
 		cc := campaigns.GetCampaignContext(c)
-		includeDmOnly := cc != nil && cc.MemberRole >= campaigns.RoleScribe
+		includeDmOnly := cc != nil && (cc.MemberRole >= campaigns.RoleScribe || cc.IsDmGranted)
 		if tagsMap, err := h.tagFetcher.GetEntityTagsBatch(c.Request().Context(), entityIDs, includeDmOnly); err == nil {
 			for i := range entities {
 				if t, ok := tagsMap[entities[i].ID]; ok {
@@ -618,7 +618,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
-	role := int(cc.MemberRole)
+	role := cc.VisibilityRole()
 	userID := auth.GetUserID(c)
 	query := c.QueryParam("q")
 	typeID, _ := strconv.Atoi(c.QueryParam("type"))
@@ -1432,7 +1432,7 @@ func (h *Handler) EntityNamesAPI(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	role := int(cc.MemberRole)
+	role := cc.VisibilityRole()
 	userID := auth.GetUserID(c)
 	cacheKey := fmt.Sprintf("entity-names:%s:%d:%s", cc.Campaign.ID, role, userID)
 
@@ -1484,7 +1484,7 @@ func (h *Handler) EntityTypesPage(c echo.Context) error {
 	}
 
 	// Get entity counts per type so we can show usage and protect used types.
-	role := int(cc.MemberRole)
+	role := cc.VisibilityRole()
 	counts, _ := h.service.CountByType(c.Request().Context(), cc.Campaign.ID, role, auth.GetUserID(c))
 
 	csrfToken := middleware.GetCSRFToken(c)
@@ -2085,7 +2085,7 @@ func (h *Handler) BacklinksFragment(c echo.Context) error {
 
 	entityID := c.Param("eid")
 	ctx := c.Request().Context()
-	role := int(cc.MemberRole)
+	role := cc.VisibilityRole()
 	userID := auth.GetUserID(c)
 
 	// Try Redis cache for JSON response.

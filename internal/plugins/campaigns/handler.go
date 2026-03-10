@@ -464,6 +464,55 @@ func (h *Handler) UpdateAccentColorAPI(c echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
+// UpdateDmGrantsAPI handles PUT /campaigns/:id/dm-grants. Sets which users
+// are granted visibility of dm_only content (co-DM privileges).
+func (h *Handler) UpdateDmGrantsAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can manage DM grants")
+	}
+
+	var req struct {
+		UserIDs []string `json:"user_ids"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdateDmGrants(c.Request().Context(), cc.Campaign.ID, req.UserIDs); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.dm_grants.updated", map[string]any{"user_ids": req.UserIDs})
+
+	return c.JSON(http.StatusOK, map[string]any{"ok": true})
+}
+
+// GetDmGrantsAPI handles GET /campaigns/:id/dm-grants. Returns the current
+// list of users granted dm_only visibility.
+func (h *Handler) GetDmGrantsAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can view DM grants")
+	}
+
+	settings := cc.Campaign.ParseSettings()
+	ids := settings.DmGrantIDs
+	if ids == nil {
+		ids = []string{}
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"user_ids": ids})
+}
+
 // --- Settings ---
 
 // Settings renders the campaign settings page (GET /campaigns/:id/settings).
@@ -736,6 +785,7 @@ func (h *Handler) ToggleViewAsPlayer(c echo.Context) error {
 // --- Members ---
 
 // Members renders the member list page (GET /campaigns/:id/members).
+// Returns JSON when Accept: application/json is set (for Alpine.js pickers).
 func (h *Handler) Members(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
@@ -745,6 +795,11 @@ func (h *Handler) Members(c echo.Context) error {
 	members, err := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
 	if err != nil {
 		return err
+	}
+
+	// Return JSON for API consumers (Alpine.js widgets).
+	if c.Request().Header.Get("Accept") == "application/json" {
+		return c.JSON(http.StatusOK, members)
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)

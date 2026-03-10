@@ -23,7 +23,7 @@ type MapRepository interface {
 	GetMarker(ctx context.Context, id string) (*Marker, error)
 	UpdateMarker(ctx context.Context, mk *Marker) error
 	DeleteMarker(ctx context.Context, id string) error
-	ListMarkers(ctx context.Context, mapID string, role int) ([]Marker, error)
+	ListMarkers(ctx context.Context, mapID string, role int, userID string) ([]Marker, error)
 }
 
 // mapRepo is the MariaDB implementation of MapRepository.
@@ -111,7 +111,8 @@ func (r *mapRepo) ListMaps(ctx context.Context, campaignID string) ([]Map, error
 // markerCols is the column list for marker queries (with entity join fields).
 const markerCols = `m.id, m.map_id, m.name, m.description,
        m.x, m.y, m.icon, m.color,
-       m.entity_id, m.visibility, m.created_by, m.created_at, m.updated_at,
+       m.entity_id, m.visibility, m.visibility_rules,
+       m.created_by, m.created_at, m.updated_at,
        COALESCE(ent.name, ''), COALESCE(et.icon, '')`
 
 // markerJoins is the LEFT JOIN clause for entity display data.
@@ -123,7 +124,8 @@ func scanMarker(scanner interface{ Scan(...any) error }) (*Marker, error) {
 	mk := &Marker{}
 	err := scanner.Scan(&mk.ID, &mk.MapID, &mk.Name, &mk.Description,
 		&mk.X, &mk.Y, &mk.Icon, &mk.Color,
-		&mk.EntityID, &mk.Visibility, &mk.CreatedBy, &mk.CreatedAt, &mk.UpdatedAt,
+		&mk.EntityID, &mk.Visibility, &mk.VisibilityRules,
+		&mk.CreatedBy, &mk.CreatedAt, &mk.UpdatedAt,
 		&mk.EntityName, &mk.EntityIcon)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -135,10 +137,11 @@ func scanMarker(scanner interface{ Scan(...any) error }) (*Marker, error) {
 func (r *mapRepo) CreateMarker(ctx context.Context, mk *Marker) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO map_markers (id, map_id, name, description,
-		        x, y, icon, color, entity_id, visibility, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        x, y, icon, color, entity_id, visibility, visibility_rules, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		mk.ID, mk.MapID, mk.Name, mk.Description,
-		mk.X, mk.Y, mk.Icon, mk.Color, mk.EntityID, mk.Visibility, mk.CreatedBy,
+		mk.X, mk.Y, mk.Icon, mk.Color, mk.EntityID, mk.Visibility,
+		mk.VisibilityRules, mk.CreatedBy,
 	)
 	return err
 }
@@ -156,11 +159,11 @@ func (r *mapRepo) UpdateMarker(ctx context.Context, mk *Marker) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE map_markers SET name = ?, description = ?,
 		        x = ?, y = ?, icon = ?, color = ?,
-		        entity_id = ?, visibility = ?
+		        entity_id = ?, visibility = ?, visibility_rules = ?
 		 WHERE id = ?`,
 		mk.Name, mk.Description,
 		mk.X, mk.Y, mk.Icon, mk.Color,
-		mk.EntityID, mk.Visibility, mk.ID,
+		mk.EntityID, mk.Visibility, mk.VisibilityRules, mk.ID,
 	)
 	return err
 }
@@ -171,21 +174,53 @@ func (r *mapRepo) DeleteMarker(ctx context.Context, id string) error {
 	return err
 }
 
-// ListMarkers returns all markers for a map, filtered by role.
-// Owners see dm_only markers; others see only 'everyone'.
-func (r *mapRepo) ListMarkers(ctx context.Context, mapID string, role int) ([]Marker, error) {
-	visFilter := "AND m.visibility = 'everyone'"
+// ListMarkers returns all markers for a map, filtered by role and user.
+// Owners see everything. Non-owners see 'everyone' markers (respecting
+// visibility_rules allow/deny lists) and 'specific' markers they are
+// explicitly allowed to see.
+func (r *mapRepo) ListMarkers(ctx context.Context, mapID string, role int, userID string) ([]Marker, error) {
+	// Owners see all markers regardless of visibility settings.
 	if permissions.CanSeeDmOnly(role) {
-		visFilter = ""
+		query := `
+			SELECT ` + markerCols + `
+			FROM map_markers m ` + markerJoins + `
+			WHERE m.map_id = ?
+			ORDER BY m.name`
+		rows, err := r.db.QueryContext(ctx, query, mapID)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		var result []Marker
+		for rows.Next() {
+			mk, err := scanMarker(rows)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, *mk)
+		}
+		return result, rows.Err()
 	}
 
-	query := fmt.Sprintf(`
-		SELECT `+markerCols+`
-		FROM map_markers m `+markerJoins+`
-		WHERE m.map_id = ? %s
-		ORDER BY m.name`, visFilter)
-
-	rows, err := r.db.QueryContext(ctx, query, mapID)
+	// Non-owners: 'everyone' + per-player rules, or 'specific' with allowed_users.
+	query := `
+		SELECT ` + markerCols + `
+		FROM map_markers m ` + markerJoins + `
+		WHERE m.map_id = ?
+		  AND m.visibility != 'dm_only'
+		  AND (
+		    m.visibility_rules IS NULL
+		    OR (
+		      NOT JSON_CONTAINS(m.visibility_rules, JSON_QUOTE(?), '$.denied_users')
+		      AND (
+		        JSON_LENGTH(COALESCE(JSON_EXTRACT(m.visibility_rules, '$.allowed_users'), '[]')) = 0
+		        OR JSON_CONTAINS(m.visibility_rules, JSON_QUOTE(?), '$.allowed_users')
+		      )
+		    )
+		  )
+		ORDER BY m.name`
+	rows, err := r.db.QueryContext(ctx, query, mapID, userID, userID)
 	if err != nil {
 		return nil, err
 	}

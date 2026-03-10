@@ -62,6 +62,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.DELETE("/backdrop", h.RemoveBackdrop, RequireRole(RoleOwner))
 	cg.PUT("/accent-color", h.UpdateAccentColorAPI, RequireRole(RoleOwner))
 
+	// DM grants (Owner only).
+	cg.GET("/dm-grants", h.GetDmGrantsAPI, RequireRole(RoleOwner))
+	cg.PUT("/dm-grants", h.UpdateDmGrantsAPI, RequireRole(RoleOwner))
+
 	// "View as player" display toggle (Owner only).
 	cg.POST("/toggle-view-mode", h.ToggleViewAsPlayer, RequireRole(RoleOwner))
 

@@ -50,9 +50,9 @@ func (h *Handler) logAudit(c echo.Context, campaignID, action, tagName string) {
 }
 
 // canSeeDmOnly returns true if the current user's role permits viewing dm_only
-// tags. Currently Owner-only (will be configurable per-campaign in Phase 2).
+// tags. Owners, site admins, and DM-granted users can see dm_only tags.
 func canSeeDmOnly(cc *campaigns.CampaignContext) bool {
-	return cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin
+	return cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted
 }
 
 // ListTags returns all tags for a campaign as JSON (GET /campaigns/:id/tags).

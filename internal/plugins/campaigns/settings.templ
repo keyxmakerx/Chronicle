@@ -254,6 +254,72 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 				}
 			</div>
 
+			// DM Privileges — grant dm_only visibility to specific members.
+			<div class="card p-6 mb-6" x-data={ fmt.Sprintf(`{
+				members: [],
+				grants: [],
+				loading: true,
+				saving: false,
+				async init() {
+					const [membersRes, grantsRes] = await Promise.all([
+						fetch('/campaigns/%s/members', { headers: { 'Accept': 'application/json' } }),
+						fetch('/campaigns/%s/dm-grants')
+					]);
+					const allMembers = membersRes.ok ? await membersRes.json() : [];
+					this.members = allMembers.filter(m => m.role !== 3);
+					const grantsData = grantsRes.ok ? await grantsRes.json() : { user_ids: [] };
+					this.grants = grantsData.user_ids || [];
+					this.loading = false;
+				},
+				isGranted(id) { return this.grants.includes(id); },
+				toggle(id) {
+					if (this.isGranted(id)) {
+						this.grants = this.grants.filter(g => g !== id);
+					} else {
+						this.grants.push(id);
+					}
+					this.save();
+				},
+				async save() {
+					this.saving = true;
+					await fetch('/campaigns/%s/dm-grants', {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ user_ids: this.grants })
+					});
+					this.saving = false;
+				}
+			}`, cc.Campaign.ID, cc.Campaign.ID, cc.Campaign.ID) }>
+				<h2 class="text-lg font-semibold text-fg mb-2">DM Privileges</h2>
+				<p class="text-sm text-fg-secondary mb-4">
+					Grant members the ability to see DM-only content (tags, relations,
+					timeline events, map markers, etc.) without giving them full ownership.
+				</p>
+				<div x-show="loading" class="text-sm text-fg-muted">
+					<i class="fa-solid fa-spinner fa-spin"></i> Loading members...
+				</div>
+				<div x-show="!loading">
+					<template x-if="members.length === 0">
+						<p class="text-sm text-fg-muted italic">No non-owner members to grant privileges to.</p>
+					</template>
+					<div class="space-y-2">
+						<template x-for="m in members" :key="m.user_id">
+							<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
+								<input type="checkbox" class="accent-primary" :checked="isGranted(m.user_id)" @change="toggle(m.user_id)"/>
+								<div class="flex-1 min-w-0">
+									<span class="text-sm font-medium text-fg" x-text="m.display_name || m.email"></span>
+									<span class="text-xs text-fg-muted ml-1" x-text="m.role === 2 ? '(Scribe)' : '(Player)'"></span>
+								</div>
+								<span x-show="isGranted(m.user_id)" class="text-[10px] text-accent font-medium">DM View</span>
+							</label>
+						</template>
+					</div>
+					<p x-show="saving" class="text-xs text-fg-muted mt-2">
+						<i class="fa-solid fa-spinner fa-spin"></i> Saving...
+					</p>
+				</div>
+			</div>
+
 			// Danger zone.
 			<div class="card p-6 border-red-200 dark:border-red-800">
 				<h2 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-4">Danger Zone</h2>

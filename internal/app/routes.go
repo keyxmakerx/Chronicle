@@ -911,6 +911,7 @@ func (a *App) RegisterRoutes() {
 	noteRepo := notes.NewNoteRepository(a.DB)
 	noteService := notes.NewNoteService(noteRepo)
 	noteHandler := notes.NewHandler(noteService)
+	noteHandler.SetMemberLister(campaignService)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 
 	// Relations widget routes already registered above (before REST API v1).

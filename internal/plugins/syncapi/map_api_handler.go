@@ -90,8 +90,14 @@ func (h *MapAPIHandler) GetMap(c echo.Context) error {
 	role := h.resolveRole(c)
 	ctx := c.Request().Context()
 
+	// Resolve user ID from API key for per-player filtering.
+	userID := ""
+	if key := GetAPIKey(c); key != nil {
+		userID = key.UserID
+	}
+
 	// Load markers for the map.
-	markers, err := h.mapSvc.ListMarkers(ctx, m.ID, role)
+	markers, err := h.mapSvc.ListMarkers(ctx, m.ID, role, userID)
 	if err != nil {
 		slog.Error("api: list markers failed", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to load markers"))

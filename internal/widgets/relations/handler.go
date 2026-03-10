@@ -44,7 +44,7 @@ func (h *Handler) ListRelations(c echo.Context) error {
 	}
 
 	// Filter dm_only relations for non-DM users.
-	if cc.MemberRole != campaigns.RoleOwner && !cc.IsSiteAdmin {
+	if cc.MemberRole != campaigns.RoleOwner && !cc.IsSiteAdmin && !cc.IsDmGranted {
 		filtered := make([]Relation, 0, len(relations))
 		for _, r := range relations {
 			if !r.DmOnly {
@@ -187,7 +187,7 @@ func (h *Handler) GraphAPI(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
-	includeDmOnly := cc.MemberRole == campaigns.RoleOwner || cc.IsSiteAdmin
+	includeDmOnly := cc.MemberRole == campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted
 	data, err := h.service.GetGraphData(c.Request().Context(), cc.Campaign.ID, includeDmOnly)
 	if err != nil {
 		return apperror.NewInternal(err)

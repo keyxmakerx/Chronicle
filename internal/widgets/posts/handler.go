@@ -35,8 +35,8 @@ func (h *Handler) ListPosts(c echo.Context) error {
 		return apperror.NewBadRequest("entity ID is required")
 	}
 
-	// Scribes and above see DM-only posts.
-	includeDMOnly := cc.MemberRole >= campaigns.RoleScribe
+	// Scribes and above see DM-only posts; DM-granted users also see them.
+	includeDMOnly := cc.MemberRole >= campaigns.RoleScribe || cc.IsDmGranted
 
 	posts, err := h.service.ListByEntity(c.Request().Context(), entityID, includeDMOnly)
 	if err != nil {

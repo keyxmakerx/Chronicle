@@ -94,7 +94,7 @@ func (m *mockMapRepo) DeleteMarker(ctx context.Context, id string) error {
 	return nil
 }
 
-func (m *mockMapRepo) ListMarkers(ctx context.Context, mapID string, role int) ([]Marker, error) {
+func (m *mockMapRepo) ListMarkers(ctx context.Context, mapID string, role int, userID string) ([]Marker, error) {
 	if m.listMarkersFn != nil {
 		return m.listMarkersFn(ctx, mapID, role)
 	}
@@ -768,7 +768,7 @@ func TestListMarkers_Success(t *testing.T) {
 	}
 	svc := newTestMapService(repo)
 
-	markers, err := svc.ListMarkers(context.Background(), "map-1", 3)
+	markers, err := svc.ListMarkers(context.Background(), "map-1", 3, "owner-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

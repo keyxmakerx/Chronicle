@@ -75,6 +75,7 @@ func (s *noteService) Create(ctx context.Context, campaignID, userID string, req
 		Content:      content,
 		Color:        color,
 		IsShared:     req.IsShared,
+		SharedWith:   req.SharedWith,
 		LastEditedBy: &userID,
 	}
 
@@ -128,6 +129,9 @@ func (s *noteService) Update(ctx context.Context, id, userID string, req UpdateN
 	}
 	if req.IsShared != nil {
 		note.IsShared = *req.IsShared
+	}
+	if req.SharedWith != nil {
+		note.SharedWith = req.SharedWith
 	}
 	if req.ParentID != nil {
 		// Empty string means move to top-level.

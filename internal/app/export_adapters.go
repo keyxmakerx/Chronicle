@@ -514,7 +514,7 @@ func (a *mapExportAdapter) ExportMaps(ctx context.Context, campaignID string, en
 		}
 
 		// Markers (owner role sees all).
-		markers, err := a.mapSvc.ListMarkers(ctx, m.ID, ownerRole)
+		markers, err := a.mapSvc.ListMarkers(ctx, m.ID, ownerRole, "")
 		if err == nil {
 			for _, mk := range markers {
 				var entitySlug *string

@@ -63,10 +63,25 @@ func RequireCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 				return apperror.NewForbidden("you are not a member of this campaign")
 			}
 
+			// Check if this member has been granted dm_only visibility.
+			cc.IsDmGranted = hasDmGrant(campaign, session.UserID)
+
 			c.Set(contextKeyCampaign, cc)
 			return next(c)
 		}
 	}
+}
+
+// hasDmGrant checks whether a user has been granted dm_only visibility
+// via the campaign's DmGrantIDs setting.
+func hasDmGrant(campaign *Campaign, userID string) bool {
+	settings := campaign.ParseSettings()
+	for _, id := range settings.DmGrantIDs {
+		if id == userID {
+			return true
+		}
+	}
+	return false
 }
 
 // AllowPublicCampaignAccess is like RequireCampaignAccess but also allows
@@ -108,6 +123,7 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 					// Authenticated non-member viewing public campaign.
 					cc.MemberRole = RolePlayer
 				}
+				cc.IsDmGranted = hasDmGrant(campaign, session.UserID)
 				c.Set(contextKeyCampaign, cc)
 				return next(c)
 			}

@@ -196,6 +196,7 @@ type CampaignContext struct {
 	Campaign    *Campaign
 	MemberRole  Role // Actual membership role, or RoleNone if not a member.
 	IsSiteAdmin bool // True if user has users.is_admin flag.
+	IsDmGranted bool // True if user has been granted dm_only visibility by Owner.
 }
 
 // EffectiveRole returns the permission level to use for route-level authorization.
@@ -203,6 +204,17 @@ type CampaignContext struct {
 // /admin routes instead for admin operations.
 func (cc *CampaignContext) EffectiveRole() Role {
 	return cc.MemberRole
+}
+
+// VisibilityRole returns the effective role for content visibility filtering.
+// DM-granted users are treated as Owners for visibility purposes so they
+// can see dm_only content, while their actual MemberRole stays unchanged
+// for authorization (create/edit) checks.
+func (cc *CampaignContext) VisibilityRole() int {
+	if cc.IsDmGranted {
+		return int(RoleOwner)
+	}
+	return int(cc.MemberRole)
 }
 
 // OwnershipTransfer represents a pending campaign ownership transfer.
@@ -268,7 +280,8 @@ func (c *Campaign) ParseDashboardLayout() *DashboardLayout {
 // CampaignSettings holds campaign-level configuration stored as JSON in
 // the campaigns.settings column. Accent color, display preferences, etc.
 type CampaignSettings struct {
-	AccentColor string `json:"accent_color,omitempty"` // Hex color, e.g. "#6366f1".
+	AccentColor string   `json:"accent_color,omitempty"`   // Hex color, e.g. "#6366f1".
+	DmGrantIDs  []string `json:"dm_grant_ids,omitempty"`   // User IDs granted dm_only visibility.
 }
 
 // ParseSettings parses the campaign's settings JSON into a CampaignSettings

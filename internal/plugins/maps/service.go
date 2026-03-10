@@ -41,7 +41,7 @@ type MapService interface {
 	GetMarker(ctx context.Context, id string) (*Marker, error)
 	UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput) error
 	DeleteMarker(ctx context.Context, id string) error
-	ListMarkers(ctx context.Context, mapID string, role int) ([]Marker, error)
+	ListMarkers(ctx context.Context, mapID string, role int, userID string) ([]Marker, error)
 }
 
 // mapService is the default MapService implementation.
@@ -170,17 +170,18 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 	}
 
 	mk := &Marker{
-		ID:         generateID(),
-		MapID:      input.MapID,
-		Name:       input.Name,
-		Description: input.Description,
-		X:          input.X,
-		Y:          input.Y,
-		Icon:       input.Icon,
-		Color:      input.Color,
-		EntityID:   input.EntityID,
-		Visibility: input.Visibility,
-		CreatedBy:  &input.CreatedBy,
+		ID:              generateID(),
+		MapID:           input.MapID,
+		Name:            input.Name,
+		Description:     input.Description,
+		X:               input.X,
+		Y:               input.Y,
+		Icon:            input.Icon,
+		Color:           input.Color,
+		EntityID:        input.EntityID,
+		Visibility:      input.Visibility,
+		VisibilityRules: input.VisibilityRules,
+		CreatedBy:       &input.CreatedBy,
 	}
 	if err := s.repo.CreateMarker(ctx, mk); err != nil {
 		return nil, fmt.Errorf("create marker: %w", err)
@@ -233,6 +234,7 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	mk.Color = input.Color
 	mk.EntityID = input.EntityID
 	mk.Visibility = input.Visibility
+	mk.VisibilityRules = input.VisibilityRules
 
 	if err := s.repo.UpdateMarker(ctx, mk); err != nil {
 		return fmt.Errorf("update marker: %w", err)
@@ -255,9 +257,9 @@ func (s *mapService) DeleteMarker(ctx context.Context, id string) error {
 	return nil
 }
 
-// ListMarkers returns all markers for a map, filtered by role.
-func (s *mapService) ListMarkers(ctx context.Context, mapID string, role int) ([]Marker, error) {
-	markers, err := s.repo.ListMarkers(ctx, mapID, role)
+// ListMarkers returns all markers for a map, filtered by role and user.
+func (s *mapService) ListMarkers(ctx context.Context, mapID string, role int, userID string) ([]Marker, error) {
+	markers, err := s.repo.ListMarkers(ctx, mapID, role, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list markers: %w", err)
 	}

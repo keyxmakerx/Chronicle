@@ -18,16 +18,18 @@ const (
 )
 
 // CanSeeDmOnly returns true if the role has permission to view dm_only content.
-// Currently Owner-only by default. Phase 2 will make this configurable
-// per-campaign via CampaignSettings.
-func CanSeeDmOnly(role int) bool {
-	return role >= RoleOwner
+// Owners always can. Other roles can if they have been granted dm_only
+// visibility via CampaignSettings.DmGrantIDs.
+func CanSeeDmOnly(role int, dmGranted ...bool) bool {
+	if role >= RoleOwner {
+		return true
+	}
+	return len(dmGranted) > 0 && dmGranted[0]
 }
 
 // CanSetDmOnly returns true if the role has permission to create or toggle
 // the dm_only flag on content (tags, relations, events, etc.).
-// Currently Owner-only by default. Phase 2 will make this configurable
-// per-campaign via CampaignSettings.
+// Only Owners can set dm_only; DM-granted users can view but not toggle.
 func CanSetDmOnly(role int) bool {
 	return role >= RoleOwner
 }

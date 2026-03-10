@@ -49,7 +49,10 @@ Chronicle.register('notes', {
       versions: [],
       versionsLoading: false,
       // Folder collapse state: Set of folder IDs that are collapsed.
-      collapsedFolders: loadCollapsedFolders()
+      collapsedFolders: loadCollapsedFolders(),
+      // Cached campaign members for share picker.
+      members: null,
+      membersLoading: false
     };
 
     // Track mini TipTap editor instances per note ID for cleanup.
@@ -319,6 +322,15 @@ Chronicle.register('notes', {
         panel.querySelectorAll('.note-move-menu:not(.note-move-hidden)').forEach(function (m) {
           if (!m.contains(e.target) && !m.previousElementSibling.contains(e.target)) {
             m.classList.add('note-move-hidden');
+          }
+        });
+        // Close any open share popovers.
+        panel.querySelectorAll('.note-share-popover:not(.note-share-hidden)').forEach(function (p) {
+          if (!p.contains(e.target)) {
+            var shareBtn = p.previousElementSibling;
+            if (!shareBtn || !shareBtn.contains(e.target)) {
+              p.classList.add('note-share-hidden');
+            }
           }
         });
       });
@@ -633,6 +645,30 @@ Chronicle.register('notes', {
         });
     }
 
+    // --- Members API (for share picker) ---
+
+    /** Fetch campaign members for the share picker. Caches the result. */
+    function fetchMembers() {
+      if (state.members) return Promise.resolve(state.members);
+      if (state.membersLoading) return Promise.resolve([]);
+      state.membersLoading = true;
+      return Chronicle.apiFetch(apiUrl('/members'))
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (members) {
+          // Exclude the current user from the picker.
+          state.members = (members || []).filter(function (m) {
+            return m.id !== currentUserId;
+          });
+          state.membersLoading = false;
+          return state.members;
+        })
+        .catch(function () {
+          state.membersLoading = false;
+          state.members = [];
+          return [];
+        });
+    }
+
     // --- Rendering ---
 
     function updateQuickPlaceholder() {
@@ -788,9 +824,11 @@ Chronicle.register('notes', {
       var isEditing = state.editingId === note.id;
       var isOwner = note.userId === currentUserId;
       var isShared = note.isShared;
-      var isLockedByOther = isShared && note.lockedBy && note.lockedBy !== currentUserId && note.lockedAt;
+      var hasSharedWith = note.sharedWith && note.sharedWith.length > 0;
+      var isSharedAny = isShared || hasSharedWith;
+      var isLockedByOther = isSharedAny && note.lockedBy && note.lockedBy !== currentUserId && note.lockedAt;
       var pinClass = note.pinned ? ' note-pinned' : '';
-      var sharedClass = isShared ? ' note-shared' : '';
+      var sharedClass = isSharedAny ? ' note-shared' : '';
       var indent = depth > 0 ? ' style="margin-left:' + (depth * 12) + 'px"' : '';
       var html = '<div class="note-card' + pinClass + sharedClass + '"' + indent + ' data-id="' + Chronicle.escapeAttr(note.id) + '">';
 
@@ -803,15 +841,30 @@ Chronicle.register('notes', {
       }
       html += '<div class="note-actions">';
 
-      // Shared badge.
-      if (isShared && !isOwner) {
-        html += '<span class="note-shared-badge" title="Shared note"><i class="fa-solid fa-users text-[9px]"></i></span>';
+      // Shared badge (non-owners see a simple indicator).
+      if (isSharedAny && !isOwner) {
+        var shareTitle = hasSharedWith ? 'Shared with you' : 'Shared note';
+        html += '<span class="note-shared-badge" title="' + shareTitle + '"><i class="fa-solid fa-users text-[9px]"></i></span>';
       }
 
-      // Share toggle (owner only).
+      // Share button (owner only) — opens sharing popover.
       if (isOwner) {
-        html += '<button class="note-btn note-share-btn" title="' + (isShared ? 'Make private' : 'Share with campaign') + '">' +
-          '<i class="fa-solid ' + (isShared ? 'fa-lock-open' : 'fa-share-nodes') + ' text-[10px]"></i></button>';
+        var shareIcon = isSharedAny ? 'fa-lock-open' : 'fa-share-nodes';
+        var shareLabel = isShared ? 'Everyone' : hasSharedWith ? note.sharedWith.length + ' player(s)' : 'Private';
+        html += '<div class="note-share-wrap">';
+        html += '<button class="note-btn note-share-btn" title="Sharing: ' + shareLabel + '">' +
+          '<i class="fa-solid ' + shareIcon + ' text-[10px]"></i></button>';
+        html += '<div class="note-share-popover note-share-hidden" data-note-id="' + Chronicle.escapeAttr(note.id) + '">';
+        html += '<div class="note-share-opts">';
+        html += '<label class="note-share-opt"><input type="radio" name="share-' + Chronicle.escapeAttr(note.id) + '" value="private"' + (!isSharedAny ? ' checked' : '') + '> Private</label>';
+        html += '<label class="note-share-opt"><input type="radio" name="share-' + Chronicle.escapeAttr(note.id) + '" value="everyone"' + (isShared ? ' checked' : '') + '> Everyone</label>';
+        html += '<label class="note-share-opt"><input type="radio" name="share-' + Chronicle.escapeAttr(note.id) + '" value="specific"' + (hasSharedWith ? ' checked' : '') + '> Specific Players</label>';
+        html += '</div>';
+        html += '<div class="note-share-members' + (hasSharedWith ? '' : ' note-share-hidden') + '" data-note-id="' + Chronicle.escapeAttr(note.id) + '">';
+        html += '<div class="note-share-members-loading"><i class="fa-solid fa-spinner fa-spin text-[10px]"></i> Loading...</div>';
+        html += '</div>';
+        html += '</div>';
+        html += '</div>';
       }
 
       // Lock indicator (shared notes locked by another user).
@@ -999,7 +1052,8 @@ Chronicle.register('notes', {
           var note = findNote(noteId);
 
           // If shared note, acquire lock before entering edit mode.
-          if (note && note.isShared) {
+          var noteIsSharedAny = note && (note.isShared || (note.sharedWith && note.sharedWith.length > 0));
+          if (noteIsSharedAny) {
             acquireLock(noteId).then(function (locked) {
               if (locked) {
                 state.editingId = noteId;
@@ -1046,17 +1100,19 @@ Chronicle.register('notes', {
         });
       });
 
-      // Share toggle button.
+      // Share button — toggle share popover.
       notesList.querySelectorAll('.note-share-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
-          var card = btn.closest('.note-card');
-          var noteId = card.getAttribute('data-id');
-          var note = findNote(noteId);
-          if (note) {
-            updateNote(noteId, { isShared: !note.isShared }).then(function () {
-              renderNotes();
-            });
+          var popover = btn.nextElementSibling;
+          if (!popover) return;
+          // Close all other share popovers.
+          notesList.querySelectorAll('.note-share-popover').forEach(function (p) {
+            if (p !== popover) p.classList.add('note-share-hidden');
+          });
+          popover.classList.toggle('note-share-hidden');
+          if (!popover.classList.contains('note-share-hidden')) {
+            initSharePopover(popover);
           }
         });
       });
@@ -1216,6 +1272,84 @@ Chronicle.register('notes', {
           var noteId = card.getAttribute('data-id');
           var targetId = opt.getAttribute('data-move-to');
           moveNote(noteId, targetId);
+        });
+      });
+    }
+
+    /** Initialize a share popover: wire radio buttons and load members. */
+    function initSharePopover(popover) {
+      var noteId = popover.getAttribute('data-note-id');
+      var note = findNote(noteId);
+      if (!note) return;
+
+      // Wire radio buttons.
+      popover.querySelectorAll('input[type="radio"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+          var val = radio.value;
+          var membersDiv = popover.querySelector('.note-share-members');
+
+          if (val === 'private') {
+            if (membersDiv) membersDiv.classList.add('note-share-hidden');
+            updateNote(noteId, { isShared: false, sharedWith: [] }).then(function () {
+              renderNotes();
+            });
+          } else if (val === 'everyone') {
+            if (membersDiv) membersDiv.classList.add('note-share-hidden');
+            updateNote(noteId, { isShared: true, sharedWith: [] }).then(function () {
+              renderNotes();
+            });
+          } else if (val === 'specific') {
+            if (membersDiv) membersDiv.classList.remove('note-share-hidden');
+            loadShareMembers(popover, noteId);
+          }
+        });
+      });
+
+      // If "specific" is already selected, load members now.
+      var specificRadio = popover.querySelector('input[value="specific"]');
+      if (specificRadio && specificRadio.checked) {
+        loadShareMembers(popover, noteId);
+      }
+    }
+
+    /** Load and render member checkboxes in a share popover. */
+    function loadShareMembers(popover, noteId) {
+      var membersDiv = popover.querySelector('.note-share-members');
+      if (!membersDiv) return;
+      var note = findNote(noteId);
+
+      fetchMembers().then(function (members) {
+        if (!members || members.length === 0) {
+          membersDiv.innerHTML = '<div class="note-share-no-members">No other members</div>';
+          return;
+        }
+        var currentShared = (note && note.sharedWith) || [];
+        var html = '';
+        members.forEach(function (m) {
+          var checked = currentShared.indexOf(m.id) !== -1 ? ' checked' : '';
+          html += '<label class="note-share-member">';
+          html += '<input type="checkbox" class="note-share-member-cb" value="' + Chronicle.escapeAttr(m.id) + '"' + checked + '>';
+          html += ' ' + Chronicle.escapeHtml(m.name);
+          html += '</label>';
+        });
+        membersDiv.innerHTML = html;
+
+        // Wire checkbox changes to update sharing.
+        membersDiv.querySelectorAll('.note-share-member-cb').forEach(function (cb) {
+          cb.addEventListener('change', function () {
+            var selected = [];
+            membersDiv.querySelectorAll('.note-share-member-cb:checked').forEach(function (c) {
+              selected.push(c.value);
+            });
+            updateNote(noteId, { isShared: false, sharedWith: selected }).then(function () {
+              // Update local state without full re-render (keeps popover open).
+              var n = findNote(noteId);
+              if (n) {
+                n.sharedWith = selected;
+                n.isShared = false;
+              }
+            });
+          });
         });
       });
     }

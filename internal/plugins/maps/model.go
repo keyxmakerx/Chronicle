@@ -3,7 +3,29 @@
 // image and positioned pin markers that optionally link to entities.
 package maps
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
+
+// VisibilityRules defines per-user visibility overrides for map content.
+// Follows the same pattern as timelines and calendar events.
+type VisibilityRules struct {
+	AllowedUsers []string `json:"allowed_users,omitempty"`
+	DeniedUsers  []string `json:"denied_users,omitempty"`
+}
+
+// ParseVisibilityRules parses the JSON visibility rules into a VisibilityRules struct.
+func ParseVisibilityRules(raw *string) *VisibilityRules {
+	if raw == nil || *raw == "" {
+		return nil
+	}
+	var rules VisibilityRules
+	if err := json.Unmarshal([]byte(*raw), &rules); err != nil {
+		return nil
+	}
+	return &rules
+}
 
 // Map is an interactive map with a background image and positioned markers.
 type Map struct {
@@ -32,21 +54,23 @@ func (m *Map) HasImage() bool {
 }
 
 // Marker is a pin placed on a map at percentage coordinates (0-100).
-// Optionally links to an entity and supports DM-only visibility.
+// Optionally links to an entity and supports per-player visibility via
+// visibility_rules (same pattern as timelines/calendar events).
 type Marker struct {
-	ID          string    `json:"id"`
-	MapID       string    `json:"map_id"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description,omitempty"`
-	X           float64   `json:"x"`
-	Y           float64   `json:"y"`
-	Icon        string    `json:"icon"`
-	Color       string    `json:"color"`
-	EntityID    *string   `json:"entity_id,omitempty"`
-	Visibility  string    `json:"visibility"`
-	CreatedBy   *string   `json:"created_by,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID              string    `json:"id"`
+	MapID           string    `json:"map_id"`
+	Name            string    `json:"name"`
+	Description     *string   `json:"description,omitempty"`
+	X               float64   `json:"x"`
+	Y               float64   `json:"y"`
+	Icon            string    `json:"icon"`
+	Color           string    `json:"color"`
+	EntityID        *string   `json:"entity_id,omitempty"`
+	Visibility      string    `json:"visibility"`
+	VisibilityRules *string   `json:"visibility_rules,omitempty"`
+	CreatedBy       *string   `json:"created_by,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 
 	// Joined fields for display (populated by some queries).
 	EntityName string `json:"entity_name,omitempty"`
@@ -81,28 +105,30 @@ type UpdateMapInput struct {
 
 // CreateMarkerInput is the validated input for placing a marker on a map.
 type CreateMarkerInput struct {
-	MapID      string
-	Name       string
-	Description *string
-	X          float64
-	Y          float64
-	Icon       string
-	Color      string
-	EntityID   *string
-	Visibility string
-	CreatedBy  string
+	MapID           string
+	Name            string
+	Description     *string
+	X               float64
+	Y               float64
+	Icon            string
+	Color           string
+	EntityID        *string
+	Visibility      string
+	VisibilityRules *string
+	CreatedBy       string
 }
 
 // UpdateMarkerInput is the validated input for updating a marker.
 type UpdateMarkerInput struct {
-	Name        string
-	Description *string
-	X           float64
-	Y           float64
-	Icon        string
-	Color       string
-	EntityID    *string
-	Visibility  string
+	Name            string
+	Description     *string
+	X               float64
+	Y               float64
+	Icon            string
+	Color           string
+	EntityID        *string
+	Visibility      string
+	VisibilityRules *string
 }
 
 // MapViewData holds all data needed to render a single map page.

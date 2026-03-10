@@ -51,6 +51,7 @@ type CampaignService interface {
 	// Backdrop and branding
 	UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error
 	UpdateAccentColor(ctx context.Context, campaignID string, color string) error
+	UpdateDmGrants(ctx context.Context, campaignID string, userIDs []string) error
 
 	// Sidebar configuration
 	UpdateSidebarConfig(ctx context.Context, campaignID string, config SidebarConfig) error
@@ -610,6 +611,26 @@ func (s *campaignService) UpdateAccentColor(ctx context.Context, campaignID stri
 
 	settings := campaign.ParseSettings()
 	settings.AccentColor = color
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// UpdateDmGrants sets which users are granted dm_only content visibility.
+// Only campaign Owners may call this. The granted users can see dm_only
+// content but cannot create or toggle dm_only flags.
+func (s *campaignService) UpdateDmGrants(ctx context.Context, campaignID string, userIDs []string) error {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+
+	settings := campaign.ParseSettings()
+	settings.DmGrantIDs = userIDs
 
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {

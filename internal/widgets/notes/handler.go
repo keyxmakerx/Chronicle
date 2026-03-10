@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -12,15 +13,33 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// MemberLister is satisfied by CampaignService for fetching campaign members.
+type MemberLister interface {
+	ListMembers(ctx context.Context, campaignID string) ([]campaigns.CampaignMember, error)
+}
+
+// memberRef is a compact member representation for the sharing UI.
+type memberRef struct {
+	UserID   string `json:"user_id"`
+	Username string `json:"username"`
+	Role     string `json:"role"`
+}
+
 // Handler handles HTTP requests for note operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service NoteService
+	service      NoteService
+	memberLister MemberLister
 }
 
 // NewHandler creates a new note handler backed by the given service.
 func NewHandler(service NoteService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetMemberLister sets the member lister for the share-with-players picker.
+func (h *Handler) SetMemberLister(ml MemberLister) {
+	h.memberLister = ml
 }
 
 // List returns notes for the current user in the campaign (GET /campaigns/:id/notes).
@@ -105,9 +124,10 @@ func (h *Handler) Update(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	// Only the owner can change shared/pinned status.
+	// Only the owner can change sharing/pinned status.
 	if existing.UserID != userID {
 		req.IsShared = nil
+		req.SharedWith = nil
 		req.Pinned = nil
 	}
 
@@ -355,10 +375,46 @@ func (h *Handler) ShowJournal(c echo.Context) error {
 	return JournalPage(cc).Render(c.Request().Context(), c.Response())
 }
 
-// canAccessNote checks if a user can access a note: owner or shared member.
+// MembersAPI returns campaign members as JSON for the share-with-players picker.
+// GET /campaigns/:id/notes/members
+func (h *Handler) MembersAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.memberLister == nil {
+		return c.JSON(http.StatusOK, []memberRef{})
+	}
+
+	ms, err := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	refs := make([]memberRef, 0, len(ms))
+	for _, m := range ms {
+		refs = append(refs, memberRef{
+			UserID:   m.UserID,
+			Username: m.DisplayName,
+			Role:     m.Role.String(),
+		})
+	}
+	return c.JSON(http.StatusOK, refs)
+}
+
+// canAccessNote checks if a user can access a note: owner, shared with
+// everyone (is_shared), or shared with this specific user (shared_with).
 func canAccessNote(note *Note, userID, campaignID string) bool {
 	if note.CampaignID != campaignID {
 		return false
 	}
-	return note.UserID == userID || note.IsShared
+	if note.UserID == userID || note.IsShared {
+		return true
+	}
+	for _, uid := range note.SharedWith {
+		if uid == userID {
+			return true
+		}
+	}
+	return false
 }

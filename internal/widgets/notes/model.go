@@ -13,7 +13,10 @@
 // on every campaign page when the addon is enabled.
 package notes
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // LockTimeout is how long an edit lock remains valid without a heartbeat.
 const LockTimeout = 5 * time.Minute
@@ -37,6 +40,7 @@ type Note struct {
 	Color        string     `json:"color"`
 	Pinned       bool       `json:"pinned"`
 	IsShared     bool       `json:"isShared"`
+	SharedWith   []string   `json:"sharedWith,omitempty"`   // User IDs this note is shared with (nil = use IsShared)
 	LastEditedBy *string    `json:"lastEditedBy,omitempty"`
 	LockedBy     *string    `json:"lockedBy,omitempty"`
 	LockedAt     *time.Time `json:"lockedAt,omitempty"`
@@ -86,25 +90,53 @@ type ChecklistItem struct {
 
 // CreateNoteRequest holds the data submitted when creating a new note.
 type CreateNoteRequest struct {
-	EntityID *string `json:"entityId,omitempty"`
-	ParentID *string `json:"parentId,omitempty"`
-	IsFolder bool    `json:"isFolder,omitempty"`
-	Title    string  `json:"title"`
-	Content  []Block `json:"content"`
-	Color    string  `json:"color,omitempty"`
-	IsShared bool    `json:"isShared,omitempty"`
+	EntityID   *string  `json:"entityId,omitempty"`
+	ParentID   *string  `json:"parentId,omitempty"`
+	IsFolder   bool     `json:"isFolder,omitempty"`
+	Title      string   `json:"title"`
+	Content    []Block  `json:"content"`
+	Color      string   `json:"color,omitempty"`
+	IsShared   bool     `json:"isShared,omitempty"`
+	SharedWith []string `json:"sharedWith,omitempty"` // Share with specific users
 }
 
 // UpdateNoteRequest holds the data submitted when updating a note.
 type UpdateNoteRequest struct {
-	Title     *string  `json:"title,omitempty"`
-	Content   *[]Block `json:"content,omitempty"`
-	Entry     *string  `json:"entry,omitempty"`
-	EntryHTML *string  `json:"entryHtml,omitempty"`
-	Color     *string  `json:"color,omitempty"`
-	Pinned    *bool    `json:"pinned,omitempty"`
-	IsShared  *bool    `json:"isShared,omitempty"`
-	ParentID  *string  `json:"parentId,omitempty"` // move note into/out of folder
+	Title      *string  `json:"title,omitempty"`
+	Content    *[]Block `json:"content,omitempty"`
+	Entry      *string  `json:"entry,omitempty"`
+	EntryHTML  *string  `json:"entryHtml,omitempty"`
+	Color      *string  `json:"color,omitempty"`
+	Pinned     *bool    `json:"pinned,omitempty"`
+	IsShared   *bool    `json:"isShared,omitempty"`
+	SharedWith []string `json:"sharedWith,omitempty"` // Share with specific users (empty = clear)
+	ParentID   *string  `json:"parentId,omitempty"`   // move note into/out of folder
+}
+
+// MarshalSharedWith converts a SharedWith slice to JSON for database storage.
+// Returns nil if the slice is nil (preserving the is_shared fallback behavior).
+func MarshalSharedWith(users []string) *string {
+	if users == nil {
+		return nil
+	}
+	data, err := json.Marshal(users)
+	if err != nil {
+		return nil
+	}
+	s := string(data)
+	return &s
+}
+
+// UnmarshalSharedWith parses the JSON shared_with column from the database.
+func UnmarshalSharedWith(raw *string) []string {
+	if raw == nil || *raw == "" {
+		return nil
+	}
+	var users []string
+	if err := json.Unmarshal([]byte(*raw), &users); err != nil {
+		return nil
+	}
+	return users
 }
 
 // ToggleCheckRequest toggles a single checklist item's checked state.

@@ -497,7 +497,7 @@ func (h *Handler) ListAvailableEventsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
-	role := int(cc.MemberRole)
+	role := cc.VisibilityRole()
 
 	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
 		return err
@@ -517,7 +517,7 @@ func (h *Handler) LinkAllEventsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
-	role := int(cc.MemberRole)
+	role := cc.VisibilityRole()
 
 	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
 		return err

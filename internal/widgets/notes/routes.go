@@ -21,6 +21,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Full-page journal view.
 	cg.GET("/journal", h.ShowJournal, player)
 
+	// Members API for share-with-players picker.
+	cg.GET("/notes/members", h.MembersAPI, player)
+
 	// CRUD — own notes + shared note access.
 	cg.GET("/notes", h.List, player)
 	cg.POST("/notes", h.Create, player)
