@@ -153,11 +153,13 @@ func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID st
 	result := make([]campaigns.PluginHubAddon, len(addonList))
 	for i, ca := range addonList {
 		result[i] = campaigns.PluginHubAddon{
-			Slug:     ca.AddonSlug,
-			Name:     ca.AddonName,
-			Icon:     ca.AddonIcon,
-			Category: string(ca.AddonCategory),
-			Enabled:  ca.Enabled,
+			AddonID:   ca.AddonID,
+			Slug:      ca.AddonSlug,
+			Name:      ca.AddonName,
+			Icon:      ca.AddonIcon,
+			Category:  string(ca.AddonCategory),
+			Enabled:   ca.Enabled,
+			Installed: ca.Installed,
 		}
 	}
 	return result, nil

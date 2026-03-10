@@ -126,10 +126,14 @@
     icon.style.cssText = 'color:' + config.text + ';font-size:16px;margin-top:1px;flex-shrink:0;';
     toast.appendChild(icon);
 
-    // Message.
+    // Message. Supports HTML when opts.html is true (use only with trusted content).
     var msg = document.createElement('span');
     msg.style.cssText = 'flex:1;';
-    msg.textContent = message;
+    if (opts.html) {
+      msg.innerHTML = message;
+    } else {
+      msg.textContent = message;
+    }
     toast.appendChild(msg);
 
     // Close button.
@@ -176,6 +180,15 @@
   }
 
   // --- HTMX Integration ---
+  // Listen for server-triggered notifications via HX-Trigger header.
+  // Servers can send: HX-Trigger: {"chronicle:notify":{"message":"...","type":"error"}}
+  document.addEventListener('chronicle:notify', function (evt) {
+    var detail = evt.detail || {};
+    if (detail.message) {
+      Chronicle.notify(detail.message, detail.type || 'info', { duration: detail.duration });
+    }
+  });
+
   // Show toasts for HTMX request errors automatically.
   document.addEventListener('htmx:responseError', function (evt) {
     var status = evt.detail.xhr ? evt.detail.xhr.status : 0;

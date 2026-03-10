@@ -8,6 +8,23 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
+2026-03-10 -- **Bug fixes & UX improvements (navbar, features page, entity templates).**
+
+1. **Drag-and-drop CSRF fix**: `sidebar_tree.js` reorderEntity() was using raw `fetch()` without CSRF token, causing 403 on drag-drop reorder. Added `Chronicle.getCsrf()` header.
+
+2. **Nav menu lag fix**: `sidebar_drill.js` category switching caused stale content flash. Now shows loading spinner immediately and uses prefetch cache for instant swaps.
+
+3. **Entity template creation fix**: `entity_types.templ` form lacked `hx-target`/`hx-swap`, causing broken page when HTMX swapped full page into form. Added proper targeting, partial response on error, and `chronicle:notify` HX-Trigger support in notifications.js.
+
+4. **Features page consolidation**: Merged Plugin Hub (read-only) and Addon Settings (management) into a single Features page at `/campaigns/:id/plugins`. Owners see inline enable/disable toggles. Added `AddonID` and `Installed` fields to `PluginHubAddon`. Settings page link now points to `/plugins`. Toggle handler supports `redirect_to=plugins` for redirect after toggle.
+
+5. **Quick notes discoverability**: After creating a quick note, toast now includes a clickable "View in Journal" link. Added `html` option to `Chronicle.notify()`.
+
+6. **Fully hideable navbar**: Added sidebar hide button (double-angle-left icon) next to pin button. When hidden, sidebar fully disappears (0px width). Floating restore button appears at top-left. State persists in `localStorage`.
+
+Branch: `claude/fix-navbar-features-page-8RZuE`.
+
+### Previous Update
 2026-03-10 -- **Per-player visibility + Co-DM grants (Phase 2 complete).** Implemented per-player content sharing across all content types:
 
 1. **Maps**: Added `visibility_rules` JSON column to `map_markers` and `map_drawings` (migration 002). Updated repository to filter with `JSON_CONTAINS` for non-owners. Updated `ListMarkers` signature to include `userID` for per-player filtering.

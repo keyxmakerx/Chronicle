@@ -189,7 +189,18 @@ func (h *Handler) ToggleCampaignAddon(c echo.Context) error {
 		}
 	}
 
-	// Return updated addon list for HTMX swap.
+	// If the toggle came from the Plugin Hub page, redirect back there
+	// so it re-renders with updated state.
+	if c.FormValue("redirect_to") == "plugins" {
+		redirectURL := "/campaigns/" + cc.Campaign.ID + "/plugins"
+		if middleware.IsHTMX(c) {
+			c.Response().Header().Set("HX-Redirect", redirectURL)
+			return c.NoContent(http.StatusNoContent)
+		}
+		return c.Redirect(http.StatusSeeOther, redirectURL)
+	}
+
+	// Return updated addon list for HTMX swap (addons settings page).
 	if middleware.IsHTMX(c) {
 		addons, err := h.service.ListForCampaign(ctx, cc.Campaign.ID)
 		if err != nil {

@@ -214,7 +214,8 @@
       })
       .then(function () {
         close();
-        Chronicle.notify('Note created', 'success');
+        var journalUrl = '/campaigns/' + encodeURIComponent(cid) + '/journal';
+        Chronicle.notify('Note created — <a href="' + journalUrl + '" style="color:inherit;text-decoration:underline;font-weight:500;">View in Journal</a>', 'success', { duration: 6000, html: true });
         // Dispatch event so the notes widget can refresh its list.
         window.dispatchEvent(new CustomEvent('chronicle:note-created'));
       })

@@ -18,7 +18,7 @@ templ App(title string) {
 	@Base(title) {
 		<!-- Global HTMX loading indicator (thin bar at top of viewport) -->
 		<div id="htmx-indicator" class="htmx-indicator"></div>
-		<div class="flex h-screen overflow-hidden" x-data="{ sidebarOpen: false }" @chronicle:navigated.window="sidebarOpen = false">
+		<div class="flex h-screen overflow-hidden" x-data="{ sidebarOpen: false, sidebarHidden: localStorage.getItem('chronicle-sidebar-hidden') === 'true' }" @chronicle:navigated.window="sidebarOpen = false">
 			<!-- Mobile backdrop -->
 			<div
 				x-show="sidebarOpen"
@@ -35,6 +35,20 @@ templ App(title string) {
 
 			<!-- Sidebar -->
 			@Sidebar()
+
+			<!-- Floating button to restore hidden sidebar -->
+			<button
+				x-show="sidebarHidden"
+				x-transition:enter="transition-opacity duration-300 delay-300"
+				x-transition:enter-start="opacity-0"
+				x-transition:enter-end="opacity-100"
+				@click="sidebarHidden = false; localStorage.setItem('chronicle-sidebar-hidden', 'false')"
+				class="fixed top-3 left-3 z-50 w-8 h-8 flex items-center justify-center rounded-lg bg-sidebar-bg text-sidebar-text shadow-lg hover:bg-sidebar-hover transition-colors"
+				title="Show sidebar"
+				x-cloak
+			>
+				<i class="fa-solid fa-angles-right text-xs"></i>
+			</button>
 
 			<!-- Main content area -->
 			<div class="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -92,8 +106,13 @@ templ Sidebar() {
 		       md:static md:z-auto md:shrink-0"
 		:class="[
 			sidebarOpen ? 'sidebar-mobile-open shadow-2xl' : '',
-			(!pinned && !hovered) ? 'sidebar-collapsed' : ''
+			(!pinned && !hovered) ? 'sidebar-collapsed' : '',
+			sidebarHidden ? 'sidebar-fully-hidden' : ''
 		]"
+		x-show="!sidebarHidden"
+		x-transition:leave="transition-transform duration-300 ease-in-out"
+		x-transition:leave-start="translate-x-0"
+		x-transition:leave-end="-translate-x-full"
 	>
 		<!-- Logo / Brand + Pin Toggle -->
 		<div class="h-16 flex items-center px-4 border-b border-gray-700 shrink-0">
@@ -110,6 +129,14 @@ templ Sidebar() {
 				:title="pinned ? 'Unpin sidebar' : 'Pin sidebar open'"
 			>
 				<i class="fa-solid fa-thumbtack text-xs transition-transform" :class="{ 'rotate-45 text-gray-600': !pinned }"></i>
+			</button>
+			<!-- Hide sidebar button (visible only when expanded) -->
+			<button
+				class="sidebar-pin-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-gray-700 transition-colors ml-0.5"
+				@click.stop="sidebarHidden = true; localStorage.setItem('chronicle-sidebar-hidden', 'true')"
+				title="Hide sidebar"
+			>
+				<i class="fa-solid fa-angles-left text-xs"></i>
 			</button>
 		</div>
 

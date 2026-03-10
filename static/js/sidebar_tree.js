@@ -402,9 +402,13 @@
       sort_order: sortOrder
     };
 
+    var csrfToken = Chronicle.getCsrf();
+    var headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
     fetch('/campaigns/' + campaignId + '/entities/' + entityId + '/reorder', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers,
       body: JSON.stringify(body)
     })
     .then(function (resp) {

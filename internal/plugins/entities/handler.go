@@ -1515,11 +1515,21 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 	et, err := h.service.CreateEntityType(c.Request().Context(), cc.Campaign.ID, input)
 	if err != nil {
 		entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
-		counts, _ := h.service.CountByType(c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole), auth.GetUserID(c))
+		role := cc.VisibilityRole()
+		counts, _ := h.service.CountByType(c.Request().Context(), cc.Campaign.ID, role, auth.GetUserID(c))
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := "failed to create entity type"
 		if appErr, ok := err.(*apperror.AppError); ok {
 			errMsg = appErr.Message
+		}
+		// Return partial for HTMX requests so the swap target (#entity-type-list) gets correct content.
+		// Use HX-Trigger to show a toast notification with the error message.
+		if middleware.IsHTMX(c) {
+			c.Response().Header().Set("HX-Retarget", "#entity-type-list")
+			c.Response().Header().Set("HX-Reswap", "innerHTML")
+			c.Response().Header().Set("HX-Trigger", `{"chronicle:notify":{"message":"`+errMsg+`","type":"error"}}`)
+			return middleware.Render(c, http.StatusOK,
+				EntityTypeListContent(cc, entityTypes, counts, csrfToken))
 		}
 		return middleware.Render(c, http.StatusOK,
 			EntityTypesManagePage(cc, entityTypes, counts, csrfToken, errMsg))

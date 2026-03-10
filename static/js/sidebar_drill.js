@@ -111,6 +111,8 @@
     });
 
     // On hx-boost navigation, refresh or close the drill panel.
+    // Uses prefetch cache for instant swaps; shows loading spinner to avoid
+    // stale-content flash when switching between categories.
     window.addEventListener('chronicle:navigated', function () {
       if (!isDrilled) return;
       var currentPath = window.location.pathname;
@@ -120,13 +122,23 @@
       for (var i = 0; i < navLinks.length; i++) {
         var catUrl = navLinks[i].getAttribute('data-cat-url');
         if (catUrl && currentPath.indexOf(catUrl) === 0) {
-          // Refresh the panel content for the current category.
           var drillUrl = navLinks[i].getAttribute('data-drill-url');
           if (drillUrl) {
-            htmx.ajax('GET', drillUrl, {
-              target: '#sidebar-cat-content',
-              swap: 'innerHTML'
-            });
+            var target = document.getElementById('sidebar-cat-content');
+            // Use prefetch cache for instant swap when available.
+            if (prefetchCache[drillUrl] && target) {
+              target.innerHTML = prefetchCache[drillUrl];
+              htmx.process(target);
+              delete prefetchCache[drillUrl];
+            } else if (target) {
+              // Show loading state immediately to avoid stale content flash.
+              target.innerHTML = '<div class="flex items-center justify-center py-8">' +
+                '<i class="fa-solid fa-spinner fa-spin text-fg-muted"></i></div>';
+              htmx.ajax('GET', drillUrl, {
+                target: '#sidebar-cat-content',
+                swap: 'innerHTML'
+              });
+            }
           }
           matched = true;
           break;

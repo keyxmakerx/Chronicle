@@ -6,6 +6,7 @@ package campaigns
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -142,7 +143,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 				<div class="flex items-center justify-between mb-2">
 					<h2 class="text-lg font-semibold text-fg">Features</h2>
 					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/addons/settings", cc.Campaign.ID)) }
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/plugins", cc.Campaign.ID)) }
 						class="text-sm link"
 					>
 						<i class="fa-solid fa-plug mr-1"></i> Manage Features
@@ -392,87 +393,167 @@ func pluginDescription(slug string) string {
 	}
 }
 
-// PluginHubPage renders the features hub showing all enabled features with quick access links.
-templ PluginHubPage(cc *CampaignContext, addons []PluginHubAddon, isOwner bool) {
+// PluginHubPage renders the unified features page where owners can toggle
+// features on/off and all members can see enabled features with quick access links.
+templ PluginHubPage(cc *CampaignContext, addons []PluginHubAddon, isOwner bool, csrfToken string) {
 	@layouts.App(cc.Campaign.Name + " - Features") {
 		<div class="max-w-3xl mx-auto">
 			<div class="flex items-center justify-between mb-6">
 				<div>
 					<h1 class="text-2xl font-bold text-fg">Features</h1>
-					<p class="text-sm text-fg-muted mt-1">Quick access to all campaign features.</p>
-				</div>
-				if isOwner {
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/addons/settings", cc.Campaign.ID)) } class="btn-secondary text-sm">
-						<i class="fa-solid fa-gear mr-1.5"></i> Manage
-					</a>
-				}
-			</div>
-
-			<!-- Enabled features -->
-			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-				for _, addon := range addons {
-					if addon.Enabled {
-						<a
-							href={ templ.SafeURL(pluginURL(cc.Campaign.ID, addon.Slug)) }
-							class="card p-4 flex items-start gap-3 hover:ring-2 hover:ring-accent/50 transition-all group"
-						>
-							<div class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0 group-hover:bg-accent/20 transition-colors">
-								if addon.Icon != "" {
-									<i class={ "fa-solid " + addon.Icon, "text-accent text-lg" }></i>
-								} else {
-									<i class="fa-solid fa-puzzle-piece text-accent text-lg"></i>
-								}
-							</div>
-							<div class="flex-1 min-w-0">
-								<div class="font-semibold text-fg group-hover:text-accent transition-colors">{ addon.Name }</div>
-								<p class="text-xs text-fg-muted mt-0.5">{ pluginDescription(addon.Slug) }</p>
-							</div>
-							<i class="fa-solid fa-arrow-right text-fg-muted text-xs mt-1 opacity-0 group-hover:opacity-100 transition-opacity"></i>
-						</a>
+					if isOwner {
+						<p class="text-sm text-fg-muted mt-1">Enable or disable features for this campaign.</p>
+					} else {
+						<p class="text-sm text-fg-muted mt-1">Quick access to all campaign features.</p>
 					}
-				}
+				</div>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/edit", cc.Campaign.ID)) } class="btn-secondary text-sm">
+					Back to Settings
+				</a>
 			</div>
 
-			<!-- Disabled features (show for owners) -->
+			<div id="plugin-hub-list">
+				@PluginHubListContent(cc, addons, isOwner, csrfToken)
+			</div>
+
+			// Info panel for owners.
 			if isOwner {
-				@disabledPlugins(cc.Campaign.ID, addons)
+				<div class="card p-6 mt-6">
+					<div class="flex items-start gap-4">
+						<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+							<i class="fa-solid fa-circle-info text-accent"></i>
+						</span>
+						<div>
+							<h3 class="text-sm font-semibold text-fg mb-1">About Features</h3>
+							<p class="text-sm text-fg-secondary leading-relaxed">
+								Features add optional capabilities to your campaign like calendars, maps, and timelines.
+								Toggle them on or off at any time — disabling does not delete your data.
+							</p>
+						</div>
+					</div>
+				</div>
 			}
 		</div>
 	}
 }
 
-// disabledPlugins shows features that are not enabled, with a prompt to enable them.
-templ disabledPlugins(campaignID string, addons []PluginHubAddon) {
-	if hasDisabled(addons) {
-		<div class="mt-4">
-			<h2 class="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">Available Features</h2>
-			<div class="space-y-2">
+// PluginHubListContent renders the addon list (for HTMX partial swaps after toggling).
+templ PluginHubListContent(cc *CampaignContext, addons []PluginHubAddon, isOwner bool, csrfToken string) {
+	// Enabled features with quick access links.
+	if hasEnabled(addons) {
+		<div class="mb-8">
+			<h2 class="section-header mb-3">
+				<i class="fa-solid fa-check-circle mr-2 text-emerald-500"></i>Enabled
+			</h2>
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 				for _, addon := range addons {
-					if !addon.Enabled {
-						<div class="card p-3 flex items-center gap-3 opacity-60">
-							<div class="w-8 h-8 rounded-lg bg-surface-alt flex items-center justify-center shrink-0">
-								if addon.Icon != "" {
-									<i class={ "fa-solid " + addon.Icon, "text-fg-muted" }></i>
-								} else {
-									<i class="fa-solid fa-puzzle-piece text-fg-muted"></i>
-								}
-							</div>
-							<div class="flex-1 min-w-0">
-								<span class="text-sm text-fg">{ addon.Name }</span>
-								<span class="text-xs text-fg-muted ml-2">Disabled</span>
-							</div>
-							<a
-								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/addons/settings", campaignID)) }
-								class="text-xs text-accent hover:underline"
-							>
-								Enable
-							</a>
-						</div>
+					if addon.Enabled {
+						@pluginHubCard(cc, addon, isOwner, csrfToken)
 					}
 				}
 			</div>
 		</div>
 	}
+
+	// Disabled/available features.
+	if hasDisabled(addons) {
+		<div class="mb-6">
+			<h2 class="section-header mb-3">
+				<i class="fa-solid fa-circle-plus mr-2 text-fg-muted"></i>Available
+			</h2>
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+				for _, addon := range addons {
+					if !addon.Enabled {
+						@pluginHubCard(cc, addon, isOwner, csrfToken)
+					}
+				}
+			</div>
+		</div>
+	}
+
+	if len(addons) == 0 {
+		<div class="card p-8 text-center">
+			<p class="text-fg-muted">No features available yet.</p>
+		</div>
+	}
+}
+
+// pluginHubCard renders a single feature card with optional toggle for owners.
+templ pluginHubCard(cc *CampaignContext, addon PluginHubAddon, isOwner bool, csrfToken string) {
+	<div class={ "card p-4 flex items-start gap-3 transition-all",
+		templ.KV("hover:ring-2 hover:ring-accent/50", addon.Enabled),
+		templ.KV("opacity-60", !addon.Enabled && !isOwner) }>
+		<div class={ "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+			templ.KV("bg-accent/10", addon.Enabled),
+			templ.KV("bg-surface-alt", !addon.Enabled) }>
+			if addon.Icon != "" {
+				<i class={ "fa-solid " + addon.Icon, "text-lg",
+					templ.KV("text-accent", addon.Enabled),
+					templ.KV("text-fg-muted", !addon.Enabled) }></i>
+			} else {
+				<i class={ "fa-solid fa-puzzle-piece text-lg",
+					templ.KV("text-accent", addon.Enabled),
+					templ.KV("text-fg-muted", !addon.Enabled) }></i>
+			}
+		</div>
+		<div class="flex-1 min-w-0">
+			if addon.Enabled {
+				<a
+					href={ templ.SafeURL(pluginURL(cc.Campaign.ID, addon.Slug)) }
+					class="font-semibold text-fg hover:text-accent transition-colors"
+				>
+					{ addon.Name }
+					<i class="fa-solid fa-arrow-right text-fg-muted text-xs ml-1"></i>
+				</a>
+			} else {
+				<div class="font-semibold text-fg">{ addon.Name }</div>
+			}
+			<p class="text-xs text-fg-muted mt-0.5">{ pluginDescription(addon.Slug) }</p>
+		</div>
+		// Toggle button for owners; "Coming Soon" badge for uninstalled addons.
+		if isOwner {
+			if addon.Installed {
+				<form
+					method="POST"
+					hx-put={ fmt.Sprintf("/campaigns/%s/addons/%s/toggle", cc.Campaign.ID, strconv.Itoa(addon.AddonID)) }
+					hx-target="#plugin-hub-list"
+					hx-swap="innerHTML"
+					class="shrink-0"
+				>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<input type="hidden" name="redirect_to" value="plugins"/>
+					if addon.Enabled {
+						<input type="hidden" name="action" value="disable"/>
+						<button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors" title="Click to disable">
+							<i class="fa-solid fa-check text-[10px]"></i>
+							Enabled
+						</button>
+					} else {
+						<input type="hidden" name="action" value="enable"/>
+						<button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-surface-alt text-fg-muted border border-edge hover:bg-accent/10 hover:text-accent transition-colors" title="Click to enable">
+							<i class="fa-solid fa-plus text-[10px]"></i>
+							Enable
+						</button>
+					}
+				</form>
+			} else {
+				<span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-surface-alt text-fg-muted border border-edge cursor-default shrink-0">
+					<i class="fa-solid fa-clock text-[10px]"></i>
+					Coming Soon
+				</span>
+			}
+		}
+	</div>
+}
+
+// hasEnabled checks if any addon in the list is enabled.
+func hasEnabled(addons []PluginHubAddon) bool {
+	for _, a := range addons {
+		if a.Enabled {
+			return true
+		}
+	}
+	return false
 }
 
 // hasDisabled checks if any addon in the list is disabled.

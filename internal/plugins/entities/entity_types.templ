@@ -60,6 +60,8 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 				method="POST"
 				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
 				hx-post={ fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID) }
+				hx-target="#entity-type-list"
+				hx-swap="innerHTML"
 				class="space-y-4"
 			>
 				<input type="hidden" name="csrf_token" value={ csrfToken }/>

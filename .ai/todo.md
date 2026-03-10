@@ -33,6 +33,12 @@ Known broken or missing things, ordered by severity.
 
 ### Medium
 
+- [x] **Drag-and-drop sidebar reorder fails with 403** — `sidebar_tree.js:reorderEntity()` used raw `fetch()` without CSRF token. Fixed by adding `Chronicle.getCsrf()` to headers.
+- [x] **Nav menu flashes stale content on category switch** — `sidebar_drill.js` kept old content visible during HTMX fetch. Fixed with immediate loading spinner and prefetch cache usage.
+- [x] **Entity template creation form broken for HTMX** — Form lacked `hx-target`/`hx-swap`, and error handler returned full page for HTMX requests. Added proper targeting, partial response, and `chronicle:notify` HX-Trigger support.
+- [x] **Features page appears duplicated** — Plugin Hub (read-only) and Addon Settings (management) were separate pages. Consolidated into single `/plugins` page with inline enable/disable toggles for owners.
+- [x] **Quick notes not discoverable after creation** — Toast only said "Note created" with no link. Added "View in Journal" clickable link in toast. Added `html` option to `Chronicle.notify()`.
+
 - [x] **Unified permission model (Phase 1)** — Created `internal/permissions/role.go` with shared role constants and `CanSeeDmOnly`/`CanSetDmOnly` helpers. Replaced ~30 magic `role >= 3` checks across calendar, timeline, maps, entities, syncapi, app/routes. Fixed dm_only inconsistencies: tags now Owner-only (was Scribe+). Added Owner-only guards on dm_only creation in calendar events, timeline events, map markers. JS `permissions.js` uses named `ROLE_OWNER` constant. Permission matrix documented in `.ai/conventions.md`.
 - [x] **Per-player visibility + Co-DM grants (Phase 2)** — Maps: `visibility_rules` JSON on markers/drawings with `JSON_CONTAINS` filtering. Notes: `shared_with` JSON with Private/Everyone/Specific Players UI + member picker popover. Co-DM: `DmGrantIDs` in CampaignSettings, `IsDmGranted` in CampaignContext, `VisibilityRole()` method, DM grants API + settings UI. DM-granted users see dm_only content but cannot create it.
 - [x] **Tags not hideable from players** — Implemented `dm_only` column (migration 000038), role-based filtering in repo/service/handler, eye-slash badge + DM checkbox in tag_picker.js.
@@ -201,6 +207,8 @@ _Quick capture, backlinks, enhanced graph, editor power-ups. See `.ai/obsidian-n
 
 ### Phase W: Polish, Ecosystem & Delight
 
+- [ ] **Sprint W-0: Nav Menu Reorg Mode** — Small icon button near Dashboard in sidebar. Click to enter reorg mode for current level (categories or entities). Category level: drag to reorder category icons. Entity level: drag to reorder, create folders/submenus. Click again to exit reorg mode. Must work on desktop, tablet, and mobile. Button is context-aware: on base nav, reorders categories; drilled into a category, reorders entities.
+- [ ] **Sprint W-0.5: Owner Visual Customization** — Change "Chronicle" brand name per-campaign with optional image/logo. Top bar color/gradient/animation/background image (responsive). Visual customization editor with faux site outline (editable boxes for colors/backgrounds). Appearance-only, not layout editing. Future: per-addon "feature in use" indicators showing which entities/pages use each feature, which widgets are available, click associations to navigate. Disabled feature banner with "offline" sticker instead of complete removal.
 - [ ] **Sprint W-1: Command Palette & Saved Filters** — Ctrl+Shift+P action palette with fuzzy search. Saved entity list filter presets as sidebar links in `saved_filters` table.
 - [ ] **Sprint W-2: Map Drawing Tools, Regions & Measurement** — Leaflet.Draw integration (freehand, polygons, circles, rectangles, text). Uses existing `map_drawings` table. Per-drawing visibility, color/opacity. Also: map regions (polygon fills/strokes/labels), measurement/distance tool, map embed layout block for entity pages.
 - [ ] **Sprint W-2.5: Nested / Linked Maps** — Click marker to open sub-map. `linked_map_id` on markers. Breadcrumb navigation between map levels. Competitive gap vs World Anvil/LegendKeeper.

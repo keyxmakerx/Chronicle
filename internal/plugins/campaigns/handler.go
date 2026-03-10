@@ -81,11 +81,13 @@ type AuditLogger interface {
 
 // PluginHubAddon is a minimal addon representation for the plugin hub page.
 type PluginHubAddon struct {
-	Slug     string
-	Name     string
-	Icon     string
-	Category string
-	Enabled  bool
+	AddonID   int
+	Slug      string
+	Name      string
+	Icon      string
+	Category  string
+	Enabled   bool
+	Installed bool // Whether backing code exists (for showing Coming Soon vs toggle).
 }
 
 // AddonLister lists addons for the plugin hub page. Avoids importing the addons
@@ -553,7 +555,8 @@ func (h *Handler) PluginHub(c echo.Context) error {
 	}
 
 	isOwner := cc.MemberRole >= RoleOwner
-	return middleware.Render(c, http.StatusOK, PluginHubPage(cc, addons, isOwner))
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, PluginHubPage(cc, addons, isOwner, csrfToken))
 }
 
 // --- Customization Hub ---
