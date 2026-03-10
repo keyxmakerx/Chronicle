@@ -2,7 +2,6 @@ package calendar
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -1351,8 +1350,7 @@ func (h *Handler) ImportFromSetupAPI(c echo.Context) error {
 		fmt.Sprintf("/campaigns/%s/calendars/%s/settings", cc.Campaign.ID, cal.ID))
 }
 
-// Silence unused import warnings for json and io packages.
-var _ = json.Marshal
+// Silence unused import warning for io package (used in request body reading).
 var _ = io.ReadAll
 
 // CalendarViewData holds all data needed to render the calendar grid.
