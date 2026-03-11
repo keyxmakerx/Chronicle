@@ -460,7 +460,6 @@ func (h *Handler) UpdateAccentColorAPI(c echo.Context) error {
 	h.logAudit(c, cc.Campaign.ID, "campaign.accent_color.updated", map[string]any{"color": color})
 
 	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Refresh", "true")
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
@@ -623,6 +622,29 @@ func (h *Handler) PluginHub(c echo.Context) error {
 	isOwner := cc.MemberRole >= RoleOwner
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, PluginHubPage(cc, addons, isOwner, csrfToken))
+}
+
+// PluginHubFragment returns the plugin hub list content as an HTMX fragment.
+// Used for in-place refresh after toggling features.
+// GET /campaigns/:id/plugins/fragment
+func (h *Handler) PluginHubFragment(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var addons []PluginHubAddon
+	if h.addonLister != nil {
+		var err error
+		addons, err = h.addonLister.ListForPluginHub(c.Request().Context(), cc.Campaign.ID)
+		if err != nil {
+			slog.Warn("plugin hub fragment: list addons failed", slog.Any("error", err))
+		}
+	}
+
+	isOwner := cc.MemberRole >= RoleOwner
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, PluginHubListContent(cc, addons, isOwner, csrfToken))
 }
 
 // --- Customization Hub ---

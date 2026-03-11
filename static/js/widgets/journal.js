@@ -37,6 +37,7 @@ Chronicle.register('journal', {
 
     var autosaveTimer = null;
     var activeEditor = null; // TipTap instance for the active note
+    var activeMentionExt = null; // @mention extension instance
 
     // --- API helpers ---
 
@@ -251,6 +252,9 @@ Chronicle.register('journal', {
       // Initialize TipTap editor with note content.
       initEditor(note);
 
+      // Load audio attachments for this note.
+      loadAttachments(id);
+
       // Highlight active note in list.
       renderNoteList();
     }
@@ -264,18 +268,28 @@ Chronicle.register('journal', {
       if (!editorArea) return;
       editorArea.innerHTML = '';
 
-      // Check if TipTap is available (loaded by the main editor widget).
-      if (!window.Chronicle || !window.Chronicle._tiptapBundle) {
+      // Check if TipTap is available (loaded as global window.TipTap by vendor bundle).
+      if (!window.TipTap) {
         // Fallback: render as HTML with a textarea.
         renderFallbackEditor(editorArea, note);
         return;
       }
 
-      var bundle = window.Chronicle._tiptapBundle;
+      var bundle = window.TipTap;
+
+      // Use MentionLink (preserves data-mention-id/data-entity-preview) if available.
+      var LinkMark = (Chronicle && Chronicle.MentionLink) || bundle.Link;
+
       var extensions = [
-        bundle.StarterKit,
+        bundle.StarterKit.configure({
+          link: false // replaced by MentionLink below
+        }),
         bundle.Underline,
-        bundle.Placeholder.configure({ placeholder: 'Start writing...' })
+        bundle.Placeholder.configure({ placeholder: 'Start writing...' }),
+        LinkMark.configure({
+          openOnClick: true,
+          HTMLAttributes: { class: 'text-accent hover:underline' }
+        })
       ];
 
       // Parse entry JSON if available, otherwise use empty doc.
@@ -287,19 +301,44 @@ Chronicle.register('journal', {
         content = note.entryHtml;
       }
 
+      // Ref for mention extension so handleKeyDown closure can access it.
+      var mentionExtRef = { current: null };
+
+      var editorProps = {
+        attributes: {
+          class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[300px]'
+        }
+      };
+
+      // Wire up keydown handler for mention popup navigation.
+      if (campaignId && Chronicle.MentionExtension) {
+        editorProps.handleKeyDown = function (view, event) {
+          if (mentionExtRef.current && mentionExtRef.current.onKeyDown(null, event)) {
+            return true;
+          }
+          return false;
+        };
+      }
+
       activeEditor = new bundle.Editor({
         element: editorArea,
         extensions: extensions,
         content: content,
-        editorProps: {
-          attributes: {
-            class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[300px]'
-          }
-        },
+        editorProps: editorProps,
         onUpdate: function () {
           scheduleAutosave();
         }
       });
+
+      // Initialize @mention support if extension module is loaded.
+      if (campaignId && Chronicle.MentionExtension) {
+        activeMentionExt = Chronicle.MentionExtension({ campaignId: campaignId });
+        activeMentionExt.onCreate(activeEditor);
+        mentionExtRef.current = activeMentionExt;
+        activeEditor.on('update', function () {
+          activeMentionExt.onUpdate(activeEditor);
+        });
+      }
     }
 
     /** Fallback for when TipTap bundle isn't loaded: show entryHtml as read-only
@@ -320,6 +359,10 @@ Chronicle.register('journal', {
     }
 
     function destroyEditor() {
+      if (activeMentionExt) {
+        activeMentionExt.onDestroy();
+        activeMentionExt = null;
+      }
       if (activeEditor) {
         activeEditor.destroy();
         activeEditor = null;
@@ -339,8 +382,10 @@ Chronicle.register('journal', {
     function showEmptyState() {
       var emptyState = document.getElementById('journal-empty-state');
       var content = document.getElementById('journal-note-content');
+      var attachments = document.getElementById('journal-attachments');
       if (emptyState) emptyState.classList.remove('hidden');
       if (content) content.classList.add('hidden');
+      if (attachments) { attachments.classList.add('hidden'); attachments.innerHTML = ''; }
       destroyEditor();
     }
 
@@ -621,6 +666,170 @@ Chronicle.register('journal', {
       shareBtn.addEventListener('click', function () {
         if (state.activeNoteId) toggleShare(state.activeNoteId);
       });
+    }
+
+    // --- Audio attachments ---
+
+    var audioInput = document.getElementById('journal-audio-input');
+    if (audioInput) {
+      audioInput.addEventListener('change', function () {
+        if (!state.activeNoteId || !audioInput.files.length) return;
+        uploadAudioAttachment(state.activeNoteId, audioInput.files[0]);
+        audioInput.value = ''; // reset for next upload
+      });
+    }
+
+    function uploadAudioAttachment(noteId, file) {
+      var formData = new FormData();
+      formData.append('file', file);
+
+      updateStatus('Uploading audio...');
+
+      Chronicle.apiFetch(apiUrl('/' + noteId + '/attachments'), {
+        method: 'POST',
+        body: formData
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('Upload failed');
+          return r.json();
+        })
+        .then(function () {
+          updateStatus('Ready');
+          Chronicle.notify('Audio attached', 'success');
+          loadAttachments(noteId);
+        })
+        .catch(function () {
+          updateStatus('Upload failed');
+          Chronicle.notify('Failed to upload audio', 'error');
+        });
+    }
+
+    function loadAttachments(noteId) {
+      var container = document.getElementById('journal-attachments');
+      if (!container) return;
+
+      Chronicle.apiFetch(apiUrl('/' + noteId + '/attachments'))
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (attachments) {
+          renderAttachments(container, noteId, attachments || []);
+        })
+        .catch(function () {
+          container.classList.add('hidden');
+        });
+    }
+
+    function renderAttachments(container, noteId, attachments) {
+      if (!attachments.length) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+      }
+
+      container.classList.remove('hidden');
+      container.innerHTML = '';
+
+      var header = document.createElement('div');
+      header.className = 'flex items-center gap-2 mb-2';
+      header.innerHTML = '<i class="fa-solid fa-paperclip text-xs text-fg-muted"></i>' +
+        '<span class="text-xs font-medium text-fg-secondary">Attachments (' + attachments.length + ')</span>';
+      container.appendChild(header);
+
+      attachments.forEach(function (att) {
+        var item = document.createElement('div');
+        item.className = 'bg-surface-alt rounded-lg p-3 mb-2 border border-edge';
+
+        // Audio player row.
+        var playerRow = document.createElement('div');
+        playerRow.className = 'flex items-center gap-3';
+
+        var audio = document.createElement('audio');
+        audio.controls = true;
+        audio.className = 'flex-1 h-8';
+        audio.src = '/media/' + att.filePath;
+        playerRow.appendChild(audio);
+
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'text-xs text-fg-muted truncate max-w-[140px]';
+        nameSpan.textContent = att.originalName;
+        nameSpan.title = att.originalName;
+        playerRow.appendChild(nameSpan);
+
+        var deleteBtn = document.createElement('button');
+        deleteBtn.className = 'p-1 rounded text-fg-muted hover:text-red-400 transition-colors shrink-0';
+        deleteBtn.title = 'Remove attachment';
+        deleteBtn.innerHTML = '<i class="fa-solid fa-trash text-xs"></i>';
+        deleteBtn.addEventListener('click', function () {
+          if (!confirm('Remove this audio attachment?')) return;
+          deleteAttachment(noteId, att.id);
+        });
+        playerRow.appendChild(deleteBtn);
+
+        item.appendChild(playerRow);
+
+        // Transcript section (collapsible).
+        var transcriptToggle = document.createElement('button');
+        transcriptToggle.className = 'flex items-center gap-1 mt-2 text-[11px] text-fg-muted hover:text-fg transition-colors';
+        transcriptToggle.innerHTML = '<i class="fa-solid fa-chevron-right text-[8px] transcript-arrow"></i> Transcript';
+        var transcriptPanel = document.createElement('div');
+        transcriptPanel.className = 'hidden mt-2';
+
+        var textarea = document.createElement('textarea');
+        textarea.className = 'w-full h-24 text-xs bg-bg border border-edge rounded p-2 text-fg resize-y';
+        textarea.placeholder = 'Paste or type a transcript...';
+        textarea.value = att.transcript || '';
+        transcriptPanel.appendChild(textarea);
+
+        var saveTranscriptBtn = document.createElement('button');
+        saveTranscriptBtn.className = 'mt-1 text-[11px] text-accent hover:underline';
+        saveTranscriptBtn.textContent = 'Save transcript';
+        saveTranscriptBtn.addEventListener('click', function () {
+          saveTranscript(noteId, att.id, textarea.value);
+        });
+        transcriptPanel.appendChild(saveTranscriptBtn);
+
+        transcriptToggle.addEventListener('click', function () {
+          var isHidden = transcriptPanel.classList.toggle('hidden');
+          var arrow = transcriptToggle.querySelector('.transcript-arrow');
+          if (arrow) {
+            arrow.className = isHidden
+              ? 'fa-solid fa-chevron-right text-[8px] transcript-arrow'
+              : 'fa-solid fa-chevron-down text-[8px] transcript-arrow';
+          }
+        });
+
+        item.appendChild(transcriptToggle);
+        item.appendChild(transcriptPanel);
+
+        container.appendChild(item);
+      });
+    }
+
+    function deleteAttachment(noteId, attachmentId) {
+      Chronicle.apiFetch(apiUrl('/' + noteId + '/attachments/' + attachmentId), {
+        method: 'DELETE'
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('delete failed');
+          Chronicle.notify('Attachment removed', 'success');
+          loadAttachments(noteId);
+        })
+        .catch(function () {
+          Chronicle.notify('Failed to remove attachment', 'error');
+        });
+    }
+
+    function saveTranscript(noteId, attachmentId, text) {
+      Chronicle.apiFetch(apiUrl('/' + noteId + '/attachments/' + attachmentId + '/transcript'), {
+        method: 'PUT',
+        body: { transcript: text }
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('save failed');
+          Chronicle.notify('Transcript saved', 'success');
+        })
+        .catch(function () {
+          Chronicle.notify('Failed to save transcript', 'error');
+        });
     }
 
     // --- Initial load ---

@@ -86,6 +86,21 @@ type ChecklistItem struct {
 	Checked bool   `json:"checked"`
 }
 
+// NoteAttachment represents a file attached to a note (audio, etc.).
+type NoteAttachment struct {
+	ID           string    `json:"id"`
+	NoteID       string    `json:"noteId"`
+	CampaignID   string    `json:"campaignId"`
+	FilePath     string    `json:"filePath"`
+	OriginalName string    `json:"originalName"`
+	MimeType     string    `json:"mimeType"`
+	FileSize     int64     `json:"fileSize"`
+	DurationSecs *int      `json:"durationSecs,omitempty"`
+	Transcript   *string   `json:"transcript,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
 // --- Request DTOs ---
 
 // CreateNoteRequest holds the data submitted when creating a new note.

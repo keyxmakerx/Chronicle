@@ -122,6 +122,10 @@ templ journalContent(cc *campaigns.CampaignContext) {
 								placeholder="Untitled note"
 							/>
 							<div class="flex items-center gap-1.5">
+								<label id="journal-note-audio" class="p-1.5 rounded text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors cursor-pointer" title="Attach audio">
+									<i class="fa-solid fa-microphone text-sm"></i>
+									<input type="file" accept="audio/mpeg,audio/ogg,audio/wav,audio/webm" class="hidden" id="journal-audio-input"/>
+								</label>
 								<button id="journal-note-share" class="p-1.5 rounded text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors" title="Share note">
 									<i class="fa-solid fa-share-nodes text-sm"></i>
 								</button>
@@ -136,6 +140,10 @@ templ journalContent(cc *campaigns.CampaignContext) {
 						<!-- Editor area -->
 						<div id="journal-editor-area" class="flex-1 overflow-y-auto px-6 py-4">
 							<!-- TipTap editor mounts here -->
+						</div>
+						<!-- Audio attachments area -->
+						<div id="journal-attachments" class="hidden shrink-0 border-t border-edge px-6 py-3">
+							<!-- Populated by journal.js when note has attachments -->
 						</div>
 						<!-- Status bar -->
 						<div class="shrink-0 px-6 py-1.5 border-t border-edge text-[11px] text-fg-muted flex items-center gap-3">

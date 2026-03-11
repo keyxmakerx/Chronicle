@@ -56,6 +56,11 @@ var AllowedMimeTypes = map[string]bool{
 	"image/png":  true,
 	"image/webp": true,
 	"image/gif":  true,
+	// Audio types for note attachments.
+	"audio/mpeg": true,
+	"audio/ogg":  true,
+	"audio/wav":  true,
+	"audio/webm": true,
 }
 
 // MimeToExtension maps MIME types to file extensions.
@@ -64,6 +69,10 @@ var MimeToExtension = map[string]string{
 	"image/png":  ".png",
 	"image/webp": ".webp",
 	"image/gif":  ".gif",
+	"audio/mpeg": ".mp3",
+	"audio/ogg":  ".ogg",
+	"audio/wav":  ".wav",
+	"audio/webm": ".webm",
 }
 
 // IsImage returns true if the file is an image based on MIME type.

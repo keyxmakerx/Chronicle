@@ -128,10 +128,21 @@ templ AccentColorPicker(campaignID string, currentColor string, csrfToken string
 }
 
 // appearanceTab renders the visual customization editor in the Customization Hub.
-// Contains: faux site outline, brand name/logo, accent color, and topbar styling.
+// Contains: faux site outline, brand name/logo, accent color, topbar styling,
+// and backdrop image. Changes preview locally; a Save button persists them.
 templ appearanceTab(cc *CampaignContext, csrfToken string) {
 	<h2 class="text-base font-semibold text-fg mb-1">Appearance</h2>
-	<p class="text-xs text-fg-secondary mb-6">Customize the visual style of your campaign.</p>
+	<p class="text-xs text-fg-secondary mb-4">Customize the visual style of your campaign. Changes preview instantly — click Save when you're happy.</p>
+
+	<!-- Save bar (shown when there are unsaved changes) -->
+	<div id="appearance-save-bar" class="hidden sticky top-0 z-10 mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-center justify-between">
+		<span class="text-sm text-amber-800 dark:text-amber-200">
+			<i class="fa-solid fa-circle-exclamation text-xs mr-1.5"></i> You have unsaved changes
+		</span>
+		<button type="button" id="appearance-save-btn" class="btn-primary text-sm px-4 py-1.5">
+			<i class="fa-solid fa-check text-xs mr-1"></i> Save Changes
+		</button>
+	</div>
 
 	<div
 		data-widget="appearance-editor"
@@ -179,6 +190,15 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 			</div>
 		</div>
 
+		<!-- Backdrop image (saves immediately since file upload requires server) -->
+		<div class="card p-4 mb-4">
+			<h3 class="text-sm font-semibold text-fg mb-2">
+				<i class="fa-solid fa-image text-xs mr-1.5 text-fg-muted"></i> Backdrop Image
+			</h3>
+			<p class="text-xs text-fg-secondary mb-3">Header banner displayed on your campaign dashboard.</p>
+			@BackdropUploadSection(cc.Campaign.ID, cc.Campaign.BackdropPath, csrfToken)
+		</div>
+
 		<!-- Brand name -->
 		<div class="card p-4 mb-4">
 			<h3 class="text-sm font-semibold text-fg mb-2">
@@ -205,13 +225,49 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 			</div>
 		</div>
 
-		<!-- Accent color -->
+		<!-- Accent color (JS-driven, no server calls until Save) -->
 		<div class="card p-4 mb-4">
 			<h3 class="text-sm font-semibold text-fg mb-2">
 				<i class="fa-solid fa-droplet text-xs mr-1.5 text-fg-muted"></i> Accent Color
 			</h3>
 			<p class="text-xs text-fg-secondary mb-3">Theme color used for buttons, links, and highlights.</p>
-			@AccentColorPicker(cc.Campaign.ID, cc.Campaign.ParseSettings().AccentColor, csrfToken)
+			<div id="appearance-accent-colors" class="space-y-3">
+				<div class="flex flex-wrap gap-2">
+					for _, preset := range accentColorPresets {
+						<button
+							type="button"
+							data-accent-color={ preset.Color }
+							class="w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 shrink-0"
+							style={ fmt.Sprintf("background-color: %s", preset.Color) }
+							if cc.Campaign.ParseSettings().AccentColor == preset.Color {
+								class="w-8 h-8 rounded-full border-2 border-white ring-2 ring-offset-2 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0"
+							} else {
+								class="w-8 h-8 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0"
+							}
+							title={ preset.Name }
+						></button>
+					}
+					// Reset to default button.
+					<button
+						type="button"
+						data-accent-color=""
+						class="w-8 h-8 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0"
+						if cc.Campaign.ParseSettings().AccentColor == "" {
+							class="w-8 h-8 rounded-full border-2 border-dashed border-fg ring-2 ring-offset-2 ring-offset-surface ring-fg flex items-center justify-center transition-colors shrink-0"
+						}
+						title="Reset to default"
+					>
+						<i class="fa-solid fa-xmark text-[10px] text-fg-muted"></i>
+					</button>
+				</div>
+				<p class="text-[10px] text-fg-muted" id="appearance-accent-label">
+					if cc.Campaign.ParseSettings().AccentColor != "" {
+						Current: { cc.Campaign.ParseSettings().AccentColor }
+					} else {
+						Using default theme color
+					}
+				</p>
+			</div>
 		</div>
 
 		<!-- Topbar style -->
