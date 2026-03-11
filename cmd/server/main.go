@@ -60,7 +60,7 @@ func main() {
 	pluginHealth := database.NewPluginHealthRegistry()
 	pluginResults := database.RunPluginMigrations(db, database.RegisteredPlugins())
 	for _, r := range pluginResults {
-		pluginHealth.Register(r.Slug, r.Healthy, r.Error, r.Version)
+		pluginHealth.Register(r.Slug, r.Healthy, r.Error, r.Version, r.LatestVersion)
 	}
 	if degraded := pluginHealth.DegradedPlugins(); len(degraded) > 0 {
 		slog.Warn("some plugins are degraded — features disabled",

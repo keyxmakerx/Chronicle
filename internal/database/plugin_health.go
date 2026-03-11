@@ -20,6 +20,9 @@ type PluginHealth struct {
 	// Version is the highest applied migration version for this plugin.
 	Version int
 
+	// LatestVersion is the highest available migration version from disk.
+	LatestVersion int
+
 	// UpdatedAt is when this status was last set.
 	UpdatedAt time.Time
 }
@@ -41,14 +44,15 @@ func NewPluginHealthRegistry() *PluginHealthRegistry {
 
 // Register records the health status of a plugin. Called once per plugin
 // during startup after migrations complete (or fail).
-func (r *PluginHealthRegistry) Register(slug string, healthy bool, err error, version int) {
+func (r *PluginHealthRegistry) Register(slug string, healthy bool, err error, version int, latestVersion int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	h := PluginHealth{
-		Healthy:   healthy,
-		Version:   version,
-		UpdatedAt: time.Now(),
+		Healthy:       healthy,
+		Version:       version,
+		LatestVersion: latestVersion,
+		UpdatedAt:     time.Now(),
 	}
 	if err != nil {
 		h.Error = err.Error()
