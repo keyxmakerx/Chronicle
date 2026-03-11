@@ -66,7 +66,9 @@ COPY --from=builder /src/foundry-module /app/foundry-module
 # Create persistent data directory owned by the chronicle user.
 # Media uploads go under /app/data/media (matches MEDIA_PATH default "./data/media").
 # Mount a volume at /app/data to persist media across container rebuilds.
-RUN mkdir -p /app/data/media && chown -R chronicle:chronicle /app/data
+# foundry-module must also be writable so the admin can upload/redeploy modules.
+RUN mkdir -p /app/data/media \
+    && chown -R chronicle:chronicle /app/data /app/foundry-module
 
 WORKDIR /app
 

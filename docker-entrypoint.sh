@@ -13,8 +13,8 @@ set -e
 
 if [ "$(id -u)" = "0" ]; then
     # Running as root: ensure dirs exist, fix ownership, drop privileges.
-    mkdir -p /app/data/media
-    chown -R chronicle:chronicle /app/data
+    mkdir -p /app/data/media /app/foundry-module
+    chown -R chronicle:chronicle /app/data /app/foundry-module
     exec su-exec chronicle "$@"
 else
     # Running as non-root (platform-enforced user).
