@@ -8,7 +8,12 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-11 -- **Session fix + Owner Dashboard (two-dashboard architecture).**
+2026-03-11 -- **Foundry module review — bug fixes and feature completion.**
+
+31. **Foundry module review.** Comprehensive code review of the Foundry VTT sync module found 13 issues. Fixed 9 (deferred ApplicationV2 upgrade):
+    - **Runtime bugs**: Shop window `{{json}}` helper crash (replaced with data-item-id lookup), drawing coordinate conversion missing percentage↔pixel (tokens had it, drawings didn't), fog reconciliation `_syncing` flag corruption (extracted `_createFogDrawingData`, batch creates), entity_type_id:0 invalid in syncapi handler (added first-type fallback).
+    - **Data flow gaps**: Scene-to-map linking (context menu + auto-link), `_onEntityCreated` fetches full entity from REST (WS payload partial), `onSyncMapping` added to MapSync and CalendarSync, `onInitialSync` added to MapSync (pulls drawings/tokens/fog on connect).
+    - **Docs/metadata**: SimpleCalendar in module.json, calendar hint fix, .ai.md corrections (fog status, App v1 not v2), TESTING.md fog + scene-linking sections.
 
 30. **Session completion fix + two-dashboard architecture.** Two changes:
     - **Session "Mark Complete" bug fix**: `hx-vals` always sends form-encoded data regardless of `hx-headers` Content-Type. `UpdateSessionAPI` expects JSON, so the decode failed → 400 error → red notification bar. Replaced with `Chronicle.apiFetch()` onclick handler using `data-url` and `data-name` attributes. Also fixes XSS risk from session name interpolation into JSON template string.

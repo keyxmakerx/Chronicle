@@ -289,6 +289,7 @@ _WASM-sandboxed backend logic via Extism/wazero. See ADR-021._
 - [ ] Calendar timezone support / print-PDF export
 - [ ] Map hex/square grid overlay
 - [x] Fog of war bidirectional sync (Chronicle ↔ Foundry)
+- [x] Foundry module review: runtime bugs (json helper, coord conversion, fog flag, entity_type_id), data flow (scene linking, onSyncMapping, onInitialSync for MapSync, full entity fetch), docs
 - [ ] Webhook support for external event notifications
 - [ ] Widget inline CSS → CSS classes migration
 - [ ] Reusable modal/dropdown component library
