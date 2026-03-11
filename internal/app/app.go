@@ -4,11 +4,15 @@
 package app
 
 import (
+	"archive/zip"
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -92,6 +96,12 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *databa
 
 	// Serve static files (CSS, JS, vendor libs, fonts, images).
 	e.Static("/static", "static")
+
+	// Serve the Foundry VTT module directory for easy installation.
+	// module.json is served with dynamic URL injection; zip built on-the-fly.
+	e.GET("/foundry-module/module.json", app.serveFoundryModuleManifest)
+	e.GET("/foundry-module/chronicle-sync.zip", app.serveFoundryModuleZip)
+	e.Static("/foundry-module", "foundry-module")
 
 	return app
 }
@@ -266,6 +276,77 @@ func isAPIRequest(c echo.Context) bool {
 // isHTMXRequest returns true if the request was initiated by HTMX.
 func isHTMXRequest(c echo.Context) bool {
 	return c.Request().Header.Get("HX-Request") == "true"
+}
+
+// serveFoundryModuleManifest serves foundry-module/module.json with the
+// manifest and download URLs rewritten to use the Chronicle instance's BaseURL.
+// This allows Foundry VTT to install the module directly from any Chronicle
+// instance without needing GitHub releases.
+func (a *App) serveFoundryModuleManifest(c echo.Context) error {
+	data, err := os.ReadFile("foundry-module/module.json")
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "module.json not found")
+	}
+
+	baseURL := strings.TrimRight(a.Config.BaseURL, "/")
+	content := string(data)
+
+	// Replace manifest and download URLs with this Chronicle instance's URLs.
+	content = strings.Replace(content,
+		`"manifest": "https://raw.githubusercontent.com/keyxmakerx/Chronicle/main/foundry-module/module.json"`,
+		fmt.Sprintf(`"manifest": "%s/foundry-module/module.json"`, baseURL), 1)
+	content = strings.Replace(content,
+		`"download": "https://github.com/keyxmakerx/Chronicle/releases/download/foundry-v0.1.0/chronicle-sync.zip"`,
+		fmt.Sprintf(`"download": "%s/foundry-module/chronicle-sync.zip"`, baseURL), 1)
+
+	return c.JSONBlob(http.StatusOK, []byte(content))
+}
+
+// serveFoundryModuleZip dynamically zips the foundry-module/ directory and
+// serves it as chronicle-sync.zip. Foundry VTT downloads this during module
+// installation. The zip contains all files under a chronicle-sync/ root
+// directory, which is the expected structure for Foundry module archives.
+func (a *App) serveFoundryModuleZip(c echo.Context) error {
+	moduleDir := "foundry-module"
+	if _, err := os.Stat(moduleDir); err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "foundry module directory not found")
+	}
+
+	c.Response().Header().Set("Content-Type", "application/zip")
+	c.Response().Header().Set("Content-Disposition", "attachment; filename=chronicle-sync.zip")
+	c.Response().WriteHeader(http.StatusOK)
+
+	zw := zip.NewWriter(c.Response().Writer)
+	defer zw.Close()
+
+	return filepath.WalkDir(moduleDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		// Skip non-distributable files.
+		name := d.Name()
+		if name == ".ai.md" || name == "TESTING.md" {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		// Create zip entry under chronicle-sync/ root.
+		relPath, _ := filepath.Rel(moduleDir, path)
+		zipPath := filepath.Join("chronicle-sync", relPath)
+
+		w, err := zw.Create(filepath.ToSlash(zipPath))
+		if err != nil {
+			return err
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(data)
+		return err
+	})
 }
 
 // Start begins listening for HTTP requests on the configured port.
