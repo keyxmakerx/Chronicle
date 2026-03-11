@@ -51,7 +51,9 @@ type CampaignService interface {
 	// Backdrop and branding
 	UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error
 	UpdateAccentColor(ctx context.Context, campaignID string, color string) error
+	// UpdateBranding sets the campaign's custom brand name and logo path.
 	UpdateBranding(ctx context.Context, campaignID, brandName, brandLogo string) error
+	// UpdateTopbarStyle sets the campaign's topbar visual customization.
 	UpdateTopbarStyle(ctx context.Context, campaignID string, style *TopbarStyle) error
 	UpdateDmGrants(ctx context.Context, campaignID string, userIDs []string) error
 
@@ -646,6 +648,9 @@ func (s *campaignService) UpdateBranding(ctx context.Context, campaignID, brandN
 	if len(brandName) > 40 {
 		return apperror.NewBadRequest("brand name must be 40 characters or fewer")
 	}
+	if len(brandLogo) > 255 {
+		return apperror.NewBadRequest("brand logo path too long")
+	}
 
 	campaign, err := s.repo.FindByID(ctx, campaignID)
 	if err != nil {
@@ -675,6 +680,21 @@ func (s *campaignService) UpdateTopbarStyle(ctx context.Context, campaignID stri
 		default:
 			return apperror.NewBadRequest("invalid topbar mode, expected solid, gradient, or image")
 		}
+		// Validate color values are valid hex (e.g. "#6366f1") or empty.
+		for _, color := range []string{style.Color, style.GradientFrom, style.GradientTo} {
+			if color != "" && !isValidHexColor(color) {
+				return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
+			}
+		}
+		// Validate gradient direction.
+		if style.GradientDir != "" {
+			switch style.GradientDir {
+			case "to-r", "to-br", "to-b":
+				// ok
+			default:
+				return apperror.NewBadRequest("invalid gradient direction")
+			}
+		}
 	}
 
 	campaign, err := s.repo.FindByID(ctx, campaignID)
@@ -691,6 +711,19 @@ func (s *campaignService) UpdateTopbarStyle(ctx context.Context, campaignID stri
 	}
 
 	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// isValidHexColor checks that s is a 7-character hex color (#RRGGBB).
+func isValidHexColor(s string) bool {
+	if len(s) != 7 || s[0] != '#' {
+		return false
+	}
+	for _, c := range s[1:] {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 // UpdateDmGrants sets which users are granted dm_only content visibility.

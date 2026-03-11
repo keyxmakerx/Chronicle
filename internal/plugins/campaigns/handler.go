@@ -492,6 +492,7 @@ func (h *Handler) UpdateBrandingAPI(c echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.branding.updated", map[string]any{
 		"brand_name": req.BrandName,
+		"brand_logo": req.BrandLogo,
 	})
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})

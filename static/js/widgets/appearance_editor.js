@@ -25,6 +25,15 @@
   };
 
   Chronicle.register('appearance-editor', {
+    destroy: function (el) {
+      // Clear any pending debounce timers to prevent saves after unmount.
+      if (el._appearanceBrandTimer) {
+        clearTimeout(el._appearanceBrandTimer);
+      }
+      if (el._appearanceTopbarTimer) {
+        clearTimeout(el._appearanceTopbarTimer);
+      }
+    },
     init: function (el, config) {
       var campaignId = config.campaignId;
       var csrfToken = config.csrf;
@@ -41,7 +50,7 @@
           topbarStyle = parsed;
         }
       } catch (e) {
-        // Ignore parse errors, use defaults.
+        console.warn('[appearance-editor] Invalid topbar-style JSON, using defaults');
       }
 
       // DOM references.
@@ -57,9 +66,9 @@
       var gradToInput = el.querySelector('#appearance-topbar-gradient-to');
       var gradDirSelect = el.querySelector('#appearance-topbar-gradient-dir');
 
-      // Timers for debounced saves.
-      var brandTimer = null;
-      var topbarTimer = null;
+      // Timers for debounced saves (stored on element for destroy cleanup).
+      el._appearanceBrandTimer = null;
+      el._appearanceTopbarTimer = null;
 
       // --- Initialization ---
 
@@ -90,8 +99,8 @@
             previewBrand.textContent = brandInput.value || brandInput.placeholder;
           }
           // Debounced save.
-          clearTimeout(brandTimer);
-          brandTimer = setTimeout(function () {
+          clearTimeout(el._appearanceBrandTimer);
+          el._appearanceBrandTimer = setTimeout(function () {
             saveBranding(brandInput.value);
           }, DEBOUNCE_MS);
         });
@@ -105,7 +114,7 @@
               previewBrand.textContent = brandInput.placeholder;
             }
           }
-          clearTimeout(brandTimer);
+          clearTimeout(el._appearanceBrandTimer);
           saveBranding('');
         });
       }
@@ -208,8 +217,8 @@
        * Debounced save for topbar style.
        */
       function debouncedSaveTopbar() {
-        clearTimeout(topbarTimer);
-        topbarTimer = setTimeout(function () {
+        clearTimeout(el._appearanceTopbarTimer);
+        el._appearanceTopbarTimer = setTimeout(function () {
           saveTopbarStyle();
         }, DEBOUNCE_MS);
       }
@@ -222,8 +231,10 @@
           method: 'PUT',
           body: { brand_name: brandName },
           csrfToken: csrfToken
-        }).catch(function (err) {
-          console.error('[appearance-editor] Failed to save branding:', err);
+        }).then(function (res) {
+          if (!res.ok) { Chronicle.notify('Failed to save brand name', 'error'); }
+        }).catch(function () {
+          Chronicle.notify('Failed to save brand name', 'error');
         });
       }
 
@@ -243,8 +254,10 @@
           method: 'PUT',
           body: body,
           csrfToken: csrfToken
-        }).catch(function (err) {
-          console.error('[appearance-editor] Failed to save topbar style:', err);
+        }).then(function (res) {
+          if (!res.ok) { Chronicle.notify('Failed to save topbar style', 'error'); }
+        }).catch(function () {
+          Chronicle.notify('Failed to save topbar style', 'error');
         });
       }
     }

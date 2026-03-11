@@ -969,8 +969,6 @@ func topbarInlineStyle(ctx context.Context) string {
 			dir = "to bottom right"
 		case "to-b":
 			dir = "to bottom"
-		case "to-bl":
-			dir = "to bottom left"
 		}
 		if style.GradientFrom != "" && style.GradientTo != "" {
 			return fmt.Sprintf("background: linear-gradient(%s, %s, %s); border-color: transparent;", dir, style.GradientFrom, style.GradientTo)
