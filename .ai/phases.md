@@ -103,6 +103,28 @@ and LegendKeeper's page headers.
 
 **Key files:** `relation_graph.js`, layout block types, entity templates
 
+#### Sprint V-5: Session Journal Audio Attachments & Bug Fixes ✅
+
+Audio file attachments for journal notes. Foundation for future AI transcription.
+Also fixed journal save bug, added @mentions to journal, and session edit UI.
+
+- **Journal save fix**: `journal.js` referenced nonexistent `window.Chronicle._tiptapBundle`
+  instead of `window.TipTap`. Fixed so TipTap editor loads and notes save correctly.
+- **Session edit UI**: Edit button + `editSessionModal` on session detail page.
+  Pre-populates all fields, JSON PUT to existing `UpdateSessionAPI`.
+- **Journal @mentions**: `MentionLink` mark + `MentionExtension` lifecycle wired
+  into journal's TipTap editor for entity search and tooltip cards.
+- **Audio attachments**: `note_attachments` table (migration 000005).
+  `AttachmentRepository` + `AttachmentService` + REST handlers (list/upload/delete/transcript).
+  Media service extended with audio MIME types + magic bytes validation.
+  Journal UI: microphone upload button, inline `<audio>` players, collapsible
+  transcript textarea, delete support.
+
+**Key files:** `static/js/widgets/journal.js`, `internal/widgets/notes/journal.templ`,
+`internal/widgets/notes/handler.go`, `internal/widgets/notes/repository.go`,
+`internal/widgets/notes/service.go`, `internal/plugins/media/service.go`,
+`internal/plugins/sessions/sessions.templ`, `db/migrations/000005_note_attachments.up.sql`
+
 ---
 
 ### Phase W: Polish, Ecosystem & Delight
