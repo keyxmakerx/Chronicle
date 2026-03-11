@@ -983,8 +983,11 @@ func (a *App) RegisterRoutes() {
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	noteRepo := notes.NewNoteRepository(a.DB)
-	noteService := notes.NewNoteService(noteRepo)
-	noteHandler := notes.NewHandler(noteService)
+	attRepo := notes.NewAttachmentRepository(a.DB)
+	noteSvc := notes.NewNoteServiceWithAttachments(noteRepo, attRepo)
+	noteHandler := notes.NewHandler(noteSvc)
+	noteHandler.SetAttachmentService(noteSvc)
+	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
 	noteHandler.SetMemberLister(campaignService)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 
@@ -1466,4 +1469,26 @@ func (a *App) RegisterRoutes() {
 	// --- API Routes ---
 	// REST API v1 is registered above via syncapi.RegisterAPIRoutes().
 	// Endpoints: /api/v1/campaigns/:id/{entity-types,entities,sync}
+}
+
+// mediaUploadAdapter adapts MediaService to the notes.MediaUploader interface.
+type mediaUploadAdapter struct {
+	svc media.MediaService
+}
+
+// UploadRaw stores a file via the media service and returns the relative path.
+func (a *mediaUploadAdapter) UploadRaw(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (string, error) {
+	file, err := a.svc.Upload(ctx, media.UploadInput{
+		CampaignID:   campaignID,
+		UploadedBy:   userID,
+		OriginalName: originalName,
+		MimeType:     mimeType,
+		FileSize:     int64(len(fileBytes)),
+		UsageType:    "attachment",
+		FileBytes:    fileBytes,
+	})
+	if err != nil {
+		return "", err
+	}
+	return file.Filename, nil
 }

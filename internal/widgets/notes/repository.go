@@ -55,6 +55,15 @@ type NoteRepository interface {
 	PruneVersions(ctx context.Context, noteID string, keep int) error
 }
 
+// AttachmentRepository defines the data access contract for note attachments.
+type AttachmentRepository interface {
+	CreateAttachment(ctx context.Context, a *NoteAttachment) error
+	ListByNote(ctx context.Context, noteID string) ([]NoteAttachment, error)
+	FindAttachmentByID(ctx context.Context, id string) (*NoteAttachment, error)
+	DeleteAttachment(ctx context.Context, id string) error
+	UpdateTranscript(ctx context.Context, id string, transcript string) error
+}
+
 // noteRepository is the MariaDB implementation of NoteRepository.
 type noteRepository struct {
 	db *sql.DB
@@ -62,6 +71,11 @@ type noteRepository struct {
 
 // NewNoteRepository creates a new MariaDB-backed note repository.
 func NewNoteRepository(db *sql.DB) NoteRepository {
+	return &noteRepository{db: db}
+}
+
+// NewAttachmentRepository creates a new MariaDB-backed attachment repository.
+func NewAttachmentRepository(db *sql.DB) AttachmentRepository {
 	return &noteRepository{db: db}
 }
 
@@ -388,4 +402,98 @@ func (r *noteRepository) scanNotes(ctx context.Context, query string, args ...an
 		notes = append(notes, n)
 	}
 	return notes, rows.Err()
+}
+
+// --- Attachment Repository Implementation ---
+
+// CreateAttachment inserts a new note attachment record.
+func (r *noteRepository) CreateAttachment(ctx context.Context, a *NoteAttachment) error {
+	query := `INSERT INTO note_attachments
+		(id, note_id, campaign_id, file_path, original_name, mime_type, file_size, duration_secs, transcript)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	_, err := r.db.ExecContext(ctx, query,
+		a.ID, a.NoteID, a.CampaignID, a.FilePath, a.OriginalName,
+		a.MimeType, a.FileSize, a.DurationSecs, a.Transcript,
+	)
+	if err != nil {
+		return fmt.Errorf("inserting note attachment: %w", err)
+	}
+	return nil
+}
+
+// ListByNote returns all attachments for a given note, newest first.
+func (r *noteRepository) ListByNote(ctx context.Context, noteID string) ([]NoteAttachment, error) {
+	query := `SELECT id, note_id, campaign_id, file_path, original_name,
+		mime_type, file_size, duration_secs, transcript, created_at, updated_at
+		FROM note_attachments WHERE note_id = ?
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query, noteID)
+	if err != nil {
+		return nil, fmt.Errorf("querying note attachments: %w", err)
+	}
+	defer rows.Close()
+
+	var attachments []NoteAttachment
+	for rows.Next() {
+		var a NoteAttachment
+		if err := rows.Scan(&a.ID, &a.NoteID, &a.CampaignID, &a.FilePath,
+			&a.OriginalName, &a.MimeType, &a.FileSize, &a.DurationSecs,
+			&a.Transcript, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scanning note attachment: %w", err)
+		}
+		attachments = append(attachments, a)
+	}
+	return attachments, rows.Err()
+}
+
+// FindAttachmentByID retrieves a single attachment by ID.
+func (r *noteRepository) FindAttachmentByID(ctx context.Context, id string) (*NoteAttachment, error) {
+	query := `SELECT id, note_id, campaign_id, file_path, original_name,
+		mime_type, file_size, duration_secs, transcript, created_at, updated_at
+		FROM note_attachments WHERE id = ?`
+
+	var a NoteAttachment
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&a.ID, &a.NoteID, &a.CampaignID, &a.FilePath, &a.OriginalName,
+		&a.MimeType, &a.FileSize, &a.DurationSecs, &a.Transcript,
+		&a.CreatedAt, &a.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperror.NewNotFound("attachment not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("scanning note attachment: %w", err)
+	}
+	return &a, nil
+}
+
+// DeleteAttachment removes an attachment record by ID.
+func (r *noteRepository) DeleteAttachment(ctx context.Context, id string) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM note_attachments WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("deleting note attachment: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("attachment not found")
+	}
+	return nil
+}
+
+// UpdateTranscript sets the transcript text for an attachment.
+func (r *noteRepository) UpdateTranscript(ctx context.Context, id string, transcript string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE note_attachments SET transcript = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		transcript, id,
+	)
+	if err != nil {
+		return fmt.Errorf("updating attachment transcript: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("attachment not found")
+	}
+	return nil
 }

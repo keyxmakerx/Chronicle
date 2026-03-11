@@ -41,4 +41,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/notes/:noteId/versions", h.ListVersions, player)
 	cg.GET("/notes/:noteId/versions/:vid", h.GetVersion, player)
 	cg.POST("/notes/:noteId/versions/:vid/restore", h.RestoreVersion, player)
+
+	// Attachments (audio files, transcripts).
+	cg.GET("/notes/:nid/attachments", h.ListAttachments, player)
+	cg.POST("/notes/:nid/attachments", h.UploadAttachment, player)
+	cg.DELETE("/notes/:nid/attachments/:aid", h.DeleteAttachment, player)
+	cg.PUT("/notes/:nid/attachments/:aid/transcript", h.UpdateTranscript, player)
 }

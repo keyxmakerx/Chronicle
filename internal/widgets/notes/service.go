@@ -34,14 +34,29 @@ type NoteService interface {
 	RestoreVersion(ctx context.Context, noteID, versionID, userID string) (*Note, error)
 }
 
-// noteService implements NoteService.
+// AttachmentService defines the business logic for note attachments.
+type AttachmentService interface {
+	ListAttachments(ctx context.Context, noteID string) ([]NoteAttachment, error)
+	GetAttachment(ctx context.Context, id string) (*NoteAttachment, error)
+	CreateAttachment(ctx context.Context, a *NoteAttachment) error
+	DeleteAttachment(ctx context.Context, id string) (filePath string, err error)
+	UpdateTranscript(ctx context.Context, id, transcript string) error
+}
+
+// noteService implements NoteService and AttachmentService.
 type noteService struct {
-	repo NoteRepository
+	repo    NoteRepository
+	attRepo AttachmentRepository
 }
 
 // NewNoteService creates a new note service.
 func NewNoteService(repo NoteRepository) NoteService {
 	return &noteService{repo: repo}
+}
+
+// NewNoteServiceWithAttachments creates a note service with attachment support.
+func NewNoteServiceWithAttachments(repo NoteRepository, attRepo AttachmentRepository) *noteService {
+	return &noteService{repo: repo, attRepo: attRepo}
 }
 
 // Create validates and persists a new note.
@@ -292,6 +307,58 @@ func (s *noteService) createVersionSnapshot(ctx context.Context, note *Note, use
 	}
 	_ = s.repo.CreateVersion(ctx, v)
 	_ = s.repo.PruneVersions(ctx, note.ID, MaxVersionsPerNote)
+}
+
+// --- Attachment Service Methods ---
+
+// ListAttachments returns all attachments for a note.
+func (s *noteService) ListAttachments(ctx context.Context, noteID string) ([]NoteAttachment, error) {
+	if s.attRepo == nil {
+		return nil, apperror.NewInternal(nil)
+	}
+	return s.attRepo.ListByNote(ctx, noteID)
+}
+
+// GetAttachment retrieves a single attachment by ID.
+func (s *noteService) GetAttachment(ctx context.Context, id string) (*NoteAttachment, error) {
+	if s.attRepo == nil {
+		return nil, apperror.NewInternal(nil)
+	}
+	return s.attRepo.FindAttachmentByID(ctx, id)
+}
+
+// CreateAttachment validates and persists a new attachment record.
+func (s *noteService) CreateAttachment(ctx context.Context, a *NoteAttachment) error {
+	if s.attRepo == nil {
+		return apperror.NewInternal(nil)
+	}
+	if a.ID == "" {
+		a.ID = generateID()
+	}
+	return s.attRepo.CreateAttachment(ctx, a)
+}
+
+// DeleteAttachment removes an attachment record and returns the file path for cleanup.
+func (s *noteService) DeleteAttachment(ctx context.Context, id string) (string, error) {
+	if s.attRepo == nil {
+		return "", apperror.NewInternal(nil)
+	}
+	att, err := s.attRepo.FindAttachmentByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if err := s.attRepo.DeleteAttachment(ctx, id); err != nil {
+		return "", err
+	}
+	return att.FilePath, nil
+}
+
+// UpdateTranscript sets the transcript text for an attachment.
+func (s *noteService) UpdateTranscript(ctx context.Context, id, transcript string) error {
+	if s.attRepo == nil {
+		return apperror.NewInternal(nil)
+	}
+	return s.attRepo.UpdateTranscript(ctx, id, transcript)
 }
 
 // generateID creates a random 36-char hex string formatted as a UUID-like ID.

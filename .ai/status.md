@@ -8,6 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
+2026-03-11 -- **Sprint V-5: Journal fixes, session edit, @mentions, audio attachments.**
+
+29. **Journal + Sessions + Audio Attachments sprint.** Four changes:
+    - **Journal save bug fix**: `journal.js` referenced `window.Chronicle._tiptapBundle` which doesn't exist — the TipTap bundle is `window.TipTap`. Fixed the reference so TipTap editor loads correctly and notes save.
+    - **Session edit UI**: Added edit button + modal on session detail page. Pre-populates all fields (name, date, summary, status, recurrence). Submits JSON PUT to existing `UpdateSessionAPI` endpoint. Visible to Scribe+ users.
+    - **Journal @mentions**: Added `MentionLink` mark and `MentionExtension` lifecycle wiring to journal's TipTap editor. Users can type `@` to search and link entities with tooltip cards, matching the main entity editor's behavior.
+    - **Audio attachments (Sprint V-5)**: New `note_attachments` table (migration 000005). Full backend: `AttachmentRepository` + `AttachmentService` + REST handlers (list/upload/delete/transcript). Media service extended with audio MIME types (mp3/ogg/wav/webm) and magic bytes validation, with `sanitizeImage()` guarded to skip audio files. Journal UI: microphone upload button, inline `<audio>` players, collapsible transcript textarea per attachment, delete support.
+
+### Previous Update
 2026-03-11 -- **Sprint W-0.5: Visual Customization + Admin DB Explorer (IN PROGRESS).**
 
 28. **Customization Hub & Features page bug fixes.** Five issues resolved:

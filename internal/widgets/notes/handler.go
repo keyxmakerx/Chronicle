@@ -3,6 +3,7 @@ package notes
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -25,16 +26,33 @@ type memberRef struct {
 	Role     string `json:"role"`
 }
 
+// MediaUploader is an interface for uploading files to the media system.
+type MediaUploader interface {
+	UploadRaw(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (filePath string, err error)
+}
+
 // Handler handles HTTP requests for note operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service      NoteService
-	memberLister MemberLister
+	service       NoteService
+	attService    AttachmentService
+	mediaUploader MediaUploader
+	memberLister  MemberLister
 }
 
 // NewHandler creates a new note handler backed by the given service.
 func NewHandler(service NoteService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetAttachmentService sets the attachment service for audio upload support.
+func (h *Handler) SetAttachmentService(as AttachmentService) {
+	h.attService = as
+}
+
+// SetMediaUploader sets the media uploader for attachment file storage.
+func (h *Handler) SetMediaUploader(mu MediaUploader) {
+	h.mediaUploader = mu
 }
 
 // SetMemberLister sets the member lister for the share-with-players picker.
@@ -417,4 +435,176 @@ func canAccessNote(note *Note, userID, campaignID string) bool {
 		}
 	}
 	return false
+}
+
+// --- Attachment Handlers ---
+
+// ListAttachments returns attachments for a note.
+// GET /campaigns/:id/notes/:nid/attachments
+func (h *Handler) ListAttachments(c echo.Context) error {
+	if h.attService == nil {
+		return c.JSON(http.StatusOK, []NoteAttachment{})
+	}
+
+	cc := campaigns.GetCampaignContext(c)
+	userID := auth.GetUserID(c)
+	noteID := c.Param("nid")
+
+	note, err := h.service.GetByID(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	if !canAccessNote(note, userID, cc.Campaign.ID) {
+		return apperror.NewForbidden("access denied")
+	}
+
+	attachments, err := h.attService.ListAttachments(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	if attachments == nil {
+		attachments = []NoteAttachment{}
+	}
+	return c.JSON(http.StatusOK, attachments)
+}
+
+// UploadAttachment uploads an audio file and attaches it to a note.
+// POST /campaigns/:id/notes/:nid/attachments
+func (h *Handler) UploadAttachment(c echo.Context) error {
+	if h.attService == nil || h.mediaUploader == nil {
+		return apperror.NewBadRequest("attachments not configured")
+	}
+
+	cc := campaigns.GetCampaignContext(c)
+	userID := auth.GetUserID(c)
+	noteID := c.Param("nid")
+
+	note, err := h.service.GetByID(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	if note.UserID != userID && note.CampaignID != cc.Campaign.ID {
+		return apperror.NewForbidden("access denied")
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		return apperror.NewBadRequest("no file provided")
+	}
+
+	// Read file bytes.
+	src, err := file.Open()
+	if err != nil {
+		return apperror.NewBadRequest("could not read uploaded file")
+	}
+	defer src.Close()
+
+	fileBytes, err := io.ReadAll(io.LimitReader(src, 100*1024*1024)) // 100MB limit
+	if err != nil {
+		return apperror.NewBadRequest("could not read uploaded file")
+	}
+
+	mimeType := file.Header.Get("Content-Type")
+
+	// Upload via media service.
+	filePath, err := h.mediaUploader.UploadRaw(c.Request().Context(),
+		cc.Campaign.ID, userID, fileBytes, file.Filename, mimeType)
+	if err != nil {
+		return err
+	}
+
+	// Create attachment record.
+	att := &NoteAttachment{
+		NoteID:       noteID,
+		CampaignID:   cc.Campaign.ID,
+		FilePath:     filePath,
+		OriginalName: file.Filename,
+		MimeType:     mimeType,
+		FileSize:     int64(len(fileBytes)),
+	}
+	if err := h.attService.CreateAttachment(c.Request().Context(), att); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusCreated, att)
+}
+
+// DeleteAttachment removes an attachment.
+// DELETE /campaigns/:id/notes/:nid/attachments/:aid
+func (h *Handler) DeleteAttachment(c echo.Context) error {
+	if h.attService == nil {
+		return apperror.NewBadRequest("attachments not configured")
+	}
+
+	cc := campaigns.GetCampaignContext(c)
+	userID := auth.GetUserID(c)
+	noteID := c.Param("nid")
+	attID := c.Param("aid")
+
+	note, err := h.service.GetByID(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	// Only note owner or campaign owner can delete attachments.
+	if note.UserID != userID && cc.MemberRole < campaigns.RoleOwner {
+		return apperror.NewForbidden("only note owner or campaign owner can delete attachments")
+	}
+
+	// Verify attachment belongs to this note.
+	att, err := h.attService.GetAttachment(c.Request().Context(), attID)
+	if err != nil {
+		return err
+	}
+	if att.NoteID != noteID {
+		return apperror.NewNotFound("attachment not found")
+	}
+
+	if _, err := h.attService.DeleteAttachment(c.Request().Context(), attID); err != nil {
+		return err
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// UpdateTranscript saves or updates the transcript text for an attachment.
+// PUT /campaigns/:id/notes/:nid/attachments/:aid/transcript
+func (h *Handler) UpdateTranscript(c echo.Context) error {
+	if h.attService == nil {
+		return apperror.NewBadRequest("attachments not configured")
+	}
+
+	cc := campaigns.GetCampaignContext(c)
+	userID := auth.GetUserID(c)
+	noteID := c.Param("nid")
+	attID := c.Param("aid")
+
+	note, err := h.service.GetByID(c.Request().Context(), noteID)
+	if err != nil {
+		return err
+	}
+	if note.UserID != userID && cc.MemberRole < campaigns.RoleOwner {
+		return apperror.NewForbidden("access denied")
+	}
+
+	// Verify attachment belongs to this note.
+	att, err := h.attService.GetAttachment(c.Request().Context(), attID)
+	if err != nil {
+		return err
+	}
+	if att.NoteID != noteID {
+		return apperror.NewNotFound("attachment not found")
+	}
+
+	var req struct {
+		Transcript string `json:"transcript"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.attService.UpdateTranscript(c.Request().Context(), attID, req.Transcript); err != nil {
+		return err
+	}
+
+	return c.NoContent(http.StatusNoContent)
 }

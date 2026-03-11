@@ -238,6 +238,13 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 				</div>
 				if isScribe {
 					<div class="flex items-center gap-2">
+						<button
+							type="button"
+							class="btn-secondary text-sm"
+							onclick="document.getElementById('edit-session-modal').showModal()"
+						>
+							<i class="fa-solid fa-pen mr-1"></i> Edit
+						</button>
 						if session.Status == StatusPlanned {
 							<button
 								type="button"
@@ -381,8 +388,146 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 					}
 				</div>
 			</div>
+			if isScribe {
+				@editSessionModal(cc, session, csrfToken)
+			}
 		</div>
 	}
+}
+
+// editSessionModal renders the edit session dialog.
+templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToken string) {
+	<dialog id="edit-session-modal" class="rounded-lg shadow-xl bg-surface border border-edge p-0 w-full max-w-md backdrop:bg-black/50">
+		<div class="p-6">
+			<h2 class="text-lg font-semibold text-fg mb-4">Edit Session</h2>
+			<div class="space-y-4" x-data={ fmt.Sprintf("{ recurring: %t, recType: '%s' }", session.IsRecurring, derefStr(session.RecurrenceType)) }>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Session Name</label>
+					<input type="text" id="edit-session-name" class="input w-full" required value={ session.Name }/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Scheduled Date</label>
+					<input type="date" id="edit-session-date" class="input w-full" value={ derefStr(session.ScheduledDate) }/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Summary</label>
+					<textarea id="edit-session-summary" class="input w-full" rows="3">{ derefStr(session.Summary) }</textarea>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Status</label>
+					<select id="edit-session-status" class="input w-full text-sm" data-initial={ session.Status }>
+						<option value="planned">Planned</option>
+						<option value="completed">Completed</option>
+						<option value="cancelled">Cancelled</option>
+					</select>
+				</div>
+				<!-- Recurrence -->
+				<div>
+					<label class="flex items-center gap-2 text-sm font-medium text-fg-body cursor-pointer">
+						<input
+							type="checkbox"
+							id="edit-session-recurring"
+							x-model="recurring"
+							class="accent-accent"
+							if session.IsRecurring {
+								checked
+							}
+						/>
+						Repeating session
+					</label>
+				</div>
+				<div x-show="recurring" x-transition x-cloak class="space-y-3 pl-4 border-l-2 border-accent/30">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Frequency</label>
+						<select id="edit-session-recurrence-type" x-model="recType" class="input w-full text-sm">
+							<option value="">Select...</option>
+							<option value="weekly">Every week</option>
+							<option value="biweekly">Every 2 weeks</option>
+							<option value="monthly">Monthly</option>
+							<option value="custom">Custom interval</option>
+						</select>
+					</div>
+					<div x-show="recType === 'custom'" x-transition>
+						<label class="block text-xs font-medium text-fg-body mb-1">Every N weeks</label>
+						<input type="number" id="edit-session-recurrence-interval" min="1" max="52" class="input w-24 text-sm" value={ fmt.Sprintf("%d", session.RecurrenceInterval) }/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">End date (optional)</label>
+						<input type="date" id="edit-session-recurrence-end" class="input w-full text-sm" value={ derefStr(session.RecurrenceEndDate) }/>
+					</div>
+				</div>
+			</div>
+			<div class="flex items-center justify-end gap-2 mt-6">
+				<button type="button" class="btn-secondary text-sm" onclick="this.closest('dialog').close()">
+					Cancel
+				</button>
+				<button type="button" class="btn-primary text-sm" id="edit-session-save-btn">
+					<i class="fa-solid fa-check mr-1"></i> Save Changes
+				</button>
+			</div>
+		</div>
+		<script>
+			(function() {
+				// Set initial select value from data attribute.
+				var statusSelect = document.getElementById('edit-session-status');
+				if (statusSelect && statusSelect.dataset.initial) {
+					statusSelect.value = statusSelect.dataset.initial;
+				}
+				var btn = document.getElementById('edit-session-save-btn');
+				if (!btn) return;
+				btn.addEventListener('click', function() {
+					var name = document.getElementById('edit-session-name').value.trim();
+					if (!name) {
+						Chronicle.notify('Session name is required', 'error');
+						return;
+					}
+					var summary = document.getElementById('edit-session-summary').value;
+					var date = document.getElementById('edit-session-date').value;
+					var status = document.getElementById('edit-session-status').value;
+					var recurring = document.getElementById('edit-session-recurring').checked;
+					var recType = document.getElementById('edit-session-recurrence-type');
+					var recInterval = document.getElementById('edit-session-recurrence-interval');
+					var recEnd = document.getElementById('edit-session-recurrence-end');
+
+					var body = {
+						name: name,
+						summary: summary || null,
+						scheduled_date: date || null,
+						status: status,
+						is_recurring: recurring
+					};
+					if (recurring && recType) {
+						body.recurrence_type = recType.value || null;
+						body.recurrence_interval = recInterval ? parseInt(recInterval.value) || 0 : 0;
+						body.recurrence_end_date = recEnd ? (recEnd.value || null) : null;
+					}
+
+					btn.disabled = true;
+					btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs mr-1"></i> Saving...';
+
+					Chronicle.apiFetch(location.pathname, {
+						method: 'PUT',
+						body: body
+					}).then(function(res) {
+						if (res.ok) {
+							location.reload();
+						} else {
+							res.json().then(function(d) {
+								Chronicle.notify(d.error || 'Failed to update session', 'error');
+							}).catch(function() {
+								Chronicle.notify('Failed to update session', 'error');
+							});
+						}
+					}).catch(function() {
+						Chronicle.notify('Failed to update session', 'error');
+					}).finally(function() {
+						btn.disabled = false;
+						btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Save Changes';
+					});
+				});
+			})();
+		</script>
+	</dialog>
 }
 
 // AttendeeList renders the RSVP attendee list with action buttons.

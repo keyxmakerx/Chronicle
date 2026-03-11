@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -176,16 +177,19 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		return nil, apperror.NewBadRequest("file content does not match declared type")
 	}
 
-	// Re-encode the image to strip ALL metadata (EXIF, IPTC, XMP) and
+	// Re-encode images to strip ALL metadata (EXIF, IPTC, XMP) and
 	// destroy any polyglot payloads. The decode-then-encode pipeline
 	// produces a clean file containing only pixel data (CDR approach).
-	sanitizedBytes, effectiveMime, err := sanitizeImage(input.FileBytes, input.MimeType)
-	if err != nil {
-		return nil, apperror.NewBadRequest("image sanitization failed: " + err.Error())
+	// Audio files are stored as-is (no re-encoding needed).
+	if strings.HasPrefix(input.MimeType, "image/") {
+		sanitizedBytes, effectiveMime, err := sanitizeImage(input.FileBytes, input.MimeType)
+		if err != nil {
+			return nil, apperror.NewBadRequest("image sanitization failed: " + err.Error())
+		}
+		input.FileBytes = sanitizedBytes
+		input.FileSize = int64(len(sanitizedBytes))
+		input.MimeType = effectiveMime
 	}
-	input.FileBytes = sanitizedBytes
-	input.FileSize = int64(len(sanitizedBytes))
-	input.MimeType = effectiveMime
 
 	// Generate UUID filename in date-based directory.
 	id := generateUUID()
@@ -571,8 +575,7 @@ func (s *mediaService) generateThumbnail(data []byte, dir, id, ext string, maxDi
 }
 
 // validateMagicBytes checks that the file content's magic bytes match the
-// declared MIME type. Prevents uploading non-image files with a spoofed
-// Content-Type header.
+// declared MIME type. Prevents uploading files with a spoofed Content-Type header.
 func validateMagicBytes(data []byte, declaredMIME string) bool {
 	if len(data) < 4 {
 		return false
@@ -588,6 +591,17 @@ func validateMagicBytes(data []byte, declaredMIME string) bool {
 		return len(data) >= 6 && string(data[:3]) == "GIF"
 	case "image/webp":
 		return len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP"
+	// Audio formats.
+	case "audio/mpeg":
+		// MP3: starts with 0xFF 0xFB/0xF3/0xF2 (frame sync) or "ID3" (ID3 tag).
+		return (data[0] == 0xFF && (data[1]&0xE0) == 0xE0) || string(data[:3]) == "ID3"
+	case "audio/ogg":
+		return string(data[:4]) == "OggS"
+	case "audio/wav":
+		return len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WAVE"
+	case "audio/webm":
+		// WebM uses Matroska container: starts with EBML header 0x1A45DFA3.
+		return len(data) >= 4 && data[0] == 0x1A && data[1] == 0x45 && data[2] == 0xDF && data[3] == 0xA3
 	default:
 		return false
 	}
