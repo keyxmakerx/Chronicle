@@ -180,18 +180,19 @@ class ShopWindow extends Application {
     html.find('.shop-item').each((i, el) => {
       el.setAttribute('draggable', true);
       el.addEventListener('dragstart', (event) => {
-        const itemData = JSON.parse(el.dataset.item || '{}');
+        const itemId = el.dataset.itemId;
+        const itemData = this._inventory.find((item) => item.id === itemId) || {};
         event.dataTransfer.setData(
           'text/plain',
           JSON.stringify({
             type: 'Item',
-            name: itemData.name,
+            name: itemData.name || 'Unknown Item',
             img: itemData.image_path || 'icons/svg/item-bag.svg',
             system: {},
             flags: {
               [FLAG_SCOPE]: {
                 shopEntityId: this._entityId,
-                chronicleItemId: itemData.id,
+                chronicleItemId: itemId,
               },
             },
           })

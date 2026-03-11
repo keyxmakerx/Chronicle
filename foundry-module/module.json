@@ -45,6 +45,12 @@
         "type": "module",
         "compatibility": {},
         "reason": "Optional: Calendar sync between Chronicle and Calendaria"
+      },
+      {
+        "id": "foundryvtt-simple-calendar",
+        "type": "module",
+        "compatibility": {},
+        "reason": "Optional: Calendar sync between Chronicle and Simple Calendar"
       }
     ]
   }

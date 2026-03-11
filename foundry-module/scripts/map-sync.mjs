@@ -54,6 +54,20 @@ export class MapSync {
     Hooks.on('updateToken', this._onUpdateToken);
     Hooks.on('deleteToken', this._onDeleteToken);
 
+    // Add context menu option to link scenes to Chronicle maps.
+    Hooks.on('getSceneNavigationContext', (html, options) => {
+      options.push({
+        name: 'Link to Chronicle Map',
+        icon: '<i class="fas fa-link"></i>',
+        condition: () => game.user.isGM,
+        callback: async (li) => {
+          const sceneId = li.data('sceneId');
+          const scene = game.scenes.get(sceneId);
+          if (scene) await this._showMapLinkDialog(scene);
+        },
+      });
+    });
+
     console.log('Chronicle: Map sync initialized');
   }
 
@@ -108,6 +122,221 @@ export class MapSync {
     this._tokenDebounceTimers.clear();
   }
 
+  /**
+   * Handle a sync mapping received during initial sync.
+   * Processes map, drawing, and token mappings.
+   * @param {object} mapping
+   */
+  async onSyncMapping(mapping) {
+    if (!getSetting('syncMaps')) return;
+
+    if (mapping.chronicle_type === 'map') {
+      // Link the Foundry scene to the Chronicle map.
+      const scene = game.scenes.get(mapping.external_id);
+      if (scene && !scene.getFlag(FLAG_SCOPE, 'mapId')) {
+        await scene.setFlag(FLAG_SCOPE, 'mapId', mapping.chronicle_id);
+        console.log(`Chronicle: Linked scene "${scene.name}" to map ${mapping.chronicle_id}`);
+      }
+    } else if (mapping.chronicle_type === 'drawing') {
+      // Set drawingId flag on the matching Foundry Drawing.
+      const scene = canvas.scene;
+      if (!scene) return;
+      const drawing = scene.drawings.get(mapping.external_id);
+      if (drawing && !drawing.getFlag(FLAG_SCOPE, 'drawingId')) {
+        this._syncing = true;
+        try {
+          await drawing.setFlag(FLAG_SCOPE, 'drawingId', mapping.chronicle_id);
+        } finally {
+          this._syncing = false;
+        }
+      }
+    } else if (mapping.chronicle_type === 'token') {
+      // Set tokenId flag on the matching Foundry Token.
+      const scene = canvas.scene;
+      if (!scene) return;
+      const token = scene.tokens.get(mapping.external_id);
+      if (token && !token.getFlag(FLAG_SCOPE, 'tokenId')) {
+        this._syncing = true;
+        try {
+          await token.setFlag(FLAG_SCOPE, 'tokenId', mapping.chronicle_id);
+        } finally {
+          this._syncing = false;
+        }
+      }
+    }
+  }
+
+  /**
+   * Perform initial map sync on WebSocket connect.
+   * Fetches the current state of drawings, tokens, and fog from Chronicle
+   * and reconciles with the active Foundry scene.
+   */
+  async onInitialSync() {
+    if (!getSetting('syncMaps')) return;
+
+    const scene = canvas.scene;
+    if (!scene) return;
+
+    let mapId = scene.getFlag(FLAG_SCOPE, 'mapId');
+
+    // If no scene is linked, try to auto-link by fetching campaign maps.
+    if (!mapId) {
+      try {
+        const maps = await this._api.get('/maps');
+        if (maps && maps.length === 1) {
+          mapId = maps[0].id;
+          await scene.setFlag(FLAG_SCOPE, 'mapId', mapId);
+          console.log(`Chronicle: Auto-linked scene "${scene.name}" to map "${maps[0].name}"`);
+
+          // Create sync mapping on the server.
+          await this._api.post('/sync/mappings', {
+            chronicle_type: 'map',
+            chronicle_id: mapId,
+            external_system: 'foundry',
+            external_id: scene.id,
+            sync_direction: 'both',
+          });
+        } else if (maps && maps.length > 1) {
+          console.warn(
+            `Chronicle: ${maps.length} maps found. Right-click a scene in the navigation bar and select "Link to Chronicle Map" to link manually.`
+          );
+          return;
+        } else {
+          return;
+        }
+      } catch (err) {
+        console.error('Chronicle: Failed to fetch maps for auto-link', err);
+        return;
+      }
+    }
+
+    // Pull current drawings, tokens, and fog from Chronicle.
+    try {
+      const [drawings, tokens, fog] = await Promise.all([
+        this._api.get(`/maps/${mapId}/drawings`).catch(() => []),
+        this._api.get(`/maps/${mapId}/tokens`).catch(() => []),
+        this._api.get(`/maps/${mapId}/fog`).catch(() => []),
+      ]);
+
+      // Reconcile drawings: add any that are missing from the scene.
+      this._syncing = true;
+      try {
+        for (const cd of (drawings || [])) {
+          const existing = scene.drawings.find(
+            (d) => d.getFlag(FLAG_SCOPE, 'drawingId') === cd.id
+          );
+          if (!existing) {
+            const drawingData = this._chronicleDrawingToFoundry(cd, scene);
+            if (drawingData) {
+              await scene.createEmbeddedDocuments('Drawing', [drawingData]);
+            }
+          }
+        }
+
+        // Reconcile tokens: add any that are missing from the scene.
+        for (const ct of (tokens || [])) {
+          const existing = scene.tokens.find(
+            (t) => t.getFlag(FLAG_SCOPE, 'tokenId') === ct.id
+          );
+          if (!existing) {
+            const tokenData = this._chronicleTokenToFoundry(ct, scene);
+            if (tokenData) {
+              await scene.createEmbeddedDocuments('Token', [tokenData]);
+            }
+          }
+        }
+      } finally {
+        this._syncing = false;
+      }
+
+      // Reconcile fog regions.
+      if (fog && fog.length > 0) {
+        await this._reconcileFogRegions(scene, fog);
+      }
+
+      console.log('Chronicle: Map initial sync complete');
+    } catch (err) {
+      console.error('Chronicle: Map initial sync failed', err);
+    }
+  }
+
+  /**
+   * Show a dialog for the GM to pick which Chronicle map to link to a scene.
+   * @param {Scene} scene
+   * @private
+   */
+  async _showMapLinkDialog(scene) {
+    try {
+      const maps = await this._api.get('/maps');
+      if (!maps || maps.length === 0) {
+        ui.notifications.warn('Chronicle: No maps found in this campaign.');
+        return;
+      }
+
+      const currentMapId = scene.getFlag(FLAG_SCOPE, 'mapId');
+
+      // Build selection options.
+      const options = maps.map(
+        (m) => `<option value="${m.id}" ${m.id === currentMapId ? 'selected' : ''}>${m.name}</option>`
+      ).join('');
+
+      new Dialog({
+        title: 'Link to Chronicle Map',
+        content: `
+          <form>
+            <div class="form-group">
+              <label>Chronicle Map</label>
+              <select name="mapId">${options}</select>
+            </div>
+          </form>
+        `,
+        buttons: {
+          link: {
+            icon: '<i class="fas fa-link"></i>',
+            label: 'Link',
+            callback: async (html) => {
+              const mapId = html.find('[name="mapId"]').val();
+              if (mapId) {
+                await scene.setFlag(FLAG_SCOPE, 'mapId', mapId);
+
+                // Create sync mapping on the server.
+                try {
+                  await this._api.post('/sync/mappings', {
+                    chronicle_type: 'map',
+                    chronicle_id: mapId,
+                    external_system: 'foundry',
+                    external_id: scene.id,
+                    sync_direction: 'both',
+                  });
+                } catch (err) {
+                  console.warn('Chronicle: Failed to create map sync mapping', err);
+                }
+
+                ui.notifications.info(`Chronicle: Scene "${scene.name}" linked to map.`);
+              }
+            },
+          },
+          unlink: {
+            icon: '<i class="fas fa-unlink"></i>',
+            label: 'Unlink',
+            callback: async () => {
+              await scene.unsetFlag(FLAG_SCOPE, 'mapId');
+              ui.notifications.info(`Chronicle: Scene "${scene.name}" unlinked.`);
+            },
+          },
+          cancel: {
+            icon: '<i class="fas fa-times"></i>',
+            label: 'Cancel',
+          },
+        },
+        default: 'link',
+      }).render(true);
+    } catch (err) {
+      console.error('Chronicle: Failed to fetch maps for linking', err);
+      ui.notifications.error('Chronicle: Failed to fetch maps. Check console.');
+    }
+  }
+
   // --- Chronicle → Foundry ---
 
   /**
@@ -119,7 +348,7 @@ export class MapSync {
     const scene = this._getLinkedScene(msg.campaignId);
     if (!scene) return;
 
-    const drawingData = this._chronicleDrawingToFoundry(msg.payload);
+    const drawingData = this._chronicleDrawingToFoundry(msg.payload, scene);
     if (!drawingData) return;
 
     this._syncing = true;
@@ -139,7 +368,7 @@ export class MapSync {
     );
     if (!drawing) return;
 
-    const updates = this._chronicleDrawingToFoundry(msg.payload);
+    const updates = this._chronicleDrawingToFoundry(msg.payload, scene);
     if (!updates) return;
 
     this._syncing = true;
@@ -258,20 +487,22 @@ export class MapSync {
   }
 
   /**
-   * Add a single Chronicle fog region as a Drawing on the Foundry scene.
+   * Build the Foundry Drawing data for a Chronicle fog region.
+   * Returns null if the region data is invalid.
    * @param {Scene} scene
    * @param {object} region - Chronicle fog region data.
+   * @returns {object|null} Foundry Drawing document data.
    * @private
    */
-  async _addFogRegionToScene(scene, region) {
-    if (!region?.points) return;
+  _createFogDrawingData(scene, region) {
+    if (!region?.points) return null;
 
     const dims = scene.dimensions;
     const points = typeof region.points === 'string'
       ? JSON.parse(region.points)
       : region.points;
 
-    if (!Array.isArray(points) || points.length < 3) return;
+    if (!Array.isArray(points) || points.length < 3) return null;
 
     // Convert percentage coords to pixel coords for Foundry.
     const pixelPoints = points.map((p) => [
@@ -282,19 +513,32 @@ export class MapSync {
     const fillColor = region.is_explored ? '#00000000' : '#000000';
     const fillAlpha = region.is_explored ? 0 : 0.7;
 
+    return {
+      shape: { type: 'p', points: pixelPoints.flat() },
+      x: 0,
+      y: 0,
+      fillColor,
+      fillAlpha,
+      strokeColor: '#000000',
+      strokeAlpha: 0.3,
+      strokeWidth: 1,
+      flags: { [FLAG_SCOPE]: { fogRegionId: region.id } },
+    };
+  }
+
+  /**
+   * Add a single Chronicle fog region as a Drawing on the Foundry scene.
+   * @param {Scene} scene
+   * @param {object} region - Chronicle fog region data.
+   * @private
+   */
+  async _addFogRegionToScene(scene, region) {
+    const drawingData = this._createFogDrawingData(scene, region);
+    if (!drawingData) return;
+
     this._syncing = true;
     try {
-      const [created] = await scene.createEmbeddedDocuments('Drawing', [{
-        shape: { type: 'p', points: pixelPoints.flat() },
-        x: 0,
-        y: 0,
-        fillColor,
-        fillAlpha,
-        strokeColor: '#000000',
-        strokeAlpha: 0.3,
-        strokeWidth: 1,
-        flags: { [FLAG_SCOPE]: { fogRegionId: region.id } },
-      }]);
+      const [created] = await scene.createEmbeddedDocuments('Drawing', [drawingData]);
       if (created) {
         console.log(`Chronicle: Fog region ${region.id} added to scene`);
       }
@@ -328,7 +572,8 @@ export class MapSync {
 
   /**
    * Reconcile fog regions from Chronicle with fog drawings on the scene.
-   * Adds missing regions and removes stale drawings.
+   * Adds missing regions and removes stale drawings. Uses batched operations
+   * with a single _syncing guard to avoid flag corruption.
    * @param {Scene} scene
    * @param {Array} regions - Chronicle fog regions.
    * @private
@@ -347,16 +592,19 @@ export class MapSync {
       .filter((d) => !regionIds.has(d.getFlag(FLAG_SCOPE, 'fogRegionId')))
       .map((d) => d.id);
 
-    // Add drawings for new regions.
-    const toAdd = regions.filter((r) => !existingIds.has(r.id));
+    // Build drawing data for new regions.
+    const toAddData = regions
+      .filter((r) => !existingIds.has(r.id))
+      .map((r) => this._createFogDrawingData(scene, r))
+      .filter(Boolean);
 
     this._syncing = true;
     try {
       if (toDelete.length > 0) {
         await scene.deleteEmbeddedDocuments('Drawing', toDelete);
       }
-      for (const region of toAdd) {
-        await this._addFogRegionToScene(scene, region);
+      if (toAddData.length > 0) {
+        await scene.createEmbeddedDocuments('Drawing', toAddData);
       }
     } finally {
       this._syncing = false;
@@ -681,12 +929,16 @@ export class MapSync {
 
   /**
    * Convert a Chronicle drawing to Foundry Drawing document data.
+   * Converts percentage-based coordinates to pixel coordinates.
    * @param {object} cd - Chronicle drawing data.
+   * @param {Scene} scene - Target scene for coordinate conversion.
    * @returns {object|null}
    * @private
    */
-  _chronicleDrawingToFoundry(cd) {
+  _chronicleDrawingToFoundry(cd, scene) {
     if (!cd) return null;
+
+    const dims = scene.dimensions;
 
     // Map drawing type to Foundry shape type.
     const shapeTypes = {
@@ -697,15 +949,31 @@ export class MapSync {
       text: 't',
     };
 
+    // Convert percentage coords to pixel coords.
+    const x = ((cd.x || 0) / 100) * dims.width;
+    const y = ((cd.y || 0) / 100) * dims.height;
+    const width = ((cd.width || 1) / 100) * dims.width;
+    const height = ((cd.height || 1) / 100) * dims.height;
+
+    // Convert polygon points from percentage to pixel coordinates.
+    let points = cd.points || [];
+    if (Array.isArray(points) && points.length > 0) {
+      points = points.map((val, i) =>
+        i % 2 === 0
+          ? (val / 100) * dims.width
+          : (val / 100) * dims.height
+      );
+    }
+
     return {
       shape: {
         type: shapeTypes[cd.drawing_type] || 'f',
-        width: cd.width || 100,
-        height: cd.height || 100,
-        points: cd.points || [],
+        width,
+        height,
+        points,
       },
-      x: cd.x || 0,
-      y: cd.y || 0,
+      x,
+      y,
       strokeColor: cd.stroke_color || '#000000',
       strokeAlpha: 1,
       strokeWidth: cd.stroke_width || 2,
@@ -725,16 +993,39 @@ export class MapSync {
 
   /**
    * Convert a Foundry Drawing to Chronicle drawing data.
+   * Converts pixel coordinates to percentage-based coordinates.
    * @param {DrawingDocument} drawing
    * @returns {object}
    * @private
    */
   _foundryDrawingToChronicle(drawing) {
+    const scene = drawing.parent;
+    const dims = scene.dimensions;
     const typeMap = { f: 'freehand', r: 'rectangle', e: 'ellipse', p: 'polygon', t: 'text' };
+
+    // Convert pixel coords to percentage.
+    const x = (drawing.x / dims.width) * 100;
+    const y = (drawing.y / dims.height) * 100;
+    const width = ((drawing.shape?.width || 0) / dims.width) * 100;
+    const height = ((drawing.shape?.height || 0) / dims.height) * 100;
+
+    // Convert polygon points from pixel to percentage coordinates.
+    let points = drawing.shape?.points || [];
+    if (Array.isArray(points) && points.length > 0) {
+      points = points.map((val, i) =>
+        i % 2 === 0
+          ? (val / dims.width) * 100
+          : (val / dims.height) * 100
+      );
+    }
 
     return {
       drawing_type: typeMap[drawing.shape?.type] || 'freehand',
-      points: drawing.shape?.points || [],
+      x,
+      y,
+      width,
+      height,
+      points,
       stroke_color: drawing.strokeColor || '#000000',
       stroke_width: drawing.strokeWidth || 2,
       fill_color: drawing.fillColor || null,

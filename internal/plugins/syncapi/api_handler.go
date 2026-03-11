@@ -230,6 +230,15 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
+	// If no entity type specified, use the first available type for the campaign.
+	if req.EntityTypeID == 0 {
+		types, err := h.entitySvc.GetEntityTypes(c.Request().Context(), c.Param("id"))
+		if err != nil || len(types) == 0 {
+			return apperror.NewBadRequest("no entity types available")
+		}
+		req.EntityTypeID = types[0].ID
+	}
+
 	entity, err := h.entitySvc.Create(c.Request().Context(), c.Param("id"), key.UserID, entities.CreateEntityInput{
 		Name:         req.Name,
 		EntityTypeID: req.EntityTypeID,
