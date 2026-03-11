@@ -497,7 +497,7 @@ func (h *Handler) UploadAttachment(c echo.Context) error {
 	if err != nil {
 		return apperror.NewBadRequest("could not read uploaded file")
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	fileBytes, err := io.ReadAll(io.LimitReader(src, 100*1024*1024)) // 100MB limit
 	if err != nil {
