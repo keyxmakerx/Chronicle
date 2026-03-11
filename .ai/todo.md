@@ -58,6 +58,7 @@ Known broken or missing things, ordered by severity.
 - [x] **Timeline event creation from timeline page** — Already implemented: "Create Event" button in header opens modal with full form (name, date, description, category, visibility, color, multi-day, recurrence). POST to standalone-events API.
 - [x] **Calendar shows as pending plugin in admin** — Fixed: set calendar and API to PluginActive, added 5 missing active plugins to registry.
 - [x] **False "confirm before leaving" dialog** — Fixed: added htmx:beforeRedirect listener to clear dirty form state before HTMX redirects.
+- [x] **Session "Mark Complete" button fails with red error bar** — `hx-vals` sends form-encoded data but `UpdateSessionAPI` expects JSON. Replaced with `Chronicle.apiFetch()` onclick. Also fixed XSS risk from session name interpolation into JSON string.
 - [x] **Image upload 500 error (ClamAV)** — Removed ClamAV entirely, added structured error logging to upload pipeline.
 - [x] **Nav panel not showing new entities** — Fixed: sidebar drill panel refreshes content on navigation instead of closing.
 - [x] **Shop inventory "entity type not found" in template editor** — Fixed: added missing data-campaign-id to layout editor fragment widget mount.
@@ -188,7 +189,7 @@ _Fix orphaned data, cascade gaps, and admin DB visibility. See `.ai/phases.md`._
 
 ### Phase U: Collaboration & Platform Maturity
 
-- [ ] **Sprint U-1: Role-Aware Dashboards** — Role-keyed dashboard layouts. Dashboard editor gains role selector. Players see role-specific dashboard or default fallback.
+- [~] **Sprint U-1: Role-Aware Dashboards** — Two-dashboard architecture implemented: Campaign Page (public, `/campaigns/:id`) and Owner Dashboard (owner-only, `/campaigns/:id/dashboard`). Both independently customizable via Customization Hub. Migration 000006 adds `owner_dashboard_layout` column. Remaining: role selector in dashboard editor so Players/Scribes can see role-specific campaign page layouts.
 - [ ] **Sprint U-2: Invite System** — Migration: `campaign_invites` table. Email invitations with one-click accept link. Non-public campaigns require invitation. Invite management UI.
 - [ ] **Sprint U-3: 2FA/TOTP Support** — TOTP enrollment with QR code (`pquerna/otp`). Login redirect to TOTP input. Recovery codes (8 hashed). Admin force-disable.
 - [ ] **Sprint U-4: Accessibility Audit (WCAG 2.1 AA)** — ARIA labels, focus traps, skip-to-content, color contrast 4.5:1, keyboard nav, screen reader announcements, axe-core scanning.
