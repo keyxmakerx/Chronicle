@@ -900,7 +900,7 @@ func (h *Handler) UploadFoundryModule(c echo.Context) error {
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("open uploaded file: %w", err))
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	// Read entire zip into memory for zip.NewReader (needs ReadSeeker).
 	zipBytes, err := io.ReadAll(io.LimitReader(src, maxZipSize+1))
@@ -977,7 +977,7 @@ func (h *Handler) UploadFoundryModule(c echo.Context) error {
 		}
 
 		data, err := io.ReadAll(io.LimitReader(rc, maxZipSize))
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
 			return apperror.NewInternal(fmt.Errorf("read zip entry %s: %w", name, err))
 		}
