@@ -731,6 +731,7 @@ func (a *App) RegisterRoutes() {
 	campaignRepo := campaigns.NewCampaignRepository(a.DB)
 	campaignService := campaigns.NewCampaignService(campaignRepo, userFinder, smtpService, entityService, a.Config.BaseURL)
 	campaignHandler := campaigns.NewHandler(campaignService)
+	campaignHandler.SetBaseURL(a.Config.BaseURL)
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
 	campaignHandler.SetLayoutFetcher(&entityTypeLayoutFetcherAdapter{svc: entityService})
 	campaignHandler.SetRecentEntityLister(&recentEntityListerAdapter{svc: entityService})
@@ -810,6 +811,7 @@ func (a *App) RegisterRoutes() {
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings, storage).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
 	adminHandler.SetMediaDeps(mediaRepo, mediaService, a.Config.Upload.MaxSize)
+	adminHandler.SetBaseURL(a.Config.BaseURL)
 	adminGroup := admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
 
 	// Settings plugin: editable storage limits (global, per-user, per-campaign).

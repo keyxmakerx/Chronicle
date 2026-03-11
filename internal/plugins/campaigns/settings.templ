@@ -20,7 +20,7 @@ func entityTypesJSON(types []SettingsEntityType) string {
 }
 
 // CampaignSettingsPage renders the campaign settings page.
-templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, entityTypes []SettingsEntityType, csrfToken, errMsg string) {
+templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, entityTypes []SettingsEntityType, csrfToken, errMsg, baseURL string) {
 	@layouts.App(cc.Campaign.Name + " - Settings") {
 		<div class="max-w-2xl mx-auto">
 			<div class="flex items-center justify-between mb-6">
@@ -145,6 +145,43 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 					Create API keys for external tools like Foundry VTT to sync data with this campaign.
 				</p>
 			</div>
+
+			// Foundry VTT integration — module install URL for Foundry clients.
+			if baseURL != "" {
+				<div class="card p-6 mb-6">
+					<div class="flex items-center justify-between mb-2">
+						<h2 class="text-lg font-semibold text-fg">Foundry VTT Integration</h2>
+					</div>
+					<p class="text-sm text-fg-secondary mb-4">
+						Install the Chronicle Sync module in Foundry VTT to sync journals, maps, tokens, and calendars
+						with this campaign in real-time.
+					</p>
+					<div>
+						<label class="block text-sm font-medium text-fg-body mb-1">Module Install URL</label>
+						<div class="flex items-center gap-2">
+							<input
+								type="text"
+								readonly
+								value={ fmt.Sprintf("%s/foundry-module/module.json", baseURL) }
+								class="input w-full font-mono text-sm bg-surface-alt"
+								id="foundry-install-url"
+							/>
+							<button
+								type="button"
+								onclick="navigator.clipboard.writeText(document.getElementById('foundry-install-url').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })"
+								class="btn-secondary text-sm px-3 py-2 shrink-0"
+								title="Copy to clipboard"
+							>
+								<i class="fa-solid fa-copy"></i>
+							</button>
+						</div>
+						<p class="text-xs text-fg-muted mt-2">
+							In Foundry VTT, go to <strong>Add-on Modules → Install Module</strong>, paste this URL in the
+							<strong>Manifest URL</strong> field, and click <strong>Install</strong>.
+						</p>
+					</div>
+				</div>
+			}
 
 			// Groups — manage user groups for entity permission grants.
 			<div class="card p-6 mb-6">

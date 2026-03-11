@@ -52,6 +52,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.GET("/database/schema", h.DatabaseSchemaAPI)
 	admin.POST("/database/migrations/apply", h.ApplyMigrationsAPI)
 
+	// Foundry VTT module management.
+	admin.GET("/foundry", h.FoundryModule)
+	admin.PUT("/foundry/version", h.UpdateFoundryModuleVersion)
+
 	// SMTP settings (delegates to SMTP plugin handler).
 	if smtpHandler != nil {
 		smtp.RegisterRoutes(admin, smtpHandler)

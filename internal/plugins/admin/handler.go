@@ -5,10 +5,13 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -43,6 +46,7 @@ type Handler struct {
 	securityService  SecurityService
 	hygieneScanner   DataHygieneScanner
 	databaseExplorer DatabaseExplorer
+	baseURL          string
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
@@ -101,6 +105,11 @@ func (h *Handler) SetHygieneScanner(scanner DataHygieneScanner) {
 // SetDatabaseExplorer wires the database explorer for the schema visualization page.
 func (h *Handler) SetDatabaseExplorer(explorer DatabaseExplorer) {
 	h.databaseExplorer = explorer
+}
+
+// SetBaseURL sets the public-facing base URL for the Foundry module admin page.
+func (h *Handler) SetBaseURL(url string) {
+	h.baseURL = url
 }
 
 // --- Data Hygiene ---
@@ -747,4 +756,90 @@ type SecurityPageData struct {
 	PerPage     int
 	Sessions    []auth.SessionInfo
 	CSRFToken   string
+}
+
+// --- Foundry VTT Module Management ---
+
+// FoundryModuleData holds data for the admin Foundry module page.
+type FoundryModuleData struct {
+	Version    string
+	InstallURL string
+	CSRFToken  string
+}
+
+// FoundryModule renders the Foundry VTT module management page (GET /admin/foundry).
+func (h *Handler) FoundryModule(c echo.Context) error {
+	version := readFoundryModuleVersion()
+	baseURL := strings.TrimRight(h.baseURL, "/")
+	data := FoundryModuleData{
+		Version:    version,
+		InstallURL: baseURL + "/foundry-module/module.json",
+		CSRFToken:  middleware.GetCSRFToken(c),
+	}
+	return middleware.Render(c, http.StatusOK, AdminFoundryModulePage(data))
+}
+
+// UpdateFoundryModuleVersion updates the version in foundry-module/module.json
+// (PUT /admin/foundry/version).
+func (h *Handler) UpdateFoundryModuleVersion(c echo.Context) error {
+	var req struct {
+		Version string `json:"version" form:"version"`
+	}
+	if err := c.Bind(&req); err != nil || req.Version == "" {
+		return apperror.NewBadRequest("version is required")
+	}
+
+	// Read current module.json.
+	data, err := os.ReadFile("foundry-module/module.json")
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("read module.json: %w", err))
+	}
+
+	var manifest map[string]any
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return apperror.NewInternal(fmt.Errorf("parse module.json: %w", err))
+	}
+
+	manifest["version"] = req.Version
+
+	// Update the download URL to use the new version tag.
+	baseURL := strings.TrimRight(h.baseURL, "/")
+	manifest["download"] = baseURL + "/foundry-module/chronicle-sync.zip"
+	manifest["manifest"] = baseURL + "/foundry-module/module.json"
+
+	out, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshal module.json: %w", err))
+	}
+	out = append(out, '\n')
+
+	if err := os.WriteFile("foundry-module/module.json", out, 0644); err != nil {
+		return apperror.NewInternal(fmt.Errorf("write module.json: %w", err))
+	}
+
+	slog.Info("foundry module version updated",
+		slog.String("version", req.Version),
+		slog.String("by", auth.GetUserID(c)),
+	)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/admin/foundry")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/foundry")
+}
+
+// readFoundryModuleVersion reads the version from foundry-module/module.json.
+func readFoundryModuleVersion() string {
+	data, err := os.ReadFile("foundry-module/module.json")
+	if err != nil {
+		return "unknown"
+	}
+	var manifest struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return "unknown"
+	}
+	return manifest.Version
 }

@@ -1,0 +1,119 @@
+// foundry.templ renders the admin Foundry VTT module management page.
+// Allows admins to view and update the module version and see the install URL.
+
+package admin
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// AdminFoundryModulePage renders the Foundry VTT module management page.
+templ AdminFoundryModulePage(data FoundryModuleData) {
+	@layouts.App("Foundry VTT Module - Admin") {
+		<div class="max-w-2xl mx-auto space-y-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Foundry VTT Module</h1>
+					<p class="text-sm text-fg-secondary mt-1">
+						Manage the Chronicle Sync module served to Foundry VTT clients.
+					</p>
+				</div>
+				<a href="/admin" class="btn-secondary text-sm">Back</a>
+			</div>
+
+			// Current status.
+			<div class="card p-6">
+				<h2 class="text-lg font-semibold text-fg mb-4">Module Status</h2>
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+					<div>
+						<label class="block text-xs font-medium text-fg-muted mb-1">Current Version</label>
+						<p class="text-lg font-bold text-fg">{ data.Version }</p>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-muted mb-1">Module ID</label>
+						<p class="text-sm font-mono text-fg">chronicle-sync</p>
+					</div>
+				</div>
+			</div>
+
+			// Install URL.
+			<div class="card p-6">
+				<h2 class="text-lg font-semibold text-fg mb-4">Install URL</h2>
+				<p class="text-sm text-fg-secondary mb-3">
+					Share this URL with users to install the module in Foundry VTT.
+				</p>
+				<div class="flex items-center gap-2">
+					<input
+						type="text"
+						readonly
+						value={ data.InstallURL }
+						class="input w-full font-mono text-sm bg-surface-alt"
+						id="foundry-admin-url"
+					/>
+					<button
+						type="button"
+						onclick="navigator.clipboard.writeText(document.getElementById('foundry-admin-url').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })"
+						class="btn-secondary text-sm px-3 py-2 shrink-0"
+						title="Copy to clipboard"
+					>
+						<i class="fa-solid fa-copy"></i>
+					</button>
+				</div>
+				<p class="text-xs text-fg-muted mt-2">
+					In Foundry VTT: <strong>Add-on Modules → Install Module → Manifest URL</strong>
+				</p>
+			</div>
+
+			// Update version.
+			<div class="card p-6">
+				<h2 class="text-lg font-semibold text-fg mb-4">Update Module Version</h2>
+				<p class="text-sm text-fg-secondary mb-4">
+					Bump the module version to notify Foundry VTT clients that an update is available.
+					Foundry checks the manifest URL periodically and shows an update badge when the
+					version changes.
+				</p>
+				<form
+					method="POST"
+					action="/admin/foundry/version"
+					hx-put="/admin/foundry/version"
+					class="flex items-end gap-3"
+				>
+					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+					<div class="flex-1">
+						<label for="version" class="block text-sm font-medium text-fg-body mb-1">New Version</label>
+						<input
+							type="text"
+							id="version"
+							name="version"
+							value={ data.Version }
+							required
+							class="input w-full"
+							placeholder="0.2.0"
+							pattern="[0-9]+\.[0-9]+\.[0-9]+"
+							title="Semantic version (e.g. 0.2.0)"
+						/>
+					</div>
+					<button type="submit" class="btn-primary text-sm">Update Version</button>
+				</form>
+			</div>
+
+			// Info panel.
+			<div class="card p-6">
+				<div class="flex items-start gap-4">
+					<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-circle-info text-accent"></i>
+					</span>
+					<div>
+						<h3 class="text-sm font-semibold text-fg mb-1">How It Works</h3>
+						<ul class="text-sm text-fg-secondary leading-relaxed space-y-1 list-disc ml-4">
+							<li>The module manifest and zip are served directly from this Chronicle instance.</li>
+							<li>Foundry VTT fetches the manifest URL to check for updates.</li>
+							<li>When you bump the version, Foundry will show an update notification to all users.</li>
+							<li>The module zip is generated on-the-fly from the <code class="text-xs bg-surface-alt px-1 rounded">foundry-module/</code> directory.</li>
+						</ul>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}

@@ -113,6 +113,7 @@ type Handler struct {
 	auditLogger   AuditLogger
 	addonLister   AddonLister
 	mediaUploader MediaUploader
+	baseURL       string
 }
 
 // NewHandler creates a new campaign handler.
@@ -157,6 +158,12 @@ func (h *Handler) SetAddonLister(lister AddonLister) {
 // SetMediaUploader sets the media uploader for backdrop image uploads.
 func (h *Handler) SetMediaUploader(uploader MediaUploader) {
 	h.mediaUploader = uploader
+}
+
+// SetBaseURL sets the public-facing base URL for generating integration URLs
+// (e.g. Foundry VTT module install URL).
+func (h *Handler) SetBaseURL(url string) {
+	h.baseURL = url
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
@@ -323,7 +330,7 @@ func (h *Handler) Update(c echo.Context) error {
 		if h.entityLister != nil {
 			entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
 		}
-		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, errMsg))
+		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, errMsg, h.baseURL))
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.updated", nil)
@@ -598,7 +605,7 @@ func (h *Handler) Settings(c echo.Context) error {
 		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
 	}
 
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, ""))
+	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, "", h.baseURL))
 }
 
 // PluginHub renders the campaign plugin hub page, showing all enabled
@@ -1118,7 +1125,7 @@ func (h *Handler) TransferForm(c echo.Context) error {
 		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
 	}
 
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, ""))
+	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, "", h.baseURL))
 }
 
 // Transfer initiates an ownership transfer (POST /campaigns/:id/transfer).
@@ -1146,7 +1153,7 @@ func (h *Handler) Transfer(c echo.Context) error {
 		if h.entityLister != nil {
 			entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
 		}
-		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, errMsg))
+		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, errMsg, h.baseURL))
 	}
 
 	if middleware.IsHTMX(c) {
