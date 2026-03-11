@@ -659,13 +659,14 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 					>{ strconv.Itoa(count) }</span>
 				}
 			</a>
-			<!-- Reorg toggle for owners (delegates to main sidebar-reorg-toggle) -->
+			<!-- Reorg toggle for owners (dispatches custom event to sidebar_reorg.js) -->
 			if GetCampaignRole(ctx) >= 3 {
 				<button
 					type="button"
 					class="w-5 h-5 flex items-center justify-center rounded text-gray-500 hover:text-gray-300 hover:bg-white/10 transition-colors shrink-0"
 					title="Reorder pages"
-					onclick="var t=document.getElementById('sidebar-reorg-toggle');if(t)t.click();"
+					data-reorg-toggle
+					onclick="document.dispatchEvent(new CustomEvent('chronicle:toggle-reorg'))"
 				>
 					<i class="fa-solid fa-grip-vertical text-[10px]"></i>
 				</button>

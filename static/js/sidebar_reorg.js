@@ -76,6 +76,14 @@
       if (icon) icon.className = 'fa-solid fa-check text-[10px]';
     }
 
+    // Sync visual state on any secondary reorg toggle buttons (e.g. drill panel).
+    document.querySelectorAll('[data-reorg-toggle]').forEach(function (b) {
+      b.classList.add('bg-accent/20', 'text-accent');
+      b.title = 'Done reordering';
+      var i = b.querySelector('i');
+      if (i) i.className = 'fa-solid fa-check text-[10px]';
+    });
+
     if (level === 'categories') {
       activateCategoryReorg();
     } else {
@@ -104,6 +112,14 @@
       var icon = btn.querySelector('i');
       if (icon) icon.className = 'fa-solid fa-grip-vertical text-[10px]';
     }
+
+    // Reset visual state on any secondary reorg toggle buttons.
+    document.querySelectorAll('[data-reorg-toggle]').forEach(function (b) {
+      b.classList.remove('bg-accent/20', 'text-accent');
+      b.title = 'Reorder pages';
+      var i = b.querySelector('i');
+      if (i) i.className = 'fa-solid fa-grip-vertical text-[10px]';
+    });
 
     cleanupTouchDrag();
   }
@@ -512,6 +528,11 @@
     btn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
+      toggle();
+    });
+
+    // Allow other buttons (e.g. drill panel) to toggle reorg via custom event.
+    document.addEventListener('chronicle:toggle-reorg', function () {
       toggle();
     });
 
