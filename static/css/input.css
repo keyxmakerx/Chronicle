@@ -817,6 +817,33 @@
     border-radius: 0 4px 4px 0;
   }
 
+  /* Reorg mode: drop target highlight for category links. */
+  .sidebar-reorg-drop-target {
+    background-color: rgba(99, 102, 241, 0.12) !important;
+    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.4);
+    border-radius: 4px;
+  }
+
+  /* Reorg mode: drag handle visibility (hidden by default, shown in reorg). */
+  .reorg-drag-handle {
+    opacity: 0.5;
+    transition: opacity 150ms ease;
+  }
+  .reorg-drag-handle:hover {
+    opacity: 1;
+  }
+
+  /* Reorg mode: subtle border on reorderable items. */
+  .sidebar-reorg-active #sidebar-cat-list .sidebar-category-link,
+  .sidebar-reorg-active #sidebar-entity-tree .sidebar-tree-node {
+    transition: background-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  /* Reorg mode active indicator on toggle button. */
+  #sidebar-reorg-toggle.bg-accent\/20 {
+    background-color: rgba(var(--color-accent-rgb, 99, 102, 241), 0.2);
+  }
+
   /* Tree toggle button styling. */
   .sidebar-tree-toggle {
     transition: transform 150ms ease;

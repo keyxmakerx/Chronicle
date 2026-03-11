@@ -8,6 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
+2026-03-10 -- **Sprint W-0: Nav Menu Reorg Mode (IN PROGRESS).**
+
+24. Starting W-0: Sidebar reorg mode toggle button, inline category reorder, conditional entity drag-and-drop, touch support for mobile. Primarily frontend work — existing APIs (`PUT /sidebar-config`, `PUT /entities/:eid/reorder`) already support reordering. Also updating stale relations widget documentation.
+
+### Previous Update
 2026-03-10 -- **Sprint V-4: Enhanced Graph View & Cover Images (COMPLETE).**
 
 18. **@Mention edges in graph**: `FindAllMentionLinks()` in entity repository scans `entry_html` for `data-mention-id` attributes across a campaign. `MentionLink` model. `GetMentionLinks()` service method. `MentionLinkProvider` interface bridges entities→relations without circular imports. Mention edges appear as dashed purple lines in the D3 graph.
