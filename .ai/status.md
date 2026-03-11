@@ -8,8 +8,16 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-11 -- **Sprint V-5: Journal fixes, session edit, @mentions, audio attachments.**
+2026-03-11 -- **Session fix + Owner Dashboard (two-dashboard architecture).**
 
+30. **Session completion fix + two-dashboard architecture.** Two changes:
+    - **Session "Mark Complete" bug fix**: `hx-vals` always sends form-encoded data regardless of `hx-headers` Content-Type. `UpdateSessionAPI` expects JSON, so the decode failed → 400 error → red notification bar. Replaced with `Chronicle.apiFetch()` onclick handler using `data-url` and `data-name` attributes. Also fixes XSS risk from session name interpolation into JSON template string.
+    - **Two-dashboard architecture**: Split campaign dashboard into two independently customizable dashboards:
+      - **Campaign Page** (`GET /campaigns/:id`) — visible to all members and public visitors. The "front page" of the campaign.
+      - **Owner Dashboard** (`GET /campaigns/:id/dashboard`) — visible only to campaign owner. Campaign management with quick links (Settings, Customize, Members, Plugins), category grid, and recent entities.
+      New migration (000006) adds `owner_dashboard_layout` JSON column. Full CRUD: model field + parser, repository query updates, service methods with shared `validateDashboardLayout()` helper, handler + routes, `OwnerDashboardPage` templ component, sidebar "Dashboard" link for owners, and second dashboard editor section in Customization Hub.
+
+### Previous Update
 29. **Journal + Sessions + Audio Attachments sprint.** Four changes:
     - **Journal save bug fix**: `journal.js` referenced `window.Chronicle._tiptapBundle` which doesn't exist — the TipTap bundle is `window.TipTap`. Fixed the reference so TipTap editor loads correctly and notes save.
     - **Session edit UI**: Added edit button + modal on session detail page. Pre-populates all fields (name, date, summary, status, recurrence). Submits JSON PUT to existing `UpdateSessionAPI` endpoint. Visible to Scribe+ users.

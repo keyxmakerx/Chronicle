@@ -58,6 +58,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.PUT("/dashboard-layout", h.UpdateDashboardLayout, RequireRole(RoleOwner))
 	cg.DELETE("/dashboard-layout", h.ResetDashboardLayout, RequireRole(RoleOwner))
 
+	// Owner dashboard (Owner + Co-DM).
+	cg.GET("/dashboard", h.OwnerDashboard, RequireRole(RoleOwner))
+	cg.GET("/owner-dashboard-layout", h.GetOwnerDashboardLayout, RequireRole(RoleOwner))
+	cg.PUT("/owner-dashboard-layout", h.UpdateOwnerDashboardLayout, RequireRole(RoleOwner))
+	cg.DELETE("/owner-dashboard-layout", h.ResetOwnerDashboardLayout, RequireRole(RoleOwner))
+
 	// Backdrop and branding (Owner only).
 	cg.POST("/backdrop", h.UploadBackdrop, RequireRole(RoleOwner))
 	cg.DELETE("/backdrop", h.RemoveBackdrop, RequireRole(RoleOwner))

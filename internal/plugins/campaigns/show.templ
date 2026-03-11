@@ -219,6 +219,142 @@ templ defaultDashboard(cc *CampaignContext, recentEntities []RecentEntity, csrfT
 	}
 }
 
+// OwnerDashboardPage renders the owner-only management dashboard.
+// Separate from the campaign page (CampaignShowPage) which all members see.
+templ OwnerDashboardPage(cc *CampaignContext, recentEntities []RecentEntity, csrfToken string) {
+	@layouts.App(cc.Campaign.Name + " — Dashboard") {
+		<div class="max-w-5xl mx-auto">
+			<div class="flex items-center justify-between mb-6">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Owner Dashboard</h1>
+					<p class="text-sm text-fg-secondary mt-0.5">Campaign management and overview</p>
+				</div>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) } class="btn-secondary text-sm">
+					<i class="fa-solid fa-palette mr-1.5 text-xs"></i> Customize
+				</a>
+			</div>
+
+			if layout := cc.Campaign.ParseOwnerDashboardLayout(); layout != nil {
+				@customDashboard(cc, layout, recentEntities)
+			} else {
+				@defaultOwnerDashboard(cc, recentEntities, csrfToken)
+			}
+
+			<div class="flex items-center gap-3 text-xs text-fg-muted mt-8">
+				<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-alt text-fg-secondary font-medium">
+					<i class="fa-solid fa-user-shield text-[10px]"></i>
+					{ cc.MemberRole.DisplayName() }
+				</span>
+				<span>Created { cc.Campaign.CreatedAt.Format("Jan 2, 2006") }</span>
+			</div>
+		</div>
+	}
+}
+
+// defaultOwnerDashboard renders the default owner management dashboard.
+templ defaultOwnerDashboard(cc *CampaignContext, recentEntities []RecentEntity, csrfToken string) {
+	<!-- Quick management links -->
+	<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) } class="card p-4 hover:shadow-md hover:-translate-y-0.5 block group">
+			<div class="flex items-center gap-3">
+				<div class="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+					<i class="fa-solid fa-gear text-gray-600 dark:text-gray-400 text-sm"></i>
+				</div>
+				<div>
+					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">Settings</h3>
+					<p class="text-[11px] text-fg-muted">Campaign config</p>
+				</div>
+			</div>
+		</a>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) } class="card p-4 hover:shadow-md hover:-translate-y-0.5 block group">
+			<div class="flex items-center gap-3">
+				<div class="w-9 h-9 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
+					<i class="fa-solid fa-palette text-purple-600 dark:text-purple-400 text-sm"></i>
+				</div>
+				<div>
+					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">Customize</h3>
+					<p class="text-[11px] text-fg-muted">Layouts & themes</p>
+				</div>
+			</div>
+		</a>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="card p-4 hover:shadow-md hover:-translate-y-0.5 block group">
+			<div class="flex items-center gap-3">
+				<div class="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+					<i class="fa-solid fa-users text-blue-600 dark:text-blue-400 text-sm"></i>
+				</div>
+				<div>
+					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">Members</h3>
+					<p class="text-[11px] text-fg-muted">Roles & access</p>
+				</div>
+			</div>
+		</a>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/plugins", cc.Campaign.ID)) } class="card p-4 hover:shadow-md hover:-translate-y-0.5 block group">
+			<div class="flex items-center gap-3">
+				<div class="w-9 h-9 rounded-lg bg-green-50 dark:bg-green-900/30 flex items-center justify-center shrink-0">
+					<i class="fa-solid fa-puzzle-piece text-green-600 dark:text-green-400 text-sm"></i>
+				</div>
+				<div>
+					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">Plugins</h3>
+					<p class="text-[11px] text-fg-muted">Features & addons</p>
+				</div>
+			</div>
+		</a>
+	</div>
+
+	<!-- Category quick-nav -->
+	if len(layouts.GetEntityTypes(ctx)) > 0 {
+		<div class="mb-8">
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">Categories</h2>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="text-xs text-accent hover:underline">Manage</a>
+			</div>
+			<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+				for _, et := range layouts.GetEntityTypes(ctx) {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
+						class="card px-4 py-3 hover:shadow-md hover:-translate-y-0.5 block group"
+					>
+						<div class="flex items-center gap-2.5 mb-1">
+							<span
+								class="w-7 h-7 rounded flex items-center justify-center shrink-0 text-sm"
+								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
+							>
+								if et.Icon != "" {
+									<i class={ "fa-solid " + et.Icon }></i>
+								}
+							</span>
+							<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ et.NamePlural }</span>
+						</div>
+						<div class="pl-[2.375rem] text-xs text-fg-muted">
+							{ strconv.Itoa(layouts.GetEntityCount(ctx, et.ID)) } pages
+						</div>
+					</a>
+				}
+			</div>
+		</div>
+	}
+
+	<!-- Recently updated pages -->
+	if len(recentEntities) > 0 {
+		<div class="mb-8">
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">Recently Updated</h2>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					View all
+				</a>
+			</div>
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+				for _, re := range recentEntities {
+					@RecentEntityCard(cc, &re)
+				}
+			</div>
+		</div>
+	}
+}
+
 // RecentEntityCard renders a compact card for a recently updated entity.
 templ RecentEntityCard(cc *CampaignContext, re *RecentEntity) {
 	<a

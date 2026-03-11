@@ -812,6 +812,76 @@ func (h *Handler) ResetDashboardLayout(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// --- Owner Dashboard ---
+
+// OwnerDashboard renders the owner-only management dashboard (GET /campaigns/:id/dashboard).
+func (h *Handler) OwnerDashboard(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var recentEntities []RecentEntity
+	if h.recentLister != nil {
+		recentEntities, _ = h.recentLister.ListRecentForDashboard(
+			c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole), auth.GetUserID(c), 8,
+		)
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, OwnerDashboardPage(cc, recentEntities, csrfToken))
+}
+
+// GetOwnerDashboardLayout returns the owner dashboard layout JSON (GET /campaigns/:id/owner-dashboard-layout).
+func (h *Handler) GetOwnerDashboardLayout(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	layout, err := h.service.GetOwnerDashboardLayout(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, layout)
+}
+
+// UpdateOwnerDashboardLayout saves the owner dashboard layout (PUT /campaigns/:id/owner-dashboard-layout).
+func (h *Handler) UpdateOwnerDashboardLayout(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var layout DashboardLayout
+	if err := json.NewDecoder(c.Request().Body).Decode(&layout); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdateOwnerDashboardLayout(c.Request().Context(), cc.Campaign.ID, &layout); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "owner_dashboard_layout_updated", nil)
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// ResetOwnerDashboardLayout removes the custom owner dashboard layout (DELETE /campaigns/:id/owner-dashboard-layout).
+func (h *Handler) ResetOwnerDashboardLayout(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if err := h.service.ResetOwnerDashboardLayout(c.Request().Context(), cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "owner_dashboard_layout_reset", nil)
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- View As Player Toggle ---
 
 // viewAsPlayerCookie is the cookie name for the "view as player" display toggle.

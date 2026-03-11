@@ -98,8 +98,9 @@ type Campaign struct {
 	Settings        string    `json:"settings"`
 	BackdropPath    *string   `json:"backdrop_path,omitempty"`
 	SidebarConfig   string    `json:"sidebar_config"`
-	DashboardLayout *string   `json:"dashboard_layout,omitempty"` // JSON layout; nil = use hardcoded default.
-	CreatedBy       string    `json:"created_by"`
+	DashboardLayout      *string   `json:"dashboard_layout,omitempty"`       // JSON layout; nil = use hardcoded default.
+	OwnerDashboardLayout *string   `json:"owner_dashboard_layout,omitempty"` // Owner-only dashboard layout; nil = use default.
+	CreatedBy            string    `json:"created_by"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -269,6 +270,23 @@ func (c *Campaign) ParseDashboardLayout() *DashboardLayout {
 	var layout DashboardLayout
 	if err := json.Unmarshal([]byte(*c.DashboardLayout), &layout); err != nil {
 		slog.Warn("failed to parse dashboard layout, using default",
+			slog.String("campaign_id", c.ID),
+			slog.String("error", err.Error()),
+		)
+		return nil
+	}
+	return &layout
+}
+
+// ParseOwnerDashboardLayout parses the campaign's owner_dashboard_layout JSON
+// into a DashboardLayout struct. Returns nil if the column is NULL (use default).
+func (c *Campaign) ParseOwnerDashboardLayout() *DashboardLayout {
+	if c.OwnerDashboardLayout == nil || *c.OwnerDashboardLayout == "" {
+		return nil
+	}
+	var layout DashboardLayout
+	if err := json.Unmarshal([]byte(*c.OwnerDashboardLayout), &layout); err != nil {
+		slog.Warn("failed to parse owner dashboard layout, using default",
 			slog.String("campaign_id", c.ID),
 			slog.String("error", err.Error()),
 		)

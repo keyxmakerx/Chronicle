@@ -196,6 +196,10 @@ func (m *mockCampaignRepo) UpdateDashboardLayout(ctx context.Context, campaignID
 	return nil
 }
 
+func (m *mockCampaignRepo) UpdateOwnerDashboardLayout(ctx context.Context, campaignID string, layoutJSON *string) error {
+	return nil
+}
+
 func (m *mockCampaignRepo) UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error {
 	return nil
 }

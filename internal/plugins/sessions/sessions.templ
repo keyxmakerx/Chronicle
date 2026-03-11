@@ -249,11 +249,9 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 							<button
 								type="button"
 								class="btn-primary text-sm"
-								hx-put={ fmt.Sprintf("/campaigns/%s/sessions/%s", cc.Campaign.ID, session.ID) }
-								hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, csrfToken) }
-								hx-vals={ fmt.Sprintf(`{"name":"%s","status":"completed"}`, session.Name) }
-								hx-swap="none"
-								hx-on::after-request="location.reload()"
+								data-url={ fmt.Sprintf("/campaigns/%s/sessions/%s", cc.Campaign.ID, session.ID) }
+								data-name={ session.Name }
+								onclick="Chronicle.apiFetch(this.dataset.url,{method:'PUT',body:{name:this.dataset.name,status:'completed'}}).then(function(r){if(r.ok)location.reload();else Chronicle.notify('Failed to complete session','error');});"
 							>
 								<i class="fa-solid fa-check mr-1"></i> Mark Complete
 							</button>

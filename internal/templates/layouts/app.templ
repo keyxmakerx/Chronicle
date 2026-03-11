@@ -311,6 +311,19 @@ templ Sidebar() {
 					<div class="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
 						Manage
 					</div>
+					if GetCampaignRole(ctx) >= 3 {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/dashboard", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/dashboard", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/dashboard", GetCampaignID(ctx)))) }
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-gauge text-xs"></i>
+							</span>
+							Dashboard
+						</a>
+					}
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx))) }
 						class={ sidebarNavLink,

@@ -66,6 +66,11 @@ type CampaignService interface {
 	GetDashboardLayout(ctx context.Context, campaignID string) (*DashboardLayout, error)
 	ResetDashboardLayout(ctx context.Context, campaignID string) error
 
+	// Owner dashboard layout
+	UpdateOwnerDashboardLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error
+	GetOwnerDashboardLayout(ctx context.Context, campaignID string) (*DashboardLayout, error)
+	ResetOwnerDashboardLayout(ctx context.Context, campaignID string) error
+
 	// Admin operations
 	ForceTransferOwnership(ctx context.Context, campaignID, newOwnerID string) error
 	AdminAddMember(ctx context.Context, campaignID, userID string, role Role) error
@@ -787,18 +792,13 @@ const maxDashboardRows = 50
 // maxDashboardBlocksPerRow caps the total number of blocks per row.
 const maxDashboardBlocksPerRow = 20
 
-// UpdateDashboardLayout validates and saves a dashboard layout for a campaign.
-func (s *campaignService) UpdateDashboardLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error {
-	if layout == nil {
-		// Reset to default.
-		return s.repo.UpdateDashboardLayout(ctx, campaignID, nil)
-	}
-
+// validateDashboardLayout validates block types, column widths, and sanitizes
+// text_block content. Shared by both campaign and owner dashboard layouts.
+func validateDashboardLayout(layout *DashboardLayout) error {
 	if len(layout.Rows) > maxDashboardRows {
 		return apperror.NewBadRequest("dashboard layout has too many rows")
 	}
 
-	// Validate block types and column widths.
 	for _, row := range layout.Rows {
 		totalWidth := 0
 		blockCount := 0
@@ -812,7 +812,6 @@ func (s *campaignService) UpdateDashboardLayout(ctx context.Context, campaignID 
 				if !ValidBlockTypes[block.Type] {
 					return apperror.NewBadRequest(fmt.Sprintf("unsupported block type: %s", block.Type))
 				}
-				// Sanitize text_block content to prevent stored XSS via templ.Raw().
 				if block.Type == "text_block" {
 					if content, ok := block.Config["content"].(string); ok {
 						col.Blocks[i].Config["content"] = sanitize.HTML(content)
@@ -827,17 +826,34 @@ func (s *campaignService) UpdateDashboardLayout(ctx context.Context, campaignID 
 			return apperror.NewBadRequest("too many blocks in a single row")
 		}
 	}
+	return nil
+}
 
+// marshalLayout marshals a DashboardLayout to a JSON string pointer.
+func marshalLayout(layout *DashboardLayout) (*string, error) {
 	layoutJSON, err := json.Marshal(layout)
 	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("marshaling dashboard layout: %w", err))
+		return nil, apperror.NewInternal(fmt.Errorf("marshaling dashboard layout: %w", err))
 	}
+	s := string(layoutJSON)
+	return &s, nil
+}
 
-	s2 := string(layoutJSON)
-	if err := s.repo.UpdateDashboardLayout(ctx, campaignID, &s2); err != nil {
+// UpdateDashboardLayout validates and saves a dashboard layout for a campaign.
+func (s *campaignService) UpdateDashboardLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error {
+	if layout == nil {
+		return s.repo.UpdateDashboardLayout(ctx, campaignID, nil)
+	}
+	if err := validateDashboardLayout(layout); err != nil {
 		return err
 	}
-
+	layoutStr, err := marshalLayout(layout)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.UpdateDashboardLayout(ctx, campaignID, layoutStr); err != nil {
+		return err
+	}
 	slog.Info("dashboard layout updated", slog.String("campaign_id", campaignID))
 	return nil
 }
@@ -858,6 +874,44 @@ func (s *campaignService) ResetDashboardLayout(ctx context.Context, campaignID s
 		return err
 	}
 	slog.Info("dashboard layout reset to default", slog.String("campaign_id", campaignID))
+	return nil
+}
+
+// UpdateOwnerDashboardLayout validates and saves the owner dashboard layout.
+func (s *campaignService) UpdateOwnerDashboardLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error {
+	if layout == nil {
+		return s.repo.UpdateOwnerDashboardLayout(ctx, campaignID, nil)
+	}
+	if err := validateDashboardLayout(layout); err != nil {
+		return err
+	}
+	layoutStr, err := marshalLayout(layout)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.UpdateOwnerDashboardLayout(ctx, campaignID, layoutStr); err != nil {
+		return err
+	}
+	slog.Info("owner dashboard layout updated", slog.String("campaign_id", campaignID))
+	return nil
+}
+
+// GetOwnerDashboardLayout returns the parsed owner dashboard layout.
+// Returns nil if no custom layout is set (use default).
+func (s *campaignService) GetOwnerDashboardLayout(ctx context.Context, campaignID string) (*DashboardLayout, error) {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return campaign.ParseOwnerDashboardLayout(), nil
+}
+
+// ResetOwnerDashboardLayout removes the custom owner dashboard layout.
+func (s *campaignService) ResetOwnerDashboardLayout(ctx context.Context, campaignID string) error {
+	if err := s.repo.UpdateOwnerDashboardLayout(ctx, campaignID, nil); err != nil {
+		return err
+	}
+	slog.Info("owner dashboard layout reset to default", slog.String("campaign_id", campaignID))
 	return nil
 }
 

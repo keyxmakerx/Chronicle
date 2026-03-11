@@ -146,9 +146,9 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 	<div class="h-full flex flex-col">
 		<div class="px-6 pt-4 pb-2 shrink-0">
 			<div class="max-w-3xl mx-auto">
-				<h2 class="text-base font-semibold text-fg mb-0.5">Campaign Dashboard</h2>
+				<h2 class="text-base font-semibold text-fg mb-0.5">Campaign Page</h2>
 				<p class="text-xs text-fg-secondary">
-					Customize the layout of your campaign's main dashboard page.
+					Customize the layout of your campaign's main page visible to all members.
 				</p>
 			</div>
 		</div>
@@ -156,6 +156,22 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 			<div
 				data-widget="dashboard-editor"
 				data-endpoint={ fmt.Sprintf("/campaigns/%s/dashboard-layout", cc.Campaign.ID) }
+				data-campaign-id={ cc.Campaign.ID }
+				data-csrf-token={ csrfToken }
+			></div>
+		</div>
+		<div class="px-6 pt-6 pb-2 shrink-0 border-t border-edge mt-4">
+			<div class="max-w-3xl mx-auto">
+				<h2 class="text-base font-semibold text-fg mb-0.5">Owner Dashboard</h2>
+				<p class="text-xs text-fg-secondary">
+					Customize your private management dashboard (visible to owner and co-DMs only).
+				</p>
+			</div>
+		</div>
+		<div class="flex-1 overflow-y-auto px-6 py-2">
+			<div
+				data-widget="dashboard-editor"
+				data-endpoint={ fmt.Sprintf("/campaigns/%s/owner-dashboard-layout", cc.Campaign.ID) }
 				data-campaign-id={ cc.Campaign.ID }
 				data-csrf-token={ csrfToken }
 			></div>
