@@ -94,9 +94,11 @@ chronicle/
 │   ├── config/                       # CORE: Configuration loading (env vars)
 │   │   └── config.go
 │   │
-│   ├── database/                     # CORE: Database connections
+│   ├── database/                     # CORE: Database connections + migrations
 │   │   ├── mariadb.go                #   MariaDB connection pool
-│   │   └── redis.go                  #   Redis client
+│   │   ├── redis.go                  #   Redis client
+│   │   ├── plugin_schema.go          #   Plugin migration runner (reads embed.FS)
+│   │   └── plugin_health.go          #   Plugin health registry
 │   │
 │   ├── middleware/                    # CORE: HTTP middleware
 │   │   ├── auth.go                   #   Session validation
@@ -220,6 +222,7 @@ Every plugin follows this exact structure. No exceptions.
 ```
 internal/plugins/<name>/
   .ai.md              # Plugin-level AI documentation
+  embed.go            # Embeds migrations/*.sql via Go embed.FS (ADR-030)
   handler.go          # Echo handlers (thin: bind, call service, render)
   handler_test.go     # Handler tests (HTTP-level, mock service)
   service.go          # Business logic (never imports Echo types)
@@ -228,6 +231,9 @@ internal/plugins/<name>/
   repository_test.go  # Repository tests (integration, real DB)
   model.go            # Domain models, DTOs, request/response structs
   routes.go           # Route registration function
+  migrations/         # Plugin-specific schema migrations (embedded in binary)
+    001_*.up.sql
+    001_*.down.sql
   templates/          # Templ components for this plugin
     index.templ       #   List view
     show.templ        #   Detail view

@@ -1050,3 +1050,42 @@ capabilities. Non-owners could see features but couldn't tell which were enabled
 - Single source of truth for feature management.
 - Owners can manage features directly from the same page all members see.
 - Future enhancements (per-addon entity usage, "offline" banners) have one target page.
+
+---
+
+## ADR-030: Embed Plugin Migrations via Go embed.FS
+
+**Date:** 2026-03-11
+**Status:** Accepted (amends ADR-028)
+
+**Context:** ADR-028 introduced per-plugin migration directories at
+`internal/plugins/<name>/migrations/`. The migration runner used `os.Stat` and
+`os.ReadDir` with relative filesystem paths. This worked in development (CWD =
+project root) but failed silently in Docker: the runtime image copies the binary
+to `/app` but never copies plugin migration directories. Since `os.Stat` returned
+`os.IsNotExist`, the runner treated each plugin as "healthy with 0 migrations"
+— no tables were created, entity pages crashed, and the DB Explorer showed 0/0.
+
+**Decision:** Embed plugin migration SQL files in the binary using Go's `embed.FS`:
+- Each plugin package gets an `embed.go` that exports `MigrationsFS embed.FS`
+  with `//go:embed migrations/*.sql`.
+- `PluginSchema.MigrationsDir` (string) replaced with `MigrationsFS` (`fs.FS`).
+- `parsePluginMigrations` and `LatestMigrationVersion` read from `fs.FS` instead
+  of the real filesystem.
+- `RegisteredPlugins()` moved from `database` package to `cmd/server/main.go`
+  to avoid import cycles (database can't import plugin packages). Uses `fs.Sub`
+  to strip the `migrations/` prefix from each embed.FS.
+- `PluginSchemas` stored on `App` struct and passed to `DatabaseExplorer` for
+  on-demand re-migration from the admin panel.
+
+**Alternatives considered:**
+- Copy plugin migration dirs to Docker runtime image: fragile, requires syncing
+  Dockerfile whenever plugins are added/removed. Still fails if CWD changes.
+- Centralise all plugin migrations in one directory: loses per-plugin isolation
+  that ADR-028 established.
+
+**Consequences:**
+- Migrations work in any environment regardless of working directory.
+- No Dockerfile changes needed when adding new plugins with migrations.
+- Each plugin must have an `embed.go` exporting its `MigrationsFS`.
+- `RegisteredPlugins()` now lives in `cmd/server/main.go` instead of `database`.
