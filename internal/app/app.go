@@ -6,6 +6,7 @@ package app
 import (
 	"archive/zip"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -288,29 +289,32 @@ func (a *App) serveFoundryModuleManifest(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "module.json not found")
 	}
 
+	var manifest map[string]any
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "invalid module.json")
+	}
+
+	// Always rewrite manifest and download URLs to point at this instance.
 	baseURL := strings.TrimRight(a.Config.BaseURL, "/")
-	content := string(data)
+	manifest["manifest"] = baseURL + "/foundry-module/module.json"
+	manifest["download"] = baseURL + "/foundry-module/chronicle-sync.zip"
 
-	// Replace manifest and download URLs with this Chronicle instance's URLs.
-	content = strings.Replace(content,
-		`"manifest": "https://raw.githubusercontent.com/keyxmakerx/Chronicle/main/foundry-module/module.json"`,
-		fmt.Sprintf(`"manifest": "%s/foundry-module/module.json"`, baseURL), 1)
-	content = strings.Replace(content,
-		`"download": "https://github.com/keyxmakerx/Chronicle/releases/download/foundry-v0.1.0/chronicle-sync.zip"`,
-		fmt.Sprintf(`"download": "%s/foundry-module/chronicle-sync.zip"`, baseURL), 1)
-
-	return c.JSONBlob(http.StatusOK, []byte(content))
+	return c.JSON(http.StatusOK, manifest)
 }
 
 // serveFoundryModuleZip dynamically zips the foundry-module/ directory and
 // serves it as chronicle-sync.zip. Foundry VTT downloads this during module
 // installation. The zip contains all files under a chronicle-sync/ root
 // directory, which is the expected structure for Foundry module archives.
+// The module.json inside the zip gets its manifest/download URLs rewritten
+// to point at this Chronicle instance.
 func (a *App) serveFoundryModuleZip(c echo.Context) error {
 	moduleDir := "foundry-module"
 	if _, err := os.Stat(moduleDir); err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "foundry module directory not found")
 	}
+
+	baseURL := strings.TrimRight(a.Config.BaseURL, "/")
 
 	c.Response().Header().Set("Content-Type", "application/zip")
 	c.Response().Header().Set("Content-Disposition", "attachment; filename=chronicle-sync.zip")
@@ -343,6 +347,16 @@ func (a *App) serveFoundryModuleZip(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+
+		// Rewrite module.json URLs inside the zip so the installed module
+		// points back at this Chronicle instance for updates.
+		if name == "module.json" {
+			data, err = a.rewriteModuleManifest(data, baseURL)
+			if err != nil {
+				return err
+			}
+		}
+
 		_, err = w.Write(data)
 		return err
 	})
@@ -350,6 +364,18 @@ func (a *App) serveFoundryModuleZip(c echo.Context) error {
 		return walkErr
 	}
 	return zw.Close()
+}
+
+// rewriteModuleManifest parses module.json and rewrites the manifest and
+// download URLs to point at the given baseURL.
+func (a *App) rewriteModuleManifest(data []byte, baseURL string) ([]byte, error) {
+	var manifest map[string]any
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return data, err
+	}
+	manifest["manifest"] = baseURL + "/foundry-module/module.json"
+	manifest["download"] = baseURL + "/foundry-module/chronicle-sync.zip"
+	return json.MarshalIndent(manifest, "", "  ")
 }
 
 // Start begins listening for HTTP requests on the configured port.
