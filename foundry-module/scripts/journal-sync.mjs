@@ -103,7 +103,9 @@ export class JournalSync {
 
   /**
    * Create a new JournalEntry from a Chronicle entity.
-   * @param {object} entity - Chronicle entity data.
+   * Fetches full entity data from the API since WebSocket payloads may
+   * not include content fields (entry_html, fields_data, tags).
+   * @param {object} entity - Chronicle entity data (possibly partial).
    * @private
    */
   async _onEntityCreated(entity) {
@@ -115,7 +117,15 @@ export class JournalSync {
     );
     if (existing) return;
 
-    await this._createJournalFromEntity(entity);
+    // Fetch full entity data (WS payload may be partial).
+    try {
+      const fullEntity = await this._api.get(`/entities/${entity.id}`);
+      await this._createJournalFromEntity(fullEntity || entity);
+    } catch (err) {
+      // Fallback to WS payload data if fetch fails.
+      console.warn('Chronicle: Failed to fetch full entity, using WS payload', err);
+      await this._createJournalFromEntity(entity);
+    }
   }
 
   /**

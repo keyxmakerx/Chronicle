@@ -88,6 +88,21 @@ export class CalendarSync {
   }
 
   /**
+   * Handle a sync mapping received during initial sync.
+   * Stores calendar event mappings for later lookup.
+   * @param {object} mapping
+   */
+  async onSyncMapping(mapping) {
+    if (mapping.chronicle_type !== 'calendar_event') return;
+    if (!getSetting('syncCalendar') || !this._calendarModule) return;
+
+    // Store the mapping so we can correlate local ↔ Chronicle events.
+    if (mapping.external_id && mapping.chronicle_id) {
+      this._storeEventMapping(mapping.external_id, mapping.chronicle_id);
+    }
+  }
+
+  /**
    * Perform initial calendar sync on WebSocket connect.
    * Fetches Chronicle calendar structure and syncs current date.
    */

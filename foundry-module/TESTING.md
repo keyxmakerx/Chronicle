@@ -60,6 +60,19 @@ Requires a running Chronicle instance and Foundry VTT with the chronicle-sync mo
 - [ ] Drawing at (0,0) maps correctly
 - [ ] Drawing at scene edge maps correctly
 
+## Fog of War
+
+### Chronicle -> Foundry
+- [ ] Create fog region in Chronicle -> Semi-transparent polygon drawing appears on scene
+- [ ] Create multiple fog regions -> All render correctly as overlay drawings
+- [ ] Reset fog in Chronicle -> All fog drawings cleared from scene
+- [ ] Fog region reconciliation: add/remove regions correctly on re-fetch
+
+### Foundry -> Chronicle
+- [ ] Draw a dark polygon (black fill, alpha > 0.5) -> Pushes as fog region to Chronicle
+- [ ] Delete a fog drawing in Foundry -> Fog region deleted in Chronicle
+- [ ] Non-fog polygon (light color or low alpha) -> Syncs as regular drawing, not fog
+
 ## Calendar Sync
 
 ### Chronicle -> Foundry
@@ -90,6 +103,16 @@ Requires a running Chronicle instance and Foundry VTT with the chronicle-sync mo
 - [ ] Real-time refresh: update shop entity in Chronicle -> Shop window updates
 - [ ] Multiple shop windows can be open simultaneously
 - [ ] Closing shop window cleans up properly
+
+## Scene-to-Map Linking
+
+- [ ] Right-click scene in nav bar -> "Link to Chronicle Map" option visible (GM only)
+- [ ] Dialog shows all Chronicle maps for the campaign
+- [ ] Selecting a map links the scene (sets flag)
+- [ ] Unlinking clears the flag
+- [ ] Auto-link: if campaign has exactly one map, scene auto-links on initial sync
+- [ ] Multi-map warning: if campaign has multiple maps, log warning with instructions
+- [ ] Linked scene shows correct map ID in flag inspector
 
 ## Initial Sync
 

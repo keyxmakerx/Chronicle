@@ -28,7 +28,7 @@
       },
       "SyncCalendar": {
         "Name": "Sync Calendar",
-        "Hint": "Sync Chronicle calendar with Calendaria module"
+        "Hint": "Sync Chronicle calendar with Calendaria or Simple Calendar module"
       }
     },
     "Status": {

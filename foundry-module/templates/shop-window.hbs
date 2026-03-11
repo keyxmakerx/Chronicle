@@ -18,7 +18,7 @@
       {{#if inventory.length}}
         {{#each inventory}}
           <div class="shop-item {{#unless in_stock}}out-of-stock{{/unless}}"
-               data-item='{{json this}}'
+               data-item-id="{{id}}"
                draggable="true">
             {{#if image_path}}
               <img src="{{image_path}}" alt="{{name}}">
