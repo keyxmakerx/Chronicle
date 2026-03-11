@@ -10,6 +10,11 @@
 ## Last Updated
 2026-03-11 -- **Sprint W-0.5: Visual Customization + Admin DB Explorer (IN PROGRESS).**
 
+27. **Fix: Embed plugin migrations in binary (ADR-030).** Root cause of entity page errors and DB Explorer showing 0/0: plugin migrations used relative filesystem paths (`internal/plugins/*/migrations/`) that only resolve when the binary's CWD is the project root. In Docker, the binary runs from `/app` so migration directories were never found, tables were never created, and entity pages crashed. Fix: each plugin now embeds its `migrations/*.sql` via Go's `embed.FS`. `PluginSchema.MigrationsDir` (string) replaced with `MigrationsFS` (`fs.FS`). `RegisteredPlugins()` moved from `database` package to `cmd/server/main.go` to avoid import cycles (database can't import plugin packages). `PluginSchemas` stored on `App` struct and passed to `DatabaseExplorer` for on-demand re-migration. New `embed.go` files in calendar, maps, sessions, timeline, syncapi plugins.
+
+### Previous Update
+2026-03-11 -- **Sprint W-0.5: Visual Customization + Admin DB Explorer (IN PROGRESS).**
+
 26. Admin Database Explorer: New `/admin/database` page with interactive D3.js schema diagram showing all tables, FK relationships, plugin grouping, and migration status. Table detail panel on click. "Apply Pending Migrations" button (fixes sessions table missing issue). Removed "Manual DB Record (Advanced)" form from Features page. New files: `database_service.go` (info_schema introspection), `database.templ`, `db_explorer.js` widget. Added `LatestMigrationVersion()` to database package. Dashboard card + sidebar link.
 
 ### Previous Update

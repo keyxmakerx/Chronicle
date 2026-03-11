@@ -8,9 +8,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io/fs"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -23,9 +22,10 @@ type PluginSchema struct {
 	// Slug is the unique plugin identifier (e.g., "calendar", "maps").
 	Slug string
 
-	// MigrationsDir is the absolute or relative path to the plugin's
-	// migrations/ directory containing numbered SQL files.
-	MigrationsDir string
+	// MigrationsFS is an embedded filesystem containing the plugin's
+	// numbered SQL migration files. Using embed.FS ensures migrations
+	// are available regardless of the binary's working directory.
+	MigrationsFS fs.FS
 }
 
 // PluginMigrationResult holds the outcome of running a single plugin's
@@ -109,20 +109,13 @@ func ensurePluginSchemaTable(db *sql.DB) error {
 func runSinglePluginMigrations(db *sql.DB, plugin PluginSchema) PluginMigrationResult {
 	ctx := context.Background()
 
-	// Check if the migrations directory exists.
-	if _, err := os.Stat(plugin.MigrationsDir); err != nil {
-		if os.IsNotExist(err) {
-			// No migrations directory = nothing to do, plugin is healthy.
-			return PluginMigrationResult{Slug: plugin.Slug, Healthy: true, Version: 0}
-		}
-		return PluginMigrationResult{
-			Slug:  plugin.Slug,
-			Error: fmt.Errorf("checking migrations dir: %w", err),
-		}
+	if plugin.MigrationsFS == nil {
+		// No embedded migrations = nothing to do, plugin is healthy.
+		return PluginMigrationResult{Slug: plugin.Slug, Healthy: true, Version: 0}
 	}
 
-	// Parse migration files from disk.
-	migrations, err := parsePluginMigrations(plugin.MigrationsDir)
+	// Parse migration files from embedded filesystem.
+	migrations, err := parsePluginMigrations(plugin.MigrationsFS)
 	if err != nil {
 		return PluginMigrationResult{
 			Slug:  plugin.Slug,
@@ -192,10 +185,10 @@ func runSinglePluginMigrations(db *sql.DB, plugin PluginSchema) PluginMigrationR
 	}
 }
 
-// parsePluginMigrations reads numbered SQL migration files from a directory.
+// parsePluginMigrations reads numbered SQL migration files from an embedded filesystem.
 // Returns migrations sorted by version number ascending.
-func parsePluginMigrations(dir string) ([]pluginMigration, error) {
-	entries, err := os.ReadDir(dir)
+func parsePluginMigrations(migrationsFS fs.FS) ([]pluginMigration, error) {
+	entries, err := fs.ReadDir(migrationsFS, ".")
 	if err != nil {
 		return nil, fmt.Errorf("reading migrations dir: %w", err)
 	}
@@ -225,7 +218,7 @@ func parsePluginMigrations(dir string) ([]pluginMigration, error) {
 			pairs[version] = &migPair{}
 		}
 
-		content, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		content, err := fs.ReadFile(migrationsFS, entry.Name())
 		if err != nil {
 			return nil, fmt.Errorf("reading %s: %w", entry.Name(), err)
 		}
@@ -331,16 +324,13 @@ func splitPluginStatements(sql string) []string {
 }
 
 // LatestMigrationVersion returns the highest migration version number found
-// in a plugin's migrations directory. Returns 0 if no migrations exist.
-func LatestMigrationVersion(migrationsDir string) (int, error) {
-	if _, err := os.Stat(migrationsDir); err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil
-		}
-		return 0, err
+// in a plugin's embedded migrations filesystem. Returns 0 if nil or empty.
+func LatestMigrationVersion(migrationsFS fs.FS) (int, error) {
+	if migrationsFS == nil {
+		return 0, nil
 	}
 
-	entries, err := os.ReadDir(migrationsDir)
+	entries, err := fs.ReadDir(migrationsFS, ".")
 	if err != nil {
 		return 0, err
 	}
@@ -366,14 +356,6 @@ func LatestMigrationVersion(migrationsDir string) (int, error) {
 	return highest, nil
 }
 
-// RegisteredPlugins returns the list of built-in plugins that have schema
-// migrations. The MigrationsDir paths are relative to the working directory.
-func RegisteredPlugins() []PluginSchema {
-	return []PluginSchema{
-		{Slug: "calendar", MigrationsDir: "internal/plugins/calendar/migrations"},
-		{Slug: "maps", MigrationsDir: "internal/plugins/maps/migrations"},
-		{Slug: "sessions", MigrationsDir: "internal/plugins/sessions/migrations"},
-		{Slug: "timeline", MigrationsDir: "internal/plugins/timeline/migrations"},
-		{Slug: "syncapi", MigrationsDir: "internal/plugins/syncapi/migrations"},
-	}
-}
+// PluginMigrationsSubdir is the subdirectory within each plugin's embed.FS
+// that contains migration SQL files (from //go:embed migrations/*.sql).
+const PluginMigrationsSubdir = "migrations"

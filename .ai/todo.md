@@ -16,6 +16,7 @@ Known broken or missing things, ordered by severity.
 ### Critical
 
 - [x] **Public campaign widget 403s** — Editor and attributes widgets return 403 for non-member visitors on public campaigns. Root cause: GET `/entry`, `/fields`, `/tags`, `/relations` only registered in authenticated route group, not in public-capable group. Fixed by adding routes to `pub` group in entities/routes.go, tags/routes.go, relations/routes.go.
+- [x] **Plugin migrations not applied in Docker (entity page errors, 0/0 in DB Explorer)** — Plugin migrations used relative filesystem paths (`internal/plugins/*/migrations/`) that only resolve when CWD is the project root. In Docker, binary runs from `/app` so dirs were never found, tables never created, entity pages crashed on missing tables, and DB Explorer showed 0/0 for all plugins. Fixed by embedding migrations in the binary via Go's `embed.FS` (ADR-030). Each plugin now has `embed.go` exporting `MigrationsFS`. `PluginSchema.MigrationsDir` replaced with `MigrationsFS` (`fs.FS`).
 
 ### High
 

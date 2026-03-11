@@ -80,15 +80,17 @@ type MigrationHistory struct {
 
 // databaseExplorer implements DatabaseExplorer with direct DB access.
 type databaseExplorer struct {
-	db           *sql.DB
-	pluginHealth *database.PluginHealthRegistry
+	db            *sql.DB
+	pluginHealth  *database.PluginHealthRegistry
+	pluginSchemas []database.PluginSchema
 }
 
 // NewDatabaseExplorer creates a new database explorer service.
-func NewDatabaseExplorer(db *sql.DB, pluginHealth *database.PluginHealthRegistry) DatabaseExplorer {
+func NewDatabaseExplorer(db *sql.DB, pluginHealth *database.PluginHealthRegistry, pluginSchemas []database.PluginSchema) DatabaseExplorer {
 	return &databaseExplorer{
-		db:           db,
-		pluginHealth: pluginHealth,
+		db:            db,
+		pluginHealth:  pluginHealth,
+		pluginSchemas: pluginSchemas,
 	}
 }
 
@@ -220,10 +222,9 @@ func (e *databaseExplorer) GetSchema(ctx context.Context) (*DatabaseSchema, erro
 
 // GetMigrationStatus computes the migration status for each registered plugin.
 func (e *databaseExplorer) GetMigrationStatus(ctx context.Context) ([]PluginMigrationStatus, error) {
-	plugins := database.RegisteredPlugins()
-	statuses := make([]PluginMigrationStatus, 0, len(plugins))
+	statuses := make([]PluginMigrationStatus, 0, len(e.pluginSchemas))
 
-	for _, p := range plugins {
+	for _, p := range e.pluginSchemas {
 		status := PluginMigrationStatus{
 			Slug:    p.Slug,
 			Healthy: true,
@@ -285,8 +286,7 @@ func (e *databaseExplorer) getMigrationHistory(ctx context.Context, slug string)
 // ApplyPendingMigrations runs all pending plugin migrations and updates the
 // health registry. Returns the results for each plugin.
 func (e *databaseExplorer) ApplyPendingMigrations(ctx context.Context) ([]database.PluginMigrationResult, error) {
-	plugins := database.RegisteredPlugins()
-	results := database.RunPluginMigrations(e.db, plugins)
+	results := database.RunPluginMigrations(e.db, e.pluginSchemas)
 
 	// Update the health registry with new results.
 	for _, r := range results {

@@ -49,11 +49,15 @@ type App struct {
 	// PluginHealth tracks which built-in plugins have healthy schemas.
 	// Used during route registration to skip degraded plugins.
 	PluginHealth *database.PluginHealthRegistry
+
+	// PluginSchemas holds the registered plugin migration configurations.
+	// Used by the database explorer to re-run migrations on demand.
+	PluginSchemas []database.PluginSchema
 }
 
 // New creates a new App instance with the given dependencies and configures
 // the Echo server with global middleware and error handling.
-func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *database.PluginHealthRegistry) *App {
+func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *database.PluginHealthRegistry, pluginSchemas []database.PluginSchema) *App {
 	e := echo.New()
 
 	// Disable Echo's default banner and startup message -- we log our own.
@@ -76,7 +80,8 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *databa
 		DB:           db,
 		Redis:        rdb,
 		Echo:         e,
-		PluginHealth: pluginHealth,
+		PluginHealth:  pluginHealth,
+		PluginSchemas: pluginSchemas,
 	}
 
 	// Register global middleware in order of execution.

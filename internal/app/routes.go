@@ -862,7 +862,7 @@ func (a *App) RegisterRoutes() {
 	adminHandler.SetHygieneScanner(hygieneScanner)
 
 	// Database explorer: schema visualization and migration management.
-	dbExplorer := admin.NewDatabaseExplorer(a.DB, a.PluginHealth)
+	dbExplorer := admin.NewDatabaseExplorer(a.DB, a.PluginHealth, a.PluginSchemas)
 	adminHandler.SetDatabaseExplorer(dbExplorer)
 
 	// Wire security event logging into the auth handler so logins, logouts,
