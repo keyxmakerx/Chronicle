@@ -31,10 +31,11 @@ type PluginSchema struct {
 // PluginMigrationResult holds the outcome of running a single plugin's
 // schema migrations.
 type PluginMigrationResult struct {
-	Slug    string
-	Healthy bool
-	Error   error
-	Version int
+	Slug          string
+	Healthy       bool
+	Error         error
+	Version       int
+	LatestVersion int
 }
 
 // pluginMigration represents a single numbered migration for a plugin.
@@ -130,15 +131,19 @@ func runSinglePluginMigrations(db *sql.DB, plugin PluginSchema) PluginMigrationR
 	}
 
 	if len(migrations) == 0 {
-		return PluginMigrationResult{Slug: plugin.Slug, Healthy: true, Version: 0}
+		return PluginMigrationResult{Slug: plugin.Slug, Healthy: true, Version: 0, LatestVersion: 0}
 	}
+
+	// Compute the highest available migration version from files.
+	latestVersion := migrations[len(migrations)-1].Version
 
 	// Get already-applied versions.
 	applied, err := getPluginAppliedVersions(ctx, db, plugin.Slug)
 	if err != nil {
 		return PluginMigrationResult{
-			Slug:  plugin.Slug,
-			Error: fmt.Errorf("reading applied versions: %w", err),
+			Slug:          plugin.Slug,
+			LatestVersion: latestVersion,
+			Error:         fmt.Errorf("reading applied versions: %w", err),
 		}
 	}
 	appliedSet := make(map[int]bool, len(applied))
@@ -165,9 +170,10 @@ func runSinglePluginMigrations(db *sql.DB, plugin PluginSchema) PluginMigrationR
 		// code, so we skip the SQL validator (unlike user extensions).
 		if err := execPluginMigration(ctx, db, plugin.Slug, m); err != nil {
 			return PluginMigrationResult{
-				Slug:    plugin.Slug,
-				Error:   err,
-				Version: highestVersion,
+				Slug:          plugin.Slug,
+				Error:         err,
+				Version:       highestVersion,
+				LatestVersion: latestVersion,
 			}
 		}
 
@@ -179,9 +185,10 @@ func runSinglePluginMigrations(db *sql.DB, plugin PluginSchema) PluginMigrationR
 	}
 
 	return PluginMigrationResult{
-		Slug:    plugin.Slug,
-		Healthy: true,
-		Version: highestVersion,
+		Slug:          plugin.Slug,
+		Healthy:       true,
+		Version:       highestVersion,
+		LatestVersion: latestVersion,
 	}
 }
 

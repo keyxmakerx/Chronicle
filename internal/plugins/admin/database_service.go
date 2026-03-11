@@ -229,23 +229,15 @@ func (e *databaseExplorer) GetMigrationStatus(ctx context.Context) ([]PluginMigr
 			Healthy: true,
 		}
 
-		// Get health from registry.
+		// Get health and version info from registry (populated at startup
+		// when migration files are scanned — avoids re-reading disk at runtime).
 		if h := e.pluginHealth.Get(p.Slug); h != nil {
 			status.Healthy = h.Healthy
 			status.CurrentVersion = h.Version
+			status.LatestVersion = h.LatestVersion
 			status.Error = h.Error
 		}
-
-		// Get latest available version from migration files.
-		latest, err := database.LatestMigrationVersion(p.MigrationsDir)
-		if err != nil {
-			slog.Warn("failed to read migration files",
-				slog.String("plugin", p.Slug),
-				slog.Any("error", err),
-			)
-		}
-		status.LatestVersion = latest
-		status.Pending = latest - status.CurrentVersion
+		status.Pending = status.LatestVersion - status.CurrentVersion
 		if status.Pending < 0 {
 			status.Pending = 0
 		}
@@ -298,7 +290,7 @@ func (e *databaseExplorer) ApplyPendingMigrations(ctx context.Context) ([]databa
 
 	// Update the health registry with new results.
 	for _, r := range results {
-		e.pluginHealth.Register(r.Slug, r.Healthy, r.Error, r.Version)
+		e.pluginHealth.Register(r.Slug, r.Healthy, r.Error, r.Version, r.LatestVersion)
 	}
 
 	return results, nil
