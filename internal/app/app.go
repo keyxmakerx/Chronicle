@@ -317,9 +317,8 @@ func (a *App) serveFoundryModuleZip(c echo.Context) error {
 	c.Response().WriteHeader(http.StatusOK)
 
 	zw := zip.NewWriter(c.Response().Writer)
-	defer zw.Close()
 
-	return filepath.WalkDir(moduleDir, func(path string, d fs.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(moduleDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -347,6 +346,10 @@ func (a *App) serveFoundryModuleZip(c echo.Context) error {
 		_, err = w.Write(data)
 		return err
 	})
+	if walkErr != nil {
+		return walkErr
+	}
+	return zw.Close()
 }
 
 // Start begins listening for HTTP requests on the configured port.
