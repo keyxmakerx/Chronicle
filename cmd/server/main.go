@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -14,6 +15,11 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/app"
 	"github.com/keyxmakerx/chronicle/internal/config"
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
+	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
+	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 
 	// Import system packages for their init() factory registrations.
@@ -56,9 +62,11 @@ func main() {
 
 	// --- Run Plugin Migrations ---
 	// Each plugin runs its own schema migrations independently. Failures
-	// disable the plugin instead of crashing the app.
+	// disable the plugin instead of crashing the app. Migrations are
+	// embedded in the binary via embed.FS so they work in any environment.
 	pluginHealth := database.NewPluginHealthRegistry()
-	pluginResults := database.RunPluginMigrations(db, database.RegisteredPlugins())
+	pluginSchemas := registeredPlugins()
+	pluginResults := database.RunPluginMigrations(db, pluginSchemas)
 	for _, r := range pluginResults {
 		pluginHealth.Register(r.Slug, r.Healthy, r.Error, r.Version, r.LatestVersion)
 	}
@@ -85,7 +93,7 @@ func main() {
 	}
 
 	// --- Create Application ---
-	application := app.New(cfg, db, rdb, pluginHealth)
+	application := app.New(cfg, db, rdb, pluginHealth, pluginSchemas)
 
 	// Register all routes (public, plugin, system, widget, API).
 	application.RegisterRoutes()
@@ -138,4 +146,25 @@ func setupLogging(cfg *config.Config) {
 	}
 
 	slog.SetDefault(slog.New(handler))
+}
+
+// registeredPlugins returns the list of built-in plugins with their embedded
+// migration filesystems. Each plugin embeds its own migrations/*.sql files
+// via Go's embed package, ensuring they're available in the compiled binary
+// regardless of working directory.
+func registeredPlugins() []database.PluginSchema {
+	mustSub := func(fsys fs.FS, dir string) fs.FS {
+		sub, err := fs.Sub(fsys, dir)
+		if err != nil {
+			panic("embedded migrations sub-dir: " + err.Error())
+		}
+		return sub
+	}
+	return []database.PluginSchema{
+		{Slug: "calendar", MigrationsFS: mustSub(calendar.MigrationsFS, database.PluginMigrationsSubdir)},
+		{Slug: "maps", MigrationsFS: mustSub(maps.MigrationsFS, database.PluginMigrationsSubdir)},
+		{Slug: "sessions", MigrationsFS: mustSub(sessions.MigrationsFS, database.PluginMigrationsSubdir)},
+		{Slug: "timeline", MigrationsFS: mustSub(timeline.MigrationsFS, database.PluginMigrationsSubdir)},
+		{Slug: "syncapi", MigrationsFS: mustSub(syncapi.MigrationsFS, database.PluginMigrationsSubdir)},
+	}
 }
