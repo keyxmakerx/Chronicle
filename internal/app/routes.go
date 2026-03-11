@@ -861,6 +861,10 @@ func (a *App) RegisterRoutes() {
 	hygieneScanner := admin.NewHygieneService(a.DB, mediaRepo, mediaService, a.Config.Upload.MediaPath, securityRepo)
 	adminHandler.SetHygieneScanner(hygieneScanner)
 
+	// Database explorer: schema visualization and migration management.
+	dbExplorer := admin.NewDatabaseExplorer(a.DB, a.PluginHealth)
+	adminHandler.SetDatabaseExplorer(dbExplorer)
+
 	// Wire security event logging into the auth handler so logins, logouts,
 	// failed attempts, and password resets are recorded automatically.
 	authHandler.SetSecurityLogger(securityService)

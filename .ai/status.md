@@ -8,6 +8,11 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
+2026-03-11 -- **Sprint W-0.5: Visual Customization + Admin DB Explorer (IN PROGRESS).**
+
+26. Admin Database Explorer: New `/admin/database` page with interactive D3.js schema diagram showing all tables, FK relationships, plugin grouping, and migration status. Table detail panel on click. "Apply Pending Migrations" button (fixes sessions table missing issue). Removed "Manual DB Record (Advanced)" form from Features page. New files: `database_service.go` (info_schema introspection), `database.templ`, `db_explorer.js` widget. Added `LatestMigrationVersion()` to database package. Dashboard card + sidebar link.
+
+### Previous Update
 2026-03-11 -- **Sprint W-0.5: Visual Customization (IN PROGRESS).**
 
 25. Starting W-0.5: Per-campaign brand name/logo, topbar color/gradient/image customization, visual editor Appearance tab in Customization Hub. Also fixing 3 bugs from W-0 (event listener leak in sidebar_tree.js, touch listener cleanup in sidebar_reorg.js, ES2020 optional chaining compat) and updating stale entity/campaign documentation.

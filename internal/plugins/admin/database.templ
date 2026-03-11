@@ -1,0 +1,108 @@
+// database.templ renders the admin database explorer page with migration
+// status cards, an interactive D3.js schema diagram, and a table detail panel.
+
+package admin
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// AdminDatabasePage renders the database explorer with migration status and schema visualization.
+templ AdminDatabasePage(statuses []PluginMigrationStatus, tableCount int, csrfToken string) {
+	@layouts.App("Database - Admin") {
+		<div class="max-w-7xl mx-auto space-y-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Database Explorer</h1>
+					<p class="text-sm text-fg-secondary mt-1">
+						{ fmt.Sprintf("%d", tableCount) } tables &middot; Schema visualization and migration management.
+					</p>
+				</div>
+				<a href="/admin" class="text-sm text-fg-muted hover:text-accent">
+					<i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard
+				</a>
+			</div>
+
+			<!-- Migration Status -->
+			if len(statuses) > 0 {
+				<div>
+					<div class="flex items-center justify-between mb-3">
+						<h2 class="section-header">Plugin Migrations</h2>
+						if hasPendingMigrations(statuses) {
+							<button
+								hx-post="/admin/database/migrations/apply"
+								hx-confirm="Apply all pending plugin migrations? This will create new database tables."
+								hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+								class="btn btn-sm btn-primary"
+							>
+								<i class="fa-solid fa-play mr-1"></i> Apply Pending Migrations
+							</button>
+						}
+					</div>
+					<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+						for _, s := range statuses {
+							@migrationStatusCard(s)
+						}
+					</div>
+				</div>
+			}
+
+			<!-- Schema Diagram -->
+			<div class="card p-0 overflow-hidden">
+				<div class="px-5 py-3 border-b border-edge flex items-center justify-between">
+					<h2 class="text-sm font-semibold text-fg">Schema Diagram</h2>
+					<span class="text-xs text-fg-muted">Scroll to zoom &middot; Drag to pan &middot; Click a table for details</span>
+				</div>
+				<div
+					data-widget="db-explorer"
+					data-api-url="/admin/database/schema"
+					style="min-height: 600px;"
+				></div>
+			</div>
+
+			<!-- Table Detail Panel (populated by JS on node click) -->
+			<div id="table-detail" class="card hidden">
+				<p class="text-sm text-fg-muted p-6">Click a table in the diagram above to see its details.</p>
+			</div>
+		</div>
+	}
+}
+
+// migrationStatusCard renders a card for a single plugin's migration status.
+templ migrationStatusCard(s PluginMigrationStatus) {
+	<div class="card p-4">
+		<div class="flex items-center justify-between mb-2">
+			<span class="text-sm font-semibold text-fg capitalize">{ s.Slug }</span>
+			if s.Healthy {
+				<span class="w-2.5 h-2.5 rounded-full bg-emerald-500" title="Healthy"></span>
+			} else {
+				<span class="w-2.5 h-2.5 rounded-full bg-red-500" title="Unhealthy"></span>
+			}
+		</div>
+		<div class="text-xs text-fg-secondary">
+			<span>v{ fmt.Sprintf("%d", s.CurrentVersion) }</span>
+			<span class="text-fg-muted"> / { fmt.Sprintf("%d", s.LatestVersion) }</span>
+		</div>
+		if s.Pending > 0 {
+			<div class="mt-2">
+				<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+					{ fmt.Sprintf("%d", s.Pending) } pending
+				</span>
+			</div>
+		}
+		if s.Error != "" {
+			<p class="text-xs text-red-500 mt-2 truncate" title={ s.Error }>{ s.Error }</p>
+		}
+	</div>
+}
+
+// hasPendingMigrations returns true if any plugin has pending migrations.
+func hasPendingMigrations(statuses []PluginMigrationStatus) bool {
+	for _, s := range statuses {
+		if s.Pending > 0 {
+			return true
+		}
+	}
+	return false
+}

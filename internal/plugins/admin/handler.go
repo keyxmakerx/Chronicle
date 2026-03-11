@@ -40,8 +40,9 @@ type Handler struct {
 	maxUploadSize   int64
 	settingsService settings.SettingsService
 	addonCounter    AddonCounter
-	securityService SecurityService
-	hygieneScanner  DataHygieneScanner
+	securityService  SecurityService
+	hygieneScanner   DataHygieneScanner
+	databaseExplorer DatabaseExplorer
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
@@ -95,6 +96,11 @@ func (h *Handler) SetSecurityService(svc SecurityService) {
 // SetHygieneScanner wires the data hygiene scanner for the hygiene dashboard.
 func (h *Handler) SetHygieneScanner(scanner DataHygieneScanner) {
 	h.hygieneScanner = scanner
+}
+
+// SetDatabaseExplorer wires the database explorer for the schema visualization page.
+func (h *Handler) SetDatabaseExplorer(explorer DatabaseExplorer) {
+	h.databaseExplorer = explorer
 }
 
 // --- Data Hygiene ---
@@ -643,6 +649,81 @@ func (h *Handler) EnableUser(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/security")
+}
+
+// --- Database Explorer ---
+
+// Database renders the admin database explorer page (GET /admin/database).
+func (h *Handler) Database(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	var statuses []PluginMigrationStatus
+	var tableCount int
+	if h.databaseExplorer != nil {
+		var err error
+		statuses, err = h.databaseExplorer.GetMigrationStatus(ctx)
+		if err != nil {
+			slog.Warn("failed to get migration status", slog.Any("error", err))
+		}
+
+		// Quick table count for the page header.
+		schema, err := h.databaseExplorer.GetSchema(ctx)
+		if err != nil {
+			slog.Warn("failed to get schema for table count", slog.Any("error", err))
+		} else {
+			tableCount = len(schema.Tables)
+		}
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, AdminDatabasePage(statuses, tableCount, csrfToken))
+}
+
+// DatabaseSchemaAPI returns the full schema as JSON (GET /admin/database/schema).
+// The D3 widget fetches this to render the interactive diagram.
+func (h *Handler) DatabaseSchemaAPI(c echo.Context) error {
+	if h.databaseExplorer == nil {
+		return apperror.NewInternal(fmt.Errorf("database explorer not configured"))
+	}
+
+	schema, err := h.databaseExplorer.GetSchema(c.Request().Context())
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("getting schema: %w", err))
+	}
+
+	return c.JSON(http.StatusOK, schema)
+}
+
+// ApplyMigrationsAPI runs all pending plugin migrations (POST /admin/database/migrations/apply).
+func (h *Handler) ApplyMigrationsAPI(c echo.Context) error {
+	if h.databaseExplorer == nil {
+		return apperror.NewInternal(fmt.Errorf("database explorer not configured"))
+	}
+
+	results, err := h.databaseExplorer.ApplyPendingMigrations(c.Request().Context())
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("applying migrations: %w", err))
+	}
+
+	for _, r := range results {
+		if r.Healthy {
+			slog.Info("migration applied via admin",
+				slog.String("plugin", r.Slug),
+				slog.Int("version", r.Version),
+			)
+		} else {
+			slog.Error("migration failed via admin",
+				slog.String("plugin", r.Slug),
+				slog.Any("error", r.Error),
+			)
+		}
+	}
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", "/admin/database")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/database")
 }
 
 // SecurityPageData holds all data needed for the security dashboard page.

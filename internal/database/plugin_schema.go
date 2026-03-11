@@ -323,6 +323,42 @@ func splitPluginStatements(sql string) []string {
 	return stmts
 }
 
+// LatestMigrationVersion returns the highest migration version number found
+// in a plugin's migrations directory. Returns 0 if no migrations exist.
+func LatestMigrationVersion(migrationsDir string) (int, error) {
+	if _, err := os.Stat(migrationsDir); err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	entries, err := os.ReadDir(migrationsDir)
+	if err != nil {
+		return 0, err
+	}
+
+	highest := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		matches := pluginMigrationFileRe.FindStringSubmatch(entry.Name())
+		if len(matches) < 2 {
+			continue
+		}
+		v, err := strconv.Atoi(matches[1])
+		if err != nil {
+			continue
+		}
+		if v > highest {
+			highest = v
+		}
+	}
+
+	return highest, nil
+}
+
 // RegisteredPlugins returns the list of built-in plugins that have schema
 // migrations. The MigrationsDir paths are relative to the working directory.
 func RegisteredPlugins() []PluginSchema {

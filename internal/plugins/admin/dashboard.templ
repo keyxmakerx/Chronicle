@@ -108,6 +108,17 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 					<p class="text-lg font-semibold text-fg mt-2">Orphan Cleanup</p>
 					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Scan &amp; clean &rarr;</p>
 				</a>
+				<!-- Database -->
+				<a href="/admin/database" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-fg-secondary">Database</p>
+						<span class="w-10 h-10 rounded-lg bg-slate-50 dark:bg-slate-900/30 flex items-center justify-center">
+							<i class="fa-solid fa-database text-slate-500"></i>
+						</span>
+					</div>
+					<p class="text-lg font-semibold text-fg mt-2">Schema Explorer</p>
+					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Tables &amp; migrations &rarr;</p>
+				</a>
 				<!-- SMTP -->
 				<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">
 					<div class="flex items-center justify-between">
