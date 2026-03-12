@@ -76,9 +76,7 @@ func (s *npcService) ListNPCs(ctx context.Context, campaignID string, role int, 
 			for i := range cards {
 				if infos, ok := tagMap[cards[i].ID]; ok {
 					for _, t := range infos {
-						cards[i].Tags = append(cards[i].Tags, NPCTagInfo{
-							ID: t.ID, Name: t.Name, Slug: t.Slug, Color: t.Color,
-						})
+						cards[i].Tags = append(cards[i].Tags, NPCTagInfo(t))
 					}
 				}
 			}
