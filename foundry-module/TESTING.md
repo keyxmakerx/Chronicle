@@ -33,6 +33,24 @@ Requires a running Chronicle instance and Foundry VTT with the chronicle-sync mo
 - [ ] Edit JournalEntry page content -> Entity entry updates
 - [ ] Delete JournalEntry -> Entity deleted in Chronicle
 
+### Multi-Page Sync
+- [ ] Entity with h1/h2 headings creates multiple Foundry journal pages
+- [ ] Entity without headings creates single "Content" page
+- [ ] Multi-page Foundry journal concatenates into single Chronicle entry
+- [ ] Updating entity content adds/removes/updates pages correctly
+- [ ] Page titles match heading text (HTML stripped)
+- [ ] Pre-heading content creates "Overview" page
+
+### Permission Sync
+- [ ] Private entity (is_private=true) creates journal with default ownership NONE
+- [ ] Public entity (is_private=false) creates journal with default ownership OBSERVER
+- [ ] Custom visibility entity fetches permissions and maps role grants to ownership
+- [ ] Custom visibility with player view grant → default OBSERVER
+- [ ] Custom visibility with no player grant → default NONE
+- [ ] Changing journal ownership in Foundry pushes is_private to Chronicle
+- [ ] Changing journal ownership pushes visibility/permissions to Chronicle API
+- [ ] Permission API failure falls back to binary is_private mapping
+
 ### Edge Cases
 - [ ] Rapid successive edits don't create duplicate entities
 - [ ] Sync guard prevents infinite loops (edit in A, syncs to B, doesn't re-sync to A)

@@ -563,3 +563,81 @@ func (h *APIHandler) ListEntityRelations(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, rels)
 }
+
+// --- Entity Permissions ---
+
+// permissionsAPIResponse is the JSON response for entity permission queries.
+type permissionsAPIResponse struct {
+	Visibility  entities.VisibilityMode    `json:"visibility"`
+	IsPrivate   bool                       `json:"is_private"`
+	Permissions []entities.EntityPermission `json:"permissions"`
+}
+
+// GetEntityPermissions returns the visibility mode and permission grants for an entity.
+// GET /api/v1/campaigns/:id/entities/:entityID/permissions
+func (h *APIHandler) GetEntityPermissions(c echo.Context) error {
+	entityID := c.Param("entityID")
+	ctx := c.Request().Context()
+
+	entity, err := h.entitySvc.GetByID(ctx, entityID)
+	if err != nil {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Verify entity belongs to the API key's campaign.
+	if entity.CampaignID != c.Param("id") {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	grants, err := h.entitySvc.GetEntityPermissions(ctx, entityID)
+	if err != nil {
+		slog.Error("fetching entity permissions",
+			slog.String("entity_id", entityID),
+			slog.String("error", err.Error()))
+		return apperror.NewInternal(fmt.Errorf("failed to fetch permissions"))
+	}
+
+	if grants == nil {
+		grants = []entities.EntityPermission{}
+	}
+
+	return c.JSON(http.StatusOK, permissionsAPIResponse{
+		Visibility:  entity.Visibility,
+		IsPrivate:   entity.IsPrivate,
+		Permissions: grants,
+	})
+}
+
+// SetEntityPermissions updates the visibility mode and permission grants for an entity.
+// PUT /api/v1/campaigns/:id/entities/:entityID/permissions
+func (h *APIHandler) SetEntityPermissions(c echo.Context) error {
+	entityID := c.Param("entityID")
+	ctx := c.Request().Context()
+	role := h.resolveRole(c)
+
+	entity, err := h.entitySvc.GetByID(ctx, entityID)
+	if err != nil {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Verify entity belongs to the API key's campaign.
+	if entity.CampaignID != c.Param("id") {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Only campaign owners can modify permissions.
+	if role < int(campaigns.RoleOwner) {
+		return apperror.NewForbidden("only campaign owners can modify entity permissions")
+	}
+
+	var input entities.SetPermissionsInput
+	if err := c.Bind(&input); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.entitySvc.SetEntityPermissions(ctx, entityID, input); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}

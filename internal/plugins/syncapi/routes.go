@@ -67,6 +67,8 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.GET("/entities", api.ListEntities, RequirePermission(PermRead))
 	cg.GET("/entities/:entityID", api.GetEntity, RequirePermission(PermRead))
 	cg.GET("/entities/:entityID/relations", api.ListEntityRelations, RequirePermission(PermRead))
+	cg.GET("/entities/:entityID/permissions", api.GetEntityPermissions, RequirePermission(PermRead))
+	cg.PUT("/entities/:entityID/permissions", api.SetEntityPermissions, RequirePermission(PermWrite))
 
 	// Calendar read endpoints (require "read" permission + calendar addon).
 	calGroup := cg.Group("", RequireAddonAPI(addonChecker, "calendar"))
