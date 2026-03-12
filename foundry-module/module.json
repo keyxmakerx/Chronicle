@@ -2,7 +2,7 @@
   "id": "chronicle-sync",
   "title": "Chronicle Sync",
   "description": "Bidirectional sync between Chronicle worldbuilding platform and Foundry VTT. Syncs journals, maps, tokens, drawings, shops, and calendars in real-time.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "compatibility": {
     "minimum": "12",
     "verified": "13",
@@ -16,7 +16,7 @@
   ],
   "url": "https://github.com/keyxmakerx/Chronicle",
   "manifest": "https://raw.githubusercontent.com/keyxmakerx/Chronicle/main/foundry-module/module.json",
-  "download": "https://github.com/keyxmakerx/Chronicle/releases/download/foundry-v0.1.0/chronicle-sync.zip",
+  "download": "https://github.com/keyxmakerx/Chronicle/releases/download/foundry-v0.2.0/chronicle-sync.zip",
   "license": "MIT",
   "esmodules": [
     "scripts/module.mjs"
