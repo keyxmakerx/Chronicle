@@ -20,11 +20,12 @@ import (
 // External clients (Foundry VTT, custom scripts) use these endpoints to
 // read and write campaign data programmatically via API key authentication.
 type APIHandler struct {
-	syncSvc      SyncAPIService
-	entitySvc    entities.EntityService
-	campaignSvc  campaigns.CampaignService
-	relationSvc  relations.RelationService
-	addonChecker AddonChecker
+	syncSvc              SyncAPIService
+	entitySvc            entities.EntityService
+	campaignSvc          campaigns.CampaignService
+	relationSvc          relations.RelationService
+	addonChecker         AddonChecker
+	campaignSystemLister CampaignSystemLister
 }
 
 // NewAPIHandler creates a new API handler with the required service dependencies.
@@ -35,6 +36,12 @@ func NewAPIHandler(syncSvc SyncAPIService, entitySvc entities.EntityService, cam
 		campaignSvc: campaignSvc,
 		relationSvc: relationSvc,
 	}
+}
+
+// SetCampaignSystemLister sets the custom campaign system lister for including
+// per-campaign custom systems in API responses.
+func (h *APIHandler) SetCampaignSystemLister(csl CampaignSystemLister) {
+	h.campaignSystemLister = csl
 }
 
 // resolveRole returns the API key owner's role in the campaign for privacy filtering.
@@ -658,7 +665,13 @@ type systemInfoResponse struct {
 	Name               string `json:"name"`
 	Status             string `json:"status"`
 	HasCharacterFields bool   `json:"has_character_fields"`
+	FoundrySystemID    string `json:"foundry_system_id,omitempty"`
 	Enabled            bool   `json:"enabled"`
+}
+
+// CampaignSystemLister provides access to per-campaign custom systems.
+type CampaignSystemLister interface {
+	GetManifest(campaignID string) *systems.SystemManifest
 }
 
 // ListSystems returns game systems available for the campaign.
@@ -687,12 +700,62 @@ func (h *APIHandler) ListSystems(c echo.Context) error {
 			Name:               manifest.Name,
 			Status:             string(manifest.Status),
 			HasCharacterFields: manifest.CharacterPreset() != nil,
+			FoundrySystemID:    manifest.FoundrySystemID,
 			Enabled:            enabled,
 		})
+	}
+
+	// Include the campaign's custom system if one is uploaded.
+	if h.campaignSystemLister != nil {
+		if custom := h.campaignSystemLister.GetManifest(campaignID); custom != nil {
+			enabled := false
+			if h.addonChecker != nil {
+				ok, err := h.addonChecker.IsEnabledForCampaign(ctx, campaignID, custom.ID)
+				if err == nil && ok {
+					enabled = true
+				}
+			}
+			result = append(result, systemInfoResponse{
+				ID:                 custom.ID,
+				Name:               custom.Name,
+				Status:             string(custom.Status),
+				HasCharacterFields: custom.CharacterPreset() != nil,
+				FoundrySystemID:    custom.FoundrySystemID,
+				Enabled:            enabled,
+			})
+		}
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":  result,
 		"total": len(result),
 	})
+}
+
+// GetCharacterFields returns the character preset field definitions for a
+// specific system, including Foundry path annotations. Used by the Foundry
+// module's generic adapter to auto-generate field mappings at runtime.
+// GET /api/v1/campaigns/:id/systems/:systemId/character-fields
+func (h *APIHandler) GetCharacterFields(c echo.Context) error {
+	campaignID := c.Param("id")
+	systemID := c.Param("systemId")
+
+	// Look up the system manifest: first in global registry, then custom.
+	manifest := systems.Find(systemID)
+	if manifest == nil && h.campaignSystemLister != nil {
+		if custom := h.campaignSystemLister.GetManifest(campaignID); custom != nil && custom.ID == systemID {
+			manifest = custom
+		}
+	}
+
+	if manifest == nil {
+		return apperror.NewNotFound("system not found: " + systemID)
+	}
+
+	resp := manifest.CharacterFieldsForAPI()
+	if resp == nil {
+		return apperror.NewNotFound("character fields not found for system: " + systemID)
+	}
+
+	return c.JSON(http.StatusOK, resp)
 }

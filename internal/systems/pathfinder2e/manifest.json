@@ -8,6 +8,7 @@
   "icon": "fa-shield-halved",
   "api_version": "1",
   "status": "available",
+  "foundry_system_id": "pf2e",
   "categories": [
     {
       "slug": "spells",
@@ -83,21 +84,21 @@
       "icon": "fa-shield-halved",
       "color": "#2563EB",
       "fields": [
-        { "key": "class", "label": "Class", "type": "string" },
-        { "key": "level", "label": "Level", "type": "number" },
-        { "key": "ancestry", "label": "Ancestry", "type": "string" },
-        { "key": "heritage", "label": "Heritage", "type": "string" },
-        { "key": "str_mod", "label": "Strength Mod", "type": "number" },
-        { "key": "dex_mod", "label": "Dexterity Mod", "type": "number" },
-        { "key": "con_mod", "label": "Constitution Mod", "type": "number" },
-        { "key": "int_mod", "label": "Intelligence Mod", "type": "number" },
-        { "key": "wis_mod", "label": "Wisdom Mod", "type": "number" },
-        { "key": "cha_mod", "label": "Charisma Mod", "type": "number" },
-        { "key": "hp_current", "label": "Current HP", "type": "number" },
-        { "key": "hp_max", "label": "Max HP", "type": "number" },
-        { "key": "ac", "label": "Armor Class", "type": "number" },
-        { "key": "perception", "label": "Perception", "type": "number" },
-        { "key": "speed", "label": "Speed", "type": "number" }
+        { "key": "class", "label": "Class", "type": "string", "foundry_path": "system.details.class.name", "foundry_writable": false },
+        { "key": "level", "label": "Level", "type": "number", "foundry_path": "system.details.level.value", "foundry_writable": false },
+        { "key": "ancestry", "label": "Ancestry", "type": "string", "foundry_path": "system.details.ancestry.name", "foundry_writable": false },
+        { "key": "heritage", "label": "Heritage", "type": "string", "foundry_path": "system.details.heritage.name", "foundry_writable": false },
+        { "key": "str_mod", "label": "Strength Mod", "type": "number", "foundry_path": "system.abilities.str.mod", "foundry_writable": false },
+        { "key": "dex_mod", "label": "Dexterity Mod", "type": "number", "foundry_path": "system.abilities.dex.mod", "foundry_writable": false },
+        { "key": "con_mod", "label": "Constitution Mod", "type": "number", "foundry_path": "system.abilities.con.mod", "foundry_writable": false },
+        { "key": "int_mod", "label": "Intelligence Mod", "type": "number", "foundry_path": "system.abilities.int.mod", "foundry_writable": false },
+        { "key": "wis_mod", "label": "Wisdom Mod", "type": "number", "foundry_path": "system.abilities.wis.mod", "foundry_writable": false },
+        { "key": "cha_mod", "label": "Charisma Mod", "type": "number", "foundry_path": "system.abilities.cha.mod", "foundry_writable": false },
+        { "key": "hp_current", "label": "Current HP", "type": "number", "foundry_path": "system.attributes.hp.value" },
+        { "key": "hp_max", "label": "Max HP", "type": "number", "foundry_path": "system.attributes.hp.max" },
+        { "key": "ac", "label": "Armor Class", "type": "number", "foundry_path": "system.attributes.ac.value", "foundry_writable": false },
+        { "key": "perception", "label": "Perception", "type": "number", "foundry_path": "system.attributes.perception.value", "foundry_writable": false },
+        { "key": "speed", "label": "Speed", "type": "number", "foundry_path": "system.attributes.speed.value", "foundry_writable": false }
       ]
     },
     {

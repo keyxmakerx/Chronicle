@@ -94,14 +94,23 @@ Make the Foundry integration robust and debuggable for real-world use.
 **Key files:** `internal/systems/campaign_systems.go`, `internal/systems/custom_system.templ`,
 `foundry-module/scripts/sync-manager.mjs`, Foundry dashboard templates
 
-#### Sprint F-5: NPC Viewer / Hall
+#### Sprint F-5: NPC Viewer / Hall (Plugin + Widget + Foundry Sync)
 
-Campaign route `/campaigns/:id/npcs` — gallery/grid of revealed NPCs (non-private
-character entities). Portrait, name, description, location, faction tags. Filters
-by location/organization/relation. "Reveal" = DM toggles visibility. Foundry:
-ownership change on NPC journal auto-reveals on Chronicle.
+Full NPC plugin at `internal/plugins/npcs/` with its own widget. Campaign route
+`/campaigns/:id/npcs` — gallery/grid of revealed NPCs (non-private character
+entities). Portrait, name, description, location, faction tags. Filters by
+location/organization/relation. "Reveal" = DM toggles visibility.
 
-**Key files:** `internal/plugins/entities/`, new NPC templ views, `foundry-module/`
+**Widget:** `npc_gallery` layout block type for entity pages and dashboards.
+Mounts a filterable NPC card grid. Registered in block registry.
+
+**Foundry Sync:** NPC gallery on Chronicle stays in sync with Foundry. When a
+DM reveals/hides an NPC in Foundry (ownership change), the corresponding
+Chronicle entity visibility updates automatically and vice versa. The Foundry
+module's actor-sync detects NPC-type actors and pushes visibility changes.
+
+**Key files:** `internal/plugins/npcs/` (new), `static/js/widgets/npc_gallery.js`
+(new), `foundry-module/scripts/actor-sync.mjs`, entity templates
 
 ---
 

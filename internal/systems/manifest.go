@@ -47,6 +47,12 @@ type SystemManifest struct {
 	// enabling this module (e.g., "D&D Character" with predefined fields).
 	EntityPresets []EntityPresetDef `json:"entity_presets,omitempty"`
 
+	// FoundrySystemID is the Foundry VTT game.system.id that this system
+	// corresponds to (e.g., "dnd5e", "pf2e"). When set, the Foundry module
+	// can automatically match this Chronicle system to the running Foundry
+	// game system, enabling character sync for custom-uploaded systems.
+	FoundrySystemID string `json:"foundry_system_id,omitempty"`
+
 	// TooltipTemplate is an optional HTML template string for rendering
 	// hover tooltips. Uses Go text/template syntax with ReferenceItem data.
 	TooltipTemplate string `json:"tooltip_template,omitempty"`
@@ -69,6 +75,9 @@ type CategoryDef struct {
 }
 
 // FieldDef describes a single field in a category's reference item schema.
+// For entity preset fields, the optional FoundryPath and FoundryWritable
+// annotations enable automatic Foundry VTT character sync without needing
+// a hardcoded system adapter.
 type FieldDef struct {
 	// Key is the property map key (e.g., "level", "school", "cr").
 	Key string `json:"key"`
@@ -78,6 +87,27 @@ type FieldDef struct {
 
 	// Type is the field data type: "string", "number", "list", "markdown".
 	Type string `json:"type"`
+
+	// FoundryPath is the dot-notation path to the corresponding field in
+	// a Foundry VTT Actor's system data (e.g., "system.abilities.str.value").
+	// Used by the generic Foundry adapter to auto-generate field mappings.
+	// Only meaningful on entity preset fields, not category reference fields.
+	FoundryPath string `json:"foundry_path,omitempty"`
+
+	// FoundryWritable indicates whether the generic adapter should write
+	// this field back to Foundry when syncing Chronicle → Foundry.
+	// Fields that are derived/calculated in Foundry (e.g., PF2e ability mods)
+	// should set this to false. Defaults to true when FoundryPath is set.
+	FoundryWritable *bool `json:"foundry_writable,omitempty"`
+}
+
+// IsFoundryWritable returns whether this field should be written back to
+// Foundry. Returns true if foundry_writable is nil (default) or explicitly true.
+func (f FieldDef) IsFoundryWritable() bool {
+	if f.FoundryWritable == nil {
+		return true
+	}
+	return *f.FoundryWritable
 }
 
 // EntityPresetDef describes an entity type template that a module provides.
@@ -113,6 +143,54 @@ func (m *SystemManifest) CharacterPreset() *EntityPresetDef {
 		}
 	}
 	return nil
+}
+
+// CharacterFieldsResponse is the API response shape for the character
+// fields endpoint, containing field definitions with Foundry annotations.
+type CharacterFieldsResponse struct {
+	SystemID        string                 `json:"system_id"`
+	PresetSlug      string                 `json:"preset_slug"`
+	PresetName      string                 `json:"preset_name"`
+	FoundrySystemID string                 `json:"foundry_system_id,omitempty"`
+	Fields          []CharacterFieldExport `json:"fields"`
+}
+
+// CharacterFieldExport is a single field definition exported for the
+// Foundry module's generic adapter.
+type CharacterFieldExport struct {
+	Key            string `json:"key"`
+	Label          string `json:"label"`
+	Type           string `json:"type"`
+	FoundryPath    string `json:"foundry_path,omitempty"`
+	FoundryWritable bool  `json:"foundry_writable"`
+}
+
+// CharacterFieldsForAPI builds the API response for character preset fields.
+// Returns nil if no character preset exists.
+func (m *SystemManifest) CharacterFieldsForAPI() *CharacterFieldsResponse {
+	preset := m.CharacterPreset()
+	if preset == nil {
+		return nil
+	}
+
+	fields := make([]CharacterFieldExport, len(preset.Fields))
+	for i, f := range preset.Fields {
+		fields[i] = CharacterFieldExport{
+			Key:             f.Key,
+			Label:           f.Label,
+			Type:            f.Type,
+			FoundryPath:     f.FoundryPath,
+			FoundryWritable: f.FoundryPath != "" && f.IsFoundryWritable(),
+		}
+	}
+
+	return &CharacterFieldsResponse{
+		SystemID:        m.ID,
+		PresetSlug:      preset.Slug,
+		PresetName:      preset.Name,
+		FoundrySystemID: m.FoundrySystemID,
+		Fields:          fields,
+	}
 }
 
 // CategoryNames returns a flat list of category display names.

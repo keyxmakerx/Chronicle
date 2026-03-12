@@ -8,6 +8,7 @@
   "icon": "fa-bolt",
   "api_version": "1",
   "status": "coming_soon",
+  "foundry_system_id": "draw-steel",
   "categories": [
     {
       "slug": "abilities",

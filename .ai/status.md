@@ -8,7 +8,17 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-12 -- **Phase & sprint plan reorg.**
+2026-03-12 -- **Sprint F-4.5: Generic System Adapter & Dynamic Matching.**
+
+37. **Sprint F-4.5: Generic System Adapter (DONE).**
+    - **Manifest schema** — Added `foundry_system_id` to `SystemManifest`, `foundry_path` and `foundry_writable` to `FieldDef`. `IsFoundryWritable()` helper defaults to true when nil. New `CharacterFieldsForAPI()` builds API response with field annotations.
+    - **API endpoint** — `GET /api/v1/campaigns/:id/systems/:systemId/character-fields` returns field definitions with Foundry path annotations. Supports both built-in and custom campaign systems via `CampaignSystemLister` interface.
+    - **Manifest annotations** — dnd5e: all 15 character fields annotated with `foundry_path`; AC, speed, proficiency_bonus marked `foundry_writable: false`. PF2e: all 15 fields annotated; only hp_current/hp_max writable (everything else derived). DrawSteel: `foundry_system_id: "draw-steel"` added.
+    - **Foundry sync-manager.mjs** — `_detectSystem()` now API-driven: queries `/systems` and matches by `foundry_system_id` first, falls back to `SYSTEM_MAP_FALLBACK` for legacy support. Custom-uploaded systems with `foundry_system_id` auto-match.
+    - **Foundry generic-adapter.mjs** — New data-driven adapter that fetches field definitions from `/systems/:id/character-fields` API. Auto-generates `toChronicleFields()` and `fromChronicleFields()` from field annotations. Respects `foundry_writable` and field types for casting.
+    - **Foundry actor-sync.mjs** — `_loadAdapter()` tries built-in adapters (dnd5e, pf2e) first, then falls back to generic adapter for any other system.
+    - **Tests** — Added 7 tests for `IsFoundryWritable`, `CharacterPreset`, `CharacterFieldsForAPI`, and `LoadManifest` with Foundry annotations. All pass.
+    - **Impact:** Any game system (including custom uploads) can now participate in character sync by including `foundry_system_id` and `foundry_path` annotations in its manifest.
 
 36. **Phase & Sprint Plan Reorg.**
     - Rewrote `.ai/phases.md` with 6 phases in new priority order based on owner direction:
@@ -166,13 +176,15 @@ Branch: `claude/fix-journal-button-placement-UF4hD`.
 
 ## Phase & Sprint Plan
 See `.ai/phases.md` for the full roadmap. Phases organized by priority:
-- **V**: Obsidian-Style Notes & Discovery ← CURRENT
-- **W**: Polish, Ecosystem & Delight
-- **T**: Game System Modules & Worldbuilding Tools
-- **U**: Collaboration & Platform Maturity
+1. **F**: Foundry Completion & QoL (F-4.5, F-QoL, F-5) ← CURRENT
+2. **X**: System Modularity & Owner Experience (X-1 through X-5)
+3. **W**: Maps & Spatial (W-2, W-2.5)
+4. **U**: Collaboration & Polish (U-1/2/3/4/5, W-1, W-4)
+5. **T**: Content & Integrations (T-3/4, W-3/5/6)
+6. **F**: Foundry Advanced (F-6, F-7)
 
 ## Current Phase
-**Phase V (Obsidian-Style Notes & Discovery) — Sprint V-2 COMPLETE.**
+**Phase 1: Foundry Completion — Sprint F-4.5 IN PROGRESS.**
 
 ### Sprint V-2: Backlinks Panel & Entity Aliases (COMPLETE)
 - **Fixed migration 060**: Removed incorrect first ALTER that tried to drop 'module' from ENUM directly, causing Error 1265. Kept correct 3-step approach.
@@ -613,9 +625,9 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - Updated architecture.md directory structure to reflect systems/ path
 
 ## Next Session Should
-- **Sprint U-2: Invite System** — campaign invite links for easier player onboarding
-- **Sprint V-1: Quick Capture** — Obsidian-style notes rapid entry
-- **Sprint T-3: Guided Worldbuilding Prompts** — Writing prompts panel on entity edit page (deferred)
+- **Sprint F-4.5: Generic System Adapter** — Remove hardcoded SYSTEM_MAP, dynamic matching via API
+- **Sprint F-QoL: Foundry Sync Diagnostics** — Validation report, health dashboard, error recovery
+- **Sprint F-5: NPC Viewer / Hall** — Gallery of revealed NPCs
 - See `.ai/phases.md` for full execution order
 
 ## Known Issues Right Now

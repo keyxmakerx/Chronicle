@@ -1283,6 +1283,10 @@ func (a *App) RegisterRoutes() {
 	campaignSystemHandler := systems.NewCampaignSystemHandler(campaignSystemMgr)
 	systems.RegisterCustomSystemRoutes(e, campaignSystemHandler, authService, campaignService)
 
+	// Wire campaign system lister into sync API so custom systems appear
+	// in /systems and /systems/:id/character-fields endpoints.
+	syncAPIHandler.SetCampaignSystemLister(campaignSystemMgr)
+
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {
 		return c.Redirect(http.StatusSeeOther, "/campaigns")
