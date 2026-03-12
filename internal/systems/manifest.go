@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // SystemManifest describes a module's metadata, capabilities, and content
@@ -100,6 +101,18 @@ type EntityPresetDef struct {
 
 	// Fields are the default field definitions for entities of this type.
 	Fields []FieldDef `json:"fields,omitempty"`
+}
+
+// CharacterPreset returns the first entity preset whose slug ends with
+// "-character", or nil if no character preset is defined. Used by the
+// sync API to expose character field templates for actor sync.
+func (m *SystemManifest) CharacterPreset() *EntityPresetDef {
+	for i := range m.EntityPresets {
+		if strings.HasSuffix(m.EntityPresets[i].Slug, "-character") {
+			return &m.EntityPresets[i]
+		}
+	}
+	return nil
 }
 
 // CategoryNames returns a flat list of category display names.

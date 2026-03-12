@@ -10,6 +10,16 @@ import { ChronicleAPI } from './api-client.mjs';
 import { getSetting, setSetting, isConfigured } from './settings.mjs';
 
 /**
+ * Maps Foundry game.system.id values to Chronicle system IDs.
+ * Only systems with an explicit mapping can enable character sync.
+ */
+const SYSTEM_MAP = {
+  dnd5e: 'dnd5e',
+  pf2e: 'pathfinder2e',
+  drawsteel: 'drawsteel',
+};
+
+/**
  * SyncManager coordinates all Chronicle sync operations.
  * It owns the API client and delegates to feature-specific sync modules.
  */
@@ -29,6 +39,12 @@ export class SyncManager {
 
     /** @type {number} Maximum activity log entries. */
     this._maxLogEntries = 100;
+
+    /** @type {string|null} Matched Chronicle system ID, or null if no match. */
+    this._matchedSystem = null;
+
+    /** @type {string|null} Foundry's game.system.id. */
+    this._foundrySystemId = null;
   }
 
   /**
@@ -60,6 +76,9 @@ export class SyncManager {
       console.log('Chronicle: Sync disabled in settings');
       return;
     }
+
+    // Detect game system and match against Chronicle systems.
+    await this._detectSystem();
 
     // Initialize all registered modules.
     for (const mod of this._modules) {
@@ -98,6 +117,68 @@ export class SyncManager {
     this._modules = [];
     this._initialSyncDone = false;
     console.log('Chronicle: Sync manager stopped');
+  }
+
+  /**
+   * Returns the matched Chronicle system ID, or null if no match.
+   * @returns {string|null}
+   */
+  getMatchedSystem() {
+    return this._matchedSystem;
+  }
+
+  /**
+   * Returns Foundry's game.system.id.
+   * @returns {string|null}
+   */
+  getFoundrySystemId() {
+    return this._foundrySystemId;
+  }
+
+  /**
+   * Detect the Foundry game system and match it against Chronicle systems.
+   * Queries the /systems API endpoint to verify the match is enabled
+   * for this campaign. Stores the result in the detectedSystem setting.
+   * @private
+   */
+  async _detectSystem() {
+    this._foundrySystemId = game.system?.id || null;
+
+    if (!this._foundrySystemId) {
+      console.log('Chronicle: No Foundry game system detected');
+      return;
+    }
+
+    const chronicleId = SYSTEM_MAP[this._foundrySystemId];
+    if (!chronicleId) {
+      console.log(`Chronicle: Foundry system "${this._foundrySystemId}" has no Chronicle mapping`);
+      await setSetting('detectedSystem', '');
+      return;
+    }
+
+    try {
+      // Query Chronicle for available systems and check if the mapped one is enabled.
+      const result = await this.api.get('/systems');
+      const systems = result.data || [];
+      const match = systems.find((s) => s.id === chronicleId && s.enabled);
+
+      if (match) {
+        this._matchedSystem = chronicleId;
+        await setSetting('detectedSystem', chronicleId);
+        this.logActivity('connect', `Game system matched: ${match.name}`);
+        console.log(`Chronicle: System matched — Foundry "${this._foundrySystemId}" → Chronicle "${chronicleId}"`);
+      } else {
+        await setSetting('detectedSystem', '');
+        console.log(`Chronicle: System "${chronicleId}" not enabled for this campaign`);
+      }
+    } catch (err) {
+      console.warn('Chronicle: Failed to detect system match', err);
+      // Fall back to local setting if API call fails.
+      const cached = getSetting('detectedSystem');
+      if (cached) {
+        this._matchedSystem = cached;
+      }
+    }
   }
 
   /**

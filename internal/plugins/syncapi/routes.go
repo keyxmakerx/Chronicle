@@ -51,6 +51,9 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 // read/write/sync access levels. Campaign match middleware ensures keys can
 // only access their scoped campaign.
 func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService, addonChecker AddonChecker) {
+	// Inject addon checker into API handler for system-aware endpoints.
+	api.SetAddonChecker(addonChecker)
+
 	// API v1 group with key auth and rate limiting.
 	v1 := e.Group("/api/v1",
 		RequireAPIKey(syncSvc),
@@ -62,6 +65,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 
 	// Read endpoints (require "read" permission).
 	cg.GET("", api.GetCampaign, RequirePermission(PermRead))
+	cg.GET("/systems", api.ListSystems, RequirePermission(PermRead))
 	cg.GET("/entity-types", api.ListEntityTypes, RequirePermission(PermRead))
 	cg.GET("/entity-types/:typeID", api.GetEntityType, RequirePermission(PermRead))
 	cg.GET("/entities", api.ListEntities, RequirePermission(PermRead))

@@ -74,5 +74,43 @@
         { "key": "effect", "label": "Effect", "type": "string" }
       ]
     }
+  ],
+  "entity_presets": [
+    {
+      "slug": "pf2e-character",
+      "name": "PF2e Character",
+      "name_plural": "PF2e Characters",
+      "icon": "fa-shield-halved",
+      "color": "#2563EB",
+      "fields": [
+        { "key": "class", "label": "Class", "type": "string" },
+        { "key": "level", "label": "Level", "type": "number" },
+        { "key": "ancestry", "label": "Ancestry", "type": "string" },
+        { "key": "heritage", "label": "Heritage", "type": "string" },
+        { "key": "str_mod", "label": "Strength Mod", "type": "number" },
+        { "key": "dex_mod", "label": "Dexterity Mod", "type": "number" },
+        { "key": "con_mod", "label": "Constitution Mod", "type": "number" },
+        { "key": "int_mod", "label": "Intelligence Mod", "type": "number" },
+        { "key": "wis_mod", "label": "Wisdom Mod", "type": "number" },
+        { "key": "cha_mod", "label": "Charisma Mod", "type": "number" },
+        { "key": "hp_current", "label": "Current HP", "type": "number" },
+        { "key": "hp_max", "label": "Max HP", "type": "number" },
+        { "key": "ac", "label": "Armor Class", "type": "number" },
+        { "key": "perception", "label": "Perception", "type": "number" },
+        { "key": "speed", "label": "Speed", "type": "number" }
+      ]
+    },
+    {
+      "slug": "pf2e-creature",
+      "name": "PF2e Creature",
+      "name_plural": "PF2e Creatures",
+      "icon": "fa-skull",
+      "color": "#DC2626",
+      "fields": [
+        { "key": "level", "label": "Level", "type": "number" },
+        { "key": "type", "label": "Type", "type": "string" },
+        { "key": "hp", "label": "Hit Points", "type": "number" }
+      ]
+    }
   ]
 }

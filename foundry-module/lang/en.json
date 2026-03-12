@@ -29,6 +29,10 @@
       "SyncCalendar": {
         "Name": "Sync Calendar",
         "Hint": "Sync Chronicle calendar with Calendaria or Simple Calendar module"
+      },
+      "SyncCharacters": {
+        "Name": "Sync Characters",
+        "Hint": "Sync Foundry actors with Chronicle character entities (requires matching game system)"
       }
     },
     "Status": {
@@ -113,6 +117,16 @@
         "EntitiesSynced": "Entities Synced",
         "MapsLinked": "Maps Linked",
         "LastSync": "Last sync",
+        "GameSystem": "Game System",
+        "FoundrySystem": "Foundry System",
+        "ChronicleSystem": "Chronicle System",
+        "SystemMatched": "Matched",
+        "SystemNoMatch": "No Match",
+        "SystemNone": "None detected",
+        "CharacterSync": "Character Sync",
+        "CharacterSyncEnabled": "Enabled",
+        "CharacterSyncDisabled": "Disabled",
+        "CharacterSyncNoSystem": "Requires matching game system",
         "RecentActivity": "Recent Activity",
         "NoActivity": "No recent activity.",
         "ClearLog": "Clear Log",

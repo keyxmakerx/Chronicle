@@ -377,6 +377,41 @@
           </div>
         </div>
 
+        {{!-- Game system detection --}}
+        <div class="system-detection">
+          <h3 class="section-heading">Game System</h3>
+          <div class="system-info-grid">
+            <div class="system-info-row">
+              <span class="system-label">Foundry System:</span>
+              <span class="system-value">{{#if foundrySystem}}{{foundrySystem}}{{else}}<em>None</em>{{/if}}</span>
+            </div>
+            <div class="system-info-row">
+              <span class="system-label">Chronicle System:</span>
+              {{#if systemMatched}}
+              <span class="system-value system-matched">
+                <i class="fa-solid fa-check-circle" style="color: #4ade80"></i> {{matchedSystem}} — Matched
+              </span>
+              {{else}}
+              <span class="system-value system-no-match">
+                <i class="fa-solid fa-circle-xmark" style="color: #f87171"></i> No Match
+              </span>
+              {{/if}}
+            </div>
+            <div class="system-info-row">
+              <span class="system-label">Character Sync:</span>
+              {{#if characterSyncAvailable}}
+                {{#if syncCharacters}}
+                <span class="system-value"><i class="fa-solid fa-toggle-on" style="color: #4ade80"></i> Enabled</span>
+                {{else}}
+                <span class="system-value"><i class="fa-solid fa-toggle-off"></i> Disabled</span>
+                {{/if}}
+              {{else}}
+              <span class="system-value hint">Requires matching game system</span>
+              {{/if}}
+            </div>
+          </div>
+        </div>
+
         <div class="last-sync-info">
           Last sync: <span>{{lastSyncTime}}</span>
         </div>

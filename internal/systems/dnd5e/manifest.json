@@ -85,7 +85,18 @@
         { "key": "class", "label": "Class", "type": "string" },
         { "key": "level", "label": "Level", "type": "number" },
         { "key": "race", "label": "Race", "type": "string" },
-        { "key": "alignment", "label": "Alignment", "type": "string" }
+        { "key": "alignment", "label": "Alignment", "type": "string" },
+        { "key": "str", "label": "Strength", "type": "number" },
+        { "key": "dex", "label": "Dexterity", "type": "number" },
+        { "key": "con", "label": "Constitution", "type": "number" },
+        { "key": "int", "label": "Intelligence", "type": "number" },
+        { "key": "wis", "label": "Wisdom", "type": "number" },
+        { "key": "cha", "label": "Charisma", "type": "number" },
+        { "key": "hp_current", "label": "Current HP", "type": "number" },
+        { "key": "hp_max", "label": "Max HP", "type": "number" },
+        { "key": "ac", "label": "Armor Class", "type": "number" },
+        { "key": "speed", "label": "Speed", "type": "number" },
+        { "key": "proficiency_bonus", "label": "Proficiency Bonus", "type": "number" }
       ]
     },
     {

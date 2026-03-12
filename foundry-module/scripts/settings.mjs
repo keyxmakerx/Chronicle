@@ -83,6 +83,24 @@ export function registerSettings() {
     default: false,
   });
 
+  // Character sync toggle (requires matching game system).
+  game.settings.register(MODULE_ID, 'syncCharacters', {
+    name: game.i18n.localize('CHRONICLE.Settings.SyncCharacters.Name'),
+    hint: game.i18n.localize('CHRONICLE.Settings.SyncCharacters.Hint'),
+    scope: 'world',
+    config: true,
+    type: Boolean,
+    default: false,
+  });
+
+  // Internal: detected Chronicle system ID matched from Foundry's game.system.id.
+  game.settings.register(MODULE_ID, 'detectedSystem', {
+    scope: 'world',
+    config: false,
+    type: String,
+    default: '',
+  });
+
   // Internal: last sync timestamp (not shown in UI).
   game.settings.register(MODULE_ID, 'lastSyncTime', {
     scope: 'world',

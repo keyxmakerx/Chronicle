@@ -8,7 +8,14 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-12 -- **Foundry enhancements planning + documentation capture.**
+2026-03-12 -- **Sprint F-3: System Detection & Character Field Templates.**
+
+33. **Sprint F-3: System detection & character field templates (DONE).**
+    - **Server: Manifest expansion** — dnd5e character preset expanded from 4 to 15 fields (added ability scores, HP, AC, speed, proficiency_bonus). New pf2e character preset with 15 PF2e-specific fields (ancestry, heritage, ability mods, perception, etc). Added `CharacterPreset()` method on `SystemManifest`.
+    - **Server: Systems API** — New `GET /api/v1/campaigns/:id/systems` endpoint returning all registered systems with `enabled` flag per campaign (via `AddonChecker`). `addonChecker` injected into `APIHandler` via `SetAddonChecker()`.
+    - **Foundry: System detection** — `SYSTEM_MAP` maps Foundry `game.system.id` → Chronicle system IDs (`dnd5e`, `pf2e`, `drawsteel`). `SyncManager._detectSystem()` queries systems API on start, stores matched system in `detectedSystem` setting. New `syncCharacters` boolean setting (gated on system match).
+    - **Foundry: Dashboard** — Status tab shows Foundry system, Chronicle system match (green check/red X), and character sync availability.
+    - **Next:** F-4 (Actor ↔ Entity Sync) — new `actor-sync.mjs` with system-specific adapters.
 
 32. **Foundry enhancements — planning + F-1/F-2 implementation.**
     - **Planning:** Captured Phase F roadmap (F-1 through F-7) in `.ai/todo.md` and `foundry-module/.ai.md`.

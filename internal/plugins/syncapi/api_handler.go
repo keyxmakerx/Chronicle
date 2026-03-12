@@ -12,6 +12,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 )
 
@@ -19,10 +20,11 @@ import (
 // External clients (Foundry VTT, custom scripts) use these endpoints to
 // read and write campaign data programmatically via API key authentication.
 type APIHandler struct {
-	syncSvc     SyncAPIService
-	entitySvc   entities.EntityService
-	campaignSvc campaigns.CampaignService
-	relationSvc relations.RelationService
+	syncSvc      SyncAPIService
+	entitySvc    entities.EntityService
+	campaignSvc  campaigns.CampaignService
+	relationSvc  relations.RelationService
+	addonChecker AddonChecker
 }
 
 // NewAPIHandler creates a new API handler with the required service dependencies.
@@ -640,4 +642,57 @@ func (h *APIHandler) SetEntityPermissions(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// SetAddonChecker injects the addon checker for system-aware endpoints.
+// Called after construction because the addon service is wired separately.
+func (h *APIHandler) SetAddonChecker(ac AddonChecker) {
+	h.addonChecker = ac
+}
+
+// --- Systems ---
+
+// systemInfoResponse is the API-safe representation of a game system.
+type systemInfoResponse struct {
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Status             string `json:"status"`
+	HasCharacterFields bool   `json:"has_character_fields"`
+	Enabled            bool   `json:"enabled"`
+}
+
+// ListSystems returns game systems available for the campaign.
+// Includes built-in systems from the global registry with an enabled flag
+// based on per-campaign addon state. Used by the Foundry module to detect
+// whether the current game system matches a Chronicle system.
+// GET /api/v1/campaigns/:id/systems
+func (h *APIHandler) ListSystems(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	registry := systems.Registry()
+	result := make([]systemInfoResponse, 0, len(registry))
+
+	for _, manifest := range registry {
+		enabled := false
+		if h.addonChecker != nil {
+			ok, err := h.addonChecker.IsEnabledForCampaign(ctx, campaignID, manifest.ID)
+			if err == nil && ok {
+				enabled = true
+			}
+		}
+
+		result = append(result, systemInfoResponse{
+			ID:                 manifest.ID,
+			Name:               manifest.Name,
+			Status:             string(manifest.Status),
+			HasCharacterFields: manifest.CharacterPreset() != nil,
+			Enabled:            enabled,
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"data":  result,
+		"total": len(result),
+	})
 }

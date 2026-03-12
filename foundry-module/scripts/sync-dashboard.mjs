@@ -543,12 +543,22 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
       s => s.getFlag(FLAG_SCOPE, 'mapId')
     ).length;
 
+    // System detection info.
+    const foundrySystem = this._syncManager?.getFoundrySystemId() || null;
+    const matchedSystem = this._syncManager?.getMatchedSystem() || null;
+    const syncCharacters = getSetting('syncCharacters');
+
     return {
       connectionState: state,
       connectionLabel: this._connectionLabel(state),
       lastSyncTime: getSetting('lastSyncTime') || 'Never',
       syncedEntities,
       linkedScenes,
+      foundrySystem,
+      matchedSystem,
+      systemMatched: !!matchedSystem,
+      syncCharacters,
+      characterSyncAvailable: !!matchedSystem,
       activityLog: activityLog.slice(0, 50),
     };
   }
