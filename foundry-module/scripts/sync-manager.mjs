@@ -23,6 +23,12 @@ export class SyncManager {
 
     /** @type {boolean} Whether initial sync has completed. */
     this._initialSyncDone = false;
+
+    /** @type {Array<{time: number, type: string, message: string}>} Recent activity log. */
+    this._activityLog = [];
+
+    /** @type {number} Maximum activity log entries. */
+    this._maxLogEntries = 100;
   }
 
   /**
@@ -130,9 +136,11 @@ export class SyncManager {
       // Update last sync timestamp.
       await setSetting('lastSyncTime', result.server_time || new Date().toISOString());
 
+      this.logActivity('connect', `Initial sync complete (${result.mappings?.length || 0} mappings)`);
       ui.notifications.info('Chronicle: Initial sync complete');
     } catch (err) {
       console.error('Chronicle: Initial sync failed', err);
+      this.logActivity('error', `Initial sync failed: ${err.message || 'Unknown error'}`);
       ui.notifications.error('Chronicle: Initial sync failed. Check console for details.');
     }
   }
@@ -152,6 +160,38 @@ export class SyncManager {
         }
       }
     }
+  }
+
+  /**
+   * Add an entry to the activity log.
+   * @param {string} type - Log type: 'pull', 'push', 'update', 'link', 'unlink', 'connect', 'error'.
+   * @param {string} message - Human-readable description.
+   */
+  logActivity(type, message) {
+    this._activityLog.unshift({
+      time: Date.now(),
+      type,
+      message,
+      timeFormatted: new Date().toLocaleTimeString(),
+    });
+    if (this._activityLog.length > this._maxLogEntries) {
+      this._activityLog.length = this._maxLogEntries;
+    }
+  }
+
+  /**
+   * Get the activity log entries.
+   * @returns {Array<{time: number, type: string, message: string, timeFormatted: string}>}
+   */
+  getActivityLog() {
+    return this._activityLog;
+  }
+
+  /**
+   * Clear the activity log.
+   */
+  clearActivityLog() {
+    this._activityLog = [];
   }
 
   /**

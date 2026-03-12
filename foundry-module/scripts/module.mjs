@@ -12,9 +12,13 @@ import { JournalSync } from './journal-sync.mjs';
 import { MapSync } from './map-sync.mjs';
 import { ShopWidget } from './shop-widget.mjs';
 import { CalendarSync } from './calendar-sync.mjs';
+import { SyncDashboard } from './sync-dashboard.mjs';
 
 /** @type {SyncManager|null} */
 let syncManager = null;
+
+/** @type {SyncDashboard|null} */
+let dashboard = null;
 
 /**
  * Module initialization — register settings.
@@ -44,8 +48,37 @@ Hooks.once('ready', async () => {
   // Start the sync manager (connects WebSocket, performs initial sync).
   await syncManager.start();
 
+  // Create the sync dashboard (singleton, rendered on demand).
+  dashboard = new SyncDashboard();
+  dashboard.bind(syncManager);
+
   // Add sync status indicator to the UI.
   _addStatusIndicator();
+});
+
+/**
+ * Add a Chronicle Sync button to Foundry's scene controls toolbar.
+ * Visible only to GMs. Opens the Sync Dashboard on click.
+ */
+Hooks.on('getSceneControlButtons', (controls) => {
+  if (!game.user.isGM) return;
+
+  controls.push({
+    name: 'chronicle-sync',
+    title: 'Chronicle Sync',
+    icon: 'fa-solid fa-rotate',
+    layer: 'controls',
+    visible: true,
+    tools: [{
+      name: 'dashboard',
+      title: 'Open Chronicle Sync Dashboard',
+      icon: 'fa-solid fa-rotate',
+      button: true,
+      onClick: () => {
+        if (dashboard) dashboard.render(true);
+      },
+    }],
+  });
 });
 
 /**
@@ -152,7 +185,9 @@ Hooks.once('ready', () => {
   if (module) {
     module.api = {
       syncManager,
+      dashboard,
       getAPI: () => syncManager?.api,
+      openDashboard: () => dashboard?.render(true),
     };
   }
 });

@@ -9,7 +9,7 @@
  * - Foundry → Chronicle: JournalEntry changes detected via Hooks, push to Chronicle API.
  */
 
-import { getSetting } from './settings.mjs';
+import { getSetting, getSyncExclusions } from './settings.mjs';
 
 // Flag namespace for Chronicle data stored on Foundry documents.
 const FLAG_SCOPE = 'chronicle-sync';
@@ -111,6 +111,9 @@ export class JournalSync {
   async _onEntityCreated(entity) {
     if (!entity?.id) return;
 
+    // Skip if entity or its type is excluded from sync.
+    if (this._isExcluded(entity)) return;
+
     // Check if we already have a journal for this entity.
     const existing = game.journal.find(
       (j) => j.getFlag(FLAG_SCOPE, 'entityId') === entity.id
@@ -135,6 +138,9 @@ export class JournalSync {
    */
   async _onEntityUpdated(entity) {
     if (!entity?.id) return;
+
+    // Skip if entity or its type is excluded from sync.
+    if (this._isExcluded(entity)) return;
 
     const journal = game.journal.find(
       (j) => j.getFlag(FLAG_SCOPE, 'entityId') === entity.id
@@ -408,5 +414,18 @@ export class JournalSync {
       // Entity may already be deleted on Chronicle side — that's fine.
       console.warn('Chronicle: Failed to delete entity on Chronicle', err);
     }
+  }
+
+  /**
+   * Check if an entity is excluded from auto-sync via dashboard settings.
+   * @param {object} entity - Chronicle entity with id and optionally entity_type_id.
+   * @returns {boolean}
+   * @private
+   */
+  _isExcluded(entity) {
+    const exclusions = getSyncExclusions();
+    if (exclusions.excludedEntities.includes(entity.id)) return true;
+    if (entity.entity_type_id && exclusions.excludedTypes.includes(entity.entity_type_id)) return true;
+    return false;
   }
 }

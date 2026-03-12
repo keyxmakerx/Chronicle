@@ -90,6 +90,15 @@ export function registerSettings() {
     type: String,
     default: '',
   });
+
+  // Internal: per-type and per-entity sync exclusions (not shown in settings UI).
+  // Stored as JSON: { excludedTypes: [typeId, ...], excludedEntities: ["entityId", ...] }
+  game.settings.register(MODULE_ID, 'syncExclusions', {
+    scope: 'world',
+    config: false,
+    type: String,
+    default: '{"excludedTypes":[],"excludedEntities":[]}',
+  });
 }
 
 /**
@@ -108,6 +117,26 @@ export function getSetting(key) {
  */
 export async function setSetting(key, value) {
   await game.settings.set(MODULE_ID, key, value);
+}
+
+/**
+ * Get sync exclusions (excluded types and entities).
+ * @returns {{ excludedTypes: number[], excludedEntities: string[] }}
+ */
+export function getSyncExclusions() {
+  try {
+    return JSON.parse(getSetting('syncExclusions'));
+  } catch {
+    return { excludedTypes: [], excludedEntities: [] };
+  }
+}
+
+/**
+ * Save sync exclusions.
+ * @param {{ excludedTypes: number[], excludedEntities: string[] }} exclusions
+ */
+export async function setSyncExclusions(exclusions) {
+  await setSetting('syncExclusions', JSON.stringify(exclusions));
 }
 
 /**

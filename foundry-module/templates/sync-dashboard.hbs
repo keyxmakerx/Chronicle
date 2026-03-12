@@ -1,0 +1,362 @@
+{{!-- Chronicle Sync Dashboard - Main tabbed interface --}}
+<div class="chronicle-dashboard-inner">
+
+  {{#unless configured}}
+  <div class="dashboard-empty">
+    <i class="fa-solid fa-plug fa-2x"></i>
+    <p>Chronicle Sync is not configured.</p>
+    <p class="hint">Go to Module Settings to enter your Chronicle URL, API key, and Campaign ID.</p>
+    <button type="button" data-action="open-settings" class="dashboard-btn">
+      <i class="fa-solid fa-gear"></i> Open Settings
+    </button>
+  </div>
+  {{else}}
+
+  {{!-- Tab navigation --}}
+  <nav class="dashboard-tabs" data-group="primary">
+    <a class="item" data-tab="entities">
+      <i class="fa-solid fa-book"></i> Entities
+    </a>
+    <a class="item" data-tab="maps">
+      <i class="fa-solid fa-map"></i> Maps
+    </a>
+    <a class="item" data-tab="calendar">
+      <i class="fa-solid fa-calendar"></i> Calendar
+    </a>
+    <a class="item" data-tab="status">
+      <i class="fa-solid fa-signal"></i> Status
+    </a>
+  </nav>
+
+  {{!-- Tab content --}}
+  <section class="dashboard-content">
+
+    {{!-- ================================================================= --}}
+    {{!-- ENTITIES TAB                                                      --}}
+    {{!-- ================================================================= --}}
+    <div class="tab" data-tab="entities" data-group="primary">
+      <div class="dashboard-toolbar">
+        <div class="toolbar-actions">
+          {{#if hasChronicleOnly}}
+          <button type="button" data-action="pull-all" class="dashboard-btn btn-sm" title="Pull all Chronicle-only entities">
+            <i class="fa-solid fa-download"></i> Pull All
+          </button>
+          {{/if}}
+          {{#if hasFoundryOnly}}
+          <button type="button" data-action="push-all" class="dashboard-btn btn-sm" title="Push all Foundry-only journals">
+            <i class="fa-solid fa-upload"></i> Push All
+          </button>
+          {{/if}}
+          <button type="button" data-action="refresh" class="dashboard-btn btn-sm" title="Refresh data">
+            <i class="fa-solid fa-arrows-rotate"></i>
+          </button>
+        </div>
+        <input type="text" class="dashboard-search" placeholder="Search entities..." value="{{searchFilter}}"/>
+      </div>
+
+      <div class="entity-list">
+        {{#each entityGroups}}
+        <div class="entity-type-group">
+          {{!-- Type header --}}
+          <div class="entity-type-header" data-type-id="{{typeId}}">
+            <i class="fa-solid {{#if isCollapsed}}fa-chevron-right{{else}}fa-chevron-down{{/if}} collapse-icon"></i>
+            <i class="{{typeIcon}}" style="color: {{typeColor}}"></i>
+            <span class="type-name">{{typeNamePlural}}</span>
+            <span class="type-stats">
+              {{syncedCount}} synced{{#if chronicleOnlyCount}}, {{chronicleOnlyCount}} Chronicle-only{{/if}}
+            </span>
+            <button type="button" class="type-sync-toggle dashboard-btn btn-xs" data-type-id="{{typeId}}"
+                    title="{{#if isTypeExcluded}}Enable sync for this type{{else}}Disable sync for this type{{/if}}">
+              {{#if isTypeExcluded}}
+              <i class="fa-solid fa-toggle-off"></i>
+              {{else}}
+              <i class="fa-solid fa-toggle-on"></i>
+              {{/if}}
+            </button>
+          </div>
+
+          {{!-- Entity rows --}}
+          {{#unless isCollapsed}}
+          <div class="entity-rows">
+            {{#each entities}}
+            <div class="entity-row status-{{status}}">
+              <span class="entity-status-dot" title="{{status}}"></span>
+              <span class="entity-name">{{name}}</span>
+
+              {{!-- Visibility badge --}}
+              {{#if journalId}}
+              <button type="button" class="visibility-badge" data-action="toggle-visibility"
+                      data-entity-id="{{id}}" data-is-private="{{isPrivate}}"
+                      title="{{#if isPrivate}}Private — click to make public{{else}}Public — click to make private{{/if}}">
+                {{#if isPrivate}}<i class="fa-solid fa-lock"></i>{{else}}<i class="fa-solid fa-lock-open"></i>{{/if}}
+              </button>
+              {{/if}}
+
+              {{!-- Status label --}}
+              <span class="entity-status-label">
+                {{#if (eq status "synced")}}<i class="fa-solid fa-check"></i> Synced{{/if}}
+                {{#if (eq status "modified")}}<i class="fa-solid fa-bolt"></i> Modified{{/if}}
+                {{#if (eq status "chronicle-only")}}Chronicle{{/if}}
+              </span>
+
+              {{!-- Action --}}
+              {{#if (eq status "chronicle-only")}}
+              <button type="button" class="dashboard-btn btn-xs btn-pull" data-action="pull-entity" data-entity-id="{{id}}">
+                <i class="fa-solid fa-download"></i> Pull
+              </button>
+              {{else}}
+              <label class="entity-sync-checkbox" title="{{#if isExcluded}}Sync disabled{{else}}Sync enabled{{/if}}">
+                <input type="checkbox" class="entity-sync-toggle" data-entity-id="{{id}}" {{#unless isExcluded}}checked{{/unless}}/>
+              </label>
+              {{/if}}
+            </div>
+            {{/each}}
+          </div>
+          {{/unless}}
+        </div>
+        {{/each}}
+
+        {{!-- Foundry-only journals --}}
+        {{#if foundryOnlyJournals.length}}
+        <div class="entity-type-group foundry-only-group">
+          <div class="entity-type-header">
+            <i class="fa-solid fa-chevron-down collapse-icon"></i>
+            <i class="fa-solid fa-file-pen" style="color: #fb923c"></i>
+            <span class="type-name">Foundry-Only Journals</span>
+            <span class="type-stats">{{foundryOnlyJournals.length}} unlinked</span>
+          </div>
+          <div class="entity-rows">
+            {{#each foundryOnlyJournals}}
+            <div class="entity-row status-foundry-only">
+              <span class="entity-status-dot" title="Foundry-only"></span>
+              <span class="entity-name">{{name}}</span>
+              <span class="entity-status-label">Foundry</span>
+              <button type="button" class="dashboard-btn btn-xs btn-push" data-action="push-journal" data-journal-id="{{id}}">
+                <i class="fa-solid fa-upload"></i> Push
+              </button>
+            </div>
+            {{/each}}
+          </div>
+        </div>
+        {{/if}}
+
+        {{!-- Empty state --}}
+        {{#unless entityGroups.length}}
+        {{#unless foundryOnlyJournals.length}}
+        <div class="dashboard-empty-tab">
+          <p>No entities found. Create entities in Chronicle or journals in Foundry to get started.</p>
+        </div>
+        {{/unless}}
+        {{/unless}}
+      </div>
+    </div>
+
+    {{!-- ================================================================= --}}
+    {{!-- MAPS TAB                                                          --}}
+    {{!-- ================================================================= --}}
+    <div class="tab" data-tab="maps" data-group="primary">
+      <div class="dashboard-toolbar">
+        <button type="button" data-action="refresh" class="dashboard-btn btn-sm" title="Refresh">
+          <i class="fa-solid fa-arrows-rotate"></i>
+        </button>
+      </div>
+
+      <div class="map-list">
+        {{#if chronicleMaps.length}}
+        <h3 class="section-heading">Chronicle Maps</h3>
+        {{#each chronicleMaps}}
+        <div class="map-row {{#if linked}}linked{{/if}}">
+          <div class="map-info">
+            <i class="fa-solid fa-map" style="color: #60a5fa"></i>
+            <span class="map-name">{{name}}</span>
+          </div>
+          {{#if linked}}
+          <div class="map-link-info">
+            <i class="fa-solid fa-arrow-right"></i>
+            <span>{{sceneName}}</span>
+            <button type="button" class="dashboard-btn btn-xs btn-danger" data-action="unlink-scene" data-scene-id="{{sceneId}}">
+              <i class="fa-solid fa-unlink"></i> Unlink
+            </button>
+          </div>
+          {{else}}
+          <div class="map-link-controls">
+            <select data-action="link-scene" data-map-id="{{id}}">
+              <option value="">Link to scene...</option>
+              {{#each ../availableScenes}}
+              <option value="{{id}}">{{name}}</option>
+              {{/each}}
+            </select>
+          </div>
+          {{/if}}
+        </div>
+        {{/each}}
+        {{else}}
+        <div class="dashboard-empty-tab">
+          <p>No maps found in this Chronicle campaign.</p>
+        </div>
+        {{/if}}
+
+        {{#if unlinkedScenes.length}}
+        <h3 class="section-heading">Unlinked Foundry Scenes</h3>
+        {{#each unlinkedScenes}}
+        <div class="map-row">
+          <div class="map-info">
+            <i class="fa-solid fa-clapperboard" style="color: #fb923c"></i>
+            <span class="map-name">{{name}}</span>
+          </div>
+          <div class="map-link-controls">
+            <select data-action="link-map" data-scene-id="{{id}}">
+              <option value="">Link to map...</option>
+              {{#each ../availableMaps}}
+              <option value="{{id}}">{{name}}</option>
+              {{/each}}
+            </select>
+          </div>
+        </div>
+        {{/each}}
+        {{/if}}
+      </div>
+    </div>
+
+    {{!-- ================================================================= --}}
+    {{!-- CALENDAR TAB                                                      --}}
+    {{!-- ================================================================= --}}
+    <div class="tab" data-tab="calendar" data-group="primary">
+      {{#if calendar.available}}
+      <div class="calendar-panel">
+        <div class="calendar-module-info">
+          <i class="fa-solid fa-check-circle" style="color: #4ade80"></i>
+          Calendar Module: <strong>{{calendar.module}}</strong>
+        </div>
+
+        <div class="calendar-date-compare">
+          <div class="calendar-date-box">
+            <div class="date-label">Chronicle</div>
+            <div class="date-value">
+              Day {{calendar.chronicleDate.day}}, Month {{calendar.chronicleDate.month}}
+            </div>
+            <div class="date-year">Year {{calendar.chronicleDate.year}}</div>
+            <div class="date-time">
+              {{calendar.chronicleDate.hour}}:{{#if (lt calendar.chronicleDate.minute 10)}}0{{/if}}{{calendar.chronicleDate.minute}}
+            </div>
+          </div>
+
+          <div class="calendar-date-box">
+            <div class="date-label">Foundry</div>
+            {{#if calendar.localDate}}
+            <div class="date-value">
+              Day {{calendar.localDate.day}}, Month {{calendar.localDate.month}}
+            </div>
+            <div class="date-year">Year {{calendar.localDate.year}}</div>
+            <div class="date-time">
+              {{calendar.localDate.hour}}:{{#if (lt calendar.localDate.minute 10)}}0{{/if}}{{calendar.localDate.minute}}
+            </div>
+            {{else}}
+            <div class="date-value">Unable to read</div>
+            {{/if}}
+          </div>
+        </div>
+
+        <div class="calendar-status">
+          {{#if calendar.inSync}}
+          <span class="sync-badge synced"><i class="fa-solid fa-check"></i> In Sync</span>
+          {{else}}
+          <span class="sync-badge out-of-sync"><i class="fa-solid fa-exclamation-triangle"></i> Out of Sync</span>
+          {{/if}}
+        </div>
+
+        <div class="calendar-actions">
+          <button type="button" data-action="pull-date" class="dashboard-btn">
+            <i class="fa-solid fa-download"></i> Pull Date from Chronicle
+          </button>
+          <button type="button" data-action="push-date" class="dashboard-btn">
+            <i class="fa-solid fa-upload"></i> Push Date to Chronicle
+          </button>
+        </div>
+      </div>
+
+      {{else}}
+      <div class="dashboard-empty-tab">
+        {{#if calendar.noCampaignCalendar}}
+        <i class="fa-solid fa-calendar-xmark fa-2x"></i>
+        <p>No calendar configured for this campaign in Chronicle.</p>
+        {{else if calendar.module}}
+        <i class="fa-solid fa-toggle-off fa-2x"></i>
+        <p>Calendar sync is disabled. Enable it in Module Settings.</p>
+        {{else if calendar.enabled}}
+        <i class="fa-solid fa-puzzle-piece fa-2x"></i>
+        <p>No calendar module detected.</p>
+        <p class="hint">Install <strong>Calendaria</strong> or <strong>Simple Calendar</strong> to enable calendar sync.</p>
+        {{else}}
+        <i class="fa-solid fa-toggle-off fa-2x"></i>
+        <p>Calendar sync is disabled. Enable it in Module Settings.</p>
+        {{/if}}
+      </div>
+      {{/if}}
+    </div>
+
+    {{!-- ================================================================= --}}
+    {{!-- STATUS TAB                                                        --}}
+    {{!-- ================================================================= --}}
+    <div class="tab" data-tab="status" data-group="primary">
+      <div class="status-panel">
+        <div class="connection-status state-{{connectionState}}">
+          <span class="status-dot"></span>
+          <span>Connection: <strong>{{connectionLabel}}</strong></span>
+        </div>
+
+        <div class="sync-stats">
+          <div class="stat-box">
+            <div class="stat-value">{{syncedEntities}}</div>
+            <div class="stat-label">Entities Synced</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">{{linkedScenes}}</div>
+            <div class="stat-label">Maps Linked</div>
+          </div>
+        </div>
+
+        <div class="last-sync-info">
+          Last sync: <span>{{lastSyncTime}}</span>
+        </div>
+
+        <h3 class="section-heading">Recent Activity</h3>
+        <div class="activity-log">
+          {{#each activityLog}}
+          <div class="log-entry log-{{type}}">
+            <span class="log-time">{{this.timeFormatted}}</span>
+            <span class="log-icon">
+              {{#if (eq type "pull")}}<i class="fa-solid fa-download"></i>{{/if}}
+              {{#if (eq type "push")}}<i class="fa-solid fa-upload"></i>{{/if}}
+              {{#if (eq type "update")}}<i class="fa-solid fa-pen"></i>{{/if}}
+              {{#if (eq type "link")}}<i class="fa-solid fa-link"></i>{{/if}}
+              {{#if (eq type "unlink")}}<i class="fa-solid fa-unlink"></i>{{/if}}
+              {{#if (eq type "connect")}}<i class="fa-solid fa-bolt"></i>{{/if}}
+              {{#if (eq type "error")}}<i class="fa-solid fa-triangle-exclamation"></i>{{/if}}
+            </span>
+            <span class="log-message">{{message}}</span>
+          </div>
+          {{else}}
+          <div class="log-empty">No recent activity.</div>
+          {{/each}}
+        </div>
+
+        <div class="status-actions">
+          <button type="button" data-action="clear-log" class="dashboard-btn btn-sm">
+            <i class="fa-solid fa-trash"></i> Clear Log
+          </button>
+          <button type="button" data-action="open-settings" class="dashboard-btn btn-sm">
+            <i class="fa-solid fa-gear"></i> Settings
+          </button>
+          {{#if (eq connectionState "disconnected")}}
+          <button type="button" data-action="reconnect" class="dashboard-btn btn-sm">
+            <i class="fa-solid fa-plug"></i> Reconnect
+          </button>
+          {{/if}}
+        </div>
+      </div>
+    </div>
+
+  </section>
+  {{/unless}}
+</div>

@@ -44,6 +44,72 @@
       "SyncConflict": "Sync conflict detected for: {name}",
       "ConnectionLost": "Lost connection to Chronicle. Retrying...",
       "ConnectionRestored": "Connection to Chronicle restored"
+    },
+    "Dashboard": {
+      "Title": "Chronicle Sync",
+      "OpenSettings": "Open Settings",
+      "NotConfigured": "Chronicle Sync is not configured.",
+      "NotConfiguredHint": "Go to Module Settings to enter your Chronicle URL, API key, and Campaign ID.",
+      "Tabs": {
+        "Entities": "Entities",
+        "Maps": "Maps",
+        "Calendar": "Calendar",
+        "Status": "Status"
+      },
+      "Entities": {
+        "PullAll": "Pull All",
+        "PushAll": "Push All",
+        "Refresh": "Refresh",
+        "SearchPlaceholder": "Search entities...",
+        "Synced": "Synced",
+        "Modified": "Modified",
+        "ChronicleOnly": "Chronicle",
+        "FoundryOnly": "Foundry",
+        "Pull": "Pull",
+        "Push": "Push",
+        "SyncEnabled": "Sync enabled",
+        "SyncDisabled": "Sync disabled",
+        "EnableSync": "Enable sync for this type",
+        "DisableSync": "Disable sync for this type",
+        "FoundryOnlyJournals": "Foundry-Only Journals",
+        "Unlinked": "unlinked",
+        "PrivateClickPublic": "Private — click to make public",
+        "PublicClickPrivate": "Public — click to make private",
+        "EmptyState": "No entities found. Create entities in Chronicle or journals in Foundry to get started."
+      },
+      "Maps": {
+        "ChronicleMaps": "Chronicle Maps",
+        "UnlinkedScenes": "Unlinked Foundry Scenes",
+        "LinkToScene": "Link to scene...",
+        "LinkToMap": "Link to map...",
+        "Unlink": "Unlink",
+        "NoMaps": "No maps found in this Chronicle campaign."
+      },
+      "Calendar": {
+        "CalendarModule": "Calendar Module",
+        "Chronicle": "Chronicle",
+        "Foundry": "Foundry",
+        "InSync": "In Sync",
+        "OutOfSync": "Out of Sync",
+        "PullDate": "Pull Date from Chronicle",
+        "PushDate": "Push Date to Chronicle",
+        "NoCalendar": "No calendar configured for this campaign in Chronicle.",
+        "Disabled": "Calendar sync is disabled. Enable it in Module Settings.",
+        "NoModule": "No calendar module detected.",
+        "NoModuleHint": "Install Calendaria or Simple Calendar to enable calendar sync.",
+        "UnableToRead": "Unable to read"
+      },
+      "StatusTab": {
+        "Connection": "Connection",
+        "EntitiesSynced": "Entities Synced",
+        "MapsLinked": "Maps Linked",
+        "LastSync": "Last sync",
+        "RecentActivity": "Recent Activity",
+        "NoActivity": "No recent activity.",
+        "ClearLog": "Clear Log",
+        "Settings": "Settings",
+        "Reconnect": "Reconnect"
+      }
     }
   }
 }
