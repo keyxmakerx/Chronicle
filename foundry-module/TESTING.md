@@ -148,6 +148,52 @@ Requires a running Chronicle instance and Foundry VTT with the chronicle-sync mo
 - [ ] Private entities hidden from non-owner API keys
 - [ ] Rate limiting enforced (60 req/min default)
 
+## Character Sync (Actor ↔ Entity)
+
+### Prerequisites
+- [ ] Game system matches a Chronicle system (dnd5e or pf2e)
+- [ ] "Sync Characters" enabled in module settings
+- [ ] Character entity type exists in Chronicle campaign
+
+### Chronicle -> Foundry
+- [ ] Create character entity in Chronicle -> Actor (type: character) created in Foundry
+- [ ] Update character entity fields -> Actor system data updates (ability scores, HP)
+- [ ] Update character entity name -> Actor name updates
+- [ ] Delete character entity -> Actor unlinked (flags removed) but NOT deleted
+
+### Foundry -> Chronicle
+- [ ] Create character Actor in Foundry -> Entity created in Chronicle with mapped fields
+- [ ] Update Actor ability scores -> Chronicle entity fields_data updates
+- [ ] Update Actor HP -> Chronicle entity hp_current/hp_max update
+- [ ] Update Actor name -> Chronicle entity name updates
+- [ ] Delete Actor -> Chronicle entity deleted
+
+### Dashboard - Characters Tab
+- [ ] Characters tab visible in sync dashboard
+- [ ] System badge shows matched system name
+- [ ] Synced actors show green check with "Synced" label
+- [ ] Unlinked actors show "Not linked" with Push button
+- [ ] Push button creates Chronicle entity and links actor
+- [ ] Empty state shown when no character actors exist
+- [ ] Disabled state shown when syncCharacters is off
+- [ ] No-system state shown when game system doesn't match
+
+### System Adapters
+- [ ] D&D 5e: All 6 ability scores sync (str, dex, con, int, wis, cha)
+- [ ] D&D 5e: HP current/max syncs bidirectionally
+- [ ] D&D 5e: AC, speed, level, class, race, alignment, proficiency_bonus push to Chronicle
+- [ ] PF2e: Ability mods sync to Chronicle (str_mod through cha_mod)
+- [ ] PF2e: HP syncs bidirectionally
+- [ ] PF2e: Only HP and name sync back from Chronicle (derived values protected)
+- [ ] PF2e: ancestry, heritage, class, level, perception, speed push to Chronicle
+
+### Edge Cases
+- [ ] Actor sync disabled when no system adapter available
+- [ ] Sync guard prevents infinite loops (change in A doesn't re-trigger back to A)
+- [ ] Only character-type actors processed (NPCs, vehicles ignored)
+- [ ] Only current user's changes pushed (other users' changes ignored)
+- [ ] Pre-existing actors can be manually pushed via dashboard Push button
+
 ## Error Recovery
 
 - [ ] Invalid API key shows clear error message

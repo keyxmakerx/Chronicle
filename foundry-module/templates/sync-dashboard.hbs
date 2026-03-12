@@ -23,6 +23,9 @@
     <a class="item" data-tab="maps">
       <i class="fa-solid fa-map"></i> Maps
     </a>
+    <a class="item" data-tab="characters">
+      <i class="fa-solid fa-users"></i> Characters
+    </a>
     <a class="item" data-tab="calendar">
       <i class="fa-solid fa-calendar"></i> Calendar
     </a>
@@ -277,6 +280,90 @@
         {{/each}}
         {{/if}}
       </div>
+    </div>
+
+    {{!-- ================================================================= --}}
+    {{!-- CHARACTERS TAB                                                    --}}
+    {{!-- ================================================================= --}}
+    <div class="tab" data-tab="characters" data-group="primary">
+      {{#if characterSyncAvailable}}
+        {{#if syncCharacters}}
+        <div class="dashboard-toolbar">
+          <div class="toolbar-actions">
+            <span class="system-badge">
+              <i class="fa-solid fa-gamepad"></i> {{matchedSystem}}
+            </span>
+            <button type="button" data-action="refresh" class="dashboard-btn btn-sm" title="Refresh">
+              <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
+          </div>
+        </div>
+
+        {{#if characters.length}}
+        <div class="character-list">
+          {{#each characters}}
+          <div class="character-row {{#if synced}}synced{{/if}}">
+            <div class="character-info">
+              {{#if img}}
+              <img class="character-portrait" src="{{img}}" alt="{{name}}" />
+              {{else}}
+              <span class="character-portrait-placeholder">
+                <i class="fa-solid fa-user"></i>
+              </span>
+              {{/if}}
+              <div class="character-details">
+                <span class="character-name">{{name}}</span>
+                {{#if synced}}
+                <span class="character-sync-status synced">
+                  <i class="fa-solid fa-check"></i> Synced
+                </span>
+                {{else}}
+                <span class="character-sync-status unlinked">
+                  <i class="fa-solid fa-unlink"></i> Not linked
+                </span>
+                {{/if}}
+              </div>
+            </div>
+            <div class="character-actions">
+              {{#if synced}}
+              <span class="character-last-sync" title="Last synced">
+                {{lastSync}}
+              </span>
+              {{else}}
+              <button type="button" class="dashboard-btn btn-xs btn-push"
+                      data-action="push-actor" data-actor-id="{{id}}">
+                <i class="fa-solid fa-upload"></i> Push
+              </button>
+              {{/if}}
+            </div>
+          </div>
+          {{/each}}
+        </div>
+        {{else}}
+        <div class="dashboard-empty-tab">
+          <i class="fa-solid fa-users fa-2x"></i>
+          <p>No character actors found.</p>
+          <p class="hint">Create character actors in Foundry or character entities in Chronicle.</p>
+        </div>
+        {{/if}}
+
+        {{else}}
+        <div class="dashboard-empty-tab">
+          <i class="fa-solid fa-toggle-off fa-2x"></i>
+          <p>Character sync is disabled.</p>
+          <p class="hint">Enable "Sync Characters" in Module Settings to sync actors with Chronicle.</p>
+          <button type="button" data-action="open-settings" class="dashboard-btn">
+            <i class="fa-solid fa-gear"></i> Open Settings
+          </button>
+        </div>
+        {{/if}}
+      {{else}}
+      <div class="dashboard-empty-tab">
+        <i class="fa-solid fa-puzzle-piece fa-2x"></i>
+        <p>Character sync requires a matching game system.</p>
+        <p class="hint">Your Foundry system must match a Chronicle game system with character field templates. Check the Status tab for details.</p>
+      </div>
+      {{/if}}
     </div>
 
     {{!-- ================================================================= --}}

@@ -56,6 +56,7 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
       'clear-log': SyncDashboard.#onClearLogAction,
       'open-settings': SyncDashboard.#onOpenSettingsAction,
       'open-shop': SyncDashboard.#onOpenShopAction,
+      'push-actor': SyncDashboard.#onPushActorAction,
     },
   };
 
@@ -149,6 +150,9 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
     // Build status tab data.
     const statusData = this._buildStatusData();
 
+    // Build characters tab data.
+    const characterData = this._buildCharacterData();
+
     return {
       configured: true,
       loading: this._loading,
@@ -166,6 +170,9 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
 
       // Maps tab.
       ...mapData,
+
+      // Characters tab.
+      ...characterData,
 
       // Calendar tab.
       calendar: calendarData,
@@ -522,6 +529,24 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   // ---------------------------------------------------------------------------
+  // Character data
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build characters tab data from ActorSync module.
+   * @returns {object}
+   * @private
+   */
+  _buildCharacterData() {
+    const actorSync = this._syncManager?._modules?.find(
+      (m) => m.constructor?.name === 'ActorSync'
+    );
+    const characters = actorSync?.getSyncedActors?.() ?? [];
+
+    return { characters };
+  }
+
+  // ---------------------------------------------------------------------------
   // Status data
   // ---------------------------------------------------------------------------
 
@@ -807,6 +832,12 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   }
 
+  /** Manually push an unlinked Foundry actor to Chronicle. */
+  static #onPushActorAction(event, target) {
+    const actorId = target.dataset.actorId;
+    this._onPushActor(actorId);
+  }
+
   // ---------------------------------------------------------------------------
   // Actions (business logic)
   // ---------------------------------------------------------------------------
@@ -1066,6 +1097,36 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
       this.render({ force: true });
     } catch (err) {
       console.error('Chronicle Dashboard: Push date failed', err);
+    }
+  }
+
+  /**
+   * Manually push an unlinked actor to Chronicle.
+   * Triggers the ActorSync create flow for an actor that wasn't
+   * auto-pushed (e.g., existed before character sync was enabled).
+   * @param {string} actorId
+   * @private
+   */
+  async _onPushActor(actorId) {
+    const actor = game.actors.get(actorId);
+    if (!actor) return;
+
+    const actorSync = this._syncManager?._modules?.find(
+      (m) => m.constructor?.name === 'ActorSync'
+    );
+    if (!actorSync) {
+      ui.notifications.warn('Character sync module not active.');
+      return;
+    }
+
+    try {
+      // Trigger the create flow by calling the hook handler directly.
+      await actorSync._handleCreateActor(actor, {}, game.user.id);
+      this._logActivity('push', `Pushed actor "${actor.name}" to Chronicle`);
+      this.render({ force: true });
+    } catch (err) {
+      console.error('Chronicle Dashboard: Push actor failed', err);
+      ui.notifications.error(`Failed to push actor: ${err.message}`);
     }
   }
 

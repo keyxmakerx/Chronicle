@@ -58,6 +58,7 @@
         "Entities": "Entities",
         "Shops": "Shops",
         "Maps": "Maps",
+        "Characters": "Characters",
         "Calendar": "Calendar",
         "Status": "Status"
       },
@@ -111,6 +112,17 @@
         "NoModule": "No calendar module detected.",
         "NoModuleHint": "Install Calendaria or Simple Calendar to enable calendar sync.",
         "UnableToRead": "Unable to read"
+      },
+      "Characters": {
+        "Synced": "Synced",
+        "NotLinked": "Not linked",
+        "Push": "Push",
+        "NoActors": "No character actors found.",
+        "NoActorsHint": "Create character actors in Foundry or character entities in Chronicle.",
+        "Disabled": "Character sync is disabled.",
+        "DisabledHint": "Enable \"Sync Characters\" in Module Settings to sync actors with Chronicle.",
+        "NoSystem": "Character sync requires a matching game system.",
+        "NoSystemHint": "Your Foundry system must match a Chronicle game system with character field templates."
       },
       "StatusTab": {
         "Connection": "Connection",

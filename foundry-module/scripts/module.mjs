@@ -12,6 +12,7 @@ import { JournalSync } from './journal-sync.mjs';
 import { MapSync } from './map-sync.mjs';
 import { ShopWidget } from './shop-widget.mjs';
 import { CalendarSync } from './calendar-sync.mjs';
+import { ActorSync } from './actor-sync.mjs';
 import { SyncDashboard } from './sync-dashboard.mjs';
 
 /** @type {SyncManager|null} */
@@ -44,6 +45,7 @@ Hooks.once('ready', async () => {
   syncManager.registerModule(new MapSync());
   syncManager.registerModule(new ShopWidget());
   syncManager.registerModule(new CalendarSync());
+  syncManager.registerModule(new ActorSync());
 
   // Start the sync manager (connects WebSocket, performs initial sync).
   await syncManager.start();

@@ -8,7 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-12 -- **Sprint F-3: System Detection & Character Field Templates.**
+2026-03-12 -- **Sprint F-4: Actor ↔ Entity Sync.**
+
+34. **Sprint F-4: Actor ↔ Entity Sync (DONE).**
+    - **actor-sync.mjs** — New `ActorSync` module class. Bidirectional sync between Foundry Actors (type: character) and Chronicle character entities. Registers `createActor`/`updateActor`/`deleteActor` hooks. Handles `entity.created/updated/deleted` WS messages filtered by character type. Uses `_syncing` guard. `_onCharacterDeleted()` unlinks (unsets flags) rather than deleting Actor.
+    - **System adapters** — `adapters/dnd5e-adapter.mjs` maps 15 D&D 5e fields (ability scores, HP, AC, speed, level, class, race, alignment, proficiency_bonus). `adapters/pf2e-adapter.mjs` maps PF2e fields (ability mods, HP, AC, perception, ancestry, heritage); only pushes HP/name back to Foundry (PF2e derives most values from items/rules).
+    - **Dashboard Characters tab** — New tab in sync dashboard showing synced/unlinked actors with Push button for manual push. Empty states for no actors, disabled sync, no system match.
+    - **module.mjs** — Registered `ActorSync` as sync module.
+    - **TESTING.md** — Added 30+ character sync test items covering both directions, dashboard, adapters, edge cases.
+    - **Next:** F-5 (NPC Viewer / Hall) or F-6 (Armory / Inventory).
 
 33. **Sprint F-3: System detection & character field templates (DONE).**
     - **Server: Manifest expansion** — dnd5e character preset expanded from 4 to 15 fields (added ability scores, HP, AC, speed, proficiency_bonus). New pf2e character preset with 15 PF2e-specific fields (ancestry, heritage, ability mods, perception, etc). Added `CharacterPreset()` method on `SystemManifest`.
