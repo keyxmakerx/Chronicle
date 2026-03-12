@@ -165,13 +165,8 @@ export class JournalSync {
 
       await journal.update(updates);
 
-      // Update the text page content.
-      const textPage = journal.pages.find((p) => p.type === 'text');
-      if (textPage && entity.entry_html) {
-        await textPage.update({
-          'text.content': entity.entry_html,
-        });
-      }
+      // Split entity content into pages and sync them.
+      await this._syncPagesToJournal(journal, entity.entry_html || '');
 
       // Update flags with latest entity data.
       await journal.setFlag(FLAG_SCOPE, 'entityType', entity.type_name || '');
@@ -231,27 +226,26 @@ export class JournalSync {
         });
       }
 
-      // Text page with entity content.
-      if (isMonksActive) {
-        // Monk's Enhanced Journal uses enhanced page type.
-        pages.push({
-          name: entity.name,
+      // Split entity content into pages by top-level headings.
+      const sections = this._splitByHeadings(entity.entry_html || '');
+
+      let sortIndex = 1;
+      for (const section of sections) {
+        const pageData = {
+          name: section.title,
           type: 'text',
-          text: { content: entity.entry_html || '' },
-          sort: 1,
-          flags: {
-            'monks-enhanced-journal': {
-              type: 'base',
-            },
-          },
-        });
-      } else {
-        pages.push({
-          name: entity.name,
-          type: 'text',
-          text: { content: entity.entry_html || '' },
-          sort: 1,
-        });
+          text: { content: section.content },
+          sort: sortIndex++,
+        };
+
+        // Monk's Enhanced Journal uses enhanced page flags.
+        if (isMonksActive) {
+          pageData.flags = {
+            'monks-enhanced-journal': { type: 'base' },
+          };
+        }
+
+        pages.push(pageData);
       }
 
       // Determine ownership.
@@ -321,14 +315,14 @@ export class JournalSync {
 
     // Create entity in Chronicle from this new journal.
     try {
-      const textPage = journal.pages.find((p) => p.type === 'text');
-      const imagePage = journal.pages.find((p) => p.type === 'image');
+      // Concatenate all text pages into a single entry for Chronicle.
+      const entryHtml = this._collectTextPages(journal);
 
       const entity = await this._api.post('/entities', {
         name: journal.name,
         entity_type_id: 0, // Default type — will use first available.
         is_private: (journal.ownership?.default ?? 0) < CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER,
-        entry: textPage?.text?.content || '',
+        entry: entryHtml,
       });
 
       if (entity) {
@@ -358,6 +352,7 @@ export class JournalSync {
 
   /**
    * Handle Foundry JournalEntry update — push changes to Chronicle.
+   * Detects name, content, and ownership changes and pushes all to Chronicle.
    * @param {JournalEntry} journal
    * @param {object} change
    * @param {object} options
@@ -372,12 +367,13 @@ export class JournalSync {
     if (!entityId) return;
 
     try {
-      const textPage = journal.pages.find((p) => p.type === 'text');
+      // Concatenate all text pages into a single entry for Chronicle.
+      const entryHtml = this._collectTextPages(journal);
 
       await this._api.put(`/entities/${entityId}`, {
         name: journal.name,
         is_private: (journal.ownership?.default ?? 0) < CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER,
-        entry: textPage?.text?.content || '',
+        entry: entryHtml,
       });
 
       this._syncing = true;
@@ -427,5 +423,132 @@ export class JournalSync {
     if (exclusions.excludedEntities.includes(entity.id)) return true;
     if (entity.entity_type_id && exclusions.excludedTypes.includes(entity.entity_type_id)) return true;
     return false;
+  }
+
+  // --- Multi-Page Helpers ---
+
+  /**
+   * Split HTML content by top-level headings (h1/h2) into named sections.
+   * Each section becomes a separate Foundry journal page.
+   * If no headings are found, returns a single section with the entity name.
+   * @param {string} html - The entity entry_html content.
+   * @returns {Array<{title: string, content: string}>}
+   * @private
+   */
+  _splitByHeadings(html) {
+    if (!html) return [{ title: 'Content', content: '' }];
+
+    // Match h1 or h2 tags to use as page break points.
+    const headingRegex = /<h[12][^>]*>(.*?)<\/h[12]>/gi;
+    const matches = [...html.matchAll(headingRegex)];
+
+    // No headings found — return as single page.
+    if (matches.length === 0) {
+      return [{ title: 'Content', content: html }];
+    }
+
+    const sections = [];
+
+    // Content before the first heading (if any).
+    const preContent = html.substring(0, matches[0].index).trim();
+    if (preContent) {
+      sections.push({ title: 'Overview', content: preContent });
+    }
+
+    // Each heading starts a new section, ending at the next heading or end of string.
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i];
+      const startAfterHeading = match.index + match[0].length;
+      const endIndex = i + 1 < matches.length ? matches[i + 1].index : html.length;
+      const sectionContent = html.substring(startAfterHeading, endIndex).trim();
+
+      // Strip HTML tags from heading text for the page title.
+      const title = match[1].replace(/<[^>]*>/g, '').trim() || `Section ${i + 1}`;
+
+      // Include the heading in the page content for context.
+      sections.push({
+        title,
+        content: match[0] + sectionContent,
+      });
+    }
+
+    return sections;
+  }
+
+  /**
+   * Collect all text pages from a Foundry JournalEntry and concatenate
+   * them into a single HTML string for Chronicle. Pages are joined in
+   * sort order.
+   * @param {JournalEntry} journal
+   * @returns {string} Combined HTML content.
+   * @private
+   */
+  _collectTextPages(journal) {
+    const textPages = journal.pages
+      .filter((p) => p.type === 'text')
+      .sort((a, b) => a.sort - b.sort);
+
+    if (textPages.length === 0) return '';
+    if (textPages.length === 1) return textPages[0].text?.content || '';
+
+    // Multiple pages: concatenate with the page name as a heading separator.
+    return textPages
+      .map((page) => {
+        const content = page.text?.content || '';
+        // If the page content already starts with a heading, use it as-is.
+        if (/^<h[12][^>]*>/i.test(content.trim())) return content;
+        // Otherwise, wrap the page name as an h2 heading.
+        return `<h2>${page.name}</h2>\n${content}`;
+      })
+      .join('\n');
+  }
+
+  /**
+   * Sync entity HTML content to journal pages. Splits by headings and
+   * updates existing pages or creates/removes pages as needed.
+   * @param {JournalEntry} journal
+   * @param {string} html - Entity entry_html content.
+   * @private
+   */
+  async _syncPagesToJournal(journal, html) {
+    const sections = this._splitByHeadings(html);
+    const existingTextPages = journal.pages
+      .filter((p) => p.type === 'text')
+      .sort((a, b) => a.sort - b.sort);
+
+    // Update existing pages and create new ones as needed.
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i];
+
+      if (i < existingTextPages.length) {
+        // Update existing page.
+        const page = existingTextPages[i];
+        const updates = { 'text.content': section.content };
+        if (page.name !== section.title) {
+          updates.name = section.title;
+        }
+        await page.update(updates);
+      } else {
+        // Create new page.
+        await journal.createEmbeddedDocuments('JournalEntryPage', [
+          {
+            name: section.title,
+            type: 'text',
+            text: { content: section.content },
+            sort: (existingTextPages.length + i) * 100,
+          },
+        ]);
+      }
+    }
+
+    // Remove excess pages if entity has fewer sections than journal has pages.
+    if (sections.length < existingTextPages.length) {
+      const pagesToDelete = existingTextPages
+        .slice(sections.length)
+        .map((p) => p.id);
+      if (pagesToDelete.length > 0) {
+        await journal.deleteEmbeddedDocuments('JournalEntryPage', pagesToDelete);
+      }
+    }
   }
 }

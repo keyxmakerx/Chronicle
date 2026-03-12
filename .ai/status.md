@@ -8,7 +8,17 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-11 -- **Foundry module review — bug fixes and feature completion.**
+2026-03-12 -- **Foundry enhancements planning + documentation capture.**
+
+32. **Foundry enhancements planning session.** Analyzed gaps in journal sync, permissions, and character sheet support. Captured comprehensive plan in `.ai/todo.md` as Phase F (Sprints F-1 through F-7):
+    - **F-1: Journal sync fidelity** — Multi-page journal sync (heading-based page splitting), ownership change hook (Foundry→Chronicle permission push).
+    - **F-2: Granular permission mapping** — Chronicle `visibility: 'custom'` + `entity_permissions` → Foundry per-user ownership. New syncapi permission endpoints.
+    - **F-3: System detection & character field templates** — Match `game.system.id` to Chronicle systems. `CharacterFields()` on System interface. Per-system field templates for Character entity type.
+    - **F-4: Actor ↔ entity sync** — New `actor-sync.mjs` with system-specific adapters (dnd5e, pf2e). Bidirectional sync of character stats/attributes.
+    - **F-5: NPC Viewer / Hall** — `/campaigns/:id/npcs` gallery page. Revealed NPCs with portrait/filters. Foundry ownership change → auto-reveal.
+    - **F-6: Armory / Inventory system** — Items with game-mechanic fields, character inventory tab via relations, system-specific item templates, Foundry actor inventory sync.
+    - **F-7: Shop / Marketplace enhancements** — Transaction logging, currency tracking, stock management.
+    Updated `foundry-module/.ai.md` with planned features section.
 
 31. **Foundry module review.** Comprehensive code review of the Foundry VTT sync module found 13 issues. Fixed 9 (deferred ApplicationV2 upgrade):
     - **Runtime bugs**: Shop window `{{json}}` helper crash (replaced with data-item-id lookup), drawing coordinate conversion missing percentage↔pixel (tokens had it, drawings didn't), fog reconciliation `_syncing` flag corruption (extracted `_createFogDrawingData`, batch creates), entity_type_id:0 invalid in syncapi handler (added first-type fallback).
