@@ -33,6 +33,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
+	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/posts"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
@@ -664,6 +665,33 @@ func (a *entityTypeListerForGraphAdapter) ListEntityTypesForGraph(ctx context.Co
 	return result, nil
 }
 
+// npcEntityTypeFinderAdapter wraps entities.EntityService to implement the
+// npcs.EntityTypeFinder interface. Resolves the "characters" entity type ID
+// for the NPC gallery without creating a circular import.
+type npcEntityTypeFinderAdapter struct {
+	svc entities.EntityService
+}
+
+// FindCharacterTypeID looks up the "characters" entity type for a campaign.
+func (a *npcEntityTypeFinderAdapter) FindCharacterTypeID(ctx context.Context, campaignID string) (int, error) {
+	et, err := a.svc.GetEntityTypeBySlug(ctx, campaignID, "characters")
+	if err != nil {
+		return 0, err
+	}
+	return et.ID, nil
+}
+
+// npcVisibilityTogglerAdapter wraps entities.EntityService to implement the
+// npcs.VisibilityToggler interface for the reveal toggle.
+type npcVisibilityTogglerAdapter struct {
+	svc entities.EntityService
+}
+
+// TogglePrivate flips an entity's is_private flag.
+func (a *npcVisibilityTogglerAdapter) TogglePrivate(ctx context.Context, entityID string) (bool, error) {
+	return a.svc.TogglePrivate(ctx, entityID)
+}
+
 // RegisterRoutes sets up all application routes. It registers public routes
 // directly and delegates to each plugin's route registration function.
 //
@@ -983,6 +1011,13 @@ func (a *App) RegisterRoutes() {
 	tagHandler := tags.NewHandler(tagService)
 	tags.RegisterRoutes(e, tagHandler, campaignService, authService)
 
+	// NPC plugin: gallery/hub view for revealed character entities.
+	npcRepo := npcs.NewNPCRepository(a.DB)
+	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{svc: entityService})
+	npcHandler := npcs.NewHandler(npcSvc)
+	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
+	npcs.RegisterRoutes(e, npcHandler, campaignService, authService)
+
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	noteRepo := notes.NewNoteRepository(a.DB)
 	attRepo := notes.NewAttachmentRepository(a.DB)
@@ -1047,6 +1082,19 @@ func (a *App) RegisterRoutes() {
 		Description: "Embedded map viewer", Addon: "maps",
 	}, func(ctx entities.BlockRenderContext) templ.Component {
 		return maps.BlockMapPreview(ctx.CC, entities.BlockConfigString(ctx.Block.Config, "map_id"))
+	})
+
+	// NPC gallery block — embeds a compact NPC grid on entity pages/dashboards.
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "npc_gallery", Label: "NPC Gallery", Icon: "fa-users",
+		Description: "Grid of revealed NPCs",
+	}, func(bctx entities.BlockRenderContext) templ.Component {
+		limit := entities.BlockConfigLimit(bctx.Block.Config, "limit", 8)
+		cards, err := npcHandler.GalleryBlock(context.Background(), bctx.CC.Campaign.ID, int(bctx.CC.MemberRole), "", limit)
+		if err != nil {
+			return templ.NopComponent
+		}
+		return npcs.BlockNPCGallery(bctx.CC, cards, limit)
 	})
 
 	// Set the registry on the entity service (validation) and as the global (rendering).
@@ -1282,6 +1330,10 @@ func (a *App) RegisterRoutes() {
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	campaignSystemHandler := systems.NewCampaignSystemHandler(campaignSystemMgr)
 	systems.RegisterCustomSystemRoutes(e, campaignSystemHandler, authService, campaignService)
+
+	// Wire campaign system lister into sync API so custom systems appear
+	// in /systems and /systems/:id/character-fields endpoints.
+	syncAPIHandler.SetCampaignSystemLister(campaignSystemMgr)
 
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {

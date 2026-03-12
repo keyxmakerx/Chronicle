@@ -8,7 +8,62 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-12 -- **Sprint F-4 done + F-4.5 planned.**
+2026-03-12 -- **Post-F-5 QoL: NPC sidebar link + plan reorg.**
+
+40. **Post-F-5 QoL: NPC sidebar navigation link.**
+    - Added "NPCs" entry to campaign sidebar in `internal/templates/layouts/app.templ` below "All Pages" link.
+    - Uses `fa-users` icon, `isPathPrefix` for active highlighting, links to `/campaigns/:id/npcs`.
+    - Updated `.ai/phases.md` with 6-phase priority rewrite (already done in session 36).
+    - Phase X sprints (X-1 through X-5) already present in `todo.md`.
+    - **Next up:** Phase 1 continues — Sprint F-4.5/F-QoL/F-5 all complete. Next is Phase 2 (X-1: System Upload UX) or Phase 6 (F-6: Armory/Inventory), depending on owner priority.
+
+39. **Sprint F-5: NPC Viewer / Hall (DONE).**
+    - **NPC plugin** — New `internal/plugins/npcs/` with model/repo/service/handler/templates/routes. View-layer plugin — no new database tables, queries existing `entities` table filtered by character type + visibility.
+    - **Gallery page** — `/campaigns/:id/npcs` shows a responsive grid of revealed character entities. Search by name (debounced HTMX), sort (name/updated/created), tag filter, pagination. Players see non-private characters; Scribes/Owners see all.
+    - **NPC card** — Portrait (aspect 3:4 or placeholder), name, type label/race/class, tags. Responsive grid (2→6 columns).
+    - **Reveal toggle** — Eye icon on each card (Scribe+). Toggles `is_private` via `POST /npcs/:eid/reveal` with HTMX swap. Green eye = visible, red eye-slash = hidden.
+    - **Entity service** — Added `TogglePrivate(entityID)` to `EntityService` interface. New `UpdatePrivate(entityID, isPrivate)` on `EntityRepository`. Publishes entity "updated" event via WebSocket.
+    - **npc_gallery layout block** — Registered in block registry (no addon required). Shows compact 3-4 column grid of up to 8 NPCs with "View all" link. Configurable via `{"limit": N}`.
+    - **Foundry sync** — Bidirectional NPC visibility sync. Chronicle→Foundry: entity `is_private` change updates actor's `prototypeToken.hidden`. Foundry→Chronicle: actor hidden toggle calls `POST /entities/:id/reveal` API.
+    - **Sync API** — New `POST /api/v1/campaigns/:id/entities/:entityID/reveal` endpoint. Accepts `{"is_private": bool}` or toggles if omitted. Verifies entity belongs to campaign.
+    - **Tests** — 7 tests: `ListNPCs_ReturnsCards`, `ListNPCs_EmptyWhenNoCharacterType`, `CountNPCs`, `NPCListOptions_Offset`, `NPCListOptions_OrderByClause`, `NPCCard_FieldString`, `TogglePrivate_EntityService`. All pass.
+    - **Wiring** — `npcEntityTypeFinderAdapter` and `npcVisibilityTogglerAdapter` in `app/routes.go`. Routes registered with `RequireRole(Player)` for view, `RequireRole(Scribe)` for reveal.
+
+38. **Sprint F-QoL: Foundry Sync Diagnostics (DONE).**
+    - **Validation report** — New `ValidationReport` type and `BuildValidationReport()` on `SystemManifest`. Analyzes categories, fields, presets, Foundry compatibility, mapped/writable fields, and generates warnings. Shown in custom system section after upload.
+    - **Template update** — `SystemValidationReport` templ component renders capability badges (categories, fields, presets, character fields), Foundry compatibility status, field mapping summary, and warnings.
+    - **API client health metrics** — `api-client.mjs` now tracks REST success/error counts, reconnect attempts, connection uptime, last success/error timestamps. New `_errorLog` array with structured error entries (method, path, status, message). `getUptimePercent()` computes session uptime.
+    - **Retry queue** — New `queueForRetry()` method for failed write operations. `processRetryQueue()` runs on WebSocket reconnect, retrying up to 3 times with structured logging. Queue capped at 50 entries.
+    - **Dashboard diagnostics** — Status tab now shows: 4-column diagnostics grid (uptime%, API OK, API errors, reconnects), last success/error timestamps, pending retry count, field mapping debug info (adapter type, system ID, character type slug), and separate error log section.
+    - **Dashboard CSS** — Added `.diagnostics-grid`, `.diagnostics-detail`, `.error-value`, `.error-text`, `.error-log` styles.
+    - **Tests** — 3 new tests: `BuildValidationReport_FullSystem`, `BuildValidationReport_MinimalSystem`, `BuildValidationReport_NoFoundryPaths`. All pass.
+    - **Dagger Heart** added to deferred systems list alongside Draw Steel.
+
+37. **Sprint F-4.5: Generic System Adapter (DONE).**
+    - **Manifest schema** — Added `foundry_system_id` to `SystemManifest`, `foundry_path` and `foundry_writable` to `FieldDef`. `IsFoundryWritable()` helper defaults to true when nil. New `CharacterFieldsForAPI()` builds API response with field annotations.
+    - **API endpoint** — `GET /api/v1/campaigns/:id/systems/:systemId/character-fields` returns field definitions with Foundry path annotations. Supports both built-in and custom campaign systems via `CampaignSystemLister` interface.
+    - **Manifest annotations** — dnd5e: all 15 character fields annotated with `foundry_path`; AC, speed, proficiency_bonus marked `foundry_writable: false`. PF2e: all 15 fields annotated; only hp_current/hp_max writable (everything else derived). DrawSteel: `foundry_system_id: "draw-steel"` added.
+    - **Foundry sync-manager.mjs** — `_detectSystem()` now API-driven: queries `/systems` and matches by `foundry_system_id` first, falls back to `SYSTEM_MAP_FALLBACK` for legacy support. Custom-uploaded systems with `foundry_system_id` auto-match.
+    - **Foundry generic-adapter.mjs** — New data-driven adapter that fetches field definitions from `/systems/:id/character-fields` API. Auto-generates `toChronicleFields()` and `fromChronicleFields()` from field annotations. Respects `foundry_writable` and field types for casting.
+    - **Foundry actor-sync.mjs** — `_loadAdapter()` tries built-in adapters (dnd5e, pf2e) first, then falls back to generic adapter for any other system.
+    - **Tests** — Added 7 tests for `IsFoundryWritable`, `CharacterPreset`, `CharacterFieldsForAPI`, and `LoadManifest` with Foundry annotations. All pass.
+    - **Impact:** Any game system (including custom uploads) can now participate in character sync by including `foundry_system_id` and `foundry_path` annotations in its manifest.
+
+36. **Phase & Sprint Plan Reorg.**
+    - Rewrote `.ai/phases.md` with 6 phases in new priority order based on owner direction:
+      (1) Foundry Completion & QoL (F-4.5, F-QoL, F-5),
+      (2) System Modularity & Owner Experience (X-1 through X-5 — new phase),
+      (3) Maps & Spatial (W-2, W-2.5),
+      (4) Collaboration & Polish (U-series, W-1, W-4),
+      (5) Content & Integrations (T-3/4, W-3/5/6),
+      (6) Foundry Advanced (F-6, F-7).
+    - Added new Phase X sprints to `todo.md`: X-1 (upload UX wizard), X-2 (auto entity presets),
+      X-3 (system-provided widgets), X-4 (system diagnostics), X-5 (character sheet blocks).
+    - Added F-QoL sprint (Foundry sync diagnostics & error handling).
+    - Key insight: the system framework needs end-to-end validation that a non-technical
+      owner can upload a custom system and get full functionality (presets, tooltips,
+      Foundry sync, widgets, character sheets) without manual setup.
+    - Next up: Sprint F-4.5 (generic system adapter).
 
 35. **F-4.5 planning: Generic System Adapter & Dynamic Matching.**
     - Identified that F-4's `SYSTEM_MAP` and `_loadAdapter()` switch are hardcoded to only dnd5e/pf2e/drawsteel. Custom-uploaded game systems can't participate in character sync despite having the server infrastructure (entity presets, `CharacterPreset()` helper, campaign system upload).
@@ -150,13 +205,15 @@ Branch: `claude/fix-journal-button-placement-UF4hD`.
 
 ## Phase & Sprint Plan
 See `.ai/phases.md` for the full roadmap. Phases organized by priority:
-- **V**: Obsidian-Style Notes & Discovery ← CURRENT
-- **W**: Polish, Ecosystem & Delight
-- **T**: Game System Modules & Worldbuilding Tools
-- **U**: Collaboration & Platform Maturity
+1. **F**: Foundry Completion & QoL (F-4.5, F-QoL, F-5) ← CURRENT
+2. **X**: System Modularity & Owner Experience (X-1 through X-5)
+3. **W**: Maps & Spatial (W-2, W-2.5)
+4. **U**: Collaboration & Polish (U-1/2/3/4/5, W-1, W-4)
+5. **T**: Content & Integrations (T-3/4, W-3/5/6)
+6. **F**: Foundry Advanced (F-6, F-7)
 
 ## Current Phase
-**Phase V (Obsidian-Style Notes & Discovery) — Sprint V-2 COMPLETE.**
+**Phase 1: Foundry Completion — Sprint F-4.5 IN PROGRESS.**
 
 ### Sprint V-2: Backlinks Panel & Entity Aliases (COMPLETE)
 - **Fixed migration 060**: Removed incorrect first ALTER that tried to drop 'module' from ENUM directly, causing Error 1265. Kept correct 3-step approach.
@@ -597,9 +654,9 @@ Created `.ai/audit.md` — comprehensive feature parity and completeness audit c
 - Updated architecture.md directory structure to reflect systems/ path
 
 ## Next Session Should
-- **Sprint U-2: Invite System** — campaign invite links for easier player onboarding
-- **Sprint V-1: Quick Capture** — Obsidian-style notes rapid entry
-- **Sprint T-3: Guided Worldbuilding Prompts** — Writing prompts panel on entity edit page (deferred)
+- **Sprint F-4.5: Generic System Adapter** — Remove hardcoded SYSTEM_MAP, dynamic matching via API
+- **Sprint F-QoL: Foundry Sync Diagnostics** — Validation report, health dashboard, error recovery
+- **Sprint F-5: NPC Viewer / Hall** — Gallery of revealed NPCs
 - See `.ai/phases.md` for full execution order
 
 ## Known Issues Right Now

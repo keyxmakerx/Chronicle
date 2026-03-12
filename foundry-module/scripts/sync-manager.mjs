@@ -10,10 +10,12 @@ import { ChronicleAPI } from './api-client.mjs';
 import { getSetting, setSetting, isConfigured } from './settings.mjs';
 
 /**
- * Maps Foundry game.system.id values to Chronicle system IDs.
- * Only systems with an explicit mapping can enable character sync.
+ * Hardcoded fallback map for known Foundry→Chronicle system mappings.
+ * Used only when the API doesn't provide foundry_system_id matches.
+ * The preferred flow is API-driven: /systems returns foundry_system_id
+ * on each system, and _detectSystem() matches against game.system.id.
  */
-const SYSTEM_MAP = {
+const SYSTEM_MAP_FALLBACK = {
   dnd5e: 'dnd5e',
   pf2e: 'pathfinder2e',
   drawsteel: 'drawsteel',
@@ -137,8 +139,9 @@ export class SyncManager {
 
   /**
    * Detect the Foundry game system and match it against Chronicle systems.
-   * Queries the /systems API endpoint to verify the match is enabled
-   * for this campaign. Stores the result in the detectedSystem setting.
+   * Queries the /systems API endpoint which returns foundry_system_id on each
+   * system. Matches are API-driven so custom-uploaded systems work automatically.
+   * Falls back to SYSTEM_MAP_FALLBACK only when the API doesn't return a match.
    * @private
    */
   async _detectSystem() {
@@ -149,27 +152,33 @@ export class SyncManager {
       return;
     }
 
-    const chronicleId = SYSTEM_MAP[this._foundrySystemId];
-    if (!chronicleId) {
-      console.log(`Chronicle: Foundry system "${this._foundrySystemId}" has no Chronicle mapping`);
-      await setSetting('detectedSystem', '');
-      return;
-    }
-
     try {
-      // Query Chronicle for available systems and check if the mapped one is enabled.
+      // Query Chronicle for available systems. Each system may include
+      // foundry_system_id for automatic matching.
       const result = await this.api.get('/systems');
       const systems = result.data || [];
-      const match = systems.find((s) => s.id === chronicleId && s.enabled);
+
+      // Primary: match by foundry_system_id returned from the API.
+      let match = systems.find(
+        (s) => s.foundry_system_id === this._foundrySystemId && s.enabled
+      );
+
+      // Secondary: match by hardcoded fallback map (legacy support).
+      if (!match) {
+        const fallbackId = SYSTEM_MAP_FALLBACK[this._foundrySystemId];
+        if (fallbackId) {
+          match = systems.find((s) => s.id === fallbackId && s.enabled);
+        }
+      }
 
       if (match) {
-        this._matchedSystem = chronicleId;
-        await setSetting('detectedSystem', chronicleId);
+        this._matchedSystem = match.id;
+        await setSetting('detectedSystem', match.id);
         this.logActivity('connect', `Game system matched: ${match.name}`);
-        console.log(`Chronicle: System matched — Foundry "${this._foundrySystemId}" → Chronicle "${chronicleId}"`);
+        console.log(`Chronicle: System matched — Foundry "${this._foundrySystemId}" → Chronicle "${match.id}"`);
       } else {
         await setSetting('detectedSystem', '');
-        console.log(`Chronicle: System "${chronicleId}" not enabled for this campaign`);
+        console.log(`Chronicle: No Chronicle system matches Foundry system "${this._foundrySystemId}"`);
       }
     } catch (err) {
       console.warn('Chronicle: Failed to detect system match', err);

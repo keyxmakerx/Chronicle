@@ -1,0 +1,101 @@
+// npc_card.templ renders a single NPC card in the gallery grid.
+// Shows portrait, name, type label, tags, and a reveal toggle for DMs.
+package npcs
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// NPCCardComponent renders a single NPC card with portrait and metadata.
+templ NPCCardComponent(cc *campaigns.CampaignContext, card *NPCCard, csrfToken string) {
+	<div class="card p-0 overflow-hidden group relative">
+		<!-- Link to entity page -->
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, card.ID)) }
+			class="block"
+		>
+			<!-- Portrait -->
+			if card.ImagePath != nil && *card.ImagePath != "" {
+				<div class="aspect-[3/4] bg-surface-alt overflow-hidden">
+					<img
+						src={ layouts.MediaURL(ctx, *card.ImagePath) }
+						alt={ card.Name }
+						class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+					/>
+				</div>
+			} else {
+				<div class="aspect-[3/4] flex items-center justify-center bg-surface-alt">
+					<i class="fa-solid fa-user text-3xl text-fg-muted opacity-30"></i>
+				</div>
+			}
+
+			<!-- Card body -->
+			<div class="px-3 py-2.5">
+				<h3 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">
+					{ card.Name }
+				</h3>
+				if card.TypeLabel != nil && *card.TypeLabel != "" {
+					<p class="text-[11px] text-fg-secondary truncate mt-0.5">{ *card.TypeLabel }</p>
+				} else {
+					// Show a field like "race" or "class" if available.
+					if race := card.FieldString("race"); race != "" {
+						<p class="text-[11px] text-fg-secondary truncate mt-0.5">{ race }</p>
+					} else if class := card.FieldString("class"); class != "" {
+						<p class="text-[11px] text-fg-secondary truncate mt-0.5">{ class }</p>
+					}
+				}
+
+				<!-- Tags -->
+				if len(card.Tags) > 0 {
+					<div class="flex flex-wrap gap-0.5 mt-1.5">
+						for _, tag := range card.Tags {
+							<span
+								class="inline-flex items-center px-1.5 py-px rounded-full text-[9px] font-medium"
+								style={ fmt.Sprintf("background-color: %s22; color: %s", tag.Color, tag.Color) }
+							>
+								{ tag.Name }
+							</span>
+						}
+					</div>
+				}
+			</div>
+		</a>
+
+		<!-- Reveal toggle (Scribe+ only) -->
+		if cc.MemberRole >= campaigns.RoleScribe {
+			<div class="absolute top-2 right-2" id={ fmt.Sprintf("reveal-%s", card.ID) }>
+				@RevealBadge(card.ID, cc.Campaign.ID, card.IsPrivate, csrfToken)
+			</div>
+		}
+	</div>
+}
+
+// RevealBadge renders the visibility toggle button for an NPC.
+// Swapped via HTMX when toggled. Private = eye-slash (hidden), public = eye (revealed).
+templ RevealBadge(entityID string, campaignID string, isPrivate bool, csrfToken string) {
+	if isPrivate {
+		<button
+			class="w-7 h-7 rounded-full flex items-center justify-center bg-black/50 text-white/70 hover:text-white hover:bg-red-600/80 transition-colors backdrop-blur-sm"
+			title="Hidden from players — click to reveal"
+			hx-post={ fmt.Sprintf("/campaigns/%s/npcs/%s/reveal", campaignID, entityID) }
+			hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+			hx-target={ fmt.Sprintf("#reveal-%s", entityID) }
+			hx-swap="innerHTML"
+		>
+			<i class="fa-solid fa-eye-slash text-[10px]"></i>
+		</button>
+	} else {
+		<button
+			class="w-7 h-7 rounded-full flex items-center justify-center bg-black/50 text-emerald-400 hover:text-white hover:bg-emerald-600/80 transition-colors backdrop-blur-sm"
+			title="Visible to players — click to hide"
+			hx-post={ fmt.Sprintf("/campaigns/%s/npcs/%s/reveal", campaignID, entityID) }
+			hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+			hx-target={ fmt.Sprintf("#reveal-%s", entityID) }
+			hx-swap="innerHTML"
+		>
+			<i class="fa-solid fa-eye text-[10px]"></i>
+		</button>
+	}
+}

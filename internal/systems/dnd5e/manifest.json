@@ -8,6 +8,7 @@
   "icon": "fa-dragon",
   "api_version": "1",
   "status": "available",
+  "foundry_system_id": "dnd5e",
   "categories": [
     {
       "slug": "spells",
@@ -82,21 +83,21 @@
       "icon": "fa-hat-wizard",
       "color": "#7C3AED",
       "fields": [
-        { "key": "class", "label": "Class", "type": "string" },
-        { "key": "level", "label": "Level", "type": "number" },
-        { "key": "race", "label": "Race", "type": "string" },
-        { "key": "alignment", "label": "Alignment", "type": "string" },
-        { "key": "str", "label": "Strength", "type": "number" },
-        { "key": "dex", "label": "Dexterity", "type": "number" },
-        { "key": "con", "label": "Constitution", "type": "number" },
-        { "key": "int", "label": "Intelligence", "type": "number" },
-        { "key": "wis", "label": "Wisdom", "type": "number" },
-        { "key": "cha", "label": "Charisma", "type": "number" },
-        { "key": "hp_current", "label": "Current HP", "type": "number" },
-        { "key": "hp_max", "label": "Max HP", "type": "number" },
-        { "key": "ac", "label": "Armor Class", "type": "number" },
-        { "key": "speed", "label": "Speed", "type": "number" },
-        { "key": "proficiency_bonus", "label": "Proficiency Bonus", "type": "number" }
+        { "key": "class", "label": "Class", "type": "string", "foundry_path": "system.details.class" },
+        { "key": "level", "label": "Level", "type": "number", "foundry_path": "system.details.level" },
+        { "key": "race", "label": "Race", "type": "string", "foundry_path": "system.details.race" },
+        { "key": "alignment", "label": "Alignment", "type": "string", "foundry_path": "system.details.alignment" },
+        { "key": "str", "label": "Strength", "type": "number", "foundry_path": "system.abilities.str.value" },
+        { "key": "dex", "label": "Dexterity", "type": "number", "foundry_path": "system.abilities.dex.value" },
+        { "key": "con", "label": "Constitution", "type": "number", "foundry_path": "system.abilities.con.value" },
+        { "key": "int", "label": "Intelligence", "type": "number", "foundry_path": "system.abilities.int.value" },
+        { "key": "wis", "label": "Wisdom", "type": "number", "foundry_path": "system.abilities.wis.value" },
+        { "key": "cha", "label": "Charisma", "type": "number", "foundry_path": "system.abilities.cha.value" },
+        { "key": "hp_current", "label": "Current HP", "type": "number", "foundry_path": "system.attributes.hp.value" },
+        { "key": "hp_max", "label": "Max HP", "type": "number", "foundry_path": "system.attributes.hp.max" },
+        { "key": "ac", "label": "Armor Class", "type": "number", "foundry_path": "system.attributes.ac.value", "foundry_writable": false },
+        { "key": "speed", "label": "Speed", "type": "number", "foundry_path": "system.attributes.movement.walk", "foundry_writable": false },
+        { "key": "proficiency_bonus", "label": "Proficiency Bonus", "type": "number", "foundry_path": "system.attributes.prof", "foundry_writable": false }
       ]
     },
     {

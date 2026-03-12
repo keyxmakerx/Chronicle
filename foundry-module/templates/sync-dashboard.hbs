@@ -503,6 +503,72 @@
           Last sync: <span>{{lastSyncTime}}</span>
         </div>
 
+        {{!-- Diagnostics section (F-QoL) --}}
+        <h3 class="section-heading">Diagnostics</h3>
+        <div class="diagnostics-grid">
+          <div class="stat-box">
+            <div class="stat-value">{{healthMetrics.uptimePercent}}%</div>
+            <div class="stat-label">Uptime</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">{{healthMetrics.restSuccessCount}}</div>
+            <div class="stat-label">API OK</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value {{#if healthMetrics.restErrorCount}}error-value{{/if}}">{{healthMetrics.restErrorCount}}</div>
+            <div class="stat-label">API Errors</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">{{healthMetrics.reconnectAttempts}}</div>
+            <div class="stat-label">Reconnects</div>
+          </div>
+        </div>
+        <div class="diagnostics-detail">
+          <div class="system-info-row">
+            <span class="system-label">Last Success:</span>
+            <span class="system-value">{{healthMetrics.lastRestSuccess}}</span>
+          </div>
+          <div class="system-info-row">
+            <span class="system-label">Last Error:</span>
+            <span class="system-value {{#if (neq healthMetrics.lastRestError 'None')}}error-text{{/if}}">{{healthMetrics.lastRestError}}</span>
+          </div>
+          {{#if healthMetrics.retryQueueSize}}
+          <div class="system-info-row">
+            <span class="system-label">Pending Retries:</span>
+            <span class="system-value error-text">{{healthMetrics.retryQueueSize}} operations queued</span>
+          </div>
+          {{/if}}
+        </div>
+
+        {{!-- Field mapping debug info --}}
+        {{#if fieldMappingInfo}}
+        <h3 class="section-heading">Field Mapping</h3>
+        <div class="diagnostics-detail">
+          <div class="system-info-row">
+            <span class="system-label">Adapter:</span>
+            <span class="system-value">{{fieldMappingInfo.adapterType}} ({{fieldMappingInfo.systemId}})</span>
+          </div>
+          <div class="system-info-row">
+            <span class="system-label">Character Type:</span>
+            <span class="system-value">{{fieldMappingInfo.characterTypeSlug}}</span>
+          </div>
+        </div>
+        {{/if}}
+
+        {{!-- Error log --}}
+        {{#if hasErrors}}
+        <h3 class="section-heading">Error Log</h3>
+        <div class="error-log">
+          {{#each errorLog}}
+          <div class="log-entry log-error">
+            <span class="log-time">{{timeFormatted}}</span>
+            <span class="log-icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
+            <span class="log-message">{{method}} {{path}}{{#if status}} ({{status}}){{/if}}: {{message}}</span>
+          </div>
+          {{/each}}
+        </div>
+        {{/if}}
+
         <h3 class="section-heading">Recent Activity</h3>
         <div class="activity-log">
           {{#each activityLog}}

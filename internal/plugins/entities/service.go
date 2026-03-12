@@ -86,6 +86,10 @@ type EntityService interface {
 	// relations graph. Each link is a source→target pair extracted from entry_html.
 	GetMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error)
 
+	// TogglePrivate flips an entity's is_private flag and returns the new state.
+	// Used by the NPC gallery reveal toggle.
+	TogglePrivate(ctx context.Context, entityID string) (newPrivate bool, err error)
+
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
 
@@ -534,6 +538,25 @@ func (s *entityService) Delete(ctx context.Context, entityID string) error {
 		s.events.PublishEntityEvent("deleted", entity.CampaignID, entityID, entity)
 	}
 	return nil
+}
+
+// TogglePrivate flips an entity's is_private flag and returns the new state.
+func (s *entityService) TogglePrivate(ctx context.Context, entityID string) (bool, error) {
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return false, err
+	}
+
+	newPrivate := !entity.IsPrivate
+	if err := s.entities.UpdatePrivate(ctx, entityID, newPrivate); err != nil {
+		return false, err
+	}
+
+	// Publish event so WebSocket clients see the visibility change.
+	entity.IsPrivate = newPrivate
+	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+
+	return newPrivate, nil
 }
 
 // --- Listing and Search ---

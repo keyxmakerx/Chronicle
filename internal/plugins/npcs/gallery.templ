@@ -1,0 +1,130 @@
+// gallery.templ renders the NPC gallery page — a grid of revealed character
+// entities with search, sort, and tag filtering. Supports full page and
+// HTMX fragment rendering.
+package npcs
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// NPCGalleryPage renders the full NPC gallery page with layout wrapper.
+templ NPCGalleryPage(cc *campaigns.CampaignContext, cards []NPCCard, total int, opts NPCListOptions, csrfToken string) {
+	@layouts.App(cc.Campaign.Name + " - NPCs") {
+		@NPCGalleryContent(cc, cards, total, opts, csrfToken)
+	}
+}
+
+// NPCGalleryContent renders the gallery content (HTMX partial target).
+templ NPCGalleryContent(cc *campaigns.CampaignContext, cards []NPCCard, total int, opts NPCListOptions, csrfToken string) {
+	<div id="npc-gallery">
+		<!-- Page header -->
+		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">
+					<i class="fa-solid fa-users mr-2 text-fg-muted"></i>NPCs
+				</h1>
+				<p class="text-sm text-fg-secondary mt-0.5">
+					{ fmt.Sprintf("%d", total) } revealed
+					if cc.MemberRole >= campaigns.RoleScribe {
+						<span class="text-fg-muted">(toggle visibility with the eye icon)</span>
+					}
+				</p>
+			</div>
+			<div class="flex items-center gap-3">
+				<!-- Search -->
+				<div class="relative">
+					<input
+						type="text"
+						name="q"
+						placeholder="Search NPCs..."
+						value={ opts.Search }
+						class="input pl-9 pr-3 py-2 w-56"
+						hx-get={ fmt.Sprintf("/campaigns/%s/npcs", cc.Campaign.ID) }
+						hx-target="#npc-gallery"
+						hx-swap="innerHTML"
+						hx-trigger="input changed delay:300ms"
+						hx-include="[name='sort'],[name='tag']"
+					/>
+					<i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-xs"></i>
+				</div>
+
+				<!-- Sort dropdown -->
+				<select
+					name="sort"
+					class="input py-2 text-sm"
+					hx-get={ fmt.Sprintf("/campaigns/%s/npcs", cc.Campaign.ID) }
+					hx-target="#npc-gallery"
+					hx-swap="innerHTML"
+					hx-include="[name='q'],[name='tag']"
+				>
+					<option value="name" selected?={ opts.Sort == "name" }>Name</option>
+					<option value="updated" selected?={ opts.Sort == "updated" }>Recently Updated</option>
+					<option value="created" selected?={ opts.Sort == "created" }>Newest</option>
+				</select>
+			</div>
+		</div>
+
+		<!-- NPC Grid -->
+		if len(cards) == 0 {
+			<div class="text-center py-16">
+				<i class="fa-solid fa-users text-4xl text-fg-muted mb-4"></i>
+				<h3 class="text-lg font-semibold text-fg-secondary mb-1">No NPCs found</h3>
+				if opts.Search != "" || opts.Tag != "" {
+					<p class="text-sm text-fg-muted">Try adjusting your search or filters.</p>
+				} else if cc.MemberRole >= campaigns.RoleScribe {
+					<p class="text-sm text-fg-muted">
+						Create character entities and make them visible to populate this gallery.
+					</p>
+				} else {
+					<p class="text-sm text-fg-muted">
+						The DM hasn't revealed any NPCs yet.
+					</p>
+				}
+			</div>
+		} else {
+			<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+				for _, card := range cards {
+					@NPCCardComponent(cc, &card, csrfToken)
+				}
+			</div>
+
+			// Pagination.
+			if total > opts.PerPage {
+				@npcPagination(cc, total, opts)
+			}
+		}
+	</div>
+}
+
+// npcPagination renders pagination controls for the NPC gallery.
+templ npcPagination(cc *campaigns.CampaignContext, total int, opts NPCListOptions) {
+	<div class="flex items-center justify-center gap-2 mt-8">
+		if opts.Page > 1 {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/npcs?page=%d&sort=%s&q=%s&tag=%s", cc.Campaign.ID, opts.Page-1, opts.Sort, opts.Search, opts.Tag)) }
+				class="px-3 py-1.5 text-sm rounded-md bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				hx-get={ fmt.Sprintf("/campaigns/%s/npcs?page=%d&sort=%s&q=%s&tag=%s", cc.Campaign.ID, opts.Page-1, opts.Sort, opts.Search, opts.Tag) }
+				hx-target="#npc-gallery"
+				hx-swap="innerHTML"
+			>
+				<i class="fa-solid fa-chevron-left text-xs mr-1"></i>Previous
+			</a>
+		}
+		<span class="text-sm text-fg-muted px-3">
+			{ fmt.Sprintf("Page %d of %d", opts.Page, (total+opts.PerPage-1)/opts.PerPage) }
+		</span>
+		if opts.Page*opts.PerPage < total {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/npcs?page=%d&sort=%s&q=%s&tag=%s", cc.Campaign.ID, opts.Page+1, opts.Sort, opts.Search, opts.Tag)) }
+				class="px-3 py-1.5 text-sm rounded-md bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
+				hx-get={ fmt.Sprintf("/campaigns/%s/npcs?page=%d&sort=%s&q=%s&tag=%s", cc.Campaign.ID, opts.Page+1, opts.Sort, opts.Search, opts.Tag) }
+				hx-target="#npc-gallery"
+				hx-swap="innerHTML"
+			>
+				Next<i class="fa-solid fa-chevron-right text-xs ml-1"></i>
+			</a>
+		}
+	</div>
+}

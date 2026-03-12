@@ -573,6 +573,15 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
     const matchedSystem = this._syncManager?.getMatchedSystem() || null;
     const syncCharacters = getSetting('syncCharacters');
 
+    // Health metrics (F-QoL).
+    const health = this.api?.health ?? {};
+    const errorLog = this.api?.getErrorLog() ?? [];
+    const retryQueueSize = this.api?.getRetryQueueSize() ?? 0;
+    const uptimePercent = this.api?.getUptimePercent() ?? 0;
+
+    // Field mapping info for debug view.
+    const fieldMappingInfo = this._buildFieldMappingInfo(matchedSystem);
+
     return {
       connectionState: state,
       connectionLabel: this._connectionLabel(state),
@@ -585,6 +594,51 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
       syncCharacters,
       characterSyncAvailable: !!matchedSystem,
       activityLog: activityLog.slice(0, 50),
+
+      // Diagnostics (F-QoL).
+      healthMetrics: {
+        restSuccessCount: health.restSuccessCount ?? 0,
+        restErrorCount: health.restErrorCount ?? 0,
+        reconnectAttempts: health.reconnectAttempts ?? 0,
+        uptimePercent,
+        retryQueueSize,
+        lastRestSuccess: health.lastRestSuccess
+          ? new Date(health.lastRestSuccess).toLocaleTimeString()
+          : 'Never',
+        lastRestError: health.lastRestError
+          ? new Date(health.lastRestError).toLocaleTimeString()
+          : 'None',
+      },
+      errorLog: errorLog.slice(0, 20),
+      hasErrors: errorLog.length > 0,
+      fieldMappingInfo,
+    };
+  }
+
+  /**
+   * Build field mapping debug info for the current system adapter.
+   * Shows which fields are mapped and their Foundry paths.
+   * @param {string|null} matchedSystem
+   * @returns {object|null}
+   * @private
+   */
+  _buildFieldMappingInfo(matchedSystem) {
+    if (!matchedSystem) return null;
+
+    // Access the actor sync adapter if available.
+    const actorSync = this._syncManager?._modules?.find(
+      (m) => m.constructor?.name === 'ActorSync' || m._adapter
+    );
+    if (!actorSync?._adapter) return null;
+
+    const adapter = actorSync._adapter;
+
+    // For generic adapters, we can read the field definitions.
+    // For built-in adapters, show the system ID and type slug.
+    return {
+      systemId: adapter.systemId || matchedSystem,
+      characterTypeSlug: adapter.characterTypeSlug || 'unknown',
+      adapterType: adapter._fieldDefs ? 'generic' : 'built-in',
     };
   }
 

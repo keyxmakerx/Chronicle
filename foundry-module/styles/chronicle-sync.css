@@ -810,6 +810,50 @@
   font-size: 12px;
 }
 
+/* Diagnostics grid (F-QoL) */
+.diagnostics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.diagnostics-grid .stat-box {
+  padding: 8px 4px;
+}
+
+.diagnostics-grid .stat-value {
+  font-size: 18px;
+}
+
+.diagnostics-detail {
+  margin-bottom: 12px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.error-value {
+  color: #ef4444 !important;
+}
+
+.error-text {
+  color: #ef4444;
+}
+
+/* Error log */
+.error-log {
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.error-log .log-message {
+  font-family: monospace;
+  font-size: 10px;
+}
+
 /* Status actions */
 .status-actions {
   display: flex;

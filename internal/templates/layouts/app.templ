@@ -246,6 +246,17 @@ templ Sidebar() {
 							</span>
 							<span class="flex-1">All Pages</span>
 						</a>
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))) }
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-users text-xs text-gray-400"></i>
+							</span>
+							<span class="flex-1">NPCs</span>
+						</a>
 						<!-- Custom sidebar sections and links -->
 						if len(GetCustomSections(ctx)) > 0 || len(GetCustomLinks(ctx)) > 0 {
 							for _, link := range GetCustomLinks(ctx) {

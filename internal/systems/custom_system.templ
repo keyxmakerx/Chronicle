@@ -58,6 +58,9 @@ templ CustomSystemSection(campaignID string, manifest *SystemManifest, totalItem
 					</button>
 				</div>
 			</div>
+
+			// Validation report (capabilities & Foundry compatibility).
+			@SystemValidationReport(manifest.BuildValidationReport())
 		} else {
 			// Show upload form.
 			<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
@@ -85,6 +88,74 @@ templ CustomSystemSection(campaignID string, manifest *SystemManifest, totalItem
 						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
 					/>
 				</label>
+			</div>
+		}
+	</div>
+}
+
+// SystemValidationReport renders a compact capabilities summary after
+// a custom system is uploaded. Shows Foundry compatibility status and warnings.
+templ SystemValidationReport(report *ValidationReport) {
+	<div class="mt-2 p-3 rounded-lg border border-edge text-xs">
+		<div class="flex items-center gap-2 mb-2">
+			<i class="fa-solid fa-clipboard-check text-fg-muted"></i>
+			<span class="font-medium text-fg">System Report</span>
+		</div>
+
+		// Capability badges.
+		<div class="flex flex-wrap gap-1.5 mb-2">
+			<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+				<i class="fa-solid fa-folder text-[9px]"></i>
+				{ fmt.Sprintf("%d categories", report.CategoryCount) }
+			</span>
+			<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
+				<i class="fa-solid fa-list text-[9px]"></i>
+				{ fmt.Sprintf("%d fields", report.TotalFields) }
+			</span>
+			<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+				<i class="fa-solid fa-shapes text-[9px]"></i>
+				{ fmt.Sprintf("%d presets", report.PresetCount) }
+			</span>
+			if report.HasCharacterPreset {
+				<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+					<i class="fa-solid fa-user text-[9px]"></i>
+					{ fmt.Sprintf("%d character fields", report.CharacterFieldCount) }
+				</span>
+			}
+		</div>
+
+		// Foundry compatibility status.
+		<div class="flex items-center gap-2 mb-1">
+			if report.FoundryCompatible {
+				<i class="fa-solid fa-circle-check text-emerald-500 text-[10px]"></i>
+				<span class="text-fg-muted">
+					Foundry VTT compatible
+					<span class="text-fg">({ report.FoundrySystemID })</span>
+				</span>
+			} else {
+				<i class="fa-solid fa-circle-minus text-fg-muted text-[10px]"></i>
+				<span class="text-fg-muted">No Foundry VTT system ID set</span>
+			}
+		</div>
+
+		if report.FoundryCompatible && report.FoundryMappedFields > 0 {
+			<div class="flex items-center gap-2 mb-1">
+				<i class="fa-solid fa-arrows-rotate text-emerald-500 text-[10px]"></i>
+				<span class="text-fg-muted">
+					{ fmt.Sprintf("%d/%d fields mapped for sync (%d writable)", report.FoundryMappedFields, report.CharacterFieldCount, report.FoundryWritableFields) }
+				</span>
+			</div>
+		}
+
+		// Warnings.
+		if len(report.Warnings) > 0 {
+			<div class="mt-2 pt-2 border-t border-edge">
+				for _, w := range report.Warnings {
+					<div class="flex items-start gap-1.5 mt-1">
+						<i class="fa-solid fa-triangle-exclamation text-amber-500 text-[9px] mt-0.5"></i>
+						<span class="text-fg-muted">{ w }</span>
+					</div>
+				}
 			</div>
 		}
 	</div>

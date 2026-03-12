@@ -488,6 +488,9 @@ type EntityRepository interface {
 	// scanning entry_html for data-mention-id attributes. Each result is a
 	// source→target pair. Used by the graph visualization to show mention edges.
 	FindAllMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error)
+
+	// UpdatePrivate sets an entity's is_private flag. Used by the NPC reveal toggle.
+	UpdatePrivate(ctx context.Context, entityID string, isPrivate bool) error
 }
 
 // entityRepository implements EntityRepository with MariaDB queries.
@@ -1090,6 +1093,23 @@ func (r *entityRepository) UpdateSortOrder(ctx context.Context, entityID string,
 		return fmt.Errorf("updating entity sort order: %w", err)
 	}
 
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
+// UpdatePrivate sets an entity's is_private flag. Used by the NPC reveal toggle.
+func (r *entityRepository) UpdatePrivate(ctx context.Context, entityID string, isPrivate bool) error {
+	query := `UPDATE entities SET is_private = ?, updated_at = NOW() WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, isPrivate, entityID)
+	if err != nil {
+		return fmt.Errorf("updating entity privacy: %w", err)
+	}
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("checking rows affected: %w", err)

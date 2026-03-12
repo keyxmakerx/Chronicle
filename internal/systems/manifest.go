@@ -47,6 +47,12 @@ type SystemManifest struct {
 	// enabling this module (e.g., "D&D Character" with predefined fields).
 	EntityPresets []EntityPresetDef `json:"entity_presets,omitempty"`
 
+	// FoundrySystemID is the Foundry VTT game.system.id that this system
+	// corresponds to (e.g., "dnd5e", "pf2e"). When set, the Foundry module
+	// can automatically match this Chronicle system to the running Foundry
+	// game system, enabling character sync for custom-uploaded systems.
+	FoundrySystemID string `json:"foundry_system_id,omitempty"`
+
 	// TooltipTemplate is an optional HTML template string for rendering
 	// hover tooltips. Uses Go text/template syntax with ReferenceItem data.
 	TooltipTemplate string `json:"tooltip_template,omitempty"`
@@ -69,6 +75,9 @@ type CategoryDef struct {
 }
 
 // FieldDef describes a single field in a category's reference item schema.
+// For entity preset fields, the optional FoundryPath and FoundryWritable
+// annotations enable automatic Foundry VTT character sync without needing
+// a hardcoded system adapter.
 type FieldDef struct {
 	// Key is the property map key (e.g., "level", "school", "cr").
 	Key string `json:"key"`
@@ -78,6 +87,27 @@ type FieldDef struct {
 
 	// Type is the field data type: "string", "number", "list", "markdown".
 	Type string `json:"type"`
+
+	// FoundryPath is the dot-notation path to the corresponding field in
+	// a Foundry VTT Actor's system data (e.g., "system.abilities.str.value").
+	// Used by the generic Foundry adapter to auto-generate field mappings.
+	// Only meaningful on entity preset fields, not category reference fields.
+	FoundryPath string `json:"foundry_path,omitempty"`
+
+	// FoundryWritable indicates whether the generic adapter should write
+	// this field back to Foundry when syncing Chronicle → Foundry.
+	// Fields that are derived/calculated in Foundry (e.g., PF2e ability mods)
+	// should set this to false. Defaults to true when FoundryPath is set.
+	FoundryWritable *bool `json:"foundry_writable,omitempty"`
+}
+
+// IsFoundryWritable returns whether this field should be written back to
+// Foundry. Returns true if foundry_writable is nil (default) or explicitly true.
+func (f FieldDef) IsFoundryWritable() bool {
+	if f.FoundryWritable == nil {
+		return true
+	}
+	return *f.FoundryWritable
 }
 
 // EntityPresetDef describes an entity type template that a module provides.
@@ -113,6 +143,138 @@ func (m *SystemManifest) CharacterPreset() *EntityPresetDef {
 		}
 	}
 	return nil
+}
+
+// CharacterFieldsResponse is the API response shape for the character
+// fields endpoint, containing field definitions with Foundry annotations.
+type CharacterFieldsResponse struct {
+	SystemID        string                 `json:"system_id"`
+	PresetSlug      string                 `json:"preset_slug"`
+	PresetName      string                 `json:"preset_name"`
+	FoundrySystemID string                 `json:"foundry_system_id,omitempty"`
+	Fields          []CharacterFieldExport `json:"fields"`
+}
+
+// CharacterFieldExport is a single field definition exported for the
+// Foundry module's generic adapter.
+type CharacterFieldExport struct {
+	Key            string `json:"key"`
+	Label          string `json:"label"`
+	Type           string `json:"type"`
+	FoundryPath    string `json:"foundry_path,omitempty"`
+	FoundryWritable bool  `json:"foundry_writable"`
+}
+
+// CharacterFieldsForAPI builds the API response for character preset fields.
+// Returns nil if no character preset exists.
+func (m *SystemManifest) CharacterFieldsForAPI() *CharacterFieldsResponse {
+	preset := m.CharacterPreset()
+	if preset == nil {
+		return nil
+	}
+
+	fields := make([]CharacterFieldExport, len(preset.Fields))
+	for i, f := range preset.Fields {
+		fields[i] = CharacterFieldExport{
+			Key:             f.Key,
+			Label:           f.Label,
+			Type:            f.Type,
+			FoundryPath:     f.FoundryPath,
+			FoundryWritable: f.FoundryPath != "" && f.IsFoundryWritable(),
+		}
+	}
+
+	return &CharacterFieldsResponse{
+		SystemID:        m.ID,
+		PresetSlug:      preset.Slug,
+		PresetName:      preset.Name,
+		FoundrySystemID: m.FoundrySystemID,
+		Fields:          fields,
+	}
+}
+
+// ValidationReport summarizes a system manifest's capabilities and readiness.
+// Used to give campaign owners clear feedback after uploading a custom system.
+type ValidationReport struct {
+	// CategoryCount is the number of reference data categories.
+	CategoryCount int `json:"category_count"`
+
+	// TotalFields is the total number of fields across all categories.
+	TotalFields int `json:"total_fields"`
+
+	// PresetCount is the number of entity presets defined.
+	PresetCount int `json:"preset_count"`
+
+	// HasCharacterPreset indicates a character preset was found.
+	HasCharacterPreset bool `json:"has_character_preset"`
+
+	// CharacterFieldCount is the number of fields on the character preset.
+	CharacterFieldCount int `json:"character_field_count"`
+
+	// FoundryCompatible indicates foundry_system_id is set.
+	FoundryCompatible bool `json:"foundry_compatible"`
+
+	// FoundrySystemID is the declared Foundry system ID (if any).
+	FoundrySystemID string `json:"foundry_system_id,omitempty"`
+
+	// FoundryMappedFields is how many character fields have foundry_path set.
+	FoundryMappedFields int `json:"foundry_mapped_fields"`
+
+	// FoundryWritableFields is how many mapped fields are writable to Foundry.
+	FoundryWritableFields int `json:"foundry_writable_fields"`
+
+	// Warnings lists non-fatal issues the owner should be aware of.
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// BuildValidationReport analyzes the manifest and produces a summary of
+// capabilities, Foundry compatibility, and any warnings.
+func (m *SystemManifest) BuildValidationReport() *ValidationReport {
+	r := &ValidationReport{
+		CategoryCount:     len(m.Categories),
+		PresetCount:       len(m.EntityPresets),
+		FoundrySystemID:   m.FoundrySystemID,
+		FoundryCompatible: m.FoundrySystemID != "",
+	}
+
+	// Count category fields.
+	for _, cat := range m.Categories {
+		r.TotalFields += len(cat.Fields)
+	}
+
+	// Analyze character preset.
+	if preset := m.CharacterPreset(); preset != nil {
+		r.HasCharacterPreset = true
+		r.CharacterFieldCount = len(preset.Fields)
+
+		for _, f := range preset.Fields {
+			if f.FoundryPath != "" {
+				r.FoundryMappedFields++
+				if f.IsFoundryWritable() {
+					r.FoundryWritableFields++
+				}
+			}
+		}
+	}
+
+	// Generate warnings.
+	if r.CategoryCount == 0 {
+		r.Warnings = append(r.Warnings, "No reference data categories defined")
+	}
+	if r.PresetCount == 0 {
+		r.Warnings = append(r.Warnings, "No entity presets defined — campaigns won't get auto-created entity types")
+	}
+	if !r.HasCharacterPreset {
+		r.Warnings = append(r.Warnings, "No character preset found (slug ending in '-character') — Foundry character sync won't work")
+	}
+	if r.HasCharacterPreset && !r.FoundryCompatible {
+		r.Warnings = append(r.Warnings, "Character preset exists but no foundry_system_id set — Foundry auto-detection disabled")
+	}
+	if r.HasCharacterPreset && r.FoundryCompatible && r.FoundryMappedFields == 0 {
+		r.Warnings = append(r.Warnings, "foundry_system_id is set but no fields have foundry_path — character sync will be name-only")
+	}
+
+	return r
 }
 
 // CategoryNames returns a flat list of category display names.

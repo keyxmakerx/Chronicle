@@ -14,6 +14,7 @@
  */
 
 import { getSetting } from './settings.mjs';
+import { createGenericAdapter } from './adapters/generic-adapter.mjs';
 
 // Flag namespace for Chronicle data stored on Foundry documents.
 const FLAG_SCOPE = 'chronicle-sync';
@@ -253,6 +254,17 @@ export class ActorSync {
         await actor.update(fieldUpdate);
       }
 
+      // Sync visibility: Chronicle is_private → Foundry actor hidden.
+      // A private entity means the NPC is hidden from players.
+      const shouldBeHidden = entity.is_private === true;
+      if (actor.hidden !== shouldBeHidden) {
+        // Update the actor's default token hidden state and active tokens.
+        await actor.update({ 'prototypeToken.hidden': shouldBeHidden });
+        console.log(
+          `Chronicle: ${shouldBeHidden ? 'Hid' : 'Revealed'} actor "${actor.name}" (visibility sync)`
+        );
+      }
+
       // Update sync timestamp.
       await actor.setFlag(FLAG_SCOPE, 'lastSync', new Date().toISOString());
 
@@ -363,7 +375,27 @@ export class ActorSync {
     const entityId = actor.getFlag(FLAG_SCOPE, 'entityId');
     if (!entityId) return;
 
-    // Only push if system data or name changed.
+    // Sync visibility: Foundry prototypeToken.hidden → Chronicle is_private.
+    const hiddenChanged =
+      change.prototypeToken?.hidden !== undefined ||
+      change.token?.hidden !== undefined;
+
+    if (hiddenChanged) {
+      try {
+        const isHidden =
+          change.prototypeToken?.hidden ?? change.token?.hidden ?? false;
+        await this._api.post(`/entities/${entityId}/reveal`, {
+          is_private: isHidden,
+        });
+        console.log(
+          `Chronicle: ${isHidden ? 'Hid' : 'Revealed'} entity for actor "${actor.name}" (Foundry → Chronicle)`
+        );
+      } catch (err) {
+        console.error('Chronicle: Failed to sync visibility to Chronicle', err);
+      }
+    }
+
+    // Only push field/name changes if system data or name changed.
     if (!change.system && !change.name) return;
 
     try {
@@ -418,6 +450,8 @@ export class ActorSync {
 
   /**
    * Load the appropriate system adapter based on the matched Chronicle system.
+   * Tries hand-written adapters first (best quality), then falls back to the
+   * generic API-driven adapter for custom or unknown systems.
    * @returns {Promise<object|null>} Adapter module or null.
    * @private
    */
@@ -425,20 +459,31 @@ export class ActorSync {
     const matchedSystem = getSetting('detectedSystem');
     if (!matchedSystem) return null;
 
+    // Try hand-written adapters first for known systems.
     try {
       switch (matchedSystem) {
         case 'dnd5e':
           return await import('./adapters/dnd5e-adapter.mjs');
         case 'pathfinder2e':
           return await import('./adapters/pf2e-adapter.mjs');
-        default:
-          console.warn(`Chronicle: No adapter for system "${matchedSystem}"`);
-          return null;
       }
     } catch (err) {
-      console.error(`Chronicle: Failed to load adapter for "${matchedSystem}"`, err);
-      return null;
+      console.warn(`Chronicle: Failed to load built-in adapter for "${matchedSystem}", trying generic`, err);
     }
+
+    // Fall back to generic adapter (reads field defs from API).
+    try {
+      const generic = await createGenericAdapter(this._api, matchedSystem);
+      if (generic) {
+        console.log(`Chronicle: Using generic adapter for "${matchedSystem}"`);
+        return generic;
+      }
+    } catch (err) {
+      console.error(`Chronicle: Failed to create generic adapter for "${matchedSystem}"`, err);
+    }
+
+    console.warn(`Chronicle: No adapter available for system "${matchedSystem}"`);
+    return null;
   }
 
   /**

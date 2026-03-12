@@ -125,6 +125,7 @@ type mockEntityRepo struct {
 	updateParentFn   func(ctx context.Context, entityID string, parentID *string) error
 	findBacklinksFn  func(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
 	setAliasesFn     func(ctx context.Context, entityID string, aliases []string) error
+	updatePrivateFn  func(ctx context.Context, entityID string, isPrivate bool) error
 }
 
 func (m *mockEntityRepo) Create(ctx context.Context, entity *Entity) error {
@@ -279,6 +280,13 @@ func (m *mockEntityRepo) FindAllMentionLinks(_ context.Context, _ string, _ int,
 }
 
 func (m *mockEntityRepo) UpdateCoverImage(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (m *mockEntityRepo) UpdatePrivate(ctx context.Context, entityID string, isPrivate bool) error {
+	if m.updatePrivateFn != nil {
+		return m.updatePrivateFn(ctx, entityID, isPrivate)
+	}
 	return nil
 }
 

@@ -1,0 +1,57 @@
+// block.templ renders the npc_gallery layout block — a compact NPC card grid
+// that can be placed on entity pages and category dashboards.
+package npcs
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// BlockNPCGallery renders a compact NPC gallery block for entity page layouts.
+// Shows up to `limit` revealed NPCs with portraits and names.
+templ BlockNPCGallery(cc *campaigns.CampaignContext, cards []NPCCard, limit int) {
+	<div class="npc-gallery-block">
+		<div class="flex items-center justify-between mb-3">
+			<h3 class="text-sm font-semibold text-fg">
+				<i class="fa-solid fa-users text-fg-muted mr-1.5 text-xs"></i>NPCs
+			</h3>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/npcs", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				View all
+			</a>
+		</div>
+
+		if len(cards) == 0 {
+			<p class="text-xs text-fg-muted text-center py-4">No revealed NPCs yet.</p>
+		} else {
+			<div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+				for _, card := range cards {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, card.ID)) }
+						class="group"
+					>
+						<div class="aspect-square rounded-lg overflow-hidden bg-surface-alt mb-1">
+							if card.ImagePath != nil && *card.ImagePath != "" {
+								<img
+									src={ layouts.MediaURL(ctx, *card.ImagePath) }
+									alt={ card.Name }
+									class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+								/>
+							} else {
+								<div class="w-full h-full flex items-center justify-center">
+									<i class="fa-solid fa-user text-lg text-fg-muted opacity-30"></i>
+								</div>
+							}
+						</div>
+						<p class="text-[11px] text-fg truncate text-center group-hover:text-accent transition-colors">
+							{ card.Name }
+						</p>
+					</a>
+				}
+			</div>
+		}
+	</div>
+}
