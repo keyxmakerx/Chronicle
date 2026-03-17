@@ -430,6 +430,17 @@ templ blockShopInventory(cc *campaigns.CampaignContext, entity *Entity, csrfToke
 	></div>
 }
 
+// blockTransactionLog renders a transaction history widget mount point.
+// Shows purchase, sale, gift, and restock transactions for a shop entity.
+templ blockTransactionLog(cc *campaigns.CampaignContext, entity *Entity) {
+	<div
+		data-widget="transaction_log"
+		data-transactions-endpoint={ fmt.Sprintf("/campaigns/%s/armory/shops/%s/transactions", cc.Campaign.ID, entity.ID) }
+		data-campaign-url={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
+		data-entity-id={ entity.ID }
+	></div>
+}
+
 // blockDivider renders a visual separator between content sections.
 templ blockDivider() {
 	<hr class="border-edge my-2"/>

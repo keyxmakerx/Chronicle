@@ -24,11 +24,18 @@ Chronicle.register('shop_inventory', {
     var editable = el.dataset.editable === 'true';
     var csrfToken = el.dataset.csrfToken || '';
 
+    // Transaction endpoints derive from the campaign URL.
+    var txEndpoint = campaignUrl + '/armory/transactions';
+    var purchaseEndpoint = campaignUrl + '/armory/purchase';
+
     // Internal state.
     var state = {
       items: [],
       loading: true,
       addMode: false,
+      showTransactions: false,
+      transactions: [],
+      txLoading: false,
       searchQuery: '',
       searchResults: [],
       searchTimer: null,
@@ -91,6 +98,26 @@ Chronicle.register('shop_inventory', {
       '.shop-inv-action-btn.blue { background: #3b82f6; }',
       '.shop-inv-action-btn.blue:hover:not(:disabled) { background: #2563eb; }',
       '.shop-inv-label { font-size: 0.6875rem; color: #6b7280; font-weight: 500; }',
+      '.shop-inv-tx-toggle { font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb; cursor: pointer; margin-left: 0.375rem; }',
+      '.dark .shop-inv-tx-toggle { background: #374151; color: #9ca3af; border-color: #4b5563; }',
+      '.shop-inv-tx-toggle:hover { background: #e5e7eb; }',
+      '.dark .shop-inv-tx-toggle:hover { background: #4b5563; }',
+      '.shop-inv-tx-section { margin-top: 0.75rem; border-top: 1px solid #e5e7eb; padding-top: 0.75rem; }',
+      '.dark .shop-inv-tx-section { border-color: #374151; }',
+      '.shop-inv-tx-title { font-size: 0.75rem; font-weight: 600; color: #6b7280; margin-bottom: 0.5rem; }',
+      '.shop-inv-tx-list { display: flex; flex-direction: column; gap: 0.25rem; }',
+      '.shop-inv-tx-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.375rem; font-size: 0.75rem; border-radius: 0.25rem; }',
+      '.shop-inv-tx-row:nth-child(even) { background: #f9fafb; }',
+      '.dark .shop-inv-tx-row:nth-child(even) { background: #1f2937; }',
+      '.shop-inv-tx-type { font-weight: 500; text-transform: capitalize; min-width: 4rem; }',
+      '.shop-inv-tx-type.purchase { color: #059669; }',
+      '.shop-inv-tx-type.sale { color: #2563eb; }',
+      '.shop-inv-tx-type.gift { color: #8b5cf6; }',
+      '.shop-inv-tx-type.restock { color: #d97706; }',
+      '.shop-inv-tx-detail { flex: 1; color: #4b5563; }',
+      '.dark .shop-inv-tx-detail { color: #9ca3af; }',
+      '.shop-inv-tx-price { font-weight: 500; color: #d97706; white-space: nowrap; }',
+      '.shop-inv-tx-date { color: #9ca3af; font-size: 0.6875rem; white-space: nowrap; }',
     ].join('\n');
     el.appendChild(style);
 
@@ -152,7 +179,99 @@ Chronicle.register('shop_inventory', {
         wrapper.appendChild(list);
       }
 
+      // Transaction history section.
+      if (editable) {
+        var txToggle = document.createElement('button');
+        txToggle.className = 'shop-inv-tx-toggle';
+        txToggle.innerHTML = '<i class="fas fa-receipt"></i> ' + (state.showTransactions ? 'Hide Transactions' : 'Transactions');
+        txToggle.onclick = function () {
+          state.showTransactions = !state.showTransactions;
+          if (state.showTransactions && state.transactions.length === 0) {
+            loadTransactions();
+          }
+          render();
+        };
+        header.appendChild(txToggle);
+      }
+
+      if (state.showTransactions) {
+        wrapper.appendChild(renderTransactionSection());
+      }
+
       el.appendChild(wrapper);
+    }
+
+    function renderTransactionSection() {
+      var section = document.createElement('div');
+      section.className = 'shop-inv-tx-section';
+
+      var title = document.createElement('div');
+      title.className = 'shop-inv-tx-title';
+      title.textContent = 'Recent Transactions';
+      section.appendChild(title);
+
+      if (state.txLoading) {
+        var loading = document.createElement('div');
+        loading.className = 'shop-inv-empty';
+        loading.textContent = 'Loading transactions...';
+        section.appendChild(loading);
+      } else if (state.transactions.length === 0) {
+        var empty = document.createElement('div');
+        empty.className = 'shop-inv-empty';
+        empty.textContent = 'No transactions recorded.';
+        section.appendChild(empty);
+      } else {
+        var list = document.createElement('div');
+        list.className = 'shop-inv-tx-list';
+        for (var i = 0; i < state.transactions.length; i++) {
+          list.appendChild(renderTransactionRow(state.transactions[i]));
+        }
+        section.appendChild(list);
+      }
+      return section;
+    }
+
+    function renderTransactionRow(tx) {
+      var row = document.createElement('div');
+      row.className = 'shop-inv-tx-row';
+
+      var typeSpan = document.createElement('span');
+      typeSpan.className = 'shop-inv-tx-type ' + (tx.transaction_type || '');
+      typeSpan.textContent = tx.transaction_type || 'unknown';
+      row.appendChild(typeSpan);
+
+      var detail = document.createElement('span');
+      detail.className = 'shop-inv-tx-detail';
+      var parts = [];
+      if (tx.item_name) parts.push(tx.item_name);
+      if (tx.quantity > 1) parts.push('x' + tx.quantity);
+      if (tx.buyer_name) parts.push('\u2192 ' + tx.buyer_name);
+      detail.textContent = parts.join(' ');
+      row.appendChild(detail);
+
+      if (tx.price_paid) {
+        var price = document.createElement('span');
+        price.className = 'shop-inv-tx-price';
+        price.textContent = tx.price_paid;
+        row.appendChild(price);
+      }
+
+      var date = document.createElement('span');
+      date.className = 'shop-inv-tx-date';
+      date.textContent = formatTxDate(tx.created_at);
+      row.appendChild(date);
+
+      return row;
+    }
+
+    function formatTxDate(isoStr) {
+      if (!isoStr) return '';
+      try {
+        var d = new Date(isoStr);
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      } catch (e) {
+        return '';
+      }
     }
 
     function renderItem(item) {
@@ -574,6 +693,35 @@ Chronicle.register('shop_inventory', {
         })
         .catch(function () {
           // Silently fail — dropdown will show "Default" fallback.
+        });
+    }
+
+    // Load transaction history for this shop entity.
+    function loadTransactions() {
+      // Extract entity ID from the relations endpoint.
+      // Format: /campaigns/:id/entities/:eid/relations
+      var parts = relationsEndpoint.split('/');
+      var eidIdx = parts.indexOf('entities');
+      var entityId = eidIdx >= 0 ? parts[eidIdx + 1] : '';
+      if (!entityId) return;
+
+      state.txLoading = true;
+      render();
+
+      Chronicle.apiFetch(txEndpoint + '?shop=' + encodeURIComponent(entityId) + '&per_page=20', { method: 'GET' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Failed to load transactions');
+          return res.json();
+        })
+        .then(function (data) {
+          state.transactions = data.data || [];
+          state.txLoading = false;
+          render();
+        })
+        .catch(function (err) {
+          console.error('Shop inventory: failed to load transactions', err);
+          state.txLoading = false;
+          render();
         });
     }
 

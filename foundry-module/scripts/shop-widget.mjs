@@ -59,12 +59,19 @@ export class ShopWidget {
    * @param {object} msg
    */
   onMessage(msg) {
-    if (msg.type !== 'entity.updated') return;
+    // Refresh on entity updates.
+    if (msg.type === 'entity.updated') {
+      const entityId = msg.payload?.id;
+      if (entityId && this._openWindows.has(entityId)) {
+        this._openWindows.get(entityId).refresh();
+      }
+    }
 
-    // Refresh any open shop windows for the updated entity.
-    const entityId = msg.payload?.id;
-    if (entityId && this._openWindows.has(entityId)) {
-      this._openWindows.get(entityId).refresh();
+    // Refresh on relation changes (stock depleted after purchase).
+    if (msg.type === 'relation.metadata_updated' || msg.type === 'relation.deleted') {
+      for (const window of this._openWindows.values()) {
+        window.refresh();
+      }
     }
   }
 
@@ -153,12 +160,14 @@ class ShopWindow extends HandlebarsApplicationMixin(ApplicationV2) {
         .filter((r) => r.metadata && (r.metadata.price !== undefined || r.metadata.quantity !== undefined))
         .map((r) => ({
           id: r.targetEntityId,
+          relationId: r.id,
           name: r.targetEntityName || 'Unknown Item',
           image_path: null, // Chronicle entities use FA icons, not image URLs.
           icon: r.targetEntityIcon || 'fa-box',
           color: r.targetEntityColor || '#6b7280',
           type: r.targetEntityType || '',
           price: r.metadata.price,
+          currency: r.metadata.currency || 'gp',
           quantity: r.metadata.quantity,
           in_stock: r.metadata.in_stock !== false,
           description: r.metadata.description || '',
@@ -204,6 +213,7 @@ class ShopWindow extends HandlebarsApplicationMixin(ApplicationV2) {
       itemEl.setAttribute('draggable', 'true');
       itemEl.addEventListener('dragstart', (event) => {
         const itemId = itemEl.dataset.itemId;
+        const relationId = itemEl.dataset.relationId;
         const itemData = this._inventory.find((item) => item.id === itemId) || {};
         event.dataTransfer.setData(
           'text/plain',
@@ -216,12 +226,78 @@ class ShopWindow extends HandlebarsApplicationMixin(ApplicationV2) {
               [FLAG_SCOPE]: {
                 shopEntityId: this._entityId,
                 chronicleItemId: itemId,
+                shopRelationId: relationId ? parseInt(relationId) : undefined,
+                shopPrice: itemData.price,
+                shopCurrency: itemData.currency || 'gp',
               },
             },
           })
         );
       });
     });
+
+    // Buy button click handler.
+    el.querySelectorAll('.shop-buy-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const itemId = btn.dataset.itemId;
+        const relationId = btn.dataset.relationId;
+        const itemData = this._inventory.find((item) => item.id === itemId) || {};
+        await this._executePurchase(itemData, relationId);
+      });
+    });
+  }
+
+  /**
+   * Execute a purchase via the Chronicle API.
+   * Creates a transaction record and decrements shop stock.
+   * @param {object} itemData - Shop inventory item.
+   * @param {string} relationId - Shop inventory relation ID.
+   * @private
+   */
+  async _executePurchase(itemData, relationId) {
+    // Determine the buyer (currently controlled character or selected actor).
+    const buyer = game.user.character;
+    if (!buyer) {
+      ui.notifications.warn('No character assigned — select a character in User Configuration to purchase items.');
+      return;
+    }
+
+    const buyerEntityId = buyer.getFlag(FLAG_SCOPE, 'entityId');
+    if (!buyerEntityId) {
+      ui.notifications.warn('Your character is not synced with Chronicle. Sync it first to make purchases.');
+      return;
+    }
+
+    // Check stock.
+    if (itemData.quantity !== undefined && itemData.quantity !== null && itemData.quantity <= 0) {
+      ui.notifications.warn(`${itemData.name} is out of stock.`);
+      return;
+    }
+
+    try {
+      const result = await this._api.post('/armory/purchase', {
+        shop_entity_id: this._entityId,
+        item_entity_id: itemData.id,
+        buyer_entity_id: buyerEntityId,
+        relation_id: relationId ? parseInt(relationId) : 0,
+        quantity: 1,
+        price_paid: itemData.price ? `${itemData.price} ${itemData.currency || 'gp'}` : '',
+        currency: itemData.currency || 'gp',
+        price_numeric: typeof itemData.price === 'number' ? itemData.price : parseFloat(itemData.price) || 0,
+        transaction_type: 'purchase',
+      });
+
+      if (result) {
+        ui.notifications.info(`${buyer.name} purchased ${itemData.name}!`);
+
+        // Refresh shop window to show updated stock.
+        await this.refresh();
+      }
+    } catch (err) {
+      console.error('Chronicle: Purchase failed', err);
+      const msg = err?.message || 'Purchase failed';
+      ui.notifications.error(`Purchase failed: ${msg}`);
+    }
   }
 
   async close(options) {
