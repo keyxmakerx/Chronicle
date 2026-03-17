@@ -83,7 +83,7 @@
   }
   .btn-primary {
     @apply btn bg-accent text-white hover:bg-accent-hover
-           focus:ring-accent shadow-sm hover:shadow-md hover:shadow-accent/20;
+           focus:ring-accent shadow-sm hover:shadow-md hover:shadow-indigo-500/20;
   }
   .btn-secondary {
     @apply btn bg-surface text-fg-body hover:bg-surface-alt
