@@ -21,6 +21,15 @@ type PackageRepository interface {
 	GetVersion(ctx context.Context, packageID, version string) (*PackageVersion, error)
 	UpsertVersion(ctx context.Context, v *PackageVersion) error
 	MarkVersionDownloaded(ctx context.Context, id string) error
+
+	// Submission/approval workflow.
+	ListByStatus(ctx context.Context, status PackageStatus) ([]Package, error)
+	ListBySubmitter(ctx context.Context, userID string) ([]Package, error)
+	CountPendingSubmissions(ctx context.Context) (int, error)
+	UpdateStatus(ctx context.Context, id string, status PackageStatus, reviewedBy, note string) error
+	SetDeprecated(ctx context.Context, id string, msg string) error
+	ClearDeprecated(ctx context.Context, id string) error
+	UpdateRepoURL(ctx context.Context, id, newURL string) error
 }
 
 // packageRepository is the MariaDB implementation.
@@ -33,14 +42,37 @@ func NewPackageRepository(db *sql.DB) PackageRepository {
 	return &packageRepository{db: db}
 }
 
+// packageColumns is the SELECT column list shared across queries.
+const packageColumns = `id, type, slug, name, repo_url, COALESCE(description,''),
+	COALESCE(installed_version,''), COALESCE(pinned_version,''),
+	auto_update, last_checked_at, last_installed_at,
+	COALESCE(install_path,''), COALESCE(submitted_by,''), status,
+	COALESCE(reviewed_by,''), reviewed_at, COALESCE(review_note,''),
+	deprecated_at, COALESCE(deprecation_msg,''),
+	created_at, updated_at`
+
+// scanPackage scans a row into a Package struct. Column order must match packageColumns.
+func scanPackage(scanner interface{ Scan(dest ...any) error }) (*Package, error) {
+	var p Package
+	err := scanner.Scan(
+		&p.ID, &p.Type, &p.Slug, &p.Name, &p.RepoURL,
+		&p.Description, &p.InstalledVersion, &p.PinnedVersion,
+		&p.AutoUpdate, &p.LastCheckedAt, &p.LastInstalledAt,
+		&p.InstallPath, &p.SubmittedBy, &p.Status,
+		&p.ReviewedBy, &p.ReviewedAt, &p.ReviewNote,
+		&p.DeprecatedAt, &p.DeprecationMsg,
+		&p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 // ListPackages returns all registered packages ordered by name.
 func (r *packageRepository) ListPackages(ctx context.Context) ([]Package, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, type, slug, name, repo_url, COALESCE(description,''),
-		       COALESCE(installed_version,''), COALESCE(pinned_version,''),
-		       auto_update, last_checked_at, last_installed_at,
-		       COALESCE(install_path,''), created_at, updated_at
-		FROM packages ORDER BY name`)
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+packageColumns+` FROM packages ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("listing packages: %w", err)
 	}
@@ -48,82 +80,52 @@ func (r *packageRepository) ListPackages(ctx context.Context) ([]Package, error)
 
 	var pkgs []Package
 	for rows.Next() {
-		var p Package
-		if err := rows.Scan(&p.ID, &p.Type, &p.Slug, &p.Name, &p.RepoURL,
-			&p.Description, &p.InstalledVersion, &p.PinnedVersion,
-			&p.AutoUpdate, &p.LastCheckedAt, &p.LastInstalledAt,
-			&p.InstallPath, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		p, err := scanPackage(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scanning package: %w", err)
 		}
-		pkgs = append(pkgs, p)
+		pkgs = append(pkgs, *p)
 	}
 	return pkgs, rows.Err()
 }
 
 // GetPackage returns a single package by ID, or nil if not found.
 func (r *packageRepository) GetPackage(ctx context.Context, id string) (*Package, error) {
-	var p Package
-	err := r.db.QueryRowContext(ctx, `
-		SELECT id, type, slug, name, repo_url, COALESCE(description,''),
-		       COALESCE(installed_version,''), COALESCE(pinned_version,''),
-		       auto_update, last_checked_at, last_installed_at,
-		       COALESCE(install_path,''), created_at, updated_at
-		FROM packages WHERE id = ?`, id).Scan(
-		&p.ID, &p.Type, &p.Slug, &p.Name, &p.RepoURL,
-		&p.Description, &p.InstalledVersion, &p.PinnedVersion,
-		&p.AutoUpdate, &p.LastCheckedAt, &p.LastInstalledAt,
-		&p.InstallPath, &p.CreatedAt, &p.UpdatedAt)
+	p, err := scanPackage(r.db.QueryRowContext(ctx,
+		`SELECT `+packageColumns+` FROM packages WHERE id = ?`, id))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("getting package %s: %w", id, err)
 	}
-	return &p, nil
+	return p, nil
 }
 
 // FindBySlug looks up a package by its slug.
 func (r *packageRepository) FindBySlug(ctx context.Context, slug string) (*Package, error) {
-	var p Package
-	err := r.db.QueryRowContext(ctx, `
-		SELECT id, type, slug, name, repo_url, COALESCE(description,''),
-		       COALESCE(installed_version,''), COALESCE(pinned_version,''),
-		       auto_update, last_checked_at, last_installed_at,
-		       COALESCE(install_path,''), created_at, updated_at
-		FROM packages WHERE slug = ?`, slug).Scan(
-		&p.ID, &p.Type, &p.Slug, &p.Name, &p.RepoURL,
-		&p.Description, &p.InstalledVersion, &p.PinnedVersion,
-		&p.AutoUpdate, &p.LastCheckedAt, &p.LastInstalledAt,
-		&p.InstallPath, &p.CreatedAt, &p.UpdatedAt)
+	p, err := scanPackage(r.db.QueryRowContext(ctx,
+		`SELECT `+packageColumns+` FROM packages WHERE slug = ?`, slug))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("finding package by slug %s: %w", slug, err)
 	}
-	return &p, nil
+	return p, nil
 }
 
 // FindByRepoURL looks up a package by its repository URL.
 func (r *packageRepository) FindByRepoURL(ctx context.Context, repoURL string) (*Package, error) {
-	var p Package
-	err := r.db.QueryRowContext(ctx, `
-		SELECT id, type, slug, name, repo_url, COALESCE(description,''),
-		       COALESCE(installed_version,''), COALESCE(pinned_version,''),
-		       auto_update, last_checked_at, last_installed_at,
-		       COALESCE(install_path,''), created_at, updated_at
-		FROM packages WHERE repo_url = ?`, repoURL).Scan(
-		&p.ID, &p.Type, &p.Slug, &p.Name, &p.RepoURL,
-		&p.Description, &p.InstalledVersion, &p.PinnedVersion,
-		&p.AutoUpdate, &p.LastCheckedAt, &p.LastInstalledAt,
-		&p.InstallPath, &p.CreatedAt, &p.UpdatedAt)
+	p, err := scanPackage(r.db.QueryRowContext(ctx,
+		`SELECT `+packageColumns+` FROM packages WHERE repo_url = ?`, repoURL))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("finding package by repo URL: %w", err)
 	}
-	return &p, nil
+	return p, nil
 }
 
 // CreatePackage inserts a new package record.
@@ -131,11 +133,14 @@ func (r *packageRepository) CreatePackage(ctx context.Context, pkg *Package) err
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO packages (id, type, slug, name, repo_url, description,
 		                      installed_version, pinned_version, auto_update,
-		                      last_checked_at, last_installed_at, install_path)
-		VALUES (?, ?, ?, ?, ?, ?, NULLIF(?,''), NULLIF(?,''), ?, ?, ?, NULLIF(?,''))`,
+		                      last_checked_at, last_installed_at, install_path,
+		                      submitted_by, status)
+		VALUES (?, ?, ?, ?, ?, ?, NULLIF(?,''), NULLIF(?,''), ?, ?, ?, NULLIF(?,''),
+		        NULLIF(?,''), ?)`,
 		pkg.ID, pkg.Type, pkg.Slug, pkg.Name, pkg.RepoURL, pkg.Description,
 		pkg.InstalledVersion, pkg.PinnedVersion, pkg.AutoUpdate,
-		pkg.LastCheckedAt, pkg.LastInstalledAt, pkg.InstallPath)
+		pkg.LastCheckedAt, pkg.LastInstalledAt, pkg.InstallPath,
+		pkg.SubmittedBy, pkg.Status)
 	if err != nil {
 		return fmt.Errorf("creating package: %w", err)
 	}
@@ -145,12 +150,12 @@ func (r *packageRepository) CreatePackage(ctx context.Context, pkg *Package) err
 // UpdatePackage updates an existing package record.
 func (r *packageRepository) UpdatePackage(ctx context.Context, pkg *Package) error {
 	_, err := r.db.ExecContext(ctx, `
-		UPDATE packages SET name = ?, description = ?,
+		UPDATE packages SET name = ?, repo_url = ?, description = ?,
 		       installed_version = NULLIF(?,''), pinned_version = NULLIF(?,''),
 		       auto_update = ?, last_checked_at = ?, last_installed_at = ?,
 		       install_path = NULLIF(?,'')
 		WHERE id = ?`,
-		pkg.Name, pkg.Description,
+		pkg.Name, pkg.RepoURL, pkg.Description,
 		pkg.InstalledVersion, pkg.PinnedVersion,
 		pkg.AutoUpdate, pkg.LastCheckedAt, pkg.LastInstalledAt,
 		pkg.InstallPath, pkg.ID)
@@ -168,6 +173,111 @@ func (r *packageRepository) DeletePackage(ctx context.Context, id string) error 
 	}
 	return nil
 }
+
+// --- Submission/Approval Workflow ---
+
+// ListByStatus returns packages filtered by lifecycle status.
+func (r *packageRepository) ListByStatus(ctx context.Context, status PackageStatus) ([]Package, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+packageColumns+` FROM packages WHERE status = ? ORDER BY created_at DESC`, status)
+	if err != nil {
+		return nil, fmt.Errorf("listing packages by status %s: %w", status, err)
+	}
+	defer rows.Close()
+
+	var pkgs []Package
+	for rows.Next() {
+		p, err := scanPackage(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning package: %w", err)
+		}
+		pkgs = append(pkgs, *p)
+	}
+	return pkgs, rows.Err()
+}
+
+// ListBySubmitter returns packages submitted by a specific user.
+func (r *packageRepository) ListBySubmitter(ctx context.Context, userID string) ([]Package, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+packageColumns+` FROM packages WHERE submitted_by = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing packages by submitter %s: %w", userID, err)
+	}
+	defer rows.Close()
+
+	var pkgs []Package
+	for rows.Next() {
+		p, err := scanPackage(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning package: %w", err)
+		}
+		pkgs = append(pkgs, *p)
+	}
+	return pkgs, rows.Err()
+}
+
+// CountPendingSubmissions returns the number of packages awaiting approval.
+func (r *packageRepository) CountPendingSubmissions(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM packages WHERE status = 'pending'`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting pending submissions: %w", err)
+	}
+	return count, nil
+}
+
+// UpdateStatus changes a package's lifecycle status and records the reviewer.
+func (r *packageRepository) UpdateStatus(ctx context.Context, id string, status PackageStatus, reviewedBy, note string) error {
+	now := time.Now()
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE packages SET status = ?, reviewed_by = NULLIF(?,''),
+		       reviewed_at = ?, review_note = NULLIF(?,'')
+		WHERE id = ?`,
+		status, reviewedBy, now, note, id)
+	if err != nil {
+		return fmt.Errorf("updating package status: %w", err)
+	}
+	return nil
+}
+
+// SetDeprecated marks a package as nearing end-of-life with a message.
+func (r *packageRepository) SetDeprecated(ctx context.Context, id string, msg string) error {
+	now := time.Now()
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE packages SET status = 'deprecated', deprecated_at = ?,
+		       deprecation_msg = NULLIF(?,'')
+		WHERE id = ?`,
+		now, msg, id)
+	if err != nil {
+		return fmt.Errorf("deprecating package %s: %w", id, err)
+	}
+	return nil
+}
+
+// ClearDeprecated removes deprecation status from a package.
+func (r *packageRepository) ClearDeprecated(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE packages SET status = 'approved', deprecated_at = NULL,
+		       deprecation_msg = NULL
+		WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("clearing deprecation for %s: %w", id, err)
+	}
+	return nil
+}
+
+// UpdateRepoURL changes a package's repository URL.
+func (r *packageRepository) UpdateRepoURL(ctx context.Context, id, newURL string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE packages SET repo_url = ? WHERE id = ?`, newURL, id)
+	if err != nil {
+		return fmt.Errorf("updating repo URL for %s: %w", id, err)
+	}
+	return nil
+}
+
+// --- Version Queries (unchanged) ---
 
 // ListVersions returns all versions for a package, newest first.
 func (r *packageRepository) ListVersions(ctx context.Context, packageID string) ([]PackageVersion, error) {

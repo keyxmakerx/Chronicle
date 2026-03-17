@@ -27,6 +27,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 )
@@ -61,6 +62,10 @@ type App struct {
 	// PluginSchemas holds the registered plugin migration configurations.
 	// Used by the database explorer to re-run migrations on demand.
 	PluginSchemas []database.PluginSchema
+
+	// pkgService is the package manager service, used for Foundry module
+	// path resolution and system loading from external repos.
+	pkgService packages.PackageService
 }
 
 // New creates a new App instance with the given dependencies and configures
@@ -296,12 +301,27 @@ func isHTMXRequest(c echo.Context) bool {
 	return c.Request().Header.Get("HX-Request") == "true"
 }
 
+// foundryModuleDir returns the directory to serve the Foundry module from.
+// Prefers the package manager install path if available, falls back to the
+// bundled foundry-module/ directory.
+func (a *App) foundryModuleDir() string {
+	if a.pkgService != nil {
+		if path := a.pkgService.FoundryModulePath(); path != "" {
+			if _, err := os.Stat(filepath.Join(path, "module.json")); err == nil {
+				return path
+			}
+		}
+	}
+	return "foundry-module"
+}
+
 // serveFoundryModuleManifest serves foundry-module/module.json with the
 // manifest and download URLs rewritten to use the Chronicle instance's BaseURL.
 // This allows Foundry VTT to install the module directly from any Chronicle
 // instance without needing GitHub releases.
 func (a *App) serveFoundryModuleManifest(c echo.Context) error {
-	data, err := os.ReadFile("foundry-module/module.json")
+	moduleDir := a.foundryModuleDir()
+	data, err := os.ReadFile(filepath.Join(moduleDir, "module.json"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "module.json not found")
 	}
@@ -326,7 +346,7 @@ func (a *App) serveFoundryModuleManifest(c echo.Context) error {
 // The module.json inside the zip gets its manifest/download URLs rewritten
 // to point at this Chronicle instance.
 func (a *App) serveFoundryModuleZip(c echo.Context) error {
-	moduleDir := "foundry-module"
+	moduleDir := a.foundryModuleDir()
 	if _, err := os.Stat(moduleDir); err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "foundry module directory not found")
 	}

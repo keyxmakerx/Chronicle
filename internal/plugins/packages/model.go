@@ -38,6 +38,26 @@ const (
 	UpdateOnRelease UpdatePolicy = "on_release"
 )
 
+// PackageStatus tracks the lifecycle state of a submitted package.
+type PackageStatus string
+
+const (
+	// StatusPending means the package is awaiting admin approval.
+	StatusPending PackageStatus = "pending"
+
+	// StatusApproved means the package has been approved and is active.
+	StatusApproved PackageStatus = "approved"
+
+	// StatusRejected means an admin declined the package submission.
+	StatusRejected PackageStatus = "rejected"
+
+	// StatusArchived means the package has been archived (hidden but preserved).
+	StatusArchived PackageStatus = "archived"
+
+	// StatusDeprecated means the package is nearing end-of-life.
+	StatusDeprecated PackageStatus = "deprecated"
+)
+
 // Package represents an external repository tracked by the package manager.
 type Package struct {
 	ID               string
@@ -52,6 +72,13 @@ type Package struct {
 	LastCheckedAt    *time.Time
 	LastInstalledAt  *time.Time
 	InstallPath      string
+	SubmittedBy      string        // UserID of submitter (empty = admin-created).
+	Status           PackageStatus // Lifecycle state: pending/approved/rejected/archived/deprecated.
+	ReviewedBy       string        // Admin who approved/rejected.
+	ReviewedAt       *time.Time
+	ReviewNote       string // Reason for rejection or review comment.
+	DeprecatedAt     *time.Time
+	DeprecationMsg   string // Message shown to users about EOL.
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -100,6 +127,47 @@ type InstallVersionInput struct {
 type PinVersionInput struct {
 	Version string `json:"version" form:"version"`
 }
+
+// SubmitPackageInput is the request from a campaign owner to submit a repo.
+type SubmitPackageInput struct {
+	RepoURL string `json:"repo_url" form:"repo_url"`
+	Name    string `json:"name" form:"name"`
+	Type    string `json:"type" form:"type"`
+}
+
+// ReviewPackageInput is the admin's approval or rejection decision.
+type ReviewPackageInput struct {
+	Action string `json:"action" form:"action"` // "approve" or "reject".
+	Note   string `json:"note" form:"note"`
+}
+
+// DeprecateInput is the request to mark a package as nearing end-of-life.
+type DeprecateInput struct {
+	Message string `json:"message" form:"message"`
+}
+
+// UpdateRepoURLInput is the request to change a package's repository URL.
+type UpdateRepoURLInput struct {
+	RepoURL string `json:"repo_url" form:"repo_url"`
+}
+
+// PackageSecuritySettings holds the parsed security settings for packages.
+type PackageSecuritySettings struct {
+	RepoPolicy       string // "github_only", "any_git", or "allow_all".
+	RequireApproval  bool
+	MaxFileSize      int64 // Bytes.
+	ValidateManifest bool
+	ScanContent      bool
+}
+
+// RepoPolicyGitHubOnly restricts submissions to GitHub repos only.
+const RepoPolicyGitHubOnly = "github_only"
+
+// RepoPolicyAnyGit allows any public git host.
+const RepoPolicyAnyGit = "any_git"
+
+// RepoPolicyAllowAll allows any HTTPS URL.
+const RepoPolicyAllowAll = "allow_all"
 
 // generateUUID creates a new v4 UUID string using crypto/rand.
 // Panics if the system entropy source fails, as this indicates a

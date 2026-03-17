@@ -764,6 +764,32 @@ func (a *armoryRelationFinderAdapter) GetByID(ctx context.Context, id int) (*arm
 	}, nil
 }
 
+// loadSystemsFromPackages scans installed system packages and loads them into
+// the system registry. Package-managed systems override bundled ones.
+func (a *App) loadSystemsFromPackages(pkgService packages.PackageService) {
+	pkgs, err := pkgService.ListPackages(context.Background())
+	if err != nil {
+		slog.Warn("failed to list packages for system loading", slog.Any("error", err))
+		return
+	}
+
+	for _, pkg := range pkgs {
+		if pkg.Type != packages.PackageTypeSystem {
+			continue
+		}
+		if pkg.InstallPath == "" || pkg.Status != packages.StatusApproved {
+			continue
+		}
+		if err := systems.LoadAdditionalDir(pkg.InstallPath); err != nil {
+			slog.Warn("failed to load package system",
+				slog.String("package", pkg.Slug),
+				slog.String("path", pkg.InstallPath),
+				slog.Any("error", err),
+			)
+		}
+	}
+}
+
 // RegisterRoutes sets up all application routes. It registers public routes
 // directly and delegates to each plugin's route registration function.
 //
@@ -976,9 +1002,26 @@ func (a *App) RegisterRoutes() {
 	pkgRepo := packages.NewPackageRepository(a.DB)
 	pkgGitHub := packages.NewGitHubClient()
 	pkgService := packages.NewPackageService(pkgRepo, pkgGitHub, a.Config.Upload.MediaPath)
+	packages.ConfigureSettings(pkgService, settingsRepo)
 	pkgHandler := packages.NewHandler(pkgService)
+	pkgOwnerHandler := packages.NewOwnerHandler(pkgService)
 	if a.PluginHealth.IsHealthy("packages") {
 		packages.RegisterRoutes(adminGroup, pkgHandler)
+
+		// Owner-facing submission routes (authenticated, not admin-only).
+		ownerGroup := e.Group("", auth.RequireAuth(authService))
+		packages.RegisterOwnerRoutes(ownerGroup, pkgOwnerHandler)
+
+		// Seed official Chronicle repos if no packages exist yet.
+		pkgService.SeedOfficialPackages(context.Background())
+
+		// Load systems from package manager install paths so externally
+		// managed system packs override the bundled fallbacks.
+		a.loadSystemsFromPackages(pkgService)
+
+		// Store package service for Foundry module path resolution.
+		a.pkgService = pkgService
+
 		// Start background auto-update worker.
 		go pkgService.StartAutoUpdateWorker(context.Background())
 	} else {

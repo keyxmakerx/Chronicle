@@ -37,20 +37,26 @@ type AddonCounter interface {
 	CountFeatures(ctx context.Context) (int, error)
 }
 
+// PendingCounter provides a count of pending package submissions for the dashboard.
+type PendingCounter interface {
+	CountPendingSubmissions(ctx context.Context) (int, error)
+}
+
 // Handler handles admin dashboard HTTP requests. Depends on other plugins'
 // services via interfaces -- no direct repo access.
 type Handler struct {
-	authRepo        auth.UserRepository
-	campaignService campaigns.CampaignService
-	smtpService     smtp.SMTPService
-	mediaRepo       media.MediaRepository
-	mediaService    media.MediaService
-	maxUploadSize   int64
-	settingsService settings.SettingsService
-	addonCounter    AddonCounter
+	authRepo         auth.UserRepository
+	campaignService  campaigns.CampaignService
+	smtpService      smtp.SMTPService
+	mediaRepo        media.MediaRepository
+	mediaService     media.MediaService
+	maxUploadSize    int64
+	settingsService  settings.SettingsService
+	addonCounter     AddonCounter
 	securityService  SecurityService
 	hygieneScanner   DataHygieneScanner
 	databaseExplorer DatabaseExplorer
+	pendingCounter   PendingCounter
 	baseURL          string
 }
 
@@ -115,6 +121,11 @@ func (h *Handler) SetDatabaseExplorer(explorer DatabaseExplorer) {
 // SetBaseURL sets the public-facing base URL for the Foundry module admin page.
 func (h *Handler) SetBaseURL(url string) {
 	h.baseURL = url
+}
+
+// SetPendingCounter wires the pending submission counter for the dashboard.
+func (h *Handler) SetPendingCounter(counter PendingCounter) {
+	h.pendingCounter = counter
 }
 
 // --- Data Hygiene ---
@@ -228,6 +239,11 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		securityStats, _ = h.securityService.GetStats(ctx)
 	}
 
+	var pendingSubmissions int
+	if h.pendingCounter != nil {
+		pendingSubmissions, _ = h.pendingCounter.CountPendingSubmissions(ctx)
+	}
+
 	// Check for degraded plugins to show alert banner.
 	var degradedPlugins []string
 	if h.databaseExplorer != nil {
@@ -239,7 +255,7 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		}
 	}
 
-	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured, addonCount, securityStats, degradedPlugins))
+	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured, addonCount, securityStats, degradedPlugins, pendingSubmissions))
 }
 
 // --- Users ---
