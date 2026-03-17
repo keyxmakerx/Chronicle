@@ -279,7 +279,7 @@ _WASM-sandboxed backend logic via Extism/wazero. See ADR-021._
 - [x] **Sprint R-3: Write Host Functions** — 6 write host functions (update_entity_fields, create_event, set_entity_tags, get_entity_tags, create_relation, send_message). 5 new capabilities. 4 write adapters. Plugin-to-plugin async messaging. 10 new tests (48 total).
 - [x] **Sprint R-4: Plugin SDK & Developer Tools** — Example WASM plugins (Rust auto-tagger, Go session-logger). Go SDK with MockHost test harness (9 tests). Plugin development guide. 7 new manifest tests. **Phase R complete.**
 
-### Phase F: Foundry Sync Enhancements & Character Integration ← CURRENT (F-6 next)
+### Phase F: Foundry Sync Enhancements & Character Integration ✓ (F-1 through F-7 COMPLETE)
 
 _Improve Foundry VTT sync fidelity. Add system-aware character sheet sync. Build toward inventory/NPC features._
 
@@ -290,8 +290,13 @@ _Improve Foundry VTT sync fidelity. Add system-aware character sheet sync. Build
 - [x] **Sprint F-4.5: Generic System Adapter & Dynamic Matching** — Added `foundry_system_id` to manifest, `foundry_path`/`foundry_writable` to FieldDef. New `GET /systems/:id/character-fields` API. `_detectSystem()` now API-driven (matches by `foundry_system_id`). New `generic-adapter.mjs` auto-generates field mappings from API. dnd5e (15 fields), pf2e (15 fields, most read-only), drawsteel annotated. actor-sync.mjs falls back to generic adapter. 7 new tests.
 - [x] **Sprint F-QoL: Foundry Sync Diagnostics & Error Handling** — `ValidationReport` type with `BuildValidationReport()` analyzing categories, fields, presets, Foundry compatibility, warnings. Templ component shows capability badges + warnings after upload. API client health metrics (success/error counts, uptime, reconnect attempts). Structured error log. Retry queue for failed writes (processes on reconnect, max 3 retries). Dashboard Status tab: diagnostics grid, error log, field mapping debug info. 3 new tests.
 - [x] **Sprint F-5: NPC Viewer / Hall (Plugin + Widget + Foundry Sync)** — Full NPC plugin at `internal/plugins/npcs/` with handler/service/repo/templates. Campaign route `/campaigns/:id/npcs` — gallery/grid of revealed NPCs (non-private character entities). Portrait, name, type label, tags. Search/sort/pagination. "Reveal" = Scribe toggles `is_private` via eye icon. `npc_gallery` layout block type for entity pages and dashboards. Foundry sync: NPC visibility changes sync bidirectionally — Chronicle `is_private` ↔ Foundry `prototypeToken.hidden`. REST API endpoint `POST /entities/:id/reveal`. 7 tests.
-- [ ] **Sprint F-6: Armory / Inventory System** — Items as entities with game-mechanic fields (weight, cost, rarity, damage, properties). Character "Inventory" tab/block via entity relations. Relation metadata: equipped, quantity, attunement. System-specific item templates (dnd5e ≠ pf2e). Foundry sync: Actor inventory ↔ Chronicle inventory relations. "Armory" campaign page showing all catalogued items.
-- [ ] **Sprint F-7: Shop / Marketplace Enhancement** — Transaction logging (who bought what, when). Currency tracking per character. Stock management (auto-deplete on purchase). Foundry: purchase from shop window → update character inventory on both sides.
+- [x] **Sprint F-6: Armory / Inventory System** — Items as entities with game-mechanic fields (weight, cost, rarity, damage, properties). Character "Inventory" tab/block via entity relations. Relation metadata: equipped, quantity, attunement. System-specific item templates (dnd5e ≠ pf2e). Foundry sync: Actor inventory ↔ Chronicle inventory relations. "Armory" campaign page showing all catalogued items. **Implemented across 5 sub-sprints:**
+  - B-1: System-dependent item presets (`preset_category` column, `RelationPresetDef`, item fields API, manifest changes for dnd5e/pf2e/drawsteel).
+  - B-2: Armory plugin (`internal/plugins/armory/`) — gallery page, sidebar link, dashboard block, addon gating.
+  - B-3: Inventory block + Foundry item sync (`blockInventory`, `inventory.js` widget, `item-sync.mjs` Foundry module).
+- [x] **Sprint F-7: Shop / Marketplace Enhancement** — Transaction logging (who bought what, when). Currency tracking per character. Stock management (auto-deplete on purchase). Foundry: purchase from shop window → update character inventory on both sides. **Implemented across 2 sub-sprints:**
+  - C-1: `shop_transactions` table, transaction service with stock validation, currency fields on character presets, REST endpoints.
+  - C-2: Transaction history in `shop_inventory.js`, `transaction_log.js` widget + block, Foundry shop-widget purchase flow.
 
 ### Phase X: System Modularity & Owner Experience
 

@@ -8,7 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-17 -- **Sprint: U-1 role dashboards, W-1 command palette, T-3 worldbuilding prompts.**
+2026-03-17 -- **Sprint: F-6 Armory/Inventory, F-7 Shop Enhancement, Sync Dashboard, Foundry Config.**
+
+43. **Sprint: F-6 + F-7 (Armory, Inventory, Transactions, Shop Enhancement).**
+    - **A-2: Chronicle Sync Dashboard Expansion (COMPLETE)** — Owner API Keys page expansion with sync status overview, mappings table, error display. Admin API Monitor expansion with per-campaign sync stats.
+    - **B-1: System-Dependent Item Presets (COMPLETE)** — `preset_category` column on `entity_types` (migration 000009). `RelationPresetDef` on SystemManifest. Item entity presets for dnd5e (gem), pf2e (equipment), drawsteel (kits). `ItemPreset()` + `ItemFieldsForAPI()` helpers. Item fields API endpoint.
+    - **B-2: Armory Page + Sidebar (COMPLETE)** — `internal/plugins/armory/` plugin: gallery page, handler, service, repo. HTMX search/filter/sort/pagination. Sidebar link gated on "armory" addon. `armory_preview` dashboard block. Adapter pattern for cross-plugin deps.
+    - **B-3: Inventory Block + Foundry Item Sync (COMPLETE)** — `blockInventory` templ mount point. `inventory.js` Chronicle widget with quantity/equipped/attuned controls. `item-sync.mjs` Foundry module: bidirectional "Has Item" relation ↔ Actor item sync. Hooks: createItem/deleteItem/updateItem. WS events: relation.created/deleted/metadata_updated.
+    - **C-1: Transaction Table + Service + Currency Fields (COMPLETE)** — Migration 000010: `shop_transactions` table. Transaction model/repo/service/handler. Purchase flow with stock validation. Currency fields on all character presets (dnd5e: cp/sp/ep/gp/pp, pf2e: cp/sp/gp/pp, drawsteel: wealth). REST endpoints: POST purchase, POST/GET transactions.
+    - **C-2: Shop Management UI + Foundry Purchase Flow (COMPLETE)** — Transaction history in `shop_inventory.js` widget. `transaction_log.js` standalone widget + `transaction_log` block type. Foundry `shop-widget.mjs` enhanced with `_executePurchase()` method, buy buttons, stock/buyer validation.
 
 42. **Sprint: U-1 + W-1 (partial) + T-3.**
     - **U-1: Role-Aware Dashboard Editor (COMPLETE)** — Role selector in dashboard editor. `RoleDashboardLayouts` struct with backward-compatible JSON format: detects legacy bare `{"rows":[...]}` vs role-keyed `{"default":...,"player":...,"scribe":...}`. Alpine.js toggle (Default/Player/Scribe) in customize.templ. `dashboard_editor.js` appends `?role=` param, listens for `role-change` events. Handler merges role layouts via `SetRoleDashboardJSON`/`RemoveRoleDashboardJSON`. `ParseRoleDashboardLayout(role)` with fallback chain. `UpdateDashboardLayoutRaw` service method. 9 unit tests in `model_test.go`.
