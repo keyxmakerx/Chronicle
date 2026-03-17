@@ -2,11 +2,14 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/redis/go-redis/v9"
 )
 
 // --- Mock Repository ---
@@ -776,5 +779,273 @@ func TestConfigureMailSender(t *testing.T) {
 	}
 	if svc.baseURL != "https://example.com" {
 		t.Errorf("expected baseURL https://example.com, got %s", svc.baseURL)
+	}
+}
+
+// --- Session Revalidation Tests ---
+
+// newTestAuthServiceWithRedis creates an authService backed by miniredis for
+// testing session revalidation logic.
+func newTestAuthServiceWithRedis(t *testing.T, repo *mockUserRepo) (*authService, *miniredis.Miniredis) {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	return &authService{
+		repo:       repo,
+		redis:      rdb,
+		sessionTTL: 24 * time.Hour,
+	}, mr
+}
+
+// seedSession stores a session directly in miniredis and returns the token.
+func seedSession(t *testing.T, svc *authService, mr *miniredis.Miniredis, session Session) string {
+	t.Helper()
+	token, err := generateSessionToken()
+	if err != nil {
+		t.Fatalf("generating token: %v", err)
+	}
+	data, err := json.Marshal(session)
+	if err != nil {
+		t.Fatalf("marshaling session: %v", err)
+	}
+	key := sessionKeyPrefix + token
+	mr.Set(key, string(data))
+	mr.SetTTL(key, svc.sessionTTL)
+	return token
+}
+
+func TestValidateSession_WithinRevalidationWindow(t *testing.T) {
+	findByIDCalled := false
+	repo := &mockUserRepo{
+		findByIDFn: func(ctx context.Context, id string) (*User, error) {
+			findByIDCalled = true
+			return &User{ID: id}, nil
+		},
+	}
+	svc, mr := newTestAuthServiceWithRedis(t, repo)
+
+	token := seedSession(t, svc, mr, Session{
+		UserID:        "user-1",
+		Email:         "alice@example.com",
+		Name:          "Alice",
+		IsAdmin:       true,
+		LastValidated: time.Now().UTC(), // Just validated.
+	})
+
+	session, err := svc.ValidateSession(context.Background(), token)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if session.UserID != "user-1" {
+		t.Errorf("expected user-1, got %s", session.UserID)
+	}
+	if findByIDCalled {
+		t.Error("expected no DB lookup within revalidation window")
+	}
+}
+
+func TestValidateSession_StaleSession_UserValid(t *testing.T) {
+	repo := &mockUserRepo{
+		findByIDFn: func(ctx context.Context, id string) (*User, error) {
+			return &User{
+				ID:          id,
+				Email:       "alice-new@example.com",
+				DisplayName: "Alice Updated",
+				IsAdmin:     false,
+			}, nil
+		},
+	}
+	svc, mr := newTestAuthServiceWithRedis(t, repo)
+
+	token := seedSession(t, svc, mr, Session{
+		UserID:        "user-1",
+		Email:         "alice@example.com",
+		Name:          "Alice",
+		IsAdmin:       true,
+		LastValidated: time.Now().Add(-10 * time.Minute), // Stale.
+	})
+
+	session, err := svc.ValidateSession(context.Background(), token)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Session fields should be updated from DB.
+	if session.IsAdmin {
+		t.Error("expected IsAdmin to be updated to false")
+	}
+	if session.Email != "alice-new@example.com" {
+		t.Errorf("expected updated email, got %s", session.Email)
+	}
+	if session.Name != "Alice Updated" {
+		t.Errorf("expected updated name, got %s", session.Name)
+	}
+
+	// Verify the session was written back to Redis.
+	key := sessionKeyPrefix + token
+	data, getErr := mr.Get(key)
+	if getErr != nil {
+		t.Fatal("expected session to still exist in Redis")
+	}
+	var stored Session
+	if jsonErr := json.Unmarshal([]byte(data), &stored); jsonErr != nil {
+		t.Fatalf("unmarshaling stored session: %v", jsonErr)
+	}
+	if stored.IsAdmin {
+		t.Error("expected stored session IsAdmin to be false")
+	}
+	if stored.LastValidated.IsZero() {
+		t.Error("expected LastValidated to be set after revalidation")
+	}
+}
+
+func TestValidateSession_StaleSession_UserDeleted(t *testing.T) {
+	repo := &mockUserRepo{
+		findByIDFn: func(ctx context.Context, id string) (*User, error) {
+			return nil, apperror.NewNotFound("user not found")
+		},
+	}
+	svc, mr := newTestAuthServiceWithRedis(t, repo)
+
+	token := seedSession(t, svc, mr, Session{
+		UserID:        "deleted-user",
+		Email:         "gone@example.com",
+		Name:          "Gone",
+		IsAdmin:       true,
+		LastValidated: time.Now().Add(-10 * time.Minute),
+	})
+
+	_, err := svc.ValidateSession(context.Background(), token)
+	assertAppError(t, err, 401)
+
+	// Session should be destroyed in Redis.
+	key := sessionKeyPrefix + token
+	if mr.Exists(key) {
+		t.Error("expected session to be destroyed after user deletion")
+	}
+}
+
+func TestValidateSession_StaleSession_UserDisabled(t *testing.T) {
+	repo := &mockUserRepo{
+		findByIDFn: func(ctx context.Context, id string) (*User, error) {
+			return &User{
+				ID:         id,
+				Email:      "disabled@example.com",
+				IsDisabled: true,
+			}, nil
+		},
+	}
+	svc, mr := newTestAuthServiceWithRedis(t, repo)
+
+	token := seedSession(t, svc, mr, Session{
+		UserID:        "disabled-user",
+		Email:         "disabled@example.com",
+		Name:          "Disabled",
+		LastValidated: time.Now().Add(-10 * time.Minute),
+	})
+
+	_, err := svc.ValidateSession(context.Background(), token)
+	assertAppError(t, err, 401)
+
+	// Session should be destroyed.
+	key := sessionKeyPrefix + token
+	if mr.Exists(key) {
+		t.Error("expected session to be destroyed after user disabled")
+	}
+}
+
+func TestValidateSession_ZeroLastValidated_TriggersRevalidation(t *testing.T) {
+	findByIDCalled := false
+	repo := &mockUserRepo{
+		findByIDFn: func(ctx context.Context, id string) (*User, error) {
+			findByIDCalled = true
+			return &User{
+				ID:          id,
+				Email:       "alice@example.com",
+				DisplayName: "Alice",
+				IsAdmin:     true,
+			}, nil
+		},
+	}
+	svc, mr := newTestAuthServiceWithRedis(t, repo)
+
+	// Zero-value LastValidated (simulates a pre-existing session).
+	token := seedSession(t, svc, mr, Session{
+		UserID:  "user-1",
+		Email:   "alice@example.com",
+		Name:    "Alice",
+		IsAdmin: true,
+		// LastValidated intentionally zero.
+	})
+
+	_, err := svc.ValidateSession(context.Background(), token)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !findByIDCalled {
+		t.Error("expected DB lookup for zero-value LastValidated")
+	}
+}
+
+func TestValidateSession_DBError_AllowsStaleSesssion(t *testing.T) {
+	repo := &mockUserRepo{
+		findByIDFn: func(ctx context.Context, id string) (*User, error) {
+			return nil, apperror.NewInternal(errors.New("db connection lost"))
+		},
+	}
+	svc, mr := newTestAuthServiceWithRedis(t, repo)
+
+	token := seedSession(t, svc, mr, Session{
+		UserID:        "user-1",
+		Email:         "alice@example.com",
+		Name:          "Alice",
+		IsAdmin:       true,
+		LastValidated: time.Now().Add(-10 * time.Minute),
+	})
+
+	// Should succeed despite DB error (fail-open for transient errors).
+	session, err := svc.ValidateSession(context.Background(), token)
+	if err != nil {
+		t.Fatalf("expected nil error on transient DB failure, got: %v", err)
+	}
+	if session.UserID != "user-1" {
+		t.Errorf("expected user-1, got %s", session.UserID)
+	}
+}
+
+func TestValidateSession_TTLPreserved(t *testing.T) {
+	repo := &mockUserRepo{
+		findByIDFn: func(ctx context.Context, id string) (*User, error) {
+			return &User{
+				ID:          id,
+				Email:       "alice@example.com",
+				DisplayName: "Alice",
+				IsAdmin:     true,
+			}, nil
+		},
+	}
+	svc, mr := newTestAuthServiceWithRedis(t, repo)
+
+	token := seedSession(t, svc, mr, Session{
+		UserID:        "user-1",
+		Email:         "alice@example.com",
+		Name:          "Alice",
+		IsAdmin:       true,
+		LastValidated: time.Now().Add(-10 * time.Minute),
+	})
+
+	// Set a specific TTL shorter than the session TTL.
+	key := sessionKeyPrefix + token
+	mr.SetTTL(key, 2*time.Hour)
+
+	_, err := svc.ValidateSession(context.Background(), token)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// TTL should not have been extended to the full session TTL.
+	ttl := mr.TTL(key)
+	if ttl > 3*time.Hour {
+		t.Errorf("expected TTL to be preserved (~2h), got %v", ttl)
 	}
 }

@@ -91,3 +91,14 @@ func AllSystems() []System {
 	}
 	return globalLoader.AllSystems()
 }
+
+// LoadAdditionalDir scans an additional directory for system manifest.json
+// files. This is used by the package manager to load systems from external
+// repos installed to media/packages/systems/<slug>/<version>/. Systems
+// found here override bundled systems with the same ID.
+func LoadAdditionalDir(dir string) error {
+	if globalLoader == nil {
+		return fmt.Errorf("system registry not initialized")
+	}
+	return globalLoader.DiscoverDir(dir)
+}

@@ -7,7 +7,7 @@ import (
 )
 
 // AdminDashboardPage renders the admin overview with high-level stats.
-templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool, addonCount int, securityStats *SecurityStats, degradedPlugins []string) {
+templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool, addonCount int, securityStats *SecurityStats, degradedPlugins []string, pendingSubmissions int) {
 	@layouts.App("Admin Dashboard") {
 		<div class="max-w-5xl mx-auto space-y-6">
 			<h1 class="text-2xl font-bold text-fg">Admin Dashboard</h1>
@@ -155,6 +155,25 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 					</div>
 					<p class="text-lg font-semibold text-fg mt-2">Module Manager</p>
 					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage module &rarr;</p>
+				</a>
+				<!-- Packages -->
+				<a href="/admin/packages" class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-fg-secondary">Packages</p>
+						<span class="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
+							<i class="fa-solid fa-box text-emerald-500"></i>
+						</span>
+					</div>
+					if pendingSubmissions > 0 {
+						<p class="text-lg font-semibold text-amber-600 dark:text-amber-400 mt-2">
+							{ fmt.Sprintf("%d", pendingSubmissions) } pending
+						</p>
+						<p class="text-xs text-fg-muted mt-1">submission(s) awaiting review</p>
+					} else {
+						<p class="text-lg font-semibold text-fg mt-2">Package Manager</p>
+						<p class="text-xs text-fg-muted mt-1">No pending submissions</p>
+					}
+					<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Manage packages &rarr;</p>
 				</a>
 				<!-- SMTP -->
 				<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">

@@ -1,0 +1,230 @@
+// owner_templates.templ renders the campaign-owner-facing pages for browsing
+// and submitting game system packages. These pages are NOT admin-only.
+package packages
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// SystemsBrowsePage renders the systems browse page for campaign owners.
+templ SystemsBrowsePage(pkgs []Package, settings PackageSecuritySettings, csrfToken string) {
+	@layouts.App("Browse Systems") {
+		<div class="max-w-5xl mx-auto space-y-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Browse Systems</h1>
+					<p class="text-sm text-fg-secondary mt-1">
+						Available game systems and Foundry modules.
+					</p>
+				</div>
+				<a href="/systems/submit" class="btn-primary text-sm">
+					<i class="fa-solid fa-plus mr-1"></i>
+					Submit a System
+				</a>
+			</div>
+
+			if len(pkgs) == 0 {
+				<div class="card p-8 text-center">
+					<i class="fa-solid fa-dice-d20 text-4xl text-fg-muted mb-3"></i>
+					<p class="text-fg-secondary">No systems available yet.</p>
+					<p class="text-sm text-fg-muted mt-1">Be the first to submit a game system!</p>
+				</div>
+			} else {
+				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+					for _, pkg := range pkgs {
+						@systemCard(pkg)
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+// systemCard renders a single system in the browse grid.
+templ systemCard(pkg Package) {
+	<div class="card p-5 flex flex-col">
+		<div class="flex items-center gap-2 mb-2">
+			<h3 class="text-lg font-semibold text-fg truncate">{ pkg.Name }</h3>
+			@packageTypeBadge(pkg.Type)
+		</div>
+		if pkg.Status == StatusDeprecated {
+			<div class="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-500/10 rounded px-2 py-1 mb-2">
+				<i class="fa-solid fa-triangle-exclamation"></i>
+				if pkg.DeprecationMsg != "" {
+					<span>{ pkg.DeprecationMsg }</span>
+				} else {
+					<span>This system is nearing end-of-life.</span>
+				}
+			</div>
+		}
+		<p class="text-sm text-fg-muted mb-3 flex-1">{ pkg.RepoURL }</p>
+		<div class="flex items-center gap-3 text-xs text-fg-secondary">
+			if pkg.InstalledVersion != "" {
+				<span>
+					<i class="fa-solid fa-check-circle text-green-500 mr-1"></i>
+					v{ pkg.InstalledVersion }
+				</span>
+			}
+			if pkg.LastCheckedAt != nil {
+				<span>Updated { pkg.LastCheckedAt.Format("Jan 2") }</span>
+			}
+		</div>
+	</div>
+}
+
+// SystemSubmitPage renders the system submission form for campaign owners.
+templ SystemSubmitPage(settings PackageSecuritySettings, csrfToken string) {
+	@layouts.App("Submit a System") {
+		<div class="max-w-2xl mx-auto space-y-6">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">Submit a System</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					Submit a game system or Foundry module repository for inclusion.
+					if settings.RequireApproval {
+						An admin will review your submission before it becomes available.
+					}
+				</p>
+			</div>
+
+			<div class="card p-5">
+				<form
+					method="POST"
+					action="/systems/submit"
+					hx-post="/systems/submit"
+					class="space-y-4"
+				>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+
+					<div>
+						<label for="name" class="block text-sm font-medium text-fg-body mb-1">System Name</label>
+						<input
+							type="text"
+							id="name"
+							name="name"
+							required
+							class="input w-full"
+							placeholder="e.g. D&D 5th Edition"
+						/>
+					</div>
+
+					<div>
+						<label for="repo_url" class="block text-sm font-medium text-fg-body mb-1">Repository URL</label>
+						<input
+							type="url"
+							id="repo_url"
+							name="repo_url"
+							required
+							class="input w-full"
+							placeholder={ repoPolicyPlaceholder(settings.RepoPolicy) }
+						/>
+						<p class="text-xs text-fg-muted mt-1">
+							{ repoPolicyHint(settings.RepoPolicy) }
+						</p>
+					</div>
+
+					<div>
+						<label for="type" class="block text-sm font-medium text-fg-body mb-1">Type</label>
+						<select id="type" name="type" class="input w-full">
+							<option value="system">Game System</option>
+							<option value="foundry-module">Foundry Module</option>
+						</select>
+					</div>
+
+					<div class="flex items-center justify-between pt-2">
+						<a href="/systems/browse" class="text-sm text-fg-secondary hover:text-fg transition-colors">
+							Cancel
+						</a>
+						<button type="submit" class="btn-primary text-sm">
+							<i class="fa-solid fa-paper-plane mr-1"></i>
+							if settings.RequireApproval {
+								Submit for Review
+							} else {
+								Submit System
+							}
+						</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	}
+}
+
+// MySubmissionsPage renders the user's submitted packages.
+templ MySubmissionsPage(pkgs []Package) {
+	@layouts.App("My Submissions") {
+		<div class="max-w-4xl mx-auto space-y-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">My Submissions</h1>
+					<p class="text-sm text-fg-secondary mt-1">
+						Track the status of your submitted systems.
+					</p>
+				</div>
+				<a href="/systems/submit" class="btn-primary text-sm">
+					<i class="fa-solid fa-plus mr-1"></i>
+					Submit Another
+				</a>
+			</div>
+
+			if len(pkgs) == 0 {
+				<div class="card p-8 text-center">
+					<i class="fa-solid fa-paper-plane text-4xl text-fg-muted mb-3"></i>
+					<p class="text-fg-secondary">You haven't submitted any systems yet.</p>
+					<p class="text-sm text-fg-muted mt-1">
+						<a href="/systems/submit" class="text-accent hover:text-accent/80 transition-colors">Submit your first system</a>
+					</p>
+				</div>
+			} else {
+				<div class="space-y-3">
+					for _, pkg := range pkgs {
+						<div class="card p-4">
+							<div class="flex items-center justify-between">
+								<div class="flex items-center gap-3 min-w-0">
+									<h3 class="text-sm font-semibold text-fg truncate">{ pkg.Name }</h3>
+									@packageTypeBadge(pkg.Type)
+									@statusBadge(pkg.Status)
+								</div>
+								<span class="text-xs text-fg-muted shrink-0">{ pkg.CreatedAt.Format("Jan 2, 2006") }</span>
+							</div>
+							<p class="text-xs text-fg-muted mt-1">{ pkg.RepoURL }</p>
+							if pkg.Status == StatusRejected && pkg.ReviewNote != "" {
+								<div class="mt-2 p-2 rounded bg-red-500/5 text-xs text-red-600">
+									<i class="fa-solid fa-comment mr-1"></i>
+									{ pkg.ReviewNote }
+								</div>
+							}
+						</div>
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+// repoPolicyPlaceholder returns the URL input placeholder based on the repo policy.
+func repoPolicyPlaceholder(policy string) string {
+	switch policy {
+	case RepoPolicyGitHubOnly:
+		return "https://github.com/owner/repo"
+	case RepoPolicyAnyGit:
+		return "https://github.com/owner/repo or https://gitlab.com/owner/repo"
+	case RepoPolicyAllowAll:
+		return "https://example.com/owner/repo"
+	default:
+		return "https://github.com/owner/repo"
+	}
+}
+
+// repoPolicyHint returns help text explaining the current repo policy.
+func repoPolicyHint(policy string) string {
+	switch policy {
+	case RepoPolicyGitHubOnly:
+		return "Only GitHub repository URLs are accepted."
+	case RepoPolicyAnyGit:
+		return "URLs from GitHub, GitLab, Bitbucket, Codeberg, and SourceHut are accepted."
+	case RepoPolicyAllowAll:
+		return "Any HTTPS repository URL is accepted."
+	default:
+		return "Only GitHub repository URLs are accepted."
+	}
+}

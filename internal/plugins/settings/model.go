@@ -111,4 +111,26 @@ const (
 	// permitted to make cross-origin API requests (e.g., Foundry VTT servers).
 	// BaseURL is always allowed implicitly. Managed from admin panel.
 	KeyCORSAllowedOrigins = "cors.allowed_origins"
+
+	// --- Package Security Settings ---
+
+	// KeyPackageRepoPolicy controls which repository sources are allowed.
+	// Values: "github_only" (default), "any_git", "allow_all".
+	KeyPackageRepoPolicy = "packages.repo_policy"
+
+	// KeyPackageRequireApproval controls whether owner-submitted packages
+	// need admin sign-off before being fetched. Values: "true" (default), "false".
+	KeyPackageRequireApproval = "packages.require_approval"
+
+	// KeyPackageMaxFileSize is the maximum download size in bytes for package
+	// ZIP assets. Default: 52428800 (50 MB).
+	KeyPackageMaxFileSize = "packages.max_file_size"
+
+	// KeyPackageValidateManifest controls whether downloaded packages must
+	// contain a valid manifest.json. Values: "true" (default), "false".
+	KeyPackageValidateManifest = "packages.validate_manifest"
+
+	// KeyPackageScanContent controls whether downloaded packages are scanned
+	// for suspicious files (executables, symlinks). Values: "true" (default), "false".
+	KeyPackageScanContent = "packages.scan_content"
 )

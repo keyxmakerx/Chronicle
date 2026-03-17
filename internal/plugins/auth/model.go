@@ -64,14 +64,19 @@ type LoginInput struct {
 
 // Session represents an authenticated user session stored in Redis.
 // The session ID is the key, and this struct is the value (JSON-encoded).
+// LastValidated tracks when the session was last checked against the database
+// to detect user deletions, disablements, or privilege changes that occurred
+// outside the normal service layer. Zero-value triggers immediate revalidation
+// (backwards-compatible with sessions created before this field existed).
 type Session struct {
-	UserID    string    `json:"user_id"`
-	Email     string    `json:"email"`
-	Name      string    `json:"name"`
-	IsAdmin   bool      `json:"is_admin"`
-	IP        string    `json:"ip,omitempty"`
-	UserAgent string    `json:"user_agent,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	UserID        string    `json:"user_id"`
+	Email         string    `json:"email"`
+	Name          string    `json:"name"`
+	IsAdmin       bool      `json:"is_admin"`
+	IP            string    `json:"ip,omitempty"`
+	UserAgent     string    `json:"user_agent,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	LastValidated time.Time `json:"last_validated"`
 }
 
 // SessionInfo extends Session with metadata for the admin active sessions view.

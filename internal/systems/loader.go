@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -114,6 +115,78 @@ func (l *SystemLoader) DiscoverAll() error {
 					slog.String("id", manifest.ID),
 				)
 			}
+		}
+	}
+
+	return nil
+}
+
+// DiscoverDir scans a single directory for a manifest.json file and loads it
+// as a system. If a system with the same ID already exists, it is replaced.
+// This is used to overlay package-manager-installed systems on top of bundled ones.
+func (l *SystemLoader) DiscoverDir(dir string) error {
+	manifestPath := filepath.Join(dir, "manifest.json")
+	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+		// No manifest — try scanning subdirectories (the install dir may
+		// contain a single repo root with subdirs per system).
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return nil // Not a valid directory, skip silently.
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			subManifest := filepath.Join(dir, entry.Name(), "manifest.json")
+			if _, err := os.Stat(subManifest); err == nil {
+				if err := l.loadSingleSystem(filepath.Join(dir, entry.Name())); err != nil {
+					slog.Warn("failed to load package system",
+						slog.String("dir", entry.Name()),
+						slog.String("error", err.Error()),
+					)
+				}
+			}
+		}
+		return nil
+	}
+
+	return l.loadSingleSystem(dir)
+}
+
+// loadSingleSystem loads a system from a directory containing manifest.json.
+func (l *SystemLoader) loadSingleSystem(sysDir string) error {
+	manifestPath := filepath.Join(sysDir, "manifest.json")
+	manifest, err := LoadManifest(manifestPath)
+	if err != nil {
+		return fmt.Errorf("invalid manifest in %s: %w", sysDir, err)
+	}
+
+	l.modules[manifest.ID] = &loadedSystem{
+		manifest: manifest,
+		dir:      sysDir,
+	}
+
+	slog.Info("loaded package system",
+		slog.String("id", manifest.ID),
+		slog.String("name", manifest.Name),
+		slog.String("dir", sysDir),
+	)
+
+	// Instantiate if available.
+	if manifest.Status == StatusAvailable {
+		dataDir := filepath.Join(sysDir, "data")
+		if factory, ok := factories[manifest.ID]; ok {
+			mod, fErr := factory(manifest, dataDir)
+			if fErr != nil {
+				return fmt.Errorf("factory failed for %s: %w", manifest.ID, fErr)
+			}
+			l.RegisterSystem(mod)
+		} else {
+			mod, gErr := NewGenericSystem(manifest, dataDir)
+			if gErr != nil {
+				return fmt.Errorf("generic system failed for %s: %w", manifest.ID, gErr)
+			}
+			l.RegisterSystem(mod)
 		}
 	}
 
