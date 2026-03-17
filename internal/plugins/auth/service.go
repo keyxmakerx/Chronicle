@@ -36,6 +36,13 @@ const resetTokenBytes = 32
 // resetTokenExpiry is how long a password reset link stays valid.
 const resetTokenExpiry = 1 * time.Hour
 
+// sessionRevalidateInterval is how often sessions are checked against the
+// database to detect user deletions, disablements, or privilege changes
+// that occurred outside the normal service layer (e.g., direct DB edits,
+// database wipe while Redis persists). 5 minutes balances security
+// responsiveness against database load.
+const sessionRevalidateInterval = 5 * time.Minute
+
 // argon2id parameters tuned for a self-hosted application running on
 // modest hardware (2-4 CPU cores, 2-4 GB RAM). These follow OWASP
 // recommendations for argon2id: memory=64MB, iterations=3, parallelism=4.
@@ -290,7 +297,9 @@ func (s *authService) clearLoginFailures(ctx context.Context, email string) {
 }
 
 // ValidateSession looks up a session token in Redis and returns the session
-// data if it exists and hasn't expired.
+// data if it exists and hasn't expired. Periodically revalidates the session
+// against the database to detect user deletions, disablements, or privilege
+// changes (e.g., admin flag revoked, database wiped while Redis persists).
 func (s *authService) ValidateSession(ctx context.Context, token string) (*Session, error) {
 	key := sessionKeyPrefix + token
 
@@ -307,7 +316,78 @@ func (s *authService) ValidateSession(ctx context.Context, token string) (*Sessi
 		return nil, apperror.NewInternal(fmt.Errorf("unmarshaling session: %w", err))
 	}
 
+	// Periodically revalidate against the database. Zero-value LastValidated
+	// (from sessions created before this field existed) triggers immediately.
+	if time.Since(session.LastValidated) > sessionRevalidateInterval {
+		if err := s.revalidateSession(ctx, key, token, &session); err != nil {
+			return nil, err
+		}
+	}
+
 	return &session, nil
+}
+
+// revalidateSession checks the database to ensure the session's user still
+// exists, is not disabled, and has up-to-date privileges. On failure it
+// destroys the session. On success it updates the session in Redis with fresh
+// data, preserving the original TTL.
+func (s *authService) revalidateSession(ctx context.Context, key, token string, session *Session) error {
+	user, err := s.repo.FindByID(ctx, session.UserID)
+	if err != nil {
+		// Distinguish "user not found" from transient DB errors.
+		var appErr *apperror.AppError
+		if errorAs(err, &appErr) && appErr.Code == 404 {
+			// User was deleted -- destroy the stale session.
+			s.DestroySession(ctx, token)
+			return apperror.NewUnauthorized("session expired or invalid")
+		}
+		// Transient DB error -- log and allow the request through with stale
+		// data. Revalidation will be retried on the next request since
+		// LastValidated was not updated.
+		slog.Warn("session revalidation failed, allowing stale session",
+			slog.String("user_id", session.UserID),
+			slog.Any("error", err),
+		)
+		return nil
+	}
+
+	// User exists but has been disabled.
+	if user.IsDisabled {
+		s.DestroySession(ctx, token)
+		return apperror.NewUnauthorized("session expired or invalid")
+	}
+
+	// Sync session fields with current DB state.
+	session.IsAdmin = user.IsAdmin
+	session.Email = user.Email
+	session.Name = user.DisplayName
+	session.LastValidated = time.Now().UTC()
+
+	// Write the updated session back to Redis, preserving the original TTL
+	// so revalidation does not extend the session lifetime.
+	remainingTTL, err := s.redis.TTL(ctx, key).Result()
+	if err != nil || remainingTTL <= 0 {
+		// Key expired or error -- session will naturally expire.
+		return nil
+	}
+
+	data, err := json.Marshal(session)
+	if err != nil {
+		slog.Warn("failed to marshal updated session",
+			slog.String("user_id", session.UserID),
+			slog.Any("error", err),
+		)
+		return nil
+	}
+
+	if err := s.redis.Set(ctx, key, data, remainingTTL).Err(); err != nil {
+		slog.Warn("failed to write revalidated session to Redis",
+			slog.String("user_id", session.UserID),
+			slog.Any("error", err),
+		)
+	}
+
+	return nil
 }
 
 // DestroySession removes a session from Redis, effectively logging the user out.
@@ -340,14 +420,16 @@ func (s *authService) createSession(ctx context.Context, user *User, ip, userAge
 		return "", fmt.Errorf("generating session token: %w", err)
 	}
 
+	now := time.Now().UTC()
 	session := Session{
-		UserID:    user.ID,
-		Email:     user.Email,
-		Name:      user.DisplayName,
-		IsAdmin:   user.IsAdmin,
-		IP:        ip,
-		UserAgent: userAgent,
-		CreatedAt: time.Now().UTC(),
+		UserID:        user.ID,
+		Email:         user.Email,
+		Name:          user.DisplayName,
+		IsAdmin:       user.IsAdmin,
+		IP:            ip,
+		UserAgent:     userAgent,
+		CreatedAt:     now,
+		LastValidated: now,
 	}
 
 	data, err := json.Marshal(session)
