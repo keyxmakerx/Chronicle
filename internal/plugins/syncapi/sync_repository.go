@@ -282,11 +282,14 @@ func (r *syncMappingRepo) ListMappingsWithNames(ctx context.Context, campaignID 
 	}
 
 	// Sort.
-	orderBy := "sm.last_synced_at DESC"
-	if opts.Sort == "name" {
+	var orderBy string
+	switch opts.Sort {
+	case "name":
 		orderBy = "COALESCE(e.name, m.name, sm.chronicle_id) ASC"
-	} else if opts.Sort == "type" {
+	case "type":
 		orderBy = "sm.chronicle_type ASC, sm.last_synced_at DESC"
+	default:
+		orderBy = "sm.last_synced_at DESC"
 	}
 
 	limit := opts.Limit

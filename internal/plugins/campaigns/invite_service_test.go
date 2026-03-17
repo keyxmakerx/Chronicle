@@ -351,10 +351,10 @@ func TestListInvites(t *testing.T) {
 	campaignRepo := newMockCampaignRepoForInvites()
 	svc := NewInviteService(inviteRepo, campaignRepo, nil, "http://localhost:3000")
 
-	svc.CreateInvite(context.Background(), "camp-1", "user-1", CreateInviteInput{
+	_, _ = svc.CreateInvite(context.Background(), "camp-1", "user-1", CreateInviteInput{
 		Email: "p1@example.com", Role: "player",
 	})
-	svc.CreateInvite(context.Background(), "camp-1", "user-1", CreateInviteInput{
+	_, _ = svc.CreateInvite(context.Background(), "camp-1", "user-1", CreateInviteInput{
 		Email: "p2@example.com", Role: "scribe",
 	})
 

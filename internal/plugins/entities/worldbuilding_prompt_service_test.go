@@ -134,11 +134,11 @@ func TestListForType(t *testing.T) {
 	svc := NewWorldbuildingPromptService(repo, typeRepo)
 
 	etID := 1
-	svc.Create(context.Background(), "camp-1", CreatePromptInput{
+	_, _ = svc.Create(context.Background(), "camp-1", CreatePromptInput{
 		Name: "A", PromptText: "prompt a", EntityTypeID: &etID,
 	})
 	etID2 := 2
-	svc.Create(context.Background(), "camp-1", CreatePromptInput{
+	_, _ = svc.Create(context.Background(), "camp-1", CreatePromptInput{
 		Name: "B", PromptText: "prompt b", EntityTypeID: &etID2,
 	})
 
