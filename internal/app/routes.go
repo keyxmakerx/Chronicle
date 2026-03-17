@@ -1029,7 +1029,7 @@ func (a *App) RegisterRoutes() {
 	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{svc: entityService})
 	npcHandler := npcs.NewHandler(npcSvc)
 	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
-	npcs.RegisterRoutes(e, npcHandler, campaignService, authService)
+	npcs.RegisterRoutes(e, npcHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	noteRepo := notes.NewNoteRepository(a.DB)
@@ -1100,7 +1100,7 @@ func (a *App) RegisterRoutes() {
 	// NPC gallery block — embeds a compact NPC grid on entity pages/dashboards.
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "npc_gallery", Label: "NPC Gallery", Icon: "fa-users",
-		Description: "Grid of revealed NPCs",
+		Description: "Grid of revealed NPCs", Addon: "npcs",
 	}, func(bctx entities.BlockRenderContext) templ.Component {
 		limit := entities.BlockConfigLimit(bctx.Block.Config, "limit", 8)
 		cards, err := npcHandler.GalleryBlock(context.Background(), bctx.CC.Campaign.ID, int(bctx.CC.MemberRole), "", limit)

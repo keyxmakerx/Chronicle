@@ -246,6 +246,7 @@ templ Sidebar() {
 							</span>
 							<span class="flex-1">All Pages</span>
 						</a>
+						if IsAddonEnabled(ctx, "npcs") {
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx))) }
 							class={ sidebarNavLink,
@@ -257,6 +258,7 @@ templ Sidebar() {
 							</span>
 							<span class="flex-1">NPCs</span>
 						</a>
+						}
 						<!-- Custom sidebar sections and links -->
 						if len(GetCustomSections(ctx)) > 0 || len(GetCustomLinks(ctx)) > 0 {
 							for _, link := range GetCustomLinks(ctx) {

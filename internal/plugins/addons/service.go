@@ -129,6 +129,7 @@ var installedAddons = map[string]bool{
 	"sessions":       true,
 	"timeline":       true,
 	"media-gallery":  true,
+	"npcs":           true,
 	"dnd5e":          true,
 	"pathfinder2e":   true,
 	"drawsteel":      true,
