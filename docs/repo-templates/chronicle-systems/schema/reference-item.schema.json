@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/keyxmakerx/chronicle-systems/schema/reference-item.schema.json",
+  "title": "Chronicle Reference Item Array",
+  "description": "Schema for a Chronicle system data file (data/*.json). Each file is a JSON array of ReferenceItem objects.",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "$ref": "#/$defs/ReferenceItem"
+  },
+  "$defs": {
+    "ReferenceItem": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Unique identifier within category. URL-safe slug (e.g., 'acid-splash')."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable display name."
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "One-line description for lists and search results."
+        },
+        "description": {
+          "type": "string",
+          "description": "Full reference text. Supports markdown formatting."
+        },
+        "properties": {
+          "type": "object",
+          "description": "Key-value map of structured data. Keys should match FieldDef.key values in the manifest category."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Searchable labels/categories."
+        },
+        "source": {
+          "type": "string",
+          "description": "Attribution for the content source (e.g., 'SRD 5.1', 'ORC')."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

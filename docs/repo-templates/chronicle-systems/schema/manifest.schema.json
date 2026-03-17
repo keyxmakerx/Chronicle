@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/keyxmakerx/chronicle-systems/schema/manifest.schema.json",
+  "title": "Chronicle System Manifest",
+  "description": "Schema for a Chronicle game system manifest.json file.",
+  "type": "object",
+  "required": ["id", "name", "version", "api_version"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Unique machine-readable identifier (e.g., 'dnd5e', 'drawsteel')."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable display name."
+    },
+    "description": {
+      "type": "string",
+      "description": "Short summary of what the system provides."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+",
+      "description": "Semantic version string (e.g., '1.0.0')."
+    },
+    "author": {
+      "type": "string",
+      "description": "Creator name or organization."
+    },
+    "license": {
+      "type": "string",
+      "description": "Content license identifier (e.g., 'OGL-1.0a', 'ORC', 'CC-BY-4.0')."
+    },
+    "icon": {
+      "type": "string",
+      "description": "Font Awesome icon class (e.g., 'fa-dragon')."
+    },
+    "api_version": {
+      "type": "string",
+      "const": "1",
+      "description": "System framework version. Must be '1'."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["available", "coming_soon"],
+      "default": "coming_soon",
+      "description": "Whether the system is ready to use."
+    },
+    "foundry_system_id": {
+      "type": "string",
+      "description": "Foundry VTT game.system.id (e.g., 'dnd5e', 'draw-steel', 'pf2e')."
+    },
+    "tooltip_template": {
+      "type": "string",
+      "description": "Custom HTML template for tooltips (Go text/template syntax)."
+    },
+    "categories": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/CategoryDef" },
+      "description": "Reference content categories."
+    },
+    "entity_presets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/EntityPresetDef" },
+      "description": "Entity type templates for campaigns."
+    },
+    "relation_presets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/RelationPresetDef" },
+      "description": "Relation type templates."
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "FieldDef": {
+      "type": "object",
+      "required": ["key", "label", "type"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_]*$",
+          "description": "Property map key (snake_case)."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable field name."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "number", "list", "markdown"],
+          "description": "Field data type."
+        },
+        "foundry_path": {
+          "type": "string",
+          "pattern": "^system\\.",
+          "description": "Dot-notation path in Foundry Actor system data."
+        },
+        "foundry_writable": {
+          "type": "boolean",
+          "description": "Whether Chronicle can write this field back to Foundry. Defaults to true when foundry_path is set."
+        }
+      },
+      "additionalProperties": false
+    },
+    "CategoryDef": {
+      "type": "object",
+      "required": ["slug", "name"],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "URL-safe category identifier (e.g., 'spells', 'monsters')."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Font Awesome icon class."
+        },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FieldDef" },
+          "description": "Schema for properties on items in this category."
+        }
+      },
+      "additionalProperties": false
+    },
+    "EntityPresetDef": {
+      "type": "object",
+      "required": ["slug", "name"],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "URL-safe identifier (e.g., 'dnd5e-character')."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name."
+        },
+        "name_plural": {
+          "type": "string",
+          "description": "Plural display name."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Font Awesome icon class."
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Hex color for entity type badge."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["character", "creature", "item", "location", "organization"],
+          "description": "Feature category for this preset."
+        },
+        "foundry_actor_type": {
+          "type": "string",
+          "description": "Foundry VTT Actor type (e.g., 'character', 'hero', 'npc')."
+        },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FieldDef" },
+          "description": "Default field definitions for entities of this type."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RelationPresetDef": {
+      "type": "object",
+      "required": ["slug", "name"],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "URL-safe identifier."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name."
+        },
+        "reverse_name": {
+          "type": "string",
+          "description": "Reverse direction label."
+        },
+        "metadata_schema": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/RelationFieldSchema"
+          },
+          "description": "Metadata fields for this relation type."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RelationFieldSchema": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["number", "boolean", "string"],
+          "description": "Field data type."
+        },
+        "default": {
+          "description": "Default value for new relations."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
