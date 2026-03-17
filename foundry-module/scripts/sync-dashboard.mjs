@@ -8,7 +8,7 @@
  * Accessed via the sidebar status indicator or scene controls button (GM only).
  */
 
-import { getSetting, setSetting } from './settings.mjs';
+import { getSetting, setSetting, getSyncDirections, setSyncDirections, getExcludedTags, setExcludedTags } from './settings.mjs';
 
 const FLAG_SCOPE = 'chronicle-sync';
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -57,6 +57,8 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
       'open-settings': SyncDashboard.#onOpenSettingsAction,
       'open-shop': SyncDashboard.#onOpenShopAction,
       'push-actor': SyncDashboard.#onPushActorAction,
+      'test-connection': SyncDashboard.#onTestConnectionAction,
+      'save-config': SyncDashboard.#onSaveConfigAction,
     },
   };
 
@@ -153,11 +155,17 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
     // Build characters tab data.
     const characterData = this._buildCharacterData();
 
+    // Build config tab data.
+    const configData = this._buildConfigData(entityGroups);
+
     return {
       configured: true,
       loading: this._loading,
       searchFilter: this._searchFilter,
       activeTab: this._activeTab,
+
+      // Config tab.
+      config: configData,
 
       // Entities tab.
       entityGroups,
@@ -547,6 +555,50 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   // ---------------------------------------------------------------------------
+  // Config data
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build config tab data from current settings.
+   * @param {Array} entityGroups - Entity groups for count display.
+   * @returns {object}
+   * @private
+   */
+  _buildConfigData(entityGroups) {
+    const directions = getSyncDirections();
+    const exclusions = this._getExclusions();
+    const excludedTags = getExcludedTags();
+
+    // Count items per sync type for the scope grid.
+    const entityCount = entityGroups.reduce((sum, g) => sum + g.totalCount, 0);
+    const mapCount = this._cache.maps?.length ?? 0;
+
+    const syncTypes = [
+      { key: 'journals', label: 'Journals / Entities', icon: 'fa-book', direction: directions.journals || 'both', count: entityCount },
+      { key: 'maps', label: 'Maps / Scenes', icon: 'fa-map', direction: directions.maps || 'both', count: mapCount },
+      { key: 'calendar', label: 'Calendar', icon: 'fa-calendar', direction: directions.calendar || 'both', count: null },
+      { key: 'characters', label: 'Characters / Actors', icon: 'fa-users', direction: directions.characters || 'both', count: null },
+      { key: 'shops', label: 'Shops', icon: 'fa-store', direction: directions.shops || 'both', count: null },
+    ];
+
+    return {
+      apiUrl: getSetting('apiUrl'),
+      apiKey: getSetting('apiKey'),
+      campaignId: getSetting('campaignId'),
+      syncPermissions: getSetting('syncPermissions'),
+      defaultOwnership: getSetting('defaultOwnership'),
+      dmOnlyHidden: getSetting('dmOnlyHidden'),
+      conflictResolution: getSetting('conflictResolution'),
+      autoSync: getSetting('autoSync'),
+      excludedTagsText: excludedTags.join(', '),
+      excludedNamePattern: getSetting('excludedNamePattern'),
+      excludedTypeCount: exclusions.excludedTypes.length,
+      excludedEntityCount: exclusions.excludedEntities.length,
+      syncTypes,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // Status data
   // ---------------------------------------------------------------------------
 
@@ -749,6 +801,24 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     });
 
+    // --- Config tab: direction selects auto-save visual feedback ---
+    el.querySelectorAll('.config-direction-select').forEach((select) => {
+      select.addEventListener('change', () => {
+        // Mark the save bar as needing attention.
+        const saveBar = el.querySelector('.config-save-bar');
+        if (saveBar) saveBar.classList.add('config-unsaved');
+      });
+    });
+
+    // --- Config tab: checkbox changes mark unsaved ---
+    el.querySelectorAll('.config-checkbox, .config-input, .config-select').forEach((input) => {
+      const event = input.type === 'checkbox' ? 'change' : 'input';
+      input.addEventListener(event, () => {
+        const saveBar = el.querySelector('.config-save-bar');
+        if (saveBar) saveBar.classList.add('config-unsaved');
+      });
+    });
+
     // --- Map link/unlink selects ---
     el.querySelectorAll('[data-action="link-scene"]').forEach((select) => {
       select.addEventListener('change', (e) => {
@@ -890,6 +960,16 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
   static #onPushActorAction(event, target) {
     const actorId = target.dataset.actorId;
     this._onPushActor(actorId);
+  }
+
+  /** Test connection to Chronicle using current config field values. */
+  static #onTestConnectionAction() {
+    this._onTestConnection();
+  }
+
+  /** Save all config tab settings. */
+  static #onSaveConfigAction() {
+    this._onSaveConfig();
   }
 
   // ---------------------------------------------------------------------------
@@ -1181,6 +1261,152 @@ export class SyncDashboard extends HandlebarsApplicationMixin(ApplicationV2) {
     } catch (err) {
       console.error('Chronicle Dashboard: Push actor failed', err);
       ui.notifications.error(`Failed to push actor: ${err.message}`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Config actions
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Test connection to Chronicle API using current config tab values.
+   * Reads URL, key, and campaign ID from the Config tab inputs, attempts
+   * a lightweight API call, and shows the result inline.
+   * @private
+   */
+  async _onTestConnection() {
+    const el = this.element;
+    if (!el) return;
+
+    const resultEl = el.querySelector('[data-test-result]');
+    const urlInput = el.querySelector('[data-config-key="apiUrl"]');
+    const keyInput = el.querySelector('[data-config-key="apiKey"]');
+    const campInput = el.querySelector('[data-config-key="campaignId"]');
+
+    const url = urlInput?.value?.trim();
+    const key = keyInput?.value?.trim();
+    const campaignId = campInput?.value?.trim();
+
+    if (!url || !key || !campaignId) {
+      if (resultEl) {
+        resultEl.textContent = 'Fill in URL, key, and campaign ID first.';
+        resultEl.className = 'config-test-result test-error';
+      }
+      return;
+    }
+
+    if (resultEl) {
+      resultEl.textContent = 'Testing...';
+      resultEl.className = 'config-test-result test-pending';
+    }
+
+    try {
+      const testUrl = `${url.replace(/\/+$/, '')}/api/v1/campaigns/${campaignId}/entity-types`;
+      const resp = await fetch(testUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${key}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (resp.ok) {
+        if (resultEl) {
+          resultEl.textContent = 'Connected successfully!';
+          resultEl.className = 'config-test-result test-success';
+        }
+      } else {
+        const status = resp.status;
+        let hint = '';
+        if (status === 401 || status === 403) hint = 'Check API key and permissions.';
+        else if (status === 404) hint = 'Check campaign ID.';
+        else hint = `HTTP ${status}`;
+        if (resultEl) {
+          resultEl.textContent = `Connection failed: ${hint}`;
+          resultEl.className = 'config-test-result test-error';
+        }
+      }
+    } catch (err) {
+      if (resultEl) {
+        resultEl.textContent = `Connection error: ${err.message}`;
+        resultEl.className = 'config-test-result test-error';
+      }
+    }
+  }
+
+  /**
+   * Save all settings from the Config tab form inputs.
+   * Reads values from DOM, saves to Foundry settings, shows confirmation.
+   * @private
+   */
+  async _onSaveConfig() {
+    const el = this.element;
+    if (!el) return;
+
+    try {
+      // Connection fields (require reload if changed).
+      const apiUrl = el.querySelector('[data-config-key="apiUrl"]')?.value?.trim() ?? '';
+      const apiKey = el.querySelector('[data-config-key="apiKey"]')?.value?.trim() ?? '';
+      const campaignId = el.querySelector('[data-config-key="campaignId"]')?.value?.trim() ?? '';
+
+      const oldUrl = getSetting('apiUrl');
+      const oldKey = getSetting('apiKey');
+      const oldCamp = getSetting('campaignId');
+      const connectionChanged = apiUrl !== oldUrl || apiKey !== oldKey || campaignId !== oldCamp;
+
+      await setSetting('apiUrl', apiUrl);
+      await setSetting('apiKey', apiKey);
+      await setSetting('campaignId', campaignId);
+
+      // Sync directions.
+      const directions = {};
+      el.querySelectorAll('.config-direction-select').forEach((select) => {
+        directions[select.dataset.syncType] = select.value;
+      });
+      await setSyncDirections(directions);
+
+      // Update per-feature toggles from directions (for backward compat).
+      await setSetting('syncJournals', directions.journals !== 'off');
+      await setSetting('syncMaps', directions.maps !== 'off');
+      await setSetting('syncCalendar', directions.calendar !== 'off');
+      await setSetting('syncCharacters', directions.characters !== 'off');
+
+      // Permission settings.
+      const syncPerms = el.querySelector('[data-config-key="syncPermissions"]')?.checked ?? true;
+      await setSetting('syncPermissions', syncPerms);
+
+      const dmOnlyHidden = el.querySelector('[data-config-key="dmOnlyHidden"]')?.checked ?? true;
+      await setSetting('dmOnlyHidden', dmOnlyHidden);
+
+      const defaultOwnership = Number(el.querySelector('[data-config-key="defaultOwnership"]')?.value ?? 0);
+      await setSetting('defaultOwnership', defaultOwnership);
+
+      // Behavior settings.
+      const conflictRes = el.querySelector('[data-config-key="conflictResolution"]')?.value ?? 'chronicle';
+      await setSetting('conflictResolution', conflictRes);
+
+      const autoSync = el.querySelector('[data-config-key="autoSync"]')?.checked ?? true;
+      await setSetting('autoSync', autoSync);
+
+      // Exclusion rules.
+      const tagsText = el.querySelector('[data-config-key="excludedTags"]')?.value ?? '';
+      const tags = tagsText.split(',').map(t => t.trim()).filter(Boolean);
+      await setExcludedTags(tags);
+
+      const namePattern = el.querySelector('[data-config-key="excludedNamePattern"]')?.value ?? '';
+      await setSetting('excludedNamePattern', namePattern);
+
+      ui.notifications.info('Chronicle: Configuration saved.');
+      this._logActivity('update', 'Sync configuration updated');
+
+      if (connectionChanged) {
+        ui.notifications.warn('Chronicle: Connection settings changed. Reload Foundry to apply.');
+      }
+
+      this.render({ force: true });
+    } catch (err) {
+      console.error('Chronicle Dashboard: Save config failed', err);
+      ui.notifications.error(`Failed to save config: ${err.message}`);
     }
   }
 

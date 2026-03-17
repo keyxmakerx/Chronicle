@@ -7,7 +7,7 @@
  */
 
 import { ChronicleAPI } from './api-client.mjs';
-import { getSetting, setSetting, isConfigured } from './settings.mjs';
+import { getSetting, setSetting, isConfigured, getSyncDirections, getExcludedTags } from './settings.mjs';
 
 /**
  * Hardcoded fallback map for known Foundry→Chronicle system mappings.
@@ -291,6 +291,70 @@ export class SyncManager {
    */
   async createMapping(mapping) {
     return this.api.post('/sync/mappings', mapping);
+  }
+
+  /**
+   * Get the sync direction for a given sync type.
+   * Returns "both", "pull", "push", or "off".
+   * @param {string} syncType - One of: journals, maps, calendar, characters, shops.
+   * @returns {string}
+   */
+  getSyncDirection(syncType) {
+    const directions = getSyncDirections();
+    return directions[syncType] || 'both';
+  }
+
+  /**
+   * Check if a sync type allows pulling from Chronicle to Foundry.
+   * @param {string} syncType
+   * @returns {boolean}
+   */
+  canPull(syncType) {
+    const dir = this.getSyncDirection(syncType);
+    return dir === 'both' || dir === 'pull';
+  }
+
+  /**
+   * Check if a sync type allows pushing from Foundry to Chronicle.
+   * @param {string} syncType
+   * @returns {boolean}
+   */
+  canPush(syncType) {
+    const dir = this.getSyncDirection(syncType);
+    return dir === 'both' || dir === 'push';
+  }
+
+  /**
+   * Check if auto-sync on change is enabled.
+   * @returns {boolean}
+   */
+  isAutoSync() {
+    return getSetting('autoSync');
+  }
+
+  /**
+   * Check if an entity should be excluded from sync based on tag or name rules.
+   * @param {object} entity - Entity with name and tags array.
+   * @returns {boolean} True if the entity should be excluded.
+   */
+  isExcludedByRules(entity) {
+    // Tag-based exclusion.
+    const excludedTags = getExcludedTags();
+    if (excludedTags.length > 0 && entity.tags) {
+      const entityTags = Array.isArray(entity.tags)
+        ? entity.tags.map(t => (typeof t === 'string' ? t : t.name || '').toLowerCase())
+        : [];
+      const excluded = excludedTags.map(t => t.toLowerCase());
+      if (entityTags.some(t => excluded.includes(t))) return true;
+    }
+
+    // Name pattern exclusion.
+    const namePattern = getSetting('excludedNamePattern');
+    if (namePattern && entity.name) {
+      if (entity.name.toLowerCase().includes(namePattern.toLowerCase())) return true;
+    }
+
+    return false;
   }
 
   /**

@@ -117,6 +117,76 @@ export function registerSettings() {
     type: String,
     default: '{"excludedTypes":[],"excludedEntities":[]}',
   });
+
+  // -----------------------------------------------------------------------
+  // Sync Configuration settings (managed via Config tab in dashboard)
+  // -----------------------------------------------------------------------
+
+  // Per-type sync direction: JSON map of sync type → direction.
+  // Directions: "both" (bidirectional), "pull" (Chronicle→Foundry), "push" (Foundry→Chronicle), "off".
+  game.settings.register(MODULE_ID, 'syncDirections', {
+    scope: 'world',
+    config: false,
+    type: String,
+    default: '{"journals":"both","maps":"both","calendar":"both","characters":"both","shops":"both"}',
+  });
+
+  // Permission mapping: sync Chronicle visibility to Foundry ownership levels.
+  game.settings.register(MODULE_ID, 'syncPermissions', {
+    scope: 'world',
+    config: false,
+    type: Boolean,
+    default: true,
+  });
+
+  // Default Foundry ownership level for newly synced documents.
+  // Values: 0 (NONE), 1 (LIMITED), 2 (OBSERVER), 3 (OWNER).
+  game.settings.register(MODULE_ID, 'defaultOwnership', {
+    scope: 'world',
+    config: false,
+    type: Number,
+    default: 0,
+  });
+
+  // Whether DM-only entities should be hidden in Foundry (ownership NONE).
+  game.settings.register(MODULE_ID, 'dmOnlyHidden', {
+    scope: 'world',
+    config: false,
+    type: Boolean,
+    default: true,
+  });
+
+  // Conflict resolution strategy: "chronicle", "foundry", or "newest".
+  game.settings.register(MODULE_ID, 'conflictResolution', {
+    scope: 'world',
+    config: false,
+    type: String,
+    default: 'chronicle',
+  });
+
+  // Auto-sync on change (true) vs manual-only (false).
+  game.settings.register(MODULE_ID, 'autoSync', {
+    scope: 'world',
+    config: false,
+    type: Boolean,
+    default: true,
+  });
+
+  // Tag-based exclusions: JSON array of tag names to exclude from sync.
+  game.settings.register(MODULE_ID, 'excludedTags', {
+    scope: 'world',
+    config: false,
+    type: String,
+    default: '[]',
+  });
+
+  // Name pattern exclusion: entities matching this substring are excluded.
+  game.settings.register(MODULE_ID, 'excludedNamePattern', {
+    scope: 'world',
+    config: false,
+    type: String,
+    default: '',
+  });
 }
 
 /**
@@ -166,6 +236,46 @@ export function isConfigured() {
   const key = getSetting('apiKey');
   const campaign = getSetting('campaignId');
   return !!(url && key && campaign);
+}
+
+/**
+ * Get sync directions config (per sync type).
+ * @returns {{ journals: string, maps: string, calendar: string, characters: string, shops: string }}
+ */
+export function getSyncDirections() {
+  try {
+    return JSON.parse(getSetting('syncDirections'));
+  } catch {
+    return { journals: 'both', maps: 'both', calendar: 'both', characters: 'both', shops: 'both' };
+  }
+}
+
+/**
+ * Save sync directions config.
+ * @param {object} directions
+ */
+export async function setSyncDirections(directions) {
+  await setSetting('syncDirections', JSON.stringify(directions));
+}
+
+/**
+ * Get excluded tags list.
+ * @returns {string[]}
+ */
+export function getExcludedTags() {
+  try {
+    return JSON.parse(getSetting('excludedTags'));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save excluded tags list.
+ * @param {string[]} tags
+ */
+export async function setExcludedTags(tags) {
+  await setSetting('excludedTags', JSON.stringify(tags));
 }
 
 /**

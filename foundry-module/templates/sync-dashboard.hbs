@@ -14,6 +14,9 @@
 
   {{!-- Tab navigation --}}
   <nav class="dashboard-tabs" data-group="primary">
+    <a class="item" data-tab="config">
+      <i class="fa-solid fa-sliders"></i> Config
+    </a>
     <a class="item" data-tab="entities">
       <i class="fa-solid fa-book"></i> Entities
     </a>
@@ -36,6 +39,137 @@
 
   {{!-- Tab content --}}
   <section class="dashboard-content">
+
+    {{!-- ================================================================= --}}
+    {{!-- CONFIG TAB                                                        --}}
+    {{!-- ================================================================= --}}
+    <div class="tab" data-tab="config" data-group="primary">
+      <div class="config-panel">
+
+        {{!-- Connection Setup --}}
+        <div class="config-section">
+          <h3 class="section-heading">Connection</h3>
+          <div class="connection-status state-{{connectionState}}">
+            <span class="status-dot"></span>
+            <span>{{connectionLabel}}</span>
+          </div>
+          <div class="config-field">
+            <label class="config-label">Chronicle URL</label>
+            <input type="text" class="config-input" data-config-key="apiUrl" value="{{config.apiUrl}}" placeholder="https://chronicle.example.com" />
+          </div>
+          <div class="config-field">
+            <label class="config-label">API Key</label>
+            <input type="password" class="config-input" data-config-key="apiKey" value="{{config.apiKey}}" placeholder="Enter API key" autocomplete="off" />
+          </div>
+          <div class="config-field">
+            <label class="config-label">Campaign ID</label>
+            <input type="text" class="config-input" data-config-key="campaignId" value="{{config.campaignId}}" placeholder="Campaign UUID" />
+          </div>
+          <div class="config-actions">
+            <button type="button" class="dashboard-btn btn-sm" data-action="test-connection">
+              <i class="fa-solid fa-plug"></i> Test Connection
+            </button>
+            <span class="config-test-result" data-test-result></span>
+          </div>
+        </div>
+
+        {{!-- Sync Scope --}}
+        <div class="config-section">
+          <h3 class="section-heading">Sync Scope</h3>
+          <p class="config-hint">Choose what to sync and in which direction.</p>
+          <div class="config-scope-grid">
+            {{#each config.syncTypes}}
+            <div class="config-scope-row">
+              <div class="scope-info">
+                <i class="fa-solid {{icon}}"></i>
+                <span class="scope-label">{{label}}</span>
+                {{#if count}}<span class="scope-count">{{count}}</span>{{/if}}
+              </div>
+              <select class="config-direction-select" data-sync-type="{{key}}">
+                <option value="both" {{#if (eq direction "both")}}selected{{/if}}>Bidirectional</option>
+                <option value="pull" {{#if (eq direction "pull")}}selected{{/if}}>Pull Only</option>
+                <option value="push" {{#if (eq direction "push")}}selected{{/if}}>Push Only</option>
+                <option value="off" {{#if (eq direction "off")}}selected{{/if}}>Off</option>
+              </select>
+            </div>
+            {{/each}}
+          </div>
+        </div>
+
+        {{!-- Permission Mapping --}}
+        <div class="config-section">
+          <h3 class="section-heading">Permissions</h3>
+          <div class="config-toggle-row">
+            <label class="config-toggle-label">
+              <input type="checkbox" class="config-checkbox" data-config-key="syncPermissions" {{#if config.syncPermissions}}checked{{/if}} />
+              Sync visibility to Foundry ownership
+            </label>
+          </div>
+          <div class="config-toggle-row">
+            <label class="config-toggle-label">
+              <input type="checkbox" class="config-checkbox" data-config-key="dmOnlyHidden" {{#if config.dmOnlyHidden}}checked{{/if}} />
+              DM-only entities hidden in Foundry
+            </label>
+          </div>
+          <div class="config-field">
+            <label class="config-label">Default ownership for new documents</label>
+            <select class="config-select" data-config-key="defaultOwnership">
+              <option value="0" {{#if (eq config.defaultOwnership 0)}}selected{{/if}}>None</option>
+              <option value="1" {{#if (eq config.defaultOwnership 1)}}selected{{/if}}>Limited</option>
+              <option value="2" {{#if (eq config.defaultOwnership 2)}}selected{{/if}}>Observer</option>
+              <option value="3" {{#if (eq config.defaultOwnership 3)}}selected{{/if}}>Owner</option>
+            </select>
+          </div>
+        </div>
+
+        {{!-- Sync Behavior --}}
+        <div class="config-section">
+          <h3 class="section-heading">Behavior</h3>
+          <div class="config-field">
+            <label class="config-label">Conflict resolution</label>
+            <select class="config-select" data-config-key="conflictResolution">
+              <option value="chronicle" {{#if (eq config.conflictResolution "chronicle")}}selected{{/if}}>Chronicle wins</option>
+              <option value="foundry" {{#if (eq config.conflictResolution "foundry")}}selected{{/if}}>Foundry wins</option>
+              <option value="newest" {{#if (eq config.conflictResolution "newest")}}selected{{/if}}>Newest wins</option>
+            </select>
+          </div>
+          <div class="config-toggle-row">
+            <label class="config-toggle-label">
+              <input type="checkbox" class="config-checkbox" data-config-key="autoSync" {{#if config.autoSync}}checked{{/if}} />
+              Auto-sync on change
+            </label>
+            <span class="config-hint-inline">When disabled, use Pull/Push buttons to sync manually.</span>
+          </div>
+        </div>
+
+        {{!-- Exclusion Rules --}}
+        <div class="config-section">
+          <h3 class="section-heading">Exclusion Rules</h3>
+          <div class="config-field">
+            <label class="config-label">Excluded tags <span class="config-hint-inline">(comma-separated)</span></label>
+            <input type="text" class="config-input" data-config-key="excludedTags" value="{{config.excludedTagsText}}" placeholder="draft, wip, test" />
+          </div>
+          <div class="config-field">
+            <label class="config-label">Exclude by name <span class="config-hint-inline">(entities containing this text)</span></label>
+            <input type="text" class="config-input" data-config-key="excludedNamePattern" value="{{config.excludedNamePattern}}" placeholder="e.g. [DRAFT]" />
+          </div>
+          {{#if config.excludedTypeCount}}
+          <p class="config-hint">
+            <i class="fa-solid fa-circle-info"></i>
+            {{config.excludedTypeCount}} entity type(s) and {{config.excludedEntityCount}} individual entity(ies) excluded via the Entities tab.
+          </p>
+          {{/if}}
+        </div>
+
+        {{!-- Save --}}
+        <div class="config-save-bar">
+          <button type="button" class="dashboard-btn" data-action="save-config">
+            <i class="fa-solid fa-floppy-disk"></i> Save Configuration
+          </button>
+        </div>
+
+      </div>
+    </div>
 
     {{!-- ================================================================= --}}
     {{!-- ENTITIES TAB                                                      --}}
