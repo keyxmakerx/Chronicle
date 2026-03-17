@@ -37,6 +37,10 @@
     --color-accent:        #6366f1;  /* indigo-500 */
     --color-accent-hover:  #4f46e5;  /* indigo-600 -- darker for hover states */
     --color-accent-light:  #a5b4fc;  /* indigo-300 -- lighter for badges/tags */
+    /* RGB channel variants for Tailwind opacity modifier support (<alpha-value>). */
+    --color-accent-rgb:       99 102 241;
+    --color-accent-hover-rgb: 79 70 229;
+    --color-accent-light-rgb: 165 180 252;
     --color-sidebar-bg:    #1a1c23;  /* always dark */
   }
 
@@ -57,6 +61,9 @@
     --color-accent:        #6366f1;  /* indigo-500 -- same both modes */
     --color-accent-hover:  #4f46e5;  /* indigo-600 */
     --color-accent-light:  #a5b4fc;  /* indigo-300 */
+    --color-accent-rgb:       99 102 241;
+    --color-accent-hover-rgb: 79 70 229;
+    --color-accent-light-rgb: 165 180 252;
     --color-sidebar-bg:    #1a1c23;  /* always dark */
   }
 
@@ -83,7 +90,7 @@
   }
   .btn-primary {
     @apply btn bg-accent text-white hover:bg-accent-hover
-           focus:ring-accent shadow-sm hover:shadow-md hover:shadow-indigo-500/20;
+           focus:ring-accent shadow-sm hover:shadow-md hover:shadow-accent/20;
   }
   .btn-secondary {
     @apply btn bg-surface text-fg-body hover:bg-surface-alt
@@ -845,7 +852,7 @@
 
   /* Reorg mode active indicator on toggle button. */
   #sidebar-reorg-toggle.bg-accent\/20 {
-    background-color: rgba(var(--color-accent-rgb, 99, 102, 241), 0.2);
+    background-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
   }
 
   /* Tree toggle button styling. */

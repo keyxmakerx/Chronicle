@@ -40,9 +40,9 @@ module.exports = {
         // Accent color for links, buttons, active states.
         // References CSS custom property so per-campaign overrides work.
         accent: {
-          DEFAULT: 'var(--color-accent, #6366f1)',
-          hover: 'var(--color-accent-hover, #4f46e5)',
-          light: 'var(--color-accent-light, #a5b4fc)',
+          DEFAULT: 'rgb(var(--color-accent-rgb, 99 102 241) / <alpha-value>)',
+          hover: 'rgb(var(--color-accent-hover-rgb, 79 70 229) / <alpha-value>)',
+          light: 'rgb(var(--color-accent-light-rgb, 165 180 252) / <alpha-value>)',
         },
 
         // ── Semantic theme tokens ──────────────────────────────
