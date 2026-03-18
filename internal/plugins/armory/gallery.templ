@@ -10,26 +10,67 @@ import (
 )
 
 // ArmoryGalleryPage renders the full Armory gallery page with layout wrapper.
-templ ArmoryGalleryPage(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo) {
+templ ArmoryGalleryPage(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo, instances []InventoryInstance, selected *InventoryInstance, csrfToken string) {
 	@layouts.App(cc.Campaign.Name + " - Armory") {
-		@ArmoryGalleryContent(cc, cards, total, opts, itemTypes)
+		@ArmoryGalleryContent(cc, cards, total, opts, itemTypes, instances, selected, csrfToken)
 	}
 }
 
 // ArmoryGalleryContent renders the gallery content (HTMX partial target).
-templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo) {
+templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo, instances []InventoryInstance, selected *InventoryInstance, csrfToken string) {
 	<div id="armory-gallery">
 		<!-- Page header -->
 		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
 			<div>
 				<h1 class="text-2xl font-bold text-fg">
-					<i class="fa-solid fa-shield-halved mr-2 text-fg-muted"></i>Armory
+					if selected != nil {
+						<i class={ "fa-solid " + selected.Icon + " mr-2" } style={ "color:" + selected.Color }></i>
+						{ selected.Name }
+					} else {
+						<i class="fa-solid fa-shield-halved mr-2 text-fg-muted"></i>Armory
+					}
 				</h1>
 				<p class="text-sm text-fg-secondary mt-0.5">
 					{ fmt.Sprintf("%d", total) } items
+					if selected != nil && selected.Description != nil && *selected.Description != "" {
+						<span class="mx-1">&middot;</span>{ *selected.Description }
+					}
 				</p>
 			</div>
 			<div class="flex items-center gap-3 flex-wrap">
+				<!-- Instance selector -->
+				if len(instances) > 0 {
+					<select
+						name="instance"
+						class="input py-2 text-sm"
+						hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
+						hx-target="#armory-gallery"
+						hx-swap="innerHTML"
+						hx-include="[name='q'],[name='sort'],[name='tag'],[name='type']"
+					>
+						<option value="">All Items</option>
+						for _, inst := range instances {
+							<option value={ fmt.Sprintf("%d", inst.ID) } selected?={ opts.InstanceID == inst.ID }>
+								{ inst.Name } ({ fmt.Sprintf("%d", inst.ItemCount) })
+							</option>
+						}
+					</select>
+				}
+
+				// Manage instances button (Owner only).
+				if cc.MemberRole >= campaigns.RoleOwner {
+					<button
+						type="button"
+						class="btn-secondary text-sm"
+						hx-get={ fmt.Sprintf("/campaigns/%s/armory/instances/manage", cc.Campaign.ID) }
+						hx-target="#instance-manage-panel"
+						hx-swap="innerHTML"
+						title="Manage inventory collections"
+					>
+						<i class="fa-solid fa-gear text-xs"></i>
+					</button>
+				}
+
 				<!-- Search -->
 				<div class="relative">
 					<input
@@ -82,6 +123,9 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 			</div>
 		</div>
 
+		<!-- Instance management panel (loaded via HTMX) -->
+		<div id="instance-manage-panel"></div>
+
 		<!-- Item Grid -->
 		if len(cards) == 0 {
 			<div class="text-center py-16">
@@ -115,14 +159,32 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 	</div>
 }
 
+// armoryPageURL builds a gallery URL with all current filter params.
+func armoryPageURL(campaignID string, page int, opts ItemListOptions) string {
+	url := fmt.Sprintf("/campaigns/%s/armory?page=%d&sort=%s", campaignID, page, opts.Sort)
+	if opts.Search != "" {
+		url += "&q=" + opts.Search
+	}
+	if opts.Tag != "" {
+		url += "&tag=" + opts.Tag
+	}
+	if opts.TypeID > 0 {
+		url += fmt.Sprintf("&type=%d", opts.TypeID)
+	}
+	if opts.InstanceID > 0 {
+		url += fmt.Sprintf("&instance=%d", opts.InstanceID)
+	}
+	return url
+}
+
 // armoryPagination renders pagination controls for the Armory gallery.
 templ armoryPagination(cc *campaigns.CampaignContext, total int, opts ItemListOptions) {
 	<div class="flex items-center justify-center gap-2 mt-8">
 		if opts.Page > 1 {
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory?page=%d&sort=%s&q=%s&tag=%s&type=%d", cc.Campaign.ID, opts.Page-1, opts.Sort, opts.Search, opts.Tag, opts.TypeID)) }
+				href={ templ.SafeURL(armoryPageURL(cc.Campaign.ID, opts.Page-1, opts)) }
 				class="px-3 py-1.5 text-sm rounded-md bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
-				hx-get={ fmt.Sprintf("/campaigns/%s/armory?page=%d&sort=%s&q=%s&tag=%s&type=%d", cc.Campaign.ID, opts.Page-1, opts.Sort, opts.Search, opts.Tag, opts.TypeID) }
+				hx-get={ armoryPageURL(cc.Campaign.ID, opts.Page-1, opts) }
 				hx-target="#armory-gallery"
 				hx-swap="innerHTML"
 			>
@@ -134,9 +196,9 @@ templ armoryPagination(cc *campaigns.CampaignContext, total int, opts ItemListOp
 		</span>
 		if opts.Page*opts.PerPage < total {
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory?page=%d&sort=%s&q=%s&tag=%s&type=%d", cc.Campaign.ID, opts.Page+1, opts.Sort, opts.Search, opts.Tag, opts.TypeID)) }
+				href={ templ.SafeURL(armoryPageURL(cc.Campaign.ID, opts.Page+1, opts)) }
 				class="px-3 py-1.5 text-sm rounded-md bg-surface-alt text-fg-secondary hover:text-fg transition-colors"
-				hx-get={ fmt.Sprintf("/campaigns/%s/armory?page=%d&sort=%s&q=%s&tag=%s&type=%d", cc.Campaign.ID, opts.Page+1, opts.Sort, opts.Search, opts.Tag, opts.TypeID) }
+				hx-get={ armoryPageURL(cc.Campaign.ID, opts.Page+1, opts) }
 				hx-target="#armory-gallery"
 				hx-swap="innerHTML"
 			>

@@ -304,11 +304,31 @@ _Validate the full owner pipeline: upload custom system → enable → get prese
 tooltips, Foundry sync, widgets, character sheets. Ensure the system framework
 is truly modular and self-service._
 
-- [ ] **Sprint X-1: System Upload UX & Validation** — Replace bare file input with guided wizard: upload ZIP, show parsed manifest summary (name, categories, presets, field count, Foundry compatibility), confirm and install. Manifest documentation/help section. Detailed validation error messages with fix suggestions. "Download sample system ZIP" button.
-- [ ] **Sprint X-2: System-Provided Entity Presets & Auto-Setup** — When system with `entity_presets` is enabled, offer to auto-create matching entity types. One-click entity type creation from presets. Preset sync on system re-upload (show diff, add new fields, don't remove existing). "From: D&D 5e" badge on preset-derived entity types.
+- [x] **Sprint X-0: Sandbox Hardening & Trust Policy** — Field type enum whitelist in `ValidateManifest()`. Slug format regex validation. Content limits (categories, fields, presets). HTML sanitization of manifest strings. `OwnerUploadPolicy` setting (`auto_approve`/`require_approval`/`disabled`) in `PackageSecuritySettings`. Security settings page now saveable with POST handler.
+- [x] **Sprint X-1: System Upload UX & Validation** — Two-step upload flow: upload ZIP → preview (dry-run) → confirm install. `PreviewFromZIP()` validates in memory without writing to disk. `BuildImpactTree()` creates nested tree structure for visual diagram. `impact_tree.js` renders collapsible tree widget. Preview template shows categories with item counts/samples, entity presets with field tables, Foundry compatibility, warnings/errors. Upload policy gating (disabled/auto_approve/require_approval).
+- [x] **Sprint X-2: System-Provided Entity Presets & Auto-Setup** — `PresetApplier` interface in addons package. `EnableForCampaign()` auto-creates entity types from system manifest's `entity_presets`. Skips categories that already exist. Graceful degradation on failure. Wired via `app/preset_applier.go`.
 - [ ] **Sprint X-3: System-Provided Widgets & Layout Blocks** — New `widgets` array in manifest. Allow `.js` files in system ZIPs (scoped to `Chronicle.register()` pattern). System widgets appear in template editor palette when enabled. Example: D&D 5e `stat-block` widget.
-- [ ] **Sprint X-4: System Debugging & Diagnostics** — `/campaigns/:id/systems/status` page showing enabled system, loaded categories, item counts, presets, Foundry compatibility. Auto-generated reference data browser. Tooltip preview. Field mapping validator for `foundry_path` annotations. System error log in campaign settings.
+- [x] **Sprint X-4: System Debugging & Diagnostics** — `/campaigns/:id/systems/status` page with system info, stats grid, categories, entity presets, Foundry compatibility, validation warnings. `diagnostics.templ` template. `SystemStatus()` handler on `CampaignSystemHandler`.
 - [ ] **Sprint X-5: Character Sheet Layout Blocks (Foundation)** — New `character_sheet` layout block type in template editor. System-specific styled layouts (D&D 5e ability score grid, HP bar, class/level header). Manifest `field_groups` for visual sections. Inline-editable fields via attributes widget API.
+
+### Phase A-2: Armory Multi-Instance
+
+_Support multiple named inventory collections per campaign. Current armory is a single campaign-wide view._
+
+- [x] **Sprint A2-1: Inventory Instances** — Migration 000011: `inventory_instances` + `inventory_items` tables + `instance_id` on `shop_transactions`. `InstanceRepository`, `InstanceService`, `InstanceHandler` with full CRUD. Gallery page instance dropdown + manage panel. Transactions scoped to instances.
+- [ ] **Sprint A2-2: Instance UI Polish** — Add/remove items UI on instance view, drag-and-drop reorder, instance description editing, Foundry sync per-instance.
+
+### Entity Manager Widget
+
+_A drag-and-droppable block for entity/category/dashboard pages showing entities from a selected category with sorting, tag filtering, folder creation, and visibility toggles._
+
+- [x] **Entity Manager Block** — Register `entity_manager` block type. Templ component in `block_entity_manager.templ`. JS widget with search, tag filtering, sort, drag reorder, visibility toggle, folder creation, tree rendering. Reparenting support.
+- [x] **Sidebar Hidden Entities** — `hidden_entity_ids[]` in sidebar-config. Filtered for players, grayed for owners. Toggle via entity manager widget and sidebar reorg mode.
+
+### Needs Discussion (Deferred)
+
+- [ ] **Sessions** — Need to discuss session management direction, relationship with calendar, player RSVP flow.
+- [ ] **Journals** — Need to discuss journal direction — "Obsidian built into the site" vision, personal vs shared notes, folder structure, linking.
 
 ### Deferred to Phase S+ (or community contributions)
 

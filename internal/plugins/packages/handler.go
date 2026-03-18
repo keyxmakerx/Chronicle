@@ -3,6 +3,7 @@ package packages
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 
@@ -365,4 +366,37 @@ func (h *Handler) GetSecuritySettings(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, SecuritySettingsPage(*secSettings, csrfToken))
+}
+
+// SaveSecuritySettings persists settings (POST /admin/packages/settings).
+func (h *Handler) SaveSecuritySettings(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	maxFileSizeMB, _ := strconv.ParseInt(c.FormValue("max_file_size_mb"), 10, 64)
+	if maxFileSizeMB < 1 {
+		maxFileSizeMB = 50
+	}
+
+	ownerPolicy := c.FormValue("owner_upload_policy")
+	if ownerPolicy != OwnerUploadAutoApprove && ownerPolicy != OwnerUploadRequireApproval && ownerPolicy != OwnerUploadDisabled {
+		ownerPolicy = OwnerUploadAutoApprove
+	}
+
+	settings := &PackageSecuritySettings{
+		RepoPolicy:        c.FormValue("repo_policy"),
+		RequireApproval:   c.FormValue("require_approval") == "true",
+		MaxFileSize:       maxFileSizeMB * 1024 * 1024,
+		ValidateManifest:  c.FormValue("validate_manifest") == "true",
+		ScanContent:       c.FormValue("scan_content") == "true",
+		OwnerUploadPolicy: ownerPolicy,
+	}
+
+	if err := h.service.SaveSecuritySettings(ctx, settings); err != nil {
+		slog.Error("failed to save security settings", slog.Any("error", err))
+		return err
+	}
+
+	slog.Info("security settings updated")
+
+	return c.Redirect(http.StatusSeeOther, "/admin/packages/settings")
 }

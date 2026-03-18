@@ -52,7 +52,7 @@ templ SystemIndexContent(cc *campaigns.CampaignContext, manifest *SystemManifest
 			for _, cat := range cats {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug)) }
-					class="block bg-surface border border-border rounded-lg p-5 hover:border-primary/50 hover:shadow-md transition-all group"
+					class="block bg-surface border border-edge rounded-lg p-5 hover:border-primary/50 hover:shadow-md transition-all group"
 					hx-get={ fmt.Sprintf("/campaigns/%s/systems/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug) }
 					hx-target="#module-content"
 					hx-swap="outerHTML"
@@ -100,9 +100,9 @@ templ CategoryListContent(cc *campaigns.CampaignContext, manifest *SystemManifes
 		</div>
 
 		<!-- Item table -->
-		<div class="bg-surface border border-border rounded-lg overflow-hidden">
+		<div class="bg-surface border border-edge rounded-lg overflow-hidden">
 			<table class="w-full text-sm">
-				<thead class="bg-surface-raised border-b border-border">
+				<thead class="bg-surface-alt border-b border-edge">
 					<tr>
 						<th class="text-left px-4 py-3 font-medium text-fg-secondary">Name</th>
 						<th class="text-left px-4 py-3 font-medium text-fg-secondary hidden sm:table-cell">Summary</th>
@@ -116,7 +116,7 @@ templ CategoryListContent(cc *campaigns.CampaignContext, manifest *SystemManifes
 				<tbody class="divide-y divide-border">
 					for _, item := range items {
 						<tr
-							class="hover:bg-surface-raised/50 cursor-pointer transition-colors"
+							class="hover:bg-surface-alt/50 cursor-pointer transition-colors"
 							hx-get={ fmt.Sprintf("/campaigns/%s/systems/%s/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug, item.ID) }
 							hx-target="#module-content"
 							hx-swap="outerHTML"
@@ -183,7 +183,7 @@ templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest,
 
 			<!-- Properties card -->
 			if len(item.Properties) > 0 && cat != nil && len(cat.Fields) > 0 {
-				<div class="bg-surface border border-border rounded-lg p-4 mb-6">
+				<div class="bg-surface border border-edge rounded-lg p-4 mb-6">
 					<div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
 						for _, field := range cat.Fields {
 							if val := propString(item.Properties, field.Key); val != "" {
@@ -201,7 +201,7 @@ templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest,
 			if len(item.Tags) > 0 {
 				<div class="flex flex-wrap gap-1.5 mb-6">
 					for _, tag := range item.Tags {
-						<span class="inline-block px-2 py-0.5 bg-surface-raised text-fg-secondary rounded text-xs">{ tag }</span>
+						<span class="inline-block px-2 py-0.5 bg-surface-alt text-fg-secondary rounded text-xs">{ tag }</span>
 					}
 				</div>
 			}

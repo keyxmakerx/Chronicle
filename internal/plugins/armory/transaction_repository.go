@@ -37,13 +37,13 @@ func NewTransactionRepository(db *sql.DB) TransactionRepository {
 // Create inserts a new transaction record.
 func (r *transactionRepository) Create(ctx context.Context, tx *Transaction) error {
 	query := `INSERT INTO shop_transactions
-		(campaign_id, shop_entity_id, item_entity_id, buyer_entity_id,
+		(campaign_id, instance_id, shop_entity_id, item_entity_id, buyer_entity_id,
 		 relation_id, quantity, price_paid, currency, price_numeric,
 		 transaction_type, notes, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := r.db.ExecContext(ctx, query,
-		tx.CampaignID, tx.ShopEntityID, tx.ItemEntityID, nullString(tx.BuyerEntityID),
+		tx.CampaignID, nullInt(tx.InstanceID), tx.ShopEntityID, tx.ItemEntityID, nullString(tx.BuyerEntityID),
 		nullInt(tx.RelationID), tx.Quantity, nullString(tx.PricePaid), tx.Currency, nullFloat(tx.PriceNumeric),
 		tx.TransactionType, nullString(tx.Notes), nullString(tx.CreatedBy),
 	)
@@ -60,7 +60,7 @@ func (r *transactionRepository) Create(ctx context.Context, tx *Transaction) err
 }
 
 // txSelectColumns is the column set for transaction list queries.
-const txSelectColumns = `t.id, t.campaign_id, t.shop_entity_id, t.item_entity_id,
+const txSelectColumns = `t.id, t.campaign_id, t.instance_id, t.shop_entity_id, t.item_entity_id,
 	t.buyer_entity_id, t.relation_id, t.quantity, t.price_paid, t.currency,
 	t.price_numeric, t.transaction_type, t.notes, t.created_at, t.created_by,
 	COALESCE(es.name, ''), COALESCE(ei.name, ''), COALESCE(eb.name, '')`
@@ -131,11 +131,11 @@ func (r *transactionRepository) queryTransactions(ctx context.Context, where str
 func scanTransaction(rows *sql.Rows) (*Transaction, error) {
 	t := &Transaction{}
 	var buyerID, pricePaid, notes, createdBy sql.NullString
-	var relationID sql.NullInt64
+	var instanceID, relationID sql.NullInt64
 	var priceNum sql.NullFloat64
 
 	err := rows.Scan(
-		&t.ID, &t.CampaignID, &t.ShopEntityID, &t.ItemEntityID,
+		&t.ID, &t.CampaignID, &instanceID, &t.ShopEntityID, &t.ItemEntityID,
 		&buyerID, &relationID, &t.Quantity, &pricePaid, &t.Currency,
 		&priceNum, &t.TransactionType, &notes, &t.CreatedAt, &createdBy,
 		&t.ShopName, &t.ItemName, &t.BuyerName,
@@ -144,6 +144,10 @@ func scanTransaction(rows *sql.Rows) (*Transaction, error) {
 		return nil, fmt.Errorf("scanning transaction: %w", err)
 	}
 
+	if instanceID.Valid {
+		v := int(instanceID.Int64)
+		t.InstanceID = &v
+	}
 	if buyerID.Valid {
 		t.BuyerEntityID = &buyerID.String
 	}

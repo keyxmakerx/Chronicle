@@ -373,8 +373,14 @@ func (s *settingsService) UpdateCORSOrigins(ctx context.Context, origins []strin
 		}
 		// Strip trailing slash for consistency.
 		o = strings.TrimRight(o, "/")
+		// Auto-prepend https:// if no scheme provided — most users will paste
+		// bare hostnames like "vtt.example.com" rather than full origins.
 		if !strings.HasPrefix(o, "http://") && !strings.HasPrefix(o, "https://") {
-			return apperror.NewBadRequest(fmt.Sprintf("invalid origin %q: must start with http:// or https://", o))
+			o = "https://" + o
+		}
+		// Strip any trailing path components — CORS origins are scheme+host+port only.
+		if idx := strings.Index(o[8:], "/"); idx >= 0 {
+			o = o[:8+idx]
 		}
 		cleaned = append(cleaned, o)
 	}

@@ -162,6 +162,25 @@ func BlockConfigString(config map[string]any, key string) string {
 	return s
 }
 
+// BlockConfigInt extracts an integer value from a block config map.
+// Returns defaultVal if the key is missing or not a number.
+func BlockConfigInt(config map[string]any, key string, defaultVal int) int {
+	if config == nil {
+		return defaultVal
+	}
+	v, ok := config[key]
+	if !ok {
+		return defaultVal
+	}
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	}
+	return defaultVal
+}
+
 // BlockConfigLimit extracts a numeric limit from a block config map.
 // Returns defaultLimit if the key is missing or not a positive number.
 func BlockConfigLimit(config map[string]any, key string, defaultLimit int) int {

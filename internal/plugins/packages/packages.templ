@@ -383,93 +383,126 @@ templ SecuritySettingsPage(settings PackageSecuritySettings, csrfToken string) {
 				</p>
 			</div>
 
-			<div class="card p-5 space-y-6">
-				<!-- Repository Policy -->
-				<div>
-					<label class="block text-sm font-semibold text-fg mb-2">Repository Source Policy</label>
-					<p class="text-xs text-fg-muted mb-2">Controls which repository URLs are accepted for package submissions.</p>
-					<div class="space-y-2">
-						<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-							<input type="radio" name="repo_policy" value="github_only" checked?={ settings.RepoPolicy == RepoPolicyGitHubOnly } class="text-accent"/>
-							<div>
-								<span class="text-sm font-medium text-fg">GitHub Only</span>
-								<span class="text-xs text-fg-muted block">Only accept repositories hosted on GitHub.com</span>
-							</div>
-						</label>
-						<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-							<input type="radio" name="repo_policy" value="any_git" checked?={ settings.RepoPolicy == RepoPolicyAnyGit } class="text-accent"/>
-							<div>
-								<span class="text-sm font-medium text-fg">Known Git Hosts</span>
-								<span class="text-xs text-fg-muted block">Allow GitHub, GitLab, Bitbucket, Codeberg, and SourceHut</span>
-							</div>
-						</label>
-						<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-							<input type="radio" name="repo_policy" value="allow_all" checked?={ settings.RepoPolicy == RepoPolicyAllowAll } class="text-accent"/>
-							<div>
-								<span class="text-sm font-medium text-fg">Allow All HTTPS</span>
-								<span class="text-xs text-fg-muted block">Accept any HTTPS URL (private IPs are still blocked)</span>
-							</div>
-						</label>
-					</div>
-				</div>
+			<form method="POST" action="/admin/packages/settings" class="space-y-6">
+				<input type="hidden" name="_csrf" value={ csrfToken }/>
 
-				<!-- Require Admin Approval -->
-				<div class="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700">
+				<div class="card p-5 space-y-6">
+					<!-- Repository Policy -->
 					<div>
-						<span class="text-sm font-semibold text-fg">Require Admin Approval</span>
-						<span class="text-xs text-fg-muted block">Submissions from campaign owners must be approved before fetching</span>
+						<label class="block text-sm font-semibold text-fg mb-2">Repository Source Policy</label>
+						<p class="text-xs text-fg-muted mb-2">Controls which repository URLs are accepted for package submissions.</p>
+						<div class="space-y-2">
+							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+								<input type="radio" name="repo_policy" value="github_only" checked?={ settings.RepoPolicy == RepoPolicyGitHubOnly } class="text-accent"/>
+								<div>
+									<span class="text-sm font-medium text-fg">GitHub Only</span>
+									<span class="text-xs text-fg-muted block">Only accept repositories hosted on GitHub.com</span>
+								</div>
+							</label>
+							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+								<input type="radio" name="repo_policy" value="any_git" checked?={ settings.RepoPolicy == RepoPolicyAnyGit } class="text-accent"/>
+								<div>
+									<span class="text-sm font-medium text-fg">Known Git Hosts</span>
+									<span class="text-xs text-fg-muted block">Allow GitHub, GitLab, Bitbucket, Codeberg, and SourceHut</span>
+								</div>
+							</label>
+							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+								<input type="radio" name="repo_policy" value="allow_all" checked?={ settings.RepoPolicy == RepoPolicyAllowAll } class="text-accent"/>
+								<div>
+									<span class="text-sm font-medium text-fg">Allow All HTTPS</span>
+									<span class="text-xs text-fg-muted block">Accept any HTTPS URL (private IPs are still blocked)</span>
+								</div>
+							</label>
+						</div>
 					</div>
-					<label class="relative inline-flex items-center cursor-pointer">
-						<input type="checkbox" name="require_approval" value="true" checked?={ settings.RequireApproval } class="sr-only peer"/>
-						<div class="w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
-					</label>
-				</div>
 
-				<!-- Validate Manifest -->
-				<div class="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700">
+					<!-- Require Admin Approval -->
+					<div class="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700">
+						<div>
+							<span class="text-sm font-semibold text-fg">Require Admin Approval</span>
+							<span class="text-xs text-fg-muted block">Submissions from campaign owners must be approved before fetching</span>
+						</div>
+						<label class="relative inline-flex items-center cursor-pointer">
+							<input type="checkbox" name="require_approval" value="true" checked?={ settings.RequireApproval } class="sr-only peer"/>
+							<div class="w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
+						</label>
+					</div>
+
+					<!-- Owner Upload Policy -->
 					<div>
-						<span class="text-sm font-semibold text-fg">Validate Manifest</span>
-						<span class="text-xs text-fg-muted block">Require valid manifest.json at package root with id and name fields</span>
+						<label class="block text-sm font-semibold text-fg mb-2">Campaign Owner Upload Policy</label>
+						<p class="text-xs text-fg-muted mb-2">Controls whether campaign owners can upload custom game systems directly.</p>
+						<div class="space-y-2">
+							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+								<input type="radio" name="owner_upload_policy" value="auto_approve" checked?={ settings.OwnerUploadPolicy == OwnerUploadAutoApprove } class="text-accent"/>
+								<div>
+									<span class="text-sm font-medium text-fg">Auto-Approve</span>
+									<span class="text-xs text-fg-muted block">Owners can upload and install custom systems immediately. Best for trusted private instances.</span>
+								</div>
+							</label>
+							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+								<input type="radio" name="owner_upload_policy" value="require_approval" checked?={ settings.OwnerUploadPolicy == OwnerUploadRequireApproval } class="text-accent"/>
+								<div>
+									<span class="text-sm font-medium text-fg">Require Admin Approval</span>
+									<span class="text-xs text-fg-muted block">Uploads are staged for admin review before installation. Best for public hosted instances.</span>
+								</div>
+							</label>
+							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+								<input type="radio" name="owner_upload_policy" value="disabled" checked?={ settings.OwnerUploadPolicy == OwnerUploadDisabled } class="text-accent"/>
+								<div>
+									<span class="text-sm font-medium text-fg">Disabled</span>
+									<span class="text-xs text-fg-muted block">Campaign owners cannot upload custom systems. Only admin-approved packages are available.</span>
+								</div>
+							</label>
+						</div>
 					</div>
-					<label class="relative inline-flex items-center cursor-pointer">
-						<input type="checkbox" name="validate_manifest" value="true" checked?={ settings.ValidateManifest } class="sr-only peer"/>
-						<div class="w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
-					</label>
-				</div>
 
-				<!-- Scan Content -->
-				<div class="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700">
+					<!-- Validate Manifest -->
+					<div class="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700">
+						<div>
+							<span class="text-sm font-semibold text-fg">Validate Manifest</span>
+							<span class="text-xs text-fg-muted block">Require valid manifest.json at package root with id and name fields</span>
+						</div>
+						<label class="relative inline-flex items-center cursor-pointer">
+							<input type="checkbox" name="validate_manifest" value="true" checked?={ settings.ValidateManifest } class="sr-only peer"/>
+							<div class="w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
+						</label>
+					</div>
+
+					<!-- Scan Content -->
+					<div class="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700">
+						<div>
+							<span class="text-sm font-semibold text-fg">Scan Package Content</span>
+							<span class="text-xs text-fg-muted block">Reject packages containing executables, symlinks, or suspicious file types</span>
+						</div>
+						<label class="relative inline-flex items-center cursor-pointer">
+							<input type="checkbox" name="scan_content" value="true" checked?={ settings.ScanContent } class="sr-only peer"/>
+							<div class="w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
+						</label>
+					</div>
+
+					<!-- Max File Size -->
 					<div>
-						<span class="text-sm font-semibold text-fg">Scan Package Content</span>
-						<span class="text-xs text-fg-muted block">Reject packages containing executables, symlinks, or suspicious file types</span>
-					</div>
-					<label class="relative inline-flex items-center cursor-pointer">
-						<input type="checkbox" name="scan_content" value="true" checked?={ settings.ScanContent } class="sr-only peer"/>
-						<div class="w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
-					</label>
-				</div>
-
-				<!-- Max File Size -->
-				<div>
-					<label class="block text-sm font-semibold text-fg mb-2">Maximum File Size</label>
-					<p class="text-xs text-fg-muted mb-2">Reject individual files larger than this size (in MB).</p>
-					<div class="flex items-center gap-2">
-						<input
-							type="number"
-							name="max_file_size_mb"
-							value={ fmt.Sprintf("%d", settings.MaxFileSize / (1024*1024)) }
-							min="1"
-							max="500"
-							class="input w-32"
-						/>
-						<span class="text-sm text-fg-secondary">MB</span>
+						<label class="block text-sm font-semibold text-fg mb-2">Maximum File Size</label>
+						<p class="text-xs text-fg-muted mb-2">Reject individual files larger than this size (in MB).</p>
+						<div class="flex items-center gap-2">
+							<input
+								type="number"
+								name="max_file_size_mb"
+								value={ fmt.Sprintf("%d", settings.MaxFileSize / (1024*1024)) }
+								min="1"
+								max="500"
+								class="input w-32"
+							/>
+							<span class="text-sm text-fg-secondary">MB</span>
+						</div>
 					</div>
 				</div>
-			</div>
 
-			<p class="text-xs text-fg-muted text-center">
-				These settings are read-only for now. Contact the site administrator to change them via the database.
-			</p>
+				<div class="flex justify-end">
+					<button type="submit" class="btn btn-primary">Save Settings</button>
+				</div>
+			</form>
 		</div>
 	}
 }

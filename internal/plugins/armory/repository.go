@@ -55,6 +55,13 @@ func (r *armoryRepository) ListItems(ctx context.Context, campaignID string, ite
 		where += " AND e.entity_type_id IN (" + strings.Join(placeholders, ",") + ")"
 	}
 
+	// Instance filter: join inventory_items to scope to a specific collection.
+	instanceJoin := ""
+	if opts.InstanceID > 0 {
+		instanceJoin = " INNER JOIN inventory_items ii ON ii.entity_id = e.id AND ii.instance_id = ?"
+		args = append(args, opts.InstanceID)
+	}
+
 	// Visibility: players see only non-private items.
 	if role < 2 {
 		where += " AND e.is_private = false"
@@ -75,7 +82,7 @@ func (r *armoryRepository) ListItems(ctx context.Context, campaignID string, ite
 	}
 
 	// Count total for pagination.
-	countQuery := fmt.Sprintf("SELECT COUNT(DISTINCT e.id) FROM entities e%s %s", tagJoin, where)
+	countQuery := fmt.Sprintf("SELECT COUNT(DISTINCT e.id) FROM entities e%s%s %s", instanceJoin, tagJoin, where)
 	var total int
 	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("counting items: %w", err)
@@ -87,9 +94,10 @@ func (r *armoryRepository) ListItems(ctx context.Context, campaignID string, ite
 		INNER JOIN entity_types et ON et.id = e.entity_type_id
 		%s
 		%s
+		%s
 		GROUP BY e.id
 		%s
-		LIMIT ? OFFSET ?`, itemSelectColumns, tagJoin, where, opts.OrderByClause())
+		LIMIT ? OFFSET ?`, itemSelectColumns, instanceJoin, tagJoin, where, opts.OrderByClause())
 
 	pageArgs := append(args, opts.PerPage, opts.Offset())
 	rows, err := r.db.QueryContext(ctx, query, pageArgs...)

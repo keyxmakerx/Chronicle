@@ -4,7 +4,10 @@ package npcs
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // EntityTypeFinder resolves entity types by slug for a campaign.
@@ -54,9 +57,15 @@ func (s *npcService) SetTagLister(tl TagLister) {
 }
 
 // ListNPCs resolves the character type and queries for revealed NPCs.
+// Returns an empty list if no character entity type exists for the campaign.
 func (s *npcService) ListNPCs(ctx context.Context, campaignID string, role int, userID string, opts NPCListOptions) ([]NPCCard, int, error) {
 	typeID, err := s.typeFinder.FindCharacterTypeID(ctx, campaignID)
 	if err != nil {
+		// No character entity type yet — return empty gallery instead of erroring.
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == 404 {
+			return nil, 0, nil
+		}
 		return nil, 0, fmt.Errorf("resolving character type: %w", err)
 	}
 
@@ -87,9 +96,14 @@ func (s *npcService) ListNPCs(ctx context.Context, campaignID string, role int, 
 }
 
 // CountNPCs resolves the character type and returns the revealed count.
+// Returns 0 if no character entity type exists for the campaign.
 func (s *npcService) CountNPCs(ctx context.Context, campaignID string, role int, userID string) (int, error) {
 	typeID, err := s.typeFinder.FindCharacterTypeID(ctx, campaignID)
 	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == 404 {
+			return 0, nil
+		}
 		return 0, fmt.Errorf("resolving character type: %w", err)
 	}
 	return s.repo.CountRevealed(ctx, campaignID, typeID, role, userID)

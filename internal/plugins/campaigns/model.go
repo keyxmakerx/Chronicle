@@ -117,6 +117,12 @@ type SidebarConfig struct {
 	// in the sidebar. Hidden types are still accessible via the All Entities page.
 	HiddenTypeIDs []int `json:"hidden_type_ids,omitempty"`
 
+	// HiddenEntityIDs is a set of individual entity IDs that should be
+	// hidden from the sidebar for non-owner roles. Owners still see them
+	// but visually dimmed. Useful for hiding WIP or secret entities
+	// without changing their visibility permissions.
+	HiddenEntityIDs []string `json:"hidden_entity_ids,omitempty"`
+
 	// CustomSections are labeled dividers that appear between entity type
 	// groups in the sidebar. Each section appears after the entity type
 	// referenced by its After field.
@@ -607,6 +613,7 @@ type TransferOwnershipRequest struct {
 type UpdateSidebarConfigRequest struct {
 	EntityTypeOrder []int        `json:"entity_type_order"`
 	HiddenTypeIDs   []int        `json:"hidden_type_ids"`
+	HiddenEntityIDs []string     `json:"hidden_entity_ids"`
 	CustomSections  []NavSection `json:"custom_sections,omitempty"`
 	CustomLinks     []NavLink    `json:"custom_links,omitempty"`
 }

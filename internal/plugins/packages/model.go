@@ -163,11 +163,12 @@ type UpdateRepoURLInput struct {
 
 // PackageSecuritySettings holds the parsed security settings for packages.
 type PackageSecuritySettings struct {
-	RepoPolicy       string // "github_only", "any_git", or "allow_all".
-	RequireApproval  bool
-	MaxFileSize      int64 // Bytes.
-	ValidateManifest bool
-	ScanContent      bool
+	RepoPolicy        string // "github_only", "any_git", or "allow_all".
+	RequireApproval   bool
+	MaxFileSize       int64  // Bytes.
+	ValidateManifest  bool
+	ScanContent       bool
+	OwnerUploadPolicy string // "auto_approve", "require_approval", or "disabled".
 }
 
 // RepoPolicyGitHubOnly restricts submissions to GitHub repos only.
@@ -178,6 +179,17 @@ const RepoPolicyAnyGit = "any_git"
 
 // RepoPolicyAllowAll allows any HTTPS URL.
 const RepoPolicyAllowAll = "allow_all"
+
+// OwnerUploadAutoApprove allows campaign owners to upload custom systems
+// without admin review. Suitable for trusted private instances.
+const OwnerUploadAutoApprove = "auto_approve"
+
+// OwnerUploadRequireApproval requires admin approval before owner-uploaded
+// custom systems are installed. Suitable for public hosted instances.
+const OwnerUploadRequireApproval = "require_approval"
+
+// OwnerUploadDisabled prevents campaign owners from uploading custom systems.
+const OwnerUploadDisabled = "disabled"
 
 // generateUUID creates a new v4 UUID string using crypto/rand.
 // Panics if the system entropy source fails, as this indicates a

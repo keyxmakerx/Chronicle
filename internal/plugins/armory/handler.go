@@ -18,12 +18,18 @@ import (
 
 // Handler serves Armory gallery endpoints.
 type Handler struct {
-	svc ArmoryService
+	svc     ArmoryService
+	instSvc InstanceService
 }
 
 // NewHandler creates a new Armory gallery handler.
 func NewHandler(svc ArmoryService) *Handler {
 	return &Handler{svc: svc}
+}
+
+// SetInstanceService injects the instance service for gallery filtering.
+func (h *Handler) SetInstanceService(svc InstanceService) {
+	h.instSvc = svc
 }
 
 // Index renders the Armory gallery page at GET /campaigns/:id/armory.
@@ -59,6 +65,11 @@ func (h *Handler) Index(c echo.Context) error {
 			opts.TypeID = n
 		}
 	}
+	if iid := c.QueryParam("instance"); iid != "" {
+		if n, err := strconv.Atoi(iid); err == nil && n > 0 {
+			opts.InstanceID = n
+		}
+	}
 
 	userID := auth.GetUserID(c)
 	cards, total, err := h.svc.ListItems(c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole), userID, opts)
@@ -69,10 +80,24 @@ func (h *Handler) Index(c echo.Context) error {
 	// Fetch item types for the filter dropdown.
 	itemTypes, _ := h.svc.GetItemTypes(c.Request().Context(), cc.Campaign.ID)
 
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, ArmoryGalleryContent(cc, cards, total, opts, itemTypes))
+	// Fetch inventory instances for the instance selector.
+	var instances []InventoryInstance
+	if h.instSvc != nil {
+		instances, _ = h.instSvc.ListInstances(c.Request().Context(), cc.Campaign.ID)
 	}
-	return middleware.Render(c, http.StatusOK, ArmoryGalleryPage(cc, cards, total, opts, itemTypes))
+
+	// Resolve selected instance name for display.
+	var selectedInstance *InventoryInstance
+	if opts.InstanceID > 0 && h.instSvc != nil {
+		selectedInstance, _ = h.instSvc.GetInstance(c.Request().Context(), cc.Campaign.ID, opts.InstanceID)
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, ArmoryGalleryContent(cc, cards, total, opts, itemTypes, instances, selectedInstance, csrfToken))
+	}
+	return middleware.Render(c, http.StatusOK, ArmoryGalleryPage(cc, cards, total, opts, itemTypes, instances, selectedInstance, csrfToken))
 }
 
 // CountAPI returns the item count as JSON at GET /campaigns/:id/armory/count.
@@ -90,6 +115,23 @@ func (h *Handler) CountAPI(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]int{"count": count})
+}
+
+// ManageInstances renders the instance management panel (HTMX fragment).
+// GET /campaigns/:id/armory/instances/manage (Owner only).
+func (h *Handler) ManageInstances(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var instances []InventoryInstance
+	if h.instSvc != nil {
+		instances, _ = h.instSvc.ListInstances(c.Request().Context(), cc.Campaign.ID)
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, InstanceManagePanel(cc, instances, csrfToken))
 }
 
 // GalleryBlock fetches item cards for embedding in entity page layout blocks.

@@ -975,6 +975,7 @@ func (a *App) RegisterRoutes() {
 	if err := addonService.SeedInstalledAddons(context.Background()); err != nil {
 		slog.Error("failed to seed built-in addons", slog.String("error", err.Error()))
 	}
+	addonService.SetPresetApplier(newPresetApplier(entityService))
 	addonHandler := addons.NewHandler(addonService)
 	addons.RegisterAdminRoutes(adminGroup, addonHandler)
 	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)
@@ -1176,13 +1177,19 @@ func (a *App) RegisterRoutes() {
 	armorySvc := armory.NewArmoryService(armoryRepo, &armoryItemTypeFinderAdapter{svc: entityService})
 	armoryHandler := armory.NewHandler(armorySvc)
 
+	// Instance service: named inventory collections per campaign.
+	instRepo := armory.NewInstanceRepository(a.DB)
+	instSvc := armory.NewInstanceService(instRepo)
+	instHandler := armory.NewInstanceHandler(instSvc)
+	armoryHandler.SetInstanceService(instSvc)
+
 	// Transaction service: purchase flow, stock management, transaction logging.
 	txRepo := armory.NewTransactionRepository(a.DB)
 	txSvc := armory.NewTransactionService(txRepo)
 	txSvc.SetRelationMetadataUpdater(&armoryRelationMetadataAdapter{svc: relService})
 	txSvc.SetRelationFinder(&armoryRelationFinderAdapter{svc: relService})
 	txHandler := armory.NewTransactionHandler(txSvc)
-	armory.RegisterRoutes(e, armoryHandler, txHandler, campaignService, authService, addonService)
+	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	noteRepo := notes.NewNoteRepository(a.DB)
@@ -1274,6 +1281,15 @@ func (a *App) RegisterRoutes() {
 			return templ.NopComponent
 		}
 		return armory.BlockArmoryPreview(bctx.CC, cards, limit)
+	})
+
+	// Entity manager block — sortable, filterable entity list with visibility controls.
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "entity_manager", Label: "Entity Manager", Icon: "fa-list-check",
+		Description: "Sortable, filterable entity list with visibility controls",
+	}, func(bctx entities.BlockRenderContext) templ.Component {
+		typeID := entities.BlockConfigInt(bctx.Block.Config, "entity_type_id", 0)
+		return entities.BlockEntityManager(bctx.CC, typeID, bctx.CSRFToken)
 	})
 
 	// Set the registry on the entity service (validation) and as the global (rendering).
@@ -1509,6 +1525,39 @@ func (a *App) RegisterRoutes() {
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	campaignSystemHandler := systems.NewCampaignSystemHandler(campaignSystemMgr)
+	// Wire upload policy provider so campaign handler checks admin setting.
+	campaignSystemHandler.SetUploadPolicy(func(ctx context.Context) string {
+		if a.PluginHealth.IsHealthy("packages") {
+			if settings, err := pkgService.GetSecuritySettings(ctx); err == nil {
+				return settings.OwnerUploadPolicy
+			}
+		}
+		return "auto_approve"
+	})
+	// Wire entity data providers for the system diagnostics page.
+	campaignSystemHandler.SetEntityDeps(
+		func(ctx context.Context, campaignID string) (map[int]int, error) {
+			return entityService.CountByType(ctx, campaignID, 3, "") // role=3 (owner) to see all
+		},
+		func(ctx context.Context, campaignID string) ([]systems.DiagEntityType, error) {
+			types, err := entityService.GetEntityTypes(ctx, campaignID)
+			if err != nil {
+				return nil, err
+			}
+			result := make([]systems.DiagEntityType, len(types))
+			for i, t := range types {
+				cat := ""
+				if t.PresetCategory != nil {
+					cat = *t.PresetCategory
+				}
+				result[i] = systems.DiagEntityType{
+					ID: t.ID, Name: t.Name, Slug: t.Slug,
+					PresetCategory: cat,
+				}
+			}
+			return result, nil
+		},
+	)
 	systems.RegisterCustomSystemRoutes(e, campaignSystemHandler, authService, campaignService)
 
 	// Wire campaign system lister into sync API so custom systems appear

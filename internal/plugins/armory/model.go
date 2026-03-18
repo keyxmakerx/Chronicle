@@ -5,14 +5,17 @@
 // own any database tables beyond the preset_category column on entity_types.
 package armory
 
+import "time"
+
 // ItemListOptions controls filtering and pagination for the Armory gallery.
 type ItemListOptions struct {
-	Page    int    // 1-indexed page number.
-	PerPage int    // Items per page (default 24).
-	Sort    string // "name" (default), "updated", "created".
-	Search  string // Optional name search (prefix match).
-	Tag     string // Optional tag slug filter.
-	TypeID  int    // Optional entity type ID filter (0 = all item types).
+	Page       int    // 1-indexed page number.
+	PerPage    int    // Items per page (default 24).
+	Sort       string // "name" (default), "updated", "created".
+	Search     string // Optional name search (prefix match).
+	Tag        string // Optional tag slug filter.
+	TypeID     int    // Optional entity type ID filter (0 = all item types).
+	InstanceID int    // Optional inventory instance filter (0 = all items).
 }
 
 // DefaultItemListOptions returns sensible defaults for the Armory gallery.
@@ -85,4 +88,28 @@ type ItemTypeInfo struct {
 	Name  string `json:"name"`
 	Icon  string `json:"icon"`
 	Color string `json:"color"`
+}
+
+// InventoryInstance is a named item collection within a campaign.
+// Standalone — not tied to a specific entity.
+type InventoryInstance struct {
+	ID          int       `json:"id"`
+	CampaignID  string    `json:"campaign_id"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	Description *string   `json:"description,omitempty"`
+	Icon        string    `json:"icon"`
+	Color       string    `json:"color"`
+	SortOrder   int       `json:"sort_order"`
+	ItemCount   int       `json:"item_count"` // Populated by COUNT join.
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// CreateInstanceInput is the request payload for creating/updating an instance.
+type CreateInstanceInput struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Icon        string `json:"icon"`
+	Color       string `json:"color"`
 }

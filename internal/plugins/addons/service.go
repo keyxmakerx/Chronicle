@@ -35,16 +35,35 @@ type AddonService interface {
 	DisableForCampaign(ctx context.Context, campaignID string, addonID int) error
 	IsEnabledForCampaign(ctx context.Context, campaignID string, addonSlug string) (bool, error)
 	UpdateCampaignConfig(ctx context.Context, campaignID string, addonID int, config map[string]any) error
+
+	// SetPresetApplier injects the preset applier for auto-creating entity
+	// types when a game system addon is enabled. Optional — if nil, no
+	// presets are applied.
+	SetPresetApplier(applier PresetApplier)
+}
+
+// PresetApplier creates entity types from system presets when a game system
+// addon is enabled for a campaign. Implemented outside the addons package
+// to avoid circular imports with entities and systems packages.
+type PresetApplier interface {
+	ApplySystemPresets(ctx context.Context, campaignID, systemSlug string) (int, error)
 }
 
 // addonService implements AddonService.
 type addonService struct {
-	repo AddonRepository
+	repo           AddonRepository
+	presetApplier  PresetApplier
 }
 
 // NewAddonService creates a new addon service.
 func NewAddonService(repo AddonRepository) AddonService {
 	return &addonService{repo: repo}
+}
+
+// SetPresetApplier injects the preset applier for auto-creating entity types
+// when a game system is enabled. Optional — if nil, presets are not applied.
+func (s *addonService) SetPresetApplier(applier PresetApplier) {
+	s.presetApplier = applier
 }
 
 // CountAddons returns the total number of registered addons.
@@ -377,6 +396,24 @@ func (s *addonService) EnableForCampaign(ctx context.Context, campaignID string,
 
 	if err := s.repo.EnableForCampaign(ctx, campaignID, addonID, userID); err != nil {
 		return apperror.NewInternal(fmt.Errorf("enabling addon: %w", err))
+	}
+
+	// Auto-create entity types from system presets when a game system is enabled.
+	if addon.Category == CategorySystem && s.presetApplier != nil {
+		count, err := s.presetApplier.ApplySystemPresets(ctx, campaignID, addon.Slug)
+		if err != nil {
+			slog.Warn("failed to apply system presets (addon still enabled)",
+				slog.String("campaign_id", campaignID),
+				slog.String("system_slug", addon.Slug),
+				slog.Any("error", err),
+			)
+		} else if count > 0 {
+			slog.Info("system presets applied",
+				slog.String("campaign_id", campaignID),
+				slog.String("system_slug", addon.Slug),
+				slog.Int("types_created", count),
+			)
+		}
 	}
 
 	slog.Info("addon enabled for campaign",

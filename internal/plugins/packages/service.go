@@ -19,6 +19,11 @@ type SettingsReader interface {
 	Get(ctx context.Context, key string) (string, error)
 }
 
+// SettingsWriter provides write access to site settings.
+type SettingsWriter interface {
+	Set(ctx context.Context, key, value string) error
+}
+
 // defaultMaxFileSize is 50 MB in bytes — used when the setting is not configured.
 const defaultMaxFileSize int64 = 50 * 1024 * 1024
 
@@ -88,6 +93,9 @@ type PackageService interface {
 	// GetSecuritySettings returns the current package security configuration.
 	GetSecuritySettings(ctx context.Context) (*PackageSecuritySettings, error)
 
+	// SaveSecuritySettings persists updated security settings.
+	SaveSecuritySettings(ctx context.Context, s *PackageSecuritySettings) error
+
 	// SeedOfficialPackages creates the official Chronicle repos if none exist.
 	SeedOfficialPackages(ctx context.Context)
 
@@ -98,10 +106,11 @@ type PackageService interface {
 
 // packageService implements PackageService.
 type packageService struct {
-	repo     PackageRepository
-	github   *GitHubClient
-	settings SettingsReader
-	mediaDir string // Root media directory (e.g., ./media).
+	repo           PackageRepository
+	github         *GitHubClient
+	settings       SettingsReader
+	settingsWriter SettingsWriter
+	mediaDir       string // Root media directory (e.g., ./media).
 }
 
 // NewPackageService creates a new package service with the given dependencies.
@@ -113,11 +122,15 @@ func NewPackageService(repo PackageRepository, github *GitHubClient, mediaDir st
 	}
 }
 
-// ConfigureSettings wires a settings reader into the package service.
+// ConfigureSettings wires settings reader/writer into the package service.
 // Called from routes.go after both services are initialized.
 func ConfigureSettings(svc PackageService, settings SettingsReader) {
 	if s, ok := svc.(*packageService); ok {
 		s.settings = settings
+		// If the reader also implements Set(), use it as writer too.
+		if w, ok := settings.(SettingsWriter); ok {
+			s.settingsWriter = w
+		}
 	}
 }
 
@@ -747,11 +760,12 @@ func (s *packageService) UpdateRepoURL(ctx context.Context, packageID, newURL st
 // Returns safe defaults if settings are not configured or the reader is nil.
 func (s *packageService) GetSecuritySettings(ctx context.Context) (*PackageSecuritySettings, error) {
 	defaults := &PackageSecuritySettings{
-		RepoPolicy:       RepoPolicyGitHubOnly,
-		RequireApproval:  true,
-		MaxFileSize:      defaultMaxFileSize,
-		ValidateManifest: true,
-		ScanContent:      true,
+		RepoPolicy:        RepoPolicyGitHubOnly,
+		RequireApproval:   true,
+		MaxFileSize:       defaultMaxFileSize,
+		ValidateManifest:  true,
+		ScanContent:       true,
+		OwnerUploadPolicy: OwnerUploadAutoApprove,
 	}
 
 	if s.settings == nil {
@@ -775,8 +789,35 @@ func (s *packageService) GetSecuritySettings(ctx context.Context) (*PackageSecur
 	if v, err := s.settings.Get(ctx, "packages.scan_content"); err == nil {
 		defaults.ScanContent = v != "false"
 	}
+	if v, err := s.settings.Get(ctx, "packages.owner_upload_policy"); err == nil {
+		defaults.OwnerUploadPolicy = v
+	}
 
 	return defaults, nil
+}
+
+// SaveSecuritySettings persists the security settings to the site_settings table.
+func (s *packageService) SaveSecuritySettings(ctx context.Context, settings *PackageSecuritySettings) error {
+	if s.settingsWriter == nil {
+		return fmt.Errorf("settings writer not configured")
+	}
+
+	pairs := map[string]string{
+		"packages.repo_policy":         settings.RepoPolicy,
+		"packages.require_approval":    fmt.Sprintf("%t", settings.RequireApproval),
+		"packages.max_file_size":       strconv.FormatInt(settings.MaxFileSize, 10),
+		"packages.validate_manifest":   fmt.Sprintf("%t", settings.ValidateManifest),
+		"packages.scan_content":        fmt.Sprintf("%t", settings.ScanContent),
+		"packages.owner_upload_policy": settings.OwnerUploadPolicy,
+	}
+
+	for key, value := range pairs {
+		if err := s.settingsWriter.Set(ctx, key, value); err != nil {
+			return fmt.Errorf("saving %s: %w", key, err)
+		}
+	}
+
+	return nil
 }
 
 // SeedOfficialPackages creates the official Chronicle repos if no packages
