@@ -142,7 +142,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Env:      getEnv("ENV", "development"),
 		Port:     getEnvInt("PORT", 8080),
-		BaseURL:  getEnv("BASE_URL", "http://localhost:8080"),
+		BaseURL:  strings.TrimRight(getEnv("BASE_URL", "http://localhost:8080"), "/"),
 		LogLevel: getEnv("LOG_LEVEL", "debug"),
 
 		Database: DatabaseConfig{
