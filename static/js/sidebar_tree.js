@@ -240,6 +240,12 @@
 
     // --- Drag and Drop ---
     setupDragAndDrop(container, campaignId);
+
+    // Preserve reorg state across HTMX tree re-inits. If the tree was
+    // replaced while reorg mode was active, re-apply draggable handles.
+    if (container.hasAttribute('data-reorg-active')) {
+      updateDraggable(container, true);
+    }
   }
 
   /**
@@ -571,12 +577,14 @@
     });
   }
 
-  // Single IIFE-scoped listener for reorg mode changes. Uses
-  // currentTreeContainer (updated by setupDragAndDrop on each initTree)
-  // so the listener is never duplicated across HTMX re-inits.
+  // Single IIFE-scoped listener for reorg mode changes. Always re-queries
+  // the DOM to avoid stale container references after HTMX swaps.
   document.addEventListener('chronicle:reorg-changed', function (e) {
-    if (currentTreeContainer) {
-      updateDraggable(currentTreeContainer, e.detail && e.detail.active);
+    var container = document.getElementById('sidebar-entity-tree');
+    if (container) {
+      // Keep currentTreeContainer in sync.
+      currentTreeContainer = container;
+      updateDraggable(container, e.detail && e.detail.active);
     }
   });
 

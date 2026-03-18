@@ -318,6 +318,18 @@ _Support multiple named inventory collections per campaign. Current armory is a 
 - [x] **Sprint A2-1: Inventory Instances** — Migration 000011: `inventory_instances` + `inventory_items` tables + `instance_id` on `shop_transactions`. `InstanceRepository`, `InstanceService`, `InstanceHandler` with full CRUD. Gallery page instance dropdown + manage panel. Transactions scoped to instances.
 - [ ] **Sprint A2-2: Instance UI Polish** — Add/remove items UI on instance view, drag-and-drop reorder, instance description editing, Foundry sync per-instance.
 
+### Entity Manager Widget
+
+_A drag-and-droppable block for entity/category/dashboard pages showing entities from a selected category with sorting, tag filtering, folder creation, and visibility toggles._
+
+- [ ] **Entity Manager Block** — Register `entity_manager` block type in `block_registry_core.go`. Templ component in `block_entity_manager.templ`. JS widget `entity_manager.js` for interactive features (search, add, reorder, hide). Config: `entity_type_id`, `show_hidden`, `allow_reorder`. Works on entity pages, category dashboards, and campaign dashboards.
+- [ ] **Sidebar Hidden Entities** — Add `hidden_entity_ids[]` to sidebar-config. Sidebar entity list filters these out for players. Owner/scribe see them grayed out (opacity-40). Toggle via entity manager widget or sidebar reorg mode.
+
+### Needs Discussion (Deferred)
+
+- [ ] **Sessions** — Need to discuss session management direction, relationship with calendar, player RSVP flow.
+- [ ] **Journals** — Need to discuss journal direction — "Obsidian built into the site" vision, personal vs shared notes, folder structure, linking.
+
 ### Deferred to Phase S+ (or community contributions)
 
 - [ ] **Module Builder UI** — Guided wizard that helps users create custom game system modules through the web UI. Step-by-step: name/metadata → define categories → define fields per category → paste/upload reference data → preview tooltips → export as module directory. Eliminates need to hand-write manifest.json + data files.

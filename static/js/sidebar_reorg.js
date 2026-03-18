@@ -388,24 +388,63 @@
   // Entity Reorg Mode
   // -----------------------------------------------------------------------
 
+  // Pending HTMX listener for entity tree that hasn't loaded yet.
+  var pendingTreeHandler = null;
+
   /**
    * Activate entity reordering (signals sidebar_tree.js via data attribute).
+   * If the entity tree hasn't loaded yet (HTMX lazy load), waits for the
+   * afterSwap event and retries.
    */
   function activateEntityReorg() {
+    // Clean up any pending handler from a previous attempt.
+    if (pendingTreeHandler) {
+      document.removeEventListener('htmx:afterSwap', pendingTreeHandler);
+      pendingTreeHandler = null;
+    }
+
     var tree = document.getElementById('sidebar-entity-tree');
     if (tree) {
       tree.setAttribute('data-reorg-active', 'true');
-      // Dispatch custom event for sidebar_tree.js to pick up.
       document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
         detail: { active: true }
       }));
+      return;
     }
+
+    // Tree not loaded yet — wait for HTMX to deliver it.
+    pendingTreeHandler = function (e) {
+      if (e.detail.target && (
+        e.detail.target.id === 'sidebar-cat-results' ||
+        e.detail.target.id === 'sidebar-cat-content'
+      )) {
+        document.removeEventListener('htmx:afterSwap', pendingTreeHandler);
+        pendingTreeHandler = null;
+        // Give sidebar_tree.js time to run initTree() first.
+        setTimeout(function () {
+          var tree = document.getElementById('sidebar-entity-tree');
+          if (tree && active) {
+            tree.setAttribute('data-reorg-active', 'true');
+            document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
+              detail: { active: true }
+            }));
+          }
+        }, 50);
+      }
+    };
+    document.addEventListener('htmx:afterSwap', pendingTreeHandler);
   }
 
   /**
    * Deactivate entity reordering.
    */
   function deactivateEntityReorg() {
+    // Cancel any pending HTMX handler waiting for tree load.
+    if (pendingTreeHandler) {
+      document.removeEventListener('htmx:afterSwap', pendingTreeHandler);
+      pendingTreeHandler = null;
+    }
+
     var tree = document.getElementById('sidebar-entity-tree');
     if (tree) {
       tree.removeAttribute('data-reorg-active');
@@ -541,14 +580,25 @@
       if (active) deactivate();
     });
 
-    // Exit reorg mode when drilling in/out changes context.
+    // When drilling in/out, deactivate reorg so the user re-activates
+    // at the new level. But only deactivate on transitions where the
+    // level actually changed AND the user didn't just activate reorg.
     var observer = new MutationObserver(function (mutations) {
       if (!active) return;
       mutations.forEach(function (m) {
         if (m.attributeName === 'class') {
           var newLevel = getCurrentLevel();
           if (newLevel !== level) {
-            deactivate();
+            // Switching from categories to entities (drill-in):
+            // deactivate category reorg and switch to entity reorg.
+            if (newLevel === 'entities' && level === 'categories') {
+              deactivateCategoryReorg();
+              level = 'entities';
+              activateEntityReorg();
+            } else if (newLevel === 'categories' && level === 'entities') {
+              // Drilling out: deactivate entirely.
+              deactivate();
+            }
           }
         }
       });
