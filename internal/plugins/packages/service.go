@@ -873,15 +873,22 @@ func (s *packageService) fetchAndImportVersions(ctx context.Context, pkg *Packag
 	}
 
 	var versions []PackageVersion
+	rp := repoPath(pkg.RepoURL)
 	for _, rel := range releases {
 		downloadURL, fileSize := pickDownloadAsset(rel.Assets)
+
+		// Fall back to GitHub's auto-generated source zipball when the
+		// release has no uploaded assets (common for pre-releases).
+		if downloadURL == "" && rp != "" {
+			downloadURL = fmt.Sprintf("https://api.github.com/repos/%s/zipball/%s", rp, rel.TagName)
+		}
 
 		v := PackageVersion{
 			ID:           generateUUID(),
 			PackageID:    pkg.ID,
 			Version:      normalizeVersion(rel.TagName),
 			TagName:      rel.TagName,
-			ReleaseURL:   fmt.Sprintf("https://github.com/%s/releases/tag/%s", repoPath(pkg.RepoURL), rel.TagName),
+			ReleaseURL:   fmt.Sprintf("https://github.com/%s/releases/tag/%s", rp, rel.TagName),
 			DownloadURL:  downloadURL,
 			ReleaseNotes: rel.Body,
 			Prerelease:   rel.Prerelease,
