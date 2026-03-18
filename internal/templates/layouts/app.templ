@@ -207,15 +207,9 @@ templ Sidebar() {
 					if IsAddonEnabled(ctx, "npcs") {
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx))) }
-							if IsAddonEnabled(ctx, "notes") {
-								class={ sidebarNavLink + " pl-8",
-									templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))),
-									templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))) }
-							} else {
-								class={ sidebarNavLink,
-									templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))),
-									templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))) }
-							}
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))) }
 						>
 							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 								<i class="fa-solid fa-users text-xs text-gray-400"></i>
@@ -737,7 +731,8 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 			<div
 				hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, et.ID) }
 				hx-trigger="load"
-				hx-swap="outerHTML"
+				hx-target="#sidebar-cat-results"
+				hx-swap="innerHTML"
 			>
 				<div class="px-4 py-2 space-y-1.5">
 					<div class="skeleton-shimmer h-3 w-3/4"></div>
