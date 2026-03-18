@@ -8,7 +8,14 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-18 -- **Entity manager folders, preset auto-setup, diagnostics page, armory tests.**
+2026-03-18 -- **Bugfix: CORS, NPC sidebar, entity reorg, lint.**
+
+51. **Bugfix: CORS, NPC sidebar, entity reorg, lint.**
+    - **CORS BASE_URL Normalization (COMPLETE)** — Trailing slash on BASE_URL caused CORS origin mismatch (exact-match failed). Now stripped at config load time in config.go. Removed redundant TrimRight calls in app.go.
+    - **Unused formatError Removal (COMPLETE)** — Removed dead `formatError` func and unused `fmt` import from armory/instance_service.go (golangci-lint fix).
+    - **NPC Tab Indentation Fix (COMPLETE)** — Removed conditional `pl-8` class that indented NPC link under Journal when notes addon enabled. NPC now renders at same level as other sidebar nav items.
+    - **Sidebar Entity Reorg Fix (COMPLETE)** — HTMX lazy-load of entity list used `hx-swap="outerHTML"` on anonymous inner div. `htmx:afterSwap` target had no id, so sidebar_tree.js never called `initTree()`. Changed to `hx-target="#sidebar-cat-results"` + `hx-swap="innerHTML"` so event target matches and tree initializes correctly.
+    - **Next Steps**: Merge branch, continue with X-3 (system-provided widgets), X-5 (character sheet blocks), A2-2 (instance UI polish).
 
 50. **Entity Manager Folders + Preset Auto-Setup + Diagnostics + Armory Tests.**
     - **Entity Manager Folder Creation (COMPLETE)** — "New Folder" button (Scribe+) in entity_manager widget toolbar. Calls QuickCreateAPI to create folder entities. Tree rendering with indentation and folder icons (`fa-folder-open`). Reparenting via drag-and-drop (bottom 2/3 of row = nest inside, top 1/3 = reorder). JSON search response now includes `parent_id` and `sort_order` fields. `buildTree()` helper constructs parent-child hierarchy from flat entity list.
@@ -26,7 +33,7 @@
 48. **Bugfix Sprint + Armory Multi-Instance.**
     - **CORS Origin Normalization (COMPLETE)** — `UpdateCORSOrigins` now auto-prepends `https://` when bare hostnames entered (e.g., `vtt.bnuuy.haus` → `https://vtt.bnuuy.haus`). Strips trailing path components.
     - **NPC Server Error Fix (COMPLETE)** — `ListNPCs` and `CountNPCs` handle missing character entity type gracefully (empty gallery instead of 500).
-    - **Sidebar NPC Under Journal (COMPLETE)** — NPC link indented under Journal when both addons enabled; standalone when only NPC enabled.
+    - **Sidebar NPC Under Journal (REVERTED in session 51)** — Was indented under Journal; now always at same level as other nav items.
     - **Invalid CSS Classes (COMPLETE)** — Fixed `bg-bg-secondary`, `border-border`, `bg-surface-raised` across 6 template files.
     - **Armory Multi-Instance (COMPLETE)** — Standalone named inventory collections per campaign. Migration 000011: `inventory_instances` + `inventory_items` tables + `instance_id` on `shop_transactions`. Full CRUD for instances (Owner), add/remove items (Scribe+). Gallery page has instance dropdown selector + manage panel. Transactions scoped to instances. New files: `instance_repository.go`, `instance_service.go`, `instance_handler.go`, `instances.templ`. Modified: `model.go`, `repository.go`, `handler.go`, `gallery.templ`, `routes.go`, `transaction_model.go`, `transaction_repository.go`, `app/routes.go`.
     - **Sidebar Cleanup (COMPLETE)** — Removed Armory static link from sidebar. Addon features are accessible via Features page and embeddable as widget blocks, not static nav links.
