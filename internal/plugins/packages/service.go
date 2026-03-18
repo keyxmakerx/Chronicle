@@ -211,9 +211,8 @@ func (s *packageService) AddPackage(ctx context.Context, input AddPackageInput) 
 		return pkg, nil
 	}
 
-	// Auto-install the latest version if available.
-	if len(newVersions) > 0 {
-		latest := newVersions[0]
+	// Auto-install the latest stable version if available.
+	if latest := latestStableVersion(newVersions); latest != nil {
 		if err := s.InstallVersion(ctx, pkg.ID, latest.Version); err != nil {
 			slog.Warn("failed to auto-install latest version",
 				slog.String("package", pkg.Slug),
@@ -482,8 +481,7 @@ func (s *packageService) RunAutoUpdates(ctx context.Context) error {
 			continue
 		}
 
-		if len(newVersions) > 0 {
-			latest := newVersions[0]
+		if latest := latestStableVersion(newVersions); latest != nil {
 			if latest.Version != pkg.InstalledVersion {
 				if err := s.InstallVersion(ctx, pkg.ID, latest.Version); err != nil {
 					slog.Warn("auto-update install failed",
@@ -855,8 +853,7 @@ func (s *packageService) fetchAndInstallLatest(ctx context.Context, pkg *Package
 		return
 	}
 
-	if len(newVersions) > 0 {
-		latest := newVersions[0]
+	if latest := latestStableVersion(newVersions); latest != nil {
 		if err := s.InstallVersion(ctx, pkg.ID, latest.Version); err != nil {
 			slog.Warn("failed to auto-install latest version",
 				slog.String("package", pkg.Slug),
@@ -887,6 +884,7 @@ func (s *packageService) fetchAndImportVersions(ctx context.Context, pkg *Packag
 			ReleaseURL:   fmt.Sprintf("https://github.com/%s/releases/tag/%s", repoPath(pkg.RepoURL), rel.TagName),
 			DownloadURL:  downloadURL,
 			ReleaseNotes: rel.Body,
+			Prerelease:   rel.Prerelease,
 			PublishedAt:  rel.PublishedAt,
 			FileSize:     fileSize,
 		}
@@ -925,6 +923,20 @@ func pickDownloadAsset(assets []GitHubAsset) (url string, size int64) {
 		return assets[0].BrowserDownloadURL, assets[0].Size
 	}
 	return "", 0
+}
+
+// latestStableVersion returns the first non-prerelease version from the list.
+// If all versions are pre-releases, falls back to the newest pre-release.
+func latestStableVersion(versions []PackageVersion) *PackageVersion {
+	for i := range versions {
+		if !versions[i].Prerelease {
+			return &versions[i]
+		}
+	}
+	if len(versions) > 0 {
+		return &versions[0]
+	}
+	return nil
 }
 
 // normalizeVersion strips a leading "v" from tag names.

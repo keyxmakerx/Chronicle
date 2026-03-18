@@ -231,7 +231,21 @@ func (a *App) errorHandler(err error, c echo.Context) {
 			_ = c.NoContent(http.StatusNoContent)
 			return
 		}
-		// For other HTMX errors, retarget to body so the full error page
+		// For 4xx client errors, show a toast notification instead of
+		// replacing the entire page — much better UX for inline actions.
+		if code >= 400 && code < 500 {
+			trigger, _ := json.Marshal(map[string]any{
+				"chronicle:notify": map[string]string{
+					"message": message,
+					"type":    "error",
+				},
+			})
+			c.Response().Header().Set("HX-Trigger", string(trigger))
+			c.Response().Header().Set("HX-Reswap", "none")
+			_ = c.NoContent(code)
+			return
+		}
+		// For 5xx server errors, retarget to body so the full error page
 		// replaces the entire page instead of landing in a partial target.
 		c.Response().Header().Set("HX-Retarget", "body")
 		c.Response().Header().Set("HX-Reswap", "innerHTML")

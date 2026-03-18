@@ -147,7 +147,7 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 
 	query := `SELECT c.id, c.name, c.slug, c.description, c.is_public,
 	                 c.settings, c.backdrop_path, c.sidebar_config, c.dashboard_layout,
-	                 c.created_by, c.created_at, c.updated_at
+	                 c.owner_dashboard_layout, c.created_by, c.created_at, c.updated_at
 	          FROM campaigns c
 	          INNER JOIN campaign_members cm ON cm.campaign_id = c.id
 	          WHERE cm.user_id = ?

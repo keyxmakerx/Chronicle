@@ -190,10 +190,21 @@
   });
 
   // Show toasts for HTMX request errors automatically.
+  // Note: 4xx errors from HTMX are handled server-side via HX-Trigger
+  // (chronicle:notify event), so this only fires for unhandled errors.
   document.addEventListener('htmx:responseError', function (evt) {
-    var status = evt.detail.xhr ? evt.detail.xhr.status : 0;
+    var xhr = evt.detail.xhr;
+    var status = xhr ? xhr.status : 0;
+    // Skip if server already sent a chronicle:notify via HX-Trigger.
+    if (xhr && xhr.getResponseHeader && xhr.getResponseHeader('HX-Trigger')) {
+      try {
+        var trigger = JSON.parse(xhr.getResponseHeader('HX-Trigger'));
+        if (trigger['chronicle:notify']) return;
+      } catch (e) { /* not JSON, continue */ }
+    }
     var msg = 'Request failed';
-    if (status === 403) msg = 'Permission denied';
+    if (status === 400) msg = 'Invalid request';
+    else if (status === 403) msg = 'Permission denied';
     else if (status === 404) msg = 'Not found';
     else if (status >= 500) msg = 'Server error. Please try again.';
     Chronicle.notify(msg, 'error');

@@ -222,6 +222,36 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 				</p>
 			</div>
 
+			// Content Packs — browse & submit game systems.
+			<div class="card p-6 mb-6">
+				<div class="flex items-center justify-between mb-2">
+					<h2 class="text-lg font-semibold text-fg">Content Packs</h2>
+					<a
+						href="/systems/browse"
+						class="text-sm link"
+					>
+						<i class="fa-solid fa-dice-d20 mr-1"></i> Browse Systems
+					</a>
+				</div>
+				<p class="text-sm text-fg-secondary mb-4">
+					Browse available game systems and Foundry modules, or submit your own for review.
+				</p>
+				<div class="flex items-center gap-3">
+					<a
+						href="/systems/submit"
+						class="btn-primary text-sm inline-flex items-center gap-1.5"
+					>
+						<i class="fa-solid fa-paper-plane text-xs"></i> Submit a System
+					</a>
+					<a
+						href="/systems/my-submissions"
+						class="btn-secondary text-sm inline-flex items-center gap-1.5"
+					>
+						<i class="fa-solid fa-clock-rotate-left text-xs"></i> My Submissions
+					</a>
+				</div>
+			</div>
+
 			// Data export & import.
 		<div class="card p-6 mb-6">
 			<h2 class="text-lg font-semibold text-fg mb-2">Data Export &amp; Import</h2>

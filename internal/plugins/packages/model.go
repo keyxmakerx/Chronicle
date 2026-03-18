@@ -92,6 +92,7 @@ type PackageVersion struct {
 	ReleaseURL   string
 	DownloadURL  string
 	ReleaseNotes string
+	Prerelease   bool // True for pre-release/beta versions from GitHub.
 	PublishedAt  time.Time
 	DownloadedAt *time.Time
 	FileSize     int64

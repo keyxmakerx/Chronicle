@@ -20,6 +20,7 @@ type GitHubRelease struct {
 	TagName     string        `json:"tag_name"`
 	Name        string        `json:"name"`
 	Body        string        `json:"body"`
+	Prerelease  bool          `json:"prerelease"`
 	PublishedAt time.Time     `json:"published_at"`
 	Assets      []GitHubAsset `json:"assets"`
 }
