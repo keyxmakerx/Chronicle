@@ -18,8 +18,8 @@ func writeTestData(t *testing.T) string {
 	spells := `[{"id":"fireball","name":"Fireball","summary":"A ball of fire","source":"SRD 5.1","tags":["fire","evocation"],"properties":{"level":3,"school":"Evocation","casting_time":"1 action","range":"150 feet","components":"V, S, M","duration":"Instantaneous"}}]`
 	monsters := `[{"id":"goblin","name":"Goblin","summary":"A small creature","source":"SRD 5.1","tags":["humanoid"],"properties":{"cr":"1/4","type":"Humanoid (Goblinoid)","size":"Small","alignment":"Neutral Evil","hp":"7 (2d6)","ac":"15"}}]`
 
-	os.WriteFile(filepath.Join(dir, "spells.json"), []byte(spells), 0644)
-	os.WriteFile(filepath.Join(dir, "monsters.json"), []byte(monsters), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "spells.json"), []byte(spells), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "monsters.json"), []byte(monsters), 0644)
 	return dir
 }
 

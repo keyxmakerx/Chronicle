@@ -809,7 +809,7 @@ func seedSession(t *testing.T, svc *authService, mr *miniredis.Miniredis, sessio
 		t.Fatalf("marshaling session: %v", err)
 	}
 	key := sessionKeyPrefix + token
-	mr.Set(key, string(data))
+	_ = mr.Set(key, string(data))
 	mr.SetTTL(key, svc.sessionTTL)
 	return token
 }

@@ -342,7 +342,7 @@ func (s *authService) revalidateSession(ctx context.Context, key, token string, 
 		var appErr *apperror.AppError
 		if errorAs(err, &appErr) && appErr.Code == 404 {
 			// User was deleted -- destroy the stale session.
-			s.DestroySession(ctx, token)
+			_ = s.DestroySession(ctx, token)
 			return apperror.NewUnauthorized("session expired or invalid")
 		}
 		// Transient DB error -- log and allow the request through with stale
@@ -357,7 +357,7 @@ func (s *authService) revalidateSession(ctx context.Context, key, token string, 
 
 	// User exists but has been disabled.
 	if user.IsDisabled {
-		s.DestroySession(ctx, token)
+		_ = s.DestroySession(ctx, token)
 		return apperror.NewUnauthorized("session expired or invalid")
 	}
 
