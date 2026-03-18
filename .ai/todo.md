@@ -311,6 +311,13 @@ is truly modular and self-service._
 - [ ] **Sprint X-4: System Debugging & Diagnostics** — `/campaigns/:id/systems/status` page showing enabled system, loaded categories, item counts, presets, Foundry compatibility. Auto-generated reference data browser. Tooltip preview. Field mapping validator for `foundry_path` annotations. System error log in campaign settings.
 - [ ] **Sprint X-5: Character Sheet Layout Blocks (Foundation)** — New `character_sheet` layout block type in template editor. System-specific styled layouts (D&D 5e ability score grid, HP bar, class/level header). Manifest `field_groups` for visual sections. Inline-editable fields via attributes widget API.
 
+### Phase A-2: Armory Multi-Instance
+
+_Support multiple named inventory collections per campaign. Current armory is a single campaign-wide view._
+
+- [ ] **Sprint A2-1: Inventory Instances** — New `inventory_instances` table (id, campaign_id, name, slug, description, owner_entity_id, visibility). New `inventory_items` junction table. Migration. Service/repo/handler refactor to parameterize by instance ID. Dropdown selector in armory UI. Routes: `GET /campaigns/:id/armory` (all instances), `GET /campaigns/:id/armory/:instance_id` (specific). Create/rename/delete instance management.
+- [ ] **Sprint A2-2: Instance-Scoped Transactions** — Scope shop transactions to inventory instance. Update transaction service to filter by instance. Per-instance stock tracking. Transaction history filtered by instance.
+
 ### Deferred to Phase S+ (or community contributions)
 
 - [ ] **Module Builder UI** — Guided wizard that helps users create custom game system modules through the web UI. Step-by-step: name/metadata → define categories → define fields per category → paste/upload reference data → preview tooltips → export as module directory. Eliminates need to hand-write manifest.json + data files.
