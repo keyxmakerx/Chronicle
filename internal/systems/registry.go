@@ -49,9 +49,13 @@ func Init(modulesDir string) error {
 	if err := globalLoader.DiscoverAll(); err != nil {
 		return fmt.Errorf("system discovery failed: %w", err)
 	}
-	slog.Info("system registry initialized",
-		slog.Int("count", globalLoader.Count()),
-	)
+	if globalLoader.Count() == 0 {
+		slog.Info("no bundled systems found, systems will load from package manager")
+	} else {
+		slog.Info("system registry initialized",
+			slog.Int("count", globalLoader.Count()),
+		)
+	}
 	return nil
 }
 

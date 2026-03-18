@@ -1,11 +1,27 @@
 package dnd5e
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
+
+// writeTestData creates a temporary data directory with minimal JSON fixture
+// files for testing the dnd5e system. Returns the temp dir path.
+func writeTestData(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	spells := `[{"id":"fireball","name":"Fireball","summary":"A ball of fire","source":"SRD 5.1","tags":["fire","evocation"],"properties":{"level":3,"school":"Evocation","casting_time":"1 action","range":"150 feet","components":"V, S, M","duration":"Instantaneous"}}]`
+	monsters := `[{"id":"goblin","name":"Goblin","summary":"A small creature","source":"SRD 5.1","tags":["humanoid"],"properties":{"cr":"1/4","type":"Humanoid (Goblinoid)","size":"Small","alignment":"Neutral Evil","hp":"7 (2d6)","ac":"15"}}]`
+
+	os.WriteFile(filepath.Join(dir, "spells.json"), []byte(spells), 0644)
+	os.WriteFile(filepath.Join(dir, "monsters.json"), []byte(monsters), 0644)
+	return dir
+}
 
 func TestNew(t *testing.T) {
 	manifest := &systems.SystemManifest{
@@ -13,7 +29,8 @@ func TestNew(t *testing.T) {
 		Name: "D&D 5th Edition",
 	}
 
-	mod, err := New(manifest, "data")
+	dataDir := writeTestData(t)
+	mod, err := New(manifest, dataDir)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -35,16 +52,17 @@ func TestNew_DataLoading(t *testing.T) {
 		Name: "D&D 5th Edition",
 	}
 
-	mod, err := New(manifest, "data")
+	dataDir := writeTestData(t)
+	mod, err := New(manifest, dataDir)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 
 	provider := mod.DataProvider()
 
-	// Verify all 6 categories are loaded.
+	// Verify categories are loaded from fixture files.
 	cats := provider.Categories()
-	expectedCats := []string{"classes", "conditions", "items", "monsters", "races", "spells"}
+	expectedCats := []string{"monsters", "spells"}
 	if len(cats) != len(expectedCats) {
 		t.Fatalf("categories: got %d (%v), want %d (%v)", len(cats), cats, len(expectedCats), expectedCats)
 	}
@@ -54,28 +72,13 @@ func TestNew_DataLoading(t *testing.T) {
 		}
 	}
 
-	// Verify item counts per category.
-	tests := []struct {
-		category string
-		minItems int
-	}{
-		{"spells", 20},
-		{"monsters", 14},
-		{"items", 10},
-		{"classes", 12},
-		{"races", 9},
-		{"conditions", 15},
+	// Verify items loaded.
+	spells, err := provider.List("spells")
+	if err != nil {
+		t.Fatalf("List(spells): %v", err)
 	}
-
-	for _, tt := range tests {
-		items, err := provider.List(tt.category)
-		if err != nil {
-			t.Errorf("List(%q): %v", tt.category, err)
-			continue
-		}
-		if len(items) < tt.minItems {
-			t.Errorf("%s: got %d items, want at least %d", tt.category, len(items), tt.minItems)
-		}
+	if len(spells) != 1 {
+		t.Errorf("spells: got %d items, want 1", len(spells))
 	}
 }
 
@@ -85,14 +88,14 @@ func TestNew_SpecificItems(t *testing.T) {
 		Name: "D&D 5th Edition",
 	}
 
-	mod, err := New(manifest, "data")
+	dataDir := writeTestData(t)
+	mod, err := New(manifest, dataDir)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 
 	provider := mod.DataProvider()
 
-	// Verify well-known items exist with correct properties.
 	tests := []struct {
 		category string
 		id       string
@@ -102,10 +105,6 @@ func TestNew_SpecificItems(t *testing.T) {
 	}{
 		{"spells", "fireball", "Fireball", "school", "Evocation"},
 		{"monsters", "goblin", "Goblin", "type", "Humanoid (Goblinoid)"},
-		{"items", "bag-of-holding", "Bag of Holding", "rarity", "Uncommon"},
-		{"classes", "wizard", "Wizard", "hit_die", "d6"},
-		{"races", "elf", "Elf", "size", "Medium"},
-		{"conditions", "blinded", "Blinded", "effect", "Can't see, auto-fail sight checks, attacks have disadvantage, attacks against have advantage"},
 	}
 
 	for _, tt := range tests {
@@ -140,29 +139,20 @@ func TestNew_Search(t *testing.T) {
 		Name: "D&D 5th Edition",
 	}
 
-	mod, err := New(manifest, "data")
+	dataDir := writeTestData(t)
+	mod, err := New(manifest, dataDir)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 
 	provider := mod.DataProvider()
 
-	// Search across categories.
 	results, err := provider.Search("fire")
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
 	if len(results) == 0 {
 		t.Error("expected results for 'fire', got none")
-	}
-
-	// Verify results come from multiple categories.
-	categories := make(map[string]bool)
-	for _, r := range results {
-		categories[r.Category] = true
-	}
-	if len(categories) < 2 {
-		t.Errorf("expected results from multiple categories, got %d", len(categories))
 	}
 }
 
