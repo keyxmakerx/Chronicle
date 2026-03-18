@@ -204,6 +204,25 @@ templ Sidebar() {
 							Journal
 						</a>
 					}
+					if IsAddonEnabled(ctx, "npcs") {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx))) }
+							if IsAddonEnabled(ctx, "notes") {
+								class={ sidebarNavLink + " pl-8",
+									templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))),
+									templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))) }
+							} else {
+								class={ sidebarNavLink,
+									templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))),
+									templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))) }
+							}
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-users text-xs text-gray-400"></i>
+							</span>
+							<span class="flex-1">NPCs</span>
+						</a>
+					}
 				</div>
 
 				<!-- Categories drill-down zone -->
@@ -246,19 +265,6 @@ templ Sidebar() {
 							</span>
 							<span class="flex-1">All Pages</span>
 						</a>
-						if IsAddonEnabled(ctx, "npcs") {
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx))) }
-							class={ sidebarNavLink,
-								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))),
-								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))) }
-						>
-							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-								<i class="fa-solid fa-users text-xs text-gray-400"></i>
-							</span>
-							<span class="flex-1">NPCs</span>
-						</a>
-						}
 						if IsAddonEnabled(ctx, "armory") {
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory", GetCampaignID(ctx))) }

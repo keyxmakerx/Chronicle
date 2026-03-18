@@ -1063,7 +1063,7 @@ templ eventModal(data CalendarViewData) {
 						id="evt-vis-rules-section"
 						x-show="document.getElementById('evt-visibility').value === 'everyone'"
 						x-init="$watch('visibility', function(v) { $el.style.display = v === 'everyone' ? '' : 'none'; })"
-						class="border border-border rounded p-3 space-y-2"
+						class="border border-edge rounded p-3 space-y-2"
 					>
 						<label class="block text-xs font-medium text-fg-body">Per-Player Restrictions (Optional)</label>
 						<p class="text-[10px] text-fg-muted">Restrict this event to specific players, or hide it from specific players.</p>
