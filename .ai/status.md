@@ -8,12 +8,17 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-17 -- **Sprint: Package Manager Plugin + Repo Separation Docs.**
+2026-03-18 -- **Sprint: Security Hardening + System Detachment + Usage Tracking.**
 
-45. **Sprint: Package Manager Plugin + Repo Separation.**
+46. **Sprint: Security Hardening + System Detachment + Usage Tracking.**
+    - **Admin Re-Authentication (COMPLETE)** — `RequireReauth` middleware in `auth/middleware.go` checks for recent password confirmation via Redis key (5-min TTL). `ConfirmReauth` + `IsReauthValid` service methods. Handler at `POST /account/reauth`. Reauth modal template (`reauth_modal.templ`) with Alpine.js + HTMX integration, included globally in `base.templ`. Applied to sensitive admin routes: ToggleAdmin, DisableUser, EnableUser, ForceLogoutUser.
+    - **Usage Tracking (COMPLETE)** — `GetUsageByCampaign` repository method queries `campaign_addons` → `addons` → `campaigns`. `GetUsage()` service wired to real query (was empty stub).
+    - **System Detachment (COMPLETE)** — Removed bundled system data: `dnd5e/data/` (6 JSON files), `dnd5e/manifest.json`, `pathfinder2e/` (entire directory), `drawsteel/` (entire directory). Preserved `dnd5e/dnd5e.go` custom factory + tooltip renderer + templates. Updated dnd5e tests to use temp fixture data instead of deleted bundled files. `Init()` logs "no bundled systems found" when directory is empty. Systems now load exclusively from package manager via `LoadAdditionalDir()`. Foundry module fallback preserved.
+    - **Next Steps**: TOTP/MFA implementation (Phase 1 of plan). Accessibility audit.
+
+45. **Sprint: Package Manager Plugin + Repo Separation Docs.**
     - **Repo Separation Documentation (COMPLETE)** — Created comprehensive documentation templates in `docs/repo-templates/` for `chronicle-foundry-module` and `chronicle-systems` repos. Includes README, CLAUDE.md, .ai/ architecture docs, API contracts, adapter docs, JSON schemas, and step-by-step system creation guides.
     - **Package Manager Plugin (COMPLETE)** — New `internal/plugins/packages/` plugin with full admin UI. Features: GitHub release fetching, version management (install/pin/unpin), auto-update policies (off/nightly/weekly/on_release), background update worker, package CRUD, HTMX version picker and usage tracking UI. Database: `packages` and `package_versions` tables. Routes under `/admin/packages`. Sidebar link added.
-    - **Next Steps**: Wire usage tracking to campaign addon tables. Replace bundled Foundry module serving with package manager's installed path. Remove bundled system data and load from package manager instead.
 
 44. **Sprint: Draw Steel System Module + Infrastructure.**
     - **Draw Steel System (COMPLETE)** — Full manifest expansion: 24-field character preset with Foundry path annotations, creature preset with EV/role/role_type, kit preset. Reference data: 8 abilities, 6 creatures, 10 ancestries, 6 kits (CC-BY-4.0). Status changed from `coming_soon` to `available`.

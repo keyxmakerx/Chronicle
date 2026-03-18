@@ -130,6 +130,36 @@ func RequireSiteAdmin() echo.MiddlewareFunc {
 	}
 }
 
+// RequireReauth returns middleware that ensures the admin has recently confirmed
+// their password (within the 5-minute reauth window). Must be applied AFTER
+// RequireAuth. If reauth has not been confirmed, returns 403 with an
+// HX-Trigger header that tells the client JS to show the password modal.
+func RequireReauth(service AuthService) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			session := GetSession(c)
+			if session == nil {
+				return handleUnauthenticated(c)
+			}
+
+			valid, err := service.IsReauthValid(c.Request().Context(), session.UserID)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				// Signal to HTMX that the reauth modal should be shown.
+				c.Response().Header().Set("HX-Trigger", "reauth-required")
+				return c.JSON(http.StatusForbidden, map[string]string{
+					"error":   "reauth_required",
+					"message": "please confirm your password to continue",
+				})
+			}
+
+			return next(c)
+		}
+	}
+}
+
 // --- Helpers ---
 
 // isAPIRequest returns true if the request targets the /api/ path.

@@ -22,6 +22,9 @@ type PackageRepository interface {
 	UpsertVersion(ctx context.Context, v *PackageVersion) error
 	MarkVersionDownloaded(ctx context.Context, id string) error
 
+	// Usage tracking.
+	GetUsageByCampaign(ctx context.Context, systemSlug string) ([]PackageUsage, error)
+
 	// Submission/approval workflow.
 	ListByStatus(ctx context.Context, status PackageStatus) ([]Package, error)
 	ListBySubmitter(ctx context.Context, userID string) ([]Package, error)
@@ -172,6 +175,36 @@ func (r *packageRepository) DeletePackage(ctx context.Context, id string) error 
 		return fmt.Errorf("deleting package %s: %w", id, err)
 	}
 	return nil
+}
+
+// --- Usage Tracking ---
+
+// GetUsageByCampaign returns campaigns using a system package, matched by addon slug.
+// This is a cross-plugin query joining campaign_addons, addons, and campaigns tables
+// to show which campaigns have enabled addons matching the given system slug.
+func (r *packageRepository) GetUsageByCampaign(ctx context.Context, systemSlug string) ([]PackageUsage, error) {
+	query := `SELECT ca.campaign_id, c.name, a.slug, ca.enabled_at
+	          FROM campaign_addons ca
+	          INNER JOIN addons a ON a.id = ca.addon_id
+	          INNER JOIN campaigns c ON c.id = ca.campaign_id
+	          WHERE a.slug = ? AND ca.enabled = 1
+	          ORDER BY ca.enabled_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query, systemSlug)
+	if err != nil {
+		return nil, fmt.Errorf("getting usage for system %s: %w", systemSlug, err)
+	}
+	defer rows.Close()
+
+	var usage []PackageUsage
+	for rows.Next() {
+		var u PackageUsage
+		if err := rows.Scan(&u.CampaignID, &u.CampaignName, &u.SystemID, &u.EnabledAt); err != nil {
+			return nil, fmt.Errorf("scanning package usage: %w", err)
+		}
+		usage = append(usage, u)
+	}
+	return usage, rows.Err()
 }
 
 // --- Submission/Approval Workflow ---

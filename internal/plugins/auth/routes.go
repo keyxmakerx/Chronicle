@@ -40,4 +40,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	// Email change (requires auth for request, public for verification link).
 	e.PUT("/account/email", h.RequestEmailChangeAPI, RequireAuth(h.service))
 	e.GET("/account/email/verify", h.ConfirmEmailChange)
+
+	// Re-authentication for sensitive operations (requires auth).
+	e.POST("/account/reauth", h.ReauthConfirm, RequireAuth(h.service))
 }
