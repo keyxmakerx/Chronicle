@@ -14,7 +14,8 @@ import (
 // Each link includes data-parent-id and data-sort-order for tree structure and
 // reordering. The sidebar_tree.js script transforms this flat list into a
 // collapsible tree with folder/page icons and drag-and-drop support.
-templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignContext) {
+// hiddenIDs marks entities that should appear dimmed for owners.
+templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignContext, hiddenIDs map[string]bool) {
 	if len(results) == 0 {
 		<div class="px-4 py-6 text-center">
 			<i class="fa-solid fa-file-circle-plus text-lg text-gray-600 mb-2 block"></i>
@@ -29,13 +30,19 @@ templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignConte
 			for _, entity := range results {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-					class="sidebar-tree-item flex items-center px-4 py-1 text-sm transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active group"
+					class={
+						"sidebar-tree-item flex items-center px-4 py-1 text-sm transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active group",
+						templ.KV("opacity-40", hiddenIDs[entity.ID]),
+					}
 					data-entity-id={ entity.ID }
 					if entity.ParentID != nil {
 						data-parent-id={ *entity.ParentID }
 					}
 					data-sort-order={ strconv.Itoa(entity.SortOrder) }
 					data-entity-name={ entity.Name }
+					if hiddenIDs[entity.ID] {
+						data-sidebar-hidden="true"
+					}
 					draggable="true"
 				>
 					<span
@@ -44,6 +51,9 @@ templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignConte
 						<i class="fa-solid fa-file-lines text-[10px]"></i>
 					</span>
 					<span class="flex-1 truncate text-xs">{ entity.Name }</span>
+					if hiddenIDs[entity.ID] {
+						<i class="fa-solid fa-eye-slash text-[9px] text-gray-600 ml-1 shrink-0"></i>
+					}
 				</a>
 			}
 		</div>

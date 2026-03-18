@@ -741,8 +741,27 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	}
 
 	// Sidebar mode returns a compact list for the sidebar drill panel.
+	// Hidden entities are filtered out for players but shown dimmed for owners.
 	if c.QueryParam("sidebar") == "1" {
-		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, total, cc))
+		sidebarCfg := cc.Campaign.ParseSidebarConfig()
+		hiddenIDs := make(map[string]bool, len(sidebarCfg.HiddenEntityIDs))
+		for _, id := range sidebarCfg.HiddenEntityIDs {
+			hiddenIDs[id] = true
+		}
+
+		// Players don't see individually hidden entities at all.
+		if cc.MemberRole < campaigns.RoleScribe && len(hiddenIDs) > 0 {
+			filtered := results[:0]
+			for _, e := range results {
+				if !hiddenIDs[e.ID] {
+					filtered = append(filtered, e)
+				}
+			}
+			results = filtered
+			total = len(results)
+		}
+
+		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, total, cc, hiddenIDs))
 	}
 
 	return middleware.Render(c, http.StatusOK, SearchResultsFragment(results, total, cc))

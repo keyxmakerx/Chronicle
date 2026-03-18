@@ -1,0 +1,29 @@
+// block_entity_manager.templ renders the mount point for the entity_manager
+// widget block. The JS widget fetches its own data and provides sortable,
+// filterable entity lists with visibility controls.
+package entities
+
+import (
+	"fmt"
+	"strconv"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// BlockEntityManager renders the mount point for the entity manager widget.
+// The widget auto-initializes via boot.js and fetches entity data from
+// existing search/reorder APIs.
+templ BlockEntityManager(cc *campaigns.CampaignContext, entityTypeID int, csrfToken string) {
+	<div
+		data-widget="entity_manager"
+		data-campaign-id={ cc.Campaign.ID }
+		data-entity-type-id={ strconv.Itoa(entityTypeID) }
+		data-role={ strconv.Itoa(int(cc.MemberRole)) }
+		data-csrf={ csrfToken }
+		data-entities-endpoint={ fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID) }
+		data-reorder-endpoint={ fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }
+		data-sidebar-config-endpoint={ fmt.Sprintf("/campaigns/%s/sidebar-config", cc.Campaign.ID) }
+		class="entity-manager-widget min-h-[200px]"
+	>
+		<div class="text-center py-8 text-fg-muted text-sm">Loading entity manager...</div>
+	</div>
+}

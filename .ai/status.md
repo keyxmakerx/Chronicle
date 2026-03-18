@@ -8,7 +8,14 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-18 -- **Bugfix sprint: CORS, NPC, sidebar, CSS.**
+2026-03-18 -- **Sidebar hidden entities, entity manager widget, Armory fix.**
+
+49. **Sidebar Hidden Entities + Entity Manager Widget.**
+    - **Armory pluginURL Fix (COMPLETE)** — Added missing `armory` case to `pluginURL()` in settings.templ so Features page links to `/campaigns/:id/armory`.
+    - **Sidebar Hidden Entities (COMPLETE)** — New `HiddenEntityIDs []string` field in `SidebarConfig` + `UpdateSidebarConfigRequest`. Handler filters hidden entities from sidebar for players (role < Scribe), shows them dimmed (opacity-40 + eye-slash icon) for owners. Template updated with `data-sidebar-hidden` attribute. `sidebar_tree.js` propagates hidden flag to tree nodes. `sidebar_reorg.js` fetches config on entity reorg entry, adds eye/eye-slash toggle per entity node, saves via PUT sidebar-config. Event-driven: `chronicle:toggle-entity-visibility` / `chronicle:entity-visibility-changed` DOM events.
+    - **Entity Manager Widget Block (COMPLETE)** — New `entity_manager` block type registered in routes.go. Mount-point templ component `block_entity_manager.templ`. JS widget `static/js/widgets/entity_manager.js` self-fetches entity data via existing search API (JSON mode). Features: search with 300ms debounce, sort by name/manual, drag-and-drop reorder (Scribe+), entity visibility toggle (Owner), type badge, icon display. Auto-mounted by boot.js. Script loaded in base.templ.
+    - **New `BlockConfigInt` helper** in block_registry.go for extracting integer config values.
+    - **Next Steps**: Entity Manager tag filtering, folder creation, Phase X-2 (preset auto-setup), Phase X-4 (diagnostics), Armory test coverage.
 
 48. **Bugfix Sprint + Armory Multi-Instance.**
     - **CORS Origin Normalization (COMPLETE)** — `UpdateCORSOrigins` now auto-prepends `https://` when bare hostnames entered (e.g., `vtt.bnuuy.haus` → `https://vtt.bnuuy.haus`). Strips trailing path components.
@@ -18,8 +25,7 @@
     - **Armory Multi-Instance (COMPLETE)** — Standalone named inventory collections per campaign. Migration 000011: `inventory_instances` + `inventory_items` tables + `instance_id` on `shop_transactions`. Full CRUD for instances (Owner), add/remove items (Scribe+). Gallery page has instance dropdown selector + manage panel. Transactions scoped to instances. New files: `instance_repository.go`, `instance_service.go`, `instance_handler.go`, `instances.templ`. Modified: `model.go`, `repository.go`, `handler.go`, `gallery.templ`, `routes.go`, `transaction_model.go`, `transaction_repository.go`, `app/routes.go`.
     - **Sidebar Cleanup (COMPLETE)** — Removed Armory static link from sidebar. Addon features are accessible via Features page and embeddable as widget blocks, not static nav links.
     - **Sidebar Entity Reorder Fix (COMPLETE)** — Fixed three interlocking bugs preventing entity drag-and-drop in drilled-in categories: (1) MutationObserver killed reorg on drill-state change — now transitions between category/entity reorg instead of deactivating; (2) Race condition where `#sidebar-entity-tree` wasn't loaded yet when reorg activated — added HTMX afterSwap retry with timeout; (3) Stale container reference in `sidebar_tree.js` event listener — now re-queries DOM; (4) Preserved reorg state across HTMX tree re-inits.
-    - **Entity Manager Widget (PLANNED)** — Tracked in `.ai/todo.md`. Drag-and-droppable block for entity/category/dashboard pages with sorting, tag filtering, folders, and visibility toggles.
-    - **Next Steps**: Entity Manager widget implementation, Phase X-2 (preset auto-setup), Phase X-4 (diagnostics), Armory test coverage.
+    - **Next Steps**: Phase X-2 (preset auto-setup), Phase X-4 (diagnostics), Armory test coverage.
 
 47. **Sprint: Phase X-0/X-1 — Sandbox Hardening + System Preview.**
     - **Foundry Admin Fix (COMPLETE)** — Switched admin handler from `FoundryPathProvider` interface to `func() string` closure (`a.foundryModuleDir`) — same function serving layer uses. Added hygiene scanner `packages/` exclusion, `tryReuseExistingInstall()` for DB wipe recovery, `ReconcileOrphanedInstalls()` for orphan detection.

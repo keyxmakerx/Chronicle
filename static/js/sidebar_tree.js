@@ -108,6 +108,10 @@
       wrapper.setAttribute('data-entity-id', node.id);
       if (node.parentId) wrapper.setAttribute('data-parent-id', node.parentId);
       wrapper.setAttribute('data-depth', String(depth));
+      // Propagate sidebar-hidden flag to wrapper for reorg script.
+      if (node.el.hasAttribute('data-sidebar-hidden')) {
+        wrapper.setAttribute('data-sidebar-hidden', 'true');
+      }
 
       // Clone the original link element and apply indentation.
       var link = node.el.cloneNode(true);
@@ -257,12 +261,19 @@
 
   /**
    * Toggle draggable state on tree items based on reorg mode.
+   * When enabled, also adds entity visibility toggles (eye icons).
    */
-  function updateDraggable(container, enabled) {
+  function updateDraggable(container, enabled, hiddenEntityIds) {
+    var hiddenSet = {};
+    if (hiddenEntityIds) {
+      hiddenEntityIds.forEach(function (id) { hiddenSet[id] = true; });
+    }
+
     var nodes = container.querySelectorAll('.sidebar-tree-node');
     nodes.forEach(function (node) {
       var item = node.querySelector('.sidebar-tree-item');
       if (item) {
+        var entityId = node.getAttribute('data-entity-id');
         if (enabled) {
           item.setAttribute('draggable', 'true');
           // Add drag handle if not present.
@@ -272,10 +283,30 @@
             handle.innerHTML = '<i class="fa-solid fa-grip-vertical text-[8px]"></i>';
             item.insertBefore(handle, item.firstChild);
           }
+          // Add entity visibility toggle if not present.
+          if (entityId && !node.querySelector('.reorg-entity-visibility')) {
+            var isHidden = !!hiddenSet[entityId] || node.hasAttribute('data-sidebar-hidden');
+            var eyeBtn = document.createElement('button');
+            eyeBtn.type = 'button';
+            eyeBtn.className = 'reorg-entity-visibility ml-auto p-0.5 text-[10px] rounded hover:bg-white/10 transition-colors shrink-0';
+            eyeBtn.setAttribute('data-entity-id', entityId);
+            eyeBtn.title = isHidden ? 'Show in sidebar' : 'Hide from sidebar';
+            eyeBtn.innerHTML = '<i class="fa-solid ' + (isHidden ? 'fa-eye-slash text-gray-500' : 'fa-eye text-gray-400') + '"></i>';
+            eyeBtn.addEventListener('click', function (e) {
+              e.preventDefault();
+              e.stopPropagation();
+              document.dispatchEvent(new CustomEvent('chronicle:toggle-entity-visibility', {
+                detail: { entityId: entityId }
+              }));
+            });
+            item.appendChild(eyeBtn);
+          }
         } else {
           item.removeAttribute('draggable');
           var handle = node.querySelector('.reorg-drag-handle');
           if (handle) handle.remove();
+          var eyeToggle = node.querySelector('.reorg-entity-visibility');
+          if (eyeToggle) eyeToggle.remove();
         }
       }
     });
@@ -584,7 +615,33 @@
     if (container) {
       // Keep currentTreeContainer in sync.
       currentTreeContainer = container;
-      updateDraggable(container, e.detail && e.detail.active);
+      var hiddenIds = (e.detail && e.detail.hiddenEntityIds) || [];
+      updateDraggable(container, e.detail && e.detail.active, hiddenIds);
+    }
+  });
+
+  // Listen for entity visibility changes and update the eye toggle + opacity.
+  document.addEventListener('chronicle:entity-visibility-changed', function (e) {
+    if (!e.detail || !e.detail.entityId) return;
+    var node = document.querySelector('.sidebar-tree-node[data-entity-id="' + e.detail.entityId + '"]');
+    if (!node) return;
+
+    var item = node.querySelector('.sidebar-tree-item');
+    var btn = node.querySelector('.reorg-entity-visibility');
+    if (e.detail.hidden) {
+      node.setAttribute('data-sidebar-hidden', 'true');
+      if (item) item.classList.add('opacity-40');
+      if (btn) {
+        btn.title = 'Show in sidebar';
+        btn.innerHTML = '<i class="fa-solid fa-eye-slash text-gray-500"></i>';
+      }
+    } else {
+      node.removeAttribute('data-sidebar-hidden');
+      if (item) item.classList.remove('opacity-40');
+      if (btn) {
+        btn.title = 'Hide from sidebar';
+        btn.innerHTML = '<i class="fa-solid fa-eye text-gray-400"></i>';
+      }
     }
   });
 

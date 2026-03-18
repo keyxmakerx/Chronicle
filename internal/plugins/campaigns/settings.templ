@@ -443,6 +443,8 @@ func pluginURL(campaignID, slug string) string {
 		return fmt.Sprintf("/campaigns/%s/sessions", campaignID)
 	case "notes":
 		return fmt.Sprintf("/campaigns/%s/entities", campaignID) // Notes are per-entity.
+	case "armory":
+		return fmt.Sprintf("/campaigns/%s/armory", campaignID)
 	case "sync-api":
 		return fmt.Sprintf("/campaigns/%s/settings", campaignID) // API keys are in settings.
 	default:

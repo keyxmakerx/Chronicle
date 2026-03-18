@@ -1282,6 +1282,15 @@ func (a *App) RegisterRoutes() {
 		return armory.BlockArmoryPreview(bctx.CC, cards, limit)
 	})
 
+	// Entity manager block — sortable, filterable entity list with visibility controls.
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "entity_manager", Label: "Entity Manager", Icon: "fa-list-check",
+		Description: "Sortable, filterable entity list with visibility controls",
+	}, func(bctx entities.BlockRenderContext) templ.Component {
+		typeID := entities.BlockConfigInt(bctx.Block.Config, "entity_type_id", 0)
+		return entities.BlockEntityManager(bctx.CC, typeID, bctx.CSRFToken)
+	})
+
 	// Set the registry on the entity service (validation) and as the global (rendering).
 	// The addon checker lets Render() skip blocks whose addon is disabled.
 	blockRegistry.SetAddonChecker(addonService)

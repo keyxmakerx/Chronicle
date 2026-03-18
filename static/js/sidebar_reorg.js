@@ -333,6 +333,7 @@
       body: {
         entity_type_order: sidebarConfig.entity_type_order || [],
         hidden_type_ids: sidebarConfig.hidden_type_ids || [],
+        hidden_entity_ids: sidebarConfig.hidden_entity_ids || [],
         custom_sections: sidebarConfig.custom_sections || [],
         custom_links: sidebarConfig.custom_links || []
       }
@@ -403,36 +404,61 @@
       pendingTreeHandler = null;
     }
 
-    var tree = document.getElementById('sidebar-entity-tree');
-    if (tree) {
-      tree.setAttribute('data-reorg-active', 'true');
-      document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
-        detail: { active: true }
-      }));
-      return;
+    // Ensure we have the campaign ID and config endpoint.
+    if (!campaignId) {
+      var btn = document.getElementById('sidebar-reorg-toggle');
+      campaignId = btn ? btn.getAttribute('data-campaign-id') : null;
+    }
+    if (campaignId && !configEndpoint) {
+      configEndpoint = '/campaigns/' + campaignId + '/sidebar-config';
     }
 
-    // Tree not loaded yet — wait for HTMX to deliver it.
-    pendingTreeHandler = function (e) {
-      if (e.detail.target && (
-        e.detail.target.id === 'sidebar-cat-results' ||
-        e.detail.target.id === 'sidebar-cat-content'
-      )) {
-        document.removeEventListener('htmx:afterSwap', pendingTreeHandler);
-        pendingTreeHandler = null;
-        // Give sidebar_tree.js time to run initTree() first.
-        setTimeout(function () {
-          var tree = document.getElementById('sidebar-entity-tree');
-          if (tree && active) {
-            tree.setAttribute('data-reorg-active', 'true');
-            document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
-              detail: { active: true }
-            }));
-          }
-        }, 50);
+    // Fetch sidebar config so we know which entities are hidden.
+    var configReady = Promise.resolve();
+    if (configEndpoint && !sidebarConfig) {
+      configReady = Chronicle.apiFetch(configEndpoint)
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (data) {
+          sidebarConfig = data || {};
+          if (!sidebarConfig.hidden_entity_ids) sidebarConfig.hidden_entity_ids = [];
+        })
+        .catch(function () {
+          sidebarConfig = { hidden_entity_ids: [] };
+        });
+    }
+
+    configReady.then(function () {
+      var tree = document.getElementById('sidebar-entity-tree');
+      if (tree) {
+        tree.setAttribute('data-reorg-active', 'true');
+        document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
+          detail: { active: true, hiddenEntityIds: (sidebarConfig && sidebarConfig.hidden_entity_ids) || [] }
+        }));
+        return;
       }
-    };
-    document.addEventListener('htmx:afterSwap', pendingTreeHandler);
+
+      // Tree not loaded yet — wait for HTMX to deliver it.
+      pendingTreeHandler = function (e) {
+        if (e.detail.target && (
+          e.detail.target.id === 'sidebar-cat-results' ||
+          e.detail.target.id === 'sidebar-cat-content'
+        )) {
+          document.removeEventListener('htmx:afterSwap', pendingTreeHandler);
+          pendingTreeHandler = null;
+          // Give sidebar_tree.js time to run initTree() first.
+          setTimeout(function () {
+            var tree = document.getElementById('sidebar-entity-tree');
+            if (tree && active) {
+              tree.setAttribute('data-reorg-active', 'true');
+              document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
+                detail: { active: true, hiddenEntityIds: (sidebarConfig && sidebarConfig.hidden_entity_ids) || [] }
+              }));
+            }
+          }, 50);
+        }
+      };
+      document.addEventListener('htmx:afterSwap', pendingTreeHandler);
+    });
   }
 
   /**
@@ -557,6 +583,30 @@
   }
 
   // -----------------------------------------------------------------------
+  // Entity Visibility Toggle
+  // -----------------------------------------------------------------------
+
+  /**
+   * Toggle sidebar visibility of an individual entity.
+   * Called from sidebar_tree.js when the user clicks an entity eye toggle.
+   */
+  function toggleEntityVisibility(entityId) {
+    if (!sidebarConfig) sidebarConfig = {};
+    if (!sidebarConfig.hidden_entity_ids) sidebarConfig.hidden_entity_ids = [];
+
+    var idx = sidebarConfig.hidden_entity_ids.indexOf(entityId);
+    if (idx === -1) {
+      sidebarConfig.hidden_entity_ids.push(entityId);
+    } else {
+      sidebarConfig.hidden_entity_ids.splice(idx, 1);
+    }
+    saveSidebarConfig();
+
+    var isNowHidden = sidebarConfig.hidden_entity_ids.indexOf(entityId) !== -1;
+    return isNowHidden;
+  }
+
+  // -----------------------------------------------------------------------
   // Initialization and event binding
   // -----------------------------------------------------------------------
 
@@ -573,6 +623,16 @@
     // Allow other buttons (e.g. drill panel) to toggle reorg via custom event.
     document.addEventListener('chronicle:toggle-reorg', function () {
       toggle();
+    });
+
+    // Listen for entity visibility toggle requests from sidebar_tree.js.
+    document.addEventListener('chronicle:toggle-entity-visibility', function (e) {
+      if (!e.detail || !e.detail.entityId) return;
+      var isNowHidden = toggleEntityVisibility(e.detail.entityId);
+      // Dispatch result back so sidebar_tree.js can update UI.
+      document.dispatchEvent(new CustomEvent('chronicle:entity-visibility-changed', {
+        detail: { entityId: e.detail.entityId, hidden: isNowHidden }
+      }));
     });
 
     // Exit reorg mode on navigation.
