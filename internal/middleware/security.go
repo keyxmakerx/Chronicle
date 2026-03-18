@@ -18,18 +18,19 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			// Content-Security-Policy: restrict what resources the browser can load.
 			// 'self' allows resources from the same origin only.
 			//
-			// Alpine.js CSP build eliminates the need for 'unsafe-eval'. The
-			// 'unsafe-inline' in script-src remains because Alpine needs to read
-			// inline x-* attribute expressions — this is NOT eval()-based execution,
-			// just attribute parsing. Mitigated by bluemonday HTML sanitization on
-			// all user-generated content.
+			// SECURITY TRADEOFF: 'unsafe-inline' and 'unsafe-eval' are required by
+			// Alpine.js (x-* attribute expressions). This weakens XSS protection since
+			// inline scripts can execute. Mitigated by server-side HTML sanitization
+			// (bluemonday) on all user-generated content. Future improvement: migrate
+			// to nonce-based CSP or replace Alpine.js with a CSP-compatible alternative.
 			//
-			// Google Fonts + Font Awesome CDN are explicitly allowed for fonts/styles.
+			// Google Fonts + Font Awesome CDN are explicitly allowed.
 			// All scripts are self-hosted (vendored). No external script CDNs needed.
+			// Google Fonts + Font Awesome CDN are explicitly allowed for fonts/styles.
 			h.Set("Content-Security-Policy",
 				"default-src 'self'; "+
-					"script-src 'self' 'unsafe-inline'; "+
-					"style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "+
+					"script-src 'self' 'unsafe-inline' 'unsafe-eval'; "+
+					"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "+
 					"img-src 'self' data: blob:; "+
 					"font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "+
 					"connect-src 'self'; "+
