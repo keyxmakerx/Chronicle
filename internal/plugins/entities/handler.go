@@ -138,6 +138,20 @@ func (h *Handler) isAddonEnabled(ctx context.Context, campaignID, slug string) b
 	return err != nil || enabled
 }
 
+// toAnyMaps converts []map[string]string to []map[string]any for JSON
+// serialization alongside entity results that include non-string fields.
+func toAnyMaps(src []map[string]string) []map[string]any {
+	out := make([]map[string]any, len(src))
+	for i, m := range src {
+		a := make(map[string]any, len(m))
+		for k, v := range m {
+			a[k] = v
+		}
+		out[i] = a
+	}
+	return out
+}
+
 // SetBlockRegistry sets the block registry for the block-types API endpoint.
 // Called after all plugins have registered their block types.
 func (h *Handler) SetBlockRegistry(reg *BlockRegistry) {
@@ -682,15 +696,31 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	}
 
 	if wantsJSON {
-		items := make([]map[string]string, len(results))
+		// Batch-fetch tags for all entities in the result set.
+		var tagMap map[string][]EntityTagInfo
+		if h.tagFetcher != nil && len(results) > 0 {
+			ids := make([]string, len(results))
+			for i, e := range results {
+				ids[i] = e.ID
+			}
+			includeDM := role >= int(campaigns.RoleScribe)
+			tagMap, _ = h.tagFetcher.GetEntityTagsBatch(c.Request().Context(), ids, includeDM)
+		}
+
+		items := make([]map[string]any, len(results))
 		for i, e := range results {
-			items[i] = map[string]string{
+			tags := tagMap[e.ID]
+			if tags == nil {
+				tags = []EntityTagInfo{}
+			}
+			items[i] = map[string]any{
 				"id":         e.ID,
 				"name":       e.Name,
 				"type_name":  e.TypeName,
 				"type_icon":  e.TypeIcon,
 				"type_color": e.TypeColor,
 				"url":        fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, e.ID),
+				"tags":       tags,
 			}
 		}
 		// Append cross-plugin search results from registered searchers.
@@ -701,7 +731,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			if tlResults, err := h.timelineSearcher.SearchTimelines(
 				ctx, cc.Campaign.ID, query, role,
 			); err == nil {
-				items = append(items, tlResults...)
+				items = append(items, toAnyMaps(tlResults)...)
 				total += len(tlResults)
 			}
 		}
@@ -709,7 +739,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			if mapResults, err := h.mapSearcher.SearchMaps(
 				ctx, cc.Campaign.ID, query,
 			); err == nil {
-				items = append(items, mapResults...)
+				items = append(items, toAnyMaps(mapResults)...)
 				total += len(mapResults)
 			}
 		}
@@ -717,7 +747,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			if calResults, err := h.calendarSearcher.SearchCalendarEvents(
 				ctx, cc.Campaign.ID, query, role,
 			); err == nil {
-				items = append(items, calResults...)
+				items = append(items, toAnyMaps(calResults)...)
 				total += len(calResults)
 			}
 		}
@@ -725,7 +755,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			if sessResults, err := h.sessionSearcher.SearchSessions(
 				ctx, cc.Campaign.ID, query,
 			); err == nil {
-				items = append(items, sessResults...)
+				items = append(items, toAnyMaps(sessResults)...)
 				total += len(sessResults)
 			}
 		}
@@ -733,7 +763,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			if modResults, err := h.systemSearcher.SearchSystemContent(
 				c.Request().Context(), cc.Campaign.ID, query,
 			); err == nil {
-				items = append(items, modResults...)
+				items = append(items, toAnyMaps(modResults)...)
 				total += len(modResults)
 			}
 		}

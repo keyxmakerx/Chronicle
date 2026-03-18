@@ -34,10 +34,12 @@
 
       // Widget state.
       var entities = [];
+      var allTags = [];          // All tags in the campaign.
+      var selectedTagName = '';  // Active tag filter (empty = show all).
       var sidebarConfig = null;
       var hiddenSet = {};
       var searchQuery = '';
-      var sortMode = 'manual'; // manual | name | updated | created
+      var sortMode = 'manual'; // manual | name
       var searchTimer = null;
       var dragSrcId = null;
 
@@ -57,12 +59,23 @@
           .then(function (res) { return res.ok ? res.json() : { results: [] }; })
           .then(function (data) {
             entities = data.results || [];
+            // Build unique tag list from entity results.
+            buildTagList();
             sortEntities();
             render();
           })
           .catch(function (err) {
             console.error('[entity_manager] fetch failed', err);
           });
+      }
+
+      function fetchAllTags() {
+        return Chronicle.apiFetch('/campaigns/' + campaignId + '/tags')
+          .then(function (res) { return res.ok ? res.json() : []; })
+          .then(function (data) {
+            allTags = data || [];
+          })
+          .catch(function () { allTags = []; });
       }
 
       function fetchSidebarConfig() {
@@ -85,8 +98,36 @@
       }
 
       // ---------------------------------------------------------------
-      // Sorting
+      // Tag list from entity results
       // ---------------------------------------------------------------
+
+      function buildTagList() {
+        var seen = {};
+        allTags = [];
+        entities.forEach(function (ent) {
+          if (ent.tags && ent.tags.length) {
+            ent.tags.forEach(function (tag) {
+              if (!seen[tag.name]) {
+                seen[tag.name] = true;
+                allTags.push(tag);
+              }
+            });
+          }
+        });
+        allTags.sort(function (a, b) { return a.name.localeCompare(b.name); });
+      }
+
+      // ---------------------------------------------------------------
+      // Filtering and sorting
+      // ---------------------------------------------------------------
+
+      function getFilteredEntities() {
+        if (!selectedTagName) return entities;
+        return entities.filter(function (ent) {
+          if (!ent.tags || !ent.tags.length) return false;
+          return ent.tags.some(function (t) { return t.name === selectedTagName; });
+        });
+      }
 
       function sortEntities() {
         if (sortMode === 'name') {
@@ -95,7 +136,6 @@
           });
         }
         // manual sort uses server order (sort_order field)
-        // updated/created would need timestamp fields from the API
       }
 
       // ---------------------------------------------------------------
@@ -133,7 +173,7 @@
       }
 
       // ---------------------------------------------------------------
-      // Drag and drop reorder (Owner/Scribe only)
+      // Drag and drop reorder (Scribe+ only)
       // ---------------------------------------------------------------
 
       function onDragStart(e) {
@@ -194,13 +234,13 @@
       function render() {
         el.innerHTML = '';
 
-        // Toolbar: search + sort.
+        // Toolbar: search + tag filter + sort.
         var toolbar = document.createElement('div');
-        toolbar.className = 'flex items-center gap-2 mb-3';
+        toolbar.className = 'flex items-center gap-2 mb-3 flex-wrap';
 
         // Search input.
         var searchWrap = document.createElement('div');
-        searchWrap.className = 'relative flex-1';
+        searchWrap.className = 'relative flex-1 min-w-[140px]';
         var searchIcon = document.createElement('i');
         searchIcon.className = 'fa-solid fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-fg-muted';
         var searchInput = document.createElement('input');
@@ -216,6 +256,28 @@
         searchWrap.appendChild(searchIcon);
         searchWrap.appendChild(searchInput);
         toolbar.appendChild(searchWrap);
+
+        // Tag filter dropdown (only if tags exist).
+        if (allTags.length > 0) {
+          var tagSelect = document.createElement('select');
+          tagSelect.className = 'text-xs bg-surface-alt border border-border rounded-lg px-2 py-1.5 text-fg focus:outline-none focus:ring-1 focus:ring-accent';
+          var allOpt = document.createElement('option');
+          allOpt.value = '';
+          allOpt.textContent = 'All tags';
+          tagSelect.appendChild(allOpt);
+          allTags.forEach(function (tag) {
+            var opt = document.createElement('option');
+            opt.value = tag.name;
+            opt.textContent = tag.name;
+            if (tag.name === selectedTagName) opt.selected = true;
+            tagSelect.appendChild(opt);
+          });
+          tagSelect.addEventListener('change', function () {
+            selectedTagName = tagSelect.value;
+            render();
+          });
+          toolbar.appendChild(tagSelect);
+        }
 
         // Sort dropdown.
         var sortSelect = document.createElement('select');
@@ -238,13 +300,25 @@
         });
         toolbar.appendChild(sortSelect);
 
+        // New entity link (Scribe+).
+        if (role >= 2) {
+          var newBtn = document.createElement('a');
+          newBtn.href = '/campaigns/' + campaignId + '/entities/new?type=' + entityTypeId;
+          newBtn.className = 'inline-flex items-center gap-1 px-2 py-1.5 text-xs bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition-colors shrink-0';
+          newBtn.innerHTML = '<i class="fa-solid fa-plus text-[9px]"></i> New';
+          toolbar.appendChild(newBtn);
+        }
+
         el.appendChild(toolbar);
 
-        // Entity list.
-        if (entities.length === 0) {
+        // Entity list (apply tag filter).
+        var displayEntities = getFilteredEntities();
+
+        if (displayEntities.length === 0) {
           var empty = document.createElement('div');
           empty.className = 'text-center py-8 text-fg-muted text-sm';
-          empty.innerHTML = '<i class="fa-solid fa-file-circle-plus text-lg mb-2 block opacity-50"></i>No entities found';
+          empty.innerHTML = '<i class="fa-solid fa-file-circle-plus text-lg mb-2 block opacity-50"></i>' +
+            (selectedTagName ? 'No entities with tag "' + selectedTagName + '"' : 'No entities found');
           el.appendChild(empty);
           return;
         }
@@ -252,7 +326,7 @@
         var list = document.createElement('div');
         list.className = 'entity-manager-list divide-y divide-border/50';
 
-        entities.forEach(function (entity) {
+        displayEntities.forEach(function (entity) {
           var row = document.createElement('div');
           var isHidden = !!hiddenSet[entity.id];
           row.className = 'entity-manager-row flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-surface-alt transition-colors' +
@@ -260,7 +334,7 @@
           row.setAttribute('data-entity-id', entity.id);
 
           // Drag handle (Scribe+).
-          if (role >= 2 && sortMode === 'manual') {
+          if (role >= 2 && sortMode === 'manual' && !selectedTagName) {
             var handle = document.createElement('span');
             handle.className = 'text-fg-muted cursor-grab shrink-0';
             handle.innerHTML = '<i class="fa-solid fa-grip-vertical text-[10px]"></i>';
@@ -290,12 +364,19 @@
           link.textContent = entity.name;
           row.appendChild(link);
 
-          // Type badge.
-          if (entity.type_name) {
-            var badge = document.createElement('span');
-            badge.className = 'text-[10px] text-fg-muted bg-surface-alt px-1.5 py-0.5 rounded shrink-0';
-            badge.textContent = entity.type_name;
-            row.appendChild(badge);
+          // Tag chips (compact, inline).
+          if (entity.tags && entity.tags.length) {
+            var tagWrap = document.createElement('div');
+            tagWrap.className = 'flex items-center gap-0.5 shrink-0';
+            entity.tags.forEach(function (tag) {
+              var chip = document.createElement('span');
+              chip.className = 'inline-block px-1 py-0 text-[9px] rounded';
+              chip.style.backgroundColor = tag.color + '22';
+              chip.style.color = tag.color;
+              chip.textContent = tag.name;
+              tagWrap.appendChild(chip);
+            });
+            row.appendChild(tagWrap);
           }
 
           // Visibility toggle (Owner only).
@@ -333,7 +414,7 @@
         return;
       }
 
-      // Fetch data in parallel.
+      // Fetch data in parallel then render.
       Promise.all([fetchEntities(), fetchSidebarConfig()])
         .then(function () {
           render();
