@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
@@ -22,6 +23,18 @@ var LayoutInjector func(echo.Context, context.Context) context.Context
 func IsHTMX(c echo.Context) bool {
 	return c.Request().Header.Get("HX-Request") == "true" &&
 		c.Request().Header.Get("HX-Boosted") != "true"
+}
+
+// HTMXRedirect sends a redirect that works for both HTMX and normal requests.
+// For HTMX requests it sets the HX-Redirect header and returns 204 No Content
+// (so HTMX performs a client-side redirect). For normal requests it returns a
+// standard 303 See Other redirect.
+func HTMXRedirect(c echo.Context, url string) error {
+	if IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", url)
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, url)
 }
 
 // Render writes a Templ component to the response with the given status code.

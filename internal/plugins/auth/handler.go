@@ -91,10 +91,7 @@ func (h *Handler) Login(c echo.Context) error {
 
 		// On failure, re-render the login form with the error message.
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "invalid email or password"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "invalid email or password")
 
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, LoginForm_(csrfToken, req.Email, errMsg))
@@ -115,11 +112,7 @@ func (h *Handler) Login(c echo.Context) error {
 	}
 
 	// HTMX requests get a redirect header; browser forms get a 303 redirect.
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", redirectTo)
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, redirectTo)
+	return middleware.HTMXRedirect(c, redirectTo)
 }
 
 // RegisterForm renders the registration page (GET /register).
@@ -160,10 +153,7 @@ func (h *Handler) Register(c echo.Context) error {
 	_, err := h.service.Register(c.Request().Context(), input)
 	if err != nil {
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "registration failed"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "registration failed")
 
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, RegisterFormComponent(csrfToken, &req, errMsg))
@@ -193,11 +183,7 @@ func (h *Handler) Register(c echo.Context) error {
 		redirectTo = redir
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", redirectTo)
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, redirectTo)
+	return middleware.HTMXRedirect(c, redirectTo)
 }
 
 // Logout destroys the session and clears the cookie (POST /logout).
@@ -216,11 +202,7 @@ func (h *Handler) Logout(c echo.Context) error {
 	// Clear the session cookie.
 	clearSessionCookie(c)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/login")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/login")
+	return middleware.HTMXRedirect(c, "/login")
 }
 
 // --- Password Reset ---
@@ -263,10 +245,7 @@ func (h *Handler) ResetPasswordForm(c echo.Context) error {
 	email, err := h.service.ValidateResetToken(c.Request().Context(), token)
 	if err != nil {
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "invalid or expired reset link"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "invalid or expired reset link")
 		return middleware.Render(c, http.StatusOK, ResetPasswordPage(csrfToken, token, email, errMsg))
 	}
 
@@ -304,21 +283,14 @@ func (h *Handler) ResetPassword(c echo.Context) error {
 
 	if err := h.service.ResetPassword(c.Request().Context(), token, password); err != nil {
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "failed to reset password"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "failed to reset password")
 		return middleware.Render(c, http.StatusOK, ResetPasswordPage(csrfToken, token, "", errMsg))
 	}
 
 	h.logSecurityEvent(c.Request().Context(), "password.reset_completed", "", "", c.RealIP(), c.Request().UserAgent(), nil)
 
 	// Success — redirect to login with a flash message.
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/login?reset=success")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/login?reset=success")
+	return middleware.HTMXRedirect(c, "/login?reset=success")
 }
 
 // ChangePasswordAPI changes the authenticated user's password (PUT /account/password).
@@ -342,10 +314,7 @@ func (h *Handler) ChangePasswordAPI(c echo.Context) error {
 	}
 
 	if err := h.service.ChangePassword(c.Request().Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
-		if appErr, ok := err.(*apperror.AppError); ok {
-			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
-		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to change password"})
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.UserMessage(err, "failed to change password")})
 	}
 
 	h.logSecurityEvent(c.Request().Context(), "password.changed", userID, "", c.RealIP(), c.Request().UserAgent(), nil)
@@ -368,10 +337,7 @@ func (h *Handler) UpdateDisplayNameAPI(c echo.Context) error {
 	}
 
 	if err := h.service.UpdateDisplayName(c.Request().Context(), userID, req.DisplayName); err != nil {
-		if appErr, ok := err.(*apperror.AppError); ok {
-			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
-		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update display name"})
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.UserMessage(err, "failed to update display name")})
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -475,10 +441,7 @@ func (h *Handler) RequestEmailChangeAPI(c echo.Context) error {
 	}
 
 	if err := h.service.RequestEmailChange(c.Request().Context(), userID, req.NewEmail, req.CurrentPassword); err != nil {
-		if appErr, ok := err.(*apperror.AppError); ok {
-			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
-		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to initiate email change"})
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.UserMessage(err, "failed to initiate email change")})
 	}
 
 	h.logSecurityEvent(c.Request().Context(), "email.change_requested", userID, "", c.RealIP(), c.Request().UserAgent(), map[string]any{"new_email": req.NewEmail})
@@ -497,10 +460,7 @@ func (h *Handler) ConfirmEmailChange(c echo.Context) error {
 	if err := h.service.ConfirmEmailChange(c.Request().Context(), token); err != nil {
 		// Render a simple error page for invalid/expired tokens.
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "invalid or expired verification link"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "invalid or expired verification link")
 		return middleware.Render(c, http.StatusOK, EmailVerifyResultPage(false, errMsg, csrfToken))
 	}
 
@@ -552,10 +512,7 @@ func (h *Handler) UpdateTimezoneAPI(c echo.Context) error {
 	}
 
 	if err := h.service.UpdateTimezone(c.Request().Context(), userID, req.Timezone); err != nil {
-		if appErr, ok := err.(*apperror.AppError); ok {
-			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
-		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update timezone"})
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.UserMessage(err, "failed to update timezone")})
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})

@@ -70,11 +70,7 @@ func (h *OwnerHandler) HandleSubmitSystem(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/systems/my-submissions")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/systems/my-submissions")
+	return middleware.HTMXRedirect(c, "/systems/my-submissions")
 }
 
 // MySubmissions renders the user's submitted packages (GET /systems/my-submissions).

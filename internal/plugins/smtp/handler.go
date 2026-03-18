@@ -41,10 +41,7 @@ func (h *Handler) UpdateSettings(c echo.Context) error {
 	if err := h.service.UpdateSettings(c.Request().Context(), req); err != nil {
 		settings, _ := h.service.GetSettings(c.Request().Context())
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "failed to save settings"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "failed to save settings")
 		return middleware.Render(c, http.StatusOK, SMTPSettingsPage(settings, csrfToken, errMsg))
 	}
 
@@ -63,10 +60,7 @@ func (h *Handler) TestConnection(c echo.Context) error {
 	if err := h.service.TestConnection(c.Request().Context()); err != nil {
 		settings, _ := h.service.GetSettings(c.Request().Context())
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "connection failed"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "connection failed")
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, SMTPFormComponent(settings, csrfToken, errMsg, ""))
 		}
@@ -92,10 +86,7 @@ func (h *Handler) SendTestEmail(c echo.Context) error {
 	if err := h.service.SendTestEmail(c.Request().Context(), to); err != nil {
 		settings, _ := h.service.GetSettings(c.Request().Context())
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "send failed"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "send failed")
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, SMTPFormComponent(settings, csrfToken, errMsg, ""))
 		}

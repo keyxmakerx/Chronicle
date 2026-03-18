@@ -121,6 +121,16 @@ func SafeMessage(err error) string {
 	return "an unexpected error occurred"
 }
 
+// UserMessage returns the AppError message if err is an AppError, otherwise
+// returns the provided fallback. Use this in handlers to extract a user-safe
+// error message with a context-specific default.
+func UserMessage(err error, fallback string) string {
+	if appErr, ok := err.(*AppError); ok {
+		return appErr.Message
+	}
+	return fallback
+}
+
 // SafeCode returns the HTTP status code from an AppError, or 500 for
 // any other error type.
 func SafeCode(err error) int {

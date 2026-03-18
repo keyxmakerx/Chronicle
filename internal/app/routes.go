@@ -110,8 +110,14 @@ func (a *entityTypeLayoutFetcherAdapter) GetEntityTypeForLayoutEditor(ctx contex
 	if err != nil {
 		return nil, err
 	}
-	layoutJSON, _ := json.Marshal(et.Layout)
-	fieldsJSON, _ := json.Marshal(et.Fields)
+	layoutJSON, err := json.Marshal(et.Layout)
+	if err != nil {
+		return nil, fmt.Errorf("marshal entity type layout: %w", err)
+	}
+	fieldsJSON, err := json.Marshal(et.Fields)
+	if err != nil {
+		return nil, fmt.Errorf("marshal entity type fields: %w", err)
+	}
 	return &campaigns.LayoutEditorEntityType{
 		ID:         et.ID,
 		CampaignID: et.CampaignID,

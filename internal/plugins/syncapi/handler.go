@@ -169,11 +169,7 @@ func (h *Handler) ToggleKey(c echo.Context) error {
 		}
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID+"/api-keys")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/api-keys")
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/api-keys")
 }
 
 // RevokeKey handles DELETE /campaigns/:id/api-keys/:keyID.
@@ -200,11 +196,7 @@ func (h *Handler) RevokeKey(c echo.Context) error {
 		return err
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID+"/api-keys")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/api-keys")
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/api-keys")
 }
 
 // SyncStatusEmbed returns an HTMX fragment showing Foundry sync health for a campaign.
@@ -406,11 +398,7 @@ func (h *Handler) ResolveEvent(c echo.Context) error {
 		return err
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/api")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/api")
+	return middleware.HTMXRedirect(c, "/admin/api")
 }
 
 // BlockIP handles POST /admin/api/ip-blocks to add an IP block.
@@ -434,11 +422,7 @@ func (h *Handler) BlockIP(c echo.Context) error {
 		return err
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/api")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/api")
+	return middleware.HTMXRedirect(c, "/admin/api")
 }
 
 // UnblockIP handles DELETE /admin/api/ip-blocks/:blockID.
@@ -452,11 +436,7 @@ func (h *Handler) UnblockIP(c echo.Context) error {
 		return err
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/api")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/api")
+	return middleware.HTMXRedirect(c, "/admin/api")
 }
 
 // AdminToggleKey handles PUT /admin/api/keys/:keyID/toggle — admin can activate/deactivate any key.
@@ -479,11 +459,7 @@ func (h *Handler) AdminToggleKey(c echo.Context) error {
 		}
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/api")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/api")
+	return middleware.HTMXRedirect(c, "/admin/api")
 }
 
 // AdminRevokeKey handles DELETE /admin/api/keys/:keyID — admin can revoke any key.
@@ -497,11 +473,7 @@ func (h *Handler) AdminRevokeKey(c echo.Context) error {
 		return err
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/api")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/api")
+	return middleware.HTMXRedirect(c, "/admin/api")
 }
 
 // --- Dashboard data struct ---

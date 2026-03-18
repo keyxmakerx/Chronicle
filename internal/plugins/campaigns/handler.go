@@ -256,21 +256,14 @@ func (h *Handler) Create(c echo.Context) error {
 	campaign, err := h.service.Create(c.Request().Context(), userID, input)
 	if err != nil {
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "failed to create campaign"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "failed to create campaign")
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK, CampaignCreateForm(csrfToken, &req, errMsg))
 		}
 		return middleware.Render(c, http.StatusOK, CampaignNewPage(csrfToken, req.Name, errMsg))
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/campaigns/"+campaign.ID)
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+campaign.ID)
+	return middleware.HTMXRedirect(c, "/campaigns/"+campaign.ID)
 }
 
 // Show renders the campaign dashboard (GET /campaigns/:id).
@@ -323,10 +316,7 @@ func (h *Handler) Update(c echo.Context) error {
 
 	_, err := h.service.Update(c.Request().Context(), cc.Campaign.ID, input)
 	if err != nil {
-		errMsg := "failed to update campaign"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "failed to update campaign")
 		csrfToken := middleware.GetCSRFToken(c)
 		transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
 		var entityTypes []SettingsEntityType
@@ -338,11 +328,7 @@ func (h *Handler) Update(c echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.updated", nil)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID+"/settings")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
 // Delete removes a campaign (DELETE /campaigns/:id).
@@ -356,11 +342,7 @@ func (h *Handler) Delete(c echo.Context) error {
 		return err
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/campaigns")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns")
+	return middleware.HTMXRedirect(c, "/campaigns")
 }
 
 // --- Backdrop & Branding ---
@@ -1046,10 +1028,7 @@ func (h *Handler) AddMember(c echo.Context) error {
 		// Re-render with error message.
 		members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "failed to add member"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "failed to add member")
 		return middleware.Render(c, http.StatusOK, CampaignMembersPage(cc, members, csrfToken, errMsg))
 	}
 
@@ -1079,10 +1058,7 @@ func (h *Handler) RemoveMember(c echo.Context) error {
 	if err := h.service.RemoveMember(c.Request().Context(), cc.Campaign.ID, targetUserID); err != nil {
 		members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "failed to remove member"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "failed to remove member")
 		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, errMsg))
 	}
 
@@ -1116,10 +1092,7 @@ func (h *Handler) UpdateRole(c echo.Context) error {
 	if err := h.service.UpdateMemberRole(c.Request().Context(), cc.Campaign.ID, targetUserID, role); err != nil {
 		members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "failed to update role"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "failed to update role")
 		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, errMsg))
 	}
 
@@ -1154,10 +1127,7 @@ func (h *Handler) UpdateMemberCharacterAPI(c echo.Context) error {
 	}
 
 	if err := h.service.UpdateMemberCharacter(c.Request().Context(), cc.Campaign.ID, targetUserID, req.CharacterEntityID); err != nil {
-		if appErr, ok := err.(*apperror.AppError); ok {
-			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
-		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update character"})
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.UserMessage(err, "failed to update character")})
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -1200,10 +1170,7 @@ func (h *Handler) Transfer(c echo.Context) error {
 	if err != nil {
 		transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "failed to initiate transfer"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "failed to initiate transfer")
 		var entityTypes []SettingsEntityType
 		if h.entityLister != nil {
 			entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
@@ -1211,11 +1178,7 @@ func (h *Handler) Transfer(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, errMsg, h.baseURL))
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID+"/settings")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
 // AcceptTransfer accepts a pending ownership transfer (GET /campaigns/:id/accept-transfer).
@@ -1231,11 +1194,7 @@ func (h *Handler) AcceptTransfer(c echo.Context) error {
 	}
 
 	campaignID := c.Param("id")
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/campaigns/"+campaignID)
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+campaignID)
+	return middleware.HTMXRedirect(c, "/campaigns/"+campaignID)
 }
 
 // CancelTransfer cancels a pending ownership transfer (POST /campaigns/:id/cancel-transfer).
@@ -1249,11 +1208,7 @@ func (h *Handler) CancelTransfer(c echo.Context) error {
 		return err
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/campaigns/"+cc.Campaign.ID+"/settings")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
 // --- Campaign Group Management ---

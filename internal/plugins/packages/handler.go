@@ -53,11 +53,7 @@ func (h *Handler) AddPackage(c echo.Context) error {
 		slog.String("repo", pkg.RepoURL),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // RemovePackage deletes a package (DELETE /admin/packages/:id).
@@ -69,11 +65,7 @@ func (h *Handler) RemovePackage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // ListVersions returns available versions for a package (GET /admin/packages/:id/versions).
@@ -113,11 +105,7 @@ func (h *Handler) InstallVersion(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // SetPinnedVersion pins a package to a version (PUT /admin/packages/:id/pin).
@@ -134,11 +122,7 @@ func (h *Handler) SetPinnedVersion(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // ClearPinnedVersion unpins a package (DELETE /admin/packages/:id/pin).
@@ -150,11 +134,7 @@ func (h *Handler) ClearPinnedVersion(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // SetAutoUpdate changes the auto-update policy (PUT /admin/packages/:id/auto-update).
@@ -172,11 +152,7 @@ func (h *Handler) SetAutoUpdate(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // CheckForUpdates triggers an update check (POST /admin/packages/:id/check).
@@ -188,11 +164,7 @@ func (h *Handler) CheckForUpdates(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // GetUsage shows which campaigns use a package (GET /admin/packages/:id/usage).
@@ -250,11 +222,7 @@ func (h *Handler) ReviewPackage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // UpdateRepoURL changes a package's repository URL (PUT /admin/packages/:id/repo).
@@ -271,11 +239,7 @@ func (h *Handler) UpdateRepoURL(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // DeprecatePackage marks a package as EOL (POST /admin/packages/:id/deprecate).
@@ -292,11 +256,7 @@ func (h *Handler) DeprecatePackage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // UndeprecatePackage clears deprecation (DELETE /admin/packages/:id/deprecate).
@@ -314,11 +274,7 @@ func (h *Handler) UndeprecatePackage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // ArchivePackage hides a package (POST /admin/packages/:id/archive).
@@ -330,11 +286,7 @@ func (h *Handler) ArchivePackage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // UnarchivePackage restores an archived package (DELETE /admin/packages/:id/archive).
@@ -346,11 +298,7 @@ func (h *Handler) UnarchivePackage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/packages")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/packages")
+	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
 // --- Package Security Settings ---

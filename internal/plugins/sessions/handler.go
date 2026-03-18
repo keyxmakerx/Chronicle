@@ -194,13 +194,7 @@ func (h *Handler) CreateSession(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect",
-			"/campaigns/"+cc.Campaign.ID+"/sessions/"+session.ID)
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther,
-		"/campaigns/"+cc.Campaign.ID+"/sessions/"+session.ID)
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/sessions/"+session.ID)
 }
 
 // UpdateSessionAPI updates a session.
@@ -246,10 +240,7 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 		RecurrenceEndDate:   req.RecurrenceEndDate,
 	})
 	if err != nil {
-		if appErr, ok := err.(*apperror.AppError); ok {
-			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
-		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "update failed"})
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 
 	// If a recurring session was completed, a new session was auto-generated.
@@ -317,10 +308,7 @@ func (h *Handler) UpdateRecapAPI(c echo.Context) error {
 	}
 
 	if err := h.svc.UpdateSessionRecap(c.Request().Context(), sessionID, req.Recap, req.RecapHTML); err != nil {
-		if appErr, ok := err.(*apperror.AppError); ok {
-			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
-		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "update failed"})
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -349,10 +337,7 @@ func (h *Handler) RSVPSession(c echo.Context) error {
 	}
 
 	if err := h.svc.UpdateRSVP(c.Request().Context(), sessionID, userID, status); err != nil {
-		if appErr, ok := err.(*apperror.AppError); ok {
-			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
-		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "RSVP failed"})
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 
 	if middleware.IsHTMX(c) {
@@ -386,10 +371,7 @@ func (h *Handler) LinkEntityAPI(c echo.Context) error {
 	}
 
 	if err := h.svc.LinkEntity(c.Request().Context(), sessionID, req.EntityID, req.Role, cc.Campaign.ID); err != nil {
-		if appErr, ok := err.(*apperror.AppError); ok {
-			return c.JSON(appErr.Code, map[string]string{"error": appErr.Message})
-		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "link failed"})
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -492,10 +474,7 @@ func (h *Handler) RedeemRSVPToken(c echo.Context) error {
 
 	token, err := h.svc.RedeemRSVPToken(c.Request().Context(), tokenStr)
 	if err != nil {
-		msg := "This RSVP link is invalid or has expired."
-		if appErr, ok := err.(*apperror.AppError); ok {
-			msg = appErr.Message
-		}
+		msg := apperror.UserMessage(err, "This RSVP link is invalid or has expired.")
 		return c.HTML(http.StatusOK, rsvpResultHTML("RSVP Failed", msg, false))
 	}
 
