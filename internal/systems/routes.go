@@ -38,6 +38,7 @@ func RegisterCustomSystemRoutes(e *echo.Echo, ch *CampaignSystemHandler, authSvc
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
 
+	cg.GET("/status", ch.SystemStatus)
 	cg.POST("/preview", ch.PreviewSystem)
 	cg.POST("/upload", ch.UploadSystem)
 	cg.GET("/custom", ch.GetCustomSystem)

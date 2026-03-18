@@ -975,6 +975,7 @@ func (a *App) RegisterRoutes() {
 	if err := addonService.SeedInstalledAddons(context.Background()); err != nil {
 		slog.Error("failed to seed built-in addons", slog.String("error", err.Error()))
 	}
+	addonService.SetPresetApplier(newPresetApplier(entityService))
 	addonHandler := addons.NewHandler(addonService)
 	addons.RegisterAdminRoutes(adminGroup, addonHandler)
 	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)
@@ -1533,6 +1534,30 @@ func (a *App) RegisterRoutes() {
 		}
 		return "auto_approve"
 	})
+	// Wire entity data providers for the system diagnostics page.
+	campaignSystemHandler.SetEntityDeps(
+		func(ctx context.Context, campaignID string) (map[int]int, error) {
+			return entityService.CountByType(ctx, campaignID, 3, "") // role=3 (owner) to see all
+		},
+		func(ctx context.Context, campaignID string) ([]systems.DiagEntityType, error) {
+			types, err := entityService.GetEntityTypes(ctx, campaignID)
+			if err != nil {
+				return nil, err
+			}
+			result := make([]systems.DiagEntityType, len(types))
+			for i, t := range types {
+				cat := ""
+				if t.PresetCategory != nil {
+					cat = *t.PresetCategory
+				}
+				result[i] = systems.DiagEntityType{
+					ID: t.ID, Name: t.Name, Slug: t.Slug,
+					PresetCategory: cat,
+				}
+			}
+			return result, nil
+		},
+	)
 	systems.RegisterCustomSystemRoutes(e, campaignSystemHandler, authService, campaignService)
 
 	// Wire campaign system lister into sync API so custom systems appear

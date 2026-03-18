@@ -21,6 +21,7 @@ templ BlockEntityManager(cc *campaigns.CampaignContext, entityTypeID int, csrfTo
 		data-csrf={ csrfToken }
 		data-entities-endpoint={ fmt.Sprintf("/campaigns/%s/entities/search", cc.Campaign.ID) }
 		data-reorder-endpoint={ fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID) }
+		data-quick-create-endpoint={ fmt.Sprintf("/campaigns/%s/entities/quick-create", cc.Campaign.ID) }
 		data-sidebar-config-endpoint={ fmt.Sprintf("/campaigns/%s/sidebar-config", cc.Campaign.ID) }
 		class="entity-manager-widget min-h-[200px]"
 	>

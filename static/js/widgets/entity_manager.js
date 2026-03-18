@@ -12,6 +12,7 @@
  *   data-csrf                    -- CSRF token for mutations
  *   data-entities-endpoint       -- Base search endpoint
  *   data-reorder-endpoint        -- Base entity endpoint for reorder
+ *   data-quick-create-endpoint   -- Quick create endpoint for new folders
  *   data-sidebar-config-endpoint -- Sidebar config endpoint for hide/unhide
  */
 (function () {
@@ -25,6 +26,7 @@
       var csrfToken = config.csrf || '';
       var entitiesEndpoint = config.entitiesEndpoint;
       var reorderEndpoint = config.reorderEndpoint;
+      var quickCreateEndpoint = config.quickCreateEndpoint;
       var sidebarConfigEndpoint = config.sidebarConfigEndpoint;
 
       if (!campaignId || !entitiesEndpoint) {
@@ -173,6 +175,53 @@
       }
 
       // ---------------------------------------------------------------
+      // Folder creation (Scribe+ only)
+      // ---------------------------------------------------------------
+
+      function createFolder() {
+        if (!quickCreateEndpoint || role < 2 || !entityTypeId) return;
+
+        var name = prompt('Folder name:');
+        if (!name || !name.trim()) return;
+
+        Chronicle.apiFetch(quickCreateEndpoint, {
+          method: 'POST',
+          body: { name: name.trim(), entity_type_id: entityTypeId }
+        })
+          .then(function (res) {
+            if (!res.ok) throw new Error('Create failed');
+            return res.json();
+          })
+          .then(function () {
+            fetchEntities();
+          })
+          .catch(function () {
+            Chronicle.notify('Failed to create folder', 'error');
+          });
+      }
+
+      // ---------------------------------------------------------------
+      // Tree helpers — build parent-child hierarchy from flat entity list
+      // ---------------------------------------------------------------
+
+      function buildTree(flatEntities) {
+        var byId = {};
+        var roots = [];
+        flatEntities.forEach(function (ent) {
+          byId[ent.id] = { entity: ent, children: [] };
+        });
+        flatEntities.forEach(function (ent) {
+          var pid = ent.parent_id;
+          if (pid && byId[pid]) {
+            byId[pid].children.push(byId[ent.id]);
+          } else {
+            roots.push(byId[ent.id]);
+          }
+        });
+        return roots;
+      }
+
+      // ---------------------------------------------------------------
       // Drag and drop reorder (Scribe+ only)
       // ---------------------------------------------------------------
 
@@ -185,41 +234,71 @@
 
       function onDragOver(e) {
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
         var row = e.currentTarget;
-        row.classList.add('border-t-2', 'border-accent');
+        var rect = row.getBoundingClientRect();
+        var y = e.clientY - rect.top;
+
+        // Clear previous indicators.
+        row.classList.remove('border-t-2', 'border-accent', 'bg-accent/10');
+
+        if (y < rect.height * 0.33) {
+          // Top third: reorder above.
+          e.dataTransfer.dropEffect = 'move';
+          row.classList.add('border-t-2', 'border-accent');
+        } else {
+          // Bottom 2/3: reparent (nest inside).
+          e.dataTransfer.dropEffect = 'move';
+          row.classList.add('bg-accent/10');
+        }
       }
 
       function onDragLeave(e) {
-        e.currentTarget.classList.remove('border-t-2', 'border-accent');
+        e.currentTarget.classList.remove('border-t-2', 'border-accent', 'bg-accent/10');
       }
 
       function onDrop(e) {
         e.preventDefault();
-        e.currentTarget.classList.remove('border-t-2', 'border-accent');
-        var targetId = e.currentTarget.getAttribute('data-entity-id');
+        var row = e.currentTarget;
+        row.classList.remove('border-t-2', 'border-accent', 'bg-accent/10');
+        var targetId = row.getAttribute('data-entity-id');
         if (!dragSrcId || dragSrcId === targetId) return;
 
-        // Find indices.
-        var srcIdx = -1, tgtIdx = -1;
-        entities.forEach(function (ent, i) {
-          if (ent.id === dragSrcId) srcIdx = i;
-          if (ent.id === targetId) tgtIdx = i;
-        });
-        if (srcIdx === -1 || tgtIdx === -1) return;
+        var rect = row.getBoundingClientRect();
+        var y = e.clientY - rect.top;
+        var isReparent = y >= rect.height * 0.33;
 
-        // Move in array.
-        var moved = entities.splice(srcIdx, 1)[0];
-        entities.splice(tgtIdx, 0, moved);
-        render();
+        if (isReparent) {
+          // Reparent: nest dragged entity inside target.
+          Chronicle.apiFetch(reorderEndpoint + '/' + dragSrcId + '/reorder', {
+            method: 'PUT',
+            body: { sort_order: 0, parent_id: targetId }
+          })
+            .then(function () { fetchEntities(); })
+            .catch(function () { Chronicle.notify('Failed to reparent', 'error'); });
+        } else {
+          // Reorder: move dragged entity before target (same parent level).
+          var targetEntity = entities.find(function (ent) { return ent.id === targetId; });
+          var targetParent = targetEntity ? (targetEntity.parent_id || null) : null;
 
-        // Save via reorder API.
-        Chronicle.apiFetch(reorderEndpoint + '/' + dragSrcId + '/reorder', {
-          method: 'PUT',
-          body: { sort_order: tgtIdx, parent_id: null }
-        }).catch(function () {
-          Chronicle.notify('Failed to save order', 'error');
-        });
+          // Find indices among siblings.
+          var srcIdx = -1, tgtIdx = -1;
+          entities.forEach(function (ent, i) {
+            if (ent.id === dragSrcId) srcIdx = i;
+            if (ent.id === targetId) tgtIdx = i;
+          });
+          if (srcIdx === -1 || tgtIdx === -1) return;
+
+          var moved = entities.splice(srcIdx, 1)[0];
+          entities.splice(tgtIdx, 0, moved);
+          render();
+
+          Chronicle.apiFetch(reorderEndpoint + '/' + dragSrcId + '/reorder', {
+            method: 'PUT',
+            body: { sort_order: tgtIdx, parent_id: targetParent }
+          }).catch(function () {
+            Chronicle.notify('Failed to save order', 'error');
+          });
+        }
       }
 
       function onDragEnd(e) {
@@ -300,18 +379,27 @@
         });
         toolbar.appendChild(sortSelect);
 
-        // New entity link (Scribe+).
+        // New entity + New Folder buttons (Scribe+).
         if (role >= 2) {
           var newBtn = document.createElement('a');
           newBtn.href = '/campaigns/' + campaignId + '/entities/new?type=' + entityTypeId;
           newBtn.className = 'inline-flex items-center gap-1 px-2 py-1.5 text-xs bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition-colors shrink-0';
           newBtn.innerHTML = '<i class="fa-solid fa-plus text-[9px]"></i> New';
           toolbar.appendChild(newBtn);
+
+          if (quickCreateEndpoint) {
+            var folderBtn = document.createElement('button');
+            folderBtn.type = 'button';
+            folderBtn.className = 'inline-flex items-center gap-1 px-2 py-1.5 text-xs bg-surface-alt border border-border text-fg-muted rounded-lg hover:bg-surface-alt/80 transition-colors shrink-0';
+            folderBtn.innerHTML = '<i class="fa-solid fa-folder-plus text-[9px]"></i> Folder';
+            folderBtn.addEventListener('click', createFolder);
+            toolbar.appendChild(folderBtn);
+          }
         }
 
         el.appendChild(toolbar);
 
-        // Entity list (apply tag filter).
+        // Entity list — render as tree when not searching/filtering.
         var displayEntities = getFilteredEntities();
 
         if (displayEntities.length === 0) {
@@ -326,80 +414,107 @@
         var list = document.createElement('div');
         list.className = 'entity-manager-list divide-y divide-border/50';
 
-        displayEntities.forEach(function (entity) {
-          var row = document.createElement('div');
-          var isHidden = !!hiddenSet[entity.id];
-          row.className = 'entity-manager-row flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-surface-alt transition-colors' +
-            (isHidden ? ' opacity-40' : '');
-          row.setAttribute('data-entity-id', entity.id);
+        // Use tree rendering when in manual sort with no search/filter active.
+        var useTree = sortMode === 'manual' && !searchQuery && !selectedTagName;
 
-          // Drag handle (Scribe+).
-          if (role >= 2 && sortMode === 'manual' && !selectedTagName) {
-            var handle = document.createElement('span');
-            handle.className = 'text-fg-muted cursor-grab shrink-0';
-            handle.innerHTML = '<i class="fa-solid fa-grip-vertical text-[10px]"></i>';
-            row.appendChild(handle);
-
-            row.setAttribute('draggable', 'true');
-            row.addEventListener('dragstart', onDragStart);
-            row.addEventListener('dragover', onDragOver);
-            row.addEventListener('dragleave', onDragLeave);
-            row.addEventListener('drop', onDrop);
-            row.addEventListener('dragend', onDragEnd);
-          }
-
-          // Entity icon.
-          var icon = document.createElement('span');
-          icon.className = 'w-5 h-5 flex items-center justify-center shrink-0 rounded text-[10px]';
-          if (entity.type_color) {
-            icon.style.color = entity.type_color;
-          }
-          icon.innerHTML = '<i class="fa-solid ' + (entity.type_icon || 'fa-file-lines') + '"></i>';
-          row.appendChild(icon);
-
-          // Entity name (clickable link).
-          var link = document.createElement('a');
-          link.href = '/campaigns/' + campaignId + '/entities/' + entity.id;
-          link.className = 'flex-1 truncate text-xs text-fg hover:text-accent transition-colors';
-          link.textContent = entity.name;
-          row.appendChild(link);
-
-          // Tag chips (compact, inline).
-          if (entity.tags && entity.tags.length) {
-            var tagWrap = document.createElement('div');
-            tagWrap.className = 'flex items-center gap-0.5 shrink-0';
-            entity.tags.forEach(function (tag) {
-              var chip = document.createElement('span');
-              chip.className = 'inline-block px-1 py-0 text-[9px] rounded';
-              chip.style.backgroundColor = tag.color + '22';
-              chip.style.color = tag.color;
-              chip.textContent = tag.name;
-              tagWrap.appendChild(chip);
-            });
-            row.appendChild(tagWrap);
-          }
-
-          // Visibility toggle (Owner only).
-          if (role >= 3) {
-            var eyeBtn = document.createElement('button');
-            eyeBtn.type = 'button';
-            eyeBtn.className = 'p-1 text-[10px] rounded hover:bg-white/10 transition-colors shrink-0';
-            eyeBtn.title = isHidden ? 'Show in sidebar' : 'Hide from sidebar';
-            eyeBtn.innerHTML = '<i class="fa-solid ' + (isHidden ? 'fa-eye-slash text-fg-muted' : 'fa-eye text-fg-muted') + '"></i>';
-            (function (eid) {
-              eyeBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                e.stopPropagation();
-                toggleEntityVisibility(eid);
-              });
-            })(entity.id);
-            row.appendChild(eyeBtn);
-          }
-
-          list.appendChild(row);
-        });
+        if (useTree) {
+          var tree = buildTree(displayEntities);
+          renderTreeNodes(list, tree, 0);
+        } else {
+          displayEntities.forEach(function (entity) {
+            renderEntityRow(list, entity, 0, false);
+          });
+        }
 
         el.appendChild(list);
+      }
+
+      // Render tree nodes recursively with indentation.
+      function renderTreeNodes(container, nodes, depth) {
+        nodes.forEach(function (node) {
+          renderEntityRow(container, node.entity, depth, node.children.length > 0);
+          if (node.children.length > 0) {
+            renderTreeNodes(container, node.children, depth + 1);
+          }
+        });
+      }
+
+      // Render a single entity row.
+      function renderEntityRow(container, entity, depth, hasChildren) {
+        var row = document.createElement('div');
+        var isHidden = !!hiddenSet[entity.id];
+        row.className = 'entity-manager-row flex items-center gap-2 py-1.5 rounded-md hover:bg-surface-alt transition-colors' +
+          (isHidden ? ' opacity-40' : '');
+        row.style.paddingLeft = (8 + depth * 16) + 'px';
+        row.style.paddingRight = '8px';
+        row.setAttribute('data-entity-id', entity.id);
+
+        // Drag handle (Scribe+).
+        if (role >= 2 && sortMode === 'manual' && !selectedTagName) {
+          var handle = document.createElement('span');
+          handle.className = 'text-fg-muted cursor-grab shrink-0';
+          handle.innerHTML = '<i class="fa-solid fa-grip-vertical text-[10px]"></i>';
+          row.appendChild(handle);
+
+          row.setAttribute('draggable', 'true');
+          row.addEventListener('dragstart', onDragStart);
+          row.addEventListener('dragover', onDragOver);
+          row.addEventListener('dragleave', onDragLeave);
+          row.addEventListener('drop', onDrop);
+          row.addEventListener('dragend', onDragEnd);
+        }
+
+        // Entity icon — folder icon for parents, type icon for leaves.
+        var icon = document.createElement('span');
+        icon.className = 'w-5 h-5 flex items-center justify-center shrink-0 rounded text-[10px]';
+        if (hasChildren) {
+          icon.innerHTML = '<i class="fa-solid fa-folder-open text-amber-400"></i>';
+        } else {
+          if (entity.type_color) icon.style.color = entity.type_color;
+          icon.innerHTML = '<i class="fa-solid ' + (entity.type_icon || 'fa-file-lines') + '"></i>';
+        }
+        row.appendChild(icon);
+
+        // Entity name (clickable link).
+        var link = document.createElement('a');
+        link.href = entity.url || ('/campaigns/' + campaignId + '/entities/' + entity.id);
+        link.className = 'flex-1 truncate text-xs text-fg hover:text-accent transition-colors';
+        link.textContent = entity.name;
+        row.appendChild(link);
+
+        // Tag chips (compact, inline).
+        if (entity.tags && entity.tags.length) {
+          var tagWrap = document.createElement('div');
+          tagWrap.className = 'flex items-center gap-0.5 shrink-0';
+          entity.tags.forEach(function (tag) {
+            var chip = document.createElement('span');
+            chip.className = 'inline-block px-1 py-0 text-[9px] rounded';
+            chip.style.backgroundColor = tag.color + '22';
+            chip.style.color = tag.color;
+            chip.textContent = tag.name;
+            tagWrap.appendChild(chip);
+          });
+          row.appendChild(tagWrap);
+        }
+
+        // Visibility toggle (Owner only).
+        if (role >= 3) {
+          var eyeBtn = document.createElement('button');
+          eyeBtn.type = 'button';
+          eyeBtn.className = 'p-1 text-[10px] rounded hover:bg-white/10 transition-colors shrink-0';
+          eyeBtn.title = isHidden ? 'Show in sidebar' : 'Hide from sidebar';
+          eyeBtn.innerHTML = '<i class="fa-solid ' + (isHidden ? 'fa-eye-slash text-fg-muted' : 'fa-eye text-fg-muted') + '"></i>';
+          (function (eid) {
+            eyeBtn.addEventListener('click', function (e) {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleEntityVisibility(eid);
+            });
+          })(entity.id);
+          row.appendChild(eyeBtn);
+        }
+
+        container.appendChild(row);
       }
 
       // ---------------------------------------------------------------

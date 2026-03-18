@@ -713,7 +713,7 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			if tags == nil {
 				tags = []EntityTagInfo{}
 			}
-			items[i] = map[string]any{
+			item := map[string]any{
 				"id":         e.ID,
 				"name":       e.Name,
 				"type_name":  e.TypeName,
@@ -721,7 +721,12 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 				"type_color": e.TypeColor,
 				"url":        fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, e.ID),
 				"tags":       tags,
+				"sort_order": e.SortOrder,
 			}
+			if e.ParentID != nil {
+				item["parent_id"] = *e.ParentID
+			}
+			items[i] = item
 		}
 		// Append cross-plugin search results from registered searchers.
 		// Each searcher is gated by its addon being enabled for the campaign,

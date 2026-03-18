@@ -1,0 +1,222 @@
+// diagnostics.templ renders the system diagnostics page showing the enabled
+// game system's status, reference data counts, entity presets, Foundry
+// compatibility, and validation warnings.
+
+package systems
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// SystemStatusPage renders the full diagnostics page.
+templ SystemStatusPage(cc *campaigns.CampaignContext, diag *SystemDiagnostics) {
+	@layouts.App("System Status - " + cc.Campaign.Name) {
+		@SystemStatusContent(cc, diag)
+	}
+}
+
+// SystemStatusContent renders the diagnostics page content (for HTMX swap).
+templ SystemStatusContent(cc *campaigns.CampaignContext, diag *SystemDiagnostics) {
+	<div id="system-status">
+		@components.Breadcrumbs([]components.BreadcrumbItem{
+			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
+			{Label: "System Status"},
+		})
+
+		<h1 class="text-2xl font-bold text-fg mb-6">System Diagnostics</h1>
+
+		if !diag.SystemFound {
+			<div class="bg-surface border border-edge rounded-lg p-8 text-center">
+				<i class="fa-solid fa-circle-info text-3xl text-fg-muted mb-3 block"></i>
+				<p class="text-fg-secondary text-sm">No game system is enabled for this campaign.</p>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", cc.Campaign.ID)) }
+					class="inline-block mt-3 text-sm text-accent hover:underline"
+				>
+					Enable a system in Campaign Settings
+				</a>
+			</div>
+		} else {
+			// System info card.
+			<div class="bg-surface border border-edge rounded-lg p-5 mb-6">
+				<div class="flex items-center gap-3 mb-3">
+					if diag.Manifest.Icon != "" {
+						<i class={ "fa-solid " + diag.Manifest.Icon + " text-2xl text-accent" }></i>
+					}
+					<div>
+						<h2 class="text-lg font-semibold text-fg">{ diag.Manifest.Name }</h2>
+						<div class="flex items-center gap-2 text-xs text-fg-muted">
+							<span>v{ diag.Manifest.Version }</span>
+							<span class="text-fg-muted/30">|</span>
+							<span>{ diag.Source }</span>
+							if diag.Manifest.Author != "" {
+								<span class="text-fg-muted/30">|</span>
+								<span>by { diag.Manifest.Author }</span>
+							}
+							if diag.Manifest.License != "" {
+								<span class="text-fg-muted/30">|</span>
+								<span>{ diag.Manifest.License }</span>
+							}
+						</div>
+					</div>
+				</div>
+				if diag.Manifest.Description != "" {
+					<p class="text-sm text-fg-secondary">{ diag.Manifest.Description }</p>
+				}
+			</div>
+
+			// Stats grid.
+			<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+				@diagStat("fa-layer-group", "Categories", fmt.Sprintf("%d", len(diag.Categories)))
+				@diagStat("fa-database", "Reference Items", fmt.Sprintf("%d", diag.TotalItems))
+				@diagStat("fa-shapes", "Entity Presets", fmt.Sprintf("%d", len(diag.Manifest.EntityPresets)))
+				@diagStat("fa-link", "Foundry Fields", fmt.Sprintf("%d/%d", diag.MappedFields, diag.TotalFields))
+			</div>
+
+			// Reference data categories.
+			if len(diag.Categories) > 0 {
+				<div class="bg-surface border border-edge rounded-lg p-5 mb-6">
+					<h3 class="text-sm font-semibold text-fg mb-3">
+						<i class="fa-solid fa-layer-group text-accent mr-1.5"></i>
+						Reference Data Categories
+					</h3>
+					<div class="divide-y divide-edge">
+						for _, cat := range diag.Categories {
+							<div class="flex items-center justify-between py-2">
+								<div class="flex items-center gap-2">
+									if cat.Icon != "" {
+										<i class={ "fa-solid " + cat.Icon + " text-xs text-fg-muted w-4 text-center" }></i>
+									}
+									<span class="text-sm text-fg">{ cat.Name }</span>
+								</div>
+								<span class="text-xs text-fg-muted">
+									{ fmt.Sprintf("%d items", cat.Count) }
+								</span>
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			// Entity presets.
+			if len(diag.Manifest.EntityPresets) > 0 {
+				<div class="bg-surface border border-edge rounded-lg p-5 mb-6">
+					<h3 class="text-sm font-semibold text-fg mb-3">
+						<i class="fa-solid fa-shapes text-accent mr-1.5"></i>
+						Entity Presets
+					</h3>
+					<div class="divide-y divide-edge">
+						for _, preset := range diag.Manifest.EntityPresets {
+							<div class="py-3">
+								<div class="flex items-center justify-between mb-1">
+									<div class="flex items-center gap-2">
+										if preset.Icon != "" {
+											<i class={ "fa-solid " + preset.Icon + " text-xs w-4 text-center" } style={ "color:" + preset.Color }></i>
+										}
+										<span class="text-sm font-medium text-fg">{ preset.Name }</span>
+										if preset.Category != "" {
+											<span class="px-1.5 py-0.5 text-[10px] rounded bg-accent/10 text-accent">{ preset.Category }</span>
+										}
+									</div>
+									<span class="text-xs text-fg-muted">
+										{ fmt.Sprintf("%d fields", len(preset.Fields)) }
+									</span>
+								</div>
+								if preset.FoundryActorType != "" {
+									<span class="text-[10px] text-fg-muted">
+										Foundry actor type: { preset.FoundryActorType }
+									</span>
+								}
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			// Entity types in campaign (from presets).
+			if len(diag.EntityTypes) > 0 {
+				<div class="bg-surface border border-edge rounded-lg p-5 mb-6">
+					<h3 class="text-sm font-semibold text-fg mb-3">
+						<i class="fa-solid fa-cubes text-accent mr-1.5"></i>
+						Campaign Entity Types
+					</h3>
+					<div class="divide-y divide-edge">
+						for _, et := range diag.EntityTypes {
+							<div class="flex items-center justify-between py-2">
+								<div class="flex items-center gap-2">
+									<span class="text-sm text-fg">{ et.Name }</span>
+									if et.PresetCategory != "" {
+										<span class="px-1.5 py-0.5 text-[10px] rounded bg-green-500/10 text-green-400">
+											from preset
+										</span>
+									}
+								</div>
+								<span class="text-xs text-fg-muted">
+									{ fmt.Sprintf("%d entities", et.Count) }
+								</span>
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			// Foundry compatibility.
+			<div class="bg-surface border border-edge rounded-lg p-5 mb-6">
+				<h3 class="text-sm font-semibold text-fg mb-3">
+					<i class="fa-solid fa-gamepad text-accent mr-1.5"></i>
+					Foundry VTT Compatibility
+				</h3>
+				if diag.FoundrySystemID != "" {
+					<div class="flex items-center gap-2 mb-2">
+						<span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-green-500/10 text-green-400">
+							<i class="fa-solid fa-check text-[9px]"></i>
+							Compatible
+						</span>
+						<span class="text-xs text-fg-muted">System ID: { diag.FoundrySystemID }</span>
+					</div>
+					<p class="text-xs text-fg-secondary">
+						{ fmt.Sprintf("%d of %d fields have Foundry path mappings for bidirectional sync.", diag.MappedFields, diag.TotalFields) }
+					</p>
+				} else {
+					<div class="flex items-center gap-2">
+						<span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-yellow-500/10 text-yellow-400">
+							<i class="fa-solid fa-triangle-exclamation text-[9px]"></i>
+							No Foundry ID
+						</span>
+						<span class="text-xs text-fg-secondary">This system does not declare a Foundry VTT system ID.</span>
+					</div>
+				}
+			</div>
+
+			// Warnings.
+			if len(diag.Warnings) > 0 {
+				<div class="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-5 mb-6">
+					<h3 class="text-sm font-semibold text-yellow-300 mb-3">
+						<i class="fa-solid fa-triangle-exclamation mr-1.5"></i>
+						Warnings ({ fmt.Sprintf("%d", len(diag.Warnings)) })
+					</h3>
+					<ul class="space-y-1">
+						for _, w := range diag.Warnings {
+							<li class="text-xs text-fg-secondary flex items-start gap-2">
+								<i class="fa-solid fa-circle text-[4px] text-yellow-400 mt-1.5 shrink-0"></i>
+								{ w }
+							</li>
+						}
+					</ul>
+				</div>
+			}
+		}
+	</div>
+}
+
+// diagStat renders a single stat card.
+templ diagStat(icon, label, value string) {
+	<div class="bg-surface border border-edge rounded-lg p-3 text-center">
+		<i class={ "fa-solid " + icon + " text-accent text-sm mb-1 block" }></i>
+		<div class="text-lg font-bold text-fg">{ value }</div>
+		<div class="text-[10px] text-fg-muted">{ label }</div>
+	</div>
+}

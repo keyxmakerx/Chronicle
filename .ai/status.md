@@ -8,14 +8,20 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-18 -- **Sidebar hidden entities, entity manager widget, Armory fix.**
+2026-03-18 -- **Entity manager folders, preset auto-setup, diagnostics page, armory tests.**
+
+50. **Entity Manager Folders + Preset Auto-Setup + Diagnostics + Armory Tests.**
+    - **Entity Manager Folder Creation (COMPLETE)** — "New Folder" button (Scribe+) in entity_manager widget toolbar. Calls QuickCreateAPI to create folder entities. Tree rendering with indentation and folder icons (`fa-folder-open`). Reparenting via drag-and-drop (bottom 2/3 of row = nest inside, top 1/3 = reorder). JSON search response now includes `parent_id` and `sort_order` fields. `buildTree()` helper constructs parent-child hierarchy from flat entity list.
+    - **Phase X-2: Preset Auto-Setup (COMPLETE)** — New `PresetApplier` interface in addons package. When a game system addon is enabled, `EnableForCampaign()` auto-creates entity types from the system manifest's `entity_presets`. `presetApplier` implementation in `app/preset_applier.go` bridges systems registry and entity service. Skips presets whose category already exists (avoids duplicates on re-enable). Graceful degradation — addon stays enabled even if preset creation fails.
+    - **Phase X-4: System Diagnostics Page (COMPLETE)** — New `/campaigns/:id/systems/status` route. Shows enabled system info (name, version, author, source), stats grid (categories, items, presets, Foundry fields), reference data category list with counts, entity presets with field counts and Foundry actor types, campaign entity types with preset badges and entity counts, Foundry VTT compatibility card with mapped field stats, validation warnings. Template: `diagnostics.templ`. Handler: `SystemStatus()` on `CampaignSystemHandler` with `EntityCountProvider` and `EntityTypeProvider` function adapters.
+    - **Armory Test Coverage (COMPLETE)** — 47 unit tests across 4 new test files: `model_test.go` (offset/order/defaults/field helpers), `service_test.go` (list/count/tags/errors/empty types), `instance_service_test.go` (CRUD, IDOR, validation, slugify), `transaction_service_test.go` (purchase flow, stock decrement, IDOR, currency defaults, shopMeta parsing).
+    - **Next Steps**: X-3 (system-provided widgets), X-5 (character sheet blocks), A2-2 (instance UI polish), command palette saved filters.
 
 49. **Sidebar Hidden Entities + Entity Manager Widget.**
     - **Armory pluginURL Fix (COMPLETE)** — Added missing `armory` case to `pluginURL()` in settings.templ so Features page links to `/campaigns/:id/armory`.
     - **Sidebar Hidden Entities (COMPLETE)** — New `HiddenEntityIDs []string` field in `SidebarConfig` + `UpdateSidebarConfigRequest`. Handler filters hidden entities from sidebar for players (role < Scribe), shows them dimmed (opacity-40 + eye-slash icon) for owners. Template updated with `data-sidebar-hidden` attribute. `sidebar_tree.js` propagates hidden flag to tree nodes. `sidebar_reorg.js` fetches config on entity reorg entry, adds eye/eye-slash toggle per entity node, saves via PUT sidebar-config. Event-driven: `chronicle:toggle-entity-visibility` / `chronicle:entity-visibility-changed` DOM events.
     - **Entity Manager Widget Block (COMPLETE)** — New `entity_manager` block type registered in routes.go. Mount-point templ component `block_entity_manager.templ`. JS widget `static/js/widgets/entity_manager.js` self-fetches entity data via existing search API (JSON mode). Features: search with 300ms debounce, sort by name/manual, drag-and-drop reorder (Scribe+), entity visibility toggle (Owner), type badge, icon display. Auto-mounted by boot.js. Script loaded in base.templ.
     - **New `BlockConfigInt` helper** in block_registry.go for extracting integer config values.
-    - **Next Steps**: Entity Manager tag filtering, folder creation, Phase X-2 (preset auto-setup), Phase X-4 (diagnostics), Armory test coverage.
 
 48. **Bugfix Sprint + Armory Multi-Instance.**
     - **CORS Origin Normalization (COMPLETE)** — `UpdateCORSOrigins` now auto-prepends `https://` when bare hostnames entered (e.g., `vtt.bnuuy.haus` → `https://vtt.bnuuy.haus`). Strips trailing path components.
