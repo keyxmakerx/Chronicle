@@ -10,14 +10,13 @@
 ## Last Updated
 2026-03-18 -- **Bugfix sprint: CORS, NPC, sidebar, CSS.**
 
-48. **Bugfix Sprint: CORS, NPC, Sidebar, CSS, Armory Design.**
-    - **CORS Origin Normalization (COMPLETE)** — `UpdateCORSOrigins` now auto-prepends `https://` when bare hostnames entered (e.g., `vtt.bnuuy.haus` → `https://vtt.bnuuy.haus`). Strips trailing path components. No longer rejects bare hostnames with an error.
-    - **NPC Server Error Fix (COMPLETE)** — `ListNPCs` and `CountNPCs` now handle "entity type not found" gracefully (return empty gallery + 0 count instead of 500). Campaigns without a "characters" entity type can view the NPC page without error.
-    - **Sidebar NPC Under Journal (COMPLETE)** — NPC link now appears indented under Journal when both addons enabled. Renders standalone (not indented) when NPC is enabled but Journal is not.
-    - **Invalid CSS Classes (COMPLETE)** — Fixed `bg-bg-secondary` → `bg-surface-alt` (CORS textarea, branding preview), `border-border` → `border-edge` (Foundry admin, calendar, system pages), `bg-surface-raised` → `bg-surface-alt` (system pages). These caused invisible borders and transparent backgrounds.
-    - **Armory Multi-Instance (DESIGN)** — Armory needs `inventory_instances` table for multiple named collections (Party Loot, Enemy Cache, Shop Inventory). Current model is a view layer over entities with `preset_category='item'`. Requires: new migration, parameterized routes, instance selector dropdown, service/repo refactor.
-    - **Package Security Settings** — Verified already complete: repo policy (GitHub only / known hosts / allow all), require approval toggle, owner upload policy, manifest validation, content scanning, max file size — all functional at `/admin/packages/settings`.
-    - **Next Steps**: Armory multi-instance implementation, Phase X-2 (preset auto-setup), Phase X-4 (diagnostics).
+48. **Bugfix Sprint + Armory Multi-Instance.**
+    - **CORS Origin Normalization (COMPLETE)** — `UpdateCORSOrigins` now auto-prepends `https://` when bare hostnames entered (e.g., `vtt.bnuuy.haus` → `https://vtt.bnuuy.haus`). Strips trailing path components.
+    - **NPC Server Error Fix (COMPLETE)** — `ListNPCs` and `CountNPCs` handle missing character entity type gracefully (empty gallery instead of 500).
+    - **Sidebar NPC Under Journal (COMPLETE)** — NPC link indented under Journal when both addons enabled; standalone when only NPC enabled.
+    - **Invalid CSS Classes (COMPLETE)** — Fixed `bg-bg-secondary`, `border-border`, `bg-surface-raised` across 6 template files.
+    - **Armory Multi-Instance (COMPLETE)** — Standalone named inventory collections per campaign. Migration 000011: `inventory_instances` + `inventory_items` tables + `instance_id` on `shop_transactions`. Full CRUD for instances (Owner), add/remove items (Scribe+). Gallery page has instance dropdown selector + manage panel. Transactions scoped to instances. New files: `instance_repository.go`, `instance_service.go`, `instance_handler.go`, `instances.templ`. Modified: `model.go`, `repository.go`, `handler.go`, `gallery.templ`, `routes.go`, `transaction_model.go`, `transaction_repository.go`, `app/routes.go`.
+    - **Next Steps**: Phase X-2 (preset auto-setup), Phase X-4 (diagnostics), Armory test coverage.
 
 47. **Sprint: Phase X-0/X-1 — Sandbox Hardening + System Preview.**
     - **Foundry Admin Fix (COMPLETE)** — Switched admin handler from `FoundryPathProvider` interface to `func() string` closure (`a.foundryModuleDir`) — same function serving layer uses. Added hygiene scanner `packages/` exclusion, `tryReuseExistingInstall()` for DB wipe recovery, `ReconcileOrphanedInstalls()` for orphan detection.

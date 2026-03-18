@@ -15,7 +15,7 @@ import (
 // Public-capable routes use AllowPublicCampaignAccess so public campaigns
 // show items to unauthenticated visitors. All routes are gated behind the
 // "armory" addon — campaign owners can enable/disable via the Plugin Hub.
-func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *InstanceHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	// Public-capable routes: gallery view (Player+).
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
@@ -25,14 +25,25 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, campaignSv
 	pub.GET("/armory", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/armory/count", h.CountAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
-	// Transaction routes require authenticated campaign member.
-	txGroup := e.Group("/campaigns/:id",
+	// Authenticated routes for instances and transactions.
+	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "armory"),
 	)
-	txGroup.POST("/armory/purchase", th.Purchase, campaigns.RequireRole(campaigns.RoleScribe))
-	txGroup.POST("/armory/transactions", th.CreateTransaction, campaigns.RequireRole(campaigns.RoleScribe))
-	txGroup.GET("/armory/transactions", th.ListTransactions, campaigns.RequireRole(campaigns.RolePlayer))
-	txGroup.GET("/armory/shops/:eid/transactions", th.ListShopTransactions, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Instance management (Owner for create/update/delete, Player for list).
+	cg.GET("/armory/instances", ih.ListInstances, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/armory/instances/manage", h.ManageInstances, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/armory/instances", ih.CreateInstance, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/armory/instances/:iid", ih.UpdateInstance, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.DELETE("/armory/instances/:iid", ih.DeleteInstance, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/armory/instances/:iid/items", ih.AddItem, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/armory/instances/:iid/items/:eid", ih.RemoveItem, campaigns.RequireRole(campaigns.RoleScribe))
+
+	// Transaction routes.
+	cg.POST("/armory/purchase", th.Purchase, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/armory/transactions", th.CreateTransaction, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.GET("/armory/transactions", th.ListTransactions, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/armory/shops/:eid/transactions", th.ListShopTransactions, campaigns.RequireRole(campaigns.RolePlayer))
 }

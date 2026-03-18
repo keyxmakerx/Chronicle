@@ -315,8 +315,8 @@ is truly modular and self-service._
 
 _Support multiple named inventory collections per campaign. Current armory is a single campaign-wide view._
 
-- [ ] **Sprint A2-1: Inventory Instances** — New `inventory_instances` table (id, campaign_id, name, slug, description, owner_entity_id, visibility). New `inventory_items` junction table. Migration. Service/repo/handler refactor to parameterize by instance ID. Dropdown selector in armory UI. Routes: `GET /campaigns/:id/armory` (all instances), `GET /campaigns/:id/armory/:instance_id` (specific). Create/rename/delete instance management.
-- [ ] **Sprint A2-2: Instance-Scoped Transactions** — Scope shop transactions to inventory instance. Update transaction service to filter by instance. Per-instance stock tracking. Transaction history filtered by instance.
+- [x] **Sprint A2-1: Inventory Instances** — Migration 000011: `inventory_instances` + `inventory_items` tables + `instance_id` on `shop_transactions`. `InstanceRepository`, `InstanceService`, `InstanceHandler` with full CRUD. Gallery page instance dropdown + manage panel. Transactions scoped to instances.
+- [ ] **Sprint A2-2: Instance UI Polish** — Add/remove items UI on instance view, drag-and-drop reorder, instance description editing, Foundry sync per-instance.
 
 ### Deferred to Phase S+ (or community contributions)
 

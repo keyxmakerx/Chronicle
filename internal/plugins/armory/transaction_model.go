@@ -17,6 +17,7 @@ const (
 type Transaction struct {
 	ID             int        `json:"id"`
 	CampaignID     string     `json:"campaign_id"`
+	InstanceID     *int       `json:"instance_id,omitempty"`
 	ShopEntityID   string     `json:"shop_entity_id"`
 	ItemEntityID   string     `json:"item_entity_id"`
 	BuyerEntityID  *string    `json:"buyer_entity_id,omitempty"`
@@ -38,6 +39,7 @@ type Transaction struct {
 
 // CreateTransactionInput is the request payload for creating a transaction.
 type CreateTransactionInput struct {
+	InstanceID      int      `json:"instance_id"`
 	ShopEntityID    string   `json:"shop_entity_id"`
 	ItemEntityID    string   `json:"item_entity_id"`
 	BuyerEntityID   string   `json:"buyer_entity_id"`

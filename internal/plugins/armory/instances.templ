@@ -1,0 +1,104 @@
+// instances.templ renders inventory instance management UI.
+// Includes the manage panel, create form, and edit/delete controls.
+package armory
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// InstanceManagePanel renders the instance management panel (HTMX fragment).
+// Shown when an Owner clicks the gear icon on the armory page.
+templ InstanceManagePanel(cc *campaigns.CampaignContext, instances []InventoryInstance, csrfToken string) {
+	<div class="card p-5 mb-6">
+		<div class="flex items-center justify-between mb-4">
+			<h2 class="text-lg font-semibold text-fg">
+				<i class="fa-solid fa-boxes-stacked mr-2 text-fg-muted"></i>Inventory Collections
+			</h2>
+			<button
+				type="button"
+				class="text-xs text-fg-muted hover:text-fg"
+				onclick="document.getElementById('instance-manage-panel').innerHTML = ''"
+			>
+				<i class="fa-solid fa-xmark"></i> Close
+			</button>
+		</div>
+
+		<!-- Existing instances -->
+		if len(instances) > 0 {
+			<div class="space-y-2 mb-4">
+				for _, inst := range instances {
+					<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
+						<div class="flex items-center gap-3">
+							<span
+								class="w-8 h-8 rounded-lg flex items-center justify-center"
+								style={ fmt.Sprintf("background-color: %s20; color: %s", inst.Color, inst.Color) }
+							>
+								<i class={ "fa-solid " + inst.Icon + " text-sm" }></i>
+							</span>
+							<div>
+								<span class="text-sm font-medium text-fg">{ inst.Name }</span>
+								<span class="text-xs text-fg-muted ml-2">{ fmt.Sprintf("%d items", inst.ItemCount) }</span>
+							</div>
+						</div>
+						<div class="flex items-center gap-1">
+							<form
+								hx-delete={ fmt.Sprintf("/campaigns/%s/armory/instances/%d", cc.Campaign.ID, inst.ID) }
+								hx-confirm={ fmt.Sprintf("Delete '%s'? Items will remain but won't be in this collection.", inst.Name) }
+								class="inline"
+							>
+								<input type="hidden" name="_csrf" value={ csrfToken }/>
+								<button type="submit" class="text-xs text-red-500 hover:text-red-600 px-2 py-1" title="Delete">
+									<i class="fa-solid fa-trash"></i>
+								</button>
+							</form>
+						</div>
+					</div>
+				}
+			</div>
+		} else {
+			<p class="text-sm text-fg-muted italic mb-4">No inventory collections yet. Create one to organize your items.</p>
+		}
+
+		<!-- Create form -->
+		<form
+			hx-post={ fmt.Sprintf("/campaigns/%s/armory/instances", cc.Campaign.ID) }
+			class="flex items-end gap-3"
+		>
+			<input type="hidden" name="_csrf" value={ csrfToken }/>
+			<div class="flex-1">
+				<label class="block text-xs font-medium text-fg-body mb-1">New Collection</label>
+				<input
+					type="text"
+					name="name"
+					required
+					maxlength="100"
+					class="input w-full text-sm"
+					placeholder="e.g., Party Loot, Blacksmith"
+				/>
+			</div>
+			<div class="w-24">
+				<label class="block text-xs font-medium text-fg-body mb-1">Icon</label>
+				<input
+					type="text"
+					name="icon"
+					class="input w-full text-sm"
+					placeholder="fa-box"
+					value="fa-box"
+				/>
+			</div>
+			<div class="w-20">
+				<label class="block text-xs font-medium text-fg-body mb-1">Color</label>
+				<input
+					type="color"
+					name="color"
+					class="w-full h-9 rounded cursor-pointer"
+					value="#6b7280"
+				/>
+			</div>
+			<button type="submit" class="btn-primary text-sm shrink-0">
+				<i class="fa-solid fa-plus mr-1"></i> Create
+			</button>
+		</form>
+	</div>
+}

@@ -1176,13 +1176,19 @@ func (a *App) RegisterRoutes() {
 	armorySvc := armory.NewArmoryService(armoryRepo, &armoryItemTypeFinderAdapter{svc: entityService})
 	armoryHandler := armory.NewHandler(armorySvc)
 
+	// Instance service: named inventory collections per campaign.
+	instRepo := armory.NewInstanceRepository(a.DB)
+	instSvc := armory.NewInstanceService(instRepo)
+	instHandler := armory.NewInstanceHandler(instSvc)
+	armoryHandler.SetInstanceService(instSvc)
+
 	// Transaction service: purchase flow, stock management, transaction logging.
 	txRepo := armory.NewTransactionRepository(a.DB)
 	txSvc := armory.NewTransactionService(txRepo)
 	txSvc.SetRelationMetadataUpdater(&armoryRelationMetadataAdapter{svc: relService})
 	txSvc.SetRelationFinder(&armoryRelationFinderAdapter{svc: relService})
 	txHandler := armory.NewTransactionHandler(txSvc)
-	armory.RegisterRoutes(e, armoryHandler, txHandler, campaignService, authService, addonService)
+	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	noteRepo := notes.NewNoteRepository(a.DB)
