@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
@@ -185,6 +186,12 @@ func (s *hygieneService) ScanStaleFiles(ctx context.Context) ([]StaleFile, error
 
 		rel, relErr := filepath.Rel(s.mediaPath, path)
 		if relErr != nil {
+			return nil
+		}
+
+		// Skip the packages/ subdirectory — package files are managed by
+		// the package manager and tracked in the packages table, not media_files.
+		if strings.HasPrefix(rel, "packages"+string(filepath.Separator)) || strings.HasPrefix(rel, "packages/") {
 			return nil
 		}
 
