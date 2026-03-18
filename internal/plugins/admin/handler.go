@@ -146,11 +146,24 @@ func (h *Handler) SetFoundryPathProvider(provider FoundryPathProvider) {
 // bundled foundry-module/ directory. Mirrors app.foundryModuleDir().
 func (h *Handler) resolveFoundryDir() string {
 	if h.foundryPath != nil {
-		if p := h.foundryPath.FoundryModulePath(); p != "" {
-			if _, err := os.Stat(filepath.Join(p, "module.json")); err == nil {
+		p := h.foundryPath.FoundryModulePath()
+		if p != "" {
+			manifestPath := filepath.Join(p, "module.json")
+			if _, err := os.Stat(manifestPath); err == nil {
+				slog.Debug("resolveFoundryDir: using package-managed path",
+					slog.String("path", p),
+				)
 				return p
 			}
+			slog.Warn("resolveFoundryDir: package path has no module.json, falling back to bundled",
+				slog.String("path", p),
+				slog.String("manifest", manifestPath),
+			)
+		} else {
+			slog.Warn("resolveFoundryDir: FoundryModulePath() returned empty, falling back to bundled")
 		}
+	} else {
+		slog.Warn("resolveFoundryDir: no foundryPath provider set, falling back to bundled")
 	}
 	return "foundry-module"
 }
@@ -814,6 +827,7 @@ type FoundryModuleData struct {
 	InstallURL string
 	CSRFToken  string
 	Files      []FoundryModuleFile
+	SourceDir  string // Resolved directory the module is served from.
 }
 
 // FoundryModuleFile represents a file in the foundry-module directory.
@@ -824,6 +838,7 @@ type FoundryModuleFile struct {
 
 // FoundryModule renders the Foundry VTT module management page (GET /admin/foundry).
 func (h *Handler) FoundryModule(c echo.Context) error {
+	moduleDir := h.resolveFoundryDir()
 	version := h.readFoundryModuleVersion()
 	baseURL := strings.TrimRight(h.baseURL, "/")
 	data := FoundryModuleData{
@@ -831,6 +846,7 @@ func (h *Handler) FoundryModule(c echo.Context) error {
 		InstallURL: baseURL + "/foundry-module/module.json",
 		CSRFToken:  middleware.GetCSRFToken(c),
 		Files:      h.listFoundryModuleFiles(),
+		SourceDir:  moduleDir,
 	}
 	return middleware.Render(c, http.StatusOK, AdminFoundryModulePage(data))
 }
