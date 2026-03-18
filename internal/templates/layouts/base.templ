@@ -22,7 +22,10 @@ templ Base(title string) {
 			(function(){try{var t=localStorage.getItem('chronicle-theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){document.documentElement.classList.add('dark');document.documentElement.style.backgroundColor='#111827'}else{document.documentElement.style.backgroundColor='#f9fafb'}}catch(e){}})();
 		</script>
 
-		<!-- Tailwind CSS (generated) — includes x-cloak and FOUC prevention rules -->
+		<!-- Hide Alpine.js elements until initialized; hide body until all CSS loads (FOUC prevention). -->
+		<style>[x-cloak]{display:none!important}body{opacity:0}</style>
+
+		<!-- Tailwind CSS (generated) -->
 		<link rel="stylesheet" href="/static/css/app.css"/>
 
 		<!-- Fonts -->
