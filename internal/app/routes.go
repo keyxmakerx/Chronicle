@@ -1509,6 +1509,15 @@ func (a *App) RegisterRoutes() {
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 	campaignSystemHandler := systems.NewCampaignSystemHandler(campaignSystemMgr)
+	// Wire upload policy provider so campaign handler checks admin setting.
+	campaignSystemHandler.SetUploadPolicy(func(ctx context.Context) string {
+		if a.PluginHealth.IsHealthy("packages") {
+			if settings, err := pkgService.GetSecuritySettings(ctx); err == nil {
+				return settings.OwnerUploadPolicy
+			}
+		}
+		return "auto_approve"
+	})
 	systems.RegisterCustomSystemRoutes(e, campaignSystemHandler, authService, campaignService)
 
 	// Wire campaign system lister into sync API so custom systems appear

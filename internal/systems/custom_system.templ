@@ -81,7 +81,7 @@ templ CustomSystemSection(campaignID string, manifest *SystemManifest, totalItem
 						name="file"
 						accept=".zip"
 						class="hidden"
-						hx-post={ fmt.Sprintf("/campaigns/%s/systems/upload", campaignID) }
+						hx-post={ fmt.Sprintf("/campaigns/%s/systems/preview", campaignID) }
 						hx-encoding="multipart/form-data"
 						hx-target="#custom-system-section"
 						hx-swap="innerHTML"

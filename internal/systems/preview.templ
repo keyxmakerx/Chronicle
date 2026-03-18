@@ -1,0 +1,223 @@
+// preview.templ renders the system preview / impact visualization page.
+// Shows a complete breakdown of what a game system package contains before
+// installation, including an interactive impact tree diagram.
+package systems
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+// SystemPreviewPage renders the full preview for a game system package.
+// Used by both admin package approval and campaign owner upload flows.
+templ SystemPreviewPage(preview *PreviewResult, campaignID string, csrfToken string) {
+	<div class="space-y-6" id="system-preview">
+		<!-- Header -->
+		<div class="card p-5">
+			<div class="flex items-start justify-between">
+				<div>
+					if preview.Manifest != nil {
+						<h2 class="text-xl font-bold text-fg flex items-center gap-2">
+							if preview.Manifest.Icon != "" {
+								<i class={ "fas " + preview.Manifest.Icon + " text-accent" }></i>
+							}
+							{ preview.Manifest.Name }
+						</h2>
+						<p class="text-sm text-fg-secondary mt-1">
+							Version { preview.Manifest.Version }
+							if preview.Manifest.Author != "" {
+								<span class="text-fg-muted"> by { preview.Manifest.Author }</span>
+							}
+						</p>
+						if preview.Manifest.Description != "" {
+							<p class="text-sm text-fg-muted mt-2">{ preview.Manifest.Description }</p>
+						}
+					}
+				</div>
+				<div class="flex items-center gap-2">
+					if preview.Valid {
+						<span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+							<i class="fas fa-check-circle"></i> Valid
+						</span>
+					} else {
+						<span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+							<i class="fas fa-times-circle"></i> Invalid
+						</span>
+					}
+				</div>
+			</div>
+		</div>
+
+		<!-- Errors -->
+		if len(preview.Errors) > 0 {
+			<div class="card p-4 border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20">
+				<h3 class="text-sm font-semibold text-red-800 dark:text-red-400 flex items-center gap-2 mb-2">
+					<i class="fas fa-times-circle"></i> Errors
+				</h3>
+				<ul class="list-disc list-inside text-sm text-red-700 dark:text-red-300 space-y-1">
+					for _, err := range preview.Errors {
+						<li>{ err }</li>
+					}
+				</ul>
+			</div>
+		}
+
+		<!-- Impact Tree Diagram -->
+		if preview.TreeData != nil {
+			<div class="card p-5">
+				<h3 class="text-sm font-semibold text-fg mb-4 flex items-center gap-2">
+					<i class="fas fa-sitemap"></i> Impact Overview
+				</h3>
+				<div
+					id="impact-tree"
+					data-widget="impact_tree"
+					data-tree={ treeJSON(preview.TreeData) }
+				></div>
+			</div>
+		}
+
+		<!-- Categories -->
+		if len(preview.Categories) > 0 {
+			<div class="card p-5">
+				<h3 class="text-sm font-semibold text-fg mb-3 flex items-center gap-2">
+					<i class="fas fa-book"></i> Reference Data Categories
+					<span class="text-fg-muted font-normal">({ fmt.Sprintf("%d items total", preview.TotalItems) })</span>
+				</h3>
+				<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+					for _, cat := range preview.Categories {
+						<div class="p-3 rounded border border-gray-200 dark:border-gray-700">
+							<div class="flex items-center gap-2 mb-1">
+								if cat.Icon != "" {
+									<i class={ "fas " + cat.Icon + " text-accent text-sm" }></i>
+								}
+								<span class="text-sm font-medium text-fg">{ cat.Name }</span>
+							</div>
+							<div class="text-xs text-fg-muted">
+								{ fmt.Sprintf("%d items", cat.ItemCount) }
+								if cat.FieldCount > 0 {
+									<span class="mx-1">&middot;</span>
+									{ fmt.Sprintf("%d fields", cat.FieldCount) }
+								}
+							</div>
+							if len(cat.Samples) > 0 {
+								<div class="mt-2 text-xs text-fg-muted">
+									<span class="font-medium">Samples:</span>
+									for i, s := range cat.Samples {
+										if i > 0 {
+											<span>, </span>
+										}
+										<span>{ s.Name }</span>
+									}
+								</div>
+							}
+						</div>
+					}
+				</div>
+			</div>
+		}
+
+		<!-- Entity Presets -->
+		if len(preview.EntityPresets) > 0 {
+			<div class="card p-5">
+				<h3 class="text-sm font-semibold text-fg mb-3 flex items-center gap-2">
+					<i class="fas fa-shapes"></i> Entity Presets
+				</h3>
+				<div class="space-y-3">
+					for _, preset := range preview.EntityPresets {
+						<div class="p-3 rounded border border-gray-200 dark:border-gray-700">
+							<div class="flex items-center gap-2 mb-2">
+								if preset.Icon != "" {
+									<i class={ "fas " + preset.Icon } style={ "color: " + preset.Color }></i>
+								}
+								<span class="text-sm font-medium text-fg">{ preset.Name }</span>
+								if preset.Category != "" {
+									<span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-fg-muted">{ preset.Category }</span>
+								}
+								if preset.FoundryActorType != "" {
+									<span class="text-xs px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+										<i class="fas fa-dice-d20 mr-0.5"></i>{ preset.FoundryActorType }
+									</span>
+								}
+							</div>
+							if len(preset.Fields) > 0 {
+								<table class="w-full text-xs">
+									<thead>
+										<tr class="text-left text-fg-muted border-b border-gray-100 dark:border-gray-700">
+											<th class="pb-1 font-medium">Field</th>
+											<th class="pb-1 font-medium">Type</th>
+											<th class="pb-1 font-medium">Foundry Path</th>
+										</tr>
+									</thead>
+									<tbody>
+										for _, f := range preset.Fields {
+											<tr class="border-b border-gray-50 dark:border-gray-800">
+												<td class="py-1 text-fg">{ f.Label }</td>
+												<td class="py-1 text-fg-muted">{ f.Type }</td>
+												<td class="py-1 text-fg-muted font-mono text-[10px]">
+													if f.FoundryPath != "" {
+														{ f.FoundryPath }
+														if f.IsFoundryWritable() {
+															<i class="fas fa-pen text-green-500 ml-1" title="Writable"></i>
+														} else {
+															<i class="fas fa-lock text-gray-400 ml-1" title="Read-only"></i>
+														}
+													}
+												</td>
+											</tr>
+										}
+									</tbody>
+								</table>
+							}
+						</div>
+					}
+				</div>
+			</div>
+		}
+
+		<!-- Warnings -->
+		if len(preview.Warnings) > 0 {
+			<div class="card p-4 border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20">
+				<h3 class="text-sm font-semibold text-yellow-800 dark:text-yellow-400 flex items-center gap-2 mb-2">
+					<i class="fas fa-triangle-exclamation"></i> Warnings
+				</h3>
+				<ul class="list-disc list-inside text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+					for _, w := range preview.Warnings {
+						<li>{ w }</li>
+					}
+				</ul>
+			</div>
+		}
+
+		<!-- Action Buttons -->
+		if preview.Valid && campaignID != "" {
+			<div class="flex justify-end gap-3">
+				<button
+					type="button"
+					class="btn btn-secondary"
+					onclick="document.getElementById('system-preview').remove()"
+				>
+					Cancel
+				</button>
+				<button
+					type="button"
+					class="btn btn-primary"
+					hx-post={ fmt.Sprintf("/campaigns/%s/systems/install", campaignID) }
+					hx-target="#custom-system-section"
+					hx-swap="innerHTML"
+					hx-vals={ fmt.Sprintf(`{"confirm": "true"}`) }
+				>
+					<i class="fas fa-download mr-1"></i> Install System
+				</button>
+			</div>
+		}
+	</div>
+}
+
+// treeJSON serializes a TreeNode to JSON for the impact_tree widget.
+func treeJSON(node *TreeNode) string {
+	data, err := json.Marshal(node)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
+}

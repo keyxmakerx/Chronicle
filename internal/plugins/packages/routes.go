@@ -38,6 +38,7 @@ func RegisterRoutes(admin *echo.Group, h *Handler) {
 
 	// Security settings.
 	g.GET("/settings", h.GetSecuritySettings)
+	g.POST("/settings", h.SaveSecuritySettings)
 }
 
 // RegisterOwnerRoutes mounts the owner-facing system submission routes.

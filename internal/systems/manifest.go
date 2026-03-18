@@ -3,7 +3,9 @@ package systems
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -400,6 +402,30 @@ func LoadManifest(path string) (*SystemManifest, error) {
 	return &m, nil
 }
 
+// ValidFieldTypes is the whitelist of accepted field type values.
+// Manifests with unknown field types are rejected during validation.
+var ValidFieldTypes = map[string]bool{
+	"string":   true,
+	"number":   true,
+	"boolean":  true,
+	"list":     true,
+	"markdown": true,
+	"enum":     true,
+	"url":      true,
+}
+
+// Manifest content limits to prevent resource exhaustion.
+const (
+	maxCategories         = 20
+	maxFieldsPerCategory  = 100
+	maxFieldsPerPreset    = 50
+	maxEntityPresets      = 10
+	maxRelationPresets    = 20
+)
+
+// slugPattern matches valid manifest IDs and preset slugs.
+var slugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+
 // ValidateManifest checks that a manifest has all required fields and
 // valid values. Returns a descriptive error for the first violation found.
 func ValidateManifest(m *SystemManifest) error {
@@ -424,15 +450,109 @@ func ValidateManifest(m *SystemManifest) error {
 		return fmt.Errorf("invalid status %q (must be %q or %q)", m.Status, StatusAvailable, StatusComingSoon)
 	}
 
-	// Validate categories have non-empty slugs.
+	// Validate ID format.
+	if !slugPattern.MatchString(m.ID) {
+		return fmt.Errorf("id %q must contain only lowercase letters, numbers, hyphens, and underscores", m.ID)
+	}
+
+	// Enforce content limits.
+	if len(m.Categories) > maxCategories {
+		return fmt.Errorf("too many categories (%d, max %d)", len(m.Categories), maxCategories)
+	}
+	if len(m.EntityPresets) > maxEntityPresets {
+		return fmt.Errorf("too many entity presets (%d, max %d)", len(m.EntityPresets), maxEntityPresets)
+	}
+	if len(m.RelationPresets) > maxRelationPresets {
+		return fmt.Errorf("too many relation presets (%d, max %d)", len(m.RelationPresets), maxRelationPresets)
+	}
+
+	// Validate categories.
 	for i, cat := range m.Categories {
 		if cat.Slug == "" {
 			return fmt.Errorf("category %d: slug is required", i)
 		}
+		if !slugPattern.MatchString(cat.Slug) {
+			return fmt.Errorf("category %d: slug %q must contain only lowercase letters, numbers, hyphens, and underscores", i, cat.Slug)
+		}
 		if cat.Name == "" {
 			return fmt.Errorf("category %d (%s): name is required", i, cat.Slug)
 		}
+		if len(cat.Fields) > maxFieldsPerCategory {
+			return fmt.Errorf("category %q: too many fields (%d, max %d)", cat.Slug, len(cat.Fields), maxFieldsPerCategory)
+		}
+		for j, f := range cat.Fields {
+			if err := validateFieldDef(f, fmt.Sprintf("category %q field %d", cat.Slug, j)); err != nil {
+				return err
+			}
+		}
 	}
 
+	// Validate entity presets.
+	for i, preset := range m.EntityPresets {
+		if preset.Slug == "" {
+			return fmt.Errorf("entity preset %d: slug is required", i)
+		}
+		if !slugPattern.MatchString(preset.Slug) {
+			return fmt.Errorf("entity preset %d: slug %q must contain only lowercase letters, numbers, hyphens, and underscores", i, preset.Slug)
+		}
+		if preset.Name == "" {
+			return fmt.Errorf("entity preset %d (%s): name is required", i, preset.Slug)
+		}
+		if len(preset.Fields) > maxFieldsPerPreset {
+			return fmt.Errorf("entity preset %q: too many fields (%d, max %d)", preset.Slug, len(preset.Fields), maxFieldsPerPreset)
+		}
+		for j, f := range preset.Fields {
+			if err := validateFieldDef(f, fmt.Sprintf("preset %q field %d", preset.Slug, j)); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Sanitize text fields to prevent stored XSS.
+	sanitizeManifestStrings(m)
+
 	return nil
+}
+
+// validateFieldDef checks a single field definition for required fields
+// and valid type values.
+func validateFieldDef(f FieldDef, context string) error {
+	if f.Key == "" {
+		return fmt.Errorf("%s: key is required", context)
+	}
+	if f.Label == "" {
+		return fmt.Errorf("%s (%s): label is required", context, f.Key)
+	}
+	if f.Type == "" {
+		return fmt.Errorf("%s (%s): type is required", context, f.Key)
+	}
+	if !ValidFieldTypes[f.Type] {
+		return fmt.Errorf("%s (%s): unknown field type %q (valid: string, number, boolean, list, markdown, enum, url)", context, f.Key, f.Type)
+	}
+	return nil
+}
+
+// sanitizeManifestStrings escapes HTML in all user-facing text fields
+// to prevent stored XSS when manifest content is rendered in templates.
+func sanitizeManifestStrings(m *SystemManifest) {
+	m.Name = html.EscapeString(m.Name)
+	m.Description = html.EscapeString(m.Description)
+	m.Author = html.EscapeString(m.Author)
+
+	for i := range m.Categories {
+		m.Categories[i].Name = html.EscapeString(m.Categories[i].Name)
+	}
+
+	for i := range m.EntityPresets {
+		m.EntityPresets[i].Name = html.EscapeString(m.EntityPresets[i].Name)
+		m.EntityPresets[i].NamePlural = html.EscapeString(m.EntityPresets[i].NamePlural)
+		for j := range m.EntityPresets[i].Fields {
+			m.EntityPresets[i].Fields[j].Label = html.EscapeString(m.EntityPresets[i].Fields[j].Label)
+		}
+	}
+
+	for i := range m.RelationPresets {
+		m.RelationPresets[i].Name = html.EscapeString(m.RelationPresets[i].Name)
+		m.RelationPresets[i].ReverseName = html.EscapeString(m.RelationPresets[i].ReverseName)
+	}
 }

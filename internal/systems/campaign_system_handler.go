@@ -4,6 +4,7 @@ package systems
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,15 +16,62 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// UploadPolicyProvider returns the current owner upload policy setting.
+// Decouples the campaign handler from the packages plugin.
+type UploadPolicyProvider func(ctx context.Context) string
+
 // CampaignSystemHandler handles upload and management of per-campaign
 // custom game systems. Only campaign owners can upload/remove.
 type CampaignSystemHandler struct {
-	mgr *CampaignSystemManager
+	mgr          *CampaignSystemManager
+	uploadPolicy UploadPolicyProvider // Returns "auto_approve", "require_approval", or "disabled".
 }
 
 // NewCampaignSystemHandler creates a handler for custom system endpoints.
 func NewCampaignSystemHandler(mgr *CampaignSystemManager) *CampaignSystemHandler {
 	return &CampaignSystemHandler{mgr: mgr}
+}
+
+// SetUploadPolicy wires the upload policy provider so the handler can
+// check whether campaign owners are allowed to upload custom systems.
+func (h *CampaignSystemHandler) SetUploadPolicy(provider UploadPolicyProvider) {
+	h.uploadPolicy = provider
+}
+
+// PreviewSystem handles POST /campaigns/:id/systems/preview.
+// Accepts a ZIP file, validates it without writing to disk, and returns
+// a full preview of what the system contains (impact tree, categories,
+// entity presets, warnings). The owner can then confirm installation.
+func (h *CampaignSystemHandler) PreviewSystem(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if cc.MemberRole != campaigns.RoleOwner {
+		return apperror.NewForbidden("only campaign owners can upload game systems")
+	}
+
+	// Check upload policy.
+	if h.uploadPolicy != nil {
+		policy := h.uploadPolicy(c.Request().Context())
+		if policy == "disabled" {
+			return apperror.NewForbidden("custom system uploads are disabled by the site administrator")
+		}
+	}
+
+	data, err := h.readUploadedZIP(c)
+	if err != nil {
+		return err
+	}
+
+	preview, err := PreviewFromZIP(data)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("previewing system: %w", err))
+	}
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, SystemPreviewPage(preview, cc.Campaign.ID, csrfToken))
 }
 
 // UploadSystem handles POST /campaigns/:id/systems/upload.
@@ -40,25 +88,17 @@ func (h *CampaignSystemHandler) UploadSystem(c echo.Context) error {
 		return apperror.NewForbidden("only campaign owners can upload game systems")
 	}
 
-	file, err := c.FormFile("file")
-	if err != nil {
-		return apperror.NewBadRequest("file is required")
+	// Check upload policy.
+	if h.uploadPolicy != nil {
+		policy := h.uploadPolicy(c.Request().Context())
+		if policy == "disabled" {
+			return apperror.NewForbidden("custom system uploads are disabled by the site administrator")
+		}
 	}
 
-	if file.Size > maxSystemZipSize {
-		return apperror.NewBadRequest(fmt.Sprintf("file exceeds maximum size of %d MB", maxSystemZipSize/(1024*1024)))
-	}
-
-	src, err := file.Open()
+	data, err := h.readUploadedZIP(c)
 	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("opening uploaded file: %w", err))
-	}
-	defer func() { _ = src.Close() }()
-
-	// Read into memory for zip.NewReader (needs io.ReaderAt).
-	data, err := io.ReadAll(io.LimitReader(src, maxSystemZipSize+1))
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("reading uploaded file: %w", err))
+		return err
 	}
 
 	manifest, err := h.mgr.Install(cc.Campaign.ID, bytes.NewReader(data), int64(len(data)))
@@ -88,6 +128,31 @@ func (h *CampaignSystemHandler) UploadSystem(c echo.Context) error {
 		"system_id": manifest.ID,
 		"name":      manifest.Name,
 	})
+}
+
+// readUploadedZIP reads and validates the uploaded ZIP file from the request.
+func (h *CampaignSystemHandler) readUploadedZIP(c echo.Context) ([]byte, error) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		return nil, apperror.NewBadRequest("file is required")
+	}
+
+	if file.Size > maxSystemZipSize {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("file exceeds maximum size of %d MB", maxSystemZipSize/(1024*1024)))
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("opening uploaded file: %w", err))
+	}
+	defer func() { _ = src.Close() }()
+
+	data, err := io.ReadAll(io.LimitReader(src, maxSystemZipSize+1))
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("reading uploaded file: %w", err))
+	}
+
+	return data, nil
 }
 
 // DeleteSystem handles DELETE /campaigns/:id/systems/custom.

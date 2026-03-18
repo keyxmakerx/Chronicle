@@ -8,7 +8,13 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-18 -- **Sprint: Security Hardening + System Detachment + Usage Tracking.**
+2026-03-18 -- **Sprint: Phase X-0/X-1 — Sandbox Hardening + System Preview.**
+
+47. **Sprint: Phase X-0/X-1 — Sandbox Hardening + System Preview.**
+    - **Foundry Admin Fix (COMPLETE)** — Switched admin handler from `FoundryPathProvider` interface to `func() string` closure (`a.foundryModuleDir`) — same function serving layer uses. Added hygiene scanner `packages/` exclusion, `tryReuseExistingInstall()` for DB wipe recovery, `ReconcileOrphanedInstalls()` for orphan detection.
+    - **X-0: Sandbox Hardening (COMPLETE)** — Field type enum whitelist (`string/number/boolean/list/markdown/enum/url`) enforced in `ValidateManifest()`. Slug format validation (`^[a-z0-9][a-z0-9_-]*$`) on manifest IDs, category slugs, preset slugs. Content limits (20 categories, 100 fields/category, 50 fields/preset, 10 presets). HTML sanitization of all manifest text fields via `html.EscapeString`. `OwnerUploadPolicy` setting: `auto_approve`/`require_approval`/`disabled`. Security settings page now has working Save button.
+    - **X-1: Preview & Impact Visualization (COMPLETE)** — `PreviewFromZIP()` dry-run validates ZIP in memory without writing to disk. `PreviewFromPackage()` for admin approval flow. `BuildImpactTree()` creates nested tree structure (system → categories → presets → fields → Foundry mappings → warnings). Preview template with impact tree diagram, category cards with sample items, entity preset tables with Foundry path annotations, error/warning sections. `impact_tree.js` widget renders collapsible tree with CSS connection lines. Two-step upload flow: upload → preview → confirm install. Upload policy gating in campaign handler.
+    - **Next Steps**: X-2 (entity preset auto-setup on addon enable), X-4 (diagnostics page), admin package preview approval.
 
 46. **Sprint: Security Hardening + System Detachment + Usage Tracking.**
     - **Admin Re-Authentication (COMPLETE)** — `RequireReauth` middleware in `auth/middleware.go` checks for recent password confirmation via Redis key (5-min TTL). `ConfirmReauth` + `IsReauthValid` service methods. Handler at `POST /account/reauth`. Reauth modal template (`reauth_modal.templ`) with Alpine.js + HTMX integration, included globally in `base.templ`. Applied to sensitive admin routes: ToggleAdmin, DisableUser, EnableUser, ForceLogoutUser.
