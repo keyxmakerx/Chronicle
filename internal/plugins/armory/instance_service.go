@@ -4,7 +4,6 @@ package armory
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 	"strings"
 	"unicode"
@@ -176,9 +175,4 @@ func slugify(name string) string {
 		s = s[:100]
 	}
 	return s
-}
-
-// formatError wraps an error with context for logging.
-func formatError(msg string, err error) error {
-	return fmt.Errorf("%s: %w", msg, err)
 }
