@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
@@ -243,7 +244,7 @@ func (r *mapRepo) SearchMaps(ctx context.Context, campaignID, query string) ([]M
 		`SELECT `+mapCols+` FROM maps
 		 WHERE campaign_id = ? AND name LIKE ?
 		 ORDER BY name LIMIT 10`,
-		campaignID, "%"+query+"%")
+		campaignID, "%"+strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)+"%")
 	if err != nil {
 		return nil, fmt.Errorf("search maps: %w", err)
 	}

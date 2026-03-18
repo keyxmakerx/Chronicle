@@ -1209,6 +1209,14 @@ func extractZip(zipPath, destDir string) error {
 
 		destPath := filepath.Join(destDir, name)
 
+		// Canonicalize and verify the path is still under destDir to prevent
+		// path traversal attacks (e.g., symlink tricks that bypass ".." checks).
+		cleanDest := filepath.Clean(destPath)
+		cleanBase := filepath.Clean(destDir) + string(os.PathSeparator)
+		if !strings.HasPrefix(cleanDest, cleanBase) && cleanDest != filepath.Clean(destDir) {
+			return fmt.Errorf("path traversal detected in zip: %s", name)
+		}
+
 		if zf.FileInfo().IsDir() {
 			if err := os.MkdirAll(destPath, 0o755); err != nil {
 				return fmt.Errorf("creating directory %s: %w", destPath, err)
