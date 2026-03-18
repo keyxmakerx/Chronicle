@@ -1,0 +1,85 @@
+// reauth_modal.templ provides a global password re-confirmation modal.
+// It is included in base.templ and triggered by the "reauth-required" HX-Trigger
+// header when a sensitive admin operation requires recent password confirmation.
+
+package layouts
+
+// ReauthModal renders a hidden password confirmation modal that appears when
+// an admin tries to perform a sensitive operation without recent re-authentication.
+// The modal POSTs to /account/reauth, and on success retries the original request.
+templ ReauthModal() {
+	<div
+		id="reauth-modal"
+		class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/50"
+		x-data="{ show: false }"
+		x-show="show"
+		x-cloak
+		@reauth-required.window="show = true; $nextTick(() => $refs.reauthPassword.focus())"
+	>
+		<div
+			class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm mx-4"
+			@click.outside="show = false"
+		>
+			<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+				Confirm Your Identity
+			</h3>
+			<p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+				This action requires password confirmation.
+			</p>
+			<form id="reauth-form" @submit.prevent="
+				const pw = $refs.reauthPassword.value;
+				if (!pw) return;
+				const errEl = $refs.reauthError;
+				errEl.classList.add('hidden');
+
+				fetch('/account/reauth', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/x-www-form-urlencoded',
+						'X-CSRF-Token': document.cookie.match(/(?:^|;\s*)__Host-csrf=([^;]*)/)?.[1] || document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] || ''
+					},
+					body: 'password=' + encodeURIComponent(pw)
+				}).then(r => {
+					if (r.ok) {
+						show = false;
+						$refs.reauthPassword.value = '';
+						// Retry the original action by dispatching a custom event.
+						window.dispatchEvent(new CustomEvent('reauth-confirmed'));
+					} else {
+						errEl.textContent = 'Incorrect password. Please try again.';
+						errEl.classList.remove('hidden');
+						$refs.reauthPassword.select();
+					}
+				}).catch(() => {
+					errEl.textContent = 'Network error. Please try again.';
+					errEl.classList.remove('hidden');
+				});
+			">
+				<input
+					x-ref="reauthPassword"
+					type="password"
+					name="password"
+					placeholder="Enter your password"
+					autocomplete="current-password"
+					class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+				/>
+				<p x-ref="reauthError" class="hidden mt-2 text-sm text-red-600 dark:text-red-400"></p>
+				<div class="mt-4 flex justify-end gap-3">
+					<button
+						type="button"
+						@click="show = false; $refs.reauthPassword.value = ''"
+						class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
+					>
+						Cancel
+					</button>
+					<button
+						type="submit"
+						class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500"
+					>
+						Confirm
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+}

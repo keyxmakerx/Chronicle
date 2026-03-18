@@ -663,3 +663,44 @@ func validateRegisterRequest(req *RegisterRequest) string {
 	}
 	return ""
 }
+
+// ReauthConfirm handles password re-confirmation for sensitive admin operations
+// (POST /account/reauth). It validates the admin's password and, if correct,
+// sets a short-lived reauth token in Redis that allows sensitive operations
+// for 5 minutes without re-prompting.
+func (h *Handler) ReauthConfirm(c echo.Context) error {
+	session := GetSession(c)
+	if session == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "authentication required",
+		})
+	}
+
+	password := c.FormValue("password")
+	if password == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "password is required",
+		})
+	}
+
+	if err := h.service.ConfirmReauth(c.Request().Context(), session.UserID, password); err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "incorrect password",
+		})
+	}
+
+	// Log the reauth event for the security dashboard.
+	if h.securityLogger != nil {
+		_ = h.securityLogger.LogEvent(
+			c.Request().Context(),
+			"reauth_confirmed",
+			session.UserID, session.UserID,
+			c.RealIP(), c.Request().UserAgent(),
+			nil,
+		)
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"status": "confirmed",
+	})
+}

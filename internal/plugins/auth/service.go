@@ -92,6 +92,10 @@ type AuthService interface {
 	// DestroySessionByHash finds a session by the SHA-256 hash of its token
 	// and destroys it. Used by the admin dashboard to avoid exposing raw tokens.
 	DestroySessionByHash(ctx context.Context, tokenHash string) error
+
+	// Re-authentication for sensitive operations.
+	ConfirmReauth(ctx context.Context, userID, password string) error
+	IsReauthValid(ctx context.Context, userID string) (bool, error)
 }
 
 // authService implements AuthService with argon2id hashing and Redis sessions.
@@ -1038,4 +1042,49 @@ func errorAs(err error, target **apperror.AppError) bool {
 		*target = ae
 	}
 	return ok
+}
+
+// --- Re-Authentication for Sensitive Operations ---
+
+// reauthKeyPrefix is the Redis key prefix for re-authentication confirmations.
+// Keys are short-lived (5 minutes) and set after the admin re-enters their password.
+const reauthKeyPrefix = "reauth_confirmed:"
+
+// reauthWindow is how long a re-authentication confirmation remains valid.
+// After this window, the admin must re-enter their password for the next
+// sensitive operation.
+const reauthWindow = 5 * time.Minute
+
+// ConfirmReauth validates the admin's password and sets a short-lived Redis key
+// that allows sensitive operations for the reauthWindow duration. Returns an
+// error if the password is incorrect.
+func (s *authService) ConfirmReauth(ctx context.Context, userID, password string) error {
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("finding user for reauth: %w", err))
+	}
+
+	if !verifyPassword(password, user.PasswordHash) {
+		return apperror.NewUnauthorized("incorrect password")
+	}
+
+	// Set the reauth confirmation key in Redis with short TTL.
+	key := reauthKeyPrefix + userID
+	if err := s.redis.Set(ctx, key, "1", reauthWindow).Err(); err != nil {
+		return apperror.NewInternal(fmt.Errorf("storing reauth confirmation: %w", err))
+	}
+
+	return nil
+}
+
+// IsReauthValid checks whether the user has recently confirmed their password
+// for sensitive operations. Returns true if a valid reauth confirmation exists
+// in Redis within the reauthWindow.
+func (s *authService) IsReauthValid(ctx context.Context, userID string) (bool, error) {
+	key := reauthKeyPrefix + userID
+	exists, err := s.redis.Exists(ctx, key).Result()
+	if err != nil {
+		return false, apperror.NewInternal(fmt.Errorf("checking reauth status: %w", err))
+	}
+	return exists > 0, nil
 }

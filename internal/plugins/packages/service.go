@@ -419,12 +419,18 @@ func (s *packageService) SetAutoUpdate(ctx context.Context, packageID string, po
 	return s.repo.UpdatePackage(ctx, pkg)
 }
 
-// GetUsage returns which campaigns are using a given package.
-// Currently returns an empty list — full implementation requires querying
-// campaign addon tables which will be wired in a future session.
+// GetUsage returns which campaigns are using a given package. It looks up
+// the package by ID, then queries campaign_addons for campaigns that have
+// enabled an addon matching the package's slug.
 func (s *packageService) GetUsage(ctx context.Context, packageID string) ([]PackageUsage, error) {
-	// TODO: query campaign_addons / campaign_systems tables to find usage.
-	return []PackageUsage{}, nil
+	pkg, err := s.repo.GetPackage(ctx, packageID)
+	if err != nil {
+		return nil, fmt.Errorf("getting package for usage: %w", err)
+	}
+	if pkg == nil {
+		return []PackageUsage{}, nil
+	}
+	return s.repo.GetUsageByCampaign(ctx, pkg.Slug)
 }
 
 // --- Auto-Update Worker ---
