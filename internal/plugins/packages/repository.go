@@ -316,7 +316,7 @@ func (r *packageRepository) UpdateRepoURL(ctx context.Context, id, newURL string
 func (r *packageRepository) ListVersions(ctx context.Context, packageID string) ([]PackageVersion, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, package_id, version, tag_name, release_url, download_url,
-		       COALESCE(release_notes,''), published_at, downloaded_at,
+		       COALESCE(release_notes,''), prerelease, published_at, downloaded_at,
 		       COALESCE(file_size, 0), created_at
 		FROM package_versions
 		WHERE package_id = ?
@@ -330,7 +330,7 @@ func (r *packageRepository) ListVersions(ctx context.Context, packageID string) 
 	for rows.Next() {
 		var v PackageVersion
 		if err := rows.Scan(&v.ID, &v.PackageID, &v.Version, &v.TagName,
-			&v.ReleaseURL, &v.DownloadURL, &v.ReleaseNotes,
+			&v.ReleaseURL, &v.DownloadURL, &v.ReleaseNotes, &v.Prerelease,
 			&v.PublishedAt, &v.DownloadedAt, &v.FileSize, &v.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning version: %w", err)
 		}
@@ -344,12 +344,12 @@ func (r *packageRepository) GetVersion(ctx context.Context, packageID, version s
 	var v PackageVersion
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, package_id, version, tag_name, release_url, download_url,
-		       COALESCE(release_notes,''), published_at, downloaded_at,
+		       COALESCE(release_notes,''), prerelease, published_at, downloaded_at,
 		       COALESCE(file_size, 0), created_at
 		FROM package_versions
 		WHERE package_id = ? AND version = ?`, packageID, version).Scan(
 		&v.ID, &v.PackageID, &v.Version, &v.TagName,
-		&v.ReleaseURL, &v.DownloadURL, &v.ReleaseNotes,
+		&v.ReleaseURL, &v.DownloadURL, &v.ReleaseNotes, &v.Prerelease,
 		&v.PublishedAt, &v.DownloadedAt, &v.FileSize, &v.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -364,16 +364,17 @@ func (r *packageRepository) GetVersion(ctx context.Context, packageID, version s
 func (r *packageRepository) UpsertVersion(ctx context.Context, v *PackageVersion) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO package_versions (id, package_id, version, tag_name, release_url,
-		                              download_url, release_notes, published_at, file_size)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                              download_url, release_notes, prerelease, published_at, file_size)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 		    tag_name = VALUES(tag_name),
 		    release_url = VALUES(release_url),
 		    download_url = VALUES(download_url),
 		    release_notes = VALUES(release_notes),
+		    prerelease = VALUES(prerelease),
 		    file_size = VALUES(file_size)`,
 		v.ID, v.PackageID, v.Version, v.TagName, v.ReleaseURL,
-		v.DownloadURL, v.ReleaseNotes, v.PublishedAt, v.FileSize)
+		v.DownloadURL, v.ReleaseNotes, v.Prerelease, v.PublishedAt, v.FileSize)
 	if err != nil {
 		return fmt.Errorf("upserting version: %w", err)
 	}
