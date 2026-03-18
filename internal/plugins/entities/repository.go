@@ -497,11 +497,12 @@ type EntityRepository interface {
 	// ordered from immediate parent to furthest ancestor. Uses a recursive CTE.
 	FindAncestors(ctx context.Context, entityID string) ([]Entity, error)
 
-	// UpdateParent sets or clears an entity's parent_id.
-	UpdateParent(ctx context.Context, entityID string, parentID *string) error
+	// UpdateParent sets or clears an entity's parent_id. Scoped to campaign for safety.
+	UpdateParent(ctx context.Context, entityID, campaignID string, parentID *string) error
 
 	// UpdateSortOrder sets an entity's manual sort order within its parent/category.
-	UpdateSortOrder(ctx context.Context, entityID string, sortOrder int) error
+	// Scoped to campaign for safety.
+	UpdateSortOrder(ctx context.Context, entityID, campaignID string, sortOrder int) error
 
 	// FindBacklinks returns entities whose entry_html contains a @mention link
 	// pointing to the given entity. Respects visibility filtering.
@@ -1108,10 +1109,10 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	return entities, rows.Err()
 }
 
-// UpdateParent sets or clears an entity's parent_id.
-func (r *entityRepository) UpdateParent(ctx context.Context, entityID string, parentID *string) error {
-	query := `UPDATE entities SET parent_id = ?, updated_at = NOW() WHERE id = ?`
-	result, err := r.db.ExecContext(ctx, query, parentID, entityID)
+// UpdateParent sets or clears an entity's parent_id. Scoped to campaign for safety.
+func (r *entityRepository) UpdateParent(ctx context.Context, entityID, campaignID string, parentID *string) error {
+	query := `UPDATE entities SET parent_id = ?, updated_at = NOW() WHERE id = ? AND campaign_id = ?`
+	result, err := r.db.ExecContext(ctx, query, parentID, entityID, campaignID)
 	if err != nil {
 		return fmt.Errorf("updating entity parent: %w", err)
 	}
@@ -1127,9 +1128,10 @@ func (r *entityRepository) UpdateParent(ctx context.Context, entityID string, pa
 }
 
 // UpdateSortOrder sets an entity's manual sort order within its parent/category.
-func (r *entityRepository) UpdateSortOrder(ctx context.Context, entityID string, sortOrder int) error {
-	query := `UPDATE entities SET sort_order = ?, updated_at = NOW() WHERE id = ?`
-	result, err := r.db.ExecContext(ctx, query, sortOrder, entityID)
+// Scoped to campaign for safety.
+func (r *entityRepository) UpdateSortOrder(ctx context.Context, entityID, campaignID string, sortOrder int) error {
+	query := `UPDATE entities SET sort_order = ?, updated_at = NOW() WHERE id = ? AND campaign_id = ?`
+	result, err := r.db.ExecContext(ctx, query, sortOrder, entityID, campaignID)
 	if err != nil {
 		return fmt.Errorf("updating entity sort order: %w", err)
 	}

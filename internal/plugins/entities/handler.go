@@ -795,7 +795,7 @@ func (h *Handler) ReorderAPI(c echo.Context) error {
 		return apperror.NewValidation("invalid request body")
 	}
 
-	if err := h.service.ReorderEntity(c.Request().Context(), entityID, input.ParentID, input.SortOrder); err != nil {
+	if err := h.service.ReorderEntity(c.Request().Context(), cc.Campaign.ID, entityID, input.ParentID, input.SortOrder); err != nil {
 		return err
 	}
 
