@@ -99,6 +99,15 @@ type PackageVersion struct {
 	CreatedAt    time.Time
 }
 
+// OrphanedInstall represents a package directory on disk that has no
+// corresponding record in the database (e.g. after a DB wipe).
+type OrphanedInstall struct {
+	Path    string // Full path to the orphaned directory.
+	Slug    string // Inferred slug (directory name).
+	Version string // Inferred version (subdirectory name).
+	Size    int64  // Total size in bytes.
+}
+
 // PackageUsage shows which campaigns use a package's systems.
 type PackageUsage struct {
 	CampaignID   string

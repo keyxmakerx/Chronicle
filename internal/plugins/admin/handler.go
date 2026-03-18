@@ -42,12 +42,6 @@ type PendingCounter interface {
 	CountPendingSubmissions(ctx context.Context) (int, error)
 }
 
-// FoundryPathProvider returns the install path for the active Foundry module
-// package. Returns empty string if no package-managed install exists.
-type FoundryPathProvider interface {
-	FoundryModulePath() string
-}
-
 // Handler handles admin dashboard HTTP requests. Depends on other plugins'
 // services via interfaces -- no direct repo access.
 type Handler struct {
@@ -63,7 +57,7 @@ type Handler struct {
 	hygieneScanner   DataHygieneScanner
 	databaseExplorer DatabaseExplorer
 	pendingCounter   PendingCounter
-	foundryPath      FoundryPathProvider
+	foundryDir       func() string // Resolves the active Foundry module directory.
 	baseURL          string
 }
 
@@ -135,22 +129,28 @@ func (h *Handler) SetPendingCounter(counter PendingCounter) {
 	h.pendingCounter = counter
 }
 
-// SetFoundryPathProvider wires the Foundry module path provider so admin
-// functions read/write the package-managed install instead of the bundled copy.
-func (h *Handler) SetFoundryPathProvider(provider FoundryPathProvider) {
-	h.foundryPath = provider
+// SetFoundryDir sets the resolver for the active Foundry module directory.
+// This allows the admin page to read/write the correct module.json whether
+// served from the package manager install or the bundled fallback.
+// The resolver should be app.foundryModuleDir — the same function the
+// serving layer uses — so both paths are always in sync.
+func (h *Handler) SetFoundryDir(resolver func() string) {
+	h.foundryDir = resolver
 }
 
-// resolveFoundryDir returns the directory containing the active Foundry module.
-// Prefers the package manager install path if available, falls back to the
-// bundled foundry-module/ directory. Mirrors app.foundryModuleDir().
+// resolveFoundryDir returns the active Foundry module directory, preferring
+// the package-manager install path and falling back to the bundled directory.
 func (h *Handler) resolveFoundryDir() string {
-	if h.foundryPath != nil {
-		if p := h.foundryPath.FoundryModulePath(); p != "" {
-			if _, err := os.Stat(filepath.Join(p, "module.json")); err == nil {
-				return p
-			}
+	if h.foundryDir != nil {
+		if dir := h.foundryDir(); dir != "" {
+			slog.Debug("resolveFoundryDir: using resolved path",
+				slog.String("path", dir),
+			)
+			return dir
 		}
+		slog.Warn("resolveFoundryDir: resolver returned empty, falling back to bundled")
+	} else {
+		slog.Warn("resolveFoundryDir: no foundry dir resolver set, falling back to bundled")
 	}
 	return "foundry-module"
 }
@@ -814,6 +814,7 @@ type FoundryModuleData struct {
 	InstallURL string
 	CSRFToken  string
 	Files      []FoundryModuleFile
+	SourceDir  string // Resolved directory the module is served from.
 }
 
 // FoundryModuleFile represents a file in the foundry-module directory.
@@ -824,6 +825,7 @@ type FoundryModuleFile struct {
 
 // FoundryModule renders the Foundry VTT module management page (GET /admin/foundry).
 func (h *Handler) FoundryModule(c echo.Context) error {
+	moduleDir := h.resolveFoundryDir()
 	version := h.readFoundryModuleVersion()
 	baseURL := strings.TrimRight(h.baseURL, "/")
 	data := FoundryModuleData{
@@ -831,6 +833,7 @@ func (h *Handler) FoundryModule(c echo.Context) error {
 		InstallURL: baseURL + "/foundry-module/module.json",
 		CSRFToken:  middleware.GetCSRFToken(c),
 		Files:      h.listFoundryModuleFiles(),
+		SourceDir:  moduleDir,
 	}
 	return middleware.Render(c, http.StatusOK, AdminFoundryModulePage(data))
 }

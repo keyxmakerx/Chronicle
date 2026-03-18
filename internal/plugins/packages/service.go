@@ -90,6 +90,10 @@ type PackageService interface {
 
 	// SeedOfficialPackages creates the official Chronicle repos if none exist.
 	SeedOfficialPackages(ctx context.Context)
+
+	// ReconcileOrphanedInstalls detects package directories on disk that have
+	// no corresponding DB record (e.g. after a database wipe).
+	ReconcileOrphanedInstalls(ctx context.Context) ([]OrphanedInstall, error)
 }
 
 // packageService implements PackageService.
@@ -834,9 +838,184 @@ func (s *packageService) SeedOfficialPackages(ctx context.Context) {
 			slog.String("repo", seed.repoURL),
 		)
 
+		// Check if files already exist on disk from a previous install
+		// (e.g. the DB was wiped but package files remain). If we find a
+		// valid manifest, reuse the existing files instead of re-downloading.
+		if reused := s.tryReuseExistingInstall(ctx, pkg); reused {
+			continue
+		}
+
 		// Attempt to fetch and install (non-fatal if GitHub is unreachable).
 		s.fetchAndInstallLatest(ctx, pkg)
 	}
+}
+
+// tryReuseExistingInstall checks if a package's expected install directory
+// already contains valid files. If so, updates the DB record with the install
+// path and returns true. Returns false if no existing files are found.
+func (s *packageService) tryReuseExistingInstall(ctx context.Context, pkg *Package) bool {
+	// Look in the type-specific directory for any version subdirectory.
+	var baseDir string
+	switch pkg.Type {
+	case PackageTypeFoundryModule:
+		baseDir = filepath.Join(s.packagesDir(), "foundry-module")
+	default:
+		baseDir = filepath.Join(s.packagesDir(), "systems", pkg.Slug)
+	}
+
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return false
+	}
+
+	// Find the first version directory with a valid manifest.
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		candidatePath := filepath.Join(baseDir, entry.Name())
+
+		// Check for manifest.json or module.json.
+		hasManifest := false
+		for _, name := range []string{"manifest.json", "module.json"} {
+			if _, err := os.Stat(filepath.Join(candidatePath, name)); err == nil {
+				hasManifest = true
+				break
+			}
+		}
+		if !hasManifest {
+			continue
+		}
+
+		// Found existing files — reuse them.
+		now := time.Now()
+		pkg.InstalledVersion = entry.Name()
+		pkg.InstallPath = candidatePath
+		pkg.LastInstalledAt = &now
+
+		if err := s.repo.UpdatePackage(ctx, pkg); err != nil {
+			slog.Warn("failed to update package with reused install",
+				slog.String("package", pkg.Slug),
+				slog.Any("error", err),
+			)
+			return false
+		}
+
+		slog.Info("reused existing package install from disk",
+			slog.String("package", pkg.Slug),
+			slog.String("version", entry.Name()),
+			slog.String("path", candidatePath),
+		)
+		return true
+	}
+
+	return false
+}
+
+// ReconcileOrphanedInstalls detects package directories on disk that have no
+// corresponding DB record. This happens when the database is wiped but
+// package files remain on disk.
+func (s *packageService) ReconcileOrphanedInstalls(ctx context.Context) ([]OrphanedInstall, error) {
+	pkgs, err := s.repo.ListPackages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing packages: %w", err)
+	}
+
+	// Build set of known install paths.
+	knownPaths := make(map[string]bool, len(pkgs))
+	for _, pkg := range pkgs {
+		if pkg.InstallPath != "" {
+			knownPaths[pkg.InstallPath] = true
+		}
+	}
+
+	var orphans []OrphanedInstall
+
+	// Scan systems directory: packages/systems/{slug}/{version}/
+	systemsDir := filepath.Join(s.packagesDir(), "systems")
+	if slugDirs, err := os.ReadDir(systemsDir); err == nil {
+		for _, slugDir := range slugDirs {
+			if !slugDir.IsDir() {
+				continue
+			}
+			slugPath := filepath.Join(systemsDir, slugDir.Name())
+			versionDirs, err := os.ReadDir(slugPath)
+			if err != nil {
+				continue
+			}
+			for _, verDir := range versionDirs {
+				if !verDir.IsDir() {
+					continue
+				}
+				fullPath := filepath.Join(slugPath, verDir.Name())
+				if knownPaths[fullPath] {
+					continue
+				}
+				orphans = append(orphans, OrphanedInstall{
+					Path:    fullPath,
+					Slug:    slugDir.Name(),
+					Version: verDir.Name(),
+					Size:    dirSize(fullPath),
+				})
+			}
+		}
+	}
+
+	// Scan foundry-module directory: packages/foundry-module/{version}/
+	foundryDir := filepath.Join(s.packagesDir(), "foundry-module")
+	if versionDirs, err := os.ReadDir(foundryDir); err == nil {
+		for _, verDir := range versionDirs {
+			if !verDir.IsDir() {
+				continue
+			}
+			fullPath := filepath.Join(foundryDir, verDir.Name())
+			if knownPaths[fullPath] {
+				continue
+			}
+			orphans = append(orphans, OrphanedInstall{
+				Path:    fullPath,
+				Slug:    "chronicle-sync",
+				Version: verDir.Name(),
+				Size:    dirSize(fullPath),
+			})
+		}
+	}
+
+	// Scan downloads directory for orphaned ZIPs.
+	dlDir := s.downloadsDir()
+	if files, err := os.ReadDir(dlDir); err == nil {
+		for _, f := range files {
+			if f.IsDir() {
+				continue
+			}
+			fullPath := filepath.Join(dlDir, f.Name())
+			info, err := f.Info()
+			if err != nil {
+				continue
+			}
+			orphans = append(orphans, OrphanedInstall{
+				Path:    fullPath,
+				Slug:    "download-cache",
+				Version: f.Name(),
+				Size:    info.Size(),
+			})
+		}
+	}
+
+	return orphans, nil
+}
+
+// dirSize calculates the total size of all files in a directory tree.
+func dirSize(path string) int64 {
+	var total int64
+	_ = filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		total += info.Size()
+		return nil
+	})
+	return total
 }
 
 // --- Internal Helpers ---
