@@ -580,14 +580,9 @@
       sort_order: sortOrder
     };
 
-    var csrfToken = Chronicle.getCsrf();
-    var headers = { 'Content-Type': 'application/json' };
-    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
-
-    fetch('/campaigns/' + campaignId + '/entities/' + entityId + '/reorder', {
+    Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + entityId + '/reorder', {
       method: 'PUT',
-      headers: headers,
-      body: JSON.stringify(body)
+      body: body
     })
     .then(function (resp) {
       if (!resp.ok) throw new Error('Reorder failed');
