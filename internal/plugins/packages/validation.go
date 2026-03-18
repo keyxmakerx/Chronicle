@@ -143,26 +143,35 @@ func ValidatePackageContents(extractDir string, validateManifest, scanContent bo
 	return nil
 }
 
-// validateManifestFile checks that a valid manifest.json exists at the root.
+// validateManifestFile checks that a valid manifest exists at the package root.
+// Accepts manifest.json (Chronicle system packs) or module.json (Foundry modules).
 func validateManifestFile(dir string) error {
+	// Try manifest.json first (Chronicle system packs), then module.json (Foundry modules).
 	manifestPath := filepath.Join(dir, "manifest.json")
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return fmt.Errorf("manifest.json not found at package root")
+		manifestPath = filepath.Join(dir, "module.json")
+		data, err = os.ReadFile(manifestPath)
+		if err != nil {
+			return fmt.Errorf("no manifest found at package root (expected manifest.json or module.json)")
+		}
 	}
 
 	// Verify it's valid JSON.
 	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
-		return fmt.Errorf("manifest.json is not valid JSON: %w", err)
+		return fmt.Errorf("%s is not valid JSON: %w", filepath.Base(manifestPath), err)
 	}
 
 	// Check for required fields.
 	if _, ok := parsed["id"]; !ok {
-		return fmt.Errorf("manifest.json missing required field: id")
+		return fmt.Errorf("%s missing required field: id", filepath.Base(manifestPath))
 	}
 	if _, ok := parsed["name"]; !ok {
-		return fmt.Errorf("manifest.json missing required field: name")
+		// Foundry modules use "title" instead of "name".
+		if _, ok := parsed["title"]; !ok {
+			return fmt.Errorf("%s missing required field: name (or title)", filepath.Base(manifestPath))
+		}
 	}
 
 	return nil

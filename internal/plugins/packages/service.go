@@ -961,6 +961,8 @@ func repoPath(repoURL string) string {
 }
 
 // extractZip extracts a ZIP file to a destination directory.
+// If the zip contains a single top-level directory (common for GitHub source
+// archives), the contents are "unwrapped" so files land directly in destDir.
 func extractZip(zipPath, destDir string) error {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
@@ -968,12 +970,24 @@ func extractZip(zipPath, destDir string) error {
 	}
 	defer func() { _ = zr.Close() }()
 
+	// Detect single top-level directory wrapper (e.g. "owner-repo-hash/").
+	prefix := detectSingleRootDir(zr.File)
+
 	for _, zf := range zr.File {
-		if strings.Contains(zf.Name, "..") {
-			return fmt.Errorf("invalid path in zip: %s", zf.Name)
+		name := zf.Name
+		if strings.Contains(name, "..") {
+			return fmt.Errorf("invalid path in zip: %s", name)
 		}
 
-		destPath := filepath.Join(destDir, zf.Name)
+		// Strip the wrapper directory prefix when present.
+		if prefix != "" {
+			name = strings.TrimPrefix(name, prefix)
+			if name == "" {
+				continue // skip the wrapper directory entry itself
+			}
+		}
+
+		destPath := filepath.Join(destDir, name)
 
 		if zf.FileInfo().IsDir() {
 			if err := os.MkdirAll(destPath, 0o755); err != nil {
@@ -991,6 +1005,31 @@ func extractZip(zipPath, destDir string) error {
 		}
 	}
 	return nil
+}
+
+// detectSingleRootDir checks whether all entries in the zip share a single
+// top-level directory prefix (e.g. "owner-repo-abc123/"). Returns the prefix
+// to strip, or "" if the zip has files at its root.
+func detectSingleRootDir(files []*zip.File) string {
+	if len(files) == 0 {
+		return ""
+	}
+
+	var prefix string
+	for _, f := range files {
+		parts := strings.SplitN(f.Name, "/", 2)
+		if len(parts) < 2 {
+			// File at root level — no wrapper.
+			return ""
+		}
+		dir := parts[0] + "/"
+		if prefix == "" {
+			prefix = dir
+		} else if dir != prefix {
+			return ""
+		}
+	}
+	return prefix
 }
 
 // extractSingleFile extracts one file from the ZIP archive to disk.
