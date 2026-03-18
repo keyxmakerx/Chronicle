@@ -135,10 +135,11 @@ func (s *hygieneService) ScanOrphanedMedia(ctx context.Context) ([]OrphanedMedia
 // via image_path or embedded in entry_html content.
 func (s *hygieneService) countMediaReferences(ctx context.Context, filename string) (int, error) {
 	var count int
+	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(filename)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM entities
 		 WHERE image_path = ? OR entry_html LIKE CONCAT('%', ?, '%')`,
-		filename, filename,
+		filename, escaped,
 	).Scan(&count)
 	return count, err
 }

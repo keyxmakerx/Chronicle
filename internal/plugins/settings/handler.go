@@ -82,11 +82,7 @@ func (h *Handler) UpdateStorageSettings(c echo.Context) error {
 	)
 
 	// Redirect back to the combined storage page.
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
 // SetUserStorageLimit creates or updates a per-user storage override
@@ -126,11 +122,7 @@ func (h *Handler) SetUserStorageLimit(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
 // DeleteUserStorageLimit removes a per-user storage override
@@ -150,11 +142,7 @@ func (h *Handler) DeleteUserStorageLimit(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
 // SetCampaignStorageLimit creates or updates a per-campaign storage override
@@ -192,11 +180,7 @@ func (h *Handler) SetCampaignStorageLimit(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
 // DeleteCampaignStorageLimit removes a per-campaign storage override
@@ -216,11 +200,7 @@ func (h *Handler) DeleteCampaignStorageLimit(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
 // --- Temporary Bypass Handlers ---
@@ -263,11 +243,7 @@ func (h *Handler) SetUserBypass(c echo.Context) error {
 		slog.Time("expires_at", expiresAt),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
 // ClearUserBypass removes a temporary bypass from a user's storage limits
@@ -287,11 +263,7 @@ func (h *Handler) ClearUserBypass(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
 // SetCampaignBypass sets a temporary bypass on a campaign's storage limits
@@ -342,11 +314,7 @@ func (h *Handler) SetCampaignBypass(c echo.Context) error {
 		slog.Time("expires_at", expiresAt),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
 // ClearCampaignBypass removes a temporary bypass from a campaign's storage limits
@@ -366,11 +334,7 @@ func (h *Handler) ClearCampaignBypass(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
 // GetCORSOrigins returns the current CORS origin whitelist as JSON

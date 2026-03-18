@@ -37,7 +37,7 @@ type EntityService interface {
 	// Hierarchy
 	GetChildren(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
 	GetAncestors(ctx context.Context, entityID string) ([]Entity, error)
-	ReorderEntity(ctx context.Context, entityID string, parentID *string, sortOrder int) error
+	ReorderEntity(ctx context.Context, campaignID, entityID string, parentID *string, sortOrder int) error
 
 	// Backlinks
 	GetBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
@@ -407,12 +407,30 @@ func (s *entityService) GetAncestors(ctx context.Context, entityID string) ([]En
 }
 
 // ReorderEntity updates an entity's parent and sort order for sidebar tree reordering.
-func (s *entityService) ReorderEntity(ctx context.Context, entityID string, parentID *string, sortOrder int) error {
-	if err := s.entities.UpdateParent(ctx, entityID, parentID); err != nil {
-		return apperror.NewInternal(fmt.Errorf("updating parent: %w", err))
+// Validates that the entity and parent belong to the same campaign, and prevents
+// self-parenting. Both operations are scoped to the campaign for safety.
+func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID string, parentID *string, sortOrder int) error {
+	// Prevent self-parenting.
+	if parentID != nil && *parentID == entityID {
+		return apperror.NewBadRequest("an entity cannot be its own parent")
 	}
-	if err := s.entities.UpdateSortOrder(ctx, entityID, sortOrder); err != nil {
-		return apperror.NewInternal(fmt.Errorf("updating sort order: %w", err))
+
+	// If a parent is specified, verify it exists in the same campaign.
+	if parentID != nil {
+		parent, err := s.entities.FindByID(ctx, *parentID)
+		if err != nil {
+			return apperror.NewBadRequest("parent entity not found")
+		}
+		if parent.CampaignID != campaignID {
+			return apperror.NewBadRequest("parent entity not found")
+		}
+	}
+
+	if err := s.entities.UpdateParent(ctx, entityID, campaignID, parentID); err != nil {
+		return err
+	}
+	if err := s.entities.UpdateSortOrder(ctx, entityID, campaignID, sortOrder); err != nil {
+		return err
 	}
 	return nil
 }

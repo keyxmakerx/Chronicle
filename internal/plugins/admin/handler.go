@@ -367,11 +367,7 @@ func (h *Handler) ToggleAdmin(c echo.Context) error {
 			map[string]any{"action": action, "target_name": user.DisplayName})
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/users")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/users")
+	return middleware.HTMXRedirect(c, "/admin/users")
 }
 
 // --- Campaigns ---
@@ -406,11 +402,7 @@ func (h *Handler) DeleteCampaign(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/campaigns")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/campaigns")
+	return middleware.HTMXRedirect(c, "/admin/campaigns")
 }
 
 // JoinCampaign adds the admin to a campaign with the selected role
@@ -436,11 +428,7 @@ func (h *Handler) JoinCampaign(c echo.Context) error {
 		slog.String("role", roleStr),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/campaigns")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/campaigns")
+	return middleware.HTMXRedirect(c, "/admin/campaigns")
 }
 
 // LeaveCampaign removes the admin from a campaign (DELETE /admin/campaigns/:id/leave).
@@ -457,11 +445,7 @@ func (h *Handler) LeaveCampaign(c echo.Context) error {
 		slog.String("user_id", userID),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/campaigns")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/campaigns")
+	return middleware.HTMXRedirect(c, "/admin/campaigns")
 }
 
 // --- Storage ---
@@ -542,11 +526,7 @@ func (h *Handler) DeleteMedia(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/storage")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
 // --- Plugins ---
@@ -620,11 +600,7 @@ func (h *Handler) TerminateSession(c echo.Context) error {
 		slog.String("by", currentUserID),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/security")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/security")
+	return middleware.HTMXRedirect(c, "/admin/security")
 }
 
 // ForceLogoutUser destroys all sessions for a user (POST /admin/security/users/:id/force-logout).
@@ -651,11 +627,7 @@ func (h *Handler) ForceLogoutUser(c echo.Context) error {
 		slog.String("by", currentUserID),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/security")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/security")
+	return middleware.HTMXRedirect(c, "/admin/security")
 }
 
 // DisableUser disables a user account (PUT /admin/security/users/:id/disable).
@@ -684,11 +656,7 @@ func (h *Handler) DisableUser(c echo.Context) error {
 		slog.String("by", currentUserID),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/security")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/security")
+	return middleware.HTMXRedirect(c, "/admin/security")
 }
 
 // EnableUser re-enables a disabled user account (PUT /admin/security/users/:id/enable).
@@ -712,11 +680,7 @@ func (h *Handler) EnableUser(c echo.Context) error {
 		slog.String("by", currentUserID),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/security")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/security")
+	return middleware.HTMXRedirect(c, "/admin/security")
 }
 
 // --- Database Explorer ---
@@ -787,11 +751,7 @@ func (h *Handler) ApplyMigrationsAPI(c echo.Context) error {
 		}
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/database")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/database")
+	return middleware.HTMXRedirect(c, "/admin/database")
 }
 
 // SecurityPageData holds all data needed for the security dashboard page.
@@ -883,11 +843,7 @@ func (h *Handler) UpdateFoundryModuleVersion(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/foundry")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/foundry")
+	return middleware.HTMXRedirect(c, "/admin/foundry")
 }
 
 // readFoundryModuleVersion reads the version from the active Foundry module's module.json.
@@ -1046,11 +1002,7 @@ func (h *Handler) UploadFoundryModule(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/foundry")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/foundry")
+	return middleware.HTMXRedirect(c, "/admin/foundry")
 }
 
 // detectZipRootDir checks if all zip entries share a single root directory.
@@ -1117,11 +1069,7 @@ func (h *Handler) RedeployFoundryModule(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/foundry")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/foundry")
+	return middleware.HTMXRedirect(c, "/admin/foundry")
 }
 
 // bumpPatchVersion increments the patch component of a semver string.

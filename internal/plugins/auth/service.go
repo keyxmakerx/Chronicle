@@ -134,7 +134,7 @@ func (s *authService) Register(ctx context.Context, input RegisterInput) (*User,
 		return nil, apperror.NewInternal(fmt.Errorf("checking email: %w", err))
 	}
 	if exists {
-		return nil, apperror.NewConflict("an account with this email already exists")
+		return nil, apperror.NewConflict("registration failed — please try a different email or log in")
 	}
 
 	// Hash the password with argon2id (memory-hard, GPU-resistant).

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
@@ -722,7 +723,8 @@ func (r *calendarRepo) SearchEvents(ctx context.Context, calendarID, query strin
 		ORDER BY e.name
 		LIMIT 10`, visFilter)
 
-	rows, err := r.db.QueryContext(ctx, q, calendarID, "%"+query+"%")
+	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
+	rows, err := r.db.QueryContext(ctx, q, calendarID, "%"+escaped+"%")
 	if err != nil {
 		return nil, fmt.Errorf("search events: %w", err)
 	}

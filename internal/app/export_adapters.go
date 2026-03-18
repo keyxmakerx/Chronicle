@@ -45,8 +45,14 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 	for _, et := range etypes {
 		typeIDToSlug[et.ID] = et.Slug
 
-		fieldsJSON, _ := json.Marshal(et.Fields)
-		layoutJSON, _ := json.Marshal(et.Layout)
+		fieldsJSON, err := json.Marshal(et.Fields)
+		if err != nil {
+			return nil, fmt.Errorf("marshal entity type fields: %w", err)
+		}
+		layoutJSON, err := json.Marshal(et.Layout)
+		if err != nil {
+			return nil, fmt.Errorf("marshal entity type layout: %w", err)
+		}
 
 		data.Types = append(data.Types, campaigns.ExportEntityType{
 			OriginalID:      et.ID,

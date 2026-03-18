@@ -115,7 +115,7 @@
 
       // Clone the original link element and apply indentation.
       var link = node.el.cloneNode(true);
-      link.style.paddingLeft = (12 + depth * INDENT_PX) + 'px';
+      link.style.paddingLeft = (10 + depth * INDENT_PX) + 'px';
 
       // Swap the default page icon based on whether this node has children.
       var iconEl = link.querySelector('.sidebar-tree-icon i');

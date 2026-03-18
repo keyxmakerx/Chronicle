@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -158,7 +159,8 @@ func (r *sessionRepository) SearchByCampaign(ctx context.Context, campaignID, qu
 	      ORDER BY s.name
 	      LIMIT 10`
 
-	rows, err := r.db.QueryContext(ctx, q, campaignID, "%"+query+"%")
+	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
+	rows, err := r.db.QueryContext(ctx, q, campaignID, "%"+escaped+"%")
 	if err != nil {
 		return nil, fmt.Errorf("search sessions: %w", err)
 	}

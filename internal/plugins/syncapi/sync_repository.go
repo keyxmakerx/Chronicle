@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -265,7 +266,8 @@ func (r *syncMappingRepo) ListMappingsWithNames(ctx context.Context, campaignID 
 	}
 	if opts.Search != "" {
 		where += " AND (e.name LIKE ? OR m.name LIKE ?)"
-		search := "%" + opts.Search + "%"
+		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(opts.Search)
+		search := "%" + escaped + "%"
 		args = append(args, search, search)
 	}
 

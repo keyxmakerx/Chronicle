@@ -118,11 +118,7 @@ func (h *ExportHandler) ImportCampaign(c echo.Context) error {
 
 	// Redirect to the new campaign.
 	redirectURL := "/campaigns/" + campaign.ID
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", redirectURL)
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, redirectURL)
+	return middleware.HTMXRedirect(c, redirectURL)
 }
 
 // sanitizeFilename converts a campaign name to a safe filename component.

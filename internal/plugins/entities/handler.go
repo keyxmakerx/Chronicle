@@ -393,10 +393,7 @@ func (h *Handler) Create(c echo.Context) error {
 	if err != nil {
 		entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "failed to create entity"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "failed to create entity")
 		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, nil, csrfToken, errMsg))
 	}
 
@@ -410,12 +407,7 @@ func (h *Handler) Create(c echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityCreated, entity.ID, entity.Name)
 
-	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entities/" + entity.ID
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", redirectURL)
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, redirectURL)
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities/"+entity.ID)
 }
 
 // Show renders the entity profile page (GET /campaigns/:id/entities/:eid).
@@ -500,12 +492,7 @@ func (h *Handler) Clone(c echo.Context) error {
 	h.logAudit(c, cc.Campaign.ID, "entity.clone", clone.ID, clone.Name)
 
 	// Redirect to the edit page of the new clone so user can review/rename.
-	editURL := fmt.Sprintf("/campaigns/%s/entities/%s/edit", cc.Campaign.ID, clone.ID)
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", editURL)
-		return c.NoContent(http.StatusOK)
-	}
-	return c.Redirect(http.StatusSeeOther, editURL)
+	return middleware.HTMXRedirect(c, fmt.Sprintf("/campaigns/%s/entities/%s/edit", cc.Campaign.ID, clone.ID))
 }
 
 // EditForm renders the entity edit form (GET /campaigns/:id/entities/:eid/edit).
@@ -581,10 +568,7 @@ func (h *Handler) Update(c echo.Context) error {
 		entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
 		entityType, _ := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "failed to update entity"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "failed to update entity")
 		// Fetch parent for re-rendering form.
 		var parentEntity *Entity
 		if entity.ParentID != nil {
@@ -598,12 +582,7 @@ func (h *Handler) Update(c echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
 
-	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entities/" + entityID
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", redirectURL)
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, redirectURL)
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities/"+entityID)
 }
 
 // Delete removes an entity (DELETE /campaigns/:id/entities/:eid).
@@ -630,12 +609,7 @@ func (h *Handler) Delete(c echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityDeleted, entityID, entity.Name)
 
-	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entities"
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", redirectURL)
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, redirectURL)
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities")
 }
 
 // SearchAPI handles entity search requests (GET /campaigns/:id/entities/search).
@@ -821,7 +795,7 @@ func (h *Handler) ReorderAPI(c echo.Context) error {
 		return apperror.NewValidation("invalid request body")
 	}
 
-	if err := h.service.ReorderEntity(c.Request().Context(), entityID, input.ParentID, input.SortOrder); err != nil {
+	if err := h.service.ReorderEntity(c.Request().Context(), cc.Campaign.ID, entityID, input.ParentID, input.SortOrder); err != nil {
 		return err
 	}
 
@@ -1625,10 +1599,7 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 		role := cc.VisibilityRole()
 		counts, _ := h.service.CountByType(c.Request().Context(), cc.Campaign.ID, role, auth.GetUserID(c))
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := "failed to create entity type"
-		if appErr, ok := err.(*apperror.AppError); ok {
-			errMsg = appErr.Message
-		}
+		errMsg := apperror.UserMessage(err, "failed to create entity type")
 		// Return partial for HTMX requests so the swap target (#entity-type-list) gets correct content.
 		// Use HX-Trigger to show a toast notification with the error message.
 		if middleware.IsHTMX(c) {
@@ -1649,12 +1620,7 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityTypeCreated, strconv.Itoa(et.ID), et.Name)
 
-	redirectURL := "/campaigns/" + cc.Campaign.ID + "/entity-types"
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", redirectURL)
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, redirectURL)
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entity-types")
 }
 
 // UpdateEntityTypeAPI updates an entity type.

@@ -238,14 +238,14 @@ func (m *mockEntityRepo) FindAncestors(ctx context.Context, entityID string) ([]
 	return nil, nil
 }
 
-func (m *mockEntityRepo) UpdateParent(ctx context.Context, entityID string, parentID *string) error {
+func (m *mockEntityRepo) UpdateParent(ctx context.Context, entityID, campaignID string, parentID *string) error {
 	if m.updateParentFn != nil {
 		return m.updateParentFn(ctx, entityID, parentID)
 	}
 	return nil
 }
 
-func (m *mockEntityRepo) UpdateSortOrder(ctx context.Context, entityID string, sortOrder int) error {
+func (m *mockEntityRepo) UpdateSortOrder(ctx context.Context, entityID, campaignID string, sortOrder int) error {
 	return nil
 }
 

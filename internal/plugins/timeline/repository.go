@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -182,7 +183,8 @@ func (r *timelineRepo) Search(ctx context.Context, campaignID, query string, rol
 		ORDER BY t.name
 		LIMIT 10`, visFilter)
 
-	rows, err := r.db.QueryContext(ctx, q, campaignID, "%"+query+"%")
+	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
+	rows, err := r.db.QueryContext(ctx, q, campaignID, "%"+escaped+"%")
 	if err != nil {
 		return nil, fmt.Errorf("search timelines: %w", err)
 	}

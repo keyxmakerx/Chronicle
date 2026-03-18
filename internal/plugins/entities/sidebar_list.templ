@@ -31,7 +31,7 @@ templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignConte
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
 					class={
-						"sidebar-tree-item flex items-center px-4 py-1 text-sm transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active group",
+						"sidebar-tree-item flex items-center mx-2 px-2.5 py-1.5 rounded-md text-sm transition-all text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active group",
 						templ.KV("opacity-40", hiddenIDs[entity.ID]),
 					}
 					data-entity-id={ entity.ID }
@@ -46,11 +46,11 @@ templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignConte
 					draggable="true"
 				>
 					<span
-						class="sidebar-tree-icon w-3.5 h-3.5 flex items-center justify-center mr-2 shrink-0 text-gray-600 group-hover:text-gray-400 transition-colors"
+						class="sidebar-tree-icon w-4 h-4 flex items-center justify-center mr-2 shrink-0 text-gray-500 group-hover:text-gray-300 transition-colors"
 					>
 						<i class="fa-solid fa-file-lines text-[10px]"></i>
 					</span>
-					<span class="flex-1 truncate text-xs">{ entity.Name }</span>
+					<span class="flex-1 truncate text-xs font-medium">{ entity.Name }</span>
 					if hiddenIDs[entity.ID] {
 						<i class="fa-solid fa-eye-slash text-[9px] text-gray-600 ml-1 shrink-0"></i>
 					}

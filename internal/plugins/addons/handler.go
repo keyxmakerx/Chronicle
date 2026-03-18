@@ -69,12 +69,7 @@ func (h *Handler) CreateAddon(c echo.Context) error {
 		return err
 	}
 
-	// HTMX: reload the addons list.
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/addons")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/addons")
+	return middleware.HTMXRedirect(c, "/admin/addons")
 }
 
 // UpdateAddonStatus handles PUT /admin/addons/:addonID/status.
@@ -89,11 +84,7 @@ func (h *Handler) UpdateAddonStatus(c echo.Context) error {
 		return err
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/addons")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/addons")
+	return middleware.HTMXRedirect(c, "/admin/addons")
 }
 
 // DeleteAddon handles DELETE /admin/addons/:addonID.
@@ -107,11 +98,7 @@ func (h *Handler) DeleteAddon(c echo.Context) error {
 		return err
 	}
 
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Redirect", "/admin/addons")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.Redirect(http.StatusSeeOther, "/admin/addons")
+	return middleware.HTMXRedirect(c, "/admin/addons")
 }
 
 // --- Campaign-scoped Routes (campaign owner) ---
