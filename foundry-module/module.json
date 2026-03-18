@@ -2,7 +2,7 @@
   "id": "chronicle-sync",
   "title": "Chronicle Sync",
   "description": "Bidirectional sync between Chronicle worldbuilding platform and Foundry VTT. Syncs journals, maps, tokens, drawings, shops, and calendars in real-time.",
-  "version": "0.2.0",
+  "version": "0.0.1",
   "compatibility": {
     "minimum": "12",
     "verified": "13",

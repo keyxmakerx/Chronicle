@@ -42,6 +42,12 @@ type PendingCounter interface {
 	CountPendingSubmissions(ctx context.Context) (int, error)
 }
 
+// FoundryPathProvider returns the install path for the active Foundry module
+// package. Returns empty string if no package-managed install exists.
+type FoundryPathProvider interface {
+	FoundryModulePath() string
+}
+
 // Handler handles admin dashboard HTTP requests. Depends on other plugins'
 // services via interfaces -- no direct repo access.
 type Handler struct {
@@ -57,6 +63,7 @@ type Handler struct {
 	hygieneScanner   DataHygieneScanner
 	databaseExplorer DatabaseExplorer
 	pendingCounter   PendingCounter
+	foundryPath      FoundryPathProvider
 	baseURL          string
 }
 
@@ -126,6 +133,26 @@ func (h *Handler) SetBaseURL(url string) {
 // SetPendingCounter wires the pending submission counter for the dashboard.
 func (h *Handler) SetPendingCounter(counter PendingCounter) {
 	h.pendingCounter = counter
+}
+
+// SetFoundryPathProvider wires the Foundry module path provider so admin
+// functions read/write the package-managed install instead of the bundled copy.
+func (h *Handler) SetFoundryPathProvider(provider FoundryPathProvider) {
+	h.foundryPath = provider
+}
+
+// resolveFoundryDir returns the directory containing the active Foundry module.
+// Prefers the package manager install path if available, falls back to the
+// bundled foundry-module/ directory. Mirrors app.foundryModuleDir().
+func (h *Handler) resolveFoundryDir() string {
+	if h.foundryPath != nil {
+		if p := h.foundryPath.FoundryModulePath(); p != "" {
+			if _, err := os.Stat(filepath.Join(p, "module.json")); err == nil {
+				return p
+			}
+		}
+	}
+	return "foundry-module"
 }
 
 // --- Data Hygiene ---
@@ -797,13 +824,13 @@ type FoundryModuleFile struct {
 
 // FoundryModule renders the Foundry VTT module management page (GET /admin/foundry).
 func (h *Handler) FoundryModule(c echo.Context) error {
-	version := readFoundryModuleVersion()
+	version := h.readFoundryModuleVersion()
 	baseURL := strings.TrimRight(h.baseURL, "/")
 	data := FoundryModuleData{
 		Version:    version,
 		InstallURL: baseURL + "/foundry-module/module.json",
 		CSRFToken:  middleware.GetCSRFToken(c),
-		Files:      listFoundryModuleFiles(),
+		Files:      h.listFoundryModuleFiles(),
 	}
 	return middleware.Render(c, http.StatusOK, AdminFoundryModulePage(data))
 }
@@ -818,8 +845,10 @@ func (h *Handler) UpdateFoundryModuleVersion(c echo.Context) error {
 		return apperror.NewBadRequest("version is required")
 	}
 
-	// Read current module.json.
-	data, err := os.ReadFile("foundry-module/module.json")
+	// Read current module.json from the active Foundry directory.
+	moduleDir := h.resolveFoundryDir()
+	manifestPath := filepath.Join(moduleDir, "module.json")
+	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("read module.json: %w", err))
 	}
@@ -842,7 +871,7 @@ func (h *Handler) UpdateFoundryModuleVersion(c echo.Context) error {
 	}
 	out = append(out, '\n')
 
-	if err := os.WriteFile("foundry-module/module.json", out, 0644); err != nil {
+	if err := os.WriteFile(manifestPath, out, 0644); err != nil {
 		return apperror.NewInternal(fmt.Errorf("write module.json: %w", err))
 	}
 
@@ -858,9 +887,9 @@ func (h *Handler) UpdateFoundryModuleVersion(c echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/admin/foundry")
 }
 
-// readFoundryModuleVersion reads the version from foundry-module/module.json.
-func readFoundryModuleVersion() string {
-	data, err := os.ReadFile("foundry-module/module.json")
+// readFoundryModuleVersion reads the version from the active Foundry module's module.json.
+func (h *Handler) readFoundryModuleVersion() string {
+	data, err := os.ReadFile(filepath.Join(h.resolveFoundryDir(), "module.json"))
 	if err != nil {
 		return "unknown"
 	}
@@ -873,10 +902,11 @@ func readFoundryModuleVersion() string {
 	return manifest.Version
 }
 
-// listFoundryModuleFiles returns all distributable files in foundry-module/.
-func listFoundryModuleFiles() []FoundryModuleFile {
+// listFoundryModuleFiles returns all distributable files in the active Foundry module directory.
+func (h *Handler) listFoundryModuleFiles() []FoundryModuleFile {
+	moduleDir := h.resolveFoundryDir()
 	var files []FoundryModuleFile
-	_ = filepath.WalkDir("foundry-module", func(path string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(moduleDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -884,7 +914,7 @@ func listFoundryModuleFiles() []FoundryModuleFile {
 		if name == ".ai.md" || name == "TESTING.md" {
 			return nil
 		}
-		rel, _ := filepath.Rel("foundry-module", path)
+		rel, _ := filepath.Rel(moduleDir, path)
 		info, _ := d.Info()
 		size := int64(0)
 		if info != nil {
@@ -949,8 +979,8 @@ func (h *Handler) UploadFoundryModule(c echo.Context) error {
 	// that prefix when extracting.
 	stripPrefix := detectZipRootDir(zr)
 
-	// Extract files into foundry-module/.
-	destDir := "foundry-module"
+	// Extract files into the active Foundry module directory.
+	destDir := h.resolveFoundryDir()
 	for _, f := range zr.File {
 		name := filepath.ToSlash(f.Name)
 
@@ -1047,7 +1077,8 @@ func detectZipRootDir(zr *zip.Reader) string {
 // RedeployFoundryModule bumps the patch version in module.json to trigger
 // Foundry VTT clients to see an available update (POST /admin/foundry/redeploy).
 func (h *Handler) RedeployFoundryModule(c echo.Context) error {
-	data, err := os.ReadFile("foundry-module/module.json")
+	manifestPath := filepath.Join(h.resolveFoundryDir(), "module.json")
+	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("read module.json: %w", err))
 	}
@@ -1073,7 +1104,7 @@ func (h *Handler) RedeployFoundryModule(c echo.Context) error {
 	}
 	out = append(out, '\n')
 
-	if err := os.WriteFile("foundry-module/module.json", out, 0644); err != nil {
+	if err := os.WriteFile(manifestPath, out, 0644); err != nil {
 		return apperror.NewInternal(fmt.Errorf("write module.json: %w", err))
 	}
 
@@ -1105,9 +1136,10 @@ func bumpPatchVersion(version string) string {
 }
 
 // rewriteFoundryManifestURLs updates manifest and download URLs in
-// foundry-module/module.json to point at this Chronicle instance.
+// the active Foundry module's module.json to point at this Chronicle instance.
 func (h *Handler) rewriteFoundryManifestURLs() {
-	data, err := os.ReadFile("foundry-module/module.json")
+	manifestPath := filepath.Join(h.resolveFoundryDir(), "module.json")
+	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return
 	}
@@ -1120,5 +1152,5 @@ func (h *Handler) rewriteFoundryManifestURLs() {
 	manifest["download"] = baseURL + "/foundry-module/chronicle-sync.zip"
 	out, _ := json.MarshalIndent(manifest, "", "  ")
 	out = append(out, '\n')
-	_ = os.WriteFile("foundry-module/module.json", out, 0644)
+	_ = os.WriteFile(manifestPath, out, 0644)
 }

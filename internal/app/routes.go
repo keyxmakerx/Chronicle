@@ -1022,6 +1022,10 @@ func (a *App) RegisterRoutes() {
 		// Store package service for Foundry module path resolution.
 		a.pkgService = pkgService
 
+		// Wire package service into admin handler so Foundry admin functions
+		// read/write the package-managed install instead of the bundled copy.
+		adminHandler.SetFoundryPathProvider(pkgService)
+
 		// Start background auto-update worker.
 		go pkgService.StartAutoUpdateWorker(context.Background())
 	} else {
