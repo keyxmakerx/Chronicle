@@ -57,11 +57,15 @@
     });
 
     // Build tree relationships — link children to their parents.
+    // If a node's parent isn't in the current list (e.g. different entity type),
+    // clear the stale parentId so it becomes a true root node. This prevents
+    // reorder operations from accidentally reparenting to an invisible entity.
     Object.keys(nodes).forEach(function (id) {
       var node = nodes[id];
       if (node.parentId && nodes[node.parentId]) {
         nodes[node.parentId].children.push(node);
       } else {
+        node.parentId = null;
         rootIds.push(id);
       }
     });
@@ -553,14 +557,14 @@
       if (targetIdx === 0) {
         // Placing before the first sibling: use target's order - 1 (min 0).
         var targetEl = targetNode.querySelector('.sidebar-tree-item');
-        var targetOrder = parseInt(targetEl ? targetEl.getAttribute('data-sort-order') : '0', 10);
+        var targetOrder = parseInt(targetEl ? targetEl.getAttribute('data-sort-order') : '0', 10) || 0;
         return Math.max(0, targetOrder - 1);
       }
       // Place between previous sibling and target.
       var prevItem = siblings[targetIdx - 1].querySelector('.sidebar-tree-item');
       var targetItem = targetNode.querySelector('.sidebar-tree-item');
-      var prevOrder = parseInt(prevItem ? prevItem.getAttribute('data-sort-order') : '0', 10);
-      var targetOrder2 = parseInt(targetItem ? targetItem.getAttribute('data-sort-order') : '0', 10);
+      var prevOrder = parseInt(prevItem ? prevItem.getAttribute('data-sort-order') : '0', 10) || 0;
+      var targetOrder2 = parseInt(targetItem ? targetItem.getAttribute('data-sort-order') : '0', 10) || 0;
       // Use midpoint if there's room, otherwise server re-normalizes.
       if (targetOrder2 > prevOrder + 1) {
         return Math.floor((prevOrder + targetOrder2) / 2);
@@ -585,7 +589,12 @@
       body: body
     })
     .then(function (resp) {
-      if (!resp.ok) throw new Error('Reorder failed');
+      if (!resp.ok) {
+        return resp.text().then(function (body) {
+          console.error('sidebar_tree: reorder failed', resp.status, body);
+          throw new Error('Reorder failed: ' + resp.status);
+        });
+      }
       // Refresh the sidebar entity list to show updated hierarchy.
       var results = document.getElementById('sidebar-cat-results');
       if (results) {

@@ -788,14 +788,19 @@ func (h *Handler) ReorderAPI(c echo.Context) error {
 	entityID := c.Param("eid")
 
 	var input struct {
-		ParentID *string `json:"parent_id"`
-		SortOrder int    `json:"sort_order"`
+		ParentID  *string `json:"parent_id"`
+		SortOrder *int    `json:"sort_order"`
 	}
 	if err := c.Bind(&input); err != nil {
 		return apperror.NewValidation("invalid request body")
 	}
 
-	if err := h.service.ReorderEntity(c.Request().Context(), cc.Campaign.ID, entityID, input.ParentID, input.SortOrder); err != nil {
+	sortOrder := 0
+	if input.SortOrder != nil {
+		sortOrder = *input.SortOrder
+	}
+
+	if err := h.service.ReorderEntity(c.Request().Context(), cc.Campaign.ID, entityID, input.ParentID, sortOrder); err != nil {
 		return err
 	}
 
