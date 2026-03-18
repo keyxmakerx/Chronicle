@@ -14,6 +14,12 @@
 
 /* --- Custom Base Styles --- */
 @layer base {
+  /* Hide Alpine.js elements until initialized (replaces inline <style> for CSP). */
+  [x-cloak] { display: none !important; }
+
+  /* Hide body until CSS loads to prevent FOUC. Removed by boot.js on DOMContentLoaded. */
+  body { opacity: 0; }
+
   /* --------------------------------------------------------------------------
    * CSS Custom Properties for theming.
    * Light mode values live on :root. Dark mode overrides live on .dark.
