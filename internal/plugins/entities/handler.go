@@ -101,6 +101,7 @@ type Handler struct {
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
 	sidebarNodeRepo    SidebarNodeRepository
+	favoriteRepo       FavoriteRepository
 	blockRegistry      *BlockRegistry
 	cache              *redis.Client
 }
@@ -216,6 +217,11 @@ func (h *Handler) SetWidgetBlockLister(wbl WidgetBlockLister) {
 // SetSidebarNodeRepo sets the sidebar node repository for folder operations.
 func (h *Handler) SetSidebarNodeRepo(repo SidebarNodeRepository) {
 	h.sidebarNodeRepo = repo
+}
+
+// SetFavoriteRepo sets the favorite repository for bookmark operations.
+func (h *Handler) SetFavoriteRepo(repo FavoriteRepository) {
+	h.favoriteRepo = repo
 }
 
 // SetCache sets the Redis client for API response caching (e.g., entity names).
@@ -874,6 +880,71 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 		"type_icon":  entity.TypeIcon,
 		"type_color": entity.TypeColor,
 	})
+}
+
+// --- Favorites API ---
+
+// ToggleFavoriteAPI adds or removes an entity from the user's favorites.
+// POST /campaigns/:id/entities/:eid/favorite
+func (h *Handler) ToggleFavoriteAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	userID := auth.GetUserID(c)
+
+	favorited, err := h.favoriteRepo.Toggle(c.Request().Context(), userID, entityID, cc.Campaign.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("toggling favorite: %w", err))
+	}
+
+	return c.JSON(http.StatusOK, map[string]bool{"favorited": favorited})
+}
+
+// ListFavoritesAPI returns the user's favorites for a campaign as JSON.
+// GET /campaigns/:id/favorites
+func (h *Handler) ListFavoritesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	userID := auth.GetUserID(c)
+	items, err := h.favoriteRepo.List(c.Request().Context(), userID, cc.Campaign.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("listing favorites: %w", err))
+	}
+	if items == nil {
+		items = []FavoriteItem{}
+	}
+
+	return c.JSON(http.StatusOK, items)
+}
+
+// FavoriteIDsAPI returns a set of entity IDs favorited by the user.
+// Used by the sidebar to mark starred entities.
+// GET /campaigns/:id/favorite-ids
+func (h *Handler) FavoriteIDsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	userID := auth.GetUserID(c)
+	ids, err := h.favoriteRepo.ListIDs(c.Request().Context(), userID, cc.Campaign.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("listing favorite IDs: %w", err))
+	}
+
+	// Convert to array for JSON.
+	result := make([]string, 0, len(ids))
+	for id := range ids {
+		result = append(result, id)
+	}
+
+	return c.JSON(http.StatusOK, result)
 }
 
 // --- Sidebar Node API (pure folders) ---

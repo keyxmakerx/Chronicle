@@ -908,8 +908,10 @@ func (a *App) RegisterRoutes() {
 
 	// Entity routes (campaign-scoped, registered after campaign service exists).
 	sidebarNodeRepo := entities.NewSidebarNodeRepository(a.DB)
+	favoriteRepo := entities.NewFavoriteRepository(a.DB)
 	entityHandler := entities.NewHandler(entityService)
 	entityHandler.SetSidebarNodeRepo(sidebarNodeRepo)
+	entityHandler.SetFavoriteRepo(favoriteRepo)
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
 
 	// Content template routes (entity content blueprints).

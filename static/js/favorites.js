@@ -1,18 +1,20 @@
 /**
  * favorites.js -- Entity Favorites (Bookmarks)
  *
- * Manages a localStorage-backed list of favorite entities per campaign.
+ * Manages per-user, per-campaign entity favorites backed by the database.
  * Renders a "Favorites" section in the sidebar drill panel and handles
  * the star toggle button on entity show pages.
  *
- * Storage key: chronicle-favorites-{campaignId}
- * Format: JSON array of { id, name, ts } (newest first).
+ * API endpoints:
+ *   POST /campaigns/:id/entities/:eid/favorite  -- toggle favorite
+ *   GET  /campaigns/:id/favorites               -- list favorites (JSON)
+ *   GET  /campaigns/:id/favorite-ids             -- list favorited entity IDs
  */
 (function () {
   'use strict';
 
-  var MAX_FAVORITES = 50;
-  var STORAGE_PREFIX = 'chronicle-favorites-';
+  // In-memory cache of favorited entity IDs per campaign.
+  var favoriteCache = {};
 
   /** Get campaign ID from the URL. */
   function getCampaignID() {
@@ -23,44 +25,47 @@
     return null;
   }
 
-  /** Load favorites from localStorage. */
-  function loadFavorites(campaignId) {
-    try {
-      var raw = localStorage.getItem(STORAGE_PREFIX + campaignId);
-      if (raw) return JSON.parse(raw);
-    } catch (e) { /* ignore */ }
-    return [];
+  /** Fetch the set of favorited entity IDs and cache them. */
+  function loadFavoriteIDs(campaignId) {
+    if (favoriteCache[campaignId]) return Promise.resolve(favoriteCache[campaignId]);
+
+    return Chronicle.apiFetch('/campaigns/' + campaignId + '/favorite-ids')
+      .then(function (res) { return res.ok ? res.json() : []; })
+      .then(function (ids) {
+        var set = {};
+        (ids || []).forEach(function (id) { set[id] = true; });
+        favoriteCache[campaignId] = set;
+        return set;
+      })
+      .catch(function () {
+        favoriteCache[campaignId] = {};
+        return {};
+      });
   }
 
-  /** Save favorites to localStorage. */
-  function saveFavorites(campaignId, list) {
-    try {
-      localStorage.setItem(STORAGE_PREFIX + campaignId, JSON.stringify(list));
-    } catch (e) { /* ignore */ }
-  }
-
-  /** Check if an entity is favorited. */
+  /** Check if an entity is favorited (from cache). */
   function isFavorite(campaignId, entityId) {
-    var list = loadFavorites(campaignId);
-    return list.some(function (item) { return item.id === entityId; });
+    var cache = favoriteCache[campaignId];
+    return cache ? !!cache[entityId] : false;
   }
 
-  /** Toggle favorite status for an entity. Returns new state. */
-  function toggleFavorite(campaignId, entityId, entityName) {
-    var list = loadFavorites(campaignId);
-    var idx = -1;
-    for (var i = 0; i < list.length; i++) {
-      if (list[i].id === entityId) { idx = i; break; }
-    }
-    if (idx !== -1) {
-      list.splice(idx, 1);
-      saveFavorites(campaignId, list);
-      return false;
-    }
-    list.unshift({ id: entityId, name: entityName, ts: Date.now() });
-    if (list.length > MAX_FAVORITES) list = list.slice(0, MAX_FAVORITES);
-    saveFavorites(campaignId, list);
-    return true;
+  /** Toggle favorite via API. Returns new state. */
+  function toggleFavorite(campaignId, entityId) {
+    return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + entityId + '/favorite', {
+      method: 'POST'
+    })
+    .then(function (res) { return res.ok ? res.json() : null; })
+    .then(function (data) {
+      if (!data) return false;
+      // Update cache.
+      if (!favoriteCache[campaignId]) favoriteCache[campaignId] = {};
+      if (data.favorited) {
+        favoriteCache[campaignId][entityId] = true;
+      } else {
+        delete favoriteCache[campaignId][entityId];
+      }
+      return data.favorited;
+    });
   }
 
   /** Update the star button icon to reflect current state. */
@@ -82,16 +87,16 @@
       btn._favBound = true;
 
       var entityId = btn.dataset.favoriteToggle;
-      var entityName = btn.dataset.entityName || '';
 
-      // Set initial state.
+      // Set initial state from cache.
       updateStarButton(btn, isFavorite(campaignId, entityId));
 
       btn.addEventListener('click', function (e) {
         e.preventDefault();
-        var nowFav = toggleFavorite(campaignId, entityId, entityName);
-        updateStarButton(btn, nowFav);
-        renderFavorites(campaignId);
+        toggleFavorite(campaignId, entityId).then(function (nowFav) {
+          updateStarButton(btn, nowFav);
+          renderFavorites(campaignId);
+        });
       });
     });
   }
@@ -102,26 +107,32 @@
     var header = document.getElementById('sidebar-cat-favorites-header');
     if (!container) return;
 
-    var list = loadFavorites(campaignId);
-    if (list.length === 0) {
-      container.innerHTML = '';
-      if (header) header.style.display = 'none';
-      return;
-    }
+    Chronicle.apiFetch('/campaigns/' + campaignId + '/favorites')
+      .then(function (res) { return res.ok ? res.json() : []; })
+      .then(function (items) {
+        if (!items || items.length === 0) {
+          container.innerHTML = '';
+          if (header) header.style.display = 'none';
+          return;
+        }
 
-    if (header) header.style.display = '';
+        if (header) header.style.display = '';
 
-    var html = '';
-    list.forEach(function (item) {
-      var href = '/campaigns/' + encodeURIComponent(campaignId) + '/entities/' + encodeURIComponent(item.id);
-      html += '<a href="' + href + '" ' +
-        'class="flex items-center px-4 py-1.5 text-[11px] transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active truncate">' +
-        '<i class="fa-solid fa-star text-[9px] text-amber-400/70 mr-2 shrink-0"></i>' +
-        '<span class="truncate">' + Chronicle.escapeHtml(item.name) + '</span>' +
-        '</a>';
-    });
+        var html = '';
+        items.forEach(function (item) {
+          var href = '/campaigns/' + encodeURIComponent(campaignId) + '/entities/' + encodeURIComponent(item.id);
+          html += '<a href="' + href + '" ' +
+            'class="flex items-center px-4 py-1.5 text-[11px] transition-colors text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active truncate">' +
+            '<i class="fa-solid fa-star text-[9px] text-amber-400/70 mr-2 shrink-0"></i>' +
+            '<span class="truncate">' + Chronicle.escapeHtml(item.name) + '</span>' +
+            '</a>';
+        });
 
-    container.innerHTML = html;
+        container.innerHTML = html;
+      })
+      .catch(function () {
+        // Silently fail — favorites section just stays empty.
+      });
   }
 
   /** Initialize favorites on page load. */
@@ -129,8 +140,11 @@
     var campaignId = getCampaignID();
     if (!campaignId) return;
 
-    bindToggleButtons(campaignId);
-    renderFavorites(campaignId);
+    // Load favorite IDs, then bind star buttons.
+    loadFavoriteIDs(campaignId).then(function () {
+      bindToggleButtons(campaignId);
+      renderFavorites(campaignId);
+    });
   }
 
   // Run on initial load.
