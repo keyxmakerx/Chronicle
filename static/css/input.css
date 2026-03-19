@@ -866,6 +866,37 @@
     transform: rotate(90deg);
   }
 
+  /* Currently-viewed entity highlight in sidebar tree. */
+  .sidebar-tree-item[aria-current="page"] {
+    background-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.12);
+    color: var(--color-sidebar-active, #e5e7eb);
+    border-radius: 6px;
+  }
+
+  /* Category icon hover: gentle scale + glow effect. */
+  .sidebar-category-link span:first-child {
+    transition: transform 150ms ease, filter 150ms ease;
+  }
+  .sidebar-category-link:hover span:first-child {
+    transform: scale(1.15);
+    filter: drop-shadow(0 0 3px currentColor);
+  }
+
+  /* Drill panel content fade-in on HTMX swap. */
+  #sidebar-cat-results {
+    animation: sidebar-fade-in 200ms ease-out;
+  }
+  @keyframes sidebar-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Sidebar nav items: smooth hover transitions. */
+  #sidebar a {
+    transition: background-color 150ms ease, color 150ms ease,
+                border-color 150ms ease;
+  }
+
   /* --- Notes Widget --- */
 
   /* Floating action button (bottom-right). */

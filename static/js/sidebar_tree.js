@@ -285,6 +285,26 @@
       renderNode(node, 0);
     });
 
+    // Highlight the entity that matches the current page URL.
+    var currentPath = window.location.pathname;
+    container.querySelectorAll('a.sidebar-tree-item').forEach(function (a) {
+      if (a.getAttribute('href') === currentPath) {
+        a.setAttribute('aria-current', 'page');
+      }
+    });
+
+    // Stagger fade-in for tree nodes (brief reveal animation).
+    var treeNodes = container.querySelectorAll('.sidebar-tree-node');
+    treeNodes.forEach(function (nd, i) {
+      nd.style.opacity = '0';
+      nd.style.transform = 'translateX(-4px)';
+      nd.style.transition = 'opacity 150ms ease, transform 150ms ease';
+      setTimeout(function () {
+        nd.style.opacity = '1';
+        nd.style.transform = 'translateX(0)';
+      }, Math.min(i * 20, 300));
+    });
+
     // --- Drag and Drop ---
     setupDragAndDrop(container, campaignId);
 
