@@ -112,7 +112,6 @@
     function renderNode(node, depth) {
       var hasChildren = node.children.length > 0;
       var isFolder = node.el.hasAttribute('data-is-folder');
-      var showAsFolder = hasChildren || isFolder;
       var isCollapsed = !!collapsedSet[node.id];
 
       // Create wrapper div for the tree node.
@@ -159,23 +158,23 @@
         });
       }
 
-      // Swap the default page icon based on whether this node is a folder.
+      // Swap icon for pure folder nodes; entities keep their page icon.
       var iconEl = link.querySelector('.sidebar-tree-icon i');
-      if (iconEl) {
-        if (showAsFolder) {
-          // Folder icon: open when expanded, closed when collapsed.
-          iconEl.className = isCollapsed
-            ? 'fa-solid fa-folder text-[10px]'
-            : 'fa-solid fa-folder-open text-[10px]';
-          link.setAttribute('data-has-children', 'true');
-        }
-        // Leaves keep the default fa-file-lines icon from the template.
+      if (iconEl && node.isNode) {
+        // Pure folder node: toggle between closed/open folder icon.
+        iconEl.className = isCollapsed
+          ? 'fa-solid fa-folder text-[10px]'
+          : 'fa-solid fa-folder-open text-[10px]';
+      }
+      // Mark any item with children so drag-drop can detect valid parents.
+      if (hasChildren || isFolder) {
+        link.setAttribute('data-has-children', 'true');
       }
 
       // Add toggle button (chevron) for items with children.
       if (hasChildren) {
         var toggle = document.createElement('span');
-        toggle.className = 'sidebar-tree-toggle inline-flex items-center justify-center w-4 h-4 cursor-pointer text-gray-500 hover:text-gray-300 shrink-0';
+        toggle.className = 'sidebar-tree-toggle inline-flex items-center justify-center w-6 h-6 -ml-1 cursor-pointer text-gray-500 hover:text-gray-300 shrink-0';
         toggle.setAttribute('data-collapsed', String(isCollapsed));
         // Use a single right-chevron that rotates via CSS transform.
         toggle.innerHTML = '<i class="fa-solid fa-chevron-right text-[7px]"></i>';
@@ -200,12 +199,14 @@
           toggle.style.transform = isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
           toggle.setAttribute('data-collapsed', String(isCollapsed));
 
-          // Swap folder icon between open/closed.
-          var folderIcon = link.querySelector('.sidebar-tree-icon i');
-          if (folderIcon) {
-            folderIcon.className = isCollapsed
-              ? 'fa-solid fa-folder text-[10px]'
-              : 'fa-solid fa-folder-open text-[10px]';
+          // Swap folder icon between open/closed (folder nodes only).
+          if (node.isNode) {
+            var folderIcon = link.querySelector('.sidebar-tree-icon i');
+            if (folderIcon) {
+              folderIcon.className = isCollapsed
+                ? 'fa-solid fa-folder text-[10px]'
+                : 'fa-solid fa-folder-open text-[10px]';
+            }
           }
 
           // Animate children container collapse/expand.
@@ -236,10 +237,10 @@
         } else {
           link.insertBefore(toggle, link.firstChild);
         }
-      } else if (depth > 0) {
-        // Leaf nodes at depth > 0 get a spacer to align with toggled siblings.
+      } else {
+        // Leaf nodes get a spacer to align with toggled siblings.
         var spacer = document.createElement('span');
-        spacer.className = 'inline-block w-4 shrink-0';
+        spacer.className = 'inline-block w-6 shrink-0';
         var iconSpan2 = link.querySelector('.sidebar-tree-icon');
         if (iconSpan2) {
           link.insertBefore(spacer, iconSpan2);
@@ -282,6 +283,26 @@
     sortChildren(roots);
     roots.forEach(function (node) {
       renderNode(node, 0);
+    });
+
+    // Highlight the entity that matches the current page URL.
+    var currentPath = window.location.pathname;
+    container.querySelectorAll('a.sidebar-tree-item').forEach(function (a) {
+      if (a.getAttribute('href') === currentPath) {
+        a.setAttribute('aria-current', 'page');
+      }
+    });
+
+    // Stagger fade-in for tree nodes (brief reveal animation).
+    var treeNodes = container.querySelectorAll('.sidebar-tree-node');
+    treeNodes.forEach(function (nd, i) {
+      nd.style.opacity = '0';
+      nd.style.transform = 'translateX(-4px)';
+      nd.style.transition = 'opacity 150ms ease, transform 150ms ease';
+      setTimeout(function () {
+        nd.style.opacity = '1';
+        nd.style.transform = 'translateX(0)';
+      }, Math.min(i * 20, 300));
     });
 
     // --- Drag and Drop ---

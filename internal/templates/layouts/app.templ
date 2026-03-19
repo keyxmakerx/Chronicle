@@ -83,13 +83,16 @@ templ App(title string) {
 }
 
 // sidebarNavLink is the CSS class set for sidebar navigation links.
-var sidebarNavLink = "flex items-center px-4 py-2 text-sm transition-colors group"
+// Includes a transparent left border so active/inactive items align.
+var sidebarNavLink = "flex items-center pl-3.5 pr-4 py-2 text-sm transition-colors group border-l-2 border-transparent"
 
 // sidebarNavActive is appended for the currently active navigation link.
-var sidebarNavActive = "bg-sidebar-hover text-sidebar-active"
+// Uses the campaign accent color for the left-border indicator.
+var sidebarNavActive = "bg-sidebar-hover text-sidebar-active border-accent"
 
 // sidebarNavInactive is the default state for non-active navigation links.
-var sidebarNavInactive = "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active"
+// Hover uses a faint accent tint instead of plain gray.
+var sidebarNavInactive = "text-sidebar-text hover:bg-accent/[0.08] hover:text-sidebar-active"
 
 // Sidebar renders the left navigation bar with drill-down support. Organized
 // into distinct zones so that global nav, manage, and admin sections remain
@@ -116,10 +119,35 @@ templ Sidebar() {
 	>
 		<!-- Logo / Brand + Pin Toggle -->
 		<div class="h-16 flex items-center px-4 border-b border-gray-700 shrink-0">
-			<a href="/campaigns" class="flex items-center flex-1 hover:opacity-80 transition-opacity">
-				<span class="text-xl font-bold text-white tracking-tight sidebar-hide-collapsed">Chronicle</span>
-				<span class="hidden items-center justify-center w-4 h-4" :class="{ '!flex': !pinned && !hovered }">
-					<i class="fa-solid fa-book-open text-white text-sm"></i>
+			<a
+				if InCampaign(ctx) {
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
+				} else {
+					href="/campaigns"
+				}
+				class="flex items-center flex-1 min-w-0 gap-2 hover:opacity-80 transition-opacity"
+			>
+				if InCampaign(ctx) && GetBrandLogo(ctx) != "" {
+					<img
+						src={ MediaURL(ctx, GetBrandLogo(ctx)) }
+						alt=""
+						class="w-7 h-7 rounded-md object-cover shrink-0 sidebar-hide-collapsed"
+					/>
+				}
+				<span class="text-lg font-bold text-white tracking-tight truncate sidebar-hide-collapsed">
+					if InCampaign(ctx) && GetBrandName(ctx) != "" {
+						{ GetBrandName(ctx) }
+					} else {
+						Chronicle
+					}
+				</span>
+				<!-- Collapsed state: show logo or book icon -->
+				<span class="hidden items-center justify-center w-5 h-5 shrink-0" :class="{ '!flex': !pinned && !hovered }">
+					if InCampaign(ctx) && GetBrandLogo(ctx) != "" {
+						<img src={ MediaURL(ctx, GetBrandLogo(ctx)) } alt="" class="w-5 h-5 rounded object-cover"/>
+					} else {
+						<i class="fa-solid fa-book-open text-white text-sm"></i>
+					}
 				</span>
 			</a>
 			<!-- Pin/unpin button (visible only when expanded) -->
@@ -128,7 +156,7 @@ templ Sidebar() {
 				@click.stop="pinned = !pinned; localStorage.setItem('chronicle-sidebar-pinned', pinned)"
 				:title="pinned ? 'Unpin sidebar' : 'Pin sidebar open'"
 			>
-				<i class="fa-solid fa-thumbtack text-xs transition-transform" :class="{ 'rotate-45 text-gray-600': !pinned }"></i>
+				<i class="fa-solid fa-thumbtack text-xs transition-transform" :class="{ 'rotate-45 text-gray-600': !pinned, 'text-accent': pinned }"></i>
 			</button>
 			<!-- Hide sidebar button (visible only when expanded) -->
 			<button
@@ -760,7 +788,7 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 				class="flex items-center gap-2 flex-1 min-w-0 group"
 				title={ fmt.Sprintf("Open %s page", et.NamePlural) }
 			>
-				<span class="w-5 h-5 rounded flex items-center justify-center shrink-0">
+				<span class="w-6 h-6 rounded-md bg-accent/10 flex items-center justify-center shrink-0">
 					if et.Icon != "" {
 						<i class={ "fa-solid " + et.Icon, "text-sm" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
 					} else {
