@@ -87,6 +87,15 @@ func FindSystem(id string) System {
 	return globalLoader.GetSystem(id)
 }
 
+// Dir returns the absolute directory path for a system by ID, or empty string
+// if not found. Used to serve system widget JS files from the filesystem.
+func Dir(id string) string {
+	if globalLoader == nil {
+		return ""
+	}
+	return globalLoader.Dir(id)
+}
+
 // AllSystems returns all live System instances, for iteration.
 // Only includes modules that have been successfully instantiated.
 func AllSystems() []System {
@@ -94,6 +103,44 @@ func AllSystems() []System {
 		return nil
 	}
 	return globalLoader.AllSystems()
+}
+
+// AddonInfo contains the metadata needed to register a discovered system
+// as an addon in the addons database. This bridges the systems registry
+// with the addons plugin so new systems are auto-registered without
+// hardcoding addon definitions.
+type AddonInfo struct {
+	Slug        string
+	Name        string
+	Description string
+	Version     string
+	Icon        string
+	Author      string
+}
+
+// AddonInfos returns addon registration metadata for all discovered
+// systems with status "available". Called during app wiring to
+// auto-register systems as addons — no hardcoded addon definitions needed.
+func AddonInfos() []AddonInfo {
+	if globalLoader == nil {
+		return nil
+	}
+	manifests := globalLoader.All()
+	infos := make([]AddonInfo, 0, len(manifests))
+	for _, m := range manifests {
+		if m.Status != StatusAvailable {
+			continue
+		}
+		infos = append(infos, AddonInfo{
+			Slug:        m.ID,
+			Name:        m.Name,
+			Description: m.Description,
+			Version:     m.Version,
+			Icon:        m.Icon,
+			Author:      m.Author,
+		})
+	}
+	return infos
 }
 
 // LoadAdditionalDir scans an additional directory for system manifest.json

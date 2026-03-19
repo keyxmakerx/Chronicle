@@ -1,7 +1,11 @@
 package systems
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -9,13 +13,20 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
+
+// addonChecker tests whether an addon slug is enabled for a campaign.
+type addonChecker interface {
+	IsEnabledForCampaign(ctx context.Context, campaignID string, addonSlug string) (bool, error)
+}
 
 // SystemHandler serves reference pages and JSON API endpoints for any
 // system. It checks both global built-in systems and per-campaign custom
 // systems uploaded by campaign owners.
 type SystemHandler struct {
 	campaignSystems *CampaignSystemManager
+	addonSvc        addonChecker
 }
 
 // NewSystemHandler creates a new system handler.
@@ -26,6 +37,12 @@ func NewSystemHandler() *SystemHandler {
 // SetCampaignSystems wires the per-campaign custom system manager.
 func (h *SystemHandler) SetCampaignSystems(mgr *CampaignSystemManager) {
 	h.campaignSystems = mgr
+}
+
+// SetAddonService wires the addon service for checking which system is
+// enabled per campaign. Used by widget metadata methods.
+func (h *SystemHandler) SetAddonService(svc addonChecker) {
+	h.addonSvc = svc
 }
 
 // resolveSystem extracts the :mod param and looks up the live system.
@@ -270,4 +287,142 @@ func (h *SystemHandler) TooltipAPI(c echo.Context) error {
 		"source":       item.Source,
 		"tooltip_html": tooltipHTML,
 	})
+}
+
+// --- System Widget Support ---
+
+// WidgetScriptAPI serves a system widget's JS file from the system directory.
+// GET /campaigns/:id/systems/:mod/widgets/:slug
+func (h *SystemHandler) WidgetScriptAPI(c echo.Context) error {
+	mod := h.resolveSystem(c)
+	if mod == nil {
+		return apperror.NewNotFound("system not found")
+	}
+
+	slug := c.Param("slug")
+	// Strip .js extension if present in the route param.
+	slug = strings.TrimSuffix(slug, ".js")
+
+	if !slugPattern.MatchString(slug) {
+		return apperror.NewBadRequest("invalid widget slug")
+	}
+
+	manifest := mod.Info()
+	var widget *WidgetDef
+	for i := range manifest.Widgets {
+		if manifest.Widgets[i].Slug == slug {
+			widget = &manifest.Widgets[i]
+			break
+		}
+	}
+	if widget == nil {
+		return apperror.NewNotFound("widget not found")
+	}
+
+	// Resolve the system's directory on disk.
+	sysDir := Dir(manifest.ID)
+	if sysDir == "" {
+		// Check campaign custom systems.
+		if h.campaignSystems != nil {
+			cc := campaigns.GetCampaignContext(c)
+			if cc != nil {
+				sysDir = h.campaignSystems.Dir(cc.Campaign.ID)
+			}
+		}
+	}
+	if sysDir == "" {
+		return apperror.NewNotFound("system directory not found")
+	}
+
+	// Resolve and validate the script file path.
+	scriptPath := filepath.Join(sysDir, widget.ScriptFile)
+	scriptPath = filepath.Clean(scriptPath)
+	// Ensure resolved path stays within system directory.
+	if !strings.HasPrefix(scriptPath, filepath.Clean(sysDir)+string(os.PathSeparator)) {
+		return apperror.NewBadRequest("invalid script path")
+	}
+
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		return apperror.NewNotFound("widget script not found")
+	}
+
+	c.Response().Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	return c.Blob(http.StatusOK, "application/javascript", data)
+}
+
+// resolveEnabledSystem returns the System enabled for the given campaign,
+// checking both built-in addon systems and campaign custom systems.
+func (h *SystemHandler) resolveEnabledSystem(ctx context.Context, campaignID string) System {
+	if h.addonSvc == nil {
+		return nil
+	}
+
+	// Check all live built-in systems.
+	for _, sys := range AllSystems() {
+		enabled, err := h.addonSvc.IsEnabledForCampaign(ctx, campaignID, sys.Info().ID)
+		if err == nil && enabled {
+			return sys
+		}
+	}
+
+	// Check campaign custom system.
+	if h.campaignSystems != nil {
+		if sys := h.campaignSystems.GetSystem(campaignID); sys != nil {
+			return sys
+		}
+	}
+
+	return nil
+}
+
+// GetSystemWidgetBlockMetas returns BlockMeta entries for widgets provided
+// by the campaign's enabled game system. Used by the template editor palette.
+func (h *SystemHandler) GetSystemWidgetBlockMetas(ctx context.Context, campaignID string) []entities.BlockMeta {
+	sys := h.resolveEnabledSystem(ctx, campaignID)
+	if sys == nil {
+		return nil
+	}
+
+	manifest := sys.Info()
+	if len(manifest.Widgets) == 0 {
+		return nil
+	}
+
+	metas := make([]entities.BlockMeta, 0, len(manifest.Widgets))
+	for _, w := range manifest.Widgets {
+		icon := w.Icon
+		if icon == "" {
+			icon = "fa-puzzle-piece"
+		}
+		metas = append(metas, entities.BlockMeta{
+			Type:        "ext_widget",
+			Label:       w.Name,
+			Icon:        icon,
+			Description: w.Description,
+			WidgetSlug:  w.Slug,
+		})
+	}
+	return metas
+}
+
+// GetSystemWidgetScriptURLs returns the URLs to load system widget JS files
+// for the campaign's enabled game system. Injected into pages via base.templ.
+func (h *SystemHandler) GetSystemWidgetScriptURLs(ctx context.Context, campaignID string) []string {
+	sys := h.resolveEnabledSystem(ctx, campaignID)
+	if sys == nil {
+		return nil
+	}
+
+	manifest := sys.Info()
+	if len(manifest.Widgets) == 0 {
+		return nil
+	}
+
+	urls := make([]string, 0, len(manifest.Widgets))
+	for _, w := range manifest.Widgets {
+		urls = append(urls, fmt.Sprintf("/campaigns/%s/systems/%s/widgets/%s.js", campaignID, manifest.ID, w.Slug))
+	}
+	return urls
 }

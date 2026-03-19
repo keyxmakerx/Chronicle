@@ -1089,3 +1089,41 @@ to `/app` but never copies plugin migration directories. Since `os.Stat` returne
 - No Dockerfile changes needed when adding new plugins with migrations.
 - Each plugin must have an `embed.go` exporting its `MigrationsFS`.
 - `RegisteredPlugins()` now lives in `cmd/server/main.go` instead of `database`.
+
+---
+
+## ADR-031: Auto-Register Game Systems as Addons from Manifests
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** Game system addon definitions were hardcoded in the
+`builtinAddons` array in `addons/service.go`. Adding a new game system
+required two code changes: (1) the system's manifest.json + data files,
+and (2) a matching `addonDef` entry in the addons package. This coupling
+prevented truly self-service system creation — you couldn't just drop a
+folder or install via the package manager and have it appear in the addon UI.
+
+**Decision:** Auto-register game systems from the systems registry:
+- `systems.AddonInfos()` returns addon metadata for all discovered systems
+  with status "available" (name, description, version, icon, author from manifest).
+- `addons.RegisterSystemAddon()` appends to `builtinAddons` and marks the
+  slug as installed in `installedAddons`.
+- App wiring calls these after `systems.Init()` but before `SeedInstalledAddons()`.
+- The three hardcoded system entries (dnd5e, pathfinder2e, drawsteel) are
+  removed from `builtinAddons`.
+
+**Alternatives considered:**
+- Have `addons` import `systems` directly: creates package coupling. The
+  wiring layer in `app/routes.go` already imports both.
+- Auto-discover from database only: doesn't help with initial registration
+  of new systems before they're in the DB.
+
+**Consequences:**
+- New game systems appear as addons automatically with zero code changes.
+- Systems from the package manager, custom uploads, or `internal/systems/`
+  all register the same way.
+- The blank import for dnd5e in `main.go` is still needed for its custom
+  tooltip renderer factory — pure-data systems need no import.
+- Campaign settings page falls back to "Campaign extension." for system
+  descriptions (previously had hardcoded per-system strings).

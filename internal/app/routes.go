@@ -585,33 +585,41 @@ func sessionsToCalendarSessions(sess []sessions.Session, userID string) []calend
 	return result
 }
 
-// widgetBlockListerAdapter bridges extensions.Handler to entities.WidgetBlockLister.
-// Converts extension widget metadata into entity block metadata for the template editor.
+// widgetBlockListerAdapter bridges extensions.Handler and systems.SystemHandler
+// to entities.WidgetBlockLister. Converts widget metadata from both extension
+// widgets and system-provided widgets into entity block metadata.
 type widgetBlockListerAdapter struct {
 	extHandler *extensions.Handler
+	sysHandler *systems.SystemHandler
 }
 
-// GetWidgetBlockMetas returns extension widget blocks as entity block metadata.
+// GetWidgetBlockMetas returns widget blocks from both extensions and game systems.
 func (a *widgetBlockListerAdapter) GetWidgetBlockMetas(ctx context.Context, campaignID string) []entities.BlockMeta {
-	infos := a.extHandler.GetWidgetBlockInfos(ctx, campaignID)
-	if len(infos) == 0 {
-		return nil
+	var metas []entities.BlockMeta
+
+	// Extension widgets.
+	if a.extHandler != nil {
+		infos := a.extHandler.GetWidgetBlockInfos(ctx, campaignID)
+		for _, info := range infos {
+			icon := info.Icon
+			if icon == "" {
+				icon = "fa-puzzle-piece"
+			}
+			metas = append(metas, entities.BlockMeta{
+				Type:        "ext_widget",
+				Label:       info.Name,
+				Icon:        icon,
+				Description: info.Description,
+				WidgetSlug:  info.Slug,
+			})
+		}
 	}
 
-	metas := make([]entities.BlockMeta, 0, len(infos))
-	for _, info := range infos {
-		icon := info.Icon
-		if icon == "" {
-			icon = "fa-puzzle-piece"
-		}
-		metas = append(metas, entities.BlockMeta{
-			Type:        "ext_widget",
-			Label:       info.Name,
-			Icon:        icon,
-			Description: info.Description,
-			WidgetSlug:  info.Slug,
-		})
+	// System-provided widgets.
+	if a.sysHandler != nil {
+		metas = append(metas, a.sysHandler.GetSystemWidgetBlockMetas(ctx, campaignID)...)
 	}
+
 	return metas
 }
 
@@ -976,8 +984,14 @@ func (a *App) RegisterRoutes() {
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
 	addonRepo := addons.NewAddonRepository(a.DB)
 	addonService := addons.NewAddonService(addonRepo)
-	// Register all built-in addons on startup so new addons appear
-	// automatically without requiring SQL migrations.
+	// Auto-register discovered game systems as addons so new systems
+	// (from internal/systems/, package manager, or GitHub) appear in the
+	// addon UI without hardcoded definitions.
+	for _, info := range systems.AddonInfos() {
+		addons.RegisterSystemAddon(info.Slug, info.Name, info.Description, info.Version, info.Icon, info.Author)
+	}
+	// Seed all built-in addons (plugins, widgets, integrations + auto-registered
+	// systems) into the database on startup.
 	if err := addonService.SeedInstalledAddons(context.Background()); err != nil {
 		slog.Error("failed to seed built-in addons", slog.String("error", err.Error()))
 	}
@@ -1529,7 +1543,12 @@ func (a *App) RegisterRoutes() {
 	campaignSystemMgr := systems.NewCampaignSystemManager(filepath.Join(a.Config.Upload.MediaPath, "systems"))
 	systemHandler := systems.NewSystemHandler()
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
+	systemHandler.SetAddonService(addonService)
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
+
+	// Wire system widgets into the template editor palette (deferred from
+	// block registry setup because systemHandler is created after entityHandler).
+	entityHandler.SetWidgetBlockLister(&widgetBlockListerAdapter{extHandler: extHandler, sysHandler: systemHandler})
 	campaignSystemHandler := systems.NewCampaignSystemHandler(campaignSystemMgr)
 	// Wire upload policy provider so campaign handler checks admin setting.
 	campaignSystemHandler.SetUploadPolicy(func(ctx context.Context) string {
@@ -1701,6 +1720,12 @@ func (a *App) RegisterRoutes() {
 			// Extension widget scripts for campaign pages.
 			if widgetURLs := extHandler.GetWidgetScriptURLs(reqCtx, cc.Campaign.ID); len(widgetURLs) > 0 {
 				ctx = layouts.SetExtWidgetScripts(ctx, widgetURLs)
+			}
+
+			// System-provided widget scripts for the enabled game system.
+			if sysScripts := systemHandler.GetSystemWidgetScriptURLs(reqCtx, cc.Campaign.ID); len(sysScripts) > 0 {
+				existing := layouts.GetExtWidgetScripts(ctx)
+				ctx = layouts.SetExtWidgetScripts(ctx, append(existing, sysScripts...))
 			}
 		}
 
