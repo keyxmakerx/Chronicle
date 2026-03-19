@@ -725,6 +725,7 @@ func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
 	config := SidebarConfig{
 		Items:           req.Items,
 		HiddenEntityIDs: req.HiddenEntityIDs,
+		HiddenNodeIDs:   req.HiddenNodeIDs,
 		EntityTypeOrder: req.EntityTypeOrder,
 		HiddenTypeIDs:   req.HiddenTypeIDs,
 		CustomSections:  req.CustomSections,

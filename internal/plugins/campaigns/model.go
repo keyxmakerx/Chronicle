@@ -122,6 +122,10 @@ type SidebarConfig struct {
 	// hidden from the sidebar for non-owner roles.
 	HiddenEntityIDs []string `json:"hidden_entity_ids,omitempty"`
 
+	// HiddenNodeIDs is a set of sidebar folder node IDs that should be
+	// hidden from the sidebar for non-owner roles.
+	HiddenNodeIDs []string `json:"hidden_node_ids,omitempty"`
+
 	// --- Legacy fields (used when Items is empty) ---
 
 	EntityTypeOrder []int        `json:"entity_type_order,omitempty"`
@@ -631,6 +635,7 @@ type UpdateSidebarConfigRequest struct {
 	EntityTypeOrder []int         `json:"entity_type_order"`
 	HiddenTypeIDs   []int         `json:"hidden_type_ids"`
 	HiddenEntityIDs []string      `json:"hidden_entity_ids"`
+	HiddenNodeIDs   []string      `json:"hidden_node_ids"`
 	CustomSections  []NavSection  `json:"custom_sections,omitempty"`
 	CustomLinks     []NavLink     `json:"custom_links,omitempty"`
 }

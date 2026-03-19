@@ -334,6 +334,7 @@
         entity_type_order: sidebarConfig.entity_type_order || [],
         hidden_type_ids: sidebarConfig.hidden_type_ids || [],
         hidden_entity_ids: sidebarConfig.hidden_entity_ids || [],
+        hidden_node_ids: sidebarConfig.hidden_node_ids || [],
         custom_sections: sidebarConfig.custom_sections || [],
         custom_links: sidebarConfig.custom_links || []
       }
@@ -432,7 +433,7 @@
       if (tree) {
         tree.setAttribute('data-reorg-active', 'true');
         document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
-          detail: { active: true, hiddenEntityIds: (sidebarConfig && sidebarConfig.hidden_entity_ids) || [] }
+          detail: { active: true, hiddenEntityIds: (sidebarConfig && sidebarConfig.hidden_entity_ids) || [], hiddenNodeIds: (sidebarConfig && sidebarConfig.hidden_node_ids) || [] }
         }));
         return;
       }
@@ -451,7 +452,7 @@
             if (tree && active) {
               tree.setAttribute('data-reorg-active', 'true');
               document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
-                detail: { active: true, hiddenEntityIds: (sidebarConfig && sidebarConfig.hidden_entity_ids) || [] }
+                detail: { active: true, hiddenEntityIds: (sidebarConfig && sidebarConfig.hidden_entity_ids) || [], hiddenNodeIds: (sidebarConfig && sidebarConfig.hidden_node_ids) || [] }
               }));
             }
           }, 50);
@@ -606,6 +607,25 @@
     return isNowHidden;
   }
 
+  /**
+   * Toggle sidebar visibility of a folder node.
+   * Called from sidebar_tree.js when the user clicks a folder eye toggle.
+   */
+  function toggleNodeVisibility(nodeId) {
+    if (!sidebarConfig) sidebarConfig = {};
+    if (!sidebarConfig.hidden_node_ids) sidebarConfig.hidden_node_ids = [];
+
+    var idx = sidebarConfig.hidden_node_ids.indexOf(nodeId);
+    if (idx === -1) {
+      sidebarConfig.hidden_node_ids.push(nodeId);
+    } else {
+      sidebarConfig.hidden_node_ids.splice(idx, 1);
+    }
+    saveSidebarConfig();
+
+    return sidebarConfig.hidden_node_ids.indexOf(nodeId) !== -1;
+  }
+
   // -----------------------------------------------------------------------
   // Initialization and event binding
   // -----------------------------------------------------------------------
@@ -629,9 +649,17 @@
     document.addEventListener('chronicle:toggle-entity-visibility', function (e) {
       if (!e.detail || !e.detail.entityId) return;
       var isNowHidden = toggleEntityVisibility(e.detail.entityId);
-      // Dispatch result back so sidebar_tree.js can update UI.
       document.dispatchEvent(new CustomEvent('chronicle:entity-visibility-changed', {
         detail: { entityId: e.detail.entityId, hidden: isNowHidden }
+      }));
+    });
+
+    // Listen for folder node visibility toggle requests from sidebar_tree.js.
+    document.addEventListener('chronicle:toggle-node-visibility', function (e) {
+      if (!e.detail || !e.detail.nodeId) return;
+      var isNowHidden = toggleNodeVisibility(e.detail.nodeId);
+      document.dispatchEvent(new CustomEvent('chronicle:node-visibility-changed', {
+        detail: { nodeId: e.detail.nodeId, hidden: isNowHidden }
       }));
     });
 

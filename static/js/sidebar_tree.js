@@ -118,31 +118,45 @@
       // Create wrapper div for the tree node.
       var wrapper = document.createElement('div');
       wrapper.className = 'sidebar-tree-node';
-      wrapper.setAttribute('data-entity-id', node.id);
+      // Use the correct ID attribute based on node type.
+      if (node.isNode) {
+        wrapper.setAttribute('data-node-id', node.id);
+      } else {
+        wrapper.setAttribute('data-entity-id', node.id);
+      }
       if (node.parentId) wrapper.setAttribute('data-parent-id', node.parentId);
       wrapper.setAttribute('data-depth', String(depth));
-      // Propagate sidebar-hidden flag to wrapper for reorg script.
       if (node.el.hasAttribute('data-sidebar-hidden')) {
         wrapper.setAttribute('data-sidebar-hidden', 'true');
       }
 
-      // Clone the original link element and apply indentation.
+      // Clone the original element and apply indentation.
       var link = node.el.cloneNode(true);
       link.style.paddingLeft = (10 + depth * INDENT_PX) + 'px';
 
-      // Folder entities are organizational — not navigable as pages.
-      // Replace the <a> with a <div> so clicking doesn't navigate away.
-      if (isFolder) {
+      // Folder nodes from the template are already <div> elements.
+      // Only convert <a> to <div> if it's an entity with is_folder
+      // (legacy compat). Pure folder nodes (data-node-id) are already divs.
+      if (isFolder && link.tagName === 'A') {
         var div = document.createElement('div');
         div.className = link.className;
         div.style.cssText = link.style.cssText;
         div.innerHTML = link.innerHTML;
-        // Copy data attributes needed by drag-and-drop.
-        ['data-entity-id', 'data-parent-id', 'data-sort-order', 'data-entity-name', 'data-sidebar-hidden', 'data-is-folder'].forEach(function (attr) {
+        ['data-entity-id', 'data-node-id', 'data-parent-id', 'data-sort-order', 'data-entity-name', 'data-sidebar-hidden', 'data-is-folder'].forEach(function (attr) {
           if (link.hasAttribute(attr)) div.setAttribute(attr, link.getAttribute(attr));
         });
         div.classList.add('sidebar-tree-item', 'cursor-default');
         link = div;
+      }
+
+      // Add double-click rename for pure folder nodes (in reorg mode).
+      if (isFolder && node.isNode) {
+        link.addEventListener('dblclick', function (e) {
+          if (!document.body.classList.contains('sidebar-reorg-active')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          startInlineRename(link, node.id, campaignId);
+        });
       }
 
       // Swap the default page icon based on whether this node is a folder.
@@ -295,10 +309,14 @@
    * Toggle draggable state on tree items based on reorg mode.
    * When enabled, also adds entity visibility toggles (eye icons).
    */
-  function updateDraggable(container, enabled, hiddenEntityIds) {
-    var hiddenSet = {};
+  function updateDraggable(container, enabled, hiddenEntityIds, hiddenNodeIds) {
+    var hiddenEntitySet = {};
+    var hiddenNodeSet = {};
     if (hiddenEntityIds) {
-      hiddenEntityIds.forEach(function (id) { hiddenSet[id] = true; });
+      hiddenEntityIds.forEach(function (id) { hiddenEntitySet[id] = true; });
+    }
+    if (hiddenNodeIds) {
+      hiddenNodeIds.forEach(function (id) { hiddenNodeSet[id] = true; });
     }
 
     var nodes = container.querySelectorAll('.sidebar-tree-node');
@@ -306,6 +324,8 @@
       var item = node.querySelector('.sidebar-tree-item');
       if (item) {
         var entityId = node.getAttribute('data-entity-id');
+        var nodeId = node.getAttribute('data-node-id');
+        var itemId = entityId || nodeId;
         if (enabled) {
           item.setAttribute('draggable', 'true');
           // Add drag handle if not present.
@@ -315,21 +335,28 @@
             handle.innerHTML = '<i class="fa-solid fa-grip-vertical text-[8px]"></i>';
             item.insertBefore(handle, item.firstChild);
           }
-          // Add entity visibility toggle if not present.
-          if (entityId && !node.querySelector('.reorg-entity-visibility')) {
-            var isHidden = !!hiddenSet[entityId] || node.hasAttribute('data-sidebar-hidden');
+          // Add visibility toggle for both entities and folder nodes.
+          if (itemId && !node.querySelector('.reorg-entity-visibility')) {
+            var isHidden = (entityId ? !!hiddenEntitySet[entityId] : !!hiddenNodeSet[nodeId]) || node.hasAttribute('data-sidebar-hidden');
             var eyeBtn = document.createElement('button');
             eyeBtn.type = 'button';
             eyeBtn.className = 'reorg-entity-visibility ml-auto p-0.5 text-[10px] rounded hover:bg-white/10 transition-colors shrink-0';
-            eyeBtn.setAttribute('data-entity-id', entityId);
+            if (entityId) eyeBtn.setAttribute('data-entity-id', entityId);
+            if (nodeId) eyeBtn.setAttribute('data-node-id', nodeId);
             eyeBtn.title = isHidden ? 'Show in sidebar' : 'Hide from sidebar';
             eyeBtn.innerHTML = '<i class="fa-solid ' + (isHidden ? 'fa-eye-slash text-gray-500' : 'fa-eye text-gray-400') + '"></i>';
             eyeBtn.addEventListener('click', function (e) {
               e.preventDefault();
               e.stopPropagation();
-              document.dispatchEvent(new CustomEvent('chronicle:toggle-entity-visibility', {
-                detail: { entityId: entityId }
-              }));
+              if (nodeId) {
+                document.dispatchEvent(new CustomEvent('chronicle:toggle-node-visibility', {
+                  detail: { nodeId: nodeId }
+                }));
+              } else {
+                document.dispatchEvent(new CustomEvent('chronicle:toggle-entity-visibility', {
+                  detail: { entityId: entityId }
+                }));
+              }
             });
             item.appendChild(eyeBtn);
           }
@@ -645,6 +672,137 @@
   }
 
   /**
+   * Start inline rename of a folder node. Replaces the name span with
+   * an input field. Enter/blur saves, Escape cancels.
+   */
+  function startInlineRename(link, nodeId, campaignId) {
+    var nameSpan = link.querySelector('.truncate');
+    if (!nameSpan || nameSpan._renaming) return;
+    nameSpan._renaming = true;
+
+    var oldName = nameSpan.textContent;
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.value = oldName;
+    input.className = 'bg-transparent border-b border-accent text-xs text-fg w-full outline-none py-0';
+    input.style.minWidth = '60px';
+
+    nameSpan.textContent = '';
+    nameSpan.appendChild(input);
+    input.focus();
+    input.select();
+
+    function save() {
+      var newName = input.value.trim();
+      if (!newName || newName === oldName) {
+        cancel();
+        return;
+      }
+      Chronicle.apiFetch('/campaigns/' + campaignId + '/sidebar-nodes/' + nodeId, {
+        method: 'PUT',
+        body: { name: newName }
+      }).then(function (res) {
+        if (res.ok) {
+          nameSpan.textContent = newName;
+          link.setAttribute('data-entity-name', newName);
+        } else {
+          nameSpan.textContent = oldName;
+        }
+        nameSpan._renaming = false;
+      }).catch(function () {
+        nameSpan.textContent = oldName;
+        nameSpan._renaming = false;
+      });
+    }
+
+    function cancel() {
+      nameSpan.textContent = oldName;
+      nameSpan._renaming = false;
+    }
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+    input.addEventListener('blur', save);
+  }
+
+  // --- Folder Context Menu (right-click in reorg mode) ---
+
+  /**
+   * Show a context menu for a folder node with Rename and Delete options.
+   * Only available in reorg mode.
+   */
+  document.addEventListener('contextmenu', function (e) {
+    if (!document.body.classList.contains('sidebar-reorg-active')) return;
+
+    var node = e.target.closest('.sidebar-tree-node[data-node-id]');
+    if (!node) return;
+
+    e.preventDefault();
+    removeFolderContextMenu();
+
+    var nodeId = node.getAttribute('data-node-id');
+    var tree = document.getElementById('sidebar-entity-tree');
+    var cid = tree ? tree.getAttribute('data-campaign-id') : '';
+    var link = node.querySelector('.sidebar-tree-item');
+
+    var menu = document.createElement('div');
+    menu.id = 'sidebar-folder-ctx-menu';
+    menu.className = 'fixed z-[9999] bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[140px] text-sm';
+    menu.style.left = Math.min(e.clientX, window.innerWidth - 160) + 'px';
+    menu.style.top = Math.min(e.clientY, window.innerHeight - 80) + 'px';
+
+    // Rename option.
+    var renameBtn = document.createElement('button');
+    renameBtn.type = 'button';
+    renameBtn.className = 'w-full px-3 py-1.5 text-left flex items-center gap-2 text-fg hover:bg-surface-hover transition-colors';
+    renameBtn.innerHTML = '<i class="fa-solid fa-pen text-xs text-fg-muted w-4 text-center"></i> Rename';
+    renameBtn.addEventListener('click', function () {
+      removeFolderContextMenu();
+      if (link) startInlineRename(link, nodeId, cid);
+    });
+
+    // Delete option.
+    var deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'w-full px-3 py-1.5 text-left flex items-center gap-2 text-fg hover:bg-red-500/10 hover:text-red-400 transition-colors';
+    deleteBtn.innerHTML = '<i class="fa-solid fa-trash text-xs text-fg-muted w-4 text-center"></i> Delete';
+    deleteBtn.addEventListener('click', function () {
+      removeFolderContextMenu();
+      if (!confirm('Delete this folder? Children will be moved to root.')) return;
+      Chronicle.apiFetch('/campaigns/' + cid + '/sidebar-nodes/' + nodeId, { method: 'DELETE' })
+        .then(function (res) {
+          if (res.ok) {
+            Chronicle.notify('Folder deleted', 'success');
+            refreshSidebarTree();
+          } else {
+            Chronicle.notify('Failed to delete folder', 'error');
+          }
+        });
+    });
+
+    menu.appendChild(renameBtn);
+    menu.appendChild(deleteBtn);
+    document.body.appendChild(menu);
+
+    setTimeout(function () {
+      document.addEventListener('mousedown', onFolderCtxOutsideClick);
+    }, 0);
+  });
+
+  function removeFolderContextMenu() {
+    var m = document.getElementById('sidebar-folder-ctx-menu');
+    if (m) m.remove();
+    document.removeEventListener('mousedown', onFolderCtxOutsideClick);
+  }
+
+  function onFolderCtxOutsideClick(e) {
+    var m = document.getElementById('sidebar-folder-ctx-menu');
+    if (m && !m.contains(e.target)) removeFolderContextMenu();
+  }
+
+  /**
    * Send reorder/reparent request to the API. On success, refreshes the
    * sidebar entity list via HTMX to reflect the new ordering.
    */
@@ -845,8 +1003,9 @@
     if (container) {
       // Keep currentTreeContainer in sync.
       currentTreeContainer = container;
-      var hiddenIds = (e.detail && e.detail.hiddenEntityIds) || [];
-      updateDraggable(container, e.detail && e.detail.active, hiddenIds);
+      var hiddenEntityIds = (e.detail && e.detail.hiddenEntityIds) || [];
+      var hiddenNodeIds = (e.detail && e.detail.hiddenNodeIds) || [];
+      updateDraggable(container, e.detail && e.detail.active, hiddenEntityIds, hiddenNodeIds);
     }
   });
 
@@ -854,6 +1013,31 @@
   document.addEventListener('chronicle:entity-visibility-changed', function (e) {
     if (!e.detail || !e.detail.entityId) return;
     var node = document.querySelector('.sidebar-tree-node[data-entity-id="' + e.detail.entityId + '"]');
+    if (!node) return;
+
+    var item = node.querySelector('.sidebar-tree-item');
+    var btn = node.querySelector('.reorg-entity-visibility');
+    if (e.detail.hidden) {
+      node.setAttribute('data-sidebar-hidden', 'true');
+      if (item) item.classList.add('opacity-40');
+      if (btn) {
+        btn.title = 'Show in sidebar';
+        btn.innerHTML = '<i class="fa-solid fa-eye-slash text-gray-500"></i>';
+      }
+    } else {
+      node.removeAttribute('data-sidebar-hidden');
+      if (item) item.classList.remove('opacity-40');
+      if (btn) {
+        btn.title = 'Hide from sidebar';
+        btn.innerHTML = '<i class="fa-solid fa-eye text-gray-400"></i>';
+      }
+    }
+  });
+
+  // Listen for folder node visibility changes and update UI.
+  document.addEventListener('chronicle:node-visibility-changed', function (e) {
+    if (!e.detail || !e.detail.nodeId) return;
+    var node = document.querySelector('.sidebar-tree-node[data-node-id="' + e.detail.nodeId + '"]');
     if (!node) return;
 
     var item = node.querySelector('.sidebar-tree-item');
