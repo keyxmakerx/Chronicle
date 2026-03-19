@@ -8,7 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-19 -- **Sprint X-3: System-Provided Widgets + Auto-Registration + Sidebar Reorder Bugfix.**
+2026-03-19 -- **Sidebar Navigation Overhaul (Sprints N-1 through N-4, ADR-032).**
+
+53. **Sidebar Navigation Overhaul (Sprints N-1 through N-4, ADR-032).**
+    - **Sprint N-1: Pure Folders (COMPLETE)** — `sidebar_nodes` table for entity-free organizational folders. Migration 000013 adds table + `parent_node_id` on entities + migrates `is_folder` entities + drops column. `SidebarNode` model/repo/handler with full CRUD. `sidebar_tree.js` merges entities + folder nodes. Reparent menu "New empty folder" creates sidebar_nodes record.
+    - **Sprint N-2: DB-Backed Favorites (COMPLETE)** — `entity_favorites` table (migration 000014). Per-user, per-campaign. Toggle/list/check API. `favorites.js` rewritten to use API with in-memory cache. Cross-device persistence.
+    - **Sprint N-3: Unified Sidebar Model (COMPLETE)** — `SidebarItem` type in sidebar_config JSON. `Items` array replaces entity_type_order + hidden_type_ids + custom_sections + custom_links. Template renders all items in owner-defined order. `sidebar_layout_editor.js` widget in Customize Hub — single drag-and-drop list for ALL sidebar items.
+    - **Sprint N-4: Large Campaign Support (COMPLETE)** — Tag filtering in drill panel (`?tags=slug1,slug2` with AND-logic SQL). Lazy loading at 50/page with IntersectionObserver. Multi-select bulk move (Ctrl+click, floating action bar, POST /entities/bulk-move). Collapsible Manage section with localStorage persistence.
+    - **Auto-Registration of Systems as Addons (COMPLETE, ADR-031)** — Removed hardcoded dnd5e/pathfinder2e/drawsteel addon definitions. `systems.AddonInfos()` → `addons.RegisterSystemAddon()` pipeline.
+    - **Next Steps**: Sprint N-4 remaining: saved filter presets. Sprint X-5 (character sheet blocks). W-2 (map drawing tools).
 
 52. **Sprint X-3: System-Provided Widgets + Auto-Registration + Sidebar Reorder Bugfix.**
     - **Sidebar Reorder 404 Fix (COMPLETE)** — MySQL `RowsAffected=0` on `UpdateParent`/`UpdateSortOrder` when values unchanged caused false "entity not found" 404. Removed `RowsAffected` checks, added explicit `FindByID` validation in service layer. Also added proper error logging in JS catch handler, cleared orphan `data-parent-id` on cross-type tree nodes, added NaN guard for sort_order, and used `*int` for nullable sort_order in handler.

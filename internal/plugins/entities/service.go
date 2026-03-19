@@ -406,9 +406,11 @@ func (s *entityService) GetAncestors(ctx context.Context, entityID string) ([]En
 	return ancestors, nil
 }
 
-// ReorderEntity updates an entity's parent and sort order for sidebar tree reordering.
-// Validates that the entity and parent belong to the same campaign, and prevents
-// self-parenting. Both operations are scoped to the campaign for safety.
+// ReorderEntity updates an entity's parent and sort order for sidebar tree
+// reordering and reparenting. An entity can be parented under either another
+// entity (parentID) or a sidebar folder node (parentNodeID), but not both.
+// When one is set, the other is automatically cleared.
+// Validates campaign ownership and prevents self-parenting.
 func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID string, parentID *string, parentNodeID *string, sortOrder int) error {
 	// Prevent self-parenting.
 	if parentID != nil && *parentID == entityID {

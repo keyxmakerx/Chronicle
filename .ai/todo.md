@@ -215,9 +215,19 @@ _Quick capture, backlinks, enhanced graph, editor power-ups. See `.ai/obsidian-n
 - [ ] **Sprint W-2: Map Drawing Tools, Regions & Measurement** — Leaflet.Draw integration (freehand, polygons, circles, rectangles, text). Uses existing `map_drawings` table. Per-drawing visibility, color/opacity. Also: map regions (polygon fills/strokes/labels), measurement/distance tool, map embed layout block for entity pages.
 - [ ] **Sprint W-2.5: Nested / Linked Maps** — Click marker to open sub-map. `linked_map_id` on markers. Breadcrumb navigation between map levels. Competitive gap vs World Anvil/LegendKeeper.
 - [ ] **Sprint W-3: Discord Bot Integration** — Plugin at `internal/plugins/discord/`. Bot token config. Webhook session notifications. Reaction-based RSVP per ADR-012.
-- [ ] **Sprint W-4: Bulk Operations & Persistent Filters** — Multi-select entity lists with batch actions (tag, move, visibility, delete). Persistent filters per category in localStorage. Entity tag/field filtering on list pages.
+- [~] **Sprint W-4: Bulk Operations & Persistent Filters** — Multi-select in sidebar reorg mode done (Ctrl+click, floating action bar, bulk-move API). Remaining: multi-select on entity list page, batch tag, batch visibility, batch delete. Persistent filters per category in localStorage. Entity tag/field filtering on list pages.
 - [ ] **Sprint W-5: Editor Import/Export & Additional Themes** — Markdown import/export via `goldmark`. Sepia + high-contrast themes. Custom accent color picker. Embed media blocks (video/audio URLs) in editor.
 - [ ] **Sprint W-6: Timeline List View & Meter Blocks** — Simple chronological list view alongside D3 viz. Meter/tracker layout block type for numeric values (HP, spell slots) with bar/circle/dot styles.
+
+### Phase N: Sidebar Navigation Overhaul (COMPLETE — ADR-032)
+
+_Comprehensive sidebar navigation rework. Replaces folder-entity hack, adds
+favorites, unified sidebar model, and large campaign support._
+
+- [x] **Sprint N-1: Pure Folders** — `sidebar_nodes` table, `parent_node_id` on entities, migration 000013 (data migration from is_folder), CRUD API, sidebar_tree.js dual-source tree builder.
+- [x] **Sprint N-2: DB-Backed Favorites** — `entity_favorites` table (migration 000014), toggle/list/check API, favorites.js rewritten for API with cache.
+- [x] **Sprint N-3: Unified Sidebar Model** — `SidebarItem` type in sidebar_config JSON, template renders owner-defined order, `sidebar_layout_editor.js` drag-and-drop widget in Customize Hub.
+- [x] **Sprint N-4: Large Campaign Support** — Tag filtering (?tags= AND-logic), lazy loading (50/page + IntersectionObserver), multi-select bulk move (Ctrl+click + floating bar + POST /entities/bulk-move), collapsible Manage section.
 
 ### Backlog: Remaining Audit Items (address opportunistically)
 
@@ -232,7 +242,7 @@ _Lower-priority items to pick up during related sprints or as standalone tasks._
 
 **Documentation:**
 - [ ] **Posts widget missing .ai.md** — Only Go widget without documentation file.
-- [ ] **16 JS widgets missing .ai.md** — calendar_widget, map_widget, relation_graph, entity_type_config, entity_type_editor, groups, permissions, shop_inventory, sidebar_config, timeline_widget, entity_posts, recent_entities, notifications, shortcuts_help, editor_autolink, editor_secret.
+- [ ] **12 JS widgets missing .ai.md** — calendar_widget, map_widget, relation_graph, entity_type_config, entity_type_editor, groups, permissions, shop_inventory, timeline_widget, entity_posts, notifications, shortcuts_help. (sidebar_tree, sidebar_reorg, sidebar_tag_filter, sidebar_layout_editor now have .ai.md files.)
 
 **Player & DM Experience Gaps:**
 - [ ] **Entity tag/field filtering** — Entity list only has type tabs. No filter by tag, custom field value, or visibility mode.

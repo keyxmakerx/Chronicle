@@ -499,7 +499,7 @@ type EntityRepository interface {
 
 	// UpdateParent sets or clears an entity's parent_id. Scoped to campaign for safety.
 	UpdateParent(ctx context.Context, entityID, campaignID string, parentID *string) error
-	UpdateParentNode(ctx context.Context, entityID, campaignID string, parentNodeID *string) error
+	UpdateParentNode(ctx context.Context, entityID, campaignID string, parentNodeID *string) error // Set sidebar folder node parent.
 
 	// UpdateSortOrder sets an entity's manual sort order within its parent/category.
 	// Scoped to campaign for safety.

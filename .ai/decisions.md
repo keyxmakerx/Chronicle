@@ -1127,3 +1127,60 @@ folder or install via the package manager and have it appear in the addon UI.
   tooltip renderer factory — pure-data systems need no import.
 - Campaign settings page falls back to "Campaign extension." for system
   descriptions (previously had hardcoded per-system strings).
+
+---
+
+## ADR-032: Sidebar Navigation Overhaul — Pure Folders & Unified Items
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** The sidebar navigation had several limitations:
+1. Organizational folders were implemented as entities with `is_folder=TRUE`,
+   which polluted entity search results and required filtering workarounds.
+2. Addon links (Journal, NPCs) were hardcoded in `app.templ` — owners
+   couldn't reorder them relative to categories or custom links.
+3. No tag filtering, lazy loading, or bulk operations for large campaigns.
+4. Favorites were localStorage-only (lost on device switch).
+
+**Decision:** Four-sprint overhaul:
+
+**Sprint N-1: Pure folders.** New `sidebar_nodes` table for organizational
+folders with zero entity records. Entities gain `parent_node_id` (FK to
+sidebar_nodes) as a mutually exclusive alternative to `parent_id`. The
+`is_folder` column is removed from entities. Migration 000013 handles
+data migration from `is_folder` entities to `sidebar_nodes` rows.
+
+**Sprint N-2: DB-backed favorites.** New `entity_favorites` table replaces
+localStorage. Per-user, per-campaign. Toggle/list API endpoints. The
+`favorites.js` widget uses API calls with in-memory cache for instant UI.
+
+**Sprint N-3: Unified sidebar model.** `SidebarItem` type added to
+`SidebarConfig` with an `Items` array. All sidebar content (dashboard,
+addons, categories, sections, links) unified as items. When `Items` is
+present, the template renders in owner-defined order. When absent,
+falls back to legacy format. New `sidebar_layout_editor.js` widget
+replaces the separate category-order and custom-links editors.
+
+**Sprint N-4: Large campaign support.** Tag filtering via `?tags=` query
+param with AND-logic SQL subquery. Lazy loading at 50 entities per page
+with IntersectionObserver. Multi-select bulk move with floating action
+bar. Collapsible Manage section with localStorage persistence.
+
+**Alternatives considered:**
+- Keep `is_folder` on entities with filtering: still creates entity records,
+  confusing conceptually, requires ongoing filtering in every query.
+- New `sidebar_folders` table with `parent_type` discriminator: adds
+  complexity for parent resolution. The simpler `parent_node_id` on
+  entities avoids ambiguous joins.
+- Separate `sidebar_items` database table: over-engineering for what
+  is effectively a JSON config. The `SidebarConfig.Items` array in the
+  existing JSON column is simpler and backward-compatible.
+
+**Consequences:**
+- Folders are true organizational containers — no entity records, no search pollution.
+- Owners can reorder the entire sidebar (addons, categories, links).
+- Large campaigns (500+ entities) load incrementally with tag filtering.
+- Favorites persist across devices.
+- Dual-parent model (`parent_id` vs `parent_node_id`) requires care in
+  queries and the reorder service to keep them mutually exclusive.

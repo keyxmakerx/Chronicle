@@ -221,8 +221,8 @@ type Entity struct {
 	EntryHTML      *string         `json:"entry_html,omitempty"` // Pre-rendered HTML from entry.
 	ImagePath      *string         `json:"image_path,omitempty"`
 	CoverImagePath *string         `json:"cover_image_path,omitempty"` // Full-width banner image.
-	ParentID       *string         `json:"parent_id,omitempty"`
-	ParentNodeID   *string         `json:"parent_node_id,omitempty"` // Sidebar folder node parent.
+	ParentID       *string         `json:"parent_id,omitempty"`       // Parent entity ID (hierarchy). Mutually exclusive with ParentNodeID.
+	ParentNodeID   *string         `json:"parent_node_id,omitempty"` // Parent sidebar folder node ID. Mutually exclusive with ParentID.
 	SortOrder      int             `json:"sort_order"`            // Manual ordering within parent/category (0 = default).
 	TypeLabel      *string         `json:"type_label,omitempty"` // Freeform subtype (e.g., "City" for a Location).
 	IsPrivate      bool            `json:"is_private"`
