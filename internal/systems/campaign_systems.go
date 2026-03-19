@@ -92,6 +92,7 @@ func (m *CampaignSystemManager) Install(campaignID string, zipData io.ReaderAt, 
 	// First pass: validate structure and find manifest.
 	var manifestFile *zip.File
 	var dataFiles []*zip.File
+	var widgetFiles []*zip.File
 	for _, f := range zr.File {
 		// Security: reject path traversal.
 		if strings.Contains(f.Name, "..") {
@@ -108,6 +109,11 @@ func (m *CampaignSystemManager) Install(campaignID string, zipData io.ReaderAt, 
 				return nil, fmt.Errorf("data file %s exceeds maximum size of %d MB", f.Name, maxDataFileSize/(1024*1024))
 			}
 			dataFiles = append(dataFiles, f)
+		} else if strings.HasPrefix(f.Name, "widgets/") && strings.HasSuffix(f.Name, ".js") {
+			if f.UncompressedSize64 > maxDataFileSize {
+				return nil, fmt.Errorf("widget file %s exceeds maximum size of %d MB", f.Name, maxDataFileSize/(1024*1024))
+			}
+			widgetFiles = append(widgetFiles, f)
 		}
 		// Ignore other files silently.
 	}
@@ -148,6 +154,13 @@ func (m *CampaignSystemManager) Install(campaignID string, zipData io.ReaderAt, 
 		return nil, fmt.Errorf("creating module directory: %w", err)
 	}
 
+	// Create widgets directory if widget files are present.
+	if len(widgetFiles) > 0 {
+		if err := os.MkdirAll(filepath.Join(sysDir, "widgets"), 0o755); err != nil {
+			return nil, fmt.Errorf("creating widgets directory: %w", err)
+		}
+	}
+
 	// Write modified manifest (with custom- prefix and available status).
 	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -161,9 +174,17 @@ func (m *CampaignSystemManager) Install(campaignID string, zipData io.ReaderAt, 
 	for _, df := range dataFiles {
 		destPath := filepath.Join(sysDir, df.Name)
 		if err := m.extractFile(df, destPath); err != nil {
-			// Cleanup on failure.
 			_ = os.RemoveAll(sysDir)
 			return nil, fmt.Errorf("extracting %s: %w", df.Name, err)
+		}
+	}
+
+	// Extract widget JS files.
+	for _, wf := range widgetFiles {
+		destPath := filepath.Join(sysDir, wf.Name)
+		if err := m.extractFile(wf, destPath); err != nil {
+			_ = os.RemoveAll(sysDir)
+			return nil, fmt.Errorf("extracting widget %s: %w", wf.Name, err)
 		}
 	}
 
