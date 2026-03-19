@@ -249,9 +249,13 @@
     // --- Drag and Drop ---
     setupDragAndDrop(container, campaignId);
 
-    // Preserve reorg state across HTMX tree re-inits. If the tree was
-    // replaced while reorg mode was active, re-apply draggable handles.
-    if (container.hasAttribute('data-reorg-active')) {
+    // Preserve reorg state across HTMX tree re-inits. If reorg mode is
+    // still active (body class set by sidebar_reorg.js), re-apply the
+    // data attribute and drag handles on the newly created container.
+    // This handles both the case where the old container had the attribute
+    // and when the tree was replaced by an HTMX swap during reorg mode.
+    if (container.hasAttribute('data-reorg-active') || document.body.classList.contains('sidebar-reorg-active')) {
+      container.setAttribute('data-reorg-active', 'true');
       updateDraggable(container, true);
     }
   }
