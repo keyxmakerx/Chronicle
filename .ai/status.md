@@ -8,9 +8,9 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-19 -- **Sprint X-3: System-Provided Widgets + Sidebar Reorder Bugfix.**
+2026-03-19 -- **Sprint X-3: System-Provided Widgets + Auto-Registration + Sidebar Reorder Bugfix.**
 
-52. **Sprint X-3: System-Provided Widgets + Sidebar Reorder Bugfix.**
+52. **Sprint X-3: System-Provided Widgets + Auto-Registration + Sidebar Reorder Bugfix.**
     - **Sidebar Reorder 404 Fix (COMPLETE)** — MySQL `RowsAffected=0` on `UpdateParent`/`UpdateSortOrder` when values unchanged caused false "entity not found" 404. Removed `RowsAffected` checks, added explicit `FindByID` validation in service layer. Also added proper error logging in JS catch handler, cleared orphan `data-parent-id` on cross-type tree nodes, added NaN guard for sort_order, and used `*int` for nullable sort_order in handler.
     - **Sprint X-3: System-Provided Widgets (COMPLETE)** — Game system modules can now declare JS widgets in their manifest that appear in the template editor palette and render on entity pages. Infrastructure:
       - `WidgetDef` struct added to `SystemManifest` (slug, name, icon, description, script_file)
@@ -22,7 +22,9 @@
       - Widget route: `GET /campaigns/:id/systems/:mod/widgets/:slug`
       - Diagnostics page shows widget count and details
       - `Dir()` package-level function and `CampaignSystemManager.Dir()` for filesystem access
+      - ZIP upload `Install()` now accepts `widgets/*.js` files alongside `data/*.json`
     - All widgets come from installed system packages (no hardcoded widgets in Chronicle source). D&D 5e stat-block widget is a reference implementation shipped with the dnd5e system package.
+    - **Auto-Registration of Systems as Addons (COMPLETE, ADR-031)** — Game systems are now fully self-service. Removed hardcoded dnd5e/pathfinder2e/drawsteel addon definitions from `builtinAddons`. Added `systems.AddonInfos()` → `addons.RegisterSystemAddon()` pipeline called during app wiring. Dropping a system folder (manifest.json + data/*.json + widgets/*.js) into `internal/systems/` or installing via the package manager now auto-registers it as an addon — zero code changes needed. Only systems with custom Go code (e.g., dnd5e's tooltip renderer) still need a blank import in main.go.
     - **Next Steps**: X-5 (character sheet layout blocks), A2-2 (armory instance UI polish), W-2 (map drawing tools).
 
 51. **Bugfix: CORS, NPC sidebar, entity reorg, lint.**

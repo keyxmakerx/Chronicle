@@ -105,6 +105,44 @@ func AllSystems() []System {
 	return globalLoader.AllSystems()
 }
 
+// AddonInfo contains the metadata needed to register a discovered system
+// as an addon in the addons database. This bridges the systems registry
+// with the addons plugin so new systems are auto-registered without
+// hardcoding addon definitions.
+type AddonInfo struct {
+	Slug        string
+	Name        string
+	Description string
+	Version     string
+	Icon        string
+	Author      string
+}
+
+// AddonInfos returns addon registration metadata for all discovered
+// systems with status "available". Called during app wiring to
+// auto-register systems as addons — no hardcoded addon definitions needed.
+func AddonInfos() []AddonInfo {
+	if globalLoader == nil {
+		return nil
+	}
+	manifests := globalLoader.All()
+	infos := make([]AddonInfo, 0, len(manifests))
+	for _, m := range manifests {
+		if m.Status != StatusAvailable {
+			continue
+		}
+		infos = append(infos, AddonInfo{
+			Slug:        m.ID,
+			Name:        m.Name,
+			Description: m.Description,
+			Version:     m.Version,
+			Icon:        m.Icon,
+			Author:      m.Author,
+		})
+	}
+	return infos
+}
+
 // LoadAdditionalDir scans an additional directory for system manifest.json
 // files. This is used by the package manager to load systems from external
 // repos installed to media/packages/systems/<slug>/<version>/. Systems

@@ -984,8 +984,14 @@ func (a *App) RegisterRoutes() {
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
 	addonRepo := addons.NewAddonRepository(a.DB)
 	addonService := addons.NewAddonService(addonRepo)
-	// Register all built-in addons on startup so new addons appear
-	// automatically without requiring SQL migrations.
+	// Auto-register discovered game systems as addons so new systems
+	// (from internal/systems/, package manager, or GitHub) appear in the
+	// addon UI without hardcoded definitions.
+	for _, info := range systems.AddonInfos() {
+		addons.RegisterSystemAddon(info.Slug, info.Name, info.Description, info.Version, info.Icon, info.Author)
+	}
+	// Seed all built-in addons (plugins, widgets, integrations + auto-registered
+	// systems) into the database on startup.
 	if err := addonService.SeedInstalledAddons(context.Background()); err != nil {
 		slog.Error("failed to seed built-in addons", slog.String("error", err.Error()))
 	}

@@ -153,14 +153,11 @@ type addonDef struct {
 }
 
 // builtinAddons is the canonical registry of all addons that ship with
-// Chronicle. Adding a new addon here is all that's needed — the startup
+// Chronicle. Game system addons are NOT listed here — they are
+// auto-registered from discovered system manifests via RegisterSystemAddon().
+// Adding a new non-system addon here is all that's needed — the startup
 // seeder will upsert it into the database automatically. No migration required.
 var builtinAddons = []addonDef{
-	// Game systems (content packs).
-	{Slug: "dnd5e", Name: "D&D 5th Edition", Description: "Reference data, stat blocks, and tooltips for Dungeons & Dragons 5th Edition", Version: "0.1.0", Category: CategorySystem, Status: StatusActive, Icon: "fa-dragon", Author: "Chronicle"},
-	{Slug: "pathfinder2e", Name: "Pathfinder 2nd Edition", Description: "Reference data and tooltips for Pathfinder 2nd Edition", Version: "0.1.0", Category: CategorySystem, Status: StatusActive, Icon: "fa-shield-halved", Author: "Chronicle"},
-	{Slug: "drawsteel", Name: "Draw Steel", Description: "Reference data for the Draw Steel RPG system", Version: "0.1.0", Category: CategorySystem, Status: StatusActive, Icon: "fa-swords", Author: "Chronicle"},
-
 	// Plugins (feature apps).
 	{Slug: "calendar", Name: "Calendar", Description: "Custom fantasy calendar with configurable months, weekdays, moons, seasons, and events. Link events to entities for timeline tracking.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-calendar-days", Author: "Chronicle"},
 	{Slug: "maps", Name: "Interactive Maps", Description: "Leaflet.js map viewer with entity pins and layer support", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-map", Author: "Chronicle"},
@@ -198,6 +195,25 @@ func init() {
 // IsInstalled reports whether an addon slug has backing code in the codebase.
 func IsInstalled(slug string) bool {
 	return installedAddons[slug]
+}
+
+// RegisterSystemAddon registers a dynamically discovered game system as
+// a built-in addon. Called from app wiring after the systems registry
+// has been initialized, before SeedInstalledAddons(). This eliminates
+// the need to hardcode system addon definitions — any system with a
+// valid manifest.json is automatically registered.
+func RegisterSystemAddon(slug, name, description, version, icon, author string) {
+	builtinAddons = append(builtinAddons, addonDef{
+		Slug:        slug,
+		Name:        name,
+		Description: description,
+		Version:     version,
+		Category:    CategorySystem,
+		Status:      StatusActive,
+		Icon:        icon,
+		Author:      author,
+	})
+	installedAddons[slug] = true
 }
 
 // SeedInstalledAddons upserts all built-in addons into the database.
