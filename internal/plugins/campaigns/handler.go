@@ -722,7 +722,14 @@ func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	config := SidebarConfig(req)
+	config := SidebarConfig{
+		Items:           req.Items,
+		HiddenEntityIDs: req.HiddenEntityIDs,
+		EntityTypeOrder: req.EntityTypeOrder,
+		HiddenTypeIDs:   req.HiddenTypeIDs,
+		CustomSections:  req.CustomSections,
+		CustomLinks:     req.CustomLinks,
+	}
 
 	if err := h.service.UpdateSidebarConfig(c.Request().Context(), cc.Campaign.ID, config); err != nil {
 		return err

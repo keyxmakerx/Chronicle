@@ -1678,24 +1678,76 @@ func (a *App) RegisterRoutes() {
 
 				// Apply sidebar config ordering/hiding if configured.
 				sidebarCfg := cc.Campaign.ParseSidebarConfig()
-				sidebarTypes = layouts.SortSidebarTypes(sidebarTypes, sidebarCfg.EntityTypeOrder, sidebarCfg.HiddenTypeIDs)
 
-				ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
+				if sidebarCfg.HasUnifiedItems() {
+					// New unified sidebar model — build SidebarItemViews.
+					// Entity types indexed by ID for quick lookup.
+					typeMap := make(map[int]layouts.SidebarEntityType)
+					for _, et := range sidebarTypes {
+						typeMap[et.ID] = et
+					}
 
-				// Pass custom nav sections and links for sidebar rendering.
-				if len(sidebarCfg.CustomSections) > 0 {
-					secs := make([]layouts.SidebarSection, len(sidebarCfg.CustomSections))
-					for i, s := range sidebarCfg.CustomSections {
-						secs[i] = layouts.SidebarSection{ID: s.ID, Label: s.Label, After: s.After}
+					var sidebarItems []layouts.SidebarItemView
+					for _, item := range sidebarCfg.Items {
+						if !item.Visible {
+							continue
+						}
+						switch item.Type {
+						case "dashboard":
+							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
+								Type: "dashboard", Label: "Dashboard",
+								Icon: "fa-home",
+							})
+						case "addon":
+							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
+								Type: "addon", Slug: item.Slug, Label: item.Label,
+								Icon: item.Icon,
+							})
+						case "category":
+							if et, ok := typeMap[item.TypeID]; ok {
+								sidebarItems = append(sidebarItems, layouts.SidebarItemView{
+									Type: "category", TypeID: et.ID,
+									Label: et.NamePlural, Icon: et.Icon, Color: et.Color,
+								})
+							}
+						case "all_pages":
+							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
+								Type: "all_pages", Label: "All Pages",
+								Icon: "fa-layer-group",
+							})
+						case "section":
+							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
+								Type: "section", ID: item.ID, Label: item.Label,
+							})
+						case "link":
+							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
+								Type: "link", ID: item.ID, Label: item.Label,
+								URL: item.URL, Icon: item.Icon,
+							})
+						}
 					}
-					ctx = layouts.SetCustomSections(ctx, secs)
-				}
-				if len(sidebarCfg.CustomLinks) > 0 {
-					lnks := make([]layouts.SidebarLink, len(sidebarCfg.CustomLinks))
-					for i, l := range sidebarCfg.CustomLinks {
-						lnks[i] = layouts.SidebarLink{ID: l.ID, Label: l.Label, URL: l.URL, Icon: l.Icon, Section: l.Section}
+					ctx = layouts.SetSidebarItems(ctx, sidebarItems)
+					// Still set entity types for the drill panel.
+					ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
+				} else {
+					// Legacy sidebar model — use entity type order + custom sections/links.
+					sidebarTypes = layouts.SortSidebarTypes(sidebarTypes, sidebarCfg.EntityTypeOrder, sidebarCfg.HiddenTypeIDs)
+					ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
+
+					if len(sidebarCfg.CustomSections) > 0 {
+						secs := make([]layouts.SidebarSection, len(sidebarCfg.CustomSections))
+						for i, s := range sidebarCfg.CustomSections {
+							secs[i] = layouts.SidebarSection{ID: s.ID, Label: s.Label, After: s.After}
+						}
+						ctx = layouts.SetCustomSections(ctx, secs)
 					}
-					ctx = layouts.SetCustomLinks(ctx, lnks)
+					if len(sidebarCfg.CustomLinks) > 0 {
+						lnks := make([]layouts.SidebarLink, len(sidebarCfg.CustomLinks))
+						for i, l := range sidebarCfg.CustomLinks {
+							lnks[i] = layouts.SidebarLink{ID: l.ID, Label: l.Label, URL: l.URL, Icon: l.Icon, Section: l.Section}
+						}
+						ctx = layouts.SetCustomLinks(ctx, lnks)
+					}
 				}
 			}
 
