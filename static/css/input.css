@@ -711,9 +711,14 @@
   }
 
   .sidebar-icon-only a > span.flex-1,
-  .sidebar-icon-only a > span.ml-auto,
-  .sidebar-icon-only > .sidebar-cat-list-label {
+  .sidebar-icon-only a > span.ml-auto {
     display: none;
+  }
+
+  /* Keep "Categories" header in the flow but invisible so icons
+     don't shift upward when entering icon-only mode. */
+  .sidebar-icon-only > .sidebar-cat-list-label {
+    visibility: hidden;
   }
 
   .sidebar-icon-only a {
