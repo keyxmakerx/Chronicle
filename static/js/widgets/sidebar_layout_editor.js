@@ -38,6 +38,8 @@
           config = data || {};
           if (config.items && config.items.length > 0) {
             items = config.items;
+            // Auto-inject any missing addons or entity types.
+            items = injectMissing(items, entityTypes);
           } else {
             // Generate default items from entity types and addons.
             items = generateDefaults(entityTypes);
@@ -60,6 +62,48 @@
 
         defaults.push({ type: 'all_pages', visible: true });
         return defaults;
+      }
+
+      /**
+       * Inject any known addons or entity types that are missing from the
+       * existing items array. Appends them at the end with visible=true.
+       * This handles the case where a new addon is enabled or entity type
+       * created after the sidebar layout was first configured.
+       */
+      function injectMissing(existingItems, types) {
+        var hasDashboard = false;
+        var hasAllPages = false;
+        var addonSlugs = {};
+        var categoryIds = {};
+
+        existingItems.forEach(function (item) {
+          if (item.type === 'dashboard') hasDashboard = true;
+          if (item.type === 'all_pages') hasAllPages = true;
+          if (item.type === 'addon') addonSlugs[item.slug] = true;
+          if (item.type === 'category') categoryIds[item.type_id] = true;
+        });
+
+        if (!hasDashboard) {
+          existingItems.unshift({ type: 'dashboard', visible: true });
+        }
+
+        KNOWN_ADDONS.forEach(function (addon) {
+          if (!addonSlugs[addon.slug]) {
+            existingItems.push({ type: 'addon', slug: addon.slug, label: addon.label, icon: addon.icon, visible: true });
+          }
+        });
+
+        types.forEach(function (et) {
+          if (!categoryIds[et.id]) {
+            existingItems.push({ type: 'category', type_id: et.id, visible: true });
+          }
+        });
+
+        if (!hasAllPages) {
+          existingItems.push({ type: 'all_pages', visible: true });
+        }
+
+        return existingItems;
       }
 
       function getItemLabel(item) {
