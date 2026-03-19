@@ -322,12 +322,22 @@ templ Sidebar() {
 				></div>
 			}
 
-			<!-- Zone 3: Manage section (static, campaign-scoped, owner only) -->
+			<!-- Zone 3: Manage section (collapsible, campaign-scoped) -->
 			if IsAuthenticated(ctx) {
-				<div class="shrink-0 border-t border-gray-700 py-1" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
-					<div class="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+				<div
+					class="shrink-0 border-t border-gray-700 py-1"
+					hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top"
+					x-data="{ open: localStorage.getItem('sidebar-manage-open') !== 'false' }"
+				>
+					<button
+						type="button"
+						class="w-full px-4 pt-2 pb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+						@click="open = !open; localStorage.setItem('sidebar-manage-open', open)"
+					>
 						Manage
-					</div>
+						<i class="fa-solid fa-chevron-right text-[8px] transition-transform" :class="open && 'rotate-90'"></i>
+					</button>
+					<div x-show="open" x-collapse>
 					if GetCampaignRole(ctx) >= 3 {
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/dashboard", GetCampaignID(ctx))) }
@@ -412,6 +422,7 @@ templ Sidebar() {
 							Settings
 						</a>
 					}
+					</div>
 				</div>
 			}
 		} else {

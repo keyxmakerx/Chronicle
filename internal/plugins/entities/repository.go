@@ -818,6 +818,30 @@ func (r *entityRepository) SlugExists(ctx context.Context, campaignID, slug stri
 	return exists, nil
 }
 
+// tagFilterClause returns a WHERE clause fragment and args that filter
+// entities to only those having ALL the specified tags (AND logic).
+// Uses a subquery with HAVING COUNT to ensure all tags match.
+func tagFilterClause(tagSlugs []string) (string, []any) {
+	if len(tagSlugs) == 0 {
+		return "", nil
+	}
+	placeholders := make([]string, len(tagSlugs))
+	args := make([]any, len(tagSlugs))
+	for i, slug := range tagSlugs {
+		placeholders[i] = "?"
+		args[i] = slug
+	}
+	clause := fmt.Sprintf(` AND e.id IN (
+		SELECT et2.entity_id FROM entity_tags et2
+		INNER JOIN tags t2 ON t2.id = et2.tag_id
+		WHERE t2.slug IN (%s)
+		GROUP BY et2.entity_id
+		HAVING COUNT(DISTINCT t2.slug) = ?
+	)`, strings.Join(placeholders, ","))
+	args = append(args, len(tagSlugs))
+	return clause, args
+}
+
 // visibilityFilter returns the WHERE clause fragment and args that enforce
 // entity visibility based on the viewer's role, user ID, and the entity's
 // visibility mode. Owners see everything — returns empty string.
@@ -858,6 +882,13 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 	if typeID > 0 {
 		where += " AND e.entity_type_id = ?"
 		args = append(args, typeID)
+	}
+
+	// Tag filtering: entity must have ALL specified tags (AND logic).
+	if len(opts.TagSlugs) > 0 {
+		tagFilter, tagArgs := tagFilterClause(opts.TagSlugs)
+		where += tagFilter
+		args = append(args, tagArgs...)
 	}
 
 	visFilter, visArgs := visibilityFilter(role, userID)
@@ -926,6 +957,13 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 	if typeID > 0 {
 		where += " AND e.entity_type_id = ?"
 		args = append(args, typeID)
+	}
+
+	// Tag filtering: entity must have ALL specified tags (AND logic).
+	if len(opts.TagSlugs) > 0 {
+		tagFilter, tagArgs := tagFilterClause(opts.TagSlugs)
+		where += tagFilter
+		args = append(args, tagArgs...)
 	}
 
 	visFilter, visArgs := visibilityFilter(role, userID)

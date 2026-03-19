@@ -382,9 +382,10 @@ type UpdateEntityInput struct {
 
 // ListOptions holds pagination and sorting parameters for list queries.
 type ListOptions struct {
-	Page    int
-	PerPage int
-	Sort    string // "name" (default), "updated", "created"
+	Page     int
+	PerPage  int
+	Sort     string   // "name" (default), "updated", "created"
+	TagSlugs []string // Filter by tag slugs (AND logic — entity must have all listed tags).
 }
 
 // DefaultListOptions returns sensible defaults for pagination.

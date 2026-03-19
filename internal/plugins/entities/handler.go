@@ -648,6 +648,11 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 		opts.PerPage = 200
 	}
 
+	// Tag filtering: comma-separated tag slugs (AND logic).
+	if tags := c.QueryParam("tags"); tags != "" {
+		opts.TagSlugs = strings.Split(tags, ",")
+	}
+
 	// Pagination: allow callers to request a specific page.
 	if p, _ := strconv.Atoi(c.QueryParam("page")); p > 1 {
 		opts.Page = p
