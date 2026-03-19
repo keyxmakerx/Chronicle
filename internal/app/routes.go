@@ -912,6 +912,7 @@ func (a *App) RegisterRoutes() {
 	entityHandler := entities.NewHandler(entityService)
 	entityHandler.SetSidebarNodeRepo(sidebarNodeRepo)
 	entityHandler.SetFavoriteRepo(favoriteRepo)
+	entityHandler.SetSavedFilterRepo(entities.NewSavedFilterRepository(a.DB))
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
 
 	// Content template routes (entity content blueprints).

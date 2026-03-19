@@ -1,74 +1,142 @@
 /**
- * sidebar_tag_filter.js -- Tag Filtering for Sidebar Drill Panel
+ * sidebar_tag_filter.js -- Tag Filtering + Saved Presets for Sidebar Drill Panel
  *
- * Adds a compact tag filter dropdown below the search input in the
- * sidebar drill panel. When tags are selected, appends &tags=slug1,slug2
- * to the search HTMX URL and re-triggers the entity list fetch.
+ * Adds tag filter chips and saved filter presets below the search input
+ * in the sidebar drill panel. Selecting tags appends &tags=slug1,slug2
+ * to the search HTMX URL. Saved presets let users store and recall
+ * tag combos with one click.
+ *
+ * API endpoints:
+ *   GET /campaigns/:id/tags               -- available tags
+ *   GET /campaigns/:id/saved-filters      -- user's saved presets
+ *   POST /campaigns/:id/saved-filters     -- create preset
+ *   DELETE /campaigns/:id/saved-filters/:fid -- delete preset
  */
 (function () {
   'use strict';
 
   var activeTags = [];
   var tagCache = null;
+  var savedFiltersCache = null;
 
-  /** Get campaign ID from the URL. */
   function getCampaignID() {
     var parts = window.location.pathname.split('/');
     if (parts.length >= 3 && parts[1] === 'campaigns') return parts[2];
     return null;
   }
 
-  /** Fetch tags for the campaign (cached). */
   function fetchTags(campaignId) {
     if (tagCache) return Promise.resolve(tagCache);
     return Chronicle.apiFetch('/campaigns/' + campaignId + '/tags')
       .then(function (res) { return res.ok ? res.json() : []; })
-      .then(function (tags) {
-        tagCache = tags || [];
-        return tagCache;
-      })
+      .then(function (tags) { tagCache = tags || []; return tagCache; })
       .catch(function () { return []; });
   }
 
-  /** Inject tag filter UI into the drill panel. */
+  function fetchSavedFilters(campaignId) {
+    return Chronicle.apiFetch('/campaigns/' + campaignId + '/saved-filters')
+      .then(function (res) { return res.ok ? res.json() : []; })
+      .then(function (filters) { savedFiltersCache = filters || []; return savedFiltersCache; })
+      .catch(function () { return []; });
+  }
+
+  /** Inject tag filter UI + saved presets into the drill panel. */
   function injectTagFilter() {
     var searchDiv = document.querySelector('#sidebar-cat-content .px-4.pb-2');
     if (!searchDiv) return;
-    if (searchDiv.querySelector('.sidebar-tag-filter')) return; // Already injected.
+    if (searchDiv.querySelector('.sidebar-tag-filter')) return;
 
     var campaignId = getCampaignID();
     if (!campaignId) return;
 
-    fetchTags(campaignId).then(function (tags) {
-      if (!tags || tags.length === 0) return;
+    Promise.all([fetchTags(campaignId), fetchSavedFilters(campaignId)]).then(function (results) {
+      var tags = results[0];
+      var savedFilters = results[1];
+      if ((!tags || tags.length === 0) && (!savedFilters || savedFilters.length === 0)) return;
 
-      var container = document.createElement('div');
-      container.className = 'sidebar-tag-filter flex flex-wrap gap-1 px-0 pt-1';
+      var wrapper = document.createElement('div');
+      wrapper.className = 'sidebar-tag-filter pt-1';
 
-      tags.forEach(function (tag) {
-        var chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'text-[10px] px-1.5 py-0.5 rounded-full border transition-colors';
-        chip.textContent = tag.name || tag.slug;
-        chip.dataset.tagSlug = tag.slug;
-        updateChipStyle(chip, false);
+      // Saved filter presets row.
+      if (savedFilters && savedFilters.length > 0) {
+        var presetsRow = document.createElement('div');
+        presetsRow.className = 'flex flex-wrap gap-1 mb-1';
+        savedFilters.forEach(function (filter) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'text-[10px] px-1.5 py-0.5 rounded-md bg-accent/10 text-accent border border-accent/30 hover:bg-accent/20 transition-colors flex items-center gap-1';
+          btn.innerHTML = '<i class="fa-solid fa-bookmark text-[8px]"></i> ' + Chronicle.escapeHtml(filter.name);
+          btn.addEventListener('click', function () {
+            applyPreset(filter.tag_slugs, tags);
+          });
+          // Delete on right-click.
+          btn.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+            if (!confirm('Delete saved filter "' + filter.name + '"?')) return;
+            Chronicle.apiFetch('/campaigns/' + campaignId + '/saved-filters/' + filter.id, { method: 'DELETE' })
+              .then(function () {
+                savedFiltersCache = null;
+                btn.remove();
+                Chronicle.notify('Filter deleted', 'success');
+              });
+          });
+          presetsRow.appendChild(btn);
+        });
+        wrapper.appendChild(presetsRow);
+      }
 
-        chip.addEventListener('click', function () {
-          var idx = activeTags.indexOf(tag.slug);
-          if (idx !== -1) {
-            activeTags.splice(idx, 1);
-            updateChipStyle(chip, false);
-          } else {
-            activeTags.push(tag.slug);
-            updateChipStyle(chip, true);
-          }
-          applyFilter();
+      // Tag chips row.
+      if (tags && tags.length > 0) {
+        var chipsRow = document.createElement('div');
+        chipsRow.className = 'flex flex-wrap gap-1 items-center';
+        tags.forEach(function (tag) {
+          var chip = document.createElement('button');
+          chip.type = 'button';
+          chip.textContent = tag.name || tag.slug;
+          chip.dataset.tagSlug = tag.slug;
+          updateChipStyle(chip, false);
+          chip.addEventListener('click', function () {
+            var idx = activeTags.indexOf(tag.slug);
+            if (idx !== -1) {
+              activeTags.splice(idx, 1);
+              updateChipStyle(chip, false);
+            } else {
+              activeTags.push(tag.slug);
+              updateChipStyle(chip, true);
+            }
+            updateSaveButton();
+            applyFilter();
+          });
+          chipsRow.appendChild(chip);
         });
 
-        container.appendChild(chip);
-      });
+        // Save button (appears when tags are active).
+        var saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.id = 'sidebar-save-filter';
+        saveBtn.className = 'text-[10px] px-1.5 py-0.5 rounded-md text-accent hover:bg-accent/10 transition-colors hidden';
+        saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk text-[8px] mr-0.5"></i> Save';
+        saveBtn.addEventListener('click', function () {
+          var name = prompt('Filter name:');
+          if (!name || !name.trim()) return;
+          Chronicle.apiFetch('/campaigns/' + campaignId + '/saved-filters', {
+            method: 'POST',
+            body: { name: name.trim(), tag_slugs: activeTags.slice() }
+          }).then(function (res) {
+            if (res.ok) {
+              Chronicle.notify('Filter saved', 'success');
+              savedFiltersCache = null;
+              // Refresh the whole filter UI to show the new preset.
+              wrapper.remove();
+              injectTagFilter();
+            }
+          });
+        });
+        chipsRow.appendChild(saveBtn);
+        wrapper.appendChild(chipsRow);
+      }
 
-      searchDiv.appendChild(container);
+      searchDiv.appendChild(wrapper);
     });
   }
 
@@ -80,13 +148,34 @@
     }
   }
 
-  /** Update the HTMX search URL and re-trigger. */
+  /** Show/hide save button based on active tag count. */
+  function updateSaveButton() {
+    var btn = document.getElementById('sidebar-save-filter');
+    if (!btn) return;
+    if (activeTags.length > 0) {
+      btn.classList.remove('hidden');
+    } else {
+      btn.classList.add('hidden');
+    }
+  }
+
+  /** Apply a saved preset — activate its tags and trigger filter. */
+  function applyPreset(tagSlugs, allTags) {
+    activeTags = tagSlugs.slice();
+    var chips = document.querySelectorAll('.sidebar-tag-filter [data-tag-slug]');
+    chips.forEach(function (chip) {
+      var isActive = activeTags.indexOf(chip.dataset.tagSlug) !== -1;
+      updateChipStyle(chip, isActive);
+    });
+    updateSaveButton();
+    applyFilter();
+  }
+
   function applyFilter() {
     var searchInput = document.querySelector('#sidebar-cat-content input[name="q"]');
     if (!searchInput) return;
 
     var baseUrl = searchInput.getAttribute('hx-get') || '';
-    // Strip existing &tags= param.
     baseUrl = baseUrl.replace(/&tags=[^&]*/g, '');
 
     if (activeTags.length > 0) {
@@ -94,10 +183,8 @@
     }
 
     searchInput.setAttribute('hx-get', baseUrl);
-    // Re-process the element so HTMX picks up the new URL.
     if (window.htmx) htmx.process(searchInput);
 
-    // Trigger a fetch with current search value.
     var results = document.getElementById('sidebar-cat-results');
     if (results) {
       htmx.ajax('GET', baseUrl + (searchInput.value ? '&q=' + encodeURIComponent(searchInput.value) : ''), {
@@ -106,14 +193,14 @@
     }
   }
 
-  /** Reset active tags when drilling out or switching categories. */
   function reset() {
     activeTags = [];
+    savedFiltersCache = null;
     var chips = document.querySelectorAll('.sidebar-tag-filter [data-tag-slug]');
     chips.forEach(function (chip) { updateChipStyle(chip, false); });
+    updateSaveButton();
   }
 
-  // Initialize after HTMX swaps (drill panel loads).
   document.addEventListener('htmx:afterSettle', function (e) {
     if (e.detail && e.detail.target && (
       e.detail.target.id === 'sidebar-cat-content' ||
@@ -123,6 +210,5 @@
     }
   });
 
-  // Reset when drilling out.
   window.addEventListener('chronicle:navigated', reset);
 })();

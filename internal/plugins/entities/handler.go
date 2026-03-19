@@ -102,6 +102,7 @@ type Handler struct {
 	contentTemplateSvc ContentTemplateService
 	sidebarNodeRepo    SidebarNodeRepository
 	favoriteRepo       FavoriteRepository
+	savedFilterRepo    SavedFilterRepository
 	blockRegistry      *BlockRegistry
 	cache              *redis.Client
 }
@@ -222,6 +223,11 @@ func (h *Handler) SetSidebarNodeRepo(repo SidebarNodeRepository) {
 // SetFavoriteRepo sets the favorite repository for bookmark operations.
 func (h *Handler) SetFavoriteRepo(repo FavoriteRepository) {
 	h.favoriteRepo = repo
+}
+
+// SetSavedFilterRepo sets the saved filter repository for tag filter presets.
+func (h *Handler) SetSavedFilterRepo(repo SavedFilterRepository) {
+	h.savedFilterRepo = repo
 }
 
 // SetCache sets the Redis client for API response caching (e.g., entity names).
@@ -987,6 +993,86 @@ func (h *Handler) FavoriteIDsAPI(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, result)
+}
+
+// --- Saved Filter Presets API ---
+
+// ListSavedFiltersAPI returns the user's saved tag filter presets.
+// GET /campaigns/:id/saved-filters
+func (h *Handler) ListSavedFiltersAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	userID := auth.GetUserID(c)
+	filters, err := h.savedFilterRepo.List(c.Request().Context(), userID, cc.Campaign.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("listing saved filters: %w", err))
+	}
+	if filters == nil {
+		filters = []SavedFilter{}
+	}
+	return c.JSON(http.StatusOK, filters)
+}
+
+// CreateSavedFilterAPI creates a new saved tag filter preset.
+// POST /campaigns/:id/saved-filters
+func (h *Handler) CreateSavedFilterAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		Name         string   `json:"name"`
+		TagSlugs     []string `json:"tag_slugs"`
+		EntityTypeID *int     `json:"entity_type_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+		return err
+	}
+	if len(req.TagSlugs) == 0 {
+		return apperror.NewBadRequest("at least one tag is required")
+	}
+
+	userID := auth.GetUserID(c)
+	filter := &SavedFilter{
+		ID:           generateFilterID(),
+		UserID:       userID,
+		CampaignID:   cc.Campaign.ID,
+		EntityTypeID: req.EntityTypeID,
+		Name:         strings.TrimSpace(req.Name),
+		TagSlugs:     req.TagSlugs,
+		CreatedAt:    time.Now().UTC(),
+	}
+
+	if err := h.savedFilterRepo.Create(c.Request().Context(), filter); err != nil {
+		return apperror.NewInternal(fmt.Errorf("creating saved filter: %w", err))
+	}
+
+	return c.JSON(http.StatusCreated, filter)
+}
+
+// DeleteSavedFilterAPI deletes a saved filter preset.
+// DELETE /campaigns/:id/saved-filters/:fid
+func (h *Handler) DeleteSavedFilterAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	userID := auth.GetUserID(c)
+	filterID := c.Param("fid")
+
+	if err := h.savedFilterRepo.Delete(c.Request().Context(), filterID, userID); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // --- Sidebar Node API (pure folders) ---
