@@ -331,7 +331,7 @@
           // Add drag handle if not present.
           if (!node.querySelector('.reorg-drag-handle')) {
             var handle = document.createElement('span');
-            handle.className = 'reorg-drag-handle w-3 h-3 flex items-center justify-center shrink-0 text-gray-500 cursor-grab mr-1';
+            handle.className = 'reorg-drag-handle w-5 h-5 flex items-center justify-center shrink-0 text-gray-500 cursor-grab mr-1';
             handle.innerHTML = '<i class="fa-solid fa-grip-vertical text-[8px]"></i>';
             item.insertBefore(handle, item.firstChild);
           }
@@ -340,7 +340,7 @@
             var isHidden = (entityId ? !!hiddenEntitySet[entityId] : !!hiddenNodeSet[nodeId]) || node.hasAttribute('data-sidebar-hidden');
             var eyeBtn = document.createElement('button');
             eyeBtn.type = 'button';
-            eyeBtn.className = 'reorg-entity-visibility ml-auto p-0.5 text-[10px] rounded hover:bg-white/10 transition-colors shrink-0';
+            eyeBtn.className = 'reorg-entity-visibility ml-auto p-1.5 text-[11px] min-w-[28px] min-h-[28px] flex items-center justify-center rounded hover:bg-white/10 transition-colors shrink-0';
             if (entityId) eyeBtn.setAttribute('data-entity-id', entityId);
             if (nodeId) eyeBtn.setAttribute('data-node-id', nodeId);
             eyeBtn.title = isHidden ? 'Show in sidebar' : 'Hide from sidebar';
@@ -684,13 +684,18 @@
     var input = document.createElement('input');
     input.type = 'text';
     input.value = oldName;
-    input.className = 'bg-transparent border-b border-accent text-xs text-fg w-full outline-none py-0';
+    // Larger font + padding for mobile usability; scrollIntoView ensures
+    // the input stays visible when the virtual keyboard appears.
+    input.className = 'bg-transparent border-b border-accent text-sm text-fg w-full outline-none py-1';
     input.style.minWidth = '60px';
+    input.style.fontSize = '14px'; // Prevents iOS zoom on focus.
 
     nameSpan.textContent = '';
     nameSpan.appendChild(input);
     input.focus();
     input.select();
+    // Scroll into view so virtual keyboard doesn't cover the input.
+    setTimeout(function () { input.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 100);
 
     function save() {
       var newName = input.value.trim();
@@ -727,46 +732,34 @@
     input.addEventListener('blur', save);
   }
 
-  // --- Folder Context Menu (right-click in reorg mode) ---
+  // --- Folder Context Menu (right-click + long-press in reorg mode) ---
 
   /**
-   * Show a context menu for a folder node with Rename and Delete options.
-   * Only available in reorg mode.
+   * Show a context menu for a folder node at (x, y) screen coords.
+   * Provides Rename and Delete options.
    */
-  document.addEventListener('contextmenu', function (e) {
-    if (!document.body.classList.contains('sidebar-reorg-active')) return;
-
-    var node = e.target.closest('.sidebar-tree-node[data-node-id]');
-    if (!node) return;
-
-    e.preventDefault();
+  function showFolderContextMenu(x, y, nodeId, link, cid) {
     removeFolderContextMenu();
-
-    var nodeId = node.getAttribute('data-node-id');
-    var tree = document.getElementById('sidebar-entity-tree');
-    var cid = tree ? tree.getAttribute('data-campaign-id') : '';
-    var link = node.querySelector('.sidebar-tree-item');
 
     var menu = document.createElement('div');
     menu.id = 'sidebar-folder-ctx-menu';
-    menu.className = 'fixed z-[9999] bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[140px] text-sm';
-    menu.style.left = Math.min(e.clientX, window.innerWidth - 160) + 'px';
-    menu.style.top = Math.min(e.clientY, window.innerHeight - 80) + 'px';
+    // Touch-friendly: larger padding on menu items (min-h-[40px]).
+    menu.className = 'fixed z-[9999] bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[160px] text-sm';
+    menu.style.left = Math.min(x, window.innerWidth - 180) + 'px';
+    menu.style.top = Math.min(y, window.innerHeight - 100) + 'px';
 
-    // Rename option.
     var renameBtn = document.createElement('button');
     renameBtn.type = 'button';
-    renameBtn.className = 'w-full px-3 py-1.5 text-left flex items-center gap-2 text-fg hover:bg-surface-hover transition-colors';
+    renameBtn.className = 'w-full px-3 py-2 min-h-[40px] text-left flex items-center gap-2 text-fg hover:bg-surface-hover transition-colors';
     renameBtn.innerHTML = '<i class="fa-solid fa-pen text-xs text-fg-muted w-4 text-center"></i> Rename';
     renameBtn.addEventListener('click', function () {
       removeFolderContextMenu();
       if (link) startInlineRename(link, nodeId, cid);
     });
 
-    // Delete option.
     var deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
-    deleteBtn.className = 'w-full px-3 py-1.5 text-left flex items-center gap-2 text-fg hover:bg-red-500/10 hover:text-red-400 transition-colors';
+    deleteBtn.className = 'w-full px-3 py-2 min-h-[40px] text-left flex items-center gap-2 text-fg hover:bg-red-500/10 hover:text-red-400 transition-colors';
     deleteBtn.innerHTML = '<i class="fa-solid fa-trash text-xs text-fg-muted w-4 text-center"></i> Delete';
     deleteBtn.addEventListener('click', function () {
       removeFolderContextMenu();
@@ -786,15 +779,66 @@
     menu.appendChild(deleteBtn);
     document.body.appendChild(menu);
 
+    // Dismiss on outside click/tap.
     setTimeout(function () {
       document.addEventListener('mousedown', onFolderCtxOutsideClick);
+      document.addEventListener('touchstart', onFolderCtxOutsideClick);
     }, 0);
+  }
+
+  /** Get folder node info for context menu from any element. */
+  function getFolderNodeInfo(target) {
+    var node = target.closest('.sidebar-tree-node[data-node-id]');
+    if (!node) return null;
+    var tree = document.getElementById('sidebar-entity-tree');
+    return {
+      nodeId: node.getAttribute('data-node-id'),
+      link: node.querySelector('.sidebar-tree-item'),
+      cid: tree ? tree.getAttribute('data-campaign-id') : ''
+    };
+  }
+
+  // Right-click handler (desktop).
+  document.addEventListener('contextmenu', function (e) {
+    if (!document.body.classList.contains('sidebar-reorg-active')) return;
+    var info = getFolderNodeInfo(e.target);
+    if (!info) return;
+    e.preventDefault();
+    showFolderContextMenu(e.clientX, e.clientY, info.nodeId, info.link, info.cid);
+  });
+
+  // Long-press handler (mobile, 500ms).
+  var longPressTimer = null;
+  var longPressFired = false;
+
+  document.addEventListener('touchstart', function (e) {
+    if (!document.body.classList.contains('sidebar-reorg-active')) return;
+    var info = getFolderNodeInfo(e.target);
+    if (!info) return;
+
+    longPressFired = false;
+    var touch = e.touches[0];
+    longPressTimer = setTimeout(function () {
+      longPressFired = true;
+      showFolderContextMenu(touch.clientX, touch.clientY, info.nodeId, info.link, info.cid);
+    }, 500);
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function () {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  }, { passive: true });
+
+  document.addEventListener('touchend', function (e) {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    // Prevent click firing after long-press opened the menu.
+    if (longPressFired) { e.preventDefault(); longPressFired = false; }
   });
 
   function removeFolderContextMenu() {
     var m = document.getElementById('sidebar-folder-ctx-menu');
     if (m) m.remove();
     document.removeEventListener('mousedown', onFolderCtxOutsideClick);
+    document.removeEventListener('touchstart', onFolderCtxOutsideClick);
   }
 
   function onFolderCtxOutsideClick(e) {

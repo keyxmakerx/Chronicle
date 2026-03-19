@@ -290,6 +290,9 @@
       }
 
       var dragSrcIdx = null;
+      var touchSrcIdx = null;
+      var touchGhost = null;
+      var TOUCH_THRESHOLD = 10;
 
       function bindDragDrop() {
         var list = el.querySelector('#sidebar-layout-list');
@@ -297,6 +300,7 @@
 
         var rows = list.querySelectorAll('[data-idx]');
         rows.forEach(function (row) {
+          // --- Mouse drag (desktop) ---
           row.addEventListener('dragstart', function (e) {
             dragSrcIdx = parseInt(row.dataset.idx, 10);
             row.classList.add('opacity-40');
@@ -320,7 +324,6 @@
             var toIdx = parseInt(row.dataset.idx, 10);
             if (dragSrcIdx === null || dragSrcIdx === toIdx) return;
 
-            // Move item.
             var moved = items.splice(dragSrcIdx, 1)[0];
             items.splice(toIdx, 0, moved);
             dragSrcIdx = null;
@@ -331,6 +334,76 @@
           row.addEventListener('dragend', function () {
             row.classList.remove('opacity-40');
             dragSrcIdx = null;
+          });
+
+          // --- Touch drag (mobile/tablet) ---
+          var startX = 0, startY = 0, dragging = false;
+
+          row.addEventListener('touchstart', function (e) {
+            var touch = e.touches[0];
+            startX = touch.clientX;
+            startY = touch.clientY;
+            touchSrcIdx = parseInt(row.dataset.idx, 10);
+            dragging = false;
+          }, { passive: true });
+
+          row.addEventListener('touchmove', function (e) {
+            if (touchSrcIdx === null) return;
+            var touch = e.touches[0];
+            var dx = touch.clientX - startX;
+            var dy = touch.clientY - startY;
+
+            if (!dragging && Math.abs(dy) > TOUCH_THRESHOLD) {
+              dragging = true;
+              touchGhost = row.cloneNode(true);
+              touchGhost.style.cssText = 'position:fixed;pointer-events:none;opacity:0.7;z-index:9999;width:' + row.offsetWidth + 'px;';
+              document.body.appendChild(touchGhost);
+              row.classList.add('opacity-40');
+            }
+
+            if (dragging) {
+              e.preventDefault();
+              touchGhost.style.left = (touch.clientX - row.offsetWidth / 2) + 'px';
+              touchGhost.style.top = (touch.clientY - 20) + 'px';
+
+              // Highlight drop target.
+              rows.forEach(function (r) { r.classList.remove('ring-1', 'ring-accent/50'); });
+              var target = document.elementFromPoint(touch.clientX, touch.clientY);
+              if (target) {
+                var targetRow = target.closest('[data-idx]');
+                if (targetRow && targetRow !== row) {
+                  targetRow.classList.add('ring-1', 'ring-accent/50');
+                }
+              }
+            }
+          }, { passive: false });
+
+          row.addEventListener('touchend', function (e) {
+            if (touchGhost) {
+              touchGhost.remove();
+              touchGhost = null;
+            }
+            row.classList.remove('opacity-40');
+            rows.forEach(function (r) { r.classList.remove('ring-1', 'ring-accent/50'); });
+
+            if (dragging && touchSrcIdx !== null) {
+              var touch = e.changedTouches[0];
+              var target = document.elementFromPoint(touch.clientX, touch.clientY);
+              if (target) {
+                var targetRow = target.closest('[data-idx]');
+                if (targetRow) {
+                  var toIdx = parseInt(targetRow.dataset.idx, 10);
+                  if (toIdx !== touchSrcIdx) {
+                    var moved = items.splice(touchSrcIdx, 1)[0];
+                    items.splice(toIdx, 0, moved);
+                    save();
+                    render();
+                  }
+                }
+              }
+            }
+            touchSrcIdx = null;
+            dragging = false;
           });
         });
       }

@@ -64,7 +64,7 @@
         savedFilters.forEach(function (filter) {
           var btn = document.createElement('button');
           btn.type = 'button';
-          btn.className = 'text-[10px] px-1.5 py-0.5 rounded-md bg-accent/10 text-accent border border-accent/30 hover:bg-accent/20 transition-colors flex items-center gap-1';
+          btn.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-md bg-accent/10 text-accent border border-accent/30 hover:bg-accent/20 transition-colors flex items-center gap-1';
           btn.innerHTML = '<i class="fa-solid fa-bookmark text-[8px]"></i> ' + Chronicle.escapeHtml(filter.name);
           btn.addEventListener('click', function () {
             applyPreset(filter.tag_slugs, tags);
@@ -114,7 +114,7 @@
         var saveBtn = document.createElement('button');
         saveBtn.type = 'button';
         saveBtn.id = 'sidebar-save-filter';
-        saveBtn.className = 'text-[10px] px-1.5 py-0.5 rounded-md text-accent hover:bg-accent/10 transition-colors hidden';
+        saveBtn.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-md text-accent hover:bg-accent/10 transition-colors hidden';
         saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk text-[8px] mr-0.5"></i> Save';
         saveBtn.addEventListener('click', function () {
           var name = prompt('Filter name:');
@@ -140,11 +140,13 @@
     });
   }
 
+  // Touch-friendly chip sizes: min-h-[32px] ensures adequate tap target
+  // on mobile while staying compact on desktop.
   function updateChipStyle(chip, active) {
     if (active) {
-      chip.className = 'text-[10px] px-1.5 py-0.5 rounded-full border border-accent bg-accent/20 text-accent transition-colors';
+      chip.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-full border border-accent bg-accent/20 text-accent transition-colors';
     } else {
-      chip.className = 'text-[10px] px-1.5 py-0.5 rounded-full border border-gray-700 text-gray-500 hover:border-gray-500 transition-colors';
+      chip.className = 'text-[11px] px-2 py-1 min-h-[32px] rounded-full border border-gray-700 text-gray-500 hover:border-gray-500 transition-colors';
     }
   }
 
