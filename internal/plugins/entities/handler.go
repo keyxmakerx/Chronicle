@@ -630,10 +630,12 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	opts.PerPage = 20
 
 	// Sidebar drill panel loads all pages for a category. Use a higher
-	// limit so categories aren't silently truncated at 20.
+	// limit so categories aren't silently truncated at 20. Include folder
+	// entities which are hidden from normal entity lists.
 	isSidebar := c.QueryParam("sidebar") == "1"
 	if isSidebar {
 		opts.PerPage = 200
+		opts.IncludeFolders = true
 	}
 
 	// Pagination: allow callers to request a specific page.

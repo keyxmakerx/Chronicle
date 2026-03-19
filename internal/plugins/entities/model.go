@@ -383,9 +383,10 @@ type UpdateEntityInput struct {
 
 // ListOptions holds pagination and sorting parameters for list queries.
 type ListOptions struct {
-	Page    int
-	PerPage int
-	Sort    string // "name" (default), "updated", "created"
+	Page           int
+	PerPage        int
+	Sort           string // "name" (default), "updated", "created"
+	IncludeFolders bool   // When true, include is_folder entities (sidebar tree only).
 }
 
 // DefaultListOptions returns sensible defaults for pagination.

@@ -859,6 +859,11 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 		args = append(args, typeID)
 	}
 
+	// Exclude folder entities unless explicitly requested (sidebar tree).
+	if !opts.IncludeFolders {
+		where += " AND e.is_folder = FALSE"
+	}
+
 	visFilter, visArgs := visibilityFilter(role, userID)
 	where += visFilter
 	args = append(args, visArgs...)
@@ -901,6 +906,11 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 func (r *entityRepository) Search(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	where := "WHERE e.campaign_id = ?"
 	args := []any{campaignID}
+
+	// Exclude folder entities unless explicitly requested (sidebar tree).
+	if !opts.IncludeFolders {
+		where += " AND e.is_folder = FALSE"
+	}
 
 	// FULLTEXT for longer queries, LIKE for short ones.
 	var nameCondition string
@@ -968,7 +978,7 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 // Respects visibility filtering for non-owner roles.
 func (r *entityRepository) CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error) {
 	// Use alias 'e' to match visibilityFilter expectations.
-	query := `SELECT e.entity_type_id, COUNT(*) FROM entities e WHERE e.campaign_id = ?`
+	query := `SELECT e.entity_type_id, COUNT(*) FROM entities e WHERE e.campaign_id = ? AND e.is_folder = FALSE`
 	args := []any{campaignID}
 
 	visFilter, visArgs := visibilityFilter(role, userID)
