@@ -11,4 +11,4 @@ CREATE TABLE saved_filters (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
   INDEX idx_saved_filters (user_id, campaign_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

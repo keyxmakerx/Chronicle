@@ -14,7 +14,7 @@ CREATE TABLE sidebar_nodes (
   FOREIGN KEY (entity_type_id) REFERENCES entity_types(id) ON DELETE CASCADE,
   INDEX idx_sidebar_nodes_campaign (campaign_id, entity_type_id),
   INDEX idx_sidebar_nodes_parent (parent_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Allow entities to be parented under a sidebar folder node.
 -- An entity's parent is either parent_id (another entity) OR

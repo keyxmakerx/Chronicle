@@ -11,4 +11,4 @@ CREATE TABLE entity_favorites (
   FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE,
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
   INDEX idx_favorites_campaign (user_id, campaign_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
