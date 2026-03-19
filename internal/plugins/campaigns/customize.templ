@@ -409,35 +409,17 @@ templ navigationTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 		<div>
 			<h2 class="text-base font-semibold text-fg mb-0.5">Sidebar Navigation</h2>
 			<p class="text-xs text-fg-secondary">
-				Drag to reorder categories, toggle visibility, and add custom sections or links.
+				Drag to reorder everything in your sidebar. Toggle visibility with the eye icon. Add custom sections and links.
 			</p>
 		</div>
 
-		<!-- Existing sidebar config widget for entity type ordering/visibility -->
+		<!-- Unified sidebar layout editor -->
 		<div class="card p-5 space-y-3">
-			<h3 class="text-sm font-semibold text-fg">Category Order &amp; Visibility</h3>
-			<p class="text-xs text-fg-secondary">
-				Drag categories to reorder them in the sidebar. Click the eye icon to show or hide categories.
-			</p>
 			<div
-				data-widget="entity-type-config"
-				data-sidebar-endpoint={ fmt.Sprintf("/campaigns/%s/sidebar-config", cc.Campaign.ID) }
-				data-layout-base={ fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID) }
-				data-entity-types={ entityTypesJSON(entityTypes) }
-			></div>
-		</div>
-
-		<!-- Custom sections and links editor widget -->
-		<div class="card p-5 space-y-3">
-			<h3 class="text-sm font-semibold text-fg">Custom Sections &amp; Links</h3>
-			<p class="text-xs text-fg-secondary">
-				Add custom dividers, section headers, and external links to the sidebar navigation.
-			</p>
-			<div
-				data-widget="sidebar-nav-editor"
+				data-widget="sidebar-layout-editor"
 				data-endpoint={ fmt.Sprintf("/campaigns/%s/sidebar-config", cc.Campaign.ID) }
 				data-campaign-id={ cc.Campaign.ID }
-				data-csrf-token={ csrfToken }
+				data-entity-types={ entityTypesJSON(entityTypes) }
 			></div>
 		</div>
 	</div>
