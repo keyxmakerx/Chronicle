@@ -762,6 +762,36 @@
     left: 40px;
   }
 
+  /* Tooltip on category icons when in icon-only mode (peek/drilled).
+     Shows category name to the right of the icon on hover. */
+  .sidebar-icon-only .sidebar-category-link {
+    position: relative;
+  }
+  .sidebar-icon-only .sidebar-category-link::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: #e5e7eb;
+    background: #1f2937;
+    border: 1px solid rgba(75, 85, 99, 0.5);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+    z-index: 50;
+  }
+  .sidebar-icon-only .sidebar-category-link:hover::after {
+    opacity: 1;
+  }
+
   /* Skeleton shimmer for loading states. */
   .skeleton-shimmer {
     background: linear-gradient(90deg, rgba(75, 85, 99, 0.3) 25%, rgba(75, 85, 99, 0.5) 50%, rgba(75, 85, 99, 0.3) 75%);
@@ -876,13 +906,12 @@
     border-radius: 6px;
   }
 
-  /* Category icon hover: gentle scale + glow effect. */
+  /* Category icon hover: subtle glow (no scale to avoid layout jiggle). */
   .sidebar-category-link span:first-child {
-    transition: transform 150ms ease, filter 150ms ease;
+    transition: filter 150ms ease;
   }
   .sidebar-category-link:hover span:first-child {
-    transform: scale(1.15);
-    filter: drop-shadow(0 0 3px currentColor);
+    filter: drop-shadow(0 0 1.5px currentColor);
   }
 
   /* Drill panel content fade-in on HTMX swap. */

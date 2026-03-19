@@ -760,6 +760,7 @@ templ entityTypeLink(slug string, label string, color string, icon string, count
 		data-cat-slug={ slug }
 		data-cat-url={ fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug) }
 		data-entity-type-id={ strconv.Itoa(typeID) }
+		data-tooltip={ label }
 	>
 		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 			if icon != "" {
