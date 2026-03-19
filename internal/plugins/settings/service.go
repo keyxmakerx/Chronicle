@@ -379,8 +379,13 @@ func (s *settingsService) UpdateCORSOrigins(ctx context.Context, origins []strin
 			o = "https://" + o
 		}
 		// Strip any trailing path components — CORS origins are scheme+host+port only.
-		if idx := strings.Index(o[8:], "/"); idx >= 0 {
-			o = o[:8+idx]
+		// Find the start of the authority (after "://") to avoid matching scheme slashes.
+		schemeEnd := strings.Index(o, "://")
+		if schemeEnd >= 0 {
+			authorityStart := schemeEnd + 3
+			if idx := strings.Index(o[authorityStart:], "/"); idx >= 0 {
+				o = o[:authorityStart+idx]
+			}
 		}
 		cleaned = append(cleaned, o)
 	}

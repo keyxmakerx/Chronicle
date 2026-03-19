@@ -106,6 +106,7 @@ func CORS(cfg CORSConfig) echo.MiddlewareFunc {
 						"Content-Type",
 						"Authorization",
 						"X-Requested-With",
+						"X-Device-Fingerprint",
 						"HX-Request",
 						"HX-Current-URL",
 						"HX-Target",

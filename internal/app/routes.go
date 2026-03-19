@@ -1815,7 +1815,20 @@ func (a *App) RegisterRoutes() {
 		&wsSessionAuthAdapter{svc: authService},
 		&wsCampaignRoleAdapter{svc: campaignService},
 	)
-	e.GET("/ws", ws.HandleUpgrade(wsHub, wsAuth, []string{a.Config.BaseURL}))
+	// Dynamic CORS origins for WebSocket — reuse the same settings service
+	// that backs the HTTP CORS middleware so the admin whitelist applies to
+	// both REST API and WebSocket connections.
+	wsDynamicOrigins := ws.DynamicOrigins(func() []string {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		origins, err := settingsService.GetCORSOrigins(ctx)
+		if err != nil {
+			slog.Warn("failed to load dynamic CORS origins for ws", slog.Any("error", err))
+			return nil
+		}
+		return origins
+	})
+	e.GET("/ws", ws.HandleUpgrade(wsHub, wsAuth, []string{a.Config.BaseURL}, wsDynamicOrigins))
 
 	// Wire EventBus into services for real-time event publishing.
 	wsEventBus := ws.NewEventBus(wsHub)
