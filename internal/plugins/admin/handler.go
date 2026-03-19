@@ -1029,62 +1029,6 @@ func detectZipRootDir(zr *zip.Reader) string {
 	return root + "/"
 }
 
-// RedeployFoundryModule bumps the patch version in module.json to trigger
-// Foundry VTT clients to see an available update (POST /admin/foundry/redeploy).
-func (h *Handler) RedeployFoundryModule(c echo.Context) error {
-	manifestPath := filepath.Join(h.resolveFoundryDir(), "module.json")
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("read module.json: %w", err))
-	}
-
-	var manifest map[string]any
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return apperror.NewInternal(fmt.Errorf("parse module.json: %w", err))
-	}
-
-	// Bump patch version: 0.1.0 -> 0.1.1, 0.1.1 -> 0.1.2, etc.
-	version, _ := manifest["version"].(string)
-	newVersion := bumpPatchVersion(version)
-	manifest["version"] = newVersion
-
-	// Ensure manifest/download URLs point at this instance.
-	baseURL := strings.TrimRight(h.baseURL, "/")
-	manifest["manifest"] = baseURL + "/foundry-module/module.json"
-	manifest["download"] = baseURL + "/foundry-module/chronicle-sync.zip"
-
-	out, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("marshal module.json: %w", err))
-	}
-	out = append(out, '\n')
-
-	if err := os.WriteFile(manifestPath, out, 0644); err != nil {
-		return apperror.NewInternal(fmt.Errorf("write module.json: %w", err))
-	}
-
-	slog.Info("foundry module redeployed",
-		slog.String("old_version", version),
-		slog.String("new_version", newVersion),
-		slog.String("by", auth.GetUserID(c)),
-	)
-
-	return middleware.HTMXRedirect(c, "/admin/foundry")
-}
-
-// bumpPatchVersion increments the patch component of a semver string.
-// "0.1.0" -> "0.1.1", "1.2.3" -> "1.2.4". Falls back to "0.0.1" on bad input.
-func bumpPatchVersion(version string) string {
-	parts := strings.Split(version, ".")
-	if len(parts) != 3 {
-		return "0.0.1"
-	}
-	patch, err := strconv.Atoi(parts[2])
-	if err != nil {
-		return version + ".1"
-	}
-	return parts[0] + "." + parts[1] + "." + strconv.Itoa(patch+1)
-}
 
 // rewriteFoundryManifestURLs updates manifest and download URLs in
 // the active Foundry module's module.json to point at this Chronicle instance.

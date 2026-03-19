@@ -8,7 +8,13 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-19 -- **Sidebar Navigation Overhaul COMPLETE (Sprints N-1 through N-8 + responsive fixes).**
+2026-03-19 -- **Module Manager moved to Packages, Redeploy auto-bump removed.**
+
+55. **Module Manager UI Reorganization + Version Bump Fix.**
+    - **Dashboard Card Removed** — Removed the standalone "Foundry VTT / Module Manager" card from the admin dashboard. The Foundry module settings are now accessed via a gear icon on the foundry-module package card in the Packages page.
+    - **Settings Gear on Package Card** — Added a gear icon button (links to `/admin/foundry`) on foundry-module type package cards, next to the refresh/check-for-updates button.
+    - **Redeploy Auto-Bump Removed** — Removed the `RedeployFoundryModule` handler, `bumpPatchVersion` helper, and the POST `/admin/foundry/redeploy` route. The Redeploy button automatically bumped the patch version on every click, which was confusing. Version changes are now explicit via the "Set Version" form. Manifest/download URLs are already dynamically rewritten at serve time by `serveFoundryModuleManifest` in app.go.
+    - **Back Link Updated** — Foundry settings page now links back to `/admin/packages` instead of `/admin`.
 
 54. **Sidebar Navigation Overhaul — Final Sprints (N-5 through N-8 + Responsive).**
     - **Sprint N-5: Folder UX Completion (COMPLETE)** — Inline folder rename (double-click in reorg mode, Enter/blur saves via PUT API, Escape cancels). Folder visibility toggles (`HiddenNodeIDs` on SidebarConfig, eye icons on folder nodes). Right-click context menu (Rename/Delete). Fixed wrapper `data-node-id` vs `data-entity-id`. Skipped redundant div→div conversion.

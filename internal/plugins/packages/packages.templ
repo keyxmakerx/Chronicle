@@ -122,6 +122,16 @@ templ packageCard(pkg Package, csrfToken string) {
 				>
 					<i class="fa-solid fa-rotate"></i>
 				</button>
+				<!-- Foundry Module Settings (only for foundry-module type) -->
+				if pkg.Type == PackageTypeFoundryModule {
+					<a
+						href="/admin/foundry"
+						class="btn-secondary text-sm"
+						title="Foundry module settings"
+					>
+						<i class="fa-solid fa-gear"></i>
+					</a>
+				}
 				<!-- Version Picker -->
 				<button
 					hx-get={ fmt.Sprintf("/admin/packages/%s/versions", pkg.ID) }

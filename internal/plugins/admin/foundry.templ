@@ -1,6 +1,6 @@
 // foundry.templ renders the admin Foundry VTT module management page.
-// Allows admins to view module status, upload new versions, and trigger
-// redeployment to notify Foundry VTT clients of updates.
+// Allows admins to view module status, upload new versions, and set
+// the version to notify Foundry VTT clients of updates.
 
 package admin
 
@@ -20,29 +20,12 @@ templ AdminFoundryModulePage(data FoundryModuleData) {
 						Manage the Chronicle Sync module served to Foundry VTT clients.
 					</p>
 				</div>
-				<a href="/admin" class="btn-secondary text-sm">Back</a>
+				<a href="/admin/packages" class="btn-secondary text-sm">Back to Packages</a>
 			</div>
 
-			// Current status + redeploy.
+			// Current module status.
 			<div class="card p-6">
-				<div class="flex items-center justify-between mb-4">
-					<h2 class="text-lg font-semibold text-fg">Module Status</h2>
-					<form
-						method="POST"
-						action="/admin/foundry/redeploy"
-						hx-post="/admin/foundry/redeploy"
-					>
-						<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-						<button
-							type="submit"
-							class="btn-primary text-sm inline-flex items-center gap-2"
-							title="Bump patch version to notify Foundry clients of an update"
-						>
-							<i class="fa-solid fa-rotate"></i>
-							Redeploy
-						</button>
-					</form>
-				</div>
+				<h2 class="text-lg font-semibold text-fg mb-4">Module Status</h2>
 				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 					<div>
 						<label class="block text-xs font-medium text-fg-muted mb-1">Current Version</label>
@@ -57,10 +40,7 @@ templ AdminFoundryModulePage(data FoundryModuleData) {
 						<p class="text-xs font-mono text-fg-secondary">{ data.SourceDir }</p>
 					</div>
 				</div>
-				<p class="text-xs text-fg-muted mt-3">
-					<i class="fa-solid fa-circle-info mr-1"></i>
-					Redeploy bumps the patch version so Foundry VTT clients see an available update.
-				</p>
+
 			</div>
 
 			// Install URL.
@@ -156,10 +136,10 @@ templ AdminFoundryModulePage(data FoundryModuleData) {
 
 			// Update version (manual).
 			<div class="card p-6">
-				<h2 class="text-lg font-semibold text-fg mb-4">Set Version Manually</h2>
+				<h2 class="text-lg font-semibold text-fg mb-4">Set Version</h2>
 				<p class="text-sm text-fg-secondary mb-4">
-					Override the module version to a specific value. Use this if you need
-					to set an exact version rather than auto-bumping.
+					Set the module version. Foundry VTT clients will see an update notification
+					when the version changes.
 				</p>
 				<form
 					method="POST"
@@ -197,7 +177,7 @@ templ AdminFoundryModulePage(data FoundryModuleData) {
 						<ul class="text-sm text-fg-secondary leading-relaxed space-y-1 list-disc ml-4">
 							<li>The module manifest and zip are served directly from this Chronicle instance.</li>
 							<li>Foundry VTT fetches the manifest URL to check for updates.</li>
-							<li>Upload a new zip to replace module files, then redeploy to notify clients.</li>
+							<li>Upload a new zip to replace module files, then update the version to notify clients.</li>
 							<li>The module zip is generated on-the-fly from the <code class="text-xs bg-surface-alt px-1 rounded">foundry-module/</code> directory.</li>
 						</ul>
 					</div>
