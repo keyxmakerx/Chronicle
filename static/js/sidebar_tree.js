@@ -875,7 +875,7 @@
     }
   });
 
-  // Inject CSS for guide lines (uses custom property set per-node).
+  // Inject CSS for guide lines and multi-select styles.
   var style = document.createElement('style');
   style.textContent = [
     '.sidebar-tree-node[data-depth]:not([data-depth="0"])::before {',
@@ -887,9 +887,126 @@
     '  width: 1px;',
     '  background: rgba(75, 85, 99, 0.2);',
     '  pointer-events: none;',
+    '}',
+    '.sidebar-tree-node.sidebar-selected > .sidebar-tree-item {',
+    '  background: rgba(var(--accent-rgb, 99 102 241) / 0.15);',
+    '  outline: 1px solid rgba(var(--accent-rgb, 99 102 241) / 0.3);',
+    '  border-radius: 0.375rem;',
+    '}',
+    '#sidebar-bulk-bar {',
+    '  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);',
+    '  z-index: 9999; display: flex; gap: 8px; align-items: center;',
+    '  padding: 8px 16px; border-radius: 10px;',
+    '  background: var(--color-surface-raised, #1e1e2e);',
+    '  border: 1px solid var(--color-border, #333);',
+    '  box-shadow: 0 8px 32px rgba(0,0,0,0.4);',
+    '  font-size: 12px; color: var(--color-fg, #e0e0e0);',
     '}'
   ].join('\n');
   document.head.appendChild(style);
+
+  // --- Multi-Select & Bulk Operations ---
+
+  var selectedIds = [];
+
+  /** Toggle selection of a tree node on Ctrl/Cmd+click. */
+  document.addEventListener('click', function (e) {
+    if (!document.body.classList.contains('sidebar-reorg-active')) return;
+    if (!e.ctrlKey && !e.metaKey) return;
+
+    var node = e.target.closest('.sidebar-tree-node');
+    if (!node) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    var id = node.getAttribute('data-entity-id') || node.getAttribute('data-node-id');
+    if (!id) return;
+
+    var idx = selectedIds.indexOf(id);
+    if (idx !== -1) {
+      selectedIds.splice(idx, 1);
+      node.classList.remove('sidebar-selected');
+    } else {
+      selectedIds.push(id);
+      node.classList.add('sidebar-selected');
+    }
+
+    updateBulkBar();
+  }, true);
+
+  /** Show or hide the floating bulk action bar. */
+  function updateBulkBar() {
+    var bar = document.getElementById('sidebar-bulk-bar');
+
+    if (selectedIds.length === 0) {
+      if (bar) bar.remove();
+      return;
+    }
+
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'sidebar-bulk-bar';
+      document.body.appendChild(bar);
+    }
+
+    var campaignId = '';
+    var tree = document.getElementById('sidebar-entity-tree');
+    if (tree) campaignId = tree.getAttribute('data-campaign-id') || '';
+
+    bar.innerHTML =
+      '<span>' + selectedIds.length + ' selected</span>' +
+      '<button type="button" class="px-2 py-1 rounded bg-accent/20 text-accent hover:bg-accent/30 transition-colors text-xs" id="bulk-move-btn">' +
+      '<i class="fa-solid fa-folder-tree mr-1"></i>Move to folder</button>' +
+      '<button type="button" class="px-2 py-1 rounded text-gray-400 hover:text-white transition-colors text-xs" id="bulk-clear-btn">' +
+      '<i class="fa-solid fa-xmark mr-1"></i>Clear</button>';
+
+    bar.querySelector('#bulk-clear-btn').addEventListener('click', clearSelection);
+
+    bar.querySelector('#bulk-move-btn').addEventListener('click', function () {
+      var targetId = prompt('Enter folder/entity ID to move into (or leave empty for root):');
+      if (targetId === null) return;
+
+      var body = { entity_ids: selectedIds };
+      if (targetId.trim()) {
+        // Determine if target is a folder node or entity.
+        var targetNode = document.querySelector('[data-node-id="' + targetId.trim() + '"]');
+        if (targetNode) {
+          body.parent_node_id = targetId.trim();
+        } else {
+          body.parent_id = targetId.trim();
+        }
+      }
+
+      Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/bulk-move', {
+        method: 'POST',
+        body: body
+      })
+      .then(function (res) {
+        if (res.ok) {
+          Chronicle.notify('Moved ' + selectedIds.length + ' items', 'success');
+          clearSelection();
+          refreshSidebarTree();
+        } else {
+          Chronicle.notify('Failed to move items', 'error');
+        }
+      });
+    });
+  }
+
+  function clearSelection() {
+    selectedIds = [];
+    document.querySelectorAll('.sidebar-selected').forEach(function (n) {
+      n.classList.remove('sidebar-selected');
+    });
+    var bar = document.getElementById('sidebar-bulk-bar');
+    if (bar) bar.remove();
+  }
+
+  // Clear selection when exiting reorg mode.
+  document.addEventListener('chronicle:reorg-changed', function (e) {
+    if (e.detail && !e.detail.active) clearSelection();
+  });
 
   // Listen for HTMX content swaps to re-initialize tree after list refreshes.
   document.addEventListener('htmx:afterSwap', function (e) {
@@ -901,10 +1018,110 @@
     }
   });
 
+  // --- Load More (pagination for large categories) ---
+
+  // Listen for the "Load more" button click in the sidebar entity list.
+  // Fetches the next page, extracts new items from the response HTML,
+  // appends them to the tree container, and re-initializes the tree.
+  document.addEventListener('sidebar:load-more', function (e) {
+    var sentinel = e.target.closest('#sidebar-load-more');
+    if (!sentinel) return;
+
+    var page = parseInt(sentinel.dataset.page || '2', 10);
+    var total = parseInt(sentinel.dataset.total || '0', 10);
+    var loaded = parseInt(sentinel.dataset.loaded || '0', 10);
+
+    // Find the search input to get the base URL.
+    var searchInput = document.querySelector('#sidebar-cat-content input[name="q"]');
+    if (!searchInput) return;
+
+    var baseUrl = searchInput.getAttribute('hx-get') || '';
+    var url = baseUrl + '&page=' + page;
+    if (searchInput.value) url += '&q=' + encodeURIComponent(searchInput.value);
+
+    // Show loading state.
+    var btn = sentinel.querySelector('button');
+    if (btn) btn.textContent = 'Loading...';
+
+    Chronicle.apiFetch(url, { headers: { 'HX-Request': 'true' } })
+      .then(function (res) { return res.ok ? res.text() : ''; })
+      .then(function (html) {
+        if (!html) return;
+
+        // Parse the response HTML to extract new tree items.
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html, 'text/html');
+        var newTree = doc.getElementById('sidebar-entity-tree');
+        if (!newTree) return;
+
+        // Append new items to the existing tree container.
+        var container = document.getElementById('sidebar-entity-tree');
+        if (!container) return;
+
+        var newItems = newTree.querySelectorAll('.sidebar-tree-item');
+        var addedCount = 0;
+        newItems.forEach(function (item) {
+          container.appendChild(item.cloneNode(true));
+          addedCount++;
+        });
+
+        // Update or remove the sentinel.
+        var newLoaded = loaded + addedCount;
+        if (newLoaded >= total || addedCount === 0) {
+          sentinel.remove();
+        } else {
+          sentinel.dataset.page = String(page + 1);
+          sentinel.dataset.loaded = String(newLoaded);
+          if (btn) btn.textContent = 'Load more (' + newLoaded + ' of ' + total + ')';
+        }
+
+        // Re-build the tree with all items.
+        initTree();
+      })
+      .catch(function () {
+        if (btn) btn.textContent = 'Failed to load — click to retry';
+      });
+  });
+
+  // Auto-trigger load-more via IntersectionObserver when the sentinel
+  // scrolls into view (infinite scroll within the drill panel).
+  var loadMoreObserver = null;
+
+  function observeLoadMore() {
+    if (loadMoreObserver) loadMoreObserver.disconnect();
+
+    var sentinel = document.getElementById('sidebar-load-more');
+    if (!sentinel) return;
+
+    var scrollContainer = sentinel.closest('.overflow-y-auto');
+    if (!scrollContainer) return;
+
+    loadMoreObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          sentinel.dispatchEvent(new CustomEvent('sidebar:load-more', { bubbles: true }));
+        }
+      });
+    }, { root: scrollContainer, threshold: 0.1 });
+
+    loadMoreObserver.observe(sentinel);
+  }
+
+  // Observe after tree init and HTMX swaps.
+  document.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target && (
+      e.detail.target.id === 'sidebar-cat-results' ||
+      e.detail.target.id === 'sidebar-cat-content'
+    )) {
+      setTimeout(function () { initTree(); observeLoadMore(); }, 10);
+    }
+  });
+
   // Initialize on DOM ready.
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initTree);
+    document.addEventListener('DOMContentLoaded', function () { initTree(); observeLoadMore(); });
   } else {
     initTree();
+    observeLoadMore();
   }
 })();

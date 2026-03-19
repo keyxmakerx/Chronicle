@@ -641,11 +641,10 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	opts := DefaultListOptions()
 	opts.PerPage = 20
 
-	// Sidebar drill panel loads all pages for a category. Use a higher
-	// limit so categories aren't silently truncated at 20.
+	// Sidebar drill panel uses chunked loading: first 50, then more on demand.
 	isSidebar := c.QueryParam("sidebar") == "1"
 	if isSidebar {
-		opts.PerPage = 200
+		opts.PerPage = 50
 	}
 
 	// Tag filtering: comma-separated tag slugs (AND logic).
@@ -884,6 +883,44 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 		"type_name":  entity.TypeName,
 		"type_icon":  entity.TypeIcon,
 		"type_color": entity.TypeColor,
+	})
+}
+
+// --- Bulk Operations API (multi-select in reorg mode) ---
+
+// BulkMoveAPI reparents multiple entities under a target parent (entity or folder node).
+// POST /campaigns/:id/entities/bulk-move
+func (h *Handler) BulkMoveAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		EntityIDs    []string `json:"entity_ids"`
+		ParentID     *string  `json:"parent_id"`
+		ParentNodeID *string  `json:"parent_node_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if len(req.EntityIDs) == 0 {
+		return apperror.NewBadRequest("no entities selected")
+	}
+
+	ctx := c.Request().Context()
+	for i, eid := range req.EntityIDs {
+		if err := h.service.ReorderEntity(ctx, cc.Campaign.ID, eid, req.ParentID, req.ParentNodeID, i); err != nil {
+			slog.Warn("bulk move: entity failed",
+				slog.String("entity_id", eid),
+				slog.Any("error", err),
+			)
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"status": "ok",
+		"moved":  len(req.EntityIDs),
 	})
 }
 
