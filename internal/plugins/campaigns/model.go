@@ -108,29 +108,49 @@ type Campaign struct {
 // SidebarConfig holds campaign-level sidebar customization settings.
 // Stored as JSON in campaigns.sidebar_config. Controls entity type ordering,
 // visibility, and custom navigation elements in the sidebar.
+//
+// The Items array is the new unified sidebar model — when present, the
+// sidebar renders items in this exact order. When absent or empty, the
+// legacy fields (EntityTypeOrder, HiddenTypeIDs, etc.) are used instead.
 type SidebarConfig struct {
-	// EntityTypeOrder is an ordered list of entity type IDs controlling
-	// sidebar display order. Types not listed appear at the end.
-	EntityTypeOrder []int `json:"entity_type_order,omitempty"`
-
-	// HiddenTypeIDs is a set of entity type IDs that should not appear
-	// in the sidebar. Hidden types are still accessible via the All Entities page.
-	HiddenTypeIDs []int `json:"hidden_type_ids,omitempty"`
+	// Items is the unified, ordered list of all sidebar items. Each item
+	// has a type (dashboard, addon, category, section, link, all_pages)
+	// and is rendered in array order. Owners can reorder, show/hide any item.
+	Items []SidebarItem `json:"items,omitempty"`
 
 	// HiddenEntityIDs is a set of individual entity IDs that should be
-	// hidden from the sidebar for non-owner roles. Owners still see them
-	// but visually dimmed. Useful for hiding WIP or secret entities
-	// without changing their visibility permissions.
+	// hidden from the sidebar for non-owner roles.
 	HiddenEntityIDs []string `json:"hidden_entity_ids,omitempty"`
 
-	// CustomSections are labeled dividers that appear between entity type
-	// groups in the sidebar. Each section appears after the entity type
-	// referenced by its After field.
-	CustomSections []NavSection `json:"custom_sections,omitempty"`
+	// HiddenNodeIDs is a set of sidebar folder node IDs that should be
+	// hidden from the sidebar for non-owner roles.
+	HiddenNodeIDs []string `json:"hidden_node_ids,omitempty"`
 
-	// CustomLinks are additional navigation items in the sidebar. They can
-	// be internal (relative URL) or external (absolute URL) links.
-	CustomLinks []NavLink `json:"custom_links,omitempty"`
+	// --- Legacy fields (used when Items is empty) ---
+
+	EntityTypeOrder []int        `json:"entity_type_order,omitempty"`
+	HiddenTypeIDs   []int        `json:"hidden_type_ids,omitempty"`
+	CustomSections  []NavSection `json:"custom_sections,omitempty"`
+	CustomLinks     []NavLink    `json:"custom_links,omitempty"`
+}
+
+// SidebarItem represents a single item in the unified sidebar navigation.
+// All sidebar content (dashboard, addons, categories, sections, links) is
+// modeled as items so owners can freely reorder everything.
+type SidebarItem struct {
+	Type    string `json:"type"`              // "dashboard", "addon", "category", "section", "link", "all_pages"
+	Visible bool   `json:"visible"`           // Whether to show this item.
+	Slug    string `json:"slug,omitempty"`    // Addon slug (for type=addon).
+	TypeID  int    `json:"type_id,omitempty"` // Entity type ID (for type=category).
+	ID      string `json:"id,omitempty"`      // Unique ID (for sections/links).
+	Label   string `json:"label,omitempty"`   // Display label (for sections/links).
+	URL     string `json:"url,omitempty"`     // Link URL (for type=link).
+	Icon    string `json:"icon,omitempty"`    // FontAwesome icon (for type=link).
+}
+
+// HasUnifiedItems returns true if the sidebar uses the unified items model.
+func (c SidebarConfig) HasUnifiedItems() bool {
+	return len(c.Items) > 0
 }
 
 // NavSection represents a labeled divider in the sidebar navigation.
@@ -611,11 +631,13 @@ type TransferOwnershipRequest struct {
 
 // UpdateSidebarConfigRequest holds the data for updating sidebar configuration.
 type UpdateSidebarConfigRequest struct {
-	EntityTypeOrder []int        `json:"entity_type_order"`
-	HiddenTypeIDs   []int        `json:"hidden_type_ids"`
-	HiddenEntityIDs []string     `json:"hidden_entity_ids"`
-	CustomSections  []NavSection `json:"custom_sections,omitempty"`
-	CustomLinks     []NavLink    `json:"custom_links,omitempty"`
+	Items           []SidebarItem `json:"items,omitempty"`
+	EntityTypeOrder []int         `json:"entity_type_order"`
+	HiddenTypeIDs   []int         `json:"hidden_type_ids"`
+	HiddenEntityIDs []string      `json:"hidden_entity_ids"`
+	HiddenNodeIDs   []string      `json:"hidden_node_ids"`
+	CustomSections  []NavSection  `json:"custom_sections,omitempty"`
+	CustomLinks     []NavLink     `json:"custom_links,omitempty"`
 }
 
 // --- Service Input DTOs ---

@@ -100,6 +100,9 @@ type Handler struct {
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
+	sidebarNodeRepo    SidebarNodeRepository
+	favoriteRepo       FavoriteRepository
+	savedFilterRepo    SavedFilterRepository
 	blockRegistry      *BlockRegistry
 	cache              *redis.Client
 }
@@ -210,6 +213,21 @@ func (h *Handler) SetGroupLister(gl GroupLister) {
 // editor palette. Extension widgets appear as additional block types.
 func (h *Handler) SetWidgetBlockLister(wbl WidgetBlockLister) {
 	h.widgetBlockLister = wbl
+}
+
+// SetSidebarNodeRepo sets the sidebar node repository for folder operations.
+func (h *Handler) SetSidebarNodeRepo(repo SidebarNodeRepository) {
+	h.sidebarNodeRepo = repo
+}
+
+// SetFavoriteRepo sets the favorite repository for bookmark operations.
+func (h *Handler) SetFavoriteRepo(repo FavoriteRepository) {
+	h.favoriteRepo = repo
+}
+
+// SetSavedFilterRepo sets the saved filter repository for tag filter presets.
+func (h *Handler) SetSavedFilterRepo(repo SavedFilterRepository) {
+	h.savedFilterRepo = repo
 }
 
 // SetCache sets the Redis client for API response caching (e.g., entity names).
@@ -629,13 +647,15 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	opts := DefaultListOptions()
 	opts.PerPage = 20
 
-	// Sidebar drill panel loads all pages for a category. Use a higher
-	// limit so categories aren't silently truncated at 20. Include folder
-	// entities which are hidden from normal entity lists.
+	// Sidebar drill panel uses chunked loading: first 50, then more on demand.
 	isSidebar := c.QueryParam("sidebar") == "1"
 	if isSidebar {
-		opts.PerPage = 200
-		opts.IncludeFolders = true
+		opts.PerPage = 50
+	}
+
+	// Tag filtering: comma-separated tag slugs (AND logic).
+	if tags := c.QueryParam("tags"); tags != "" {
+		opts.TagSlugs = strings.Split(tags, ",")
 	}
 
 	// Pagination: allow callers to request a specific page.
@@ -772,7 +792,13 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			total = len(results)
 		}
 
-		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, total, cc, hiddenIDs))
+		// Fetch sidebar folder nodes for this category.
+		var nodes []SidebarNode
+		if h.sidebarNodeRepo != nil && typeID > 0 {
+			nodes, _ = h.sidebarNodeRepo.ListByType(c.Request().Context(), cc.Campaign.ID, typeID)
+		}
+
+		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, cc, hiddenIDs))
 	}
 
 	return middleware.Render(c, http.StatusOK, SearchResultsFragment(results, total, cc))
@@ -790,8 +816,9 @@ func (h *Handler) ReorderAPI(c echo.Context) error {
 	entityID := c.Param("eid")
 
 	var input struct {
-		ParentID  *string `json:"parent_id"`
-		SortOrder *int    `json:"sort_order"`
+		ParentID     *string `json:"parent_id"`
+		ParentNodeID *string `json:"parent_node_id"`
+		SortOrder    *int    `json:"sort_order"`
 	}
 	if err := c.Bind(&input); err != nil {
 		return apperror.NewValidation("invalid request body")
@@ -802,7 +829,7 @@ func (h *Handler) ReorderAPI(c echo.Context) error {
 		sortOrder = *input.SortOrder
 	}
 
-	if err := h.service.ReorderEntity(c.Request().Context(), cc.Campaign.ID, entityID, input.ParentID, sortOrder); err != nil {
+	if err := h.service.ReorderEntity(c.Request().Context(), cc.Campaign.ID, entityID, input.ParentID, input.ParentNodeID, sortOrder); err != nil {
 		return err
 	}
 
@@ -823,7 +850,6 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 	var req struct {
 		Name         string `json:"name"`
 		EntityTypeID int    `json:"entity_type_id"`
-		IsFolder     bool   `json:"is_folder"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -848,7 +874,6 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 	input := CreateEntityInput{
 		Name:         req.Name,
 		EntityTypeID: req.EntityTypeID,
-		IsFolder:     req.IsFolder,
 	}
 
 	entity, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, userID, input)
@@ -865,6 +890,327 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 		"type_icon":  entity.TypeIcon,
 		"type_color": entity.TypeColor,
 	})
+}
+
+// --- Bulk Operations API (multi-select in reorg mode) ---
+
+// BulkMoveAPI reparents multiple entities under a target parent (entity or folder node).
+// POST /campaigns/:id/entities/bulk-move
+func (h *Handler) BulkMoveAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		EntityIDs    []string `json:"entity_ids"`
+		ParentID     *string  `json:"parent_id"`
+		ParentNodeID *string  `json:"parent_node_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if len(req.EntityIDs) == 0 {
+		return apperror.NewBadRequest("no entities selected")
+	}
+
+	ctx := c.Request().Context()
+	for i, eid := range req.EntityIDs {
+		if err := h.service.ReorderEntity(ctx, cc.Campaign.ID, eid, req.ParentID, req.ParentNodeID, i); err != nil {
+			slog.Warn("bulk move: entity failed",
+				slog.String("entity_id", eid),
+				slog.Any("error", err),
+			)
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"status": "ok",
+		"moved":  len(req.EntityIDs),
+	})
+}
+
+// --- Favorites API ---
+
+// ToggleFavoriteAPI adds or removes an entity from the user's favorites.
+// POST /campaigns/:id/entities/:eid/favorite
+func (h *Handler) ToggleFavoriteAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	userID := auth.GetUserID(c)
+
+	favorited, err := h.favoriteRepo.Toggle(c.Request().Context(), userID, entityID, cc.Campaign.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("toggling favorite: %w", err))
+	}
+
+	return c.JSON(http.StatusOK, map[string]bool{"favorited": favorited})
+}
+
+// ListFavoritesAPI returns the user's favorites for a campaign as JSON.
+// GET /campaigns/:id/favorites
+func (h *Handler) ListFavoritesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	userID := auth.GetUserID(c)
+	items, err := h.favoriteRepo.List(c.Request().Context(), userID, cc.Campaign.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("listing favorites: %w", err))
+	}
+	if items == nil {
+		items = []FavoriteItem{}
+	}
+
+	return c.JSON(http.StatusOK, items)
+}
+
+// FavoriteIDsAPI returns a set of entity IDs favorited by the user.
+// Used by the sidebar to mark starred entities.
+// GET /campaigns/:id/favorite-ids
+func (h *Handler) FavoriteIDsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	userID := auth.GetUserID(c)
+	ids, err := h.favoriteRepo.ListIDs(c.Request().Context(), userID, cc.Campaign.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("listing favorite IDs: %w", err))
+	}
+
+	// Convert to array for JSON.
+	result := make([]string, 0, len(ids))
+	for id := range ids {
+		result = append(result, id)
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// --- Saved Filter Presets API ---
+
+// ListSavedFiltersAPI returns the user's saved tag filter presets.
+// GET /campaigns/:id/saved-filters
+func (h *Handler) ListSavedFiltersAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	userID := auth.GetUserID(c)
+	filters, err := h.savedFilterRepo.List(c.Request().Context(), userID, cc.Campaign.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("listing saved filters: %w", err))
+	}
+	if filters == nil {
+		filters = []SavedFilter{}
+	}
+	return c.JSON(http.StatusOK, filters)
+}
+
+// CreateSavedFilterAPI creates a new saved tag filter preset.
+// POST /campaigns/:id/saved-filters
+func (h *Handler) CreateSavedFilterAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		Name         string   `json:"name"`
+		TagSlugs     []string `json:"tag_slugs"`
+		EntityTypeID *int     `json:"entity_type_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+		return err
+	}
+	if len(req.TagSlugs) == 0 {
+		return apperror.NewBadRequest("at least one tag is required")
+	}
+
+	userID := auth.GetUserID(c)
+	filter := &SavedFilter{
+		ID:           generateFilterID(),
+		UserID:       userID,
+		CampaignID:   cc.Campaign.ID,
+		EntityTypeID: req.EntityTypeID,
+		Name:         strings.TrimSpace(req.Name),
+		TagSlugs:     req.TagSlugs,
+		CreatedAt:    time.Now().UTC(),
+	}
+
+	if err := h.savedFilterRepo.Create(c.Request().Context(), filter); err != nil {
+		return apperror.NewInternal(fmt.Errorf("creating saved filter: %w", err))
+	}
+
+	return c.JSON(http.StatusCreated, filter)
+}
+
+// DeleteSavedFilterAPI deletes a saved filter preset.
+// DELETE /campaigns/:id/saved-filters/:fid
+func (h *Handler) DeleteSavedFilterAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	userID := auth.GetUserID(c)
+	filterID := c.Param("fid")
+
+	if err := h.savedFilterRepo.Delete(c.Request().Context(), filterID, userID); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// --- Sidebar Node API (pure folders) ---
+
+// CreateSidebarNodeAPI creates a new sidebar folder node.
+// POST /campaigns/:id/sidebar-nodes
+func (h *Handler) CreateSidebarNodeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		Name         string `json:"name"`
+		EntityTypeID int    `json:"entity_type_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+		return err
+	}
+
+	node := &SidebarNode{
+		ID:           generateNodeID(),
+		CampaignID:   cc.Campaign.ID,
+		EntityTypeID: req.EntityTypeID,
+		Name:         strings.TrimSpace(req.Name),
+		SortOrder:    0,
+		NodeType:     "folder",
+		CreatedAt:    time.Now().UTC(),
+	}
+
+	if err := h.sidebarNodeRepo.Create(c.Request().Context(), node); err != nil {
+		return apperror.NewInternal(fmt.Errorf("creating sidebar node: %w", err))
+	}
+
+	return c.JSON(http.StatusCreated, map[string]string{
+		"id":   node.ID,
+		"name": node.Name,
+	})
+}
+
+// DeleteSidebarNodeAPI deletes a sidebar folder node. Children are
+// reparented to root.
+// DELETE /campaigns/:id/sidebar-nodes/:nid
+func (h *Handler) DeleteSidebarNodeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	nodeID := c.Param("nid")
+	node, err := h.sidebarNodeRepo.FindByID(c.Request().Context(), nodeID)
+	if err != nil {
+		return err
+	}
+	if node.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("sidebar node not found")
+	}
+
+	if err := h.sidebarNodeRepo.Delete(c.Request().Context(), nodeID); err != nil {
+		return apperror.NewInternal(fmt.Errorf("deleting sidebar node: %w", err))
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// RenameSidebarNodeAPI renames a sidebar folder node.
+// PUT /campaigns/:id/sidebar-nodes/:nid
+func (h *Handler) RenameSidebarNodeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	nodeID := c.Param("nid")
+	node, err := h.sidebarNodeRepo.FindByID(c.Request().Context(), nodeID)
+	if err != nil {
+		return err
+	}
+	if node.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("sidebar node not found")
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+		return err
+	}
+
+	node.Name = strings.TrimSpace(req.Name)
+	if err := h.sidebarNodeRepo.Update(c.Request().Context(), node); err != nil {
+		return apperror.NewInternal(fmt.Errorf("renaming sidebar node: %w", err))
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// ReorderSidebarNodeAPI updates a sidebar node's parent and sort order.
+// PUT /campaigns/:id/sidebar-nodes/:nid/reorder
+func (h *Handler) ReorderSidebarNodeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	nodeID := c.Param("nid")
+	node, err := h.sidebarNodeRepo.FindByID(c.Request().Context(), nodeID)
+	if err != nil {
+		return err
+	}
+	if node.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("sidebar node not found")
+	}
+
+	var req struct {
+		ParentID  *string `json:"parent_id"`
+		SortOrder *int    `json:"sort_order"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+
+	if err := h.sidebarNodeRepo.UpdateParent(c.Request().Context(), nodeID, cc.Campaign.ID, req.ParentID); err != nil {
+		return apperror.NewInternal(fmt.Errorf("updating node parent: %w", err))
+	}
+	if req.SortOrder != nil {
+		if err := h.sidebarNodeRepo.UpdateSortOrder(c.Request().Context(), nodeID, cc.Campaign.ID, *req.SortOrder); err != nil {
+			return apperror.NewInternal(fmt.Errorf("updating node sort order: %w", err))
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // EntityTypesAPI returns entity types as JSON for widget dropdowns.

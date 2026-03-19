@@ -245,6 +245,10 @@ func (m *mockEntityRepo) UpdateParent(ctx context.Context, entityID, campaignID 
 	return nil
 }
 
+func (m *mockEntityRepo) UpdateParentNode(ctx context.Context, entityID, campaignID string, parentNodeID *string) error {
+	return nil
+}
+
 func (m *mockEntityRepo) UpdateSortOrder(ctx context.Context, entityID, campaignID string, sortOrder int) error {
 	return nil
 }

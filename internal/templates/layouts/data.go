@@ -38,6 +38,7 @@ const (
 	keyMediaURLFunc      ctxKey = "layout_media_url_func"
 	keyMediaThumbFunc    ctxKey = "layout_media_thumb_func"
 	keyExtWidgetScripts  ctxKey = "layout_ext_widget_scripts"
+	keySidebarItems      ctxKey = "layout_sidebar_items"
 	keyAccentColor       ctxKey = "layout_accent_color"
 	keyBrandName         ctxKey = "layout_brand_name"
 	keyBrandLogo         ctxKey = "layout_brand_logo"
@@ -333,6 +334,44 @@ func SetCustomLinks(ctx context.Context, links []SidebarLink) context.Context {
 func GetCustomLinks(ctx context.Context) []SidebarLink {
 	links, _ := ctx.Value(keyCustomLinks).([]SidebarLink)
 	return links
+}
+
+// --- Unified Sidebar Items ---
+
+// SidebarItemView is the template-ready representation of a sidebar item.
+// Populated by the LayoutInjector from the campaign's SidebarConfig.Items.
+type SidebarItemView struct {
+	Type    string // "dashboard", "addon", "category", "section", "link", "all_pages"
+	Slug    string // Addon slug (for addon items).
+	TypeID  int    // Entity type ID (for category items).
+	ID      string // Unique ID (for sections/links).
+	Label   string // Display label.
+	URL     string // Navigation URL.
+	Icon    string // FontAwesome icon class.
+	Color   string // Category color.
+	Count   int    // Entity count (for categories).
+}
+
+// SetSidebarItems stores the unified sidebar items in context.
+func SetSidebarItems(ctx context.Context, items []SidebarItemView) context.Context {
+	return context.WithValue(ctx, keySidebarItems, items)
+}
+
+// GetSidebarItems returns unified sidebar items from context.
+// Returns nil if the campaign uses the legacy sidebar format.
+func GetSidebarItems(ctx context.Context) []SidebarItemView {
+	items, _ := ctx.Value(keySidebarItems).([]SidebarItemView)
+	return items
+}
+
+// getEntityTypeSlug looks up the slug for an entity type by ID from context.
+func getEntityTypeSlug(ctx context.Context, typeID int) string {
+	for _, et := range GetEntityTypes(ctx) {
+		if et.ID == typeID {
+			return et.Slug
+		}
+	}
+	return ""
 }
 
 // --- View As Player (owner preview toggle) ---

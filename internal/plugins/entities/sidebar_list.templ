@@ -1,6 +1,7 @@
 // sidebar_list.templ renders a compact entity list for the sidebar drill panel.
 // Used by SearchAPI with ?sidebar=1 to display category pages inline.
 // Includes data attributes for client-side tree building and drag-and-drop.
+// Also renders sidebar folder nodes (pure organizational containers).
 
 package entities
 
@@ -10,13 +11,13 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// SidebarEntityList renders entity results as compact links for the sidebar panel.
-// Each link includes data-parent-id and data-sort-order for tree structure and
-// reordering. The sidebar_tree.js script transforms this flat list into a
+// SidebarEntityList renders entity results and folder nodes as compact items
+// for the sidebar panel. Each item includes data attributes for tree structure
+// and reordering. The sidebar_tree.js script transforms this flat list into a
 // collapsible tree with folder/page icons and drag-and-drop support.
 // hiddenIDs marks entities that should appear dimmed for owners.
-templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignContext, hiddenIDs map[string]bool) {
-	if len(results) == 0 {
+templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, cc *campaigns.CampaignContext, hiddenIDs map[string]bool) {
+	if len(results) == 0 && len(nodes) == 0 {
 		<div class="px-4 py-6 text-center">
 			<i class="fa-solid fa-file-circle-plus text-lg text-gray-600 mb-2 block"></i>
 			<span class="text-xs text-gray-500">No pages yet</span>
@@ -28,8 +29,32 @@ templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignConte
 			data-campaign-id={ cc.Campaign.ID }
 			if len(results) > 0 {
 				data-entity-type-id={ strconv.Itoa(results[0].EntityTypeID) }
+			} else if len(nodes) > 0 {
+				data-entity-type-id={ strconv.Itoa(nodes[0].EntityTypeID) }
 			}
 		>
+			// Render sidebar folder nodes (pure organizational containers).
+			for _, node := range nodes {
+				<div
+					class="sidebar-tree-item sidebar-tree-folder flex items-center mx-2 px-2.5 py-1.5 rounded-md text-sm transition-all text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active group cursor-default"
+					data-node-id={ node.ID }
+					data-is-folder="true"
+					if node.ParentID != nil {
+						data-parent-id={ *node.ParentID }
+					}
+					data-sort-order={ strconv.Itoa(node.SortOrder) }
+					data-entity-name={ node.Name }
+					draggable="true"
+				>
+					<span
+						class="sidebar-tree-icon w-4 h-4 flex items-center justify-center mr-2 shrink-0 text-gray-500 group-hover:text-gray-300 transition-colors"
+					>
+						<i class="fa-solid fa-folder text-[10px]"></i>
+					</span>
+					<span class="flex-1 truncate text-xs font-medium">{ node.Name }</span>
+				</div>
+			}
+			// Render entity items (navigable pages).
 			for _, entity := range results {
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
@@ -41,11 +66,11 @@ templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignConte
 					if entity.ParentID != nil {
 						data-parent-id={ *entity.ParentID }
 					}
+					if entity.ParentNodeID != nil {
+						data-parent-node-id={ *entity.ParentNodeID }
+					}
 					data-sort-order={ strconv.Itoa(entity.SortOrder) }
 					data-entity-name={ entity.Name }
-					if entity.IsFolder {
-						data-is-folder="true"
-					}
 					if hiddenIDs[entity.ID] {
 						data-sidebar-hidden="true"
 					}
@@ -64,14 +89,21 @@ templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignConte
 			}
 		</div>
 		if total > len(results) {
-			<div class="px-4 py-2 border-t border-gray-700/30">
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, results[0].EntityTypeID)) }
-					class="flex items-center justify-center py-1 text-[11px] text-gray-500 hover:text-gray-300 transition-colors rounded hover:bg-gray-800/50"
+			<!-- Load more sentinel for infinite scroll -->
+			<div
+				id="sidebar-load-more"
+				class="px-4 py-2 text-center"
+				data-page="2"
+				data-total={ strconv.Itoa(total) }
+				data-loaded={ strconv.Itoa(len(results)) }
+			>
+				<button
+					type="button"
+					class="w-full py-1.5 text-[11px] text-gray-500 hover:text-gray-300 transition-colors rounded hover:bg-gray-800/50"
+					onclick="this.parentElement.dispatchEvent(new CustomEvent('sidebar:load-more', {bubbles: true}))"
 				>
-					{ fmt.Sprintf("Show all %d pages", total) }
-					<i class="fa-solid fa-chevron-right ml-1.5 text-[8px]"></i>
-				</a>
+					{ fmt.Sprintf("Load more (%d of %d)", len(results), total) }
+				</button>
 			</div>
 		}
 	}

@@ -61,6 +61,23 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/entities/:eid/clone", h.Clone, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid", h.Update, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid/reorder", h.ReorderAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/entities/bulk-move", h.BulkMoveAPI, campaigns.RequireRole(campaigns.RoleScribe)) // Multi-select reorg mode.
+
+	// Saved filter presets (per-user tag filter combos, Player+).
+	cg.GET("/saved-filters", h.ListSavedFiltersAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/saved-filters", h.CreateSavedFilterAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.DELETE("/saved-filters/:fid", h.DeleteSavedFilterAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Favorites (per-user bookmarks, Player+).
+	cg.POST("/entities/:eid/favorite", h.ToggleFavoriteAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/favorites", h.ListFavoritesAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/favorite-ids", h.FavoriteIDsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Sidebar node (pure folder) routes (Scribe+ for create/reorder, Owner for delete).
+	cg.POST("/sidebar-nodes", h.CreateSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/sidebar-nodes/:nid", h.RenameSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/sidebar-nodes/:nid/reorder", h.ReorderSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/sidebar-nodes/:nid", h.DeleteSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Owner routes.
 	cg.DELETE("/entities/:eid", h.Delete, campaigns.RequireRole(campaigns.RoleOwner))

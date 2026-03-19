@@ -38,21 +38,28 @@
     var items = container.querySelectorAll('.sidebar-tree-item');
     if (!items.length) return;
 
-    // Build lookup: entityId -> { el, parentId, sortOrder, children[] }
+    // Build lookup: id -> { el, parentId, sortOrder, children[], isNode }
+    // Items can be entities (data-entity-id) or folder nodes (data-node-id).
+    // Entities can be parented under entities (data-parent-id) or folder nodes
+    // (data-parent-node-id). Folder nodes use data-parent-id for their parent.
     var nodes = {};
     var rootIds = [];
 
     items.forEach(function (el) {
-      var id = el.getAttribute('data-entity-id');
-      var parentId = el.getAttribute('data-parent-id') || null;
+      var id = el.getAttribute('data-entity-id') || el.getAttribute('data-node-id');
+      if (!id) return;
+      // Resolve parent: entities may have parent_id (entity) or parent_node_id (folder).
+      var parentId = el.getAttribute('data-parent-node-id') || el.getAttribute('data-parent-id') || null;
       var sortOrder = parseInt(el.getAttribute('data-sort-order') || '0', 10);
+      var isNode = el.hasAttribute('data-node-id');
 
       nodes[id] = {
         el: el,
         id: id,
         parentId: parentId,
         sortOrder: sortOrder,
-        children: []
+        children: [],
+        isNode: isNode
       };
     });
 
@@ -111,31 +118,45 @@
       // Create wrapper div for the tree node.
       var wrapper = document.createElement('div');
       wrapper.className = 'sidebar-tree-node';
-      wrapper.setAttribute('data-entity-id', node.id);
+      // Use the correct ID attribute based on node type.
+      if (node.isNode) {
+        wrapper.setAttribute('data-node-id', node.id);
+      } else {
+        wrapper.setAttribute('data-entity-id', node.id);
+      }
       if (node.parentId) wrapper.setAttribute('data-parent-id', node.parentId);
       wrapper.setAttribute('data-depth', String(depth));
-      // Propagate sidebar-hidden flag to wrapper for reorg script.
       if (node.el.hasAttribute('data-sidebar-hidden')) {
         wrapper.setAttribute('data-sidebar-hidden', 'true');
       }
 
-      // Clone the original link element and apply indentation.
+      // Clone the original element and apply indentation.
       var link = node.el.cloneNode(true);
       link.style.paddingLeft = (10 + depth * INDENT_PX) + 'px';
 
-      // Folder entities are organizational — not navigable as pages.
-      // Replace the <a> with a <div> so clicking doesn't navigate away.
-      if (isFolder) {
+      // Folder nodes from the template are already <div> elements.
+      // Only convert <a> to <div> if it's an entity with is_folder
+      // (legacy compat). Pure folder nodes (data-node-id) are already divs.
+      if (isFolder && link.tagName === 'A') {
         var div = document.createElement('div');
         div.className = link.className;
         div.style.cssText = link.style.cssText;
         div.innerHTML = link.innerHTML;
-        // Copy data attributes needed by drag-and-drop.
-        ['data-entity-id', 'data-parent-id', 'data-sort-order', 'data-entity-name', 'data-sidebar-hidden', 'data-is-folder'].forEach(function (attr) {
+        ['data-entity-id', 'data-node-id', 'data-parent-id', 'data-sort-order', 'data-entity-name', 'data-sidebar-hidden', 'data-is-folder'].forEach(function (attr) {
           if (link.hasAttribute(attr)) div.setAttribute(attr, link.getAttribute(attr));
         });
         div.classList.add('sidebar-tree-item', 'cursor-default');
         link = div;
+      }
+
+      // Add double-click rename for pure folder nodes (in reorg mode).
+      if (isFolder && node.isNode) {
+        link.addEventListener('dblclick', function (e) {
+          if (!document.body.classList.contains('sidebar-reorg-active')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          startInlineRename(link, node.id, campaignId);
+        });
       }
 
       // Swap the default page icon based on whether this node is a folder.
@@ -288,10 +309,14 @@
    * Toggle draggable state on tree items based on reorg mode.
    * When enabled, also adds entity visibility toggles (eye icons).
    */
-  function updateDraggable(container, enabled, hiddenEntityIds) {
-    var hiddenSet = {};
+  function updateDraggable(container, enabled, hiddenEntityIds, hiddenNodeIds) {
+    var hiddenEntitySet = {};
+    var hiddenNodeSet = {};
     if (hiddenEntityIds) {
-      hiddenEntityIds.forEach(function (id) { hiddenSet[id] = true; });
+      hiddenEntityIds.forEach(function (id) { hiddenEntitySet[id] = true; });
+    }
+    if (hiddenNodeIds) {
+      hiddenNodeIds.forEach(function (id) { hiddenNodeSet[id] = true; });
     }
 
     var nodes = container.querySelectorAll('.sidebar-tree-node');
@@ -299,30 +324,39 @@
       var item = node.querySelector('.sidebar-tree-item');
       if (item) {
         var entityId = node.getAttribute('data-entity-id');
+        var nodeId = node.getAttribute('data-node-id');
+        var itemId = entityId || nodeId;
         if (enabled) {
           item.setAttribute('draggable', 'true');
           // Add drag handle if not present.
           if (!node.querySelector('.reorg-drag-handle')) {
             var handle = document.createElement('span');
-            handle.className = 'reorg-drag-handle w-3 h-3 flex items-center justify-center shrink-0 text-gray-500 cursor-grab mr-1';
+            handle.className = 'reorg-drag-handle w-5 h-5 flex items-center justify-center shrink-0 text-gray-500 cursor-grab mr-1';
             handle.innerHTML = '<i class="fa-solid fa-grip-vertical text-[8px]"></i>';
             item.insertBefore(handle, item.firstChild);
           }
-          // Add entity visibility toggle if not present.
-          if (entityId && !node.querySelector('.reorg-entity-visibility')) {
-            var isHidden = !!hiddenSet[entityId] || node.hasAttribute('data-sidebar-hidden');
+          // Add visibility toggle for both entities and folder nodes.
+          if (itemId && !node.querySelector('.reorg-entity-visibility')) {
+            var isHidden = (entityId ? !!hiddenEntitySet[entityId] : !!hiddenNodeSet[nodeId]) || node.hasAttribute('data-sidebar-hidden');
             var eyeBtn = document.createElement('button');
             eyeBtn.type = 'button';
-            eyeBtn.className = 'reorg-entity-visibility ml-auto p-0.5 text-[10px] rounded hover:bg-white/10 transition-colors shrink-0';
-            eyeBtn.setAttribute('data-entity-id', entityId);
+            eyeBtn.className = 'reorg-entity-visibility ml-auto p-1.5 text-[11px] min-w-[28px] min-h-[28px] flex items-center justify-center rounded hover:bg-white/10 transition-colors shrink-0';
+            if (entityId) eyeBtn.setAttribute('data-entity-id', entityId);
+            if (nodeId) eyeBtn.setAttribute('data-node-id', nodeId);
             eyeBtn.title = isHidden ? 'Show in sidebar' : 'Hide from sidebar';
             eyeBtn.innerHTML = '<i class="fa-solid ' + (isHidden ? 'fa-eye-slash text-gray-500' : 'fa-eye text-gray-400') + '"></i>';
             eyeBtn.addEventListener('click', function (e) {
               e.preventDefault();
               e.stopPropagation();
-              document.dispatchEvent(new CustomEvent('chronicle:toggle-entity-visibility', {
-                detail: { entityId: entityId }
-              }));
+              if (nodeId) {
+                document.dispatchEvent(new CustomEvent('chronicle:toggle-node-visibility', {
+                  detail: { nodeId: nodeId }
+                }));
+              } else {
+                document.dispatchEvent(new CustomEvent('chronicle:toggle-entity-visibility', {
+                  detail: { entityId: entityId }
+                }));
+              }
             });
             item.appendChild(eyeBtn);
           }
@@ -431,7 +465,9 @@
       var target = e.target.closest('.sidebar-tree-node');
       if (!target) return;
 
-      var targetId = target.getAttribute('data-entity-id');
+      var targetEntityId = target.getAttribute('data-entity-id');
+      var targetNodeId = target.getAttribute('data-node-id');
+      var targetId = targetEntityId || targetNodeId;
       if (targetId === droppedId) return;
 
       var rect = target.getBoundingClientRect();
@@ -439,15 +475,20 @@
 
       if (e.clientY < thirdY) {
         // Reorder: place before target (same parent).
+        var targetParentNodeId = target.getAttribute('data-parent-node-id') || null;
         var targetParentId = target.getAttribute('data-parent-id') || null;
         var sortOrder = calculateSortOrder(target, 'before');
-        reorderEntity(campaignId, droppedId, targetParentId, sortOrder);
+        reorderEntity(campaignId, droppedId, targetParentId, sortOrder, targetParentNodeId);
       } else {
         // Reparent zone: behavior depends on whether target is a folder.
-        var targetHasChildren = !!target.querySelector('[data-has-children]');
-        if (targetHasChildren) {
+        var targetIsFolder = !!target.querySelector('[data-is-folder]') || !!target.querySelector('[data-has-children]');
+        if (targetIsFolder) {
           // Target is already a folder — add dragged entity as child.
-          reorderEntity(campaignId, droppedId, targetId, 0);
+          if (targetNodeId) {
+            reorderEntity(campaignId, droppedId, null, 0, targetNodeId);
+          } else {
+            reorderEntity(campaignId, droppedId, targetEntityId, 0);
+          }
         } else {
           // Target is a leaf — show menu to create a new folder
           // containing both the dragged and target entities.
@@ -545,18 +586,24 @@
       var target = el ? el.closest('.sidebar-tree-node') : null;
 
       if (target && target !== touchState.src) {
-        var targetId = target.getAttribute('data-entity-id');
+        var targetEntityId = target.getAttribute('data-entity-id');
+        var targetNodeId = target.getAttribute('data-node-id');
         var rect = target.getBoundingClientRect();
         var thirdY = rect.top + rect.height / 3;
 
         if (lastTouch.clientY < thirdY) {
+          var targetParentNodeId = target.getAttribute('data-parent-node-id') || null;
           var targetParentId = target.getAttribute('data-parent-id') || null;
           var sortOrder = calculateSortOrder(target, 'before');
-          reorderEntity(campaignId, touchState.srcId, targetParentId, sortOrder);
+          reorderEntity(campaignId, touchState.srcId, targetParentId, sortOrder, targetParentNodeId);
         } else {
-          var targetHasChildren = !!target.querySelector('[data-has-children]');
-          if (targetHasChildren) {
-            reorderEntity(campaignId, touchState.srcId, targetId, 0);
+          var targetIsFolder = !!target.querySelector('[data-is-folder]') || !!target.querySelector('[data-has-children]');
+          if (targetIsFolder) {
+            if (targetNodeId) {
+              reorderEntity(campaignId, touchState.srcId, null, 0, targetNodeId);
+            } else {
+              reorderEntity(campaignId, touchState.srcId, targetEntityId, 0);
+            }
           } else {
             showReparentMenu(lastTouch.clientX, lastTouch.clientY, touchState.srcId, target, campaignId);
           }
@@ -625,14 +672,198 @@
   }
 
   /**
+   * Start inline rename of a folder node. Replaces the name span with
+   * an input field. Enter/blur saves, Escape cancels.
+   */
+  function startInlineRename(link, nodeId, campaignId) {
+    var nameSpan = link.querySelector('.truncate');
+    if (!nameSpan || nameSpan._renaming) return;
+    nameSpan._renaming = true;
+
+    var oldName = nameSpan.textContent;
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.value = oldName;
+    // Larger font + padding for mobile usability; scrollIntoView ensures
+    // the input stays visible when the virtual keyboard appears.
+    input.className = 'bg-transparent border-b border-accent text-sm text-fg w-full outline-none py-1';
+    input.style.minWidth = '60px';
+    input.style.fontSize = '14px'; // Prevents iOS zoom on focus.
+
+    nameSpan.textContent = '';
+    nameSpan.appendChild(input);
+    input.focus();
+    input.select();
+    // Scroll into view so virtual keyboard doesn't cover the input.
+    setTimeout(function () { input.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 100);
+
+    function save() {
+      var newName = input.value.trim();
+      if (!newName || newName === oldName) {
+        cancel();
+        return;
+      }
+      Chronicle.apiFetch('/campaigns/' + campaignId + '/sidebar-nodes/' + nodeId, {
+        method: 'PUT',
+        body: { name: newName }
+      }).then(function (res) {
+        if (res.ok) {
+          nameSpan.textContent = newName;
+          link.setAttribute('data-entity-name', newName);
+        } else {
+          nameSpan.textContent = oldName;
+        }
+        nameSpan._renaming = false;
+      }).catch(function () {
+        nameSpan.textContent = oldName;
+        nameSpan._renaming = false;
+      });
+    }
+
+    function cancel() {
+      nameSpan.textContent = oldName;
+      nameSpan._renaming = false;
+    }
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+    input.addEventListener('blur', save);
+  }
+
+  // --- Folder Context Menu (right-click + long-press in reorg mode) ---
+
+  /**
+   * Show a context menu for a folder node at (x, y) screen coords.
+   * Provides Rename and Delete options.
+   */
+  function showFolderContextMenu(x, y, nodeId, link, cid) {
+    removeFolderContextMenu();
+
+    var menu = document.createElement('div');
+    menu.id = 'sidebar-folder-ctx-menu';
+    // Touch-friendly: larger padding on menu items (min-h-[40px]).
+    menu.className = 'fixed z-[9999] bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[160px] text-sm';
+    menu.style.left = Math.min(x, window.innerWidth - 180) + 'px';
+    menu.style.top = Math.min(y, window.innerHeight - 100) + 'px';
+
+    var renameBtn = document.createElement('button');
+    renameBtn.type = 'button';
+    renameBtn.className = 'w-full px-3 py-2 min-h-[40px] text-left flex items-center gap-2 text-fg hover:bg-surface-hover transition-colors';
+    renameBtn.innerHTML = '<i class="fa-solid fa-pen text-xs text-fg-muted w-4 text-center"></i> Rename';
+    renameBtn.addEventListener('click', function () {
+      removeFolderContextMenu();
+      if (link) startInlineRename(link, nodeId, cid);
+    });
+
+    var deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'w-full px-3 py-2 min-h-[40px] text-left flex items-center gap-2 text-fg hover:bg-red-500/10 hover:text-red-400 transition-colors';
+    deleteBtn.innerHTML = '<i class="fa-solid fa-trash text-xs text-fg-muted w-4 text-center"></i> Delete';
+    deleteBtn.addEventListener('click', function () {
+      removeFolderContextMenu();
+      if (!confirm('Delete this folder? Children will be moved to root.')) return;
+      Chronicle.apiFetch('/campaigns/' + cid + '/sidebar-nodes/' + nodeId, { method: 'DELETE' })
+        .then(function (res) {
+          if (res.ok) {
+            Chronicle.notify('Folder deleted', 'success');
+            refreshSidebarTree();
+          } else {
+            Chronicle.notify('Failed to delete folder', 'error');
+          }
+        });
+    });
+
+    menu.appendChild(renameBtn);
+    menu.appendChild(deleteBtn);
+    document.body.appendChild(menu);
+
+    // Dismiss on outside click/tap.
+    setTimeout(function () {
+      document.addEventListener('mousedown', onFolderCtxOutsideClick);
+      document.addEventListener('touchstart', onFolderCtxOutsideClick);
+    }, 0);
+  }
+
+  /** Get folder node info for context menu from any element. */
+  function getFolderNodeInfo(target) {
+    var node = target.closest('.sidebar-tree-node[data-node-id]');
+    if (!node) return null;
+    var tree = document.getElementById('sidebar-entity-tree');
+    return {
+      nodeId: node.getAttribute('data-node-id'),
+      link: node.querySelector('.sidebar-tree-item'),
+      cid: tree ? tree.getAttribute('data-campaign-id') : ''
+    };
+  }
+
+  // Right-click handler (desktop).
+  document.addEventListener('contextmenu', function (e) {
+    if (!document.body.classList.contains('sidebar-reorg-active')) return;
+    var info = getFolderNodeInfo(e.target);
+    if (!info) return;
+    e.preventDefault();
+    showFolderContextMenu(e.clientX, e.clientY, info.nodeId, info.link, info.cid);
+  });
+
+  // Long-press handler (mobile, 500ms).
+  var longPressTimer = null;
+  var longPressFired = false;
+
+  document.addEventListener('touchstart', function (e) {
+    if (!document.body.classList.contains('sidebar-reorg-active')) return;
+    var info = getFolderNodeInfo(e.target);
+    if (!info) return;
+
+    longPressFired = false;
+    var touch = e.touches[0];
+    longPressTimer = setTimeout(function () {
+      longPressFired = true;
+      showFolderContextMenu(touch.clientX, touch.clientY, info.nodeId, info.link, info.cid);
+    }, 500);
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function () {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  }, { passive: true });
+
+  document.addEventListener('touchend', function (e) {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    // Prevent click firing after long-press opened the menu.
+    if (longPressFired) { e.preventDefault(); longPressFired = false; }
+  });
+
+  function removeFolderContextMenu() {
+    var m = document.getElementById('sidebar-folder-ctx-menu');
+    if (m) m.remove();
+    document.removeEventListener('mousedown', onFolderCtxOutsideClick);
+    document.removeEventListener('touchstart', onFolderCtxOutsideClick);
+  }
+
+  function onFolderCtxOutsideClick(e) {
+    var m = document.getElementById('sidebar-folder-ctx-menu');
+    if (m && !m.contains(e.target)) removeFolderContextMenu();
+  }
+
+  /**
    * Send reorder/reparent request to the API. On success, refreshes the
    * sidebar entity list via HTMX to reflect the new ordering.
    */
-  function reorderEntity(campaignId, entityId, newParentId, sortOrder) {
-    var body = {
-      parent_id: newParentId || null,
-      sort_order: sortOrder
-    };
+  /**
+   * @param {string} campaignId
+   * @param {string} entityId
+   * @param {string|null} newParentId - entity parent ID
+   * @param {number} sortOrder
+   * @param {string|null} [newParentNodeId] - sidebar folder node parent ID
+   */
+  function reorderEntity(campaignId, entityId, newParentId, sortOrder, newParentNodeId) {
+    var body = { sort_order: sortOrder };
+    if (newParentNodeId) {
+      body.parent_node_id = newParentNodeId;
+    } else {
+      body.parent_id = newParentId || null;
+    }
 
     Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + entityId + '/reorder', {
       method: 'PUT',
@@ -735,9 +966,9 @@
    *
    * Flow: create folder → position folder → reparent target → reparent dragged → refresh.
    */
-  function createGroupFolder(campaignId, droppedId, targetNode, folderName, isFolder) {
-    var targetId = targetNode.getAttribute('data-entity-id');
-    var targetParentId = targetNode.getAttribute('data-parent-id') || null;
+  function createGroupFolder(campaignId, droppedId, targetNode, folderName, isPureFolder) {
+    var targetId = targetNode.getAttribute('data-entity-id') || targetNode.getAttribute('data-node-id');
+    var targetParentId = targetNode.getAttribute('data-parent-node-id') || targetNode.getAttribute('data-parent-id') || null;
     var targetItem = targetNode.querySelector('.sidebar-tree-item');
     var targetSortOrder = parseInt(targetItem ? targetItem.getAttribute('data-sort-order') : '0', 10) || 0;
 
@@ -745,10 +976,15 @@
     var tree = document.getElementById('sidebar-entity-tree');
     var entityTypeId = parseInt(tree ? tree.getAttribute('data-entity-type-id') : '0', 10) || 0;
 
-    // Step 1: Create the folder entity.
-    Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/quick-create', {
+    // Step 1: Create the folder — either a pure sidebar node or a real entity.
+    var createUrl = isPureFolder
+      ? '/campaigns/' + campaignId + '/sidebar-nodes'
+      : '/campaigns/' + campaignId + '/entities/quick-create';
+    var createBody = { name: folderName, entity_type_id: entityTypeId };
+
+    Chronicle.apiFetch(createUrl, {
       method: 'POST',
-      body: { name: folderName, entity_type_id: entityTypeId, is_folder: !!isFolder }
+      body: createBody
     })
     .then(function (res) {
       if (!res.ok) throw new Error('Failed to create folder');
@@ -756,7 +992,10 @@
     })
     .then(function (folder) {
       // Step 2: Position the folder where the target was.
-      return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + folder.id + '/reorder', {
+      var posUrl = isPureFolder
+        ? '/campaigns/' + campaignId + '/sidebar-nodes/' + folder.id + '/reorder'
+        : '/campaigns/' + campaignId + '/entities/' + folder.id + '/reorder';
+      return Chronicle.apiFetch(posUrl, {
         method: 'PUT',
         body: { parent_id: targetParentId, sort_order: targetSortOrder }
       }).then(function (res) {
@@ -766,9 +1005,13 @@
     })
     .then(function (folder) {
       // Step 3: Reparent the target entity under the new folder.
+      // Use parent_node_id for sidebar nodes, parent_id for entity folders.
+      var reparentBody = isPureFolder
+        ? { parent_node_id: folder.id, sort_order: 0 }
+        : { parent_id: folder.id, sort_order: 0 };
       return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + targetId + '/reorder', {
         method: 'PUT',
-        body: { parent_id: folder.id, sort_order: 0 }
+        body: reparentBody
       }).then(function (res) {
         if (!res.ok) throw new Error('Failed to reparent target');
         return folder;
@@ -776,9 +1019,12 @@
     })
     .then(function (folder) {
       // Step 4: Reparent the dragged entity under the new folder.
+      var reparentBody = isPureFolder
+        ? { parent_node_id: folder.id, sort_order: 1 }
+        : { parent_id: folder.id, sort_order: 1 };
       return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + droppedId + '/reorder', {
         method: 'PUT',
-        body: { parent_id: folder.id, sort_order: 1 }
+        body: reparentBody
       }).then(function (res) {
         if (!res.ok) throw new Error('Failed to reparent dragged entity');
       });
@@ -801,8 +1047,9 @@
     if (container) {
       // Keep currentTreeContainer in sync.
       currentTreeContainer = container;
-      var hiddenIds = (e.detail && e.detail.hiddenEntityIds) || [];
-      updateDraggable(container, e.detail && e.detail.active, hiddenIds);
+      var hiddenEntityIds = (e.detail && e.detail.hiddenEntityIds) || [];
+      var hiddenNodeIds = (e.detail && e.detail.hiddenNodeIds) || [];
+      updateDraggable(container, e.detail && e.detail.active, hiddenEntityIds, hiddenNodeIds);
     }
   });
 
@@ -831,7 +1078,32 @@
     }
   });
 
-  // Inject CSS for guide lines (uses custom property set per-node).
+  // Listen for folder node visibility changes and update UI.
+  document.addEventListener('chronicle:node-visibility-changed', function (e) {
+    if (!e.detail || !e.detail.nodeId) return;
+    var node = document.querySelector('.sidebar-tree-node[data-node-id="' + e.detail.nodeId + '"]');
+    if (!node) return;
+
+    var item = node.querySelector('.sidebar-tree-item');
+    var btn = node.querySelector('.reorg-entity-visibility');
+    if (e.detail.hidden) {
+      node.setAttribute('data-sidebar-hidden', 'true');
+      if (item) item.classList.add('opacity-40');
+      if (btn) {
+        btn.title = 'Show in sidebar';
+        btn.innerHTML = '<i class="fa-solid fa-eye-slash text-gray-500"></i>';
+      }
+    } else {
+      node.removeAttribute('data-sidebar-hidden');
+      if (item) item.classList.remove('opacity-40');
+      if (btn) {
+        btn.title = 'Hide from sidebar';
+        btn.innerHTML = '<i class="fa-solid fa-eye text-gray-400"></i>';
+      }
+    }
+  });
+
+  // Inject CSS for guide lines and multi-select styles.
   var style = document.createElement('style');
   style.textContent = [
     '.sidebar-tree-node[data-depth]:not([data-depth="0"])::before {',
@@ -843,9 +1115,126 @@
     '  width: 1px;',
     '  background: rgba(75, 85, 99, 0.2);',
     '  pointer-events: none;',
+    '}',
+    '.sidebar-tree-node.sidebar-selected > .sidebar-tree-item {',
+    '  background: rgba(var(--accent-rgb, 99 102 241) / 0.15);',
+    '  outline: 1px solid rgba(var(--accent-rgb, 99 102 241) / 0.3);',
+    '  border-radius: 0.375rem;',
+    '}',
+    '#sidebar-bulk-bar {',
+    '  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);',
+    '  z-index: 9999; display: flex; gap: 8px; align-items: center;',
+    '  padding: 8px 16px; border-radius: 10px;',
+    '  background: var(--color-surface-raised, #1e1e2e);',
+    '  border: 1px solid var(--color-border, #333);',
+    '  box-shadow: 0 8px 32px rgba(0,0,0,0.4);',
+    '  font-size: 12px; color: var(--color-fg, #e0e0e0);',
     '}'
   ].join('\n');
   document.head.appendChild(style);
+
+  // --- Multi-Select & Bulk Operations ---
+
+  var selectedIds = [];
+
+  /** Toggle selection of a tree node on Ctrl/Cmd+click. */
+  document.addEventListener('click', function (e) {
+    if (!document.body.classList.contains('sidebar-reorg-active')) return;
+    if (!e.ctrlKey && !e.metaKey) return;
+
+    var node = e.target.closest('.sidebar-tree-node');
+    if (!node) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    var id = node.getAttribute('data-entity-id') || node.getAttribute('data-node-id');
+    if (!id) return;
+
+    var idx = selectedIds.indexOf(id);
+    if (idx !== -1) {
+      selectedIds.splice(idx, 1);
+      node.classList.remove('sidebar-selected');
+    } else {
+      selectedIds.push(id);
+      node.classList.add('sidebar-selected');
+    }
+
+    updateBulkBar();
+  }, true);
+
+  /** Show or hide the floating bulk action bar. */
+  function updateBulkBar() {
+    var bar = document.getElementById('sidebar-bulk-bar');
+
+    if (selectedIds.length === 0) {
+      if (bar) bar.remove();
+      return;
+    }
+
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'sidebar-bulk-bar';
+      document.body.appendChild(bar);
+    }
+
+    var campaignId = '';
+    var tree = document.getElementById('sidebar-entity-tree');
+    if (tree) campaignId = tree.getAttribute('data-campaign-id') || '';
+
+    bar.innerHTML =
+      '<span>' + selectedIds.length + ' selected</span>' +
+      '<button type="button" class="px-2 py-1 rounded bg-accent/20 text-accent hover:bg-accent/30 transition-colors text-xs" id="bulk-move-btn">' +
+      '<i class="fa-solid fa-folder-tree mr-1"></i>Move to folder</button>' +
+      '<button type="button" class="px-2 py-1 rounded text-gray-400 hover:text-white transition-colors text-xs" id="bulk-clear-btn">' +
+      '<i class="fa-solid fa-xmark mr-1"></i>Clear</button>';
+
+    bar.querySelector('#bulk-clear-btn').addEventListener('click', clearSelection);
+
+    bar.querySelector('#bulk-move-btn').addEventListener('click', function () {
+      var targetId = prompt('Enter folder/entity ID to move into (or leave empty for root):');
+      if (targetId === null) return;
+
+      var body = { entity_ids: selectedIds };
+      if (targetId.trim()) {
+        // Determine if target is a folder node or entity.
+        var targetNode = document.querySelector('[data-node-id="' + targetId.trim() + '"]');
+        if (targetNode) {
+          body.parent_node_id = targetId.trim();
+        } else {
+          body.parent_id = targetId.trim();
+        }
+      }
+
+      Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/bulk-move', {
+        method: 'POST',
+        body: body
+      })
+      .then(function (res) {
+        if (res.ok) {
+          Chronicle.notify('Moved ' + selectedIds.length + ' items', 'success');
+          clearSelection();
+          refreshSidebarTree();
+        } else {
+          Chronicle.notify('Failed to move items', 'error');
+        }
+      });
+    });
+  }
+
+  function clearSelection() {
+    selectedIds = [];
+    document.querySelectorAll('.sidebar-selected').forEach(function (n) {
+      n.classList.remove('sidebar-selected');
+    });
+    var bar = document.getElementById('sidebar-bulk-bar');
+    if (bar) bar.remove();
+  }
+
+  // Clear selection when exiting reorg mode.
+  document.addEventListener('chronicle:reorg-changed', function (e) {
+    if (e.detail && !e.detail.active) clearSelection();
+  });
 
   // Listen for HTMX content swaps to re-initialize tree after list refreshes.
   document.addEventListener('htmx:afterSwap', function (e) {
@@ -857,10 +1246,110 @@
     }
   });
 
+  // --- Load More (pagination for large categories) ---
+
+  // Listen for the "Load more" button click in the sidebar entity list.
+  // Fetches the next page, extracts new items from the response HTML,
+  // appends them to the tree container, and re-initializes the tree.
+  document.addEventListener('sidebar:load-more', function (e) {
+    var sentinel = e.target.closest('#sidebar-load-more');
+    if (!sentinel) return;
+
+    var page = parseInt(sentinel.dataset.page || '2', 10);
+    var total = parseInt(sentinel.dataset.total || '0', 10);
+    var loaded = parseInt(sentinel.dataset.loaded || '0', 10);
+
+    // Find the search input to get the base URL.
+    var searchInput = document.querySelector('#sidebar-cat-content input[name="q"]');
+    if (!searchInput) return;
+
+    var baseUrl = searchInput.getAttribute('hx-get') || '';
+    var url = baseUrl + '&page=' + page;
+    if (searchInput.value) url += '&q=' + encodeURIComponent(searchInput.value);
+
+    // Show loading state.
+    var btn = sentinel.querySelector('button');
+    if (btn) btn.textContent = 'Loading...';
+
+    Chronicle.apiFetch(url, { headers: { 'HX-Request': 'true' } })
+      .then(function (res) { return res.ok ? res.text() : ''; })
+      .then(function (html) {
+        if (!html) return;
+
+        // Parse the response HTML to extract new tree items.
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html, 'text/html');
+        var newTree = doc.getElementById('sidebar-entity-tree');
+        if (!newTree) return;
+
+        // Append new items to the existing tree container.
+        var container = document.getElementById('sidebar-entity-tree');
+        if (!container) return;
+
+        var newItems = newTree.querySelectorAll('.sidebar-tree-item');
+        var addedCount = 0;
+        newItems.forEach(function (item) {
+          container.appendChild(item.cloneNode(true));
+          addedCount++;
+        });
+
+        // Update or remove the sentinel.
+        var newLoaded = loaded + addedCount;
+        if (newLoaded >= total || addedCount === 0) {
+          sentinel.remove();
+        } else {
+          sentinel.dataset.page = String(page + 1);
+          sentinel.dataset.loaded = String(newLoaded);
+          if (btn) btn.textContent = 'Load more (' + newLoaded + ' of ' + total + ')';
+        }
+
+        // Re-build the tree with all items.
+        initTree();
+      })
+      .catch(function () {
+        if (btn) btn.textContent = 'Failed to load — click to retry';
+      });
+  });
+
+  // Auto-trigger load-more via IntersectionObserver when the sentinel
+  // scrolls into view (infinite scroll within the drill panel).
+  var loadMoreObserver = null;
+
+  function observeLoadMore() {
+    if (loadMoreObserver) loadMoreObserver.disconnect();
+
+    var sentinel = document.getElementById('sidebar-load-more');
+    if (!sentinel) return;
+
+    var scrollContainer = sentinel.closest('.overflow-y-auto');
+    if (!scrollContainer) return;
+
+    loadMoreObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          sentinel.dispatchEvent(new CustomEvent('sidebar:load-more', { bubbles: true }));
+        }
+      });
+    }, { root: scrollContainer, threshold: 0.1 });
+
+    loadMoreObserver.observe(sentinel);
+  }
+
+  // Observe after tree init and HTMX swaps.
+  document.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target && (
+      e.detail.target.id === 'sidebar-cat-results' ||
+      e.detail.target.id === 'sidebar-cat-content'
+    )) {
+      setTimeout(function () { initTree(); observeLoadMore(); }, 10);
+    }
+  });
+
   // Initialize on DOM ready.
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initTree);
+    document.addEventListener('DOMContentLoaded', function () { initTree(); observeLoadMore(); });
   } else {
     initTree();
+    observeLoadMore();
   }
 })();

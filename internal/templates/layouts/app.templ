@@ -159,7 +159,7 @@ templ Sidebar() {
 
 			<!-- Zone 2: Campaign context area (scrollable middle) -->
 			<div class="flex-1 flex flex-col min-h-0 overflow-hidden">
-				<!-- Campaign header + Dashboard (static within zone) -->
+				<!-- Campaign header + navigation items -->
 				<div class="shrink-0 pt-3" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
 					<div class="px-4 mb-1 flex items-center gap-2">
 						if GetBrandLogo(ctx) != "" {
@@ -180,42 +180,36 @@ templ Sidebar() {
 							}
 						</a>
 					</div>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))),
-							templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))) }
-					>
-						<svg class="w-4 h-4 mr-3 shrink-0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-						</svg>
-						Dashboard
-					</a>
-					if IsAddonEnabled(ctx, "notes") {
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx))) }
-							class={ sidebarNavLink,
-								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx)))),
-								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx)))) }
-						>
-							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-								<i class="fa-solid fa-book-open text-xs"></i>
-							</span>
-							Journal
-						</a>
-					}
-					if IsAddonEnabled(ctx, "npcs") {
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx))) }
-							class={ sidebarNavLink,
-								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))),
-								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/npcs", GetCampaignID(ctx)))) }
-						>
-							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-								<i class="fa-solid fa-users text-xs text-gray-400"></i>
-							</span>
-							<span class="flex-1">NPCs</span>
-						</a>
+					if len(GetSidebarItems(ctx)) > 0 {
+						<!-- Unified sidebar: render items in owner-defined order -->
+						for _, item := range GetSidebarItems(ctx) {
+							if item.Type == "dashboard" {
+								@sidebarDashboardLink(ctx)
+							}
+							if item.Type == "addon" && IsAddonEnabled(ctx, item.Slug) {
+								@sidebarAddonLink(ctx, item)
+							}
+							if item.Type == "all_pages" {
+								@sidebarAllPagesLink(ctx)
+							}
+							if item.Type == "section" {
+								<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
+									{ item.Label }
+								</div>
+							}
+							if item.Type == "link" {
+								@customNavLink(SidebarLink{ID: item.ID, Label: item.Label, URL: item.URL, Icon: item.Icon})
+							}
+						}
+					} else {
+						<!-- Legacy sidebar: hardcoded order -->
+						@sidebarDashboardLink(ctx)
+						if IsAddonEnabled(ctx, "notes") {
+							@sidebarAddonLink(ctx, SidebarItemView{Slug: "notes", Label: "Journal", Icon: "fa-book-open"})
+						}
+						if IsAddonEnabled(ctx, "npcs") {
+							@sidebarAddonLink(ctx, SidebarItemView{Slug: "npcs", Label: "NPCs", Icon: "fa-users"})
+						}
 					}
 				</div>
 
@@ -245,34 +239,44 @@ templ Sidebar() {
 								</button>
 							}
 						</div>
-						for _, et := range GetEntityTypes(ctx) {
-							@entityTypeLink(et.Slug, et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID), et.ID)
-						}
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
-							class={ sidebarNavLink,
-								templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
-								templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
-						>
-							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-								<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
-							</span>
-							<span class="flex-1">All Pages</span>
-						</a>
-						<!-- Custom sidebar sections and links -->
-						if len(GetCustomSections(ctx)) > 0 || len(GetCustomLinks(ctx)) > 0 {
-							for _, link := range GetCustomLinks(ctx) {
-								if link.Section == "" {
-									@customNavLink(link)
+						if len(GetSidebarItems(ctx)) > 0 {
+							<!-- Unified: render categories and other items from the items array -->
+							for _, item := range GetSidebarItems(ctx) {
+								if item.Type == "category" {
+									@entityTypeLink(getEntityTypeSlug(ctx, item.TypeID), item.Label, item.Color, item.Icon, GetEntityCount(ctx, item.TypeID), item.TypeID)
 								}
 							}
-							for _, section := range GetCustomSections(ctx) {
-								<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
-									{ section.Label }
-								</div>
+						} else {
+							<!-- Legacy: render entity types in configured order -->
+							for _, et := range GetEntityTypes(ctx) {
+								@entityTypeLink(et.Slug, et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID), et.ID)
+							}
+							<a
+								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
+								class={ sidebarNavLink,
+									templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
+									templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
+							>
+								<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+									<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
+								</span>
+								<span class="flex-1">All Pages</span>
+							</a>
+							<!-- Custom sidebar sections and links (legacy) -->
+							if len(GetCustomSections(ctx)) > 0 || len(GetCustomLinks(ctx)) > 0 {
 								for _, link := range GetCustomLinks(ctx) {
-									if link.Section == section.ID {
+									if link.Section == "" {
 										@customNavLink(link)
+									}
+								}
+								for _, section := range GetCustomSections(ctx) {
+									<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
+										{ section.Label }
+									</div>
+									for _, link := range GetCustomLinks(ctx) {
+										if link.Section == section.ID {
+											@customNavLink(link)
+										}
 									}
 								}
 							}
@@ -318,12 +322,22 @@ templ Sidebar() {
 				></div>
 			}
 
-			<!-- Zone 3: Manage section (static, campaign-scoped, owner only) -->
+			<!-- Zone 3: Manage section (collapsible, campaign-scoped) -->
 			if IsAuthenticated(ctx) {
-				<div class="shrink-0 border-t border-gray-700 py-1" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
-					<div class="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+				<div
+					class="shrink-0 border-t border-gray-700 py-1"
+					hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top"
+					x-data="{ open: localStorage.getItem('sidebar-manage-open') !== 'false' }"
+				>
+					<button
+						type="button"
+						class="w-full px-4 pt-2 pb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+						@click="open = !open; localStorage.setItem('sidebar-manage-open', open)"
+					>
 						Manage
-					</div>
+						<i class="fa-solid fa-chevron-right text-[8px] transition-transform" :class="open && 'rotate-90'"></i>
+					</button>
+					<div x-show="open" x-collapse>
 					if GetCampaignRole(ctx) >= 3 {
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/dashboard", GetCampaignID(ctx))) }
@@ -408,6 +422,7 @@ templ Sidebar() {
 							Settings
 						</a>
 					}
+					</div>
 				</div>
 			}
 		} else {
@@ -625,6 +640,82 @@ templ DefaultSidebarNav() {
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
 		</svg>
 		New Campaign
+	</a>
+}
+
+// addonURLMap maps addon slugs to their sidebar URL paths.
+var addonURLMap = map[string]string{
+	"notes":   "/journal",
+	"npcs":    "/npcs",
+	"armory":  "/armory",
+}
+
+// addonIconMap maps addon slugs to their default icons.
+var addonIconMap = map[string]string{
+	"notes":   "fa-book-open",
+	"npcs":    "fa-users",
+	"armory":  "fa-shield-halved",
+}
+
+// addonLabelMap maps addon slugs to their display labels.
+var addonLabelMap = map[string]string{
+	"notes":   "Journal",
+	"npcs":    "NPCs",
+	"armory":  "Armory",
+}
+
+// sidebarDashboardLink renders the Dashboard link in the sidebar.
+templ sidebarDashboardLink(ctx context.Context) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))),
+			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))) }
+	>
+		<svg class="w-4 h-4 mr-3 shrink-0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+		</svg>
+		Dashboard
+	</a>
+}
+
+// sidebarAddonLink renders an addon link in the sidebar (Journal, NPCs, etc.).
+templ sidebarAddonLink(ctx context.Context, item SidebarItemView) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s%s", GetCampaignID(ctx), addonURLMap[item.Slug])) }
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s%s", GetCampaignID(ctx), addonURLMap[item.Slug]))),
+			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s%s", GetCampaignID(ctx), addonURLMap[item.Slug]))) }
+	>
+		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+			if item.Icon != "" {
+				<i class={ "fa-solid " + item.Icon + " text-xs" }></i>
+			} else {
+				<i class={ "fa-solid " + addonIconMap[item.Slug] + " text-xs" }></i>
+			}
+		</span>
+		<span class="flex-1">
+			if item.Label != "" {
+				{ item.Label }
+			} else {
+				{ addonLabelMap[item.Slug] }
+			}
+		</span>
+	</a>
+}
+
+// sidebarAllPagesLink renders the "All Pages" link in the sidebar.
+templ sidebarAllPagesLink(ctx context.Context) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
+			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
+	>
+		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+			<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
+		</span>
+		<span class="flex-1">All Pages</span>
 	</a>
 }
 

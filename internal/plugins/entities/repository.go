@@ -499,6 +499,7 @@ type EntityRepository interface {
 
 	// UpdateParent sets or clears an entity's parent_id. Scoped to campaign for safety.
 	UpdateParent(ctx context.Context, entityID, campaignID string, parentID *string) error
+	UpdateParentNode(ctx context.Context, entityID, campaignID string, parentNodeID *string) error // Set sidebar folder node parent.
 
 	// UpdateSortOrder sets an entity's manual sort order within its parent/category.
 	// Scoped to campaign for safety.
@@ -553,13 +554,13 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 	}
 
 	query := `INSERT INTO entities (id, campaign_id, entity_type_id, name, slug, entry, entry_html,
-	          image_path, parent_id, sort_order, is_folder, type_label, is_private, is_template, fields_data, created_by, created_at, updated_at)
+	          image_path, parent_id, parent_node_id, sort_order, type_label, is_private, is_template, fields_data, created_by, created_at, updated_at)
 	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err = r.db.ExecContext(ctx, query,
 		entity.ID, entity.CampaignID, entity.EntityTypeID,
 		entity.Name, entity.Slug, entity.Entry, entity.EntryHTML,
-		entity.ImagePath, entity.ParentID, entity.SortOrder, entity.IsFolder, entity.TypeLabel,
+		entity.ImagePath, entity.ParentID, entity.ParentNodeID, entity.SortOrder, entity.TypeLabel,
 		entity.IsPrivate, entity.IsTemplate, fieldsJSON,
 		entity.CreatedBy, entity.CreatedAt, entity.UpdatedAt,
 	)
@@ -571,7 +572,7 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 
 // entitySelectColumns is the standard column list for entity queries with joined type info.
 const entitySelectColumns = `e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	                 e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.sort_order, e.is_folder, e.type_label,
+	                 e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	                 e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug`
@@ -603,7 +604,7 @@ func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := row.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
-		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.SortOrder, &e.IsFolder, &e.TypeLabel,
+		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
@@ -817,6 +818,30 @@ func (r *entityRepository) SlugExists(ctx context.Context, campaignID, slug stri
 	return exists, nil
 }
 
+// tagFilterClause returns a WHERE clause fragment and args that filter
+// entities to only those having ALL the specified tags (AND logic).
+// Uses a subquery with HAVING COUNT to ensure all tags match.
+func tagFilterClause(tagSlugs []string) (string, []any) {
+	if len(tagSlugs) == 0 {
+		return "", nil
+	}
+	placeholders := make([]string, len(tagSlugs))
+	args := make([]any, len(tagSlugs))
+	for i, slug := range tagSlugs {
+		placeholders[i] = "?"
+		args[i] = slug
+	}
+	clause := fmt.Sprintf(` AND e.id IN (
+		SELECT et2.entity_id FROM entity_tags et2
+		INNER JOIN tags t2 ON t2.id = et2.tag_id
+		WHERE t2.slug IN (%s)
+		GROUP BY et2.entity_id
+		HAVING COUNT(DISTINCT t2.slug) = ?
+	)`, strings.Join(placeholders, ","))
+	args = append(args, len(tagSlugs))
+	return clause, args
+}
+
 // visibilityFilter returns the WHERE clause fragment and args that enforce
 // entity visibility based on the viewer's role, user ID, and the entity's
 // visibility mode. Owners see everything — returns empty string.
@@ -859,9 +884,11 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 		args = append(args, typeID)
 	}
 
-	// Exclude folder entities unless explicitly requested (sidebar tree).
-	if !opts.IncludeFolders {
-		where += " AND e.is_folder = FALSE"
+	// Tag filtering: entity must have ALL specified tags (AND logic).
+	if len(opts.TagSlugs) > 0 {
+		tagFilter, tagArgs := tagFilterClause(opts.TagSlugs)
+		where += tagFilter
+		args = append(args, tagArgs...)
 	}
 
 	visFilter, visArgs := visibilityFilter(role, userID)
@@ -907,11 +934,6 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 	where := "WHERE e.campaign_id = ?"
 	args := []any{campaignID}
 
-	// Exclude folder entities unless explicitly requested (sidebar tree).
-	if !opts.IncludeFolders {
-		where += " AND e.is_folder = FALSE"
-	}
-
 	// FULLTEXT for longer queries, LIKE for short ones.
 	var nameCondition string
 	var nameArg string
@@ -935,6 +957,13 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 	if typeID > 0 {
 		where += " AND e.entity_type_id = ?"
 		args = append(args, typeID)
+	}
+
+	// Tag filtering: entity must have ALL specified tags (AND logic).
+	if len(opts.TagSlugs) > 0 {
+		tagFilter, tagArgs := tagFilterClause(opts.TagSlugs)
+		where += tagFilter
+		args = append(args, tagArgs...)
 	}
 
 	visFilter, visArgs := visibilityFilter(role, userID)
@@ -978,7 +1007,7 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 // Respects visibility filtering for non-owner roles.
 func (r *entityRepository) CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error) {
 	// Use alias 'e' to match visibilityFilter expectations.
-	query := `SELECT e.entity_type_id, COUNT(*) FROM entities e WHERE e.campaign_id = ? AND e.is_folder = FALSE`
+	query := `SELECT e.entity_type_id, COUNT(*) FROM entities e WHERE e.campaign_id = ?`
 	args := []any{campaignID}
 
 	visFilter, visArgs := visibilityFilter(role, userID)
@@ -1077,7 +1106,7 @@ func (r *entityRepository) FindChildren(ctx context.Context, parentID string, ro
 func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) ([]Entity, error) {
 	query := `WITH RECURSIVE ancestors AS (
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	           e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.sort_order, e.is_folder, e.type_label,
+	           e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.created_at, e.updated_at,
 	           1 AS depth
@@ -1085,7 +1114,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	    WHERE e.id = (SELECT parent_id FROM entities WHERE id = ?)
 	    UNION ALL
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	           e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.sort_order, e.is_folder, e.type_label,
+	           e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.created_at, e.updated_at,
 	           a.depth + 1
@@ -1094,7 +1123,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	    WHERE a.depth < 20
 	)
 	SELECT a.id, a.campaign_id, a.entity_type_id, a.name, a.slug,
-	       a.entry, a.entry_html, a.image_path, a.cover_image_path, a.parent_id, a.sort_order, a.is_folder, a.type_label,
+	       a.entry, a.entry_html, a.image_path, a.cover_image_path, a.parent_id, a.parent_node_id, a.sort_order, a.type_label,
 	       a.is_private, a.visibility, a.is_template, a.fields_data, a.field_overrides, a.popup_config,
 	       a.created_by, a.created_at, a.updated_at,
 	       et.name, et.icon, et.color, et.slug
@@ -1127,6 +1156,18 @@ func (r *entityRepository) UpdateParent(ctx context.Context, entityID, campaignI
 	_, err := r.db.ExecContext(ctx, query, parentID, entityID, campaignID)
 	if err != nil {
 		return fmt.Errorf("updating entity parent: %w", err)
+	}
+	return nil
+}
+
+// UpdateParentNode sets or clears an entity's sidebar folder node parent.
+// An entity can be parented under a folder node (parent_node_id) or another
+// entity (parent_id), but not both. The caller clears the other reference.
+func (r *entityRepository) UpdateParentNode(ctx context.Context, entityID, campaignID string, parentNodeID *string) error {
+	query := `UPDATE entities SET parent_node_id = ?, updated_at = NOW() WHERE id = ? AND campaign_id = ?`
+	_, err := r.db.ExecContext(ctx, query, parentNodeID, entityID, campaignID)
+	if err != nil {
+		return fmt.Errorf("updating entity parent node: %w", err)
 	}
 	return nil
 }
@@ -1245,7 +1286,7 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := rows.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
-		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.SortOrder, &e.IsFolder, &e.TypeLabel,
+		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,

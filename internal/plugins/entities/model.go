@@ -221,9 +221,9 @@ type Entity struct {
 	EntryHTML      *string         `json:"entry_html,omitempty"` // Pre-rendered HTML from entry.
 	ImagePath      *string         `json:"image_path,omitempty"`
 	CoverImagePath *string         `json:"cover_image_path,omitempty"` // Full-width banner image.
-	ParentID       *string         `json:"parent_id,omitempty"`
+	ParentID       *string         `json:"parent_id,omitempty"`       // Parent entity ID (hierarchy). Mutually exclusive with ParentNodeID.
+	ParentNodeID   *string         `json:"parent_node_id,omitempty"` // Parent sidebar folder node ID. Mutually exclusive with ParentID.
 	SortOrder      int             `json:"sort_order"`            // Manual ordering within parent/category (0 = default).
-	IsFolder       bool            `json:"is_folder"`             // Organizational container with no page content.
 	TypeLabel      *string         `json:"type_label,omitempty"` // Freeform subtype (e.g., "City" for a Location).
 	IsPrivate      bool            `json:"is_private"`
 	Visibility     VisibilityMode  `json:"visibility"`
@@ -364,7 +364,6 @@ type CreateEntityInput struct {
 	TypeLabel    string
 	ParentID     string // Empty string = no parent.
 	IsPrivate    bool
-	IsFolder     bool   // Organizational container with no page content.
 	FieldsData   map[string]any
 }
 
@@ -383,10 +382,10 @@ type UpdateEntityInput struct {
 
 // ListOptions holds pagination and sorting parameters for list queries.
 type ListOptions struct {
-	Page           int
-	PerPage        int
-	Sort           string // "name" (default), "updated", "created"
-	IncludeFolders bool   // When true, include is_folder entities (sidebar tree only).
+	Page     int
+	PerPage  int
+	Sort     string   // "name" (default), "updated", "created"
+	TagSlugs []string // Filter by tag slugs (AND logic — entity must have all listed tags).
 }
 
 // DefaultListOptions returns sensible defaults for pagination.

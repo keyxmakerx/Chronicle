@@ -37,7 +37,7 @@ type EntityService interface {
 	// Hierarchy
 	GetChildren(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
 	GetAncestors(ctx context.Context, entityID string) ([]Entity, error)
-	ReorderEntity(ctx context.Context, campaignID, entityID string, parentID *string, sortOrder int) error
+	ReorderEntity(ctx context.Context, campaignID, entityID string, parentID *string, parentNodeID *string, sortOrder int) error
 
 	// Backlinks
 	GetBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
@@ -201,7 +201,6 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		ParentID:     parentIDPtr,
 		TypeLabel:    typeLabelPtr,
 		IsPrivate:    input.IsPrivate,
-		IsFolder:     input.IsFolder,
 		IsTemplate:   false,
 		FieldsData:   fieldsData,
 		CreatedBy:    userID,
@@ -407,10 +406,12 @@ func (s *entityService) GetAncestors(ctx context.Context, entityID string) ([]En
 	return ancestors, nil
 }
 
-// ReorderEntity updates an entity's parent and sort order for sidebar tree reordering.
-// Validates that the entity and parent belong to the same campaign, and prevents
-// self-parenting. Both operations are scoped to the campaign for safety.
-func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID string, parentID *string, sortOrder int) error {
+// ReorderEntity updates an entity's parent and sort order for sidebar tree
+// reordering and reparenting. An entity can be parented under either another
+// entity (parentID) or a sidebar folder node (parentNodeID), but not both.
+// When one is set, the other is automatically cleared.
+// Validates campaign ownership and prevents self-parenting.
+func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID string, parentID *string, parentNodeID *string, sortOrder int) error {
 	// Prevent self-parenting.
 	if parentID != nil && *parentID == entityID {
 		return apperror.NewBadRequest("an entity cannot be its own parent")
@@ -425,7 +426,7 @@ func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID 
 		return apperror.NewNotFound("entity not found")
 	}
 
-	// If a parent is specified, verify it exists in the same campaign.
+	// If a parent entity is specified, verify it exists in the same campaign.
 	if parentID != nil {
 		parent, err := s.entities.FindByID(ctx, *parentID)
 		if err != nil {
@@ -436,9 +437,26 @@ func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID 
 		}
 	}
 
-	if err := s.entities.UpdateParent(ctx, entityID, campaignID, parentID); err != nil {
-		return err
+	// An entity can be parented under an entity (parent_id) or a folder
+	// node (parent_node_id), but not both. When one is set, clear the other.
+	if parentNodeID != nil {
+		// Reparenting under a folder node — clear entity parent.
+		if err := s.entities.UpdateParent(ctx, entityID, campaignID, nil); err != nil {
+			return err
+		}
+		if err := s.entities.UpdateParentNode(ctx, entityID, campaignID, parentNodeID); err != nil {
+			return err
+		}
+	} else {
+		// Reparenting under an entity or root — clear folder node parent.
+		if err := s.entities.UpdateParentNode(ctx, entityID, campaignID, nil); err != nil {
+			return err
+		}
+		if err := s.entities.UpdateParent(ctx, entityID, campaignID, parentID); err != nil {
+			return err
+		}
 	}
+
 	if err := s.entities.UpdateSortOrder(ctx, entityID, campaignID, sortOrder); err != nil {
 		return err
 	}
