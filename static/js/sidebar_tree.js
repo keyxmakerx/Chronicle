@@ -426,8 +426,16 @@
         var sortOrder = calculateSortOrder(target, 'before');
         reorderEntity(campaignId, droppedId, targetParentId, sortOrder);
       } else {
-        // Reparent: nest inside target as first child (sort_order 0).
-        reorderEntity(campaignId, droppedId, targetId, 0);
+        // Reparent zone: behavior depends on whether target is a folder.
+        var targetHasChildren = !!target.querySelector('[data-has-children]');
+        if (targetHasChildren) {
+          // Target is already a folder — add dragged entity as child.
+          reorderEntity(campaignId, droppedId, targetId, 0);
+        } else {
+          // Target is a leaf — show menu to create a new folder
+          // containing both the dragged and target entities.
+          showReparentMenu(e.clientX, e.clientY, droppedId, target, campaignId);
+        }
       }
     });
 
@@ -529,7 +537,12 @@
           var sortOrder = calculateSortOrder(target, 'before');
           reorderEntity(campaignId, touchState.srcId, targetParentId, sortOrder);
         } else {
-          reorderEntity(campaignId, touchState.srcId, targetId, 0);
+          var targetHasChildren = !!target.querySelector('[data-has-children]');
+          if (targetHasChildren) {
+            reorderEntity(campaignId, touchState.srcId, targetId, 0);
+          } else {
+            showReparentMenu(lastTouch.clientX, lastTouch.clientY, touchState.srcId, target, campaignId);
+          }
         }
       }
 
@@ -579,6 +592,22 @@
   }
 
   /**
+   * Refresh the sidebar entity list via HTMX to reflect updated hierarchy.
+   */
+  function refreshSidebarTree() {
+    var results = document.getElementById('sidebar-cat-results');
+    if (results) {
+      var searchInput = document.querySelector('#sidebar-cat-content input[name="q"]');
+      if (searchInput) {
+        var loadUrl = searchInput.getAttribute('hx-get');
+        if (loadUrl) {
+          htmx.ajax('GET', loadUrl, { target: results, swap: 'innerHTML' });
+        }
+      }
+    }
+  }
+
+  /**
    * Send reorder/reparent request to the API. On success, refreshes the
    * sidebar entity list via HTMX to reflect the new ordering.
    */
@@ -599,20 +628,152 @@
           throw new Error('Reorder failed: ' + resp.status);
         });
       }
-      // Refresh the sidebar entity list to show updated hierarchy.
-      var results = document.getElementById('sidebar-cat-results');
-      if (results) {
-        var searchInput = document.querySelector('#sidebar-cat-content input[name="q"]');
-        if (searchInput) {
-          var loadUrl = searchInput.getAttribute('hx-get');
-          if (loadUrl) {
-            htmx.ajax('GET', loadUrl, { target: results, swap: 'innerHTML' });
-          }
-        }
-      }
+      refreshSidebarTree();
     })
     .catch(function (err) {
       console.error('sidebar_tree: reorder failed', err);
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // Reparent Menu — shown when dropping a leaf onto another leaf.
+  // Instead of making the target the parent, creates a new folder entity
+  // and groups both items under it.
+  // -----------------------------------------------------------------------
+
+  /**
+   * Remove any existing reparent context menu from the DOM.
+   */
+  function removeReparentMenu() {
+    var existing = document.getElementById('sidebar-reparent-menu');
+    if (existing) existing.remove();
+    document.removeEventListener('mousedown', onReparentMenuOutsideClick);
+  }
+
+  /**
+   * Dismiss handler: close menu when clicking outside it.
+   */
+  function onReparentMenuOutsideClick(e) {
+    var menu = document.getElementById('sidebar-reparent-menu');
+    if (menu && !menu.contains(e.target)) {
+      removeReparentMenu();
+    }
+  }
+
+  /**
+   * Show a context menu with options for grouping two entities into a folder.
+   * Appears at the drop position when a leaf entity is dropped onto another
+   * leaf entity. The original target entity is never made the folder itself —
+   * a new folder is created to contain both.
+   */
+  function showReparentMenu(x, y, droppedId, targetNode, campaignId) {
+    removeReparentMenu();
+
+    var menu = document.createElement('div');
+    menu.id = 'sidebar-reparent-menu';
+    menu.className = 'fixed z-[9999] bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[180px] text-sm';
+
+    // Clamp position to stay within viewport.
+    var menuW = 190;
+    var menuH = 80;
+    var posX = Math.min(x, window.innerWidth - menuW - 8);
+    var posY = Math.min(y, window.innerHeight - menuH - 8);
+    menu.style.left = posX + 'px';
+    menu.style.top = posY + 'px';
+
+    // Option 1: New page as folder (a real entity with content).
+    var opt1 = document.createElement('button');
+    opt1.type = 'button';
+    opt1.className = 'w-full px-3 py-2 text-left flex items-center gap-2 text-fg hover:bg-surface-hover transition-colors';
+    opt1.innerHTML = '<i class="fa-solid fa-file-lines text-xs text-fg-muted w-4 text-center"></i> New page as folder';
+    opt1.addEventListener('click', function () {
+      removeReparentMenu();
+      createGroupFolder(campaignId, droppedId, targetNode, 'New Page');
+    });
+
+    // Option 2: Empty folder (organizational only).
+    var opt2 = document.createElement('button');
+    opt2.type = 'button';
+    opt2.className = 'w-full px-3 py-2 text-left flex items-center gap-2 text-fg hover:bg-surface-hover transition-colors';
+    opt2.innerHTML = '<i class="fa-solid fa-folder text-xs text-fg-muted w-4 text-center"></i> New empty folder';
+    opt2.addEventListener('click', function () {
+      removeReparentMenu();
+      createGroupFolder(campaignId, droppedId, targetNode, 'New Folder');
+    });
+
+    menu.appendChild(opt1);
+    menu.appendChild(opt2);
+    document.body.appendChild(menu);
+
+    // Close on outside click (delayed to avoid the current event).
+    setTimeout(function () {
+      document.addEventListener('mousedown', onReparentMenuOutsideClick);
+    }, 0);
+  }
+
+  /**
+   * Create a new folder entity and group both the dragged and target
+   * entities under it. The folder is placed where the target was
+   * (same parent, same sort order), then both items are reparented.
+   *
+   * Flow: create folder → position folder → reparent target → reparent dragged → refresh.
+   */
+  function createGroupFolder(campaignId, droppedId, targetNode, folderName) {
+    var targetId = targetNode.getAttribute('data-entity-id');
+    var targetParentId = targetNode.getAttribute('data-parent-id') || null;
+    var targetItem = targetNode.querySelector('.sidebar-tree-item');
+    var targetSortOrder = parseInt(targetItem ? targetItem.getAttribute('data-sort-order') : '0', 10) || 0;
+
+    // Read entity type from the tree container.
+    var tree = document.getElementById('sidebar-entity-tree');
+    var entityTypeId = parseInt(tree ? tree.getAttribute('data-entity-type-id') : '0', 10) || 0;
+
+    // Step 1: Create the folder entity.
+    Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/quick-create', {
+      method: 'POST',
+      body: { name: folderName, entity_type_id: entityTypeId }
+    })
+    .then(function (res) {
+      if (!res.ok) throw new Error('Failed to create folder');
+      return res.json();
+    })
+    .then(function (folder) {
+      // Step 2: Position the folder where the target was.
+      return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + folder.id + '/reorder', {
+        method: 'PUT',
+        body: { parent_id: targetParentId, sort_order: targetSortOrder }
+      }).then(function (res) {
+        if (!res.ok) throw new Error('Failed to position folder');
+        return folder;
+      });
+    })
+    .then(function (folder) {
+      // Step 3: Reparent the target entity under the new folder.
+      return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + targetId + '/reorder', {
+        method: 'PUT',
+        body: { parent_id: folder.id, sort_order: 0 }
+      }).then(function (res) {
+        if (!res.ok) throw new Error('Failed to reparent target');
+        return folder;
+      });
+    })
+    .then(function (folder) {
+      // Step 4: Reparent the dragged entity under the new folder.
+      return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + droppedId + '/reorder', {
+        method: 'PUT',
+        body: { parent_id: folder.id, sort_order: 1 }
+      }).then(function (res) {
+        if (!res.ok) throw new Error('Failed to reparent dragged entity');
+      });
+    })
+    .then(function () {
+      // Step 5: Refresh the sidebar tree.
+      refreshSidebarTree();
+      Chronicle.notify('Folder created', 'success');
+    })
+    .catch(function (err) {
+      console.error('sidebar_tree: create group folder failed', err);
+      Chronicle.notify('Failed to create folder', 'error');
     });
   }
 
