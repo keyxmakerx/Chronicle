@@ -26,6 +26,9 @@ templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignConte
 			id="sidebar-entity-tree"
 			class="sidebar-entity-list py-1"
 			data-campaign-id={ cc.Campaign.ID }
+			if len(results) > 0 {
+				data-entity-type-id={ strconv.Itoa(results[0].EntityTypeID) }
+			}
 		>
 			for _, entity := range results {
 				<a
