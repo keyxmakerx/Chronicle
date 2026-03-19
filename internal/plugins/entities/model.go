@@ -223,6 +223,7 @@ type Entity struct {
 	CoverImagePath *string         `json:"cover_image_path,omitempty"` // Full-width banner image.
 	ParentID       *string         `json:"parent_id,omitempty"`
 	SortOrder      int             `json:"sort_order"`            // Manual ordering within parent/category (0 = default).
+	IsFolder       bool            `json:"is_folder"`             // Organizational container with no page content.
 	TypeLabel      *string         `json:"type_label,omitempty"` // Freeform subtype (e.g., "City" for a Location).
 	IsPrivate      bool            `json:"is_private"`
 	Visibility     VisibilityMode  `json:"visibility"`
@@ -363,6 +364,7 @@ type CreateEntityInput struct {
 	TypeLabel    string
 	ParentID     string // Empty string = no parent.
 	IsPrivate    bool
+	IsFolder     bool   // Organizational container with no page content.
 	FieldsData   map[string]any
 }
 

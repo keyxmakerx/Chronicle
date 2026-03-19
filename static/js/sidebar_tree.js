@@ -104,6 +104,8 @@
      */
     function renderNode(node, depth) {
       var hasChildren = node.children.length > 0;
+      var isFolder = node.el.hasAttribute('data-is-folder');
+      var showAsFolder = hasChildren || isFolder;
       var isCollapsed = !!collapsedSet[node.id];
 
       // Create wrapper div for the tree node.
@@ -121,10 +123,25 @@
       var link = node.el.cloneNode(true);
       link.style.paddingLeft = (10 + depth * INDENT_PX) + 'px';
 
-      // Swap the default page icon based on whether this node has children.
+      // Folder entities are organizational — not navigable as pages.
+      // Replace the <a> with a <div> so clicking doesn't navigate away.
+      if (isFolder) {
+        var div = document.createElement('div');
+        div.className = link.className;
+        div.style.cssText = link.style.cssText;
+        div.innerHTML = link.innerHTML;
+        // Copy data attributes needed by drag-and-drop.
+        ['data-entity-id', 'data-parent-id', 'data-sort-order', 'data-entity-name', 'data-sidebar-hidden', 'data-is-folder'].forEach(function (attr) {
+          if (link.hasAttribute(attr)) div.setAttribute(attr, link.getAttribute(attr));
+        });
+        div.classList.add('sidebar-tree-item', 'cursor-default');
+        link = div;
+      }
+
+      // Swap the default page icon based on whether this node is a folder.
       var iconEl = link.querySelector('.sidebar-tree-icon i');
       if (iconEl) {
-        if (hasChildren) {
+        if (showAsFolder) {
           // Folder icon: open when expanded, closed when collapsed.
           iconEl.className = isCollapsed
             ? 'fa-solid fa-folder text-[10px]'
@@ -698,7 +715,7 @@
     opt2.innerHTML = '<i class="fa-solid fa-folder text-xs text-fg-muted w-4 text-center"></i> New empty folder';
     opt2.addEventListener('click', function () {
       removeReparentMenu();
-      createGroupFolder(campaignId, droppedId, targetNode, 'New Folder');
+      createGroupFolder(campaignId, droppedId, targetNode, 'New Folder', true);
     });
 
     menu.appendChild(opt1);
@@ -718,7 +735,7 @@
    *
    * Flow: create folder → position folder → reparent target → reparent dragged → refresh.
    */
-  function createGroupFolder(campaignId, droppedId, targetNode, folderName) {
+  function createGroupFolder(campaignId, droppedId, targetNode, folderName, isFolder) {
     var targetId = targetNode.getAttribute('data-entity-id');
     var targetParentId = targetNode.getAttribute('data-parent-id') || null;
     var targetItem = targetNode.querySelector('.sidebar-tree-item');
@@ -731,7 +748,7 @@
     // Step 1: Create the folder entity.
     Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/quick-create', {
       method: 'POST',
-      body: { name: folderName, entity_type_id: entityTypeId }
+      body: { name: folderName, entity_type_id: entityTypeId, is_folder: !!isFolder }
     })
     .then(function (res) {
       if (!res.ok) throw new Error('Failed to create folder');

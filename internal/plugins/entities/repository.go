@@ -553,13 +553,13 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 	}
 
 	query := `INSERT INTO entities (id, campaign_id, entity_type_id, name, slug, entry, entry_html,
-	          image_path, parent_id, sort_order, type_label, is_private, is_template, fields_data, created_by, created_at, updated_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	          image_path, parent_id, sort_order, is_folder, type_label, is_private, is_template, fields_data, created_by, created_at, updated_at)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err = r.db.ExecContext(ctx, query,
 		entity.ID, entity.CampaignID, entity.EntityTypeID,
 		entity.Name, entity.Slug, entity.Entry, entity.EntryHTML,
-		entity.ImagePath, entity.ParentID, entity.SortOrder, entity.TypeLabel,
+		entity.ImagePath, entity.ParentID, entity.SortOrder, entity.IsFolder, entity.TypeLabel,
 		entity.IsPrivate, entity.IsTemplate, fieldsJSON,
 		entity.CreatedBy, entity.CreatedAt, entity.UpdatedAt,
 	)
@@ -571,7 +571,7 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 
 // entitySelectColumns is the standard column list for entity queries with joined type info.
 const entitySelectColumns = `e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	                 e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.sort_order, e.type_label,
+	                 e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.sort_order, e.is_folder, e.type_label,
 	                 e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug`
@@ -603,7 +603,7 @@ func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := row.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
-		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.SortOrder, &e.TypeLabel,
+		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.SortOrder, &e.IsFolder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
@@ -1067,7 +1067,7 @@ func (r *entityRepository) FindChildren(ctx context.Context, parentID string, ro
 func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) ([]Entity, error) {
 	query := `WITH RECURSIVE ancestors AS (
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	           e.entry, e.entry_html, e.image_path, e.parent_id, e.sort_order, e.type_label,
+	           e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.sort_order, e.is_folder, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.created_at, e.updated_at,
 	           1 AS depth
@@ -1075,7 +1075,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	    WHERE e.id = (SELECT parent_id FROM entities WHERE id = ?)
 	    UNION ALL
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	           e.entry, e.entry_html, e.image_path, e.parent_id, e.sort_order, e.type_label,
+	           e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.sort_order, e.is_folder, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.created_at, e.updated_at,
 	           a.depth + 1
@@ -1084,7 +1084,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	    WHERE a.depth < 20
 	)
 	SELECT a.id, a.campaign_id, a.entity_type_id, a.name, a.slug,
-	       a.entry, a.entry_html, a.image_path, a.parent_id, a.sort_order, a.type_label,
+	       a.entry, a.entry_html, a.image_path, a.cover_image_path, a.parent_id, a.sort_order, a.is_folder, a.type_label,
 	       a.is_private, a.visibility, a.is_template, a.fields_data, a.field_overrides, a.popup_config,
 	       a.created_by, a.created_at, a.updated_at,
 	       et.name, et.icon, et.color, et.slug
@@ -1235,7 +1235,7 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := rows.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
-		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.SortOrder, &e.TypeLabel,
+		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.SortOrder, &e.IsFolder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
