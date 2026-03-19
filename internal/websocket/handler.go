@@ -12,11 +12,16 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
+// DynamicOrigins is an optional function that returns additional allowed
+// origins at runtime (e.g., from the admin CORS whitelist in the database).
+type DynamicOrigins func() []string
+
 // newUpgrader creates a WebSocket upgrader that validates the Origin header
-// against the configured allowed origins. Requests authenticated with an API
-// key (Foundry VTT) bypass origin checks since they already prove authorization.
-func newUpgrader(allowedOrigins []string) gorillaWs.Upgrader {
-	// Pre-parse allowed origins for efficient comparison.
+// against the configured allowed origins plus any dynamic origins. Requests
+// authenticated with an API key (Foundry VTT) bypass origin checks since
+// they already prove authorization.
+func newUpgrader(allowedOrigins []string, dynamicOrigins DynamicOrigins) gorillaWs.Upgrader {
+	// Pre-parse static allowed origins for efficient comparison.
 	parsedOrigins := make([]string, 0, len(allowedOrigins))
 	for _, o := range allowedOrigins {
 		if u, err := url.Parse(o); err == nil && u.Host != "" {
@@ -48,6 +53,17 @@ func newUpgrader(allowedOrigins []string) gorillaWs.Upgrader {
 				}
 			}
 
+			// Check dynamic origins (admin CORS whitelist from database).
+			if dynamicOrigins != nil {
+				for _, o := range dynamicOrigins() {
+					if u, err := url.Parse(o); err == nil && u.Host != "" {
+						if originLower == strings.ToLower(u.Scheme+"://"+u.Host) {
+							return true
+						}
+					}
+				}
+			}
+
 			slog.Warn("ws: origin rejected",
 				slog.String("origin", origin),
 				slog.String("remote", r.RemoteAddr),
@@ -69,10 +85,11 @@ type Authenticator interface {
 // HandleUpgrade returns an Echo handler that upgrades HTTP connections to WebSocket
 // and registers them with the hub. Authentication is delegated to the Authenticator.
 // The allowedOrigins parameter specifies which origins are permitted for browser
-// clients (typically the app's BaseURL). API-key-authenticated connections bypass
-// origin checks.
-func HandleUpgrade(hub *Hub, auth Authenticator, allowedOrigins []string) echo.HandlerFunc {
-	upgrader := newUpgrader(allowedOrigins)
+// clients (typically the app's BaseURL). The optional dynamicOrigins function
+// provides additional origins from the admin CORS whitelist at runtime.
+// API-key-authenticated connections bypass origin checks.
+func HandleUpgrade(hub *Hub, auth Authenticator, allowedOrigins []string, dynamicOrigins DynamicOrigins) echo.HandlerFunc {
+	upgrader := newUpgrader(allowedOrigins, dynamicOrigins)
 
 	return func(c echo.Context) error {
 		r := c.Request()
