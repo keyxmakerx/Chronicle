@@ -668,12 +668,14 @@
     display: none;
   }
 
-  /* Compact link padding for icon strip in collapsed state. */
+  /* Compact link padding for icon strip in collapsed state.
+     Also removes accent left-border to keep icons centered. */
   .sidebar-collapsed nav a,
   .sidebar-collapsed [hx-boost] a {
     padding-left: 12px;
     padding-right: 12px;
     justify-content: center;
+    border-left-width: 0 !important;
   }
 
   /* Remove icon margin when there's no text next to it.
@@ -718,6 +720,7 @@
     padding-left: 14px;
     padding-right: 14px;
     justify-content: center;
+    border-left-width: 0 !important;
   }
 
   .sidebar-icon-only a > span:first-child {
