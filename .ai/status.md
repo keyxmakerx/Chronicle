@@ -8,7 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-19 -- **Sidebar Navigation Overhaul (Sprints N-1 through N-4, ADR-032).**
+2026-03-19 -- **Sidebar Navigation Overhaul COMPLETE (Sprints N-1 through N-8 + responsive fixes).**
+
+54. **Sidebar Navigation Overhaul — Final Sprints (N-5 through N-8 + Responsive).**
+    - **Sprint N-5: Folder UX Completion (COMPLETE)** — Inline folder rename (double-click in reorg mode, Enter/blur saves via PUT API, Escape cancels). Folder visibility toggles (`HiddenNodeIDs` on SidebarConfig, eye icons on folder nodes). Right-click context menu (Rename/Delete). Fixed wrapper `data-node-id` vs `data-entity-id`. Skipped redundant div→div conversion.
+    - **Sprint N-6: Layout Editor Polish (COMPLETE)** — `injectMissing()` auto-appends addons and entity types missing from the items array when loading existing config. Handles addon enabled after initial config creation.
+    - **Sprint N-8: Saved Filter Presets (COMPLETE)** — Migration 000015 (`saved_filters` table). `SavedFilterRepository` with List/Create/Delete. REST API (GET/POST/DELETE `/campaigns/:id/saved-filters`). `sidebar_tag_filter.js` rewritten: preset buttons above tag chips, one-click apply, right-click delete, "Save" button when tags active.
+    - **Responsive/Mobile Fixes (COMPLETE)** — Touch drag-and-drop for layout editor (touchstart/touchmove/touchend with ghost element). Touch targets increased to WCAG-friendly sizes (tag chips, eye toggles, drag handles, context menu items). Long-press (500ms) context menu for mobile. Inline rename: 14px font prevents iOS zoom, scrollIntoView for virtual keyboard.
+    - **Phase N is fully complete.** Admin section was already collapsible (N-7a). Sidebar quick search (N-7b) deferred — Ctrl+K global search covers the use case.
+    - **Next Steps**: X-5 (character sheet blocks), W-2 (map drawing tools), W-4 remaining (batch operations on entity list page).
 
 53. **Sidebar Navigation Overhaul (Sprints N-1 through N-4, ADR-032).**
     - **Sprint N-1: Pure Folders (COMPLETE)** — `sidebar_nodes` table for entity-free organizational folders. Migration 000013 adds table + `parent_node_id` on entities + migrates `is_folder` entities + drops column. `SidebarNode` model/repo/handler with full CRUD. `sidebar_tree.js` merges entities + folder nodes. Reparent menu "New empty folder" creates sidebar_nodes record.
@@ -16,7 +24,6 @@
     - **Sprint N-3: Unified Sidebar Model (COMPLETE)** — `SidebarItem` type in sidebar_config JSON. `Items` array replaces entity_type_order + hidden_type_ids + custom_sections + custom_links. Template renders all items in owner-defined order. `sidebar_layout_editor.js` widget in Customize Hub — single drag-and-drop list for ALL sidebar items.
     - **Sprint N-4: Large Campaign Support (COMPLETE)** — Tag filtering in drill panel (`?tags=slug1,slug2` with AND-logic SQL). Lazy loading at 50/page with IntersectionObserver. Multi-select bulk move (Ctrl+click, floating action bar, POST /entities/bulk-move). Collapsible Manage section with localStorage persistence.
     - **Auto-Registration of Systems as Addons (COMPLETE, ADR-031)** — Removed hardcoded dnd5e/pathfinder2e/drawsteel addon definitions. `systems.AddonInfos()` → `addons.RegisterSystemAddon()` pipeline.
-    - **Next Steps**: Sprint N-4 remaining: saved filter presets. Sprint X-5 (character sheet blocks). W-2 (map drawing tools).
 
 52. **Sprint X-3: System-Provided Widgets + Auto-Registration + Sidebar Reorder Bugfix.**
     - **Sidebar Reorder 404 Fix (COMPLETE)** — MySQL `RowsAffected=0` on `UpdateParent`/`UpdateSortOrder` when values unchanged caused false "entity not found" 404. Removed `RowsAffected` checks, added explicit `FindByID` validation in service layer. Also added proper error logging in JS catch handler, cleared orphan `data-parent-id` on cross-type tree nodes, added NaN guard for sort_order, and used `*int` for nullable sort_order in handler.
