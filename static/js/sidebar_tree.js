@@ -1257,15 +1257,10 @@
     if (e.detail && !e.detail.active) clearSelection();
   });
 
-  // Listen for HTMX content swaps to re-initialize tree after list refreshes.
-  document.addEventListener('htmx:afterSwap', function (e) {
-    if (e.detail.target && (
-      e.detail.target.id === 'sidebar-cat-results' ||
-      e.detail.target.id === 'sidebar-cat-content'
-    )) {
-      setTimeout(initTree, 10);
-    }
-  });
+  // NOTE: Tree re-init on HTMX swaps is handled by the single listener
+  // near the bottom of this file (alongside observeLoadMore). Registering
+  // a second htmx:afterSwap handler here would cause initTree to run twice,
+  // producing double toggle chevrons.
 
   // --- Load More (pagination for large categories) ---
 
