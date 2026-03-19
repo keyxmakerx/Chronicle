@@ -38,21 +38,28 @@
     var items = container.querySelectorAll('.sidebar-tree-item');
     if (!items.length) return;
 
-    // Build lookup: entityId -> { el, parentId, sortOrder, children[] }
+    // Build lookup: id -> { el, parentId, sortOrder, children[], isNode }
+    // Items can be entities (data-entity-id) or folder nodes (data-node-id).
+    // Entities can be parented under entities (data-parent-id) or folder nodes
+    // (data-parent-node-id). Folder nodes use data-parent-id for their parent.
     var nodes = {};
     var rootIds = [];
 
     items.forEach(function (el) {
-      var id = el.getAttribute('data-entity-id');
-      var parentId = el.getAttribute('data-parent-id') || null;
+      var id = el.getAttribute('data-entity-id') || el.getAttribute('data-node-id');
+      if (!id) return;
+      // Resolve parent: entities may have parent_id (entity) or parent_node_id (folder).
+      var parentId = el.getAttribute('data-parent-node-id') || el.getAttribute('data-parent-id') || null;
       var sortOrder = parseInt(el.getAttribute('data-sort-order') || '0', 10);
+      var isNode = el.hasAttribute('data-node-id');
 
       nodes[id] = {
         el: el,
         id: id,
         parentId: parentId,
         sortOrder: sortOrder,
-        children: []
+        children: [],
+        isNode: isNode
       };
     });
 
@@ -431,7 +438,9 @@
       var target = e.target.closest('.sidebar-tree-node');
       if (!target) return;
 
-      var targetId = target.getAttribute('data-entity-id');
+      var targetEntityId = target.getAttribute('data-entity-id');
+      var targetNodeId = target.getAttribute('data-node-id');
+      var targetId = targetEntityId || targetNodeId;
       if (targetId === droppedId) return;
 
       var rect = target.getBoundingClientRect();
@@ -439,15 +448,20 @@
 
       if (e.clientY < thirdY) {
         // Reorder: place before target (same parent).
+        var targetParentNodeId = target.getAttribute('data-parent-node-id') || null;
         var targetParentId = target.getAttribute('data-parent-id') || null;
         var sortOrder = calculateSortOrder(target, 'before');
-        reorderEntity(campaignId, droppedId, targetParentId, sortOrder);
+        reorderEntity(campaignId, droppedId, targetParentId, sortOrder, targetParentNodeId);
       } else {
         // Reparent zone: behavior depends on whether target is a folder.
-        var targetHasChildren = !!target.querySelector('[data-has-children]');
-        if (targetHasChildren) {
+        var targetIsFolder = !!target.querySelector('[data-is-folder]') || !!target.querySelector('[data-has-children]');
+        if (targetIsFolder) {
           // Target is already a folder — add dragged entity as child.
-          reorderEntity(campaignId, droppedId, targetId, 0);
+          if (targetNodeId) {
+            reorderEntity(campaignId, droppedId, null, 0, targetNodeId);
+          } else {
+            reorderEntity(campaignId, droppedId, targetEntityId, 0);
+          }
         } else {
           // Target is a leaf — show menu to create a new folder
           // containing both the dragged and target entities.
@@ -545,18 +559,24 @@
       var target = el ? el.closest('.sidebar-tree-node') : null;
 
       if (target && target !== touchState.src) {
-        var targetId = target.getAttribute('data-entity-id');
+        var targetEntityId = target.getAttribute('data-entity-id');
+        var targetNodeId = target.getAttribute('data-node-id');
         var rect = target.getBoundingClientRect();
         var thirdY = rect.top + rect.height / 3;
 
         if (lastTouch.clientY < thirdY) {
+          var targetParentNodeId = target.getAttribute('data-parent-node-id') || null;
           var targetParentId = target.getAttribute('data-parent-id') || null;
           var sortOrder = calculateSortOrder(target, 'before');
-          reorderEntity(campaignId, touchState.srcId, targetParentId, sortOrder);
+          reorderEntity(campaignId, touchState.srcId, targetParentId, sortOrder, targetParentNodeId);
         } else {
-          var targetHasChildren = !!target.querySelector('[data-has-children]');
-          if (targetHasChildren) {
-            reorderEntity(campaignId, touchState.srcId, targetId, 0);
+          var targetIsFolder = !!target.querySelector('[data-is-folder]') || !!target.querySelector('[data-has-children]');
+          if (targetIsFolder) {
+            if (targetNodeId) {
+              reorderEntity(campaignId, touchState.srcId, null, 0, targetNodeId);
+            } else {
+              reorderEntity(campaignId, touchState.srcId, targetEntityId, 0);
+            }
           } else {
             showReparentMenu(lastTouch.clientX, lastTouch.clientY, touchState.srcId, target, campaignId);
           }
@@ -628,11 +648,20 @@
    * Send reorder/reparent request to the API. On success, refreshes the
    * sidebar entity list via HTMX to reflect the new ordering.
    */
-  function reorderEntity(campaignId, entityId, newParentId, sortOrder) {
-    var body = {
-      parent_id: newParentId || null,
-      sort_order: sortOrder
-    };
+  /**
+   * @param {string} campaignId
+   * @param {string} entityId
+   * @param {string|null} newParentId - entity parent ID
+   * @param {number} sortOrder
+   * @param {string|null} [newParentNodeId] - sidebar folder node parent ID
+   */
+  function reorderEntity(campaignId, entityId, newParentId, sortOrder, newParentNodeId) {
+    var body = { sort_order: sortOrder };
+    if (newParentNodeId) {
+      body.parent_node_id = newParentNodeId;
+    } else {
+      body.parent_id = newParentId || null;
+    }
 
     Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + entityId + '/reorder', {
       method: 'PUT',
@@ -735,9 +764,9 @@
    *
    * Flow: create folder → position folder → reparent target → reparent dragged → refresh.
    */
-  function createGroupFolder(campaignId, droppedId, targetNode, folderName, isFolder) {
-    var targetId = targetNode.getAttribute('data-entity-id');
-    var targetParentId = targetNode.getAttribute('data-parent-id') || null;
+  function createGroupFolder(campaignId, droppedId, targetNode, folderName, isPureFolder) {
+    var targetId = targetNode.getAttribute('data-entity-id') || targetNode.getAttribute('data-node-id');
+    var targetParentId = targetNode.getAttribute('data-parent-node-id') || targetNode.getAttribute('data-parent-id') || null;
     var targetItem = targetNode.querySelector('.sidebar-tree-item');
     var targetSortOrder = parseInt(targetItem ? targetItem.getAttribute('data-sort-order') : '0', 10) || 0;
 
@@ -745,10 +774,15 @@
     var tree = document.getElementById('sidebar-entity-tree');
     var entityTypeId = parseInt(tree ? tree.getAttribute('data-entity-type-id') : '0', 10) || 0;
 
-    // Step 1: Create the folder entity.
-    Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/quick-create', {
+    // Step 1: Create the folder — either a pure sidebar node or a real entity.
+    var createUrl = isPureFolder
+      ? '/campaigns/' + campaignId + '/sidebar-nodes'
+      : '/campaigns/' + campaignId + '/entities/quick-create';
+    var createBody = { name: folderName, entity_type_id: entityTypeId };
+
+    Chronicle.apiFetch(createUrl, {
       method: 'POST',
-      body: { name: folderName, entity_type_id: entityTypeId, is_folder: !!isFolder }
+      body: createBody
     })
     .then(function (res) {
       if (!res.ok) throw new Error('Failed to create folder');
@@ -756,7 +790,10 @@
     })
     .then(function (folder) {
       // Step 2: Position the folder where the target was.
-      return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + folder.id + '/reorder', {
+      var posUrl = isPureFolder
+        ? '/campaigns/' + campaignId + '/sidebar-nodes/' + folder.id + '/reorder'
+        : '/campaigns/' + campaignId + '/entities/' + folder.id + '/reorder';
+      return Chronicle.apiFetch(posUrl, {
         method: 'PUT',
         body: { parent_id: targetParentId, sort_order: targetSortOrder }
       }).then(function (res) {
@@ -766,9 +803,13 @@
     })
     .then(function (folder) {
       // Step 3: Reparent the target entity under the new folder.
+      // Use parent_node_id for sidebar nodes, parent_id for entity folders.
+      var reparentBody = isPureFolder
+        ? { parent_node_id: folder.id, sort_order: 0 }
+        : { parent_id: folder.id, sort_order: 0 };
       return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + targetId + '/reorder', {
         method: 'PUT',
-        body: { parent_id: folder.id, sort_order: 0 }
+        body: reparentBody
       }).then(function (res) {
         if (!res.ok) throw new Error('Failed to reparent target');
         return folder;
@@ -776,9 +817,12 @@
     })
     .then(function (folder) {
       // Step 4: Reparent the dragged entity under the new folder.
+      var reparentBody = isPureFolder
+        ? { parent_node_id: folder.id, sort_order: 1 }
+        : { parent_id: folder.id, sort_order: 1 };
       return Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/' + droppedId + '/reorder', {
         method: 'PUT',
-        body: { parent_id: folder.id, sort_order: 1 }
+        body: reparentBody
       }).then(function (res) {
         if (!res.ok) throw new Error('Failed to reparent dragged entity');
       });

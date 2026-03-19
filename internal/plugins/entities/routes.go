@@ -62,6 +62,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/entities/:eid", h.Update, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid/reorder", h.ReorderAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// Sidebar node (pure folder) routes (Scribe+ for create/reorder, Owner for delete).
+	cg.POST("/sidebar-nodes", h.CreateSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/sidebar-nodes/:nid", h.RenameSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/sidebar-nodes/:nid/reorder", h.ReorderSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/sidebar-nodes/:nid", h.DeleteSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Owner routes.
 	cg.DELETE("/entities/:eid", h.Delete, campaigns.RequireRole(campaigns.RoleOwner))
 

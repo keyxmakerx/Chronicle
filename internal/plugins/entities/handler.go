@@ -100,6 +100,7 @@ type Handler struct {
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
+	sidebarNodeRepo    SidebarNodeRepository
 	blockRegistry      *BlockRegistry
 	cache              *redis.Client
 }
@@ -210,6 +211,11 @@ func (h *Handler) SetGroupLister(gl GroupLister) {
 // editor palette. Extension widgets appear as additional block types.
 func (h *Handler) SetWidgetBlockLister(wbl WidgetBlockLister) {
 	h.widgetBlockLister = wbl
+}
+
+// SetSidebarNodeRepo sets the sidebar node repository for folder operations.
+func (h *Handler) SetSidebarNodeRepo(repo SidebarNodeRepository) {
+	h.sidebarNodeRepo = repo
 }
 
 // SetCache sets the Redis client for API response caching (e.g., entity names).
@@ -630,12 +636,10 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	opts.PerPage = 20
 
 	// Sidebar drill panel loads all pages for a category. Use a higher
-	// limit so categories aren't silently truncated at 20. Include folder
-	// entities which are hidden from normal entity lists.
+	// limit so categories aren't silently truncated at 20.
 	isSidebar := c.QueryParam("sidebar") == "1"
 	if isSidebar {
 		opts.PerPage = 200
-		opts.IncludeFolders = true
 	}
 
 	// Pagination: allow callers to request a specific page.
@@ -772,7 +776,13 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			total = len(results)
 		}
 
-		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, total, cc, hiddenIDs))
+		// Fetch sidebar folder nodes for this category.
+		var nodes []SidebarNode
+		if h.sidebarNodeRepo != nil && typeID > 0 {
+			nodes, _ = h.sidebarNodeRepo.ListByType(c.Request().Context(), cc.Campaign.ID, typeID)
+		}
+
+		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, cc, hiddenIDs))
 	}
 
 	return middleware.Render(c, http.StatusOK, SearchResultsFragment(results, total, cc))
@@ -790,8 +800,9 @@ func (h *Handler) ReorderAPI(c echo.Context) error {
 	entityID := c.Param("eid")
 
 	var input struct {
-		ParentID  *string `json:"parent_id"`
-		SortOrder *int    `json:"sort_order"`
+		ParentID     *string `json:"parent_id"`
+		ParentNodeID *string `json:"parent_node_id"`
+		SortOrder    *int    `json:"sort_order"`
 	}
 	if err := c.Bind(&input); err != nil {
 		return apperror.NewValidation("invalid request body")
@@ -802,7 +813,7 @@ func (h *Handler) ReorderAPI(c echo.Context) error {
 		sortOrder = *input.SortOrder
 	}
 
-	if err := h.service.ReorderEntity(c.Request().Context(), cc.Campaign.ID, entityID, input.ParentID, sortOrder); err != nil {
+	if err := h.service.ReorderEntity(c.Request().Context(), cc.Campaign.ID, entityID, input.ParentID, input.ParentNodeID, sortOrder); err != nil {
 		return err
 	}
 
@@ -823,7 +834,6 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 	var req struct {
 		Name         string `json:"name"`
 		EntityTypeID int    `json:"entity_type_id"`
-		IsFolder     bool   `json:"is_folder"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -848,7 +858,6 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 	input := CreateEntityInput{
 		Name:         req.Name,
 		EntityTypeID: req.EntityTypeID,
-		IsFolder:     req.IsFolder,
 	}
 
 	entity, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, userID, input)
@@ -865,6 +874,144 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 		"type_icon":  entity.TypeIcon,
 		"type_color": entity.TypeColor,
 	})
+}
+
+// --- Sidebar Node API (pure folders) ---
+
+// CreateSidebarNodeAPI creates a new sidebar folder node.
+// POST /campaigns/:id/sidebar-nodes
+func (h *Handler) CreateSidebarNodeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		Name         string `json:"name"`
+		EntityTypeID int    `json:"entity_type_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+		return err
+	}
+
+	node := &SidebarNode{
+		ID:           generateNodeID(),
+		CampaignID:   cc.Campaign.ID,
+		EntityTypeID: req.EntityTypeID,
+		Name:         strings.TrimSpace(req.Name),
+		SortOrder:    0,
+		NodeType:     "folder",
+		CreatedAt:    time.Now().UTC(),
+	}
+
+	if err := h.sidebarNodeRepo.Create(c.Request().Context(), node); err != nil {
+		return apperror.NewInternal(fmt.Errorf("creating sidebar node: %w", err))
+	}
+
+	return c.JSON(http.StatusCreated, map[string]string{
+		"id":   node.ID,
+		"name": node.Name,
+	})
+}
+
+// DeleteSidebarNodeAPI deletes a sidebar folder node. Children are
+// reparented to root.
+// DELETE /campaigns/:id/sidebar-nodes/:nid
+func (h *Handler) DeleteSidebarNodeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	nodeID := c.Param("nid")
+	node, err := h.sidebarNodeRepo.FindByID(c.Request().Context(), nodeID)
+	if err != nil {
+		return err
+	}
+	if node.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("sidebar node not found")
+	}
+
+	if err := h.sidebarNodeRepo.Delete(c.Request().Context(), nodeID); err != nil {
+		return apperror.NewInternal(fmt.Errorf("deleting sidebar node: %w", err))
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// RenameSidebarNodeAPI renames a sidebar folder node.
+// PUT /campaigns/:id/sidebar-nodes/:nid
+func (h *Handler) RenameSidebarNodeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	nodeID := c.Param("nid")
+	node, err := h.sidebarNodeRepo.FindByID(c.Request().Context(), nodeID)
+	if err != nil {
+		return err
+	}
+	if node.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("sidebar node not found")
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := apperror.ValidateRequired("name", req.Name); err != nil {
+		return err
+	}
+
+	node.Name = strings.TrimSpace(req.Name)
+	if err := h.sidebarNodeRepo.Update(c.Request().Context(), node); err != nil {
+		return apperror.NewInternal(fmt.Errorf("renaming sidebar node: %w", err))
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// ReorderSidebarNodeAPI updates a sidebar node's parent and sort order.
+// PUT /campaigns/:id/sidebar-nodes/:nid/reorder
+func (h *Handler) ReorderSidebarNodeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	nodeID := c.Param("nid")
+	node, err := h.sidebarNodeRepo.FindByID(c.Request().Context(), nodeID)
+	if err != nil {
+		return err
+	}
+	if node.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("sidebar node not found")
+	}
+
+	var req struct {
+		ParentID  *string `json:"parent_id"`
+		SortOrder *int    `json:"sort_order"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+
+	if err := h.sidebarNodeRepo.UpdateParent(c.Request().Context(), nodeID, cc.Campaign.ID, req.ParentID); err != nil {
+		return apperror.NewInternal(fmt.Errorf("updating node parent: %w", err))
+	}
+	if req.SortOrder != nil {
+		if err := h.sidebarNodeRepo.UpdateSortOrder(c.Request().Context(), nodeID, cc.Campaign.ID, *req.SortOrder); err != nil {
+			return apperror.NewInternal(fmt.Errorf("updating node sort order: %w", err))
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // EntityTypesAPI returns entity types as JSON for widget dropdowns.
