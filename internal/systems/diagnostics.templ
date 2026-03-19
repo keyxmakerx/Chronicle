@@ -69,10 +69,11 @@ templ SystemStatusContent(cc *campaigns.CampaignContext, diag *SystemDiagnostics
 			</div>
 
 			// Stats grid.
-			<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+			<div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
 				@diagStat("fa-layer-group", "Categories", fmt.Sprintf("%d", len(diag.Categories)))
 				@diagStat("fa-database", "Reference Items", fmt.Sprintf("%d", diag.TotalItems))
 				@diagStat("fa-shapes", "Entity Presets", fmt.Sprintf("%d", len(diag.Manifest.EntityPresets)))
+				@diagStat("fa-puzzle-piece", "Widgets", fmt.Sprintf("%d", len(diag.Manifest.Widgets)))
 				@diagStat("fa-link", "Foundry Fields", fmt.Sprintf("%d/%d", diag.MappedFields, diag.TotalFields))
 			</div>
 
@@ -156,6 +157,32 @@ templ SystemStatusContent(cc *campaigns.CampaignContext, diag *SystemDiagnostics
 								</div>
 								<span class="text-xs text-fg-muted">
 									{ fmt.Sprintf("%d entities", et.Count) }
+								</span>
+							</div>
+						}
+					</div>
+				</div>
+			}
+
+			// Widgets.
+			if len(diag.Manifest.Widgets) > 0 {
+				<div class="bg-surface border border-edge rounded-lg p-5 mb-6">
+					<h3 class="text-sm font-semibold text-fg mb-3">
+						<i class="fa-solid fa-puzzle-piece text-accent mr-1.5"></i>
+						Widgets ({ fmt.Sprintf("%d", len(diag.Manifest.Widgets)) })
+					</h3>
+					<div class="divide-y divide-edge">
+						for _, w := range diag.Manifest.Widgets {
+							<div class="flex items-center justify-between py-2">
+								<div class="flex items-center gap-2">
+									if w.Icon != "" {
+										<i class={ "fa-solid " + w.Icon + " text-xs text-fg-muted w-4 text-center" }></i>
+									}
+									<span class="text-sm text-fg">{ w.Name }</span>
+									<span class="text-[10px] text-fg-muted font-mono">{ w.Slug }</span>
+								</div>
+								<span class="text-xs text-fg-muted">
+									{ w.ScriptFile }
 								</span>
 							</div>
 						}

@@ -87,6 +87,15 @@ func FindSystem(id string) System {
 	return globalLoader.GetSystem(id)
 }
 
+// Dir returns the absolute directory path for a system by ID, or empty string
+// if not found. Used to serve system widget JS files from the filesystem.
+func Dir(id string) string {
+	if globalLoader == nil {
+		return ""
+	}
+	return globalLoader.Dir(id)
+}
+
 // AllSystems returns all live System instances, for iteration.
 // Only includes modules that have been successfully instantiated.
 func AllSystems() []System {

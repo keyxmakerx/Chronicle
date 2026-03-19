@@ -65,6 +65,17 @@ func (m *CampaignSystemManager) GetManifest(campaignID string) *SystemManifest {
 	return m.manifests[campaignID]
 }
 
+// Dir returns the absolute directory path for a campaign's custom system,
+// or empty string if no custom system is installed.
+func (m *CampaignSystemManager) Dir(campaignID string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.manifests[campaignID] == nil {
+		return ""
+	}
+	return filepath.Join(m.baseDir, campaignID)
+}
+
 // Install extracts a ZIP file containing a custom game system,
 // validates it, stores it on disk, and loads it into memory.
 // Returns the parsed manifest on success.

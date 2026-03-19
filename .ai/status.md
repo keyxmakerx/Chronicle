@@ -8,7 +8,22 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-18 -- **Bugfix: CORS, NPC sidebar, entity reorg, lint.**
+2026-03-19 -- **Sprint X-3: System-Provided Widgets + Sidebar Reorder Bugfix.**
+
+52. **Sprint X-3: System-Provided Widgets + Sidebar Reorder Bugfix.**
+    - **Sidebar Reorder 404 Fix (COMPLETE)** — MySQL `RowsAffected=0` on `UpdateParent`/`UpdateSortOrder` when values unchanged caused false "entity not found" 404. Removed `RowsAffected` checks, added explicit `FindByID` validation in service layer. Also added proper error logging in JS catch handler, cleared orphan `data-parent-id` on cross-type tree nodes, added NaN guard for sort_order, and used `*int` for nullable sort_order in handler.
+    - **Sprint X-3: System-Provided Widgets (COMPLETE)** — Game system modules can now declare JS widgets in their manifest that appear in the template editor palette and render on entity pages. Infrastructure:
+      - `WidgetDef` struct added to `SystemManifest` (slug, name, icon, description, script_file)
+      - Manifest validation: max 10 widgets, slug format, .js extension, path traversal prevention, XSS sanitization
+      - `WidgetScriptAPI` handler serves widget JS files from system directory with path security checks
+      - `GetSystemWidgetBlockMetas` and `GetSystemWidgetScriptURLs` on `SystemHandler` (uses `ext_widget` block type — reuses existing renderer)
+      - `widgetBlockListerAdapter` extended to query both extension and system widgets
+      - LayoutInjector injects system widget `<script>` tags alongside extension widget scripts
+      - Widget route: `GET /campaigns/:id/systems/:mod/widgets/:slug`
+      - Diagnostics page shows widget count and details
+      - `Dir()` package-level function and `CampaignSystemManager.Dir()` for filesystem access
+    - All widgets come from installed system packages (no hardcoded widgets in Chronicle source). D&D 5e stat-block widget is a reference implementation shipped with the dnd5e system package.
+    - **Next Steps**: X-5 (character sheet layout blocks), A2-2 (armory instance UI polish), W-2 (map drawing tools).
 
 51. **Bugfix: CORS, NPC sidebar, entity reorg, lint.**
     - **CORS BASE_URL Normalization (COMPLETE)** — Trailing slash on BASE_URL caused CORS origin mismatch (exact-match failed). Now stripped at config load time in config.go. Removed redundant TrimRight calls in app.go.

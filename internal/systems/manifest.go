@@ -62,6 +62,33 @@ type SystemManifest struct {
 	// TooltipTemplate is an optional HTML template string for rendering
 	// hover tooltips. Uses Go text/template syntax with ReferenceItem data.
 	TooltipTemplate string `json:"tooltip_template,omitempty"`
+
+	// Widgets declares JS widgets provided by this system that can be added
+	// to entity page layouts via the template editor. Each widget is a
+	// self-contained JS file that registers via Chronicle.register().
+	Widgets []WidgetDef `json:"widgets,omitempty"`
+}
+
+// WidgetDef describes a JS widget provided by a game system module.
+// Widgets are self-contained scripts that register via Chronicle.register()
+// and can be placed on entity pages through the template editor palette.
+type WidgetDef struct {
+	// Slug is the widget registration name (e.g., "dnd5e-stat-block").
+	// Must be unique and match the name passed to Chronicle.register().
+	Slug string `json:"slug"`
+
+	// Name is the display name shown in the template editor palette.
+	Name string `json:"name"`
+
+	// Icon is the Font Awesome icon class (e.g., "fa-shield-halved").
+	Icon string `json:"icon"`
+
+	// Description is tooltip text shown in the template editor palette.
+	Description string `json:"description"`
+
+	// ScriptFile is the relative path to the JS file within the system
+	// directory (e.g., "widgets/stat-block.js").
+	ScriptFile string `json:"script_file"`
 }
 
 // CategoryDef describes one category of reference content within a module.
@@ -312,6 +339,9 @@ type ValidationReport struct {
 	// FoundryWritableFields is how many mapped fields are writable to Foundry.
 	FoundryWritableFields int `json:"foundry_writable_fields"`
 
+	// WidgetCount is the number of JS widgets provided by this system.
+	WidgetCount int `json:"widget_count"`
+
 	// Warnings lists non-fatal issues the owner should be aware of.
 	Warnings []string `json:"warnings,omitempty"`
 }
@@ -322,6 +352,7 @@ func (m *SystemManifest) BuildValidationReport() *ValidationReport {
 	r := &ValidationReport{
 		CategoryCount:     len(m.Categories),
 		PresetCount:       len(m.EntityPresets),
+		WidgetCount:       len(m.Widgets),
 		FoundrySystemID:   m.FoundrySystemID,
 		FoundryCompatible: m.FoundrySystemID != "",
 	}
@@ -421,6 +452,7 @@ const (
 	maxFieldsPerPreset    = 50
 	maxEntityPresets      = 10
 	maxRelationPresets    = 20
+	maxWidgets            = 10
 )
 
 // slugPattern matches valid manifest IDs and preset slugs.
@@ -508,6 +540,31 @@ func ValidateManifest(m *SystemManifest) error {
 		}
 	}
 
+	// Validate widgets.
+	if len(m.Widgets) > maxWidgets {
+		return fmt.Errorf("too many widgets (%d, max %d)", len(m.Widgets), maxWidgets)
+	}
+	for i, w := range m.Widgets {
+		if w.Slug == "" {
+			return fmt.Errorf("widget %d: slug is required", i)
+		}
+		if !slugPattern.MatchString(w.Slug) {
+			return fmt.Errorf("widget %d: slug %q must contain only lowercase letters, numbers, hyphens, and underscores", i, w.Slug)
+		}
+		if w.Name == "" {
+			return fmt.Errorf("widget %d (%s): name is required", i, w.Slug)
+		}
+		if w.ScriptFile == "" {
+			return fmt.Errorf("widget %d (%s): script_file is required", i, w.Slug)
+		}
+		if !strings.HasSuffix(w.ScriptFile, ".js") {
+			return fmt.Errorf("widget %d (%s): script_file must end in .js", i, w.Slug)
+		}
+		if strings.Contains(w.ScriptFile, "..") {
+			return fmt.Errorf("widget %d (%s): script_file must not contain path traversal", i, w.Slug)
+		}
+	}
+
 	// Sanitize text fields to prevent stored XSS.
 	sanitizeManifestStrings(m)
 
@@ -554,5 +611,10 @@ func sanitizeManifestStrings(m *SystemManifest) {
 	for i := range m.RelationPresets {
 		m.RelationPresets[i].Name = html.EscapeString(m.RelationPresets[i].Name)
 		m.RelationPresets[i].ReverseName = html.EscapeString(m.RelationPresets[i].ReverseName)
+	}
+
+	for i := range m.Widgets {
+		m.Widgets[i].Name = html.EscapeString(m.Widgets[i].Name)
+		m.Widgets[i].Description = html.EscapeString(m.Widgets[i].Description)
 	}
 }

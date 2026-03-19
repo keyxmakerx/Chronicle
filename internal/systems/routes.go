@@ -25,6 +25,7 @@ func RegisterRoutes(e *echo.Echo, h *SystemHandler, addonSvc addons.AddonService
 
 	mg.GET("", h.Index)
 	mg.GET("/search", h.SearchAPI)
+	mg.GET("/widgets/:slug", h.WidgetScriptAPI)
 	mg.GET("/:cat", h.CategoryList)
 	mg.GET("/:cat/:item", h.ItemDetail)
 	mg.GET("/:cat/:item/tooltip", h.TooltipAPI)
