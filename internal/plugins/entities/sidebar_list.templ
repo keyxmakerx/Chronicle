@@ -43,6 +43,9 @@ templ SidebarEntityList(results []Entity, total int, cc *campaigns.CampaignConte
 					}
 					data-sort-order={ strconv.Itoa(entity.SortOrder) }
 					data-entity-name={ entity.Name }
+					if entity.IsFolder {
+						data-is-folder="true"
+					}
 					if hiddenIDs[entity.ID] {
 						data-sidebar-hidden="true"
 					}

@@ -91,6 +91,7 @@ type ExportEntity struct {
 	ParentSlug     *string         `json:"parent_slug,omitempty"`
 	TypeLabel      *string         `json:"type_label,omitempty"`
 	IsPrivate      bool                     `json:"is_private"`
+	IsFolder       bool                     `json:"is_folder,omitempty"`
 	IsTemplate     bool                     `json:"is_template"`
 	Visibility     string                   `json:"visibility,omitempty"`
 	Permissions    []ExportEntityPermission  `json:"permissions,omitempty"`

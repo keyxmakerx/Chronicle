@@ -201,6 +201,7 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		ParentID:     parentIDPtr,
 		TypeLabel:    typeLabelPtr,
 		IsPrivate:    input.IsPrivate,
+		IsFolder:     input.IsFolder,
 		IsTemplate:   false,
 		FieldsData:   fieldsData,
 		CreatedBy:    userID,

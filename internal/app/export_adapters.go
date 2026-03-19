@@ -119,6 +119,7 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 				ImagePath:      e.ImagePath,
 				TypeLabel:      e.TypeLabel,
 				IsPrivate:      e.IsPrivate,
+				IsFolder:       e.IsFolder,
 				IsTemplate:     e.IsTemplate,
 				Visibility:     string(e.Visibility),
 				FieldsData:     fieldsData,
@@ -780,6 +781,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			EntityTypeID: typeID,
 			TypeLabel:    ptrString(e.TypeLabel),
 			IsPrivate:    e.IsPrivate,
+			IsFolder:     e.IsFolder,
 			FieldsData:   fieldsData,
 		})
 		if err != nil {

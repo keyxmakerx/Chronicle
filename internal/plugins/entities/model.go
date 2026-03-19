@@ -223,6 +223,7 @@ type Entity struct {
 	CoverImagePath *string         `json:"cover_image_path,omitempty"` // Full-width banner image.
 	ParentID       *string         `json:"parent_id,omitempty"`
 	SortOrder      int             `json:"sort_order"`            // Manual ordering within parent/category (0 = default).
+	IsFolder       bool            `json:"is_folder"`             // Organizational container with no page content.
 	TypeLabel      *string         `json:"type_label,omitempty"` // Freeform subtype (e.g., "City" for a Location).
 	IsPrivate      bool            `json:"is_private"`
 	Visibility     VisibilityMode  `json:"visibility"`
@@ -363,6 +364,7 @@ type CreateEntityInput struct {
 	TypeLabel    string
 	ParentID     string // Empty string = no parent.
 	IsPrivate    bool
+	IsFolder     bool   // Organizational container with no page content.
 	FieldsData   map[string]any
 }
 
@@ -381,9 +383,10 @@ type UpdateEntityInput struct {
 
 // ListOptions holds pagination and sorting parameters for list queries.
 type ListOptions struct {
-	Page    int
-	PerPage int
-	Sort    string // "name" (default), "updated", "created"
+	Page           int
+	PerPage        int
+	Sort           string // "name" (default), "updated", "created"
+	IncludeFolders bool   // When true, include is_folder entities (sidebar tree only).
 }
 
 // DefaultListOptions returns sensible defaults for pagination.

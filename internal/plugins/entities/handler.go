@@ -630,10 +630,12 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	opts.PerPage = 20
 
 	// Sidebar drill panel loads all pages for a category. Use a higher
-	// limit so categories aren't silently truncated at 20.
+	// limit so categories aren't silently truncated at 20. Include folder
+	// entities which are hidden from normal entity lists.
 	isSidebar := c.QueryParam("sidebar") == "1"
 	if isSidebar {
 		opts.PerPage = 200
+		opts.IncludeFolders = true
 	}
 
 	// Pagination: allow callers to request a specific page.
@@ -821,6 +823,7 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 	var req struct {
 		Name         string `json:"name"`
 		EntityTypeID int    `json:"entity_type_id"`
+		IsFolder     bool   `json:"is_folder"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -845,6 +848,7 @@ func (h *Handler) QuickCreateAPI(c echo.Context) error {
 	input := CreateEntityInput{
 		Name:         req.Name,
 		EntityTypeID: req.EntityTypeID,
+		IsFolder:     req.IsFolder,
 	}
 
 	entity, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, userID, input)
