@@ -415,6 +415,15 @@ func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID 
 		return apperror.NewBadRequest("an entity cannot be its own parent")
 	}
 
+	// Verify the entity exists and belongs to this campaign.
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return apperror.NewNotFound("entity not found")
+	}
+	if entity.CampaignID != campaignID {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	// If a parent is specified, verify it exists in the same campaign.
 	if parentID != nil {
 		parent, err := s.entities.FindByID(ctx, *parentID)

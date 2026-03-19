@@ -1110,38 +1110,27 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 }
 
 // UpdateParent sets or clears an entity's parent_id. Scoped to campaign for safety.
+// Note: does not check RowsAffected because MySQL returns 0 when the value is
+// unchanged, which is expected during reorder-within-same-parent operations.
 func (r *entityRepository) UpdateParent(ctx context.Context, entityID, campaignID string, parentID *string) error {
 	query := `UPDATE entities SET parent_id = ?, updated_at = NOW() WHERE id = ? AND campaign_id = ?`
-	result, err := r.db.ExecContext(ctx, query, parentID, entityID, campaignID)
+	_, err := r.db.ExecContext(ctx, query, parentID, entityID, campaignID)
 	if err != nil {
 		return fmt.Errorf("updating entity parent: %w", err)
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("checking rows affected: %w", err)
-	}
-	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
 	}
 	return nil
 }
 
 // UpdateSortOrder sets an entity's manual sort order within its parent/category.
 // Scoped to campaign for safety.
+// Note: does not check RowsAffected because MySQL returns 0 when the new value
+// matches the existing value within the same second (updated_at unchanged).
+// This commonly happens during reorder when calculateSortOrder returns the same value.
 func (r *entityRepository) UpdateSortOrder(ctx context.Context, entityID, campaignID string, sortOrder int) error {
 	query := `UPDATE entities SET sort_order = ?, updated_at = NOW() WHERE id = ? AND campaign_id = ?`
-	result, err := r.db.ExecContext(ctx, query, sortOrder, entityID, campaignID)
+	_, err := r.db.ExecContext(ctx, query, sortOrder, entityID, campaignID)
 	if err != nil {
 		return fmt.Errorf("updating entity sort order: %w", err)
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("checking rows affected: %w", err)
-	}
-	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
 	}
 	return nil
 }
