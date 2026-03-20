@@ -425,6 +425,50 @@ func (a *entityEventPublisherAdapter) PublishEntityEvent(eventType, campaignID, 
 	a.bus.Publish(ws.NewMessage(msgType, campaignID, entityID, entity))
 }
 
+// PublishEntityTypeEvent translates entity type domain events into WebSocket messages.
+func (a *entityEventPublisherAdapter) PublishEntityTypeEvent(eventType, campaignID string, entityType *entities.EntityType) {
+	if campaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case "created":
+		msgType = ws.MsgEntityTypeCreated
+	case "updated":
+		msgType = ws.MsgEntityTypeUpdated
+	case "deleted":
+		msgType = ws.MsgEntityTypeDeleted
+	default:
+		return
+	}
+	a.bus.Publish(ws.NewMessage(msgType, campaignID, fmt.Sprintf("%d", entityType.ID), entityType))
+}
+
+// noteEventPublisherAdapter bridges the websocket.EventBus to the
+// notes.NoteEventPublisher interface.
+type noteEventPublisherAdapter struct {
+	bus ws.EventBus
+}
+
+// PublishNoteEvent translates note domain events into WebSocket messages.
+func (a *noteEventPublisherAdapter) PublishNoteEvent(eventType, campaignID, noteID string, note *notes.Note) {
+	if campaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case "created":
+		msgType = ws.MsgNoteCreated
+	case "updated":
+		msgType = ws.MsgNoteUpdated
+	case "deleted":
+		msgType = ws.MsgNoteDeleted
+	default:
+		return
+	}
+	a.bus.Publish(ws.NewMessage(msgType, campaignID, noteID, note))
+}
+
 // mapEventPublisherAdapter bridges the websocket.EventBus to the maps.MapEventPublisher
 // interface, translating domain events into WebSocket messages.
 type mapEventPublisherAdapter struct {
@@ -1180,8 +1224,16 @@ func (a *App) RegisterRoutes() {
 	syncMappingHandler := syncapi.NewSyncHandler(syncMappingSvcEarly)
 	mapAPIHandler := syncapi.NewMapAPIHandler(syncService, mapsService, drawingService, campaignService)
 
+	// Note API handler for sync API — uses the same note repo/service as the web handler.
+	// Created here (before RegisterAPIRoutes) so the service is available; the web
+	// handler wiring below reuses the same noteSvc instance.
+	noteRepo := notes.NewNoteRepository(a.DB)
+	attRepo := notes.NewAttachmentRepository(a.DB)
+	noteSvc := notes.NewNoteServiceWithAttachments(noteRepo, attRepo)
+	noteAPIHandler := syncapi.NewNoteAPIHandler(syncService, noteSvc)
+
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, syncMappingHandler, syncService, addonService)
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, syncMappingHandler, syncService, addonService)
 	}
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
@@ -1217,9 +1269,7 @@ func (a *App) RegisterRoutes() {
 	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
-	noteRepo := notes.NewNoteRepository(a.DB)
-	attRepo := notes.NewAttachmentRepository(a.DB)
-	noteSvc := notes.NewNoteServiceWithAttachments(noteRepo, attRepo)
+	// noteSvc was created above (before REST API v1 registration).
 	noteHandler := notes.NewHandler(noteSvc)
 	noteHandler.SetAttachmentService(noteSvc)
 	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
@@ -1835,6 +1885,7 @@ func (a *App) RegisterRoutes() {
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
 	calendarService.SetEventPublisher(&calendarEventPublisherAdapter{bus: wsEventBus})
+	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
 
 	drawingService.SetEventPublisher(&mapEventPublisherAdapter{bus: wsEventBus})
 	drawingService.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {

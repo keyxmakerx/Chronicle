@@ -217,9 +217,11 @@ type Entity struct {
 	EntityTypeID   int             `json:"entity_type_id"`
 	Name           string          `json:"name"`
 	Slug           string          `json:"slug"`
-	Entry          *string         `json:"entry,omitempty"`     // TipTap/ProseMirror JSON document.
-	EntryHTML      *string         `json:"entry_html,omitempty"` // Pre-rendered HTML from entry.
-	ImagePath      *string         `json:"image_path,omitempty"`
+	Entry            *string         `json:"entry,omitempty"`              // TipTap/ProseMirror JSON document.
+	EntryHTML        *string         `json:"entry_html,omitempty"`         // Pre-rendered HTML from entry.
+	PlayerNotes      *string         `json:"player_notes,omitempty"`       // Player-facing ProseMirror JSON (synced as a player-visible Foundry page).
+	PlayerNotesHTML  *string         `json:"player_notes_html,omitempty"`  // Pre-rendered HTML from player_notes.
+	ImagePath        *string         `json:"image_path,omitempty"`
 	CoverImagePath *string         `json:"cover_image_path,omitempty"` // Full-width banner image.
 	ParentID       *string         `json:"parent_id,omitempty"`       // Parent entity ID (hierarchy). Mutually exclusive with ParentNodeID.
 	ParentNodeID   *string         `json:"parent_node_id,omitempty"` // Parent sidebar folder node ID. Mutually exclusive with ParentID.
@@ -348,11 +350,12 @@ type CreateEntityRequest struct {
 
 // UpdateEntityRequest holds the data submitted by the entity edit form.
 type UpdateEntityRequest struct {
-	Name      string `json:"name" form:"name"`
-	TypeLabel string `json:"type_label" form:"type_label"`
-	ParentID  string `json:"parent_id" form:"parent_id"`
-	IsPrivate bool   `json:"is_private" form:"is_private"`
-	Entry     string `json:"entry" form:"entry"`
+	Name              string     `json:"name" form:"name"`
+	TypeLabel         string     `json:"type_label" form:"type_label"`
+	ParentID          string     `json:"parent_id" form:"parent_id"`
+	IsPrivate         bool       `json:"is_private" form:"is_private"`
+	Entry             string     `json:"entry" form:"entry"`
+	ExpectedUpdatedAt *time.Time `json:"expected_updated_at"` // Optimistic concurrency (optional, JSON API only).
 }
 
 // --- Service Input DTOs ---
@@ -369,13 +372,15 @@ type CreateEntityInput struct {
 
 // UpdateEntityInput is the validated input for updating an entity.
 type UpdateEntityInput struct {
-	Name       string
-	TypeLabel  string
-	ParentID   string // Empty string = clear parent.
-	IsPrivate  bool
-	Entry      string
-	ImagePath  string
-	FieldsData map[string]any
+	Name              string
+	TypeLabel         string
+	ParentID          string // Empty string = clear parent.
+	IsPrivate         bool
+	Entry             string
+	PlayerNotes       *string // Player-facing content (nil = don't change).
+	ImagePath         string
+	FieldsData        map[string]any
+	ExpectedUpdatedAt *time.Time // Optimistic concurrency: reject if entity was modified after this timestamp.
 }
 
 // --- Pagination ---

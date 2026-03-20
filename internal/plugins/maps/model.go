@@ -65,10 +65,12 @@ type Marker struct {
 	Y               float64   `json:"y"`
 	Icon            string    `json:"icon"`
 	Color           string    `json:"color"`
+	PinCategory     *string   `json:"pin_category,omitempty"` // location, danger, treasure, quest, note.
 	EntityID        *string   `json:"entity_id,omitempty"`
 	Visibility      string    `json:"visibility"`
 	VisibilityRules *string   `json:"visibility_rules,omitempty"`
 	CreatedBy       *string   `json:"created_by,omitempty"`
+	FoundryID       *string   `json:"foundry_id,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 
@@ -112,10 +114,12 @@ type CreateMarkerInput struct {
 	Y               float64
 	Icon            string
 	Color           string
+	PinCategory     *string
 	EntityID        *string
 	Visibility      string
 	VisibilityRules *string
 	CreatedBy       string
+	FoundryID       *string
 }
 
 // UpdateMarkerInput is the validated input for updating a marker.
@@ -126,9 +130,11 @@ type UpdateMarkerInput struct {
 	Y               float64
 	Icon            string
 	Color           string
+	PinCategory     *string
 	EntityID        *string
 	Visibility      string
 	VisibilityRules *string
+	FoundryID       *string
 }
 
 // MapViewData holds all data needed to render a single map page.

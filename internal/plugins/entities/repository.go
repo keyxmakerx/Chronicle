@@ -469,6 +469,7 @@ type EntityRepository interface {
 	FindBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entity *Entity) error
 	UpdateEntry(ctx context.Context, id, entryJSON, entryHTML string) error
+	UpdatePlayerNotes(ctx context.Context, id, notesJSON, notesHTML string) error
 	UpdateFields(ctx context.Context, id string, fieldsData map[string]any) error
 	UpdateFieldOverrides(ctx context.Context, id string, overrides *FieldOverrides) error
 	UpdateImage(ctx context.Context, id, imagePath string) error
@@ -554,12 +555,14 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 	}
 
 	query := `INSERT INTO entities (id, campaign_id, entity_type_id, name, slug, entry, entry_html,
+	          player_notes, player_notes_html,
 	          image_path, parent_id, parent_node_id, sort_order, type_label, is_private, is_template, fields_data, created_by, created_at, updated_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err = r.db.ExecContext(ctx, query,
 		entity.ID, entity.CampaignID, entity.EntityTypeID,
 		entity.Name, entity.Slug, entity.Entry, entity.EntryHTML,
+		entity.PlayerNotes, entity.PlayerNotesHTML,
 		entity.ImagePath, entity.ParentID, entity.ParentNodeID, entity.SortOrder, entity.TypeLabel,
 		entity.IsPrivate, entity.IsTemplate, fieldsJSON,
 		entity.CreatedBy, entity.CreatedAt, entity.UpdatedAt,
@@ -572,7 +575,8 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 
 // entitySelectColumns is the standard column list for entity queries with joined type info.
 const entitySelectColumns = `e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	                 e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
+	                 e.entry, e.entry_html, e.player_notes, e.player_notes_html,
+	                 e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	                 e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug`
@@ -604,7 +608,8 @@ func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := row.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
-		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
+		&e.Entry, &e.EntryHTML, &e.PlayerNotes, &e.PlayerNotesHTML,
+		&e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
@@ -645,11 +650,13 @@ func (r *entityRepository) Update(ctx context.Context, entity *Entity) error {
 	}
 
 	query := `UPDATE entities SET name = ?, slug = ?, entry = ?, entry_html = ?,
+	          player_notes = ?, player_notes_html = ?,
 	          type_label = ?, parent_id = ?, sort_order = ?, is_private = ?, fields_data = ?, updated_at = ?
 	          WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query,
 		entity.Name, entity.Slug, entity.Entry, entity.EntryHTML,
+		entity.PlayerNotes, entity.PlayerNotesHTML,
 		entity.TypeLabel, entity.ParentID, entity.SortOrder, entity.IsPrivate, fieldsJSON, entity.UpdatedAt,
 		entity.ID,
 	)
@@ -675,6 +682,26 @@ func (r *entityRepository) UpdateEntry(ctx context.Context, id, entryJSON, entry
 	result, err := r.db.ExecContext(ctx, query, entryJSON, entryHTML, id)
 	if err != nil {
 		return fmt.Errorf("updating entity entry: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
+// UpdatePlayerNotes updates only the player_notes content for an entity.
+// Used by the Foundry VTT sync module to set player-facing content.
+func (r *entityRepository) UpdatePlayerNotes(ctx context.Context, id, notesJSON, notesHTML string) error {
+	query := `UPDATE entities SET player_notes = ?, player_notes_html = ?, updated_at = NOW() WHERE id = ?`
+
+	result, err := r.db.ExecContext(ctx, query, notesJSON, notesHTML, id)
+	if err != nil {
+		return fmt.Errorf("updating entity player notes: %w", err)
 	}
 
 	rows, err := result.RowsAffected()
@@ -1106,7 +1133,8 @@ func (r *entityRepository) FindChildren(ctx context.Context, parentID string, ro
 func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) ([]Entity, error) {
 	query := `WITH RECURSIVE ancestors AS (
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	           e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
+	           e.entry, e.entry_html, e.player_notes, e.player_notes_html,
+	           e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.created_at, e.updated_at,
 	           1 AS depth
@@ -1114,7 +1142,8 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	    WHERE e.id = (SELECT parent_id FROM entities WHERE id = ?)
 	    UNION ALL
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
-	           e.entry, e.entry_html, e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
+	           e.entry, e.entry_html, e.player_notes, e.player_notes_html,
+	           e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	           e.created_by, e.created_at, e.updated_at,
 	           a.depth + 1
@@ -1123,7 +1152,8 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	    WHERE a.depth < 20
 	)
 	SELECT a.id, a.campaign_id, a.entity_type_id, a.name, a.slug,
-	       a.entry, a.entry_html, a.image_path, a.cover_image_path, a.parent_id, a.parent_node_id, a.sort_order, a.type_label,
+	       a.entry, a.entry_html, a.player_notes, a.player_notes_html,
+	       a.image_path, a.cover_image_path, a.parent_id, a.parent_node_id, a.sort_order, a.type_label,
 	       a.is_private, a.visibility, a.is_template, a.fields_data, a.field_overrides, a.popup_config,
 	       a.created_by, a.created_at, a.updated_at,
 	       et.name, et.icon, et.color, et.slug
@@ -1286,7 +1316,8 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 	var fieldsRaw, overridesRaw, popupRaw []byte
 	err := rows.Scan(
 		&e.ID, &e.CampaignID, &e.EntityTypeID, &e.Name, &e.Slug,
-		&e.Entry, &e.EntryHTML, &e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
+		&e.Entry, &e.EntryHTML, &e.PlayerNotes, &e.PlayerNotesHTML,
+		&e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,

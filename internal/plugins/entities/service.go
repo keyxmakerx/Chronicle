@@ -28,6 +28,7 @@ type EntityService interface {
 	GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
 	UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error
+	UpdatePlayerNotes(ctx context.Context, entityID, notesJSON, notesHTML string) error
 	UpdateFields(ctx context.Context, entityID string, fieldsData map[string]any) error
 	UpdateFieldOverrides(ctx context.Context, entityID string, overrides *FieldOverrides) error
 	UpdateImage(ctx context.Context, entityID, imagePath string) error
@@ -99,16 +100,18 @@ type EntityService interface {
 	SetBlockRegistry(reg *BlockRegistry)
 }
 
-// EntityEventPublisher emits domain events when entities change.
+// EntityEventPublisher emits domain events when entities or entity types change.
 // Implemented by the WebSocket EventBus adapter in routes.go.
 type EntityEventPublisher interface {
 	PublishEntityEvent(eventType, campaignID, entityID string, entity *Entity)
+	PublishEntityTypeEvent(eventType, campaignID string, entityType *EntityType)
 }
 
 // NoopEntityEventPublisher is a no-op implementation for tests.
 type NoopEntityEventPublisher struct{}
 
-func (NoopEntityEventPublisher) PublishEntityEvent(string, string, string, *Entity) {}
+func (NoopEntityEventPublisher) PublishEntityEvent(string, string, string, *Entity)  {}
+func (NoopEntityEventPublisher) PublishEntityTypeEvent(string, string, *EntityType)  {}
 
 // entityService implements EntityService.
 type entityService struct {
@@ -302,10 +305,20 @@ func (s *entityService) GetBySlug(ctx context.Context, campaignID, slug string) 
 }
 
 // Update modifies an existing entity's name, type_label, privacy, entry, and fields.
+// If ExpectedUpdatedAt is set, the update is rejected with 409 Conflict if the
+// entity has been modified since that timestamp (optimistic concurrency control).
 func (s *entityService) Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error) {
 	entity, err := s.entities.FindByID(ctx, entityID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Optimistic concurrency check: reject if the entity was modified after
+	// the caller's last-known version.
+	if input.ExpectedUpdatedAt != nil {
+		if entity.UpdatedAt.After(*input.ExpectedUpdatedAt) {
+			return nil, apperror.NewConflict("entity was modified by another user; refresh and retry")
+		}
 	}
 
 	name := strings.TrimSpace(input.Name)
@@ -370,6 +383,19 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		entity.Entry = &entry
 		sanitized := sanitize.HTML(entry)
 		entity.EntryHTML = &sanitized
+	}
+
+	// Update player-facing notes if provided.
+	if input.PlayerNotes != nil {
+		pn := strings.TrimSpace(*input.PlayerNotes)
+		if pn == "" {
+			entity.PlayerNotes = nil
+			entity.PlayerNotesHTML = nil
+		} else {
+			entity.PlayerNotes = &pn
+			sanitized := sanitize.HTML(pn)
+			entity.PlayerNotesHTML = &sanitized
+		}
 	}
 
 	if input.FieldsData != nil {
@@ -492,6 +518,22 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 	}
 	slog.Info("entity entry updated", slog.String("entity_id", entityID))
 	// Emit entity updated event (fetch entity for campaign ID).
+	if entity, err := s.entities.FindByID(ctx, entityID); err == nil {
+		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	}
+	return nil
+}
+
+// UpdatePlayerNotes updates only the player-facing notes content for an entity.
+// Used by the Foundry VTT sync module to set content visible to players.
+func (s *entityService) UpdatePlayerNotes(ctx context.Context, entityID, notesJSON, notesHTML string) error {
+	// Sanitize HTML to strip dangerous content.
+	notesHTML = sanitize.HTML(notesHTML)
+	if err := s.entities.UpdatePlayerNotes(ctx, entityID, notesJSON, notesHTML); err != nil {
+		return err
+	}
+	slog.Info("entity player notes updated", slog.String("entity_id", entityID))
+	// Emit entity updated event.
 	if entity, err := s.entities.FindByID(ctx, entityID); err == nil {
 		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 	}
@@ -751,6 +793,7 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		slog.String("name", name),
 	)
 
+	s.events.PublishEntityTypeEvent("created", campaignID, et)
 	return et, nil
 }
 
@@ -818,6 +861,7 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 		slog.String("name", name),
 	)
 
+	s.events.PublishEntityTypeEvent("updated", et.CampaignID, et)
 	return et, nil
 }
 
@@ -849,6 +893,7 @@ func (s *entityService) DeleteEntityType(ctx context.Context, id int) error {
 		slog.String("name", et.Name),
 	)
 
+	s.events.PublishEntityTypeEvent("deleted", et.CampaignID, et)
 	return nil
 }
 

@@ -43,20 +43,37 @@ type AttachmentService interface {
 	UpdateTranscript(ctx context.Context, id, transcript string) error
 }
 
+// NoteEventPublisher emits domain events when notes change.
+// Implemented by the WebSocket EventBus adapter in app/routes.go.
+type NoteEventPublisher interface {
+	PublishNoteEvent(eventType, campaignID, noteID string, note *Note)
+}
+
+// NoopNoteEventPublisher is a no-op implementation for tests.
+type NoopNoteEventPublisher struct{}
+
+func (NoopNoteEventPublisher) PublishNoteEvent(string, string, string, *Note) {}
+
 // noteService implements NoteService and AttachmentService.
 type noteService struct {
 	repo    NoteRepository
 	attRepo AttachmentRepository
+	events  NoteEventPublisher
 }
 
 // NewNoteService creates a new note service.
 func NewNoteService(repo NoteRepository) NoteService {
-	return &noteService{repo: repo}
+	return &noteService{repo: repo, events: NoopNoteEventPublisher{}}
 }
 
 // NewNoteServiceWithAttachments creates a note service with attachment support.
 func NewNoteServiceWithAttachments(repo NoteRepository, attRepo AttachmentRepository) *noteService {
-	return &noteService{repo: repo, attRepo: attRepo}
+	return &noteService{repo: repo, attRepo: attRepo, events: NoopNoteEventPublisher{}}
+}
+
+// SetEventPublisher sets the event publisher for real-time sync.
+func (s *noteService) SetEventPublisher(pub NoteEventPublisher) {
+	s.events = pub
 }
 
 // Create validates and persists a new note.
@@ -98,7 +115,12 @@ func (s *noteService) Create(ctx context.Context, campaignID, userID string, req
 		return nil, err
 	}
 
-	return s.repo.FindByID(ctx, note.ID)
+	created, err := s.repo.FindByID(ctx, note.ID)
+	if err != nil {
+		return nil, err
+	}
+	s.events.PublishNoteEvent("created", campaignID, created.ID, created)
+	return created, nil
 }
 
 // GetByID retrieves a note by ID.
@@ -162,12 +184,25 @@ func (s *noteService) Update(ctx context.Context, id, userID string, req UpdateN
 	if err := s.repo.Update(ctx, note); err != nil {
 		return nil, err
 	}
-	return s.repo.FindByID(ctx, note.ID)
+	updated, err := s.repo.FindByID(ctx, note.ID)
+	if err != nil {
+		return nil, err
+	}
+	s.events.PublishNoteEvent("updated", note.CampaignID, note.ID, updated)
+	return updated, nil
 }
 
 // Delete removes a note.
 func (s *noteService) Delete(ctx context.Context, id string) error {
-	return s.repo.Delete(ctx, id)
+	note, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	s.events.PublishNoteEvent("deleted", note.CampaignID, note.ID, note)
+	return nil
 }
 
 // ToggleCheck flips a checklist item's checked state within a note.

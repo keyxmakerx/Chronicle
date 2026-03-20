@@ -1,6 +1,7 @@
 // Package syncapi — map_api_handler.go provides REST API v1 endpoints for
-// map, drawing, token, and layer CRUD. External clients (Foundry VTT) use
-// these endpoints to synchronize map data with Chronicle via API key auth.
+// map, drawing, token, layer, fog, and marker CRUD. External clients (Foundry
+// VTT) use these endpoints to synchronize map data with Chronicle via API key
+// auth.
 package syncapi
 
 import (
@@ -617,6 +618,156 @@ func (h *MapAPIHandler) ResetFog(c echo.Context) error {
 		return err
 	}
 	if err := h.drawingSvc.ResetFog(c.Request().Context(), m.ID); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Marker CRUD ---
+
+// apiCreateMarkerRequest is the JSON body for creating a marker via the API.
+type apiCreateMarkerRequest struct {
+	Name            string  `json:"name"`
+	Description     *string `json:"description"`
+	X               float64 `json:"x"`
+	Y               float64 `json:"y"`
+	Icon            string  `json:"icon"`
+	Color           string  `json:"color"`
+	PinCategory     *string `json:"pin_category"`
+	EntityID        *string `json:"entity_id"`
+	Visibility      string  `json:"visibility"`
+	VisibilityRules *string `json:"visibility_rules"`
+	FoundryID       *string `json:"foundry_id"`
+}
+
+// apiUpdateMarkerRequest is the JSON body for updating a marker.
+type apiUpdateMarkerRequest struct {
+	Name            string  `json:"name"`
+	Description     *string `json:"description"`
+	X               float64 `json:"x"`
+	Y               float64 `json:"y"`
+	Icon            string  `json:"icon"`
+	Color           string  `json:"color"`
+	PinCategory     *string `json:"pin_category"`
+	EntityID        *string `json:"entity_id"`
+	Visibility      string  `json:"visibility"`
+	VisibilityRules *string `json:"visibility_rules"`
+	FoundryID       *string `json:"foundry_id"`
+}
+
+// ListMarkers returns all markers for a map, filtered by the caller's role.
+// GET /api/v1/campaigns/:id/maps/:mapID/markers
+func (h *MapAPIHandler) ListMarkers(c echo.Context) error {
+	m, err := h.requireMapInCampaign(c)
+	if err != nil {
+		return err
+	}
+	role := h.resolveRole(c)
+
+	userID := ""
+	if key := GetAPIKey(c); key != nil {
+		userID = key.UserID
+	}
+
+	markers, err := h.mapSvc.ListMarkers(c.Request().Context(), m.ID, role, userID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("failed to list markers"))
+	}
+	return c.JSON(http.StatusOK, markers)
+}
+
+// GetMarker returns a single marker.
+// GET /api/v1/campaigns/:id/maps/:mapID/markers/:markerID
+func (h *MapAPIHandler) GetMarker(c echo.Context) error {
+	if _, err := h.requireMapInCampaign(c); err != nil {
+		return err
+	}
+	markerID := c.Param("markerID")
+
+	marker, err := h.mapSvc.GetMarker(c.Request().Context(), markerID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, marker)
+}
+
+// CreateMarker places a new marker on a map.
+// POST /api/v1/campaigns/:id/maps/:mapID/markers
+func (h *MapAPIHandler) CreateMarker(c echo.Context) error {
+	m, err := h.requireMapInCampaign(c)
+	if err != nil {
+		return err
+	}
+	key := GetAPIKey(c)
+	if key == nil {
+		return apperror.NewUnauthorized("api key required")
+	}
+
+	var req apiCreateMarkerRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	marker, err := h.mapSvc.CreateMarker(c.Request().Context(), maps.CreateMarkerInput{
+		MapID:           m.ID,
+		Name:            req.Name,
+		Description:     req.Description,
+		X:               req.X,
+		Y:               req.Y,
+		Icon:            req.Icon,
+		Color:           req.Color,
+		PinCategory:     req.PinCategory,
+		EntityID:        req.EntityID,
+		Visibility:      req.Visibility,
+		VisibilityRules: req.VisibilityRules,
+		CreatedBy:       key.UserID,
+		FoundryID:       req.FoundryID,
+	})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, marker)
+}
+
+// UpdateMarker updates an existing marker.
+// PUT /api/v1/campaigns/:id/maps/:mapID/markers/:markerID
+func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
+	if _, err := h.requireMapInCampaign(c); err != nil {
+		return err
+	}
+	markerID := c.Param("markerID")
+
+	var req apiUpdateMarkerRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	err := h.mapSvc.UpdateMarker(c.Request().Context(), markerID, maps.UpdateMarkerInput{
+		Name:            req.Name,
+		Description:     req.Description,
+		X:               req.X,
+		Y:               req.Y,
+		Icon:            req.Icon,
+		Color:           req.Color,
+		PinCategory:     req.PinCategory,
+		EntityID:        req.EntityID,
+		Visibility:      req.Visibility,
+		VisibilityRules: req.VisibilityRules,
+		FoundryID:       req.FoundryID,
+	})
+	if err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// DeleteMarker removes a marker.
+// DELETE /api/v1/campaigns/:id/maps/:mapID/markers/:markerID
+func (h *MapAPIHandler) DeleteMarker(c echo.Context) error {
+	if _, err := h.requireMapInCampaign(c); err != nil {
+		return err
+	}
+	if err := h.mapSvc.DeleteMarker(c.Request().Context(), c.Param("markerID")); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

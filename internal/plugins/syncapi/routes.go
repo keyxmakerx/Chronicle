@@ -54,7 +54,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 // All routes require API key authentication. Permission middleware enforces
 // read/write/sync access levels. Campaign match middleware ensures keys can
 // only access their scoped campaign.
-func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService, addonChecker AddonChecker, opts ...func(*APIHandler)) {
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService, addonChecker AddonChecker, opts ...func(*APIHandler)) {
 	// Inject addon checker into API handler for system-aware endpoints.
 	api.SetAddonChecker(addonChecker)
 
@@ -74,6 +74,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 
 	// Read endpoints (require "read" permission).
 	cg.GET("", api.GetCampaign, RequirePermission(PermRead))
+	cg.GET("/members", api.ListMembers, RequirePermission(PermRead))
 	cg.GET("/systems", api.ListSystems, RequirePermission(PermRead))
 	cg.GET("/systems/:systemId/character-fields", api.GetCharacterFields, RequirePermission(PermRead))
 	cg.GET("/systems/:systemId/item-fields", api.GetItemFields, RequirePermission(PermRead))
@@ -132,8 +133,13 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	mapGroup.GET("/maps/:mapID/tokens", mapAPI.ListTokens, RequirePermission(PermRead))
 	mapGroup.GET("/maps/:mapID/layers", mapAPI.ListLayers, RequirePermission(PermRead))
 	mapGroup.GET("/maps/:mapID/fog", mapAPI.ListFog, RequirePermission(PermRead))
+	mapGroup.GET("/maps/:mapID/markers", mapAPI.ListMarkers, RequirePermission(PermRead))
+	mapGroup.GET("/maps/:mapID/markers/:markerID", mapAPI.GetMarker, RequirePermission(PermRead))
 
 	// Map write endpoints (require "write" permission + maps addon).
+	mapGroup.POST("/maps/:mapID/markers", mapAPI.CreateMarker, RequirePermission(PermWrite))
+	mapGroup.PUT("/maps/:mapID/markers/:markerID", mapAPI.UpdateMarker, RequirePermission(PermWrite))
+	mapGroup.DELETE("/maps/:mapID/markers/:markerID", mapAPI.DeleteMarker, RequirePermission(PermWrite))
 	mapGroup.POST("/maps/:mapID/drawings", mapAPI.CreateDrawing, RequirePermission(PermWrite))
 	mapGroup.PUT("/maps/:mapID/drawings/:drawingID", mapAPI.UpdateDrawing, RequirePermission(PermWrite))
 	mapGroup.DELETE("/maps/:mapID/drawings/:drawingID", mapAPI.DeleteDrawing, RequirePermission(PermWrite))
@@ -147,6 +153,15 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	mapGroup.POST("/maps/:mapID/fog", mapAPI.CreateFog, RequirePermission(PermWrite))
 	mapGroup.DELETE("/maps/:mapID/fog/:fogID", mapAPI.DeleteFog, RequirePermission(PermWrite))
 	mapGroup.DELETE("/maps/:mapID/fog", mapAPI.ResetFog, RequirePermission(PermWrite))
+
+	// Note read endpoints (require "read" permission).
+	cg.GET("/notes", noteAPI.ListNotes, RequirePermission(PermRead))
+	cg.GET("/notes/:noteID", noteAPI.GetNote, RequirePermission(PermRead))
+
+	// Note write endpoints (require "write" permission).
+	cg.POST("/notes", noteAPI.CreateNote, RequirePermission(PermWrite))
+	cg.PUT("/notes/:noteID", noteAPI.UpdateNote, RequirePermission(PermWrite))
+	cg.DELETE("/notes/:noteID", noteAPI.DeleteNote, RequirePermission(PermWrite))
 
 	// Sync endpoint (require "sync" permission).
 	cg.POST("/sync", api.Sync, RequirePermission(PermSync))
