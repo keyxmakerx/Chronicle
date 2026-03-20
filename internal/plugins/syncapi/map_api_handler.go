@@ -637,6 +637,7 @@ type apiCreateMarkerRequest struct {
 	EntityID        *string `json:"entity_id"`
 	Visibility      string  `json:"visibility"`
 	VisibilityRules *string `json:"visibility_rules"`
+	FoundryID       *string `json:"foundry_id"`
 }
 
 // apiUpdateMarkerRequest is the JSON body for updating a marker.
@@ -651,6 +652,7 @@ type apiUpdateMarkerRequest struct {
 	EntityID        *string `json:"entity_id"`
 	Visibility      string  `json:"visibility"`
 	VisibilityRules *string `json:"visibility_rules"`
+	FoundryID       *string `json:"foundry_id"`
 }
 
 // ListMarkers returns all markers for a map, filtered by the caller's role.
@@ -719,6 +721,7 @@ func (h *MapAPIHandler) CreateMarker(c echo.Context) error {
 		Visibility:      req.Visibility,
 		VisibilityRules: req.VisibilityRules,
 		CreatedBy:       key.UserID,
+		FoundryID:       req.FoundryID,
 	})
 	if err != nil {
 		return err
@@ -750,6 +753,7 @@ func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
 		EntityID:        req.EntityID,
 		Visibility:      req.Visibility,
 		VisibilityRules: req.VisibilityRules,
+		FoundryID:       req.FoundryID,
 	})
 	if err != nil {
 		return err

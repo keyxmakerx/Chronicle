@@ -10,6 +10,12 @@
 ## Last Updated
 2026-03-20 -- **Chronicle API extended for Foundry VTT bidirectional sync (chronicle-sync).**
 
+58. **Foundry VTT Clarification Fixes.**
+    - **Members Endpoint on Sync API** — Added `GET /api/v1/campaigns/:id/members` (PermRead). Returns `CampaignMember` objects with `user_id`, `display_name`, `role`, `email`, `avatar_path`, `character_entity_id`, `character_name`. Previously only available on web routes.
+    - **Player Notes via Sync API Update** — Added `player_notes` and `expected_updated_at` fields to `apiUpdateEntityRequest` in `api_handler.go`. Sync API `PUT /entities/:entityID` now passes through player notes and optimistic concurrency control.
+    - **Foundry ID on Markers** — Added `foundry_id` column to `map_markers` (plugin migration 004), matching the pattern used by `map_drawings` and `map_tokens`. Added to `Marker` struct, `CreateMarkerInput`, `UpdateMarkerInput`, all repository queries, service methods, and sync API request structs.
+    - All unit tests pass, build succeeds.
+
 57. **Sync API: Marker + Note CRUD Endpoints.**
     - **Marker CRUD on Sync API** — Added `GET/POST /api/v1/campaigns/:id/maps/:mapID/markers`, `GET/PUT/DELETE .../markers/:markerID` to `map_api_handler.go`. Foundry module can now sync map pins via API key auth (previously only available on session-cookie web routes). Includes `pin_category`, `visibility_rules`, and `entity_id` linking.
     - **Note CRUD on Sync API** — New `note_api_handler.go` with `GET/POST /api/v1/campaigns/:id/notes`, `GET/PUT/DELETE .../notes/:noteID`. Supports ProseMirror `entry`/`entry_html` plus legacy block content. Campaign IDOR check on single-note operations.

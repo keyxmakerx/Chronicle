@@ -74,6 +74,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 
 	// Read endpoints (require "read" permission).
 	cg.GET("", api.GetCampaign, RequirePermission(PermRead))
+	cg.GET("/members", api.ListMembers, RequirePermission(PermRead))
 	cg.GET("/systems", api.ListSystems, RequirePermission(PermRead))
 	cg.GET("/systems/:systemId/character-fields", api.GetCharacterFields, RequirePermission(PermRead))
 	cg.GET("/systems/:systemId/item-fields", api.GetItemFields, RequirePermission(PermRead))

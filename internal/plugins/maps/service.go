@@ -183,6 +183,7 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 		Visibility:      input.Visibility,
 		VisibilityRules: input.VisibilityRules,
 		CreatedBy:       &input.CreatedBy,
+		FoundryID:       input.FoundryID,
 	}
 	if err := s.repo.CreateMarker(ctx, mk); err != nil {
 		return nil, fmt.Errorf("create marker: %w", err)
@@ -237,6 +238,7 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	mk.EntityID = input.EntityID
 	mk.Visibility = input.Visibility
 	mk.VisibilityRules = input.VisibilityRules
+	mk.FoundryID = input.FoundryID
 
 	if err := s.repo.UpdateMarker(ctx, mk); err != nil {
 		return fmt.Errorf("update marker: %w", err)

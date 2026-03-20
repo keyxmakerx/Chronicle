@@ -490,7 +490,7 @@ User --< CampaignMember >-- Campaign
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
 
-### map_markers (implemented -- migrations 000029, plugin 003)
+### map_markers (implemented -- migrations 000029, plugin 003, plugin 004)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | VARCHAR(36) | PK | UUID |
@@ -506,6 +506,7 @@ User --< CampaignMember >-- Campaign
 | visibility | VARCHAR(20) | NOT NULL, DEFAULT 'everyone' | everyone or dm_only |
 | visibility_rules | JSON | NULL | Per-user overrides: {allowed_users, denied_users} |
 | created_by | VARCHAR(36) | NULL | |
+| foundry_id | VARCHAR(255) | NULL | Stable Foundry VTT ID mapping (plugin migration 004) |
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
 

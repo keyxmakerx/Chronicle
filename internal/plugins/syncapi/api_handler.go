@@ -100,6 +100,18 @@ func (h *APIHandler) GetCampaign(c echo.Context) error {
 	})
 }
 
+// ListMembers returns all members of the campaign.
+// GET /api/v1/campaigns/:id/members
+func (h *APIHandler) ListMembers(c echo.Context) error {
+	campaignID := c.Param("id")
+	members, err := h.campaignSvc.ListMembers(c.Request().Context(), campaignID)
+	if err != nil {
+		slog.Error("api: list members failed", slog.Any("error", err))
+		return apperror.NewInternal(fmt.Errorf("failed to list members"))
+	}
+	return c.JSON(http.StatusOK, members)
+}
+
 // --- Entity Types ---
 
 // ListEntityTypes returns all entity types for the campaign.
@@ -264,11 +276,13 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 
 // apiUpdateEntityRequest is the JSON body for updating an entity via the API.
 type apiUpdateEntityRequest struct {
-	Name       string         `json:"name"`
-	TypeLabel  string         `json:"type_label"`
-	IsPrivate  bool           `json:"is_private"`
-	Entry      string         `json:"entry"`
-	FieldsData map[string]any `json:"fields_data"`
+	Name              string         `json:"name"`
+	TypeLabel         string         `json:"type_label"`
+	IsPrivate         bool           `json:"is_private"`
+	Entry             string         `json:"entry"`
+	PlayerNotes       *string        `json:"player_notes"`
+	FieldsData        map[string]any `json:"fields_data"`
+	ExpectedUpdatedAt *time.Time     `json:"expected_updated_at"`
 }
 
 // UpdateEntity updates an existing entity.
@@ -292,11 +306,13 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 	}
 
 	updated, err := h.entitySvc.Update(ctx, entityID, entities.UpdateEntityInput{
-		Name:       req.Name,
-		TypeLabel:  req.TypeLabel,
-		IsPrivate:  req.IsPrivate,
-		Entry:      req.Entry,
-		FieldsData: req.FieldsData,
+		Name:              req.Name,
+		TypeLabel:         req.TypeLabel,
+		IsPrivate:         req.IsPrivate,
+		Entry:             req.Entry,
+		PlayerNotes:       req.PlayerNotes,
+		FieldsData:        req.FieldsData,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	})
 	if err != nil {
 		return err
