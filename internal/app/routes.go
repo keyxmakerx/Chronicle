@@ -1224,8 +1224,16 @@ func (a *App) RegisterRoutes() {
 	syncMappingHandler := syncapi.NewSyncHandler(syncMappingSvcEarly)
 	mapAPIHandler := syncapi.NewMapAPIHandler(syncService, mapsService, drawingService, campaignService)
 
+	// Note API handler for sync API — uses the same note repo/service as the web handler.
+	// Created here (before RegisterAPIRoutes) so the service is available; the web
+	// handler wiring below reuses the same noteSvc instance.
+	noteRepo := notes.NewNoteRepository(a.DB)
+	attRepo := notes.NewAttachmentRepository(a.DB)
+	noteSvc := notes.NewNoteServiceWithAttachments(noteRepo, attRepo)
+	noteAPIHandler := syncapi.NewNoteAPIHandler(syncService, noteSvc)
+
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, syncMappingHandler, syncService, addonService)
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, syncMappingHandler, syncService, addonService)
 	}
 
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
@@ -1261,9 +1269,7 @@ func (a *App) RegisterRoutes() {
 	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
-	noteRepo := notes.NewNoteRepository(a.DB)
-	attRepo := notes.NewAttachmentRepository(a.DB)
-	noteSvc := notes.NewNoteServiceWithAttachments(noteRepo, attRepo)
+	// noteSvc was created above (before REST API v1 registration).
 	noteHandler := notes.NewHandler(noteSvc)
 	noteHandler.SetAttachmentService(noteSvc)
 	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
