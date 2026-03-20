@@ -3,6 +3,7 @@ package packages
 import (
 	"archive/zip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -367,6 +368,19 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 			slog.String("version_id", ver.ID),
 			slog.Any("error", err),
 		)
+	}
+
+	// For Foundry module packages, update the version in module.json to match
+	// the installed version tag. The GitHub release may contain a stale version
+	// string in the manifest. Manifest/download URLs are rewritten at serve
+	// time, so we only need to fix the version field here.
+	if pkg.Type == PackageTypeFoundryModule {
+		if err := rewriteModuleJSONVersion(destDir, version); err != nil {
+			slog.Warn("failed to update module.json version",
+				slog.String("version", version),
+				slog.Any("error", err),
+			)
+		}
 	}
 
 	now := time.Now()
@@ -1178,6 +1192,34 @@ func repoPath(repoURL string) string {
 		return ""
 	}
 	return owner + "/" + repo
+}
+
+// rewriteModuleJSONVersion updates the "version" field in a Foundry module's
+// module.json to match the installed version tag from the package manager.
+func rewriteModuleJSONVersion(dir, version string) error {
+	manifestPath := filepath.Join(dir, "module.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("read module.json: %w", err)
+	}
+
+	var manifest map[string]any
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return fmt.Errorf("parse module.json: %w", err)
+	}
+
+	manifest["version"] = version
+
+	out, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal module.json: %w", err)
+	}
+	out = append(out, '\n')
+
+	if err := os.WriteFile(manifestPath, out, 0644); err != nil {
+		return fmt.Errorf("write module.json: %w", err)
+	}
+	return nil
 }
 
 // extractZip extracts a ZIP file to a destination directory.
