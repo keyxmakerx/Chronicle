@@ -148,7 +148,7 @@ User --< CampaignMember >-- Campaign
 | enabled | BOOLEAN | DEFAULT true | |
 | UNIQUE(campaign_id, slug) | | | |
 
-### entities (implemented -- migrations 000004, 000014, 000023, 000048)
+### entities (implemented -- migrations 000004, 000014, 000016, 000023, 000048)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | CHAR(36) | PK | UUID |
@@ -158,6 +158,8 @@ User --< CampaignMember >-- Campaign
 | slug | VARCHAR(200) | NOT NULL | |
 | entry | JSON | NULL | TipTap/ProseMirror JSON doc |
 | entry_html | LONGTEXT | NULL | Pre-rendered HTML |
+| player_notes | JSON | NULL | Player-facing ProseMirror JSON (migration 000016) |
+| player_notes_html | TEXT | NULL | Pre-rendered HTML from player_notes (migration 000016) |
 | image_path | VARCHAR(500) | NULL | Header image |
 | parent_id | CHAR(36) | FK -> entities.id, NULL | Nesting |
 | type_label | VARCHAR(100) | NULL | Freeform subtype ("City") |
@@ -488,7 +490,7 @@ User --< CampaignMember >-- Campaign
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
 
-### map_markers (implemented -- migration 000029)
+### map_markers (implemented -- migrations 000029, plugin 003)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | VARCHAR(36) | PK | UUID |
@@ -499,8 +501,10 @@ User --< CampaignMember >-- Campaign
 | y | DOUBLE | NOT NULL, DEFAULT 50 | Percentage 0-100 |
 | icon | VARCHAR(100) | NOT NULL, DEFAULT 'fa-map-pin' | FA icon class |
 | color | VARCHAR(7) | NOT NULL, DEFAULT '#3b82f6' | Hex color |
+| pin_category | VARCHAR(50) | NULL | location, danger, treasure, quest, note (plugin migration 003) |
 | entity_id | VARCHAR(36) | NULL, FK -> entities.id ON DELETE SET NULL | |
 | visibility | VARCHAR(20) | NOT NULL, DEFAULT 'everyone' | everyone or dm_only |
+| visibility_rules | JSON | NULL | Per-user overrides: {allowed_users, denied_users} |
 | created_by | VARCHAR(36) | NULL | |
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |

@@ -1,6 +1,7 @@
 // Package syncapi — map_api_handler.go provides REST API v1 endpoints for
-// map, drawing, token, and layer CRUD. External clients (Foundry VTT) use
-// these endpoints to synchronize map data with Chronicle via API key auth.
+// map, drawing, token, layer, fog, and marker CRUD. External clients (Foundry
+// VTT) use these endpoints to synchronize map data with Chronicle via API key
+// auth.
 package syncapi
 
 import (

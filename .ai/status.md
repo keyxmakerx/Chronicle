@@ -10,6 +10,13 @@
 ## Last Updated
 2026-03-20 -- **Chronicle API extended for Foundry VTT bidirectional sync (chronicle-sync).**
 
+57. **Sync API: Marker + Note CRUD Endpoints.**
+    - **Marker CRUD on Sync API** — Added `GET/POST /api/v1/campaigns/:id/maps/:mapID/markers`, `GET/PUT/DELETE .../markers/:markerID` to `map_api_handler.go`. Foundry module can now sync map pins via API key auth (previously only available on session-cookie web routes). Includes `pin_category`, `visibility_rules`, and `entity_id` linking.
+    - **Note CRUD on Sync API** — New `note_api_handler.go` with `GET/POST /api/v1/campaigns/:id/notes`, `GET/PUT/DELETE .../notes/:noteID`. Supports ProseMirror `entry`/`entry_html` plus legacy block content. Campaign IDOR check on single-note operations.
+    - **Route wiring** — `RegisterAPIRoutes` now accepts `*NoteAPIHandler`. Note service instantiated before sync API registration in `app/routes.go` (shared instance with web handler).
+    - Documentation updated: syncapi/.ai.md, maps/.ai.md, entities/.ai.md, notes/.ai.md, data-model.md.
+    - All unit tests pass, build succeeds.
+
 56. **Chronicle API Extensions for Foundry VTT Sync.**
     - **Entity Types API Enriched** — `GET /campaigns/:id/entities/types` now returns `slug`, `color`, `name_plural`, `sort_order`, `enabled` in addition to `id`, `name`, `icon`. Unblocks Foundry folder mapping.
     - **Entity Type WebSocket Events** — Added `entity_type.created`, `entity_type.updated`, `entity_type.deleted` message types. Published from entity type CRUD service methods via the existing EventBus pattern. Unblocks real-time folder sync.
