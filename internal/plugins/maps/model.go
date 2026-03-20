@@ -65,6 +65,7 @@ type Marker struct {
 	Y               float64   `json:"y"`
 	Icon            string    `json:"icon"`
 	Color           string    `json:"color"`
+	PinCategory     *string   `json:"pin_category,omitempty"` // location, danger, treasure, quest, note.
 	EntityID        *string   `json:"entity_id,omitempty"`
 	Visibility      string    `json:"visibility"`
 	VisibilityRules *string   `json:"visibility_rules,omitempty"`
@@ -112,6 +113,7 @@ type CreateMarkerInput struct {
 	Y               float64
 	Icon            string
 	Color           string
+	PinCategory     *string
 	EntityID        *string
 	Visibility      string
 	VisibilityRules *string
@@ -126,6 +128,7 @@ type UpdateMarkerInput struct {
 	Y               float64
 	Icon            string
 	Color           string
+	PinCategory     *string
 	EntityID        *string
 	Visibility      string
 	VisibilityRules *string

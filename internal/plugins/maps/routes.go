@@ -25,7 +25,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/maps/:mid", h.UpdateMapAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/maps/:mid", h.DeleteMapAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// Marker CRUD (Scribe+ can create/edit, Owner can delete).
+	// Marker CRUD (Player can list, Scribe+ can create/edit, Owner can delete).
+	cg.GET("/maps/:mid/markers", h.ListMarkersAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/maps/:mid/markers", h.CreateMarkerAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/maps/:mid/markers/:mkid", h.UpdateMarkerAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/maps/:mid/markers/:mkid", h.DeleteMarkerAPI, campaigns.RequireRole(campaigns.RoleOwner))

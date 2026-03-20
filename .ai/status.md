@@ -8,7 +8,17 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-19 -- **Module Manager moved to Packages, Redeploy auto-bump removed.**
+2026-03-20 -- **Chronicle API extended for Foundry VTT bidirectional sync (chronicle-sync).**
+
+56. **Chronicle API Extensions for Foundry VTT Sync.**
+    - **Entity Types API Enriched** — `GET /campaigns/:id/entities/types` now returns `slug`, `color`, `name_plural`, `sort_order`, `enabled` in addition to `id`, `name`, `icon`. Unblocks Foundry folder mapping.
+    - **Entity Type WebSocket Events** — Added `entity_type.created`, `entity_type.updated`, `entity_type.deleted` message types. Published from entity type CRUD service methods via the existing EventBus pattern. Unblocks real-time folder sync.
+    - **Note WebSocket Events** — Added `note.created`, `note.updated`, `note.deleted` message types. `NoteEventPublisher` interface + adapter wired into notes widget service. Unblocks real-time note sync.
+    - **Player Notes on Entities** — New `player_notes` (JSON) and `player_notes_html` (TEXT) columns on entities (migration 000016). Dedicated `GET/PUT /campaigns/:id/entities/:eid/player-notes` API. Enables syncing entity content as GM-only page + player-visible page in Foundry JournalEntries.
+    - **Map Marker Pin Category** — New `pin_category` column on `map_markers` (migration 003). Supports categories: location, danger, treasure, quest, note. Added `GET /campaigns/:id/maps/:mid/markers` list endpoint (previously markers only loaded with map page). Existing WS events (`marker.created/updated/deleted`) already defined.
+    - **Optimistic Concurrency Control** — `UpdateEntityInput` now accepts optional `ExpectedUpdatedAt`. If set, the service compares against current `updated_at` and returns 409 Conflict if the entity was modified since. Uses existing `apperror.NewConflict`. The `UpdateEntityRequest` JSON DTO exposes this as `expected_updated_at`.
+    - **Campaign Members** — Already existed at `GET /campaigns/:id/members` (Accept: application/json). No changes needed.
+    - All unit tests pass, lint clean, build succeeds.
 
 55. **Module Manager UI Reorganization + Version Bump Fix.**
     - **Dashboard Card Removed** — Removed the standalone "Foundry VTT / Module Manager" card from the admin dashboard. The Foundry module settings are now accessed via a gear icon on the foundry-module package card in the Packages page.

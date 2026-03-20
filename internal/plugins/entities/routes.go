@@ -23,6 +23,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/entities/:eid/entry", h.UpdateEntryAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// Player notes API (player-facing content, synced as a separate Foundry page).
+	cg.GET("/entities/:eid/player-notes", h.GetPlayerNotes, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/entities/:eid/player-notes", h.UpdatePlayerNotesAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Fields API (JSON endpoints for attributes widget).
 	cg.GET("/entities/:eid/fields", h.GetFieldsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/entities/:eid/fields", h.UpdateFieldsAPI, campaigns.RequireRole(campaigns.RoleScribe))

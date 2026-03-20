@@ -242,6 +242,7 @@ func (h *Handler) CreateMarkerAPI(c echo.Context) error {
 		Y               float64 `json:"y"`
 		Icon            string  `json:"icon"`
 		Color           string  `json:"color"`
+		PinCategory     *string `json:"pin_category"`
 		EntityID        *string `json:"entity_id"`
 		Visibility      string  `json:"visibility"`
 		VisibilityRules *string `json:"visibility_rules"`
@@ -277,6 +278,7 @@ func (h *Handler) CreateMarkerAPI(c echo.Context) error {
 		Y:               req.Y,
 		Icon:            req.Icon,
 		Color:           req.Color,
+		PinCategory:     req.PinCategory,
 		EntityID:        req.EntityID,
 		Visibility:      visibility,
 		VisibilityRules: visRules,
@@ -308,6 +310,7 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 		Y               float64 `json:"y"`
 		Icon            string  `json:"icon"`
 		Color           string  `json:"color"`
+		PinCategory     *string `json:"pin_category"`
 		EntityID        *string `json:"entity_id"`
 		Visibility      string  `json:"visibility"`
 		VisibilityRules *string `json:"visibility_rules"`
@@ -334,6 +337,7 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 		Y:               req.Y,
 		Icon:            req.Icon,
 		Color:           req.Color,
+		PinCategory:     req.PinCategory,
 		EntityID:        req.EntityID,
 		Visibility:      visibility,
 		VisibilityRules: visRules,
@@ -356,4 +360,32 @@ func (h *Handler) DeleteMarkerAPI(c echo.Context) error {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
+}
+
+// ListMarkersAPI returns all markers for a map as JSON.
+// GET /campaigns/:id/maps/:mid/markers
+func (h *Handler) ListMarkersAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	mapID := c.Param("mid")
+
+	// IDOR protection: verify map belongs to this campaign.
+	if _, err := h.requireMapInCampaign(c, mapID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	role := cc.VisibilityRole()
+	userID := ""
+	if session := c.Get("session"); session != nil {
+		if s, ok := session.(interface{ GetUserID() string }); ok {
+			userID = s.GetUserID()
+		}
+	}
+
+	markers, err := h.svc.ListMarkers(ctx, mapID, role, userID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, markers)
 }

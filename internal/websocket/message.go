@@ -41,6 +41,20 @@ const (
 	MsgCalendarDateAdvanced MessageType = "calendar.date.advanced"
 )
 
+// Entity type sync messages.
+const (
+	MsgEntityTypeCreated MessageType = "entity_type.created"
+	MsgEntityTypeUpdated MessageType = "entity_type.updated"
+	MsgEntityTypeDeleted MessageType = "entity_type.deleted"
+)
+
+// Note sync messages.
+const (
+	MsgNoteCreated MessageType = "note.created"
+	MsgNoteUpdated MessageType = "note.updated"
+	MsgNoteDeleted MessageType = "note.deleted"
+)
+
 // Sync control messages.
 const (
 	MsgSyncStatus   MessageType = "sync.status"
@@ -70,6 +84,12 @@ var validMessageTypes = map[MessageType]struct{}{
 	MsgCalendarEventUpdated: {},
 	MsgCalendarEventDeleted: {},
 	MsgCalendarDateAdvanced: {},
+	MsgEntityTypeCreated:    {},
+	MsgEntityTypeUpdated:    {},
+	MsgEntityTypeDeleted:    {},
+	MsgNoteCreated:          {},
+	MsgNoteUpdated:          {},
+	MsgNoteDeleted:          {},
 	MsgSyncStatus:           {},
 	MsgSyncError:            {},
 	MsgSyncConflict:         {},

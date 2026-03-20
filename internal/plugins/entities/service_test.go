@@ -167,6 +167,10 @@ func (m *mockEntityRepo) UpdateEntry(ctx context.Context, id, entryJSON, entryHT
 	return nil
 }
 
+func (m *mockEntityRepo) UpdatePlayerNotes(ctx context.Context, id, notesJSON, notesHTML string) error {
+	return nil
+}
+
 func (m *mockEntityRepo) UpdateFields(ctx context.Context, id string, fieldsData map[string]any) error {
 	return nil
 }

@@ -573,12 +573,13 @@ func (h *Handler) Update(c echo.Context) error {
 	fieldsData := h.parseFieldsFromForm(c, cc.Campaign.ID, entity.EntityTypeID)
 
 	input := UpdateEntityInput{
-		Name:       req.Name,
-		TypeLabel:  req.TypeLabel,
-		ParentID:   req.ParentID,
-		IsPrivate:  req.IsPrivate,
-		Entry:      req.Entry,
-		FieldsData: fieldsData,
+		Name:              req.Name,
+		TypeLabel:         req.TypeLabel,
+		ParentID:          req.ParentID,
+		IsPrivate:         req.IsPrivate,
+		Entry:             req.Entry,
+		FieldsData:        fieldsData,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	}
 
 	_, err = h.service.Update(c.Request().Context(), entityID, input)
@@ -1229,9 +1230,14 @@ func (h *Handler) EntityTypesAPI(c echo.Context) error {
 	items := make([]map[string]any, len(types))
 	for i, t := range types {
 		items[i] = map[string]any{
-			"id":   t.ID,
-			"name": t.Name,
-			"icon": t.Icon,
+			"id":          t.ID,
+			"name":        t.Name,
+			"name_plural": t.NamePlural,
+			"slug":        t.Slug,
+			"icon":        t.Icon,
+			"color":       t.Color,
+			"sort_order":  t.SortOrder,
+			"enabled":     t.Enabled,
 		}
 	}
 	return c.JSON(http.StatusOK, items)
@@ -1313,6 +1319,65 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	}
 
 	if err := h.service.UpdateEntry(c.Request().Context(), entityID, body.Entry, body.EntryHTML); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// --- Player Notes API ---
+
+// GetPlayerNotes returns the entity's player-facing notes as JSON.
+// GET /campaigns/:id/entities/:eid/player-notes
+func (h *Handler) GetPlayerNotes(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"player_notes":      entity.PlayerNotes,
+		"player_notes_html": entity.PlayerNotesHTML,
+	})
+}
+
+// UpdatePlayerNotesAPI updates only the entity's player-facing notes.
+// PUT /campaigns/:id/entities/:eid/player-notes
+func (h *Handler) UpdatePlayerNotesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var body struct {
+		PlayerNotes     string `json:"player_notes"`
+		PlayerNotesHTML string `json:"player_notes_html"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	if err := h.service.UpdatePlayerNotes(c.Request().Context(), entityID, body.PlayerNotes, body.PlayerNotesHTML); err != nil {
 		return err
 	}
 

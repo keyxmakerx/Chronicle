@@ -178,6 +178,7 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 		Y:               input.Y,
 		Icon:            input.Icon,
 		Color:           input.Color,
+		PinCategory:     input.PinCategory,
 		EntityID:        input.EntityID,
 		Visibility:      input.Visibility,
 		VisibilityRules: input.VisibilityRules,
@@ -232,6 +233,7 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	mk.Y = input.Y
 	mk.Icon = input.Icon
 	mk.Color = input.Color
+	mk.PinCategory = input.PinCategory
 	mk.EntityID = input.EntityID
 	mk.Visibility = input.Visibility
 	mk.VisibilityRules = input.VisibilityRules

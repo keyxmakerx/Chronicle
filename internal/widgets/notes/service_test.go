@@ -492,6 +492,9 @@ func TestUpdate_ColorChange(t *testing.T) {
 func TestDelete_Success(t *testing.T) {
 	var deletedID string
 	repo := &mockNoteRepo{
+		findByIDFn: func(ctx context.Context, id string) (*Note, error) {
+			return &Note{ID: id, CampaignID: "camp-1"}, nil
+		},
 		deleteFn: func(ctx context.Context, id string) error {
 			deletedID = id
 			return nil

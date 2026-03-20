@@ -425,6 +425,50 @@ func (a *entityEventPublisherAdapter) PublishEntityEvent(eventType, campaignID, 
 	a.bus.Publish(ws.NewMessage(msgType, campaignID, entityID, entity))
 }
 
+// PublishEntityTypeEvent translates entity type domain events into WebSocket messages.
+func (a *entityEventPublisherAdapter) PublishEntityTypeEvent(eventType, campaignID string, entityType *entities.EntityType) {
+	if campaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case "created":
+		msgType = ws.MsgEntityTypeCreated
+	case "updated":
+		msgType = ws.MsgEntityTypeUpdated
+	case "deleted":
+		msgType = ws.MsgEntityTypeDeleted
+	default:
+		return
+	}
+	a.bus.Publish(ws.NewMessage(msgType, campaignID, fmt.Sprintf("%d", entityType.ID), entityType))
+}
+
+// noteEventPublisherAdapter bridges the websocket.EventBus to the
+// notes.NoteEventPublisher interface.
+type noteEventPublisherAdapter struct {
+	bus ws.EventBus
+}
+
+// PublishNoteEvent translates note domain events into WebSocket messages.
+func (a *noteEventPublisherAdapter) PublishNoteEvent(eventType, campaignID, noteID string, note *notes.Note) {
+	if campaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case "created":
+		msgType = ws.MsgNoteCreated
+	case "updated":
+		msgType = ws.MsgNoteUpdated
+	case "deleted":
+		msgType = ws.MsgNoteDeleted
+	default:
+		return
+	}
+	a.bus.Publish(ws.NewMessage(msgType, campaignID, noteID, note))
+}
+
 // mapEventPublisherAdapter bridges the websocket.EventBus to the maps.MapEventPublisher
 // interface, translating domain events into WebSocket messages.
 type mapEventPublisherAdapter struct {
@@ -1835,6 +1879,7 @@ func (a *App) RegisterRoutes() {
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
 	calendarService.SetEventPublisher(&calendarEventPublisherAdapter{bus: wsEventBus})
+	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
 
 	drawingService.SetEventPublisher(&mapEventPublisherAdapter{bus: wsEventBus})
 	drawingService.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {

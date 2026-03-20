@@ -111,7 +111,7 @@ func (r *mapRepo) ListMaps(ctx context.Context, campaignID string) ([]Map, error
 
 // markerCols is the column list for marker queries (with entity join fields).
 const markerCols = `m.id, m.map_id, m.name, m.description,
-       m.x, m.y, m.icon, m.color,
+       m.x, m.y, m.icon, m.color, m.pin_category,
        m.entity_id, m.visibility, m.visibility_rules,
        m.created_by, m.created_at, m.updated_at,
        COALESCE(ent.name, ''), COALESCE(et.icon, '')`
@@ -124,7 +124,7 @@ const markerJoins = `LEFT JOIN entities ent ON ent.id = m.entity_id
 func scanMarker(scanner interface{ Scan(...any) error }) (*Marker, error) {
 	mk := &Marker{}
 	err := scanner.Scan(&mk.ID, &mk.MapID, &mk.Name, &mk.Description,
-		&mk.X, &mk.Y, &mk.Icon, &mk.Color,
+		&mk.X, &mk.Y, &mk.Icon, &mk.Color, &mk.PinCategory,
 		&mk.EntityID, &mk.Visibility, &mk.VisibilityRules,
 		&mk.CreatedBy, &mk.CreatedAt, &mk.UpdatedAt,
 		&mk.EntityName, &mk.EntityIcon)
@@ -138,10 +138,10 @@ func scanMarker(scanner interface{ Scan(...any) error }) (*Marker, error) {
 func (r *mapRepo) CreateMarker(ctx context.Context, mk *Marker) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO map_markers (id, map_id, name, description,
-		        x, y, icon, color, entity_id, visibility, visibility_rules, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        x, y, icon, color, pin_category, entity_id, visibility, visibility_rules, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		mk.ID, mk.MapID, mk.Name, mk.Description,
-		mk.X, mk.Y, mk.Icon, mk.Color, mk.EntityID, mk.Visibility,
+		mk.X, mk.Y, mk.Icon, mk.Color, mk.PinCategory, mk.EntityID, mk.Visibility,
 		mk.VisibilityRules, mk.CreatedBy,
 	)
 	return err
@@ -159,11 +159,11 @@ func (r *mapRepo) GetMarker(ctx context.Context, id string) (*Marker, error) {
 func (r *mapRepo) UpdateMarker(ctx context.Context, mk *Marker) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE map_markers SET name = ?, description = ?,
-		        x = ?, y = ?, icon = ?, color = ?,
+		        x = ?, y = ?, icon = ?, color = ?, pin_category = ?,
 		        entity_id = ?, visibility = ?, visibility_rules = ?
 		 WHERE id = ?`,
 		mk.Name, mk.Description,
-		mk.X, mk.Y, mk.Icon, mk.Color,
+		mk.X, mk.Y, mk.Icon, mk.Color, mk.PinCategory,
 		mk.EntityID, mk.Visibility, mk.VisibilityRules, mk.ID,
 	)
 	return err
