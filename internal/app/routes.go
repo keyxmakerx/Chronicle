@@ -974,6 +974,13 @@ func (a *App) RegisterRoutes() {
 	entities.RegisterWorldbuildingPromptRoutes(e, wbPromptHandler, campaignService, authService)
 	campaignService.SetWorldbuildingPromptSeeder(wbPromptService)
 
+	// Layout preset routes (reusable page layout configurations).
+	layoutPresetRepo := entities.NewLayoutPresetRepository(a.DB)
+	layoutPresetService := entities.NewLayoutPresetService(layoutPresetRepo)
+	layoutPresetHandler := entities.NewLayoutPresetHandler(layoutPresetService)
+	entities.RegisterLayoutPresetRoutes(e, layoutPresetHandler, campaignService, authService)
+	campaignService.SetLayoutPresetSeeder(layoutPresetService)
+
 	// Media plugin: file upload, storage, thumbnailing, serving.
 	// Graceful degradation: if the media directory can't be created, log a warning
 	// but don't crash -- the rest of the app keeps running.

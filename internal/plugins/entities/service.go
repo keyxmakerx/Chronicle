@@ -949,9 +949,14 @@ var defaultBlockTypes = map[string]bool{
 	"shop_inventory": true, "inventory": true, "text_block": true,
 }
 
-// UpdateEntityTypeLayout validates and persists a new layout for an entity type.
-// Accepts the new row/column/block format.
-func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error {
+// maxLayoutSize is the maximum allowed size for serialized layout JSON (100KB).
+const maxLayoutSize = 102400
+
+// ValidateLayout checks that a layout conforms to structural constraints.
+// The optional isValidBlock callback validates block types; if nil, block type
+// validation is skipped (useful for layout presets where block availability is
+// campaign-dependent).
+func ValidateLayout(layout EntityTypeLayout, isValidBlock func(string) bool) error {
 	if len(layout.Rows) > maxLayoutRows {
 		return apperror.NewBadRequest("too many layout rows")
 	}
@@ -986,7 +991,7 @@ func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layo
 					return apperror.NewBadRequest("duplicate block ID: " + blk.ID)
 				}
 				seenBlockIDs[blk.ID] = true
-				if !s.isValidBlockType(blk.Type) {
+				if isValidBlock != nil && !isValidBlock(blk.Type) {
 					return apperror.NewBadRequest("invalid block type: " + blk.Type)
 				}
 			}
@@ -995,10 +1000,23 @@ func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layo
 			return apperror.NewBadRequest("column widths in a row must sum to 12")
 		}
 	}
+	return nil
+}
+
+// UpdateEntityTypeLayout validates and persists a new layout for an entity type.
+// Accepts the new row/column/block format.
+func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error {
+	if err := ValidateLayout(layout, s.isValidBlockType); err != nil {
+		return err
+	}
 
 	layoutJSON, err := json.Marshal(layout)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("marshaling layout: %w", err))
+	}
+
+	if len(layoutJSON) > maxLayoutSize {
+		return apperror.NewBadRequest("layout exceeds maximum size")
 	}
 
 	if err := s.types.UpdateLayout(ctx, id, string(layoutJSON)); err != nil {

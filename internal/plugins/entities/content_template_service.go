@@ -2,11 +2,15 @@ package entities
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
+
+// maxContentTemplateSize is the maximum allowed size for content JSON or HTML (100KB).
+const maxContentTemplateSize = 102400
 
 // ContentTemplateService handles business logic for content templates.
 type ContentTemplateService interface {
@@ -47,6 +51,15 @@ func (s *contentTemplateService) Create(ctx context.Context, campaignID string, 
 	contentJSON := strings.TrimSpace(input.ContentJSON)
 	if contentJSON == "" {
 		return nil, apperror.NewBadRequest("template content is required")
+	}
+	if !json.Valid([]byte(contentJSON)) {
+		return nil, apperror.NewBadRequest("content_json must be valid JSON")
+	}
+	if len(contentJSON) > maxContentTemplateSize {
+		return nil, apperror.NewBadRequest("content_json exceeds maximum size")
+	}
+	if len(input.ContentHTML) > maxContentTemplateSize {
+		return nil, apperror.NewBadRequest("content_html exceeds maximum size")
 	}
 
 	icon := strings.TrimSpace(input.Icon)
@@ -117,6 +130,15 @@ func (s *contentTemplateService) Update(ctx context.Context, id int, input Updat
 	contentJSON := strings.TrimSpace(input.ContentJSON)
 	if contentJSON == "" {
 		return nil, apperror.NewBadRequest("template content is required")
+	}
+	if !json.Valid([]byte(contentJSON)) {
+		return nil, apperror.NewBadRequest("content_json must be valid JSON")
+	}
+	if len(contentJSON) > maxContentTemplateSize {
+		return nil, apperror.NewBadRequest("content_json exceeds maximum size")
+	}
+	if len(input.ContentHTML) > maxContentTemplateSize {
+		return nil, apperror.NewBadRequest("content_html exceeds maximum size")
 	}
 
 	t.Name = name

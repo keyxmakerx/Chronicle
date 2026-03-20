@@ -598,6 +598,12 @@ type WorldbuildingPromptSeeder interface {
 	SeedDefaults(ctx context.Context, campaignID string) error
 }
 
+// LayoutPresetSeeder seeds default layout presets when a campaign is created.
+// Implemented by the entities plugin's LayoutPresetService.
+type LayoutPresetSeeder interface {
+	SeedDefaults(ctx context.Context, campaignID string) error
+}
+
 // --- Request DTOs (bound from HTTP requests) ---
 
 // CreateCampaignRequest holds the data submitted by the campaign creation form.

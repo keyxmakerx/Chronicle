@@ -267,6 +267,29 @@ Chronicle.register('template-editor', {
     });
     palette.appendChild(presetSection);
 
+    // Layout preset actions (Load / Save as Preset).
+    if (this.campaignId) {
+      const presetActions = document.createElement('div');
+      presetActions.className = 'mt-6 pt-4 border-t border-gray-200 dark:border-gray-700';
+      presetActions.innerHTML = '<h3 class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Presets</h3>';
+
+      // Load Preset button.
+      const loadBtn = document.createElement('button');
+      loadBtn.className = 'flex items-center gap-2 w-full px-3 py-2 mb-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-sm transition-all text-sm text-left';
+      loadBtn.innerHTML = '<i class="fa-solid fa-download w-4 text-gray-400 dark:text-gray-500 text-center"></i><span class="text-gray-700 dark:text-gray-200">Load Preset</span>';
+      loadBtn.addEventListener('click', () => this.showLoadPresetMenu(loadBtn));
+      presetActions.appendChild(loadBtn);
+
+      // Save as Preset button.
+      const savePresetBtn = document.createElement('button');
+      savePresetBtn.className = 'flex items-center gap-2 w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-sm transition-all text-sm text-left';
+      savePresetBtn.innerHTML = '<i class="fa-solid fa-floppy-disk w-4 text-gray-400 dark:text-gray-500 text-center"></i><span class="text-gray-700 dark:text-gray-200">Save as Preset</span>';
+      savePresetBtn.addEventListener('click', () => this.saveAsPreset());
+      presetActions.appendChild(savePresetBtn);
+
+      palette.appendChild(presetActions);
+    }
+
     this.el.appendChild(palette);
 
     // Canvas area.
@@ -1521,12 +1544,150 @@ Chronicle.register('template-editor', {
     }
   },
 
+  /** Show a dropdown menu of available layout presets to load. */
+  showLoadPresetMenu(anchorEl) {
+    // Remove any existing preset menu.
+    this.closePresetMenu();
+
+    const self = this;
+    const menu = document.createElement('div');
+    menu.className = 'te-preset-menu absolute z-50 mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg overflow-hidden';
+    menu.style.cssText = 'max-height: 300px; overflow-y: auto;';
+    menu.innerHTML = '<div class="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">Loading presets...</div>';
+
+    // Position below the anchor.
+    const rect = anchorEl.getBoundingClientRect();
+    const paletteRect = anchorEl.closest('.w-56').getBoundingClientRect();
+    menu.style.position = 'fixed';
+    menu.style.left = paletteRect.left + 'px';
+    menu.style.top = rect.bottom + 4 + 'px';
+    menu.style.width = paletteRect.width + 'px';
+    document.body.appendChild(menu);
+    this._presetMenu = menu;
+
+    // Close on outside click.
+    this._presetMenuClickHandler = (e) => {
+      if (!menu.contains(e.target) && e.target !== anchorEl) {
+        self.closePresetMenu();
+      }
+    };
+    setTimeout(() => document.addEventListener('click', this._presetMenuClickHandler), 0);
+
+    // Fetch presets.
+    Chronicle.apiFetch('/campaigns/' + this.campaignId + '/layout-presets')
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (presets) {
+        menu.innerHTML = '';
+        if (!presets || presets.length === 0) {
+          menu.innerHTML = '<div class="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">No presets available</div>';
+          return;
+        }
+        presets.forEach(function (preset) {
+          const item = document.createElement('button');
+          item.className = 'flex items-center gap-2 w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors';
+          const escapedName = self.escapeHtml(preset.name);
+          const escapedDesc = self.escapeHtml(preset.description || '');
+          item.innerHTML = '<i class="fa-solid ' + self.escapeHtml(preset.icon || 'fa-table-columns') + ' w-4 text-gray-400 dark:text-gray-500 text-center"></i>' +
+            '<div><div class="font-medium">' + escapedName + '</div>' +
+            (escapedDesc ? '<div class="text-[10px] text-gray-400 dark:text-gray-500">' + escapedDesc + '</div>' : '') +
+            '</div>' +
+            (preset.is_builtin ? '<span class="ml-auto text-[9px] text-gray-400 dark:text-gray-500 border border-gray-300 dark:border-gray-600 rounded px-1">Built-in</span>' : '');
+          item.addEventListener('click', function () {
+            self.closePresetMenu();
+            self.loadPreset(preset);
+          });
+          menu.appendChild(item);
+        });
+      })
+      .catch(function () {
+        menu.innerHTML = '<div class="px-3 py-2 text-xs text-red-400">Failed to load presets</div>';
+      });
+  },
+
+  /** Close the preset dropdown menu. */
+  closePresetMenu() {
+    if (this._presetMenu) {
+      this._presetMenu.remove();
+      this._presetMenu = null;
+    }
+    if (this._presetMenuClickHandler) {
+      document.removeEventListener('click', this._presetMenuClickHandler);
+      this._presetMenuClickHandler = null;
+    }
+  },
+
+  /** Apply a layout preset, replacing the current layout after confirmation. */
+  loadPreset(preset) {
+    if (!confirm('Replace current layout with "' + preset.name + '"? This cannot be undone.')) {
+      return;
+    }
+    try {
+      const layout = JSON.parse(preset.layout_json);
+      if (layout && layout.rows) {
+        this.layout = layout;
+        this.markDirty();
+        this.renderCanvas();
+        const status = this.findSaveStatus();
+        if (status) status.textContent = 'Preset loaded — save to apply';
+      }
+    } catch (e) {
+      console.warn('[template-editor] Failed to parse preset layout:', e);
+      const status = this.findSaveStatus();
+      if (status) status.textContent = 'Error loading preset';
+    }
+  },
+
+  /** Save the current layout as a new preset. */
+  async saveAsPreset() {
+    const name = prompt('Preset name:');
+    if (!name || !name.trim()) return;
+
+    const status = this.findSaveStatus();
+    try {
+      const cleanLayout = this.cleanLayoutForSave(this.layout);
+      const res = await Chronicle.apiFetch('/campaigns/' + this.campaignId + '/layout-presets', {
+        method: 'POST',
+        body: {
+          name: name.trim(),
+          description: '',
+          layout_json: JSON.stringify(cleanLayout),
+          icon: 'fa-table-columns',
+        },
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to save preset');
+      }
+
+      if (status) status.textContent = 'Preset saved';
+      setTimeout(() => { if (status && !this.dirty) status.textContent = ''; }, 2000);
+    } catch (err) {
+      if (status) {
+        status.textContent = 'Error: ' + err.message;
+        status.classList.add('text-red-500');
+      }
+      setTimeout(() => {
+        if (status) { status.textContent = ''; status.classList.remove('text-red-500'); }
+      }, 4000);
+    }
+  },
+
+  /** Escape HTML to prevent XSS when rendering user-provided text. */
+  escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  },
+
   // Clean up when HTMX swaps this widget out (called by boot.js destroyElement).
   destroy(el) {
     if (this.keydownHandler) {
       document.removeEventListener('keydown', this.keydownHandler);
       this.keydownHandler = null;
     }
+    this.closePresetMenu();
+    this.closeBlockPreview();
     el.innerHTML = '';
     this.layout = null;
     this.canvas = null;

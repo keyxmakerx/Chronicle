@@ -79,6 +79,7 @@ type CampaignService interface {
 	// Lifecycle hooks — set after construction to avoid circular initialization.
 	SetContentTemplateSeeder(seeder ContentTemplateSeeder)
 	SetWorldbuildingPromptSeeder(seeder WorldbuildingPromptSeeder)
+	SetLayoutPresetSeeder(seeder LayoutPresetSeeder)
 	SetMediaCleaner(cleaner MediaCleaner)
 	SetHookDispatcher(dispatcher CampaignHookDispatcher)
 }
@@ -115,6 +116,7 @@ type campaignService struct {
 	seeder           EntityTypeSeeder       // Seeds default entity types on campaign creation. May be nil.
 	templateSeeder   ContentTemplateSeeder  // Seeds default content templates on campaign creation. May be nil.
 	promptSeeder     WorldbuildingPromptSeeder // Seeds default worldbuilding prompts on campaign creation. May be nil.
+	layoutSeeder     LayoutPresetSeeder     // Seeds default layout presets on campaign creation. May be nil.
 	mediaCleaner     MediaCleaner           // Cleans up media files on campaign delete. May be nil.
 	hookDispatcher   CampaignHookDispatcher // Dispatches WASM lifecycle events. May be nil.
 	baseURL          string
@@ -141,6 +143,12 @@ func (s *campaignService) SetContentTemplateSeeder(seeder ContentTemplateSeeder)
 // SetWorldbuildingPromptSeeder sets the seeder for default worldbuilding prompts.
 func (s *campaignService) SetWorldbuildingPromptSeeder(seeder WorldbuildingPromptSeeder) {
 	s.promptSeeder = seeder
+}
+
+// SetLayoutPresetSeeder sets the seeder for default layout presets.
+// Called after all plugins are wired to avoid initialization order issues.
+func (s *campaignService) SetLayoutPresetSeeder(seeder LayoutPresetSeeder) {
+	s.layoutSeeder = seeder
 }
 
 // SetMediaCleaner sets the media cleaner for campaign deletion cleanup.
@@ -236,6 +244,16 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 	if s.promptSeeder != nil {
 		if err := s.promptSeeder.SeedDefaults(ctx, campaign.ID); err != nil {
 			slog.Warn("failed to seed default worldbuilding prompts",
+				slog.String("campaign_id", campaign.ID),
+				slog.Any("error", err),
+			)
+		}
+	}
+
+	// Seed default layout presets for the new campaign.
+	if s.layoutSeeder != nil {
+		if err := s.layoutSeeder.SeedDefaults(ctx, campaign.ID); err != nil {
+			slog.Warn("failed to seed default layout presets",
 				slog.String("campaign_id", campaign.ID),
 				slog.Any("error", err),
 			)
