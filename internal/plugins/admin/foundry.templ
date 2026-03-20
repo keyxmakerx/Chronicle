@@ -134,38 +134,6 @@ templ AdminFoundryModulePage(data FoundryModuleData) {
 				</div>
 			}
 
-			// Update version (manual).
-			<div class="card p-6">
-				<h2 class="text-lg font-semibold text-fg mb-4">Set Version</h2>
-				<p class="text-sm text-fg-secondary mb-4">
-					Set the module version. Foundry VTT clients will see an update notification
-					when the version changes.
-				</p>
-				<form
-					method="POST"
-					action="/admin/foundry/version"
-					hx-put="/admin/foundry/version"
-					class="flex items-end gap-3"
-				>
-					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-					<div class="flex-1">
-						<label for="version" class="block text-sm font-medium text-fg-body mb-1">New Version</label>
-						<input
-							type="text"
-							id="version"
-							name="version"
-							value={ data.Version }
-							required
-							class="input w-full"
-							placeholder="0.2.0"
-							pattern="[0-9]+\.[0-9]+\.[0-9]+"
-							title="Semantic version (e.g. 0.2.0)"
-						/>
-					</div>
-					<button type="submit" class="btn-primary text-sm">Update Version</button>
-				</form>
-			</div>
-
 			// Info panel.
 			<div class="card p-6">
 				<div class="flex items-start gap-4">

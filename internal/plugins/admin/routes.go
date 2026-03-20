@@ -59,7 +59,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 
 	// Foundry VTT module management.
 	admin.GET("/foundry", h.FoundryModule)
-	admin.PUT("/foundry/version", h.UpdateFoundryModuleVersion)
 	admin.POST("/foundry/upload", h.UploadFoundryModule)
 
 	// SMTP settings (delegates to SMTP plugin handler).

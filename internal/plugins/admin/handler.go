@@ -798,54 +798,6 @@ func (h *Handler) FoundryModule(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, AdminFoundryModulePage(data))
 }
 
-// UpdateFoundryModuleVersion updates the version in foundry-module/module.json
-// (PUT /admin/foundry/version).
-func (h *Handler) UpdateFoundryModuleVersion(c echo.Context) error {
-	var req struct {
-		Version string `json:"version" form:"version"`
-	}
-	if err := c.Bind(&req); err != nil || req.Version == "" {
-		return apperror.NewBadRequest("version is required")
-	}
-
-	// Read current module.json from the active Foundry directory.
-	moduleDir := h.resolveFoundryDir()
-	manifestPath := filepath.Join(moduleDir, "module.json")
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("read module.json: %w", err))
-	}
-
-	var manifest map[string]any
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return apperror.NewInternal(fmt.Errorf("parse module.json: %w", err))
-	}
-
-	manifest["version"] = req.Version
-
-	// Update the download URL to use the new version tag.
-	baseURL := strings.TrimRight(h.baseURL, "/")
-	manifest["download"] = baseURL + "/foundry-module/chronicle-sync.zip"
-	manifest["manifest"] = baseURL + "/foundry-module/module.json"
-
-	out, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("marshal module.json: %w", err))
-	}
-	out = append(out, '\n')
-
-	if err := os.WriteFile(manifestPath, out, 0644); err != nil {
-		return apperror.NewInternal(fmt.Errorf("write module.json: %w", err))
-	}
-
-	slog.Info("foundry module version updated",
-		slog.String("version", req.Version),
-		slog.String("by", auth.GetUserID(c)),
-	)
-
-	return middleware.HTMXRedirect(c, "/admin/foundry")
-}
-
 // readFoundryModuleVersion reads the version from the active Foundry module's module.json.
 func (h *Handler) readFoundryModuleVersion() string {
 	data, err := os.ReadFile(filepath.Join(h.resolveFoundryDir(), "module.json"))
