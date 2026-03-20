@@ -419,7 +419,19 @@ func (h *Handler) Create(c echo.Context) error {
 	if req.TemplateID > 0 && h.contentTemplateSvc != nil {
 		tmpl, tmplErr := h.contentTemplateSvc.GetByID(c.Request().Context(), req.TemplateID)
 		if tmplErr == nil && tmpl.ContentJSON != "" {
-			_ = h.service.UpdateEntry(c.Request().Context(), entity.ID, tmpl.ContentJSON, tmpl.ContentHTML)
+			// IDOR check: template must belong to this campaign or be global.
+			if tmpl.CampaignID != nil && *tmpl.CampaignID != cc.Campaign.ID {
+				slog.Warn("content template IDOR blocked",
+					slog.Int("template_id", req.TemplateID),
+					slog.String("campaign_id", cc.Campaign.ID),
+				)
+			} else if err := h.service.UpdateEntry(c.Request().Context(), entity.ID, tmpl.ContentJSON, tmpl.ContentHTML); err != nil {
+				slog.Warn("failed to apply content template",
+					slog.Int("template_id", req.TemplateID),
+					slog.String("entity_id", entity.ID),
+					slog.Any("error", err),
+				)
+			}
 		}
 	}
 

@@ -859,6 +859,20 @@ User --< CampaignMember >-- Campaign
 | bypass_reason | VARCHAR(255) | NULL | Admin note (added 000040) |
 | bypass_granted_by | CHAR(36) | NULL | Admin who granted bypass (added 000040) |
 
+### layout_presets (implemented -- migration 000017)
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | INT | PK, AUTO_INCREMENT | |
+| campaign_id | CHAR(36) | FK -> campaigns.id ON DELETE CASCADE, NOT NULL | |
+| name | VARCHAR(200) | NOT NULL | Display name |
+| description | VARCHAR(500) | DEFAULT '' | Purpose description |
+| layout_json | JSON | NOT NULL | EntityTypeLayout JSON (same format as entity_types.layout_json) |
+| icon | VARCHAR(50) | DEFAULT 'fa-table-columns' | FontAwesome icon class |
+| sort_order | INT | DEFAULT 0 | Ordering in lists |
+| is_builtin | BOOLEAN | DEFAULT FALSE | Built-in presets cannot be edited/deleted |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | |
+| updated_at | DATETIME | DEFAULT CURRENT_TIMESTAMP ON UPDATE | |
+
 ## MariaDB-Specific Notes
 
 - **JSON columns:** MariaDB validates JSON on write. Use `JSON_EXTRACT()` for

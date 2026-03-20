@@ -8,7 +8,17 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-20 -- **Chronicle API extended for Foundry VTT bidirectional sync (chronicle-sync).**
+2026-03-20 -- **Layout Presets + Security Hardening.**
+
+59. **Layout Presets + Security Hardening + Debug Improvements.**
+    - **Layout Presets (NEW)** — Reusable page layout configurations that can be applied to any entity type. Migration 000017 creates `layout_presets` table. Full CRUD API: `GET/POST/PUT/DELETE /campaigns/:id/layout-presets`. 4 built-in presets seeded on campaign creation (Standard, Wide Content, Sidebar Left, Compact Profile). Built-in presets cannot be edited/deleted (403). Campaign-scoped with IDOR protection.
+    - **Template Editor Integration** — "Load Preset" dropdown and "Save as Preset" button added to the template editor palette sidebar. Load fetches presets from API, shows confirmation, replaces layout. Save prompts for name and POSTs to create endpoint.
+    - **Shared Layout Validation** — Extracted `ValidateLayout()` from `entityService.UpdateEntityTypeLayout` into a standalone exported function. Used by both entity type layout updates and layout preset validation. Layout size limit (100KB) added.
+    - **Content Template IDOR Fix** — Template application during entity creation (`handler.go:419`) now validates that the template belongs to the same campaign or is global. Previously any template could be applied cross-campaign if the ID was known.
+    - **Content Template Validation** — Added `json.Valid` check for `content_json` in Create/Update. Added 100KB size limits for both `content_json` and `content_html`.
+    - **Template Application Logging** — Silent error swallowing on template application replaced with `slog.Warn` logging.
+    - **Campaign Service Seeder** — `LayoutPresetSeeder` interface added to campaigns plugin. `SetLayoutPresetSeeder` wired in `app/routes.go`. Seeds run during campaign creation with non-fatal error handling.
+    - All unit tests pass, lint clean, build succeeds.
 
 58. **Foundry VTT Clarification Fixes.**
     - **Members Endpoint on Sync API** — Added `GET /api/v1/campaigns/:id/members` (PermRead). Returns `CampaignMember` objects with `user_id`, `display_name`, `role`, `email`, `avatar_path`, `character_entity_id`, `character_name`. Previously only available on web routes.
