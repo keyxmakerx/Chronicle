@@ -15,4 +15,4 @@ CREATE TABLE IF NOT EXISTS layout_presets (
 
     INDEX idx_lp_campaign (campaign_id),
     FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
