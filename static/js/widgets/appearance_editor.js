@@ -115,6 +115,17 @@
         gradDirSelect.value = draft.topbarStyle.gradient_dir;
       }
 
+      // Font family CSS map (mirrors Go fontFamilyPresets). Declared here so
+      // it is initialized before updateFontPreview is called during init.
+      var FONT_CSS_MAP = {
+        '': 'inherit',
+        'serif': "Georgia, 'Times New Roman', serif",
+        'sans-serif': "'Inter', system-ui, sans-serif",
+        'monospace': "'JetBrains Mono', 'Fira Code', monospace",
+        'georgia': 'Georgia, Cambria, serif',
+        'merriweather': "'Merriweather', Georgia, serif"
+      };
+
       // Set initial active mode and show correct panel.
       setActiveMode(draft.topbarStyle.mode);
       updateTopbarPreview();
@@ -513,18 +524,6 @@
           }
         }
       }
-
-      /**
-       * Font family CSS map (mirrors Go fontFamilyPresets).
-       */
-      var FONT_CSS_MAP = {
-        '': 'inherit',
-        'serif': "Georgia, 'Times New Roman', serif",
-        'sans-serif': "'Inter', system-ui, sans-serif",
-        'monospace': "'JetBrains Mono', 'Fira Code', monospace",
-        'georgia': 'Georgia, Cambria, serif',
-        'merriweather': "'Merriweather', Georgia, serif"
-      };
 
       /**
        * Update the preview content font family.
