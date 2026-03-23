@@ -472,11 +472,14 @@ func (c *Campaign) ParseOwnerDashboardLayout() *DashboardLayout {
 // CampaignSettings holds campaign-level configuration stored as JSON in
 // the campaigns.settings column. Accent color, display preferences, etc.
 type CampaignSettings struct {
-	AccentColor  string       `json:"accent_color,omitempty"`   // Hex color, e.g. "#6366f1".
-	DmGrantIDs   []string     `json:"dm_grant_ids,omitempty"`   // User IDs granted dm_only visibility.
-	BrandName    string       `json:"brand_name,omitempty"`     // Custom sidebar brand name (replaces campaign name).
-	BrandLogo    string       `json:"brand_logo,omitempty"`     // Media path for brand logo image.
-	TopbarStyle  *TopbarStyle `json:"topbar_style,omitempty"`   // Topbar visual customization.
+	AccentColor       string       `json:"accent_color,omitempty"`        // Hex color, e.g. "#6366f1".
+	DmGrantIDs        []string     `json:"dm_grant_ids,omitempty"`        // User IDs granted dm_only visibility.
+	BrandName         string       `json:"brand_name,omitempty"`          // Custom sidebar brand name (replaces campaign name).
+	BrandLogo         string       `json:"brand_logo,omitempty"`          // Media path for brand logo image.
+	TopbarStyle       *TopbarStyle `json:"topbar_style,omitempty"`        // Topbar visual customization.
+	FontFamily        string       `json:"font_family,omitempty"`         // Campaign body font: "serif", "sans-serif", "monospace", "georgia", "merriweather".
+	WelcomeMessage    string       `json:"welcome_message,omitempty"`     // MOTD banner shown on campaign dashboard (max 500 chars).
+	DefaultVisibility string       `json:"default_visibility,omitempty"`  // Default visibility for new entities: "", "dm_only", "private".
 }
 
 // TopbarStyle configures the visual appearance of the campaign's top navigation bar.

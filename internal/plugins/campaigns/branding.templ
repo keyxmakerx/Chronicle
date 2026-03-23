@@ -152,6 +152,7 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 		data-brand-logo={ cc.Campaign.ParseSettings().BrandLogo }
 		data-accent-color={ cc.Campaign.ParseSettings().AccentColor }
 		data-topbar-style={ topbarStyleJSON(cc.Campaign.ParseSettings().TopbarStyle) }
+		data-font-family={ cc.Campaign.ParseSettings().FontFamily }
 	>
 		<!-- Faux site outline preview -->
 		<div class="rounded-lg border border-edge overflow-hidden mb-6 bg-surface-alt">
@@ -259,6 +260,21 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 					>
 						<i class="fa-solid fa-xmark text-[10px] text-fg-muted"></i>
 					</button>
+					<!-- Custom color picker -->
+					<div class="flex items-center gap-2 ml-2 pl-2 border-l border-edge">
+						<input
+							type="color"
+							id="appearance-accent-custom"
+							class="w-8 h-8 rounded-full border border-edge cursor-pointer"
+							if cc.Campaign.ParseSettings().AccentColor != "" {
+								value={ cc.Campaign.ParseSettings().AccentColor }
+							} else {
+								value="#6366f1"
+							}
+							title="Pick a custom color"
+						/>
+						<span class="text-[10px] text-fg-muted">Custom</span>
+					</div>
 				</div>
 				<p class="text-[10px] text-fg-muted" id="appearance-accent-label">
 					if cc.Campaign.ParseSettings().AccentColor != "" {
@@ -308,7 +324,49 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 				</div>
 			</div>
 		</div>
+
+		<!-- Font family -->
+		<div class="card p-4 mb-4">
+			<h3 class="text-sm font-semibold text-fg mb-2">
+				<i class="fa-solid fa-font text-xs mr-1.5 text-fg-muted"></i> Font
+			</h3>
+			<p class="text-xs text-fg-secondary mb-3">Choose the body font for campaign pages.</p>
+			<div id="appearance-font-family" class="flex flex-wrap gap-2">
+				for _, font := range fontFamilyPresets {
+					<button
+						type="button"
+						data-font-family={ font.Value }
+						class="px-3 py-2 rounded-lg border transition-colors text-sm"
+						if cc.Campaign.ParseSettings().FontFamily == font.Value {
+							class="px-3 py-2 rounded-lg border border-accent bg-accent/10 text-accent font-medium text-sm"
+						} else {
+							class="px-3 py-2 rounded-lg border border-edge bg-surface hover:border-accent/30 text-fg-secondary text-sm"
+						}
+						style={ fmt.Sprintf("font-family: %s", font.CSS) }
+					>
+						{ font.Label }
+					</button>
+				}
+			</div>
+		</div>
 	</div>
+}
+
+// fontFamilyPreset represents a selectable font family option.
+type fontFamilyPreset struct {
+	Value string // stored in settings JSON
+	Label string // display name
+	CSS   string // font-family CSS value
+}
+
+// fontFamilyPresets defines the available font families for campaigns.
+var fontFamilyPresets = []fontFamilyPreset{
+	{"", "Default", "inherit"},
+	{"serif", "Serif", "Georgia, 'Times New Roman', serif"},
+	{"sans-serif", "Sans Serif", "'Inter', system-ui, sans-serif"},
+	{"monospace", "Monospace", "'JetBrains Mono', 'Fira Code', monospace"},
+	{"georgia", "Georgia", "Georgia, Cambria, serif"},
+	{"merriweather", "Merriweather", "'Merriweather', Georgia, serif"},
 }
 
 // topbarStyleJSON serializes a TopbarStyle to a JSON data attribute value.

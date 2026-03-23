@@ -39,6 +39,7 @@
       var saved = {
         brandName: config.brandName || '',
         accentColor: config.accentColor || '',
+        fontFamily: config.fontFamily || '',
         topbarStyle: { mode: '', color: '', gradient_from: '', gradient_to: '', gradient_dir: 'to-r' }
       };
 
@@ -56,6 +57,7 @@
       var draft = {
         brandName: saved.brandName,
         accentColor: saved.accentColor,
+        fontFamily: saved.fontFamily,
         topbarStyle: {
           mode: saved.topbarStyle.mode || '',
           color: saved.topbarStyle.color || '',
@@ -109,6 +111,7 @@
       function isDirty() {
         return draft.brandName !== saved.brandName ||
                draft.accentColor !== saved.accentColor ||
+               draft.fontFamily !== saved.fontFamily ||
                draft.topbarStyle.mode !== (saved.topbarStyle.mode || '') ||
                draft.topbarStyle.color !== (saved.topbarStyle.color || '') ||
                draft.topbarStyle.gradient_from !== (saved.topbarStyle.gradient_from || '') ||
@@ -160,6 +163,21 @@
             var color = this.getAttribute('data-accent-color');
             draft.accentColor = color;
             updateAccentHighlight(color);
+            // Sync the custom color picker value when a preset is chosen.
+            var customInput = el.querySelector('#appearance-accent-custom');
+            if (customInput && color) {
+              customInput.value = color;
+            }
+            updateSaveBar();
+          });
+        }
+
+        // Custom hex color picker input.
+        var customColorInput = el.querySelector('#appearance-accent-custom');
+        if (customColorInput) {
+          customColorInput.addEventListener('input', function () {
+            draft.accentColor = this.value;
+            updateAccentHighlight(this.value);
             updateSaveBar();
           });
         }
@@ -191,6 +209,35 @@
         // Update label.
         if (accentLabel) {
           accentLabel.textContent = selectedColor ? 'Selected: ' + selectedColor : 'Using default theme color';
+        }
+      }
+
+      // --- Font Family Buttons ---
+
+      var fontContainer = el.querySelector('#appearance-font-family');
+      if (fontContainer) {
+        var fontButtons = fontContainer.querySelectorAll('button[data-font-family]');
+        for (var i = 0; i < fontButtons.length; i++) {
+          fontButtons[i].addEventListener('click', function () {
+            draft.fontFamily = this.getAttribute('data-font-family');
+            // Update button highlighting.
+            var allBtns = fontContainer.querySelectorAll('button[data-font-family]');
+            for (var j = 0; j < allBtns.length; j++) {
+              var btn = allBtns[j];
+              var isSelected = btn.getAttribute('data-font-family') === draft.fontFamily;
+              if (isSelected) {
+                btn.className = btn.className.replace(/border-edge bg-surface hover:border-accent\/30 text-fg-secondary/, 'border-accent bg-accent/10 text-accent font-medium');
+                if (btn.className.indexOf('border-accent') === -1) {
+                  btn.className = 'px-3 py-2 rounded-lg border border-accent bg-accent/10 text-accent font-medium text-sm';
+                  btn.style.fontFamily = btn.style.fontFamily; // preserve
+                }
+              } else {
+                btn.className = 'px-3 py-2 rounded-lg border border-edge bg-surface hover:border-accent/30 text-fg-secondary text-sm';
+                btn.style.fontFamily = btn.style.fontFamily; // preserve
+              }
+            }
+            updateSaveBar();
+          });
         }
       }
 
@@ -264,6 +311,7 @@
                 // Update saved state to match draft.
                 saved.brandName = draft.brandName;
                 saved.accentColor = draft.accentColor;
+                saved.fontFamily = draft.fontFamily;
                 saved.topbarStyle = {
                   mode: draft.topbarStyle.mode,
                   color: draft.topbarStyle.color,
@@ -300,6 +348,22 @@
               method: 'PUT',
               body: 'accent_color=' + encodeURIComponent(draft.accentColor),
               headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              csrfToken: csrfToken
+            }).then(function (res) {
+              if (!res.ok) { failed = true; }
+              onComplete();
+            }).catch(function () {
+              failed = true;
+              onComplete();
+            });
+          }
+
+          // Save font family if changed.
+          if (draft.fontFamily !== saved.fontFamily) {
+            pending++;
+            Chronicle.apiFetch('/campaigns/' + campaignId + '/font-family', {
+              method: 'PUT',
+              body: { font_family: draft.fontFamily },
               csrfToken: csrfToken
             }).then(function (res) {
               if (!res.ok) { failed = true; }

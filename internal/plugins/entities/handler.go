@@ -398,12 +398,22 @@ func (h *Handler) Create(c echo.Context) error {
 	fieldsData := h.parseFieldsFromForm(c, cc.Campaign.ID, req.EntityTypeID)
 
 	userID := auth.GetUserID(c)
+
+	// Apply campaign default visibility if the user didn't explicitly set private.
+	isPrivate := req.IsPrivate
+	if !isPrivate {
+		defaultVis := cc.Campaign.ParseSettings().DefaultVisibility
+		if defaultVis == "dm_only" || defaultVis == "private" {
+			isPrivate = true
+		}
+	}
+
 	input := CreateEntityInput{
 		Name:         req.Name,
 		EntityTypeID: req.EntityTypeID,
 		TypeLabel:    req.TypeLabel,
 		ParentID:     req.ParentID,
-		IsPrivate:    req.IsPrivate,
+		IsPrivate:    isPrivate,
 		FieldsData:   fieldsData,
 	}
 

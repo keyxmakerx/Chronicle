@@ -10,6 +10,16 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
+// welcomeMessageJS returns a JS-safe quoted string for the welcome message.
+func welcomeMessageJS(cc *CampaignContext) string {
+	msg := cc.Campaign.ParseSettings().WelcomeMessage
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return "''"
+	}
+	return string(b)
+}
+
 // entityTypesJSON serializes entity types to JSON for the entity type config widget.
 func entityTypesJSON(types []SettingsEntityType) string {
 	b, err := json.Marshal(types)
@@ -98,6 +108,113 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 						<button type="submit" class="btn-primary text-sm">Save Changes</button>
 					</div>
 				</form>
+			</div>
+
+			// Welcome message / MOTD.
+			<div class="card p-6 mb-6">
+				<h2 class="text-lg font-semibold text-fg mb-2">Welcome Message</h2>
+				<p class="text-sm text-fg-secondary mb-4">
+					Set a message of the day that appears as a banner on your campaign dashboard for all members.
+					Leave blank to hide the banner.
+				</p>
+				<div
+					x-data={ fmt.Sprintf(`{
+						message: %s,
+						saving: false,
+						saved: false,
+						async save() {
+							this.saving = true;
+							this.saved = false;
+							const res = await Chronicle.apiFetch('/campaigns/%s/welcome-message', {
+								method: 'PUT',
+								body: { message: this.message }
+							});
+							this.saving = false;
+							if (res.ok) {
+								this.saved = true;
+								setTimeout(() => { this.saved = false; }, 3000);
+							}
+						}
+					}`, welcomeMessageJS(cc), cc.Campaign.ID) }
+				>
+					<textarea
+						x-model="message"
+						class="input w-full h-20 text-sm mb-3"
+						placeholder="Welcome to the campaign! Here's what's new..."
+						maxlength="500"
+					></textarea>
+					<div class="flex items-center justify-between">
+						<span class="text-xs text-fg-muted" x-text="message.length + '/500'"></span>
+						<div class="flex items-center gap-2">
+							<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
+							<button
+								type="button"
+								class="btn-primary text-sm"
+								:disabled="saving"
+								@click="save()"
+							>
+								<span x-show="!saving">Save Message</span>
+								<span x-show="saving"><i class="fa-solid fa-spinner fa-spin text-xs mr-1"></i> Saving...</span>
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			// Default visibility for new entities.
+			<div class="card p-6 mb-6">
+				<h2 class="text-lg font-semibold text-fg mb-2">Default Visibility</h2>
+				<p class="text-sm text-fg-secondary mb-4">
+					Set the default visibility for newly created entities. This can always be overridden per-entity.
+				</p>
+				<div
+					x-data={ fmt.Sprintf(`{
+						visibility: '%s',
+						saving: false,
+						saved: false,
+						async save(v) {
+							this.visibility = v;
+							this.saving = true;
+							this.saved = false;
+							const res = await Chronicle.apiFetch('/campaigns/%s/default-visibility', {
+								method: 'PUT',
+								body: { visibility: v }
+							});
+							this.saving = false;
+							if (res.ok) {
+								this.saved = true;
+								setTimeout(() => { this.saved = false; }, 3000);
+							}
+						}
+					}`, cc.Campaign.ParseSettings().DefaultVisibility, cc.Campaign.ID) }
+					class="space-y-2"
+				>
+					<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
+						<input type="radio" name="default_vis" value="" :checked="visibility === ''" @change="save('')" class="accent-accent"/>
+						<div>
+							<span class="text-sm font-medium text-fg">Everyone</span>
+							<p class="text-xs text-fg-secondary">All campaign members can see new entities by default.</p>
+						</div>
+					</label>
+					<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
+						<input type="radio" name="default_vis" value="dm_only" :checked="visibility === 'dm_only'" @change="save('dm_only')" class="accent-accent"/>
+						<div>
+							<span class="text-sm font-medium text-fg">DM Only</span>
+							<p class="text-xs text-fg-secondary">New entities are hidden from players until explicitly revealed.</p>
+						</div>
+					</label>
+					<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
+						<input type="radio" name="default_vis" value="private" :checked="visibility === 'private'" @change="save('private')" class="accent-accent"/>
+						<div>
+							<span class="text-sm font-medium text-fg">Private</span>
+							<p class="text-xs text-fg-secondary">New entities are visible only to the creator until permissions are set.</p>
+						</div>
+					</label>
+					<div class="flex items-center gap-2 pt-1">
+						<span x-show="saving" class="text-xs text-fg-muted"><i class="fa-solid fa-spinner fa-spin"></i> Saving...</span>
+						<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
+					</div>
+				</div>
 			</div>
 
 			// Appearance & Layout.

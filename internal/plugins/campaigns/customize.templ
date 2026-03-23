@@ -227,16 +227,16 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 	</div>
 }
 
-// categoriesTab renders a unified category management interface. A selector
-// at the top picks the category; HTMX lazy-loads identity, attributes, and
-// category dashboard configuration from the entities plugin.
+// categoriesTab renders a card grid of categories with links to each
+// category's full configuration page. Create/delete operations are
+// handled on the Manage Categories page.
 templ categoriesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
 	<div class="space-y-4">
 		<div class="flex items-center justify-between">
 			<div>
 				<h2 class="text-base font-semibold text-fg mb-0.5">Categories</h2>
 				<p class="text-xs text-fg-secondary">
-					Configure identity, attributes, and dashboard for each category.
+					Each category has its own layout, attributes, navigation, and dashboard settings.
 				</p>
 			</div>
 			<a
@@ -248,70 +248,26 @@ templ categoriesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 		</div>
 
 		if len(entityTypes) == 0 {
-			<div class="card p-6 text-center">
-				<i class="fa-solid fa-folder-open text-2xl text-fg-muted mb-2"></i>
-				<p class="text-sm text-fg-secondary">No categories yet. Create one to get started.</p>
+			<div class="card p-8 text-center">
+				<i class="fa-solid fa-folder-open text-3xl text-fg-muted mb-3"></i>
+				<p class="text-sm text-fg-secondary mb-3">No categories yet. Create one to get started.</p>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) }
+					class="btn-primary text-sm inline-flex items-center gap-1.5"
+				>
+					<i class="fa-solid fa-plus text-xs"></i> Create Category
+				</a>
 			</div>
 		} else {
-			<!-- Category selector -->
-			<div class="flex flex-wrap gap-2" x-data="{ selected: 0 }">
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
 				for _, et := range entityTypes {
-					<button
-						type="button"
-						class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm"
-						:class={ fmt.Sprintf("selected === %d ? 'border-accent bg-accent/10 text-accent font-medium' : 'border-edge bg-surface hover:border-accent/30 text-fg-secondary'", et.ID) }
-						@click={ fmt.Sprintf("selected = %d", et.ID) }
-						hx-get={ fmt.Sprintf("/campaigns/%s/entity-types/%d/customize", cc.Campaign.ID, et.ID) }
-						hx-target="#category-config-container"
-						hx-swap="innerHTML"
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types/%d/config", cc.Campaign.ID, et.ID)) }
+						class="card p-4 hover:border-accent/40 transition-colors group"
 					>
-						<span
-							class="w-6 h-6 rounded flex items-center justify-center text-[10px] shrink-0"
-							style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
-						>
-							if et.Icon != "" {
-								<i class={ "fa-solid " + et.Icon }></i>
-							} else {
-								<i class="fa-solid fa-file"></i>
-							}
-						</span>
-						{ et.NamePlural }
-					</button>
-				}
-			</div>
-
-			<!-- Lazy-loaded category config container -->
-			<div id="category-config-container">
-				<div class="card p-6 text-center">
-					<i class="fa-solid fa-hand-pointer text-xl text-fg-muted mb-2"></i>
-					<p class="text-sm text-fg-secondary">Select a category above to configure it.</p>
-				</div>
-			</div>
-
-			<!-- Attributes field editor (per-category) -->
-			<div class="border-t border-edge pt-6 mt-6">
-				<div class="flex items-center gap-2 mb-1">
-					<i class="fa-solid fa-sliders text-sm text-accent"></i>
-					<h3 class="text-sm font-semibold text-fg">Attributes</h3>
-				</div>
-				<p class="text-xs text-fg-secondary mb-3">
-					Define the custom fields that appear on entity pages for each category.
-				</p>
-
-				<!-- Category selector for attributes editor -->
-				<div class="flex flex-wrap gap-2 mb-3" x-data="{ attrCat: 0 }">
-					for _, et := range entityTypes {
-						<button
-							type="button"
-							class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm"
-							:class={ fmt.Sprintf("attrCat === %d ? 'border-accent bg-accent/10 text-accent font-medium' : 'border-edge bg-surface hover:border-accent/30 text-fg-secondary'", et.ID) }
-							@click={ fmt.Sprintf("attrCat = %d", et.ID) }
-							hx-get={ fmt.Sprintf("/campaigns/%s/entity-types/%d/attributes-fragment", cc.Campaign.ID, et.ID) }
-							hx-target="#attributes-editor-container"
-							hx-swap="innerHTML"
-						>
-							<span
-								class="w-6 h-6 rounded flex items-center justify-center text-[10px] shrink-0"
+						<div class="flex items-center gap-3">
+							<div
+								class="w-10 h-10 rounded-lg flex items-center justify-center text-sm shrink-0"
 								style={ fmt.Sprintf("background-color: %s20; color: %s", et.Color, et.Color) }
 							>
 								if et.Icon != "" {
@@ -319,19 +275,21 @@ templ categoriesTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 								} else {
 									<i class="fa-solid fa-file"></i>
 								}
-							</span>
-							{ et.NamePlural }
-						</button>
-					}
-				</div>
-
-				<!-- Lazy-loaded attributes editor container -->
-				<div id="attributes-editor-container">
-					<div class="card p-4 text-center text-sm text-fg-secondary">
-						<i class="fa-solid fa-hand-pointer text-lg text-fg-muted mb-2"></i>
-						<p>Select a category above to configure its attributes.</p>
-					</div>
-				</div>
+							</div>
+							<div class="flex-1 min-w-0">
+								<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors truncate">
+									{ et.NamePlural }
+								</h3>
+								if et.Description != nil && *et.Description != "" {
+									<p class="text-xs text-fg-secondary truncate">{ *et.Description }</p>
+								} else {
+									<p class="text-xs text-fg-muted italic">No description</p>
+								}
+							</div>
+							<i class="fa-solid fa-chevron-right text-[10px] text-fg-muted group-hover:text-accent transition-colors shrink-0"></i>
+						</div>
+					</a>
+				}
 			</div>
 		}
 	</div>
