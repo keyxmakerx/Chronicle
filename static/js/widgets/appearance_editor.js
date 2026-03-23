@@ -82,6 +82,19 @@
       var accentContainer = el.querySelector('#appearance-accent-colors');
       var accentLabel = el.querySelector('#appearance-accent-label');
 
+      // Preview elements for live accent/font/backdrop updates.
+      var previewBtnPrimary = el.querySelector('#appearance-preview-btn-primary');
+      var previewLink = el.querySelector('#appearance-preview-link');
+      var previewBadge = el.querySelector('#appearance-preview-badge');
+      var previewAvatar = el.querySelector('#appearance-preview-avatar');
+      var previewSidebarActive = el.querySelector('#appearance-preview-sidebar-active');
+      var previewCat1 = el.querySelector('#appearance-preview-cat1');
+      var previewCat2 = el.querySelector('#appearance-preview-cat2');
+      var previewCat3 = el.querySelector('#appearance-preview-cat3');
+      var previewContent = el.querySelector('#appearance-preview-content');
+      var previewBackdrop = el.querySelector('#appearance-preview-backdrop');
+      var previewBackdropImg = el.querySelector('#appearance-preview-backdrop-img');
+
       // Save bar lives outside the widget element (sibling above it).
       var saveBar = document.getElementById('appearance-save-bar');
       var saveBtn = document.getElementById('appearance-save-btn');
@@ -105,6 +118,9 @@
       // Set initial active mode and show correct panel.
       setActiveMode(draft.topbarStyle.mode);
       updateTopbarPreview();
+      updateAccentPreview(draft.accentColor);
+      updateFontPreview(draft.fontFamily);
+      initBackdropPreview();
 
       // --- Dirty tracking ---
 
@@ -163,6 +179,7 @@
             var color = this.getAttribute('data-accent-color');
             draft.accentColor = color;
             updateAccentHighlight(color);
+            updateAccentPreview(color);
             // Sync the custom color picker value when a preset is chosen.
             var customInput = el.querySelector('#appearance-accent-custom');
             if (customInput && color) {
@@ -178,6 +195,7 @@
           customColorInput.addEventListener('input', function () {
             draft.accentColor = this.value;
             updateAccentHighlight(this.value);
+            updateAccentPreview(this.value);
             updateSaveBar();
           });
         }
@@ -220,6 +238,7 @@
         for (var i = 0; i < fontButtons.length; i++) {
           fontButtons[i].addEventListener('click', function () {
             draft.fontFamily = this.getAttribute('data-font-family');
+            updateFontPreview(draft.fontFamily);
             // Update button highlighting.
             var allBtns = fontContainer.querySelectorAll('button[data-font-family]');
             for (var j = 0; j < allBtns.length; j++) {
@@ -447,12 +466,111 @@
         var mode = draft.topbarStyle.mode;
         if (mode === 'solid' && draft.topbarStyle.color) {
           previewTopbar.style.background = draft.topbarStyle.color;
+          // Use light text on dark topbar backgrounds.
+          previewTopbar.style.color = isLightColor(draft.topbarStyle.color) ? '' : '#f9fafb';
         } else if (mode === 'gradient' && draft.topbarStyle.gradient_from && draft.topbarStyle.gradient_to) {
           var dir = GRADIENT_DIR_CSS[draft.topbarStyle.gradient_dir] || 'to right';
           previewTopbar.style.background = 'linear-gradient(' + dir + ', ' + draft.topbarStyle.gradient_from + ', ' + draft.topbarStyle.gradient_to + ')';
+          previewTopbar.style.color = isLightColor(draft.topbarStyle.gradient_from) ? '' : '#f9fafb';
         } else {
           previewTopbar.style.background = '';
+          previewTopbar.style.color = '';
         }
+      }
+
+      /**
+       * Update all accent-colored elements in the preview.
+       */
+      function updateAccentPreview(color) {
+        var accent = color || '#6366f1'; // fallback to default indigo
+        var accentLight = accent + '20'; // 12% opacity for backgrounds
+
+        if (previewBtnPrimary) {
+          previewBtnPrimary.style.backgroundColor = accent;
+        }
+        if (previewLink) {
+          previewLink.style.color = accent;
+        }
+        if (previewBadge) {
+          previewBadge.style.backgroundColor = accentLight;
+          previewBadge.style.color = accent;
+        }
+        if (previewAvatar) {
+          previewAvatar.style.backgroundColor = accent;
+        }
+        if (previewSidebarActive) {
+          previewSidebarActive.style.backgroundColor = '#2d2f3a';
+          previewSidebarActive.style.borderLeft = '2px solid ' + accent;
+        }
+        // Category icon circles.
+        var catEls = [previewCat1, previewCat2, previewCat3];
+        for (var i = 0; i < catEls.length; i++) {
+          if (catEls[i]) {
+            catEls[i].style.backgroundColor = accentLight;
+            catEls[i].style.color = accent;
+          }
+        }
+      }
+
+      /**
+       * Font family CSS map (mirrors Go fontFamilyPresets).
+       */
+      var FONT_CSS_MAP = {
+        '': 'inherit',
+        'serif': "Georgia, 'Times New Roman', serif",
+        'sans-serif': "'Inter', system-ui, sans-serif",
+        'monospace': "'JetBrains Mono', 'Fira Code', monospace",
+        'georgia': 'Georgia, Cambria, serif',
+        'merriweather': "'Merriweather', Georgia, serif"
+      };
+
+      /**
+       * Update the preview content font family.
+       */
+      function updateFontPreview(family) {
+        if (!previewContent) return;
+        var css = FONT_CSS_MAP[family] || 'inherit';
+        previewContent.style.fontFamily = css;
+      }
+
+      /**
+       * Initialize backdrop preview from the existing backdrop section.
+       */
+      function initBackdropPreview() {
+        if (!previewBackdrop) return;
+        // Check if there's an existing backdrop image on the page.
+        var backdropSection = el.querySelector('#backdrop-section img');
+        if (backdropSection && backdropSection.src) {
+          previewBackdropImg.src = backdropSection.src;
+          previewBackdrop.style.display = '';
+        }
+
+        // Watch for HTMX swaps that update the backdrop section.
+        document.body.addEventListener('htmx:afterSwap', function (evt) {
+          if (!evt.detail || !evt.detail.target) return;
+          if (evt.detail.target.id === 'backdrop-section' || (evt.detail.target.closest && evt.detail.target.closest('#backdrop-section'))) {
+            var newImg = el.querySelector('#backdrop-section img');
+            if (newImg && newImg.src) {
+              previewBackdropImg.src = newImg.src;
+              previewBackdrop.style.display = '';
+            } else {
+              previewBackdrop.style.display = 'none';
+            }
+          }
+        });
+      }
+
+      /**
+       * Returns true if a hex color is light (should use dark text on it).
+       */
+      function isLightColor(hex) {
+        if (!hex || hex.length < 7) return true;
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        // Perceived luminance formula.
+        var luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return luminance > 0.6;
       }
     }
   });
