@@ -101,6 +101,9 @@ export class MapSync {
       case 'fog.updated':
         await this._onFogUpdated(msg);
         break;
+      case 'layer.updated':
+        console.log('Chronicle: Map layer updated', msg.payload?.name || msg.resourceId);
+        break;
     }
   }
 

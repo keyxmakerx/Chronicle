@@ -34,6 +34,15 @@ export class CalendarSync {
     /** @type {object|null} Cached Chronicle calendar structure. */
     this._chronicleCalendar = null;
 
+    /** @type {object|null} Cached current weather state from Chronicle. */
+    this._currentWeather = null;
+
+    /** @type {object|null} Cached current season from Chronicle. */
+    this._currentSeason = null;
+
+    /** @type {object|null} Cached current era from Chronicle. */
+    this._currentEra = null;
+
     // Bound hook handlers for cleanup.
     this._boundHandlers = {};
   }
@@ -83,6 +92,21 @@ export class CalendarSync {
         break;
       case 'calendar.event.deleted':
         await this._onChronicleEventDeleted(msg.payload);
+        break;
+      case 'calendar.structure.updated':
+        await this._onCalendarStructureUpdated();
+        break;
+      case 'calendar.weather.changed':
+        await this._onWeatherChanged(msg.payload);
+        break;
+      case 'calendar.season.changed':
+        this._onSeasonChanged(msg.payload);
+        break;
+      case 'calendar.moon.phase_changed':
+        this._onMoonPhaseChanged(msg.payload);
+        break;
+      case 'calendar.era.changed':
+        this._onEraChanged(msg.payload);
         break;
     }
   }
@@ -238,6 +262,84 @@ export class CalendarSync {
     }
   }
 
+  /**
+   * Handle calendar structure change from Chronicle (months, weekdays, moons, etc.).
+   * Re-fetches the full calendar to update the cached structure.
+   * @private
+   */
+  async _onCalendarStructureUpdated() {
+    try {
+      this._chronicleCalendar = await this._api.get('/calendar');
+      console.log('Chronicle: Calendar structure updated, re-fetched configuration');
+    } catch (err) {
+      console.error('Chronicle: Failed to re-fetch calendar after structure update', err);
+    }
+  }
+
+  /**
+   * Handle weather change from Chronicle.
+   * Caches the weather state and forwards to Calendaria if supported.
+   * @param {object} data - WeatherInput: { preset_id, preset_label, icon, color,
+   *   temperature_celsius, wind_speed_kph, wind_speed_tier, wind_direction,
+   *   wind_direction_degrees, precipitation_type, precipitation_intensity,
+   *   zone_id, zone_name, description }
+   * @private
+   */
+  async _onWeatherChanged(data) {
+    this._currentWeather = data;
+
+    // Forward to Calendaria if it exposes a weather API.
+    if (this._calendarModule === 'calendaria' && game.Calendaria?.setWeather) {
+      this._syncing = true;
+      try {
+        await game.Calendaria.setWeather(data);
+      } catch (err) {
+        console.warn('Chronicle: Failed to forward weather to Calendaria', err);
+      } finally {
+        this._syncing = false;
+      }
+    }
+
+    console.log('Chronicle: Weather changed:', data?.preset_label || 'Custom');
+  }
+
+  /**
+   * Handle season change from Chronicle (date crossed a season boundary).
+   * @param {object|null} data - { id, name, color } or null if no current season.
+   * @private
+   */
+  _onSeasonChanged(data) {
+    this._currentSeason = data;
+    if (data) {
+      console.log(`Chronicle: Season changed to ${data.name}`);
+    } else {
+      console.log('Chronicle: No current season');
+    }
+  }
+
+  /**
+   * Handle moon phase change from Chronicle.
+   * @param {object} data - { moon_id, moon_name, phase_name, phase_position }
+   * @private
+   */
+  _onMoonPhaseChanged(data) {
+    if (data) {
+      console.log(`Chronicle: ${data.moon_name} entered ${data.phase_name}`);
+    }
+  }
+
+  /**
+   * Handle era change from Chronicle (date crossed an era boundary).
+   * @param {object} data - { id, name, color }
+   * @private
+   */
+  _onEraChanged(data) {
+    this._currentEra = data;
+    if (data) {
+      console.log(`Chronicle: Era changed to ${data.name}`);
+    }
+  }
+
   // --- Foundry → Chronicle ---
 
   /**
@@ -308,6 +410,9 @@ export class CalendarSync {
         day: eventData.day,
         description: eventData.description || '',
         visibility: 'everyone',
+        color: eventData.color || null,
+        icon: eventData.icon || null,
+        all_day: eventData.allDay ?? true,
       });
 
       // Store the Chronicle event ID in the local module's data for later sync.
@@ -342,6 +447,9 @@ export class CalendarSync {
         month: eventData.month,
         day: eventData.day,
         description: eventData.description || '',
+        color: eventData.color || null,
+        icon: eventData.icon || null,
+        all_day: eventData.allDay ?? true,
       });
     } catch (err) {
       console.error('Chronicle: Failed to update calendar event', err);
@@ -395,6 +503,7 @@ export class CalendarSync {
         day: scData.day,
         description: scData.description,
         visibility: 'everyone',
+        all_day: true,
       });
 
       if (result?.id) {
@@ -547,13 +656,16 @@ export class CalendarSync {
     if (this._calendarModule === 'calendaria') {
       // Calendaria events: use its API if available, otherwise store as flag.
       if (game.Calendaria?.createEvent) {
-        const localEvent = await game.Calendaria.createEvent({
+        const eventData = {
           name: data.name,
           year: data.year,
           month: data.month,
           day: data.day,
           description: data.description || '',
-        });
+        };
+        if (data.color) eventData.color = data.color;
+        if (data.icon) eventData.icon = data.icon;
+        const localEvent = await game.Calendaria.createEvent(eventData);
         if (localEvent?.id) {
           this._storeEventMapping(localEvent.id, data.id);
         }
@@ -609,13 +721,16 @@ export class CalendarSync {
       if (game.Calendaria?.updateEvent) {
         const localId = this._getLocalEventId(data.id);
         if (localId) {
-          await game.Calendaria.updateEvent(localId, {
+          const updateData = {
             name: data.name,
             year: data.year,
             month: data.month,
             day: data.day,
             description: data.description || '',
-          });
+          };
+          if (data.color) updateData.color = data.color;
+          if (data.icon) updateData.icon = data.icon;
+          await game.Calendaria.updateEvent(localId, updateData);
         }
       }
     } else if (this._calendarModule === 'simple-calendar') {

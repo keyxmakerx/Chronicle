@@ -140,19 +140,34 @@ Lists entities in the campaign. Supports pagination and filtering.
     {
       "id": "uuid",
       "name": "Entity Name",
-      "content": "<p>HTML content</p>",
-      "summary": "Short text",
+      "entry": "{\"type\":\"doc\",...}",
+      "entry_html": "<p>HTML content</p>",
       "entity_type_id": 1,
+      "type_name": "Character",
+      "type_icon": "fa-user",
+      "type_color": "#7C3AED",
+      "type_slug": "dnd5e-character",
+      "type_label": "Fighter",
+      "is_private": false,
+      "visibility": "default",
       "fields_data": { "hp_current": 45, "str": 18 },
-      "tags": ["npc", "villain"],
-      "visibility": "public",
+      "tags": [{ "name": "npc", "color": "#ef4444" }],
+      "image_path": "/media/uuid.png",
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-15T12:00:00Z"
     }
   ],
-  "pagination": { "page": 1, "per_page": 50, "total": 120 }
+  "total": 120,
+  "page": 1,
+  "per_page": 50
 }
 ```
+
+**Key fields:**
+- `entry` — ProseMirror/TipTap JSON document (the canonical content)
+- `entry_html` — Pre-rendered HTML from `entry` (read-only, for display)
+- `is_private` — Boolean visibility flag (true = GM-only)
+- `visibility` — `"default"` (uses `is_private`) or `"custom"` (uses entity_permissions)
 
 #### POST /entities
 Creates a new entity.
@@ -163,27 +178,46 @@ Creates a new entity.
 ```json
 {
   "name": "Entity Name",
-  "content": "<p>HTML content</p>",
   "entity_type_id": 1,
-  "visibility": "public"
+  "is_private": false,
+  "fields_data": {}
 }
 ```
 
-**Response:** The created entity object (same shape as GET).
+**Note:** Content is set via `entry` field in PUT (not on create). The `visibility`
+field is not accepted here — use `PUT /entities/:id/permissions` to set custom visibility.
+
+**Response:** The created entity object (same shape as GET list item).
 
 #### GET /entities/:entityId
-Returns a single entity with full content.
+Returns a single entity with full content (same shape as list item).
 
 #### PUT /entities/:entityId
 Updates an entity.
 
-**Request:** Same shape as POST (partial updates supported).
+**Used by:** `journal-sync.mjs` → push journal changes to Chronicle
+
+**Request:**
+```json
+{
+  "name": "Entity Name",
+  "is_private": false,
+  "entry": "<p>HTML content</p>",
+  "player_notes": "Notes visible to players",
+  "type_label": "Fighter",
+  "fields_data": { "hp_current": 45 },
+  "expected_updated_at": "2026-01-15T12:00:00Z"
+}
+```
+
+**Note:** `expected_updated_at` is optional; if provided, the server rejects the update
+if the entity was modified since that timestamp (optimistic concurrency control).
 
 #### DELETE /entities/:entityId
 Deletes an entity.
 
 #### PUT /entities/:entityId/fields
-Updates only the `fields_data` on an entity.
+Updates only the `fields_data` on an entity (partial update).
 
 **Used by:** `actor-sync.mjs` → push character stats to Chronicle
 
@@ -201,18 +235,49 @@ Updates only the `fields_data` on an entity.
 #### GET /entities/:entityId/permissions
 Returns entity permission/visibility settings.
 
+**Response:**
+```json
+{
+  "visibility": "default",
+  "is_private": false,
+  "permissions": [
+    {
+      "subject_type": "user",
+      "subject_id": "user-uuid",
+      "permission": "view"
+    }
+  ]
+}
+```
+
 #### PUT /entities/:entityId/permissions
-Updates entity permissions.
+Updates entity permissions. This is the **only** endpoint where `visibility` can be set.
+
+**Used by:** `journal-sync.mjs` → push ownership changes to Chronicle
 
 **Request:**
 ```json
 {
-  "visibility": "public"
+  "visibility": "custom",
+  "is_private": false,
+  "permissions": [
+    { "subject_type": "user", "subject_id": "user-uuid", "permission": "view" }
+  ]
 }
 ```
 
+**Visibility values:** `"default"` (uses `is_private` flag) or `"custom"` (uses `permissions` array).
+**Permission values:** `"view"` (maps to Foundry OBSERVER) or `"edit"` (maps to Foundry OWNER).
+
 #### POST /entities/:entityId/reveal
 Toggles entity reveal state (NPC reveal to players).
+
+**Used by:** `actor-sync.mjs`
+
+**Request:**
+```json
+{ "is_private": false }
+```
 
 **Used by:** `actor-sync.mjs`
 
@@ -245,10 +310,15 @@ Returns a single entity type with field definitions.
 
 ### Sync Mappings
 
+Sync mappings track the bidirectional link between a Chronicle resource and its
+Foundry counterpart. Each mapping stores IDs on both sides plus sync metadata.
+
 #### GET /sync/mappings
 Lists all sync mappings for the campaign.
 
 **Used by:** `sync-manager.mjs` → initial sync setup
+
+**Query params:** `?limit=50&offset=0`
 
 **Response:**
 ```json
@@ -256,49 +326,67 @@ Lists all sync mappings for the campaign.
   "data": [
     {
       "id": "uuid",
+      "campaign_id": "uuid",
+      "chronicle_type": "entity",
       "chronicle_id": "entity-uuid",
-      "foundry_id": "foundry-doc-id",
-      "type": "entity",
-      "last_synced": "2026-01-15T12:00:00Z"
+      "external_system": "foundry",
+      "external_id": "foundry-doc-id",
+      "sync_version": 3,
+      "last_synced_at": "2026-01-15T12:00:00Z",
+      "sync_direction": "both",
+      "sync_metadata": { "foundry_type": "JournalEntry" },
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-15T12:00:00Z"
     }
-  ]
+  ],
+  "total": 42,
+  "limit": 50,
+  "offset": 0
 }
 ```
+
+**Key fields:**
+- `chronicle_type` — `entity`, `map`, `calendar_event`, `marker`, `drawing`, `token`
+- `external_system` — Currently always `"foundry"`
+- `sync_direction` — `"both"`, `"push"`, or `"pull"`
+- `sync_metadata` — Arbitrary JSON for per-mapping context
 
 #### POST /sync/mappings
 Creates a new sync mapping.
 
+**Used by:** All sync modules when linking a Foundry document to a Chronicle resource
+
 **Request:**
 ```json
 {
+  "chronicle_type": "entity",
   "chronicle_id": "entity-uuid",
-  "foundry_id": "foundry-doc-id",
-  "type": "entity"
+  "external_system": "foundry",
+  "external_id": "foundry-doc-id",
+  "sync_direction": "both",
+  "sync_metadata": { "foundry_type": "JournalEntry" }
 }
 ```
+
+**Response:** The created SyncMapping object (201 Created).
 
 #### DELETE /sync/mappings/:mappingId
 Removes a sync mapping.
 
 #### GET /sync/lookup
-Looks up a mapping by Foundry ID.
+Looks up a mapping by Chronicle ID or external (Foundry) ID.
 
 **Used by:** All sync modules to find existing mappings
 
-**Query:** `?foundry_id=abc123&type=entity`
+**Query (by Foundry ID):** `?external_system=foundry&external_id=abc123`
+**Query (by Chronicle ID):** `?chronicle_type=entity&chronicle_id=entity-uuid`
 
-**Response:**
-```json
-{
-  "chronicle_id": "entity-uuid",
-  "foundry_id": "abc123",
-  "type": "entity"
-}
-```
+**Response:** SyncMapping object (same shape as list item).
+
 Returns 404 if no mapping exists.
 
 #### GET /sync/pull
-Pulls all changes since a timestamp.
+Pulls all changed mappings since a timestamp.
 
 **Used by:** `sync-manager.mjs` → initial sync
 
@@ -748,21 +836,35 @@ Deletes a media file.
 #### GET /entities/:entityId/relations
 Lists relations for an entity (used for shop inventory).
 
+**Used by:** `shop-widget.mjs` → load shop inventory
+
 **Response:**
 ```json
 {
   "data": [
     {
-      "id": "relation-uuid",
-      "source_id": "shop-entity-uuid",
-      "target_id": "item-entity-uuid",
-      "relation_type_id": 1,
-      "metadata": { "quantity": 5, "equipped": false },
-      "target": { "id": "item-uuid", "name": "Longsword", "fields_data": {...} }
+      "id": 1,
+      "campaignId": "uuid",
+      "sourceEntityId": "shop-entity-uuid",
+      "targetEntityId": "item-entity-uuid",
+      "relationType": "sells",
+      "reverseRelationType": "sold_by",
+      "metadata": { "price": 15, "quantity": 5, "currency": "gp", "in_stock": true },
+      "dmOnly": false,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "createdBy": "user-uuid",
+      "targetEntityName": "Longsword",
+      "targetEntityIcon": "fa-sword",
+      "targetEntityColor": "#7C3AED",
+      "targetEntitySlug": "longsword",
+      "targetEntityType": "Item"
     }
   ]
 }
 ```
+
+**Note:** Relation fields use **camelCase** (not snake_case). This matches the widget
+API convention. The joined `target*` fields provide display info without a second fetch.
 
 ---
 
@@ -774,11 +876,14 @@ GET /ws?token=<api-key>
 Upgrade: websocket
 ```
 
-### Message Format (Server → Client)
+### Message Envelope (Server ↔ Client)
 ```json
 {
   "type": "entity.updated",
-  "data": { /* payload */ }
+  "campaignId": "uuid",
+  "resourceId": "entity-uuid",
+  "senderId": "connection-id",
+  "payload": { /* type-specific data */ }
 }
 ```
 
