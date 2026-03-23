@@ -111,7 +111,12 @@
         "Disabled": "Calendar sync is disabled. Enable it in Module Settings.",
         "NoModule": "No calendar module detected.",
         "NoModuleHint": "Install Calendaria or Simple Calendar to enable calendar sync.",
-        "UnableToRead": "Unable to read"
+        "UnableToRead": "Unable to read",
+        "WeatherChanged": "Weather updated from Chronicle",
+        "StructureUpdated": "Calendar structure updated from Chronicle",
+        "SeasonChanged": "Season changed to {name}",
+        "EraChanged": "Era changed to {name}",
+        "MoonPhase": "{moon} entered {phase}"
       },
       "Characters": {
         "Synced": "Synced",
