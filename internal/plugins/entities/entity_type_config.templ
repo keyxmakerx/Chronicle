@@ -72,6 +72,13 @@ templ EntityTypeConfigPage(cc *campaigns.CampaignContext, et *EntityType, csrfTo
 				>
 					<i class="fa-solid fa-bars mr-1.5 text-xs"></i> Nav Panel
 				</button>
+				<button
+					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+					:class="tab === 'dashboard' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
+					@click="tab = 'dashboard'"
+				>
+					<i class="fa-solid fa-grip mr-1.5 text-xs"></i> Dashboard
+				</button>
 			</div>
 
 			<!-- Tab content -->
@@ -98,6 +105,13 @@ templ EntityTypeConfigPage(cc *campaigns.CampaignContext, et *EntityType, csrfTo
 				<div x-show="tab === 'nav'" x-cloak class="h-full overflow-y-auto">
 					<div class="max-w-3xl mx-auto px-6 py-6">
 						@navPanelTab(cc, et, csrfToken)
+					</div>
+				</div>
+
+				<!-- Dashboard tab: category dashboard description + layout blocks -->
+				<div x-show="tab === 'dashboard'" x-cloak class="h-full overflow-y-auto">
+					<div class="max-w-3xl mx-auto px-6 py-6">
+						@categoryDashboardTab(cc, et, csrfToken)
 					</div>
 				</div>
 			</div>
@@ -449,6 +463,68 @@ templ navPanelTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken strin
 					class="text-accent hover:underline"
 				>Campaign Customization</a>.
 			</p>
+		</div>
+	</div>
+}
+
+// categoryDashboardTab renders the category dashboard configuration:
+// description and drag-and-drop layout block editor.
+templ categoryDashboardTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken string) {
+	<div class="space-y-6">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Category Dashboard</h2>
+			<p class="text-sm text-fg-secondary">
+				Customize the description and layout for the { et.NamePlural } landing page.
+			</p>
+		</div>
+
+		<!-- Description -->
+		<div
+			class="card p-5 space-y-3"
+			x-data={ fmt.Sprintf("{ desc: %s, saving: false, saved: false }", catDescJS(et.Description)) }
+		>
+			<h3 class="text-sm font-semibold text-fg">Description</h3>
+			<textarea
+				class="input w-full text-sm h-24 resize-y"
+				x-model="desc"
+				placeholder={ fmt.Sprintf("Describe the %s category...", et.NamePlural) }
+				maxlength="2000"
+			></textarea>
+			<div class="flex items-center justify-end gap-2">
+				<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false;
+						fetch('/campaigns/%s/entity-types/%d/dashboard', {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
+							credentials: 'same-origin',
+							body: JSON.stringify({ description: desc, pinned_entity_ids: [] })
+						}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
+					`, cc.Campaign.ID, et.ID, csrfToken) }
+				>
+					<span x-show="!saving">Save Description</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+
+		<!-- Dashboard layout editor -->
+		<div class="card p-5 space-y-3">
+			<h3 class="text-sm font-semibold text-fg">Dashboard Blocks</h3>
+			<p class="text-xs text-fg-secondary">
+				Drag and drop blocks to build the layout for the { et.NamePlural } landing page.
+			</p>
+			<div
+				data-widget="dashboard-editor"
+				data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/dashboard-layout", cc.Campaign.ID, et.ID) }
+				data-campaign-id={ cc.Campaign.ID }
+				data-csrf-token={ csrfToken }
+				data-block-types={ categoryDashboardBlockTypes() }
+			></div>
 		</div>
 	</div>
 }

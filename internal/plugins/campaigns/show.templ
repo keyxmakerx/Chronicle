@@ -5,6 +5,7 @@
 package campaigns
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -36,6 +37,11 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 				</div>
 			}
 
+			// Welcome message banner (MOTD).
+			if msg := cc.Campaign.ParseSettings().WelcomeMessage; msg != "" {
+				@welcomeMessageBanner(cc.Campaign.ID, msg)
+			}
+
 			// Render from role-aware custom layout or fall back to hardcoded default.
 			if layout := cc.Campaign.ParseRoleDashboardLayout(cc.MemberRole); layout != nil {
 				@customDashboard(cc, layout, recentEntities)
@@ -53,6 +59,55 @@ templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentE
 			</div>
 		</div>
 	}
+}
+
+// welcomeMessageBanner renders a dismissible MOTD banner. Uses localStorage
+// to track dismissals; re-shows when the message content changes.
+templ welcomeMessageBanner(campaignID, message string) {
+	<div
+		x-data={ fmt.Sprintf(`{
+			dismissed: false,
+			key: 'welcome-dismissed-' + '%s',
+			hash: '',
+			init() {
+				this.hash = this.simpleHash(%s);
+				var stored = localStorage.getItem(this.key);
+				if (stored === this.hash) this.dismissed = true;
+			},
+			dismiss() {
+				this.dismissed = true;
+				localStorage.setItem(this.key, this.hash);
+			},
+			simpleHash(s) {
+				var h = 0;
+				for (var i = 0; i < s.length; i++) {
+					h = ((h << 5) - h) + s.charCodeAt(i);
+					h = h & h;
+				}
+				return String(h);
+			}
+		}`, campaignID, welcomeMessageQuoted(message)) }
+		x-show="!dismissed"
+		x-transition
+		class="mb-6 p-4 rounded-lg bg-accent/10 border border-accent/20 flex items-start gap-3"
+	>
+		<i class="fa-solid fa-bullhorn text-accent text-sm mt-0.5 shrink-0"></i>
+		<p class="text-sm text-fg flex-1 whitespace-pre-line">{ message }</p>
+		<button
+			type="button"
+			@click="dismiss()"
+			class="text-fg-muted hover:text-fg transition-colors shrink-0"
+			title="Dismiss"
+		>
+			<i class="fa-solid fa-xmark text-xs"></i>
+		</button>
+	</div>
+}
+
+// welcomeMessageQuoted returns a JSON-encoded string safe for embedding in JS.
+func welcomeMessageQuoted(msg string) string {
+	b, _ := json.Marshal(msg)
+	return string(b)
 }
 
 // customDashboard renders the campaign dashboard from a custom DashboardLayout

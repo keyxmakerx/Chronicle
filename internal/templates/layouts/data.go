@@ -44,6 +44,7 @@ const (
 	keyBrandLogo         ctxKey = "layout_brand_logo"
 	keyTopbarStyle           ctxKey = "layout_topbar_style"
 	keyDegradedPluginCount   ctxKey = "layout_degraded_plugin_count"
+	keyFontFamily            ctxKey = "layout_font_family"
 )
 
 // SidebarEntityType holds the minimum entity type info needed for sidebar
@@ -515,6 +516,40 @@ func clampByte(v int) uint8 {
 		return 255
 	}
 	return uint8(v)
+}
+
+// SetFontFamily stores the campaign's custom font family in the context.
+func SetFontFamily(ctx context.Context, family string) context.Context {
+	return context.WithValue(ctx, keyFontFamily, family)
+}
+
+// GetFontFamily returns the campaign's custom font family, or empty string for default.
+func GetFontFamily(ctx context.Context) string {
+	family, _ := ctx.Value(keyFontFamily).(string)
+	return family
+}
+
+// fontFamilyCSS maps font family setting values to CSS font-family declarations.
+var fontFamilyCSSMap = map[string]string{
+	"serif":        "Georgia, 'Times New Roman', serif",
+	"sans-serif":   "'Inter', system-ui, sans-serif",
+	"monospace":    "'JetBrains Mono', 'Fira Code', monospace",
+	"georgia":      "Georgia, Cambria, serif",
+	"merriweather": "'Merriweather', Georgia, serif",
+}
+
+// FontFamilyCSS returns a CSS block that overrides the body font family.
+// Returns empty string if no custom font is set.
+func FontFamilyCSS(ctx context.Context) string {
+	family := GetFontFamily(ctx)
+	if family == "" {
+		return ""
+	}
+	css, ok := fontFamilyCSSMap[family]
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf(":root{--font-campaign:%s;}", css)
 }
 
 // SetBrandName stores the campaign's custom brand name in the context.

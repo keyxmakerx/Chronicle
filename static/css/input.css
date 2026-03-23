@@ -72,6 +72,7 @@
     @apply font-sans antialiased;
     background-color: var(--color-bg-primary);
     color: var(--color-text-primary);
+    font-family: var(--font-campaign, theme('fontFamily.sans'));
   }
 
   /* Headings */

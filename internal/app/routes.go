@@ -1701,6 +1701,9 @@ func (a *App) RegisterRoutes() {
 			if campaignSettings.BrandLogo != "" {
 				ctx = layouts.SetBrandLogo(ctx, campaignSettings.BrandLogo)
 			}
+			if campaignSettings.FontFamily != "" {
+				ctx = layouts.SetFontFamily(ctx, campaignSettings.FontFamily)
+			}
 			if campaignSettings.TopbarStyle != nil {
 				ctx = layouts.SetTopbarStyle(ctx, &layouts.TopbarStyleData{
 					Mode:         campaignSettings.TopbarStyle.Mode,

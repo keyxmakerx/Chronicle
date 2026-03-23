@@ -43,6 +43,12 @@ templ Base(title string) {
 				{ css }
 			</style>
 		}
+		<!-- Campaign font family override -->
+		if css := FontFamilyCSS(ctx); css != "" {
+			<style>
+				{ css }
+			</style>
+		}
 
 		<!-- Reveal body after all render-blocking CSS has loaded (FOUC guard). -->
 		<script>document.addEventListener('DOMContentLoaded',function(){document.body.style.opacity='1'})</script>

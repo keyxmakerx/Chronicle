@@ -572,6 +572,87 @@ func (h *Handler) GetDmGrantsAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"user_ids": ids})
 }
 
+// UpdateFontFamilyAPI handles PUT /campaigns/:id/font-family. Sets the
+// campaign's body font family for visual customization.
+func (h *Handler) UpdateFontFamilyAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can change font settings")
+	}
+
+	var req struct {
+		FontFamily string `json:"font_family"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.service.UpdateFontFamily(c.Request().Context(), cc.Campaign.ID, req.FontFamily); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.font_family.updated", map[string]any{"font_family": req.FontFamily})
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateWelcomeMessageAPI handles PUT /campaigns/:id/welcome-message. Sets the
+// campaign's MOTD banner displayed on the dashboard.
+func (h *Handler) UpdateWelcomeMessageAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can set the welcome message")
+	}
+
+	var req struct {
+		Message string `json:"message"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.service.UpdateWelcomeMessage(c.Request().Context(), cc.Campaign.ID, req.Message); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.welcome_message.updated", nil)
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateDefaultVisibilityAPI handles PUT /campaigns/:id/default-visibility. Sets
+// the default visibility applied to newly created entities.
+func (h *Handler) UpdateDefaultVisibilityAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can change default visibility")
+	}
+
+	var req struct {
+		Visibility string `json:"visibility"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.service.UpdateDefaultVisibility(c.Request().Context(), cc.Campaign.ID, req.Visibility); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.default_visibility.updated", map[string]any{"visibility": req.Visibility})
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- Settings ---
 
 // Settings renders the campaign settings page (GET /campaigns/:id/settings).

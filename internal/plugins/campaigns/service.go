@@ -56,6 +56,12 @@ type CampaignService interface {
 	// UpdateTopbarStyle sets the campaign's topbar visual customization.
 	UpdateTopbarStyle(ctx context.Context, campaignID string, style *TopbarStyle) error
 	UpdateDmGrants(ctx context.Context, campaignID string, userIDs []string) error
+	// UpdateFontFamily sets the campaign's body font family.
+	UpdateFontFamily(ctx context.Context, campaignID, fontFamily string) error
+	// UpdateWelcomeMessage sets the campaign's MOTD banner message.
+	UpdateWelcomeMessage(ctx context.Context, campaignID, message string) error
+	// UpdateDefaultVisibility sets the default visibility for new entities.
+	UpdateDefaultVisibility(ctx context.Context, campaignID, visibility string) error
 
 	// Sidebar configuration
 	UpdateSidebarConfig(ctx context.Context, campaignID string, config SidebarConfig) error
@@ -778,6 +784,92 @@ func (s *campaignService) UpdateDmGrants(ctx context.Context, campaignID string,
 
 	settings := campaign.ParseSettings()
 	settings.DmGrantIDs = userIDs
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// validFontFamilies defines the allowed font families for campaigns.
+var validFontFamilies = map[string]bool{
+	"":              true, // default
+	"serif":         true,
+	"sans-serif":    true,
+	"monospace":     true,
+	"georgia":       true,
+	"merriweather":  true,
+}
+
+// UpdateFontFamily sets the campaign's body font family.
+// Empty string resets to the default font.
+func (s *campaignService) UpdateFontFamily(ctx context.Context, campaignID, fontFamily string) error {
+	if !validFontFamilies[fontFamily] {
+		return apperror.NewBadRequest("invalid font family")
+	}
+
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+
+	settings := campaign.ParseSettings()
+	settings.FontFamily = fontFamily
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// UpdateWelcomeMessage sets the campaign's MOTD banner message.
+// Empty string clears the message.
+func (s *campaignService) UpdateWelcomeMessage(ctx context.Context, campaignID, message string) error {
+	if len(message) > 500 {
+		return apperror.NewBadRequest("welcome message must be 500 characters or fewer")
+	}
+
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+
+	settings := campaign.ParseSettings()
+	settings.WelcomeMessage = message
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// validDefaultVisibilities defines the allowed default visibility values.
+var validDefaultVisibilities = map[string]bool{
+	"":        true, // everyone (default)
+	"dm_only": true,
+	"private": true,
+}
+
+// UpdateDefaultVisibility sets the campaign's default visibility for new entities.
+// Empty string means "everyone" (the platform default).
+func (s *campaignService) UpdateDefaultVisibility(ctx context.Context, campaignID, visibility string) error {
+	if !validDefaultVisibilities[visibility] {
+		return apperror.NewBadRequest("invalid visibility, expected empty, dm_only, or private")
+	}
+
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+
+	settings := campaign.ParseSettings()
+	settings.DefaultVisibility = visibility
 
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
