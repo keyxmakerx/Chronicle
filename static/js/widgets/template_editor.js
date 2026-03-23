@@ -65,6 +65,7 @@ Chronicle.register('template-editor', {
           // Map API response to the format the editor expects.
           self.blockTypes = types.map(function (t) {
             var bt = { type: t.type, label: t.label, icon: t.icon, desc: t.description, container: !!t.container };
+            if (t.addon) bt.addon = t.addon;
             if (t.widget_slug) bt.widget_slug = t.widget_slug;
             return bt;
           });
@@ -161,10 +162,17 @@ Chronicle.register('template-editor', {
     const item = document.createElement('div');
     item.className = 'flex items-center gap-2 px-3 py-2 mb-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md cursor-grab hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-sm transition-all text-sm';
     item.draggable = true;
+    var source = bt.addon || bt.widget_slug || '';
+    var addonBadge = source
+      ? '<span class="text-[8px] px-1 py-px rounded bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-500 leading-tight shrink-0">' + Chronicle.escapeHtml(source) + '</span>'
+      : '';
     item.innerHTML = `
       <i class="fa-solid ${bt.icon} w-4 text-gray-400 dark:text-gray-500 text-center"></i>
-      <div>
-        <div class="font-medium text-gray-700 dark:text-gray-200">${bt.label}</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-1">
+          <span class="font-medium text-gray-700 dark:text-gray-200">${bt.label}</span>
+          ${addonBadge}
+        </div>
         <div class="text-[10px] text-gray-400 dark:text-gray-500">${bt.desc}</div>
       </div>
     `;

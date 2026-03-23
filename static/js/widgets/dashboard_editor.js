@@ -24,16 +24,16 @@
     { type: 'entity_list',    label: 'Entity List',     icon: 'fa-list',       desc: 'Filtered list by category' },
     { type: 'text_block',     label: 'Text Block',      icon: 'fa-align-left', desc: 'Custom rich text / HTML' },
     { type: 'pinned_pages',   label: 'Pinned Pages',    icon: 'fa-thumbtack',  desc: 'Hand-picked entity cards' },
-    { type: 'calendar_preview', label: 'Calendar',     icon: 'fa-calendar-days', desc: 'Upcoming calendar events' },
-    { type: 'timeline_preview', label: 'Timeline',     icon: 'fa-timeline',      desc: 'Timeline list with event counts' },
-    { type: 'map_preview',      label: 'Map',          icon: 'fa-map',           desc: 'Embedded map viewer' },
-    { type: 'calendar_full',    label: 'Full Calendar',  icon: 'fa-calendar',      desc: 'Full interactive calendar grid' },
-    { type: 'timeline_full',    label: 'Full Timeline',  icon: 'fa-timeline',      desc: 'Full timeline D3 visualization' },
-    { type: 'relations_graph_full', label: 'Full Relations Graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph' },
-    { type: 'map_full',           label: 'Full Map',       icon: 'fa-map-location-dot', desc: 'Full map with drawings & tokens' },
-    { type: 'session_tracker',    label: 'Sessions',       icon: 'fa-dice-d20',         desc: 'Upcoming sessions with RSVP' },
+    { type: 'calendar_preview', label: 'Calendar',     icon: 'fa-calendar-days', desc: 'Upcoming calendar events', addon: 'calendar' },
+    { type: 'timeline_preview', label: 'Timeline',     icon: 'fa-timeline',      desc: 'Timeline list with event counts', addon: 'timeline' },
+    { type: 'map_preview',      label: 'Map',          icon: 'fa-map',           desc: 'Embedded map viewer', addon: 'maps' },
+    { type: 'calendar_full',    label: 'Full Calendar',  icon: 'fa-calendar',      desc: 'Full interactive calendar grid', addon: 'calendar' },
+    { type: 'timeline_full',    label: 'Full Timeline',  icon: 'fa-timeline',      desc: 'Full timeline D3 visualization', addon: 'timeline' },
+    { type: 'relations_graph_full', label: 'Full Relations Graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph', addon: 'relations' },
+    { type: 'map_full',           label: 'Full Map',       icon: 'fa-map-location-dot', desc: 'Full map with drawings & tokens', addon: 'maps' },
+    { type: 'session_tracker',    label: 'Sessions',       icon: 'fa-dice-d20',         desc: 'Upcoming sessions with RSVP', addon: 'sessions' },
     { type: 'activity_feed',      label: 'Activity Feed',  icon: 'fa-clock-rotate-left', desc: 'Recent campaign activity log' },
-    { type: 'sync_status',        label: 'Foundry Sync',   icon: 'fa-plug',             desc: 'Foundry VTT sync status' }
+    { type: 'sync_status',        label: 'Foundry Sync',   icon: 'fa-plug',             desc: 'Foundry VTT sync status', addon: 'foundry' }
   ];
 
   /** Column layout presets for adding new rows. */
@@ -50,6 +50,42 @@
    */
   function genId() {
     return 'db_' + Math.random().toString(36).substr(2, 8);
+  }
+
+  /**
+   * Render a collapsible palette section with block items.
+   * @param {string} title - Section heading.
+   * @param {string} icon - FontAwesome icon class.
+   * @param {Array} blocks - Block type objects.
+   * @param {boolean} openByDefault - Whether the section starts expanded.
+   * @returns {string} HTML string.
+   */
+  function renderPaletteSection(title, icon, blocks, openByDefault) {
+    var h = '<div class="palette-section">';
+    h += '<button type="button" class="palette-section-toggle w-full flex items-center gap-1.5 px-1 py-1.5 text-left hover:bg-surface-alt rounded transition-colors">';
+    h += '<i class="fa-solid fa-chevron-down text-[8px] text-fg-muted palette-chevron transition-transform' + (openByDefault ? '' : ' -rotate-90') + '"></i>';
+    h += '<i class="fa-solid ' + icon + ' text-[9px] text-fg-muted"></i>';
+    h += '<span class="text-[10px] font-semibold text-fg-secondary uppercase tracking-wider">' + Chronicle.escapeHtml(title) + '</span>';
+    h += '<span class="text-[9px] text-fg-muted ml-auto">' + blocks.length + '</span>';
+    h += '</button>';
+    h += '<div class="palette-section-content space-y-1 mt-1"' + (openByDefault ? '' : ' style="display:none"') + '>';
+    blocks.forEach(function (bt) {
+      h += '<div class="palette-block flex items-center gap-2 px-2 py-1.5 rounded border border-edge bg-surface-raised cursor-grab hover:border-accent/50 transition-colors text-sm" draggable="true" data-block-type="' + bt.type + '">';
+      h += '<i class="fa-solid ' + bt.icon + ' text-xs text-fg-muted w-4 text-center"></i>';
+      h += '<div class="flex-1 min-w-0">';
+      h += '<div class="flex items-center gap-1">';
+      h += '<span class="text-fg font-medium text-xs">' + Chronicle.escapeHtml(bt.label) + '</span>';
+      if (bt.addon) {
+        h += '<span class="text-[8px] px-1 py-px rounded bg-surface-alt text-fg-muted border border-edge leading-tight shrink-0">' + Chronicle.escapeHtml(bt.addon) + '</span>';
+      }
+      h += '</div>';
+      h += '<div class="text-[10px] text-fg-muted">' + Chronicle.escapeHtml(bt.desc) + '</div>';
+      h += '</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+    h += '</div>';
+    return h;
   }
 
   Chronicle.register('dashboard-editor', {
@@ -211,28 +247,39 @@
       // Two-panel layout: palette + canvas.
       h += '<div class="grid grid-cols-12 gap-4">';
 
-      // Palette (left).
+      // Palette (left) with collapsible sections.
       h += '<div class="col-span-3">';
-      h += '<div class="card p-3 space-y-2 sticky top-4">';
-      h += '<h4 class="text-xs font-semibold text-fg-secondary uppercase tracking-wider mb-2">Blocks</h4>';
-      self.blockTypes.forEach(function (bt) {
-        h += '<div class="palette-block flex items-center gap-2 px-2 py-1.5 rounded border border-edge bg-surface-raised cursor-grab hover:border-accent/50 transition-colors text-sm" draggable="true" data-block-type="' + bt.type + '">';
-        h += '<i class="fa-solid ' + bt.icon + ' text-xs text-fg-muted w-4 text-center"></i>';
-        h += '<div>';
-        h += '<div class="text-fg font-medium text-xs">' + Chronicle.escapeHtml(bt.label) + '</div>';
-        h += '<div class="text-[10px] text-fg-muted">' + Chronicle.escapeHtml(bt.desc) + '</div>';
-        h += '</div>';
-        h += '</div>';
-      });
+      h += '<div class="card p-3 sticky top-4 space-y-1">';
 
-      h += '<hr class="border-edge my-2"/>';
-      h += '<h4 class="text-xs font-semibold text-fg-secondary uppercase tracking-wider mb-2">Add Row</h4>';
+      // Separate blocks into core and addon groups.
+      var coreBlocks = self.blockTypes.filter(function (bt) { return !bt.addon; });
+      var addonBlocks = self.blockTypes.filter(function (bt) { return !!bt.addon; });
+
+      // Core Blocks section.
+      h += renderPaletteSection('Core Blocks', 'fa-cube', coreBlocks, true);
+
+      // Addon Blocks section (if any).
+      if (addonBlocks.length > 0) {
+        h += renderPaletteSection('Addon Blocks', 'fa-puzzle-piece', addonBlocks, false);
+      }
+
+      // Add Row section.
+      h += '<div class="palette-section">';
+      h += '<button type="button" class="palette-section-toggle w-full flex items-center gap-1.5 px-1 py-1.5 text-left hover:bg-surface-alt rounded transition-colors">';
+      h += '<i class="fa-solid fa-chevron-down text-[8px] text-fg-muted palette-chevron transition-transform"></i>';
+      h += '<i class="fa-solid fa-columns text-[9px] text-fg-muted"></i>';
+      h += '<span class="text-[10px] font-semibold text-fg-secondary uppercase tracking-wider">Add Row</span>';
+      h += '</button>';
+      h += '<div class="palette-section-content space-y-1 mt-1">';
       COL_PRESETS.forEach(function (p) {
         h += '<button type="button" class="add-row-btn w-full text-left flex items-center gap-2 px-2 py-1.5 rounded border border-edge bg-surface-raised hover:border-accent/50 transition-colors text-xs" data-widths=\'' + JSON.stringify(p.widths) + '\'>';
         h += '<i class="fa-solid fa-plus text-[10px] text-fg-muted w-4 text-center"></i>';
         h += '<span class="text-fg font-medium">' + Chronicle.escapeHtml(p.label) + '</span>';
         h += '</button>';
       });
+      h += '</div>';
+      h += '</div>';
+
       h += '</div>';
       h += '</div>';
 
@@ -353,6 +400,18 @@
           self.resetLayout();
         });
       }
+
+      // Collapsible palette section toggles.
+      this.el.querySelectorAll('.palette-section-toggle').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var section = btn.closest('.palette-section');
+          var content = section.querySelector('.palette-section-content');
+          var chevron = btn.querySelector('.palette-chevron');
+          var hidden = content.style.display === 'none';
+          content.style.display = hidden ? '' : 'none';
+          chevron.classList.toggle('-rotate-90', !hidden);
+        });
+      });
 
       // Add row buttons.
       this.el.querySelectorAll('.add-row-btn').forEach(function (btn) {

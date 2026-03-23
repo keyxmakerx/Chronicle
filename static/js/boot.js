@@ -309,6 +309,7 @@
 
   // Expose mount/destroy for manual use if needed.
   Chronicle.mountWidgets = mountWidgets;
+  Chronicle.mountWidget = mountElement;
   Chronicle.destroyWidget = destroyElement;
 
   // --- Unsaved Changes Warning ---

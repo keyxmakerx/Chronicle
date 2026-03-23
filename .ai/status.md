@@ -8,7 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-23 -- **Calendar Calendaria Feature Parity.**
+2026-03-23 -- **Customization Hub Overhaul.**
+
+61. **Customization Hub Overhaul.**
+    - **Accent Color Fix** — Fixed duplicate `class` attributes in templ output for accent color buttons and font family buttons. Restructured to use if/else around full button elements. Added live CSS custom property updates (`--color-accent`, `--color-accent-hover`, `--color-accent-light`) after save so the entire page reflects the new accent color without reload. Handler now returns JSON for API callers instead of redirect.
+    - **Widget Addon Labels** — Dashboard editor palette items now show addon source badges (calendar, timeline, maps, relations, sessions, foundry). Template editor palette items show addon/widget_slug badges from block-types API.
+    - **Layout Studio (NEW)** — Unified two-panel editor replacing the old Dashboard, Categories, and Page Templates tabs. Left sidebar has tree navigation (Campaign Page with role toggle, Owner Dashboard, per-category Page Template and Category Dashboard). Right panel dynamically mounts editors. Inline category CRUD (create/edit/delete) directly from sidebar. Unsaved changes warning on context switch.
+    - **Collapsible Palette Sections** — Dashboard editor palette now groups blocks into collapsible sections (Core Blocks, Addon Blocks, Add Row) to reduce visual clutter.
+    - **Rich Appearance Preview** — Enhanced the faux site preview in the Appearance tab with realistic sidebar, topbar, category cards, accent-colored buttons/links/badges, font preview, and backdrop area.
+    - Customization Hub reduced from 6 tabs to 4: Layouts, Navigation, Content Templates, Appearance.
 
 60. **Calendar Calendaria Feature Parity.**
     - **New Sync API Read Endpoints** — Added `GET /calendar/seasons`, `/moons`, `/eras`, `/event-categories`, `/structure`, `/weather`, `/cycles`, `/festivals` to syncapi. Each returns sub-resource data for external tools (Foundry VTT Calendaria module).

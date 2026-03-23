@@ -94,19 +94,25 @@ templ AccentColorPicker(campaignID string, currentColor string, csrfToken string
 	<div class="space-y-3">
 		<div class="flex flex-wrap gap-2">
 			for _, preset := range accentColorPresets {
-				<button
-					hx-put={ fmt.Sprintf("/campaigns/%s/accent-color", campaignID) }
-					hx-vals={ fmt.Sprintf(`{"accent_color":"%s"}`, preset.Color) }
-					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-					class="w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 shrink-0"
-					style={ fmt.Sprintf("background-color: %s", preset.Color) }
-					if currentColor == preset.Color {
+				if currentColor == preset.Color {
+					<button
+						hx-put={ fmt.Sprintf("/campaigns/%s/accent-color", campaignID) }
+						hx-vals={ fmt.Sprintf(`{"accent_color":"%s"}`, preset.Color) }
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
 						class="w-8 h-8 rounded-full border-2 border-white ring-2 ring-offset-2 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0"
-					} else {
+						style={ fmt.Sprintf("background-color: %s", preset.Color) }
+						title={ preset.Name }
+					></button>
+				} else {
+					<button
+						hx-put={ fmt.Sprintf("/campaigns/%s/accent-color", campaignID) }
+						hx-vals={ fmt.Sprintf(`{"accent_color":"%s"}`, preset.Color) }
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
 						class="w-8 h-8 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0"
-					}
-					title={ preset.Name }
-				></button>
+						style={ fmt.Sprintf("background-color: %s", preset.Color) }
+						title={ preset.Name }
+					></button>
+				}
 			}
 			// Reset to default button.
 			<button
@@ -328,31 +334,44 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 			<div id="appearance-accent-colors" class="space-y-3">
 				<div class="flex flex-wrap gap-2">
 					for _, preset := range accentColorPresets {
-						<button
-							type="button"
-							data-accent-color={ preset.Color }
-							class="w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 shrink-0"
-							style={ fmt.Sprintf("background-color: %s", preset.Color) }
-							if cc.Campaign.ParseSettings().AccentColor == preset.Color {
+						if cc.Campaign.ParseSettings().AccentColor == preset.Color {
+							<button
+								type="button"
+								data-accent-color={ preset.Color }
 								class="w-8 h-8 rounded-full border-2 border-white ring-2 ring-offset-2 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0"
-							} else {
+								style={ fmt.Sprintf("background-color: %s", preset.Color) }
+								title={ preset.Name }
+							></button>
+						} else {
+							<button
+								type="button"
+								data-accent-color={ preset.Color }
 								class="w-8 h-8 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0"
-							}
-							title={ preset.Name }
-						></button>
+								style={ fmt.Sprintf("background-color: %s", preset.Color) }
+								title={ preset.Name }
+							></button>
+						}
 					}
 					// Reset to default button.
-					<button
-						type="button"
-						data-accent-color=""
-						class="w-8 h-8 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0"
-						if cc.Campaign.ParseSettings().AccentColor == "" {
+					if cc.Campaign.ParseSettings().AccentColor == "" {
+						<button
+							type="button"
+							data-accent-color=""
 							class="w-8 h-8 rounded-full border-2 border-dashed border-fg ring-2 ring-offset-2 ring-offset-surface ring-fg flex items-center justify-center transition-colors shrink-0"
-						}
-						title="Reset to default"
-					>
-						<i class="fa-solid fa-xmark text-[10px] text-fg-muted"></i>
-					</button>
+							title="Reset to default"
+						>
+							<i class="fa-solid fa-xmark text-[10px] text-fg-muted"></i>
+						</button>
+					} else {
+						<button
+							type="button"
+							data-accent-color=""
+							class="w-8 h-8 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0"
+							title="Reset to default"
+						>
+							<i class="fa-solid fa-xmark text-[10px] text-fg-muted"></i>
+						</button>
+					}
 					<!-- Custom color picker -->
 					<div class="flex items-center gap-2 ml-2 pl-2 border-l border-edge">
 						<input
@@ -426,19 +445,25 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 			<p class="text-xs text-fg-secondary mb-3">Choose the body font for campaign pages.</p>
 			<div id="appearance-font-family" class="flex flex-wrap gap-2">
 				for _, font := range fontFamilyPresets {
-					<button
-						type="button"
-						data-font-family={ font.Value }
-						class="px-3 py-2 rounded-lg border transition-colors text-sm"
-						if cc.Campaign.ParseSettings().FontFamily == font.Value {
+					if cc.Campaign.ParseSettings().FontFamily == font.Value {
+						<button
+							type="button"
+							data-font-family={ font.Value }
 							class="px-3 py-2 rounded-lg border border-accent bg-accent/10 text-accent font-medium text-sm"
-						} else {
+							style={ fmt.Sprintf("font-family: %s", font.CSS) }
+						>
+							{ font.Label }
+						</button>
+					} else {
+						<button
+							type="button"
+							data-font-family={ font.Value }
 							class="px-3 py-2 rounded-lg border border-edge bg-surface hover:border-accent/30 text-fg-secondary text-sm"
-						}
-						style={ fmt.Sprintf("font-family: %s", font.CSS) }
-					>
-						{ font.Label }
-					</button>
+							style={ fmt.Sprintf("font-family: %s", font.CSS) }
+						>
+							{ font.Label }
+						</button>
+					}
 				}
 			</div>
 		</div>
