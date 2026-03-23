@@ -339,6 +339,8 @@
                   gradient_dir: draft.topbarStyle.gradient_dir
                 };
                 updateSaveBar();
+                // Apply accent color to page CSS custom properties live.
+                applyAccentToPage(draft.accentColor);
                 Chronicle.notify('Appearance saved', 'success');
               }
             }
@@ -558,6 +560,42 @@
             }
           }
         });
+      }
+
+      /**
+       * Apply accent color to the page's CSS custom properties so the change
+       * is visible site-wide without a full page reload.
+       */
+      function applyAccentToPage(hex) {
+        var root = document.documentElement;
+        if (!hex) {
+          // Reset to defaults (indigo-500).
+          root.style.removeProperty('--color-accent');
+          root.style.removeProperty('--color-accent-hover');
+          root.style.removeProperty('--color-accent-light');
+          return;
+        }
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        if (isNaN(r)) return;
+        // Base color as RGB triplet for Tailwind.
+        root.style.setProperty('--color-accent', hex);
+        // Hover: darken by ~12%.
+        var hr = Math.max(0, Math.min(255, Math.round(r * 0.88)));
+        var hg = Math.max(0, Math.min(255, Math.round(g * 0.88)));
+        var hb = Math.max(0, Math.min(255, Math.round(b * 0.88)));
+        root.style.setProperty('--color-accent-hover', '#' + toHex(hr) + toHex(hg) + toHex(hb));
+        // Light: blend toward white by ~60%.
+        var lr = Math.max(0, Math.min(255, Math.round(r + (255 - r) * 0.6)));
+        var lg = Math.max(0, Math.min(255, Math.round(g + (255 - g) * 0.6)));
+        var lb = Math.max(0, Math.min(255, Math.round(b + (255 - b) * 0.6)));
+        root.style.setProperty('--color-accent-light', '#' + toHex(lr) + toHex(lg) + toHex(lb));
+      }
+
+      function toHex(n) {
+        var h = n.toString(16);
+        return h.length < 2 ? '0' + h : h;
       }
 
       /**

@@ -24,16 +24,16 @@
     { type: 'entity_list',    label: 'Entity List',     icon: 'fa-list',       desc: 'Filtered list by category' },
     { type: 'text_block',     label: 'Text Block',      icon: 'fa-align-left', desc: 'Custom rich text / HTML' },
     { type: 'pinned_pages',   label: 'Pinned Pages',    icon: 'fa-thumbtack',  desc: 'Hand-picked entity cards' },
-    { type: 'calendar_preview', label: 'Calendar',     icon: 'fa-calendar-days', desc: 'Upcoming calendar events' },
-    { type: 'timeline_preview', label: 'Timeline',     icon: 'fa-timeline',      desc: 'Timeline list with event counts' },
-    { type: 'map_preview',      label: 'Map',          icon: 'fa-map',           desc: 'Embedded map viewer' },
-    { type: 'calendar_full',    label: 'Full Calendar',  icon: 'fa-calendar',      desc: 'Full interactive calendar grid' },
-    { type: 'timeline_full',    label: 'Full Timeline',  icon: 'fa-timeline',      desc: 'Full timeline D3 visualization' },
-    { type: 'relations_graph_full', label: 'Full Relations Graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph' },
-    { type: 'map_full',           label: 'Full Map',       icon: 'fa-map-location-dot', desc: 'Full map with drawings & tokens' },
-    { type: 'session_tracker',    label: 'Sessions',       icon: 'fa-dice-d20',         desc: 'Upcoming sessions with RSVP' },
+    { type: 'calendar_preview', label: 'Calendar',     icon: 'fa-calendar-days', desc: 'Upcoming calendar events', addon: 'calendar' },
+    { type: 'timeline_preview', label: 'Timeline',     icon: 'fa-timeline',      desc: 'Timeline list with event counts', addon: 'timeline' },
+    { type: 'map_preview',      label: 'Map',          icon: 'fa-map',           desc: 'Embedded map viewer', addon: 'maps' },
+    { type: 'calendar_full',    label: 'Full Calendar',  icon: 'fa-calendar',      desc: 'Full interactive calendar grid', addon: 'calendar' },
+    { type: 'timeline_full',    label: 'Full Timeline',  icon: 'fa-timeline',      desc: 'Full timeline D3 visualization', addon: 'timeline' },
+    { type: 'relations_graph_full', label: 'Full Relations Graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph', addon: 'relations' },
+    { type: 'map_full',           label: 'Full Map',       icon: 'fa-map-location-dot', desc: 'Full map with drawings & tokens', addon: 'maps' },
+    { type: 'session_tracker',    label: 'Sessions',       icon: 'fa-dice-d20',         desc: 'Upcoming sessions with RSVP', addon: 'sessions' },
     { type: 'activity_feed',      label: 'Activity Feed',  icon: 'fa-clock-rotate-left', desc: 'Recent campaign activity log' },
-    { type: 'sync_status',        label: 'Foundry Sync',   icon: 'fa-plug',             desc: 'Foundry VTT sync status' }
+    { type: 'sync_status',        label: 'Foundry Sync',   icon: 'fa-plug',             desc: 'Foundry VTT sync status', addon: 'foundry' }
   ];
 
   /** Column layout presets for adding new rows. */
@@ -218,8 +218,13 @@
       self.blockTypes.forEach(function (bt) {
         h += '<div class="palette-block flex items-center gap-2 px-2 py-1.5 rounded border border-edge bg-surface-raised cursor-grab hover:border-accent/50 transition-colors text-sm" draggable="true" data-block-type="' + bt.type + '">';
         h += '<i class="fa-solid ' + bt.icon + ' text-xs text-fg-muted w-4 text-center"></i>';
-        h += '<div>';
-        h += '<div class="text-fg font-medium text-xs">' + Chronicle.escapeHtml(bt.label) + '</div>';
+        h += '<div class="flex-1 min-w-0">';
+        h += '<div class="flex items-center gap-1">';
+        h += '<span class="text-fg font-medium text-xs">' + Chronicle.escapeHtml(bt.label) + '</span>';
+        if (bt.addon) {
+          h += '<span class="text-[8px] px-1 py-px rounded bg-surface-alt text-fg-muted border border-edge leading-tight shrink-0">' + Chronicle.escapeHtml(bt.addon) + '</span>';
+        }
+        h += '</div>';
         h += '<div class="text-[10px] text-fg-muted">' + Chronicle.escapeHtml(bt.desc) + '</div>';
         h += '</div>';
         h += '</div>';

@@ -451,8 +451,13 @@ func (h *Handler) UpdateAccentColorAPI(c echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.accent_color.updated", map[string]any{"color": color})
 
+	// HTMX and API (Accept: application/json) callers get a direct response;
+	// plain browser navigation gets a redirect back to settings.
 	if middleware.IsHTMX(c) {
 		return c.NoContent(http.StatusNoContent)
+	}
+	if c.Request().Header.Get("Accept") == "application/json" {
+		return c.JSON(http.StatusOK, map[string]string{"accent_color": color})
 	}
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
