@@ -394,6 +394,16 @@ func (a *calendarEventPublisherAdapter) PublishCalendarEvent(eventType, campaign
 		msgType = ws.MsgCalendarEventDeleted
 	case "date.advanced":
 		msgType = ws.MsgCalendarDateAdvanced
+	case "weather.changed":
+		msgType = ws.MsgCalendarWeatherChanged
+	case "structure.updated":
+		msgType = ws.MsgCalendarStructureUpdated
+	case "season.changed":
+		msgType = ws.MsgCalendarSeasonChanged
+	case "era.changed":
+		msgType = ws.MsgCalendarEraChanged
+	case "moon.phase_changed":
+		msgType = ws.MsgCalendarMoonPhaseChanged
 	default:
 		return
 	}
