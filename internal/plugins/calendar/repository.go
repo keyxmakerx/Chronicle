@@ -45,6 +45,18 @@ type CalendarRepository interface {
 	SetEventCategories(ctx context.Context, calendarID string, cats []EventCategoryInput) error
 	GetEventCategories(ctx context.Context, calendarID string) ([]EventCategory, error)
 
+	// Weather.
+	GetWeather(ctx context.Context, calendarID string) (*Weather, error)
+	SetWeather(ctx context.Context, calendarID string, input WeatherInput) error
+
+	// Cycles.
+	SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error
+	GetCycles(ctx context.Context, calendarID string) ([]Cycle, error)
+
+	// Festivals.
+	SetFestivals(ctx context.Context, calendarID string, festivals []FestivalInput) error
+	GetFestivals(ctx context.Context, calendarID string) ([]Festival, error)
+
 	// Events.
 	CreateEvent(ctx context.Context, evt *Event) error
 	GetEvent(ctx context.Context, id string) (*Event, error)
@@ -250,9 +262,9 @@ func (r *calendarRepo) SetWeekdays(ctx context.Context, calendarID string, weekd
 	}
 	for _, w := range weekdays {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO calendar_weekdays (calendar_id, name, sort_order)
-			 VALUES (?, ?, ?)`,
-			calendarID, w.Name, w.SortOrder,
+			`INSERT INTO calendar_weekdays (calendar_id, name, sort_order, is_rest_day)
+			 VALUES (?, ?, ?, ?)`,
+			calendarID, w.Name, w.SortOrder, w.IsRestDay,
 		); err != nil {
 			return err
 		}
@@ -263,7 +275,7 @@ func (r *calendarRepo) SetWeekdays(ctx context.Context, calendarID string, weekd
 // GetWeekdays returns all weekdays for a calendar ordered by sort_order.
 func (r *calendarRepo) GetWeekdays(ctx context.Context, calendarID string) ([]Weekday, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, calendar_id, name, sort_order
+		`SELECT id, calendar_id, name, sort_order, is_rest_day
 		 FROM calendar_weekdays WHERE calendar_id = ? ORDER BY sort_order`, calendarID)
 	if err != nil {
 		return nil, err
@@ -273,7 +285,7 @@ func (r *calendarRepo) GetWeekdays(ctx context.Context, calendarID string) ([]We
 	var weekdays []Weekday
 	for rows.Next() {
 		var w Weekday
-		if err := rows.Scan(&w.ID, &w.CalendarID, &w.Name, &w.SortOrder); err != nil {
+		if err := rows.Scan(&w.ID, &w.CalendarID, &w.Name, &w.SortOrder, &w.IsRestDay); err != nil {
 			return nil, err
 		}
 		weekdays = append(weekdays, w)
@@ -461,7 +473,11 @@ func (r *calendarRepo) GetEventCategories(ctx context.Context, calendarID string
 const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description, e.description_html,
        e.year, e.month, e.day, e.start_hour, e.start_minute,
        e.end_year, e.end_month, e.end_day, e.end_hour, e.end_minute,
-       e.is_recurring, e.recurrence_type, e.visibility, e.visibility_rules, e.category,
+       e.is_recurring, e.recurrence_type,
+       e.recurrence_interval, e.recurrence_end_year, e.recurrence_end_month,
+       e.recurrence_end_day, e.recurrence_max_occurrences,
+       e.visibility, e.visibility_rules, e.category,
+       e.color, e.icon, e.all_day,
        e.created_by, e.created_at, e.updated_at,
        COALESCE(ent.name, ''), COALESCE(et.icon, ''), COALESCE(et.color, '')`
 
@@ -475,12 +491,20 @@ func (r *calendarRepo) CreateEvent(ctx context.Context, evt *Event) error {
 		`INSERT INTO calendar_events (id, calendar_id, entity_id, name, description, description_html,
 		        year, month, day, start_hour, start_minute,
 		        end_year, end_month, end_day, end_hour, end_minute,
-		        is_recurring, recurrence_type, visibility, visibility_rules, category, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        is_recurring, recurrence_type,
+		        recurrence_interval, recurrence_end_year, recurrence_end_month,
+		        recurrence_end_day, recurrence_max_occurrences,
+		        visibility, visibility_rules, category,
+		        color, icon, all_day, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		evt.ID, evt.CalendarID, evt.EntityID, evt.Name, evt.Description, evt.DescriptionHTML,
 		evt.Year, evt.Month, evt.Day, evt.StartHour, evt.StartMinute,
 		evt.EndYear, evt.EndMonth, evt.EndDay, evt.EndHour, evt.EndMinute,
-		evt.IsRecurring, evt.RecurrenceType, evt.Visibility, evt.VisibilityRules, evt.Category, evt.CreatedBy,
+		evt.IsRecurring, evt.RecurrenceType,
+		evt.RecurrenceInterval, evt.RecurrenceEndYear, evt.RecurrenceEndMonth,
+		evt.RecurrenceEndDay, evt.RecurrenceMaxOccurrences,
+		evt.Visibility, evt.VisibilityRules, evt.Category,
+		evt.Color, evt.Icon, evt.AllDay, evt.CreatedBy,
 	)
 	return err
 }
@@ -495,7 +519,11 @@ func (r *calendarRepo) GetEvent(ctx context.Context, id string) (*Event, error) 
 	).Scan(&evt.ID, &evt.CalendarID, &evt.EntityID, &evt.Name, &evt.Description, &evt.DescriptionHTML,
 		&evt.Year, &evt.Month, &evt.Day, &evt.StartHour, &evt.StartMinute,
 		&evt.EndYear, &evt.EndMonth, &evt.EndDay, &evt.EndHour, &evt.EndMinute,
-		&evt.IsRecurring, &evt.RecurrenceType, &evt.Visibility, &evt.VisibilityRules, &evt.Category,
+		&evt.IsRecurring, &evt.RecurrenceType,
+		&evt.RecurrenceInterval, &evt.RecurrenceEndYear, &evt.RecurrenceEndMonth,
+		&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences,
+		&evt.Visibility, &evt.VisibilityRules, &evt.Category,
+		&evt.Color, &evt.Icon, &evt.AllDay,
 		&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
 		&evt.EntityName, &evt.EntityIcon, &evt.EntityColor)
 	if err == sql.ErrNoRows {
@@ -512,13 +540,21 @@ func (r *calendarRepo) UpdateEvent(ctx context.Context, evt *Event) error {
 		     year = ?, month = ?, day = ?,
 		     start_hour = ?, start_minute = ?,
 		     end_year = ?, end_month = ?, end_day = ?, end_hour = ?, end_minute = ?,
-		     is_recurring = ?, recurrence_type = ?, visibility = ?, visibility_rules = ?, category = ?
+		     is_recurring = ?, recurrence_type = ?,
+		     recurrence_interval = ?, recurrence_end_year = ?, recurrence_end_month = ?,
+		     recurrence_end_day = ?, recurrence_max_occurrences = ?,
+		     visibility = ?, visibility_rules = ?, category = ?,
+		     color = ?, icon = ?, all_day = ?
 		 WHERE id = ?`,
 		evt.Name, evt.Description, evt.DescriptionHTML, evt.EntityID,
 		evt.Year, evt.Month, evt.Day,
 		evt.StartHour, evt.StartMinute,
 		evt.EndYear, evt.EndMonth, evt.EndDay, evt.EndHour, evt.EndMinute,
-		evt.IsRecurring, evt.RecurrenceType, evt.Visibility, evt.VisibilityRules, evt.Category, evt.ID,
+		evt.IsRecurring, evt.RecurrenceType,
+		evt.RecurrenceInterval, evt.RecurrenceEndYear, evt.RecurrenceEndMonth,
+		evt.RecurrenceEndDay, evt.RecurrenceMaxOccurrences,
+		evt.Visibility, evt.VisibilityRules, evt.Category,
+		evt.Color, evt.Icon, evt.AllDay, evt.ID,
 	)
 	return err
 }
@@ -689,7 +725,11 @@ func scanEvents(rows *sql.Rows) ([]Event, error) {
 			&evt.ID, &evt.CalendarID, &evt.EntityID, &evt.Name, &evt.Description, &evt.DescriptionHTML,
 			&evt.Year, &evt.Month, &evt.Day, &evt.StartHour, &evt.StartMinute,
 			&evt.EndYear, &evt.EndMonth, &evt.EndDay, &evt.EndHour, &evt.EndMinute,
-			&evt.IsRecurring, &evt.RecurrenceType, &evt.Visibility, &evt.VisibilityRules, &evt.Category,
+			&evt.IsRecurring, &evt.RecurrenceType,
+			&evt.RecurrenceInterval, &evt.RecurrenceEndYear, &evt.RecurrenceEndMonth,
+			&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences,
+			&evt.Visibility, &evt.VisibilityRules, &evt.Category,
+			&evt.Color, &evt.Icon, &evt.AllDay,
 			&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
 			&evt.EntityName, &evt.EntityIcon, &evt.EntityColor,
 		); err != nil {
@@ -731,4 +771,225 @@ func (r *calendarRepo) SearchEvents(ctx context.Context, calendarID, query strin
 	defer rows.Close()
 
 	return scanEvents(rows)
+}
+
+// --- Weather ---
+
+// GetWeather returns the current weather state for a calendar, or nil if none set.
+func (r *calendarRepo) GetWeather(ctx context.Context, calendarID string) (*Weather, error) {
+	w := &Weather{}
+	var windSpeedKPHf sql.NullFloat64
+	var windSpeedTier, windDir sql.NullString
+	var windDirDegi sql.NullInt32
+	var precipType sql.NullString
+	var precipIntensity sql.NullFloat64
+
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, calendar_id, preset_id, preset_label, icon, color,
+		        temperature_celsius, wind_speed_kph, wind_speed_tier,
+		        wind_direction, wind_direction_degrees,
+		        precipitation_type, precipitation_intensity,
+		        zone_id, zone_name, description, updated_at
+		 FROM calendar_weather WHERE calendar_id = ?`, calendarID,
+	).Scan(&w.ID, &w.CalendarID, &w.PresetID, &w.PresetLabel, &w.Icon, &w.Color,
+		&w.TemperatureCelsius, &windSpeedKPHf, &windSpeedTier,
+		&windDir, &windDirDegi,
+		&precipType, &precipIntensity,
+		&w.ZoneID, &w.ZoneName, &w.Description, &w.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Build Wind struct if any wind data is present.
+	if windSpeedKPHf.Valid || windDir.Valid {
+		wind := &Wind{}
+		if windSpeedKPHf.Valid {
+			v := windSpeedKPHf.Float64
+			wind.SpeedKPH = &v
+		}
+		if windSpeedTier.Valid {
+			wind.SpeedTier = &windSpeedTier.String
+		}
+		if windDir.Valid {
+			wind.Direction = &windDir.String
+		}
+		if windDirDegi.Valid {
+			v := int(windDirDegi.Int32)
+			wind.DirectionDegrees = &v
+		}
+		w.Wind = wind
+	}
+
+	// Build Precipitation struct if any precipitation data is present.
+	if precipType.Valid {
+		p := &Precipitation{Type: &precipType.String}
+		if precipIntensity.Valid {
+			p.Intensity = &precipIntensity.Float64
+		}
+		w.Precipitation = p
+	}
+
+	return w, nil
+}
+
+// SetWeather upserts the current weather state for a calendar.
+func (r *calendarRepo) SetWeather(ctx context.Context, calendarID string, input WeatherInput) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_weather (calendar_id, preset_id, preset_label, icon, color,
+		        temperature_celsius, wind_speed_kph, wind_speed_tier,
+		        wind_direction, wind_direction_degrees,
+		        precipitation_type, precipitation_intensity,
+		        zone_id, zone_name, description)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		        preset_id = VALUES(preset_id), preset_label = VALUES(preset_label),
+		        icon = VALUES(icon), color = VALUES(color),
+		        temperature_celsius = VALUES(temperature_celsius),
+		        wind_speed_kph = VALUES(wind_speed_kph), wind_speed_tier = VALUES(wind_speed_tier),
+		        wind_direction = VALUES(wind_direction), wind_direction_degrees = VALUES(wind_direction_degrees),
+		        precipitation_type = VALUES(precipitation_type), precipitation_intensity = VALUES(precipitation_intensity),
+		        zone_id = VALUES(zone_id), zone_name = VALUES(zone_name),
+		        description = VALUES(description)`,
+		calendarID, input.PresetID, input.PresetLabel, input.Icon, input.Color,
+		input.TemperatureCelsius, input.WindSpeedKPH, input.WindSpeedTier,
+		input.WindDirection, input.WindDirectionDeg,
+		input.PrecipitationType, input.PrecipitationIntensity,
+		input.ZoneID, input.ZoneName, input.Description,
+	)
+	return err
+}
+
+// --- Cycles ---
+
+// SetCycles replaces all cycles and their entries for a calendar.
+func (r *calendarRepo) SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Delete existing cycles (entries cascade via FK).
+	if _, err := tx.ExecContext(ctx, `DELETE FROM calendar_cycles WHERE calendar_id = ?`, calendarID); err != nil {
+		return err
+	}
+	for _, c := range cycles {
+		res, err := tx.ExecContext(ctx,
+			`INSERT INTO calendar_cycles (calendar_id, name, cycle_length, type, sort_order)
+			 VALUES (?, ?, ?, ?, ?)`,
+			calendarID, c.Name, c.CycleLength, c.Type, c.SortOrder)
+		if err != nil {
+			return err
+		}
+		cycleID, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		for _, e := range c.Entries {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO calendar_cycle_entries (cycle_id, name, icon, year_offset, sort_order)
+				 VALUES (?, ?, ?, ?, ?)`,
+				cycleID, e.Name, e.Icon, e.YearOffset, e.SortOrder,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
+// GetCycles returns all cycles with their entries for a calendar.
+func (r *calendarRepo) GetCycles(ctx context.Context, calendarID string) ([]Cycle, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, calendar_id, name, cycle_length, type, sort_order
+		 FROM calendar_cycles WHERE calendar_id = ? ORDER BY sort_order`, calendarID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cycles []Cycle
+	for rows.Next() {
+		var c Cycle
+		if err := rows.Scan(&c.ID, &c.CalendarID, &c.Name, &c.CycleLength, &c.Type, &c.SortOrder); err != nil {
+			return nil, err
+		}
+		cycles = append(cycles, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Load entries for each cycle.
+	for i := range cycles {
+		entryRows, err := r.db.QueryContext(ctx,
+			`SELECT id, cycle_id, name, icon, year_offset, sort_order
+			 FROM calendar_cycle_entries WHERE cycle_id = ? ORDER BY sort_order`, cycles[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		for entryRows.Next() {
+			var e CycleEntry
+			if err := entryRows.Scan(&e.ID, &e.CycleID, &e.Name, &e.Icon, &e.YearOffset, &e.SortOrder); err != nil {
+				entryRows.Close()
+				return nil, err
+			}
+			cycles[i].Entries = append(cycles[i].Entries, e)
+		}
+		entryRows.Close()
+		if err := entryRows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return cycles, nil
+}
+
+// --- Festivals ---
+
+// SetFestivals replaces all festivals for a calendar.
+func (r *calendarRepo) SetFestivals(ctx context.Context, calendarID string, festivals []FestivalInput) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM calendar_festivals WHERE calendar_id = ?`, calendarID); err != nil {
+		return err
+	}
+	for _, f := range festivals {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO calendar_festivals (calendar_id, name, month, day, after_month, description, color, icon, sort_order)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			calendarID, f.Name, f.Month, f.Day, f.AfterMonth, f.Description, f.Color, f.Icon, f.SortOrder,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// GetFestivals returns all festivals for a calendar.
+func (r *calendarRepo) GetFestivals(ctx context.Context, calendarID string) ([]Festival, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, calendar_id, name, month, day, after_month, description, color, icon, sort_order
+		 FROM calendar_festivals WHERE calendar_id = ? ORDER BY sort_order`, calendarID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var festivals []Festival
+	for rows.Next() {
+		var f Festival
+		if err := rows.Scan(&f.ID, &f.CalendarID, &f.Name, &f.Month, &f.Day, &f.AfterMonth,
+			&f.Description, &f.Color, &f.Icon, &f.SortOrder); err != nil {
+			return nil, err
+		}
+		festivals = append(festivals, f)
+	}
+	return festivals, rows.Err()
 }

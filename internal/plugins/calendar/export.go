@@ -1,6 +1,7 @@
 // Package calendar — export.go provides JSON export of calendar configurations.
-// Exports include all sub-resources (months, weekdays, moons, seasons, eras)
-// in Chronicle's native format. Events are optionally included.
+// Exports include all sub-resources (months, weekdays, moons, seasons, eras,
+// cycles, festivals, weather) in Chronicle's native format. Events are
+// optionally included.
 package calendar
 
 // ChronicleExport is the top-level JSON envelope for calendar export.
@@ -8,32 +9,35 @@ package calendar
 // from external sources (Simple Calendar, Calendaria).
 type ChronicleExport struct {
 	Format  string         `json:"format"`  // "chronicle-calendar-v1"
-	Version int            `json:"version"` // schema version (1)
+	Version int            `json:"version"` // schema version (2)
 	Calendar ExportCalendar `json:"calendar"`
 	Events  []ExportEvent  `json:"events,omitempty"` // optional
 }
 
 // ExportCalendar holds the calendar configuration for export.
 type ExportCalendar struct {
-	Name             string           `json:"name"`
-	Description      *string          `json:"description,omitempty"`
-	Mode             string           `json:"mode"` // "fantasy" or "reallife"
-	EpochName        *string          `json:"epoch_name,omitempty"`
-	CurrentYear      int              `json:"current_year"`
-	CurrentMonth     int              `json:"current_month"`
-	CurrentDay       int              `json:"current_day"`
-	CurrentHour      int              `json:"current_hour"`
-	CurrentMinute    int              `json:"current_minute"`
-	HoursPerDay      int              `json:"hours_per_day"`
-	MinutesPerHour   int              `json:"minutes_per_hour"`
-	SecondsPerMinute int              `json:"seconds_per_minute"`
-	LeapYearEvery    int              `json:"leap_year_every"`
-	LeapYearOffset   int              `json:"leap_year_offset"`
-	Months           []ExportMonth    `json:"months"`
-	Weekdays         []ExportWeekday  `json:"weekdays"`
-	Moons            []ExportMoon     `json:"moons,omitempty"`
-	Seasons          []ExportSeason   `json:"seasons,omitempty"`
-	Eras             []ExportEra      `json:"eras,omitempty"`
+	Name             string            `json:"name"`
+	Description      *string           `json:"description,omitempty"`
+	Mode             string            `json:"mode"` // "fantasy" or "reallife"
+	EpochName        *string           `json:"epoch_name,omitempty"`
+	CurrentYear      int               `json:"current_year"`
+	CurrentMonth     int               `json:"current_month"`
+	CurrentDay       int               `json:"current_day"`
+	CurrentHour      int               `json:"current_hour"`
+	CurrentMinute    int               `json:"current_minute"`
+	HoursPerDay      int               `json:"hours_per_day"`
+	MinutesPerHour   int               `json:"minutes_per_hour"`
+	SecondsPerMinute int               `json:"seconds_per_minute"`
+	LeapYearEvery    int               `json:"leap_year_every"`
+	LeapYearOffset   int               `json:"leap_year_offset"`
+	Months           []ExportMonth     `json:"months"`
+	Weekdays         []ExportWeekday   `json:"weekdays"`
+	Moons            []ExportMoon      `json:"moons,omitempty"`
+	Seasons          []ExportSeason    `json:"seasons,omitempty"`
+	Eras             []ExportEra       `json:"eras,omitempty"`
+	Cycles           []ExportCycle     `json:"cycles,omitempty"`
+	Festivals        []ExportFestival  `json:"festivals,omitempty"`
+	Weather          *WeatherInput     `json:"weather,omitempty"`
 }
 
 // ExportMonth is a month definition for export.
@@ -49,6 +53,7 @@ type ExportMonth struct {
 type ExportWeekday struct {
 	Name      string `json:"name"`
 	SortOrder int    `json:"sort_order"`
+	IsRestDay bool   `json:"is_rest_day"`
 }
 
 // ExportMoon is a moon definition for export.
@@ -81,25 +86,62 @@ type ExportEra struct {
 	SortOrder   int     `json:"sort_order"`
 }
 
+// ExportCycle is a cycle definition for export.
+type ExportCycle struct {
+	Name        string             `json:"name"`
+	CycleLength int                `json:"cycle_length"`
+	Type        string             `json:"type"`
+	SortOrder   int                `json:"sort_order"`
+	Entries     []ExportCycleEntry `json:"entries,omitempty"`
+}
+
+// ExportCycleEntry is a cycle entry for export.
+type ExportCycleEntry struct {
+	Name       string  `json:"name"`
+	Icon       *string `json:"icon,omitempty"`
+	YearOffset int     `json:"year_offset"`
+	SortOrder  int     `json:"sort_order"`
+}
+
+// ExportFestival is a festival definition for export.
+type ExportFestival struct {
+	Name        string  `json:"name"`
+	Month       *int    `json:"month,omitempty"`
+	Day         *int    `json:"day,omitempty"`
+	AfterMonth  *int    `json:"after_month,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Color       *string `json:"color,omitempty"`
+	Icon        *string `json:"icon,omitempty"`
+	SortOrder   int     `json:"sort_order"`
+}
+
 // ExportEvent is a calendar event for export.
 type ExportEvent struct {
-	Name            string  `json:"name"`
-	Description     *string `json:"description,omitempty"`
-	DescriptionHTML *string `json:"description_html,omitempty"`
-	Year            int     `json:"year"`
-	Month          int     `json:"month"`
-	Day            int     `json:"day"`
-	StartHour      *int    `json:"start_hour,omitempty"`
-	StartMinute    *int    `json:"start_minute,omitempty"`
-	EndYear        *int    `json:"end_year,omitempty"`
-	EndMonth       *int    `json:"end_month,omitempty"`
-	EndDay         *int    `json:"end_day,omitempty"`
-	EndHour        *int    `json:"end_hour,omitempty"`
-	EndMinute      *int    `json:"end_minute,omitempty"`
-	IsRecurring    bool    `json:"is_recurring"`
-	RecurrenceType *string `json:"recurrence_type,omitempty"`
-	Visibility     string  `json:"visibility"`
-	Category       *string `json:"category,omitempty"`
+	Name                     string  `json:"name"`
+	Description              *string `json:"description,omitempty"`
+	DescriptionHTML          *string `json:"description_html,omitempty"`
+	Year                     int     `json:"year"`
+	Month                    int     `json:"month"`
+	Day                      int     `json:"day"`
+	StartHour                *int    `json:"start_hour,omitempty"`
+	StartMinute              *int    `json:"start_minute,omitempty"`
+	EndYear                  *int    `json:"end_year,omitempty"`
+	EndMonth                 *int    `json:"end_month,omitempty"`
+	EndDay                   *int    `json:"end_day,omitempty"`
+	EndHour                  *int    `json:"end_hour,omitempty"`
+	EndMinute                *int    `json:"end_minute,omitempty"`
+	IsRecurring              bool    `json:"is_recurring"`
+	RecurrenceType           *string `json:"recurrence_type,omitempty"`
+	RecurrenceInterval       *int    `json:"recurrence_interval,omitempty"`
+	RecurrenceEndYear        *int    `json:"recurrence_end_year,omitempty"`
+	RecurrenceEndMonth       *int    `json:"recurrence_end_month,omitempty"`
+	RecurrenceEndDay         *int    `json:"recurrence_end_day,omitempty"`
+	RecurrenceMaxOccurrences *int    `json:"recurrence_max_occurrences,omitempty"`
+	Visibility               string  `json:"visibility"`
+	Category                 *string `json:"category,omitempty"`
+	Color                    *string `json:"color,omitempty"`
+	Icon                     *string `json:"icon,omitempty"`
+	AllDay                   bool    `json:"all_day"`
 }
 
 // BuildExport creates a ChronicleExport from a fully-loaded Calendar and
@@ -107,7 +149,7 @@ type ExportEvent struct {
 func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleExport {
 	export := &ChronicleExport{
 		Format:  "chronicle-calendar-v1",
-		Version: 1,
+		Version: 2,
 		Calendar: ExportCalendar{
 			Name:             cal.Name,
 			Description:      cal.Description,
@@ -142,6 +184,7 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 		export.Calendar.Weekdays = append(export.Calendar.Weekdays, ExportWeekday{
 			Name:      w.Name,
 			SortOrder: w.SortOrder,
+			IsRestDay: w.IsRestDay,
 		})
 	}
 
@@ -181,27 +224,68 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 		})
 	}
 
+	// Cycles.
+	for _, c := range cal.Cycles {
+		ec := ExportCycle{
+			Name:        c.Name,
+			CycleLength: c.CycleLength,
+			Type:        c.Type,
+			SortOrder:   c.SortOrder,
+		}
+		for _, entry := range c.Entries {
+			ec.Entries = append(ec.Entries, ExportCycleEntry{
+				Name:       entry.Name,
+				Icon:       entry.Icon,
+				YearOffset: entry.YearOffset,
+				SortOrder:  entry.SortOrder,
+			})
+		}
+		export.Calendar.Cycles = append(export.Calendar.Cycles, ec)
+	}
+
+	// Festivals.
+	for _, f := range cal.Festivals {
+		export.Calendar.Festivals = append(export.Calendar.Festivals, ExportFestival{
+			Name:        f.Name,
+			Month:       f.Month,
+			Day:         f.Day,
+			AfterMonth:  f.AfterMonth,
+			Description: f.Description,
+			Color:       f.Color,
+			Icon:        f.Icon,
+			SortOrder:   f.SortOrder,
+		})
+	}
+
 	// Events (optional).
 	if includeEvents && len(events) > 0 {
 		for _, evt := range events {
 			export.Events = append(export.Events, ExportEvent{
-				Name:            evt.Name,
-				Description:     evt.Description,
-				DescriptionHTML: evt.DescriptionHTML,
-				Year:            evt.Year,
-				Month:          evt.Month,
-				Day:            evt.Day,
-				StartHour:      evt.StartHour,
-				StartMinute:    evt.StartMinute,
-				EndYear:        evt.EndYear,
-				EndMonth:       evt.EndMonth,
-				EndDay:         evt.EndDay,
-				EndHour:        evt.EndHour,
-				EndMinute:      evt.EndMinute,
-				IsRecurring:    evt.IsRecurring,
-				RecurrenceType: evt.RecurrenceType,
-				Visibility:     evt.Visibility,
-				Category:       evt.Category,
+				Name:                     evt.Name,
+				Description:              evt.Description,
+				DescriptionHTML:          evt.DescriptionHTML,
+				Year:                     evt.Year,
+				Month:                    evt.Month,
+				Day:                      evt.Day,
+				StartHour:                evt.StartHour,
+				StartMinute:              evt.StartMinute,
+				EndYear:                  evt.EndYear,
+				EndMonth:                 evt.EndMonth,
+				EndDay:                   evt.EndDay,
+				EndHour:                  evt.EndHour,
+				EndMinute:                evt.EndMinute,
+				IsRecurring:              evt.IsRecurring,
+				RecurrenceType:           evt.RecurrenceType,
+				RecurrenceInterval:       evt.RecurrenceInterval,
+				RecurrenceEndYear:        evt.RecurrenceEndYear,
+				RecurrenceEndMonth:       evt.RecurrenceEndMonth,
+				RecurrenceEndDay:         evt.RecurrenceEndDay,
+				RecurrenceMaxOccurrences: evt.RecurrenceMaxOccurrences,
+				Visibility:               evt.Visibility,
+				Category:                 evt.Category,
+				Color:                    evt.Color,
+				Icon:                     evt.Icon,
+				AllDay:                   evt.AllDay,
 			})
 		}
 	}

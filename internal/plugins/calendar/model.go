@@ -58,12 +58,14 @@ type Calendar struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 
 	// Eager-loaded sub-resources (populated by service, not by every query).
-	Months   []Month   `json:"months,omitempty"`
-	Weekdays []Weekday `json:"weekdays,omitempty"`
-	Moons    []Moon    `json:"moons,omitempty"`
-	Seasons  []Season  `json:"seasons,omitempty"`
-	Eras            []Era            `json:"eras,omitempty"`
-	EventCategories []EventCategory  `json:"event_categories,omitempty"`
+	Months          []Month         `json:"months,omitempty"`
+	Weekdays        []Weekday       `json:"weekdays,omitempty"`
+	Moons           []Moon          `json:"moons,omitempty"`
+	Seasons         []Season        `json:"seasons,omitempty"`
+	Eras            []Era           `json:"eras,omitempty"`
+	EventCategories []EventCategory `json:"event_categories,omitempty"`
+	Cycles          []Cycle         `json:"cycles,omitempty"`
+	Festivals       []Festival      `json:"festivals,omitempty"`
 }
 
 // GetCampaignID returns the campaign ID this calendar belongs to.
@@ -168,6 +170,27 @@ func (c *Calendar) EraForYear(year int) *Era {
 	return nil
 }
 
+// AbsoluteDay returns the total number of days from year 0 day 0 to the given
+// date (year, month 1-indexed, day). Used for moon phase calculation.
+func (c *Calendar) AbsoluteDay(year, month, day int) int {
+	total := 0
+	// Add full years.
+	for y := 0; y < year; y++ {
+		total += c.YearLengthForYear(y)
+	}
+	// Add full months in the current year.
+	for i := 0; i < month-1 && i < len(c.Months); i++ {
+		total += c.MonthDays(i, year)
+	}
+	total += day
+	return total
+}
+
+// CurrentAbsoluteDay returns AbsoluteDay for the current date.
+func (c *Calendar) CurrentAbsoluteDay() int {
+	return c.AbsoluteDay(c.CurrentYear, c.CurrentMonth, c.CurrentDay)
+}
+
 // Month is a named period in the calendar with a configurable number of days.
 type Month struct {
 	ID            int    `json:"id"`
@@ -185,6 +208,7 @@ type Weekday struct {
 	CalendarID string `json:"calendar_id"`
 	Name       string `json:"name"`
 	SortOrder  int    `json:"sort_order"`
+	IsRestDay  bool   `json:"is_rest_day"`
 }
 
 // Moon is a celestial body with a phase cycle used for moon phase display.
@@ -232,6 +256,29 @@ func (m *Moon) MoonPhaseName(absoluteDay int) string {
 		return "Last Quarter"
 	default:
 		return "Waning Crescent"
+	}
+}
+
+// MoonPhaseIcon returns an icon identifier for the current phase.
+func (m *Moon) MoonPhaseIcon(absoluteDay int) string {
+	phase := m.MoonPhase(absoluteDay)
+	switch {
+	case phase < 0.125:
+		return "circle-dot"
+	case phase < 0.25:
+		return "moon-waxing-crescent"
+	case phase < 0.375:
+		return "moon-first-quarter"
+	case phase < 0.5:
+		return "moon-waxing-gibbous"
+	case phase < 0.625:
+		return "moon"
+	case phase < 0.75:
+		return "moon-waning-gibbous"
+	case phase < 0.875:
+		return "moon-last-quarter"
+	default:
+		return "moon-waning-crescent"
 	}
 }
 
@@ -306,14 +353,22 @@ type Event struct {
 	EndDay         *int      `json:"end_day,omitempty"`
 	EndHour        *int      `json:"end_hour,omitempty"`
 	EndMinute      *int      `json:"end_minute,omitempty"`
-	IsRecurring    bool      `json:"is_recurring"`
-	RecurrenceType *string   `json:"recurrence_type,omitempty"`
-	Visibility      string  `json:"visibility"`
-	VisibilityRules *string `json:"visibility_rules,omitempty"`
-	Category        *string `json:"category,omitempty"`
-	CreatedBy       *string `json:"created_by,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	IsRecurring              bool    `json:"is_recurring"`
+	RecurrenceType           *string `json:"recurrence_type,omitempty"`
+	RecurrenceInterval       *int    `json:"recurrence_interval,omitempty"`
+	RecurrenceEndYear        *int    `json:"recurrence_end_year,omitempty"`
+	RecurrenceEndMonth       *int    `json:"recurrence_end_month,omitempty"`
+	RecurrenceEndDay         *int    `json:"recurrence_end_day,omitempty"`
+	RecurrenceMaxOccurrences *int    `json:"recurrence_max_occurrences,omitempty"`
+	Visibility               string  `json:"visibility"`
+	VisibilityRules          *string `json:"visibility_rules,omitempty"`
+	Category                 *string `json:"category,omitempty"`
+	Color                    *string `json:"color,omitempty"`
+	Icon                     *string `json:"icon,omitempty"`
+	AllDay                   bool    `json:"all_day"`
+	CreatedBy                *string `json:"created_by,omitempty"`
+	CreatedAt                time.Time `json:"created_at"`
+	UpdatedAt                time.Time `json:"updated_at"`
 
 	// Joined fields for display (populated by some queries).
 	EntityName  string `json:"entity_name,omitempty"`
@@ -429,49 +484,65 @@ type UpdateCalendarInput struct {
 
 // CreateEventInput is the validated input for creating a calendar event.
 type CreateEventInput struct {
-	Name            string
-	Description     *string
-	DescriptionHTML *string
-	EntityID        *string
-	Year           int
-	Month          int
-	Day            int
-	StartHour      *int
-	StartMinute    *int
-	EndYear        *int
-	EndMonth       *int
-	EndDay         *int
-	EndHour        *int
-	EndMinute      *int
-	IsRecurring    bool
-	RecurrenceType  *string
-	Visibility      string
-	VisibilityRules *string
-	Category        *string
-	CreatedBy       string
+	Name                     string
+	Description              *string
+	DescriptionHTML          *string
+	EntityID                 *string
+	Year                     int
+	Month                    int
+	Day                      int
+	StartHour                *int
+	StartMinute              *int
+	EndYear                  *int
+	EndMonth                 *int
+	EndDay                   *int
+	EndHour                  *int
+	EndMinute                *int
+	IsRecurring              bool
+	RecurrenceType           *string
+	RecurrenceInterval       *int
+	RecurrenceEndYear        *int
+	RecurrenceEndMonth       *int
+	RecurrenceEndDay         *int
+	RecurrenceMaxOccurrences *int
+	Visibility               string
+	VisibilityRules          *string
+	Category                 *string
+	Color                    *string
+	Icon                     *string
+	AllDay                   bool
+	CreatedBy                string
 }
 
 // UpdateEventInput is the validated input for updating an event.
 type UpdateEventInput struct {
-	Name            string
-	Description     *string
-	DescriptionHTML *string
-	EntityID        *string
-	Year           int
-	Month          int
-	Day            int
-	StartHour      *int
-	StartMinute    *int
-	EndYear        *int
-	EndMonth       *int
-	EndDay         *int
-	EndHour        *int
-	EndMinute      *int
-	IsRecurring     bool
-	RecurrenceType  *string
-	Visibility      string
-	VisibilityRules *string
-	Category        *string
+	Name                     string
+	Description              *string
+	DescriptionHTML          *string
+	EntityID                 *string
+	Year                     int
+	Month                    int
+	Day                      int
+	StartHour                *int
+	StartMinute              *int
+	EndYear                  *int
+	EndMonth                 *int
+	EndDay                   *int
+	EndHour                  *int
+	EndMinute                *int
+	IsRecurring              bool
+	RecurrenceType           *string
+	RecurrenceInterval       *int
+	RecurrenceEndYear        *int
+	RecurrenceEndMonth       *int
+	RecurrenceEndDay         *int
+	RecurrenceMaxOccurrences *int
+	Visibility               string
+	VisibilityRules          *string
+	Category                 *string
+	Color                    *string
+	Icon                     *string
+	AllDay                   bool
 }
 
 // MonthInput is the input for creating/updating a month.
@@ -487,6 +558,7 @@ type MonthInput struct {
 type WeekdayInput struct {
 	Name      string `json:"name"`
 	SortOrder int    `json:"sort_order"`
+	IsRestDay bool   `json:"is_rest_day"`
 }
 
 // MoonInput is the input for creating/updating a moon.
@@ -526,6 +598,123 @@ type EventCategoryInput struct {
 	Icon      string `json:"icon"`
 	Color     string `json:"color"`
 	SortOrder int    `json:"sort_order"`
+}
+
+// Weather represents the current weather state for a calendar.
+// Set manually by the GM or synced from external tools (Calendaria).
+type Weather struct {
+	ID                     int      `json:"id"`
+	CalendarID             string   `json:"calendar_id"`
+	PresetID               *string  `json:"preset_id,omitempty"`
+	PresetLabel            *string  `json:"preset_label,omitempty"`
+	Icon                   *string  `json:"icon,omitempty"`
+	Color                  *string  `json:"color,omitempty"`
+	TemperatureCelsius     *float64 `json:"temperature_celsius,omitempty"`
+	Wind                   *Wind    `json:"wind,omitempty"`
+	Precipitation          *Precipitation `json:"precipitation,omitempty"`
+	ZoneID                 *string  `json:"zone_id,omitempty"`
+	ZoneName               *string  `json:"zone_name,omitempty"`
+	Description            *string  `json:"description,omitempty"`
+	UpdatedAt              time.Time `json:"updated_at"`
+}
+
+// Wind describes wind speed and direction.
+type Wind struct {
+	SpeedKPH         *float64 `json:"speed_kph,omitempty"`
+	SpeedTier        *string  `json:"speed_tier,omitempty"`
+	Direction        *string  `json:"direction,omitempty"`
+	DirectionDegrees *int     `json:"direction_degrees,omitempty"`
+}
+
+// Precipitation describes the type and intensity of precipitation.
+type Precipitation struct {
+	Type      *string  `json:"type,omitempty"`
+	Intensity *float64 `json:"intensity,omitempty"`
+}
+
+// WeatherInput is the input for setting weather state.
+type WeatherInput struct {
+	PresetID           *string  `json:"preset_id"`
+	PresetLabel        *string  `json:"preset_label"`
+	Icon               *string  `json:"icon"`
+	Color              *string  `json:"color"`
+	TemperatureCelsius *float64 `json:"temperature_celsius"`
+	WindSpeedKPH       *float64 `json:"wind_speed_kph"`
+	WindSpeedTier      *string  `json:"wind_speed_tier"`
+	WindDirection      *string  `json:"wind_direction"`
+	WindDirectionDeg   *int     `json:"wind_direction_degrees"`
+	PrecipitationType  *string  `json:"precipitation_type"`
+	PrecipitationIntensity *float64 `json:"precipitation_intensity"`
+	ZoneID             *string  `json:"zone_id"`
+	ZoneName           *string  `json:"zone_name"`
+	Description        *string  `json:"description"`
+}
+
+// Cycle is a periodic named cycle (zodiac, elemental, seasonal, etc.).
+// Entries rotate based on cycle_length (number of years per full rotation).
+type Cycle struct {
+	ID          int          `json:"id"`
+	CalendarID  string       `json:"calendar_id"`
+	Name        string       `json:"name"`
+	CycleLength int          `json:"cycle_length"`
+	Type        string       `json:"type"` // "yearly", "monthly", etc.
+	SortOrder   int          `json:"sort_order"`
+	Entries     []CycleEntry `json:"entries,omitempty"`
+}
+
+// CycleEntry is a single entry within a cycle.
+type CycleEntry struct {
+	ID         int    `json:"id"`
+	CycleID    int    `json:"cycle_id"`
+	Name       string `json:"name"`
+	Icon       *string `json:"icon,omitempty"`
+	YearOffset int    `json:"year_offset"`
+	SortOrder  int    `json:"sort_order"`
+}
+
+// CycleInput is the input for creating/updating a cycle with its entries.
+type CycleInput struct {
+	Name        string           `json:"name"`
+	CycleLength int              `json:"cycle_length"`
+	Type        string           `json:"type"`
+	SortOrder   int              `json:"sort_order"`
+	Entries     []CycleEntryInput `json:"entries"`
+}
+
+// CycleEntryInput is the input for a single cycle entry.
+type CycleEntryInput struct {
+	Name       string  `json:"name"`
+	Icon       *string `json:"icon"`
+	YearOffset int     `json:"year_offset"`
+	SortOrder  int     `json:"sort_order"`
+}
+
+// Festival is a fixed calendar entry (holiday) that is part of the calendar
+// structure rather than a recurring event. month+day specifies the date;
+// after_month is used for intercalary festivals that fall between months.
+type Festival struct {
+	ID          int     `json:"id"`
+	CalendarID  string  `json:"calendar_id"`
+	Name        string  `json:"name"`
+	Month       *int    `json:"month,omitempty"`
+	Day         *int    `json:"day,omitempty"`
+	AfterMonth  *int    `json:"after_month,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Color       *string `json:"color,omitempty"`
+	Icon        *string `json:"icon,omitempty"`
+	SortOrder   int     `json:"sort_order"`
+}
+
+// FestivalInput is the input for creating/updating a festival.
+type FestivalInput struct {
+	Name        string  `json:"name"`
+	Month       *int    `json:"month"`
+	Day         *int    `json:"day"`
+	AfterMonth  *int    `json:"after_month"`
+	Description *string `json:"description"`
+	Color       *string `json:"color"`
+	Icon        *string `json:"icon"`
+	SortOrder   int     `json:"sort_order"`
 }
 
 // DefaultEventCategories returns the default set of event categories seeded
