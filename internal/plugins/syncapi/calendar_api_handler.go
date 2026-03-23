@@ -67,7 +67,8 @@ func (h *CalendarAPIHandler) GetCalendar(c echo.Context) error {
 	return c.JSON(http.StatusOK, cal)
 }
 
-// GetCurrentDate returns only the current in-game date.
+// GetCurrentDate returns the current in-game date with computed state
+// (current season, moon phases, era, weather).
 // GET /api/v1/campaigns/:id/calendar/date
 func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 	campaignID := c.Param("id")
@@ -78,14 +79,208 @@ func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 		return apperror.NewNotFound("calendar not found")
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{
+	result := map[string]any{
 		"mode":   cal.Mode,
 		"year":   cal.CurrentYear,
 		"month":  cal.CurrentMonth,
 		"day":    cal.CurrentDay,
 		"hour":   cal.CurrentHour,
 		"minute": cal.CurrentMinute,
+	}
+
+	// Computed: current season.
+	if season := cal.CurrentSeason(); season != nil {
+		result["current_season"] = map[string]any{
+			"id":    season.ID,
+			"name":  season.Name,
+			"color": season.Color,
+		}
+	}
+
+	// Computed: current era.
+	if era := cal.CurrentEra(); era != nil {
+		result["current_era"] = map[string]any{
+			"id":         era.ID,
+			"name":       era.Name,
+			"start_year": era.StartYear,
+			"color":      era.Color,
+		}
+	}
+
+	// Computed: current moon phases.
+	if len(cal.Moons) > 0 {
+		absDay := cal.CurrentAbsoluteDay()
+		moonPhases := make([]map[string]any, 0, len(cal.Moons))
+		for i := range cal.Moons {
+			moon := &cal.Moons[i]
+			moonPhases = append(moonPhases, map[string]any{
+				"moon_id":        moon.ID,
+				"moon_name":      moon.Name,
+				"phase_name":     moon.MoonPhaseName(absDay),
+				"phase_position": moon.MoonPhase(absDay),
+				"phase_icon":     moon.MoonPhaseIcon(absDay),
+			})
+		}
+		result["current_moon_phases"] = moonPhases
+	}
+
+	// Computed: current weather.
+	if weather, err := h.calendarSvc.GetWeather(ctx, cal.ID); err == nil && weather != nil {
+		result["current_weather"] = weather
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// --- Sub-resource Read ---
+
+// GetSeasons returns all season definitions.
+// GET /api/v1/campaigns/:id/calendar/seasons
+func (h *CalendarAPIHandler) GetSeasons(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"data": cal.Seasons})
+}
+
+// GetMoons returns all moon definitions.
+// GET /api/v1/campaigns/:id/calendar/moons
+func (h *CalendarAPIHandler) GetMoons(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"data": cal.Moons})
+}
+
+// GetEras returns all era definitions.
+// GET /api/v1/campaigns/:id/calendar/eras
+func (h *CalendarAPIHandler) GetEras(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"data": cal.Eras})
+}
+
+// GetEventCategories returns all event category definitions.
+// GET /api/v1/campaigns/:id/calendar/event-categories
+func (h *CalendarAPIHandler) GetEventCategories(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	cats, err := h.calendarSvc.GetEventCategories(ctx, cal.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("failed to get event categories"))
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"data": cats})
+}
+
+// GetStructure returns the calendar structure (months, weekdays, time system, leap year).
+// GET /api/v1/campaigns/:id/calendar/structure
+func (h *CalendarAPIHandler) GetStructure(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"id":                 cal.ID,
+		"name":               cal.Name,
+		"mode":               cal.Mode,
+		"hours_per_day":      cal.HoursPerDay,
+		"minutes_per_hour":   cal.MinutesPerHour,
+		"seconds_per_minute": cal.SecondsPerMinute,
+		"epoch_name":         cal.EpochName,
+		"months":             cal.Months,
+		"weekdays":           cal.Weekdays,
+		"leap_year": map[string]any{
+			"every":  cal.LeapYearEvery,
+			"offset": cal.LeapYearOffset,
+		},
 	})
+}
+
+// GetWeather returns the current weather state.
+// GET /api/v1/campaigns/:id/calendar/weather
+func (h *CalendarAPIHandler) GetWeather(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	weather, err := h.calendarSvc.GetWeather(ctx, cal.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("failed to get weather"))
+	}
+	if weather == nil {
+		return c.JSON(http.StatusOK, map[string]any{})
+	}
+
+	return c.JSON(http.StatusOK, weather)
+}
+
+// GetCycles returns all cycle definitions.
+// GET /api/v1/campaigns/:id/calendar/cycles
+func (h *CalendarAPIHandler) GetCycles(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	cycles, err := h.calendarSvc.GetCycles(ctx, cal.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("failed to get cycles"))
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"data": cycles})
+}
+
+// GetFestivals returns all festival definitions.
+// GET /api/v1/campaigns/:id/calendar/festivals
+func (h *CalendarAPIHandler) GetFestivals(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	festivals, err := h.calendarSvc.GetFestivals(ctx, cal.ID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("failed to get festivals"))
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"data": festivals})
 }
 
 // --- Events Read ---
@@ -171,24 +366,32 @@ func (h *CalendarAPIHandler) GetEvent(c echo.Context) error {
 
 // apiCreateEventRequest is the JSON body for creating a calendar event via the API.
 type apiCreateEventRequest struct {
-	Name            string  `json:"name"`
-	Description     *string `json:"description"`
-	DescriptionHTML *string `json:"description_html"`
-	EntityID        *string `json:"entity_id"`
-	Year           int     `json:"year"`
-	Month          int     `json:"month"`
-	Day            int     `json:"day"`
-	StartHour      *int    `json:"start_hour"`
-	StartMinute    *int    `json:"start_minute"`
-	EndYear        *int    `json:"end_year"`
-	EndMonth       *int    `json:"end_month"`
-	EndDay         *int    `json:"end_day"`
-	EndHour        *int    `json:"end_hour"`
-	EndMinute      *int    `json:"end_minute"`
-	IsRecurring    bool    `json:"is_recurring"`
-	RecurrenceType *string `json:"recurrence_type"`
-	Visibility     string  `json:"visibility"`
-	Category       *string `json:"category"`
+	Name                     string   `json:"name"`
+	Description              *string  `json:"description"`
+	DescriptionHTML          *string  `json:"description_html"`
+	EntityID                 *string  `json:"entity_id"`
+	Year                     int      `json:"year"`
+	Month                    int      `json:"month"`
+	Day                      int      `json:"day"`
+	StartHour                *int     `json:"start_hour"`
+	StartMinute              *int     `json:"start_minute"`
+	EndYear                  *int     `json:"end_year"`
+	EndMonth                 *int     `json:"end_month"`
+	EndDay                   *int     `json:"end_day"`
+	EndHour                  *int     `json:"end_hour"`
+	EndMinute                *int     `json:"end_minute"`
+	IsRecurring              bool     `json:"is_recurring"`
+	RecurrenceType           *string  `json:"recurrence_type"`
+	RecurrenceInterval       *int     `json:"recurrence_interval"`
+	RecurrenceEndYear        *int     `json:"recurrence_end_year"`
+	RecurrenceEndMonth       *int     `json:"recurrence_end_month"`
+	RecurrenceEndDay         *int     `json:"recurrence_end_day"`
+	RecurrenceMaxOccurrences *int     `json:"recurrence_max_occurrences"`
+	Visibility               string   `json:"visibility"`
+	Category                 *string  `json:"category"`
+	Color                    *string  `json:"color"`
+	Icon                     *string  `json:"icon"`
+	AllDay                   bool     `json:"all_day"`
 }
 
 // CreateEvent creates a new calendar event.
@@ -213,25 +416,33 @@ func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
 	}
 
 	evt, err := h.calendarSvc.CreateEvent(ctx, cal.ID, calendar.CreateEventInput{
-		Name:            req.Name,
-		Description:     req.Description,
-		DescriptionHTML: req.DescriptionHTML,
-		EntityID:        req.EntityID,
-		Year:           req.Year,
-		Month:          req.Month,
-		Day:            req.Day,
-		StartHour:      req.StartHour,
-		StartMinute:    req.StartMinute,
-		EndYear:        req.EndYear,
-		EndMonth:       req.EndMonth,
-		EndDay:         req.EndDay,
-		EndHour:        req.EndHour,
-		EndMinute:      req.EndMinute,
-		IsRecurring:    req.IsRecurring,
-		RecurrenceType: req.RecurrenceType,
-		Visibility:     req.Visibility,
-		Category:       req.Category,
-		CreatedBy:      key.UserID,
+		Name:                     req.Name,
+		Description:              req.Description,
+		DescriptionHTML:          req.DescriptionHTML,
+		EntityID:                 req.EntityID,
+		Year:                     req.Year,
+		Month:                    req.Month,
+		Day:                      req.Day,
+		StartHour:                req.StartHour,
+		StartMinute:              req.StartMinute,
+		EndYear:                  req.EndYear,
+		EndMonth:                 req.EndMonth,
+		EndDay:                   req.EndDay,
+		EndHour:                  req.EndHour,
+		EndMinute:                req.EndMinute,
+		IsRecurring:              req.IsRecurring,
+		RecurrenceType:           req.RecurrenceType,
+		RecurrenceInterval:       req.RecurrenceInterval,
+		RecurrenceEndYear:        req.RecurrenceEndYear,
+		RecurrenceEndMonth:       req.RecurrenceEndMonth,
+		RecurrenceEndDay:         req.RecurrenceEndDay,
+		RecurrenceMaxOccurrences: req.RecurrenceMaxOccurrences,
+		Visibility:               req.Visibility,
+		Category:                 req.Category,
+		Color:                    req.Color,
+		Icon:                     req.Icon,
+		AllDay:                   req.AllDay,
+		CreatedBy:                key.UserID,
 	})
 	if err != nil {
 		return err
@@ -242,24 +453,32 @@ func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
 
 // apiUpdateEventRequest is the JSON body for updating a calendar event.
 type apiUpdateEventRequest struct {
-	Name            string  `json:"name"`
-	Description     *string `json:"description"`
-	DescriptionHTML *string `json:"description_html"`
-	EntityID        *string `json:"entity_id"`
-	Year           int     `json:"year"`
-	Month          int     `json:"month"`
-	Day            int     `json:"day"`
-	StartHour      *int    `json:"start_hour"`
-	StartMinute    *int    `json:"start_minute"`
-	EndYear        *int    `json:"end_year"`
-	EndMonth       *int    `json:"end_month"`
-	EndDay         *int    `json:"end_day"`
-	EndHour        *int    `json:"end_hour"`
-	EndMinute      *int    `json:"end_minute"`
-	IsRecurring    bool    `json:"is_recurring"`
-	RecurrenceType *string `json:"recurrence_type"`
-	Visibility     string  `json:"visibility"`
-	Category       *string `json:"category"`
+	Name                     string   `json:"name"`
+	Description              *string  `json:"description"`
+	DescriptionHTML          *string  `json:"description_html"`
+	EntityID                 *string  `json:"entity_id"`
+	Year                     int      `json:"year"`
+	Month                    int      `json:"month"`
+	Day                      int      `json:"day"`
+	StartHour                *int     `json:"start_hour"`
+	StartMinute              *int     `json:"start_minute"`
+	EndYear                  *int     `json:"end_year"`
+	EndMonth                 *int     `json:"end_month"`
+	EndDay                   *int     `json:"end_day"`
+	EndHour                  *int     `json:"end_hour"`
+	EndMinute                *int     `json:"end_minute"`
+	IsRecurring              bool     `json:"is_recurring"`
+	RecurrenceType           *string  `json:"recurrence_type"`
+	RecurrenceInterval       *int     `json:"recurrence_interval"`
+	RecurrenceEndYear        *int     `json:"recurrence_end_year"`
+	RecurrenceEndMonth       *int     `json:"recurrence_end_month"`
+	RecurrenceEndDay         *int     `json:"recurrence_end_day"`
+	RecurrenceMaxOccurrences *int     `json:"recurrence_max_occurrences"`
+	Visibility               string   `json:"visibility"`
+	Category                 *string  `json:"category"`
+	Color                    *string  `json:"color"`
+	Icon                     *string  `json:"icon"`
+	AllDay                   bool     `json:"all_day"`
 }
 
 // UpdateEvent updates an existing calendar event.
@@ -285,24 +504,32 @@ func (h *CalendarAPIHandler) UpdateEvent(c echo.Context) error {
 	}
 
 	if err := h.calendarSvc.UpdateEvent(ctx, eventID, calendar.UpdateEventInput{
-		Name:            req.Name,
-		Description:     req.Description,
-		DescriptionHTML: req.DescriptionHTML,
-		EntityID:        req.EntityID,
-		Year:           req.Year,
-		Month:          req.Month,
-		Day:            req.Day,
-		StartHour:      req.StartHour,
-		StartMinute:    req.StartMinute,
-		EndYear:        req.EndYear,
-		EndMonth:       req.EndMonth,
-		EndDay:         req.EndDay,
-		EndHour:        req.EndHour,
-		EndMinute:      req.EndMinute,
-		IsRecurring:    req.IsRecurring,
-		RecurrenceType: req.RecurrenceType,
-		Visibility:     req.Visibility,
-		Category:       req.Category,
+		Name:                     req.Name,
+		Description:              req.Description,
+		DescriptionHTML:          req.DescriptionHTML,
+		EntityID:                 req.EntityID,
+		Year:                     req.Year,
+		Month:                    req.Month,
+		Day:                      req.Day,
+		StartHour:                req.StartHour,
+		StartMinute:              req.StartMinute,
+		EndYear:                  req.EndYear,
+		EndMonth:                 req.EndMonth,
+		EndDay:                   req.EndDay,
+		EndHour:                  req.EndHour,
+		EndMinute:                req.EndMinute,
+		IsRecurring:              req.IsRecurring,
+		RecurrenceType:           req.RecurrenceType,
+		RecurrenceInterval:       req.RecurrenceInterval,
+		RecurrenceEndYear:        req.RecurrenceEndYear,
+		RecurrenceEndMonth:       req.RecurrenceEndMonth,
+		RecurrenceEndDay:         req.RecurrenceEndDay,
+		RecurrenceMaxOccurrences: req.RecurrenceMaxOccurrences,
+		Visibility:               req.Visibility,
+		Category:                 req.Category,
+		Color:                    req.Color,
+		Icon:                     req.Icon,
+		AllDay:                   req.AllDay,
 	}); err != nil {
 		return err
 	}
@@ -606,6 +833,123 @@ func (h *CalendarAPIHandler) UpdateEras(c echo.Context) error {
 	}
 
 	if err := h.calendarSvc.SetEras(ctx, cal.ID, eras); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// --- Sub-resource Write ---
+
+// UpdateSeasons replaces all calendar seasons.
+// PUT /api/v1/campaigns/:id/calendar/seasons
+func (h *CalendarAPIHandler) UpdateSeasons(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	var seasons []calendar.Season
+	if err := c.Bind(&seasons); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.calendarSvc.SetSeasons(ctx, cal.ID, seasons); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateEventCategories replaces all event categories.
+// PUT /api/v1/campaigns/:id/calendar/event-categories
+func (h *CalendarAPIHandler) UpdateEventCategories(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	var cats []calendar.EventCategoryInput
+	if err := c.Bind(&cats); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.calendarSvc.SetEventCategories(ctx, cal.ID, cats); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// SetWeather sets the current weather state.
+// PUT /api/v1/campaigns/:id/calendar/weather
+func (h *CalendarAPIHandler) SetWeather(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	var input calendar.WeatherInput
+	if err := c.Bind(&input); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.calendarSvc.SetWeather(ctx, cal.ID, input); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateCycles replaces all calendar cycles.
+// PUT /api/v1/campaigns/:id/calendar/cycles
+func (h *CalendarAPIHandler) UpdateCycles(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	var cycles []calendar.CycleInput
+	if err := c.Bind(&cycles); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.calendarSvc.SetCycles(ctx, cal.ID, cycles); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateFestivals replaces all calendar festivals.
+// PUT /api/v1/campaigns/:id/calendar/festivals
+func (h *CalendarAPIHandler) UpdateFestivals(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	var festivals []calendar.FestivalInput
+	if err := c.Bind(&festivals); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.calendarSvc.SetFestivals(ctx, cal.ID, festivals); err != nil {
 		return err
 	}
 

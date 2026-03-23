@@ -257,6 +257,30 @@ func (m *mockCalendarRepo) UpdateEventVisibility(ctx context.Context, eventID st
 	return nil
 }
 
+func (m *mockCalendarRepo) GetWeather(ctx context.Context, calendarID string) (*Weather, error) {
+	return nil, nil
+}
+
+func (m *mockCalendarRepo) SetWeather(ctx context.Context, calendarID string, input WeatherInput) error {
+	return nil
+}
+
+func (m *mockCalendarRepo) GetCycles(ctx context.Context, calendarID string) ([]Cycle, error) {
+	return nil, nil
+}
+
+func (m *mockCalendarRepo) SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error {
+	return nil
+}
+
+func (m *mockCalendarRepo) GetFestivals(ctx context.Context, calendarID string) ([]Festival, error) {
+	return nil, nil
+}
+
+func (m *mockCalendarRepo) SetFestivals(ctx context.Context, calendarID string, festivals []FestivalInput) error {
+	return nil
+}
+
 // --- Test Helpers ---
 
 func newTestCalendarService(repo *mockCalendarRepo) CalendarService {

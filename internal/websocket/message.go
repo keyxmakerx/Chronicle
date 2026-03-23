@@ -35,10 +35,15 @@ const (
 
 // Calendar sync messages.
 const (
-	MsgCalendarEventCreated MessageType = "calendar.event.created"
-	MsgCalendarEventUpdated MessageType = "calendar.event.updated"
-	MsgCalendarEventDeleted MessageType = "calendar.event.deleted"
-	MsgCalendarDateAdvanced MessageType = "calendar.date.advanced"
+	MsgCalendarEventCreated     MessageType = "calendar.event.created"
+	MsgCalendarEventUpdated     MessageType = "calendar.event.updated"
+	MsgCalendarEventDeleted     MessageType = "calendar.event.deleted"
+	MsgCalendarDateAdvanced     MessageType = "calendar.date.advanced"
+	MsgCalendarSeasonChanged    MessageType = "calendar.season.changed"
+	MsgCalendarMoonPhaseChanged MessageType = "calendar.moon.phase_changed"
+	MsgCalendarWeatherChanged   MessageType = "calendar.weather.changed"
+	MsgCalendarStructureUpdated MessageType = "calendar.structure.updated"
+	MsgCalendarEraChanged       MessageType = "calendar.era.changed"
 )
 
 // Entity type sync messages.
@@ -83,7 +88,12 @@ var validMessageTypes = map[MessageType]struct{}{
 	MsgCalendarEventCreated: {},
 	MsgCalendarEventUpdated: {},
 	MsgCalendarEventDeleted: {},
-	MsgCalendarDateAdvanced: {},
+	MsgCalendarDateAdvanced:     {},
+	MsgCalendarSeasonChanged:    {},
+	MsgCalendarMoonPhaseChanged: {},
+	MsgCalendarWeatherChanged:   {},
+	MsgCalendarStructureUpdated: {},
+	MsgCalendarEraChanged:       {},
 	MsgEntityTypeCreated:    {},
 	MsgEntityTypeUpdated:    {},
 	MsgEntityTypeDeleted:    {},

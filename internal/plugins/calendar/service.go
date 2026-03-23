@@ -42,6 +42,18 @@ type CalendarService interface {
 	SetEventCategories(ctx context.Context, calendarID string, cats []EventCategoryInput) error
 	GetEventCategories(ctx context.Context, calendarID string) ([]EventCategory, error)
 
+	// Weather.
+	GetWeather(ctx context.Context, calendarID string) (*Weather, error)
+	SetWeather(ctx context.Context, calendarID string, input WeatherInput) error
+
+	// Cycles.
+	GetCycles(ctx context.Context, calendarID string) ([]Cycle, error)
+	SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error
+
+	// Festivals.
+	GetFestivals(ctx context.Context, calendarID string) ([]Festival, error)
+	SetFestivals(ctx context.Context, calendarID string, festivals []FestivalInput) error
+
 	// Events.
 	CreateEvent(ctx context.Context, calendarID string, input CreateEventInput) (*Event, error)
 	GetEvent(ctx context.Context, eventID string) (*Event, error)
@@ -318,6 +330,12 @@ func (s *calendarService) eagerLoad(ctx context.Context, cal *Calendar) (*Calend
 	if cal.EventCategories, err = s.repo.GetEventCategories(ctx, cal.ID); err != nil {
 		return nil, fmt.Errorf("get event categories: %w", err)
 	}
+	if cal.Cycles, err = s.repo.GetCycles(ctx, cal.ID); err != nil {
+		return nil, fmt.Errorf("get cycles: %w", err)
+	}
+	if cal.Festivals, err = s.repo.GetFestivals(ctx, cal.ID); err != nil {
+		return nil, fmt.Errorf("get festivals: %w", err)
+	}
 	return cal, nil
 }
 
@@ -450,7 +468,11 @@ func (s *calendarService) SetMonths(ctx context.Context, calendarID string, mont
 			return apperror.NewValidation(fmt.Sprintf("month %q: leap_year_days cannot be negative", m.Name))
 		}
 	}
-	return s.repo.SetMonths(ctx, calendarID, months)
+	if err := s.repo.SetMonths(ctx, calendarID, months); err != nil {
+		return err
+	}
+	s.publishStructureUpdated(ctx, calendarID)
+	return nil
 }
 
 // SetWeekdays replaces all weekdays.
@@ -463,7 +485,11 @@ func (s *calendarService) SetWeekdays(ctx context.Context, calendarID string, we
 			return apperror.NewValidation(fmt.Sprintf("weekday %d: name is required", i+1))
 		}
 	}
-	return s.repo.SetWeekdays(ctx, calendarID, weekdays)
+	if err := s.repo.SetWeekdays(ctx, calendarID, weekdays); err != nil {
+		return err
+	}
+	s.publishStructureUpdated(ctx, calendarID)
+	return nil
 }
 
 // SetMoons replaces all moons.
@@ -476,7 +502,11 @@ func (s *calendarService) SetMoons(ctx context.Context, calendarID string, moons
 			return apperror.NewValidation(fmt.Sprintf("moon %q: cycle_days must be positive", m.Name))
 		}
 	}
-	return s.repo.SetMoons(ctx, calendarID, moons)
+	if err := s.repo.SetMoons(ctx, calendarID, moons); err != nil {
+		return err
+	}
+	s.publishStructureUpdated(ctx, calendarID)
+	return nil
 }
 
 // SetSeasons replaces all seasons.
@@ -486,7 +516,11 @@ func (s *calendarService) SetSeasons(ctx context.Context, calendarID string, sea
 			return apperror.NewValidation(fmt.Sprintf("season %d: name is required", i+1))
 		}
 	}
-	return s.repo.SetSeasons(ctx, calendarID, seasons)
+	if err := s.repo.SetSeasons(ctx, calendarID, seasons); err != nil {
+		return err
+	}
+	s.publishStructureUpdated(ctx, calendarID)
+	return nil
 }
 
 // SetEras replaces all eras. Validates names and year ranges.
@@ -502,7 +536,11 @@ func (s *calendarService) SetEras(ctx context.Context, calendarID string, eras [
 			eras[i].Color = "#6366f1"
 		}
 	}
-	return s.repo.SetEras(ctx, calendarID, eras)
+	if err := s.repo.SetEras(ctx, calendarID, eras); err != nil {
+		return err
+	}
+	s.publishStructureUpdated(ctx, calendarID)
+	return nil
 }
 
 // SetEventCategories replaces all event categories. Validates names and slugs.
@@ -524,6 +562,57 @@ func (s *calendarService) SetEventCategories(ctx context.Context, calendarID str
 // GetEventCategories returns all event categories for a calendar.
 func (s *calendarService) GetEventCategories(ctx context.Context, calendarID string) ([]EventCategory, error) {
 	return s.repo.GetEventCategories(ctx, calendarID)
+}
+
+// GetWeather returns the current weather state for a calendar.
+func (s *calendarService) GetWeather(ctx context.Context, calendarID string) (*Weather, error) {
+	return s.repo.GetWeather(ctx, calendarID)
+}
+
+// SetWeather sets the current weather state for a calendar.
+func (s *calendarService) SetWeather(ctx context.Context, calendarID string, input WeatherInput) error {
+	if err := s.repo.SetWeather(ctx, calendarID, input); err != nil {
+		return fmt.Errorf("set weather: %w", err)
+	}
+	// Publish weather change event.
+	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
+		s.events.PublishCalendarEvent("weather.changed", cal.CampaignID, calendarID, input)
+	}
+	return nil
+}
+
+// GetCycles returns all cycles for a calendar.
+func (s *calendarService) GetCycles(ctx context.Context, calendarID string) ([]Cycle, error) {
+	return s.repo.GetCycles(ctx, calendarID)
+}
+
+// SetCycles replaces all cycles for a calendar.
+func (s *calendarService) SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error {
+	if err := s.repo.SetCycles(ctx, calendarID, cycles); err != nil {
+		return fmt.Errorf("set cycles: %w", err)
+	}
+	// Publish structure updated event.
+	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
+		s.events.PublishCalendarEvent("structure.updated", cal.CampaignID, calendarID, nil)
+	}
+	return nil
+}
+
+// GetFestivals returns all festivals for a calendar.
+func (s *calendarService) GetFestivals(ctx context.Context, calendarID string) ([]Festival, error) {
+	return s.repo.GetFestivals(ctx, calendarID)
+}
+
+// SetFestivals replaces all festivals for a calendar.
+func (s *calendarService) SetFestivals(ctx context.Context, calendarID string, festivals []FestivalInput) error {
+	if err := s.repo.SetFestivals(ctx, calendarID, festivals); err != nil {
+		return fmt.Errorf("set festivals: %w", err)
+	}
+	// Publish structure updated event.
+	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
+		s.events.PublishCalendarEvent("structure.updated", cal.CampaignID, calendarID, nil)
+	}
+	return nil
 }
 
 // CreateEvent creates a new calendar event.
@@ -558,28 +647,36 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID string, in
 	}
 
 	evt := &Event{
-		ID:              generateID(),
-		CalendarID:      calendarID,
-		EntityID:        input.EntityID,
-		Name:            input.Name,
-		Description:     input.Description,
-		DescriptionHTML: descHTML,
-		Year:            input.Year,
-		Month:          input.Month,
-		Day:            input.Day,
-		StartHour:      input.StartHour,
-		StartMinute:    input.StartMinute,
-		EndYear:        input.EndYear,
-		EndMonth:       input.EndMonth,
-		EndDay:         input.EndDay,
-		EndHour:        input.EndHour,
-		EndMinute:      input.EndMinute,
-		IsRecurring:    input.IsRecurring,
-		RecurrenceType: input.RecurrenceType,
-		Visibility:      input.Visibility,
-		VisibilityRules: input.VisibilityRules,
-		Category:        input.Category,
-		CreatedBy:       &input.CreatedBy,
+		ID:                       generateID(),
+		CalendarID:               calendarID,
+		EntityID:                 input.EntityID,
+		Name:                     input.Name,
+		Description:              input.Description,
+		DescriptionHTML:          descHTML,
+		Year:                     input.Year,
+		Month:                    input.Month,
+		Day:                      input.Day,
+		StartHour:                input.StartHour,
+		StartMinute:              input.StartMinute,
+		EndYear:                  input.EndYear,
+		EndMonth:                 input.EndMonth,
+		EndDay:                   input.EndDay,
+		EndHour:                  input.EndHour,
+		EndMinute:                input.EndMinute,
+		IsRecurring:              input.IsRecurring,
+		RecurrenceType:           input.RecurrenceType,
+		RecurrenceInterval:       input.RecurrenceInterval,
+		RecurrenceEndYear:        input.RecurrenceEndYear,
+		RecurrenceEndMonth:       input.RecurrenceEndMonth,
+		RecurrenceEndDay:         input.RecurrenceEndDay,
+		RecurrenceMaxOccurrences: input.RecurrenceMaxOccurrences,
+		Visibility:               input.Visibility,
+		VisibilityRules:          input.VisibilityRules,
+		Category:                 input.Category,
+		Color:                    input.Color,
+		Icon:                     input.Icon,
+		AllDay:                   input.AllDay,
+		CreatedBy:                &input.CreatedBy,
 	}
 
 	if err := s.repo.CreateEvent(ctx, evt); err != nil {
@@ -647,9 +744,17 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 	evt.EndMinute = input.EndMinute
 	evt.IsRecurring = input.IsRecurring
 	evt.RecurrenceType = input.RecurrenceType
+	evt.RecurrenceInterval = input.RecurrenceInterval
+	evt.RecurrenceEndYear = input.RecurrenceEndYear
+	evt.RecurrenceEndMonth = input.RecurrenceEndMonth
+	evt.RecurrenceEndDay = input.RecurrenceEndDay
+	evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences
 	evt.Visibility = input.Visibility
 	evt.VisibilityRules = input.VisibilityRules
 	evt.Category = input.Category
+	evt.Color = input.Color
+	evt.Icon = input.Icon
+	evt.AllDay = input.AllDay
 
 	if err := s.repo.UpdateEvent(ctx, evt); err != nil {
 		return err
@@ -774,6 +879,9 @@ func (s *calendarService) AdvanceDate(ctx context.Context, calendarID string, da
 	// Attach months to calendar for leap year calculations.
 	cal.Months = months
 
+	// Snapshot before state for change detection.
+	beforeSeason, beforeEra, beforeMoonPhases := s.snapshotState(ctx, cal)
+
 	day := cal.CurrentDay
 	monthIdx := cal.CurrentMonth - 1 // 0-indexed
 	year := cal.CurrentYear
@@ -802,6 +910,8 @@ func (s *calendarService) AdvanceDate(ctx context.Context, calendarID string, da
 		"month": cal.CurrentMonth,
 		"day":   cal.CurrentDay,
 	})
+	// Detect and publish state changes.
+	s.publishStateChanges(ctx, cal, beforeSeason, beforeEra, beforeMoonPhases)
 	return nil
 }
 
@@ -905,6 +1015,13 @@ func (s *calendarService) SetDate(ctx context.Context, calendarID string, year, 
 		return apperror.NewValidation("minute out of range for this calendar")
 	}
 
+	// Eager-load sub-resources for change detection.
+	months, _ := s.repo.GetMonths(ctx, calendarID)
+	cal.Months = months
+
+	// Snapshot before state for change detection.
+	beforeSeason, beforeEra, beforeMoonPhases := s.snapshotState(ctx, cal)
+
 	cal.CurrentYear = year
 	cal.CurrentMonth = month
 	cal.CurrentDay = day
@@ -922,6 +1039,8 @@ func (s *calendarService) SetDate(ctx context.Context, calendarID string, year, 
 		"hour":   cal.CurrentHour,
 		"minute": cal.CurrentMinute,
 	})
+	// Detect and publish state changes.
+	s.publishStateChanges(ctx, cal, beforeSeason, beforeEra, beforeMoonPhases)
 	return nil
 }
 
@@ -1102,4 +1221,85 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 		}
 	}
 	return results, nil
+}
+
+// publishStructureUpdated fires a structure.updated WS event.
+func (s *calendarService) publishStructureUpdated(ctx context.Context, calendarID string) {
+	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
+		s.events.PublishCalendarEvent("structure.updated", cal.CampaignID, calendarID, nil)
+	}
+}
+
+// snapshotState captures the current season, era, and moon phase names before a date change.
+// Used for change detection to publish WS events.
+func (s *calendarService) snapshotState(ctx context.Context, cal *Calendar) (string, string, map[int]string) {
+	// Load seasons/eras/moons if not already loaded.
+	if cal.Seasons == nil {
+		cal.Seasons, _ = s.repo.GetSeasons(ctx, cal.ID)
+	}
+	if cal.Eras == nil {
+		cal.Eras, _ = s.repo.GetEras(ctx, cal.ID)
+	}
+	if cal.Moons == nil {
+		cal.Moons, _ = s.repo.GetMoons(ctx, cal.ID)
+	}
+
+	var seasonName, eraName string
+	if season := cal.CurrentSeason(); season != nil {
+		seasonName = season.Name
+	}
+	if era := cal.CurrentEra(); era != nil {
+		eraName = era.Name
+	}
+
+	absDay := cal.CurrentAbsoluteDay()
+	moonPhases := make(map[int]string, len(cal.Moons))
+	for i := range cal.Moons {
+		moonPhases[cal.Moons[i].ID] = cal.Moons[i].MoonPhaseName(absDay)
+	}
+
+	return seasonName, eraName, moonPhases
+}
+
+// publishStateChanges compares before/after state and publishes WS events for changes.
+func (s *calendarService) publishStateChanges(ctx context.Context, cal *Calendar, beforeSeason, beforeEra string, beforeMoonPhases map[int]string) {
+	// Season change detection.
+	if afterSeason := cal.CurrentSeason(); afterSeason != nil {
+		if afterSeason.Name != beforeSeason {
+			s.events.PublishCalendarEvent("season.changed", cal.CampaignID, cal.ID, map[string]any{
+				"id":    afterSeason.ID,
+				"name":  afterSeason.Name,
+				"color": afterSeason.Color,
+			})
+		}
+	} else if beforeSeason != "" {
+		// Left a season without entering a new one.
+		s.events.PublishCalendarEvent("season.changed", cal.CampaignID, cal.ID, nil)
+	}
+
+	// Era change detection.
+	if afterEra := cal.CurrentEra(); afterEra != nil {
+		if afterEra.Name != beforeEra {
+			s.events.PublishCalendarEvent("era.changed", cal.CampaignID, cal.ID, map[string]any{
+				"id":           afterEra.ID,
+				"name":         afterEra.Name,
+				"color":        afterEra.Color,
+			})
+		}
+	}
+
+	// Moon phase change detection.
+	absDay := cal.CurrentAbsoluteDay()
+	for i := range cal.Moons {
+		moon := &cal.Moons[i]
+		afterPhase := moon.MoonPhaseName(absDay)
+		if afterPhase != beforeMoonPhases[moon.ID] {
+			s.events.PublishCalendarEvent("moon.phase_changed", cal.CampaignID, cal.ID, map[string]any{
+				"moon_id":        moon.ID,
+				"moon_name":      moon.Name,
+				"phase_name":     afterPhase,
+				"phase_position": moon.MoonPhase(absDay),
+			})
+		}
+	}
 }

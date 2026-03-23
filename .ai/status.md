@@ -8,7 +8,21 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-20 -- **Layout Presets + Security Hardening.**
+2026-03-23 -- **Calendar Calendaria Feature Parity.**
+
+60. **Calendar Calendaria Feature Parity.**
+    - **New Sync API Read Endpoints** — Added `GET /calendar/seasons`, `/moons`, `/eras`, `/event-categories`, `/structure`, `/weather`, `/cycles`, `/festivals` to syncapi. Each returns sub-resource data for external tools (Foundry VTT Calendaria module).
+    - **Enhanced Date Response** — `GET /calendar/date` now returns computed `current_season`, `current_moon_phases` (with phase name, position, icon per moon), `current_era`, and `current_weather` alongside year/month/day/hour/minute.
+    - **New Sync API Write Endpoints** — Added `PUT /calendar/seasons`, `/event-categories`, `/weather`, `/cycles`, `/festivals`. All use bulk replace pattern consistent with existing months/weekdays/moons/eras endpoints.
+    - **Event Extended Fields** — Migration 002 adds `color`, `icon`, `all_day`, `recurrence_interval`, `recurrence_end_year/month/day`, `recurrence_max_occurrences` to `calendar_events`. Enables full round-trip of Calendaria note metadata.
+    - **Weekday Rest Days** — Migration 002 adds `is_rest_day` to `calendar_weekdays`. Supports Calendaria rest day designation.
+    - **Weather System** — New `calendar_weather` table (migration 003). One row per calendar with preset, temperature, wind, precipitation, zone, description. UPSERT pattern. GET/PUT via sync API. Publishes `calendar.weather.changed` WS message.
+    - **Cycles** — New `calendar_cycles` + `calendar_cycle_entries` tables (migration 003). Zodiac/elemental cycle support with named entries. Bulk replace in transaction. GET/PUT via sync API.
+    - **Festivals** — New `calendar_festivals` table (migration 003). Fixed calendar entries (holidays as structure, not events). month+day or after_month for intercalary festivals. GET/PUT via sync API.
+    - **5 New WebSocket Message Types** — `calendar.season.changed`, `calendar.moon.phase_changed`, `calendar.weather.changed`, `calendar.structure.updated`, `calendar.era.changed`. Season/moon/era changes auto-detected on date advance/set.
+    - **Change Detection** — `AdvanceDate()` and `SetDate()` snapshot season/era/moon state before, compare after, publish WS events on change. Structure mutation methods (SetMonths, SetWeekdays, etc.) publish `structure.updated`.
+    - **Export/Import v2** — Export format updated to include cycles, festivals, weather, new event fields, weekday `is_rest_day`. Backward compatible (new fields optional on import).
+    - All unit tests pass, build succeeds.
 
 59. **Layout Presets + Security Hardening + Debug Improvements.**
     - **Layout Presets (NEW)** — Reusable page layout configurations that can be applied to any entity type. Migration 000017 creates `layout_presets` table. Full CRUD API: `GET/POST/PUT/DELETE /campaigns/:id/layout-presets`. 4 built-in presets seeded on campaign creation (Standard, Wide Content, Sidebar Left, Compact Profile). Built-in presets cannot be edited/deleted (403). Campaign-scoped with IDOR protection.
