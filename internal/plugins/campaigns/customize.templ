@@ -1,17 +1,13 @@
 // customize.templ renders the Campaign Customization Hub -- a centralized page
-// for campaign owners to control dashboards, categories, page templates,
-// sidebar navigation, and visual appearance.
+// for campaign owners to control all campaign customization in one place.
 //
 // Tabs:
-//   1. Dashboard        — Campaign dashboard layout editor (drag-and-drop blocks).
-//   2. Categories       — Per-category settings: identity, attributes, and category
-//                         dashboard. Content lazy-loaded via HTMX from the entities
-//                         plugin (one fragment per selected category).
-//   3. Page Templates   — Per-category page template editor (template-editor widget,
-//                         lazy-loaded via HTMX).
-//   4. Navigation       — Sidebar ordering/visibility + custom sections & links.
-//   5. Content Templates — Manage content templates for entity creation.
-//   6. Appearance       — Branding, topbar, accent color, and backdrop customization.
+//   1. Layouts          — Unified Layout Studio: campaign dashboards, page templates,
+//                         and category management in a two-panel interface with
+//                         sidebar navigation and dynamic editor mounting.
+//   2. Navigation       — Sidebar ordering/visibility + custom sections & links.
+//   3. Content Templates — Manage content templates for entity creation.
+//   4. Appearance       — Branding, topbar, accent color, and backdrop customization.
 //
 // Features/addons are managed on the dedicated Plugin Hub page (/campaigns/:id/plugins).
 //
@@ -28,7 +24,7 @@ import (
 // CustomizePage renders the Campaign Customization Hub with tabbed interface.
 templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
 	@layouts.App(cc.Campaign.Name + " - Customize") {
-		<div class="h-full flex flex-col -mx-5 -my-4" x-data="{ tab: 'dashboard' }">
+		<div class="h-full flex flex-col -mx-5 -my-4" x-data="{ tab: 'layouts' }">
 			<!-- Header -->
 			<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
 				<div class="flex items-center gap-3">
@@ -43,7 +39,7 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 					</a>
 					<div>
 						<h1 class="text-base font-semibold text-fg">Campaign Customization</h1>
-						<p class="text-[11px] text-fg-secondary">Dashboards, categories, templates, navigation, and appearance</p>
+						<p class="text-[11px] text-fg-secondary">Layouts, navigation, templates, and appearance</p>
 					</div>
 				</div>
 			</div>
@@ -52,24 +48,10 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 			<div class="bg-surface border-b border-edge px-6 flex gap-0 shrink-0 overflow-x-auto">
 				<button
 					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-					:class="tab === 'dashboard' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
-					@click="tab = 'dashboard'"
+					:class="tab === 'layouts' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
+					@click="tab = 'layouts'"
 				>
-					<i class="fa-solid fa-grip mr-1.5 text-xs"></i> Dashboard
-				</button>
-				<button
-					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-					:class="tab === 'categories' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
-					@click="tab = 'categories'"
-				>
-					<i class="fa-solid fa-folder-open mr-1.5 text-xs"></i> Categories
-				</button>
-				<button
-					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-					:class="tab === 'page-templates' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'"
-					@click="tab = 'page-templates'"
-				>
-					<i class="fa-solid fa-layer-group mr-1.5 text-xs"></i> Page Templates
+					<i class="fa-solid fa-grip mr-1.5 text-xs"></i> Layouts
 				</button>
 				<button
 					class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
@@ -92,25 +74,13 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 				>
 					<i class="fa-solid fa-palette mr-1.5 text-xs"></i> Appearance
 				</button>
-				</div>
+			</div>
 
 			<!-- Tab content -->
 			<div class="flex-1 overflow-hidden">
-				<!-- Dashboard tab: campaign dashboard layout editor (full-page) -->
-				<div x-show="tab === 'dashboard'" x-cloak class="h-full overflow-hidden">
-					@dashboardEditorTab(cc, csrfToken)
-				</div>
-
-				<!-- Categories tab: per-category config (identity + dashboard, 2-column) -->
-				<div x-show="tab === 'categories'" x-cloak class="h-full overflow-y-auto">
-					<div class="px-6 py-4">
-						@categoriesTab(cc, entityTypes, csrfToken)
-					</div>
-				</div>
-
-				<!-- Page Templates tab: per-category template editor, lazy-loaded via HTMX -->
-				<div x-show="tab === 'page-templates'" x-cloak class="h-full overflow-hidden">
-					@pageTemplatesTab(cc, entityTypes, csrfToken)
+				<!-- Layout Studio: unified dashboard + page template + category editor -->
+				<div x-show="tab === 'layouts'" x-cloak class="h-full overflow-hidden">
+					@layoutStudioTab(cc, entityTypes, csrfToken)
 				</div>
 
 				<!-- Navigation tab: sidebar ordering, visibility, custom sections/links -->
@@ -133,10 +103,22 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 						@appearanceTab(cc, csrfToken)
 					</div>
 				</div>
-
-				</div>
+			</div>
 		</div>
 	}
+}
+
+// layoutStudioTab renders the unified Layout Studio: a two-panel interface
+// combining campaign dashboards, page templates, and category management.
+// Left panel has sidebar navigation; right panel dynamically mounts editors.
+templ layoutStudioTab(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
+	<div
+		class="h-full"
+		data-widget="layout-studio"
+		data-campaign-id={ cc.Campaign.ID }
+		data-csrf-token={ csrfToken }
+		data-entity-types={ entityTypesJSON(entityTypes) }
+	></div>
 }
 
 // dashboardEditorTab renders the campaign dashboard layout editor with a
