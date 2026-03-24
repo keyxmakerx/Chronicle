@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
@@ -1039,6 +1040,10 @@ func (a *App) RegisterRoutes() {
 	settingsService := settings.NewSettingsService(settingsRepo)
 	settingsHandler := settings.NewHandler(settingsService)
 	settings.RegisterRoutes(adminGroup, settingsHandler)
+
+	// Design Lab: admin-only component showcase for previewing UI variants.
+	designLabHandler := designlab.NewHandler()
+	designlab.RegisterRoutes(adminGroup, designLabHandler)
 
 	// Wire settings service into admin handler for the combined storage page.
 	adminHandler.SetSettingsDeps(settingsService)
