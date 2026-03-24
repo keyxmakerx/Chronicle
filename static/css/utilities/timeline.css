@@ -1,0 +1,610 @@
+@layer utilities {
+  /* --- Timeline Visualization Widget --- */
+
+  .timeline-viz-container {
+    @apply overflow-hidden sm:rounded-xl;
+    background: var(--color-surface, #1a1b26);
+    border: 1px solid var(--color-edge, #2a2b3d);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+  /* On mobile, let the viz bleed to screen edges. */
+  @media (max-width: 639px) {
+    .timeline-viz-container {
+      margin-left: -0.5rem;
+      margin-right: -0.5rem;
+      border-left: none;
+      border-right: none;
+      border-radius: 0;
+    }
+  }
+
+  .timeline-viz-toolbar {
+    @apply flex items-center justify-between px-4 py-2.5 border-b gap-3;
+    border-color: var(--color-edge, #2a2b3d);
+    background: var(--color-surface-alt, #24253a);
+  }
+
+  .timeline-viz-toolbar-left,
+  .timeline-viz-toolbar-center,
+  .timeline-viz-toolbar-right {
+    @apply flex items-center gap-2;
+  }
+
+  .timeline-viz-toolbar-center {
+    @apply flex-1 justify-center;
+  }
+
+  .timeline-viz-toolbar-divider {
+    @apply w-px h-5 mx-1;
+    background: var(--color-edge, #2a2b3d);
+  }
+
+  .timeline-viz-btn {
+    @apply w-8 h-8 flex items-center justify-center rounded-md text-xs transition-all;
+    color: var(--color-fg-secondary, #a9b1d6);
+    background: var(--color-surface, #1a1b26);
+    border: 1px solid var(--color-edge, #2a2b3d);
+  }
+  .timeline-viz-btn:hover {
+    color: var(--color-fg, #c0caf5);
+    background: var(--color-surface-alt, #24253a);
+    transform: scale(1.05);
+  }
+
+  .timeline-viz-zoom-label {
+    @apply text-xs font-semibold px-2.5 py-0.5 rounded-full;
+    background: var(--color-accent, #6366f1);
+    color: white;
+    opacity: 0.85;
+  }
+
+  /* Segmented zoom level button group */
+  .timeline-viz-zoom-buttons {
+    @apply flex items-center rounded-md overflow-hidden ml-2;
+    border: 1px solid var(--color-edge, #2a2b3d);
+  }
+  .timeline-viz-zoom-btn {
+    @apply text-xs font-medium px-2.5 py-1 transition-all;
+    color: var(--color-fg-muted, #565f89);
+    background: var(--color-surface, #1a1b26);
+    border: none;
+    border-right: 1px solid var(--color-edge, #2a2b3d);
+    cursor: pointer;
+    line-height: 1;
+  }
+  .timeline-viz-zoom-btn:last-child {
+    border-right: none;
+  }
+  .timeline-viz-zoom-btn:hover {
+    color: var(--color-fg, #c0caf5);
+    background: var(--color-surface-alt, #24253a);
+  }
+  .timeline-viz-zoom-btn.active {
+    color: white;
+    background: var(--color-accent, #6366f1);
+  }
+
+  .timeline-viz-skip-label {
+    @apply text-xs;
+    color: var(--color-fg-muted, #565f89);
+  }
+
+  .timeline-viz-skip-input {
+    @apply w-20 h-8 text-xs rounded-md px-2;
+    background: var(--color-surface, #1a1b26);
+    border: 1px solid var(--color-edge, #2a2b3d);
+    color: var(--color-fg, #c0caf5);
+  }
+
+  .timeline-viz-search-wrap {
+    @apply relative flex items-center;
+  }
+
+  .timeline-viz-search-icon {
+    @apply absolute left-2.5 text-xs;
+    color: var(--color-fg-muted, #565f89);
+    pointer-events: none;
+  }
+
+  .timeline-viz-search-input {
+    @apply w-56 h-8 text-xs rounded-md pl-8 pr-7;
+    background: var(--color-surface, #1a1b26);
+    border: 1px solid var(--color-edge, #2a2b3d);
+    color: var(--color-fg, #c0caf5);
+  }
+  .timeline-viz-search-input::placeholder {
+    color: var(--color-fg-muted, #565f89);
+  }
+  .timeline-viz-search-input:focus {
+    outline: none;
+    border-color: var(--color-accent, #6366f1);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+  }
+
+  .timeline-viz-search-clear {
+    @apply absolute right-1.5 w-5 h-5 flex items-center justify-center rounded text-xs;
+    color: var(--color-fg-muted, #565f89);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+  }
+  .timeline-viz-search-clear:hover {
+    color: var(--color-fg, #c0caf5);
+  }
+
+  .timeline-viz-svg-wrap {
+    @apply w-full overflow-hidden;
+    min-height: 200px;
+  }
+
+  .timeline-viz-svg {
+    display: block;
+  }
+
+  .timeline-viz-svg .timeline-axis text {
+    fill: var(--color-fg-secondary, #a9b1d6);
+    font-size: 12px;
+  }
+  .timeline-viz-svg .timeline-axis line,
+  .timeline-viz-svg .timeline-axis path {
+    stroke: var(--color-edge, #2a2b3d);
+    stroke-width: 1.5;
+  }
+
+  .timeline-viz-svg .timeline-event-label {
+    fill: var(--color-fg, #c0caf5);
+    font-size: 11px;
+    font-weight: 600;
+    pointer-events: none;
+  }
+
+  .timeline-viz-svg .timeline-event-date {
+    fill: var(--color-fg-muted, #565f89);
+    font-size: 10px;
+    pointer-events: none;
+    font-family: ui-monospace, monospace;
+  }
+
+  .timeline-viz-svg .timeline-event-entity {
+    fill: var(--color-fg-secondary, #a9b1d6);
+    font-size: 10px;
+    font-style: italic;
+    pointer-events: none;
+  }
+
+  .timeline-viz-svg .timeline-lane-label {
+    fill: var(--color-fg-muted, #565f89);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .timeline-viz-tooltip {
+    position: fixed;
+    z-index: 9999;
+    max-width: 320px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    pointer-events: none;
+    background: var(--color-surface-alt, #24253a);
+    border: 1px solid var(--color-edge, #2a2b3d);
+    color: var(--color-fg, #c0caf5);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .timeline-viz-tooltip.visible {
+    opacity: 1;
+  }
+
+  .timeline-viz-tooltip-cat {
+    @apply inline-block text-xs px-2 py-0.5 rounded-full mt-1;
+    background: var(--color-surface, #1a1b26);
+    color: var(--color-fg-secondary, #a9b1d6);
+    border: 1px solid var(--color-edge, #2a2b3d);
+  }
+
+  .timeline-viz-empty {
+    @apply flex flex-col items-center justify-center text-center py-16;
+    color: var(--color-fg-secondary, #a9b1d6);
+    font-size: 14px;
+    position: relative;
+  }
+  .timeline-viz-empty-line {
+    width: 200px;
+    height: 2px;
+    margin-bottom: 20px;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--color-edge, #2a2b3d) 0px,
+      var(--color-edge, #2a2b3d) 6px,
+      transparent 6px,
+      transparent 12px
+    );
+    animation: timeline-empty-pulse 2s ease-in-out infinite;
+    border-radius: 1px;
+  }
+  @keyframes timeline-empty-pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.8; }
+  }
+
+  /* D3 card markers (day zoom) */
+  .tl-viz-card {
+    background: var(--color-surface-alt, #24253a);
+    border: 1px solid var(--color-edge, #2a2b3d);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--color-fg, #c0caf5);
+    pointer-events: all;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: border-color 150ms, box-shadow 150ms;
+    max-width: 200px;
+    overflow: hidden;
+  }
+  .tl-viz-card:hover {
+    border-color: var(--color-accent, #6366f1);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  }
+  .tl-viz-card-name {
+    font-weight: 600;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+  }
+  .tl-viz-card-date {
+    font-size: 10px;
+    color: var(--color-fg-muted, #565f89);
+    font-family: ui-monospace, monospace;
+    margin-top: 1px;
+  }
+  .tl-viz-card-entity {
+    font-size: 10px;
+    color: var(--color-fg-secondary, #a9b1d6);
+    font-style: italic;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tl-viz-card-entity-icon {
+    font-size: 9px;
+    margin-right: 2px;
+  }
+  .tl-viz-card-cat {
+    @apply inline-block text-xs px-1.5 py-0 rounded-full mt-1;
+    font-size: 9px;
+    background: var(--color-surface, #1a1b26);
+    color: var(--color-fg-muted, #565f89);
+    border: 1px solid var(--color-edge, #2a2b3d);
+  }
+  .tl-viz-card-color-bar {
+    width: 3px;
+    border-radius: 2px;
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+  }
+
+  /* Map marker cluster icons */
+  .chronicle-cluster { background: none !important; border: none !important; }
+  .chronicle-cluster-icon {
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(59, 130, 246, 0.85);
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    transition: transform 150ms ease;
+  }
+  .chronicle-cluster-icon:hover {
+    transform: scale(1.15);
+  }
+
+  /* Event connection lines */
+  .timeline-connection-line {
+    transition: stroke-opacity 150ms ease;
+  }
+  .timeline-connection-line:hover {
+    stroke-opacity: 1 !important;
+    stroke-width: 2.5;
+  }
+  .timeline-connection-label {
+    pointer-events: none;
+  }
+
+  /* Event marker hover effects */
+  .timeline-event .timeline-event-dot {
+    transition: r 150ms ease, filter 150ms ease;
+  }
+  .timeline-event:hover .timeline-event-dot {
+    filter: brightness(1.3) drop-shadow(0 0 4px currentColor);
+  }
+
+  /* Ruler label styling */
+  .ruler-label-primary {
+    fill: var(--color-fg-secondary, #a9b1d6);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: ui-monospace, monospace;
+    letter-spacing: 0.02em;
+  }
+
+  /* Event list cards */
+  .tl-event-card {
+    @apply flex gap-3 p-3 rounded-lg border transition-all;
+    background: var(--color-surface, #1a1b26);
+    border-color: var(--color-edge, #2a2b3d);
+  }
+  .tl-event-card:hover {
+    background: var(--color-surface-alt, #24253a);
+    border-color: rgba(99, 102, 241, 0.3);
+  }
+
+  /* Admin manage section */
+  .tl-manage-section {
+    @apply mt-6 rounded-xl border overflow-hidden;
+    background: var(--color-surface, #1a1b26);
+    border-color: var(--color-edge, #2a2b3d);
+  }
+  .tl-manage-header {
+    @apply flex items-center gap-2 px-4 py-3 text-sm font-medium border-b cursor-pointer transition-colors;
+    background: var(--color-surface-alt, #24253a);
+    border-color: var(--color-edge, #2a2b3d);
+    color: var(--color-fg-secondary, #a9b1d6);
+  }
+  .tl-manage-header:hover {
+    color: var(--color-fg, #c0caf5);
+  }
+  .tl-manage-tab {
+    @apply px-4 py-2 text-xs font-medium transition-colors cursor-pointer;
+    color: var(--color-fg-muted, #565f89);
+    border-bottom: 2px solid transparent;
+  }
+  .tl-manage-tab:hover {
+    color: var(--color-fg-secondary, #a9b1d6);
+  }
+  .tl-manage-tab.active {
+    color: var(--color-accent, #6366f1);
+    border-bottom-color: var(--color-accent, #6366f1);
+  }
+
+  /* Loading skeleton for timeline viz */
+  .timeline-viz-skeleton {
+    @apply flex flex-col items-center justify-center gap-4 py-12;
+    min-height: 200px;
+  }
+  .timeline-viz-skeleton-bar {
+    height: 2px;
+    border-radius: 1px;
+    background: var(--color-edge, #2a2b3d);
+    animation: tl-skeleton-pulse 1.5s ease-in-out infinite;
+  }
+  .timeline-viz-skeleton-dots {
+    @apply flex items-center justify-center gap-6;
+  }
+  .timeline-viz-skeleton-dots span {
+    @apply block w-3 h-3 rounded-full;
+    background: var(--color-edge, #2a2b3d);
+    animation: tl-skeleton-pulse 1.5s ease-in-out infinite;
+  }
+  .timeline-viz-skeleton-dots span:nth-child(2) { animation-delay: 0.15s; }
+  .timeline-viz-skeleton-dots span:nth-child(3) { animation-delay: 0.3s; }
+  .timeline-viz-skeleton-dots span:nth-child(4) { animation-delay: 0.45s; }
+  .timeline-viz-skeleton-dots span:nth-child(5) { animation-delay: 0.6s; }
+  @keyframes tl-skeleton-pulse {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.6; }
+  }
+
+  /* Event detail panel (floating, shown on click) */
+  .timeline-viz-detail {
+    position: fixed;
+    z-index: 10000;
+    width: 320px;
+    max-height: 80vh;
+    overflow-y: auto;
+    border-radius: 12px;
+    background: var(--color-surface-alt, #24253a);
+    border: 1px solid var(--color-edge, #2a2b3d);
+    color: var(--color-fg, #c0caf5);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(12px);
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+    transition: opacity 200ms ease, transform 200ms ease;
+    pointer-events: none;
+  }
+  .timeline-viz-detail.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+  }
+  .timeline-viz-detail-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    @apply w-7 h-7 flex items-center justify-center rounded-md text-xs;
+    color: var(--color-fg-muted, #565f89);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    z-index: 1;
+  }
+  .timeline-viz-detail-close:hover {
+    color: var(--color-fg, #c0caf5);
+    background: var(--color-surface, #1a1b26);
+  }
+  .timeline-viz-detail-body {
+    padding: 16px;
+  }
+  .timeline-viz-detail-color {
+    width: 100%;
+    height: 3px;
+    border-radius: 12px 12px 0 0;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  .timeline-viz-detail-name {
+    font-size: 15px;
+    font-weight: 700;
+    margin-top: 4px;
+    margin-bottom: 6px;
+    padding-right: 24px;
+    line-height: 1.3;
+  }
+  .timeline-viz-detail-date {
+    font-size: 12px;
+    font-family: ui-monospace, monospace;
+    color: var(--color-fg-muted, #565f89);
+    margin-bottom: 8px;
+  }
+  .timeline-viz-detail-entity {
+    @apply flex items-center gap-1.5 text-xs mb-2;
+    color: var(--color-fg-secondary, #a9b1d6);
+  }
+  .timeline-viz-detail-cat {
+    @apply inline-block text-xs px-2.5 py-0.5 rounded-full mb-3;
+    background: var(--color-surface, #1a1b26);
+    color: var(--color-fg-secondary, #a9b1d6);
+    border: 1px solid var(--color-edge, #2a2b3d);
+  }
+  .timeline-viz-detail-desc {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--color-fg-secondary, #a9b1d6);
+    border-top: 1px solid var(--color-edge, #2a2b3d);
+    padding-top: 10px;
+    margin-top: 4px;
+    white-space: pre-line;
+  }
+  .timeline-viz-detail-source {
+    @apply flex items-center gap-1.5 text-xs mt-3 pt-3;
+    color: var(--color-fg-muted, #565f89);
+    border-top: 1px solid var(--color-edge, #2a2b3d);
+  }
+
+  /* Unified viz + event list tabbed view */
+  .tl-view-tabs {
+    @apply flex border-b;
+    border-color: var(--color-edge, #2a2b3d);
+    background: var(--color-surface-alt, #24253a);
+    border-radius: 12px 12px 0 0;
+  }
+  .tl-view-tab {
+    @apply flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium transition-colors cursor-pointer;
+    color: var(--color-fg-muted, #565f89);
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+  }
+  .tl-view-tab:hover {
+    color: var(--color-fg-secondary, #a9b1d6);
+  }
+  .tl-view-tab.active {
+    color: var(--color-accent, #6366f1);
+    border-bottom-color: var(--color-accent, #6366f1);
+  }
+  .tl-view-tab-count {
+    @apply text-xs px-1.5 py-0 rounded-full;
+    background: var(--color-surface, #1a1b26);
+    color: var(--color-fg-muted, #565f89);
+    font-size: 10px;
+  }
+
+  /* ---- Timeline Visual Enrichment (Phase 2) ---- */
+
+  /* Central ruler line ("spine" of the timeline) */
+  .timeline-viz-svg .timeline-ruler-line {
+    stroke: var(--color-edge, #2a2b3d);
+    stroke-width: 2.5;
+    opacity: 0.8;
+  }
+
+  /* Ruler tick labels */
+  .timeline-viz-svg .ruler-label-primary {
+    fill: var(--color-fg-secondary, #a9b1d6);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+
+  /* Era top-bar strips */
+  .timeline-viz-svg .timeline-era-band {
+    pointer-events: none;
+    transition: opacity 150ms;
+  }
+  .timeline-viz-svg .timeline-era-label {
+    pointer-events: none;
+    user-select: none;
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+    letter-spacing: 0.02em;
+  }
+
+  /* Range event bars (horizontal bars for multi-day events) */
+  .timeline-viz-svg .timeline-event-range-bar {
+    pointer-events: none;
+    transition: opacity 150ms;
+  }
+  .timeline-event:hover .timeline-event-range-bar {
+    opacity: 0.5;
+  }
+
+  /* Cluster badges */
+  .timeline-viz-svg .timeline-cluster-badge {
+    cursor: pointer;
+    transition: stroke-width 150ms;
+  }
+  .timeline-event:hover .timeline-cluster-badge {
+    stroke-width: 2;
+  }
+  .timeline-viz-svg .timeline-cluster-label {
+    pointer-events: none;
+  }
+
+  /* Category icons (Font Awesome glyphs as SVG text) */
+  .timeline-viz-svg .timeline-event-icon {
+    pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+  }
+
+  /* Mini-map overview strip */
+  .timeline-viz-minimap {
+    width: 100%;
+    height: 36px;
+    border-top: 1px solid var(--color-edge, #2a2b3d);
+    cursor: pointer;
+    background: var(--color-surface-alt, #24253a);
+  }
+  .timeline-viz-minimap-svg {
+    display: block;
+  }
+  .timeline-minimap-viewport {
+    cursor: grab;
+  }
+
+  /* Toolbar: visible year range indicator */
+  .timeline-viz-range {
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    color: var(--color-fg-muted, #565f89);
+    white-space: nowrap;
+  }
+}

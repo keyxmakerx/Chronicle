@@ -1,0 +1,68 @@
+/* --- Custom Base Styles --- */
+@layer base {
+  /* --------------------------------------------------------------------------
+   * CSS Custom Properties for theming.
+   * Light mode values live on :root. Dark mode overrides live on .dark.
+   * Components can reference these variables for colours that respond to the
+   * active theme without needing per-component dark: overrides.
+   * ------------------------------------------------------------------------ */
+  :root {
+    --color-bg-primary:    #f9fafb;  /* gray-50  -- page background */
+    --color-bg-secondary:  #ffffff;  /* white    -- card/panel surface */
+    --color-bg-tertiary:   #f3f4f6;  /* gray-100 -- alt rows, hover */
+    --color-text-primary:  #111827;  /* gray-900 -- headings */
+    --color-text-body:     #374151;  /* gray-700 -- body text */
+    --color-text-secondary:#6b7280;  /* gray-500 -- labels */
+    --color-text-muted:    #9ca3af;  /* gray-400 -- hints, timestamps */
+    --color-text-faint:    #d1d5db;  /* gray-300 -- disabled, very subtle */
+    --color-border:        #e5e7eb;  /* gray-200 */
+    --color-border-light:  #f3f4f6;  /* gray-100 */
+    --color-card-bg:       #ffffff;
+    --color-input-bg:      #ffffff;
+    --color-input-border:  #d1d5db;  /* gray-300 */
+    --color-accent:        #6366f1;  /* indigo-500 */
+    --color-accent-hover:  #4f46e5;  /* indigo-600 -- darker for hover states */
+    --color-accent-light:  #a5b4fc;  /* indigo-300 -- lighter for badges/tags */
+    /* RGB channel variants for Tailwind opacity modifier support (<alpha-value>). */
+    --color-accent-rgb:       99 102 241;
+    --color-accent-hover-rgb: 79 70 229;
+    --color-accent-light-rgb: 165 180 252;
+    --color-sidebar-bg:    #1a1c23;  /* always dark */
+  }
+
+  .dark {
+    --color-bg-primary:    #111827;  /* gray-900 */
+    --color-bg-secondary:  #1f2937;  /* gray-800 */
+    --color-bg-tertiary:   #374151;  /* gray-700 */
+    --color-text-primary:  #f9fafb;  /* gray-50  */
+    --color-text-body:     #d1d5db;  /* gray-300 */
+    --color-text-secondary:#9ca3af;  /* gray-400 */
+    --color-text-muted:    #6b7280;  /* gray-500 */
+    --color-text-faint:    #4b5563;  /* gray-600 */
+    --color-border:        #374151;  /* gray-700 */
+    --color-border-light:  #4b5563;  /* gray-600 */
+    --color-card-bg:       #1f2937;  /* gray-800 */
+    --color-input-bg:      #111827;  /* gray-900 */
+    --color-input-border:  #4b5563;  /* gray-600 */
+    --color-accent:        #6366f1;  /* indigo-500 -- same both modes */
+    --color-accent-hover:  #4f46e5;  /* indigo-600 */
+    --color-accent-light:  #a5b4fc;  /* indigo-300 */
+    --color-accent-rgb:       99 102 241;
+    --color-accent-hover-rgb: 79 70 229;
+    --color-accent-light-rgb: 165 180 252;
+    --color-sidebar-bg:    #1a1c23;  /* always dark */
+  }
+
+  /* Default body styling -- uses semantic vars so no dark: overrides needed */
+  body {
+    @apply font-sans antialiased;
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font-family: var(--font-campaign, theme('fontFamily.sans'));
+  }
+
+  /* Headings */
+  h1 { @apply text-2xl font-bold; }
+  h2 { @apply text-xl font-semibold; }
+  h3 { @apply text-lg font-semibold; }
+}

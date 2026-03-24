@@ -1,0 +1,122 @@
+@layer components {
+  /* ---- Toggle Switch ---- */
+  .toggle {
+    @apply relative inline-flex h-6 w-11 items-center rounded-full cursor-pointer
+           transition-colors duration-200;
+    background-color: var(--color-border);
+  }
+  .toggle[aria-checked="true"],
+  .toggle.active {
+    background-color: rgb(var(--color-accent-rgb, 99 102 241));
+  }
+  .toggle .toggle-knob {
+    @apply inline-block h-4 w-4 rounded-full bg-white shadow-sm
+           transition-transform duration-200;
+    transform: translateX(4px);
+  }
+  .toggle[aria-checked="true"] .toggle-knob,
+  .toggle.active .toggle-knob {
+    transform: translateX(24px);
+  }
+
+  /* ---- Tooltip ---- */
+  .tooltip {
+    @apply relative;
+  }
+  .tooltip::before {
+    content: attr(data-tip);
+    @apply absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+           px-2 py-1 text-xs font-medium text-white rounded-md
+           whitespace-nowrap pointer-events-none;
+    background: var(--color-text-primary);
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  .tooltip:hover::before {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* ---- Dropdown Menu ---- */
+  .dropdown-menu {
+    @apply absolute z-50 min-w-[180px] rounded-lg border border-edge bg-surface
+           shadow-lg py-1;
+    animation: dropdown-in 0.15s ease-out;
+  }
+  .dropdown-item {
+    @apply flex items-center gap-2 px-3 py-2 text-sm text-fg-body
+           cursor-pointer transition-colors duration-100;
+  }
+  .dropdown-item:hover {
+    @apply bg-surface-alt;
+  }
+  .dropdown-item-danger {
+    @apply text-red-600;
+  }
+  .dropdown-item-danger:hover {
+    @apply bg-red-50 dark:bg-red-900/20;
+  }
+  .dropdown-divider {
+    @apply border-t border-edge my-1;
+  }
+  @keyframes dropdown-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* ---- Skeleton Loader ---- */
+  .skeleton {
+    @apply rounded-md;
+    background: linear-gradient(
+      90deg,
+      var(--color-bg-tertiary) 25%,
+      var(--color-border-light, var(--color-bg-secondary)) 50%,
+      var(--color-bg-tertiary) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  }
+  .skeleton-text { @apply h-3 w-full; }
+  .skeleton-title { @apply h-5 w-2/3; }
+  .skeleton-avatar { @apply h-10 w-10 rounded-full; }
+  .skeleton-button { @apply h-9 w-24 rounded-lg; }
+  @keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ---- Cards ---- */
+  .card {
+    @apply bg-surface rounded-xl shadow-sm border border-edge p-4
+           transition-all duration-200;
+  }
+
+  /* ---- Form Inputs ---- */
+  .input {
+    @apply w-full px-3 py-2.5 rounded-lg text-sm
+           focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent
+           transition-all duration-200;
+    background-color: var(--color-input-bg);
+    border: 1px solid var(--color-input-border);
+    color: var(--color-text-primary);
+  }
+  .input::placeholder {
+    color: var(--color-text-muted);
+  }
+  .input:disabled {
+    @apply opacity-60 cursor-not-allowed;
+    background-color: var(--color-bg-tertiary);
+  }
+  /* Show red border after user interaction on invalid required/pattern fields. */
+  .input:user-invalid {
+    @apply border-red-500 focus:ring-red-500/30 focus:border-red-500;
+  }
+  .input-error {
+    @apply border-red-500 focus:ring-red-500/30 focus:border-red-500;
+  }
+  /* Inline validation hint shown below an input. */
+  .field-error {
+    @apply text-xs text-red-600 dark:text-red-400 mt-1;
+  }
+}

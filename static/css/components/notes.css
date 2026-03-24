@@ -1,0 +1,384 @@
+@layer components {
+  /* --- Notes Widget --- */
+
+  /* Floating action button (bottom-right). */
+  .notes-fab {
+    @apply fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full
+           bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg
+           flex items-center justify-center cursor-pointer
+           transition-all duration-200 hover:scale-105;
+  }
+  .notes-fab-hidden {
+    @apply scale-0 opacity-0 pointer-events-none;
+  }
+
+  /* Panel container -- slides up from bottom-right.
+     Default sizes are intentionally tall. Users can resize via the
+     drag handle; dimensions persist in localStorage.
+     Responsive: 340px on medium, 400px on large, full-width on mobile. */
+  .notes-panel {
+    @apply fixed z-50 bg-surface rounded-xl
+           shadow-2xl border border-edge flex flex-col;
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+    /* Mobile: full-width bottom sheet, using dvh to dodge virtual keyboard. */
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: 75dvh;
+    border-radius: 0.75rem 0.75rem 0 0;
+  }
+  @media (min-width: 640px) {
+    .notes-panel {
+      bottom: 1.5rem;
+      right: 1.5rem;
+      left: auto;
+      width: 340px;
+      height: 520px;
+      max-height: calc(100vh - 6rem);
+      border-radius: 0.75rem;
+    }
+  }
+  @media (min-width: 1280px) {
+    .notes-panel {
+      width: 400px;
+      height: 600px;
+      max-height: min(700px, 80vh);
+    }
+  }
+  .notes-panel-hidden {
+    @apply opacity-0 scale-95 pointer-events-none translate-y-4;
+  }
+
+  /* Resize handle: sits at the top-left corner, draggable. */
+  .notes-resize-handle {
+    @apply absolute cursor-nwse-resize;
+    top: 0;
+    left: 0;
+    width: 18px;
+    height: 18px;
+    z-index: 10;
+  }
+  .notes-resize-handle::after {
+    content: '';
+    @apply absolute rounded-full;
+    background-color: color-mix(in srgb, var(--color-text-muted) 30%, transparent);
+    top: 5px;
+    left: 5px;
+    width: 8px;
+    height: 8px;
+    transition: background-color 0.15s;
+  }
+  .notes-resize-handle:hover::after {
+    background-color: color-mix(in srgb, var(--color-text-muted) 60%, transparent);
+  }
+
+  /* Text size presets -- applied via modifier class on the panel.
+     Default is "md" (14px). Users toggle S/M/L via the settings gear;
+     choice persists in localStorage. */
+  .notes-panel                  { --notes-font: 0.875rem; }  /* md: 14px */
+  .notes-panel.notes-size-sm    { --notes-font: 0.75rem;  }  /* sm: 12px */
+  .notes-panel.notes-size-lg    { --notes-font: 1rem;     }  /* lg: 16px */
+
+  /* Panel header. */
+  .notes-header {
+    @apply flex items-center justify-between px-4 py-3
+           border-b border-edge shrink-0 relative;
+  }
+  .notes-header-title {
+    @apply text-sm font-semibold text-fg;
+  }
+  .notes-header-actions {
+    @apply flex items-center gap-1;
+  }
+
+  /* Tab bar. */
+  .notes-tabs {
+    @apply flex border-b border-edge shrink-0;
+  }
+  .notes-tab {
+    @apply flex-1 px-3 py-2 text-xs font-medium text-fg-secondary
+           hover:text-fg hover:bg-surface-alt transition-colors
+           cursor-pointer border-b-2 border-transparent;
+  }
+  .notes-tab-active {
+    @apply text-indigo-400 border-indigo-400;
+  }
+
+  /* Quick-add input bar -- always visible at top of panel. */
+  .notes-quick-add {
+    @apply flex items-center gap-2 px-3 py-2.5 border-b border-edge shrink-0;
+  }
+  .notes-quick-input {
+    @apply flex-1 bg-transparent text-fg
+           px-0 py-0 focus:outline-none;
+    font-size: var(--notes-font);
+    border: none;
+    outline: none;
+  }
+  .notes-quick-input::placeholder {
+    @apply text-fg-muted;
+  }
+
+  /* Scrollable notes list. */
+  .notes-list {
+    @apply flex-1 overflow-y-auto p-3 space-y-2;
+    min-height: 120px;
+  }
+  .notes-empty {
+    @apply text-xs text-fg-secondary text-center py-8 italic;
+  }
+
+  /* Individual note card. */
+  .note-card {
+    @apply bg-surface-alt rounded-lg border border-edge p-3;
+    font-size: var(--notes-font);
+  }
+  .note-card.note-pinned {
+    @apply border-indigo-500/30;
+  }
+  .note-card-header {
+    @apply flex items-center justify-between gap-2 mb-2;
+  }
+  .note-title {
+    @apply font-medium text-fg truncate flex-1;
+  }
+  .note-title-input {
+    @apply flex-1 bg-transparent border-b border-edge text-fg
+           px-0 py-0.5 focus:outline-none focus:border-indigo-400;
+    font-size: inherit;
+  }
+  .note-actions {
+    @apply flex items-center gap-0.5 shrink-0;
+  }
+  .note-btn {
+    @apply w-6 h-6 flex items-center justify-center rounded
+           text-fg-secondary hover:text-fg hover:bg-surface
+           transition-colors cursor-pointer text-[11px];
+  }
+
+  /* Card body. */
+  .note-card-body {
+    @apply space-y-2;
+  }
+  .note-text {
+    @apply text-fg-secondary whitespace-pre-wrap leading-relaxed;
+  }
+  .note-text-input {
+    @apply w-full bg-transparent border border-edge rounded px-2 py-1.5
+           text-fg resize-none focus:outline-none focus:border-indigo-400;
+    font-size: inherit;
+    min-height: 48px;
+  }
+
+  /* Checklist items. */
+  .note-checklist {
+    @apply space-y-1;
+  }
+  .note-check-item {
+    @apply flex items-center gap-2 text-fg-secondary cursor-pointer;
+  }
+  .note-check-item.note-checked span {
+    @apply line-through opacity-50;
+  }
+  .note-checkbox {
+    @apply rounded border-gray-500 text-indigo-500 w-3.5 h-3.5
+           cursor-pointer shrink-0;
+  }
+  .note-check-text-input {
+    @apply flex-1 bg-transparent border-b border-transparent text-fg
+           px-0 py-0 focus:outline-none focus:border-edge;
+    font-size: inherit;
+  }
+  .note-add-check-item {
+    @apply text-[10px] text-fg-secondary hover:text-fg
+           cursor-pointer pl-5 py-0.5 transition-colors;
+  }
+
+  /* Block add buttons. */
+  .note-add-block {
+    @apply flex items-center gap-1 pt-1 border-t border-edge-light mt-2;
+  }
+  .note-add-block button {
+    @apply w-7 h-7 flex items-center justify-center rounded
+           text-fg-secondary hover:text-fg hover:bg-surface
+           transition-colors cursor-pointer;
+  }
+
+  /* Settings popover -- opens below the header bar. */
+  .notes-settings-popover {
+    @apply absolute right-3 bg-surface border border-edge
+           rounded-lg shadow-lg px-3 py-2.5 z-10;
+    top: calc(100% + 4px);
+  }
+  .notes-settings-hidden {
+    @apply hidden;
+  }
+  .notes-settings-label {
+    @apply text-xs text-fg-secondary font-medium mb-1.5;
+  }
+  .notes-settings-sizes {
+    @apply flex gap-1;
+  }
+  .notes-size-opt {
+    @apply px-3 py-1 text-xs rounded border border-edge
+           text-fg-secondary hover:text-fg hover:bg-surface-alt
+           cursor-pointer transition-colors text-center font-medium;
+  }
+  .notes-size-opt-active {
+    @apply bg-indigo-600 text-white border-indigo-600
+           hover:bg-indigo-500 hover:text-white;
+  }
+
+  /* Shared note styling -- subtle left accent. */
+  .note-card.note-shared {
+    @apply border-l-2 border-l-indigo-500/50;
+  }
+  .note-shared-badge {
+    @apply inline-flex items-center justify-center w-5 h-5 rounded
+           text-indigo-400 opacity-70;
+  }
+  .note-lock-badge {
+    @apply inline-flex items-center justify-center w-5 h-5 rounded
+           text-amber-400 opacity-80;
+  }
+
+  /* Lock error toast -- slides in from bottom of panel. */
+  .notes-lock-toast {
+    @apply absolute bottom-3 left-3 right-3 bg-red-600/90 text-white
+           text-xs font-medium px-3 py-2 rounded-lg text-center z-20;
+    animation: notesToastIn 0.2s ease-out;
+  }
+  @keyframes notesToastIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Rich text (entryHtml) display inside note cards. */
+  .note-entry-html {
+    @apply text-fg-secondary leading-relaxed;
+    font-size: var(--notes-font);
+  }
+  .note-entry-html p { @apply mb-1; }
+  .note-entry-html ul { @apply list-disc pl-4 mb-1; }
+  .note-entry-html ol { @apply list-decimal pl-4 mb-1; }
+  .note-entry-html strong { @apply font-semibold; }
+  .note-entry-html em { @apply italic; }
+  .note-entry-html a { @apply text-indigo-400 hover:underline; }
+
+  /* Folder cards. */
+  .note-folder {
+    @apply rounded-lg border border-edge overflow-hidden;
+  }
+  .note-folder-header {
+    @apply flex items-center gap-1.5 px-3 py-2 bg-surface-alt
+           cursor-pointer hover:bg-surface transition-colors;
+    font-size: var(--notes-font);
+  }
+  .note-folder-name {
+    @apply font-medium text-fg truncate flex-1;
+  }
+  .note-folder-count {
+    @apply shrink-0;
+  }
+  .note-folder-children {
+    @apply pl-2 pb-2 space-y-2 border-t border-edge-light;
+    background-color: color-mix(in srgb, var(--color-card-bg) 30%, transparent);
+    padding-top: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  .note-folder-toggle {
+    @apply w-5 h-5 shrink-0;
+  }
+
+  /* Move-to-folder dropdown. */
+  .note-move-wrap {
+    @apply relative;
+  }
+  .note-move-menu {
+    @apply absolute right-0 top-full mt-1 bg-surface border border-edge
+           rounded-lg shadow-lg py-1 z-20 min-w-[140px] max-h-[160px] overflow-y-auto;
+  }
+  .note-move-hidden {
+    @apply hidden;
+  }
+  .note-move-opt {
+    @apply block w-full text-left px-3 py-1.5 text-xs text-fg-secondary
+           hover:text-fg hover:bg-surface-alt cursor-pointer transition-colors truncate;
+  }
+
+  /* Share popover dropdown. */
+  .note-share-wrap {
+    @apply relative;
+  }
+  .note-share-popover {
+    @apply absolute right-0 top-full mt-1 bg-surface border border-edge
+           rounded-lg shadow-lg py-2 px-3 z-20 min-w-[180px];
+  }
+  .note-share-hidden {
+    @apply hidden;
+  }
+  .note-share-opts {
+    @apply flex flex-col gap-1.5 text-xs text-fg-secondary;
+  }
+  .note-share-opt {
+    @apply flex items-center gap-1.5 cursor-pointer hover:text-fg transition-colors;
+  }
+  .note-share-opt input[type="radio"] {
+    accent-color: var(--color-accent, #6366f1);
+  }
+  .note-share-members {
+    @apply mt-2 pt-2 border-t border-edge flex flex-col gap-1 max-h-[120px] overflow-y-auto;
+  }
+  .note-share-member {
+    @apply flex items-center gap-1.5 text-xs text-fg-secondary cursor-pointer
+           hover:text-fg transition-colors;
+  }
+  .note-share-member input[type="checkbox"] {
+    accent-color: var(--color-accent, #6366f1);
+  }
+  .note-share-no-members {
+    @apply text-[10px] text-fg-muted italic;
+  }
+  .note-share-members-loading {
+    @apply text-[10px] text-fg-muted;
+  }
+
+  /* New folder button in quick-add row. */
+  .notes-new-folder-btn {
+    @apply shrink-0 ml-1;
+  }
+
+  /* Version history sub-panel. */
+  .notes-versions-header {
+    @apply flex items-center gap-2 px-1 py-2 border-b border-edge mb-2;
+  }
+  .notes-versions-title {
+    @apply text-sm font-medium text-fg truncate;
+  }
+  .notes-versions-list {
+    @apply space-y-1;
+  }
+  .notes-version-item {
+    @apply flex items-center justify-between gap-2 px-2 py-2
+           rounded hover:bg-surface-alt transition-colors;
+  }
+  .notes-version-info {
+    @apply flex flex-col gap-0.5 min-w-0 flex-1;
+  }
+  .notes-version-title {
+    @apply text-xs font-medium text-fg truncate;
+  }
+  .notes-version-date {
+    @apply text-[10px] text-fg-muted;
+  }
+  .notes-version-restore {
+    @apply shrink-0;
+  }
+
+  /* --- Calendar drag-and-drop --- */
+  /* Drop zone highlight when dragging an event over a day cell. */
+  .cal-drop-highlight {
+    @apply ring-2 ring-inset ring-accent/50 bg-accent/5;
+  }
+}

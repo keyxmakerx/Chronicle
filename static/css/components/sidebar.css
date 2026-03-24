@@ -1,0 +1,326 @@
+@layer components {
+  /* ---- Admin Sidebar Collapse (slide, not fade) ---- */
+
+  /* Uses the CSS grid-rows trick to animate height to/from zero. The outer
+     div toggles between 0fr (collapsed) and 1fr (expanded). The inner div
+     has overflow:hidden so content doesn't leak during the transition. */
+  .admin-slide {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 200ms ease-out;
+  }
+  .admin-slide.expanded {
+    grid-template-rows: 1fr;
+  }
+  .admin-slide > div {
+    overflow: hidden;
+  }
+
+  /* ---- Mobile Sidebar Toggle ---- */
+  /* Uses !important to override the static -translate-x-full class,
+     which Tailwind generates AFTER translate-x-0 in the stylesheet
+     (breaking normal class-order specificity). */
+  .sidebar-mobile-open {
+    transform: translateX(0) !important;
+  }
+
+  /* ---- Desktop Sidebar Fully Hidden ---- */
+
+  /* When user clicks the hide button, sidebar disappears entirely.
+     A small floating button appears to restore it. */
+  .sidebar-fully-hidden {
+    width: 0 !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  /* ---- Desktop Sidebar Auto-Collapse ---- */
+
+  /* When mouse leaves sidebar, it collapses to a narrow icon strip.
+     Hovering the strip re-expands to full width. Uses transition on
+     the <aside> element controlled by Alpine.js. */
+  .sidebar-collapsed {
+    width: 48px !important;
+    overflow: hidden !important;
+    min-width: 48px !important;
+  }
+
+  /* Hide text labels, section headers, counts, and other non-icon content
+     when sidebar is collapsed to icon strip. */
+  .sidebar-collapsed .sidebar-text-content,
+  .sidebar-collapsed .sidebar-cat-list-label,
+  .sidebar-collapsed .sidebar-hide-collapsed,
+  .sidebar-collapsed a > span.flex-1,
+  .sidebar-collapsed a > svg.ml-1,
+  .sidebar-collapsed a > span.ml-auto {
+    display: none;
+  }
+
+  /* Compact link padding for icon strip in collapsed state.
+     Also removes accent left-border to keep icons centered. */
+  .sidebar-collapsed nav a,
+  .sidebar-collapsed [hx-boost] a {
+    padding-left: 12px;
+    padding-right: 12px;
+    justify-content: center;
+    border-left-width: 0 !important;
+  }
+
+  /* Remove icon margin when there's no text next to it.
+     Uses !important to beat Tailwind utility classes (e.g. mr-3). */
+  .sidebar-collapsed a > span:first-child,
+  .sidebar-collapsed a > svg:first-child {
+    margin-right: 0 !important;
+  }
+
+  /* Explicit icon sizing: icons must stay 16x16 in all states. */
+  .sidebar-collapsed a > span:first-child,
+  .sidebar-collapsed a > svg:first-child {
+    width: 16px !important;
+    height: 16px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Pin button visibility: only show when expanded. */
+  .sidebar-collapsed .sidebar-pin-btn {
+    display: none;
+  }
+
+  /* ---- Drill-Down Slide-Over Panel ---- */
+
+  /* When drilled into a category, the icon list is hidden behind the panel.
+     The panel slides in from the right, briefly pauses showing the category
+     icons, then covers everything. */
+
+  /* Icon-only mode: constrain to 48px strip with icons only. */
+  .sidebar-icon-only {
+    width: 48px !important;
+    overflow: hidden !important;
+  }
+
+  .sidebar-icon-only a > span.flex-1,
+  .sidebar-icon-only a > span.ml-auto {
+    display: none;
+  }
+
+  /* Keep "Categories" header in the flow but invisible so icons
+     don't shift upward when entering icon-only mode. */
+  .sidebar-icon-only > .sidebar-cat-list-label {
+    visibility: hidden;
+  }
+
+  .sidebar-icon-only a {
+    padding-left: 14px;
+    padding-right: 14px;
+    justify-content: center;
+    border-left-width: 0 !important;
+  }
+
+  .sidebar-icon-only a > span:first-child {
+    margin-right: 0 !important;
+    width: 16px !important;
+    height: 16px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* The slide-over panel (absolutely positioned inside categories zone). */
+  .sidebar-drill-panel {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    left: 100%; /* Hidden off-screen to the right */
+    background: var(--color-sidebar-bg);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    transition: left 300ms ease-in-out;
+    box-shadow: -4px 0 12px -2px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Stage 1: panel visible, icons still showing (left: 48px). */
+  .sidebar-drill-panel.sidebar-drill-active {
+    left: 48px;
+  }
+
+  /* Stage 2: panel fully covers icons (left: 0). */
+  .sidebar-drill-panel.sidebar-drill-full {
+    left: 0;
+  }
+
+  /* Peek: panel nudges right ~40px so icons are partially visible.
+     Shows most of the 48px icon strip — enough to hint at icons
+     but not enough to be in the way. */
+  .sidebar-drill-panel.sidebar-drill-peeking {
+    left: 40px;
+  }
+
+  /* Tooltip on category icons when in icon-only mode (peek/drilled).
+     Shows category name to the right of the icon on hover. */
+  .sidebar-icon-only .sidebar-category-link {
+    position: relative;
+  }
+  .sidebar-icon-only .sidebar-category-link::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: #e5e7eb;
+    background: #1f2937;
+    border: 1px solid rgba(75, 85, 99, 0.5);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+    z-index: 50;
+  }
+  .sidebar-icon-only .sidebar-category-link:hover::after {
+    opacity: 1;
+  }
+
+  /* Skeleton shimmer for loading states. */
+  .skeleton-shimmer {
+    background: linear-gradient(90deg, rgba(75, 85, 99, 0.3) 25%, rgba(75, 85, 99, 0.5) 50%, rgba(75, 85, 99, 0.3) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* --- Sidebar Entity Tree --- */
+
+  /* Tree node wrapper with smooth collapse/expand transition. */
+  .sidebar-tree-children {
+    overflow: hidden;
+    transition: max-height 200ms ease-in-out, opacity 200ms ease-in-out;
+  }
+  .sidebar-tree-children[data-collapsed="true"] {
+    max-height: 0 !important;
+    opacity: 0;
+  }
+
+  /* Guide lines: subtle vertical connector for nested items. */
+  .sidebar-tree-node[data-depth]:not([data-depth="0"]) {
+    position: relative;
+  }
+  .sidebar-tree-node[data-depth]:not([data-depth="0"])::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(75, 85, 99, 0.25);
+    pointer-events: none;
+  }
+  /* Position guide lines based on depth level (set inline by JS). */
+
+  /* Folder icon for parent items (has children). */
+  .sidebar-tree-item[data-has-children="true"] .sidebar-tree-icon i {
+    /* JS swaps to fa-folder / fa-folder-open */
+  }
+
+  /* Drag-and-drop feedback: highlighted drop zone. */
+  .sidebar-drop-target {
+    background-color: rgba(99, 102, 241, 0.12) !important;
+    outline: 1px dashed rgba(99, 102, 241, 0.4);
+    outline-offset: -1px;
+    border-radius: 4px;
+  }
+
+  /* Drop indicator line between items. */
+  .sidebar-drop-indicator {
+    height: 2px;
+    background: #6366f1;
+    margin: 0 8px;
+    border-radius: 1px;
+    pointer-events: none;
+    transition: opacity 150ms ease;
+  }
+
+  /* Reparent indicator: shows when dropping onto bottom half of item. */
+  .sidebar-drop-reparent {
+    background-color: rgba(99, 102, 241, 0.08) !important;
+    box-shadow: inset 2px 0 0 #6366f1;
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* Reorg mode: drop target highlight for category links. */
+  .sidebar-reorg-drop-target {
+    background-color: rgba(99, 102, 241, 0.12) !important;
+    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.4);
+    border-radius: 4px;
+  }
+
+  /* Reorg mode: drag handle visibility (hidden by default, shown in reorg). */
+  .reorg-drag-handle {
+    opacity: 0.5;
+    transition: opacity 150ms ease;
+  }
+  .reorg-drag-handle:hover {
+    opacity: 1;
+  }
+
+  /* Reorg mode: subtle border on reorderable items. */
+  .sidebar-reorg-active #sidebar-cat-list .sidebar-category-link,
+  .sidebar-reorg-active #sidebar-entity-tree .sidebar-tree-node {
+    transition: background-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  /* Reorg mode active indicator on toggle button. */
+  #sidebar-reorg-toggle.bg-accent\/20 {
+    background-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
+  }
+
+  /* Tree toggle button styling. */
+  .sidebar-tree-toggle {
+    transition: transform 150ms ease;
+  }
+  .sidebar-tree-toggle[data-collapsed="true"] {
+    transform: rotate(0deg);
+  }
+  .sidebar-tree-toggle[data-collapsed="false"] {
+    transform: rotate(90deg);
+  }
+
+  /* Currently-viewed entity highlight in sidebar tree. */
+  .sidebar-tree-item[aria-current="page"] {
+    background-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.12);
+    color: var(--color-sidebar-active, #e5e7eb);
+    border-radius: 6px;
+  }
+
+  /* Category icon hover: subtle glow (no scale to avoid layout jiggle). */
+  .sidebar-category-link span:first-child {
+    transition: filter 150ms ease;
+  }
+  .sidebar-category-link:hover span:first-child {
+    filter: drop-shadow(0 0 1.5px currentColor);
+  }
+
+  /* Drill panel content fade-in on HTMX swap. */
+  #sidebar-cat-results {
+    animation: sidebar-fade-in 200ms ease-out;
+  }
+  @keyframes sidebar-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Sidebar nav items: smooth hover transitions. */
+  #sidebar a {
+    transition: background-color 150ms ease, color 150ms ease,
+                border-color 150ms ease;
+  }
+}
