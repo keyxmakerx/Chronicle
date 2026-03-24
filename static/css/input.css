@@ -89,6 +89,34 @@
            text-sm transition-all duration-200 cursor-pointer
            focus:outline-none focus:ring-2 focus:ring-offset-2
            active:scale-[0.98];
+    position: relative;
+    overflow: visible;
+  }
+  /* Subtle accent edge-glow on hover — a soft gradient that peeks out
+     on the right side of every button, just outside its boundary. */
+  .btn::after {
+    content: '';
+    position: absolute;
+    top: 15%;
+    right: -3px;
+    width: 6px;
+    height: 70%;
+    border-radius: 0 4px 4px 0;
+    background: linear-gradient(
+      to right,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.45),
+      rgb(var(--color-accent-rgb, 99 102 241) / 0)
+    );
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+  }
+  .btn:hover::after {
+    opacity: 1;
+  }
+  .btn:disabled::after,
+  .btn[disabled]::after {
+    display: none;
   }
   .btn-primary {
     @apply btn bg-accent text-white hover:bg-accent-hover
