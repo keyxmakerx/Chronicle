@@ -1,0 +1,305 @@
+@layer components {
+  /* ---- Buttons ---- */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium
+           text-sm transition-all duration-200 cursor-pointer
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           active:scale-[0.98];
+    position: relative;
+    overflow: visible;
+  }
+  /* Hover accent effect — placeholder, chosen via Design Lab testing. */
+  .btn-primary {
+    @apply btn bg-accent text-white hover:bg-accent-hover
+           focus:ring-accent shadow-sm hover:shadow-md hover:shadow-accent/20;
+  }
+  .btn-secondary {
+    @apply btn bg-surface text-fg-body hover:bg-surface-alt
+           border border-edge focus:ring-gray-400;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700
+           focus:ring-red-500 shadow-sm hover:shadow-md hover:shadow-red-500/20;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-fg-secondary hover:bg-surface-alt
+           border-none;
+  }
+  .btn-warning {
+    @apply btn bg-amber-600 text-white hover:bg-amber-700
+           focus:ring-amber-500 shadow-sm hover:shadow-md hover:shadow-amber-500/20;
+  }
+  .btn-success {
+    @apply btn bg-green-600 text-white hover:bg-green-700
+           focus:ring-green-500 shadow-sm hover:shadow-md hover:shadow-green-500/20;
+  }
+  .btn:disabled,
+  .btn[disabled] {
+    @apply opacity-50 cursor-not-allowed pointer-events-none;
+  }
+
+  /* Button size variants */
+  .btn-xs { @apply text-xs px-2 py-1 rounded-md; }
+  .btn-sm { @apply text-xs px-3 py-1.5 rounded-md; }
+  .btn-lg { @apply text-base px-6 py-3 rounded-lg; }
+  .btn-icon { @apply !p-2 rounded-lg; }
+
+  /* Button group — joined buttons that act as a single control. */
+  .btn-group {
+    @apply inline-flex rounded-lg overflow-hidden border border-edge;
+  }
+  .btn-group .btn {
+    @apply rounded-none border-0 shadow-none;
+  }
+  .btn-group .btn + .btn {
+    border-left: 1px solid rgb(255 255 255 / 0.15);
+  }
+  .btn-group .btn-secondary + .btn-secondary {
+    border-left-color: var(--color-border);
+  }
+
+  /* Loading button spinner */
+  .btn-loading {
+    @apply relative pointer-events-none;
+    color: transparent !important;
+  }
+  .btn-loading::before {
+    content: '';
+    position: absolute;
+    width: 1em;
+    height: 1em;
+    border: 2px solid rgb(255 255 255 / 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: btn-spin 0.6s linear infinite;
+  }
+  .btn-loading.btn-secondary::before {
+    border-color: rgb(0 0 0 / 0.15);
+    border-top-color: var(--color-text-secondary);
+  }
+  @keyframes btn-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* ---- Hover Glow Concepts (Design Lab testing) ---- */
+  /* 5 variations of the right-edge accent illumination for nav items.
+     Each uses ::after for the glow and transitions for click expansion.
+     These are intentionally scoped to .hover-concept-N for A/B comparison;
+     the winner will be promoted to the real nav/entity item classes. */
+
+  /* Concept A: Right-edge bar glow — a vertical accent bar on the right
+     that fades in on hover, with a subtle shadow. On active, bar widens
+     and a faint top/bottom accent appears. */
+  .hover-concept-a {
+    position: relative;
+    overflow: hidden;
+  }
+  .hover-concept-a::after {
+    content: '';
+    position: absolute;
+    top: 10%;
+    right: 0;
+    width: 3px;
+    height: 80%;
+    border-radius: 3px 0 0 3px;
+    background: rgb(var(--color-accent-rgb, 99 102 241));
+    opacity: 0;
+    transition: opacity 0.2s ease, width 0.2s ease, height 0.2s ease, top 0.2s ease,
+                box-shadow 0.2s ease;
+    pointer-events: none;
+  }
+  .hover-concept-a:hover::after {
+    opacity: 0.7;
+    box-shadow: -4px 0 12px rgb(var(--color-accent-rgb, 99 102 241) / 0.25);
+  }
+  .hover-concept-a:hover {
+    box-shadow: 2px 0 8px -2px rgb(var(--color-accent-rgb, 99 102 241) / 0.15);
+  }
+  .hover-concept-a:active::after {
+    opacity: 1;
+    width: 4px;
+    top: 0;
+    height: 100%;
+    box-shadow: -6px 0 16px rgb(var(--color-accent-rgb, 99 102 241) / 0.35);
+  }
+
+  /* Concept B: Right-edge with top/bottom bleed — the accent starts as a
+     right bar, but also bleeds a gradient onto the top-right and bottom-right
+     corners. On click, the accent sweeps further along top and bottom. */
+  .hover-concept-b {
+    position: relative;
+    overflow: hidden;
+  }
+  .hover-concept-b::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background:
+      linear-gradient(to left, rgb(var(--color-accent-rgb, 99 102 241) / 0.5) 0px,
+                               rgb(var(--color-accent-rgb, 99 102 241) / 0.08) 3px,
+                               transparent 20px) no-repeat right,
+      linear-gradient(to bottom, rgb(var(--color-accent-rgb, 99 102 241) / 0.25), transparent 6px) no-repeat top right / 30% 6px,
+      linear-gradient(to top, rgb(var(--color-accent-rgb, 99 102 241) / 0.25), transparent 6px) no-repeat bottom right / 40% 6px;
+    opacity: 0;
+    transition: opacity 0.2s ease, background-size 0.25s ease;
+    pointer-events: none;
+  }
+  .hover-concept-b:hover::after {
+    opacity: 1;
+  }
+  .hover-concept-b:hover {
+    box-shadow: 0 2px 8px rgb(var(--color-accent-rgb, 99 102 241) / 0.12);
+  }
+  .hover-concept-b:active::after {
+    opacity: 1;
+    background:
+      linear-gradient(to left, rgb(var(--color-accent-rgb, 99 102 241) / 0.6) 0px,
+                               rgb(var(--color-accent-rgb, 99 102 241) / 0.12) 4px,
+                               transparent 24px) no-repeat right,
+      linear-gradient(to bottom, rgb(var(--color-accent-rgb, 99 102 241) / 0.35), transparent 6px) no-repeat top right / 60% 6px,
+      linear-gradient(to top, rgb(var(--color-accent-rgb, 99 102 241) / 0.35), transparent 6px) no-repeat bottom right / 70% 6px;
+  }
+  .hover-concept-b:active {
+    box-shadow: 0 4px 16px rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
+  }
+
+  /* Concept C: Right glow + border sweep — the right edge lights up,
+     and on click the accent border animates from right around the top
+     and bottom simultaneously to near the left side. Uses border-image. */
+  .hover-concept-c {
+    position: relative;
+    overflow: visible;
+  }
+  .hover-concept-c::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    border: 2px solid transparent;
+    border-right-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.6);
+    opacity: 0;
+    transition: opacity 0.2s ease, border-color 0.3s ease;
+    pointer-events: none;
+  }
+  .hover-concept-c:hover::after {
+    opacity: 1;
+  }
+  .hover-concept-c:hover {
+    box-shadow: 2px 0 12px -3px rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
+  }
+  .hover-concept-c:active::after {
+    opacity: 1;
+    border-top-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.4);
+    border-bottom-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.4);
+    border-right-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.8);
+  }
+  .hover-concept-c:active {
+    box-shadow: 0 0 16px -4px rgb(var(--color-accent-rgb, 99 102 241) / 0.3);
+  }
+
+  /* Concept D: Soft edge glow — a diffused radial gradient that glows
+     from the right center, creating a soft halo effect. On click the
+     glow intensifies and spreads across the item. */
+  .hover-concept-d {
+    position: relative;
+    overflow: hidden;
+  }
+  .hover-concept-d::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: -20px;
+    width: 60px;
+    height: 120%;
+    transform: translateY(-50%);
+    background: radial-gradient(
+      ellipse at center right,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 0%,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.08) 40%,
+      transparent 70%
+    );
+    opacity: 0;
+    transition: opacity 0.2s ease, width 0.3s ease, right 0.3s ease;
+    pointer-events: none;
+  }
+  .hover-concept-d:hover::after {
+    opacity: 1;
+  }
+  .hover-concept-d:hover {
+    box-shadow: 0 1px 6px rgb(var(--color-accent-rgb, 99 102 241) / 0.1);
+  }
+  .hover-concept-d:active::after {
+    opacity: 1;
+    width: 200%;
+    right: -40px;
+    background: radial-gradient(
+      ellipse at 80% 50%,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.2) 0%,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.06) 50%,
+      transparent 80%
+    );
+  }
+  .hover-concept-d:active {
+    box-shadow: 0 2px 12px rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
+  }
+
+  /* Concept E: Right bar with animated sweep — a sharp 2px accent line
+     appears on the right on hover with a tiny bleed onto top and bottom corners.
+     On click, the accent animates to wrap ~50% around the element using a
+     conic gradient reveal. */
+  .hover-concept-e {
+    position: relative;
+    overflow: visible;
+  }
+  .hover-concept-e::before {
+    content: '';
+    position: absolute;
+    top: 15%;
+    right: -1px;
+    width: 2px;
+    height: 70%;
+    background: rgb(var(--color-accent-rgb, 99 102 241) / 0.6);
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.15s ease, height 0.2s ease, top 0.2s ease;
+    pointer-events: none;
+  }
+  .hover-concept-e::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: conic-gradient(
+      from 0deg at 100% 50%,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.5) 0%,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 12.5%,
+      transparent 25%,
+      transparent 75%,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 87.5%,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.5) 100%
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+  }
+  .hover-concept-e:hover::before {
+    opacity: 1;
+  }
+  .hover-concept-e:hover {
+    box-shadow: 2px 0 10px -3px rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
+  }
+  .hover-concept-e:active::before {
+    opacity: 0;
+  }
+  .hover-concept-e:active::after {
+    opacity: 1;
+  }
+  .hover-concept-e:active {
+    box-shadow: 0 0 16px -4px rgb(var(--color-accent-rgb, 99 102 241) / 0.3);
+  }
+}

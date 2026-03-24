@@ -1,0 +1,51 @@
+@layer components {
+  /* ---- Entity Type Tabs (entity list page filter) ---- */
+  .entity-tab {
+    @apply inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium
+           whitespace-nowrap border-b-2 transition-colors cursor-pointer;
+  }
+  .entity-tab--active {
+    @apply text-accent border-accent;
+  }
+  .entity-tab--inactive {
+    @apply text-fg-secondary border-transparent hover:text-fg hover:border-edge;
+  }
+  .entity-tab__count {
+    @apply text-[11px] font-normal text-fg-muted ml-0.5;
+  }
+  .entity-tab--active .entity-tab__count {
+    @apply text-accent/70;
+  }
+
+  /* ---- Section Headers ---- */
+  .section-header {
+    @apply text-xs font-semibold uppercase tracking-wider text-fg-secondary;
+  }
+
+  /* ---- Stat Cards (Dashboard) ---- */
+  .stat-card {
+    @apply card p-6 flex flex-col items-center text-center
+           hover:shadow-md hover:-translate-y-0.5;
+  }
+  .stat-card__icon {
+    @apply w-12 h-12 rounded-xl flex items-center justify-center mb-3;
+  }
+  .stat-card__label {
+    @apply text-sm font-semibold text-fg mb-1;
+  }
+  .stat-card__desc {
+    @apply text-xs text-fg-secondary;
+  }
+
+  /* ---- Stat Icon Badges (semantic color classes for dashboard icons) ---- */
+  .stat-icon { @apply w-10 h-10 rounded-lg flex items-center justify-center; }
+  .stat-icon-blue { @apply stat-icon bg-blue-50 text-blue-500 dark:bg-blue-900/30; }
+  .stat-icon-teal { @apply stat-icon bg-teal-50 text-teal-500 dark:bg-teal-900/30; }
+  .stat-icon-purple { @apply stat-icon bg-purple-50 text-purple-500 dark:bg-purple-900/30; }
+  .stat-icon-indigo { @apply stat-icon bg-indigo-50 text-indigo-500 dark:bg-indigo-900/30; }
+  .stat-icon-cyan { @apply stat-icon bg-cyan-50 text-cyan-500 dark:bg-cyan-900/30; }
+  .stat-icon-red { @apply stat-icon bg-red-50 text-red-500 dark:bg-red-900/30; }
+  .stat-icon-amber { @apply stat-icon bg-amber-50 text-amber-500 dark:bg-amber-900/30; }
+  .stat-icon-emerald { @apply stat-icon bg-emerald-50 text-emerald-500 dark:bg-emerald-900/30; }
+  .stat-icon-slate { @apply stat-icon bg-slate-50 text-slate-500 dark:bg-slate-900/30; }
+}

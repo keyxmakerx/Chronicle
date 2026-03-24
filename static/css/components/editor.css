@@ -1,0 +1,342 @@
+@layer components {
+  /* --- Chronicle Editor Widget --- */
+
+  .chronicle-editor {
+    @apply border border-edge rounded-lg bg-surface overflow-hidden;
+  }
+
+  .chronicle-editor__toolbar {
+    @apply flex items-center flex-wrap gap-0.5 px-2 py-1.5 border-b border-edge;
+    background-color: var(--color-bg-tertiary);
+  }
+
+  .chronicle-editor__btn {
+    @apply w-8 h-8 flex items-center justify-center rounded text-sm
+           text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors;
+  }
+
+  .chronicle-editor__btn--active {
+    @apply bg-accent/10 text-accent;
+  }
+
+  .chronicle-editor__btn--save {
+    @apply ml-auto px-3 py-1 w-auto text-xs font-semibold rounded-md
+           bg-surface-alt text-fg-secondary hover:text-fg transition-colors;
+  }
+
+  /* Highlight the save button when there are unsaved changes. */
+  .chronicle-editor__btn--save.has-changes {
+    @apply bg-accent text-white hover:bg-accent-hover;
+  }
+
+  .chronicle-editor__separator {
+    @apply w-px h-5 mx-1;
+    background-color: var(--color-border);
+  }
+
+  /* Insert menu (+ dropdown for discoverable features) */
+  .chronicle-editor__insert-menu {
+    @apply relative;
+  }
+  .chronicle-editor__insert-trigger {
+    @apply text-accent/70 hover:text-accent;
+  }
+  .chronicle-editor__insert-dropdown {
+    @apply absolute top-full left-0 mt-1 w-56 py-1 rounded-lg shadow-lg border border-edge z-50;
+    background-color: var(--color-bg-primary);
+  }
+  .chronicle-editor__insert-item {
+    @apply w-full flex items-center gap-2.5 px-3 py-2 text-sm text-fg
+           hover:bg-surface-alt transition-colors cursor-pointer text-left;
+  }
+  .chronicle-editor__insert-icon {
+    @apply w-4 text-center text-fg-muted text-xs;
+  }
+  .chronicle-editor__insert-label {
+    @apply flex-1;
+  }
+  .chronicle-editor__insert-hint {
+    @apply text-[10px] text-fg-muted px-1.5 py-0.5 rounded;
+    background-color: var(--color-bg-tertiary);
+    font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+
+  /* Editor header bar (contains "Entry" label and Edit/Done toggle) */
+  .chronicle-editor__header {
+    @apply flex items-center justify-between px-3 py-2 border-b border-edge-light;
+  }
+  .chronicle-editor__header-label {
+    @apply text-xs font-semibold uppercase tracking-wider text-fg-secondary;
+  }
+  .chronicle-editor__edit-btn {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium
+           rounded-md transition-colors cursor-pointer
+           text-fg-secondary hover:text-fg hover:bg-surface-alt;
+  }
+  .chronicle-editor__edit-btn--done {
+    @apply text-accent hover:text-accent-hover hover:bg-accent/10;
+  }
+
+  /* Editing mode visual cue — subtle left accent border */
+  .chronicle-editor--editing {
+    @apply ring-2 ring-accent/20;
+  }
+
+  .chronicle-editor__content .tiptap {
+    @apply min-h-[200px] p-4 focus:outline-none;
+    color: var(--color-text-body);
+  }
+
+  .chronicle-editor__content .tiptap p.is-editor-empty:first-child::before {
+    @apply text-fg-muted float-left h-0 pointer-events-none;
+    content: attr(data-placeholder);
+  }
+
+  .chronicle-editor__status {
+    @apply px-3 py-1.5 text-xs border-t border-edge-light;
+  }
+  .chronicle-editor__status--saved { @apply text-green-600; }
+  .chronicle-editor__status--saving { @apply text-fg-muted; }
+  .chronicle-editor__status--unsaved { @apply text-amber-600; }
+  .chronicle-editor__status--error { @apply text-red-600; }
+
+  /* ---- Find/Replace Bar ---- */
+  .chronicle-find-bar {
+    @apply flex flex-col gap-1 px-3 py-2 border-b border-edge-light;
+    background: var(--color-bg-secondary);
+  }
+  .chronicle-find-bar__row {
+    @apply flex items-center gap-1.5;
+  }
+  .chronicle-find-bar__input {
+    @apply flex-1 text-xs rounded border border-edge px-2 py-1;
+    background: var(--color-bg-primary);
+    color: var(--color-text-body);
+    min-width: 0;
+  }
+  .chronicle-find-bar__input:focus {
+    @apply outline-none ring-1 ring-accent border-accent;
+  }
+  .chronicle-find-bar__count {
+    @apply text-[10px] text-fg-muted whitespace-nowrap min-w-[3.5rem] text-center;
+  }
+  .chronicle-find-bar__btn {
+    @apply text-xs px-1.5 py-1 rounded hover:bg-surface-alt text-fg-secondary hover:text-fg transition-colors;
+  }
+  .chronicle-find-bar__close {
+    @apply ml-1;
+  }
+
+  /* ---- Entity Links (mention-style references to other entities) ---- */
+  /* Styled as distinctive inline pills so they stand out from regular links. */
+  .chronicle-editor__content a.entity-link,
+  .prose a.entity-link {
+    @apply text-accent font-medium no-underline cursor-pointer
+           rounded bg-accent/10 px-1 py-0.5
+           hover:bg-accent/20 transition-colors;
+    user-select: all;
+  }
+
+  /* Fallback for entity links rendered without the class (legacy content). */
+  .chronicle-editor__content a[data-mention-id]:not(.entity-link),
+  .prose a[data-mention-id]:not(.entity-link) {
+    @apply text-accent font-medium no-underline hover:underline;
+  }
+
+  /* ---- Inline secrets (GM-only text) ---- */
+  .chronicle-secret {
+    @apply bg-amber-500/10 border-b border-dashed border-amber-500/40 rounded-sm px-0.5;
+    position: relative;
+  }
+  .chronicle-secret::before {
+    content: '\f070'; /* fa-eye-slash */
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    font-size: 9px;
+    @apply text-amber-500/60 mr-1;
+  }
+
+  /* ---- Prose styling for dark mode ---- */
+  .chronicle-editor__content .tiptap h1,
+  .chronicle-editor__content .tiptap h2,
+  .chronicle-editor__content .tiptap h3 {
+    color: var(--color-text-primary);
+  }
+  .chronicle-editor__content .tiptap blockquote {
+    @apply bg-accent/5 rounded-r-lg py-3 px-4 my-4;
+    border-left: 3px solid var(--color-accent);
+    color: var(--color-text-body);
+  }
+  .chronicle-editor__content .tiptap blockquote::before {
+    content: '\f05a'; /* fa-circle-info */
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    font-size: 12px;
+    @apply text-accent/70 mr-2;
+    float: left;
+    margin-top: 2px;
+  }
+  .chronicle-editor__content .tiptap blockquote p {
+    @apply my-0;
+  }
+  /* ---- Callout styling for read-only prose views (entity pages, dashboards) ---- */
+  .prose blockquote {
+    @apply bg-accent/5 rounded-r-lg not-italic;
+    border-left: 3px solid var(--color-accent);
+    color: var(--color-text-body);
+  }
+  .prose blockquote::before {
+    content: '\f05a'; /* fa-circle-info */
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    font-size: 11px;
+    @apply text-accent/70 mr-2;
+  }
+
+  .chronicle-editor__content .tiptap code {
+    color: var(--color-text-body);
+  }
+
+  /* ---- Code block syntax highlighting (lowlight/highlight.js) ---- */
+  .chronicle-editor__content .tiptap pre,
+  .prose pre {
+    @apply rounded-lg my-4 p-4 overflow-x-auto text-sm leading-relaxed;
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-body);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .chronicle-editor__content .tiptap pre code,
+  .prose pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
+  }
+  /* Language label (positioned in top-right of code block) */
+  .chronicle-editor__content .tiptap pre .hljs-language-label {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    font-size: 10px;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  /* Syntax token colors — dark mode first (most users). */
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-built_in,
+  .hljs-name,
+  .hljs-tag { color: #7aa2f7; }
+  .hljs-string,
+  .hljs-title,
+  .hljs-section,
+  .hljs-attribute,
+  .hljs-literal,
+  .hljs-template-tag,
+  .hljs-template-variable,
+  .hljs-type { color: #9ece6a; }
+  .hljs-comment,
+  .hljs-deletion,
+  .hljs-meta { color: #565f89; font-style: italic; }
+  .hljs-number,
+  .hljs-symbol,
+  .hljs-bullet,
+  .hljs-link { color: #ff9e64; }
+  .hljs-regexp,
+  .hljs-variable,
+  .hljs-addition { color: #73daca; }
+  .hljs-params { color: #c0caf5; }
+  .hljs-selector-id,
+  .hljs-selector-class { color: #bb9af7; }
+  .hljs-doctag,
+  .hljs-strong { font-weight: 700; }
+  .hljs-emphasis { font-style: italic; }
+
+  /* Light mode overrides. */
+  :root .hljs-keyword,
+  :root .hljs-selector-tag,
+  :root .hljs-built_in,
+  :root .hljs-name,
+  :root .hljs-tag { color: #0550ae; }
+  :root .hljs-string,
+  :root .hljs-title,
+  :root .hljs-section,
+  :root .hljs-attribute,
+  :root .hljs-literal,
+  :root .hljs-template-tag,
+  :root .hljs-template-variable,
+  :root .hljs-type { color: #116329; }
+  :root .hljs-comment,
+  :root .hljs-deletion,
+  :root .hljs-meta { color: #6e7781; font-style: italic; }
+  :root .hljs-number,
+  :root .hljs-symbol,
+  :root .hljs-bullet,
+  :root .hljs-link { color: #953800; }
+  :root .hljs-regexp,
+  :root .hljs-variable,
+  :root .hljs-addition { color: #1a7f37; }
+  :root .hljs-params { color: #24292f; }
+  :root .hljs-selector-id,
+  :root .hljs-selector-class { color: #8250df; }
+  /* Dark mode overrides (re-declare to beat light specificity). */
+  .dark .hljs-keyword,
+  .dark .hljs-selector-tag,
+  .dark .hljs-built_in,
+  .dark .hljs-name,
+  .dark .hljs-tag { color: #7aa2f7; }
+  .dark .hljs-string,
+  .dark .hljs-title,
+  .dark .hljs-section,
+  .dark .hljs-attribute,
+  .dark .hljs-literal,
+  .dark .hljs-template-tag,
+  .dark .hljs-template-variable,
+  .dark .hljs-type { color: #9ece6a; }
+  .dark .hljs-comment,
+  .dark .hljs-deletion,
+  .dark .hljs-meta { color: #565f89; font-style: italic; }
+  .dark .hljs-number,
+  .dark .hljs-symbol,
+  .dark .hljs-bullet,
+  .dark .hljs-link { color: #ff9e64; }
+  .dark .hljs-regexp,
+  .dark .hljs-variable,
+  .dark .hljs-addition { color: #73daca; }
+  .dark .hljs-params { color: #c0caf5; }
+  .dark .hljs-selector-id,
+  .dark .hljs-selector-class { color: #bb9af7; }
+
+  .chronicle-editor__content .tiptap hr {
+    border-color: var(--color-border-light);
+  }
+
+  /* ---- Table support (TipTap table extension) ---- */
+  .chronicle-editor__content .tiptap table,
+  .prose table {
+    @apply w-full border-collapse my-4;
+  }
+  .chronicle-editor__content .tiptap th,
+  .prose th {
+    @apply bg-surface-alt text-left text-sm font-semibold px-3 py-2;
+    border: 1px solid var(--color-border-light);
+    color: var(--color-text-primary);
+  }
+  .chronicle-editor__content .tiptap td,
+  .prose td {
+    @apply text-sm px-3 py-2;
+    border: 1px solid var(--color-border-light);
+    color: var(--color-text-body);
+  }
+  .chronicle-editor__content .tiptap .selectedCell {
+    @apply bg-accent/10;
+  }
+  .chronicle-editor__content .tiptap .column-resize-handle {
+    @apply absolute top-0 right-[-2px] bottom-0 w-1 bg-accent/40 cursor-col-resize;
+    pointer-events: auto;
+  }
+  .chronicle-editor__content .tiptap table .tableWrapper {
+    @apply overflow-x-auto my-4;
+  }
+}
