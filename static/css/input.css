@@ -87,7 +87,8 @@
   .btn {
     @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium
            text-sm transition-all duration-200 cursor-pointer
-           focus:outline-none focus:ring-2 focus:ring-offset-2;
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           active:scale-[0.98];
   }
   .btn-primary {
     @apply btn bg-accent text-white hover:bg-accent-hover
@@ -105,10 +106,24 @@
     @apply btn bg-transparent text-fg-secondary hover:bg-surface-alt
            border-none;
   }
+  .btn-warning {
+    @apply btn bg-amber-600 text-white hover:bg-amber-700
+           focus:ring-amber-500 shadow-sm hover:shadow-md hover:shadow-amber-500/20;
+  }
+  .btn-success {
+    @apply btn bg-green-600 text-white hover:bg-green-700
+           focus:ring-green-500 shadow-sm hover:shadow-md hover:shadow-green-500/20;
+  }
   .btn:disabled,
   .btn[disabled] {
     @apply opacity-50 cursor-not-allowed pointer-events-none;
   }
+
+  /* Button size variants */
+  .btn-xs { @apply text-xs px-2 py-1 rounded-md; }
+  .btn-sm { @apply text-xs px-3 py-1.5 rounded-md; }
+  .btn-lg { @apply text-base px-6 py-3 rounded-lg; }
+  .btn-icon { @apply !p-2 rounded-lg; }
 
   /* ---- Cards ---- */
   .card {
@@ -609,6 +624,18 @@
   .stat-card__desc {
     @apply text-xs text-fg-secondary;
   }
+
+  /* ---- Stat Icon Badges (semantic color classes for dashboard icons) ---- */
+  .stat-icon { @apply w-10 h-10 rounded-lg flex items-center justify-center; }
+  .stat-icon-blue { @apply stat-icon bg-blue-50 text-blue-500 dark:bg-blue-900/30; }
+  .stat-icon-teal { @apply stat-icon bg-teal-50 text-teal-500 dark:bg-teal-900/30; }
+  .stat-icon-purple { @apply stat-icon bg-purple-50 text-purple-500 dark:bg-purple-900/30; }
+  .stat-icon-indigo { @apply stat-icon bg-indigo-50 text-indigo-500 dark:bg-indigo-900/30; }
+  .stat-icon-cyan { @apply stat-icon bg-cyan-50 text-cyan-500 dark:bg-cyan-900/30; }
+  .stat-icon-red { @apply stat-icon bg-red-50 text-red-500 dark:bg-red-900/30; }
+  .stat-icon-amber { @apply stat-icon bg-amber-50 text-amber-500 dark:bg-amber-900/30; }
+  .stat-icon-emerald { @apply stat-icon bg-emerald-50 text-emerald-500 dark:bg-emerald-900/30; }
+  .stat-icon-slate { @apply stat-icon bg-slate-50 text-slate-500 dark:bg-slate-900/30; }
 
   /* ---- Admin Sidebar Collapse (slide, not fade) ---- */
 

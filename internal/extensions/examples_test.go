@@ -12,7 +12,6 @@ func TestExampleExtensionManifests(t *testing.T) {
 		path string
 	}{
 		{"harptos-calendar", "../../extensions/harptos-calendar/manifest.json"},
-		{"dnd5e-character-sheet", "../../extensions/dnd5e-character-sheet/manifest.json"},
 		{"dice-roller", "../../extensions/dice-roller/manifest.json"},
 		{"example-wasm-rust", "../../extensions/example-wasm-rust/manifest.json"},
 		{"example-wasm-go", "../../extensions/example-wasm-go/manifest.json"},

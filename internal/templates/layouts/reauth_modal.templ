@@ -17,13 +17,13 @@ templ ReauthModal() {
 		@reauth-required.window="show = true; $nextTick(() => $refs.reauthPassword.focus())"
 	>
 		<div
-			class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm mx-4"
+			class="bg-surface rounded-lg shadow-xl p-6 w-full max-w-sm mx-4"
 			@click.outside="show = false"
 		>
-			<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+			<h3 class="text-lg font-semibold text-fg mb-2">
 				Confirm Your Identity
 			</h3>
-			<p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+			<p class="text-sm text-fg-secondary mb-4">
 				This action requires password confirmation.
 			</p>
 			<form id="reauth-form" @submit.prevent="
@@ -61,20 +61,20 @@ templ ReauthModal() {
 					name="password"
 					placeholder="Enter your password"
 					autocomplete="current-password"
-					class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+					class="input"
 				/>
 				<p x-ref="reauthError" class="hidden mt-2 text-sm text-red-600 dark:text-red-400"></p>
 				<div class="mt-4 flex justify-end gap-3">
 					<button
 						type="button"
 						@click="show = false; $refs.reauthPassword.value = ''"
-						class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
+						class="btn-secondary"
 					>
 						Cancel
 					</button>
 					<button
 						type="submit"
-						class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500"
+						class="btn-primary"
 					>
 						Confirm
 					</button>

@@ -1,0 +1,436 @@
+package designlab
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// DesignLabPage renders the component showcase for previewing UI variants.
+templ DesignLabPage() {
+	@layouts.App("Design Lab - Admin") {
+		<div class="max-w-6xl mx-auto space-y-4" x-data="{ tab: 'buttons' }">
+			<div class="flex items-center justify-between">
+				<h1 class="text-xl font-bold text-fg">
+					<i class="fa-solid fa-palette mr-2 text-accent"></i>Design Lab
+				</h1>
+				<span class="text-xs text-fg-muted">Component showcase &mdash; changes here don&apos;t affect the live site</span>
+			</div>
+
+			<!-- Tabs -->
+			<div class="border-b border-edge">
+				<nav class="flex gap-6">
+					@designLabTab("buttons", "fa-hand-pointer", "Buttons")
+					@designLabTab("cards", "fa-square", "Cards")
+					@designLabTab("badges", "fa-certificate", "Badges")
+					@designLabTab("alerts", "fa-triangle-exclamation", "Alerts")
+					@designLabTab("forms", "fa-keyboard", "Forms")
+					@designLabTab("typography", "fa-font", "Typography")
+					@designLabTab("icons", "fa-icons", "Stat Icons")
+				</nav>
+			</div>
+
+			<!-- Buttons Tab -->
+			<div x-show="tab==='buttons'" x-cloak>
+				@buttonsSection()
+			</div>
+
+			<!-- Cards Tab -->
+			<div x-show="tab==='cards'" x-cloak>
+				@cardsSection()
+			</div>
+
+			<!-- Badges Tab -->
+			<div x-show="tab==='badges'" x-cloak>
+				@badgesSection()
+			</div>
+
+			<!-- Alerts Tab -->
+			<div x-show="tab==='alerts'" x-cloak>
+				@alertsSection()
+			</div>
+
+			<!-- Forms Tab -->
+			<div x-show="tab==='forms'" x-cloak>
+				@formsSection()
+			</div>
+
+			<!-- Typography Tab -->
+			<div x-show="tab==='typography'" x-cloak>
+				@typographySection()
+			</div>
+
+			<!-- Stat Icons Tab -->
+			<div x-show="tab==='icons'" x-cloak>
+				@statIconsSection()
+			</div>
+		</div>
+	}
+}
+
+templ designLabTab(id, icon, label string) {
+	<button
+		@click={ "tab='" + id + "'" }
+		:class={ "tab==='" + id + "' ? 'border-accent text-accent' : 'border-transparent text-fg-secondary hover:text-fg-body'" }
+		class="pb-2 text-sm font-medium border-b-2 transition-colors"
+	>
+		<i class={ "fa-solid " + icon, "mr-1" }></i>
+		{ label }
+	</button>
+}
+
+// sectionCard wraps a demo section with a label.
+templ sectionCard(title string) {
+	<div class="card space-y-4">
+		<h3 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">{ title }</h3>
+		{ children... }
+	</div>
+}
+
+// ---------- Buttons ----------
+
+templ buttonsSection() {
+	<div class="space-y-6">
+		@sectionCard("Button Variants") {
+			<div class="flex flex-wrap gap-3 items-center">
+				<button class="btn-primary">Primary</button>
+				<button class="btn-secondary">Secondary</button>
+				<button class="btn-danger">Danger</button>
+				<button class="btn-ghost">Ghost</button>
+				<button class="btn-warning">Warning</button>
+				<button class="btn-success">Success</button>
+			</div>
+		}
+
+		@sectionCard("Size Variants") {
+			<div class="space-y-4">
+				<div class="flex flex-wrap gap-3 items-center">
+					<span class="text-xs text-fg-muted w-12">xs</span>
+					<button class="btn-primary btn-xs">Primary</button>
+					<button class="btn-secondary btn-xs">Secondary</button>
+					<button class="btn-danger btn-xs">Danger</button>
+					<button class="btn-warning btn-xs">Warning</button>
+					<button class="btn-success btn-xs">Success</button>
+				</div>
+				<div class="flex flex-wrap gap-3 items-center">
+					<span class="text-xs text-fg-muted w-12">sm</span>
+					<button class="btn-primary btn-sm">Primary</button>
+					<button class="btn-secondary btn-sm">Secondary</button>
+					<button class="btn-danger btn-sm">Danger</button>
+					<button class="btn-warning btn-sm">Warning</button>
+					<button class="btn-success btn-sm">Success</button>
+				</div>
+				<div class="flex flex-wrap gap-3 items-center">
+					<span class="text-xs text-fg-muted w-12">default</span>
+					<button class="btn-primary">Primary</button>
+					<button class="btn-secondary">Secondary</button>
+					<button class="btn-danger">Danger</button>
+					<button class="btn-warning">Warning</button>
+					<button class="btn-success">Success</button>
+				</div>
+				<div class="flex flex-wrap gap-3 items-center">
+					<span class="text-xs text-fg-muted w-12">lg</span>
+					<button class="btn-primary btn-lg">Primary</button>
+					<button class="btn-secondary btn-lg">Secondary</button>
+					<button class="btn-danger btn-lg">Danger</button>
+					<button class="btn-warning btn-lg">Warning</button>
+					<button class="btn-success btn-lg">Success</button>
+				</div>
+			</div>
+		}
+
+		@sectionCard("With Icons") {
+			<div class="flex flex-wrap gap-3 items-center">
+				<button class="btn-primary"><i class="fa-solid fa-plus mr-2"></i>Create</button>
+				<button class="btn-secondary"><i class="fa-solid fa-download mr-2"></i>Export</button>
+				<button class="btn-danger"><i class="fa-solid fa-trash mr-2"></i>Delete</button>
+				<button class="btn-warning"><i class="fa-solid fa-bolt mr-2"></i>Override</button>
+				<button class="btn-success"><i class="fa-solid fa-check mr-2"></i>Confirm</button>
+				<button class="btn-ghost"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+			</div>
+		}
+
+		@sectionCard("Icon-Only Buttons") {
+			<div class="flex flex-wrap gap-3 items-center">
+				<button class="btn-primary btn-icon"><i class="fa-solid fa-plus"></i></button>
+				<button class="btn-secondary btn-icon"><i class="fa-solid fa-pen"></i></button>
+				<button class="btn-danger btn-icon"><i class="fa-solid fa-trash"></i></button>
+				<button class="btn-warning btn-icon"><i class="fa-solid fa-bolt"></i></button>
+				<button class="btn-success btn-icon"><i class="fa-solid fa-check"></i></button>
+				<button class="btn-ghost btn-icon"><i class="fa-solid fa-gear"></i></button>
+			</div>
+		}
+
+		@sectionCard("Disabled States") {
+			<div class="flex flex-wrap gap-3 items-center">
+				<button class="btn-primary" disabled>Primary</button>
+				<button class="btn-secondary" disabled>Secondary</button>
+				<button class="btn-danger" disabled>Danger</button>
+				<button class="btn-warning" disabled>Warning</button>
+				<button class="btn-success" disabled>Success</button>
+			</div>
+		}
+	</div>
+}
+
+// ---------- Cards ----------
+
+templ cardsSection() {
+	<div class="space-y-6">
+		@sectionCard("Standard Card") {
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+				<div class="card">
+					<h4 class="text-sm font-semibold text-fg mb-2">Default Card</h4>
+					<p class="text-sm text-fg-secondary">Standard card with default padding (p-4) and rounded-xl corners.</p>
+				</div>
+				<div class="card hover:shadow-md transition-shadow cursor-pointer">
+					<h4 class="text-sm font-semibold text-fg mb-2">Hover Elevation</h4>
+					<p class="text-sm text-fg-secondary">Hover me to see the shadow-md elevation effect.</p>
+				</div>
+				<div class="card hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer">
+					<h4 class="text-sm font-semibold text-fg mb-2">Hover Lift</h4>
+					<p class="text-sm text-fg-secondary">Hover me for both elevation and subtle upward translate.</p>
+				</div>
+			</div>
+		}
+
+		@sectionCard("Stat Card Pattern") {
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+				<div class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-fg-secondary">Users</p>
+						<span class="stat-icon-blue">
+							<i class="fa-solid fa-users text-sm"></i>
+						</span>
+					</div>
+					<p class="text-3xl font-bold text-fg mt-2">128</p>
+					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">View details &rarr;</p>
+				</div>
+				<div class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-fg-secondary">Campaigns</p>
+						<span class="stat-icon-indigo">
+							<i class="fa-solid fa-book-open text-sm"></i>
+						</span>
+					</div>
+					<p class="text-3xl font-bold text-fg mt-2">24</p>
+					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">View details &rarr;</p>
+				</div>
+				<div class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-fg-secondary">Features</p>
+						<span class="stat-icon-teal">
+							<i class="fa-solid fa-plug text-sm"></i>
+						</span>
+					</div>
+					<p class="text-3xl font-bold text-fg mt-2">12</p>
+					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">View details &rarr;</p>
+				</div>
+				<div class="card hover:shadow-md transition-shadow group">
+					<div class="flex items-center justify-between">
+						<p class="text-sm font-medium text-fg-secondary">Storage</p>
+						<span class="stat-icon-purple">
+							<i class="fa-solid fa-hard-drive text-sm"></i>
+						</span>
+					</div>
+					<p class="text-2xl font-bold text-fg mt-2">1.2 GB</p>
+					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">View details &rarr;</p>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// ---------- Badges ----------
+
+templ badgesSection() {
+	<div class="space-y-6">
+		@sectionCard("Badge Variants") {
+			<div class="flex flex-wrap gap-3 items-center">
+				<span class="badge badge-primary">Primary</span>
+				<span class="badge badge-gray">Gray</span>
+				<span class="badge badge-green">Green / Active</span>
+				<span class="badge badge-amber">Amber / Warning</span>
+				<span class="badge badge-red">Red / Error</span>
+				<span class="badge badge-blue">Blue / Info</span>
+			</div>
+		}
+
+		@sectionCard("Badge Use Cases") {
+			<div class="flex flex-wrap gap-3 items-center">
+				<span class="badge badge-green">Active</span>
+				<span class="badge badge-gray">Planned</span>
+				<span class="badge badge-amber">Deprecated</span>
+				<span class="badge badge-red">Offline</span>
+				<span class="badge badge-primary">v1.2.0</span>
+				<span class="badge badge-blue">System</span>
+			</div>
+		}
+	</div>
+}
+
+// ---------- Alerts ----------
+
+templ alertsSection() {
+	<div class="space-y-6">
+		@sectionCard("Alert Variants") {
+			<div class="space-y-3">
+				<div class="alert-success p-3 rounded-lg text-sm">
+					<i class="fa-solid fa-circle-check mr-2"></i>
+					Settings saved successfully.
+				</div>
+				<div class="alert-info p-3 rounded-lg text-sm">
+					<i class="fa-solid fa-circle-info mr-2"></i>
+					Your campaign is configured for bi-directional sync.
+				</div>
+				<div class="alert-warning p-3 rounded-lg text-sm">
+					<i class="fa-solid fa-triangle-exclamation mr-2"></i>
+					SMTP is not configured. Email invites will not be sent.
+				</div>
+				<div class="alert-error p-3 rounded-lg text-sm">
+					<i class="fa-solid fa-circle-xmark mr-2"></i>
+					Failed to connect to the database. Check your configuration.
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// ---------- Forms ----------
+
+templ formsSection() {
+	<div class="space-y-6">
+		@sectionCard("Input States") {
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+				<div>
+					<label class="block text-sm font-medium text-fg-secondary mb-1">Default</label>
+					<input type="text" class="input" placeholder="Enter text..." />
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-secondary mb-1">With Value</label>
+					<input type="text" class="input" value="Chronicle Campaign" />
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-secondary mb-1">Disabled</label>
+					<input type="text" class="input opacity-50 cursor-not-allowed" value="Read only" disabled />
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-secondary mb-1">With Icon</label>
+					<div class="relative">
+						<i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-sm"></i>
+						<input type="text" class="input pl-9" placeholder="Search..." />
+					</div>
+				</div>
+			</div>
+		}
+
+		@sectionCard("Select & Textarea") {
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+				<div>
+					<label class="block text-sm font-medium text-fg-secondary mb-1">Select</label>
+					<select class="input">
+						<option>Choose an option...</option>
+						<option>Option A</option>
+						<option>Option B</option>
+						<option>Option C</option>
+					</select>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-fg-secondary mb-1">Textarea</label>
+					<textarea class="input" rows="3" placeholder="Write something..."></textarea>
+				</div>
+			</div>
+		}
+
+		@sectionCard("Form Actions") {
+			<div class="flex gap-3">
+				<button class="btn-primary">Save Changes</button>
+				<button class="btn-secondary">Cancel</button>
+				<button class="btn-danger btn-sm">Reset</button>
+			</div>
+		}
+	</div>
+}
+
+// ---------- Typography ----------
+
+templ typographySection() {
+	<div class="space-y-6">
+		@sectionCard("Headings") {
+			<div class="space-y-3">
+				<h1 class="text-3xl font-bold text-fg">Heading 1 &mdash; Page Title</h1>
+				<h2 class="text-2xl font-bold text-fg">Heading 2 &mdash; Section Title</h2>
+				<h3 class="text-xl font-semibold text-fg">Heading 3 &mdash; Subsection</h3>
+				<h4 class="text-lg font-semibold text-fg">Heading 4 &mdash; Card Title</h4>
+			</div>
+		}
+
+		@sectionCard("Text Hierarchy") {
+			<div class="space-y-2 max-w-xl">
+				<p class="text-fg">Primary text &mdash; used for main content and headings</p>
+				<p class="text-fg-body">Body text &mdash; used for paragraph content and descriptions</p>
+				<p class="text-fg-secondary">Secondary text &mdash; used for labels, metadata, and supporting info</p>
+				<p class="text-fg-muted">Muted text &mdash; used for timestamps, hints, and subtle details</p>
+				<p class="text-fg-faint">Faint text &mdash; used for disabled content and decorative elements</p>
+			</div>
+		}
+
+		@sectionCard("Links") {
+			<div class="flex flex-wrap gap-6 items-center">
+				<a href="#" class="link" onclick="return false">Standard Link</a>
+				<a href="#" class="link-muted" onclick="return false">Muted Link</a>
+				<a href="#" class="link-danger" onclick="return false">Danger Link</a>
+			</div>
+		}
+
+		@sectionCard("Section Header") {
+			<p class="section-header">Section Header &mdash; uppercase tracking label</p>
+		}
+	</div>
+}
+
+// ---------- Stat Icons ----------
+
+templ statIconsSection() {
+	<div class="space-y-6">
+		@sectionCard("Stat Icon Color Classes") {
+			<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+				@statIconDemo("stat-icon-blue", "fa-users", "Blue")
+				@statIconDemo("stat-icon-indigo", "fa-hard-drive", "Indigo")
+				@statIconDemo("stat-icon-teal", "fa-plug", "Teal")
+				@statIconDemo("stat-icon-purple", "fa-puzzle-piece", "Purple")
+				@statIconDemo("stat-icon-cyan", "fa-satellite-dish", "Cyan")
+				@statIconDemo("stat-icon-red", "fa-shield-halved", "Red")
+				@statIconDemo("stat-icon-amber", "fa-bolt", "Amber")
+				@statIconDemo("stat-icon-emerald", "fa-broom", "Emerald")
+				@statIconDemo("stat-icon-slate", "fa-database", "Slate")
+			</div>
+		}
+
+		@sectionCard("Usage in Dashboard Cards") {
+			<p class="text-sm text-fg-secondary mb-3">
+				Replace inline <code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">bg-blue-50 dark:bg-blue-900/30</code> with semantic <code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">stat-icon-blue</code> classes.
+			</p>
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div class="card p-3">
+					<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">Before (hardcoded)</p>
+					<code class="text-xs text-fg-secondary font-mono block bg-surface-alt p-2 rounded">
+						class=&quot;w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center&quot;
+					</code>
+				</div>
+				<div class="card p-3">
+					<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">After (semantic)</p>
+					<code class="text-xs text-fg-secondary font-mono block bg-surface-alt p-2 rounded">
+						class=&quot;stat-icon-blue&quot;
+					</code>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+templ statIconDemo(className, icon, label string) {
+	<div class="flex flex-col items-center gap-2">
+		<span class={ className }>
+			<i class={ "fa-solid " + icon, "text-sm" }></i>
+		</span>
+		<span class="text-xs text-fg-secondary">{ label }</span>
+		<code class="text-[10px] text-fg-muted font-mono">{ className }</code>
+	</div>
+}

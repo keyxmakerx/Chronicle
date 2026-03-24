@@ -35,8 +35,8 @@ three tiers.
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │  SYSTEMS -- Game System Content Packs                  │    │
-│  │  dnd5e/  pathfinder2e/  drawsteel/                     │    │
+│  │  SYSTEMS -- External packages via package manager       │    │
+│  │  (generic loader + GenericTooltipRenderer)              │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
@@ -69,8 +69,8 @@ Entity Profile Page Load:
   3. Widget (tags) renders the tag picker
   4. Widget (editor) mounts TipTap for entry content
   5. Widget (attributes) renders configurable entity fields
-  6. System (dnd5e) provides tooltip data when hovering @mentions
-     that reference game content (spells, monsters, items, etc.)
+  6. System (installed via package manager) provides tooltip data when
+     hovering @mentions that reference game content
 ```
 
 **Communication rules:**
@@ -141,15 +141,12 @@ chronicle/
 │   │       ├── routes.go
 │   │       └── maps.templ
 │   │
-│   ├── systems/                      # SYSTEMS: Game system content packs
-│   │   ├── dnd5e/                    #   D&D 5th Edition
-│   │   │   ├── .ai.md
-│   │   │   └── data/                 #   Static reference data (JSON)
-│   │   ├── pathfinder2e/             #   Pathfinder 2nd Edition
-│   │   │   ├── .ai.md
-│   │   │   └── data/                 #   Static reference data (JSON)
-│   │   └── drawsteel/                #   Draw Steel (coming soon)
-│   │       └── .ai.md
+│   ├── systems/                      # SYSTEMS: Generic system infrastructure
+│   │   ├── registry.go               #   System registry + factory pattern
+│   │   ├── loader.go                 #   Discover manifests from directories
+│   │   ├── generic_system.go         #   Fallback for manifest-only systems
+│   │   ├── generic_tooltip.go        #   Manifest-driven tooltip renderer
+│   │   └── handler.go                #   System reference page handlers
 │   │
 │   ├── widgets/                      # WIDGETS: Reusable UI building blocks
 │   │   ├── editor/                   #   TipTap rich text editor

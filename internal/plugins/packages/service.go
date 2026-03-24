@@ -855,8 +855,13 @@ func (s *packageService) SeedOfficialPackages(ctx context.Context) {
 		pkgType PackageType
 	}{
 		{
-			name:    "Chronicle Systems",
-			repoURL: "https://github.com/keyxmakerx/chronicle-systems",
+			name:    "D&D 5th Edition (2024)",
+			repoURL: "https://github.com/keyxmakerx/chronicle-dnd-5.5e",
+			pkgType: PackageTypeSystem,
+		},
+		{
+			name:    "Draw Steel",
+			repoURL: "https://github.com/keyxmakerx/chronicle-draw-steel",
 			pkgType: PackageTypeSystem,
 		},
 		{
