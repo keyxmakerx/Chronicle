@@ -23,6 +23,8 @@ templ DesignLabPage() {
 					@designLabTab("forms", "fa-keyboard", "Forms")
 					@designLabTab("typography", "fa-font", "Typography")
 					@designLabTab("icons", "fa-icons", "Stat Icons")
+					@designLabTab("interactive", "fa-wand-magic-sparkles", "Interactive")
+					@designLabTab("hovers", "fa-arrow-pointer", "Hover Effects")
 				</nav>
 			</div>
 
@@ -59,6 +61,16 @@ templ DesignLabPage() {
 			<!-- Stat Icons Tab -->
 			<div x-show="tab==='icons'" x-cloak>
 				@statIconsSection()
+			</div>
+
+			<!-- Interactive Components Tab -->
+			<div x-show="tab==='interactive'" x-cloak>
+				@interactiveSection()
+			</div>
+
+			<!-- Hover Effects Tab -->
+			<div x-show="tab==='hovers'" x-cloak>
+				@hoverEffectsSection()
 			</div>
 		</div>
 	}
@@ -432,5 +444,305 @@ templ statIconDemo(className, icon, label string) {
 		</span>
 		<span class="text-xs text-fg-secondary">{ label }</span>
 		<code class="text-[10px] text-fg-muted font-mono">{ className }</code>
+	</div>
+}
+
+// ---------- Interactive Components ----------
+
+templ interactiveSection() {
+	<div class="space-y-6">
+		@sectionCard("Button Groups") {
+			<div class="space-y-4">
+				<div class="flex flex-wrap gap-6 items-center">
+					<div class="btn-group">
+						<button class="btn-primary btn-sm"><i class="fa-solid fa-list mr-1"></i>List</button>
+						<button class="btn-primary btn-sm"><i class="fa-solid fa-grip mr-1"></i>Grid</button>
+						<button class="btn-primary btn-sm"><i class="fa-solid fa-table-columns mr-1"></i>Board</button>
+					</div>
+					<div class="btn-group">
+						<button class="btn-secondary btn-sm">Day</button>
+						<button class="btn-secondary btn-sm">Week</button>
+						<button class="btn-secondary btn-sm">Month</button>
+					</div>
+					<div class="btn-group">
+						<button class="btn-primary btn-icon btn-sm"><i class="fa-solid fa-bold"></i></button>
+						<button class="btn-primary btn-icon btn-sm"><i class="fa-solid fa-italic"></i></button>
+						<button class="btn-primary btn-icon btn-sm"><i class="fa-solid fa-underline"></i></button>
+						<button class="btn-primary btn-icon btn-sm"><i class="fa-solid fa-strikethrough"></i></button>
+					</div>
+				</div>
+				<p class="text-xs text-fg-muted">
+					Use <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">.btn-group</code> wrapper to join buttons into a single control.
+				</p>
+			</div>
+		}
+
+		@sectionCard("Loading Buttons") {
+			<div class="space-y-4">
+				<div class="flex flex-wrap gap-3 items-center">
+					<button class="btn-primary btn-loading">Saving</button>
+					<button class="btn-secondary btn-loading">Loading</button>
+					<button class="btn-danger btn-loading">Deleting</button>
+					<button class="btn-warning btn-loading">Processing</button>
+					<button class="btn-success btn-loading">Syncing</button>
+				</div>
+				<div class="flex flex-wrap gap-3 items-center">
+					<button class="btn-primary">Normal</button>
+					<i class="fa-solid fa-arrow-right text-fg-muted text-xs"></i>
+					<button class="btn-primary btn-loading">Loading</button>
+					<span class="text-xs text-fg-muted ml-2">Add <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">.btn-loading</code> to any button</span>
+				</div>
+			</div>
+		}
+
+		@sectionCard("Toggle Switches") {
+			<div class="space-y-4">
+				<div class="flex flex-wrap gap-8 items-center">
+					<label class="flex items-center gap-3 cursor-pointer" x-data="{ on: true }">
+						<button
+							class="toggle"
+							:class="on && 'active'"
+							:aria-checked="on"
+							@click="on = !on"
+							type="button"
+							role="switch"
+						>
+							<span class="toggle-knob"></span>
+						</button>
+						<span class="text-sm text-fg-body" x-text="on ? 'Enabled' : 'Disabled'"></span>
+					</label>
+					<label class="flex items-center gap-3 cursor-pointer" x-data="{ on: false }">
+						<button
+							class="toggle"
+							:class="on && 'active'"
+							:aria-checked="on"
+							@click="on = !on"
+							type="button"
+							role="switch"
+						>
+							<span class="toggle-knob"></span>
+						</button>
+						<span class="text-sm text-fg-body" x-text="on ? 'Dark Mode' : 'Light Mode'"></span>
+					</label>
+					<label class="flex items-center gap-3 cursor-pointer" x-data="{ on: true }">
+						<button
+							class="toggle"
+							:class="on && 'active'"
+							:aria-checked="on"
+							@click="on = !on"
+							type="button"
+							role="switch"
+						>
+							<span class="toggle-knob"></span>
+						</button>
+						<span class="text-sm text-fg-body" x-text="on ? 'Notifications On' : 'Notifications Off'"></span>
+					</label>
+				</div>
+				<p class="text-xs text-fg-muted">
+					Uses <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">.toggle</code> + <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">.toggle-knob</code> with Alpine <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">aria-checked</code> binding.
+				</p>
+			</div>
+		}
+
+		@sectionCard("Tooltips") {
+			<div class="flex flex-wrap gap-6 items-center py-6">
+				<button class="btn-primary tooltip" data-tip="Create a new item">
+					<i class="fa-solid fa-plus mr-2"></i>New
+				</button>
+				<button class="btn-secondary tooltip" data-tip="Export as CSV">
+					<i class="fa-solid fa-download mr-2"></i>Export
+				</button>
+				<button class="btn-danger btn-icon tooltip" data-tip="Delete permanently">
+					<i class="fa-solid fa-trash"></i>
+				</button>
+				<span class="tooltip text-sm text-fg-secondary cursor-default" data-tip="Last synced 3 minutes ago">
+					<i class="fa-solid fa-circle-info mr-1"></i>Hover for info
+				</span>
+			</div>
+		}
+
+		@sectionCard("Dropdown Menu") {
+			<div class="relative" x-data="{ open: false }">
+				<button class="btn-secondary" @click="open = !open">
+					<i class="fa-solid fa-ellipsis-vertical mr-2"></i>Actions
+					<i class="fa-solid fa-chevron-down ml-2 text-xs"></i>
+				</button>
+				<div class="dropdown-menu mt-1" x-show="open" x-cloak @click.outside="open = false" x-transition>
+					<div class="dropdown-item">
+						<i class="fa-solid fa-pen text-fg-muted w-4 text-center"></i>
+						<span>Edit</span>
+					</div>
+					<div class="dropdown-item">
+						<i class="fa-solid fa-copy text-fg-muted w-4 text-center"></i>
+						<span>Duplicate</span>
+					</div>
+					<div class="dropdown-item">
+						<i class="fa-solid fa-arrow-up-right-from-square text-fg-muted w-4 text-center"></i>
+						<span>Open in new tab</span>
+					</div>
+					<div class="dropdown-divider"></div>
+					<div class="dropdown-item dropdown-item-danger">
+						<i class="fa-solid fa-trash w-4 text-center"></i>
+						<span>Delete</span>
+					</div>
+				</div>
+			</div>
+		}
+
+		@sectionCard("Skeleton Loaders") {
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+				<div>
+					<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">Card Skeleton</p>
+					<div class="card space-y-3">
+						<div class="flex items-center gap-3">
+							<div class="skeleton skeleton-avatar"></div>
+							<div class="space-y-2 flex-1">
+								<div class="skeleton skeleton-title"></div>
+								<div class="skeleton skeleton-text w-1/3"></div>
+							</div>
+						</div>
+						<div class="space-y-2">
+							<div class="skeleton skeleton-text"></div>
+							<div class="skeleton skeleton-text w-5/6"></div>
+							<div class="skeleton skeleton-text w-4/6"></div>
+						</div>
+						<div class="flex gap-2">
+							<div class="skeleton skeleton-button"></div>
+							<div class="skeleton skeleton-button w-16"></div>
+						</div>
+					</div>
+				</div>
+				<div>
+					<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">List Skeleton</p>
+					<div class="card space-y-4">
+						<div class="flex items-center gap-3">
+							<div class="skeleton h-8 w-8 rounded-lg"></div>
+							<div class="flex-1 space-y-1.5">
+								<div class="skeleton skeleton-text w-3/4"></div>
+								<div class="skeleton skeleton-text w-1/2"></div>
+							</div>
+						</div>
+						<div class="flex items-center gap-3">
+							<div class="skeleton h-8 w-8 rounded-lg"></div>
+							<div class="flex-1 space-y-1.5">
+								<div class="skeleton skeleton-text w-2/3"></div>
+								<div class="skeleton skeleton-text w-2/5"></div>
+							</div>
+						</div>
+						<div class="flex items-center gap-3">
+							<div class="skeleton h-8 w-8 rounded-lg"></div>
+							<div class="flex-1 space-y-1.5">
+								<div class="skeleton skeleton-text w-5/6"></div>
+								<div class="skeleton skeleton-text w-1/3"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// ---------- Hover Effects ----------
+
+templ hoverEffectsSection() {
+	<div class="space-y-6">
+		@sectionCard("Button Accent Edge-Glow") {
+			<div class="space-y-4">
+				<p class="text-sm text-fg-secondary">
+					Every button has a subtle accent gradient that peeks out on the right edge on hover.
+					The glow sits <strong>3px outside</strong> the button boundary and fades from 45% accent opacity to transparent.
+				</p>
+				<div class="flex flex-wrap gap-6 items-center bg-surface-alt p-6 rounded-lg">
+					<button class="btn-primary btn-lg">Hover Me</button>
+					<button class="btn-secondary btn-lg">Hover Me</button>
+					<button class="btn-danger btn-lg">Hover Me</button>
+					<button class="btn-success btn-lg">Hover Me</button>
+					<button class="btn-warning btn-lg">Hover Me</button>
+				</div>
+				<div class="card p-3">
+					<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">How it works</p>
+					<code class="text-xs text-fg-secondary font-mono block bg-surface-alt p-3 rounded whitespace-pre leading-relaxed">.btn::after &#123;
+  right: -3px; width: 6px; height: 70%;
+  background: linear-gradient(to right,
+    accent/0.45, accent/0);
+  opacity: 0 → 1 on hover (0.25s ease);
+&#125;</code>
+				</div>
+			</div>
+		}
+
+		@sectionCard("Shadow Elevation") {
+			<p class="text-sm text-fg-secondary mb-3">
+				Colored buttons gain a <strong>tinted shadow</strong> on hover (e.g. <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">shadow-accent/20</code>).
+				Combined with <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">shadow-sm → shadow-md</code> transition.
+			</p>
+			<div class="flex flex-wrap gap-6 items-center bg-surface-alt p-6 rounded-lg">
+				<button class="btn-primary">Indigo shadow</button>
+				<button class="btn-danger">Red shadow</button>
+				<button class="btn-warning">Amber shadow</button>
+				<button class="btn-success">Green shadow</button>
+			</div>
+		}
+
+		@sectionCard("Press Feedback (Active State)") {
+			<p class="text-sm text-fg-secondary mb-3">
+				All buttons scale down to <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">scale(0.98)</code> on press for tactile click feedback.
+				Try clicking and holding these buttons.
+			</p>
+			<div class="flex flex-wrap gap-4 items-center bg-surface-alt p-6 rounded-lg">
+				<button class="btn-primary btn-lg">Click &amp; hold</button>
+				<button class="btn-secondary btn-lg">Click &amp; hold</button>
+			</div>
+		}
+
+		@sectionCard("Card Hover Patterns") {
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+				<div class="card hover:shadow-md transition-shadow cursor-pointer">
+					<h4 class="text-sm font-semibold text-fg mb-2">Shadow Only</h4>
+					<p class="text-xs text-fg-secondary"><code class="bg-surface-alt px-1 py-0.5 rounded font-mono">hover:shadow-md</code></p>
+				</div>
+				<div class="card hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer">
+					<h4 class="text-sm font-semibold text-fg mb-2">Shadow + Lift</h4>
+					<p class="text-xs text-fg-secondary"><code class="bg-surface-alt px-1 py-0.5 rounded font-mono">hover:-translate-y-0.5</code></p>
+				</div>
+				<div class="card hover:shadow-md hover:border-accent/30 transition-all cursor-pointer">
+					<h4 class="text-sm font-semibold text-fg mb-2">Shadow + Accent Border</h4>
+					<p class="text-xs text-fg-secondary"><code class="bg-surface-alt px-1 py-0.5 rounded font-mono">hover:border-accent/30</code></p>
+				</div>
+			</div>
+		}
+
+		@sectionCard("Link Hover Styles") {
+			<div class="flex flex-wrap gap-8 items-center">
+				<a href="#" onclick="return false" class="link">Standard link</a>
+				<a href="#" onclick="return false" class="link-muted">Muted link</a>
+				<a href="#" onclick="return false" class="link-danger">Danger link</a>
+			</div>
+		}
+
+		@sectionCard("Transition Timing Reference") {
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div class="space-y-2">
+					<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider">Standard Durations</p>
+					<div class="space-y-1.5 text-sm text-fg-body">
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">100ms</code> — color changes on dropdown items</p>
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">150ms</code> — tooltip fade, dropdown appear</p>
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">200ms</code> — buttons, cards, inputs (default)</p>
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">250ms</code> — accent edge-glow</p>
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">300ms</code> — sidebar slide, panel expand</p>
+					</div>
+				</div>
+				<div class="space-y-2">
+					<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider">Easing Curves</p>
+					<div class="space-y-1.5 text-sm text-fg-body">
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">ease</code> — accent glow, general purpose</p>
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">ease-out</code> — sidebar fade-in, toasts</p>
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">ease-in-out</code> — shimmer, skeleton pulse</p>
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">linear</code> — spinner rotation</p>
+					</div>
+				</div>
+			</div>
+		}
 	</div>
 }

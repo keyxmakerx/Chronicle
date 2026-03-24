@@ -153,6 +153,131 @@
   .btn-lg { @apply text-base px-6 py-3 rounded-lg; }
   .btn-icon { @apply !p-2 rounded-lg; }
 
+  /* Button group — joined buttons that act as a single control. */
+  .btn-group {
+    @apply inline-flex rounded-lg overflow-hidden border border-edge;
+  }
+  .btn-group .btn {
+    @apply rounded-none border-0 shadow-none;
+  }
+  .btn-group .btn::after { display: none; }
+  .btn-group .btn + .btn {
+    border-left: 1px solid rgb(255 255 255 / 0.15);
+  }
+  .btn-group .btn-secondary + .btn-secondary {
+    border-left-color: var(--color-border);
+  }
+
+  /* Loading button spinner */
+  .btn-loading {
+    @apply relative pointer-events-none;
+    color: transparent !important;
+  }
+  .btn-loading::before {
+    content: '';
+    position: absolute;
+    width: 1em;
+    height: 1em;
+    border: 2px solid rgb(255 255 255 / 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: btn-spin 0.6s linear infinite;
+  }
+  .btn-loading.btn-secondary::before {
+    border-color: rgb(0 0 0 / 0.15);
+    border-top-color: var(--color-text-secondary);
+  }
+  @keyframes btn-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Toggle switch */
+  .toggle {
+    @apply relative inline-flex h-6 w-11 items-center rounded-full cursor-pointer
+           transition-colors duration-200;
+    background-color: var(--color-border);
+  }
+  .toggle[aria-checked="true"],
+  .toggle.active {
+    background-color: rgb(var(--color-accent-rgb, 99 102 241));
+  }
+  .toggle .toggle-knob {
+    @apply inline-block h-4 w-4 rounded-full bg-white shadow-sm
+           transition-transform duration-200;
+    transform: translateX(4px);
+  }
+  .toggle[aria-checked="true"] .toggle-knob,
+  .toggle.active .toggle-knob {
+    transform: translateX(24px);
+  }
+
+  /* Tooltip */
+  .tooltip {
+    @apply relative;
+  }
+  .tooltip::before {
+    content: attr(data-tip);
+    @apply absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+           px-2 py-1 text-xs font-medium text-white rounded-md
+           whitespace-nowrap pointer-events-none;
+    background: var(--color-text-primary);
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  .tooltip:hover::before {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* Dropdown menu */
+  .dropdown-menu {
+    @apply absolute z-50 min-w-[180px] rounded-lg border border-edge bg-surface
+           shadow-lg py-1;
+    animation: dropdown-in 0.15s ease-out;
+  }
+  .dropdown-item {
+    @apply flex items-center gap-2 px-3 py-2 text-sm text-fg-body
+           cursor-pointer transition-colors duration-100;
+  }
+  .dropdown-item:hover {
+    @apply bg-surface-alt;
+  }
+  .dropdown-item-danger {
+    @apply text-red-600;
+  }
+  .dropdown-item-danger:hover {
+    @apply bg-red-50 dark:bg-red-900/20;
+  }
+  .dropdown-divider {
+    @apply border-t border-edge my-1;
+  }
+  @keyframes dropdown-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Skeleton loader shapes */
+  .skeleton {
+    @apply rounded-md;
+    background: linear-gradient(
+      90deg,
+      var(--color-bg-tertiary) 25%,
+      var(--color-border-light, var(--color-bg-secondary)) 50%,
+      var(--color-bg-tertiary) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  }
+  .skeleton-text { @apply h-3 w-full; }
+  .skeleton-title { @apply h-5 w-2/3; }
+  .skeleton-avatar { @apply h-10 w-10 rounded-full; }
+  .skeleton-button { @apply h-9 w-24 rounded-lg; }
+  @keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
   /* ---- Cards ---- */
   .card {
     @apply bg-surface rounded-xl shadow-sm border border-edge p-4
