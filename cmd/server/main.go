@@ -22,11 +22,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/systems"
-
-	// Import system packages with custom Go code for their init() factory
-	// registrations. Pure-data systems (manifest.json + data/*.json + widgets/*.js)
-	// work automatically without an import — they use the GenericSystem fallback.
-	_ "github.com/keyxmakerx/chronicle/internal/systems/dnd5e"
 )
 
 func main() {
