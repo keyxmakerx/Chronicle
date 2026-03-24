@@ -2149,9 +2149,9 @@ func (h *Handler) DeleteEntityType(c echo.Context) error {
 
 // --- Template Editor ---
 
-// BlockTypesAPI returns the available block types for the template editor,
-// filtered by which addons are enabled for the current campaign.
-// Also includes extension widget blocks from enabled extensions.
+// BlockTypesAPI returns the available block types for the layout editor,
+// filtered by which addons are enabled for the current campaign and
+// optionally by editor context (?context=dashboard|template).
 // GET /campaigns/:id/entity-types/block-types
 func (h *Handler) BlockTypesAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -2163,10 +2163,11 @@ func (h *Handler) BlockTypesAPI(c echo.Context) error {
 		return c.JSON(http.StatusOK, []BlockMeta{})
 	}
 
-	types := h.blockRegistry.TypesForCampaign(c.Request().Context(), cc.Campaign.ID, h.addonSvc)
+	editorCtx := c.QueryParam("context") // "dashboard", "template", or "" (all)
+	types := h.blockRegistry.TypesForCampaignAndContext(c.Request().Context(), cc.Campaign.ID, h.addonSvc, editorCtx)
 
-	// Append extension widget blocks from enabled extensions.
-	if h.widgetBlockLister != nil {
+	// Append extension widget blocks from enabled extensions (template context only).
+	if h.widgetBlockLister != nil && (editorCtx == "" || editorCtx == "template") {
 		extWidgets := h.widgetBlockLister.GetWidgetBlockMetas(c.Request().Context(), cc.Campaign.ID)
 		types = append(types, extWidgets...)
 	}

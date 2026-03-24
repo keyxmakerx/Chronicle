@@ -12,15 +12,37 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// BlockMeta describes a block type for the template editor UI and validation.
+// BlockMeta describes a block type for the layout editor UI and validation.
+// Both template (entity page) and dashboard block types are registered here
+// so a single source of truth drives palette, validation, and config dialogs.
 type BlockMeta struct {
-	Type        string `json:"type"`
-	Label       string `json:"label"`
-	Icon        string `json:"icon"`                    // FontAwesome class (e.g., "fa-heading").
-	Description string `json:"description"`
-	Addon       string `json:"addon,omitempty"`          // Required addon slug; empty = always available.
-	Container   bool   `json:"container,omitempty"`      // True for layout containers (two_column, tabs, etc.).
-	WidgetSlug  string `json:"widget_slug,omitempty"`    // For ext_widget blocks: the extension widget slug.
+	Type         string            `json:"type"`
+	Label        string            `json:"label"`
+	Icon         string            `json:"icon"`                      // FontAwesome class (e.g., "fa-heading").
+	Description  string            `json:"description"`
+	Addon        string            `json:"addon,omitempty"`           // Required addon slug; empty = always available.
+	Container    bool              `json:"container,omitempty"`       // True for layout containers (two_column, tabs, etc.).
+	WidgetSlug   string            `json:"widget_slug,omitempty"`     // For ext_widget blocks: the extension widget slug.
+	Contexts     []string          `json:"contexts,omitempty"`        // Editor contexts: "dashboard", "template". Empty = all.
+	ConfigFields []ConfigFieldMeta `json:"config_fields,omitempty"`   // Declarative config schema for the editor dialog.
+}
+
+// ConfigFieldMeta describes a single configurable field for a block type.
+// The layout editor auto-generates a config dialog from these declarations.
+type ConfigFieldMeta struct {
+	Key     string   `json:"key"`
+	Label   string   `json:"label"`
+	Type    string   `json:"type"`              // "number", "text", "textarea", "select", "entity_type"
+	Min     *int     `json:"min,omitempty"`      // For "number" type.
+	Max     *int     `json:"max,omitempty"`      // For "number" type.
+	Default any      `json:"default,omitempty"`
+	Options []Option `json:"options,omitempty"`  // For "select" type.
+}
+
+// Option is a label+value pair for select-type config fields.
+type Option struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
 }
 
 // BlockRenderContext holds the data available to every block renderer.
@@ -122,6 +144,59 @@ func (r *BlockRegistry) TypesForCampaign(ctx context.Context, campaignID string,
 		}
 	}
 	return result
+}
+
+// TypesForCampaignAndContext returns block metadata filtered by both addon
+// availability and editor context. Pass an empty editorCtx to skip context
+// filtering (returns all blocks for the campaign, same as TypesForCampaign).
+func (r *BlockRegistry) TypesForCampaignAndContext(ctx context.Context, campaignID string, checker blockAddonChecker, editorCtx string) []BlockMeta {
+	all := r.Types()
+	result := make([]BlockMeta, 0, len(all))
+	for _, meta := range all {
+		// Filter by context if specified.
+		if editorCtx != "" && len(meta.Contexts) > 0 {
+			found := false
+			for _, c := range meta.Contexts {
+				if c == editorCtx {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		// Filter by addon.
+		if meta.Addon != "" && checker != nil {
+			enabled, err := checker.IsEnabledForCampaign(ctx, campaignID, meta.Addon)
+			if err != nil || !enabled {
+				continue
+			}
+		}
+		result = append(result, meta)
+	}
+	return result
+}
+
+// IsValidForContext returns true if blockType is registered and belongs to the
+// given editor context (or has no context restriction). Pass empty editorCtx
+// to skip the context check.
+func (r *BlockRegistry) IsValidForContext(blockType string, editorCtx string) bool {
+	r.mu.RLock()
+	entry, ok := r.entries[blockType]
+	r.mu.RUnlock()
+	if !ok {
+		return false
+	}
+	if editorCtx == "" || len(entry.meta.Contexts) == 0 {
+		return true
+	}
+	for _, c := range entry.meta.Contexts {
+		if c == editorCtx {
+			return true
+		}
+	}
+	return false
 }
 
 // Render dispatches to the registered renderer for the block type.
