@@ -92,30 +92,47 @@
     position: relative;
     overflow: visible;
   }
-  /* Subtle accent edge-glow on hover — a soft gradient that peeks out
-     on the right side of every button, just outside its boundary. */
-  .btn::after {
+  /* Asymmetric accent trace on hover — a conic border that starts 2/3
+     along the top edge, sweeps right-down-left to 2/3 along the bottom.
+     On click the accent completes a full outline with a pop. */
+  .btn::before {
     content: '';
     position: absolute;
-    top: 15%;
-    right: -3px;
-    width: 6px;
-    height: 70%;
-    border-radius: 0 4px 4px 0;
-    background: linear-gradient(
-      to right,
-      rgb(var(--color-accent-rgb, 99 102 241) / 0.45),
-      rgb(var(--color-accent-rgb, 99 102 241) / 0)
+    inset: -1.5px;
+    border-radius: inherit;
+    padding: 1.5px;
+    /* Conic gradient: transparent for the first ~17% (left 1/3 of top),
+       then accent from 17% around to ~83% (right 2/3 of bottom),
+       then transparent again for the remaining left 1/3 of bottom → top. */
+    background: conic-gradient(
+      from 0deg at 50% 50%,
+      transparent 0%,
+      transparent 17%,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.6) 22%,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.45) 50%,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.6) 78%,
+      transparent 83%,
+      transparent 100%
     );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
     opacity: 0;
     transition: opacity 0.25s ease;
     pointer-events: none;
   }
-  .btn:hover::after {
+  .btn:hover::before {
     opacity: 1;
   }
-  .btn:disabled::after,
-  .btn[disabled]::after {
+  /* On press: full accent outline + pop */
+  .btn:active::before {
+    opacity: 1;
+    background: rgb(var(--color-accent-rgb, 99 102 241) / 0.7);
+  }
+  .btn:disabled::before,
+  .btn[disabled]::before {
     display: none;
   }
   .btn-primary {
@@ -160,7 +177,7 @@
   .btn-group .btn {
     @apply rounded-none border-0 shadow-none;
   }
-  .btn-group .btn::after { display: none; }
+  .btn-group .btn::before { display: none; }
   .btn-group .btn + .btn {
     border-left: 1px solid rgb(255 255 255 / 0.15);
   }

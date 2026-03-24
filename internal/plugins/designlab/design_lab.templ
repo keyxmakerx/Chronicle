@@ -647,56 +647,176 @@ templ interactiveSection() {
 
 templ hoverEffectsSection() {
 	<div class="space-y-6">
-		@sectionCard("Button Accent Edge-Glow") {
+		@sectionCard("Button Accent Trace") {
 			<div class="space-y-4">
 				<p class="text-sm text-fg-secondary">
-					Every button has a subtle accent gradient that peeks out on the right edge on hover.
-					The glow sits <strong>3px outside</strong> the button boundary and fades from 45% accent opacity to transparent.
+					On hover, an asymmetric accent border traces around the button &mdash; starting <strong>2/3 along the top</strong>, sweeping
+					down the right side, then continuing <strong>2/3 along the bottom</strong>. On click, the accent completes a full outline with a pop.
 				</p>
-				<div class="flex flex-wrap gap-6 items-center bg-surface-alt p-6 rounded-lg">
+				<div class="flex flex-wrap gap-6 items-center bg-surface-alt p-8 rounded-lg">
 					<button class="btn-primary btn-lg">Hover Me</button>
 					<button class="btn-secondary btn-lg">Hover Me</button>
 					<button class="btn-danger btn-lg">Hover Me</button>
 					<button class="btn-success btn-lg">Hover Me</button>
 					<button class="btn-warning btn-lg">Hover Me</button>
+					<button class="btn-ghost btn-lg">Ghost</button>
 				</div>
+				<p class="text-xs text-fg-muted">
+					<strong>Hover</strong> = asymmetric trace &nbsp;&bull;&nbsp;
+					<strong>Click &amp; hold</strong> = full accent outline + scale pop
+				</p>
 				<div class="card p-3">
 					<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">How it works</p>
-					<code class="text-xs text-fg-secondary font-mono block bg-surface-alt p-3 rounded whitespace-pre leading-relaxed">.btn::after &#123;
-  right: -3px; width: 6px; height: 70%;
-  background: linear-gradient(to right,
-    accent/0.45, accent/0);
-  opacity: 0 → 1 on hover (0.25s ease);
+					<code class="text-xs text-fg-secondary font-mono block bg-surface-alt p-3 rounded whitespace-pre leading-relaxed">.btn::before &#123;
+  inset: -1.5px; padding: 1.5px;
+  background: conic-gradient(
+    transparent 0-17%,     /* skip left 1/3 of top */
+    accent/0.6  22%,       /* start trace at 2/3 top */
+    accent/0.45 50%,       /* right side */
+    accent/0.6  78%,       /* end trace at 2/3 bottom */
+    transparent 83-100%    /* skip left 1/3 of bottom */
+  );
+  mask-composite: exclude; /* hollow out the center */
+&#125;
+.btn:active::before &#123;
+  background: accent/0.7; /* full outline on press */
 &#125;</code>
 				</div>
 			</div>
 		}
 
-		@sectionCard("Shadow Elevation") {
+		@sectionCard("Entity Card Hover (Live Pattern)") {
 			<p class="text-sm text-fg-secondary mb-3">
-				Colored buttons gain a <strong>tinted shadow</strong> on hover (e.g. <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">shadow-accent/20</code>).
-				Combined with <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">shadow-sm → shadow-md</code> transition.
+				The real entity card pattern: shadow elevation + image zoom + title color shift on hover.
+				Uses Tailwind <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">group</code> /
+				<code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">group-hover:</code> to coordinate child transitions.
 			</p>
-			<div class="flex flex-wrap gap-6 items-center bg-surface-alt p-6 rounded-lg">
-				<button class="btn-primary">Indigo shadow</button>
-				<button class="btn-danger">Red shadow</button>
-				<button class="btn-warning">Amber shadow</button>
-				<button class="btn-success">Green shadow</button>
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+				<!-- Entity card mock -->
+				<a href="#" onclick="return false" class="card p-0 overflow-hidden hover:shadow-md transition-shadow block group cursor-pointer">
+					<div class="h-28 bg-gradient-to-br from-accent/20 to-accent/5 overflow-hidden">
+						<div class="w-full h-full bg-accent/10 group-hover:scale-105 transition-transform duration-300 flex items-center justify-center">
+							<i class="fa-solid fa-dragon text-3xl text-accent/40"></i>
+						</div>
+					</div>
+					<div class="p-3">
+						<h4 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">Ancient Red Dragon</h4>
+						<p class="text-xs text-fg-muted mt-0.5">Creature &bull; CR 24</p>
+					</div>
+				</a>
+				<a href="#" onclick="return false" class="card p-0 overflow-hidden hover:shadow-md transition-shadow block group cursor-pointer">
+					<div class="h-28 bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 overflow-hidden">
+						<div class="w-full h-full bg-emerald-500/10 group-hover:scale-105 transition-transform duration-300 flex items-center justify-center">
+							<i class="fa-solid fa-landmark text-3xl text-emerald-500/40"></i>
+						</div>
+					</div>
+					<div class="p-3">
+						<h4 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">Waterdeep</h4>
+						<p class="text-xs text-fg-muted mt-0.5">Location &bull; City</p>
+					</div>
+				</a>
+				<a href="#" onclick="return false" class="card p-0 overflow-hidden hover:shadow-md transition-shadow block group cursor-pointer">
+					<div class="h-28 bg-gradient-to-br from-amber-500/20 to-amber-500/5 overflow-hidden">
+						<div class="w-full h-full bg-amber-500/10 group-hover:scale-105 transition-transform duration-300 flex items-center justify-center">
+							<i class="fa-solid fa-hat-wizard text-3xl text-amber-500/40"></i>
+						</div>
+					</div>
+					<div class="p-3">
+						<h4 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">Elminster Aumar</h4>
+						<p class="text-xs text-fg-muted mt-0.5">NPC &bull; Archmage</p>
+					</div>
+				</a>
+				<a href="#" onclick="return false" class="card p-0 overflow-hidden hover:shadow-md transition-shadow block group cursor-pointer">
+					<div class="h-28 bg-gradient-to-br from-purple-500/20 to-purple-500/5 overflow-hidden">
+						<div class="w-full h-full bg-purple-500/10 group-hover:scale-105 transition-transform duration-300 flex items-center justify-center">
+							<i class="fa-solid fa-scroll text-3xl text-purple-500/40"></i>
+						</div>
+					</div>
+					<div class="p-3">
+						<h4 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">Staff of the Magi</h4>
+						<p class="text-xs text-fg-muted mt-0.5">Item &bull; Legendary</p>
+					</div>
+				</a>
 			</div>
 		}
 
-		@sectionCard("Press Feedback (Active State)") {
+		@sectionCard("Timeline Card Hover (Accent Border Glow)") {
 			<p class="text-sm text-fg-secondary mb-3">
-				All buttons scale down to <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">scale(0.98)</code> on press for tactile click feedback.
-				Try clicking and holding these buttons.
+				Timeline cards use <strong>border-color shift to accent</strong> + a <strong>colored box-shadow glow</strong> on hover.
 			</p>
-			<div class="flex flex-wrap gap-4 items-center bg-surface-alt p-6 rounded-lg">
-				<button class="btn-primary btn-lg">Click &amp; hold</button>
-				<button class="btn-secondary btn-lg">Click &amp; hold</button>
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+				<div
+					class="rounded-lg p-3 cursor-pointer"
+					style="background: var(--color-surface-alt); border: 1px solid var(--color-edge); transition: border-color 150ms, box-shadow 150ms;"
+					onmouseover="this.style.borderColor='var(--color-accent)';this.style.boxShadow='0 4px 12px rgba(99,102,241,0.2)'"
+					onmouseout="this.style.borderColor='var(--color-edge)';this.style.boxShadow='none'"
+				>
+					<div class="flex items-center gap-2 mb-1">
+						<i class="fa-solid fa-calendar-day text-accent text-xs"></i>
+						<span class="text-xs text-fg-muted">Session 14 &mdash; 1422 DR</span>
+					</div>
+					<h4 class="text-sm font-semibold text-fg">The Fall of Myth Drannor</h4>
+					<p class="text-xs text-fg-secondary mt-1">The elven city falls to the demon horde...</p>
+				</div>
+				<div
+					class="rounded-lg p-3 cursor-pointer"
+					style="background: var(--color-surface-alt); border: 1px solid var(--color-edge); transition: border-color 150ms, box-shadow 150ms;"
+					onmouseover="this.style.borderColor='var(--color-accent)';this.style.boxShadow='0 4px 12px rgba(99,102,241,0.2)'"
+					onmouseout="this.style.borderColor='var(--color-edge)';this.style.boxShadow='none'"
+				>
+					<div class="flex items-center gap-2 mb-1">
+						<i class="fa-solid fa-calendar-day text-accent text-xs"></i>
+						<span class="text-xs text-fg-muted">Session 22 &mdash; 1489 DR</span>
+					</div>
+					<h4 class="text-sm font-semibold text-fg">Dragon Heist Begins</h4>
+					<p class="text-xs text-fg-secondary mt-1">A fireball in Trollskull Alley...</p>
+				</div>
+				<div
+					class="rounded-lg p-3 cursor-pointer"
+					style="background: var(--color-surface-alt); border: 1px solid var(--color-edge); transition: border-color 150ms, box-shadow 150ms;"
+					onmouseover="this.style.borderColor='var(--color-accent)';this.style.boxShadow='0 4px 12px rgba(99,102,241,0.2)'"
+					onmouseout="this.style.borderColor='var(--color-edge)';this.style.boxShadow='none'"
+				>
+					<div class="flex items-center gap-2 mb-1">
+						<i class="fa-solid fa-calendar-day text-accent text-xs"></i>
+						<span class="text-xs text-fg-muted">Session 31 &mdash; 1492 DR</span>
+					</div>
+					<h4 class="text-sm font-semibold text-fg">Descent into Avernus</h4>
+					<p class="text-xs text-fg-secondary mt-1">The party enters the first layer of the Nine Hells...</p>
+				</div>
 			</div>
 		}
 
-		@sectionCard("Card Hover Patterns") {
+		@sectionCard("Pinned / Recent Entity Row Hover") {
+			<p class="text-sm text-fg-secondary mb-3">
+				Compact list rows: background shift + text accent on hover. Used in sidebar, recent pages, pinned lists.
+			</p>
+			<div class="max-w-md space-y-1">
+				<a href="#" onclick="return false" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-alt hover:bg-surface border border-edge-light hover:border-edge transition-colors group">
+					<div class="w-8 h-8 rounded bg-accent/10 flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-dragon text-xs text-accent/60"></i>
+					</div>
+					<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">Ancient Red Dragon</span>
+					<span class="ml-auto text-[10px] text-fg-muted">Creature</span>
+				</a>
+				<a href="#" onclick="return false" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-alt hover:bg-surface border border-edge-light hover:border-edge transition-colors group">
+					<div class="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-landmark text-xs text-emerald-500/60"></i>
+					</div>
+					<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">Waterdeep</span>
+					<span class="ml-auto text-[10px] text-fg-muted">Location</span>
+				</a>
+				<a href="#" onclick="return false" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-alt hover:bg-surface border border-edge-light hover:border-edge transition-colors group">
+					<div class="w-8 h-8 rounded bg-amber-500/10 flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-hat-wizard text-xs text-amber-500/60"></i>
+					</div>
+					<span class="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">Elminster Aumar</span>
+					<span class="ml-auto text-[10px] text-fg-muted">NPC</span>
+				</a>
+			</div>
+		}
+
+		@sectionCard("Card Hover Comparison") {
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 				<div class="card hover:shadow-md transition-shadow cursor-pointer">
 					<h4 class="text-sm font-semibold text-fg mb-2">Shadow Only</h4>
@@ -713,11 +833,46 @@ templ hoverEffectsSection() {
 			</div>
 		}
 
-		@sectionCard("Link Hover Styles") {
-			<div class="flex flex-wrap gap-8 items-center">
-				<a href="#" onclick="return false" class="link">Standard link</a>
-				<a href="#" onclick="return false" class="link-muted">Muted link</a>
-				<a href="#" onclick="return false" class="link-danger">Danger link</a>
+		@sectionCard("Entity Link Hover (Inline Mentions)") {
+			<div class="prose max-w-xl">
+				<p class="text-sm text-fg-body leading-relaxed">
+					The party traveled to
+					<a href="#" onclick="return false" class="text-accent font-medium no-underline cursor-pointer rounded bg-accent/10 px-1 py-0.5 hover:bg-accent/20 transition-colors">Waterdeep</a>
+					where they met
+					<a href="#" onclick="return false" class="text-accent font-medium no-underline cursor-pointer rounded bg-accent/10 px-1 py-0.5 hover:bg-accent/20 transition-colors">Elminster Aumar</a>
+					at the
+					<a href="#" onclick="return false" class="text-accent font-medium no-underline cursor-pointer rounded bg-accent/10 px-1 py-0.5 hover:bg-accent/20 transition-colors">Yawning Portal Inn</a>.
+					He warned them about the
+					<a href="#" onclick="return false" class="text-accent font-medium no-underline cursor-pointer rounded bg-accent/10 px-1 py-0.5 hover:bg-accent/20 transition-colors">Ancient Red Dragon</a>
+					threatening the region.
+				</p>
+			</div>
+			<p class="text-xs text-fg-muted mt-3">
+				<code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">.entity-link</code> &mdash;
+				accent pill with <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">bg-accent/10 → bg-accent/20</code> on hover.
+			</p>
+		}
+
+		@sectionCard("Sidebar Icon Glow") {
+			<p class="text-sm text-fg-secondary mb-3">
+				Category icons in the sidebar get a <strong>drop-shadow glow</strong> on hover (no scale, avoids layout jiggle).
+			</p>
+			<div class="flex flex-wrap gap-6 items-center p-4">
+				<span class="cursor-pointer transition-all duration-150 text-red-400 text-xl hover:drop-shadow-[0_0_3px_currentColor]">
+					<i class="fa-solid fa-dragon"></i>
+				</span>
+				<span class="cursor-pointer transition-all duration-150 text-emerald-400 text-xl hover:drop-shadow-[0_0_3px_currentColor]">
+					<i class="fa-solid fa-landmark"></i>
+				</span>
+				<span class="cursor-pointer transition-all duration-150 text-amber-400 text-xl hover:drop-shadow-[0_0_3px_currentColor]">
+					<i class="fa-solid fa-hat-wizard"></i>
+				</span>
+				<span class="cursor-pointer transition-all duration-150 text-purple-400 text-xl hover:drop-shadow-[0_0_3px_currentColor]">
+					<i class="fa-solid fa-scroll"></i>
+				</span>
+				<span class="cursor-pointer transition-all duration-150 text-blue-400 text-xl hover:drop-shadow-[0_0_3px_currentColor]">
+					<i class="fa-solid fa-shield-halved"></i>
+				</span>
 			</div>
 		}
 
@@ -727,16 +882,16 @@ templ hoverEffectsSection() {
 					<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider">Standard Durations</p>
 					<div class="space-y-1.5 text-sm text-fg-body">
 						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">100ms</code> — color changes on dropdown items</p>
-						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">150ms</code> — tooltip fade, dropdown appear</p>
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">150ms</code> — tooltip fade, dropdown appear, icon glow</p>
 						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">200ms</code> — buttons, cards, inputs (default)</p>
-						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">250ms</code> — accent edge-glow</p>
-						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">300ms</code> — sidebar slide, panel expand</p>
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">250ms</code> — accent border trace</p>
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">300ms</code> — sidebar slide, image zoom</p>
 					</div>
 				</div>
 				<div class="space-y-2">
 					<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider">Easing Curves</p>
 					<div class="space-y-1.5 text-sm text-fg-body">
-						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">ease</code> — accent glow, general purpose</p>
+						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">ease</code> — accent trace, general purpose</p>
 						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">ease-out</code> — sidebar fade-in, toasts</p>
 						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">ease-in-out</code> — shimmer, skeleton pulse</p>
 						<p><code class="bg-surface-alt px-1.5 py-0.5 rounded text-xs font-mono">linear</code> — spinner rotation</p>
