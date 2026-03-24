@@ -355,46 +355,34 @@
     },
 
     /**
-     * Mount the editor widget for the current context.
+     * Mount the unified layout-editor widget for the current context.
+     * Passes context-appropriate features and data attributes.
      */
     mountEditor: function () {
       this.destroyActiveEditor();
       var ctx = this.activeContext;
+
+      if (ctx.type === CTX_PAGE_TEMPLATE) {
+        // Template context: fetch layout first since it's not a simple GET.
+        this._mountTemplateEditor(ctx.etid);
+        return;
+      }
+
       var widgetEl = document.createElement('div');
       widgetEl.className = 'h-full';
+      widgetEl.setAttribute('data-widget', 'layout-editor');
+      widgetEl.setAttribute('data-campaign-id', this.campaignId);
+      widgetEl.setAttribute('data-csrf-token', this.csrfToken);
+      widgetEl.setAttribute('data-context', 'dashboard');
 
       if (ctx.type === CTX_CAMPAIGN_DASH) {
-        widgetEl.setAttribute('data-widget', 'dashboard-editor');
         widgetEl.setAttribute('data-endpoint', '/campaigns/' + this.campaignId + '/dashboard-layout');
-        widgetEl.setAttribute('data-campaign-id', this.campaignId);
-        widgetEl.setAttribute('data-csrf-token', this.csrfToken);
+        widgetEl.setAttribute('data-features', 'roles');
         widgetEl.setAttribute('data-role', ctx.role || 'default');
       } else if (ctx.type === CTX_OWNER_DASH) {
-        widgetEl.setAttribute('data-widget', 'dashboard-editor');
         widgetEl.setAttribute('data-endpoint', '/campaigns/' + this.campaignId + '/owner-dashboard-layout');
-        widgetEl.setAttribute('data-campaign-id', this.campaignId);
-        widgetEl.setAttribute('data-csrf-token', this.csrfToken);
-      } else if (ctx.type === CTX_PAGE_TEMPLATE) {
-        // Load layout via HTMX-style fetch, then mount template-editor.
-        this.mountTemplateEditor(ctx.etid);
-        return;
       } else if (ctx.type === CTX_CATEGORY_DASH) {
-        widgetEl.setAttribute('data-widget', 'dashboard-editor');
         widgetEl.setAttribute('data-endpoint', '/campaigns/' + this.campaignId + '/entity-types/' + ctx.etid + '/dashboard-layout');
-        widgetEl.setAttribute('data-campaign-id', this.campaignId);
-        widgetEl.setAttribute('data-csrf-token', this.csrfToken);
-        // Category dashboards have different block types.
-        widgetEl.setAttribute('data-block-types', JSON.stringify([
-          { type: 'category_header', label: 'Category Header', icon: 'fa-heading', desc: 'Category name, icon, description' },
-          { type: 'pinned_pages',    label: 'Pinned Pages',    icon: 'fa-thumbtack', desc: 'Pinned entity cards' },
-          { type: 'entity_grid',     label: 'Entity Grid',     icon: 'fa-grid-2', desc: 'All entities as card grid' },
-          { type: 'recent_pages',    label: 'Recent Pages',    icon: 'fa-clock', desc: 'Recently updated entities' },
-          { type: 'text_block',      label: 'Text Block',      icon: 'fa-align-left', desc: 'Custom HTML' },
-          { type: 'search_bar',      label: 'Search Bar',      icon: 'fa-magnifying-glass', desc: 'Search input' },
-          { type: 'calendar_preview', label: 'Calendar',       icon: 'fa-calendar-days', desc: 'Upcoming events', addon: 'calendar' },
-          { type: 'timeline_preview', label: 'Timeline',       icon: 'fa-timeline', desc: 'Timeline preview', addon: 'timeline' },
-          { type: 'map_preview',      label: 'Map',            icon: 'fa-map', desc: 'Map preview', addon: 'maps' }
-        ]));
       }
 
       this.editorEl.innerHTML = '';
@@ -406,10 +394,10 @@
     },
 
     /**
-     * Mount a template editor for a specific entity type.
-     * Fetches the layout from the API, then creates the widget.
+     * Mount the unified layout-editor for a page template context.
+     * Fetches the layout from the API first, then creates the widget.
      */
-    mountTemplateEditor: function (etid) {
+    _mountTemplateEditor: function (etid) {
       var self = this;
       var endpoint = '/campaigns/' + this.campaignId + '/entity-types/' + etid + '/layout';
 
@@ -421,10 +409,12 @@
         .then(function (data) {
           var widgetEl = document.createElement('div');
           widgetEl.className = 'h-full';
-          widgetEl.setAttribute('data-widget', 'template-editor');
+          widgetEl.setAttribute('data-widget', 'layout-editor');
           widgetEl.setAttribute('data-endpoint', endpoint);
           widgetEl.setAttribute('data-campaign-id', self.campaignId);
           widgetEl.setAttribute('data-csrf-token', self.csrfToken);
+          widgetEl.setAttribute('data-context', 'template');
+          widgetEl.setAttribute('data-features', 'containers,visibility,height,presets,preview');
           if (data) {
             widgetEl.setAttribute('data-layout', JSON.stringify(data));
           }

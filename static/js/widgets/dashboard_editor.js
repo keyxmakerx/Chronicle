@@ -244,11 +244,11 @@
       }
       h += '</div>';
 
-      // Two-panel layout: palette + canvas.
-      h += '<div class="grid grid-cols-12 gap-4">';
+      // Two-panel layout: fixed palette + flexible canvas.
+      h += '<div class="flex gap-4">';
 
       // Palette (left) with collapsible sections.
-      h += '<div class="col-span-3">';
+      h += '<div class="w-56 shrink-0">';
       h += '<div class="card p-3 sticky top-4 space-y-1">';
 
       // Separate blocks into core and addon groups.
@@ -284,7 +284,7 @@
       h += '</div>';
 
       // Canvas (right).
-      h += '<div class="col-span-9">';
+      h += '<div class="flex-1 min-w-0">';
       h += '<div class="canvas space-y-3 min-h-[200px]">';
 
       if (!this.layout || !this.layout.rows || this.layout.rows.length === 0) {

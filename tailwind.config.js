@@ -8,7 +8,7 @@
 //
 // Semantic color tokens:
 //   text-fg, text-fg-body, text-fg-secondary, text-fg-muted, text-fg-faint
-//   bg-surface, bg-surface-alt, bg-page
+//   bg-surface, bg-surface-alt, bg-surface-raised, bg-page
 //   border-edge, border-edge-light
 //   These auto-switch between light/dark via CSS custom properties.
 // ============================================================================
@@ -63,6 +63,7 @@ module.exports = {
         surface: {
           DEFAULT: 'var(--color-card-bg)',             // card / panel bg
           alt:     'var(--color-bg-tertiary)',          // alt rows, hover bg
+          raised:  'var(--color-bg-secondary)',         // palette items, blocks (slightly elevated)
         },
         page:      'var(--color-bg-primary)',           // main page bg
 

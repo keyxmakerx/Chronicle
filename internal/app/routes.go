@@ -1323,12 +1323,17 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "calendar", Label: "Calendar", Icon: "fa-calendar-days",
 		Description: "Entity calendar events", Addon: "calendar",
+		Contexts: []string{"template"},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
 		return calendar.BlockCalendarEvents(ctx.CC, ctx.Entity.ID)
 	})
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "upcoming_events", Label: "Upcoming Events", Icon: "fa-calendar-check",
 		Description: "Upcoming calendar events list", Addon: "calendar",
+		Contexts: []string{"template"},
+		ConfigFields: []entities.ConfigFieldMeta{
+			{Key: "limit", Label: "Events to show", Type: "number", Min: entities.IntPtr(1), Max: entities.IntPtr(20), Default: 5},
+		},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
 		return calendar.BlockUpcomingEvents(ctx.CC, entities.BlockConfigLimit(ctx.Block.Config, "limit", 5))
 	})
@@ -1337,14 +1342,17 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "timeline", Label: "Timeline", Icon: "fa-timeline",
 		Description: "Timeline preview with events", Addon: "timeline",
+		Contexts: []string{"template"},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
 		return timeline.BlockTimeline(ctx.CC)
 	})
 
 	// Maps plugin blocks (requires "maps" addon).
+	// map_preview is available in both dashboard and template contexts.
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "map_preview", Label: "Map", Icon: "fa-map",
 		Description: "Embedded map viewer", Addon: "maps",
+		Contexts: []string{"dashboard", "template"},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
 		return maps.BlockMapPreview(ctx.CC, entities.BlockConfigString(ctx.Block.Config, "map_id"))
 	})
@@ -1353,6 +1361,7 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "npc_gallery", Label: "NPC Gallery", Icon: "fa-users",
 		Description: "Grid of revealed NPCs", Addon: "npcs",
+		Contexts: []string{"template"},
 	}, func(bctx entities.BlockRenderContext) templ.Component {
 		limit := entities.BlockConfigLimit(bctx.Block.Config, "limit", 8)
 		cards, err := npcHandler.GalleryBlock(context.Background(), bctx.CC.Campaign.ID, int(bctx.CC.MemberRole), "", limit)
@@ -1366,6 +1375,7 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "armory_preview", Label: "Armory Preview", Icon: "fa-shield-halved",
 		Description: "Grid of campaign items", Addon: "armory",
+		Contexts: []string{"template"},
 	}, func(bctx entities.BlockRenderContext) templ.Component {
 		limit := entities.BlockConfigLimit(bctx.Block.Config, "limit", 8)
 		cards, err := armoryHandler.GalleryBlock(context.Background(), bctx.CC.Campaign.ID, int(bctx.CC.MemberRole), "", limit)
@@ -1379,6 +1389,7 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "entity_manager", Label: "Entity Manager", Icon: "fa-list-check",
 		Description: "Sortable, filterable entity list with visibility controls",
+		Contexts: []string{"template"},
 	}, func(bctx entities.BlockRenderContext) templ.Component {
 		typeID := entities.BlockConfigInt(bctx.Block.Config, "entity_type_id", 0)
 		return entities.BlockEntityManager(bctx.CC, typeID, bctx.CSRFToken)
