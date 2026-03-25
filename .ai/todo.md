@@ -600,3 +600,14 @@ Six widgets inject `<style>` elements dynamically. Working correctly (ID-based d
 - [x] Category dashboard: updated table visibility column + tree view privacy indicator
 - [x] Show page: updated title block + blockChildren visibility indicators
 - [x] Export adapters: TODO comment for entity_permissions export
+
+### Community Bestiary Backend (2026-03-25)
+- [x] Phase 1: Foundation — models, migrations (5 tables), repository CRUD, service with slug gen + statblock validation, handlers, routes
+- [x] Phase 2: Search (FULLTEXT + filters), feeds (newest/trending/top-rated/most-imported), creator profiles
+- [x] Phase 3: Ratings (1-5 with self-rating prevention, atomic aggregates), reviews, favorites with toggle
+- [x] Phase 4: Import/fork into campaigns (EntityCreator + CampaignRoleChecker adapters), flagging with auto-hide
+- [x] Phase 5: Admin moderation (flagged queue, approve/archive/restore, audit trail), per-user rate limiting
+- [x] Security hardening: transactional writes with row locking, per-user flag deduplication (bestiary_flags table)
+- [x] Multi-system support: `system_id` accepted on publish, defaults to "drawsteel"
+- [ ] Bestiary unit tests — service tests with mocked repo (not yet written)
+- [ ] Widget integration — Draw Steel monster widget to call bestiary API endpoints (external repo)
