@@ -92,6 +92,15 @@ type Favorite struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+// Flag tracks a single user's flag on a publication for moderation.
+// The composite PK (user_id, publication_id) prevents duplicate flags.
+type Flag struct {
+	UserID        string    `json:"user_id"`
+	PublicationID string    `json:"publication_id"`
+	Reason        *string   `json:"reason,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
 // Import tracks a publication imported into a campaign as an entity.
 type Import struct {
 	ID            string    `json:"id"`

@@ -55,7 +55,17 @@ type BestiaryRepository interface {
 	ImportExists(ctx context.Context, publicationID, campaignID string) (bool, error)
 	IncrementDownloads(ctx context.Context, publicationID string) error
 
-	// Flagging.
+	// Transactional rating operations (row-locked to prevent race conditions).
+	RatePublication(ctx context.Context, publicationID, userID string, rating int, reviewText *string) (isNew bool, err error)
+	RemoveRatingWithAggregates(ctx context.Context, publicationID, userID string) error
+
+	// Transactional favorite operations (row-locked to prevent race conditions).
+	ToggleFavoriteWithCount(ctx context.Context, publicationID, userID string) (favorited bool, err error)
+	RemoveFavoriteWithCount(ctx context.Context, publicationID, userID string) error
+
+	// Flagging (transactional with per-user deduplication).
+	FlagPublicationAtomic(ctx context.Context, userID, publicationID string, reason *string, threshold int) error
+	FlagExists(ctx context.Context, userID, publicationID string) (bool, error)
 	IncrementFlaggedCount(ctx context.Context, publicationID string) (newCount int, err error)
 	AutoFlagIfThreshold(ctx context.Context, publicationID string, threshold int) error
 
@@ -819,6 +829,267 @@ func (r *bestiaryRepo) SetReviewedBy(ctx context.Context, publicationID, moderat
 		return fmt.Errorf("set reviewed by: %w", err)
 	}
 	return nil
+}
+
+// --- Transactional rating methods ---
+
+// RatePublication creates or updates a rating in a single transaction with row
+// locking to prevent race conditions. Adjusts publication aggregates atomically.
+func (r *bestiaryRepo) RatePublication(ctx context.Context, publicationID, userID string, rating int, reviewText *string) (bool, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin rate tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Lock the existing rating row (if any) to prevent concurrent modification.
+	var existingID string
+	var existingRating int
+	err = tx.QueryRowContext(ctx,
+		`SELECT id, rating FROM bestiary_ratings
+		 WHERE user_id = ? AND publication_id = ? FOR UPDATE`,
+		userID, publicationID,
+	).Scan(&existingID, &existingRating)
+
+	isNew := err == sql.ErrNoRows
+	if err != nil && !isNew {
+		return false, fmt.Errorf("lock rating row: %w", err)
+	}
+
+	if isNew {
+		newID := generateID()
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO bestiary_ratings (id, publication_id, user_id, rating, review_text)
+			 VALUES (?, ?, ?, ?, ?)`,
+			newID, publicationID, userID, rating, reviewText,
+		); err != nil {
+			return false, fmt.Errorf("insert rating: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE bestiary_publications
+			 SET rating_sum = rating_sum + ?, rating_count = rating_count + 1
+			 WHERE id = ?`,
+			rating, publicationID,
+		); err != nil {
+			return false, fmt.Errorf("adjust aggregates (new): %w", err)
+		}
+	} else {
+		sumDelta := rating - existingRating
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE bestiary_ratings SET rating = ?, review_text = ? WHERE id = ?`,
+			rating, reviewText, existingID,
+		); err != nil {
+			return false, fmt.Errorf("update rating: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE bestiary_publications SET rating_sum = rating_sum + ? WHERE id = ?`,
+			sumDelta, publicationID,
+		); err != nil {
+			return false, fmt.Errorf("adjust aggregates (update): %w", err)
+		}
+	}
+
+	return isNew, tx.Commit()
+}
+
+// RemoveRatingWithAggregates deletes a rating and adjusts aggregates in a single
+// transaction. Returns NotFound if the user hasn't rated this publication.
+func (r *bestiaryRepo) RemoveRatingWithAggregates(ctx context.Context, publicationID, userID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin remove-rating tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	var ratingValue int
+	err = tx.QueryRowContext(ctx,
+		`SELECT rating FROM bestiary_ratings
+		 WHERE user_id = ? AND publication_id = ? FOR UPDATE`,
+		userID, publicationID,
+	).Scan(&ratingValue)
+	if err == sql.ErrNoRows {
+		return apperror.NewNotFound("rating not found")
+	}
+	if err != nil {
+		return fmt.Errorf("lock rating for removal: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM bestiary_ratings WHERE user_id = ? AND publication_id = ?`,
+		userID, publicationID,
+	); err != nil {
+		return fmt.Errorf("delete rating: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE bestiary_publications
+		 SET rating_sum = rating_sum - ?, rating_count = rating_count - 1
+		 WHERE id = ?`,
+		ratingValue, publicationID,
+	); err != nil {
+		return fmt.Errorf("adjust aggregates (remove): %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// --- Transactional favorite methods ---
+
+// ToggleFavoriteWithCount adds or removes a favorite and adjusts the publication
+// counter in a single transaction. Returns the new favorited state.
+func (r *bestiaryRepo) ToggleFavoriteWithCount(ctx context.Context, publicationID, userID string) (bool, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin toggle-fav tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	var exists bool
+	err = tx.QueryRowContext(ctx,
+		`SELECT 1 FROM bestiary_favorites
+		 WHERE user_id = ? AND publication_id = ? FOR UPDATE`,
+		userID, publicationID,
+	).Scan(&exists)
+
+	if err == sql.ErrNoRows {
+		// Not favorited — add it.
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO bestiary_favorites (user_id, publication_id) VALUES (?, ?)`,
+			userID, publicationID,
+		); err != nil {
+			return false, fmt.Errorf("insert favorite: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE bestiary_publications SET favorites = favorites + 1 WHERE id = ?`,
+			publicationID,
+		); err != nil {
+			return false, fmt.Errorf("increment favorites: %w", err)
+		}
+		return true, tx.Commit()
+	}
+	if err != nil {
+		return false, fmt.Errorf("lock favorite row: %w", err)
+	}
+
+	// Already favorited — remove it.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM bestiary_favorites WHERE user_id = ? AND publication_id = ?`,
+		userID, publicationID,
+	); err != nil {
+		return false, fmt.Errorf("delete favorite: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE bestiary_publications SET favorites = favorites - 1 WHERE id = ?`,
+		publicationID,
+	); err != nil {
+		return false, fmt.Errorf("decrement favorites: %w", err)
+	}
+	return false, tx.Commit()
+}
+
+// RemoveFavoriteWithCount removes a favorite and decrements the counter in a
+// single transaction. Idempotent — returns nil if not favorited.
+func (r *bestiaryRepo) RemoveFavoriteWithCount(ctx context.Context, publicationID, userID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin remove-fav tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	var exists bool
+	err = tx.QueryRowContext(ctx,
+		`SELECT 1 FROM bestiary_favorites
+		 WHERE user_id = ? AND publication_id = ? FOR UPDATE`,
+		userID, publicationID,
+	).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return nil // Idempotent — already not favorited.
+	}
+	if err != nil {
+		return fmt.Errorf("lock favorite for removal: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM bestiary_favorites WHERE user_id = ? AND publication_id = ?`,
+		userID, publicationID,
+	); err != nil {
+		return fmt.Errorf("delete favorite: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE bestiary_publications SET favorites = favorites - 1 WHERE id = ?`,
+		publicationID,
+	); err != nil {
+		return fmt.Errorf("decrement favorites: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// --- Transactional flag methods ---
+
+// FlagPublicationAtomic records a user flag, increments the flagged_count, and
+// auto-hides the publication if the threshold is reached — all in one transaction.
+// Returns Conflict if the user has already flagged this publication.
+func (r *bestiaryRepo) FlagPublicationAtomic(ctx context.Context, userID, publicationID string, reason *string, threshold int) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin flag tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Insert flag — composite PK prevents duplicates.
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO bestiary_flags (user_id, publication_id, reason) VALUES (?, ?, ?)`,
+		userID, publicationID, reason,
+	)
+	if err != nil {
+		// Duplicate key error means the user already flagged this publication.
+		if strings.Contains(err.Error(), "Duplicate") || strings.Contains(err.Error(), "duplicate") {
+			return apperror.NewConflict("you have already flagged this publication")
+		}
+		return fmt.Errorf("insert flag: %w", err)
+	}
+
+	// Atomically increment flagged_count and retrieve the new value.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE bestiary_publications
+		 SET flagged_count = LAST_INSERT_ID(flagged_count + 1)
+		 WHERE id = ?`,
+		publicationID,
+	); err != nil {
+		return fmt.Errorf("increment flagged count: %w", err)
+	}
+
+	var newCount int
+	if err := tx.QueryRowContext(ctx, `SELECT LAST_INSERT_ID()`).Scan(&newCount); err != nil {
+		return fmt.Errorf("read flagged count: %w", err)
+	}
+
+	// Auto-hide if threshold reached.
+	if newCount >= threshold {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE bestiary_publications SET visibility = ?
+			 WHERE id = ? AND visibility = ?`,
+			VisibilityFlagged, publicationID, VisibilityPublished,
+		); err != nil {
+			return fmt.Errorf("auto-flag publication: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// FlagExists checks if a user has already flagged a publication.
+func (r *bestiaryRepo) FlagExists(ctx context.Context, userID, publicationID string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM bestiary_flags WHERE user_id = ? AND publication_id = ?)`,
+		userID, publicationID,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check flag exists: %w", err)
+	}
+	return exists, nil
 }
 
 // listWithOrder is a helper that lists published publications with a custom ORDER BY.

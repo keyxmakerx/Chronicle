@@ -371,6 +371,7 @@ func (s *bestiaryService) GetCreatorProfile(ctx context.Context, userID string) 
 
 // Rate creates or updates a user's rating on a publication.
 // Self-rating is prevented: creators cannot rate their own publications.
+// The actual check-then-write-then-adjust is transactional in the repo layer.
 func (s *bestiaryService) Rate(ctx context.Context, userID, publicationID string, rating int, reviewText *string) error {
 	if rating < 1 || rating > 5 {
 		return apperror.NewValidation("rating must be between 1 and 5")
@@ -389,50 +390,13 @@ func (s *bestiaryService) Rate(ctx context.Context, userID, publicationID string
 		return apperror.NewForbidden("you cannot rate your own publication")
 	}
 
-	existing, err := s.repo.GetRating(ctx, userID, publicationID)
-	if err != nil {
-		return fmt.Errorf("check existing rating: %w", err)
-	}
-
-	if existing != nil {
-		// Update existing rating; adjust aggregates by the difference.
-		sumDelta := rating - existing.Rating
-		existing.Rating = rating
-		existing.ReviewText = reviewText
-		if err := s.repo.UpdateRating(ctx, existing); err != nil {
-			return err
-		}
-		return s.repo.AdjustRatingAggregates(ctx, publicationID, sumDelta, 0)
-	}
-
-	// New rating.
-	rt := &Rating{
-		ID:            generateID(),
-		PublicationID: publicationID,
-		UserID:        userID,
-		Rating:        rating,
-		ReviewText:    reviewText,
-	}
-	if err := s.repo.CreateRating(ctx, rt); err != nil {
-		return err
-	}
-	return s.repo.AdjustRatingAggregates(ctx, publicationID, rating, 1)
+	_, err = s.repo.RatePublication(ctx, publicationID, userID, rating, reviewText)
+	return err
 }
 
-// RemoveRating removes a user's rating and adjusts aggregates.
+// RemoveRating removes a user's rating and adjusts aggregates atomically.
 func (s *bestiaryService) RemoveRating(ctx context.Context, userID, publicationID string) error {
-	existing, err := s.repo.GetRating(ctx, userID, publicationID)
-	if err != nil {
-		return fmt.Errorf("get rating for removal: %w", err)
-	}
-	if existing == nil {
-		return apperror.NewNotFound("rating not found")
-	}
-
-	if err := s.repo.DeleteRating(ctx, userID, publicationID); err != nil {
-		return err
-	}
-	return s.repo.AdjustRatingAggregates(ctx, publicationID, -existing.Rating, -1)
+	return s.repo.RemoveRatingWithAggregates(ctx, publicationID, userID)
 }
 
 // ListReviews returns paginated reviews (ratings with text) for a publication.
@@ -459,47 +423,21 @@ func (s *bestiaryService) ListReviews(ctx context.Context, publicationID string,
 }
 
 // ToggleFavorite adds a favorite if not already favorited, or removes it.
-// Returns the new favorited state.
+// Returns the new favorited state. The toggle and count adjustment are
+// transactional in the repo layer to prevent race conditions.
 func (s *bestiaryService) ToggleFavorite(ctx context.Context, userID, publicationID string) (bool, error) {
-	// Verify publication exists.
+	// Verify publication exists before toggling.
 	if _, err := s.repo.GetByID(ctx, publicationID); err != nil {
 		return false, err
 	}
 
-	favorited, err := s.repo.IsFavorited(ctx, userID, publicationID)
-	if err != nil {
-		return false, fmt.Errorf("check favorited: %w", err)
-	}
-
-	if favorited {
-		if err := s.repo.RemoveFavorite(ctx, userID, publicationID); err != nil {
-			return false, err
-		}
-		_ = s.repo.AdjustFavoriteCount(ctx, publicationID, -1)
-		return false, nil
-	}
-
-	if err := s.repo.AddFavorite(ctx, userID, publicationID); err != nil {
-		return false, err
-	}
-	_ = s.repo.AdjustFavoriteCount(ctx, publicationID, 1)
-	return true, nil
+	return s.repo.ToggleFavoriteWithCount(ctx, publicationID, userID)
 }
 
-// RemoveFavorite removes a user's favorite on a publication.
+// RemoveFavorite removes a user's favorite on a publication. Idempotent.
+// The delete and count adjustment are transactional in the repo layer.
 func (s *bestiaryService) RemoveFavorite(ctx context.Context, userID, publicationID string) error {
-	favorited, err := s.repo.IsFavorited(ctx, userID, publicationID)
-	if err != nil {
-		return fmt.Errorf("check favorited: %w", err)
-	}
-	if !favorited {
-		return nil // Idempotent — already not favorited.
-	}
-
-	if err := s.repo.RemoveFavorite(ctx, userID, publicationID); err != nil {
-		return err
-	}
-	return s.repo.AdjustFavoriteCount(ctx, publicationID, -1)
+	return s.repo.RemoveFavoriteWithCount(ctx, publicationID, userID)
 }
 
 // ListFavorites returns paginated publications favorited by a user.
@@ -606,7 +544,9 @@ func (s *bestiaryService) importOrFork(ctx context.Context, userID, publicationI
 	}, nil
 }
 
-// Flag flags a publication for moderation. Auto-flags at 3+ unique flags.
+// Flag flags a publication for moderation. Auto-flags at 3+ unique user flags.
+// Per-user deduplication, flag count increment, and auto-hide are all
+// transactional in the repo layer to prevent abuse and race conditions.
 func (s *bestiaryService) Flag(ctx context.Context, userID, publicationID string, reason *string) error {
 	pub, err := s.repo.GetByID(ctx, publicationID)
 	if err != nil {
@@ -618,20 +558,7 @@ func (s *bestiaryService) Flag(ctx context.Context, userID, publicationID string
 		return apperror.NewForbidden("you cannot flag your own publication")
 	}
 
-	// Note: reason text will be stored in moderation log in Phase 5.
-	// For now we only track the flag count.
-
-	newCount, err := s.repo.IncrementFlaggedCount(ctx, publicationID)
-	if err != nil {
-		return err
-	}
-
-	// Auto-flag when threshold reached.
-	if newCount >= flagThreshold {
-		_ = s.repo.AutoFlagIfThreshold(ctx, publicationID, flagThreshold)
-	}
-
-	return nil
+	return s.repo.FlagPublicationAtomic(ctx, userID, publicationID, reason, flagThreshold)
 }
 
 // --- Admin moderation methods ---
