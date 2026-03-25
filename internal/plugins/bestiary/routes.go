@@ -21,15 +21,21 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authSvc auth.AuthService) {
 	bg.GET("/newest", h.Newest)
 	bg.GET("/top-rated", h.TopRated)
 	bg.GET("/most-imported", h.MostImported)
-	bg.GET("/favorites", h.Browse) // Placeholder — wired in Phase 3.
+	bg.GET("/favorites", h.ListFavorites)
 	bg.GET("/creators/:userId", h.CreatorProfile)
 	bg.GET("/:slug", h.Show)
 	bg.GET("/:slug/statblock", h.GetStatblock)
-	bg.GET("/:slug/reviews", h.Browse) // Placeholder — wired in Phase 3.
+	bg.GET("/:slug/reviews", h.ListReviews)
 
 	// Publish & manage (any authenticated user; ownership checked in service).
 	bg.POST("", h.Create)
 	bg.PUT("/:id", h.Update)
 	bg.DELETE("/:id", h.Delete)
 	bg.PATCH("/:id/visibility", h.ChangeVisibility)
+
+	// Rating & favorites.
+	bg.POST("/:id/rate", h.RatePublication)
+	bg.DELETE("/:id/rate", h.RemoveRating)
+	bg.POST("/:id/favorite", h.AddFavorite)
+	bg.DELETE("/:id/favorite", h.RemoveFavorite)
 }

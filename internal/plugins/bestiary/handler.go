@@ -284,6 +284,125 @@ func (h *Handler) CreatorProfile(c echo.Context) error {
 	return c.JSON(http.StatusOK, profile)
 }
 
+// --- Rating & Favorite handlers ---
+
+// RatePublication creates or updates a rating on a publication.
+// POST /bestiary/:id/rate
+func (h *Handler) RatePublication(c echo.Context) error {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+	pubID := c.Param("id")
+
+	var req struct {
+		Rating     int     `json:"rating"`
+		ReviewText *string `json:"review_text,omitempty"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.svc.Rate(c.Request().Context(), userID, pubID, req.Rating, req.ReviewText); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"publication_id": pubID,
+		"rating":         req.Rating,
+	})
+}
+
+// RemoveRating removes a user's rating on a publication.
+// DELETE /bestiary/:id/rate
+func (h *Handler) RemoveRating(c echo.Context) error {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+	pubID := c.Param("id")
+
+	if err := h.svc.RemoveRating(c.Request().Context(), userID, pubID); err != nil {
+		return err
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ListReviews returns paginated reviews for a publication.
+// GET /bestiary/:slug/reviews
+func (h *Handler) ListReviews(c echo.Context) error {
+	slug := c.Param("slug")
+	ctx := c.Request().Context()
+
+	// Resolve slug to ID.
+	pub, err := h.svc.GetBySlug(ctx, slug)
+	if err != nil {
+		return err
+	}
+
+	page, perPage := parsePagination(c)
+	result, err := h.svc.ListReviews(ctx, pub.ID, page, perPage)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// AddFavorite toggles a favorite on a publication.
+// POST /bestiary/:id/favorite
+func (h *Handler) AddFavorite(c echo.Context) error {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+	pubID := c.Param("id")
+
+	favorited, err := h.svc.ToggleFavorite(c.Request().Context(), userID, pubID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"publication_id": pubID,
+		"favorited":      favorited,
+	})
+}
+
+// RemoveFavorite removes a favorite from a publication.
+// DELETE /bestiary/:id/favorite
+func (h *Handler) RemoveFavorite(c echo.Context) error {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+	pubID := c.Param("id")
+
+	if err := h.svc.RemoveFavorite(c.Request().Context(), userID, pubID); err != nil {
+		return err
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ListFavorites returns the current user's favorited publications.
+// GET /bestiary/favorites
+func (h *Handler) ListFavorites(c echo.Context) error {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+
+	page, perPage := parsePagination(c)
+	result, err := h.svc.ListFavorites(c.Request().Context(), userID, page, perPage)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
 // --- Helpers ---
 
 // parsePagination extracts page and per_page query parameters with safe defaults.

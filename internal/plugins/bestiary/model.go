@@ -174,6 +174,15 @@ type PublicationListResult struct {
 	TotalPages int                 `json:"total_pages"`
 }
 
+// ReviewListResult is a paginated list of ratings with review text.
+type ReviewListResult struct {
+	Reviews    []Rating `json:"reviews"`
+	Total      int      `json:"total"`
+	Page       int      `json:"page"`
+	PerPage    int      `json:"per_page"`
+	TotalPages int      `json:"total_pages"`
+}
+
 // SearchFilters holds the query parameters for bestiary search.
 type SearchFilters struct {
 	Query        string `json:"q,omitempty"`

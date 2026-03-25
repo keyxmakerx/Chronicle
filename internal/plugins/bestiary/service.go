@@ -55,6 +55,19 @@ type BestiaryService interface {
 	// GetCreatorProfile returns a creator's public profile with stats.
 	GetCreatorProfile(ctx context.Context, userID string) (*CreatorProfile, error)
 
+	// Rate creates or updates a rating on a publication.
+	Rate(ctx context.Context, userID, publicationID string, rating int, reviewText *string) error
+	// RemoveRating removes a user's rating on a publication.
+	RemoveRating(ctx context.Context, userID, publicationID string) error
+	// ListReviews returns paginated reviews for a publication.
+	ListReviews(ctx context.Context, publicationID string, page, perPage int) (*ReviewListResult, error)
+	// ToggleFavorite adds or removes a favorite, returning the new state.
+	ToggleFavorite(ctx context.Context, userID, publicationID string) (favorited bool, err error)
+	// RemoveFavorite removes a user's favorite on a publication.
+	RemoveFavorite(ctx context.Context, userID, publicationID string) error
+	// ListFavorites returns paginated publications favorited by a user.
+	ListFavorites(ctx context.Context, userID string, page, perPage int) (*PublicationListResult, error)
+
 	// SetUserFetcher sets the cross-plugin interface for user lookups.
 	SetUserFetcher(uf UserFetcher)
 }
@@ -323,6 +336,153 @@ func (s *bestiaryService) GetCreatorProfile(ctx context.Context, userID string) 
 	}
 
 	return profile, nil
+}
+
+// --- Rating & Favorite methods ---
+
+// Rate creates or updates a user's rating on a publication.
+// Self-rating is prevented: creators cannot rate their own publications.
+func (s *bestiaryService) Rate(ctx context.Context, userID, publicationID string, rating int, reviewText *string) error {
+	if rating < 1 || rating > 5 {
+		return apperror.NewValidation("rating must be between 1 and 5")
+	}
+	if reviewText != nil && len(*reviewText) > 2000 {
+		truncated := (*reviewText)[:2000]
+		reviewText = &truncated
+	}
+	reviewText = sanitizeOptionalText(reviewText)
+
+	pub, err := s.repo.GetByID(ctx, publicationID)
+	if err != nil {
+		return err
+	}
+	if pub.CreatorID == userID {
+		return apperror.NewForbidden("you cannot rate your own publication")
+	}
+
+	existing, err := s.repo.GetRating(ctx, userID, publicationID)
+	if err != nil {
+		return fmt.Errorf("check existing rating: %w", err)
+	}
+
+	if existing != nil {
+		// Update existing rating; adjust aggregates by the difference.
+		sumDelta := rating - existing.Rating
+		existing.Rating = rating
+		existing.ReviewText = reviewText
+		if err := s.repo.UpdateRating(ctx, existing); err != nil {
+			return err
+		}
+		return s.repo.AdjustRatingAggregates(ctx, publicationID, sumDelta, 0)
+	}
+
+	// New rating.
+	rt := &Rating{
+		ID:            generateID(),
+		PublicationID: publicationID,
+		UserID:        userID,
+		Rating:        rating,
+		ReviewText:    reviewText,
+	}
+	if err := s.repo.CreateRating(ctx, rt); err != nil {
+		return err
+	}
+	return s.repo.AdjustRatingAggregates(ctx, publicationID, rating, 1)
+}
+
+// RemoveRating removes a user's rating and adjusts aggregates.
+func (s *bestiaryService) RemoveRating(ctx context.Context, userID, publicationID string) error {
+	existing, err := s.repo.GetRating(ctx, userID, publicationID)
+	if err != nil {
+		return fmt.Errorf("get rating for removal: %w", err)
+	}
+	if existing == nil {
+		return apperror.NewNotFound("rating not found")
+	}
+
+	if err := s.repo.DeleteRating(ctx, userID, publicationID); err != nil {
+		return err
+	}
+	return s.repo.AdjustRatingAggregates(ctx, publicationID, -existing.Rating, -1)
+}
+
+// ListReviews returns paginated reviews (ratings with text) for a publication.
+func (s *bestiaryService) ListReviews(ctx context.Context, publicationID string, page, perPage int) (*ReviewListResult, error) {
+	page, perPage = clampPagination(page, perPage)
+
+	reviews, total, err := s.repo.ListReviews(ctx, publicationID, page, perPage)
+	if err != nil {
+		return nil, fmt.Errorf("list reviews: %w", err)
+	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = int(math.Ceil(float64(total) / float64(perPage)))
+	}
+
+	return &ReviewListResult{
+		Reviews:    reviews,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// ToggleFavorite adds a favorite if not already favorited, or removes it.
+// Returns the new favorited state.
+func (s *bestiaryService) ToggleFavorite(ctx context.Context, userID, publicationID string) (bool, error) {
+	// Verify publication exists.
+	if _, err := s.repo.GetByID(ctx, publicationID); err != nil {
+		return false, err
+	}
+
+	favorited, err := s.repo.IsFavorited(ctx, userID, publicationID)
+	if err != nil {
+		return false, fmt.Errorf("check favorited: %w", err)
+	}
+
+	if favorited {
+		if err := s.repo.RemoveFavorite(ctx, userID, publicationID); err != nil {
+			return false, err
+		}
+		_ = s.repo.AdjustFavoriteCount(ctx, publicationID, -1)
+		return false, nil
+	}
+
+	if err := s.repo.AddFavorite(ctx, userID, publicationID); err != nil {
+		return false, err
+	}
+	_ = s.repo.AdjustFavoriteCount(ctx, publicationID, 1)
+	return true, nil
+}
+
+// RemoveFavorite removes a user's favorite on a publication.
+func (s *bestiaryService) RemoveFavorite(ctx context.Context, userID, publicationID string) error {
+	favorited, err := s.repo.IsFavorited(ctx, userID, publicationID)
+	if err != nil {
+		return fmt.Errorf("check favorited: %w", err)
+	}
+	if !favorited {
+		return nil // Idempotent — already not favorited.
+	}
+
+	if err := s.repo.RemoveFavorite(ctx, userID, publicationID); err != nil {
+		return err
+	}
+	return s.repo.AdjustFavoriteCount(ctx, publicationID, -1)
+}
+
+// ListFavorites returns paginated publications favorited by a user.
+func (s *bestiaryService) ListFavorites(ctx context.Context, userID string, page, perPage int) (*PublicationListResult, error) {
+	page, perPage = clampPagination(page, perPage)
+
+	pubs, total, err := s.repo.ListFavorites(ctx, userID, page, perPage)
+	if err != nil {
+		return nil, fmt.Errorf("list favorites: %w", err)
+	}
+
+	return buildListResult(pubs, total, page, perPage), nil
 }
 
 // --- Validation helpers ---

@@ -33,6 +33,23 @@ type BestiaryRepository interface {
 	// Creator stats.
 	GetCreatorStats(ctx context.Context, creatorID string) (*CreatorStats, error)
 
+	// Ratings.
+	CreateRating(ctx context.Context, r *Rating) error
+	UpdateRating(ctx context.Context, r *Rating) error
+	DeleteRating(ctx context.Context, userID, publicationID string) error
+	GetRating(ctx context.Context, userID, publicationID string) (*Rating, error)
+	ListReviews(ctx context.Context, publicationID string, page, perPage int) ([]Rating, int, error)
+	// AdjustRatingAggregates atomically updates rating_sum and rating_count on a publication.
+	AdjustRatingAggregates(ctx context.Context, publicationID string, sumDelta, countDelta int) error
+
+	// Favorites.
+	AddFavorite(ctx context.Context, userID, publicationID string) error
+	RemoveFavorite(ctx context.Context, userID, publicationID string) error
+	IsFavorited(ctx context.Context, userID, publicationID string) (bool, error)
+	ListFavorites(ctx context.Context, userID string, page, perPage int) ([]Publication, int, error)
+	// AdjustFavoriteCount atomically updates the favorites counter on a publication.
+	AdjustFavoriteCount(ctx context.Context, publicationID string, delta int) error
+
 	// Slug uniqueness.
 	SlugExists(ctx context.Context, slug string) (bool, error)
 }
@@ -413,6 +430,196 @@ func (r *bestiaryRepo) GetCreatorStats(ctx context.Context, creatorID string) (*
 		return nil, fmt.Errorf("get creator stats: %w", err)
 	}
 	return stats, nil
+}
+
+// --- Rating repository methods ---
+
+// CreateRating inserts a new rating.
+func (r *bestiaryRepo) CreateRating(ctx context.Context, rt *Rating) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO bestiary_ratings (id, publication_id, user_id, rating, review_text)
+		 VALUES (?, ?, ?, ?, ?)`,
+		rt.ID, rt.PublicationID, rt.UserID, rt.Rating, rt.ReviewText,
+	)
+	if err != nil {
+		return fmt.Errorf("insert rating: %w", err)
+	}
+	return nil
+}
+
+// UpdateRating updates an existing rating's score and review text.
+func (r *bestiaryRepo) UpdateRating(ctx context.Context, rt *Rating) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE bestiary_ratings SET rating = ?, review_text = ? WHERE id = ?`,
+		rt.Rating, rt.ReviewText, rt.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("update rating: %w", err)
+	}
+	return nil
+}
+
+// DeleteRating removes a user's rating on a publication.
+func (r *bestiaryRepo) DeleteRating(ctx context.Context, userID, publicationID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM bestiary_ratings WHERE user_id = ? AND publication_id = ?`,
+		userID, publicationID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete rating: %w", err)
+	}
+	return nil
+}
+
+// GetRating returns a user's rating on a publication, or nil if not rated.
+func (r *bestiaryRepo) GetRating(ctx context.Context, userID, publicationID string) (*Rating, error) {
+	rt := &Rating{}
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, publication_id, user_id, rating, review_text, created_at, updated_at
+		 FROM bestiary_ratings WHERE user_id = ? AND publication_id = ?`,
+		userID, publicationID,
+	).Scan(&rt.ID, &rt.PublicationID, &rt.UserID, &rt.Rating, &rt.ReviewText, &rt.CreatedAt, &rt.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get rating: %w", err)
+	}
+	return rt, nil
+}
+
+// ListReviews returns paginated ratings with review text for a publication.
+func (r *bestiaryRepo) ListReviews(ctx context.Context, publicationID string, page, perPage int) ([]Rating, int, error) {
+	offset := (page - 1) * perPage
+
+	var total int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM bestiary_ratings WHERE publication_id = ? AND review_text IS NOT NULL AND review_text != ''`,
+		publicationID,
+	).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count reviews: %w", err)
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, publication_id, user_id, rating, review_text, created_at, updated_at
+		 FROM bestiary_ratings
+		 WHERE publication_id = ? AND review_text IS NOT NULL AND review_text != ''
+		 ORDER BY created_at DESC
+		 LIMIT ? OFFSET ?`,
+		publicationID, perPage, offset,
+	)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list reviews: %w", err)
+	}
+	defer rows.Close()
+
+	var ratings []Rating
+	for rows.Next() {
+		var rt Rating
+		if err := rows.Scan(&rt.ID, &rt.PublicationID, &rt.UserID, &rt.Rating, &rt.ReviewText, &rt.CreatedAt, &rt.UpdatedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan review: %w", err)
+		}
+		ratings = append(ratings, rt)
+	}
+	return ratings, total, rows.Err()
+}
+
+// AdjustRatingAggregates atomically updates rating_sum and rating_count.
+func (r *bestiaryRepo) AdjustRatingAggregates(ctx context.Context, publicationID string, sumDelta, countDelta int) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE bestiary_publications
+		 SET rating_sum = rating_sum + ?, rating_count = rating_count + ?
+		 WHERE id = ?`,
+		sumDelta, countDelta, publicationID,
+	)
+	if err != nil {
+		return fmt.Errorf("adjust rating aggregates: %w", err)
+	}
+	return nil
+}
+
+// --- Favorite repository methods ---
+
+// AddFavorite adds a favorite bookmark.
+func (r *bestiaryRepo) AddFavorite(ctx context.Context, userID, publicationID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO bestiary_favorites (user_id, publication_id) VALUES (?, ?)`,
+		userID, publicationID,
+	)
+	if err != nil {
+		return fmt.Errorf("add favorite: %w", err)
+	}
+	return nil
+}
+
+// RemoveFavorite removes a favorite bookmark.
+func (r *bestiaryRepo) RemoveFavorite(ctx context.Context, userID, publicationID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM bestiary_favorites WHERE user_id = ? AND publication_id = ?`,
+		userID, publicationID,
+	)
+	if err != nil {
+		return fmt.Errorf("remove favorite: %w", err)
+	}
+	return nil
+}
+
+// IsFavorited checks if a user has favorited a publication.
+func (r *bestiaryRepo) IsFavorited(ctx context.Context, userID, publicationID string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM bestiary_favorites WHERE user_id = ? AND publication_id = ?)`,
+		userID, publicationID,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check favorited: %w", err)
+	}
+	return exists, nil
+}
+
+// ListFavorites returns paginated publications favorited by a user.
+func (r *bestiaryRepo) ListFavorites(ctx context.Context, userID string, page, perPage int) ([]Publication, int, error) {
+	offset := (page - 1) * perPage
+
+	var total int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM bestiary_favorites WHERE user_id = ?`, userID,
+	).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count favorites: %w", err)
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+pubCols+` FROM bestiary_publications p
+		 INNER JOIN bestiary_favorites f ON f.publication_id = p.id
+		 WHERE f.user_id = ?
+		 ORDER BY f.created_at DESC
+		 LIMIT ? OFFSET ?`,
+		userID, perPage, offset,
+	)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list favorites: %w", err)
+	}
+	defer rows.Close()
+
+	pubs, err := scanPublications(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return pubs, total, nil
+}
+
+// AdjustFavoriteCount atomically updates the favorites counter.
+func (r *bestiaryRepo) AdjustFavoriteCount(ctx context.Context, publicationID string, delta int) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE bestiary_publications SET favorites = favorites + ? WHERE id = ?`,
+		delta, publicationID,
+	)
+	if err != nil {
+		return fmt.Errorf("adjust favorite count: %w", err)
+	}
+	return nil
 }
 
 // listWithOrder is a helper that lists published publications with a custom ORDER BY.
