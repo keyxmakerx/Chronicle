@@ -14,7 +14,7 @@ import (
 
 // sensitiveParams are query parameter names whose values should be redacted
 // from request logs to prevent leaking secrets (e.g. password reset tokens).
-var sensitiveParams = []string{"token", "key", "password", "secret"}
+var sensitiveParams = []string{"token", "key", "password", "secret", "api_key"}
 
 // RequestLogger returns middleware that logs every HTTP request with
 // structured fields: method, path, status, latency, and remote IP.

@@ -373,7 +373,7 @@
         'transition:background-color 0.1s;' + bgSelected + '">' +
         '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;' +
         'margin-right:10px;flex-shrink:0;background-color:' +
-        (item.type_color || '#6b7280') + '"></span>' +
+        Chronicle.escapeAttr(item.type_color || '#6b7280') + '"></span>' +
         '<div style="min-width:0;flex:1">' +
         '<div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
         Chronicle.escapeHtml(item.name) + '</div>' +

@@ -92,7 +92,7 @@
     // Alias chips.
     for (var i = 0; i < state.aliases.length; i++) {
       html += '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-alt border border-edge-light text-xs text-fg-secondary">';
-      html += Chronicle.escapeHTML(state.aliases[i]);
+      html += Chronicle.escapeHtml(state.aliases[i]);
       if (state.editable) {
         html += ' <button class="hover:text-red-400 transition-colors alias-remove" data-index="' + i + '" title="Remove alias">';
         html += '<i class="fa-solid fa-xmark text-[9px]"></i>';

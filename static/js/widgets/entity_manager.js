@@ -471,7 +471,7 @@
           icon.innerHTML = '<i class="fa-solid fa-folder-open text-amber-400"></i>';
         } else {
           if (entity.type_color) icon.style.color = entity.type_color;
-          icon.innerHTML = '<i class="fa-solid ' + (entity.type_icon || 'fa-file-lines') + '"></i>';
+          icon.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(entity.type_icon || 'fa-file-lines') + '"></i>';
         }
         row.appendChild(icon);
 

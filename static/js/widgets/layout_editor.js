@@ -93,12 +93,6 @@
     return (prefix || 'le') + '_' + Math.random().toString(36).substr(2, 8);
   }
 
-  function escapeHtml(str) {
-    var div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
   // ── Widget Registration ────────────────────────────────────────────
 
   Chronicle.register('layout-editor', {
@@ -279,7 +273,7 @@
       toggle.innerHTML =
         '<i class="fa-solid fa-chevron-down text-[8px] text-fg-muted palette-chevron transition-transform' + (open ? '' : ' -rotate-90') + '"></i>' +
         '<i class="fa-solid ' + icon + ' text-[9px] text-fg-muted"></i>' +
-        '<span class="text-[10px] font-semibold text-fg-secondary uppercase tracking-wider flex-1">' + escapeHtml(title) + '</span>';
+        '<span class="text-[10px] font-semibold text-fg-secondary uppercase tracking-wider flex-1">' + Chronicle.escapeHtml(title) + '</span>';
 
       var content = document.createElement('div');
       content.className = 'palette-section-content space-y-1 mt-1';
@@ -312,16 +306,16 @@
 
       var source = bt.addon || bt.widget_slug || '';
       var addonBadge = source
-        ? '<span class="text-[8px] px-1 py-px rounded bg-surface-alt text-fg-muted border border-edge leading-tight shrink-0">' + escapeHtml(source) + '</span>'
+        ? '<span class="text-[8px] px-1 py-px rounded bg-surface-alt text-fg-muted border border-edge leading-tight shrink-0">' + Chronicle.escapeHtml(source) + '</span>'
         : '';
       item.innerHTML =
         '<i class="fa-solid ' + bt.icon + ' w-4 text-fg-muted text-center"></i>' +
         '<div class="flex-1 min-w-0">' +
           '<div class="flex items-center gap-1">' +
-            '<span class="font-medium text-fg">' + escapeHtml(bt.label) + '</span>' +
+            '<span class="font-medium text-fg">' + Chronicle.escapeHtml(bt.label) + '</span>' +
             addonBadge +
           '</div>' +
-          '<div class="text-[10px] text-fg-muted">' + escapeHtml(bt.desc) + '</div>' +
+          '<div class="text-[10px] text-fg-muted">' + Chronicle.escapeHtml(bt.desc) + '</div>' +
         '</div>';
 
       item.addEventListener('dragstart', function (e) {
@@ -387,7 +381,7 @@
           var pct = Math.round(w / 12 * 100);
           return '<div class="h-3 bg-edge rounded-sm" style="width:' + pct + '%"></div>';
         }).join('<div class="w-0.5"></div>');
-        btn.innerHTML = '<div class="flex gap-0.5 w-12 shrink-0">' + preview + '</div><span class="text-fg">' + escapeHtml(preset.label) + '</span>';
+        btn.innerHTML = '<div class="flex gap-0.5 w-12 shrink-0">' + preview + '</div><span class="text-fg">' + Chronicle.escapeHtml(preset.label) + '</span>';
         btn.addEventListener('click', function () { self.addRow(preset.widths); });
         presetContent.appendChild(btn);
       });
@@ -430,7 +424,7 @@
       COL_PRESETS.forEach(function (p) {
         var btn = document.createElement('button');
         btn.className = 'w-full text-left flex items-center gap-2 px-2 py-1.5 rounded border border-edge bg-surface-raised hover:border-accent/50 transition-colors text-xs';
-        btn.innerHTML = '<i class="fa-solid fa-plus text-[10px] text-fg-muted w-4 text-center"></i><span class="text-fg font-medium">' + escapeHtml(p.label) + '</span>';
+        btn.innerHTML = '<i class="fa-solid fa-plus text-[10px] text-fg-muted w-4 text-center"></i><span class="text-fg font-medium">' + Chronicle.escapeHtml(p.label) + '</span>';
         btn.addEventListener('click', function () { self.addRow(p.widths); });
         rowContent.appendChild(btn);
       });
@@ -585,7 +579,7 @@
 
       var html = '<i class="fa-solid fa-grip-vertical text-fg-muted text-xs"></i>' +
         '<i class="fa-solid ' + bt.icon + ' w-4 text-fg-muted text-center text-sm"></i>' +
-        '<span class="text-sm font-medium text-fg flex-1">' + escapeHtml(bt.label) + '</span>';
+        '<span class="text-sm font-medium text-fg flex-1">' + Chronicle.escapeHtml(bt.label) + '</span>';
 
       // Visibility controls (template with visibility feature).
       if (this.hasFeature('visibility')) {
@@ -728,7 +722,7 @@
       header.innerHTML =
         '<i class="fa-solid fa-grip-vertical text-accent/40 text-xs"></i>' +
         '<i class="fa-solid ' + bt.icon + ' w-4 text-accent/60 text-center text-sm"></i>' +
-        '<span class="text-sm font-semibold text-accent flex-1">' + escapeHtml(bt.label) + '</span>';
+        '<span class="text-sm font-semibold text-accent flex-1">' + Chronicle.escapeHtml(bt.label) + '</span>';
 
       var configArea = document.createElement('div');
       configArea.className = 'flex items-center gap-1';
@@ -937,7 +931,7 @@
           var collapseIcon = block.config.collapsed ? 'fa-chevron-right' : 'fa-chevron-down';
           titleBar.innerHTML =
             '<i class="fa-solid ' + collapseIcon + ' text-xs text-fg-muted"></i>' +
-            '<span class="font-medium">' + escapeHtml(block.config.title || 'Section') + '</span>' +
+            '<span class="font-medium">' + Chronicle.escapeHtml(block.config.title || 'Section') + '</span>' +
             '<span class="text-[10px] text-fg-muted ml-auto">' + (block.config.collapsed ? 'collapsed by default' : 'expanded by default') + '</span>';
           body.appendChild(titleBar);
           body.appendChild(this._createSubBlockZone(block.config.blocks, null, rowIdx, colIdx, blockIdx, 'content'));
@@ -1010,7 +1004,7 @@
       el.innerHTML =
         '<i class="fa-solid fa-grip-vertical text-fg-muted text-[10px]"></i>' +
         '<i class="fa-solid ' + bt.icon + ' w-3 text-fg-muted text-center text-[10px]"></i>' +
-        '<span class="font-medium text-fg-secondary flex-1">' + escapeHtml(bt.label) + '</span>' +
+        '<span class="font-medium text-fg-secondary flex-1">' + Chronicle.escapeHtml(bt.label) + '</span>' +
         '<button class="le-sub-del opacity-0 group-hover/sub:opacity-100 text-fg-muted hover:text-red-500 dark:hover:text-red-400 transition-all p-0.5" title="Remove"><i class="fa-solid fa-xmark text-[10px]"></i></button>';
 
       el.addEventListener('dragstart', function (e) {
@@ -1267,7 +1261,7 @@
       var header = document.createElement('div');
       header.style.cssText = 'padding:16px;border-bottom:1px solid var(--color-border-light,#f3f4f6);display:flex;align-items:center;gap:8px;';
       header.innerHTML = '<i class="fa-solid ' + bt.icon + '" style="color:var(--color-text-muted);"></i>' +
-        '<span style="font-weight:600;font-size:14px;">Configure ' + escapeHtml(bt.label) + '</span>';
+        '<span style="font-weight:600;font-size:14px;">Configure ' + Chronicle.escapeHtml(bt.label) + '</span>';
       panel.appendChild(header);
 
       // Form.
@@ -1432,7 +1426,7 @@
       var header = document.createElement('div');
       header.style.cssText = 'padding:12px 16px;border-bottom:1px solid var(--color-border-light,#f3f4f6);display:flex;align-items:center;gap:8px;';
       header.innerHTML = '<i class="fa-solid ' + bt.icon + '" style="color:var(--color-text-muted);font-size:14px;"></i>' +
-        '<span style="font-weight:600;font-size:14px;color:var(--color-text-primary);">' + escapeHtml(bt.label) + ' Preview</span>' +
+        '<span style="font-weight:600;font-size:14px;color:var(--color-text-primary);">' + Chronicle.escapeHtml(bt.label) + ' Preview</span>' +
         '<span style="flex:1"></span>' +
         '<span style="font-size:11px;color:var(--color-text-muted);padding:2px 8px;border-radius:4px;background:var(--color-bg-tertiary);">Mock preview</span>';
 
@@ -1486,7 +1480,7 @@
         case 'attributes':
           var fieldMocks = this.fields && this.fields.length > 0
             ? this.fields.slice(0, 4).map(function (f) {
-                return '<div style="margin-bottom:8px;"><div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-secondary);">' + escapeHtml(f.label) + '</div><div style="font-size:13px;color:var(--color-text-primary);margin-top:2px;">Sample value</div></div>';
+                return '<div style="margin-bottom:8px;"><div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-secondary);">' + Chronicle.escapeHtml(f.label) + '</div><div style="font-size:13px;color:var(--color-text-primary);margin-top:2px;">Sample value</div></div>';
               }).join('')
             : '<div style="font-size:12px;color:var(--color-text-muted);">No fields defined</div>';
           mock.innerHTML = '<div style="border:1px solid var(--color-border);border-radius:8px;padding:12px;"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-secondary);margin-bottom:10px;">Attributes</div>' + fieldMocks + '</div>';
@@ -1542,9 +1536,9 @@
           presets.forEach(function (preset) {
             var item = document.createElement('button');
             item.className = 'flex items-center gap-2 w-full px-3 py-2 text-sm text-left text-fg hover:bg-accent/10 transition-colors';
-            item.innerHTML = '<i class="fa-solid ' + escapeHtml(preset.icon || 'fa-table-columns') + ' w-4 text-fg-muted text-center"></i>' +
-              '<div><div class="font-medium">' + escapeHtml(preset.name) + '</div>' +
-              (preset.description ? '<div class="text-[10px] text-fg-muted">' + escapeHtml(preset.description) + '</div>' : '') +
+            item.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(preset.icon || 'fa-table-columns') + ' w-4 text-fg-muted text-center"></i>' +
+              '<div><div class="font-medium">' + Chronicle.escapeHtml(preset.name) + '</div>' +
+              (preset.description ? '<div class="text-[10px] text-fg-muted">' + Chronicle.escapeHtml(preset.description) + '</div>' : '') +
               '</div>' +
               (preset.is_builtin ? '<span class="ml-auto text-[9px] text-fg-muted border border-edge rounded px-1">Built-in</span>' : '');
             item.addEventListener('click', function () {
