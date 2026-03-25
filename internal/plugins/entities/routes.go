@@ -42,6 +42,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/entities/:eid/image", h.UpdateImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid/cover-image", h.UpdateCoverImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// Inline metadata API (Scribe+): name, descriptor, parent, privacy.
+	cg.PUT("/entities/:eid/metadata", h.UpdateMetadataAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Popup preview config API (Scribe+).
 	cg.PUT("/entities/:eid/popup-config", h.UpdatePopupConfigAPI, campaigns.RequireRole(campaigns.RoleScribe))
 

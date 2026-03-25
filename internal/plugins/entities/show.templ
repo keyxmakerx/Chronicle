@@ -105,6 +105,14 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 	}
 }
 
+// derefStr safely dereferences a *string, returning "" if nil.
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 // layoutHasBlock checks whether the entity type layout contains a block of the given type.
 // Used to avoid duplicate rendering when a block is both in the layout and hardcoded.
 func layoutHasBlock(et *EntityType, blockType string) bool {
@@ -195,57 +203,135 @@ templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entit
 	@RenderBlock(ctx, block, cc, entity, entityType, csrfToken)
 }
 
-// blockTitle renders the entity name heading with edit/delete actions.
+// blockTitle renders the entity name heading with inline metadata edit panel.
 templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
-	<div class="flex items-center justify-between">
-		<div class="flex items-center gap-2">
-			<h1 class="text-3xl font-bold text-fg">{ entity.Name }</h1>
-			<button
-				class="text-fg-muted hover:text-amber-400 transition-colors"
-				data-favorite-toggle={ entity.ID }
-				data-entity-name={ entity.Name }
-				title="Toggle favorite"
-			>
-				<i class="fa-regular fa-star text-lg"></i>
-			</button>
-		</div>
-		// Aliases widget: displays alternative names for this entity.
-		<div
-			data-widget="aliases"
-			data-entity-id={ entity.ID }
-			data-campaign-id={ cc.Campaign.ID }
-			data-editable={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RoleScribe) }
-		></div>
+	<div
 		if cc.MemberRole >= campaigns.RoleScribe {
-			<div class="flex space-x-2">
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/edit", cc.Campaign.ID, entity.ID)) }
-					class="btn-secondary text-sm"
-				>Edit</a>
-				<form
-					method="POST"
-					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID)) }
-					hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID) }
-					class="inline"
+			x-data={ fmt.Sprintf("{ editing: false, saving: false, saved: false, error: '', name: '%s', typeLabel: '%s', parentId: '%s', isPrivate: %t }",
+				jsEsc(entity.Name),
+				jsEsc(derefStr(entity.TypeLabel)),
+				jsEsc(derefStr(entity.ParentID)),
+				entity.IsPrivate) }
+		}
+	>
+		<div class="flex items-center justify-between">
+			<div class="flex items-center gap-2">
+				<h1 class="text-3xl font-bold text-fg">{ entity.Name }</h1>
+				<button
+					class="text-fg-muted hover:text-amber-400 transition-colors"
+					data-favorite-toggle={ entity.ID }
+					data-entity-name={ entity.Name }
+					title="Toggle favorite"
 				>
-					<input type="hidden" name="csrf_token" value={ csrfToken }/>
-					<button type="submit" class="btn-secondary text-sm" title="Create a copy of this page">
-						<i class="fa-regular fa-clone mr-1"></i> Clone
+					<i class="fa-regular fa-star text-lg"></i>
+				</button>
+			</div>
+			// Aliases widget: displays alternative names for this entity.
+			<div
+				data-widget="aliases"
+				data-entity-id={ entity.ID }
+				data-campaign-id={ cc.Campaign.ID }
+				data-editable={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RoleScribe) }
+			></div>
+			if cc.MemberRole >= campaigns.RoleScribe {
+				<div class="flex items-center gap-2">
+					<button
+						@click="editing = !editing"
+						class="btn-ghost btn-sm"
+						:class="editing ? 'text-accent' : ''"
+						title="Edit page details"
+					>
+						<i class="fa-solid fa-pencil mr-1"></i>
+						<span x-text="editing ? 'Close' : 'Edit'">Edit</span>
 					</button>
-				</form>
-				if cc.MemberRole >= campaigns.RoleOwner {
 					<form
 						method="POST"
-						action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-						hx-delete={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
-						hx-confirm="Are you sure you want to delete this entity?"
+						action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID)) }
+						hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID) }
 						class="inline"
 					>
-						<input type="hidden" name="_method" value="DELETE"/>
 						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<button type="submit" class="btn-danger text-sm">Delete</button>
+						<button type="submit" class="btn-ghost btn-sm" title="Create a copy of this page">
+							<i class="fa-regular fa-clone mr-1"></i> Clone
+						</button>
 					</form>
-				}
+					if cc.MemberRole >= campaigns.RoleOwner {
+						<form
+							method="POST"
+							action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+							hx-delete={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
+							hx-confirm="Are you sure you want to delete this page?"
+							class="inline"
+						>
+							<input type="hidden" name="_method" value="DELETE"/>
+							<input type="hidden" name="csrf_token" value={ csrfToken }/>
+							<button type="submit" class="btn-ghost btn-sm text-red-500 hover:text-red-700 dark:text-red-400">
+								<i class="fa-solid fa-trash mr-1"></i> Delete
+							</button>
+						</form>
+					}
+				</div>
+			}
+		</div>
+
+		// Inline metadata edit panel (Scribe+).
+		if cc.MemberRole >= campaigns.RoleScribe {
+			<div x-show="editing" x-cloak x-transition class="mt-4 card p-4 space-y-3">
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Name</label>
+						<input type="text" x-model="name" class="input w-full text-sm" maxlength="200"/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Descriptor</label>
+						<input type="text" x-model="typeLabel" class="input w-full text-sm" placeholder="e.g., City, NPC, Artifact" maxlength="100"/>
+					</div>
+				</div>
+
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+					<div>
+						<label class="block text-xs font-medium text-fg-body mb-1">Parent Page</label>
+						<input type="text" x-model="parentId" class="input w-full text-sm" placeholder="Parent entity ID (or leave empty)"/>
+					</div>
+					<div class="flex items-center gap-2 pt-5">
+						<label class="relative inline-flex items-center cursor-pointer">
+							<input type="checkbox" x-model="isPrivate" class="sr-only peer"/>
+							<div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent/50 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
+							<span class="ml-2 text-xs text-fg-body">DM Only (Private)</span>
+						</label>
+					</div>
+				</div>
+
+				<div class="flex items-center justify-end gap-3 pt-1">
+					<span x-show="saved" x-transition class="text-xs text-green-600">Saved!</span>
+					<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+					<button
+						type="button"
+						class="btn-secondary btn-sm"
+						@click="editing = false; saved = false; error = ''"
+					>Cancel</button>
+					<button
+						type="button"
+						class="btn-primary btn-sm"
+						:disabled="saving || !name.trim()"
+						@click={ fmt.Sprintf(`
+							saving = true; saved = false; error = '';
+							Chronicle.apiFetch('/campaigns/%s/entities/%s/metadata', {
+								method: 'PUT',
+								body: { name: name.trim(), type_label: typeLabel.trim(), parent_id: parentId.trim(), is_private: isPrivate }
+							}).then(r => {
+								if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Failed to save'); });
+								return r.json();
+							}).then(d => {
+								saved = true;
+								setTimeout(() => { window.location.reload(); }, 600);
+							}).catch(e => { error = e.message; }).finally(() => { saving = false; })
+						`, cc.Campaign.ID, entity.ID) }
+					>
+						<span x-show="!saving">Save Changes</span>
+						<span x-show="saving">Saving...</span>
+					</button>
+				</div>
 			</div>
 		}
 	</div>
