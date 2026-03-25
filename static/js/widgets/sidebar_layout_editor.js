@@ -418,7 +418,9 @@
         })
         .then(function (res) {
           if (res.ok) {
-            Chronicle.notify('Sidebar updated', 'success');
+            Chronicle.notify('Sidebar updated — reloading...', 'success');
+            // Sidebar is server-rendered; reload to reflect visibility/order changes.
+            setTimeout(function () { window.location.reload(); }, 600);
           } else {
             Chronicle.notify('Failed to save sidebar', 'error');
           }
