@@ -8,7 +8,15 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-25 -- **Community Bestiary Backend + Security Hardening.**
+2026-03-25 -- **Security Hardening Audit Completion.**
+
+63. **Security Hardening — Audit Completion (5 items).**
+    - **HTMX `allowEval: false`** — Added to `boot.js`. All four HTMX security configs now active: `selfRequestsOnly`, `allowScriptTags=false`, `historyCacheSize=0`, `allowEval=false`.
+    - **Log redaction** — Added `api_key` to sensitive query parameter list in `logging.go`. Now redacts: `token`, `key`, `password`, `secret`, `api_key`.
+    - **Progressive login delays** — Enhanced per-email throttle in `auth/service.go` from hard-reject to progressive delays (2s, 4s, 8s... capped at 5min after 10 failures). Context-aware cancellation via `select`.
+    - **innerHTML audit** — Full audit of ~330 instances across 35+ JS files. Fixed critical `escapeHTML` typo in `aliases.js`. Consolidated 6 local `escapeHtml` duplicates to `Chronicle.escapeHtml()`. Added missing escaping for entity type icons/colors in `entity_manager.js`, `inventory.js`, `editor_mention.js`, `timeline_widget.js`.
+    - **Leaflet vendoring** — Confirmed already complete (no action needed).
+    - Updated `.ai/security-hardening-plan.md` with completion status for items 1.1, 2.2, 3.1, 3.2, 3.3.
 
 62. **Community Bestiary Backend (Full Plugin).**
     - **New plugin** at `internal/plugins/bestiary/` — instance-scoped creature sharing system with 30+ JSON API endpoints. No UI (consumed by system package widgets). Multi-system via `system_id` field (defaults to "drawsteel").

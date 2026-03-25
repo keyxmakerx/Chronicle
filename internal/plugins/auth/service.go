@@ -182,6 +182,11 @@ const loginThrottleMax = 10
 // loginThrottleWindow is how long failed attempt counters persist in Redis.
 const loginThrottleWindow = 15 * time.Minute
 
+// loginThrottleMaxDelay caps the progressive delay applied after exceeding
+// loginThrottleMax failures. The delay doubles each attempt (2s, 4s, 8s, ...)
+// but never exceeds this ceiling.
+const loginThrottleMaxDelay = 5 * time.Minute
+
 // loginFailureKeyPrefix is the Redis key prefix for per-email failure counters.
 // Uses SHA-256 of the email to avoid storing plaintext emails in Redis.
 const loginFailureKeyPrefix = "login_failures:"
@@ -196,9 +201,19 @@ const loginFailureKeyPrefix = "login_failures:"
 func (s *authService) Login(ctx context.Context, input LoginInput) (string, *User, error) {
 	email := strings.ToLower(strings.TrimSpace(input.Email))
 
-	// Check per-email login throttle before doing any expensive work.
-	if s.isLoginThrottled(ctx, email) {
-		return "", nil, apperror.NewTooManyRequests("too many login attempts — please try again later")
+	// Apply progressive delay when the failure count exceeds the threshold.
+	// Instead of hard-rejecting, we slow down attempts to frustrate brute-force
+	// attacks while still allowing legitimate users to eventually authenticate.
+	if delay := s.loginThrottleDelay(ctx, email); delay > 0 {
+		slog.Info("login throttle delay applied",
+			slog.String("email_hash", loginFailureKey(email)),
+			slog.Duration("delay", delay),
+		)
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return "", nil, ctx.Err()
+		}
 	}
 
 	// Find user by email. Returns apperror.NotFound if no match.
@@ -256,18 +271,33 @@ func loginFailureKey(email string) string {
 	return loginFailureKeyPrefix + hex.EncodeToString(h[:])
 }
 
-// isLoginThrottled checks whether the email has exceeded the failed attempt threshold.
-// Fails open on Redis errors (logs warning, allows the attempt).
-func (s *authService) isLoginThrottled(ctx context.Context, email string) bool {
+// loginThrottleDelay returns the progressive delay to apply before processing
+// a login attempt for the given email. Returns 0 if the failure count is below
+// the threshold. After loginThrottleMax failures, delay doubles each attempt:
+// 2s, 4s, 8s, 16s, ... capped at loginThrottleMaxDelay (5 min).
+// Fails open on Redis errors (logs warning, returns 0).
+func (s *authService) loginThrottleDelay(ctx context.Context, email string) time.Duration {
 	if s.redis == nil {
-		return false
+		return 0
 	}
 	count, err := s.redis.Get(ctx, loginFailureKey(email)).Int()
 	if err != nil {
-		// Key doesn't exist or Redis error — allow the attempt.
-		return false
+		// Key doesn't exist or Redis error — no delay.
+		return 0
 	}
-	return count >= loginThrottleMax
+	if count < loginThrottleMax {
+		return 0
+	}
+	// Progressive backoff: 2^(count - threshold) * 2 seconds.
+	exponent := count - loginThrottleMax
+	delay := 2 * time.Second
+	for i := 0; i < exponent; i++ {
+		delay *= 2
+		if delay >= loginThrottleMaxDelay {
+			return loginThrottleMaxDelay
+		}
+	}
+	return delay
 }
 
 // recordLoginFailure increments the failed attempt counter for an email.

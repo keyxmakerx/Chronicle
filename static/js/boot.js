@@ -163,6 +163,9 @@
   htmx.config.allowScriptTags = false;
   // Do not cache pages in localStorage (prevents sensitive data leakage on shared browsers).
   htmx.config.historyCacheSize = 0;
+  // Disable eval()-based features (hx-on attribute expressions). Reduces XSS surface
+  // independently of CSP, which still allows unsafe-eval for Alpine.js.
+  htmx.config.allowEval = false;
 
   // --- HTMX Loading Indicator ---
   // Toggle body.htmx-request class to show/hide the global progress bar.

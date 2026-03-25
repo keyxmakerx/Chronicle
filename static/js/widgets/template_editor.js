@@ -1620,9 +1620,9 @@ Chronicle.register('template-editor', {
         presets.forEach(function (preset) {
           const item = document.createElement('button');
           item.className = 'flex items-center gap-2 w-full px-3 py-2 text-sm text-left text-fg hover:bg-accent/10 transition-colors';
-          const escapedName = self.escapeHtml(preset.name);
-          const escapedDesc = self.escapeHtml(preset.description || '');
-          item.innerHTML = '<i class="fa-solid ' + self.escapeHtml(preset.icon || 'fa-table-columns') + ' w-4 text-fg-muted text-center"></i>' +
+          const escapedName = Chronicle.escapeHtml(preset.name);
+          const escapedDesc = Chronicle.escapeHtml(preset.description || '');
+          item.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(preset.icon || 'fa-table-columns') + ' w-4 text-fg-muted text-center"></i>' +
             '<div><div class="font-medium">' + escapedName + '</div>' +
             (escapedDesc ? '<div class="text-[10px] text-fg-muted">' + escapedDesc + '</div>' : '') +
             '</div>' +
@@ -1706,13 +1706,6 @@ Chronicle.register('template-editor', {
         if (status) { status.textContent = ''; status.classList.remove('text-red-500'); }
       }, 4000);
     }
-  },
-
-  /** Escape HTML to prevent XSS when rendering user-provided text. */
-  escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
   },
 
   // Clean up when HTMX swaps this widget out (called by boot.js destroyElement).

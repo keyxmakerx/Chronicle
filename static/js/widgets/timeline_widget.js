@@ -82,7 +82,7 @@
           '</button>' +
         '</div>' +
         '<div class="tl-widget-events text-xs text-fg-muted mb-3">Loading events...</div>' +
-        '<a href="' + Chronicle.escapeHtml(href) + '" ' +
+        '<a href="' + Chronicle.escapeAttr(href) + '" ' +
            'class="text-xs text-accent hover:underline">' +
           '<i class="fa-solid fa-arrow-right mr-1"></i>Open Timeline' +
         '</a>';

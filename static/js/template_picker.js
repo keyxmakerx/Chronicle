@@ -61,7 +61,7 @@
           for (var i = 0; i < templates.length; i++) {
             var t = templates[i];
             var icon = t.icon || 'fa-file-lines';
-            html += '<option value="' + t.id + '">' + escapeHtml(t.name) + '</option>';
+            html += '<option value="' + t.id + '">' + Chronicle.escapeHtml(t.name) + '</option>';
           }
           pickerEl.classList.remove('hidden');
         } else {
@@ -171,11 +171,11 @@
         'display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;' +
         'font-size:14px;transition:background 0.1s;';
       item.innerHTML =
-        '<i class="fa-solid ' + escapeHtml(t.icon || 'fa-file-lines') +
+        '<i class="fa-solid ' + Chronicle.escapeHtml(t.icon || 'fa-file-lines') +
         '" style="width:20px;text-align:center;opacity:0.6"></i>' +
-        '<div><div style="font-weight:500">' + escapeHtml(t.name) + '</div>' +
+        '<div><div style="font-weight:500">' + Chronicle.escapeHtml(t.name) + '</div>' +
         (t.description
-          ? '<div style="font-size:12px;opacity:0.6">' + escapeHtml(t.description) + '</div>'
+          ? '<div style="font-size:12px;opacity:0.6">' + Chronicle.escapeHtml(t.description) + '</div>'
           : '') +
         '</div>';
 
@@ -242,14 +242,6 @@
     } catch (err) {
       Chronicle.notify('Failed to insert template.', 'error');
     }
-  }
-
-  // --- Utilities ---
-
-  function escapeHtml(str) {
-    var div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
   }
 
   // --- Initialization ---

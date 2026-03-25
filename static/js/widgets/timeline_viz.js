@@ -349,7 +349,7 @@ var _impl = {
           '<div class="timeline-viz-empty">' +
             '<i class="fa-solid fa-triangle-exclamation text-3xl mb-3" style="color: var(--color-fg-muted)"></i>' +
             '<p style="font-weight: 600">Failed to load timeline data</p>' +
-            '<p class="text-xs mt-1" style="color: var(--color-fg-muted)">' + self._escapeHTML(String(err)) + '</p>' +
+            '<p class="text-xs mt-1" style="color: var(--color-fg-muted)">' + Chronicle.escapeHtml(String(err)) + '</p>' +
           '</div>';
       });
   },
@@ -1198,12 +1198,12 @@ var _impl = {
         .append('xhtml:div')
         .attr('class', 'tl-viz-card')
         .html(function(d) {
-          var label = self._escapeHTML(d.label || d.event_name || 'Untitled');
+          var label = Chronicle.escapeHtml(d.label || d.event_name || 'Untitled');
           var date = 'Y' + d.event_year + ' M' + d.event_month + ' D' + d.event_day;
-          var entity = d.event_entity_name ? self._escapeHTML(d.event_entity_name) : '';
+          var entity = d.event_entity_name ? Chronicle.escapeHtml(d.event_entity_name) : '';
           var catHtml = '';
           if (d.event_category) {
-            catHtml = '<span class="tl-viz-card-cat">' + self._escapeHTML(d.event_category) + '</span>';
+            catHtml = '<span class="tl-viz-card-cat">' + Chronicle.escapeHtml(d.event_category) + '</span>';
           }
           return '<div class="tl-viz-card-name">' + label + '</div>' +
                  '<div class="tl-viz-card-date">' + date + '</div>' +
@@ -1716,25 +1716,25 @@ var _impl = {
     var date = 'Y' + d.event_year + ' M' + d.event_month + ' D' + d.event_day;
 
     var html = '<div style="font-weight:700; font-size:13px; margin-bottom:4px">' +
-      this._escapeHTML(label) + '</div>';
+      Chronicle.escapeHtml(label) + '</div>';
     html += '<div style="font-family:ui-monospace,monospace; font-size:11px; color:var(--color-fg-muted); margin-bottom:4px">' +
       date + '</div>';
 
     if (d.event_entity_name) {
       html += '<div style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--color-fg-secondary); margin-bottom:3px">';
       if (d.event_entity_icon) {
-        html += '<i class="fa-solid ' + this._escapeHTML(d.event_entity_icon) + '"></i>';
+        html += '<i class="fa-solid ' + Chronicle.escapeHtml(d.event_entity_icon) + '"></i>';
       }
-      html += this._escapeHTML(d.event_entity_name) + '</div>';
+      html += Chronicle.escapeHtml(d.event_entity_name) + '</div>';
     }
     if (d.event_category) {
-      html += '<div><span class="timeline-viz-tooltip-cat">' + this._escapeHTML(d.event_category) + '</span></div>';
+      html += '<div><span class="timeline-viz-tooltip-cat">' + Chronicle.escapeHtml(d.event_category) + '</span></div>';
     }
     if (d.event_description) {
       var desc = d.event_description;
       if (desc.length > 120) desc = desc.substring(0, 120) + '...';
       html += '<div style="font-size:11px; color:var(--color-fg-muted); margin-top:4px; line-height:1.4">' +
-        this._escapeHTML(desc) + '</div>';
+        Chronicle.escapeHtml(desc) + '</div>';
     }
 
     tip.innerHTML = html;
@@ -1785,23 +1785,23 @@ var _impl = {
     }
 
     var html = '<div class="timeline-viz-detail-color" style="background:' + color + '"></div>';
-    html += '<div class="timeline-viz-detail-name">' + this._escapeHTML(label) + '</div>';
+    html += '<div class="timeline-viz-detail-name">' + Chronicle.escapeHtml(label) + '</div>';
     html += '<div class="timeline-viz-detail-date">' + date + '</div>';
 
     if (d.event_entity_name) {
       html += '<div class="timeline-viz-detail-entity">';
       if (d.event_entity_icon) {
-        html += '<i class="fa-solid ' + this._escapeHTML(d.event_entity_icon) + '"></i> ';
+        html += '<i class="fa-solid ' + Chronicle.escapeHtml(d.event_entity_icon) + '"></i> ';
       }
-      html += this._escapeHTML(d.event_entity_name) + '</div>';
+      html += Chronicle.escapeHtml(d.event_entity_name) + '</div>';
     }
 
     if (d.event_category) {
-      html += '<div class="timeline-viz-detail-cat">' + this._escapeHTML(d.event_category) + '</div>';
+      html += '<div class="timeline-viz-detail-cat">' + Chronicle.escapeHtml(d.event_category) + '</div>';
     }
 
     if (d.event_description) {
-      html += '<div class="timeline-viz-detail-desc">' + this._escapeHTML(d.event_description) + '</div>';
+      html += '<div class="timeline-viz-detail-desc">' + Chronicle.escapeHtml(d.event_description) + '</div>';
     }
 
     // Source indicator.
@@ -1870,17 +1870,6 @@ var _impl = {
 
     // Show the modal.
     modal.classList.remove('hidden');
-  },
-
-  // ---- Utilities ----
-
-  /**
-   * Escape HTML entities for safe insertion.
-   */
-  _escapeHTML: function(str) {
-    var div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
   },
 
   /**

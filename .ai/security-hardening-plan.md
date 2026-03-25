@@ -31,21 +31,14 @@ Before planning, here's what's already been resolved:
 
 Low-effort, high-impact changes that can be done in one session.
 
-### 1.1 — HTMX Config Hardening
+### 1.1 — HTMX Config Hardening ✅ DONE (2026-03-25)
 **File:** `static/js/boot.js`
-**Effort:** 10 minutes
 
-Add HTMX security configuration after the document ready / boot initialization:
-```js
-htmx.config.selfRequestsOnly = true;     // Block cross-origin hx-* requests
-htmx.config.allowScriptTags = false;      // Don't execute <script> in swapped content
-htmx.config.historyCacheSize = 0;         // Don't cache pages in localStorage
-htmx.config.allowEval = false;            // Disable eval-based features (hx-on, js: prefix)
-```
-
-**Note on `allowEval`:** This disables `hx-on:*` attributes and `javascript:` prefix in
-`hx-vals`/`hx-headers`. Need to verify no templates use these patterns before enabling.
-If they do, skip `allowEval` for now and document which templates need migration.
+All four HTMX security configs are now set in `boot.js`:
+- `selfRequestsOnly = true` (done in sprint 59)
+- `allowScriptTags = false` (done in sprint 59)
+- `historyCacheSize = 0` (done in sprint 59)
+- `allowEval = false` (done in sprint 63 — this session)
 
 ### 1.2 — Cross-Origin Security Headers
 **File:** `internal/middleware/security.go`
@@ -122,17 +115,11 @@ cookie injection attacks.
 **Risk:** Only works over HTTPS. Self-hosted users on plain HTTP (no reverse proxy)
 would lose CSRF protection. Add fallback: use `__Host-` prefix only when Secure=true.
 
-### 2.2 — Sensitive Query Parameter Redaction in Logs (L-5)
+### 2.2 — Sensitive Query Parameter Redaction in Logs (L-5) ✅ DONE (2026-03-25)
 **File:** `internal/middleware/logging.go`
-**Effort:** 20 minutes
 
-Redact known sensitive query parameters from request logs:
-```go
-// Before logging, redact sensitive params.
-redactParams := []string{"token", "key", "password", "secret"}
-```
-
-Replace values with `[REDACTED]` in the logged URI.
+Redaction implemented in sprint 59. Sprint 63 added `api_key` to the sensitive params list.
+Current list: `token`, `key`, `password`, `secret`, `api_key`.
 
 ### 2.4 — Default DB Password Fails in Production (L-6)
 **File:** `internal/config/config.go`
@@ -158,32 +145,38 @@ strip `<meta>` by default, but worth confirming).
 
 Higher-effort improvements for defense-in-depth. Lower priority but valuable.
 
-### 3.1 — innerHTML Audit in JS Widgets (L-8)
-**Files:** `static/js/widgets/*.js`
-**Effort:** 1-2 hours
+### 3.1 — innerHTML Audit in JS Widgets (L-8) ✅ DONE (2026-03-25)
+**Files:** `static/js/widgets/*.js`, `static/js/*.js`, `extensions/dice-roller/`
 
-Audit all `innerHTML` assignments in widget JavaScript. Ensure every instance that
-includes user-supplied data passes through `Chronicle.escapeHtml()`. Create a checklist
-of widgets and their status. Fix any gaps found.
+Full audit completed in sprint 63. ~330 innerHTML assignments across 35+ files reviewed.
+Fixes applied:
+- **Critical:** `aliases.js` — `Chronicle.escapeHTML` typo → `Chronicle.escapeHtml`
+- **Escape consolidation:** Removed 6 local `escapeHtml` duplicates in `template_picker.js`,
+  `command_palette.js`, `inventory.js`, `layout_editor.js`, `template_editor.js`,
+  `timeline_viz.js`. All now use `Chronicle.escapeHtml()` from `boot.js`.
+- **Missing escaping:** Added `Chronicle.escapeHtml()` for entity type icons in
+  `entity_manager.js` and `inventory.js`. Added `Chronicle.escapeAttr()` for
+  `type_color` in `editor_mention.js` and `inventory.js`.
+- **Attribute context:** Changed `escapeHtml` → `escapeAttr` for `href` attribute in
+  `timeline_widget.js`.
+- **Verified safe:** ~95% of instances are static HTML (icons, spinners), element clearing,
+  server-sanitized content, or already properly escaped.
 
-### 3.2 — Per-User Login Throttling
-**Files:** `internal/plugins/auth/service.go`, `internal/middleware/ratelimit.go`
-**Effort:** 1-2 hours
+### 3.2 — Per-User Login Throttling ✅ DONE (2026-03-25)
+**File:** `internal/plugins/auth/service.go`
 
-Current rate limiting is per-IP only. A distributed attacker can bypass this. Add
-per-email failure tracking in Redis:
-- Track failed login attempts per email address
-- After 10 failures in 15 minutes, introduce progressive delays (1s, 2s, 4s...)
-- Use Redis key: `login_failures:{email_hash}` with TTL
-- Still return generic error message (no enumeration)
+Per-email Redis-backed throttling implemented in sprint 59. Sprint 63 enhanced from
+hard-reject to progressive delays:
+- After 10 failures in 15 min: delay doubles each attempt (2s, 4s, 8s... capped at 5min)
+- Uses `time.After` with `ctx.Done()` select for graceful cancellation
+- Clears on successful login (existing behavior)
+- Redis key: `login_failures:{sha256(email)}` with 15-min TTL
 
-### 3.3 — Vendor Leaflet Locally (Eliminate unpkg.com Entirely)
-**Files:** `static/vendor/`, `maps.templ`, `map_widget.js`, `security.go`
-**Effort:** 1 hour
+### 3.3 — Vendor Leaflet Locally (Eliminate unpkg.com Entirely) ✅ DONE (prior sprint)
+**Files:** `static/vendor/leaflet.js`, `static/vendor/leaflet.markercluster.js`
 
-Download Leaflet 1.9.4 and MarkerCluster 1.5.3 to `static/vendor/`. Update all
-references. Remove `unpkg.com` from CSP entirely. This eliminates the last external
-script dependency and closes the CDN compromise vector.
+Leaflet and MarkerCluster already vendored locally. CSP has no unpkg.com reference.
+Maps template loads from `/static/vendor/`. No action needed.
 
 ### 3.4 — SVG Sanitizer Library (I-2)
 **File:** `internal/extensions/security.go`

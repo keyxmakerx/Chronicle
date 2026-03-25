@@ -611,3 +611,11 @@ Six widgets inject `<style>` elements dynamically. Working correctly (ID-based d
 - [x] Multi-system support: `system_id` accepted on publish, defaults to "drawsteel"
 - [ ] Bestiary unit tests — service tests with mocked repo (not yet written)
 - [ ] Widget integration — Draw Steel monster widget to call bestiary API endpoints (external repo)
+
+### Security Hardening — Audit Completion (2026-03-25)
+- [x] HTMX `allowEval: false` in boot.js
+- [x] Log redaction: added `api_key` to sensitive params
+- [x] Progressive login delays (2s→5min cap) replacing hard-reject after 10 failures
+- [x] innerHTML audit: fixed escapeHTML typo, consolidated 6 local escape dupes, added missing escaping for icons/colors
+- [x] Leaflet vendoring: confirmed already complete
+- [x] Updated security-hardening-plan.md with completion status

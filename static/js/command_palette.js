@@ -193,13 +193,13 @@
         h += '<div class="flex items-center gap-3 min-w-0">';
         h += '<i class="fa-solid ' + (cmd.icon || 'fa-chevron-right') + ' text-xs w-4 text-center '
           + (isActive ? 'text-accent' : 'text-fg-muted') + '"></i>';
-        h += '<span class="text-sm truncate">' + escHtml(cmd.label) + '</span>';
+        h += '<span class="text-sm truncate">' + Chronicle.escapeHtml(cmd.label) + '</span>';
         h += '</div>';
         if (cmd.shortcut) {
           h += '<kbd class="text-[10px] font-mono ml-2 shrink-0 '
             + (isActive ? 'text-accent/70' : 'text-fg-muted')
             + ' bg-surface-alt border border-edge rounded px-1.5 py-0.5">'
-            + escHtml(cmd.shortcut) + '</kbd>';
+            + Chronicle.escapeHtml(cmd.shortcut) + '</kbd>';
         }
         h += '</div>';
       }
@@ -224,12 +224,6 @@
       var active = resultsList.querySelector('.cmd-item[data-idx="' + activeIndex + '"]');
       if (active) active.scrollIntoView({ block: 'nearest' });
     }
-  }
-
-  function escHtml(s) {
-    var d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
   }
 
   // --- Event Handlers ---

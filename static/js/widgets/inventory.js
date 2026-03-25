@@ -146,7 +146,7 @@ Chronicle.register('inventory', {
       icon.className = 'inv-item-icon';
       icon.style.background = (item.targetEntityColor || '#6b7280') + '22';
       icon.style.color = item.targetEntityColor || '#6b7280';
-      icon.innerHTML = '<i class="fa-solid ' + (item.targetEntityIcon || 'fa-gem') + '"></i>';
+      icon.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(item.targetEntityIcon || 'fa-gem') + '"></i>';
       row.appendChild(icon);
 
       // Info.
@@ -262,8 +262,8 @@ Chronicle.register('inventory', {
       state.searchResults.forEach(function (entity) {
         var item = document.createElement('div');
         item.className = 'inv-search-item';
-        item.innerHTML = '<i class="fa-solid ' + (entity.type_icon || 'fa-gem') + '" style="color:' + (entity.type_color || '#6b7280') + ';font-size:0.75rem"></i> ' +
-          '<span>' + escapeHtml(entity.name) + '</span>';
+        item.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(entity.type_icon || 'fa-gem') + '" style="color:' + Chronicle.escapeAttr(entity.type_color || '#6b7280') + ';font-size:0.75rem"></i> ' +
+          '<span>' + Chronicle.escapeHtml(entity.name) + '</span>';
         item.addEventListener('click', function () {
           addItem(entity.id);
         });
@@ -388,12 +388,6 @@ Chronicle.register('inventory', {
       } catch (e) {
         return { quantity: 1, equipped: false };
       }
-    }
-
-    function escapeHtml(str) {
-      var div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
     }
 
     // --- Init ---
