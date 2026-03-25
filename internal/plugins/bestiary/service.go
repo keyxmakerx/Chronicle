@@ -128,6 +128,10 @@ func (s *bestiaryService) Publish(ctx context.Context, creatorID string, input C
 	if err := validateVisibility(input.Visibility); err != nil {
 		return nil, err
 	}
+	// Default to "drawsteel" if no system specified, but accept any system slug.
+	if input.SystemID == "" {
+		input.SystemID = "drawsteel"
+	}
 	validateOptionalText(&input.Description, 5000)
 	validateOptionalText(&input.FlavorText, 5000)
 
@@ -144,7 +148,7 @@ func (s *bestiaryService) Publish(ctx context.Context, creatorID string, input C
 		CreatorID:        creatorID,
 		SourceEntityID:   input.SourceEntityID,
 		SourceCampaignID: input.SourceCampaignID,
-		SystemID:         "drawsteel",
+		SystemID:         input.SystemID,
 		Name:             sanitizeText(input.Name),
 		Slug:             slug,
 		Description:      sanitizeOptionalText(input.Description),

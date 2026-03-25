@@ -118,6 +118,7 @@ type ModerationLogEntry struct {
 type CreatePublicationInput struct {
 	SourceEntityID   *string         `json:"source_entity_id,omitempty"`
 	SourceCampaignID *string         `json:"source_campaign_id,omitempty"`
+	SystemID         string          `json:"system_id"`
 	Name             string          `json:"name"`
 	Description      *string         `json:"description,omitempty"`
 	FlavorText       *string         `json:"flavor_text,omitempty"`
