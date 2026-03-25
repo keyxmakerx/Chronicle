@@ -205,10 +205,9 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (string, *Use
 	// Instead of hard-rejecting, we slow down attempts to frustrate brute-force
 	// attacks while still allowing legitimate users to eventually authenticate.
 	if delay := s.loginThrottleDelay(ctx, email); delay > 0 {
-		slog.Info("login throttle delay applied",
-			slog.String("email_hash", loginFailureKey(email)),
-			slog.Duration("delay", delay),
-		)
+		// NOTE: Do not log the email hash or delay here. Logging throttle
+		// events leaks whether an account exists (timing side-channel) and
+		// reveals failure counts via delay magnitude.
 		select {
 		case <-time.After(delay):
 		case <-ctx.Done():

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -171,9 +172,11 @@ func (s *relationService) Delete(ctx context.Context, id int) error {
 	}
 	if reverse != nil {
 		if err := s.repo.Delete(ctx, reverse.ID); err != nil {
-			// Log but don't fail if reverse deletion fails -- the forward
-			// deletion is the primary operation.
-			_ = err
+			// Log but don't fail — forward deletion is the primary operation.
+			slog.Warn("failed to delete reverse relation",
+				slog.String("reverse_id", reverse.ID),
+				slog.Any("error", err),
+			)
 		}
 	}
 
