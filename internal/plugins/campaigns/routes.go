@@ -20,6 +20,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// Accept transfer requires auth but not campaign membership (uses token).
 	authed.GET("/campaigns/:id/accept-transfer", h.AcceptTransfer)
 
+	// Join via shareable invite code (auth required, no campaign membership needed).
+	authed.GET("/join/:code", h.JoinByCode)
+
 	// Public-capable view routes: logged-in users see full UI, guests see
 	// read-only content for public campaigns.
 	pub := e.Group("/campaigns/:id",
@@ -91,6 +94,17 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.GET("/transfer", h.TransferForm, RequireRole(RoleOwner))
 	cg.POST("/transfer", h.Transfer, RequireRole(RoleOwner))
 	cg.POST("/cancel-transfer", h.CancelTransfer, RequireRole(RoleOwner))
+
+	// Archive (Owner only). Unarchive is exempt from RejectIfArchived.
+	cg.POST("/archive", h.ArchiveCampaign, RequireRole(RoleOwner))
+	cg.POST("/unarchive", h.UnarchiveCampaign, RequireRole(RoleOwner))
+
+	// Game system (Owner only).
+	cg.PUT("/system", h.UpdateSystemID, RequireRole(RoleOwner))
+
+	// Shareable invite link (Owner only).
+	cg.POST("/join-code", h.GenerateJoinCode, RequireRole(RoleOwner))
+	cg.DELETE("/join-code", h.RevokeJoinCode, RequireRole(RoleOwner))
 
 	// Campaign groups (Owner only).
 	cg.GET("/groups/manage", h.GroupsPage, RequireRole(RoleOwner))

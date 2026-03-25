@@ -23,10 +23,20 @@ func NewHandler(service AuditService) *Handler {
 	return &Handler{service: service}
 }
 
-// Activity renders the campaign activity page showing audit stats and a
-// timeline of recent actions (GET /campaigns/:id/activity). Restricted to
-// campaign owners (RoleOwner) via route middleware.
+// Activity redirects to the unified settings page Activity tab.
+// GET /campaigns/:id/activity
 func (h *Handler) Activity(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewInternal(fmt.Errorf("missing campaign context"))
+	}
+
+	return c.Redirect(http.StatusFound, fmt.Sprintf("/campaigns/%s/settings?tab=activity", cc.Campaign.ID))
+}
+
+// ActivityFragment returns an HTMX fragment with stats and timeline for the
+// settings Activity tab. GET /campaigns/:id/activity/fragment
+func (h *Handler) ActivityFragment(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewInternal(fmt.Errorf("missing campaign context"))
@@ -40,8 +50,6 @@ func (h *Handler) Activity(c echo.Context) error {
 	ctx := c.Request().Context()
 	campaignID := cc.Campaign.ID
 
-	// Fetch activity feed and campaign stats in sequence. Both are needed
-	// for the full page render.
 	entries, total, err := h.service.GetCampaignActivity(ctx, campaignID, page)
 	if err != nil {
 		return err
@@ -52,7 +60,7 @@ func (h *Handler) Activity(c echo.Context) error {
 		return err
 	}
 
-	return middleware.Render(c, http.StatusOK, ActivityPage(cc, stats, entries, total, page, perPage))
+	return middleware.Render(c, http.StatusOK, ActivityContent(cc, stats, entries, total, page, perPage))
 }
 
 // EmbedActivity returns an HTMX fragment for the dashboard activity feed block.

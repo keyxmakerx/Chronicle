@@ -206,6 +206,20 @@ func (a *campaignAuditAdapter) LogEvent(ctx context.Context, campaignID, userID,
 	})
 }
 
+// systemListerAdapter wraps systems.Registry to implement the
+// campaigns.SystemLister interface for the game system dropdown.
+type systemListerAdapter struct{}
+
+// ListSystems returns all available game systems.
+func (a *systemListerAdapter) ListSystems() []campaigns.SystemOption {
+	manifests := systems.Registry()
+	opts := make([]campaigns.SystemOption, 0, len(manifests))
+	for _, m := range manifests {
+		opts = append(opts, campaigns.SystemOption{ID: m.ID, Name: m.Name})
+	}
+	return opts
+}
+
 // addonListerAdapter wraps addons.AddonService to implement the
 // campaigns.AddonLister interface for the plugin hub page.
 type addonListerAdapter struct {
@@ -1483,6 +1497,8 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	campaignHandler.SetMediaUploader(&backdropUploaderAdapter{svc: mediaService})
+	campaignHandler.SetSMTPChecker(smtpService)
+	campaignHandler.SetSystemLister(&systemListerAdapter{})
 	tagHandler.SetAuditService(auditService)
 
 	// --- Campaign Export/Import ---

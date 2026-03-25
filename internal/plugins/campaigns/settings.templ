@@ -1,5 +1,5 @@
-// settings.templ renders the campaign settings page with entity type
-// customization, ownership transfer, and danger zone (delete campaign).
+// settings.templ renders the campaign settings page as a tabbed "Campaign Hub"
+// with four tabs: General, People, Integrations, and Activity.
 
 package campaigns
 
@@ -29,522 +29,584 @@ func entityTypesJSON(types []SettingsEntityType) string {
 	return string(b)
 }
 
-// CampaignSettingsPage renders the campaign settings page.
-templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, entityTypes []SettingsEntityType, csrfToken, errMsg, baseURL string) {
+// SystemOption is a minimal system manifest for the game system selector dropdown.
+type SystemOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// systemOptionsJSON serializes system options to JSON for Alpine.js.
+func systemOptionsJSON(opts []SystemOption) string {
+	b, err := json.Marshal(opts)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+// CampaignSettingsPage renders the tabbed campaign settings hub.
+templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, entityTypes []SettingsEntityType, members []CampaignMember, csrfToken, errMsg, baseURL, activeTab string, smtpConfigured bool, systemOptions []SystemOption) {
 	@layouts.App(cc.Campaign.Name + " - Settings") {
-		<div class="max-w-2xl mx-auto">
-			<div class="flex items-center justify-between mb-6">
-				<h1 class="text-2xl font-bold text-fg">Campaign Settings</h1>
+		<div class="max-w-4xl mx-auto" x-data={ fmt.Sprintf("{ tab: '%s' }", activeTab) }>
+			<div class="flex items-center justify-between mb-4">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Campaign Settings</h1>
+					<p class="text-sm text-fg-muted mt-0.5">Manage your campaign</p>
+				</div>
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) } class="btn-secondary text-sm">Back</a>
 			</div>
-
 			if errMsg != "" {
-				<div class="alert-error mb-6" role="alert">
-					{ errMsg }
+				<div class="alert-error mb-4" role="alert">{ errMsg }</div>
+			}
+			if cc.Campaign.IsArchived() {
+				<div class="alert-warning mb-4">
+					<i class="fa-solid fa-box-archive mr-2"></i> This campaign is archived and read-only.
+					<form method="POST" hx-post={ fmt.Sprintf("/campaigns/%s/unarchive", cc.Campaign.ID) } class="inline ml-2">
+						<input type="hidden" name="csrf_token" value={ csrfToken }/>
+						<button type="submit" class="text-sm font-medium underline hover:no-underline">Unarchive</button>
+					</form>
 				</div>
 			}
-
-			// Campaign details (name, description, public toggle).
-			<div class="card p-6 mb-6">
-				<h2 class="text-lg font-semibold text-fg mb-4">Campaign Details</h2>
-				<form
-					method="POST"
-					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
-					hx-put={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
-					hx-target="#campaign-details-form"
-					hx-swap="outerHTML"
-					id="campaign-details-form"
-					class="space-y-4"
-					data-track-changes="campaign-settings"
-				>
-					<input type="hidden" name="_method" value="PUT"/>
-					<input type="hidden" name="csrf_token" value={ csrfToken }/>
-
-					<div>
-						<label for="name" class="block text-sm font-medium text-fg-body mb-1">Campaign Name</label>
-						<input
-							type="text"
-							id="name"
-							name="name"
-							value={ cc.Campaign.Name }
-							required
-							class="input w-full"
-							maxlength="200"
-						/>
-					</div>
-
-					<div>
-						<label for="description" class="block text-sm font-medium text-fg-body mb-1">Description</label>
-						<textarea
-							id="description"
-							name="description"
-							class="input w-full h-24"
-							maxlength="5000"
-						>
-							if cc.Campaign.Description != nil {
-								{ *cc.Campaign.Description }
-							}
-						</textarea>
-					</div>
-
-					<div class="flex items-center">
-						<input
-							type="checkbox"
-							id="is_public"
-							name="is_public"
-							value="true"
-							if cc.Campaign.IsPublic {
-								checked
-							}
-							class="h-4 w-4 text-accent border-edge rounded focus:ring-accent"
-						/>
-						<label for="is_public" class="ml-2 block text-sm text-fg-body">
-							Make this campaign public
-						</label>
-					</div>
-					<p class="text-xs text-fg-secondary -mt-2 ml-6">Public campaigns can be viewed by anyone without logging in.</p>
-
-					<div class="flex justify-end">
-						<button type="submit" class="btn-primary text-sm">Save Changes</button>
-					</div>
-				</form>
+			// Tab bar.
+			<div class="flex gap-0 border-b border-edge mb-6 overflow-x-auto">
+				<button @click="tab = 'general'; history.replaceState(null, '', '?tab=general')" :class="tab === 'general' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-gear mr-1.5 text-xs"></i> General</button>
+				<button @click="tab = 'people'; history.replaceState(null, '', '?tab=people')" :class="tab === 'people' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-users mr-1.5 text-xs"></i> People</button>
+				<button @click="tab = 'integrations'; history.replaceState(null, '', '?tab=integrations')" :class="tab === 'integrations' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-plug mr-1.5 text-xs"></i> Integrations</button>
+				<button @click="tab = 'activity'; history.replaceState(null, '', '?tab=activity')" :class="tab === 'activity' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-clock-rotate-left mr-1.5 text-xs"></i> Activity</button>
 			</div>
-
-			// Welcome message / MOTD.
-			<div class="card p-6 mb-6">
-				<h2 class="text-lg font-semibold text-fg mb-2">Welcome Message</h2>
-				<p class="text-sm text-fg-secondary mb-4">
-					Set a message of the day that appears as a banner on your campaign dashboard for all members.
-					Leave blank to hide the banner.
-				</p>
-				<div
-					x-data={ fmt.Sprintf(`{
-						message: %s,
-						saving: false,
-						saved: false,
-						async save() {
-							this.saving = true;
-							this.saved = false;
-							const res = await Chronicle.apiFetch('/campaigns/%s/welcome-message', {
-								method: 'PUT',
-								body: { message: this.message }
-							});
-							this.saving = false;
-							if (res.ok) {
-								this.saved = true;
-								setTimeout(() => { this.saved = false; }, 3000);
-							}
-						}
-					}`, welcomeMessageJS(cc), cc.Campaign.ID) }
-				>
-					<textarea
-						x-model="message"
-						class="input w-full h-20 text-sm mb-3"
-						placeholder="Welcome to the campaign! Here's what's new..."
-						maxlength="500"
-					></textarea>
-					<div class="flex items-center justify-between">
-						<span class="text-xs text-fg-muted" x-text="message.length + '/500'"></span>
-						<div class="flex items-center gap-2">
-							<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
-							<button
-								type="button"
-								class="btn-primary text-sm"
-								:disabled="saving"
-								@click="save()"
-							>
-								<span x-show="!saving">Save Message</span>
-								<span x-show="saving"><i class="fa-solid fa-spinner fa-spin text-xs mr-1"></i> Saving...</span>
-							</button>
-						</div>
-					</div>
+			// Tab content.
+			<div x-show="tab === 'general'" x-cloak>
+				@settingsGeneralTab(cc, csrfToken, systemOptionsJSON(systemOptions))
+			</div>
+			<div x-show="tab === 'people'" x-cloak>
+				@settingsPeopleTab(cc, members, transfer, csrfToken, smtpConfigured)
+			</div>
+			<div x-show="tab === 'integrations'" x-cloak>
+				@settingsIntegrationsTab(cc, csrfToken, baseURL)
+			</div>
+			<div x-show="tab === 'activity'" x-cloak>
+				<div id="activity-content" hx-get={ fmt.Sprintf("/campaigns/%s/activity/fragment", cc.Campaign.ID) } hx-trigger="intersect once" hx-swap="innerHTML">
+					<div class="text-center py-12 text-fg-muted text-sm"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Loading activity...</div>
 				</div>
 			</div>
+		</div>
+	}
+}
 
-			// Default visibility for new entities.
-			<div class="card p-6 mb-6">
-				<h2 class="text-lg font-semibold text-fg mb-2">Default Visibility</h2>
-				<p class="text-sm text-fg-secondary mb-4">
-					Set the default visibility for newly created entities. This can always be overridden per-entity.
-				</p>
-				<div
-					x-data={ fmt.Sprintf(`{
-						visibility: '%s',
-						saving: false,
-						saved: false,
-						async save(v) {
-							this.visibility = v;
-							this.saving = true;
-							this.saved = false;
-							const res = await Chronicle.apiFetch('/campaigns/%s/default-visibility', {
-								method: 'PUT',
-								body: { visibility: v }
-							});
-							this.saving = false;
-							if (res.ok) {
-								this.saved = true;
-								setTimeout(() => { this.saved = false; }, 3000);
-							}
+// settingsGeneralTab renders the General tab: details, MOTD, visibility, system, danger zone.
+templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON string) {
+	<div class="space-y-6">
+		// Campaign details.
+		<div class="card p-6">
+			<h2 class="text-lg font-semibold text-fg mb-4">Campaign Details</h2>
+			<form
+				method="POST"
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
+				hx-put={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
+				hx-target="#campaign-details-form"
+				hx-swap="outerHTML"
+				id="campaign-details-form"
+				class="space-y-4"
+			>
+				<input type="hidden" name="_method" value="PUT"/>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<div>
+					<label for="name" class="block text-sm font-medium text-fg-body mb-1">Campaign Name</label>
+					<input type="text" id="name" name="name" value={ cc.Campaign.Name } required class="input w-full" maxlength="200"/>
+				</div>
+				<div>
+					<label for="description" class="block text-sm font-medium text-fg-body mb-1">Description</label>
+					<textarea id="description" name="description" class="input w-full h-24" maxlength="5000">
+						if cc.Campaign.Description != nil {
+							{ *cc.Campaign.Description }
 						}
-					}`, cc.Campaign.ParseSettings().DefaultVisibility, cc.Campaign.ID) }
-					class="space-y-2"
-				>
-					<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
-						<input type="radio" name="default_vis" value="" :checked="visibility === ''" @change="save('')" class="accent-accent"/>
-						<div>
-							<span class="text-sm font-medium text-fg">Everyone</span>
-							<p class="text-xs text-fg-secondary">All campaign members can see new entities by default.</p>
-						</div>
-					</label>
-					<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
-						<input type="radio" name="default_vis" value="dm_only" :checked="visibility === 'dm_only'" @change="save('dm_only')" class="accent-accent"/>
-						<div>
-							<span class="text-sm font-medium text-fg">DM Only</span>
-							<p class="text-xs text-fg-secondary">New entities are hidden from players until explicitly revealed.</p>
-						</div>
-					</label>
-					<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
-						<input type="radio" name="default_vis" value="private" :checked="visibility === 'private'" @change="save('private')" class="accent-accent"/>
-						<div>
-							<span class="text-sm font-medium text-fg">Private</span>
-							<p class="text-xs text-fg-secondary">New entities are visible only to the creator until permissions are set.</p>
-						</div>
-					</label>
-					<div class="flex items-center gap-2 pt-1">
-						<span x-show="saving" class="text-xs text-fg-muted"><i class="fa-solid fa-spinner fa-spin"></i> Saving...</span>
+					</textarea>
+				</div>
+				<div class="flex items-center">
+					<input type="checkbox" id="is_public" name="is_public" value="true" if cc.Campaign.IsPublic { checked } class="h-4 w-4 text-accent border-edge rounded focus:ring-accent"/>
+					<label for="is_public" class="ml-2 block text-sm text-fg-body">Make this campaign public</label>
+				</div>
+				<p class="text-xs text-fg-secondary -mt-2 ml-6">Public campaigns can be viewed by anyone without logging in.</p>
+				<div class="flex justify-end">
+					<button type="submit" class="btn-primary text-sm">Save Changes</button>
+				</div>
+			</form>
+		</div>
+
+		// Welcome message.
+		<div class="card p-6">
+			<h2 class="text-lg font-semibold text-fg mb-2">Welcome Message</h2>
+			<p class="text-sm text-fg-secondary mb-4">Set a banner message shown on the campaign dashboard for all members.</p>
+			<div
+				x-data={ fmt.Sprintf(`{
+					message: %s,
+					saving: false,
+					saved: false,
+					async save() {
+						this.saving = true;
+						this.saved = false;
+						const res = await Chronicle.apiFetch('/campaigns/%s/welcome-message', {
+							method: 'PUT',
+							body: { message: this.message }
+						});
+						this.saving = false;
+						if (res.ok) {
+							this.saved = true;
+							setTimeout(() => { this.saved = false; }, 3000);
+						}
+					}
+				}`, welcomeMessageJS(cc), cc.Campaign.ID) }
+			>
+				<textarea x-model="message" class="input w-full h-20 text-sm mb-3" placeholder="Welcome to the campaign! Here's what's new..." maxlength="500"></textarea>
+				<div class="flex items-center justify-between">
+					<span class="text-xs text-fg-muted" x-text="message.length + '/500'"></span>
+					<div class="flex items-center gap-2">
 						<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
+						<button type="button" class="btn-primary text-sm" :disabled="saving" @click="save()">
+							<span x-show="!saving">Save Message</span>
+							<span x-show="saving"><i class="fa-solid fa-spinner fa-spin text-xs mr-1"></i> Saving...</span>
+						</button>
 					</div>
 				</div>
 			</div>
+		</div>
 
-			// Appearance & Layout.
-			<div class="card p-6 mb-6">
-				<h2 class="text-lg font-semibold text-fg mb-4">Appearance &amp; Layout</h2>
-				<p class="text-sm text-fg-secondary mb-4">
-					Manage your campaign's backdrop image, accent color, branding, topbar style, and layout settings.
-				</p>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) }
-					class="btn-primary text-sm inline-flex items-center gap-1.5"
-				>
-					<i class="fa-solid fa-paintbrush text-xs"></i> Open Customization Hub
-				</a>
-			</div>
-
-			// Campaign features.
-			<div class="card p-6 mb-6">
-				<div class="flex items-center justify-between mb-2">
-					<h2 class="text-lg font-semibold text-fg">Features</h2>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/plugins", cc.Campaign.ID)) }
-						class="text-sm link"
-					>
-						<i class="fa-solid fa-plug mr-1"></i> Manage Features
-					</a>
-				</div>
-				<p class="text-sm text-fg-secondary">
-					Enable or disable features like calendars, maps, game systems, and integrations for this campaign.
-				</p>
-			</div>
-
-			// API Keys for external tool integration.
-			<div class="card p-6 mb-6">
-				<div class="flex items-center justify-between mb-2">
-					<h2 class="text-lg font-semibold text-fg">API Keys</h2>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", cc.Campaign.ID)) }
-						class="text-sm link"
-					>
-						<i class="fa-solid fa-key mr-1"></i> Manage Keys
-					</a>
-				</div>
-				<p class="text-sm text-fg-secondary">
-					Create API keys for external tools like Foundry VTT to sync data with this campaign.
-				</p>
-			</div>
-
-			// Foundry VTT integration — module install URL for Foundry clients.
-			if baseURL != "" {
-				<div class="card p-6 mb-6">
-					<div class="flex items-center justify-between mb-2">
-						<h2 class="text-lg font-semibold text-fg">Foundry VTT Integration</h2>
-					</div>
-					<p class="text-sm text-fg-secondary mb-4">
-						Install the Chronicle Sync module in Foundry VTT to sync journals, maps, tokens, and calendars
-						with this campaign in real-time.
-					</p>
-					<div class="mb-4">
-						<label class="block text-sm font-medium text-fg-body mb-1">Campaign ID</label>
-						<div class="flex items-center gap-2">
-							<input
-								type="text"
-								readonly
-								value={ cc.Campaign.ID }
-								class="input w-full font-mono text-sm bg-surface-alt"
-								id="foundry-campaign-id"
-							/>
-							<button
-								type="button"
-								onclick="navigator.clipboard.writeText(document.getElementById('foundry-campaign-id').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })"
-								class="btn-secondary text-sm px-3 py-2 shrink-0"
-								title="Copy to clipboard"
-							>
-								<i class="fa-solid fa-copy"></i>
-							</button>
-						</div>
-						<p class="text-xs text-fg-muted mt-2">
-							Enter this ID in the Foundry VTT module settings as the <strong>Campaign ID</strong>.
-						</p>
-					</div>
+		// Default visibility.
+		<div class="card p-6">
+			<h2 class="text-lg font-semibold text-fg mb-2">Default Visibility</h2>
+			<p class="text-sm text-fg-secondary mb-4">Set the default visibility for newly created entities.</p>
+			<div
+				x-data={ fmt.Sprintf(`{
+					visibility: '%s',
+					saving: false,
+					saved: false,
+					async save(v) {
+						this.visibility = v;
+						this.saving = true;
+						this.saved = false;
+						const res = await Chronicle.apiFetch('/campaigns/%s/default-visibility', {
+							method: 'PUT',
+							body: { visibility: v }
+						});
+						this.saving = false;
+						if (res.ok) {
+							this.saved = true;
+							setTimeout(() => { this.saved = false; }, 3000);
+						}
+					}
+				}`, cc.Campaign.ParseSettings().DefaultVisibility, cc.Campaign.ID) }
+				class="space-y-2"
+			>
+				<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
+					<input type="radio" name="default_vis" value="" :checked="visibility === ''" @change="save('')" class="accent-accent"/>
 					<div>
-						<label class="block text-sm font-medium text-fg-body mb-1">Module Install URL</label>
-						<div class="flex items-center gap-2">
-							<input
-								type="text"
-								readonly
-								value={ fmt.Sprintf("%s/foundry-module/module.json", baseURL) }
-								class="input w-full font-mono text-sm bg-surface-alt"
-								id="foundry-install-url"
-							/>
-							<button
-								type="button"
-								onclick="navigator.clipboard.writeText(document.getElementById('foundry-install-url').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })"
-								class="btn-secondary text-sm px-3 py-2 shrink-0"
-								title="Copy to clipboard"
-							>
-								<i class="fa-solid fa-copy"></i>
-							</button>
+						<span class="text-sm font-medium text-fg">Everyone</span>
+						<p class="text-xs text-fg-secondary">All campaign members can see new entities by default.</p>
+					</div>
+				</label>
+				<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
+					<input type="radio" name="default_vis" value="dm_only" :checked="visibility === 'dm_only'" @change="save('dm_only')" class="accent-accent"/>
+					<div>
+						<span class="text-sm font-medium text-fg">DM Only</span>
+						<p class="text-xs text-fg-secondary">New entities are hidden from players until explicitly revealed.</p>
+					</div>
+				</label>
+				<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
+					<input type="radio" name="default_vis" value="private" :checked="visibility === 'private'" @change="save('private')" class="accent-accent"/>
+					<div>
+						<span class="text-sm font-medium text-fg">Private</span>
+						<p class="text-xs text-fg-secondary">New entities are visible only to the creator until permissions are set.</p>
+					</div>
+				</label>
+				<div class="flex items-center gap-2 pt-1">
+					<span x-show="saving" class="text-xs text-fg-muted"><i class="fa-solid fa-spinner fa-spin"></i> Saving...</span>
+					<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
+				</div>
+			</div>
+		</div>
+
+		// Game System selector.
+		<div class="card p-6">
+			<h2 class="text-lg font-semibold text-fg mb-2">Game System</h2>
+			<p class="text-sm text-fg-secondary mb-4">Select a game system for reference content, tooltips, and entity presets.</p>
+			<div
+				x-data={ fmt.Sprintf(`{
+					systemId: '%s',
+					customUrl: '',
+					isCustom: false,
+					saving: false,
+					saved: false,
+					systems: %s,
+					init() {
+						if (this.systemId.startsWith('custom:')) {
+							this.customUrl = this.systemId.substring(7);
+							this.isCustom = true;
+							this.systemId = 'custom';
+						}
+					},
+					async save() {
+						this.saving = true;
+						this.saved = false;
+						var id = this.systemId;
+						if (id === 'custom' && this.customUrl.trim()) {
+							id = 'custom:' + this.customUrl.trim();
+						}
+						const res = await Chronicle.apiFetch('/campaigns/%s/system', {
+							method: 'PUT',
+							body: { system_id: id }
+						});
+						this.saving = false;
+						if (res.ok) {
+							this.saved = true;
+							setTimeout(() => { this.saved = false; }, 3000);
+						}
+					},
+					onChange() {
+						this.isCustom = (this.systemId === 'custom');
+						if (!this.isCustom) this.save();
+					}
+				}`, cc.Campaign.ParseSettings().SystemID, systemOptionsJSON, cc.Campaign.ID) }
+			>
+				<select x-model="systemId" @change="onChange()" class="input w-full mb-2">
+					<option value="">None</option>
+					<template x-for="sys in systems" :key="sys.id">
+						<option :value="sys.id" x-text="sys.name"></option>
+					</template>
+					<option value="custom">Custom...</option>
+				</select>
+				<div x-show="isCustom" x-transition class="flex items-center gap-2 mt-2">
+					<input type="url" x-model="customUrl" class="input flex-1" placeholder="https://example.com/system/manifest.json"/>
+					<button type="button" class="btn-primary text-sm" @click="save()">Install</button>
+				</div>
+				<div class="flex items-center gap-2 pt-1">
+					<span x-show="saving" class="text-xs text-fg-muted"><i class="fa-solid fa-spinner fa-spin"></i> Saving...</span>
+					<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
+				</div>
+			</div>
+		</div>
+
+		// Danger Zone.
+		<div class="card border-red-200 dark:border-red-800" x-data="{ open: false }">
+			<button @click="open = !open" class="w-full p-6 flex items-center justify-between text-left">
+				<h2 class="text-lg font-semibold text-red-600 dark:text-red-400">Danger Zone</h2>
+				<i class="fa-solid fa-chevron-down text-red-400 text-xs transition-transform" :class="open && 'rotate-180'"></i>
+			</button>
+			<div x-show="open" x-transition x-cloak class="px-6 pb-6 space-y-6">
+				// Archive campaign.
+				<div>
+					<h3 class="text-sm font-semibold text-fg mb-1">Archive Campaign</h3>
+					<p class="text-sm text-fg-secondary mb-3">Hides from dashboard, makes read-only. Can be unarchived later.</p>
+					if cc.Campaign.IsArchived() {
+						<form method="POST" hx-post={ fmt.Sprintf("/campaigns/%s/unarchive", cc.Campaign.ID) }>
+							<input type="hidden" name="csrf_token" value={ csrfToken }/>
+							<button type="submit" class="btn-secondary text-sm">Unarchive Campaign</button>
+						</form>
+					} else {
+						<form method="POST" hx-post={ fmt.Sprintf("/campaigns/%s/archive", cc.Campaign.ID) }>
+							<input type="hidden" name="csrf_token" value={ csrfToken }/>
+							<button type="submit" class="btn-secondary text-sm">Archive Campaign</button>
+						</form>
+					}
+				</div>
+				// Delete campaign (type name to confirm).
+				<div class="pt-4 border-t border-red-200 dark:border-red-800" x-data="{ confirmName: '' }">
+					<h3 class="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">Delete Campaign</h3>
+					<p class="text-sm text-fg-secondary mb-3">Permanently delete this campaign and all its data. This cannot be undone.</p>
+					<p class="text-sm text-fg-body mb-2">Type <strong class="text-fg">{ cc.Campaign.Name }</strong> to confirm:</p>
+					<input type="text" x-model="confirmName" class="input w-full mb-3" placeholder="Campaign name"/>
+					<form
+						method="POST"
+						action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
+						hx-delete={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
+						hx-vals={ fmt.Sprintf(`{"confirm_name": "%s"}`, cc.Campaign.Name) }
+					>
+						<input type="hidden" name="_method" value="DELETE"/>
+						<input type="hidden" name="csrf_token" value={ csrfToken }/>
+						<button
+							type="submit"
+							class="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+							x-bind:disabled={ fmt.Sprintf("confirmName !== '%s'", cc.Campaign.Name) }
+						>
+							Delete Campaign
+						</button>
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// settingsPeopleTab renders member list, invites, DM privileges, and transfer.
+templ settingsPeopleTab(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken string, smtpConfigured bool) {
+	<div class="space-y-6">
+		// SMTP warning.
+		if !smtpConfigured {
+			<div class="alert-warning">
+				<i class="fa-solid fa-triangle-exclamation mr-2"></i>
+				Email is not configured. Invitations and transfer notifications will not be sent by email.
+			</div>
+		}
+
+		// Member list.
+		<div class="card p-6">
+			<div class="flex items-center justify-between mb-4">
+				<h2 class="text-lg font-semibold text-fg">Members</h2>
+				<span class="text-xs text-fg-muted">{ fmt.Sprintf("%d members", len(members)) }</span>
+			</div>
+			// Add member form.
+			<form
+				method="POST"
+				hx-post={ fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID) }
+				hx-swap="none"
+				class="flex flex-wrap items-end gap-3 mb-4 pb-4 border-b border-edge"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<div class="flex-1 min-w-[200px]">
+					<label class="block text-xs text-fg-secondary mb-1">Email</label>
+					<input type="email" name="email" placeholder="player@example.com" required class="input w-full"/>
+				</div>
+				<div class="w-28">
+					<label class="block text-xs text-fg-secondary mb-1">Role</label>
+					<select name="role" class="input w-full">
+						<option value="player">Player</option>
+						<option value="scribe">Scribe</option>
+					</select>
+				</div>
+				<button type="submit" class="btn-primary text-sm">Add Member</button>
+			</form>
+			// Member table.
+			<div class="space-y-2">
+				for _, m := range members {
+					<div class="flex items-center gap-3 py-2 px-3 rounded-md hover:bg-surface-alt transition-colors">
+						<div class="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-xs font-bold text-accent shrink-0">
+							if m.DisplayName != "" {
+								{ string([]rune(m.DisplayName)[0:1]) }
+							} else {
+								{ string([]rune(m.Email)[0:1]) }
+							}
 						</div>
-						<p class="text-xs text-fg-muted mt-2">
-							In Foundry VTT, go to <strong>Add-on Modules → Install Module</strong>, paste this URL in the
-							<strong>Manifest URL</strong> field, and click <strong>Install</strong>.
-						</p>
+						<div class="flex-1 min-w-0">
+							<span class="text-sm font-medium text-fg truncate block">
+								if m.DisplayName != "" {
+									{ m.DisplayName }
+								} else {
+									{ m.Email }
+								}
+							</span>
+							<span class="text-xs text-fg-muted">{ m.Email }</span>
+						</div>
+						<span class={ "text-[10px] font-medium uppercase px-2 py-0.5 rounded-full",
+							templ.KV("bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", m.Role == RoleOwner),
+							templ.KV("bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400", m.Role == RoleScribe),
+							templ.KV("bg-surface-alt text-fg-muted", m.Role == RolePlayer) }>
+							{ m.Role.DisplayName() }
+						</span>
+						if m.Role != RoleOwner {
+							<form method="POST" hx-delete={ fmt.Sprintf("/campaigns/%s/members/%s", cc.Campaign.ID, m.UserID) } hx-confirm={ fmt.Sprintf("Remove %s from the campaign?", m.DisplayName) }>
+								<input type="hidden" name="csrf_token" value={ csrfToken }/>
+								<button type="submit" class="text-fg-muted hover:text-red-400 transition-colors p-1" title="Remove">
+									<i class="fa-solid fa-xmark text-xs"></i>
+								</button>
+							</form>
+						}
+					</div>
+				}
+			</div>
+		</div>
+
+		// Shareable invite link.
+		<div class="card p-6" x-data={ fmt.Sprintf(`{
+			code: '%s',
+			url: '%s',
+			generating: false,
+			async generate() {
+				this.generating = true;
+				const res = await Chronicle.apiFetch('/campaigns/%s/join-code', { method: 'POST' });
+				if (res.ok) {
+					const data = await res.json();
+					this.code = data.code;
+					this.url = data.url;
+				}
+				this.generating = false;
+			},
+			async revoke() {
+				if (!confirm('Revoke invite link? Existing links will stop working.')) return;
+				await Chronicle.apiFetch('/campaigns/%s/join-code', { method: 'DELETE' });
+				this.code = '';
+				this.url = '';
+			},
+			copy() {
+				navigator.clipboard.writeText(this.url);
+				Chronicle.notify('Link copied!', 'success');
+			}
+		}`, func() string { if cc.Campaign.JoinCode != nil { return *cc.Campaign.JoinCode } else { return "" } }(), func() string { if cc.Campaign.JoinCode != nil { return fmt.Sprintf("%s/join/%s", "", *cc.Campaign.JoinCode) } else { return "" } }(), cc.Campaign.ID, cc.Campaign.ID) }>
+			<h2 class="text-lg font-semibold text-fg mb-2">Invite Link</h2>
+			<p class="text-sm text-fg-secondary mb-3">Generate a shareable link anyone can use to join your campaign.</p>
+			<div x-show="code" class="flex items-center gap-2">
+				<input type="text" readonly :value="url" class="input flex-1 font-mono text-sm bg-surface-alt"/>
+				<button type="button" @click="copy()" class="btn-secondary text-sm px-3 py-2 shrink-0" title="Copy"><i class="fa-solid fa-copy"></i></button>
+				<button type="button" @click="revoke()" class="btn-secondary text-sm px-3 py-2 shrink-0 text-red-400 hover:text-red-500" title="Revoke"><i class="fa-solid fa-trash"></i></button>
+			</div>
+			<div x-show="!code">
+				<button type="button" @click="generate()" :disabled="generating" class="btn-primary text-sm">
+					<span x-show="!generating"><i class="fa-solid fa-link mr-1.5"></i> Generate Invite Link</span>
+					<span x-show="generating"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Generating...</span>
+				</button>
+			</div>
+		</div>
+
+		// Invitations (HTMX lazy load).
+		<div class="card p-6">
+			<h2 class="text-lg font-semibold text-fg mb-4">
+				<i class="fa-solid fa-envelope mr-2 text-accent"></i> Invitations
+			</h2>
+			<p class="text-sm text-fg-secondary mb-4">Invite players and scribes by email. Invitations expire after 7 days.</p>
+			<div hx-get={ fmt.Sprintf("/campaigns/%s/invites/page", cc.Campaign.ID) } hx-trigger="load" hx-swap="innerHTML">
+				<div class="text-center py-4 text-fg-muted text-sm">Loading invitations...</div>
+			</div>
+		</div>
+
+		// DM Privileges — uses Chronicle.apiFetch for CSRF safety (S1 fix).
+		<div class="card p-6" x-data={ fmt.Sprintf(`{
+			members: [],
+			grants: [],
+			loading: true,
+			saving: false,
+			async init() {
+				const [membersRes, grantsRes] = await Promise.all([
+					Chronicle.apiFetch('/campaigns/%s/members'),
+					Chronicle.apiFetch('/campaigns/%s/dm-grants')
+				]);
+				const allMembers = membersRes.ok ? await membersRes.json() : [];
+				this.members = allMembers.filter(m => m.role !== 3);
+				const grantsData = grantsRes.ok ? await grantsRes.json() : { user_ids: [] };
+				this.grants = grantsData.user_ids || [];
+				this.loading = false;
+			},
+			isGranted(id) { return this.grants.includes(id); },
+			toggle(id) {
+				if (this.isGranted(id)) {
+					this.grants = this.grants.filter(g => g !== id);
+				} else {
+					this.grants.push(id);
+				}
+				this.save();
+			},
+			async save() {
+				this.saving = true;
+				await Chronicle.apiFetch('/campaigns/%s/dm-grants', {
+					method: 'PUT',
+					body: { user_ids: this.grants }
+				});
+				this.saving = false;
+			}
+		}`, cc.Campaign.ID, cc.Campaign.ID, cc.Campaign.ID) }>
+			<h2 class="text-lg font-semibold text-fg mb-2">DM Privileges</h2>
+			<p class="text-sm text-fg-secondary mb-4">Grant members the ability to see DM-only content without giving them full ownership.</p>
+			<div x-show="loading" class="text-sm text-fg-muted"><i class="fa-solid fa-spinner fa-spin"></i> Loading members...</div>
+			<div x-show="!loading">
+				<template x-if="members.length === 0">
+					<p class="text-sm text-fg-muted italic">No non-owner members to grant privileges to.</p>
+				</template>
+				<div class="space-y-2">
+					<template x-for="m in members" :key="m.user_id">
+						<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
+							<input type="checkbox" class="accent-accent" :checked="isGranted(m.user_id)" @change="toggle(m.user_id)"/>
+							<div class="flex-1 min-w-0">
+								<span class="text-sm font-medium text-fg" x-text="m.display_name || m.email"></span>
+								<span class="text-xs text-fg-muted ml-1" x-text="m.role === 2 ? '(Scribe)' : '(Player)'"></span>
+							</div>
+							<span x-show="isGranted(m.user_id)" class="text-[10px] text-accent font-medium">DM View</span>
+						</label>
+					</template>
+				</div>
+				<p x-show="saving" class="text-xs text-fg-muted mt-2"><i class="fa-solid fa-spinner fa-spin"></i> Saving...</p>
+			</div>
+		</div>
+
+		// Transfer ownership.
+		<div class="card p-6">
+			<h2 class="text-lg font-semibold text-fg mb-4">Transfer Ownership</h2>
+			if transfer != nil {
+				<div class="alert-warning mb-4">
+					<strong>Transfer pending.</strong> Waiting for the new owner to accept. Expires { transfer.ExpiresAt.Format("Jan 2, 2006 3:04 PM") }.
+				</div>
+				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID)) } hx-post={ fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID) }>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<button type="submit" class="btn-secondary text-sm">Cancel Transfer</button>
+				</form>
+			} else {
+				<p class="text-sm text-fg-secondary mb-4">Transfer ownership to another user. They will receive a confirmation email (if SMTP is configured).</p>
+				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/transfer", cc.Campaign.ID)) } hx-post={ fmt.Sprintf("/campaigns/%s/transfer", cc.Campaign.ID) } class="flex items-end space-x-4">
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<div class="flex-1">
+						<label for="transfer-email" class="block text-sm font-medium text-fg-body mb-1">New owner's email</label>
+						<input type="email" id="transfer-email" name="email" required class="input w-full" placeholder="user@example.com"/>
+					</div>
+					<button type="submit" class="btn-primary text-sm">Initiate Transfer</button>
+				</form>
+			}
+		</div>
+	</div>
+}
+
+// settingsIntegrationsTab renders Foundry VTT, API keys, export/import, and quick links.
+templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
+	<div class="space-y-6">
+		// Quick links.
+		<div class="flex flex-wrap gap-3">
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) } class="btn-secondary text-sm inline-flex items-center gap-1.5">
+				<i class="fa-solid fa-paintbrush text-xs"></i> Customization Hub
+			</a>
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/plugins", cc.Campaign.ID)) } class="btn-secondary text-sm inline-flex items-center gap-1.5">
+				<i class="fa-solid fa-puzzle-piece text-xs"></i> Feature Hub
+			</a>
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", cc.Campaign.ID)) } class="btn-secondary text-sm inline-flex items-center gap-1.5">
+				<i class="fa-solid fa-key text-xs"></i> API Keys
+			</a>
+		</div>
+
+		// Foundry VTT.
+		if baseURL != "" {
+			<div class="card p-6">
+				<h2 class="text-lg font-semibold text-fg mb-2">Foundry VTT Integration</h2>
+				<p class="text-sm text-fg-secondary mb-4">Install the Chronicle Sync module in Foundry VTT to sync journals, maps, tokens, and calendars.</p>
+				<div class="mb-4">
+					<label class="block text-sm font-medium text-fg-body mb-1">Campaign ID</label>
+					<div class="flex items-center gap-2">
+						<input type="text" readonly value={ cc.Campaign.ID } class="input w-full font-mono text-sm bg-surface-alt" id="foundry-campaign-id"/>
+						<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('foundry-campaign-id').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })" class="btn-secondary text-sm px-3 py-2 shrink-0" title="Copy">
+							<i class="fa-solid fa-copy"></i>
+						</button>
 					</div>
 				</div>
-			}
-
-			// Groups — manage user groups for entity permission grants.
-			<div class="card p-6 mb-6">
-				<div class="flex items-center justify-between mb-2">
-					<h2 class="text-lg font-semibold text-fg">Groups</h2>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/groups/manage", cc.Campaign.ID)) }
-						class="text-sm link"
-					>
-						<i class="fa-solid fa-users-gear mr-1"></i> Manage Groups
-					</a>
-				</div>
-				<p class="text-sm text-fg-secondary">
-					Create groups of users and grant them access to entities with custom visibility.
-				</p>
-			</div>
-
-			// Content Packs — browse & submit game systems.
-			<div class="card p-6 mb-6">
-				<div class="flex items-center justify-between mb-2">
-					<h2 class="text-lg font-semibold text-fg">Content Packs</h2>
-					<a
-						href="/systems/browse"
-						class="text-sm link"
-					>
-						<i class="fa-solid fa-dice-d20 mr-1"></i> Browse Systems
-					</a>
-				</div>
-				<p class="text-sm text-fg-secondary mb-4">
-					Browse available game systems and Foundry modules, or submit your own for review.
-				</p>
-				<div class="flex items-center gap-3">
-					<a
-						href="/systems/submit"
-						class="btn-primary text-sm inline-flex items-center gap-1.5"
-					>
-						<i class="fa-solid fa-paper-plane text-xs"></i> Submit a System
-					</a>
-					<a
-						href="/systems/my-submissions"
-						class="btn-secondary text-sm inline-flex items-center gap-1.5"
-					>
-						<i class="fa-solid fa-clock-rotate-left text-xs"></i> My Submissions
-					</a>
+				<div>
+					<label class="block text-sm font-medium text-fg-body mb-1">Module Install URL</label>
+					<div class="flex items-center gap-2">
+						<input type="text" readonly value={ fmt.Sprintf("%s/foundry-module/module.json", baseURL) } class="input w-full font-mono text-sm bg-surface-alt" id="foundry-install-url"/>
+						<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('foundry-install-url').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })" class="btn-secondary text-sm px-3 py-2 shrink-0" title="Copy">
+							<i class="fa-solid fa-copy"></i>
+						</button>
+					</div>
+					<p class="text-xs text-fg-muted mt-2">In Foundry VTT, go to <strong>Add-on Modules → Install Module</strong>, paste this URL, and click <strong>Install</strong>.</p>
 				</div>
 			</div>
+		}
 
-			// Data export & import.
-		<div class="card p-6 mb-6">
+		// Data export & import.
+		<div class="card p-6">
 			<h2 class="text-lg font-semibold text-fg mb-2">Data Export &amp; Import</h2>
-			<p class="text-sm text-fg-secondary mb-4">
-				Export your entire campaign as a JSON file for backup or migration. Import a previously exported campaign file.
-			</p>
+			<p class="text-sm text-fg-secondary mb-4">Export your entire campaign as a JSON file for backup or migration.</p>
 			<div class="flex items-center gap-3">
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) }
-					class="btn-primary text-sm inline-flex items-center gap-1.5"
-					download
-				>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
 					<i class="fa-solid fa-download text-xs"></i> Export Campaign
 				</a>
-				<a
-					href="/campaigns/import"
-					class="btn-secondary text-sm inline-flex items-center gap-1.5"
-				>
+				<a href="/campaigns/import" class="btn-secondary text-sm inline-flex items-center gap-1.5">
 					<i class="fa-solid fa-upload text-xs"></i> Import Campaign
 				</a>
 			</div>
 		</div>
-
-		// Invitations — invite users by email.
-			<div class="card p-6 mb-6">
-				<h2 class="text-lg font-semibold text-fg mb-4">
-					<i class="fa-solid fa-envelope mr-2 text-accent"></i>
-					Invitations
-				</h2>
-				<p class="text-sm text-fg-secondary mb-4">
-					Invite players and scribes by email. They'll receive a link to join
-					the campaign. Invitations expire after 7 days.
-				</p>
-				<div
-					hx-get={ fmt.Sprintf("/campaigns/%s/invites/page", cc.Campaign.ID) }
-					hx-trigger="load"
-					hx-swap="innerHTML"
-				>
-					<div class="text-center py-4 text-fg-muted text-sm">Loading invitations...</div>
-				</div>
-			</div>
-
-		// Transfer ownership section.
-			<div class="card p-6 mb-6">
-				<h2 class="text-lg font-semibold text-fg mb-4">Transfer Ownership</h2>
-
-				if transfer != nil {
-					<div class="alert-warning mb-4">
-						<strong>Transfer pending.</strong> Waiting for the new owner to accept.
-						Expires { transfer.ExpiresAt.Format("Jan 2, 2006 3:04 PM") }.
-					</div>
-					<form
-						method="POST"
-						action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID)) }
-						hx-post={ fmt.Sprintf("/campaigns/%s/cancel-transfer", cc.Campaign.ID) }
-					>
-						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<button type="submit" class="btn-secondary text-sm">Cancel Transfer</button>
-					</form>
-				} else {
-					<p class="text-sm text-fg-secondary mb-4">
-						Transfer ownership of this campaign to another user. They will receive
-						an email to confirm (if SMTP is configured), or can accept via the
-						campaign settings page.
-					</p>
-					<form
-						method="POST"
-						action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/transfer", cc.Campaign.ID)) }
-						hx-post={ fmt.Sprintf("/campaigns/%s/transfer", cc.Campaign.ID) }
-						class="flex items-end space-x-4"
-					>
-						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<div class="flex-1">
-							<label for="transfer-email" class="block text-sm font-medium text-fg-body mb-1">New owner's email</label>
-							<input
-								type="email"
-								id="transfer-email"
-								name="email"
-								required
-								class="input w-full"
-								placeholder="user@example.com"
-							/>
-						</div>
-						<button type="submit" class="btn-primary">Initiate Transfer</button>
-					</form>
-				}
-			</div>
-
-			// DM Privileges — grant dm_only visibility to specific members.
-			<div class="card p-6 mb-6" x-data={ fmt.Sprintf(`{
-				members: [],
-				grants: [],
-				loading: true,
-				saving: false,
-				async init() {
-					const [membersRes, grantsRes] = await Promise.all([
-						fetch('/campaigns/%s/members', { headers: { 'Accept': 'application/json' } }),
-						fetch('/campaigns/%s/dm-grants')
-					]);
-					const allMembers = membersRes.ok ? await membersRes.json() : [];
-					this.members = allMembers.filter(m => m.role !== 3);
-					const grantsData = grantsRes.ok ? await grantsRes.json() : { user_ids: [] };
-					this.grants = grantsData.user_ids || [];
-					this.loading = false;
-				},
-				isGranted(id) { return this.grants.includes(id); },
-				toggle(id) {
-					if (this.isGranted(id)) {
-						this.grants = this.grants.filter(g => g !== id);
-					} else {
-						this.grants.push(id);
-					}
-					this.save();
-				},
-				async save() {
-					this.saving = true;
-					await fetch('/campaigns/%s/dm-grants', {
-						method: 'PUT',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ user_ids: this.grants })
-					});
-					this.saving = false;
-				}
-			}`, cc.Campaign.ID, cc.Campaign.ID, cc.Campaign.ID) }>
-				<h2 class="text-lg font-semibold text-fg mb-2">DM Privileges</h2>
-				<p class="text-sm text-fg-secondary mb-4">
-					Grant members the ability to see DM-only content (tags, relations,
-					timeline events, map markers, etc.) without giving them full ownership.
-				</p>
-				<div x-show="loading" class="text-sm text-fg-muted">
-					<i class="fa-solid fa-spinner fa-spin"></i> Loading members...
-				</div>
-				<div x-show="!loading">
-					<template x-if="members.length === 0">
-						<p class="text-sm text-fg-muted italic">No non-owner members to grant privileges to.</p>
-					</template>
-					<div class="space-y-2">
-						<template x-for="m in members" :key="m.user_id">
-							<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
-								<input type="checkbox" class="accent-accent" :checked="isGranted(m.user_id)" @change="toggle(m.user_id)"/>
-								<div class="flex-1 min-w-0">
-									<span class="text-sm font-medium text-fg" x-text="m.display_name || m.email"></span>
-									<span class="text-xs text-fg-muted ml-1" x-text="m.role === 2 ? '(Scribe)' : '(Player)'"></span>
-								</div>
-								<span x-show="isGranted(m.user_id)" class="text-[10px] text-accent font-medium">DM View</span>
-							</label>
-						</template>
-					</div>
-					<p x-show="saving" class="text-xs text-fg-muted mt-2">
-						<i class="fa-solid fa-spinner fa-spin"></i> Saving...
-					</p>
-				</div>
-			</div>
-
-			// Danger zone.
-			<div class="card p-6 border-red-200 dark:border-red-800">
-				<h2 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-4">Danger Zone</h2>
-				<p class="text-sm text-fg-secondary mb-4">
-					Deleting a campaign is permanent and cannot be undone. All pages,
-					maps, and other data will be destroyed.
-				</p>
-				<form
-					method="POST"
-					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
-					hx-delete={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
-					hx-confirm="Are you absolutely sure? This will permanently delete this campaign and all its data."
-				>
-					<input type="hidden" name="_method" value="DELETE"/>
-					<input type="hidden" name="csrf_token" value={ csrfToken }/>
-					<button type="submit" class="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700 transition-colors">
-						Delete Campaign
-					</button>
-				</form>
-			</div>
-		</div>
-	}
+	</div>
 }
 
 // pluginURL returns the main page URL for a given addon slug within a campaign.

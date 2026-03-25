@@ -88,6 +88,13 @@ func (r Role) IsValid() bool {
 
 // --- Domain Models ---
 
+// Validation constants for campaign fields.
+const (
+	MaxCampaignNameLen    = 200
+	MaxDescriptionLen     = 5000
+	MaxWelcomeMessageLen  = 500
+)
+
 // Campaign represents a top-level worldbuilding container.
 type Campaign struct {
 	ID              string    `json:"id"`
@@ -103,6 +110,13 @@ type Campaign struct {
 	CreatedBy            string    `json:"created_by"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+	ArchivedAt      *time.Time `json:"archived_at,omitempty"`               // Soft-archive timestamp; nil = active.
+	JoinCode        *string    `json:"join_code,omitempty"`                  // Shareable invite code; nil = no active link.
+}
+
+// IsArchived returns true if the campaign has been soft-archived.
+func (c *Campaign) IsArchived() bool {
+	return c.ArchivedAt != nil
 }
 
 // SidebarConfig holds campaign-level sidebar customization settings.
@@ -480,6 +494,7 @@ type CampaignSettings struct {
 	FontFamily        string       `json:"font_family,omitempty"`         // Campaign body font: "serif", "sans-serif", "monospace", "georgia", "merriweather".
 	WelcomeMessage    string       `json:"welcome_message,omitempty"`     // MOTD banner shown on campaign dashboard (max 500 chars).
 	DefaultVisibility string       `json:"default_visibility,omitempty"`  // Default visibility for new entities: "", "dm_only", "private".
+	SystemID          string       `json:"system_id,omitempty"`           // Game system ID (e.g. "dnd5e", "drawsteel") or "custom:<url>".
 }
 
 // TopbarStyle configures the visual appearance of the campaign's top navigation bar.
