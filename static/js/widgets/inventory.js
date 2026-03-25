@@ -280,10 +280,7 @@ Chronicle.register('inventory', {
       state.loading = true;
       render();
 
-      fetch(relationsEndpoint, {
-        headers: { 'Accept': 'application/json' },
-        credentials: 'same-origin',
-      })
+      Chronicle.apiFetch(relationsEndpoint)
         .then(function (res) { return res.json(); })
         .then(function (data) {
           // Filter to only "Has Item" type relations.
@@ -306,10 +303,7 @@ Chronicle.register('inventory', {
         render();
         return;
       }
-      fetch(entitySearchEndpoint + '?q=' + encodeURIComponent(query), {
-        headers: { 'Accept': 'application/json' },
-        credentials: 'same-origin',
-      })
+      Chronicle.apiFetch(entitySearchEndpoint + '?q=' + encodeURIComponent(query))
         .then(function (res) { return res.json(); })
         .then(function (data) {
           state.searchResults = data?.data || data || [];
@@ -328,14 +322,9 @@ Chronicle.register('inventory', {
         metadata: JSON.stringify({ quantity: 1, equipped: false }),
       };
 
-      fetch(relationsEndpoint, {
+      Chronicle.apiFetch(relationsEndpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken,
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(body),
+        body: body,
       })
         .then(function (res) {
           if (!res.ok) throw new Error('Failed to add item');
@@ -350,10 +339,8 @@ Chronicle.register('inventory', {
     }
 
     function removeItem(relationId) {
-      fetch(relationsEndpoint + '/' + relationId, {
+      Chronicle.apiFetch(relationsEndpoint + '/' + relationId, {
         method: 'DELETE',
-        headers: { 'X-CSRF-Token': csrfToken },
-        credentials: 'same-origin',
       })
         .then(function (res) {
           if (!res.ok) throw new Error('Failed to remove item');
@@ -365,14 +352,9 @@ Chronicle.register('inventory', {
     }
 
     function updateMetadata(relationId, meta) {
-      fetch(relationsEndpoint + '/' + relationId + '/metadata', {
+      Chronicle.apiFetch(relationsEndpoint + '/' + relationId + '/metadata', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken,
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({ metadata: JSON.stringify(meta) }),
+        body: { metadata: JSON.stringify(meta) },
       })
         .catch(function (err) {
           console.error('Inventory: Failed to update metadata', err);

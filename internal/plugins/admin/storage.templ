@@ -602,9 +602,8 @@ templ userOverrideForm(users []auth.User, csrfToken string) {
 		@submit.prevent="
 			if (!userId) return;
 			const fd = new FormData($el);
-			fetch('/admin/users/' + userId + '/storage', {
+			Chronicle.apiFetch('/admin/users/' + userId + '/storage', {
 				method: 'PUT',
-				headers: { 'X-CSRF-Token': csrf },
 				body: fd
 			}).then(() => window.location.reload());
 		"
@@ -665,9 +664,8 @@ templ campaignOverrideForm(allCampaigns []campaigns.Campaign, csrfToken string) 
 		@submit.prevent="
 			if (!campaignId) return;
 			const fd = new FormData($el);
-			fetch('/admin/campaigns/' + campaignId + '/storage', {
+			Chronicle.apiFetch('/admin/campaigns/' + campaignId + '/storage', {
 				method: 'PUT',
-				headers: { 'X-CSRF-Token': csrf },
 				body: fd
 			}).then(() => window.location.reload());
 		"
@@ -725,9 +723,8 @@ templ userBypassForm(users []auth.User, csrfToken string) {
 			@submit.prevent="
 				if (!userId) return;
 				const fd = new FormData($el);
-				fetch('/admin/users/' + userId + '/storage/bypass', {
+				Chronicle.apiFetch('/admin/users/' + userId + '/storage/bypass', {
 					method: 'PUT',
-					headers: { 'X-CSRF-Token': csrf },
 					body: fd
 				}).then(() => window.location.reload());
 			"
@@ -792,9 +789,8 @@ templ campaignBypassForm(allCampaigns []campaigns.Campaign, csrfToken string) {
 			@submit.prevent="
 				if (!campaignId) return;
 				const fd = new FormData($el);
-				fetch('/admin/campaigns/' + campaignId + '/storage/bypass', {
+				Chronicle.apiFetch('/admin/campaigns/' + campaignId + '/storage/bypass', {
 					method: 'PUT',
-					headers: { 'X-CSRF-Token': csrf },
 					body: fd
 				}).then(() => window.location.reload());
 			"

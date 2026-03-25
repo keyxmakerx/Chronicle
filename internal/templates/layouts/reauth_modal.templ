@@ -32,12 +32,9 @@ templ ReauthModal() {
 				const errEl = $refs.reauthError;
 				errEl.classList.add('hidden');
 
-				fetch('/account/reauth', {
+				Chronicle.apiFetch('/account/reauth', {
 					method: 'POST',
-					headers: {
-						'Content-Type': 'application/x-www-form-urlencoded',
-						'X-CSRF-Token': document.cookie.match(/(?:^|;\s*)__Host-csrf=([^;]*)/)?.[1] || document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] || ''
-					},
+					headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 					body: 'password=' + encodeURIComponent(pw)
 				}).then(r => {
 					if (r.ok) {

@@ -215,6 +215,21 @@
     mountWidgets(document);
   });
 
+  // --- Button press linger effect ---
+  // Adds .btn-pressed on mousedown and removes it 300ms after mouseup,
+  // so the click glow animation lingers instead of snapping back instantly.
+  document.addEventListener('mousedown', function (e) {
+    var btn = e.target.closest('.btn');
+    if (!btn) return;
+    btn.classList.add('btn-pressed');
+    function onUp() {
+      document.removeEventListener('mouseup', onUp);
+      setTimeout(function () { btn.classList.remove('btn-pressed'); }, 300);
+    }
+    document.removeEventListener('mouseup', onUp);
+    document.addEventListener('mouseup', onUp);
+  });
+
   // Re-mount widgets after HTMX content swaps.
   // htmx:afterSettle fires after new content is settled in the DOM.
   document.addEventListener('htmx:afterSettle', function (event) {

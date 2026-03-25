@@ -244,7 +244,7 @@ templ createTimelineModal(data TimelineListData) {
 				init() {
 					// Fetch available calendars for this campaign.
 					var campaignID = window.location.pathname.split('/campaigns/')[1].split('/')[0];
-					fetch('/campaigns/' + campaignID + '/timelines/calendars')
+					Chronicle.apiFetch('/campaigns/' + campaignID + '/timelines/calendars')
 						.then(function(r) { return r.json(); })
 						.then(function(data) { this.calendars = data || []; }.bind(this))
 						.catch(function(err) { console.warn('[timeline] Failed to load calendars:', err); });
@@ -524,7 +524,7 @@ templ visibilitySettingsInline(data TimelineViewData) {
 			</div>
 		</div>
 	<script>
-		function visibilityManager(campaignID, timelineID, csrfToken, initVisibility, initRules) {
+		function visibilityManager(campaignID, timelineID, initVisibility, initRules) {
 			return {
 				visibility: initVisibility,
 				ruleMode: 'none',
@@ -544,7 +544,7 @@ templ visibilitySettingsInline(data TimelineViewData) {
 					}
 					// Load campaign members.
 					var self = this;
-					fetch('/campaigns/' + campaignID + '/timelines/members')
+					Chronicle.apiFetch('/campaigns/' + campaignID + '/timelines/members')
 						.then(function(r) { return r.json(); })
 						.then(function(data) {
 							// Show non-owner members only (owners always see everything).
@@ -574,13 +574,12 @@ templ visibilitySettingsInline(data TimelineViewData) {
 					} else if (self.ruleMode === 'deny' && self.selectedUsers.length > 0) {
 						rules = JSON.stringify({denied_users: self.selectedUsers});
 					}
-					fetch(self.apiBase + '/visibility', {
+					Chronicle.apiFetch(self.apiBase + '/visibility', {
 						method: 'PUT',
-						headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
-						body: JSON.stringify({
+						body: {
 							visibility: self.visibility,
 							visibility_rules: rules
-						})
+						}
 					})
 					.then(function(r) {
 						self.saving = false;
@@ -603,7 +602,7 @@ templ visibilitySettingsInline(data TimelineViewData) {
 templ entityGroupsInline(data TimelineViewData) {
 	<div
 		class="space-y-3"
-			x-data={ fmt.Sprintf(`entityGroupManager('%s', '%s', '%s')`, data.CampaignID, data.Timeline.ID, data.CSRFToken) }
+			x-data={ fmt.Sprintf(`entityGroupManager('%s', '%s')`, data.CampaignID, data.Timeline.ID) }
 		>
 			<!-- Create group form -->
 			<div class="flex items-center gap-2 mb-3">
@@ -669,7 +668,7 @@ templ entityGroupsInline(data TimelineViewData) {
 			</template>
 		</div>
 	<script>
-		function entityGroupManager(campaignID, timelineID, csrfToken) {
+		function entityGroupManager(campaignID, timelineID) {
 			return {
 				groups: [],
 				newGroupName: '',
@@ -681,7 +680,7 @@ templ entityGroupsInline(data TimelineViewData) {
 				},
 				loadGroups() {
 					var self = this;
-					fetch(self.apiBase + '/groups')
+					Chronicle.apiFetch(self.apiBase + '/groups')
 						.then(function(r) { return r.json(); })
 						.then(function(data) { self.groups = data || []; })
 						.catch(function(err) { console.warn('[timeline] Failed to load groups:', err); });
@@ -690,10 +689,9 @@ templ entityGroupsInline(data TimelineViewData) {
 					var name = this.newGroupName.trim();
 					if (!name) return;
 					var self = this;
-					fetch(self.apiBase + '/groups', {
+					Chronicle.apiFetch(self.apiBase + '/groups', {
 						method: 'POST',
-						headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
-						body: JSON.stringify({name: name, color: self.newGroupColor})
+						body: {name: name, color: self.newGroupColor}
 					})
 					.then(function(r) { return r.json(); })
 					.then(function(g) {
@@ -707,9 +705,8 @@ templ entityGroupsInline(data TimelineViewData) {
 				deleteGroup(groupID) {
 					if (!confirm('Delete this group?')) return;
 					var self = this;
-					fetch(self.apiBase + '/groups/' + groupID, {
-						method: 'DELETE',
-						headers: {'X-CSRF-Token': csrfToken}
+					Chronicle.apiFetch(self.apiBase + '/groups/' + groupID, {
+						method: 'DELETE'
 					})
 					.then(function(r) {
 						if (r.ok) self.groups = self.groups.filter(function(g) { return g.id !== groupID; });
@@ -718,10 +715,9 @@ templ entityGroupsInline(data TimelineViewData) {
 				},
 				addMember(groupID, entityID, entityName) {
 					var self = this;
-					fetch(self.apiBase + '/groups/' + groupID + '/members', {
+					Chronicle.apiFetch(self.apiBase + '/groups/' + groupID + '/members', {
 						method: 'POST',
-						headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
-						body: JSON.stringify({entity_id: entityID})
+						body: {entity_id: entityID}
 					})
 					.then(function(r) {
 						if (r.ok) {
@@ -739,9 +735,8 @@ templ entityGroupsInline(data TimelineViewData) {
 				},
 				removeMember(groupID, entityID) {
 					var self = this;
-					fetch(self.apiBase + '/groups/' + groupID + '/members/' + entityID, {
-						method: 'DELETE',
-						headers: {'X-CSRF-Token': csrfToken}
+					Chronicle.apiFetch(self.apiBase + '/groups/' + groupID + '/members/' + entityID, {
+						method: 'DELETE'
 					})
 					.then(function(r) {
 						if (r.ok) {
@@ -759,9 +754,7 @@ templ entityGroupsInline(data TimelineViewData) {
 						self.entityResults[groupID] = [];
 						return;
 					}
-					fetch('/campaigns/' + campaignID + '/entities/search?q=' + encodeURIComponent(query), {
-						headers: {'Accept': 'application/json'}
-					})
+					Chronicle.apiFetch('/campaigns/' + campaignID + '/entities/search?q=' + encodeURIComponent(query))
 					.then(function(r) { return r.json(); })
 					.then(function(data) {
 						var results = (data.entities || data || []).slice(0, 8);
@@ -964,12 +957,9 @@ templ createStandaloneEventModal(data TimelineViewData) {
 						body.recurrence_type = self.recurrenceType;
 					}
 
-					var headers = {'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf()};
-
-					fetch('/campaigns/' + campaignID + '/timelines/' + timelineID + '/standalone-events', {
+					Chronicle.apiFetch('/campaigns/' + campaignID + '/timelines/' + timelineID + '/standalone-events', {
 						method: 'POST',
-						headers: headers,
-						body: JSON.stringify(body)
+						body: body
 					})
 					.then(function(r) {
 						self.saving = false;
@@ -1125,12 +1115,9 @@ templ editStandaloneEventModal(data TimelineViewData) {
 					if (self.color) body.color = self.color;
 					if (self.label) body.label = self.label;
 
-					var headers = {'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf()};
-
-					fetch('/campaigns/' + campaignID + '/timelines/' + timelineID + '/standalone-events/' + self.eventID, {
+					Chronicle.apiFetch('/campaigns/' + campaignID + '/timelines/' + timelineID + '/standalone-events/' + self.eventID, {
 						method: 'PUT',
-						headers: headers,
-						body: JSON.stringify(body)
+						body: body
 					})
 					.then(function(r) {
 						self.saving = false;
@@ -1236,7 +1223,7 @@ templ eventVisibilityModal(data TimelineViewData) {
 				errorMsg: '',
 				init() {
 					var self = this;
-					fetch('/campaigns/' + campaignID + '/timelines/members')
+					Chronicle.apiFetch('/campaigns/' + campaignID + '/timelines/members')
 						.then(function(r) { return r.json(); })
 						.then(function(data) {
 							self.members = (data || []).filter(function(m) { return m.role !== 'owner'; });
@@ -1292,8 +1279,7 @@ templ eventVisibilityModal(data TimelineViewData) {
 					} else {
 						body.visibility_override = self.visibility === 'dm_only' ? self.visibility : null;
 					}
-					var headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf() };
-					fetch(url, { method: 'PUT', headers: headers, body: JSON.stringify(body) })
+					Chronicle.apiFetch(url, { method: 'PUT', body: body })
 						.then(function(r) {
 							self.saving = false;
 							if (r.ok) { self.closeVis(); window.location.reload(); }
@@ -1368,7 +1354,7 @@ templ eventPickerModal(data TimelineViewData) {
 				loadEvents() {
 					var self = this;
 					self.loading = true;
-					fetch(self.apiBase + '/available-events')
+					Chronicle.apiFetch(self.apiBase + '/available-events')
 						.then(function(r) { return r.json(); })
 						.then(function(data) { self.events = data || []; self.loading = false; })
 						.catch(function(err) { console.warn('[timeline] Failed to load events:', err); self.loading = false; });
@@ -1384,11 +1370,9 @@ templ eventPickerModal(data TimelineViewData) {
 				},
 				linkEvent(evt) {
 					var self = this;
-					var headers = {'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf()};
-					fetch(self.apiBase + '/events', {
+					Chronicle.apiFetch(self.apiBase + '/events', {
 						method: 'POST',
-						headers: headers,
-						body: JSON.stringify({event_id: evt.id})
+						body: {event_id: evt.id}
 					})
 					.then(function(r) {
 						if (r.ok) {
