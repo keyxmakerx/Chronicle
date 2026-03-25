@@ -23,6 +23,10 @@
 
   Chronicle.register('sidebar-layout-editor', {
     init: function (el) {
+      // Guard against double-mounting (can happen during HTMX swaps).
+      if (el.dataset.sidebarEditorMounted === 'true') return;
+      el.dataset.sidebarEditorMounted = 'true';
+
       var endpoint = el.dataset.endpoint;
       var campaignId = el.dataset.campaignId;
       var entityTypes = [];
@@ -429,6 +433,9 @@
           Chronicle.notify('Failed to save sidebar', 'error');
         });
       }
+    },
+    destroy: function (el) {
+      el.dataset.sidebarEditorMounted = '';
     }
   });
 })();
