@@ -284,6 +284,68 @@ func (h *Handler) CreatorProfile(c echo.Context) error {
 	return c.JSON(http.StatusOK, profile)
 }
 
+// --- Import, Fork & Flag handlers ---
+
+// ImportToCampaign imports a publication's creature into a campaign.
+// POST /bestiary/:id/import/:campaignId
+func (h *Handler) ImportToCampaign(c echo.Context) error {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+	pubID := c.Param("id")
+	campaignID := c.Param("campaignId")
+
+	result, err := h.svc.Import(c.Request().Context(), userID, pubID, campaignID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusCreated, result)
+}
+
+// ForkToCampaign imports a publication as an editable copy into a campaign.
+// POST /bestiary/:id/fork/:campaignId
+func (h *Handler) ForkToCampaign(c echo.Context) error {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+	pubID := c.Param("id")
+	campaignID := c.Param("campaignId")
+
+	result, err := h.svc.Fork(c.Request().Context(), userID, pubID, campaignID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusCreated, result)
+}
+
+// FlagPublication flags a publication for moderation.
+// POST /bestiary/:id/flag
+func (h *Handler) FlagPublication(c echo.Context) error {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+	pubID := c.Param("id")
+
+	var req FlagInput
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.svc.Flag(c.Request().Context(), userID, pubID, req.Reason); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"publication_id": pubID,
+		"status":         "flagged",
+	})
+}
+
 // --- Rating & Favorite handlers ---
 
 // RatePublication creates or updates a rating on a publication.

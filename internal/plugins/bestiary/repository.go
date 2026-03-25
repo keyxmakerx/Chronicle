@@ -50,6 +50,15 @@ type BestiaryRepository interface {
 	// AdjustFavoriteCount atomically updates the favorites counter on a publication.
 	AdjustFavoriteCount(ctx context.Context, publicationID string, delta int) error
 
+	// Imports.
+	CreateImport(ctx context.Context, imp *Import) error
+	ImportExists(ctx context.Context, publicationID, campaignID string) (bool, error)
+	IncrementDownloads(ctx context.Context, publicationID string) error
+
+	// Flagging.
+	IncrementFlaggedCount(ctx context.Context, publicationID string) (newCount int, err error)
+	AutoFlagIfThreshold(ctx context.Context, publicationID string, threshold int) error
+
 	// Slug uniqueness.
 	SlugExists(ctx context.Context, slug string) (bool, error)
 }
@@ -618,6 +627,82 @@ func (r *bestiaryRepo) AdjustFavoriteCount(ctx context.Context, publicationID st
 	)
 	if err != nil {
 		return fmt.Errorf("adjust favorite count: %w", err)
+	}
+	return nil
+}
+
+// --- Import repository methods ---
+
+// CreateImport records an import of a publication into a campaign.
+func (r *bestiaryRepo) CreateImport(ctx context.Context, imp *Import) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO bestiary_imports (id, publication_id, user_id, campaign_id, entity_id)
+		 VALUES (?, ?, ?, ?, ?)`,
+		imp.ID, imp.PublicationID, imp.UserID, imp.CampaignID, imp.EntityID,
+	)
+	if err != nil {
+		return fmt.Errorf("insert import: %w", err)
+	}
+	return nil
+}
+
+// ImportExists checks if a publication has already been imported into a campaign.
+func (r *bestiaryRepo) ImportExists(ctx context.Context, publicationID, campaignID string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM bestiary_imports WHERE publication_id = ? AND campaign_id = ?)`,
+		publicationID, campaignID,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check import exists: %w", err)
+	}
+	return exists, nil
+}
+
+// IncrementDownloads bumps the download counter by 1.
+func (r *bestiaryRepo) IncrementDownloads(ctx context.Context, publicationID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE bestiary_publications SET downloads = downloads + 1 WHERE id = ?`,
+		publicationID,
+	)
+	if err != nil {
+		return fmt.Errorf("increment downloads: %w", err)
+	}
+	return nil
+}
+
+// --- Flagging repository methods ---
+
+// IncrementFlaggedCount bumps the flagged_count and returns the new value.
+func (r *bestiaryRepo) IncrementFlaggedCount(ctx context.Context, publicationID string) (int, error) {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE bestiary_publications SET flagged_count = flagged_count + 1 WHERE id = ?`,
+		publicationID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("increment flagged count: %w", err)
+	}
+
+	var count int
+	err = r.db.QueryRowContext(ctx,
+		`SELECT flagged_count FROM bestiary_publications WHERE id = ?`,
+		publicationID,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("read flagged count: %w", err)
+	}
+	return count, nil
+}
+
+// AutoFlagIfThreshold sets visibility to flagged if flagged_count >= threshold.
+func (r *bestiaryRepo) AutoFlagIfThreshold(ctx context.Context, publicationID string, threshold int) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE bestiary_publications SET visibility = ?
+		 WHERE id = ? AND flagged_count >= ? AND visibility = ?`,
+		VisibilityFlagged, publicationID, threshold, VisibilityPublished,
+	)
+	if err != nil {
+		return fmt.Errorf("auto-flag: %w", err)
 	}
 	return nil
 }

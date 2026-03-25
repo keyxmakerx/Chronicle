@@ -229,6 +229,31 @@ type UserFetcher interface {
 	GetUserPublicInfo(ctx context.Context, userID string) (*UserInfo, error)
 }
 
+// EntityCreator creates campaign entities from imported bestiary statblocks.
+// Implemented via an adapter wrapping the entities service in routes.go.
+type EntityCreator interface {
+	CreateFromStatblock(ctx context.Context, campaignID, userID, name string, statblock json.RawMessage) (entityID string, err error)
+}
+
+// CampaignRoleChecker verifies a user's role in a campaign.
+// Implemented via an adapter wrapping the campaigns service in routes.go.
+type CampaignRoleChecker interface {
+	HasMinRole(ctx context.Context, campaignID, userID string, minRole int) (bool, error)
+}
+
+// ImportResult is the response returned after importing a publication into a campaign.
+type ImportResult struct {
+	EntityID      string `json:"entity_id"`
+	CampaignID    string `json:"campaign_id"`
+	PublicationID string `json:"publication_id"`
+	CreatureName  string `json:"creature_name"`
+}
+
+// FlagInput is the request body for flagging a publication.
+type FlagInput struct {
+	Reason *string `json:"reason,omitempty"`
+}
+
 // SummaryFromPublication converts a full Publication to a summary for list views.
 func SummaryFromPublication(p *Publication) PublicationSummary {
 	return PublicationSummary{

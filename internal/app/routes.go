@@ -66,6 +66,41 @@ func (a *bestiaryUserFetcherAdapter) GetUserPublicInfo(ctx context.Context, user
 	return info, nil
 }
 
+// bestiaryEntityCreatorAdapter wraps entities.EntityService to implement the
+// bestiary.EntityCreator interface for importing creatures into campaigns.
+type bestiaryEntityCreatorAdapter struct {
+	svc entities.EntityService
+}
+
+// CreateFromStatblock creates a new entity in a campaign from a bestiary statblock.
+// Uses entity type ID 0 (default) since the real type depends on system configuration.
+func (a *bestiaryEntityCreatorAdapter) CreateFromStatblock(ctx context.Context, campaignID, userID, name string, statblock json.RawMessage) (string, error) {
+	input := entities.CreateEntityInput{
+		Name:       name,
+		FieldsData: map[string]any{"statblock_json": string(statblock)},
+	}
+	ent, err := a.svc.Create(ctx, campaignID, userID, input)
+	if err != nil {
+		return "", err
+	}
+	return ent.ID, nil
+}
+
+// bestiaryCampaignRoleAdapter wraps campaigns.CampaignService to implement the
+// bestiary.CampaignRoleChecker interface for verifying import permissions.
+type bestiaryCampaignRoleAdapter struct {
+	svc campaigns.CampaignService
+}
+
+// HasMinRole checks if a user has at least the specified role in a campaign.
+func (a *bestiaryCampaignRoleAdapter) HasMinRole(ctx context.Context, campaignID, userID string, minRole int) (bool, error) {
+	member, err := a.svc.GetMember(ctx, campaignID, userID)
+	if err != nil {
+		return false, nil // Not a member → no role.
+	}
+	return int(member.Role) >= minRole, nil
+}
+
 // entityTypeListerAdapter wraps entities.EntityService to implement the
 // campaigns.EntityTypeLister interface without creating a circular import.
 type entityTypeListerAdapter struct {
@@ -1203,6 +1238,8 @@ func (a *App) RegisterRoutes() {
 	bestiaryRepo := bestiary.NewBestiaryRepository(a.DB)
 	bestiarySvc := bestiary.NewBestiaryService(bestiaryRepo)
 	bestiarySvc.SetUserFetcher(&bestiaryUserFetcherAdapter{authSvc: authService})
+	bestiarySvc.SetEntityCreator(&bestiaryEntityCreatorAdapter{svc: entityService})
+	bestiarySvc.SetCampaignRoleChecker(&bestiaryCampaignRoleAdapter{svc: campaignService})
 	bestiaryHandler := bestiary.NewHandler(bestiarySvc)
 	if a.PluginHealth.IsHealthy("bestiary") {
 		bestiary.RegisterRoutes(e, bestiaryHandler, authService)

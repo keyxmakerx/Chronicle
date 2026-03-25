@@ -38,4 +38,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authSvc auth.AuthService) {
 	bg.DELETE("/:id/rate", h.RemoveRating)
 	bg.POST("/:id/favorite", h.AddFavorite)
 	bg.DELETE("/:id/favorite", h.RemoveFavorite)
+
+	// Import, fork & flag.
+	bg.POST("/:id/import/:campaignId", h.ImportToCampaign)
+	bg.POST("/:id/fork/:campaignId", h.ForkToCampaign)
+	bg.POST("/:id/flag", h.FlagPublication)
 }

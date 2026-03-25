@@ -68,14 +68,30 @@ type BestiaryService interface {
 	// ListFavorites returns paginated publications favorited by a user.
 	ListFavorites(ctx context.Context, userID string, page, perPage int) (*PublicationListResult, error)
 
+	// Import imports a publication's creature into a campaign.
+	Import(ctx context.Context, userID, publicationID, campaignID string) (*ImportResult, error)
+	// Fork imports a publication as an editable copy into a campaign.
+	Fork(ctx context.Context, userID, publicationID, campaignID string) (*ImportResult, error)
+	// Flag flags a publication for moderation.
+	Flag(ctx context.Context, userID, publicationID string, reason *string) error
+
 	// SetUserFetcher sets the cross-plugin interface for user lookups.
 	SetUserFetcher(uf UserFetcher)
+	// SetEntityCreator sets the cross-plugin interface for entity creation.
+	SetEntityCreator(ec EntityCreator)
+	// SetCampaignRoleChecker sets the cross-plugin interface for campaign role checks.
+	SetCampaignRoleChecker(rc CampaignRoleChecker)
 }
+
+// flagThreshold is the number of user flags that triggers auto-flagging.
+const flagThreshold = 3
 
 // bestiaryService is the default BestiaryService implementation.
 type bestiaryService struct {
-	repo  BestiaryRepository
-	users UserFetcher
+	repo     BestiaryRepository
+	users    UserFetcher
+	entities EntityCreator
+	roles    CampaignRoleChecker
 }
 
 // NewBestiaryService creates a BestiaryService backed by the given repository.
@@ -483,6 +499,126 @@ func (s *bestiaryService) ListFavorites(ctx context.Context, userID string, page
 	}
 
 	return buildListResult(pubs, total, page, perPage), nil
+}
+
+// SetEntityCreator sets the cross-plugin interface for creating entities.
+func (s *bestiaryService) SetEntityCreator(ec EntityCreator) {
+	s.entities = ec
+}
+
+// SetCampaignRoleChecker sets the cross-plugin interface for campaign role checks.
+func (s *bestiaryService) SetCampaignRoleChecker(rc CampaignRoleChecker) {
+	s.roles = rc
+}
+
+// Import imports a publication's creature into a campaign as a new entity.
+func (s *bestiaryService) Import(ctx context.Context, userID, publicationID, campaignID string) (*ImportResult, error) {
+	return s.importOrFork(ctx, userID, publicationID, campaignID, false)
+}
+
+// Fork imports a publication as an editable copy with "(Fork)" suffix.
+func (s *bestiaryService) Fork(ctx context.Context, userID, publicationID, campaignID string) (*ImportResult, error) {
+	return s.importOrFork(ctx, userID, publicationID, campaignID, true)
+}
+
+// importOrFork is the shared logic for Import and Fork.
+func (s *bestiaryService) importOrFork(ctx context.Context, userID, publicationID, campaignID string, isFork bool) (*ImportResult, error) {
+	if s.entities == nil {
+		return nil, apperror.NewInternal(fmt.Errorf("entity creator not configured"))
+	}
+	if s.roles == nil {
+		return nil, apperror.NewInternal(fmt.Errorf("campaign role checker not configured"))
+	}
+
+	// Verify user has Scribe+ role in the target campaign (role >= 2).
+	hasRole, err := s.roles.HasMinRole(ctx, campaignID, userID, 2)
+	if err != nil {
+		return nil, fmt.Errorf("check campaign role: %w", err)
+	}
+	if !hasRole {
+		return nil, apperror.NewForbidden("you need Scribe or higher role in the target campaign")
+	}
+
+	pub, err := s.repo.GetByID(ctx, publicationID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Only published or unlisted publications can be imported.
+	if pub.Visibility != VisibilityPublished && pub.Visibility != VisibilityUnlisted {
+		return nil, apperror.NewForbidden("publication is not available for import")
+	}
+
+	// Check for duplicate import (not for forks — forks always create new entities).
+	if !isFork {
+		exists, err := s.repo.ImportExists(ctx, publicationID, campaignID)
+		if err != nil {
+			return nil, fmt.Errorf("check import exists: %w", err)
+		}
+		if exists {
+			return nil, apperror.NewConflict("this creature has already been imported into this campaign")
+		}
+	}
+
+	// Create the entity in the target campaign.
+	name := pub.Name
+	if isFork {
+		name += " (Fork)"
+	}
+	entityID, err := s.entities.CreateFromStatblock(ctx, campaignID, userID, name, pub.StatblockJSON)
+	if err != nil {
+		return nil, fmt.Errorf("create entity from statblock: %w", err)
+	}
+
+	// Record the import.
+	imp := &Import{
+		ID:            generateID(),
+		PublicationID: publicationID,
+		UserID:        userID,
+		CampaignID:    campaignID,
+		EntityID:      &entityID,
+	}
+	if err := s.repo.CreateImport(ctx, imp); err != nil {
+		return nil, err
+	}
+
+	// Increment download counter.
+	_ = s.repo.IncrementDownloads(ctx, publicationID)
+
+	return &ImportResult{
+		EntityID:      entityID,
+		CampaignID:    campaignID,
+		PublicationID: publicationID,
+		CreatureName:  name,
+	}, nil
+}
+
+// Flag flags a publication for moderation. Auto-flags at 3+ unique flags.
+func (s *bestiaryService) Flag(ctx context.Context, userID, publicationID string, reason *string) error {
+	pub, err := s.repo.GetByID(ctx, publicationID)
+	if err != nil {
+		return err
+	}
+
+	// Cannot flag own publications.
+	if pub.CreatorID == userID {
+		return apperror.NewForbidden("you cannot flag your own publication")
+	}
+
+	// Note: reason text will be stored in moderation log in Phase 5.
+	// For now we only track the flag count.
+
+	newCount, err := s.repo.IncrementFlaggedCount(ctx, publicationID)
+	if err != nil {
+		return err
+	}
+
+	// Auto-flag when threshold reached.
+	if newCount >= flagThreshold {
+		_ = s.repo.AutoFlagIfThreshold(ctx, publicationID, flagThreshold)
+	}
+
+	return nil
 }
 
 // --- Validation helpers ---
