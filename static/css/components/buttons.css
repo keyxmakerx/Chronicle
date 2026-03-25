@@ -21,10 +21,11 @@
     pointer-events: none;
   }
 
-  /* ---- Primary: Full-wrap asymmetric corner bleed ----
-     Accent glow wraps all four edges. Strongest on the right,
-     fading as it travels left — creates a directional "energy" feel.
-     Uses the campaign owner's accent color via --color-accent-rgb. */
+  /* ---- Primary: Asymmetric corner bleed → full-wrap on click ----
+     Bottom-heavy glow on hover: bottom edge ~8px, top ~4px.
+     Bottom-right corner heaviest, top-left lightest.
+     On click (.btn-pressed), animates to full wrap-around border
+     that lingers 300ms after release before fading back. */
   .btn-primary {
     @apply btn bg-accent text-white hover:bg-accent-hover
            focus:ring-accent shadow-sm;
@@ -41,26 +42,27 @@
         rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 0px,
         rgb(var(--color-accent-rgb, 99 102 241) / 0.06) 2px,
         transparent 14px) no-repeat left center / auto 100%,
-      /* Top edge — full width */
+      /* Top edge — shorter (4px) */
       linear-gradient(to bottom,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 0px,
-        transparent 5px) no-repeat top center / 100% 5px,
-      /* Bottom edge — full width */
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.25) 0px,
+        transparent 4px) no-repeat top center / 100% 4px,
+      /* Bottom edge — longer (8px), heavier */
       linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 0px,
-        transparent 5px) no-repeat bottom center / 100% 5px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.4) 0px,
+        transparent 8px) no-repeat bottom center / 100% 8px,
       /* Top-right corner bleed */
       linear-gradient(to bottom,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.28), transparent 6px) no-repeat top right / 35% 6px,
-      /* Bottom-right corner bleed */
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.25), transparent 5px) no-repeat top right / 30% 5px,
+      /* Bottom-right corner bleed — heaviest */
       linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.28), transparent 6px) no-repeat bottom right / 40% 6px,
-      /* Top-left corner bleed */
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.38), transparent 8px) no-repeat bottom right / 50% 8px,
+      /* Top-left corner bleed — lightest */
       linear-gradient(to bottom,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.18), transparent 5px) no-repeat top left / 25% 5px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.15), transparent 4px) no-repeat top left / 20% 4px,
       /* Bottom-left corner bleed */
       linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.18), transparent 5px) no-repeat bottom left / 30% 5px;
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.28), transparent 7px) no-repeat bottom left / 35% 7px;
+    transition: opacity 0.2s ease, background-size 0.25s ease;
   }
   .btn-primary:hover::after {
     opacity: 1;
@@ -69,7 +71,10 @@
     box-shadow: 0 0 12px rgb(var(--color-accent-rgb, 99 102 241) / 0.2),
                 0 2px 8px rgb(var(--color-accent-rgb, 99 102 241) / 0.12);
   }
-  .btn-primary:active::after {
+  /* Click state: full wrap-around — corners expand to 100%, edges intensify.
+     .btn-pressed is toggled by JS with 300ms linger after mouseup. */
+  .btn-primary:active::after,
+  .btn-primary.btn-pressed::after {
     opacity: 1;
     background:
       /* Right edge — intensified */
@@ -82,28 +87,27 @@
         rgb(var(--color-accent-rgb, 99 102 241) / 0.45) 0px,
         rgb(var(--color-accent-rgb, 99 102 241) / 0.1) 3px,
         transparent 18px) no-repeat left center / auto 100%,
-      /* Top edge — wider */
+      /* Top edge — expanded to 6px */
       linear-gradient(to bottom,
         rgb(var(--color-accent-rgb, 99 102 241) / 0.4) 0px,
         transparent 6px) no-repeat top center / 100% 6px,
-      /* Bottom edge — wider */
+      /* Bottom edge — expanded to 10px */
       linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.4) 0px,
-        transparent 6px) no-repeat bottom center / 100% 6px,
-      /* Top-right corner — expanded */
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.5) 0px,
+        transparent 10px) no-repeat bottom center / 100% 10px,
+      /* All corners expand to 100% — full wrap */
       linear-gradient(to bottom,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.4), transparent 7px) no-repeat top right / 65% 7px,
-      /* Bottom-right corner — expanded */
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.4), transparent 7px) no-repeat top right / 100% 7px,
       linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.4), transparent 7px) no-repeat bottom right / 70% 7px,
-      /* Top-left corner — expanded */
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.5), transparent 10px) no-repeat bottom right / 100% 10px,
       linear-gradient(to bottom,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.3), transparent 6px) no-repeat top left / 50% 6px,
-      /* Bottom-left corner — expanded */
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.3), transparent 6px) no-repeat top left / 100% 6px,
       linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.3), transparent 6px) no-repeat bottom left / 55% 6px;
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.4), transparent 9px) no-repeat bottom left / 100% 9px;
+    transition: opacity 0.2s ease, background-size 0.2s ease;
   }
-  .btn-primary:active {
+  .btn-primary:active,
+  .btn-primary.btn-pressed {
     box-shadow: 0 0 20px rgb(var(--color-accent-rgb, 99 102 241) / 0.3),
                 0 4px 16px rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
   }

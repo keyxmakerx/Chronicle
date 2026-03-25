@@ -1240,10 +1240,6 @@ templ eventModal(data CalendarViewData) {
 						};
 					}
 
-					function getHeaders() {
-						return { 'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf() };
-					}
-
 					// Get visibility rules JSON from the Alpine per-user UI (if present).
 					function getVisibilityRules() {
 						var section = document.getElementById('evt-vis-rules-section');
@@ -1308,8 +1304,8 @@ templ eventModal(data CalendarViewData) {
 						}
 
 						try {
-							var resp = await fetch(url, {
-								method: method, headers: getHeaders(), body: JSON.stringify(body),
+							var resp = await Chronicle.apiFetch(url, {
+								method: method, body: body,
 							});
 							if (resp.ok) {
 								closeEventModal();
@@ -1410,10 +1406,9 @@ templ eventModal(data CalendarViewData) {
 						if (src.dataset.eventRecurrenceType) payload.recurrence_type = src.dataset.eventRecurrenceType;
 
 						try {
-							var resp = await fetch('/campaigns/' + campaignID + '/calendars/' + calendarID + '/events/' + eventId, {
+							var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/calendars/' + calendarID + '/events/' + eventId, {
 								method: 'PUT',
-								headers: getHeaders(),
-								body: JSON.stringify(payload),
+								body: payload,
 							});
 							if (resp.ok) {
 								window.location.reload();
@@ -1551,8 +1546,8 @@ templ eventModal(data CalendarViewData) {
 						if (!eventID) return;
 
 						try {
-							var resp = await fetch('/campaigns/' + campaignID + '/calendars/' + calendarID + '/events/' + eventID, {
-								method: 'DELETE', headers: getHeaders(),
+							var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/calendars/' + calendarID + '/events/' + eventID, {
+								method: 'DELETE',
 							});
 							if (resp.ok) {
 								closeEventModal();
@@ -1585,7 +1580,7 @@ templ eventModal(data CalendarViewData) {
 								sel.addEventListener('change', function() { self.visibility = sel.value; });
 							}
 							// Load campaign members (reuse timeline members endpoint).
-							fetch('/campaigns/' + campaignID + '/timelines/members')
+							Chronicle.apiFetch('/campaigns/' + campaignID + '/timelines/members')
 								.then(function(r) { return r.json(); })
 								.then(function(data) {
 									self.members = (data || []).filter(function(m) { return m.role !== 'owner'; });

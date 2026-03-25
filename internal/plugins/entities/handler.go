@@ -535,7 +535,9 @@ func (h *Handler) Clone(c echo.Context) error {
 	return middleware.HTMXRedirect(c, fmt.Sprintf("/campaigns/%s/entities/%s/edit", cc.Campaign.ID, clone.ID))
 }
 
-// EditForm renders the entity edit form (GET /campaigns/:id/entities/:eid/edit).
+// EditForm redirects to the entity show page. The separate edit form has been
+// replaced by inline editing on the show page (metadata panel + rich text editor).
+// Kept as a redirect for backwards compatibility with bookmarks and old links.
 func (h *Handler) EditForm(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -543,30 +545,7 @@ func (h *Handler) EditForm(c echo.Context) error {
 	}
 
 	entityID := c.Param("eid")
-	entity, err := h.service.GetByID(c.Request().Context(), entityID)
-	if err != nil {
-		return err
-	}
-
-	// IDOR protection.
-	if entity.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("entity not found")
-	}
-
-	entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
-	entityType, _ := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
-	csrfToken := middleware.GetCSRFToken(c)
-
-	// Fetch parent entity for pre-fill in the parent selector.
-	var parentEntity *Entity
-	if entity.ParentID != nil {
-		parent, err := h.service.GetByID(c.Request().Context(), *entity.ParentID)
-		if err == nil {
-			parentEntity = parent
-		}
-	}
-
-	return middleware.Render(c, http.StatusOK, EntityEditPage(cc, entity, entityType, entityTypes, parentEntity, csrfToken, ""))
+	return c.Redirect(http.StatusFound, fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entityID))
 }
 
 // Update processes the entity edit form (PUT /campaigns/:id/entities/:eid).
@@ -1748,6 +1727,57 @@ func (h *Handler) UpdatePopupConfigAPI(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateMetadataAPI saves entity metadata (name, descriptor, parent, privacy)
+// without touching entry content or field values. Used by the inline metadata
+// panel on the entity show page.
+// PUT /campaigns/:id/entities/:eid/metadata
+func (h *Handler) UpdateMetadataAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityID := c.Param("eid")
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var req struct {
+		Name      string `json:"name"`
+		TypeLabel string `json:"type_label"`
+		ParentID  string `json:"parent_id"`
+		IsPrivate bool   `json:"is_private"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+
+	// Use the existing Update service with empty entry/fields so they stay unchanged.
+	input := UpdateEntityInput{
+		Name:      req.Name,
+		TypeLabel: req.TypeLabel,
+		ParentID:  req.ParentID,
+		IsPrivate: req.IsPrivate,
+	}
+
+	updated, err := h.service.Update(c.Request().Context(), entityID, input)
+	if err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, updated.Name)
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"status": "ok",
+		"name":   updated.Name,
+		"slug":   updated.Slug,
+	})
 }
 
 // --- Per-Entity Permissions API ---

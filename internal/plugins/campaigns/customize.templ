@@ -80,7 +80,7 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 				<!-- Content Templates tab: manage content templates for entity creation -->
 				<div x-show="tab === 'content-templates'" x-cloak class="h-full overflow-y-auto">
 					<div class="max-w-3xl mx-auto px-6 py-4">
-						@contentTemplatesTab(cc, csrfToken)
+						@contentTemplatesTab(cc)
 					</div>
 				</div>
 
@@ -368,7 +368,7 @@ templ LayoutEditorFragment(cc *CampaignContext, et *LayoutEditorEntityType, csrf
 
 // contentTemplatesTab renders the content template management interface.
 // Templates are loaded via HTMX from the entities plugin's API.
-templ contentTemplatesTab(cc *CampaignContext, csrfToken string) {
+templ contentTemplatesTab(cc *CampaignContext) {
 	<div class="space-y-4">
 		<div class="flex items-center justify-between">
 			<div>
@@ -390,9 +390,7 @@ templ contentTemplatesTab(cc *CampaignContext, csrfToken string) {
 				async load() {
 					this.loading = true;
 					try {
-						var resp = await fetch('/campaigns/%s/content-templates', {
-							headers: { 'Accept': 'application/json' }
-						});
+						var resp = await Chronicle.apiFetch('/campaigns/%s/content-templates');
 						if (resp.ok) this.templates = await resp.json();
 					} finally { this.loading = false; }
 				},
@@ -407,14 +405,9 @@ templ contentTemplatesTab(cc *CampaignContext, csrfToken string) {
 						this.form.content_json = '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Start writing..."}]}]}';
 						this.form.content_html = '<p>Start writing...</p>';
 					}
-					var resp = await fetch(url, {
+					var resp = await Chronicle.apiFetch(url, {
 						method: method,
-						headers: {
-							'Content-Type': 'application/json',
-							'X-CSRF-Token': '%s'
-						},
-						credentials: 'same-origin',
-						body: JSON.stringify(this.form)
+						body: this.form
 					});
 					if (resp.ok) {
 						this.editing = null;
@@ -428,10 +421,8 @@ templ contentTemplatesTab(cc *CampaignContext, csrfToken string) {
 				},
 				async remove(id) {
 					if (!confirm('Delete this template?')) return;
-					var resp = await fetch('/campaigns/%s/content-templates/' + id, {
-						method: 'DELETE',
-						headers: { 'X-CSRF-Token': '%s' },
-						credentials: 'same-origin'
+					var resp = await Chronicle.apiFetch('/campaigns/%s/content-templates/' + id, {
+						method: 'DELETE'
 					});
 					if (resp.ok) {
 						this.load();
@@ -455,7 +446,7 @@ templ contentTemplatesTab(cc *CampaignContext, csrfToken string) {
 					this.creating = false;
 					this.form = { name: '', description: '', icon: 'fa-file-lines', entity_type_id: 0, content_json: '', content_html: '' };
 				}
-			}`, cc.Campaign.ID, cc.Campaign.ID, csrfToken, cc.Campaign.ID, csrfToken) }
+			}`, cc.Campaign.ID, cc.Campaign.ID, cc.Campaign.ID) }
 			x-init="load()"
 		>
 			// Loading state.

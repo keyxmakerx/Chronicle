@@ -103,6 +103,18 @@ type MediaUploader interface {
 	UploadBackdrop(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (filename string, err error)
 }
 
+// SMTPChecker reports whether SMTP email delivery is configured.
+// Used to show warnings on the settings page when email is unavailable.
+type SMTPChecker interface {
+	IsConfigured(ctx context.Context) bool
+}
+
+// SystemLister lists available game systems for the settings page dropdown.
+// Avoids importing the systems package directly (prevents import cycle).
+type SystemLister interface {
+	ListSystems() []SystemOption
+}
+
 // Handler handles HTTP requests for campaign operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
@@ -114,6 +126,8 @@ type Handler struct {
 	auditLogger   AuditLogger
 	addonLister   AddonLister
 	mediaUploader MediaUploader
+	smtpChecker   SMTPChecker
+	systemLister  SystemLister
 	baseURL       string
 }
 
@@ -165,6 +179,16 @@ func (h *Handler) SetMediaUploader(uploader MediaUploader) {
 // (e.g. Foundry VTT module install URL).
 func (h *Handler) SetBaseURL(url string) {
 	h.baseURL = url
+}
+
+// SetSMTPChecker sets the SMTP configuration checker for the settings page.
+func (h *Handler) SetSMTPChecker(checker SMTPChecker) {
+	h.smtpChecker = checker
+}
+
+// SetSystemLister sets the system lister for the game system dropdown.
+func (h *Handler) SetSystemLister(lister SystemLister) {
+	h.systemLister = lister
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
@@ -323,7 +347,7 @@ func (h *Handler) Update(c echo.Context) error {
 		if h.entityLister != nil {
 			entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
 		}
-		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, errMsg, h.baseURL))
+		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, errMsg, h.baseURL, "general", false, nil))
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.updated", nil)
@@ -331,17 +355,30 @@ func (h *Handler) Update(c echo.Context) error {
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
-// Delete removes a campaign (DELETE /campaigns/:id).
+// Delete removes a campaign (DELETE /campaigns/:id). Requires the request to
+// include a confirm_name field that matches the campaign name exactly (S4).
 func (h *Handler) Delete(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
+	var req struct {
+		ConfirmName string `json:"confirm_name" form:"confirm_name"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if req.ConfirmName != cc.Campaign.Name {
+		return apperror.NewBadRequest("campaign name does not match; deletion cancelled")
+	}
+
 	if err := h.service.Delete(c.Request().Context(), cc.Campaign.ID); err != nil {
 		return err
 	}
 
+	h.logAudit(c, cc.Campaign.ID, "campaign.deleted", nil)
 	return middleware.HTMXRedirect(c, "/campaigns")
 }
 
@@ -661,22 +698,45 @@ func (h *Handler) UpdateDefaultVisibilityAPI(c echo.Context) error {
 // --- Settings ---
 
 // Settings renders the campaign settings page (GET /campaigns/:id/settings).
+// Supports ?tab= query param to open a specific tab (general, people, integrations, activity).
 func (h *Handler) Settings(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
+	ctx := c.Request().Context()
+	transfer, _ := h.service.GetPendingTransfer(ctx, cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)
 
 	// Fetch entity types for sidebar config widget.
 	var entityTypes []SettingsEntityType
 	if h.entityLister != nil {
-		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
+		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(ctx, cc.Campaign.ID)
 	}
 
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, "", h.baseURL))
+	// Fetch members for the People tab.
+	members, _ := h.service.ListMembers(ctx, cc.Campaign.ID)
+
+	// Check SMTP configuration for invite/transfer warnings.
+	smtpConfigured := false
+	if h.smtpChecker != nil {
+		smtpConfigured = h.smtpChecker.IsConfigured(ctx)
+	}
+
+	// Read the active tab from query params.
+	activeTab := c.QueryParam("tab")
+	if activeTab == "" {
+		activeTab = "general"
+	}
+
+	// Fetch available game systems for the system selector.
+	var systemOptions []SystemOption
+	if h.systemLister != nil {
+		systemOptions = h.systemLister.ListSystems()
+	}
+
+	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, members, csrfToken, "", h.baseURL, activeTab, smtpConfigured, systemOptions))
 }
 
 // PluginHub renders the campaign plugin hub page, showing all enabled
@@ -1083,26 +1143,25 @@ func (h *Handler) ToggleViewAsPlayer(c echo.Context) error {
 
 // --- Members ---
 
-// Members renders the member list page (GET /campaigns/:id/members).
-// Returns JSON when Accept: application/json is set (for Alpine.js pickers).
+// Members returns the member list as JSON for API consumers (Alpine.js pickers)
+// or redirects HTML requests to the settings People tab.
 func (h *Handler) Members(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
 
-	members, err := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
-	if err != nil {
-		return err
-	}
-
-	// Return JSON for API consumers (Alpine.js widgets).
+	// Return JSON for API consumers (Alpine.js widgets, DM Privileges).
 	if c.Request().Header.Get("Accept") == "application/json" {
+		members, err := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
+		if err != nil {
+			return err
+		}
 		return c.JSON(http.StatusOK, members)
 	}
 
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, CampaignMembersPage(cc, members, csrfToken, ""))
+	// Redirect HTML requests to the unified settings page.
+	return c.Redirect(http.StatusFound, fmt.Sprintf("/campaigns/%s/settings?tab=people", cc.Campaign.ID))
 }
 
 // AddMember adds a user to the campaign (POST /campaigns/:id/members).
@@ -1244,7 +1303,7 @@ func (h *Handler) TransferForm(c echo.Context) error {
 		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
 	}
 
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, "", h.baseURL))
+	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, "", h.baseURL, "general", false, nil))
 }
 
 // Transfer initiates an ownership transfer (POST /campaigns/:id/transfer).
@@ -1269,7 +1328,7 @@ func (h *Handler) Transfer(c echo.Context) error {
 		if h.entityLister != nil {
 			entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
 		}
-		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, csrfToken, errMsg, h.baseURL))
+		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, errMsg, h.baseURL, "general", false, nil))
 	}
 
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
@@ -1547,6 +1606,113 @@ func (h *Handler) RemoveGroupMemberAPI(c echo.Context) error {
 	})
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Archive & Join Code ---
+
+// ArchiveCampaign soft-archives a campaign (POST /campaigns/:id/archive).
+func (h *Handler) ArchiveCampaign(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if err := h.service.ArchiveCampaign(c.Request().Context(), cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.archived", nil)
+	return c.JSON(http.StatusOK, map[string]string{"status": "archived"})
+}
+
+// UnarchiveCampaign restores a soft-archived campaign (POST /campaigns/:id/unarchive).
+func (h *Handler) UnarchiveCampaign(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if err := h.service.UnarchiveCampaign(c.Request().Context(), cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.unarchived", nil)
+	return c.JSON(http.StatusOK, map[string]string{"status": "active"})
+}
+
+// GenerateJoinCode creates a shareable invite code (POST /campaigns/:id/join-code).
+func (h *Handler) GenerateJoinCode(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	code, err := h.service.GenerateJoinCode(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	joinURL := fmt.Sprintf("%s/join/%s", h.baseURL, code)
+	h.logAudit(c, cc.Campaign.ID, "campaign.join_code.generated", nil)
+	return c.JSON(http.StatusOK, map[string]string{"code": code, "url": joinURL})
+}
+
+// RevokeJoinCode removes the shareable invite code (DELETE /campaigns/:id/join-code).
+func (h *Handler) RevokeJoinCode(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	if err := h.service.RevokeJoinCode(c.Request().Context(), cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.join_code.revoked", nil)
+	return c.NoContent(http.StatusNoContent)
+}
+
+// JoinByCode handles a user joining a campaign via invite code (GET /join/:code).
+func (h *Handler) JoinByCode(c echo.Context) error {
+	code := c.Param("code")
+	if code == "" {
+		return apperror.NewBadRequest("invite code is required")
+	}
+
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		// Redirect to login, preserving the join URL.
+		return c.Redirect(http.StatusFound, fmt.Sprintf("/login?next=/join/%s", code))
+	}
+
+	if err := h.service.JoinByCode(c.Request().Context(), code, userID); err != nil {
+		return err
+	}
+
+	// Redirect to the campaigns list; the user is now a member.
+	return c.Redirect(http.StatusFound, "/campaigns")
+}
+
+// UpdateSystemID sets the game system for a campaign (PUT /campaigns/:id/system).
+func (h *Handler) UpdateSystemID(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		SystemID string `json:"system_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.service.UpdateSystemID(c.Request().Context(), cc.Campaign.ID, req.SystemID); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.system.updated", map[string]any{"system_id": req.SystemID})
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // GroupsPage renders the groups management page (GET /campaigns/:id/groups/manage).

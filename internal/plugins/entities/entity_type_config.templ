@@ -245,13 +245,11 @@ templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityT
 						:disabled="saving"
 						@click={ fmt.Sprintf(`
 							saving = true; saved = false;
-							fetch('/campaigns/%s/entity-types/%d', {
+							Chronicle.apiFetch('/campaigns/%s/entity-types/%d', {
 								method: 'PUT',
-								headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-								credentials: 'same-origin',
-								body: JSON.stringify({ name: etName, name_plural: etNamePlural, icon: etIcon, color: etColor })
+								body: { name: etName, name_plural: etNamePlural, icon: etIcon, color: etColor }
 							}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
-						`, cc.Campaign.ID, et.ID, csrfToken) }
+						`, cc.Campaign.ID, et.ID) }
 					>
 						<span x-show="!saving">Save Identity</span>
 						<span x-show="saving">Saving...</span>
@@ -288,13 +286,11 @@ templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityT
 							:disabled="saving"
 							@click={ fmt.Sprintf(`
 								saving = true; saved = false;
-								fetch('/campaigns/%s/entity-types/%d/dashboard', {
+								Chronicle.apiFetch('/campaigns/%s/entity-types/%d/dashboard', {
 									method: 'PUT',
-									headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-									credentials: 'same-origin',
-									body: JSON.stringify({ description: desc, pinned_entity_ids: [] })
+									body: { description: desc, pinned_entity_ids: [] }
 								}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
-							`, cc.Campaign.ID, et.ID, csrfToken) }
+							`, cc.Campaign.ID, et.ID) }
 						>
 							<span x-show="!saving">Save Description</span>
 							<span x-show="saving">Saving...</span>
@@ -439,13 +435,11 @@ templ navPanelTab(cc *campaigns.CampaignContext, et *EntityType, csrfToken strin
 					:disabled="saving"
 					@click={ fmt.Sprintf(`
 						saving = true; saved = false;
-						fetch('/campaigns/%s/entity-types/%d', {
+						Chronicle.apiFetch('/campaigns/%s/entity-types/%d', {
 							method: 'PUT',
-							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-							credentials: 'same-origin',
-							body: JSON.stringify({ name: etName, name_plural: etNamePlural, icon: etIcon, color: etColor })
+							body: { name: etName, name_plural: etNamePlural, icon: etIcon, color: etColor }
 						}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
-					`, cc.Campaign.ID, et.ID, csrfToken) }
+					`, cc.Campaign.ID, et.ID) }
 				>
 					<span x-show="!saving">Save Changes</span>
 					<span x-show="saving">Saving...</span>
@@ -498,13 +492,11 @@ templ categoryDashboardTab(cc *campaigns.CampaignContext, et *EntityType, csrfTo
 					:disabled="saving"
 					@click={ fmt.Sprintf(`
 						saving = true; saved = false;
-						fetch('/campaigns/%s/entity-types/%d/dashboard', {
+						Chronicle.apiFetch('/campaigns/%s/entity-types/%d/dashboard', {
 							method: 'PUT',
-							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-							credentials: 'same-origin',
-							body: JSON.stringify({ description: desc, pinned_entity_ids: [] })
+							body: { description: desc, pinned_entity_ids: [] }
 						}).then(r => { if (r.ok) saved = true; }).finally(() => { saving = false; })
-					`, cc.Campaign.ID, et.ID, csrfToken) }
+					`, cc.Campaign.ID, et.ID) }
 				>
 					<span x-show="!saving">Save Description</span>
 					<span x-show="saving">Saving...</span>

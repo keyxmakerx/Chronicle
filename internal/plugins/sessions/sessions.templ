@@ -339,10 +339,9 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 								var html = text.split('\n').filter(function(l) { return l.trim(); })
 									.map(function(l) { return '<p>' + l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>'; })
 									.join('');
-								fetch('/campaigns/' + campaignId + '/sessions/' + sessionId + '/recap', {
+								Chronicle.apiFetch('/campaigns/' + campaignId + '/sessions/' + sessionId + '/recap', {
 									method: 'PUT',
-									headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf},
-									body: JSON.stringify({recap: text, recap_html: html})
+									body: {recap: text, recap_html: html}
 								}).then(function(r) {
 									if (r.ok) { location.reload(); }
 									else { Chronicle.notify('Failed to save recap', 'error'); }

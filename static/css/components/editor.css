@@ -77,9 +77,11 @@
     @apply text-accent hover:text-accent-hover hover:bg-accent/10;
   }
 
-  /* Editing mode visual cue — subtle left accent border */
+  /* Editing mode visual cue — accent left border + subtle highlight.
+     Uses border instead of ring to avoid clipping by overflow-hidden. */
   .chronicle-editor--editing {
-    @apply ring-2 ring-accent/20;
+    border-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.4);
+    box-shadow: 0 0 0 1px rgb(var(--color-accent-rgb, 99 102 241) / 0.15);
   }
 
   .chronicle-editor__content .tiptap {

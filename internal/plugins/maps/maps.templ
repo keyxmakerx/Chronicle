@@ -407,10 +407,6 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 				togglePlaceMode();
 			});
 
-			function getHeaders() {
-				return { 'Content-Type': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf() };
-			}
-
 			// Create marker modal handlers.
 			window.openCreateMarker = function(x, y) {
 				resetMarkerModal();
@@ -484,8 +480,8 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 				}
 
 				try {
-					var resp = await fetch(url, {
-						method: method, headers: getHeaders(), body: JSON.stringify(body),
+					var resp = await Chronicle.apiFetch(url, {
+						method: method, body: body,
 					});
 					if (resp.ok) {
 						closeMarkerModal();
@@ -502,16 +498,15 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 			// Drag-end position update (silent PUT).
 			async function updateMarkerPosition(mk) {
 				try {
-					await fetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, {
+					await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, {
 						method: 'PUT',
-						headers: getHeaders(),
-						body: JSON.stringify({
+						body: {
 							name: mk.name, description: mk.description || null,
 							x: mk.x, y: mk.y,
 							icon: mk.icon, color: mk.color,
 							visibility: mk.visibility,
 							entity_id: mk.entity_id || null,
-						}),
+						},
 					});
 				} catch (err) {
 					console.error('Failed to save marker position:', err);
@@ -534,8 +529,8 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 				if (!markerID) return;
 
 				try {
-					var resp = await fetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + markerID, {
-						method: 'DELETE', headers: getHeaders(),
+					var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + markerID, {
+						method: 'DELETE',
 					});
 					if (resp.ok) {
 						closeMarkerModal();
@@ -562,8 +557,8 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 				if (imgID) body.image_id = imgID;
 
 				try {
-					var resp = await fetch('/campaigns/' + campaignID + '/maps/' + mapID, {
-						method: 'PUT', headers: getHeaders(), body: JSON.stringify(body),
+					var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID, {
+						method: 'PUT', body: body,
 					});
 					if (resp.ok) {
 						document.getElementById('map-settings-modal').classList.add('hidden');
@@ -586,11 +581,9 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 				fd.append('campaign_id', campaignID);
 				fd.append('usage_type', 'attachment');
 
-				var csrfHeaders = { 'X-CSRF-Token': Chronicle.getCsrf() };
-
 				try {
-					var resp = await fetch('/media/upload', {
-						method: 'POST', headers: csrfHeaders, body: fd,
+					var resp = await Chronicle.apiFetch('/media/upload', {
+						method: 'POST', body: fd,
 					});
 					if (resp.ok) {
 						var data = await resp.json();
@@ -616,8 +609,8 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 			window.deleteMap = async function() {
 				if (!confirm('Delete this map and all its markers? This cannot be undone.')) return;
 				try {
-					var resp = await fetch('/campaigns/' + campaignID + '/maps/' + mapID, {
-						method: 'DELETE', headers: getHeaders(),
+					var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID, {
+						method: 'DELETE',
 					});
 					if (resp.ok) {
 						window.location.href = '/campaigns/' + campaignID + '/maps';

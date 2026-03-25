@@ -168,6 +168,24 @@ func RequireRole(minRole Role) echo.MiddlewareFunc {
 	}
 }
 
+// RejectIfArchived blocks mutating requests (POST/PUT/DELETE) to archived
+// campaigns. GET and HEAD requests pass through for read-only access.
+// Must be applied after RequireCampaignAccess.
+func RejectIfArchived() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			cc := GetCampaignContext(c)
+			if cc != nil && cc.Campaign.IsArchived() {
+				method := c.Request().Method
+				if method != "GET" && method != "HEAD" {
+					return apperror.NewForbidden("campaign is archived and read-only")
+				}
+			}
+			return next(c)
+		}
+	}
+}
+
 // GetCampaignContext retrieves the campaign context from the Echo context.
 // Returns nil if RequireCampaignAccess middleware was not applied.
 func GetCampaignContext(c echo.Context) *CampaignContext {

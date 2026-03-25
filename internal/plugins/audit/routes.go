@@ -17,8 +17,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
 
-	// Activity page -- campaign owner only.
+	// Activity page -- redirects to settings Activity tab.
 	cg.GET("/activity", h.Activity, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// Activity fragment -- HTMX fragment for settings Activity tab.
+	cg.GET("/activity/fragment", h.ActivityFragment, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Activity embed -- owner only (used by dashboard activity feed block).
 	cg.GET("/activity/embed", h.EmbedActivity, campaigns.RequireRole(campaigns.RoleOwner))

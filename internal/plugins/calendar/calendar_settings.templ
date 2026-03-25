@@ -221,22 +221,20 @@ templ generalSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 					:disabled="saving"
 					@click={ fmt.Sprintf(`
 						saving = true; saved = false; error = '';
-						fetch('/campaigns/%s/calendars/%s/settings', {
+						Chronicle.apiFetch('/campaigns/%s/calendars/%s/settings', {
 							method: 'PUT',
-							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-							credentials: 'same-origin',
-							body: JSON.stringify({
+							body: {
 								name: name, epoch_name: epochName || null, description: null,
 								current_year: currentYear, current_month: currentMonth, current_day: currentDay,
 								current_hour: currentHour, current_minute: currentMinute,
 								hours_per_day: hoursPerDay, minutes_per_hour: minutesPerHour,
 								seconds_per_minute: secondsPerMinute,
 								leap_year_every: leapYearEvery, leap_year_offset: leapYearOffset
-							})
+							}
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, cal.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID) }
 				>
 					<span x-show="!saving">Save Settings</span>
 					<span x-show="saving">Saving...</span>
@@ -323,15 +321,13 @@ templ monthsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken 
 							name: m.name, days: m.days, sort_order: i,
 							is_intercalary: m.is_intercalary, leap_year_days: m.leap_year_days || 0
 						}));
-						fetch('/campaigns/%s/calendars/%s/months', {
+						Chronicle.apiFetch('/campaigns/%s/calendars/%s/months', {
 							method: 'PUT',
-							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-							credentials: 'same-origin',
-							body: JSON.stringify(payload)
+							body: payload
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, cal.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID) }
 				>
 					<span x-show="!saving">Save All Months</span>
 					<span x-show="saving">Saving...</span>
@@ -382,15 +378,13 @@ templ weekdaysSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToke
 					@click={ fmt.Sprintf(`
 						saving = true; saved = false; error = '';
 						const payload = weekdays.map((w, i) => ({ name: w.name, sort_order: i }));
-						fetch('/campaigns/%s/calendars/%s/weekdays', {
+						Chronicle.apiFetch('/campaigns/%s/calendars/%s/weekdays', {
 							method: 'PUT',
-							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-							credentials: 'same-origin',
-							body: JSON.stringify(payload)
+							body: payload
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, cal.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID) }
 				>
 					<span x-show="!saving">Save All Weekdays</span>
 					<span x-show="saving">Saving...</span>
@@ -459,15 +453,13 @@ templ moonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken s
 						const payload = moons.map(m => ({
 							name: m.name, cycle_days: m.cycle_days, phase_offset: m.phase_offset, color: m.color
 						}));
-						fetch('/campaigns/%s/calendars/%s/moons', {
+						Chronicle.apiFetch('/campaigns/%s/calendars/%s/moons', {
 							method: 'PUT',
-							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-							credentials: 'same-origin',
-							body: JSON.stringify(payload)
+							body: payload
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, cal.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID) }
 				>
 					<span x-show="!saving">Save All Moons</span>
 					<span x-show="saving">Saving...</span>
@@ -560,15 +552,13 @@ templ seasonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 							description: s.description || null,
 								weather_effect: s.weather_effect || null
 						}));
-						fetch('/campaigns/%s/calendars/%s/seasons', {
+						Chronicle.apiFetch('/campaigns/%s/calendars/%s/seasons', {
 							method: 'PUT',
-							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-							credentials: 'same-origin',
-							body: JSON.stringify(payload)
+							body: payload
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, cal.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID) }
 				>
 					<span x-show="!saving">Save All Seasons</span>
 					<span x-show="saving">Saving...</span>
@@ -649,15 +639,13 @@ templ erasSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken st
 							color: e.color, description: e.description || null,
 							sort_order: i
 						}));
-						fetch('/campaigns/%s/calendars/%s/eras', {
+						Chronicle.apiFetch('/campaigns/%s/calendars/%s/eras', {
 							method: 'PUT',
-							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-							credentials: 'same-origin',
-							body: JSON.stringify(payload)
+							body: payload
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, cal.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID) }
 				>
 					<span x-show="!saving">Save All Eras</span>
 					<span x-show="saving">Saving...</span>
@@ -857,15 +845,13 @@ templ categoriesSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfTo
 							icon: c.icon || '', color: c.color || '#6b7280',
 							sort_order: i
 						}));
-						fetch('/campaigns/%s/calendars/%s/event-categories', {
+						Chronicle.apiFetch('/campaigns/%s/calendars/%s/event-categories', {
 							method: 'PUT',
-							headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-							credentials: 'same-origin',
-							body: JSON.stringify(payload)
+							body: payload
 						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
-					`, cc.Campaign.ID, cal.ID, csrfToken) }
+					`, cc.Campaign.ID, cal.ID) }
 				>
 					<span x-show="!saving">Save Categories</span>
 					<span x-show="saving">Saving...</span>

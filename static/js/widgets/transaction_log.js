@@ -173,10 +173,7 @@ Chronicle.register('transaction_log', {
       if (!append) state.loading = true;
       render();
 
-      fetch(txEndpoint + '?page=' + state.page + '&per_page=10', {
-        headers: { 'Accept': 'application/json' },
-        credentials: 'same-origin',
-      })
+      Chronicle.apiFetch(txEndpoint + '?page=' + state.page + '&per_page=10')
         .then(function (res) { return res.json(); })
         .then(function (data) {
           var items = data.data || [];

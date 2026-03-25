@@ -214,7 +214,7 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 						{ *entity.Entry }
 					}
 				</textarea>
-				<p class="mt-1 text-xs text-fg-secondary">Plain text for now. Rich text editor coming soon.</p>
+				<p class="mt-1 text-xs text-fg-secondary">Plain text fallback. Use the rich text editor on the page view for full formatting.</p>
 			</div>
 
 				<!-- Preserve is_private in form submission so Update handler does not reset it. -->
@@ -303,9 +303,7 @@ templ parentSelector(campaignID string, parentEntity *Entity) {
 				if (this.query.length < 2) { this.results = []; return; }
 				this.loading = true;
 				try {
-					const resp = await fetch('/campaigns/%s/entities/search?q=' + encodeURIComponent(this.query), {
-						headers: { 'Accept': 'application/json' }
-					});
+					const resp = await Chronicle.apiFetch('/campaigns/%s/entities/search?q=' + encodeURIComponent(this.query));
 					if (resp.ok) { const data = await resp.json(); this.results = data.results || []; }
 				} finally { this.loading = false; }
 			},
@@ -447,18 +445,13 @@ templ popupConfigSection(cc *campaigns.CampaignContext, entity *Entity) {
 				this.saving = true;
 				this.saved = false;
 				try {
-					const resp = await fetch('/campaigns/%s/entities/%s/popup-config', {
+					const resp = await Chronicle.apiFetch('/campaigns/%s/entities/%s/popup-config', {
 						method: 'PUT',
-						headers: {
-							'Content-Type': 'application/json',
-							'X-CSRF-Token': document.querySelector('input[name=csrf_token]').value
-						},
-						credentials: 'same-origin',
-						body: JSON.stringify({
+						body: {
 							showImage: this.showImage,
 							showAttributes: this.showAttributes,
 							showEntry: this.showEntry
-						})
+						}
 					});
 					if (resp.ok) {
 						this.saved = true;

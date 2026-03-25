@@ -82,6 +82,18 @@ type CampaignService interface {
 	ForceTransferOwnership(ctx context.Context, campaignID, newOwnerID string) error
 	AdminAddMember(ctx context.Context, campaignID, userID string, role Role) error
 
+	// Archive
+	ArchiveCampaign(ctx context.Context, campaignID string) error
+	UnarchiveCampaign(ctx context.Context, campaignID string) error
+
+	// Shareable invite link
+	GenerateJoinCode(ctx context.Context, campaignID string) (string, error)
+	RevokeJoinCode(ctx context.Context, campaignID string) error
+	JoinByCode(ctx context.Context, code, userID string) error
+
+	// Game system
+	UpdateSystemID(ctx context.Context, campaignID, systemID string) error
+
 	// Lifecycle hooks — set after construction to avoid circular initialization.
 	SetContentTemplateSeeder(seeder ContentTemplateSeeder)
 	SetWorldbuildingPromptSeeder(seeder WorldbuildingPromptSeeder)
@@ -412,6 +424,9 @@ func (s *campaignService) GetMember(ctx context.Context, campaignID, userID stri
 
 // AddMember adds a user to a campaign by their email address.
 func (s *campaignService) AddMember(ctx context.Context, campaignID, email string, role Role) error {
+	if !isValidEmail(email) {
+		return apperror.NewBadRequest("invalid email address")
+	}
 	if !role.IsValid() {
 		return apperror.NewBadRequest("invalid role")
 	}
@@ -523,6 +538,9 @@ func (s *campaignService) ListMembers(ctx context.Context, campaignID string) ([
 // optionally sends an email if SMTP is configured.
 func (s *campaignService) InitiateTransfer(ctx context.Context, campaignID, ownerID, targetEmail string) (*OwnershipTransfer, error) {
 	email := strings.ToLower(strings.TrimSpace(targetEmail))
+	if !isValidEmail(email) {
+		return nil, apperror.NewBadRequest("invalid email address")
+	}
 
 	// Verify the target user exists.
 	targetUser, err := s.users.FindUserByEmail(ctx, email)
@@ -1169,6 +1187,102 @@ func generateToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// --- Archive & Join Code ---
+
+// ArchiveCampaign soft-archives a campaign, making it read-only.
+func (s *campaignService) ArchiveCampaign(ctx context.Context, campaignID string) error {
+	return s.repo.ArchiveCampaign(ctx, campaignID)
+}
+
+// UnarchiveCampaign restores write access to a soft-archived campaign.
+func (s *campaignService) UnarchiveCampaign(ctx context.Context, campaignID string) error {
+	return s.repo.UnarchiveCampaign(ctx, campaignID)
+}
+
+// GenerateJoinCode creates a shareable invite code for the campaign.
+// Returns the generated code.
+func (s *campaignService) GenerateJoinCode(ctx context.Context, campaignID string) (string, error) {
+	b := make([]byte, 6) // 12 hex chars
+	if _, err := rand.Read(b); err != nil {
+		return "", apperror.NewInternal(fmt.Errorf("generating join code: %w", err))
+	}
+	code := hex.EncodeToString(b)
+
+	if err := s.repo.SetJoinCode(ctx, campaignID, code); err != nil {
+		return "", err
+	}
+
+	slog.Info("join code generated",
+		slog.String("campaign_id", campaignID),
+	)
+	return code, nil
+}
+
+// RevokeJoinCode removes the shareable invite code for the campaign.
+func (s *campaignService) RevokeJoinCode(ctx context.Context, campaignID string) error {
+	return s.repo.ClearJoinCode(ctx, campaignID)
+}
+
+// JoinByCode joins a user to a campaign via its shareable invite code.
+func (s *campaignService) JoinByCode(ctx context.Context, code, userID string) error {
+	campaign, err := s.repo.FindByJoinCode(ctx, code)
+	if err != nil {
+		return err
+	}
+
+	if campaign.IsArchived() {
+		return apperror.NewBadRequest("campaign is archived and not accepting new members")
+	}
+
+	// Check if already a member.
+	_, err = s.repo.FindMember(ctx, campaign.ID, userID)
+	if err == nil {
+		return apperror.NewConflict("you are already a member of this campaign")
+	}
+
+	member := &CampaignMember{
+		CampaignID: campaign.ID,
+		UserID:     userID,
+		Role:       RolePlayer,
+		JoinedAt:   time.Now().UTC(),
+	}
+
+	if err := s.repo.AddMember(ctx, member); err != nil {
+		return apperror.NewInternal(fmt.Errorf("joining campaign: %w", err))
+	}
+
+	slog.Info("user joined campaign via invite code",
+		slog.String("campaign_id", campaign.ID),
+		slog.String("user_id", userID),
+	)
+	return nil
+}
+
+// UpdateSystemID sets the game system for a campaign. Stores in the
+// settings JSON column. Accepts a system registry ID or "custom:<url>".
+func (s *campaignService) UpdateSystemID(ctx context.Context, campaignID, systemID string) error {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+
+	settings := campaign.ParseSettings()
+	settings.SystemID = systemID
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// isValidEmail performs a basic format check on an email address.
+func isValidEmail(email string) bool {
+	// Simple regex: something@something.something
+	return len(email) <= 254 && len(email) >= 5 && strings.Contains(email, "@") && strings.Contains(email, ".")
 }
 
 // --- Campaign Group Service ---

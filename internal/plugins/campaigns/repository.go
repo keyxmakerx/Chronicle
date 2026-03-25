@@ -63,6 +63,21 @@ type CampaignRepository interface {
 	// ForceTransferOwnership is used by admins to take ownership. Atomically
 	// demotes current owner to Scribe and sets the new owner.
 	ForceTransferOwnership(ctx context.Context, campaignID, newOwnerID string) error
+
+	// ArchiveCampaign sets the archived_at timestamp, making the campaign read-only.
+	ArchiveCampaign(ctx context.Context, campaignID string) error
+
+	// UnarchiveCampaign clears the archived_at timestamp, restoring write access.
+	UnarchiveCampaign(ctx context.Context, campaignID string) error
+
+	// SetJoinCode stores a shareable invite code for the campaign.
+	SetJoinCode(ctx context.Context, campaignID, code string) error
+
+	// ClearJoinCode removes the shareable invite code.
+	ClearJoinCode(ctx context.Context, campaignID string) error
+
+	// FindByJoinCode looks up a campaign by its shareable invite code.
+	FindByJoinCode(ctx context.Context, code string) (*Campaign, error)
 }
 
 // campaignRepository implements CampaignRepository with MariaDB queries.
@@ -95,14 +110,14 @@ func (r *campaignRepository) Create(ctx context.Context, campaign *Campaign) err
 
 // FindByID retrieves a campaign by its UUID.
 func (r *campaignRepository) FindByID(ctx context.Context, id string) (*Campaign, error) {
-	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at
+	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
 	          FROM campaigns WHERE id = ?`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
 		&c.Settings, &c.BackdropPath, &c.SidebarConfig, &c.DashboardLayout, &c.OwnerDashboardLayout,
-		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt, &c.ArchivedAt, &c.JoinCode,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("campaign not found")
@@ -115,14 +130,14 @@ func (r *campaignRepository) FindByID(ctx context.Context, id string) (*Campaign
 
 // FindBySlug retrieves a campaign by its URL slug.
 func (r *campaignRepository) FindBySlug(ctx context.Context, slug string) (*Campaign, error) {
-	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at
+	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
 	          FROM campaigns WHERE slug = ?`
 
 	c := &Campaign{}
 	err := r.db.QueryRowContext(ctx, query, slug).Scan(
 		&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
 		&c.Settings, &c.BackdropPath, &c.SidebarConfig, &c.DashboardLayout, &c.OwnerDashboardLayout,
-		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt, &c.ArchivedAt, &c.JoinCode,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("campaign not found")
@@ -139,7 +154,7 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 	// Count total for pagination.
 	countQuery := `SELECT COUNT(*) FROM campaigns c
 	               INNER JOIN campaign_members cm ON cm.campaign_id = c.id
-	               WHERE cm.user_id = ?`
+	               WHERE cm.user_id = ? AND c.archived_at IS NULL`
 	var total int
 	if err := r.db.QueryRowContext(ctx, countQuery, userID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("counting user campaigns: %w", err)
@@ -147,10 +162,11 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 
 	query := `SELECT c.id, c.name, c.slug, c.description, c.is_public,
 	                 c.settings, c.backdrop_path, c.sidebar_config, c.dashboard_layout,
-	                 c.owner_dashboard_layout, c.created_by, c.created_at, c.updated_at
+	                 c.owner_dashboard_layout, c.created_by, c.created_at, c.updated_at,
+	                 c.archived_at, c.join_code
 	          FROM campaigns c
 	          INNER JOIN campaign_members cm ON cm.campaign_id = c.id
-	          WHERE cm.user_id = ?
+	          WHERE cm.user_id = ? AND c.archived_at IS NULL
 	          ORDER BY c.updated_at DESC
 	          LIMIT ? OFFSET ?`
 
@@ -183,7 +199,7 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 		return nil, 0, fmt.Errorf("counting all campaigns: %w", err)
 	}
 
-	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at
+	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
 	          FROM campaigns ORDER BY updated_at DESC LIMIT ? OFFSET ?`
 
 	rows, err := r.db.QueryContext(ctx, query, opts.PerPage, opts.Offset())
@@ -210,8 +226,8 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 // ListPublic returns public campaigns ordered by most recently updated.
 // Used for the public landing page to showcase discoverable campaigns.
 func (r *campaignRepository) ListPublic(ctx context.Context, limit int) ([]Campaign, error) {
-	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at
-	          FROM campaigns WHERE is_public = 1
+	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
+	          FROM campaigns WHERE is_public = 1 AND archived_at IS NULL
 	          ORDER BY updated_at DESC LIMIT ?`
 
 	rows, err := r.db.QueryContext(ctx, query, limit)
@@ -372,6 +388,92 @@ func (r *campaignRepository) UpdateOwnerDashboardLayout(ctx context.Context, cam
 		return apperror.NewNotFound("campaign not found")
 	}
 	return nil
+}
+
+// --- Archive & Join Code ---
+
+// ArchiveCampaign sets the archived_at timestamp, making the campaign read-only.
+func (r *campaignRepository) ArchiveCampaign(ctx context.Context, campaignID string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaigns SET archived_at = NOW(), updated_at = NOW() WHERE id = ? AND archived_at IS NULL`,
+		campaignID,
+	)
+	if err != nil {
+		return fmt.Errorf("archiving campaign: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("campaign not found or already archived")
+	}
+	return nil
+}
+
+// UnarchiveCampaign clears the archived_at timestamp, restoring write access.
+func (r *campaignRepository) UnarchiveCampaign(ctx context.Context, campaignID string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaigns SET archived_at = NULL, updated_at = NOW() WHERE id = ? AND archived_at IS NOT NULL`,
+		campaignID,
+	)
+	if err != nil {
+		return fmt.Errorf("unarchiving campaign: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("campaign not found or not archived")
+	}
+	return nil
+}
+
+// SetJoinCode stores a shareable invite code for the campaign.
+func (r *campaignRepository) SetJoinCode(ctx context.Context, campaignID, code string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaigns SET join_code = ?, updated_at = NOW() WHERE id = ?`,
+		code, campaignID,
+	)
+	if err != nil {
+		return fmt.Errorf("setting join code: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("campaign not found")
+	}
+	return nil
+}
+
+// ClearJoinCode removes the shareable invite code.
+func (r *campaignRepository) ClearJoinCode(ctx context.Context, campaignID string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaigns SET join_code = NULL, updated_at = NOW() WHERE id = ?`,
+		campaignID,
+	)
+	if err != nil {
+		return fmt.Errorf("clearing join code: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperror.NewNotFound("campaign not found")
+	}
+	return nil
+}
+
+// FindByJoinCode looks up a campaign by its shareable invite code.
+func (r *campaignRepository) FindByJoinCode(ctx context.Context, code string) (*Campaign, error) {
+	query := `SELECT id, name, slug, description, is_public, settings, backdrop_path, sidebar_config, dashboard_layout, owner_dashboard_layout, created_by, created_at, updated_at, archived_at, join_code
+	          FROM campaigns WHERE join_code = ?`
+
+	c := &Campaign{}
+	err := r.db.QueryRowContext(ctx, query, code).Scan(
+		&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
+		&c.Settings, &c.BackdropPath, &c.SidebarConfig, &c.DashboardLayout, &c.OwnerDashboardLayout,
+		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt, &c.ArchivedAt, &c.JoinCode,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperror.NewNotFound("invalid or expired invite code")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying campaign by join code: %w", err)
+	}
+	return c, nil
 }
 
 // --- Membership ---

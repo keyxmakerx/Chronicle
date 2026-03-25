@@ -119,11 +119,10 @@ func formatWordCount(words int64) string {
 	return fmt.Sprintf("%.1fM", float64(words)/1000000)
 }
 
-// ActivityPage renders the campaign activity page with stats and timeline.
+// ActivityPage renders the full campaign activity page (standalone, backward compat).
 templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries []AuditEntry, total, page, itemsPerPage int) {
 	@layouts.App(cc.Campaign.Name + " - Activity") {
 		<div class="max-w-4xl mx-auto space-y-6">
-			<!-- Page Header -->
 			<div class="flex items-center justify-between">
 				<div>
 					<h1 class="text-2xl font-bold text-fg">Activity</h1>
@@ -136,9 +135,16 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 					Back
 				</a>
 			</div>
+			@ActivityContent(cc, stats, entries, total, page, itemsPerPage)
+		</div>
+	}
+}
 
-			<!-- Campaign Stats -->
-			if stats != nil {
+// ActivityContent renders the stats grid and timeline without a layout wrapper.
+// Used by both ActivityPage (standalone) and ActivityFragment (settings tab).
+templ ActivityContent(cc *campaigns.CampaignContext, stats *CampaignStats, entries []AuditEntry, total, page, itemsPerPage int) {
+	<!-- Campaign Stats -->
+	if stats != nil {
 				<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
 					<!-- Total Entities -->
 					<div class="card">
@@ -259,12 +265,14 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 					if total > itemsPerPage {
 						<div class="flex justify-center items-center gap-4 mt-6 pt-4 border-t border-edge">
 							if page > 1 {
-								<a
-									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/activity?page=%d", cc.Campaign.ID, page-1)) }
+								<button
+									hx-get={ fmt.Sprintf("/campaigns/%s/activity/fragment?page=%d", cc.Campaign.ID, page-1) }
+									hx-target="#activity-content"
+									hx-swap="innerHTML"
 									class="btn-secondary text-sm"
 								>
 									Previous
-								</a>
+								</button>
 							} else {
 								<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Previous</span>
 							}
@@ -272,12 +280,14 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 								Page { fmt.Sprintf("%d", page) } of { fmt.Sprintf("%d", (total+itemsPerPage-1)/itemsPerPage) }
 							</span>
 							if page*itemsPerPage < total {
-								<a
-									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/activity?page=%d", cc.Campaign.ID, page+1)) }
+								<button
+									hx-get={ fmt.Sprintf("/campaigns/%s/activity/fragment?page=%d", cc.Campaign.ID, page+1) }
+									hx-target="#activity-content"
+									hx-swap="innerHTML"
 									class="btn-secondary text-sm"
 								>
 									Next
-								</a>
+								</button>
 							} else {
 								<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Next</span>
 							}
@@ -285,8 +295,6 @@ templ ActivityPage(cc *campaigns.CampaignContext, stats *CampaignStats, entries 
 					}
 				}
 			</div>
-		</div>
-	}
 }
 
 // ActivityEmbedFragment renders a compact activity feed for dashboard embedding.

@@ -159,17 +159,15 @@ templ AccountPage(user *User, csrfToken string, timezones []string) {
 						type="button"
 						class="btn-primary text-sm"
 						x-bind:disabled="saving"
-						@click={ fmt.Sprintf(`
+						@click="
 							saving = true; saved = false; error = '';
-							fetch('/account/timezone', {
+							Chronicle.apiFetch('/account/timezone', {
 								method: 'PUT',
-								headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '%s' },
-								credentials: 'same-origin',
-								body: JSON.stringify({ timezone: timezone })
+								body: { timezone: timezone }
 							}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 							.catch(e => { error = e.message; })
 							.finally(() => { saving = false; })
-						`, csrfToken) }
+						"
 					>
 						<span x-show="!saving">Save Timezone</span>
 						<span x-show="saving">Saving...</span>
@@ -198,10 +196,8 @@ func avatarData(user *User, csrfToken string) string {
 			var fd = new FormData();
 			fd.append('avatar', file);
 			this.avatarMsg = 'Uploading...'; this.avatarError = false;
-			fetch('/account/avatar', {
+			Chronicle.apiFetch('/account/avatar', {
 				method: 'POST',
-				headers: { 'X-CSRF-Token': this.csrf },
-				credentials: 'same-origin',
 				body: fd
 			}).then(r => r.json().then(d => {
 				if (!r.ok) throw new Error(d.error || 'Upload failed');
@@ -226,11 +222,9 @@ func profileData(user *User, csrfToken string) string {
 		csrf: %q,
 		saveDisplayName() {
 			this.savingName = true; this.nameMsg = ''; this.nameError = false;
-			fetch('/account/display-name', {
+			Chronicle.apiFetch('/account/display-name', {
 				method: 'PUT',
-				headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrf },
-				credentials: 'same-origin',
-				body: JSON.stringify({ displayName: this.displayName })
+				body: { displayName: this.displayName }
 			}).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.error || 'Failed'); this.originalName = this.displayName; this.nameMsg = 'Saved'; this.nameError = false; setTimeout(() => this.nameMsg = '', 3000); }))
 			.catch(e => { this.nameMsg = e.message; this.nameError = true; })
 			.finally(() => { this.savingName = false; });
@@ -251,11 +245,9 @@ func passwordData(csrfToken string) string {
 		changePassword() {
 			if (this.newPassword !== this.confirmPassword) { this.pwMsg = 'Passwords do not match'; this.pwError = true; return; }
 			this.savingPw = true; this.pwMsg = ''; this.pwError = false;
-			fetch('/account/password', {
+			Chronicle.apiFetch('/account/password', {
 				method: 'PUT',
-				headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrf },
-				credentials: 'same-origin',
-				body: JSON.stringify({ currentPassword: this.currentPassword, newPassword: this.newPassword, confirmPassword: this.confirmPassword })
+				body: { currentPassword: this.currentPassword, newPassword: this.newPassword, confirmPassword: this.confirmPassword }
 			}).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.error || 'Failed'); this.pwMsg = 'Password changed'; this.pwError = false; this.currentPassword = ''; this.newPassword = ''; this.confirmPassword = ''; setTimeout(() => this.pwMsg = '', 3000); }))
 			.catch(e => { this.pwMsg = e.message; this.pwError = true; })
 			.finally(() => { this.savingPw = false; });
@@ -274,11 +266,9 @@ func emailChangeData(csrfToken string) string {
 		csrf: %q,
 		requestEmailChange() {
 			this.savingEmail = true; this.emailMsg = ''; this.emailError = false;
-			fetch('/account/email', {
+			Chronicle.apiFetch('/account/email', {
 				method: 'PUT',
-				headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrf },
-				credentials: 'same-origin',
-				body: JSON.stringify({ newEmail: this.newEmail, currentPassword: this.emailPassword })
+				body: { newEmail: this.newEmail, currentPassword: this.emailPassword }
 			}).then(r => r.json().then(d => {
 				if (!r.ok) throw new Error(d.error || 'Failed');
 				this.emailMsg = d.message || 'Verification email sent';
