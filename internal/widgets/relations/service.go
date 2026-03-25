@@ -174,7 +174,7 @@ func (s *relationService) Delete(ctx context.Context, id int) error {
 		if err := s.repo.Delete(ctx, reverse.ID); err != nil {
 			// Log but don't fail — forward deletion is the primary operation.
 			slog.Warn("failed to delete reverse relation",
-				slog.String("reverse_id", reverse.ID),
+				slog.Int("reverse_id", reverse.ID),
 				slog.Any("error", err),
 			)
 		}
