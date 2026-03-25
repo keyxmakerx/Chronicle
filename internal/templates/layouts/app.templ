@@ -977,7 +977,7 @@ templ Topbar() {
 			<!-- Mobile hamburger -->
 			<button
 				@click="sidebarOpen = !sidebarOpen"
-				class="p-2 -ml-1 rounded-md text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors md:hidden shrink-0"
+				class="btn-ghost btn-icon -ml-1 md:hidden shrink-0"
 				title="Toggle menu"
 			>
 				<i class="fa-solid fa-bars text-lg"></i>
@@ -1042,11 +1042,11 @@ templ Topbar() {
 					<!-- Quick capture trigger (opens Ctrl+Shift+N modal) -->
 					<button
 						onclick="Chronicle.openQuickCapture()"
-						class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors"
+						class="btn-ghost btn-sm hidden sm:inline-flex"
 						title="Quick note (Ctrl+Shift+N)"
 					>
 						<i class="fa-solid fa-bolt text-xs"></i>
-						<span class="hidden lg:inline">Note</span>
+						<span class="hidden lg:inline ml-1">Note</span>
 					</button>
 				}
 			}
@@ -1057,7 +1057,7 @@ templ Topbar() {
 			<!-- Dark mode toggle -->
 			<button
 				data-theme-toggle
-				class="p-2 rounded-md text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors"
+				class="btn-ghost btn-icon"
 				title="Toggle dark mode"
 			>
 				<!-- Sun icon (shown in dark mode — click to go light) -->
@@ -1076,9 +1076,8 @@ templ Topbar() {
 					hx-post={ "/campaigns/" + GetCampaignID(ctx) + "/toggle-view-mode" }
 					hx-headers={ `{"X-CSRF-Token":"` + GetCSRFToken(ctx) + `"}` }
 					class={
-						"p-2 rounded-md transition-colors",
-						templ.KV("bg-amber-500/20 text-amber-400 hover:bg-amber-500/30", IsViewingAsPlayer(ctx)),
-						templ.KV("text-fg-secondary hover:bg-surface-alt hover:text-fg", !IsViewingAsPlayer(ctx)),
+						"btn-ghost btn-icon",
+						templ.KV("!bg-amber-500/20 !text-amber-400 hover:!bg-amber-500/30", IsViewingAsPlayer(ctx)),
 					}
 					title={ func() string { if IsViewingAsPlayer(ctx) { return "Viewing as player — click to return to owner view" }; return "View as player" }() }
 				>
@@ -1099,16 +1098,13 @@ templ Topbar() {
 					</span>
 				</div>
 
-				<a href="/account" class="text-sm text-fg-secondary hover:text-fg transition-colors">
+				<a href="/account" class="btn-ghost btn-sm">
 					<i class="fa-solid fa-gear text-xs mr-0.5"></i> Account
 				</a>
 
 				<form method="POST" action="/logout" class="inline">
 					<input type="hidden" name="csrf_token" value={ GetCSRFToken(ctx) }/>
-					<button
-						type="submit"
-						class="text-sm text-fg-secondary hover:text-fg transition-colors"
-					>
+					<button type="submit" class="btn-ghost btn-sm">
 						Logout
 					</button>
 				</form>
