@@ -694,6 +694,57 @@ templ hoverEffectsSection() {
 			</div>
 		}
 
+		@sectionCard("Entity Mention Pills (Inline Rich Text)") {
+			<p class="text-sm text-fg-secondary mb-3">
+				How <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">&#64;mentions</code> render inline in rich text content.
+				These use the <code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">.entity-link</code> CSS class.
+				Hover to see the background darken. In production, hovering also shows a preview tooltip.
+			</p>
+			<div class="prose prose-sm max-w-none">
+				<p class="text-fg-body leading-relaxed">
+					The party ventured deep into the lair of
+					<a href="#" onclick="return false" class="entity-link">&#64;Ancient Red Dragon</a>,
+					guided only by the cryptic notes found in the library of
+					<a href="#" onclick="return false" class="entity-link">&#64;Waterdeep</a>.
+					Their quest had been set in motion by none other than
+					<a href="#" onclick="return false" class="entity-link">&#64;Elminster Aumar</a>,
+					who promised that the legendary
+					<a href="#" onclick="return false" class="entity-link">&#64;Staff of the Magi</a>
+					lay hidden within the dragon&apos;s hoard. The
+					<a href="#" onclick="return false" class="entity-link">&#64;Emerald Enclave</a>
+					had warned them of the dangers, but the promise of glory was too great to ignore.
+				</p>
+			</div>
+		}
+
+		@sectionCard("Entity Preview Tooltip (Static Mockup)") {
+			<p class="text-sm text-fg-secondary mb-3">
+				This is how the hover preview tooltip looks when you mouse over an
+				<code class="bg-surface-alt px-1 py-0.5 rounded text-[11px] font-mono">&#64;mention</code> or entity card.
+				Owners can toggle image / attributes / excerpt per-entity in edit settings.
+			</p>
+			<div class="flex flex-wrap gap-6">
+				<!-- Full tooltip mockup -->
+				@entityTooltipMock(
+					"Elminster Aumar",
+					"NPC",
+					"fa-hat-wizard",
+					"#f59e0b",
+					"Archmage",
+					true,
+				)
+				<!-- Tooltip without image -->
+				@entityTooltipMock(
+					"Waterdeep",
+					"Location",
+					"fa-landmark",
+					"#10b981",
+					"City",
+					false,
+				)
+			</div>
+		}
+
 		@sectionCard("Sidebar Entity Nav Items (Current Pattern)") {
 			<p class="text-sm text-fg-secondary mb-3">
 				How entities look in the sidebar drill panel. Dark sidebar background with
@@ -769,4 +820,70 @@ templ entityCardMock(icon, color, name, typeName, label string) {
 			</div>
 		</div>
 	</a>
+}
+
+// entityTooltipMock renders a static preview tooltip matching the real entity_tooltip.js layout.
+// Always visible (not floating) so the user can evaluate the design without live data.
+templ entityTooltipMock(name, typeName, icon, color, label string, showImage bool) {
+	<div
+		class="w-80 max-w-full bg-surface border border-edge rounded-xl shadow-lg overflow-hidden"
+		style="font-family: Inter, system-ui, -apple-system, sans-serif;"
+	>
+		<!-- Content row: optional image + info -->
+		<div class={ "p-3", templ.KV("flex gap-3", showImage) }>
+			if showImage {
+				<!-- Gradient-bordered image placeholder -->
+				<div
+					class="shrink-0 w-[76px] h-[76px] p-0.5 rounded-[10px]"
+					style={ "background: linear-gradient(135deg, " + color + ", #a855f7);" }
+				>
+					<div
+						class="w-full h-full rounded-lg flex items-center justify-center"
+						style={ "background-color: " + color + "15" }
+					>
+						<i class={ "fa-solid " + icon, "text-2xl opacity-40" } style={ "color: " + color }></i>
+					</div>
+				</div>
+			}
+			<div class="flex-1 min-w-0">
+				<!-- Type badge row -->
+				<div class="flex items-center flex-wrap gap-1 mb-1.5">
+					<span
+						class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium leading-4"
+						style={ "background-color: " + color + "; color: #fff;" }
+					>
+						<i class={ "fa-solid " + icon, "text-[8px]" }></i>
+						{ typeName }
+					</span>
+					<span class="text-[11px] text-fg-muted">{ label }</span>
+				</div>
+				<!-- Entity name -->
+				<div class="text-[15px] font-semibold text-fg leading-tight mb-1">{ name }</div>
+				<!-- Mock attributes -->
+				<div class="space-y-0.5">
+					<div class="flex gap-1.5 text-[11px] leading-relaxed">
+						<span class="text-fg-muted shrink-0">Race</span>
+						<span class="text-fg-body font-medium truncate">Human</span>
+					</div>
+					<div class="flex gap-1.5 text-[11px] leading-relaxed">
+						<span class="text-fg-muted shrink-0">Class</span>
+						<span class="text-fg-body font-medium truncate">Wizard (Lvl 29)</span>
+					</div>
+					<div class="flex gap-1.5 text-[11px] leading-relaxed">
+						<span class="text-fg-muted shrink-0">Affiliation</span>
+						<span class="text-fg-body font-medium truncate">Harpers, Lords&apos; Alliance</span>
+					</div>
+				</div>
+			</div>
+		</div>
+		<!-- Excerpt -->
+		<p class="text-xs leading-relaxed text-fg-secondary px-3 pb-2.5" style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
+			The Sage of Shadowdale, one of the most powerful mages in all of Faer&ucirc;n. Known for his meddling
+			in the affairs of adventurers and his centuries-long battle against the forces of darkness.
+		</p>
+		<!-- Footer -->
+		<div class="px-3 py-1.5 border-t border-edge text-[10px] text-fg-muted">
+			Click to view &rarr;
+		</div>
+	</div>
 }
