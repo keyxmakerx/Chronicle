@@ -17,6 +17,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
+	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -1174,6 +1175,16 @@ func (a *App) RegisterRoutes() {
 		calendar.RegisterRoutes(e, calendarHandler, campaignService, authService, addonService)
 	} else {
 		slog.Warn("calendar plugin degraded — routes not registered")
+	}
+
+	// Bestiary plugin: community creature sharing with ratings, favorites, import.
+	bestiaryRepo := bestiary.NewBestiaryRepository(a.DB)
+	bestiarySvc := bestiary.NewBestiaryService(bestiaryRepo)
+	bestiaryHandler := bestiary.NewHandler(bestiarySvc)
+	if a.PluginHealth.IsHealthy("bestiary") {
+		bestiary.RegisterRoutes(e, bestiaryHandler, authService)
+	} else {
+		slog.Warn("bestiary plugin degraded — routes not registered")
 	}
 
 	// Maps plugin: interactive maps with Leaflet.js, pin markers, entity linking.

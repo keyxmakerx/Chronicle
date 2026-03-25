@@ -15,6 +15,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/app"
 	"github.com/keyxmakerx/chronicle/internal/config"
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
@@ -159,6 +160,7 @@ func registeredPlugins() []database.PluginSchema {
 		return sub
 	}
 	return []database.PluginSchema{
+		{Slug: "bestiary", MigrationsFS: mustSub(bestiary.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "calendar", MigrationsFS: mustSub(calendar.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "maps", MigrationsFS: mustSub(maps.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "sessions", MigrationsFS: mustSub(sessions.MigrationsFS, database.PluginMigrationsSubdir)},
