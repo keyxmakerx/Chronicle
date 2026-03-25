@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -220,6 +221,28 @@ func (m *mockCampaignRepo) ForceTransferOwnership(ctx context.Context, campaignI
 		return m.forceTransferOwnershipFn(ctx, campaignID, newOwnerID)
 	}
 	return nil
+}
+
+func (m *mockCampaignRepo) ArchiveCampaign(context.Context, string) error   { return nil }
+func (m *mockCampaignRepo) UnarchiveCampaign(context.Context, string) error { return nil }
+func (m *mockCampaignRepo) SetJoinCode(context.Context, string, string) error { return nil }
+func (m *mockCampaignRepo) ClearJoinCode(context.Context, string) error       { return nil }
+func (m *mockCampaignRepo) FindByJoinCode(context.Context, string) (*Campaign, error) {
+	return nil, fmt.Errorf("not found")
+}
+func (m *mockCampaignRepo) CreateGroup(context.Context, string, string, *string) (*CampaignGroup, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepo) ListGroups(context.Context, string) ([]CampaignGroup, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepo) GetGroup(context.Context, int) (*CampaignGroup, error) { return nil, nil }
+func (m *mockCampaignRepo) UpdateGroup(context.Context, int, string, *string) error { return nil }
+func (m *mockCampaignRepo) DeleteGroup(context.Context, int) error                  { return nil }
+func (m *mockCampaignRepo) AddGroupMember(context.Context, int, string) error       { return nil }
+func (m *mockCampaignRepo) RemoveGroupMember(context.Context, int, string) error    { return nil }
+func (m *mockCampaignRepo) ListGroupMembers(context.Context, int) ([]GroupMemberInfo, error) {
+	return nil, nil
 }
 
 // --- Mock UserFinder ---

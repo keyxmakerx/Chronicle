@@ -174,6 +174,35 @@ func (m *mockCampaignRepoForInvites) TransferOwnership(context.Context, string, 
 func (m *mockCampaignRepoForInvites) ForceTransferOwnership(context.Context, string, string) error {
 	return nil
 }
+func (m *mockCampaignRepoForInvites) ArchiveCampaign(context.Context, string) error   { return nil }
+func (m *mockCampaignRepoForInvites) UnarchiveCampaign(context.Context, string) error { return nil }
+func (m *mockCampaignRepoForInvites) SetJoinCode(context.Context, string, string) error {
+	return nil
+}
+func (m *mockCampaignRepoForInvites) ClearJoinCode(context.Context, string) error { return nil }
+func (m *mockCampaignRepoForInvites) FindByJoinCode(context.Context, string) (*Campaign, error) {
+	return nil, fmt.Errorf("not found")
+}
+func (m *mockCampaignRepoForInvites) CreateGroup(context.Context, string, string, *string) (*CampaignGroup, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepoForInvites) ListGroups(context.Context, string) ([]CampaignGroup, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepoForInvites) GetGroup(context.Context, int) (*CampaignGroup, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepoForInvites) UpdateGroup(context.Context, int, string, *string) error {
+	return nil
+}
+func (m *mockCampaignRepoForInvites) DeleteGroup(context.Context, int) error          { return nil }
+func (m *mockCampaignRepoForInvites) AddGroupMember(context.Context, int, string) error { return nil }
+func (m *mockCampaignRepoForInvites) RemoveGroupMember(context.Context, int, string) error {
+	return nil
+}
+func (m *mockCampaignRepoForInvites) ListGroupMembers(context.Context, int) ([]GroupMemberInfo, error) {
+	return nil, nil
+}
 
 // --- Tests ---
 
