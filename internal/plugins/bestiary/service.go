@@ -75,6 +75,15 @@ type BestiaryService interface {
 	// Flag flags a publication for moderation.
 	Flag(ctx context.Context, userID, publicationID string, reason *string) error
 
+	// Moderate performs an admin moderation action on a publication.
+	Moderate(ctx context.Context, moderatorID, publicationID, action string, reason *string) error
+	// GetModerationLog returns the moderation audit trail for a publication.
+	GetModerationLog(ctx context.Context, publicationID string) ([]ModerationLogEntry, error)
+	// ListFlagged returns paginated flagged publications for admin review.
+	ListFlagged(ctx context.Context, page, perPage int) (*PublicationListResult, error)
+	// GetStats returns aggregate bestiary statistics for admin dashboard.
+	GetStats(ctx context.Context) (*BestiaryStats, error)
+
 	// SetUserFetcher sets the cross-plugin interface for user lookups.
 	SetUserFetcher(uf UserFetcher)
 	// SetEntityCreator sets the cross-plugin interface for entity creation.
@@ -619,6 +628,78 @@ func (s *bestiaryService) Flag(ctx context.Context, userID, publicationID string
 	}
 
 	return nil
+}
+
+// --- Admin moderation methods ---
+
+// validModerationActions is the set of allowed moderation action values.
+var validModerationActions = map[string]bool{
+	"approve": true,
+	"archive": true,
+	"restore": true,
+}
+
+// Moderate performs an admin moderation action: approve (unflag), archive, or restore.
+func (s *bestiaryService) Moderate(ctx context.Context, moderatorID, publicationID, action string, reason *string) error {
+	if !validModerationActions[action] {
+		return apperror.NewValidation(fmt.Sprintf("invalid moderation action: %q", action))
+	}
+
+	pub, err := s.repo.GetByID(ctx, publicationID)
+	if err != nil {
+		return err
+	}
+
+	// Determine the new visibility based on the action.
+	var newVisibility string
+	switch action {
+	case "approve":
+		newVisibility = VisibilityPublished
+	case "archive":
+		newVisibility = VisibilityArchived
+	case "restore":
+		// Restore to published regardless of current state.
+		newVisibility = VisibilityPublished
+	}
+
+	if err := s.repo.UpdateVisibility(ctx, pub.ID, newVisibility); err != nil {
+		return err
+	}
+
+	// Stamp the reviewer.
+	_ = s.repo.SetReviewedBy(ctx, publicationID, moderatorID)
+
+	// Log the moderation action.
+	entry := &ModerationLogEntry{
+		ID:            generateID(),
+		PublicationID: publicationID,
+		ModeratorID:   moderatorID,
+		Action:        action,
+		Reason:        reason,
+	}
+	return s.repo.CreateModerationEntry(ctx, entry)
+}
+
+// GetModerationLog returns the full audit trail for a publication.
+func (s *bestiaryService) GetModerationLog(ctx context.Context, publicationID string) ([]ModerationLogEntry, error) {
+	return s.repo.GetModerationLog(ctx, publicationID)
+}
+
+// ListFlagged returns flagged publications for admin review.
+func (s *bestiaryService) ListFlagged(ctx context.Context, page, perPage int) (*PublicationListResult, error) {
+	page, perPage = clampPagination(page, perPage)
+
+	pubs, total, err := s.repo.ListFlagged(ctx, page, perPage)
+	if err != nil {
+		return nil, fmt.Errorf("list flagged: %w", err)
+	}
+
+	return buildListResult(pubs, total, page, perPage), nil
+}
+
+// GetStats returns aggregate bestiary statistics for the admin dashboard.
+func (s *bestiaryService) GetStats(ctx context.Context) (*BestiaryStats, error) {
+	return s.repo.GetBestiaryStats(ctx)
 }
 
 // --- Validation helpers ---

@@ -284,6 +284,70 @@ func (h *Handler) CreatorProfile(c echo.Context) error {
 	return c.JSON(http.StatusOK, profile)
 }
 
+// --- Admin moderation handlers ---
+
+// AdminFlagged lists flagged publications for moderation review.
+// GET /admin/bestiary/flagged
+func (h *Handler) AdminFlagged(c echo.Context) error {
+	page, perPage := parsePagination(c)
+
+	result, err := h.svc.ListFlagged(c.Request().Context(), page, perPage)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// AdminStats returns aggregate bestiary statistics.
+// GET /admin/bestiary/stats
+func (h *Handler) AdminStats(c echo.Context) error {
+	stats, err := h.svc.GetStats(c.Request().Context())
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, stats)
+}
+
+// AdminModerate performs a moderation action on a publication.
+// POST /admin/bestiary/:id/moderate
+func (h *Handler) AdminModerate(c echo.Context) error {
+	moderatorID := auth.GetUserID(c)
+	if moderatorID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+	pubID := c.Param("id")
+
+	var req ModerateInput
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.svc.Moderate(c.Request().Context(), moderatorID, pubID, req.Action, req.Reason); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"publication_id": pubID,
+		"action":         req.Action,
+		"status":         "completed",
+	})
+}
+
+// AdminModerationLog returns the moderation audit trail for a publication.
+// GET /admin/bestiary/:id/moderation-log
+func (h *Handler) AdminModerationLog(c echo.Context) error {
+	pubID := c.Param("id")
+
+	entries, err := h.svc.GetModerationLog(c.Request().Context(), pubID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, entries)
+}
+
 // --- Import, Fork & Flag handlers ---
 
 // ImportToCampaign imports a publication's creature into a campaign.

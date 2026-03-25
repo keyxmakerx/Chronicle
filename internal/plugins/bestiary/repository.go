@@ -59,6 +59,13 @@ type BestiaryRepository interface {
 	IncrementFlaggedCount(ctx context.Context, publicationID string) (newCount int, err error)
 	AutoFlagIfThreshold(ctx context.Context, publicationID string, threshold int) error
 
+	// Moderation.
+	ListFlagged(ctx context.Context, page, perPage int) ([]Publication, int, error)
+	CreateModerationEntry(ctx context.Context, entry *ModerationLogEntry) error
+	GetModerationLog(ctx context.Context, publicationID string) ([]ModerationLogEntry, error)
+	GetBestiaryStats(ctx context.Context) (*BestiaryStats, error)
+	SetReviewedBy(ctx context.Context, publicationID, moderatorID string) error
+
 	// Slug uniqueness.
 	SlugExists(ctx context.Context, slug string) (bool, error)
 }
@@ -703,6 +710,113 @@ func (r *bestiaryRepo) AutoFlagIfThreshold(ctx context.Context, publicationID st
 	)
 	if err != nil {
 		return fmt.Errorf("auto-flag: %w", err)
+	}
+	return nil
+}
+
+// --- Moderation repository methods ---
+
+// ListFlagged returns paginated publications in the flagged state for admin review.
+func (r *bestiaryRepo) ListFlagged(ctx context.Context, page, perPage int) ([]Publication, int, error) {
+	offset := (page - 1) * perPage
+
+	var total int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM bestiary_publications WHERE visibility = ?`,
+		VisibilityFlagged,
+	).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count flagged: %w", err)
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+pubCols+` FROM bestiary_publications
+		 WHERE visibility = ?
+		 ORDER BY flagged_count DESC, updated_at DESC
+		 LIMIT ? OFFSET ?`,
+		VisibilityFlagged, perPage, offset,
+	)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list flagged: %w", err)
+	}
+	defer rows.Close()
+
+	pubs, err := scanPublications(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return pubs, total, nil
+}
+
+// CreateModerationEntry inserts a moderation log entry.
+func (r *bestiaryRepo) CreateModerationEntry(ctx context.Context, entry *ModerationLogEntry) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO bestiary_moderation_log (id, publication_id, moderator_id, action, reason)
+		 VALUES (?, ?, ?, ?, ?)`,
+		entry.ID, entry.PublicationID, entry.ModeratorID, entry.Action, entry.Reason,
+	)
+	if err != nil {
+		return fmt.Errorf("insert moderation entry: %w", err)
+	}
+	return nil
+}
+
+// GetModerationLog returns all moderation entries for a publication, newest first.
+func (r *bestiaryRepo) GetModerationLog(ctx context.Context, publicationID string) ([]ModerationLogEntry, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, publication_id, moderator_id, action, reason, created_at
+		 FROM bestiary_moderation_log
+		 WHERE publication_id = ?
+		 ORDER BY created_at DESC`,
+		publicationID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get moderation log: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []ModerationLogEntry
+	for rows.Next() {
+		var e ModerationLogEntry
+		if err := rows.Scan(&e.ID, &e.PublicationID, &e.ModeratorID, &e.Action, &e.Reason, &e.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan moderation entry: %w", err)
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// GetBestiaryStats returns aggregate statistics for the admin dashboard.
+func (r *bestiaryRepo) GetBestiaryStats(ctx context.Context) (*BestiaryStats, error) {
+	stats := &BestiaryStats{}
+
+	err := r.db.QueryRowContext(ctx,
+		`SELECT
+		   COUNT(*),
+		   SUM(CASE WHEN visibility = 'published' THEN 1 ELSE 0 END),
+		   SUM(CASE WHEN visibility = 'flagged' THEN 1 ELSE 0 END),
+		   COALESCE(SUM(rating_count), 0),
+		   COALESCE(SUM(downloads), 0),
+		   COUNT(DISTINCT creator_id)
+		 FROM bestiary_publications`,
+	).Scan(
+		&stats.TotalPublications, &stats.PublishedCount, &stats.FlaggedCount,
+		&stats.TotalRatings, &stats.TotalImports, &stats.TotalCreators,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get bestiary stats: %w", err)
+	}
+	return stats, nil
+}
+
+// SetReviewedBy stamps the publication with the reviewing moderator and timestamp.
+func (r *bestiaryRepo) SetReviewedBy(ctx context.Context, publicationID, moderatorID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE bestiary_publications SET reviewed_by = ?, reviewed_at = NOW() WHERE id = ?`,
+		moderatorID, publicationID,
+	)
+	if err != nil {
+		return fmt.Errorf("set reviewed by: %w", err)
 	}
 	return nil
 }

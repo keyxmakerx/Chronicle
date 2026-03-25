@@ -1243,6 +1243,7 @@ func (a *App) RegisterRoutes() {
 	bestiaryHandler := bestiary.NewHandler(bestiarySvc)
 	if a.PluginHealth.IsHealthy("bestiary") {
 		bestiary.RegisterRoutes(e, bestiaryHandler, authService)
+		bestiary.RegisterAdminRoutes(e, bestiaryHandler, authService)
 	} else {
 		slog.Warn("bestiary plugin degraded — routes not registered")
 	}

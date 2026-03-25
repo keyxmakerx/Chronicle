@@ -229,6 +229,22 @@ type UserFetcher interface {
 	GetUserPublicInfo(ctx context.Context, userID string) (*UserInfo, error)
 }
 
+// BestiaryStats holds aggregate statistics for the admin dashboard.
+type BestiaryStats struct {
+	TotalPublications int `json:"total_publications"`
+	PublishedCount    int `json:"published_count"`
+	FlaggedCount      int `json:"flagged_count"`
+	TotalRatings      int `json:"total_ratings"`
+	TotalImports      int `json:"total_imports"`
+	TotalCreators     int `json:"total_creators"`
+}
+
+// ModerateInput is the request body for admin moderation actions.
+type ModerateInput struct {
+	Action string  `json:"action"` // approve, archive, restore
+	Reason *string `json:"reason,omitempty"`
+}
+
 // EntityCreator creates campaign entities from imported bestiary statblocks.
 // Implemented via an adapter wrapping the entities service in routes.go.
 type EntityCreator interface {
