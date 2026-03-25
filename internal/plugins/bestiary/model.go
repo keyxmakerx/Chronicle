@@ -1,6 +1,7 @@
 package bestiary
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 )
@@ -186,6 +187,37 @@ type SearchFilters struct {
 	Sort         string `json:"sort,omitempty"`
 	Page         int    `json:"page"`
 	PerPage      int    `json:"per_page"`
+}
+
+// CreatorStats holds aggregated statistics for a bestiary creator.
+type CreatorStats struct {
+	PublicationCount int     `json:"publication_count"`
+	TotalDownloads   int     `json:"total_downloads"`
+	TotalRatings     int     `json:"total_ratings"`
+	AverageRating    float64 `json:"average_rating"`
+}
+
+// CreatorProfile is the public profile of a bestiary creator, combining
+// user info (fetched via UserFetcher) with aggregated publication stats.
+type CreatorProfile struct {
+	UserID      string       `json:"user_id"`
+	DisplayName string       `json:"display_name"`
+	AvatarURL   string       `json:"avatar_url,omitempty"`
+	Stats       CreatorStats `json:"stats"`
+}
+
+// UserInfo is the minimal user data needed for creator profiles.
+// Populated by the UserFetcher cross-plugin interface.
+type UserInfo struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	AvatarURL   string `json:"avatar_url,omitempty"`
+}
+
+// UserFetcher retrieves public user information for creator profiles.
+// Implemented via an adapter wrapping the auth service in routes.go.
+type UserFetcher interface {
+	GetUserPublicInfo(ctx context.Context, userID string) (*UserInfo, error)
 }
 
 // SummaryFromPublication converts a full Publication to a summary for list views.

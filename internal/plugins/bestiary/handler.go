@@ -178,6 +178,112 @@ func (h *Handler) MyCreations(c echo.Context) error {
 	return c.JSON(http.StatusOK, result)
 }
 
+// Search performs a filtered search across published publications.
+// GET /bestiary/search
+func (h *Handler) Search(c echo.Context) error {
+	page, perPage := parsePagination(c)
+
+	filters := SearchFilters{
+		Query:        c.QueryParam("q"),
+		Organization: c.QueryParam("organization"),
+		Role:         c.QueryParam("role"),
+		Tags:         c.QueryParam("tags"),
+		CreatorID:    c.QueryParam("creator_id"),
+		SystemID:     c.QueryParam("system_id"),
+		Sort:         c.QueryParam("sort"),
+		Page:         page,
+		PerPage:      perPage,
+	}
+
+	if v := c.QueryParam("level_min"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			filters.LevelMin = &n
+		}
+	}
+	if v := c.QueryParam("level_max"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			filters.LevelMax = &n
+		}
+	}
+
+	result, err := h.svc.Search(c.Request().Context(), filters)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// Trending returns publications sorted by trending score.
+// GET /bestiary/trending
+func (h *Handler) Trending(c echo.Context) error {
+	page, perPage := parsePagination(c)
+
+	// Trending uses the search endpoint with sort=trending and no filters.
+	result, err := h.svc.Search(c.Request().Context(), SearchFilters{
+		Sort:    "trending",
+		Page:    page,
+		PerPage: perPage,
+	})
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// Newest returns the most recently published publications.
+// GET /bestiary/newest
+func (h *Handler) Newest(c echo.Context) error {
+	page, perPage := parsePagination(c)
+
+	result, err := h.svc.ListNewest(c.Request().Context(), page, perPage)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// TopRated returns publications with the highest average rating.
+// GET /bestiary/top-rated
+func (h *Handler) TopRated(c echo.Context) error {
+	page, perPage := parsePagination(c)
+
+	result, err := h.svc.ListTopRated(c.Request().Context(), page, perPage)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// MostImported returns publications with the most downloads.
+// GET /bestiary/most-imported
+func (h *Handler) MostImported(c echo.Context) error {
+	page, perPage := parsePagination(c)
+
+	result, err := h.svc.ListMostImported(c.Request().Context(), page, perPage)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// CreatorProfile returns a creator's public profile with stats.
+// GET /bestiary/creators/:userId
+func (h *Handler) CreatorProfile(c echo.Context) error {
+	userID := c.Param("userId")
+
+	profile, err := h.svc.GetCreatorProfile(c.Request().Context(), userID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, profile)
+}
+
 // --- Helpers ---
 
 // parsePagination extracts page and per_page query parameters with safe defaults.

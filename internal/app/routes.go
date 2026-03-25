@@ -44,6 +44,28 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
 
+// bestiaryUserFetcherAdapter wraps auth.AuthService to implement the
+// bestiary.UserFetcher interface for creator profile display names.
+type bestiaryUserFetcherAdapter struct {
+	authSvc auth.AuthService
+}
+
+// GetUserPublicInfo returns minimal public user info for bestiary creator profiles.
+func (a *bestiaryUserFetcherAdapter) GetUserPublicInfo(ctx context.Context, userID string) (*bestiary.UserInfo, error) {
+	user, err := a.authSvc.GetUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	info := &bestiary.UserInfo{
+		ID:          user.ID,
+		DisplayName: user.DisplayName,
+	}
+	if user.AvatarPath != nil {
+		info.AvatarURL = *user.AvatarPath
+	}
+	return info, nil
+}
+
 // entityTypeListerAdapter wraps entities.EntityService to implement the
 // campaigns.EntityTypeLister interface without creating a circular import.
 type entityTypeListerAdapter struct {
@@ -1180,6 +1202,7 @@ func (a *App) RegisterRoutes() {
 	// Bestiary plugin: community creature sharing with ratings, favorites, import.
 	bestiaryRepo := bestiary.NewBestiaryRepository(a.DB)
 	bestiarySvc := bestiary.NewBestiaryService(bestiaryRepo)
+	bestiarySvc.SetUserFetcher(&bestiaryUserFetcherAdapter{authSvc: authService})
 	bestiaryHandler := bestiary.NewHandler(bestiarySvc)
 	if a.PluginHealth.IsHealthy("bestiary") {
 		bestiary.RegisterRoutes(e, bestiaryHandler, authService)

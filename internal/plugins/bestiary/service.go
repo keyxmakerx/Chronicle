@@ -43,11 +43,26 @@ type BestiaryService interface {
 	ListPublished(ctx context.Context, page, perPage int) (*PublicationListResult, error)
 	// ListMyCreations returns paginated publications by the requesting user.
 	ListMyCreations(ctx context.Context, userID string, page, perPage int) (*PublicationListResult, error)
+
+	// Search performs filtered, paginated search across published publications.
+	Search(ctx context.Context, filters SearchFilters) (*PublicationListResult, error)
+	// ListNewest returns the most recently published publications.
+	ListNewest(ctx context.Context, page, perPage int) (*PublicationListResult, error)
+	// ListTopRated returns publications with the highest average rating.
+	ListTopRated(ctx context.Context, page, perPage int) (*PublicationListResult, error)
+	// ListMostImported returns publications with the most downloads.
+	ListMostImported(ctx context.Context, page, perPage int) (*PublicationListResult, error)
+	// GetCreatorProfile returns a creator's public profile with stats.
+	GetCreatorProfile(ctx context.Context, userID string) (*CreatorProfile, error)
+
+	// SetUserFetcher sets the cross-plugin interface for user lookups.
+	SetUserFetcher(uf UserFetcher)
 }
 
 // bestiaryService is the default BestiaryService implementation.
 type bestiaryService struct {
-	repo BestiaryRepository
+	repo  BestiaryRepository
+	users UserFetcher
 }
 
 // NewBestiaryService creates a BestiaryService backed by the given repository.
@@ -231,6 +246,83 @@ func (s *bestiaryService) ListMyCreations(ctx context.Context, userID string, pa
 	}
 
 	return buildListResult(pubs, total, page, perPage), nil
+}
+
+// SetUserFetcher sets the cross-plugin interface for looking up user info.
+func (s *bestiaryService) SetUserFetcher(uf UserFetcher) {
+	s.users = uf
+}
+
+// Search performs a filtered, paginated search.
+func (s *bestiaryService) Search(ctx context.Context, filters SearchFilters) (*PublicationListResult, error) {
+	filters.Page, filters.PerPage = clampPagination(filters.Page, filters.PerPage)
+
+	pubs, total, err := s.repo.SearchPublications(ctx, filters)
+	if err != nil {
+		return nil, fmt.Errorf("search: %w", err)
+	}
+
+	return buildListResult(pubs, total, filters.Page, filters.PerPage), nil
+}
+
+// ListNewest returns the most recently published publications.
+func (s *bestiaryService) ListNewest(ctx context.Context, page, perPage int) (*PublicationListResult, error) {
+	page, perPage = clampPagination(page, perPage)
+
+	pubs, total, err := s.repo.ListNewest(ctx, page, perPage)
+	if err != nil {
+		return nil, fmt.Errorf("list newest: %w", err)
+	}
+
+	return buildListResult(pubs, total, page, perPage), nil
+}
+
+// ListTopRated returns publications with the highest average rating (min 3 ratings).
+func (s *bestiaryService) ListTopRated(ctx context.Context, page, perPage int) (*PublicationListResult, error) {
+	page, perPage = clampPagination(page, perPage)
+
+	pubs, total, err := s.repo.ListTopRated(ctx, page, perPage)
+	if err != nil {
+		return nil, fmt.Errorf("list top rated: %w", err)
+	}
+
+	return buildListResult(pubs, total, page, perPage), nil
+}
+
+// ListMostImported returns publications with the most downloads.
+func (s *bestiaryService) ListMostImported(ctx context.Context, page, perPage int) (*PublicationListResult, error) {
+	page, perPage = clampPagination(page, perPage)
+
+	pubs, total, err := s.repo.ListMostImported(ctx, page, perPage)
+	if err != nil {
+		return nil, fmt.Errorf("list most imported: %w", err)
+	}
+
+	return buildListResult(pubs, total, page, perPage), nil
+}
+
+// GetCreatorProfile builds a creator's public profile from user info and stats.
+func (s *bestiaryService) GetCreatorProfile(ctx context.Context, userID string) (*CreatorProfile, error) {
+	stats, err := s.repo.GetCreatorStats(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("creator stats: %w", err)
+	}
+
+	profile := &CreatorProfile{
+		UserID: userID,
+		Stats:  *stats,
+	}
+
+	// Enrich with display name if UserFetcher is wired.
+	if s.users != nil {
+		info, err := s.users.GetUserPublicInfo(ctx, userID)
+		if err == nil && info != nil {
+			profile.DisplayName = info.DisplayName
+			profile.AvatarURL = info.AvatarURL
+		}
+	}
+
+	return profile, nil
 }
 
 // --- Validation helpers ---
