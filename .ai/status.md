@@ -8,7 +8,19 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-23 -- **Customization Hub Overhaul.**
+2026-03-25 -- **Community Bestiary Backend + Security Hardening.**
+
+62. **Community Bestiary Backend (Full Plugin).**
+    - **New plugin** at `internal/plugins/bestiary/` — instance-scoped creature sharing system with 30+ JSON API endpoints. No UI (consumed by system package widgets). Multi-system via `system_id` field (defaults to "drawsteel").
+    - **Phase 1** — 5 DB tables (`bestiary_publications`, `bestiary_ratings`, `bestiary_favorites`, `bestiary_imports`, `bestiary_moderation_log`), domain models, repository CRUD, service with slug generation + statblock validation, thin HTTP handlers.
+    - **Phase 2** — Full-text search (MATCH AGAINST with sanitized input), feed endpoints (newest/trending/top-rated/most-imported), creator profiles with aggregated stats, UserFetcher cross-plugin adapter.
+    - **Phase 3** — Rating system (1-5 stars, self-rating prevention, atomic aggregate updates), reviews, favorites with toggle.
+    - **Phase 4** — Import/fork into campaigns (EntityCreator + CampaignRoleChecker adapters), flagging with auto-hide at 3+ unique flags.
+    - **Phase 5** — Admin moderation (flagged queue, approve/archive/restore with audit trail), per-user rate limiting middleware (token bucket, configurable per-route).
+    - **Security hardening** — Transactional writes with `SELECT ... FOR UPDATE` row locking for ratings, favorites, and flags. Per-user flag deduplication via `bestiary_flags` table (migration 002). Prevents race conditions and flag abuse.
+    - **Cross-plugin adapters** in `internal/app/routes.go`: `bestiaryUserFetcherAdapter` (wraps auth), `bestiaryEntityCreatorAdapter` (wraps entities), `bestiaryCampaignRoleAdapter` (wraps campaigns).
+    - **DI wiring**: repo → service → handler, gated by `pluginHealth.IsHealthy("bestiary")`. Migration registered in `cmd/server/main.go`.
+    - All builds pass, lint clean (0 issues).
 
 61. **Customization Hub Overhaul.**
     - **Accent Color Fix** — Fixed duplicate `class` attributes in templ output for accent color buttons and font family buttons. Restructured to use if/else around full button elements. Added live CSS custom property updates (`--color-accent`, `--color-accent-hover`, `--color-accent-light`) after save so the entire page reflects the new accent color without reload. Handler now returns JSON for API callers instead of redirect.
