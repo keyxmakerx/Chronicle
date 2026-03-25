@@ -414,14 +414,32 @@
   .hover-concept-b:active::after {
     opacity: 1;
     background:
+      /* Right edge — strongest */
       linear-gradient(to left, rgb(var(--color-accent-rgb, 99 102 241) / 0.6) 0px,
                                rgb(var(--color-accent-rgb, 99 102 241) / 0.12) 4px,
                                transparent 24px) no-repeat right,
-      linear-gradient(to bottom, rgb(var(--color-accent-rgb, 99 102 241) / 0.35), transparent 6px) no-repeat top right / 60% 6px,
-      linear-gradient(to top, rgb(var(--color-accent-rgb, 99 102 241) / 0.35), transparent 6px) no-repeat bottom right / 70% 6px;
+      /* Left edge — dimmer mirror */
+      linear-gradient(to right, rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 0px,
+                                rgb(var(--color-accent-rgb, 99 102 241) / 0.06) 2px,
+                                transparent 14px) no-repeat left,
+      /* Top edge — full width */
+      linear-gradient(to bottom, rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 0px,
+                                 transparent 5px) no-repeat top center / 100% 5px,
+      /* Bottom edge — full width */
+      linear-gradient(to top, rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 0px,
+                              transparent 5px) no-repeat bottom center / 100% 5px,
+      /* Top-right corner — full bleed */
+      linear-gradient(to bottom, rgb(var(--color-accent-rgb, 99 102 241) / 0.35), transparent 6px) no-repeat top right / 100% 6px,
+      /* Bottom-right corner — full bleed */
+      linear-gradient(to top, rgb(var(--color-accent-rgb, 99 102 241) / 0.35), transparent 6px) no-repeat bottom right / 100% 6px,
+      /* Top-left corner — full bleed */
+      linear-gradient(to bottom, rgb(var(--color-accent-rgb, 99 102 241) / 0.25), transparent 5px) no-repeat top left / 100% 5px,
+      /* Bottom-left corner — full bleed */
+      linear-gradient(to top, rgb(var(--color-accent-rgb, 99 102 241) / 0.25), transparent 5px) no-repeat bottom left / 100% 5px;
   }
   .hover-concept-b:active {
-    box-shadow: 0 4px 16px rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
+    box-shadow: 0 0 16px rgb(var(--color-accent-rgb, 99 102 241) / 0.25),
+                0 4px 16px rgb(var(--color-accent-rgb, 99 102 241) / 0.15);
   }
 
   /* Concept C: Right glow + border sweep — the right edge lights up,
@@ -561,5 +579,184 @@
   }
   .hover-concept-e:active {
     box-shadow: 0 0 16px -4px rgb(var(--color-accent-rgb, 99 102 241) / 0.3);
+  }
+
+  /* ==== Sleeker Button Concepts (Design Lab) ==== */
+  /* 6 distinct button aesthetics for visual exploration.
+     Each uses --color-accent-rgb for theme consistency. */
+
+  /* ── Concept 1: Glass ── Frosted glassmorphism with translucent fill,
+     backdrop-blur, and a subtle white border. Hover deepens the frost. */
+  .btn-concept-glass {
+    @apply inline-flex items-center justify-center px-5 py-2.5 rounded-xl
+           text-sm font-medium cursor-pointer;
+    background: rgb(var(--color-accent-rgb, 99 102 241) / 0.12);
+    border: 1px solid rgb(255 255 255 / 0.18);
+    color: rgb(var(--color-accent-rgb, 99 102 241));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: all 0.25s ease;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1),
+                0 1px 3px rgb(0 0 0 / 0.06);
+  }
+  .btn-concept-glass:hover {
+    background: rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
+    border-color: rgb(255 255 255 / 0.28);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.15),
+                0 4px 16px rgb(var(--color-accent-rgb, 99 102 241) / 0.12),
+                0 1px 3px rgb(0 0 0 / 0.08);
+    transform: translateY(-1px);
+  }
+  .btn-concept-glass:active {
+    background: rgb(var(--color-accent-rgb, 99 102 241) / 0.28);
+    transform: translateY(0);
+    box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.06),
+                0 1px 2px rgb(0 0 0 / 0.04);
+  }
+
+  /* ── Concept 2: Neon Outline ── Transparent with a neon accent border.
+     Hover makes the border and text glow. No background fill. */
+  .btn-concept-neon {
+    @apply inline-flex items-center justify-center px-5 py-2.5 rounded-lg
+           text-sm font-medium cursor-pointer;
+    background: transparent;
+    border: 1.5px solid rgb(var(--color-accent-rgb, 99 102 241) / 0.5);
+    color: rgb(var(--color-accent-rgb, 99 102 241));
+    transition: all 0.2s ease;
+  }
+  .btn-concept-neon:hover {
+    border-color: rgb(var(--color-accent-rgb, 99 102 241));
+    text-shadow: 0 0 8px rgb(var(--color-accent-rgb, 99 102 241) / 0.6);
+    box-shadow: 0 0 8px rgb(var(--color-accent-rgb, 99 102 241) / 0.2),
+                0 0 20px rgb(var(--color-accent-rgb, 99 102 241) / 0.08),
+                inset 0 0 8px rgb(var(--color-accent-rgb, 99 102 241) / 0.06);
+  }
+  .btn-concept-neon:active {
+    border-color: rgb(var(--color-accent-rgb, 99 102 241));
+    background: rgb(var(--color-accent-rgb, 99 102 241) / 0.1);
+    text-shadow: 0 0 12px rgb(var(--color-accent-rgb, 99 102 241) / 0.8);
+    box-shadow: 0 0 14px rgb(var(--color-accent-rgb, 99 102 241) / 0.35),
+                0 0 28px rgb(var(--color-accent-rgb, 99 102 241) / 0.12),
+                inset 0 0 12px rgb(var(--color-accent-rgb, 99 102 241) / 0.1);
+  }
+
+  /* ── Concept 3: Gradient Shift ── Accent gradient that shifts position
+     on hover for a smooth, living color movement. */
+  .btn-concept-gradient {
+    @apply inline-flex items-center justify-center px-5 py-2.5 rounded-lg
+           text-sm font-semibold text-white cursor-pointer;
+    background: linear-gradient(
+      135deg,
+      rgb(var(--color-accent-rgb, 99 102 241)) 0%,
+      rgb(var(--color-accent-rgb, 99 102 241) / 0.7) 50%,
+      rgb(var(--color-accent-rgb, 99 102 241)) 100%
+    );
+    background-size: 200% 200%;
+    background-position: 0% 50%;
+    border: none;
+    transition: background-position 0.4s ease, box-shadow 0.25s ease, transform 0.15s ease;
+    box-shadow: 0 2px 8px rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
+  }
+  .btn-concept-gradient:hover {
+    background-position: 100% 50%;
+    box-shadow: 0 4px 18px rgb(var(--color-accent-rgb, 99 102 241) / 0.3),
+                0 1px 4px rgb(var(--color-accent-rgb, 99 102 241) / 0.15);
+    transform: translateY(-1px);
+  }
+  .btn-concept-gradient:active {
+    background-position: 50% 100%;
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
+  }
+
+  /* ── Concept 4: Minimal Line ── No visible button shape. Text with a thin
+     bottom line that slides in from left on hover. Ultra-clean. */
+  .btn-concept-minimal {
+    @apply inline-flex items-center justify-center px-3 py-2
+           text-sm font-medium cursor-pointer;
+    background: transparent;
+    border: none;
+    color: var(--color-text-secondary, #6b7280);
+    position: relative;
+    transition: color 0.2s ease;
+  }
+  .btn-concept-minimal::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    left: 12px;
+    right: 12px;
+    height: 1.5px;
+    background: rgb(var(--color-accent-rgb, 99 102 241));
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .btn-concept-minimal:hover {
+    color: rgb(var(--color-accent-rgb, 99 102 241));
+  }
+  .btn-concept-minimal:hover::after {
+    transform: scaleX(1);
+  }
+  .btn-concept-minimal:active {
+    color: rgb(var(--color-accent-rgb, 99 102 241));
+    opacity: 0.8;
+  }
+  .btn-concept-minimal:active::after {
+    transform: scaleX(1);
+    height: 2px;
+  }
+
+  /* ── Concept 5: Raised 3D ── Layered shadows create depth. Lifts on hover,
+     presses down on click. Modern skeuomorphism. */
+  .btn-concept-raised {
+    @apply inline-flex items-center justify-center px-5 py-2.5 rounded-lg
+           text-sm font-semibold text-white cursor-pointer;
+    background: rgb(var(--color-accent-rgb, 99 102 241));
+    border: none;
+    box-shadow: 0 1px 0 rgb(var(--color-accent-rgb, 99 102 241) / 0.8),
+                0 2px 4px rgb(0 0 0 / 0.12),
+                0 4px 8px rgb(0 0 0 / 0.08),
+                0 8px 16px rgb(var(--color-accent-rgb, 99 102 241) / 0.1);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateY(0);
+  }
+  .btn-concept-raised:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 0 rgb(var(--color-accent-rgb, 99 102 241) / 0.8),
+                0 4px 8px rgb(0 0 0 / 0.15),
+                0 8px 16px rgb(0 0 0 / 0.1),
+                0 12px 24px rgb(var(--color-accent-rgb, 99 102 241) / 0.15);
+  }
+  .btn-concept-raised:active {
+    transform: translateY(1px);
+    box-shadow: 0 0 0 rgb(var(--color-accent-rgb, 99 102 241) / 0.8),
+                0 1px 2px rgb(0 0 0 / 0.1),
+                0 2px 4px rgb(0 0 0 / 0.06);
+  }
+
+  /* ── Concept 6: Pill Glow ── Fully rounded pill with a soft outer halo
+     that radiates on hover. Friendly and modern. */
+  .btn-concept-pill {
+    @apply inline-flex items-center justify-center px-6 py-2.5
+           text-sm font-semibold cursor-pointer;
+    background: rgb(var(--color-accent-rgb, 99 102 241));
+    color: white;
+    border: none;
+    border-radius: 999px;
+    transition: all 0.25s ease;
+    box-shadow: 0 1px 3px rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
+  }
+  .btn-concept-pill:hover {
+    box-shadow: 0 0 0 4px rgb(var(--color-accent-rgb, 99 102 241) / 0.15),
+                0 0 20px rgb(var(--color-accent-rgb, 99 102 241) / 0.2),
+                0 4px 12px rgb(var(--color-accent-rgb, 99 102 241) / 0.15);
+    transform: translateY(-1px);
+  }
+  .btn-concept-pill:active {
+    transform: translateY(0);
+    box-shadow: 0 0 0 3px rgb(var(--color-accent-rgb, 99 102 241) / 0.2),
+                0 0 12px rgb(var(--color-accent-rgb, 99 102 241) / 0.3),
+                inset 0 1px 3px rgb(0 0 0 / 0.1);
   }
 }

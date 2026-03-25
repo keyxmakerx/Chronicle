@@ -7,6 +7,7 @@ package layouts
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -261,6 +262,28 @@ func SetEntityTypes(ctx context.Context, types []SidebarEntityType) context.Cont
 func GetEntityTypes(ctx context.Context) []SidebarEntityType {
 	types, _ := ctx.Value(keyEntityTypes).([]SidebarEntityType)
 	return types
+}
+
+// EntityTypesJSON serializes the sidebar entity types to a JSON string for
+// JavaScript widget data attributes.
+func EntityTypesJSON(ctx context.Context) string {
+	types := GetEntityTypes(ctx)
+	type jsonET struct {
+		ID         int    `json:"id"`
+		Name       string `json:"name"`
+		NamePlural string `json:"name_plural"`
+		Icon       string `json:"icon"`
+		Color      string `json:"color"`
+	}
+	out := make([]jsonET, len(types))
+	for i, t := range types {
+		out[i] = jsonET{ID: t.ID, Name: t.Name, NamePlural: t.NamePlural, Icon: t.Icon, Color: t.Color}
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
 }
 
 // SetEntityCounts stores per-type entity counts for sidebar badges.
