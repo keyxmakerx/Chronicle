@@ -664,7 +664,7 @@ templ hoverEffectsSection() {
 
 				<!-- Concept B: Right-edge with corner bleed -->
 				@hoverConceptRow("B", "hover-concept-b", "Corner Bleed",
-					"Right edge lights up with accent gradient bleeding onto top-right (30%) and bottom-right (40%) corners. Click expands the bleed to 60%/70%.")
+					"Right edge lights up with accent gradient bleeding onto top-right and bottom-right corners. Click wraps the glow around the entire element.")
 
 				<!-- Concept C: Border sweep -->
 				@hoverConceptRow("C", "hover-concept-c", "Border Sweep",
@@ -677,6 +677,44 @@ templ hoverEffectsSection() {
 				<!-- Concept E: Bar + conic sweep -->
 				@hoverConceptRow("E", "hover-concept-e", "Bar → Wrap",
 					"Sharp 2px accent line on right. On click, it transitions to a conic gradient that wraps ~50% around the element.")
+			</div>
+		}
+
+		@sectionCard("Sleeker Button Concepts") {
+			<p class="text-sm text-fg-secondary mb-2">
+				6 distinct button aesthetics. <strong>Hover</strong> and <strong>click</strong> to see transitions.
+			</p>
+			<div class="space-y-5">
+				@buttonConceptRow("1", "Glass", "Frosted glassmorphism — translucent fill, backdrop-blur, soft white border.") {
+					<button class="btn-concept-glass"><i class="fa-solid fa-wand-magic-sparkles mr-2"></i>Cast Spell</button>
+					<button class="btn-concept-glass">Open Portal</button>
+					<button class="btn-concept-glass"><i class="fa-solid fa-shield-halved mr-2"></i>Defend</button>
+				}
+				@buttonConceptRow("2", "Neon Outline", "Transparent with a neon accent border. Hover makes it glow.") {
+					<button class="btn-concept-neon"><i class="fa-solid fa-bolt mr-2"></i>Lightning Bolt</button>
+					<button class="btn-concept-neon">Detect Magic</button>
+					<button class="btn-concept-neon"><i class="fa-solid fa-eye mr-2"></i>Scry</button>
+				}
+				@buttonConceptRow("3", "Gradient Shift", "Accent gradient that shifts position on hover for living color movement.") {
+					<button class="btn-concept-gradient"><i class="fa-solid fa-fire mr-2"></i>Fireball</button>
+					<button class="btn-concept-gradient">Enchant</button>
+					<button class="btn-concept-gradient"><i class="fa-solid fa-star mr-2"></i>Inspire</button>
+				}
+				@buttonConceptRow("4", "Minimal Line", "No button shape — just text + a sliding underline on hover.") {
+					<button class="btn-concept-minimal"><i class="fa-solid fa-book mr-2"></i>Read Lore</button>
+					<button class="btn-concept-minimal">Investigate</button>
+					<button class="btn-concept-minimal"><i class="fa-solid fa-magnifying-glass mr-2"></i>Search</button>
+				}
+				@buttonConceptRow("5", "Raised 3D", "Layered shadows for depth. Lifts on hover, presses down on click.") {
+					<button class="btn-concept-raised"><i class="fa-solid fa-hammer mr-2"></i>Forge Weapon</button>
+					<button class="btn-concept-raised">Craft</button>
+					<button class="btn-concept-raised"><i class="fa-solid fa-gem mr-2"></i>Enchant</button>
+				}
+				@buttonConceptRow("6", "Pill Glow", "Rounded pill with a soft halo that radiates on hover.") {
+					<button class="btn-concept-pill"><i class="fa-solid fa-heart mr-2"></i>Heal</button>
+					<button class="btn-concept-pill">Bless</button>
+					<button class="btn-concept-pill"><i class="fa-solid fa-shield mr-2"></i>Ward</button>
+				}
 			</div>
 		}
 
@@ -796,6 +834,20 @@ templ hoverConceptRow(letter, className, title, desc string) {
 				<span class="flex-1 truncate">Elminster Aumar</span>
 				<span class="text-[10px] ml-2" style="color: #6b7280;">NPC</span>
 			</a>
+		</div>
+	</div>
+}
+
+// buttonConceptRow renders a labelled button concept section with sample buttons.
+templ buttonConceptRow(number, title, desc string) {
+	<div>
+		<div class="flex items-baseline gap-2 mb-2">
+			<span class="text-xs font-bold text-accent">{ number }</span>
+			<span class="text-sm font-semibold text-fg">{ title }</span>
+			<span class="text-xs text-fg-muted">&mdash; { desc }</span>
+		</div>
+		<div class="flex flex-wrap items-center gap-3 p-4 rounded-lg bg-surface-alt/50">
+			{ children... }
 		</div>
 	</div>
 }
