@@ -59,6 +59,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Validate the DB schema is at the version the code expects.
+	// Catches cases where migrations auto-run was skipped or failed silently.
+	if err := database.ValidateMigrationVersion(db, 18); err != nil {
+		slog.Error("migration version mismatch — database schema is behind", slog.Any("error", err))
+		os.Exit(1)
+	}
+
 	// --- Run Plugin Migrations ---
 	// Each plugin runs its own schema migrations independently. Failures
 	// disable the plugin instead of crashing the app. Migrations are
