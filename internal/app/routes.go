@@ -247,6 +247,31 @@ func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID st
 	return result, nil
 }
 
+// addonListerAPIAdapter wraps the addon service to implement the
+// syncapi.AddonLister interface for the REST API addon discovery endpoint.
+type addonListerAPIAdapter struct {
+	svc addons.AddonService
+}
+
+func (a *addonListerAPIAdapter) ListForCampaign(ctx context.Context, campaignID string) ([]syncapi.AddonInfo, error) {
+	addonList, err := a.svc.ListForCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]syncapi.AddonInfo, len(addonList))
+	for i, ca := range addonList {
+		result[i] = syncapi.AddonInfo{
+			Slug:      ca.AddonSlug,
+			Name:      ca.AddonName,
+			Icon:      ca.AddonIcon,
+			Category:  string(ca.AddonCategory),
+			Enabled:   ca.Enabled,
+			Installed: ca.Installed,
+		}
+	}
+	return result, nil
+}
+
 // backdropUploaderAdapter wraps the media service to implement the
 // campaigns.MediaUploader interface for backdrop image uploads.
 type backdropUploaderAdapter struct {
@@ -1318,9 +1343,17 @@ func (a *App) RegisterRoutes() {
 	postHandler := posts.NewHandler(postService)
 	posts.RegisterRoutes(e, postHandler, campaignService, authService)
 
+	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
+	// Created before sync API so the tag service is available for the REST API handler.
+	tagRepo := tags.NewTagRepository(a.DB)
+	tagService := tags.NewTagService(tagRepo)
+	tagHandler := tags.NewHandler(tagService)
+	tags.RegisterRoutes(e, tagHandler, campaignService, authService)
+
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
+	syncAPIHandler.SetAddonLister(&addonListerAPIAdapter{svc: addonService})
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {
@@ -1340,15 +1373,12 @@ func (a *App) RegisterRoutes() {
 	noteSvc := notes.NewNoteServiceWithAttachments(noteRepo, attRepo)
 	noteAPIHandler := syncapi.NewNoteAPIHandler(syncService, noteSvc)
 
-	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, syncMappingHandler, syncService, addonService)
-	}
+	// Tag API handler for sync API — exposes tag CRUD and bulk tag operations.
+	tagAPIHandler := syncapi.NewTagAPIHandler(syncService, tagService, entityService, campaignService)
 
-	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
-	tagRepo := tags.NewTagRepository(a.DB)
-	tagService := tags.NewTagService(tagRepo)
-	tagHandler := tags.NewHandler(tagService)
-	tags.RegisterRoutes(e, tagHandler, campaignService, authService)
+	if a.PluginHealth.IsHealthy("syncapi") {
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncService, addonService)
+	}
 
 	// NPC plugin: gallery/hub view for revealed character entities.
 	npcRepo := npcs.NewNPCRepository(a.DB)

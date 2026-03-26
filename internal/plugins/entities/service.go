@@ -92,6 +92,11 @@ type EntityService interface {
 	// Used by the NPC gallery reveal toggle.
 	TogglePrivate(ctx context.Context, entityID string) (newPrivate bool, err error)
 
+	// BulkUpdateType changes the entity type for multiple entities at once.
+	// Returns the count of successfully updated entities. Validates that the
+	// target type belongs to the campaign and each entity is campaign-scoped.
+	BulkUpdateType(ctx context.Context, campaignID string, entityIDs []string, typeID int) (int, error)
+
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
 
@@ -646,6 +651,42 @@ func (s *entityService) TogglePrivate(ctx context.Context, entityID string) (boo
 	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 
 	return newPrivate, nil
+}
+
+// BulkUpdateType changes the entity type for multiple entities. Validates
+// the target type belongs to the campaign, verifies each entity is
+// campaign-scoped, and publishes update events for WebSocket sync.
+func (s *entityService) BulkUpdateType(ctx context.Context, campaignID string, entityIDs []string, typeID int) (int, error) {
+	// Validate target entity type belongs to the campaign.
+	et, err := s.types.FindByID(ctx, typeID)
+	if err != nil {
+		return 0, apperror.NewBadRequest("entity type not found")
+	}
+	if et.CampaignID != campaignID {
+		return 0, apperror.NewBadRequest("entity type does not belong to this campaign")
+	}
+
+	updated := 0
+	for _, entityID := range entityIDs {
+		entity, err := s.entities.FindByID(ctx, entityID)
+		if err != nil || entity.CampaignID != campaignID {
+			continue // Skip entities that don't exist or belong to another campaign.
+		}
+
+		if err := s.entities.UpdateEntityType(ctx, entityID, typeID); err != nil {
+			slog.Warn("bulk update type: failed to update entity",
+				slog.String("entity_id", entityID),
+				slog.Any("error", err),
+			)
+			continue
+		}
+
+		entity.EntityTypeID = typeID
+		s.events.PublishEntityEvent("updated", campaignID, entityID, entity)
+		updated++
+	}
+
+	return updated, nil
 }
 
 // --- Listing and Search ---

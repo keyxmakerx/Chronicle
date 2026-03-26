@@ -84,3 +84,29 @@ func RunMigrations(appDB *sql.DB, dsn string, migrationsPath string) error {
 
 	return nil
 }
+
+// ValidateMigrationVersion checks that the applied migration version matches
+// or exceeds the expected version. Returns a clear error if the database is
+// behind, helping diagnose "column not found" runtime errors early.
+func ValidateMigrationVersion(db *sql.DB, expectedVersion uint) error {
+	var version int
+	var dirty bool
+	err := db.QueryRow("SELECT version, dirty FROM schema_migrations LIMIT 1").Scan(&version, &dirty)
+	if err != nil {
+		return fmt.Errorf("reading schema_migrations: %w (has migrate-up been run?)", err)
+	}
+
+	if dirty {
+		return fmt.Errorf("database migration %d is in dirty state — run 'make migrate-down' then 'make migrate-up' to fix", version)
+	}
+
+	if uint(version) < expectedVersion {
+		return fmt.Errorf("database is at migration %d but code requires %d — run 'make migrate-up'", version, expectedVersion)
+	}
+
+	slog.Info("migration version validated",
+		slog.Int("applied", version),
+		slog.Uint64("expected", uint64(expectedVersion)),
+	)
+	return nil
+}

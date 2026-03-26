@@ -1184,3 +1184,91 @@ bar. Collapsible Manage section with localStorage persistence.
 - Favorites persist across devices.
 - Dual-parent model (`parent_id` vs `parent_node_id`) requires care in
   queries and the reorder service to keep them mutually exclusive.
+
+---
+
+## ADR-033: Startup Health Check System
+
+**Date:** 2026-03-26
+**Status:** Accepted
+
+**Context:** Migration 000018 added `archived_at` and `join_code` columns to
+campaigns, but wasn't applied in a dev environment. Repository queries already
+referenced these columns, causing server errors on campaign pages. This revealed
+that Chronicle had no proactive detection of schema drift, unapplied migrations,
+or security misconfigurations at startup.
+
+**Decision:** Comprehensive startup health check system in
+`internal/database/healthcheck.go`. Runs after `RunMigrations()` but before
+route registration. Five checks:
+
+1. **Migration version** — Verifies DB is at expected version (currently v18).
+   Detects dirty state and logs force-retry instructions.
+2. **Critical columns** — Queries `information_schema.COLUMNS` for required
+   table/column pairs. Catches schema drift from failed or skipped migrations.
+3. **DB connectivity** — Pings with 5s timeout. Monitors connection pool
+   utilization (warns at 80% capacity).
+4. **Security audit** — Detects weak/default DB passwords in production, HTTP
+   BaseURL (CSRF cookie vulnerability), overprivileged DB user grants (SUPER,
+   FILE, PROCESS), and world-writable schema_migrations table.
+5. **Pre-migration backup** — `PreMigrationBackup()` runs mysqldump with gzip
+   before migrations. Auto-rotates old backups (configurable retention).
+   Silently skips if mysqldump is unavailable.
+
+Server exits with `os.Exit(1)` if any check fails. Configuration via
+`HealthCheckConfig` struct in `cmd/server/main.go`.
+
+**Alternatives Considered:**
+- Runtime health endpoint: too late, server already accepts traffic with bad state.
+- External monitoring (Prometheus/Grafana): doesn't prevent startup with broken schema.
+- Manual `make migrate-up` before deploy: error-prone, forgotten in practice.
+
+**Consequences:**
+- Schema drift detected before first request is served.
+- Database backed up before destructive migrations.
+- Security baseline (strong password, HTTPS, least-privilege DB user) enforced
+  on every start.
+- Adds ~100ms to startup time (information_schema queries are fast).
+- mysqldump dependency is optional — backup silently skipped if not installed.
+
+---
+
+## ADR-034: Asymmetric Corner Bleed CSS Effect System
+
+**Date:** 2026-03-26
+**Status:** Accepted
+
+**Context:** Chronicle needed a cohesive visual language for interactive elements
+(buttons, navigation items) that feels distinctive and polished, consistent
+across the entire UI.
+
+**Decision:** CSS pseudo-element (`::after` for buttons, `::before` for sidebar
+nav) with stacked `linear-gradient` backgrounds creating an asymmetric glow
+effect. Design principles:
+
+- **Right edge strongest** — Gradients from right side have highest opacity.
+- **Bottom heavier than top** — Bottom edge thicker (8px) vs top (4px).
+- **Bottom-right corner heaviest** — 50% opacity at 8px, vs top-left at 15-20%.
+- **Click/active state** — All corners expand to 100% width (full wrap-around)
+  with 0.2-0.3s transition.
+- **`.btn-pressed` JS class** — Added on `mousedown`, removed 300ms after
+  `mouseup` for a tactile linger effect (`boot.js`).
+
+Applied consistently across six button variants (primary, ghost, secondary,
+danger, warning, success) in `static/css/components/buttons.css` and sidebar
+navigation in `static/css/components/sidebar.css`.
+
+Sidebar uses `::before` (not `::after`) to avoid conflicting with the icon-only
+tooltip which uses `::after`. Glow is suppressed in icon-only mode (too narrow).
+
+**Alternatives Considered:**
+- `box-shadow`: symmetric only, can't create directional weighting.
+- `border-image`: limited transition/animation support.
+- SVG filters: performance overhead, harder to maintain.
+- CSS `outline`: no gradient or directional control.
+
+**Consequences:**
+- Unified visual language across all interactive elements.
+- Pure CSS except for the 300ms linger JavaScript (6 lines in boot.js).
+- Two pseudo-elements needed per element (one for glow, tooltips need separate).
+- Sidebar nav avoids `::after` conflict by using `::before` instead.

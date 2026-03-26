@@ -1,6 +1,8 @@
 package syncapi
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,6 +18,23 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 )
 
+// AddonLister provides campaign addon listing for the discovery endpoint.
+// Implemented by the addons plugin's service.
+type AddonLister interface {
+	ListForCampaign(ctx context.Context, campaignID string) ([]AddonInfo, error)
+}
+
+// AddonInfo is the API-safe representation of a campaign addon.
+// Defined here to avoid importing the addons package directly.
+type AddonInfo struct {
+	Slug      string `json:"slug"`
+	Name      string `json:"name"`
+	Icon      string `json:"icon"`
+	Category  string `json:"category"`
+	Enabled   bool   `json:"enabled"`
+	Installed bool   `json:"installed"`
+}
+
 // APIHandler serves the versioned REST API for external tool integration.
 // External clients (Foundry VTT, custom scripts) use these endpoints to
 // read and write campaign data programmatically via API key authentication.
@@ -25,6 +44,7 @@ type APIHandler struct {
 	campaignSvc          campaigns.CampaignService
 	relationSvc          relations.RelationService
 	addonChecker         AddonChecker
+	addonLister          AddonLister
 	campaignSystemLister CampaignSystemLister
 }
 
@@ -722,6 +742,11 @@ func (h *APIHandler) SetAddonChecker(ac AddonChecker) {
 	h.addonChecker = ac
 }
 
+// SetAddonLister injects the addon lister for the discovery endpoint.
+func (h *APIHandler) SetAddonLister(al AddonLister) {
+	h.addonLister = al
+}
+
 // --- Systems ---
 
 // systemInfoResponse is the API-safe representation of a game system.
@@ -853,4 +878,248 @@ func (h *APIHandler) GetItemFields(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, resp)
+}
+
+// --- Addon Discovery ---
+
+// ListAddons returns all addons for the campaign with their enabled state.
+// Used by external clients to discover available features without probing.
+// GET /api/v1/campaigns/:id/addons
+func (h *APIHandler) ListAddons(c echo.Context) error {
+	campaignID := c.Param("id")
+
+	if h.addonLister == nil {
+		return c.JSON(http.StatusOK, map[string]any{"data": []any{}, "total": 0})
+	}
+
+	addons, err := h.addonLister.ListForCampaign(c.Request().Context(), campaignID)
+	if err != nil {
+		slog.Error("api: list addons failed", slog.Any("error", err))
+		return apperror.NewInternal(fmt.Errorf("failed to list addons"))
+	}
+
+	if addons == nil {
+		addons = []AddonInfo{}
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"data":  addons,
+		"total": len(addons),
+	})
+}
+
+// --- Relation Types & CRUD ---
+
+// ListRelationTypes returns the predefined relation type pairs for the frontend.
+// GET /api/v1/campaigns/:id/relations/types
+func (h *APIHandler) ListRelationTypes(c echo.Context) error {
+	types := h.relationSvc.GetCommonTypes()
+	return c.JSON(http.StatusOK, map[string]any{
+		"data":  types,
+		"total": len(types),
+	})
+}
+
+// apiCreateRelationRequest is the JSON body for creating a relation.
+type apiCreateRelationRequest struct {
+	TargetEntityID      string          `json:"target_entity_id"`
+	RelationType        string          `json:"relation_type"`
+	ReverseRelationType string          `json:"reverse_relation_type"`
+	Metadata            json.RawMessage `json:"metadata"`
+	DmOnly              bool            `json:"dm_only"`
+}
+
+// CreateRelation creates a new relation between two entities.
+// POST /api/v1/campaigns/:id/entities/:entityID/relations
+func (h *APIHandler) CreateRelation(c echo.Context) error {
+	campaignID := c.Param("id")
+	entityID := c.Param("entityID")
+	ctx := c.Request().Context()
+
+	// Verify source entity belongs to this campaign.
+	entity, err := h.entitySvc.GetByID(ctx, entityID)
+	if err != nil {
+		return apperror.NewNotFound("entity not found")
+	}
+	if entity.CampaignID != campaignID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var req apiCreateRelationRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if req.TargetEntityID == "" {
+		return apperror.NewBadRequest("target_entity_id is required")
+	}
+	if req.RelationType == "" {
+		return apperror.NewBadRequest("relation_type is required")
+	}
+
+	userID := h.resolveUserID(c)
+	rel, err := h.relationSvc.Create(ctx, campaignID, entityID, req.TargetEntityID,
+		req.RelationType, req.ReverseRelationType, userID, req.Metadata, req.DmOnly)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusCreated, rel)
+}
+
+// apiUpdateRelationRequest is the JSON body for updating a relation's metadata.
+type apiUpdateRelationRequest struct {
+	Metadata json.RawMessage `json:"metadata"`
+}
+
+// UpdateRelation updates a relation's metadata.
+// PUT /api/v1/campaigns/:id/relations/:relationId
+func (h *APIHandler) UpdateRelation(c echo.Context) error {
+	relationID, err := strconv.Atoi(c.Param("relationId"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid relation ID")
+	}
+
+	var req apiUpdateRelationRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.relationSvc.UpdateMetadata(c.Request().Context(), relationID, req.Metadata); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// DeleteRelation removes a relation and its reverse.
+// DELETE /api/v1/campaigns/:id/relations/:relationId
+func (h *APIHandler) DeleteRelation(c echo.Context) error {
+	relationID, err := strconv.Atoi(c.Param("relationId"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid relation ID")
+	}
+
+	if err := h.relationSvc.Delete(c.Request().Context(), relationID); err != nil {
+		return err
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Entity Type CRUD ---
+
+// apiCreateEntityTypeRequest is the JSON body for creating an entity type.
+type apiCreateEntityTypeRequest struct {
+	Name       string `json:"name"`
+	NamePlural string `json:"name_plural"`
+	Icon       string `json:"icon"`
+	Color      string `json:"color"`
+}
+
+// CreateEntityType creates a new entity type for the campaign.
+// POST /api/v1/campaigns/:id/entity-types
+func (h *APIHandler) CreateEntityType(c echo.Context) error {
+	campaignID := c.Param("id")
+
+	var req apiCreateEntityTypeRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	et, err := h.entitySvc.CreateEntityType(c.Request().Context(), campaignID, entities.CreateEntityTypeInput{
+		Name:       req.Name,
+		NamePlural: req.NamePlural,
+		Icon:       req.Icon,
+		Color:      req.Color,
+	})
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusCreated, et)
+}
+
+// apiUpdateEntityTypeRequest is the JSON body for updating an entity type.
+type apiUpdateEntityTypeRequest struct {
+	Name       string `json:"name"`
+	NamePlural string `json:"name_plural"`
+	Icon       string `json:"icon"`
+	Color      string `json:"color"`
+}
+
+// UpdateEntityType updates an existing entity type.
+// PUT /api/v1/campaigns/:id/entity-types/:typeID
+func (h *APIHandler) UpdateEntityType(c echo.Context) error {
+	campaignID := c.Param("id")
+	typeID, err := strconv.Atoi(c.Param("typeID"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type ID")
+	}
+
+	// Verify entity type belongs to this campaign.
+	existing, err := h.entitySvc.GetEntityTypeByID(c.Request().Context(), typeID)
+	if err != nil {
+		return apperror.NewNotFound("entity type not found")
+	}
+	if existing.CampaignID != campaignID {
+		return apperror.NewNotFound("entity type not found")
+	}
+
+	var req apiUpdateEntityTypeRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	et, err := h.entitySvc.UpdateEntityType(c.Request().Context(), typeID, entities.UpdateEntityTypeInput{
+		Name:       req.Name,
+		NamePlural: req.NamePlural,
+		Icon:       req.Icon,
+		Color:      req.Color,
+	})
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, et)
+}
+
+// --- Bulk Operations ---
+
+// apiBulkUpdateEntityTypeRequest is the JSON body for bulk entity type reassignment.
+type apiBulkUpdateEntityTypeRequest struct {
+	EntityIDs    []string `json:"entity_ids"`
+	EntityTypeID int      `json:"entity_type_id"`
+}
+
+// BulkUpdateEntityType changes the entity type for multiple entities at once.
+// POST /api/v1/campaigns/:id/entities/bulk-update
+func (h *APIHandler) BulkUpdateEntityType(c echo.Context) error {
+	campaignID := c.Param("id")
+
+	var req apiBulkUpdateEntityTypeRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	const maxBulkEntities = 200
+	if len(req.EntityIDs) == 0 {
+		return apperror.NewBadRequest("entity_ids is required")
+	}
+	if len(req.EntityIDs) > maxBulkEntities {
+		return apperror.NewBadRequest(fmt.Sprintf("too many entities; maximum is %d per request", maxBulkEntities))
+	}
+	if req.EntityTypeID == 0 {
+		return apperror.NewBadRequest("entity_type_id is required")
+	}
+
+	updated, err := h.entitySvc.BulkUpdateType(c.Request().Context(), campaignID, req.EntityIDs, req.EntityTypeID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"status":  "ok",
+		"updated": updated,
+	})
 }
