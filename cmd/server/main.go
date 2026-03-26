@@ -54,15 +54,40 @@ func main() {
 	// Auto-apply pending migrations on every startup. Already-applied
 	// migrations are skipped. This eliminates the need to run migrate
 	// manually after deployment.
+
+	// Pre-migration backup: dump the database before applying any changes.
+	database.PreMigrationBackup(database.HealthCheckConfig{
+		BackupDir:  getEnvDefault("BACKUP_DIR", ""),
+		DBName:     cfg.Database.Name,
+		DBHost:     cfg.Database.Host,
+		DBUser:     cfg.Database.User,
+		DBPassword: cfg.Database.Password,
+	})
+
 	if err := database.RunMigrations(db, cfg.Database.DSN(), "db/migrations"); err != nil {
 		slog.Error("failed to run migrations", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	// Validate the DB schema is at the version the code expects.
-	// Catches cases where migrations auto-run was skipped or failed silently.
-	if err := database.ValidateMigrationVersion(db, 18); err != nil {
-		slog.Error("migration version mismatch — database schema is behind", slog.Any("error", err))
+	// --- Startup Health Checks ---
+	// Validates migration version, schema columns, DB health, and security.
+	// Server refuses to start if any fatal check fails.
+	if err := database.RunStartupHealthChecks(db, database.HealthCheckConfig{
+		ExpectedMigrationVersion: 18,
+		CriticalColumns: map[string][]string{
+			"campaigns":        {"id", "name", "slug", "archived_at", "join_code", "settings", "sidebar_config"},
+			"entities":         {"id", "campaign_id", "name", "slug", "entry", "entry_html", "fields_data", "visibility"},
+			"users":            {"id", "email", "display_name", "password_hash"},
+			"campaign_members": {"campaign_id", "user_id", "role"},
+		},
+		Env:        cfg.Env,
+		BaseURL:    cfg.BaseURL,
+		DBPassword: cfg.Database.Password,
+		DBHost:     cfg.Database.Host,
+		DBUser:     cfg.Database.User,
+		DBName:     cfg.Database.Name,
+	}); err != nil {
+		slog.Error("startup health checks failed", slog.Any("error", err))
 		os.Exit(1)
 	}
 
@@ -156,6 +181,14 @@ func setupLogging(cfg *config.Config) {
 
 // registeredPlugins returns the list of built-in plugins with their embedded
 // migration filesystems. Each plugin embeds its own migrations/*.sql files
+// getEnvDefault reads an environment variable or returns the fallback.
+func getEnvDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
 // via Go's embed package, ensuring they're available in the compiled binary
 // regardless of working directory.
 func registeredPlugins() []database.PluginSchema {
