@@ -535,6 +535,9 @@ type EntityRepository interface {
 
 	// UpdatePrivate sets an entity's is_private flag. Used by the NPC reveal toggle.
 	UpdatePrivate(ctx context.Context, entityID string, isPrivate bool) error
+
+	// UpdateEntityType changes an entity's entity_type_id. Used by bulk type reassignment.
+	UpdateEntityType(ctx context.Context, entityID string, typeID int) error
 }
 
 // entityRepository implements EntityRepository with MariaDB queries.
@@ -1222,6 +1225,24 @@ func (r *entityRepository) UpdatePrivate(ctx context.Context, entityID string, i
 	result, err := r.db.ExecContext(ctx, query, isPrivate, entityID)
 	if err != nil {
 		return fmt.Errorf("updating entity privacy: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
+// UpdateEntityType changes an entity's entity_type_id. Used by bulk type reassignment
+// from the sync API. Updates the updated_at timestamp for change tracking.
+func (r *entityRepository) UpdateEntityType(ctx context.Context, entityID string, typeID int) error {
+	query := `UPDATE entities SET entity_type_id = ?, updated_at = NOW() WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, typeID, entityID)
+	if err != nil {
+		return fmt.Errorf("updating entity type: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {

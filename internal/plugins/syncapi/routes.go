@@ -54,7 +54,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 // All routes require API key authentication. Permission middleware enforces
 // read/write/sync access levels. Campaign match middleware ensures keys can
 // only access their scoped campaign.
-func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService, addonChecker AddonChecker, opts ...func(*APIHandler)) {
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, tagAPI *TagAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService, addonChecker AddonChecker, opts ...func(*APIHandler)) {
 	// Inject addon checker into API handler for system-aware endpoints.
 	api.SetAddonChecker(addonChecker)
 
@@ -85,6 +85,30 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.GET("/entities/:entityID/relations", api.ListEntityRelations, RequirePermission(PermRead))
 	cg.GET("/entities/:entityID/permissions", api.GetEntityPermissions, RequirePermission(PermRead))
 	cg.PUT("/entities/:entityID/permissions", api.SetEntityPermissions, RequirePermission(PermWrite))
+
+	// Addon discovery (read).
+	cg.GET("/addons", api.ListAddons, RequirePermission(PermRead))
+
+	// Tag endpoints (always available, not addon-gated).
+	cg.GET("/tags", tagAPI.ListTags, RequirePermission(PermRead))
+	cg.POST("/tags", tagAPI.CreateTag, RequirePermission(PermWrite))
+	cg.PUT("/tags/:tagId", tagAPI.UpdateTag, RequirePermission(PermWrite))
+	cg.DELETE("/tags/:tagId", tagAPI.DeleteTag, RequirePermission(PermWrite))
+	cg.PUT("/entities/:entityID/tags", tagAPI.SetEntityTags, RequirePermission(PermWrite))
+	cg.POST("/entities/bulk-tags", tagAPI.BulkAssignTags, RequirePermission(PermWrite))
+
+	// Relation type listing and CRUD.
+	cg.GET("/relations/types", api.ListRelationTypes, RequirePermission(PermRead))
+	cg.POST("/entities/:entityID/relations", api.CreateRelation, RequirePermission(PermWrite))
+	cg.PUT("/relations/:relationId", api.UpdateRelation, RequirePermission(PermWrite))
+	cg.DELETE("/relations/:relationId", api.DeleteRelation, RequirePermission(PermWrite))
+
+	// Entity type write endpoints.
+	cg.POST("/entity-types", api.CreateEntityType, RequirePermission(PermWrite))
+	cg.PUT("/entity-types/:typeID", api.UpdateEntityType, RequirePermission(PermWrite))
+
+	// Bulk entity operations.
+	cg.POST("/entities/bulk-update", api.BulkUpdateEntityType, RequirePermission(PermWrite))
 
 	// Calendar read endpoints (require "read" permission + calendar addon).
 	calGroup := cg.Group("", RequireAddonAPI(addonChecker, "calendar"))

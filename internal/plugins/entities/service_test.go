@@ -302,6 +302,10 @@ func (m *mockEntityRepo) UpdatePrivate(ctx context.Context, entityID string, isP
 	return nil
 }
 
+func (m *mockEntityRepo) UpdateEntityType(_ context.Context, _ string, _ int) error {
+	return nil
+}
+
 // --- Test Helpers ---
 
 // mockPermissionRepo implements EntityPermissionRepository for testing.
