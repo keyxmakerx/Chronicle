@@ -8,7 +8,18 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-25 -- **Security Hardening Audit Completion.**
+2026-03-26 -- **Nav Bar Deep Dive + Sync API Expansion.**
+
+64. **Nav Bar Deep Dive + Sync API Expansion (9 items).**
+    - **Button Restyle** — Replaced all button hover/click effects with asymmetric corner bleed glow in `buttons.css`. Right/bottom edges stronger, bottom-right heaviest. Click state expands corners to 100% (full wrap). `.btn-pressed` class in `boot.js` lingers 300ms after mouseup. Applied to btn-primary, btn-ghost (underline reveal), btn-secondary (gray shimmer), btn-danger (red glow), btn-warning (radial pulse), btn-success (green sweep).
+    - **Inline Metadata Panel** — Replaced separate `/edit` form page with Alpine.js inline editing panel on entity show page (`show.templ`). Name, type label, parent, privacy editable in-place. Saves via `Chronicle.apiFetch()` PUT to `/entities/:eid/metadata`. New `UpdateMetadataAPI` handler. `EditForm` handler now redirects to show page.
+    - **Categories Editor Fix** — Replaced broken `data-widget="entity-type-editor"` (mounted into hidden div at zero height) with Alpine.js inline form in `entity_types.templ`. Name, plural, icon picker, color picker with `Chronicle.apiFetch()` saves.
+    - **Editor Mode UI Fix** — Fixed visual cue in `editor.css` from `ring-2 ring-accent/20` (clipped by overflow-hidden) to `border-color` + `box-shadow` approach.
+    - **CSRF Security Sweep** — Migrated all ~57 raw `fetch()` calls to `Chronicle.apiFetch()` across 12 .templ + 2 .js files. Ensures CSRF token, Accept header, Content-Type, and credentials are always set.
+    - **Sidebar Nav Glow** — New `.sidebar-nav-glow` class in `sidebar.css` using `::before` pseudo-element (avoids conflicting with icon-only tooltip `::after`). Same asymmetric gradient technique as btn-primary. Active state at 0.7 opacity. Suppressed in icon-only mode. Applied to all sidebar nav links and entity drill-down items.
+    - **Sidebar Bug Fixes** — Mount guard in `sidebar_layout_editor.js` prevents double-init. Changed `#sidebar-cat-content` from `overflow-hidden` to `overflow-y-auto` for drill-down scroll. Topbar buttons standardized to `btn-ghost btn-icon` / `btn-ghost btn-sm`.
+    - **Startup Health Checks** — New `internal/database/healthcheck.go` (372 lines). `RunStartupHealthChecks()` orchestrates: migration version validation (v18), critical column verification via information_schema, DB connectivity + pool stats, security audit (weak passwords, HTTP BaseURL, overprivileged grants, schema_migrations ACL). `PreMigrationBackup()` with mysqldump + gzip + rotation. Wired in `cmd/server/main.go`.
+    - **Sync API Expansion** — 15 new REST API endpoints. New `tag_api_handler.go` with TagAPIHandler (6 tag endpoints: list, create, update, delete, set entity tags, bulk assign). AddonLister interface + `ListAddons` endpoint for addon discovery. Relation types listing, create, update metadata, delete. Entity type create/update. Bulk entity type reassignment (max 200). New `BulkUpdateType` service method with event publishing. New `UpdateEntityType` repo method.
 
 63. **Security Hardening — Audit Completion (5 items).**
     - **HTMX `allowEval: false`** — Added to `boot.js`. All four HTMX security configs now active: `selfRequestsOnly`, `allowScriptTags=false`, `historyCacheSize=0`, `allowEval=false`.
