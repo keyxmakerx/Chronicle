@@ -182,7 +182,7 @@ func (r *campaignRepository) ListByUser(ctx context.Context, userID string, opts
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
 			&c.Settings, &c.BackdropPath, &c.SidebarConfig, &c.DashboardLayout, &c.OwnerDashboardLayout,
-			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt, &c.ArchivedAt, &c.JoinCode,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning campaign row: %w", err)
 		}
@@ -214,7 +214,7 @@ func (r *campaignRepository) ListAll(ctx context.Context, opts ListOptions) ([]C
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
 			&c.Settings, &c.BackdropPath, &c.SidebarConfig, &c.DashboardLayout, &c.OwnerDashboardLayout,
-			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt, &c.ArchivedAt, &c.JoinCode,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning campaign row: %w", err)
 		}
@@ -242,7 +242,7 @@ func (r *campaignRepository) ListPublic(ctx context.Context, limit int) ([]Campa
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.Slug, &c.Description, &c.IsPublic,
 			&c.Settings, &c.BackdropPath, &c.SidebarConfig, &c.DashboardLayout, &c.OwnerDashboardLayout,
-			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt, &c.ArchivedAt, &c.JoinCode,
 		); err != nil {
 			return nil, fmt.Errorf("scanning public campaign row: %w", err)
 		}
