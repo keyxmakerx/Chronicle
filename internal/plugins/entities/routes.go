@@ -129,6 +129,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 	pub.GET("/entities", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/entities/search", h.SearchAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/search", h.SearchPageHandler, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/entities/:eid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/entities/:eid/backlinks", h.BacklinksFragment, campaigns.RequireRole(campaigns.RolePlayer))

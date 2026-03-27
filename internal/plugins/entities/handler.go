@@ -641,6 +641,22 @@ func (h *Handler) Delete(c echo.Context) error {
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities")
 }
 
+// SearchPageHandler renders the dedicated search page with real-time filtering.
+// GET /campaigns/:id/search
+func (h *Handler) SearchPageHandler(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	entityTypes, err := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		entityTypes = nil
+	}
+
+	return middleware.Render(c, http.StatusOK, SearchPage(cc, entityTypes))
+}
+
 // SearchAPI handles entity search requests (GET /campaigns/:id/entities/search).
 // Returns HTML fragments for HTMX callers and JSON for API callers (e.g., the
 // @mention widget) based on the Accept header.

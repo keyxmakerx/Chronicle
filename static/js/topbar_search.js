@@ -184,6 +184,15 @@
       '</a>';
     }
 
+    // "View all results" link to the dedicated search page.
+    var campaignId = getCampaignId();
+    var q = input ? input.value.trim() : '';
+    if (campaignId && q) {
+      html += '<a href="/campaigns/' + Chronicle.escapeAttr(campaignId) + '/search?q=' + encodeURIComponent(q) + '" ' +
+        'class="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-accent hover:bg-accent/10 border-t border-edge transition-colors">' +
+        '<i class="fa-solid fa-arrow-right text-[10px]"></i> View all results</a>';
+    }
+
     resultsCt.innerHTML = html;
     resultsCt.classList.remove('hidden');
 
