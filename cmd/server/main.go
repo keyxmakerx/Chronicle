@@ -17,6 +17,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
@@ -86,6 +87,9 @@ func main() {
 		DBHost:     cfg.Database.Host,
 		DBUser:     cfg.Database.User,
 		DBName:     cfg.Database.Name,
+		SmokeTests: []database.SmokeTest{
+			campaigns.ScanSmokeTest(),
+		},
 	}); err != nil {
 		slog.Error("startup health checks failed", slog.Any("error", err))
 		os.Exit(1)

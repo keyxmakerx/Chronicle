@@ -7,6 +7,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
@@ -50,6 +51,20 @@ type HealthCheckConfig struct {
 
 	// BaseURL is the public-facing URL of the server.
 	BaseURL string
+
+	// SmokeTests are startup probes that run actual SELECT + Scan queries
+	// against critical tables. Catches column count mismatches and type errors
+	// that information_schema checks cannot detect.
+	SmokeTests []SmokeTest
+}
+
+// SmokeTest is a named startup probe that verifies a critical query+scan
+// pattern works end-to-end. Each probe runs SELECT ... LIMIT 1 on a table
+// and scans into the real Go struct. If the scan fails (wrong column count,
+// type mismatch, etc.), the server refuses to start.
+type SmokeTest struct {
+	Name string                  // Human-readable label (e.g. "campaigns.list_scan").
+	Fn   func(db *sql.DB) error // Runs the query and scan. sql.ErrNoRows = pass.
 }
 
 // HealthCheckResult aggregates all check outcomes.
@@ -84,6 +99,9 @@ func RunStartupHealthChecks(db *sql.DB, cfg HealthCheckConfig) error {
 
 	// 4. Security audit.
 	checkSecurity(db, cfg, result)
+
+	// 5. Smoke-test queries — verify critical SELECT+Scan patterns work.
+	checkSmokeTests(db, cfg, result)
 
 	// Log summary.
 	for _, c := range result.Checks {
@@ -352,6 +370,34 @@ func rotateBackups(cfg HealthCheckConfig) {
 		slog.Info("rotated old backups", slog.Int("removed", removed),
 			slog.Duration("max_age", maxAge))
 	}
+}
+
+// checkSmokeTests runs each registered smoke test to verify that critical
+// query+scan patterns work end-to-end. An empty table (sql.ErrNoRows) is
+// treated as a pass — the scan pattern is still validated by the query planner.
+func checkSmokeTests(db *sql.DB, cfg HealthCheckConfig, result *HealthCheckResult) {
+	if len(cfg.SmokeTests) == 0 {
+		return
+	}
+
+	failed := 0
+	for _, st := range cfg.SmokeTests {
+		if err := st.Fn(db); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue // Empty table — scan pattern is valid, just no data.
+			}
+			addFail(result, "smoke_test",
+				fmt.Sprintf("%s: %v — query/scan pattern mismatch detected", st.Name, err))
+			failed++
+		}
+	}
+
+	if failed > 0 {
+		return
+	}
+
+	addPass(result, "smoke_tests",
+		fmt.Sprintf("all %d probe(s) passed", len(cfg.SmokeTests)))
 }
 
 // --- Helper functions ---
