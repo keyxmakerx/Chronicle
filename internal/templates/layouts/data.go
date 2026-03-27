@@ -448,7 +448,9 @@ func SetMediaThumbFunc(ctx context.Context, fn MediaThumbFunc) context.Context {
 
 // MediaURL returns a signed URL for a media file. Falls back to an
 // unsigned URL if no signing function is configured (dev mode, migration).
+// Normalizes path-format fileIDs (e.g., "2026/03/uuid.jpg") to just the UUID.
 func MediaURL(ctx context.Context, fileID string) string {
+	fileID = normalizeMediaID(fileID)
 	if fn, ok := ctx.Value(keyMediaURLFunc).(MediaURLFunc); ok && fn != nil {
 		return fn(fileID)
 	}
@@ -458,14 +460,31 @@ func MediaURL(ctx context.Context, fileID string) string {
 // MediaThumbURL returns a signed URL for a media thumbnail at the given
 // size. Falls back to an unsigned URL if no signing function is configured.
 func MediaThumbURL(ctx context.Context, fileID, size string) string {
+	fileID = normalizeMediaID(fileID)
 	if fn, ok := ctx.Value(keyMediaURLFunc).(MediaURLFunc); ok && fn != nil {
-		// The signing function handles full URLs; for thumbnails we need
-		// the thumb-specific variant. We store a second function for this.
 		if thumbFn, ok2 := ctx.Value(keyMediaThumbFunc).(MediaThumbFunc); ok2 && thumbFn != nil {
 			return thumbFn(fileID, size)
 		}
 	}
 	return "/media/" + fileID + "/thumb/" + size
+}
+
+// normalizeMediaID extracts the UUID from a media file identifier.
+// Handles both UUID-only ("b7c17bb1-...") and path-format ("2026/03/b7c17bb1-....jpg")
+// inputs, returning just the UUID portion without extension.
+func normalizeMediaID(fileID string) string {
+	if !strings.Contains(fileID, "/") {
+		return fileID
+	}
+	// Extract basename: "2026/03/b7c17bb1-6563-462c-8b49-5b2e8bd57108.jpg" → "b7c17bb1-...108.jpg"
+	if idx := strings.LastIndex(fileID, "/"); idx >= 0 {
+		fileID = fileID[idx+1:]
+	}
+	// Strip extension: "b7c17bb1-...108.jpg" → "b7c17bb1-...108"
+	if idx := strings.LastIndex(fileID, "."); idx > 0 {
+		fileID = fileID[:idx]
+	}
+	return fileID
 }
 
 // --- Extension Widget Scripts ---

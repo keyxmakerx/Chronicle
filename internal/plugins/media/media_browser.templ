@@ -324,11 +324,11 @@ templ mediaUploaderScript() {
 					for (var i = 0; i < files.length; i++) {
 						var f = files[i];
 						if (!ALLOWED.includes(f.type)) {
-							Chronicle.toast(f.name + ': unsupported file type.', 'error');
+							Chronicle.notify(f.name + ': unsupported file type.', 'error');
 							continue;
 						}
 						if (f.size > MAX_SIZE) {
-							Chronicle.toast(f.name + ': too large (max 10 MB).', 'error');
+							Chronicle.notify(f.name + ': too large (max 10 MB).', 'error');
 							continue;
 						}
 						this.queue.push({
@@ -359,7 +359,7 @@ templ mediaUploaderScript() {
 					var allDone = this.queue.length > 0 && this.queue.every(function(q) { return q.status === 'done'; });
 					if (allDone) {
 						var count = this.queue.length;
-						Chronicle.toast(count + ' file' + (count > 1 ? 's' : '') + ' uploaded.', 'success');
+						Chronicle.notify(count + ' file' + (count > 1 ? 's' : '') + ' uploaded.', 'success');
 						setTimeout(function() { window.location.reload(); }, 800);
 					}
 				},
@@ -397,7 +397,7 @@ templ mediaUploaderScript() {
 								} catch (_) {
 									item.statusText = 'Failed';
 								}
-								Chronicle.toast(item.name + ': ' + item.statusText, 'error');
+								Chronicle.notify(item.name + ': ' + item.statusText, 'error');
 							}
 							resolve();
 						});
@@ -405,7 +405,7 @@ templ mediaUploaderScript() {
 						xhr.addEventListener('error', function() {
 							item.status = 'error';
 							item.statusText = 'Network error';
-							Chronicle.toast(item.name + ': network error.', 'error');
+							Chronicle.notify(item.name + ': network error.', 'error');
 							resolve();
 						});
 

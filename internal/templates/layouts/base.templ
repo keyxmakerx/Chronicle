@@ -62,17 +62,21 @@ templ Base(title string) {
 		<!-- Theme toggle (before other scripts so icons update early) -->
 		<script src="/static/js/theme.js" defer></script>
 
-		<!-- Vendored libraries (loaded last for faster initial paint) -->
+		<!-- Vendored libraries -->
 		<script src="/static/vendor/htmx.min.js" defer></script>
-		<!-- Alpine plugins must load before Alpine core -->
-		<script src="/static/vendor/alpine-collapse.min.js" defer></script>
-		<script src="/static/vendor/alpine.min.js" defer></script>
 
-		<!-- Toast notification system (before widgets so they can use Chronicle.notify) -->
+		<!-- Toast notification system (must load before Alpine) -->
 		<script src="/static/js/notifications.js" defer></script>
 
-		<!-- Widget system: boot.js auto-mounts data-widget elements -->
+		<!-- Widget system: boot.js defines Chronicle.apiFetch and auto-mounts
+		     data-widget elements. Must load before Alpine so Chronicle utilities
+		     are available when Alpine processes x-data expressions. -->
 		<script src="/static/js/boot.js" defer></script>
+
+		<!-- Alpine.js: loaded AFTER boot.js so Chronicle.apiFetch/notify exist
+		     when Alpine initializes and evaluates x-data attributes. -->
+		<script src="/static/vendor/alpine-collapse.min.js" defer></script>
+		<script src="/static/vendor/alpine.min.js" defer></script>
 
 		<!-- Drill-down sidebar navigation (CSS toggling + HTMX triggers) -->
 		<script src="/static/js/sidebar_drill.js" defer></script>
