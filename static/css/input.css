@@ -153,10 +153,6 @@
   .btn-primary:hover::after {
     opacity: 1;
   }
-  .btn-primary:hover {
-    box-shadow: 0 0 12px rgb(var(--color-accent-rgb, 99 102 241) / 0.2),
-                0 2px 8px rgb(var(--color-accent-rgb, 99 102 241) / 0.12);
-  }
   /* Click state: full wrap-around — corners expand to 100%, edges intensify.
      .btn-pressed is toggled by JS with 300ms linger after mouseup. */
   .btn-primary:active::after,
@@ -192,11 +188,6 @@
         rgb(var(--color-accent-rgb, 99 102 241) / 0.4), transparent 9px) no-repeat bottom left / 100% 9px;
     transition: opacity 0.2s ease, background-size 0.2s ease;
   }
-  .btn-primary:active,
-  .btn-primary.btn-pressed {
-    box-shadow: 0 0 20px rgb(var(--color-accent-rgb, 99 102 241) / 0.3),
-                0 4px 16px rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
-  }
 
   /* ---- Secondary: Edge shimmer ----
      A faint neutral ring glow that brightens the border on hover.
@@ -215,11 +206,6 @@
   .btn-secondary:hover::after {
     opacity: 1;
   }
-  .btn-secondary:hover {
-    border-color: rgb(156 163 175 / 0.5);
-    box-shadow: 0 0 0 1px rgb(156 163 175 / 0.08),
-                0 2px 8px rgb(156 163 175 / 0.08);
-  }
   .btn-secondary:active::after {
     opacity: 1;
     background:
@@ -227,10 +213,6 @@
       linear-gradient(to right, rgb(156 163 175 / 0.18) 0px, transparent 14px) no-repeat left,
       linear-gradient(to bottom, rgb(156 163 175 / 0.15) 0px, transparent 5px) no-repeat top,
       linear-gradient(to top, rgb(156 163 175 / 0.15) 0px, transparent 5px) no-repeat bottom;
-  }
-  .btn-secondary:active {
-    box-shadow: 0 0 0 1px rgb(156 163 175 / 0.15),
-                0 1px 4px rgb(156 163 175 / 0.1);
   }
 
   /* ---- Danger: Red edge bleed ----
@@ -250,10 +232,6 @@
   .btn-danger:hover::after {
     opacity: 1;
   }
-  .btn-danger:hover {
-    box-shadow: 0 0 10px rgb(239 68 68 / 0.18),
-                0 2px 8px rgb(239 68 68 / 0.12);
-  }
   .btn-danger:active::after {
     opacity: 1;
     background:
@@ -261,10 +239,6 @@
       linear-gradient(to right, rgb(239 68 68 / 0.4) 0px, rgb(239 68 68 / 0.08) 3px, transparent 16px) no-repeat left,
       linear-gradient(to bottom, rgb(239 68 68 / 0.35) 0px, transparent 6px) no-repeat top,
       linear-gradient(to top, rgb(239 68 68 / 0.35) 0px, transparent 6px) no-repeat bottom;
-  }
-  .btn-danger:active {
-    box-shadow: 0 0 18px rgb(239 68 68 / 0.25),
-                0 4px 14px rgb(239 68 68 / 0.18);
   }
 
   /* ---- Ghost: Underline reveal ----
@@ -316,10 +290,6 @@
   .btn-warning:hover::after {
     opacity: 1;
   }
-  .btn-warning:hover {
-    box-shadow: 0 0 12px rgb(245 158 11 / 0.2),
-                0 2px 8px rgb(245 158 11 / 0.12);
-  }
   .btn-warning:active::after {
     opacity: 1;
     background:
@@ -331,10 +301,6 @@
       linear-gradient(to right, rgb(245 158 11 / 0.35) 0px, transparent 14px) no-repeat left,
       linear-gradient(to bottom, rgb(245 158 11 / 0.3) 0px, transparent 5px) no-repeat top,
       linear-gradient(to top, rgb(245 158 11 / 0.3) 0px, transparent 5px) no-repeat bottom;
-  }
-  .btn-warning:active {
-    box-shadow: 0 0 20px rgb(245 158 11 / 0.28),
-                0 4px 14px rgb(245 158 11 / 0.18);
   }
 
   /* ---- Success: Green border sweep ----
@@ -354,10 +320,6 @@
   .btn-success:hover::after {
     opacity: 1;
   }
-  .btn-success:hover {
-    box-shadow: 0 0 10px rgb(22 163 74 / 0.15),
-                0 2px 8px rgb(22 163 74 / 0.1);
-  }
   .btn-success:active::after {
     opacity: 1;
     background:
@@ -365,10 +327,6 @@
       linear-gradient(to right, rgb(22 163 74 / 0.4) 0px, rgb(22 163 74 / 0.08) 3px, transparent 16px) no-repeat left,
       linear-gradient(to bottom, rgb(22 163 74 / 0.35) 0px, transparent 6px) no-repeat top,
       linear-gradient(to top, rgb(22 163 74 / 0.35) 0px, transparent 6px) no-repeat bottom;
-  }
-  .btn-success:active {
-    box-shadow: 0 0 18px rgb(22 163 74 / 0.22),
-                0 4px 14px rgb(22 163 74 / 0.15);
   }
 
   /* Disabled state — suppress hover effects. */
