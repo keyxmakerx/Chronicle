@@ -92,36 +92,293 @@
            focus:outline-none focus:ring-2 focus:ring-offset-2
            active:scale-[0.98];
     position: relative;
-    overflow: visible;
+    overflow: hidden;
   }
-  /* Hover accent effect — placeholder, chosen via Design Lab testing. */
+
+  /* Shared ::after base for hover glow effects on all button types.
+     Each variant overrides the background property for its own look. */
+  .btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.2s ease, background-size 0.25s ease;
+    pointer-events: none;
+  }
+
+  /* ---- Primary: Asymmetric corner bleed → full-wrap on click ----
+     Bottom-heavy glow on hover: bottom edge ~8px, top ~4px.
+     Bottom-right corner heaviest, top-left lightest.
+     On click (.btn-pressed), animates to full wrap-around border
+     that lingers 300ms after release before fading back. */
   .btn-primary {
     @apply btn bg-accent text-white hover:bg-accent-hover
-           focus:ring-accent shadow-sm hover:shadow-md hover:shadow-accent/20;
+           focus:ring-accent shadow-sm;
   }
+  .btn-primary::after {
+    background:
+      /* Right edge — strongest */
+      linear-gradient(to left,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.55) 0px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.1) 3px,
+        transparent 22px) no-repeat right center / auto 100%,
+      /* Left edge — dimmer mirror */
+      linear-gradient(to right,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 0px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.06) 2px,
+        transparent 14px) no-repeat left center / auto 100%,
+      /* Top edge — shorter (4px) */
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.25) 0px,
+        transparent 4px) no-repeat top center / 100% 4px,
+      /* Bottom edge — longer (8px), heavier */
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.4) 0px,
+        transparent 8px) no-repeat bottom center / 100% 8px,
+      /* Top-right corner bleed */
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.25), transparent 5px) no-repeat top right / 30% 5px,
+      /* Bottom-right corner bleed — heaviest */
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.38), transparent 8px) no-repeat bottom right / 50% 8px,
+      /* Top-left corner bleed — lightest */
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.15), transparent 4px) no-repeat top left / 20% 4px,
+      /* Bottom-left corner bleed */
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.28), transparent 7px) no-repeat bottom left / 35% 7px;
+    transition: opacity 0.2s ease, background-size 0.25s ease;
+  }
+  .btn-primary:hover::after {
+    opacity: 1;
+  }
+  .btn-primary:hover {
+    box-shadow: 0 0 12px rgb(var(--color-accent-rgb, 99 102 241) / 0.2),
+                0 2px 8px rgb(var(--color-accent-rgb, 99 102 241) / 0.12);
+  }
+  /* Click state: full wrap-around — corners expand to 100%, edges intensify.
+     .btn-pressed is toggled by JS with 300ms linger after mouseup. */
+  .btn-primary:active::after,
+  .btn-primary.btn-pressed::after {
+    opacity: 1;
+    background:
+      /* Right edge — intensified */
+      linear-gradient(to left,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.7) 0px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.15) 4px,
+        transparent 28px) no-repeat right center / auto 100%,
+      /* Left edge — intensified */
+      linear-gradient(to right,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.45) 0px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.1) 3px,
+        transparent 18px) no-repeat left center / auto 100%,
+      /* Top edge — expanded to 6px */
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.4) 0px,
+        transparent 6px) no-repeat top center / 100% 6px,
+      /* Bottom edge — expanded to 10px */
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.5) 0px,
+        transparent 10px) no-repeat bottom center / 100% 10px,
+      /* All corners expand to 100% — full wrap */
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.4), transparent 7px) no-repeat top right / 100% 7px,
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.5), transparent 10px) no-repeat bottom right / 100% 10px,
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.3), transparent 6px) no-repeat top left / 100% 6px,
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.4), transparent 9px) no-repeat bottom left / 100% 9px;
+    transition: opacity 0.2s ease, background-size 0.2s ease;
+  }
+  .btn-primary:active,
+  .btn-primary.btn-pressed {
+    box-shadow: 0 0 20px rgb(var(--color-accent-rgb, 99 102 241) / 0.3),
+                0 4px 16px rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
+  }
+
+  /* ---- Secondary: Edge shimmer ----
+     A faint neutral ring glow that brightens the border on hover.
+     Restrained and utility-like. */
   .btn-secondary {
     @apply btn bg-surface text-fg-body hover:bg-surface-alt
            border border-edge focus:ring-gray-400;
   }
+  .btn-secondary::after {
+    background:
+      linear-gradient(to left, rgb(156 163 175 / 0.15) 0px, transparent 12px) no-repeat right,
+      linear-gradient(to right, rgb(156 163 175 / 0.1) 0px, transparent 10px) no-repeat left,
+      linear-gradient(to bottom, rgb(156 163 175 / 0.1) 0px, transparent 4px) no-repeat top,
+      linear-gradient(to top, rgb(156 163 175 / 0.1) 0px, transparent 4px) no-repeat bottom;
+  }
+  .btn-secondary:hover::after {
+    opacity: 1;
+  }
+  .btn-secondary:hover {
+    border-color: rgb(156 163 175 / 0.5);
+    box-shadow: 0 0 0 1px rgb(156 163 175 / 0.08),
+                0 2px 8px rgb(156 163 175 / 0.08);
+  }
+  .btn-secondary:active::after {
+    opacity: 1;
+    background:
+      linear-gradient(to left, rgb(156 163 175 / 0.22) 0px, transparent 16px) no-repeat right,
+      linear-gradient(to right, rgb(156 163 175 / 0.18) 0px, transparent 14px) no-repeat left,
+      linear-gradient(to bottom, rgb(156 163 175 / 0.15) 0px, transparent 5px) no-repeat top,
+      linear-gradient(to top, rgb(156 163 175 / 0.15) 0px, transparent 5px) no-repeat bottom;
+  }
+  .btn-secondary:active {
+    box-shadow: 0 0 0 1px rgb(156 163 175 / 0.15),
+                0 1px 4px rgb(156 163 175 / 0.1);
+  }
+
+  /* ---- Danger: Red edge bleed ----
+     A warning aura that bleeds red around all edges on hover.
+     Communicates "caution" — the red glows outward. */
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700
-           focus:ring-red-500 shadow-sm hover:shadow-md hover:shadow-red-500/20;
+           focus:ring-red-500 shadow-sm;
   }
+  .btn-danger::after {
+    background:
+      linear-gradient(to left, rgb(239 68 68 / 0.45) 0px, rgb(239 68 68 / 0.08) 3px, transparent 18px) no-repeat right,
+      linear-gradient(to right, rgb(239 68 68 / 0.25) 0px, rgb(239 68 68 / 0.05) 2px, transparent 12px) no-repeat left,
+      linear-gradient(to bottom, rgb(239 68 68 / 0.25) 0px, transparent 5px) no-repeat top,
+      linear-gradient(to top, rgb(239 68 68 / 0.25) 0px, transparent 5px) no-repeat bottom;
+  }
+  .btn-danger:hover::after {
+    opacity: 1;
+  }
+  .btn-danger:hover {
+    box-shadow: 0 0 10px rgb(239 68 68 / 0.18),
+                0 2px 8px rgb(239 68 68 / 0.12);
+  }
+  .btn-danger:active::after {
+    opacity: 1;
+    background:
+      linear-gradient(to left, rgb(239 68 68 / 0.6) 0px, rgb(239 68 68 / 0.12) 4px, transparent 24px) no-repeat right,
+      linear-gradient(to right, rgb(239 68 68 / 0.4) 0px, rgb(239 68 68 / 0.08) 3px, transparent 16px) no-repeat left,
+      linear-gradient(to bottom, rgb(239 68 68 / 0.35) 0px, transparent 6px) no-repeat top,
+      linear-gradient(to top, rgb(239 68 68 / 0.35) 0px, transparent 6px) no-repeat bottom;
+  }
+  .btn-danger:active {
+    box-shadow: 0 0 18px rgb(239 68 68 / 0.25),
+                0 4px 14px rgb(239 68 68 / 0.18);
+  }
+
+  /* ---- Ghost: Underline reveal ----
+     A subtle bottom-edge accent line slides in on hover, with a very faint
+     fill. Minimal and text-link-like, matching ghost's invisible intent. */
   .btn-ghost {
     @apply btn bg-transparent text-fg-secondary hover:bg-surface-alt
            border-none;
   }
+  .btn-ghost::after {
+    background:
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.35) 0px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.08) 2px,
+        transparent 3px) no-repeat bottom center / 0% 3px;
+    transition: opacity 0.2s ease, background-size 0.25s ease;
+  }
+  .btn-ghost:hover::after {
+    opacity: 1;
+    background-size: 80% 3px;
+  }
+  .btn-ghost:active::after {
+    opacity: 1;
+    background:
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.5) 0px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.1) 2px,
+        transparent 4px) no-repeat bottom center / 100% 4px;
+  }
+
+  /* ---- Warning: Amber pulse glow ----
+     A warm radial glow emanating from the center, plus an outer amber aura.
+     Says "think before proceeding" — warm and attention-drawing. */
   .btn-warning {
     @apply btn bg-amber-600 text-white hover:bg-amber-700
-           focus:ring-amber-500 shadow-sm hover:shadow-md hover:shadow-amber-500/20;
+           focus:ring-amber-500 shadow-sm;
   }
+  .btn-warning::after {
+    background:
+      radial-gradient(ellipse at center,
+        rgb(245 158 11 / 0.2) 0%,
+        rgb(245 158 11 / 0.05) 50%,
+        transparent 75%),
+      linear-gradient(to left, rgb(245 158 11 / 0.35) 0px, transparent 14px) no-repeat right,
+      linear-gradient(to right, rgb(245 158 11 / 0.2) 0px, transparent 10px) no-repeat left,
+      linear-gradient(to bottom, rgb(245 158 11 / 0.2) 0px, transparent 4px) no-repeat top,
+      linear-gradient(to top, rgb(245 158 11 / 0.2) 0px, transparent 4px) no-repeat bottom;
+  }
+  .btn-warning:hover::after {
+    opacity: 1;
+  }
+  .btn-warning:hover {
+    box-shadow: 0 0 12px rgb(245 158 11 / 0.2),
+                0 2px 8px rgb(245 158 11 / 0.12);
+  }
+  .btn-warning:active::after {
+    opacity: 1;
+    background:
+      radial-gradient(ellipse at center,
+        rgb(245 158 11 / 0.3) 0%,
+        rgb(245 158 11 / 0.08) 55%,
+        transparent 80%),
+      linear-gradient(to left, rgb(245 158 11 / 0.5) 0px, transparent 20px) no-repeat right,
+      linear-gradient(to right, rgb(245 158 11 / 0.35) 0px, transparent 14px) no-repeat left,
+      linear-gradient(to bottom, rgb(245 158 11 / 0.3) 0px, transparent 5px) no-repeat top,
+      linear-gradient(to top, rgb(245 158 11 / 0.3) 0px, transparent 5px) no-repeat bottom;
+  }
+  .btn-warning:active {
+    box-shadow: 0 0 20px rgb(245 158 11 / 0.28),
+                0 4px 14px rgb(245 158 11 / 0.18);
+  }
+
+  /* ---- Success: Green border sweep ----
+     An all-around green border that fades in on hover — a confirming
+     "all systems go" highlight. Uses stacked edge gradients for softness. */
   .btn-success {
     @apply btn bg-green-600 text-white hover:bg-green-700
-           focus:ring-green-500 shadow-sm hover:shadow-md hover:shadow-green-500/20;
+           focus:ring-green-500 shadow-sm;
   }
+  .btn-success::after {
+    background:
+      linear-gradient(to left, rgb(22 163 74 / 0.4) 0px, rgb(22 163 74 / 0.08) 3px, transparent 16px) no-repeat right,
+      linear-gradient(to right, rgb(22 163 74 / 0.3) 0px, rgb(22 163 74 / 0.06) 2px, transparent 12px) no-repeat left,
+      linear-gradient(to bottom, rgb(22 163 74 / 0.25) 0px, transparent 4px) no-repeat top,
+      linear-gradient(to top, rgb(22 163 74 / 0.25) 0px, transparent 4px) no-repeat bottom;
+  }
+  .btn-success:hover::after {
+    opacity: 1;
+  }
+  .btn-success:hover {
+    box-shadow: 0 0 10px rgb(22 163 74 / 0.15),
+                0 2px 8px rgb(22 163 74 / 0.1);
+  }
+  .btn-success:active::after {
+    opacity: 1;
+    background:
+      linear-gradient(to left, rgb(22 163 74 / 0.55) 0px, rgb(22 163 74 / 0.12) 4px, transparent 22px) no-repeat right,
+      linear-gradient(to right, rgb(22 163 74 / 0.4) 0px, rgb(22 163 74 / 0.08) 3px, transparent 16px) no-repeat left,
+      linear-gradient(to bottom, rgb(22 163 74 / 0.35) 0px, transparent 6px) no-repeat top,
+      linear-gradient(to top, rgb(22 163 74 / 0.35) 0px, transparent 6px) no-repeat bottom;
+  }
+  .btn-success:active {
+    box-shadow: 0 0 18px rgb(22 163 74 / 0.22),
+                0 4px 14px rgb(22 163 74 / 0.15);
+  }
+
+  /* Disabled state — suppress hover effects. */
   .btn:disabled,
   .btn[disabled] {
     @apply opacity-50 cursor-not-allowed pointer-events-none;
+  }
+  .btn:disabled::after,
+  .btn[disabled]::after {
+    display: none;
   }
 
   /* Button size variants */
@@ -130,12 +387,16 @@
   .btn-lg { @apply text-base px-6 py-3 rounded-lg; }
   .btn-icon { @apply !p-2 rounded-lg; }
 
-  /* Button group — joined buttons that act as a single control. */
+  /* Button group — joined buttons that act as a single control.
+     Suppress individual hover glow effects inside groups. */
   .btn-group {
     @apply inline-flex rounded-lg overflow-hidden border border-edge;
   }
   .btn-group .btn {
     @apply rounded-none border-0 shadow-none;
+  }
+  .btn-group .btn::after {
+    display: none;
   }
   .btn-group .btn + .btn {
     border-left: 1px solid rgb(255 255 255 / 0.15);
@@ -144,7 +405,7 @@
     border-left-color: var(--color-border);
   }
 
-  /* Loading button spinner */
+  /* Loading button spinner — suppress hover glow during loading. */
   .btn-loading {
     @apply relative pointer-events-none;
     color: transparent !important;
@@ -163,8 +424,101 @@
     border-color: rgb(0 0 0 / 0.15);
     border-top-color: var(--color-text-secondary);
   }
+  .btn-loading::after {
+    display: none;
+  }
   @keyframes btn-spin {
     to { transform: rotate(360deg); }
+  }
+
+  /* ---- Sidebar Nav Glow: Asymmetric Corner Bleed ----
+     Same visual language as btn-primary. Right edge strongest, bottom
+     heavier than top. Bottom-right corner heaviest, top-left lightest.
+     Uses ::before to avoid conflicting with icon-only tooltip ::after. */
+
+  .sidebar-nav-glow {
+    position: relative;
+    overflow: hidden;
+  }
+  .sidebar-nav-glow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.2s ease, background-size 0.25s ease;
+    pointer-events: none;
+    background:
+      /* Right edge — strongest */
+      linear-gradient(to left,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.45) 0px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.08) 3px,
+        transparent 18px) no-repeat right center / auto 100%,
+      /* Left edge — dimmer */
+      linear-gradient(to right,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.2) 0px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.04) 2px,
+        transparent 10px) no-repeat left center / auto 100%,
+      /* Top edge — shorter (3px) */
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.18) 0px,
+        transparent 3px) no-repeat top center / 100% 3px,
+      /* Bottom edge — longer (6px), heavier */
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 0px,
+        transparent 6px) no-repeat bottom center / 100% 6px,
+      /* Top-right corner */
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.2), transparent 4px) no-repeat top right / 25% 4px,
+      /* Bottom-right corner — heaviest */
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.3), transparent 6px) no-repeat bottom right / 40% 6px,
+      /* Top-left corner — lightest */
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.1), transparent 3px) no-repeat top left / 15% 3px,
+      /* Bottom-left corner */
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.2), transparent 5px) no-repeat bottom left / 30% 5px;
+  }
+  .sidebar-nav-glow:hover::before {
+    opacity: 1;
+  }
+  /* Active/pressed: full wrap — all corners expand to 100%. */
+  .sidebar-nav-glow:active::before,
+  .sidebar-nav-glow.btn-pressed::before {
+    opacity: 1;
+    background:
+      linear-gradient(to left,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.55) 0px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.12) 4px,
+        transparent 22px) no-repeat right center / auto 100%,
+      linear-gradient(to right,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.35) 0px,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.08) 3px,
+        transparent 14px) no-repeat left center / auto 100%,
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 0px,
+        transparent 5px) no-repeat top center / 100% 5px,
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.4) 0px,
+        transparent 8px) no-repeat bottom center / 100% 8px,
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.3), transparent 5px) no-repeat top right / 100% 5px,
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.4), transparent 8px) no-repeat bottom right / 100% 8px,
+      linear-gradient(to bottom,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.25), transparent 5px) no-repeat top left / 100% 5px,
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.35), transparent 7px) no-repeat bottom left / 100% 7px;
+    transition: opacity 0.2s ease, background-size 0.2s ease;
+  }
+  /* Active sidebar link: glow always visible. */
+  .sidebar-nav-glow.sidebar-nav-active-glow::before {
+    opacity: 0.7;
+  }
+  /* Suppress glow in icon-only mode (too narrow for the effect). */
+  .sidebar-icon-only .sidebar-nav-glow::before {
+    display: none;
   }
 
   /* ---- Hover Glow Concepts (Design Lab testing) ---- */
