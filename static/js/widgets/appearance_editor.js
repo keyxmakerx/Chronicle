@@ -572,6 +572,9 @@
           root.style.removeProperty('--color-accent');
           root.style.removeProperty('--color-accent-hover');
           root.style.removeProperty('--color-accent-light');
+          root.style.removeProperty('--color-accent-rgb');
+          root.style.removeProperty('--color-accent-hover-rgb');
+          root.style.removeProperty('--color-accent-light-rgb');
           return;
         }
         var r = parseInt(hex.slice(1, 3), 16);
@@ -590,6 +593,10 @@
         var lg = Math.max(0, Math.min(255, Math.round(g + (255 - g) * 0.6)));
         var lb = Math.max(0, Math.min(255, Math.round(b + (255 - b) * 0.6)));
         root.style.setProperty('--color-accent-light', '#' + toHex(lr) + toHex(lg) + toHex(lb));
+        // RGB triplets for Tailwind's color-accent utilities (bg-accent, text-accent, etc.)
+        root.style.setProperty('--color-accent-rgb', r + ' ' + g + ' ' + b);
+        root.style.setProperty('--color-accent-hover-rgb', hr + ' ' + hg + ' ' + hb);
+        root.style.setProperty('--color-accent-light-rgb', lr + ' ' + lg + ' ' + lb);
       }
 
       function toHex(n) {

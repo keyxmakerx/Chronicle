@@ -138,6 +138,8 @@ templ Sidebar() {
 				<span class="text-lg font-bold text-white tracking-tight truncate sidebar-hide-collapsed">
 					if InCampaign(ctx) && GetBrandName(ctx) != "" {
 						{ GetBrandName(ctx) }
+					} else if InCampaign(ctx) {
+						{ GetCampaignName(ctx) }
 					} else {
 						Chronicle
 					}
