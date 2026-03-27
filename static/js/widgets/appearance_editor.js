@@ -334,8 +334,8 @@
             pending--;
             if (pending <= 0) {
               saveBtn.disabled = false;
+              saveBtn.innerHTML = '<i class="fa-solid fa-check text-xs mr-1"></i> Save Changes';
               if (failed) {
-                saveBtn.innerHTML = '<i class="fa-solid fa-check text-xs mr-1"></i> Save Changes';
                 Chronicle.notify('Some changes failed to save', 'error');
               } else {
                 // Update saved state to match draft.
