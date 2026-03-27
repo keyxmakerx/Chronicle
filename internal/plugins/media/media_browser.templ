@@ -55,6 +55,8 @@ func mediaUsageLabel(t string) string {
 
 // campaignMediaContent renders the media browser body.
 templ campaignMediaContent(cc *campaigns.CampaignContext, data CampaignMediaPageData) {
+	<!-- Uploader script must be defined before Alpine processes x-data -->
+	@mediaUploaderScript()
 	<div class="max-w-6xl mx-auto py-6 px-4">
 		<!-- Header + upload zone -->
 		<div
@@ -189,9 +191,6 @@ templ campaignMediaContent(cc *campaigns.CampaignContext, data CampaignMediaPage
 			}
 		}
 	</div>
-
-	<!-- Inline uploader script -->
-	@mediaUploaderScript()
 }
 
 // mediaCard renders a single media file in the grid view.
