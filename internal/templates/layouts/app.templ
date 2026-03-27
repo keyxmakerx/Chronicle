@@ -1029,7 +1029,7 @@ templ Topbar() {
 		<!-- Center: Customizable content area (quick-links, quote, or empty) -->
 		if InCampaign(ctx) {
 			<div id="topbar-content" class="flex-1 flex items-center justify-center min-w-0 overflow-hidden transition-all duration-200">
-				<!-- Topbar custom content renders here (Step 5) -->
+				@topbarCenterContent(ctx)
 			</div>
 
 			<!-- Inline search bar (hidden by default, shown when search is active) -->
@@ -1211,6 +1211,32 @@ func isPathPrefix(ctx context.Context, prefix string) bool {
 // an external-link icon.
 func isExternalURL(url string) bool {
 	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
+}
+
+// topbarCenterContent renders the customizable center area of the topbar.
+// Supports quick-link buttons and quote/message text, configured by the owner.
+templ topbarCenterContent(ctx context.Context) {
+	if tc := GetTopbarContent(ctx); tc != nil {
+		if tc.Mode == "links" && len(tc.Links) > 0 {
+			<div class="flex items-center gap-1.5 flex-wrap justify-center">
+				for _, link := range tc.Links {
+					<a
+						href={ templ.SafeURL(link.URL) }
+						class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-fg-secondary hover:text-fg hover:bg-surface-alt transition-colors whitespace-nowrap"
+					>
+						if link.Icon != "" {
+							<i class={ "fa-solid " + link.Icon, "text-[10px]" }></i>
+						}
+						{ link.Label }
+					</a>
+				}
+			</div>
+		} else if tc.Mode == "quote" && tc.Quote != "" {
+			<div class="text-xs text-fg-muted italic truncate px-4 max-w-md text-center">
+				{ tc.Quote }
+			</div>
+		}
+	}
 }
 
 // topbarInlineStyle generates inline CSS for the topbar based on campaign
