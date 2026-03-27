@@ -62,15 +62,20 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 - **Checklists** — Quick checklist blocks within notes
 
 ### REST API
-- **API v1** — Full CRUD for entities, calendar, events, maps, drawings, tokens, layers, fog, and media
-- **API Key Auth** — Per-campaign API keys with read/write/sync permissions
+- **API v1** — Full CRUD for entities, entity types, tags, relations, calendar, events, maps, drawings, tokens, layers, fog, media, and notes
+- **API Key Auth** — Per-campaign API keys with read/write/sync permissions and device fingerprint binding
+- **Addon Discovery** — External tools can detect which features are enabled per campaign
+- **Bulk Operations** — Bulk tag assignment and entity type reassignment (up to 200 per request)
 - **Sync Protocol** — Sync mappings, WebSocket real-time events, and bidirectional Foundry VTT integration
 
 ### Admin & Security
+- **Startup Health Checks** — Automatic migration validation, schema verification, DB connectivity checks, and security audit on every server start
+- **Pre-Migration Backups** — Optional mysqldump with gzip before schema changes, with automatic rotation
 - **User Management** — Admin dashboard for users, campaigns, storage, and security
 - **Audit Logging** — Full activity trail for all campaign mutations
 - **Rate Limiting** — Per-route rate limits on auth and upload endpoints
 - **Session Security** — Redis-backed sessions with force-logout and session termination
+- **Database TLS** — Configurable TLS encryption for database connections (`DB_TLS_MODE`)
 - **IDOR Protection** — Campaign-scoped access checks on every route
 - **Argon2id** — Password hashing with modern algorithm
 
@@ -89,15 +94,16 @@ Replace `your-chronicle-instance.com` with your Chronicle server's URL. Chronicl
 
 Supports [Calendaria](https://foundryvtt.com/packages/calendaria) and [Simple Calendar](https://foundryvtt.com/packages/foundryvtt-simple-calendar) for calendar sync.
 
-## Planned Features
+## Recently Shipped
 
-- Per-entity permissions (view/edit per role)
-- Relations graph visualization
-- Editor tables
-- Game system modules (D&D 5e SRD, Pathfinder 2e, Draw Steel)
-- Campaign export/import
-- Auto-linking (entity name detection in editor)
-- Shop entity type with inventory management
+- Per-entity permissions (view/edit per role, per user, per group)
+- Relations graph visualization (D3.js force-directed with filtering)
+- Editor tables, code blocks with syntax highlighting, find & replace
+- Game system modules (Draw Steel with statblock widget and reference tooltips)
+- Campaign export/import (JSON bundle with full data round-trip)
+- Auto-linking (entity name detection in editor with Ctrl+Shift+L)
+- Shop entity type with inventory management and transaction log
+- Community Bestiary (instance-scoped creature sharing with ratings and moderation)
 
 See [.ai/todo.md](.ai/todo.md) for the full backlog.
 
