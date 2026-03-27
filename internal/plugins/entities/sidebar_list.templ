@@ -59,7 +59,7 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, cc *ca
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
 					class={
-						"sidebar-tree-item flex items-center mx-2 px-2.5 py-1.5 rounded-md text-sm transition-all text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active group",
+						"sidebar-nav-glow sidebar-tree-item flex items-center mx-2 px-2.5 py-1.5 rounded-md text-sm transition-all text-sidebar-text hover:text-sidebar-active group",
 						templ.KV("opacity-40", hiddenIDs[entity.ID]),
 					}
 					data-entity-id={ entity.ID }

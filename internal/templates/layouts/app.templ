@@ -84,14 +84,16 @@ templ App(title string) {
 
 // sidebarNavLink is the CSS class set for sidebar navigation links.
 // Includes a transparent left border so active/inactive items align.
-var sidebarNavLink = "flex items-center pl-3.5 pr-4 py-2 text-sm transition-colors group border-l-2 border-transparent"
+// sidebar-nav-glow provides the asymmetric hover effect (no other hover bg needed).
+var sidebarNavLink = "sidebar-nav-glow flex items-center pl-3.5 pr-4 py-2 text-sm transition-colors group border-l-2 border-transparent"
 
 // sidebarNavActive is appended for the currently active navigation link.
 // Uses the campaign accent color for the left-border indicator.
-var sidebarNavActive = "bg-sidebar-hover text-sidebar-active border-accent"
+var sidebarNavActive = "sidebar-nav-active text-sidebar-active border-accent"
 
 // sidebarNavInactive is the default state for non-active navigation links.
-var sidebarNavInactive = "text-sidebar-text hover:bg-accent/[0.08] hover:text-sidebar-active"
+// No hover:bg — the sidebar-nav-glow ::before handles the hover visual.
+var sidebarNavInactive = "text-sidebar-text hover:text-sidebar-active"
 
 // Sidebar renders the left navigation bar with drill-down support. Organized
 // into distinct zones so that global nav, manage, and admin sections remain

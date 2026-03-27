@@ -166,6 +166,66 @@
     to { transform: rotate(360deg); }
   }
 
+  /* ---- Sidebar Nav Glow ----
+     Asymmetric accent glow on sidebar nav items. Right edge strongest,
+     bottom heavier. This is the ONLY hover effect — no competing hover:bg.
+     Uses ::before to avoid conflicting with icon-only tooltip ::after. */
+  .sidebar-nav-glow {
+    position: relative;
+    overflow: hidden;
+  }
+  .sidebar-nav-glow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    background:
+      /* Right edge — strongest, soft fade inward */
+      linear-gradient(to left,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.12) 0px,
+        transparent 40%) no-repeat right center / auto 100%,
+      /* Bottom edge — subtle ground line */
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.08) 0px,
+        transparent 3px) no-repeat bottom center / 100% 3px;
+  }
+  .sidebar-nav-glow:hover::before {
+    opacity: 1;
+  }
+  .sidebar-nav-glow:active::before {
+    opacity: 1;
+    background:
+      linear-gradient(to left,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.18) 0px,
+        transparent 50%) no-repeat right center / auto 100%,
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.12) 0px,
+        transparent 4px) no-repeat bottom center / 100% 4px;
+  }
+  /* Active nav link — persistent subtle glow. */
+  .sidebar-nav-active::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0.6;
+    background:
+      linear-gradient(to left,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.15) 0px,
+        transparent 45%) no-repeat right center / auto 100%,
+      linear-gradient(to top,
+        rgb(var(--color-accent-rgb, 99 102 241) / 0.1) 0px,
+        transparent 3px) no-repeat bottom center / 100% 3px;
+  }
+  /* Suppress glow in icon-only mode (too narrow). */
+  .sidebar-icon-only .sidebar-nav-glow::before {
+    display: none;
+  }
+
   /* ---- Hover Glow Concepts (Design Lab testing) ---- */
   /* 5 variations of the right-edge accent illumination for nav items.
      Each uses ::after for the glow and transitions for click expansion.
