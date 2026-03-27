@@ -230,6 +230,15 @@ Chronicle.register('notes', {
       setTimeout(function () { if (quickInput) quickInput.focus(); }, 100);
     });
 
+    // Expose global toggle for the topbar notes button.
+    Chronicle.toggleNotes = function () {
+      if (state.open) {
+        closeBtn.click();
+      } else {
+        fab.click();
+      }
+    };
+
     closeBtn.addEventListener('click', function () {
       state.open = false;
       panel.classList.add('notes-panel-hidden');
