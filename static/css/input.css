@@ -87,7 +87,7 @@
 @layer components {
   /* ---- Buttons ---- */
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-xl font-medium
            text-sm transition-all duration-200 cursor-pointer
            focus:outline-none focus:ring-2 focus:ring-offset-2
            active:scale-[0.98];
@@ -113,8 +113,8 @@
      On click (.btn-pressed), animates to full wrap-around border
      that lingers 300ms after release before fading back. */
   .btn-primary {
-    @apply btn bg-accent text-white hover:bg-accent-hover
-           focus:ring-accent shadow-sm;
+    @apply btn bg-accent text-white
+           focus:ring-accent;
   }
   .btn-primary::after {
     background:
@@ -202,7 +202,7 @@
      A faint neutral ring glow that brightens the border on hover.
      Restrained and utility-like. */
   .btn-secondary {
-    @apply btn bg-surface text-fg-body hover:bg-surface-alt
+    @apply btn bg-surface text-fg-body
            border border-edge focus:ring-gray-400;
   }
   .btn-secondary::after {
@@ -237,8 +237,8 @@
      A warning aura that bleeds red around all edges on hover.
      Communicates "caution" — the red glows outward. */
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700
-           focus:ring-red-500 shadow-sm;
+    @apply btn bg-red-600 text-white
+           focus:ring-red-500;
   }
   .btn-danger::after {
     background:
@@ -271,7 +271,7 @@
      A subtle bottom-edge accent line slides in on hover, with a very faint
      fill. Minimal and text-link-like, matching ghost's invisible intent. */
   .btn-ghost {
-    @apply btn bg-transparent text-fg-secondary hover:bg-surface-alt
+    @apply btn bg-transparent text-fg-secondary
            border-none;
   }
   .btn-ghost::after {
@@ -299,8 +299,8 @@
      A warm radial glow emanating from the center, plus an outer amber aura.
      Says "think before proceeding" — warm and attention-drawing. */
   .btn-warning {
-    @apply btn bg-amber-600 text-white hover:bg-amber-700
-           focus:ring-amber-500 shadow-sm;
+    @apply btn bg-amber-600 text-white
+           focus:ring-amber-500;
   }
   .btn-warning::after {
     background:
@@ -341,8 +341,8 @@
      An all-around green border that fades in on hover — a confirming
      "all systems go" highlight. Uses stacked edge gradients for softness. */
   .btn-success {
-    @apply btn bg-green-600 text-white hover:bg-green-700
-           focus:ring-green-500 shadow-sm;
+    @apply btn bg-green-600 text-white
+           focus:ring-green-500;
   }
   .btn-success::after {
     background:
@@ -382,10 +382,10 @@
   }
 
   /* Button size variants */
-  .btn-xs { @apply text-xs px-2 py-1 rounded-md; }
-  .btn-sm { @apply text-xs px-3 py-1.5 rounded-md; }
-  .btn-lg { @apply text-base px-6 py-3 rounded-lg; }
-  .btn-icon { @apply !p-2 rounded-lg; }
+  .btn-xs { @apply text-xs px-2 py-1 rounded-lg; }
+  .btn-sm { @apply text-xs px-3 py-1.5 rounded-lg; }
+  .btn-lg { @apply text-base px-6 py-3 rounded-2xl; }
+  .btn-icon { @apply !p-2 rounded-xl; }
 
   /* Button group — joined buttons that act as a single control.
      Suppress individual hover glow effects inside groups. */
