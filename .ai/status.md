@@ -8,7 +8,55 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-26 -- **Nav Bar Deep Dive + Sync API Expansion.**
+2026-03-27 -- **Topbar Redesign + Bug Fix Marathon + Security Audit.**
+
+65. **Topbar Redesign + Bug Fix Marathon + Security Audit (33 items).**
+
+    **Bug Fixes (16):**
+    - **Campaign Scan mismatch** — 3 `Scan` calls in `campaigns/repository.go` were missing `ArchivedAt`/`JoinCode` columns, causing row scan errors.
+    - **Startup smoke tests** — New `SmokeTest` type + `campaigns/smoketest.go` for startup validation.
+    - **Button CSS** — Integrated into `input.css`, reverted to original styles after glow issues.
+    - **Sidebar nav glow** — Right-edge line on hover, animated border wrap on click.
+    - **Accent color CSS** — `templ.Raw()` fix for style injection (was the real root cause of accent color not applying).
+    - **Accent color JS** — RGB vars in `applyAccentToPage()` for correct CSS custom property propagation.
+    - **Alpine.js load order** — Reordered scripts so `boot.js` loads before Alpine, preventing race conditions.
+    - **Media 404s** — `normalizeMediaID()` extracts UUID from path-format fileIDs (e.g., `/media/uuid.ext` → `uuid`).
+    - **Chronicle.toast to Chronicle.notify** — Fixed stale API call in `media_browser.templ`.
+    - **Media uploader script order** — Moved `<script>` before `x-data` element to prevent Alpine init errors.
+    - **Save button stuck** — `innerHTML` reset moved before success/failure branch so button always re-enables.
+    - **Sidebar drill reset** — Server-side `SetActivePath` override in entity handler + `LayoutInjector` check to fix stale drill state on navigation.
+    - **Device fingerprint race** — Atomic binding with `WHERE device_fingerprint IS NULL` prevents concurrent requests from clobbering fingerprint.
+    - **DB TLS support** — `DB_TLS_MODE` env var + health check warning when TLS disabled in production.
+    - **Layout studio style escaping** — `Chronicle.escapeAttr()` for colors/icons to prevent XSS in style attributes.
+    - **Hardcoded URLs removed** — `GITHUB_ORG` env var, generic placeholders replace hardcoded GitHub URLs.
+
+    **New Features — Sync API (4):**
+    - **15 new REST API endpoints** — Tags CRUD, addon discovery, relation types/CRUD, entity type create/update, bulk entity type reassignment.
+    - **New `tag_api_handler.go`** — `TagAPIHandler` with 6 tag endpoints (list, create, update, delete, set entity tags, bulk assign).
+    - **`BulkUpdateType` service method** — Reassigns up to 200 entities to a new type with event publishing. `UpdateEntityType` repo method.
+    - **`AddonLister` interface** — Addon discovery endpoint listing all addons with enabled/installed state.
+
+    **New Features — Topbar Redesign (7 steps):**
+    - **Step 1: Compact topbar layout** — `h-14`, user avatar dropdown, icon row replacing text links.
+    - **Step 2: Inline topbar search** — Magnifying glass icon, slide-up animation, live results dropdown.
+    - **Step 3: Notes icon in topbar** — Replaces floating FAB for quick note access.
+    - **Step 4: TopbarContent data model** — `PUT /topbar-content` API for storing custom topbar center content.
+    - **Step 5: Quick-links and quote rendering** — Topbar center area shows campaign-configured links and rotating quotes.
+    - **Step 6: Dedicated search page** — Full `/campaigns/:id/search` page with live filtering, entity type tabs, sort controls.
+    - **Step 7: Topbar content editor** — Appearance settings panel for configuring topbar center content (links/quotes).
+
+    **Infrastructure (4):**
+    - **Startup health checks** — New `internal/database/healthcheck.go` (372 lines). Migration version validation (v18), critical column verification, DB connectivity + pool stats, security audit, pre-migration backup with mysqldump + gzip + rotation. Wired in `cmd/server/main.go`.
+    - **CI workflow_dispatch trigger** — Manual Docker builds via GitHub Actions.
+    - **templ upgraded to v0.3.1001.**
+    - **Campaign name as default sidebar brand** — Replaces "Chronicle" text when no custom brand is set.
+
+    **Security Audit (1):**
+    - **Full 3-agent security audit** — Go backend, JS/templates, infrastructure. No critical vulnerabilities found.
+
+    **Documentation — ADRs (2):**
+    - **ADR-033: Startup Health Check System.**
+    - **ADR-034: Asymmetric Corner Bleed CSS Effect System.**
 
 64. **Nav Bar Deep Dive + Sync API Expansion (9 items).**
     - **Button Restyle** — Replaced all button hover/click effects with asymmetric corner bleed glow in `buttons.css`. Right/bottom edges stronger, bottom-right heaviest. Click state expands corners to 100% (full wrap). `.btn-pressed` class in `boot.js` lingers 300ms after mouseup. Applied to btn-primary, btn-ghost (underline reveal), btn-secondary (gray shimmer), btn-danger (red glow), btn-warning (radial pulse), btn-success (green sweep).

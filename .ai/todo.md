@@ -66,6 +66,19 @@ Known broken or missing things, ordered by severity.
 - [x] **SMTP diagnostics insufficient** — Added step-by-step logging and actionable error messages to TestConnection.
 - [x] **Email change feature** — Full email change with password verification, verification link to new email, session invalidation on confirm. Migration 000056.
 - [x] **SMTP test should ask which email** — Added SendTestEmail endpoint with recipient input field and actionable error wrapping.
+- [x] **Campaign Scan mismatch** — 3 `Scan` calls in `campaigns/repository.go` missing `ArchivedAt`/`JoinCode`, causing row scan errors.
+- [x] **Media 404s on path-format fileIDs** — `normalizeMediaID()` extracts UUID from path-format fileIDs (e.g., `/media/uuid.ext` → `uuid`).
+- [x] **Alpine.js load order race** — Reordered scripts so `boot.js` loads before Alpine, preventing undefined `Chronicle` references.
+- [x] **Accent color CSS not applying** — `templ.Raw()` fix for inline style injection; was the root cause of accent color failures.
+- [x] **Accent color JS RGB vars** — `applyAccentToPage()` now sets RGB CSS custom properties for opacity utilities.
+- [x] **Device fingerprint race condition** — Atomic binding with `WHERE device_fingerprint IS NULL` prevents concurrent clobbering.
+- [x] **DB TLS support missing** — Added `DB_TLS_MODE` env var + health check warning when TLS disabled in production.
+- [x] **Layout studio style escaping** — `Chronicle.escapeAttr()` for colors/icons in style attributes.
+- [x] **Media uploader script order** — Moved `<script>` before `x-data` element to prevent Alpine init errors.
+- [x] **Save button stuck after save** — `innerHTML` reset moved before success/failure branch so button always re-enables.
+- [x] **Sidebar drill reset on navigation** — Server-side `SetActivePath` override in entity handler + `LayoutInjector` check.
+- [x] **Chronicle.toast stale API** — Replaced `Chronicle.toast` with `Chronicle.notify` in `media_browser.templ`.
+- [x] **Hardcoded GitHub URLs** — `GITHUB_ORG` env var, generic placeholders replace hardcoded URLs.
 
 ### Low (Original)
 
@@ -212,6 +225,7 @@ _Quick capture, backlinks, enhanced graph, editor power-ups. See `.ai/obsidian-n
 
 - [x] **Sprint W-0: Nav Menu Reorg Mode** — Small icon button near Dashboard in sidebar. Click to enter reorg mode for current level (categories or entities). Category level: drag to reorder category icons. Entity level: drag to reorder, create folders/submenus. Click again to exit reorg mode. Must work on desktop, tablet, and mobile. Button is context-aware: on base nav, reorders categories; drilled into a category, reorders entities.
 - [x] **Sprint W-0.5: Owner Visual Customization** — Change "Chronicle" brand name per-campaign with optional image/logo. Top bar color/gradient/animation/background image (responsive). Visual customization editor with faux site outline (editable boxes for colors/backgrounds). Appearance-only, not layout editing. Accent color CSS variable now propagates to all Tailwind utilities via `var(--color-accent)` references. Auto-computed hover/light variants.
+- [x] **Sprint W-0.75: Topbar Redesign** — 7-step redesign: compact h-14 layout with user avatar dropdown and icon row, inline search with magnifying glass + slide-up + live results, notes icon replacing floating FAB, TopbarContent data model + PUT API, quick-links and quote rendering in center area, dedicated `/campaigns/:id/search` page with live filtering and entity type tabs, topbar content editor in Appearance settings.
 - [x] **Sprint W-1: Command Palette & Saved Filters** — Command palette done: `static/js/command_palette.js` (~280 lines) with Ctrl+Shift+P trigger, context-aware commands (campaign navigation, actions, universal), fuzzy substring matching, keyboard navigation, `Chronicle.openCommandPalette()`/`closeCommandPalette()` API. Added to `base.templ` and `shortcuts_help.js`. Saved filter presets done in Sprint N-8 (`saved_filters` table, CRUD API, sidebar_tag_filter.js preset UI).
 - [ ] **Sprint W-2: Map Drawing Tools, Regions & Measurement** — Leaflet.Draw integration (freehand, polygons, circles, rectangles, text). Uses existing `map_drawings` table. Per-drawing visibility, color/opacity. Also: map regions (polygon fills/strokes/labels), measurement/distance tool, map embed layout block for entity pages.
 - [ ] **Sprint W-2.5: Nested / Linked Maps** — Click marker to open sub-map. `linked_map_id` on markers. Breadcrumb navigation between map levels. Competitive gap vs World Anvil/LegendKeeper.
