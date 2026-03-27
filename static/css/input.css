@@ -89,7 +89,7 @@
   .btn {
     @apply inline-flex items-center justify-center px-4 py-2 rounded-xl font-medium
            text-sm transition-all duration-200 cursor-pointer
-           focus:outline-none focus:ring-2 focus:ring-offset-2
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
            active:scale-[0.98];
     position: relative;
     overflow: hidden;
@@ -114,7 +114,7 @@
      that lingers 300ms after release before fading back. */
   .btn-primary {
     @apply btn bg-accent text-white
-           focus:ring-accent;
+           focus-visible:ring-accent;
   }
   .btn-primary::after {
     background:
@@ -194,7 +194,7 @@
      Restrained and utility-like. */
   .btn-secondary {
     @apply btn bg-surface text-fg-body
-           border border-edge focus:ring-gray-400;
+           border border-edge focus-visible:ring-gray-400;
   }
   .btn-secondary::after {
     background:
@@ -220,7 +220,7 @@
      Communicates "caution" — the red glows outward. */
   .btn-danger {
     @apply btn bg-red-600 text-white
-           focus:ring-red-500;
+           focus-visible:ring-red-500;
   }
   .btn-danger::after {
     background:
@@ -274,7 +274,7 @@
      Says "think before proceeding" — warm and attention-drawing. */
   .btn-warning {
     @apply btn bg-amber-600 text-white
-           focus:ring-amber-500;
+           focus-visible:ring-amber-500;
   }
   .btn-warning::after {
     background:
@@ -308,7 +308,7 @@
      "all systems go" highlight. Uses stacked edge gradients for softness. */
   .btn-success {
     @apply btn bg-green-600 text-white
-           focus:ring-green-500;
+           focus-visible:ring-green-500;
   }
   .btn-success::after {
     background:
