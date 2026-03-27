@@ -91,252 +91,59 @@
            text-sm transition-all duration-200 cursor-pointer
            focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
            active:scale-[0.98];
-    position: relative;
-    overflow: hidden;
   }
 
-  /* Shared ::after base for hover glow effects on all button types.
-     Each variant overrides the background property for its own look. */
-  .btn::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    opacity: 0;
-    transition: opacity 0.2s ease, background-size 0.25s ease;
-    pointer-events: none;
-  }
-
-  /* ---- Primary: Asymmetric corner bleed → full-wrap on click ----
-     Bottom-heavy glow on hover: bottom edge ~8px, top ~4px.
-     Bottom-right corner heaviest, top-left lightest.
-     On click (.btn-pressed), animates to full wrap-around border
-     that lingers 300ms after release before fading back. */
+  /* ---- Primary ---- */
   .btn-primary {
-    @apply btn bg-accent text-white
+    @apply btn bg-accent text-white shadow-sm
+           hover:brightness-110 hover:shadow-md hover:shadow-accent/20
+           active:brightness-95
            focus-visible:ring-accent;
   }
-  .btn-primary::after {
-    background:
-      /* Right edge — strongest */
-      linear-gradient(to left,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.55) 0px,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.1) 3px,
-        transparent 22px) no-repeat right center / auto 100%,
-      /* Left edge — dimmer mirror */
-      linear-gradient(to right,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.3) 0px,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.06) 2px,
-        transparent 14px) no-repeat left center / auto 100%,
-      /* Top edge — shorter (4px) */
-      linear-gradient(to bottom,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.25) 0px,
-        transparent 4px) no-repeat top center / 100% 4px,
-      /* Bottom edge — longer (8px), heavier */
-      linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.4) 0px,
-        transparent 8px) no-repeat bottom center / 100% 8px,
-      /* Top-right corner bleed */
-      linear-gradient(to bottom,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.25), transparent 5px) no-repeat top right / 30% 5px,
-      /* Bottom-right corner bleed — heaviest */
-      linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.38), transparent 8px) no-repeat bottom right / 50% 8px,
-      /* Top-left corner bleed — lightest */
-      linear-gradient(to bottom,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.15), transparent 4px) no-repeat top left / 20% 4px,
-      /* Bottom-left corner bleed */
-      linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.28), transparent 7px) no-repeat bottom left / 35% 7px;
-    transition: opacity 0.2s ease, background-size 0.25s ease;
-  }
-  .btn-primary:hover::after {
-    opacity: 1;
-  }
-  /* Click state: full wrap-around — corners expand to 100%, edges intensify.
-     .btn-pressed is toggled by JS with 300ms linger after mouseup. */
-  .btn-primary:active::after,
-  .btn-primary.btn-pressed::after {
-    opacity: 1;
-    background:
-      /* Right edge — intensified */
-      linear-gradient(to left,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.7) 0px,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.15) 4px,
-        transparent 28px) no-repeat right center / auto 100%,
-      /* Left edge — intensified */
-      linear-gradient(to right,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.45) 0px,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.1) 3px,
-        transparent 18px) no-repeat left center / auto 100%,
-      /* Top edge — expanded to 6px */
-      linear-gradient(to bottom,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.4) 0px,
-        transparent 6px) no-repeat top center / 100% 6px,
-      /* Bottom edge — expanded to 10px */
-      linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.5) 0px,
-        transparent 10px) no-repeat bottom center / 100% 10px,
-      /* All corners expand to 100% — full wrap */
-      linear-gradient(to bottom,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.4), transparent 7px) no-repeat top right / 100% 7px,
-      linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.5), transparent 10px) no-repeat bottom right / 100% 10px,
-      linear-gradient(to bottom,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.3), transparent 6px) no-repeat top left / 100% 6px,
-      linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.4), transparent 9px) no-repeat bottom left / 100% 9px;
-    transition: opacity 0.2s ease, background-size 0.2s ease;
-  }
 
-  /* ---- Secondary: Edge shimmer ----
-     A faint neutral ring glow that brightens the border on hover.
-     Restrained and utility-like. */
+  /* ---- Secondary ---- */
   .btn-secondary {
-    @apply btn bg-surface text-fg-body
-           border border-edge focus-visible:ring-gray-400;
-  }
-  .btn-secondary::after {
-    background:
-      linear-gradient(to left, rgb(156 163 175 / 0.15) 0px, transparent 12px) no-repeat right,
-      linear-gradient(to right, rgb(156 163 175 / 0.1) 0px, transparent 10px) no-repeat left,
-      linear-gradient(to bottom, rgb(156 163 175 / 0.1) 0px, transparent 4px) no-repeat top,
-      linear-gradient(to top, rgb(156 163 175 / 0.1) 0px, transparent 4px) no-repeat bottom;
-  }
-  .btn-secondary:hover::after {
-    opacity: 1;
-  }
-  .btn-secondary:active::after {
-    opacity: 1;
-    background:
-      linear-gradient(to left, rgb(156 163 175 / 0.22) 0px, transparent 16px) no-repeat right,
-      linear-gradient(to right, rgb(156 163 175 / 0.18) 0px, transparent 14px) no-repeat left,
-      linear-gradient(to bottom, rgb(156 163 175 / 0.15) 0px, transparent 5px) no-repeat top,
-      linear-gradient(to top, rgb(156 163 175 / 0.15) 0px, transparent 5px) no-repeat bottom;
+    @apply btn bg-surface text-fg-body border border-edge
+           hover:bg-surface-alt hover:border-gray-400/30
+           active:bg-surface
+           focus-visible:ring-gray-400;
   }
 
-  /* ---- Danger: Red edge bleed ----
-     A warning aura that bleeds red around all edges on hover.
-     Communicates "caution" — the red glows outward. */
+  /* ---- Danger ---- */
   .btn-danger {
-    @apply btn bg-red-600 text-white
+    @apply btn bg-red-600 text-white shadow-sm
+           hover:bg-red-700 hover:shadow-md hover:shadow-red-500/20
+           active:bg-red-800
            focus-visible:ring-red-500;
   }
-  .btn-danger::after {
-    background:
-      linear-gradient(to left, rgb(239 68 68 / 0.45) 0px, rgb(239 68 68 / 0.08) 3px, transparent 18px) no-repeat right,
-      linear-gradient(to right, rgb(239 68 68 / 0.25) 0px, rgb(239 68 68 / 0.05) 2px, transparent 12px) no-repeat left,
-      linear-gradient(to bottom, rgb(239 68 68 / 0.25) 0px, transparent 5px) no-repeat top,
-      linear-gradient(to top, rgb(239 68 68 / 0.25) 0px, transparent 5px) no-repeat bottom;
-  }
-  .btn-danger:hover::after {
-    opacity: 1;
-  }
-  .btn-danger:active::after {
-    opacity: 1;
-    background:
-      linear-gradient(to left, rgb(239 68 68 / 0.6) 0px, rgb(239 68 68 / 0.12) 4px, transparent 24px) no-repeat right,
-      linear-gradient(to right, rgb(239 68 68 / 0.4) 0px, rgb(239 68 68 / 0.08) 3px, transparent 16px) no-repeat left,
-      linear-gradient(to bottom, rgb(239 68 68 / 0.35) 0px, transparent 6px) no-repeat top,
-      linear-gradient(to top, rgb(239 68 68 / 0.35) 0px, transparent 6px) no-repeat bottom;
-  }
 
-  /* ---- Ghost: Underline reveal ----
-     A subtle bottom-edge accent line slides in on hover, with a very faint
-     fill. Minimal and text-link-like, matching ghost's invisible intent. */
+  /* ---- Ghost ---- */
   .btn-ghost {
-    @apply btn bg-transparent text-fg-secondary
-           border-none;
-  }
-  .btn-ghost::after {
-    background:
-      linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.35) 0px,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.08) 2px,
-        transparent 3px) no-repeat bottom center / 0% 3px;
-    transition: opacity 0.2s ease, background-size 0.25s ease;
-  }
-  .btn-ghost:hover::after {
-    opacity: 1;
-    background-size: 80% 3px;
-  }
-  .btn-ghost:active::after {
-    opacity: 1;
-    background:
-      linear-gradient(to top,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.5) 0px,
-        rgb(var(--color-accent-rgb, 99 102 241) / 0.1) 2px,
-        transparent 4px) no-repeat bottom center / 100% 4px;
+    @apply btn bg-transparent text-fg-secondary border-none
+           hover:bg-surface-alt hover:text-fg-body
+           active:bg-surface;
   }
 
-  /* ---- Warning: Amber pulse glow ----
-     A warm radial glow emanating from the center, plus an outer amber aura.
-     Says "think before proceeding" — warm and attention-drawing. */
+  /* ---- Warning ---- */
   .btn-warning {
-    @apply btn bg-amber-600 text-white
+    @apply btn bg-amber-600 text-white shadow-sm
+           hover:bg-amber-700 hover:shadow-md hover:shadow-amber-500/20
+           active:bg-amber-800
            focus-visible:ring-amber-500;
   }
-  .btn-warning::after {
-    background:
-      radial-gradient(ellipse at center,
-        rgb(245 158 11 / 0.2) 0%,
-        rgb(245 158 11 / 0.05) 50%,
-        transparent 75%),
-      linear-gradient(to left, rgb(245 158 11 / 0.35) 0px, transparent 14px) no-repeat right,
-      linear-gradient(to right, rgb(245 158 11 / 0.2) 0px, transparent 10px) no-repeat left,
-      linear-gradient(to bottom, rgb(245 158 11 / 0.2) 0px, transparent 4px) no-repeat top,
-      linear-gradient(to top, rgb(245 158 11 / 0.2) 0px, transparent 4px) no-repeat bottom;
-  }
-  .btn-warning:hover::after {
-    opacity: 1;
-  }
-  .btn-warning:active::after {
-    opacity: 1;
-    background:
-      radial-gradient(ellipse at center,
-        rgb(245 158 11 / 0.3) 0%,
-        rgb(245 158 11 / 0.08) 55%,
-        transparent 80%),
-      linear-gradient(to left, rgb(245 158 11 / 0.5) 0px, transparent 20px) no-repeat right,
-      linear-gradient(to right, rgb(245 158 11 / 0.35) 0px, transparent 14px) no-repeat left,
-      linear-gradient(to bottom, rgb(245 158 11 / 0.3) 0px, transparent 5px) no-repeat top,
-      linear-gradient(to top, rgb(245 158 11 / 0.3) 0px, transparent 5px) no-repeat bottom;
-  }
 
-  /* ---- Success: Green border sweep ----
-     An all-around green border that fades in on hover — a confirming
-     "all systems go" highlight. Uses stacked edge gradients for softness. */
+  /* ---- Success ---- */
   .btn-success {
-    @apply btn bg-green-600 text-white
+    @apply btn bg-green-600 text-white shadow-sm
+           hover:bg-green-700 hover:shadow-md hover:shadow-green-500/20
+           active:bg-green-800
            focus-visible:ring-green-500;
   }
-  .btn-success::after {
-    background:
-      linear-gradient(to left, rgb(22 163 74 / 0.4) 0px, rgb(22 163 74 / 0.08) 3px, transparent 16px) no-repeat right,
-      linear-gradient(to right, rgb(22 163 74 / 0.3) 0px, rgb(22 163 74 / 0.06) 2px, transparent 12px) no-repeat left,
-      linear-gradient(to bottom, rgb(22 163 74 / 0.25) 0px, transparent 4px) no-repeat top,
-      linear-gradient(to top, rgb(22 163 74 / 0.25) 0px, transparent 4px) no-repeat bottom;
-  }
-  .btn-success:hover::after {
-    opacity: 1;
-  }
-  .btn-success:active::after {
-    opacity: 1;
-    background:
-      linear-gradient(to left, rgb(22 163 74 / 0.55) 0px, rgb(22 163 74 / 0.12) 4px, transparent 22px) no-repeat right,
-      linear-gradient(to right, rgb(22 163 74 / 0.4) 0px, rgb(22 163 74 / 0.08) 3px, transparent 16px) no-repeat left,
-      linear-gradient(to bottom, rgb(22 163 74 / 0.35) 0px, transparent 6px) no-repeat top,
-      linear-gradient(to top, rgb(22 163 74 / 0.35) 0px, transparent 6px) no-repeat bottom;
-  }
 
-  /* Disabled state — suppress hover effects. */
+  /* Disabled state */
   .btn:disabled,
   .btn[disabled] {
     @apply opacity-50 cursor-not-allowed pointer-events-none;
-  }
-  .btn:disabled::after,
-  .btn[disabled]::after {
-    display: none;
   }
 
   /* Button size variants */
@@ -345,16 +152,12 @@
   .btn-lg { @apply text-base px-6 py-3 rounded-2xl; }
   .btn-icon { @apply !p-2 rounded-xl; }
 
-  /* Button group — joined buttons that act as a single control.
-     Suppress individual hover glow effects inside groups. */
+  /* Button group — joined buttons that act as a single control. */
   .btn-group {
     @apply inline-flex rounded-lg overflow-hidden border border-edge;
   }
   .btn-group .btn {
     @apply rounded-none border-0 shadow-none;
-  }
-  .btn-group .btn::after {
-    display: none;
   }
   .btn-group .btn + .btn {
     border-left: 1px solid rgb(255 255 255 / 0.15);
@@ -363,7 +166,7 @@
     border-left-color: var(--color-border);
   }
 
-  /* Loading button spinner — suppress hover glow during loading. */
+  /* Loading button spinner */
   .btn-loading {
     @apply relative pointer-events-none;
     color: transparent !important;
@@ -381,9 +184,6 @@
   .btn-loading.btn-secondary::before {
     border-color: rgb(0 0 0 / 0.15);
     border-top-color: var(--color-text-secondary);
-  }
-  .btn-loading::after {
-    display: none;
   }
   @keyframes btn-spin {
     to { transform: rotate(360deg); }
