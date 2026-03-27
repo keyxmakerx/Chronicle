@@ -510,8 +510,10 @@ func AccentColorCSS(ctx context.Context) string {
 	// Light: blend toward white by ~60%
 	lr, lg, lb := clampByte(int(float64(r)+float64(255-r)*0.6)), clampByte(int(float64(g)+float64(255-g)*0.6)), clampByte(int(float64(b)+float64(255-b)*0.6))
 	return fmt.Sprintf(
-		":root{--color-accent:%s;--color-accent-hover:#%02x%02x%02x;--color-accent-light:#%02x%02x%02x;}",
+		":root{--color-accent:%s;--color-accent-hover:#%02x%02x%02x;--color-accent-light:#%02x%02x%02x;"+
+			"--color-accent-rgb:%d %d %d;--color-accent-hover-rgb:%d %d %d;--color-accent-light-rgb:%d %d %d;}",
 		base, hr, hg, hb, lr, lg, lb,
+		r, g, b, hr, hg, hb, lr, lg, lb,
 	)
 }
 
