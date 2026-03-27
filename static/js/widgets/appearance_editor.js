@@ -40,7 +40,8 @@
         brandName: config.brandName || '',
         accentColor: config.accentColor || '',
         fontFamily: config.fontFamily || '',
-        topbarStyle: { mode: '', color: '', gradient_from: '', gradient_to: '', gradient_dir: 'to-r' }
+        topbarStyle: { mode: '', color: '', gradient_from: '', gradient_to: '', gradient_dir: 'to-r' },
+        topbarContent: { mode: 'none', links: [], quote: '' }
       };
 
       // Parse initial topbar style.
@@ -51,6 +52,16 @@
         }
       } catch (e) {
         console.warn('[appearance-editor] Invalid topbar-style JSON, using defaults');
+      }
+
+      // Parse initial topbar content.
+      try {
+        var parsedContent = JSON.parse(el.getAttribute('data-topbar-content') || '{}');
+        if (parsedContent && parsedContent.mode !== undefined) {
+          saved.topbarContent = parsedContent;
+        }
+      } catch (e) {
+        console.warn('[appearance-editor] Invalid topbar-content JSON, using defaults');
       }
 
       // --- Draft state (local changes, not yet saved) ---
@@ -64,6 +75,11 @@
           gradient_from: saved.topbarStyle.gradient_from || '',
           gradient_to: saved.topbarStyle.gradient_to || '',
           gradient_dir: saved.topbarStyle.gradient_dir || 'to-r'
+        },
+        topbarContent: {
+          mode: saved.topbarContent.mode || 'none',
+          links: JSON.parse(JSON.stringify(saved.topbarContent.links || [])),
+          quote: saved.topbarContent.quote || ''
         }
       };
 
@@ -143,7 +159,10 @@
                draft.topbarStyle.color !== (saved.topbarStyle.color || '') ||
                draft.topbarStyle.gradient_from !== (saved.topbarStyle.gradient_from || '') ||
                draft.topbarStyle.gradient_to !== (saved.topbarStyle.gradient_to || '') ||
-               draft.topbarStyle.gradient_dir !== (saved.topbarStyle.gradient_dir || 'to-r');
+               draft.topbarStyle.gradient_dir !== (saved.topbarStyle.gradient_dir || 'to-r') ||
+               draft.topbarContent.mode !== (saved.topbarContent.mode || 'none') ||
+               draft.topbarContent.quote !== (saved.topbarContent.quote || '') ||
+               JSON.stringify(draft.topbarContent.links) !== JSON.stringify(saved.topbarContent.links || []);
       }
 
       function updateSaveBar() {
@@ -320,6 +339,100 @@
         });
       }
 
+      // --- Topbar Content ---
+
+      var contentModeContainer = el.querySelector('#appearance-topbar-content-mode');
+      var linksPanel = el.querySelector('#appearance-topbar-links');
+      var quotePanel = el.querySelector('#appearance-topbar-quote');
+      var linksList = el.querySelector('#appearance-topbar-links-list');
+      var addLinkBtn = el.querySelector('#appearance-add-topbar-link');
+      var quoteTextarea = el.querySelector('#appearance-topbar-quote-text');
+      var quoteCounter = el.querySelector('#appearance-topbar-quote-counter');
+
+      function setActiveContentMode(mode) {
+        if (!contentModeContainer) return;
+        var buttons = contentModeContainer.querySelectorAll('button[data-content-mode]');
+        for (var i = 0; i < buttons.length; i++) {
+          var isActive = buttons[i].getAttribute('data-content-mode') === mode;
+          buttons[i].className = isActive ? 'btn-primary text-xs px-3 py-1.5' : 'btn-secondary text-xs px-3 py-1.5';
+        }
+        if (linksPanel) linksPanel.classList.toggle('hidden', mode !== 'links');
+        if (quotePanel) quotePanel.classList.toggle('hidden', mode !== 'quote');
+      }
+
+      function renderLinksList() {
+        if (!linksList) return;
+        var html = '';
+        for (var i = 0; i < draft.topbarContent.links.length; i++) {
+          var link = draft.topbarContent.links[i];
+          html += '<div class="flex items-center gap-2" data-link-idx="' + i + '">' +
+            '<input type="text" class="input text-xs flex-1" placeholder="Label" value="' + Chronicle.escapeAttr(link.label || '') + '" data-link-field="label"/>' +
+            '<input type="text" class="input text-xs flex-1" placeholder="/path or URL" value="' + Chronicle.escapeAttr(link.url || '') + '" data-link-field="url"/>' +
+            '<input type="text" class="input text-xs w-24" placeholder="fa-icon" value="' + Chronicle.escapeAttr(link.icon || '') + '" data-link-field="icon"/>' +
+            '<button type="button" class="btn-ghost btn-icon text-red-500 hover:text-red-600 shrink-0" data-remove-link="' + i + '" title="Remove">' +
+              '<i class="fa-solid fa-xmark text-xs"></i></button>' +
+            '</div>';
+        }
+        linksList.innerHTML = html;
+
+        // Bind input change listeners.
+        linksList.querySelectorAll('input[data-link-field]').forEach(function (inp) {
+          inp.addEventListener('input', function () {
+            var idx = parseInt(inp.closest('[data-link-idx]').getAttribute('data-link-idx'));
+            var field = inp.getAttribute('data-link-field');
+            if (draft.topbarContent.links[idx]) {
+              draft.topbarContent.links[idx][field] = inp.value;
+              updateSaveBar();
+            }
+          });
+        });
+
+        // Bind remove buttons.
+        linksList.querySelectorAll('button[data-remove-link]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var idx = parseInt(btn.getAttribute('data-remove-link'));
+            draft.topbarContent.links.splice(idx, 1);
+            renderLinksList();
+            updateSaveBar();
+          });
+        });
+      }
+
+      // Mode selector buttons.
+      if (contentModeContainer) {
+        contentModeContainer.querySelectorAll('button[data-content-mode]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            draft.topbarContent.mode = btn.getAttribute('data-content-mode');
+            setActiveContentMode(draft.topbarContent.mode);
+            updateSaveBar();
+          });
+        });
+      }
+
+      // Add link button.
+      if (addLinkBtn) {
+        addLinkBtn.addEventListener('click', function () {
+          draft.topbarContent.links.push({ label: '', url: '', icon: '' });
+          renderLinksList();
+          updateSaveBar();
+        });
+      }
+
+      // Quote textarea.
+      if (quoteTextarea) {
+        quoteTextarea.value = draft.topbarContent.quote || '';
+        if (quoteCounter) quoteCounter.textContent = quoteTextarea.value.length + ' / 200';
+        quoteTextarea.addEventListener('input', function () {
+          draft.topbarContent.quote = quoteTextarea.value;
+          if (quoteCounter) quoteCounter.textContent = quoteTextarea.value.length + ' / 200';
+          updateSaveBar();
+        });
+      }
+
+      // Initialize mode and link list.
+      setActiveContentMode(draft.topbarContent.mode);
+      renderLinksList();
+
       // --- Save Button ---
 
       if (saveBtn) {
@@ -348,6 +461,11 @@
                   gradient_from: draft.topbarStyle.gradient_from,
                   gradient_to: draft.topbarStyle.gradient_to,
                   gradient_dir: draft.topbarStyle.gradient_dir
+                };
+                saved.topbarContent = {
+                  mode: draft.topbarContent.mode,
+                  links: JSON.parse(JSON.stringify(draft.topbarContent.links)),
+                  quote: draft.topbarContent.quote
                 };
                 updateSaveBar();
                 // Apply accent color to page CSS custom properties live.
@@ -422,6 +540,29 @@
                 gradient_from: draft.topbarStyle.gradient_from || '',
                 gradient_to: draft.topbarStyle.gradient_to || '',
                 gradient_dir: draft.topbarStyle.gradient_dir || ''
+              },
+              csrfToken: csrfToken
+            }).then(function (res) {
+              if (!res.ok) { failed = true; }
+              onComplete();
+            }).catch(function () {
+              failed = true;
+              onComplete();
+            });
+          }
+
+          // Save topbar content if changed.
+          var contentChanged = draft.topbarContent.mode !== (saved.topbarContent.mode || 'none') ||
+                               draft.topbarContent.quote !== (saved.topbarContent.quote || '') ||
+                               JSON.stringify(draft.topbarContent.links) !== JSON.stringify(saved.topbarContent.links || []);
+          if (contentChanged) {
+            pending++;
+            Chronicle.apiFetch('/campaigns/' + campaignId + '/topbar-content', {
+              method: 'PUT',
+              body: {
+                mode: draft.topbarContent.mode || 'none',
+                links: draft.topbarContent.links || [],
+                quote: draft.topbarContent.quote || ''
               },
               csrfToken: csrfToken
             }).then(function (res) {

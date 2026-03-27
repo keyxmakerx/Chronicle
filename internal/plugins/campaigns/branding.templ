@@ -158,6 +158,7 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 		data-brand-logo={ cc.Campaign.ParseSettings().BrandLogo }
 		data-accent-color={ cc.Campaign.ParseSettings().AccentColor }
 		data-topbar-style={ topbarStyleJSON(cc.Campaign.ParseSettings().TopbarStyle) }
+		data-topbar-content={ topbarContentJSON(cc.Campaign.ParseSettings().TopbarContent) }
 		data-font-family={ cc.Campaign.ParseSettings().FontFamily }
 	>
 		<!-- Live preview of campaign appearance -->
@@ -437,6 +438,38 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 			</div>
 		</div>
 
+		<!-- Topbar content (quick-links or quote) -->
+		<div class="card p-4 mb-4">
+			<h3 class="text-sm font-semibold text-fg mb-2">
+				<i class="fa-solid fa-grip text-xs mr-1.5 text-fg-muted"></i> Topbar Content
+			</h3>
+			<p class="text-xs text-fg-secondary mb-3">Add quick-link buttons or a message to the topbar center area.</p>
+			<!-- Mode selector -->
+			<div class="flex gap-2 mb-3" id="appearance-topbar-content-mode">
+				<button type="button" data-content-mode="none" class="btn-secondary text-xs px-3 py-1.5">None</button>
+				<button type="button" data-content-mode="links" class="btn-secondary text-xs px-3 py-1.5">Links</button>
+				<button type="button" data-content-mode="quote" class="btn-secondary text-xs px-3 py-1.5">Quote</button>
+			</div>
+			<!-- Links mode panel -->
+			<div id="appearance-topbar-links" class="hidden space-y-2">
+				<div id="appearance-topbar-links-list" class="space-y-2"></div>
+				<button type="button" id="appearance-add-topbar-link" class="btn-ghost text-xs px-2 py-1">
+					<i class="fa-solid fa-plus text-[10px] mr-1"></i> Add link
+				</button>
+			</div>
+			<!-- Quote mode panel -->
+			<div id="appearance-topbar-quote" class="hidden">
+				<textarea
+					id="appearance-topbar-quote-text"
+					class="input text-sm"
+					rows="2"
+					maxlength="200"
+					placeholder="Enter a quote or message..."
+				></textarea>
+				<p class="text-[10px] text-fg-muted mt-1" id="appearance-topbar-quote-counter">0 / 200</p>
+			</div>
+		</div>
+
 		<!-- Font family -->
 		<div class="card p-4 mb-4">
 			<h3 class="text-sm font-semibold text-fg mb-2">
@@ -485,6 +518,29 @@ var fontFamilyPresets = []fontFamilyPreset{
 	{"monospace", "Monospace", "'JetBrains Mono', 'Fira Code', monospace"},
 	{"georgia", "Georgia", "Georgia, Cambria, serif"},
 	{"merriweather", "Merriweather", "'Merriweather', Georgia, serif"},
+}
+
+// topbarContentJSON serializes TopbarContent to a JSON data attribute value.
+func topbarContentJSON(content *TopbarContent) string {
+	if content == nil {
+		return `{"mode":"none","links":[],"quote":""}`
+	}
+	// Build links array manually.
+	linksJSON := "["
+	for i, link := range content.Links {
+		if i > 0 {
+			linksJSON += ","
+		}
+		linksJSON += fmt.Sprintf(`{"label":"%s","url":"%s","icon":"%s"}`,
+			layouts.EscapeJSONString(link.Label),
+			layouts.EscapeJSONString(link.URL),
+			layouts.EscapeJSONString(link.Icon))
+	}
+	linksJSON += "]"
+	return fmt.Sprintf(`{"mode":"%s","links":%s,"quote":"%s"}`,
+		layouts.EscapeJSONString(content.Mode),
+		linksJSON,
+		layouts.EscapeJSONString(content.Quote))
 }
 
 // topbarStyleJSON serializes a TopbarStyle to a JSON data attribute value.
