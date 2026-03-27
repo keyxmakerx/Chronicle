@@ -87,70 +87,47 @@
 @layer components {
   /* ---- Buttons ---- */
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 rounded-xl font-medium
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium
            text-sm transition-all duration-200 cursor-pointer
-           focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+           focus:outline-none focus:ring-2 focus:ring-offset-2
            active:scale-[0.98];
+    position: relative;
+    overflow: visible;
   }
-
-  /* ---- Primary ---- */
   .btn-primary {
-    @apply btn bg-accent text-white shadow-sm
-           hover:brightness-110 hover:shadow-md hover:shadow-accent/20
-           active:brightness-95
-           focus-visible:ring-accent;
+    @apply btn bg-accent text-white hover:bg-accent-hover
+           focus:ring-accent shadow-sm hover:shadow-md hover:shadow-accent/20;
   }
-
-  /* ---- Secondary ---- */
   .btn-secondary {
-    @apply btn bg-surface text-fg-body border border-edge
-           hover:bg-surface-alt hover:border-gray-400/30
-           active:bg-surface
-           focus-visible:ring-gray-400;
+    @apply btn bg-surface text-fg-body hover:bg-surface-alt
+           border border-edge focus:ring-gray-400;
   }
-
-  /* ---- Danger ---- */
   .btn-danger {
-    @apply btn bg-red-600 text-white shadow-sm
-           hover:bg-red-700 hover:shadow-md hover:shadow-red-500/20
-           active:bg-red-800
-           focus-visible:ring-red-500;
+    @apply btn bg-red-600 text-white hover:bg-red-700
+           focus:ring-red-500 shadow-sm hover:shadow-md hover:shadow-red-500/20;
   }
-
-  /* ---- Ghost ---- */
   .btn-ghost {
-    @apply btn bg-transparent text-fg-secondary border-none
-           hover:bg-surface-alt hover:text-fg-body
-           active:bg-surface;
+    @apply btn bg-transparent text-fg-secondary hover:bg-surface-alt
+           border-none;
   }
-
-  /* ---- Warning ---- */
   .btn-warning {
-    @apply btn bg-amber-600 text-white shadow-sm
-           hover:bg-amber-700 hover:shadow-md hover:shadow-amber-500/20
-           active:bg-amber-800
-           focus-visible:ring-amber-500;
+    @apply btn bg-amber-600 text-white hover:bg-amber-700
+           focus:ring-amber-500 shadow-sm hover:shadow-md hover:shadow-amber-500/20;
   }
-
-  /* ---- Success ---- */
   .btn-success {
-    @apply btn bg-green-600 text-white shadow-sm
-           hover:bg-green-700 hover:shadow-md hover:shadow-green-500/20
-           active:bg-green-800
-           focus-visible:ring-green-500;
+    @apply btn bg-green-600 text-white hover:bg-green-700
+           focus:ring-green-500 shadow-sm hover:shadow-md hover:shadow-green-500/20;
   }
-
-  /* Disabled state */
   .btn:disabled,
   .btn[disabled] {
     @apply opacity-50 cursor-not-allowed pointer-events-none;
   }
 
   /* Button size variants */
-  .btn-xs { @apply text-xs px-2 py-1 rounded-lg; }
-  .btn-sm { @apply text-xs px-3 py-1.5 rounded-lg; }
-  .btn-lg { @apply text-base px-6 py-3 rounded-2xl; }
-  .btn-icon { @apply !p-2 rounded-xl; }
+  .btn-xs { @apply text-xs px-2 py-1 rounded-md; }
+  .btn-sm { @apply text-xs px-3 py-1.5 rounded-md; }
+  .btn-lg { @apply text-base px-6 py-3 rounded-lg; }
+  .btn-icon { @apply !p-2 rounded-lg; }
 
   /* Button group — joined buttons that act as a single control. */
   .btn-group {
