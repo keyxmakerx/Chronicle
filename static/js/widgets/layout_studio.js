@@ -186,8 +186,8 @@
         // Category icon + name.
         var catLabel = document.createElement('div');
         catLabel.className = 'flex items-center gap-1.5 flex-1 min-w-0 px-1.5 py-1 rounded-md text-xs font-medium text-fg truncate';
-        catLabel.innerHTML = '<span class="w-4 h-4 rounded flex items-center justify-center text-[8px] shrink-0" style="background-color:' + et.color + '20;color:' + et.color + '">' +
-          '<i class="fa-solid ' + (et.icon || 'fa-file') + '"></i></span>' +
+        catLabel.innerHTML = '<span class="w-4 h-4 rounded flex items-center justify-center text-[8px] shrink-0" style="background-color:' + Chronicle.escapeAttr(et.color) + '20;color:' + Chronicle.escapeAttr(et.color) + '">' +
+          '<i class="fa-solid ' + Chronicle.escapeAttr(et.icon || 'fa-file') + '"></i></span>' +
           '<span class="truncate">' + Chronicle.escapeHtml(et.name_plural || et.name) + '</span>';
 
         // Category actions (edit/delete).
@@ -526,7 +526,7 @@
         '<input type="text" class="input text-xs w-full" placeholder="Plural name" id="ls-cat-plural" value="' + Chronicle.escapeHtml(et.name_plural) + '"/>' +
         '<div class="flex gap-2">' +
         '  <input type="text" class="input text-xs flex-1" placeholder="Icon" id="ls-cat-icon" value="' + Chronicle.escapeHtml(et.icon || 'fa-file') + '"/>' +
-        '  <input type="color" class="w-8 h-8 rounded border border-edge cursor-pointer shrink-0" id="ls-cat-color" value="' + (et.color || '#6366f1') + '"/>' +
+        '  <input type="color" class="w-8 h-8 rounded border border-edge cursor-pointer shrink-0" id="ls-cat-color" value="' + Chronicle.escapeAttr(et.color || '#6366f1') + '"/>' +
         '</div>' +
         '<div class="flex gap-1.5 justify-end">' +
         '  <button type="button" class="text-xs text-fg-muted hover:text-fg px-2 py-1" id="ls-cat-cancel">Cancel</button>' +
