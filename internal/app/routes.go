@@ -1993,8 +1993,11 @@ func (a *App) RegisterRoutes() {
 		// CSRF token for forms.
 		ctx = layouts.SetCSRFToken(ctx, middleware.GetCSRFToken(c))
 
-		// Active path for nav highlighting.
-		ctx = layouts.SetActivePath(ctx, c.Request().URL.Path)
+		// Active path for nav highlighting. Handlers can pre-set this on the
+		// request context (e.g., entity show overrides to the category URL).
+		if layouts.GetActivePath(ctx) == "" {
+			ctx = layouts.SetActivePath(ctx, c.Request().URL.Path)
+		}
 
 		// Signed media URL generators for templates.
 		if urlSigner != nil {
