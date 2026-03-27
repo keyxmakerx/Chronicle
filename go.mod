@@ -3,7 +3,7 @@ module github.com/keyxmakerx/chronicle
 go 1.24.7
 
 require (
-	github.com/a-h/templ v0.3.977
+	github.com/a-h/templ v0.3.1001
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/labstack/echo/v4 v4.15.0
 	github.com/redis/go-redis/v9 v9.18.0
