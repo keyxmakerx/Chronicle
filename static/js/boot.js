@@ -215,11 +215,12 @@
     mountWidgets(document);
   });
 
-  // --- Button press linger effect ---
+  // --- Button/nav press linger effect ---
   // Adds .btn-pressed on mousedown and removes it 300ms after mouseup,
   // so the click glow animation lingers instead of snapping back instantly.
+  // Applies to .btn elements and .sidebar-nav-glow nav items.
   document.addEventListener('mousedown', function (e) {
-    var btn = e.target.closest('.btn');
+    var btn = e.target.closest('.btn') || e.target.closest('.sidebar-nav-glow');
     if (!btn) return;
     btn.classList.add('btn-pressed');
     function onUp() {

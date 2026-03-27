@@ -199,8 +199,10 @@
   .sidebar-nav-glow:hover::before {
     opacity: 1;
   }
-  /* Click: border wraps all sides (animated from right-only) */
-  .sidebar-nav-glow:active {
+  /* Click: border wraps all sides (animated from right-only).
+     .btn-pressed lingers 300ms after mouseup via boot.js. */
+  .sidebar-nav-glow:active,
+  .sidebar-nav-glow.btn-pressed {
     box-shadow: inset 0 0 0 0.75px rgb(var(--color-accent-rgb, 99 102 241) / 0.5);
   }
   /* Active page: persistent thin border + faint fill */
