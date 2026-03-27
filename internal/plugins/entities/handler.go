@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // EntityTagFetcher retrieves tags for entities in batch. Defined here to avoid
@@ -510,6 +511,14 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
+
+	// Override the active path to the entity's category URL so the sidebar
+	// stays drilled into the correct category (e.g., /campaigns/{id}/characters)
+	// instead of collapsing because /entities/{eid} doesn't match any category.
+	categoryPath := fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, entityType.Slug)
+	ctx := layouts.SetActivePath(c.Request().Context(), categoryPath)
+	c.SetRequest(c.Request().WithContext(ctx))
+
 	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, csrfToken))
 }
 
