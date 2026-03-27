@@ -17,7 +17,7 @@ import (
 // from replacing the page body via HX-Retarget when the calendar addon is not enabled.
 templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, csrfToken string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
-		<div class="max-w-6xl mx-auto">
+		<div class="max-w-6xl mx-auto" data-entity-type-slug={ entityType.Slug }>
 			<!-- Breadcrumb with ancestor chain -->
 			<nav class="text-sm text-fg-secondary mb-4">
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>

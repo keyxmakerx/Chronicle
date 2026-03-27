@@ -144,6 +144,22 @@
           break;
         }
       }
+      // If URL didn't match a category prefix, check if we're on an entity
+      // page that belongs to the currently drilled category. Entity URLs are
+      // /campaigns/{id}/entities/{eid} and don't include the type slug.
+      if (!matched) {
+        var typeEl = document.querySelector('[data-entity-type-slug]');
+        if (typeEl) {
+          var slug = typeEl.getAttribute('data-entity-type-slug');
+          for (var j = 0; j < navLinks.length; j++) {
+            var url = navLinks[j].getAttribute('data-cat-url');
+            if (url && url.indexOf('/' + slug) > -1) {
+              matched = true;
+              break;
+            }
+          }
+        }
+      }
       if (!matched) drillOut();
     });
   }
