@@ -44,6 +44,7 @@ const (
 	keyBrandName         ctxKey = "layout_brand_name"
 	keyBrandLogo         ctxKey = "layout_brand_logo"
 	keyTopbarStyle           ctxKey = "layout_topbar_style"
+	keyTopbarContent         ctxKey = "layout_topbar_content"
 	keyDegradedPluginCount   ctxKey = "layout_degraded_plugin_count"
 	keyFontFamily            ctxKey = "layout_font_family"
 )
@@ -638,6 +639,31 @@ func SetTopbarStyle(ctx context.Context, style *TopbarStyleData) context.Context
 func GetTopbarStyle(ctx context.Context) *TopbarStyleData {
 	style, _ := ctx.Value(keyTopbarStyle).(*TopbarStyleData)
 	return style
+}
+
+// TopbarContentData holds the topbar center area content for templates.
+type TopbarContentData struct {
+	Mode  string
+	Quote string
+	Links []TopbarLinkData
+}
+
+// TopbarLinkData holds a single quick-link button for the topbar.
+type TopbarLinkData struct {
+	Label string
+	URL   string
+	Icon  string
+}
+
+// SetTopbarContent stores the campaign's topbar content configuration in the context.
+func SetTopbarContent(ctx context.Context, content *TopbarContentData) context.Context {
+	return context.WithValue(ctx, keyTopbarContent, content)
+}
+
+// GetTopbarContent returns the campaign's topbar content, or nil for empty.
+func GetTopbarContent(ctx context.Context) *TopbarContentData {
+	content, _ := ctx.Value(keyTopbarContent).(*TopbarContentData)
+	return content
 }
 
 // SetDegradedPluginCount stores the number of unhealthy plugins in the context.

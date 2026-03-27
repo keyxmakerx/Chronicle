@@ -1848,6 +1848,20 @@ func (a *App) RegisterRoutes() {
 					ImagePath:    campaignSettings.TopbarStyle.ImagePath,
 				})
 			}
+			if campaignSettings.TopbarContent != nil && campaignSettings.TopbarContent.Mode != "" && campaignSettings.TopbarContent.Mode != "none" {
+				tc := &layouts.TopbarContentData{
+					Mode:  campaignSettings.TopbarContent.Mode,
+					Quote: campaignSettings.TopbarContent.Quote,
+				}
+				for _, link := range campaignSettings.TopbarContent.Links {
+					tc.Links = append(tc.Links, layouts.TopbarLinkData{
+						Label: link.Label,
+						URL:   link.URL,
+						Icon:  link.Icon,
+					})
+				}
+				ctx = layouts.SetTopbarContent(ctx, tc)
+			}
 
 			// "View as player" override: when an owner has the toggle active,
 			// templates see RolePlayer instead of RoleOwner. Access control

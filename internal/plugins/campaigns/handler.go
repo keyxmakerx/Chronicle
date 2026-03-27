@@ -531,6 +531,33 @@ func (h *Handler) UpdateBrandingAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// UpdateTopbarContentAPI handles PUT /campaigns/:id/topbar-content. Sets the
+// campaign's topbar center content (quick-links, quote text).
+func (h *Handler) UpdateTopbarContentAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can change topbar content")
+	}
+
+	var content TopbarContent
+	if err := c.Bind(&content); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.service.UpdateTopbarContent(c.Request().Context(), cc.Campaign.ID, &content); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.topbar_content.updated", map[string]any{
+		"mode": content.Mode,
+	})
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // UpdateTopbarStyleAPI handles PUT /campaigns/:id/topbar-style. Sets the
 // campaign's topbar visual customization (solid color, gradient, or image).
 func (h *Handler) UpdateTopbarStyleAPI(c echo.Context) error {

@@ -55,6 +55,8 @@ type CampaignService interface {
 	UpdateBranding(ctx context.Context, campaignID, brandName, brandLogo string) error
 	// UpdateTopbarStyle sets the campaign's topbar visual customization.
 	UpdateTopbarStyle(ctx context.Context, campaignID string, style *TopbarStyle) error
+	// UpdateTopbarContent sets the campaign's topbar center content (quick-links, quote).
+	UpdateTopbarContent(ctx context.Context, campaignID string, content *TopbarContent) error
 	UpdateDmGrants(ctx context.Context, campaignID string, userIDs []string) error
 	// UpdateFontFamily sets the campaign's body font family.
 	UpdateFontFamily(ctx context.Context, campaignID, fontFamily string) error
@@ -769,6 +771,48 @@ func (s *campaignService) UpdateTopbarStyle(ctx context.Context, campaignID stri
 
 	settings := campaign.ParseSettings()
 	settings.TopbarStyle = style
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// UpdateTopbarContent sets the campaign's topbar center content.
+// Validates mode, quote length, and link count/lengths.
+func (s *campaignService) UpdateTopbarContent(ctx context.Context, campaignID string, content *TopbarContent) error {
+	if content != nil {
+		switch content.Mode {
+		case "none", "links", "quote", "":
+			// ok
+		default:
+			return apperror.NewBadRequest("invalid topbar content mode")
+		}
+		if len(content.Quote) > 200 {
+			return apperror.NewBadRequest("quote must be 200 characters or fewer")
+		}
+		if len(content.Links) > 8 {
+			return apperror.NewBadRequest("maximum 8 topbar links")
+		}
+		for _, link := range content.Links {
+			if len(link.Label) > 30 {
+				return apperror.NewBadRequest("link label must be 30 characters or fewer")
+			}
+			if link.URL == "" {
+				return apperror.NewBadRequest("link URL is required")
+			}
+		}
+	}
+
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+
+	settings := campaign.ParseSettings()
+	settings.TopbarContent = content
 
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {

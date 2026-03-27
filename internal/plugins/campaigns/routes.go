@@ -73,6 +73,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.PUT("/accent-color", h.UpdateAccentColorAPI, RequireRole(RoleOwner))
 	cg.PUT("/branding", h.UpdateBrandingAPI, RequireRole(RoleOwner))
 	cg.PUT("/topbar-style", h.UpdateTopbarStyleAPI, RequireRole(RoleOwner))
+	cg.PUT("/topbar-content", h.UpdateTopbarContentAPI, RequireRole(RoleOwner))
 	cg.PUT("/font-family", h.UpdateFontFamilyAPI, RequireRole(RoleOwner))
 	cg.PUT("/welcome-message", h.UpdateWelcomeMessageAPI, RequireRole(RoleOwner))
 	cg.PUT("/default-visibility", h.UpdateDefaultVisibilityAPI, RequireRole(RoleOwner))

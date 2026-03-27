@@ -490,8 +490,9 @@ type CampaignSettings struct {
 	DmGrantIDs        []string     `json:"dm_grant_ids,omitempty"`        // User IDs granted dm_only visibility.
 	BrandName         string       `json:"brand_name,omitempty"`          // Custom sidebar brand name (replaces campaign name).
 	BrandLogo         string       `json:"brand_logo,omitempty"`          // Media path for brand logo image.
-	TopbarStyle       *TopbarStyle `json:"topbar_style,omitempty"`        // Topbar visual customization.
-	FontFamily        string       `json:"font_family,omitempty"`         // Campaign body font: "serif", "sans-serif", "monospace", "georgia", "merriweather".
+	TopbarStyle       *TopbarStyle   `json:"topbar_style,omitempty"`        // Topbar visual customization.
+	TopbarContent     *TopbarContent `json:"topbar_content,omitempty"`     // Customizable topbar center content.
+	FontFamily        string         `json:"font_family,omitempty"`       // Campaign body font: "serif", "sans-serif", "monospace", "georgia", "merriweather".
 	WelcomeMessage    string       `json:"welcome_message,omitempty"`     // MOTD banner shown on campaign dashboard (max 500 chars).
 	DefaultVisibility string       `json:"default_visibility,omitempty"`  // Default visibility for new entities: "", "dm_only", "private".
 	SystemID          string       `json:"system_id,omitempty"`           // Game system ID (e.g. "dnd5e", "drawsteel") or "custom:<url>".
@@ -505,6 +506,20 @@ type TopbarStyle struct {
 	GradientTo   string `json:"gradient_to,omitempty"`       // End color for gradient mode.
 	GradientDir  string `json:"gradient_dir,omitempty"`      // Direction: "to-r", "to-br", etc.
 	ImagePath    string `json:"image_path,omitempty"`        // Media path for background image.
+}
+
+// TopbarContent configures what the owner wants displayed in the topbar center area.
+type TopbarContent struct {
+	Mode  string       `json:"mode"`            // "none", "links", "quote".
+	Quote string       `json:"quote,omitempty"` // Text to display in quote mode (max 200 chars).
+	Links []TopbarLink `json:"links,omitempty"` // Quick-link buttons in links mode (max 8).
+}
+
+// TopbarLink is a quick-link button displayed in the topbar center area.
+type TopbarLink struct {
+	Label string `json:"label"`              // Button text (max 30 chars).
+	URL   string `json:"url"`                // Navigation URL.
+	Icon  string `json:"icon,omitempty"`     // Optional FA icon class (e.g., "fa-user").
 }
 
 // ParseSettings parses the campaign's settings JSON into a CampaignSettings
