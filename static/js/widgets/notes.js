@@ -75,6 +75,12 @@ Chronicle.register('notes', {
     el.appendChild(fab);
     el.appendChild(panel);
 
+    // Hide the floating FAB if the topbar has a notes trigger button.
+    // The topbar button calls Chronicle.toggleNotes() which clicks the FAB.
+    if (document.getElementById('topbar-notes-trigger')) {
+      fab.classList.add('notes-fab-hidden');
+    }
+
     // --- Saved preferences (localStorage) ---
     var STORAGE_KEY = 'chronicle_notes_size';
     var STORAGE_TEXT_SIZE = 'chronicle_notes_text_size';
