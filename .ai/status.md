@@ -155,7 +155,7 @@
     - **New `BlockConfigInt` helper** in block_registry.go for extracting integer config values.
 
 48. **Bugfix Sprint + Armory Multi-Instance.**
-    - **CORS Origin Normalization (COMPLETE)** — `UpdateCORSOrigins` now auto-prepends `https://` when bare hostnames entered (e.g., `vtt.bnuuy.haus` → `https://vtt.bnuuy.haus`). Strips trailing path components.
+    - **CORS Origin Normalization (COMPLETE)** — `UpdateCORSOrigins` now auto-prepends `https://` when bare hostnames entered (e.g., `vtt.example.com` → `https://vtt.example.com`). Strips trailing path components.
     - **NPC Server Error Fix (COMPLETE)** — `ListNPCs` and `CountNPCs` handle missing character entity type gracefully (empty gallery instead of 500).
     - **Sidebar NPC Under Journal (REVERTED in session 51)** — Was indented under Journal; now always at same level as other nav items.
     - **Invalid CSS Classes (COMPLETE)** — Fixed `bg-bg-secondary`, `border-border`, `bg-surface-raised` across 6 template files.

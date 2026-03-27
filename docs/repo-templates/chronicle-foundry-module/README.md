@@ -1,6 +1,6 @@
 # Chronicle Sync - Foundry VTT Module
 
-Bidirectional real-time sync between [Chronicle](https://github.com/keyxmakerx/Chronicle) (a self-hosted TTRPG worldbuilding platform) and [Foundry VTT](https://foundryvtt.com).
+Bidirectional real-time sync between [Chronicle](https://github.com/chronicle-app/Chronicle) (a self-hosted TTRPG worldbuilding platform) and [Foundry VTT](https://foundryvtt.com).
 
 ## Features
 

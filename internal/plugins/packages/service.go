@@ -837,6 +837,7 @@ func (s *packageService) SaveSecuritySettings(ctx context.Context, settings *Pac
 // SeedOfficialPackages creates the official Chronicle repos if no packages
 // exist yet. This runs on startup to ensure the default system pack and
 // Foundry module repos are registered. Existing installations are untouched.
+// The GitHub org is read from GITHUB_ORG env var (default: "keyxmakerx").
 func (s *packageService) SeedOfficialPackages(ctx context.Context) {
 	existing, err := s.repo.ListPackages(ctx)
 	if err != nil {
@@ -849,24 +850,31 @@ func (s *packageService) SeedOfficialPackages(ctx context.Context) {
 		return
 	}
 
+	// GitHub org is configurable so forks can point to their own repos.
+	githubOrg := os.Getenv("GITHUB_ORG")
+	if githubOrg == "" {
+		githubOrg = "keyxmakerx"
+	}
+	baseURL := "https://github.com/" + githubOrg + "/"
+
 	seeds := []struct {
 		name    string
-		repoURL string
+		repo    string // Just the repo name, not full URL.
 		pkgType PackageType
 	}{
 		{
 			name:    "D&D 5th Edition (2024)",
-			repoURL: "https://github.com/keyxmakerx/chronicle-dnd-5.5e",
+			repo:    "chronicle-dnd-5.5e",
 			pkgType: PackageTypeSystem,
 		},
 		{
 			name:    "Draw Steel",
-			repoURL: "https://github.com/keyxmakerx/chronicle-draw-steel",
+			repo:    "chronicle-draw-steel",
 			pkgType: PackageTypeSystem,
 		},
 		{
 			name:    "Chronicle Foundry Module",
-			repoURL: "https://github.com/keyxmakerx/chronicle-foundry-module",
+			repo:    "chronicle-foundry-module",
 			pkgType: PackageTypeFoundryModule,
 		},
 	}
@@ -876,9 +884,9 @@ func (s *packageService) SeedOfficialPackages(ctx context.Context) {
 		pkg := &Package{
 			ID:            generateUUID(),
 			Type:          seed.pkgType,
-			Slug:          strings.TrimPrefix(seed.repoURL, "https://github.com/keyxmakerx/"),
+			Slug:          seed.repo,
 			Name:          seed.name,
-			RepoURL:       seed.repoURL,
+			RepoURL:       baseURL + seed.repo,
 			Description:   "Official Chronicle package",
 			AutoUpdate:    UpdateNightly,
 			Status:        StatusApproved,
@@ -895,7 +903,7 @@ func (s *packageService) SeedOfficialPackages(ctx context.Context) {
 
 		slog.Info("seeded official package",
 			slog.String("name", seed.name),
-			slog.String("repo", seed.repoURL),
+			slog.String("repo", baseURL+seed.repo),
 		)
 
 		// Check if files already exist on disk from a previous install

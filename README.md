@@ -122,7 +122,7 @@ See [.ai/todo.md](.ai/todo.md) for the full backlog.
 
 ```bash
 # Clone the repository
-git clone https://github.com/keyxmakerx/chronicle.git
+git clone https://github.com/chronicle-app/chronicle.git
 cd chronicle
 
 # Set required secrets
@@ -143,7 +143,7 @@ docker compose up -d
 
 ```bash
 # Clone and setup
-git clone https://github.com/keyxmakerx/chronicle.git
+git clone https://github.com/chronicle-app/chronicle.git
 cd chronicle
 cp .env.example .env       # Edit with your database credentials
 

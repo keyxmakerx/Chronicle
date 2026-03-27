@@ -11,12 +11,12 @@
   "authors": [
     {
       "name": "Chronicle Team",
-      "url": "https://github.com/keyxmakerx/Chronicle"
+      "url": "https://github.com/chronicle-app/Chronicle"
     }
   ],
-  "url": "https://github.com/keyxmakerx/Chronicle",
-  "manifest": "https://raw.githubusercontent.com/keyxmakerx/Chronicle/main/foundry-module/module.json",
-  "download": "https://github.com/keyxmakerx/Chronicle/releases/download/foundry-v0.2.0/chronicle-sync.zip",
+  "url": "https://github.com/chronicle-app/Chronicle",
+  "manifest": "REWRITTEN_BY_SERVER",
+  "download": "REWRITTEN_BY_SERVER",
   "license": "MIT",
   "esmodules": [
     "scripts/module.mjs"

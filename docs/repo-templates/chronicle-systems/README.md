@@ -1,6 +1,6 @@
 # Chronicle Systems - Game System Content Packs
 
-Game system reference data packs for [Chronicle](https://github.com/keyxmakerx/Chronicle),
+Game system reference data packs for [Chronicle](https://github.com/chronicle-app/Chronicle),
 a self-hosted TTRPG worldbuilding platform.
 
 ## What This Is

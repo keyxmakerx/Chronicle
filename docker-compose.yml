@@ -15,7 +15,7 @@ services:
   # Pull from GHCR, or build locally with `docker compose build chronicle`.
   # Cosmos Cloud reverse-proxies to this container.
   chronicle:
-    image: ghcr.io/keyxmakerx/chronicle:latest
+    image: ghcr.io/${GITHUB_ORG:-keyxmakerx}/chronicle:latest
     build:
       context: .
       dockerfile: Dockerfile
