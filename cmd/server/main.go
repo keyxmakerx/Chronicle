@@ -83,6 +83,7 @@ func main() {
 		},
 		Env:        cfg.Env,
 		BaseURL:    cfg.BaseURL,
+		DBTLSMode:  cfg.Database.TLSMode,
 		DBPassword: cfg.Database.Password,
 		DBHost:     cfg.Database.Host,
 		DBUser:     cfg.Database.User,

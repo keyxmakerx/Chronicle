@@ -171,10 +171,13 @@ func (r *syncAPIRepository) UpdateKeyLastUsed(ctx context.Context, id int, ip st
 	return nil
 }
 
-// BindDevice records a device fingerprint on an API key.
+// BindDevice atomically records a device fingerprint on an API key.
+// Uses a conditional UPDATE (WHERE device_fingerprint IS NULL) to prevent
+// race conditions where concurrent first requests could bind different devices.
 func (r *syncAPIRepository) BindDevice(ctx context.Context, keyID int, fingerprint string, boundAt time.Time) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE api_keys SET device_fingerprint = ?, device_bound_at = ? WHERE id = ?`,
+		`UPDATE api_keys SET device_fingerprint = ?, device_bound_at = ?
+		 WHERE id = ? AND device_fingerprint IS NULL`,
 		fingerprint, boundAt, keyID)
 	if err != nil {
 		return fmt.Errorf("binding device: %w", err)

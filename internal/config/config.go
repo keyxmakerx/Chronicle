@@ -66,6 +66,11 @@ type DatabaseConfig struct {
 	// dsnOverride is set when DATABASE_URL is provided, bypassing individual fields.
 	dsnOverride string
 
+	// TLSMode controls database connection encryption.
+	// Values: "" or "disabled" (no TLS), "required" (verify server cert),
+	// "skip-verify" (encrypt but don't verify cert), "preferred" (TLS if available).
+	TLSMode string
+
 	// MaxOpenConns is the maximum number of open connections in the pool.
 	MaxOpenConns int
 
@@ -91,6 +96,20 @@ func (d DatabaseConfig) DSN() string {
 	cfg.Addr = ensurePort(d.Host, "3306")
 	cfg.DBName = d.Name
 	cfg.ParseTime = true
+
+	// TLS: map DB_TLS_MODE to go-sql-driver/mysql tls parameter.
+	// "required" verifies the server certificate against system CA pool.
+	// "skip-verify" encrypts traffic but doesn't verify the certificate.
+	// "preferred" uses TLS if available, falls back to plaintext.
+	switch strings.ToLower(d.TLSMode) {
+	case "required", "true":
+		cfg.TLSConfig = "true"
+	case "skip-verify":
+		cfg.TLSConfig = "skip-verify"
+	case "preferred":
+		cfg.TLSConfig = "preferred"
+	}
+
 	return cfg.FormatDSN()
 }
 
@@ -151,6 +170,7 @@ func Load() (*Config, error) {
 			Password:        getEnv("DB_PASSWORD", "chronicle"),
 			Name:            getEnv("DB_NAME", "chronicle"),
 			dsnOverride:     getEnv("DATABASE_URL", ""),
+			TLSMode:         getEnv("DB_TLS_MODE", ""),
 			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
 			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 5),
 			ConnMaxLifetime: getEnvDuration("DB_CONN_MAX_LIFETIME", 5*time.Minute),

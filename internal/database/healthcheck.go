@@ -46,6 +46,11 @@ type HealthCheckConfig struct {
 	// DBPassword is the database password (needed for mysqldump).
 	DBPassword string
 
+	// DBTLSMode is the configured TLS mode for the database connection.
+	// Empty or "disabled" means no TLS. Used by security checks to warn
+	// about unencrypted database traffic in production.
+	DBTLSMode string
+
 	// Env is the runtime environment ("development" or "production").
 	Env string
 
@@ -244,6 +249,13 @@ func checkSecurity(db *sql.DB, cfg HealthCheckConfig, result *HealthCheckResult)
 	if isProd && cfg.BaseURL != "" && strings.HasPrefix(cfg.BaseURL, "http://") {
 		addWarn(result, "security_base_url",
 			"BASE_URL uses http:// in production — CSRF cookies require HTTPS; set BASE_URL to https://")
+	}
+
+	// Check for unencrypted database connections in production.
+	tlsMode := strings.ToLower(cfg.DBTLSMode)
+	if isProd && (tlsMode == "" || tlsMode == "disabled") {
+		addWarn(result, "security_db_tls",
+			"database connection is unencrypted in production — set DB_TLS_MODE=required for TLS encryption")
 	}
 
 	// Check for overprivileged DB user (SUPER, FILE, PROCESS grants).
