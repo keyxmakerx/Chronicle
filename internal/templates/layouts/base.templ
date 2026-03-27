@@ -39,15 +39,11 @@ templ Base(title string) {
 
 		<!-- Campaign accent color override (applied via CSS custom properties) -->
 		if css := AccentColorCSS(ctx); css != "" {
-			<style>
-				{ css }
-			</style>
+			@accentStyleBlock(css)
 		}
 		<!-- Campaign font family override -->
 		if css := FontFamilyCSS(ctx); css != "" {
-			<style>
-				{ css }
-			</style>
+			@fontStyleBlock(css)
 		}
 
 		<!-- Reveal body after all render-blocking CSS has loaded (FOUC guard). -->
@@ -210,4 +206,15 @@ templ Base(title string) {
 		}
 	</body>
 	</html>
+}
+
+// accentStyleBlock renders a raw <style> tag with accent color CSS overrides.
+// Uses templ.Raw because Templ does not interpolate variables inside <style> tags.
+templ accentStyleBlock(css string) {
+	@templ.Raw("<style>" + css + "</style>")
+}
+
+// fontStyleBlock renders a raw <style> tag with font family CSS overrides.
+templ fontStyleBlock(css string) {
+	@templ.Raw("<style>" + css + "</style>")
 }
