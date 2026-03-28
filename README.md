@@ -4,7 +4,8 @@
 
 Chronicle gives game masters and players a shared space to build worlds, track lore, manage calendars, visualize timelines, and run campaigns — all on your own server, with no paywall, no forced public content, and full control over your data.
 
-<!-- TODO: Add hero screenshot -->
+> **Screenshots coming soon** — Chronicle features a rich entity editor, interactive calendar,
+> D3.js timeline, Leaflet.js map viewer, drag-and-drop page layouts, and customizable dashboards.
 
 ---
 
@@ -94,25 +95,22 @@ Replace `your-chronicle-instance.com` with your Chronicle server's URL. Chronicl
 
 Supports [Calendaria](https://foundryvtt.com/packages/calendaria) and [Simple Calendar](https://foundryvtt.com/packages/foundryvtt-simple-calendar) for calendar sync.
 
-## Recently Shipped
+## What's in v0.1
 
-- Per-entity permissions (view/edit per role, per user, per group)
-- Relations graph visualization (D3.js force-directed with filtering)
-- Editor tables, code blocks with syntax highlighting, find & replace
-- Game system modules (Draw Steel with statblock widget and reference tooltips)
-- Campaign export/import (JSON bundle with full data round-trip)
-- Auto-linking (entity name detection in editor with Ctrl+Shift+L)
-- Shop entity type with inventory management and transaction log
-- Community Bestiary (instance-scoped creature sharing with ratings and moderation)
-
-See [.ai/todo.md](.ai/todo.md) for the full backlog.
+- Worldbuilding with custom entity types and rich text editor
+- Interactive calendar with events, seasons, moons, and eras
+- Map viewer with markers, drawings, and fog of war
+- Timeline visualization
+- Session planning with RSVP tracking
+- Foundry VTT bidirectional sync module
+- Bestiary with community sharing and ratings
+- Full REST API for integrations
 
 ---
 
 ## Screenshots
 
-<!-- TODO: Add screenshots for each feature area -->
-<!-- Suggested: dashboard, entity page, calendar, timeline, map, editor, notes -->
+> Screenshots coming soon — see the feature list above for what Chronicle offers today.
 
 ---
 
@@ -246,6 +244,4 @@ Chronicle is in active early development (pre-alpha). Contribution guidelines wi
 
 ## License
 
-<!-- TODO: Choose and add a license (AGPL-3.0 recommended for self-hosted open source) -->
-
-License TBD. See [LICENSE](LICENSE) when available.
+This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).

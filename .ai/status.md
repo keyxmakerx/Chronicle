@@ -8,7 +8,18 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-27 -- **Topbar Redesign + Bug Fix Marathon + Security Audit.**
+2026-03-27 -- **Pre-Reddit Launch Cleanup.**
+
+66. **Pre-Reddit Launch Cleanup (4 items).**
+
+    - **LICENSE file** — Created `/LICENSE` with full AGPL-3.0 text (662 lines, fetched from GitHub API).
+    - **README TODO comments** — Removed all 3 HTML TODO comments (hero screenshot, feature screenshots, license placeholder).
+    - **README .ai/todo.md reference** — Replaced internal AI doc link with concrete v0.1 shipped features list.
+    - **README license section** — Updated from "TBD" to AGPL-3.0 with link to LICENSE file.
+
+    **Phase 1 API audit:** All requested sync API endpoints (addon discovery, tags CRUD, relations CRUD,
+    entity type CRUD, bulk entity update, media) already exist in `internal/plugins/syncapi/routes.go`.
+    No new API work needed — Foundry module can proceed directly to Phase 2 (Import Wizard).
 
 65. **Topbar Redesign + Bug Fix Marathon + Security Audit (33 items).**
 
