@@ -1208,12 +1208,8 @@ func (a *App) RegisterRoutes() {
 		// managed system packs override the bundled fallbacks.
 		a.loadSystemsFromPackages(pkgService)
 
-		// Store package service for Foundry module path resolution.
+		// Store package service reference.
 		a.pkgService = pkgService
-
-		// Wire foundry dir resolver into admin handler so the Foundry page
-		// reads/writes the package-manager-installed module, not the bundled fallback.
-		adminHandler.SetFoundryDir(a.foundryModuleDir)
 
 		// Start background auto-update worker.
 		go pkgService.StartAutoUpdateWorker(context.Background())

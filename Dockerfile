@@ -60,15 +60,11 @@ COPY --from=builder /src/static /app/static
 # Copy database migrations for auto-migration on startup.
 COPY --from=builder /src/db/migrations /app/db/migrations
 
-# Copy Foundry VTT module files for direct installation from this instance.
-COPY --from=builder /src/foundry-module /app/foundry-module
-
 # Create persistent data directory owned by the chronicle user.
 # Media uploads go under /app/data/media (matches MEDIA_PATH default "./data/media").
 # Mount a volume at /app/data to persist media across container rebuilds.
-# foundry-module must also be writable so the admin can upload/redeploy modules.
 RUN mkdir -p /app/data/media \
-    && chown -R chronicle:chronicle /app/data /app/foundry-module
+    && chown -R chronicle:chronicle /app/data
 
 WORKDIR /app
 

@@ -4,19 +4,11 @@
 package admin
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"io/fs"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -57,7 +49,6 @@ type Handler struct {
 	hygieneScanner   DataHygieneScanner
 	databaseExplorer DatabaseExplorer
 	pendingCounter   PendingCounter
-	foundryDir       func() string // Resolves the active Foundry module directory.
 	baseURL          string
 }
 
@@ -127,32 +118,6 @@ func (h *Handler) SetBaseURL(url string) {
 // SetPendingCounter wires the pending submission counter for the dashboard.
 func (h *Handler) SetPendingCounter(counter PendingCounter) {
 	h.pendingCounter = counter
-}
-
-// SetFoundryDir sets the resolver for the active Foundry module directory.
-// This allows the admin page to read/write the correct module.json whether
-// served from the package manager install or the bundled fallback.
-// The resolver should be app.foundryModuleDir — the same function the
-// serving layer uses — so both paths are always in sync.
-func (h *Handler) SetFoundryDir(resolver func() string) {
-	h.foundryDir = resolver
-}
-
-// resolveFoundryDir returns the active Foundry module directory, preferring
-// the package-manager install path and falling back to the bundled directory.
-func (h *Handler) resolveFoundryDir() string {
-	if h.foundryDir != nil {
-		if dir := h.foundryDir(); dir != "" {
-			slog.Debug("resolveFoundryDir: using resolved path",
-				slog.String("path", dir),
-			)
-			return dir
-		}
-		slog.Warn("resolveFoundryDir: resolver returned empty, falling back to bundled")
-	} else {
-		slog.Warn("resolveFoundryDir: no foundry dir resolver set, falling back to bundled")
-	}
-	return "foundry-module"
 }
 
 // --- Data Hygiene ---
@@ -766,238 +731,3 @@ type SecurityPageData struct {
 	CSRFToken   string
 }
 
-// --- Foundry VTT Module Management ---
-
-// FoundryModuleData holds data for the admin Foundry module page.
-type FoundryModuleData struct {
-	Version    string
-	InstallURL string
-	CSRFToken  string
-	Files      []FoundryModuleFile
-	SourceDir  string // Resolved directory the module is served from.
-}
-
-// FoundryModuleFile represents a file in the foundry-module directory.
-type FoundryModuleFile struct {
-	Path string
-	Size int64
-}
-
-// FoundryModule renders the Foundry VTT module management page (GET /admin/foundry).
-func (h *Handler) FoundryModule(c echo.Context) error {
-	moduleDir := h.resolveFoundryDir()
-	version := h.readFoundryModuleVersion()
-	baseURL := strings.TrimRight(h.baseURL, "/")
-	data := FoundryModuleData{
-		Version:    version,
-		InstallURL: baseURL + "/foundry-module/module.json",
-		CSRFToken:  middleware.GetCSRFToken(c),
-		Files:      h.listFoundryModuleFiles(),
-		SourceDir:  moduleDir,
-	}
-	return middleware.Render(c, http.StatusOK, AdminFoundryModulePage(data))
-}
-
-// readFoundryModuleVersion reads the version from the active Foundry module's module.json.
-func (h *Handler) readFoundryModuleVersion() string {
-	data, err := os.ReadFile(filepath.Join(h.resolveFoundryDir(), "module.json"))
-	if err != nil {
-		return "unknown"
-	}
-	var manifest struct {
-		Version string `json:"version"`
-	}
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return "unknown"
-	}
-	return manifest.Version
-}
-
-// listFoundryModuleFiles returns all distributable files in the active Foundry module directory.
-func (h *Handler) listFoundryModuleFiles() []FoundryModuleFile {
-	moduleDir := h.resolveFoundryDir()
-	var files []FoundryModuleFile
-	_ = filepath.WalkDir(moduleDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		name := d.Name()
-		if name == ".ai.md" || name == "TESTING.md" {
-			return nil
-		}
-		rel, _ := filepath.Rel(moduleDir, path)
-		info, _ := d.Info()
-		size := int64(0)
-		if info != nil {
-			size = info.Size()
-		}
-		files = append(files, FoundryModuleFile{Path: rel, Size: size})
-		return nil
-	})
-	return files
-}
-
-// UploadFoundryModule handles zip upload of a new Foundry module version
-// (POST /admin/foundry/upload). Extracts the zip into foundry-module/,
-// replacing existing files. Preserves manifest/download URLs by rewriting
-// them to point at this Chronicle instance.
-func (h *Handler) UploadFoundryModule(c echo.Context) error {
-	file, err := c.FormFile("module_zip")
-	if err != nil {
-		return apperror.NewBadRequest("module zip file is required")
-	}
-
-	// 10 MB limit for the module zip.
-	const maxZipSize = 10 << 20
-	if file.Size > maxZipSize {
-		return apperror.NewBadRequest("module zip must be under 10 MB")
-	}
-
-	src, err := file.Open()
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("open uploaded file: %w", err))
-	}
-	defer func() { _ = src.Close() }()
-
-	// Read entire zip into memory for zip.NewReader (needs ReadSeeker).
-	zipBytes, err := io.ReadAll(io.LimitReader(src, maxZipSize+1))
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("read uploaded file: %w", err))
-	}
-	if int64(len(zipBytes)) > maxZipSize {
-		return apperror.NewBadRequest("module zip must be under 10 MB")
-	}
-
-	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
-	if err != nil {
-		return apperror.NewBadRequest("uploaded file is not a valid zip archive")
-	}
-
-	// Validate: zip must contain a module.json somewhere.
-	hasManifest := false
-	for _, f := range zr.File {
-		if filepath.Base(f.Name) == "module.json" && !f.FileInfo().IsDir() {
-			hasManifest = true
-			break
-		}
-	}
-	if !hasManifest {
-		return apperror.NewBadRequest("zip must contain a module.json file")
-	}
-
-	// Determine if files are nested under a single root directory (common in
-	// Foundry module zips, e.g. chronicle-sync/module.json). If so, strip
-	// that prefix when extracting.
-	stripPrefix := detectZipRootDir(zr)
-
-	// Extract files into the active Foundry module directory.
-	destDir := h.resolveFoundryDir()
-	for _, f := range zr.File {
-		name := filepath.ToSlash(f.Name)
-
-		// Strip the common root directory if present.
-		if stripPrefix != "" {
-			name = strings.TrimPrefix(name, stripPrefix)
-			if name == "" {
-				continue // Skip the root dir entry itself.
-			}
-		}
-
-		// Security: reject paths that escape the destination directory.
-		if strings.Contains(name, "..") {
-			continue
-		}
-
-		// Skip non-distributable files and hidden files.
-		base := filepath.Base(name)
-		if base == ".ai.md" || base == "TESTING.md" || strings.HasPrefix(base, ".") {
-			continue
-		}
-
-		destPath := filepath.Join(destDir, filepath.FromSlash(name))
-
-		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(destPath, 0755); err != nil {
-				return apperror.NewInternal(fmt.Errorf("create dir %s: %w", name, err))
-			}
-			continue
-		}
-
-		// Ensure parent directory exists.
-		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-			return apperror.NewInternal(fmt.Errorf("create parent dir for %s: %w", name, err))
-		}
-
-		rc, err := f.Open()
-		if err != nil {
-			return apperror.NewInternal(fmt.Errorf("open zip entry %s: %w", name, err))
-		}
-
-		data, err := io.ReadAll(io.LimitReader(rc, maxZipSize))
-		_ = rc.Close()
-		if err != nil {
-			return apperror.NewInternal(fmt.Errorf("read zip entry %s: %w", name, err))
-		}
-
-		if err := os.WriteFile(destPath, data, 0644); err != nil {
-			return apperror.NewInternal(fmt.Errorf("write %s: %w", name, err))
-		}
-	}
-
-	// Rewrite manifest/download URLs in the extracted module.json to point
-	// at this Chronicle instance.
-	h.rewriteFoundryManifestURLs()
-
-	slog.Info("foundry module uploaded",
-		slog.String("filename", file.Filename),
-		slog.Int64("size", file.Size),
-		slog.String("by", auth.GetUserID(c)),
-	)
-
-	return middleware.HTMXRedirect(c, "/admin/foundry")
-}
-
-// detectZipRootDir checks if all zip entries share a single root directory.
-// Returns the prefix to strip (e.g. "chronicle-sync/") or empty string.
-func detectZipRootDir(zr *zip.Reader) string {
-	if len(zr.File) == 0 {
-		return ""
-	}
-	// Find the first path component of each entry.
-	var root string
-	for _, f := range zr.File {
-		name := filepath.ToSlash(f.Name)
-		parts := strings.SplitN(name, "/", 2)
-		if len(parts) < 2 {
-			// File at zip root level — no common root dir.
-			return ""
-		}
-		if root == "" {
-			root = parts[0]
-		} else if parts[0] != root {
-			return ""
-		}
-	}
-	return root + "/"
-}
-
-
-// rewriteFoundryManifestURLs updates manifest and download URLs in
-// the active Foundry module's module.json to point at this Chronicle instance.
-func (h *Handler) rewriteFoundryManifestURLs() {
-	manifestPath := filepath.Join(h.resolveFoundryDir(), "module.json")
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return
-	}
-	var manifest map[string]any
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return
-	}
-	baseURL := strings.TrimRight(h.baseURL, "/")
-	manifest["manifest"] = baseURL + "/foundry-module/module.json"
-	manifest["download"] = baseURL + "/foundry-module/chronicle-sync.zip"
-	out, _ := json.MarshalIndent(manifest, "", "  ")
-	out = append(out, '\n')
-	_ = os.WriteFile(manifestPath, out, 0644)
-}

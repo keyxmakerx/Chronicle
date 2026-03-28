@@ -82,19 +82,6 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 
 ---
 
-## Foundry VTT Integration
-
-Chronicle includes a Foundry VTT module for bidirectional sync between your Chronicle worldbuilding and your Foundry VTT game. Sync journals, maps (drawings, tokens, fog of war), and calendars in real-time.
-
-**Install in Foundry VTT** — paste this manifest URL into Foundry's module installer:
-```
-https://your-chronicle-instance.com/foundry-module/module.json
-```
-
-Replace `your-chronicle-instance.com` with your Chronicle server's URL. Chronicle serves the module manifest and zip directly — no GitHub releases needed. The manifest URLs are automatically rewritten to match your instance.
-
-Supports [Calendaria](https://foundryvtt.com/packages/calendaria) and [Simple Calendar](https://foundryvtt.com/packages/foundryvtt-simple-calendar) for calendar sync.
-
 ## What's in v0.1
 
 - Worldbuilding with custom entity types and rich text editor
@@ -102,7 +89,6 @@ Supports [Calendaria](https://foundryvtt.com/packages/calendaria) and [Simple Ca
 - Map viewer with markers, drawings, and fog of war
 - Timeline visualization
 - Session planning with RSVP tracking
-- Foundry VTT bidirectional sync module
 - Bestiary with community sharing and ratings
 - Full REST API for integrations
 

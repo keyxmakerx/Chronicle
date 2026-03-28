@@ -50,7 +50,7 @@ services:
 
   # --- MariaDB ---
   chronicle-db:
-    image: mariadb:10.11
+    image: mariadb:latest
     container_name: chronicle-db
     restart: unless-stopped
     environment:
@@ -74,7 +74,7 @@ services:
   # Used for session storage, caching, and rate limiting.
   # 128MB max with LRU eviction -- sessions survive restarts via AOF.
   chronicle-redis:
-    image: redis:7-alpine
+    image: redis:alpine
     container_name: chronicle-redis
     restart: unless-stopped
     command: >
