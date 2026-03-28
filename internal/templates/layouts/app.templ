@@ -299,7 +299,20 @@ templ Sidebar() {
 					>
 						<div class="px-4 mb-2 flex items-center justify-between sidebar-cat-list-label">
 							<span class="text-xs font-semibold uppercase tracking-wider text-gray-500">Categories</span>
+							if GetCampaignRole(ctx) >= 3 {
+								<button
+									type="button"
+									class="text-fg-muted hover:text-accent transition-colors p-0.5"
+									title="Add category"
+									onclick="document.getElementById('sidebar-create-category').toggleAttribute('data-open'); var el = document.getElementById('sidebar-create-category'); if (el.hasAttribute('data-open')) { el.style.display = ''; el.querySelector('input[type=text]').focus(); } else { el.style.display = 'none'; }"
+								>
+									<i class="fa-solid fa-plus text-[10px]"></i>
+								</button>
+							}
 						</div>
+						if GetCampaignRole(ctx) >= 3 {
+							@sidebarCreateCategory(ctx)
+						}
 						if len(GetSidebarItems(ctx)) > 0 {
 							<!-- Unified: render categories and other items from the items array -->
 							for _, item := range GetSidebarItems(ctx) {
@@ -793,6 +806,74 @@ templ sidebarAllPagesLink(ctx context.Context) {
 
 // entityTypeLink renders a single category link in the sidebar icon list.
 // Clicking triggers the slide-over panel via sidebar_drill.js.
+// sidebarCreateCategory renders a compact inline form for creating a new
+// entity type directly from the sidebar. Visible to campaign owners only.
+templ sidebarCreateCategory(ctx context.Context) {
+	<div id="sidebar-create-category" class="px-4 mb-2" style="display: none;">
+		<div class="p-2.5 bg-surface-raised border border-edge rounded-md space-y-2"
+			x-data={ fmt.Sprintf(`{
+				name: '', icon: 'fa-file', color: '#6b7280', saving: false,
+				icons: ['fa-user','fa-users','fa-map-pin','fa-building','fa-box','fa-sticky-note',
+					'fa-crown','fa-shield','fa-scroll','fa-book','fa-star','fa-flag',
+					'fa-landmark','fa-globe','fa-mountain','fa-gem','fa-skull','fa-dragon',
+					'fa-hat-wizard','fa-dungeon','fa-wand-sparkles','fa-flask','fa-paw','fa-ghost'],
+				async create() {
+					if (!this.name.trim() || this.saving) return;
+					this.saving = true;
+					try {
+						const res = await Chronicle.apiFetch('/campaigns/%s/entity-types', {
+							method: 'POST',
+							body: { name: this.name.trim(), icon: this.icon, color: this.color }
+						});
+						if (res.ok || res.redirected) {
+							window.location.reload();
+						} else {
+							const err = await res.json().catch(() => ({}));
+							Chronicle.notify(err.message || 'Failed to create category', 'error');
+						}
+					} catch (e) {
+						Chronicle.notify('Failed to create category', 'error');
+					} finally {
+						this.saving = false;
+					}
+				}
+			}`, GetCampaignID(ctx)) }
+		>
+			<input
+				x-model="name"
+				type="text"
+				placeholder="Category name"
+				class="input w-full text-xs"
+				maxlength="100"
+				@keydown.enter="create()"
+				@keydown.escape="$el.closest('#sidebar-create-category').style.display='none'"
+			/>
+			<div class="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+				<template x-for="ic in icons" :key="ic">
+					<label class="cursor-pointer">
+						<input type="radio" name="sidebar_icon" :value="ic" x-model="icon" class="peer sr-only"/>
+						<span class="inline-flex items-center justify-center w-6 h-6 rounded border border-edge text-fg-secondary peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:text-accent hover:border-edge transition-colors">
+							<i :class="'fa-solid ' + ic" class="text-[10px]"></i>
+						</span>
+					</label>
+				</template>
+			</div>
+			<div class="flex items-center gap-2">
+				<input type="color" x-model="color" class="w-6 h-6 rounded border border-edge cursor-pointer shrink-0"/>
+				<button
+					type="button"
+					:disabled="!name.trim() || saving"
+					class="btn-primary text-xs flex-1 py-1"
+					@click="create()"
+				>
+					<span x-show="!saving">Add</span>
+					<span x-show="saving">Adding...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
 templ entityTypeLink(slug string, label string, color string, icon string, count int, typeID int) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug)) }

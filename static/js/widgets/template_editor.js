@@ -1445,6 +1445,8 @@ Chronicle.register('template-editor', {
 
     this.markDirty();
     this.renderCanvas();
+    console.log('[template-editor] Drop complete: layout now has', this.layout.rows.length, 'rows,',
+      this.layout.rows.reduce((n, r) => n + r.columns.reduce((m, c) => m + c.blocks.length, 0), 0), 'blocks');
   },
 
   addRow(widths) {
@@ -1552,6 +1554,8 @@ Chronicle.register('template-editor', {
     try {
       // Strip transient UI state before sending to the server.
       const cleanLayout = this.cleanLayoutForSave(this.layout);
+      console.log('[template-editor] Saving layout:', cleanLayout.rows.length, 'rows,',
+        JSON.stringify(cleanLayout).length, 'bytes to', this.endpoint);
       const res = await Chronicle.apiFetch(this.endpoint, {
         method: 'PUT',
         body: { layout: cleanLayout },
@@ -1559,8 +1563,10 @@ Chronicle.register('template-editor', {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        console.error('[template-editor] Save failed:', res.status, err);
         throw new Error(err.message || 'Failed to save');
       }
+      console.log('[template-editor] Save successful');
 
       this.dirty = false;
       if (status) status.textContent = 'Saved';
