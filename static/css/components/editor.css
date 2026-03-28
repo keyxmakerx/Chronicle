@@ -24,6 +24,37 @@
            bg-surface-alt text-fg-secondary hover:text-fg transition-colors;
   }
 
+  /* --- Mobile touch-friendly adjustments --- */
+  @media (max-width: 767px) {
+    .chronicle-editor__toolbar {
+      @apply gap-1 px-1.5 py-2;
+    }
+    .chronicle-editor__btn {
+      @apply w-10 h-10 text-base;
+    }
+    .chronicle-editor__separator {
+      @apply w-px h-4 mx-0.5;
+    }
+    .chronicle-editor__btn--save {
+      @apply px-4 py-2 text-sm;
+    }
+    .chronicle-editor__insert-dropdown {
+      @apply w-64 right-0 left-auto;
+    }
+    .chronicle-editor__content .tiptap {
+      @apply p-3 min-h-[150px];
+    }
+    .chronicle-editor__header {
+      @apply px-2 py-1.5;
+    }
+    .chronicle-find-bar__row {
+      @apply flex-wrap;
+    }
+    .chronicle-find-bar__input {
+      @apply text-base py-1.5;
+    }
+  }
+
   /* Highlight the save button when there are unsaved changes. */
   .chronicle-editor__btn--save.has-changes {
     @apply bg-accent text-white hover:bg-accent-hover;

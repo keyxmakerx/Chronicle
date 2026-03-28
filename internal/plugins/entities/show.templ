@@ -19,7 +19,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-6xl mx-auto" data-entity-type-slug={ entityType.Slug }>
 			<!-- Breadcrumb with ancestor chain -->
-			<nav class="text-sm text-fg-secondary mb-4">
+			<nav class="text-xs md:text-sm text-fg-secondary mb-4 overflow-x-auto whitespace-nowrap">
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>
 				if entity.TypeSlug != "" {
 					<span class="mx-1">/</span>
@@ -37,7 +37,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			<!-- Dynamic layout from entity type template -->
 			if entityType != nil && len(entityType.Layout.Rows) > 0 {
 				for _, row := range entityType.Layout.Rows {
-					<div class="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
+					<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6">
 						for _, col := range row.Columns {
 							<div class={ entityColSpan(col.Width) }>
 								for _, block := range col.Blocks {
@@ -49,7 +49,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				}
 			} else {
 				<!-- Fallback: default two-column layout if no layout defined -->
-				<div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+				<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6">
 					<div class="col-span-1 md:col-span-8 space-y-4">
 						@blockTitle(cc, entity, csrfToken)
 						@blockTags(cc, entity, csrfToken)
@@ -216,7 +216,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 	>
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-2">
-				<h1 class="text-3xl font-bold text-fg">{ entity.Name }</h1>
+				<h1 class="text-xl md:text-3xl font-bold text-fg">{ entity.Name }</h1>
 				<button
 					class="text-fg-muted hover:text-amber-400 transition-colors"
 					data-favorite-toggle={ entity.ID }

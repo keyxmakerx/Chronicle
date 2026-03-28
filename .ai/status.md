@@ -8,7 +8,20 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-27 -- **Pre-Reddit Launch Cleanup.**
+2026-03-28 -- **Layout Editor Debug + Sidebar Quick-Create.**
+
+67. **Layout Editor Debug + Sidebar Quick-Create (2 items).**
+
+    - **Template editor debug logging** — Added `console.log` to `handleDrop()` and `save()` in
+      `static/js/widgets/template_editor.js` to diagnose layout save failures. Logs block count,
+      payload size, endpoint, and server error details. Code review of the full save flow
+      (template_editor.js → handler.go → service.go ValidateLayout → repository.go) found no
+      obvious bug — the `posts` block IS registered, the JSON wrapping is correct, validation
+      logic checks out. Issue may be in drag-and-drop interaction or rendering.
+    - **Sidebar entity type quick-create** — Added "+" button to sidebar Categories header
+      (owner-only, `GetCampaignRole >= 3`). Clicking opens an inline Alpine.js form with name
+      input, 24-icon picker grid, and color picker. POSTs to existing `CreateEntityType` endpoint.
+      Reloads page on success. No backend changes needed.
 
 66. **Pre-Reddit Launch Cleanup (4 items).**
 
