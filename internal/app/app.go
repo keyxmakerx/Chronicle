@@ -4,17 +4,13 @@
 package app
 
 import (
-	"archive/zip"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -105,12 +101,6 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *databa
 
 	// Serve static files (CSS, JS, vendor libs, fonts, images).
 	e.Static("/static", "static")
-
-	// Serve the Foundry VTT module directory for easy installation.
-	// module.json is served with dynamic URL injection; zip built on-the-fly.
-	e.GET("/foundry-module/module.json", app.serveFoundryModuleManifest)
-	e.GET("/foundry-module/chronicle-sync.zip", app.serveFoundryModuleZip)
-	e.Static("/foundry-module", "foundry-module")
 
 	return app
 }
@@ -313,117 +303,6 @@ func isAPIRequest(c echo.Context) bool {
 // isHTMXRequest returns true if the request was initiated by HTMX.
 func isHTMXRequest(c echo.Context) bool {
 	return c.Request().Header.Get("HX-Request") == "true"
-}
-
-// foundryModuleDir returns the directory to serve the Foundry module from.
-// Prefers the package manager install path if available, falls back to the
-// bundled foundry-module/ directory.
-func (a *App) foundryModuleDir() string {
-	if a.pkgService != nil {
-		if path := a.pkgService.FoundryModulePath(); path != "" {
-			if _, err := os.Stat(filepath.Join(path, "module.json")); err == nil {
-				return path
-			}
-		}
-	}
-	return "foundry-module"
-}
-
-// serveFoundryModuleManifest serves foundry-module/module.json with the
-// manifest and download URLs rewritten to use the Chronicle instance's BaseURL.
-// This allows Foundry VTT to install the module directly from any Chronicle
-// instance without needing GitHub releases.
-func (a *App) serveFoundryModuleManifest(c echo.Context) error {
-	moduleDir := a.foundryModuleDir()
-	data, err := os.ReadFile(filepath.Join(moduleDir, "module.json"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "module.json not found")
-	}
-
-	var manifest map[string]any
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "invalid module.json")
-	}
-
-	// Always rewrite manifest and download URLs to point at this instance.
-	manifest["manifest"] = a.Config.BaseURL + "/foundry-module/module.json"
-	manifest["download"] = a.Config.BaseURL + "/foundry-module/chronicle-sync.zip"
-
-	return c.JSON(http.StatusOK, manifest)
-}
-
-// serveFoundryModuleZip dynamically zips the foundry-module/ directory and
-// serves it as chronicle-sync.zip. Foundry VTT downloads this during module
-// installation. The zip contains all files under a chronicle-sync/ root
-// directory, which is the expected structure for Foundry module archives.
-// The module.json inside the zip gets its manifest/download URLs rewritten
-// to point at this Chronicle instance.
-func (a *App) serveFoundryModuleZip(c echo.Context) error {
-	moduleDir := a.foundryModuleDir()
-	if _, err := os.Stat(moduleDir); err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "foundry module directory not found")
-	}
-
-	c.Response().Header().Set("Content-Type", "application/zip")
-	c.Response().Header().Set("Content-Disposition", "attachment; filename=chronicle-sync.zip")
-	c.Response().WriteHeader(http.StatusOK)
-
-	zw := zip.NewWriter(c.Response().Writer)
-
-	walkErr := filepath.WalkDir(moduleDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		// Skip non-distributable files.
-		name := d.Name()
-		if name == ".ai.md" || name == "TESTING.md" {
-			return nil
-		}
-		if d.IsDir() {
-			return nil
-		}
-		// Create zip entry under chronicle-sync/ root.
-		relPath, _ := filepath.Rel(moduleDir, path)
-		zipPath := filepath.Join("chronicle-sync", relPath)
-
-		w, err := zw.Create(filepath.ToSlash(zipPath))
-		if err != nil {
-			return err
-		}
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-
-		// Rewrite module.json URLs inside the zip so the installed module
-		// points back at this Chronicle instance for updates.
-		if name == "module.json" {
-			data, err = a.rewriteModuleManifest(data, a.Config.BaseURL)
-			if err != nil {
-				return err
-			}
-		}
-
-		_, err = w.Write(data)
-		return err
-	})
-	if walkErr != nil {
-		return walkErr
-	}
-	return zw.Close()
-}
-
-// rewriteModuleManifest parses module.json and rewrites the manifest and
-// download URLs to point at the given baseURL.
-func (a *App) rewriteModuleManifest(data []byte, baseURL string) ([]byte, error) {
-	var manifest map[string]any
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return data, err
-	}
-	manifest["manifest"] = baseURL + "/foundry-module/module.json"
-	manifest["download"] = baseURL + "/foundry-module/chronicle-sync.zip"
-	return json.MarshalIndent(manifest, "", "  ")
 }
 
 // Start begins listening for HTTP requests on the configured port.
