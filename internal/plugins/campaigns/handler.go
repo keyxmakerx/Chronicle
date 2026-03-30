@@ -27,12 +27,13 @@ type EntityTypeLister interface {
 // SettingsEntityType is a minimal entity type representation for the settings
 // and customization pages. Includes Description for the Category Dashboards tab.
 type SettingsEntityType struct {
-	ID          int     `json:"id"`
-	Name        string  `json:"name"`
-	NamePlural  string  `json:"name_plural"`
-	Icon        string  `json:"icon"`
-	Color       string  `json:"color"`
-	Description *string `json:"description,omitempty"`
+	ID           int     `json:"id"`
+	Name         string  `json:"name"`
+	NamePlural   string  `json:"name_plural"`
+	Icon         string  `json:"icon"`
+	Color        string  `json:"color"`
+	Description  *string `json:"description,omitempty"`
+	ParentTypeID *int    `json:"parent_type_id,omitempty"`
 }
 
 // EntityTypeLayoutFetcher fetches a single entity type's full layout and field

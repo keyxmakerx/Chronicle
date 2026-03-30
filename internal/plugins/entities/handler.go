@@ -2084,10 +2084,11 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 	}
 
 	input := CreateEntityTypeInput{
-		Name:       req.Name,
-		NamePlural: req.NamePlural,
-		Icon:       req.Icon,
-		Color:      req.Color,
+		Name:         req.Name,
+		NamePlural:   req.NamePlural,
+		Icon:         req.Icon,
+		Color:        req.Color,
+		ParentTypeID: req.ParentTypeID,
 	}
 
 	et, err := h.service.CreateEntityType(c.Request().Context(), cc.Campaign.ID, input)
@@ -2116,6 +2117,19 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 	}
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityTypeCreated, strconv.Itoa(et.ID), et.Name)
+
+	// JSON response for API callers (Layout Studio, sidebar quick-create).
+	if strings.Contains(c.Request().Header.Get("Accept"), "application/json") {
+		return c.JSON(http.StatusCreated, map[string]any{
+			"id":             et.ID,
+			"name":           et.Name,
+			"name_plural":    et.NamePlural,
+			"slug":           et.Slug,
+			"icon":           et.Icon,
+			"color":          et.Color,
+			"parent_type_id": et.ParentTypeID,
+		})
+	}
 
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entity-types")
 }

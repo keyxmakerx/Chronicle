@@ -162,86 +162,154 @@
       var self = this;
       this.catListEl.innerHTML = '';
 
+      // Separate top-level types from child types.
+      var topLevel = this.entityTypes.filter(function (et) { return !et.parent_type_id; });
+      var childrenOf = {};
       this.entityTypes.forEach(function (et) {
-        var group = document.createElement('div');
-        group.className = 'mb-0.5';
+        if (et.parent_type_id) {
+          if (!childrenOf[et.parent_type_id]) childrenOf[et.parent_type_id] = [];
+          childrenOf[et.parent_type_id].push(et);
+        }
+      });
 
-        // Category header row.
-        var row = document.createElement('div');
-        row.className = 'flex items-center gap-1 px-1 group';
-
-        // Expand/collapse toggle.
-        var toggle = document.createElement('button');
-        toggle.className = 'w-4 h-4 flex items-center justify-center text-[8px] text-fg-muted hover:text-fg transition-colors shrink-0';
-        toggle.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
-        var subItems = document.createElement('div');
-        subItems.className = 'ml-5 pl-2 border-l border-edge/50';
-        var expanded = true;
-        toggle.addEventListener('click', function () {
-          expanded = !expanded;
-          subItems.style.display = expanded ? '' : 'none';
-          toggle.querySelector('i').style.transform = expanded ? '' : 'rotate(-90deg)';
-        });
-
-        // Category icon + name.
-        var catLabel = document.createElement('div');
-        catLabel.className = 'flex items-center gap-1.5 flex-1 min-w-0 px-1.5 py-1 rounded-md text-xs font-medium text-fg truncate';
-        catLabel.innerHTML = '<span class="w-4 h-4 rounded flex items-center justify-center text-[8px] shrink-0" style="background-color:' + Chronicle.escapeAttr(et.color) + '20;color:' + Chronicle.escapeAttr(et.color) + '">' +
-          '<i class="fa-solid ' + Chronicle.escapeAttr(et.icon || 'fa-file') + '"></i></span>' +
-          '<span class="truncate">' + Chronicle.escapeHtml(et.name_plural || et.name) + '</span>';
-
-        // Category actions (edit/delete).
-        var actions = document.createElement('div');
-        actions.className = 'flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0';
-        var editBtn = document.createElement('button');
-        editBtn.className = 'w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-fg hover:bg-surface-alt';
-        editBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
-        editBtn.title = 'Edit category';
-        editBtn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          self.showEditCategory(et);
-        });
-        var delBtn = document.createElement('button');
-        delBtn.className = 'w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20';
-        delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
-        delBtn.title = 'Delete category';
-        delBtn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          self.deleteCategory(et);
-        });
-        actions.appendChild(editBtn);
-        actions.appendChild(delBtn);
-
-        row.appendChild(toggle);
-        row.appendChild(catLabel);
-        row.appendChild(actions);
-        group.appendChild(row);
-
-        // Sub-items: Page Template + Category Dashboard.
-        var pageBtn = document.createElement('button');
-        pageBtn.className = 'ls-nav-item w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors text-left';
-        pageBtn.innerHTML = '<i class="fa-solid fa-layer-group w-3 text-center text-fg-muted text-[9px]"></i><span>Page Template</span>';
-        pageBtn.dataset.contextType = CTX_PAGE_TEMPLATE;
-        pageBtn.dataset.contextEtid = et.id;
-        pageBtn.addEventListener('click', function () {
-          self.selectContext({ type: CTX_PAGE_TEMPLATE, etid: et.id, etName: et.name, etIcon: et.icon, etColor: et.color });
-        });
-
-        var dashBtn = document.createElement('button');
-        dashBtn.className = 'ls-nav-item w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors text-left';
-        dashBtn.innerHTML = '<i class="fa-solid fa-grip w-3 text-center text-fg-muted text-[9px]"></i><span>Category Dashboard</span>';
-        dashBtn.dataset.contextType = CTX_CATEGORY_DASH;
-        dashBtn.dataset.contextEtid = et.id;
-        dashBtn.addEventListener('click', function () {
-          self.selectContext({ type: CTX_CATEGORY_DASH, etid: et.id, etName: et.name, etIcon: et.icon, etColor: et.color });
-        });
-
-        subItems.appendChild(pageBtn);
-        subItems.appendChild(dashBtn);
-        group.appendChild(subItems);
-
+      topLevel.forEach(function (et) {
+        var group = self._renderCategoryGroup(et, childrenOf[et.id] || []);
         self.catListEl.appendChild(group);
       });
+    },
+
+    /**
+     * Render a single category group with its children and sub-items.
+     */
+    _renderCategoryGroup: function (et, children) {
+      var self = this;
+      var group = document.createElement('div');
+      group.className = 'mb-0.5';
+
+      // Category header row.
+      var row = document.createElement('div');
+      row.className = 'flex items-center gap-1 px-1 group';
+
+      // Expand/collapse toggle.
+      var toggle = document.createElement('button');
+      toggle.className = 'w-4 h-4 flex items-center justify-center text-[8px] text-fg-muted hover:text-fg transition-colors shrink-0';
+      toggle.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
+      var subItems = document.createElement('div');
+      subItems.className = 'ml-5 pl-2 border-l border-edge/50';
+      var expanded = true;
+      toggle.addEventListener('click', function () {
+        expanded = !expanded;
+        subItems.style.display = expanded ? '' : 'none';
+        toggle.querySelector('i').style.transform = expanded ? '' : 'rotate(-90deg)';
+      });
+
+      // Category icon + name.
+      var catLabel = document.createElement('div');
+      catLabel.className = 'flex items-center gap-1.5 flex-1 min-w-0 px-1.5 py-1 rounded-md text-xs font-medium text-fg truncate';
+      catLabel.innerHTML = '<span class="w-4 h-4 rounded flex items-center justify-center text-[8px] shrink-0" style="background-color:' + Chronicle.escapeAttr(et.color) + '20;color:' + Chronicle.escapeAttr(et.color) + '">' +
+        '<i class="fa-solid ' + Chronicle.escapeAttr(et.icon || 'fa-file') + '"></i></span>' +
+        '<span class="truncate">' + Chronicle.escapeHtml(et.name_plural || et.name) + '</span>';
+
+      // Category actions (edit/add sub-type/delete).
+      var actions = document.createElement('div');
+      actions.className = 'flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0';
+      var addSubBtn = document.createElement('button');
+      addSubBtn.className = 'w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-accent hover:bg-accent/10';
+      addSubBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+      addSubBtn.title = 'Add sub-type';
+      addSubBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        self.showCreateCategory(et.id);
+      });
+      var editBtn = document.createElement('button');
+      editBtn.className = 'w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-fg hover:bg-surface-alt';
+      editBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
+      editBtn.title = 'Edit category';
+      editBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        self.showEditCategory(et);
+      });
+      var delBtn = document.createElement('button');
+      delBtn.className = 'w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20';
+      delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      delBtn.title = 'Delete category';
+      delBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        self.deleteCategory(et);
+      });
+      actions.appendChild(addSubBtn);
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+
+      row.appendChild(toggle);
+      row.appendChild(catLabel);
+      row.appendChild(actions);
+      group.appendChild(row);
+
+      // Sub-items: Page Template + Category Dashboard.
+      var pageBtn = document.createElement('button');
+      pageBtn.className = 'ls-nav-item w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors text-left';
+      pageBtn.innerHTML = '<i class="fa-solid fa-layer-group w-3 text-center text-fg-muted text-[9px]"></i><span>Page Template</span>';
+      pageBtn.dataset.contextType = CTX_PAGE_TEMPLATE;
+      pageBtn.dataset.contextEtid = et.id;
+      pageBtn.addEventListener('click', function () {
+        self.selectContext({ type: CTX_PAGE_TEMPLATE, etid: et.id, etName: et.name, etIcon: et.icon, etColor: et.color });
+      });
+
+      var dashBtn = document.createElement('button');
+      dashBtn.className = 'ls-nav-item w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors text-left';
+      dashBtn.innerHTML = '<i class="fa-solid fa-grip w-3 text-center text-fg-muted text-[9px]"></i><span>Category Dashboard</span>';
+      dashBtn.dataset.contextType = CTX_CATEGORY_DASH;
+      dashBtn.dataset.contextEtid = et.id;
+      dashBtn.addEventListener('click', function () {
+        self.selectContext({ type: CTX_CATEGORY_DASH, etid: et.id, etName: et.name, etIcon: et.icon, etColor: et.color });
+      });
+
+      subItems.appendChild(pageBtn);
+      subItems.appendChild(dashBtn);
+
+      // Render child types (sub-types) under this parent.
+      children.forEach(function (child) {
+        var childRow = document.createElement('div');
+        childRow.className = 'flex items-center gap-1 group/child mt-0.5';
+
+        var childLabel = document.createElement('button');
+        childLabel.className = 'ls-nav-item flex items-center gap-1.5 flex-1 min-w-0 px-2 py-1 rounded-md text-xs text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors text-left';
+        childLabel.innerHTML = '<span class="w-3.5 h-3.5 rounded flex items-center justify-center text-[7px] shrink-0" style="background-color:' + Chronicle.escapeAttr(child.color) + '20;color:' + Chronicle.escapeAttr(child.color) + '">' +
+          '<i class="fa-solid ' + Chronicle.escapeAttr(child.icon || 'fa-file') + '"></i></span>' +
+          '<span class="truncate">' + Chronicle.escapeHtml(child.name) + '</span>';
+        childLabel.dataset.contextType = CTX_PAGE_TEMPLATE;
+        childLabel.dataset.contextEtid = child.id;
+        childLabel.addEventListener('click', function () {
+          self.selectContext({ type: CTX_PAGE_TEMPLATE, etid: child.id, etName: child.name, etIcon: child.icon, etColor: child.color });
+        });
+
+        var childActions = document.createElement('div');
+        childActions.className = 'flex items-center gap-0.5 opacity-0 group-hover/child:opacity-100 transition-opacity shrink-0';
+        var childEditBtn = document.createElement('button');
+        childEditBtn.className = 'w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-fg hover:bg-surface-alt';
+        childEditBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
+        childEditBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          self.showEditCategory(child);
+        });
+        var childDelBtn = document.createElement('button');
+        childDelBtn.className = 'w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20';
+        childDelBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+        childDelBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          self.deleteCategory(child);
+        });
+        childActions.appendChild(childEditBtn);
+        childActions.appendChild(childDelBtn);
+
+        childRow.appendChild(childLabel);
+        childRow.appendChild(childActions);
+        subItems.appendChild(childRow);
+      });
+
+      group.appendChild(subItems);
+      return group;
     },
 
     /**
@@ -448,16 +516,24 @@
     /**
      * Show inline create category form.
      */
-    showCreateCategory: function () {
+    showCreateCategory: function (parentTypeId) {
       var self = this;
       // Check if form already exists.
       if (this.catListEl.querySelector('.ls-cat-form')) return;
 
+      var isSubType = !!parentTypeId;
+      var parentName = '';
+      if (isSubType) {
+        var parent = this.entityTypes.find(function (et) { return et.id == parentTypeId; });
+        parentName = parent ? parent.name : '';
+      }
+
       var form = document.createElement('div');
       form.className = 'ls-cat-form mx-1 my-1 p-2 rounded-md border border-accent/30 bg-accent/5 space-y-2';
       form.innerHTML =
-        '<input type="text" class="input text-xs w-full" placeholder="Category name (singular)" id="ls-cat-name"/>' +
-        '<input type="text" class="input text-xs w-full" placeholder="Plural name" id="ls-cat-plural"/>' +
+        (isSubType ? '<div class="text-[10px] text-accent font-medium mb-1"><i class="fa-solid fa-turn-down-right mr-1"></i>New sub-type of ' + Chronicle.escapeHtml(parentName) + '</div>' : '') +
+        '<input type="text" class="input text-xs w-full" placeholder="' + (isSubType ? 'Sub-type name (e.g. NPC)' : 'Category name (singular)') + '" id="ls-cat-name"/>' +
+        (isSubType ? '' : '<input type="text" class="input text-xs w-full" placeholder="Plural name" id="ls-cat-plural"/>') +
         '<div class="flex gap-2">' +
         '  <input type="text" class="input text-xs flex-1" placeholder="Icon (e.g. fa-user)" id="ls-cat-icon" value="fa-file"/>' +
         '  <input type="color" class="w-8 h-8 rounded border border-edge cursor-pointer shrink-0" id="ls-cat-color" value="#6366f1"/>' +
@@ -475,7 +551,8 @@
 
       form.querySelector('#ls-cat-save').addEventListener('click', function () {
         var name = form.querySelector('#ls-cat-name').value.trim();
-        var plural = form.querySelector('#ls-cat-plural').value.trim();
+        var pluralEl = form.querySelector('#ls-cat-plural');
+        var plural = pluralEl ? pluralEl.value.trim() : '';
         var icon = form.querySelector('#ls-cat-icon').value.trim();
         var color = form.querySelector('#ls-cat-color').value;
         if (!name) { Chronicle.notify('Name is required', 'error'); return; }
@@ -485,9 +562,12 @@
         saveBtn.disabled = true;
         saveBtn.textContent = 'Creating...';
 
+        var body = { name: name, name_plural: plural, icon: icon, color: color };
+        if (parentTypeId) body.parent_type_id = parentTypeId;
+
         Chronicle.apiFetch('/campaigns/' + self.campaignId + '/entity-types', {
           method: 'POST',
-          body: { name: name, name_plural: plural, icon: icon, color: color },
+          body: body,
           csrfToken: self.csrfToken
         }).then(function (res) {
           if (!res.ok) throw new Error('Failed');
@@ -499,15 +579,16 @@
             name: name,
             name_plural: plural,
             icon: icon,
-            color: color
+            color: color,
+            parent_type_id: parentTypeId || null
           });
           form.remove();
           self.renderCategoryList();
-          Chronicle.notify('Category created', 'success');
+          Chronicle.notify(isSubType ? 'Sub-type created' : 'Category created', 'success');
         }).catch(function () {
           saveBtn.disabled = false;
           saveBtn.textContent = 'Create';
-          Chronicle.notify('Failed to create category', 'error');
+          Chronicle.notify('Failed to create ' + (isSubType ? 'sub-type' : 'category'), 'error');
         });
       });
 
