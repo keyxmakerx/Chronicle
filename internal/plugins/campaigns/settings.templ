@@ -95,48 +95,49 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 
 // settingsGeneralTab renders the General tab: details, MOTD, visibility, system, danger zone.
 templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON string) {
-	<div class="space-y-6">
-		// Campaign details.
-		<div class="card p-6">
-			<h2 class="text-lg font-semibold text-fg mb-4">Campaign Details</h2>
-			<form
-				method="POST"
-				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
-				hx-put={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
-				hx-target="#campaign-details-form"
-				hx-swap="outerHTML"
-				id="campaign-details-form"
-				class="space-y-4"
-			>
-				<input type="hidden" name="_method" value="PUT"/>
-				<input type="hidden" name="csrf_token" value={ csrfToken }/>
-				<div>
-					<label for="name" class="block text-sm font-medium text-fg-body mb-1">Campaign Name</label>
-					<input type="text" id="name" name="name" value={ cc.Campaign.Name } required class="input w-full" maxlength="200"/>
-				</div>
-				<div>
-					<label for="description" class="block text-sm font-medium text-fg-body mb-1">Description</label>
-					<textarea id="description" name="description" class="input w-full h-24" maxlength="5000">
-						if cc.Campaign.Description != nil {
-							{ *cc.Campaign.Description }
-						}
-					</textarea>
-				</div>
-				<div class="flex items-center">
-					<input type="checkbox" id="is_public" name="is_public" value="true" if cc.Campaign.IsPublic { checked } class="h-4 w-4 text-accent border-edge rounded focus:ring-accent"/>
-					<label for="is_public" class="ml-2 block text-sm text-fg-body">Make this campaign public</label>
-				</div>
-				<p class="text-xs text-fg-secondary -mt-2 ml-6">Public campaigns can be viewed by anyone without logging in.</p>
-				<div class="flex justify-end">
-					<button type="submit" class="btn-primary text-sm">Save Changes</button>
-				</div>
-			</form>
-		</div>
+	<div class="space-y-4">
+		// Top row: Campaign Details + Welcome Message side-by-side.
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			// Campaign details.
+			<div class="card p-4">
+				<h2 class="text-sm font-semibold text-fg mb-3">Campaign Details</h2>
+				<form
+					method="POST"
+					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) }
+					hx-put={ fmt.Sprintf("/campaigns/%s", cc.Campaign.ID) }
+					hx-target="#campaign-details-form"
+					hx-swap="outerHTML"
+					id="campaign-details-form"
+					class="space-y-3"
+				>
+					<input type="hidden" name="_method" value="PUT"/>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<div>
+						<label for="name" class="block text-xs font-medium text-fg-body mb-1">Campaign Name</label>
+						<input type="text" id="name" name="name" value={ cc.Campaign.Name } required class="input w-full text-sm" maxlength="200"/>
+					</div>
+					<div>
+						<label for="description" class="block text-xs font-medium text-fg-body mb-1">Description</label>
+						<textarea id="description" name="description" class="input w-full h-20 text-sm" maxlength="5000">
+							if cc.Campaign.Description != nil {
+								{ *cc.Campaign.Description }
+							}
+						</textarea>
+					</div>
+					<div class="flex items-center">
+						<input type="checkbox" id="is_public" name="is_public" value="true" if cc.Campaign.IsPublic { checked } class="h-4 w-4 text-accent border-edge rounded focus:ring-accent"/>
+						<label for="is_public" class="ml-2 block text-xs text-fg-body">Make this campaign public</label>
+					</div>
+					<div class="flex justify-end">
+						<button type="submit" class="btn-primary text-xs">Save Changes</button>
+					</div>
+				</form>
+			</div>
 
-		// Welcome message.
-		<div class="card p-6">
-			<h2 class="text-lg font-semibold text-fg mb-2">Welcome Message</h2>
-			<p class="text-sm text-fg-secondary mb-4">Set a banner message shown on the campaign dashboard for all members.</p>
+			// Welcome message.
+			<div class="card p-4">
+				<h2 class="text-sm font-semibold text-fg mb-1">Welcome Message</h2>
+				<p class="text-xs text-fg-secondary mb-3">Banner shown on the campaign dashboard.</p>
 			<div
 				x-data={ fmt.Sprintf(`{
 					message: %s,
@@ -169,12 +170,15 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 					</div>
 				</div>
 			</div>
+			</div>
 		</div>
 
+		// Second row: Visibility + Game System side-by-side.
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 		// Default visibility.
-		<div class="card p-6">
-			<h2 class="text-lg font-semibold text-fg mb-2">Default Visibility</h2>
-			<p class="text-sm text-fg-secondary mb-4">Set the default visibility for newly created entities.</p>
+		<div class="card p-4">
+			<h2 class="text-sm font-semibold text-fg mb-2">Default Visibility</h2>
+			<p class="text-xs text-fg-secondary mb-2">Default visibility for new entities.</p>
 			<div
 				x-data={ fmt.Sprintf(`{
 					visibility: '%s',
@@ -226,9 +230,9 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 		</div>
 
 		// Game System selector.
-		<div class="card p-6">
-			<h2 class="text-lg font-semibold text-fg mb-2">Game System</h2>
-			<p class="text-sm text-fg-secondary mb-4">Select a game system for reference content, tooltips, and entity presets.</p>
+		<div class="card p-4">
+			<h2 class="text-sm font-semibold text-fg mb-1">Game System</h2>
+			<p class="text-xs text-fg-secondary mb-3">Reference content, tooltips, and presets.</p>
 			<div
 				x-data={ fmt.Sprintf(`{
 					systemId: '%s',
@@ -284,11 +288,12 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 				</div>
 			</div>
 		</div>
+		</div>
 
 		// Danger Zone.
 		<div class="card border-red-200 dark:border-red-800" x-data="{ open: false }">
-			<button @click="open = !open" class="w-full p-6 flex items-center justify-between text-left">
-				<h2 class="text-lg font-semibold text-red-600 dark:text-red-400">Danger Zone</h2>
+			<button @click="open = !open" class="w-full p-4 flex items-center justify-between text-left">
+				<h2 class="text-sm font-semibold text-red-600 dark:text-red-400">Danger Zone</h2>
 				<i class="fa-solid fa-chevron-down text-red-400 text-xs transition-transform" :class="open && 'rotate-180'"></i>
 			</button>
 			<div x-show="open" x-transition x-cloak class="px-6 pb-6 space-y-6">
