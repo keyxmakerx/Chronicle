@@ -44,8 +44,40 @@ func systemOptionsJSON(opts []SystemOption) string {
 	return string(b)
 }
 
+// pluginHubAddonsJSON serializes addons to JSON for the Alpine.js features tab.
+func pluginHubAddonsJSON(addons []PluginHubAddon) string {
+	type addonJS struct {
+		AddonID     int    `json:"addon_id"`
+		Slug        string `json:"slug"`
+		Name        string `json:"name"`
+		Icon        string `json:"icon"`
+		Category    string `json:"category"`
+		Enabled     bool   `json:"enabled"`
+		Installed   bool   `json:"installed"`
+		Description string `json:"description"`
+	}
+	out := make([]addonJS, len(addons))
+	for i, a := range addons {
+		out[i] = addonJS{
+			AddonID:     a.AddonID,
+			Slug:        a.Slug,
+			Name:        a.Name,
+			Icon:        a.Icon,
+			Category:    a.Category,
+			Enabled:     a.Enabled,
+			Installed:   a.Installed,
+			Description: pluginDescription(a.Slug),
+		}
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
 // CampaignSettingsPage renders the tabbed campaign settings hub.
-templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, entityTypes []SettingsEntityType, members []CampaignMember, csrfToken, errMsg, baseURL, activeTab string, smtpConfigured bool, systemOptions []SystemOption) {
+templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, entityTypes []SettingsEntityType, members []CampaignMember, csrfToken, errMsg, baseURL, activeTab string, smtpConfigured bool, systemOptions []SystemOption, addons []PluginHubAddon) {
 	@layouts.App(cc.Campaign.Name + " - Settings") {
 		<div class="max-w-4xl mx-auto" x-data={ fmt.Sprintf("{ tab: '%s' }", activeTab) }>
 			<div class="flex items-center justify-between mb-4">
@@ -70,6 +102,9 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 			// Tab bar.
 			<div class="flex gap-0 border-b border-edge mb-6 overflow-x-auto">
 				<button @click="tab = 'general'; history.replaceState(null, '', '?tab=general')" :class="tab === 'general' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-gear mr-1.5 text-xs"></i> General</button>
+				if cc.MemberRole >= RoleOwner {
+					<button @click="tab = 'features'; history.replaceState(null, '', '?tab=features')" :class="tab === 'features' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-puzzle-piece mr-1.5 text-xs"></i> Features</button>
+				}
 				<button @click="tab = 'people'; history.replaceState(null, '', '?tab=people')" :class="tab === 'people' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-users mr-1.5 text-xs"></i> People</button>
 				<button @click="tab = 'integrations'; history.replaceState(null, '', '?tab=integrations')" :class="tab === 'integrations' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-plug mr-1.5 text-xs"></i> Integrations</button>
 				<button @click="tab = 'activity'; history.replaceState(null, '', '?tab=activity')" :class="tab === 'activity' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-clock-rotate-left mr-1.5 text-xs"></i> Activity</button>
@@ -78,6 +113,11 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 			<div x-show="tab === 'general'" x-cloak>
 				@settingsGeneralTab(cc, csrfToken, systemOptionsJSON(systemOptions))
 			</div>
+			if cc.MemberRole >= RoleOwner {
+				<div x-show="tab === 'features'" x-cloak>
+					@settingsFeaturesTab(cc, addons, csrfToken)
+				</div>
+			}
 			<div x-show="tab === 'people'" x-cloak>
 				@settingsPeopleTab(cc, members, transfer, csrfToken, smtpConfigured)
 			</div>
@@ -91,6 +131,75 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 			</div>
 		</div>
 	}
+}
+
+// settingsFeaturesTab renders the Features tab: addon toggles with optimistic UI.
+// Toggles fire in the background — the card updates instantly, then confirms with the server.
+templ settingsFeaturesTab(cc *CampaignContext, addons []PluginHubAddon, csrfToken string) {
+	<div class="space-y-4">
+		<p class="text-xs text-fg-secondary">Enable or disable features for this campaign. Disabling does not delete data.</p>
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+			x-data={ fmt.Sprintf(`{
+				addons: %s,
+				async toggle(addon) {
+					const action = addon.enabled ? 'disable' : 'enable';
+					addon.enabled = !addon.enabled;
+					try {
+						const form = new FormData();
+						form.append('action', action);
+						form.append('csrf_token', '%s');
+						const res = await fetch('/campaigns/%s/addons/' + addon.addon_id + '/toggle', {
+							method: 'PUT',
+							body: form,
+							credentials: 'same-origin',
+							headers: { 'X-CSRF-Token': Chronicle.getCsrf() }
+						});
+						if (!res.ok) {
+							addon.enabled = !addon.enabled;
+							Chronicle.notify('Failed to ' + action + ' ' + addon.name, 'error');
+						}
+					} catch (e) {
+						addon.enabled = !addon.enabled;
+						Chronicle.notify('Failed to ' + action + ' ' + addon.name, 'error');
+					}
+				}
+			}`, pluginHubAddonsJSON(addons), csrfToken, cc.Campaign.ID) }
+		>
+			<template x-for="addon in addons" :key="addon.slug">
+				<div class="card p-3 flex items-center gap-3 transition-all"
+					:class="addon.enabled ? 'ring-1 ring-accent/30' : 'opacity-70'"
+				>
+					<div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+						:class="addon.enabled ? 'bg-accent/10' : 'bg-surface-alt'"
+					>
+						<i :class="'fa-solid ' + addon.icon + ' text-base ' + (addon.enabled ? 'text-accent' : 'text-fg-muted')"></i>
+					</div>
+					<div class="flex-1 min-w-0">
+						<div class="text-sm font-semibold text-fg" x-text="addon.name"></div>
+						<div class="text-[10px] text-fg-muted" x-text="addon.description"></div>
+					</div>
+					<template x-if="addon.installed">
+						<button
+							type="button"
+							@click="toggle(addon)"
+							class="shrink-0 px-3 py-1 text-xs font-medium rounded-full transition-colors"
+							:class="addon.enabled
+								? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50'
+								: 'bg-surface-alt text-fg-muted border border-edge hover:bg-accent/10 hover:text-accent'"
+						>
+							<span x-show="addon.enabled"><i class="fa-solid fa-check text-[10px] mr-1"></i>On</span>
+							<span x-show="!addon.enabled"><i class="fa-solid fa-plus text-[10px] mr-1"></i>Off</span>
+						</button>
+					</template>
+					<template x-if="!addon.installed">
+						<span class="shrink-0 px-3 py-1 text-xs font-medium rounded-full bg-surface-alt text-fg-muted border border-edge">
+							Soon
+						</span>
+					</template>
+				</div>
+			</template>
+		</div>
+	</div>
 }
 
 // settingsGeneralTab renders the General tab: details, MOTD, visibility, system, danger zone.

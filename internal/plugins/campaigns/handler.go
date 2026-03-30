@@ -347,7 +347,7 @@ func (h *Handler) Update(c echo.Context) error {
 		if h.entityLister != nil {
 			entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
 		}
-		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, errMsg, h.baseURL, "general", false, nil))
+		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, errMsg, h.baseURL, "general", false, nil, nil))
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.updated", nil)
@@ -763,7 +763,13 @@ func (h *Handler) Settings(c echo.Context) error {
 		systemOptions = h.systemLister.ListSystems()
 	}
 
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, members, csrfToken, "", h.baseURL, activeTab, smtpConfigured, systemOptions))
+	// Fetch addons for the Features tab (owner only).
+	var addons []PluginHubAddon
+	if cc.MemberRole >= RoleOwner && h.addonLister != nil {
+		addons, _ = h.addonLister.ListForPluginHub(ctx, cc.Campaign.ID)
+	}
+
+	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, members, csrfToken, "", h.baseURL, activeTab, smtpConfigured, systemOptions, addons))
 }
 
 // PluginHub renders the campaign plugin hub page, showing all enabled
@@ -1330,7 +1336,7 @@ func (h *Handler) TransferForm(c echo.Context) error {
 		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
 	}
 
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, "", h.baseURL, "general", false, nil))
+	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, "", h.baseURL, "general", false, nil, nil))
 }
 
 // Transfer initiates an ownership transfer (POST /campaigns/:id/transfer).
@@ -1355,7 +1361,7 @@ func (h *Handler) Transfer(c echo.Context) error {
 		if h.entityLister != nil {
 			entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
 		}
-		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, errMsg, h.baseURL, "general", false, nil))
+		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, errMsg, h.baseURL, "general", false, nil, nil))
 	}
 
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
