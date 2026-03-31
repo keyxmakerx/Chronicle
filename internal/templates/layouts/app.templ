@@ -314,16 +314,29 @@ templ Sidebar() {
 							@sidebarCreateCategory(ctx)
 						}
 						if len(GetSidebarItems(ctx)) > 0 {
-							<!-- Unified: render categories and other items from the items array -->
+							<!-- Unified: render categories with sub-types indented -->
 							for _, item := range GetSidebarItems(ctx) {
-								if item.Type == "category" {
+								if item.Type == "category" && item.ParentTypeID == nil {
 									@entityTypeLink(getEntityTypeSlug(ctx, item.TypeID), item.Label, item.Color, item.Icon, GetEntityCount(ctx, item.TypeID), item.TypeID)
+									<!-- Render child types indented under parent -->
+									for _, child := range GetSidebarItems(ctx) {
+										if child.Type == "category" && child.ParentTypeID != nil && *child.ParentTypeID == item.TypeID {
+											@entityTypeChildLink(getEntityTypeSlug(ctx, child.TypeID), child.Label, child.Color, child.Icon, GetEntityCount(ctx, child.TypeID), child.TypeID)
+										}
+									}
 								}
 							}
 						} else {
-							<!-- Legacy: render entity types in configured order -->
+							<!-- Legacy: render entity types with sub-types -->
 							for _, et := range GetEntityTypes(ctx) {
-								@entityTypeLink(et.Slug, et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID), et.ID)
+								if et.ParentTypeID == nil {
+									@entityTypeLink(et.Slug, et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID), et.ID)
+									for _, child := range GetEntityTypes(ctx) {
+										if child.ParentTypeID != nil && *child.ParentTypeID == et.ID {
+											@entityTypeChildLink(child.Slug, child.NamePlural, child.Color, child.Icon, GetEntityCount(ctx, child.ID), child.ID)
+										}
+									}
+								}
 							}
 							<a
 								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
@@ -872,6 +885,34 @@ templ sidebarCreateCategory(ctx context.Context) {
 			</div>
 		</div>
 	</div>
+}
+
+// entityTypeChildLink renders a sub-type link indented under its parent category.
+templ entityTypeChildLink(slug string, label string, color string, icon string, count int, typeID int) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug)) }
+		hx-boost="false"
+		data-drill-url={ fmt.Sprintf("/campaigns/%s/sidebar/drill/%s", GetCampaignID(ctx), slug) }
+		class={ "sidebar-category-link ml-4", sidebarNavLink,
+			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))),
+			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))) }
+		data-cat-slug={ slug }
+		data-cat-url={ fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug) }
+		data-entity-type-id={ strconv.Itoa(typeID) }
+		data-tooltip={ label }
+	>
+		<span class="w-3 h-3 mr-2 shrink-0 flex items-center justify-center">
+			if icon != "" {
+				<i class={ "fa-solid " + icon, "text-[10px]" } style={ fmt.Sprintf("color: %s", color) }></i>
+			} else {
+				<span class="w-1.5 h-1.5 rounded-full" style={ fmt.Sprintf("background-color: %s", color) }></span>
+			}
+		</span>
+		<span class="flex-1 text-[11px]">{ label }</span>
+		if count > 0 {
+			<span class="ml-auto text-[10px] text-gray-500">{ strconv.Itoa(count) }</span>
+		}
+	</a>
 }
 
 templ entityTypeLink(slug string, label string, color string, icon string, count int, typeID int) {
