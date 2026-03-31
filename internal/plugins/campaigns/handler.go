@@ -775,25 +775,13 @@ func (h *Handler) Settings(c echo.Context) error {
 
 // PluginHub renders the campaign plugin hub page, showing all enabled
 // addons with quick links to their main pages.
-// GET /campaigns/:id/plugins
+// GET /campaigns/:id/plugins — redirects to Settings > Features tab.
 func (h *Handler) PluginHub(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-
-	var addons []PluginHubAddon
-	if h.addonLister != nil {
-		var err error
-		addons, err = h.addonLister.ListForPluginHub(c.Request().Context(), cc.Campaign.ID)
-		if err != nil {
-			slog.Warn("plugin hub: list addons failed", slog.Any("error", err))
-		}
-	}
-
-	isOwner := cc.MemberRole >= RoleOwner
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, PluginHubPage(cc, addons, isOwner, csrfToken))
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings?tab=features")
 }
 
 // PluginHubFragment returns the plugin hub list content as an HTMX fragment.
