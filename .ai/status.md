@@ -47,12 +47,13 @@
     - Template editor: handleDrop() and save() console logs
     - Entity tooltip: hover trigger console log
 
-    **NEXT SPRINT: Sidebar Edit Mode Rewrite (W-7)**
-    Current reorg mode is ~2,000 lines across 3 JS files (sidebar_reorg.js, sidebar_tree.js,
-    sidebar_layout_editor.js). Issues: grip icon unintuitive, bolted-on UI looks bad, doesn't
-    handle sub-types, two separate edit modes (gear vs grip) is confusing.
-    Plan: unify into single edit mode with pencil trigger, clean inline editing, full sub-type
-    support, maintain all functionality (reorder, visibility, folders, rename, delete).
+    **NEXT SPRINT: Sidebar Edit Mode Rewrite (W-7) — COMPLETE**
+    Replaced 2 JS files (1,150 lines) with unified `sidebar_editor.js` (575 lines).
+    Single pencil trigger replaces gear + grip icons. Inline edit mode with direct
+    drag-and-drop (no grip handles). Eye toggles, section/link CRUD, touch support.
+    Sub-types display indented under parents in sidebar navigation.
+    Old files (sidebar_reorg.js, sidebar_layout_editor.js) kept on disk for reference,
+    removed from script tags.
 
 67. **Layout Editor Debug + Sidebar Quick-Create (2 items).**
 
