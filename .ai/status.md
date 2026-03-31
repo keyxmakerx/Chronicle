@@ -8,7 +8,52 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-28 -- **Layout Editor Debug + Sidebar Quick-Create.**
+2026-03-30 -- **Pre-Reddit Launch + Entity Type Hierarchy + Settings Redesign.**
+
+68. **Pre-Reddit Launch + Entity Type Hierarchy + Settings Redesign (15+ items).**
+
+    **Pre-Reddit Launch Fixes:**
+    - **LICENSE file** — AGPL-3.0 (662 lines, fetched from GitHub API)
+    - **README cleanup** — Removed 3 TODO comments, replaced .ai/todo.md ref with v0.1 features
+    - **Foundry module unbundled** — Deleted `foundry-module/`, removed serving routes, admin page,
+      Dockerfile COPY. Module now installed via package manager. Sync API stays.
+    - **Docker versions** — MariaDB `10.11` → `latest`, Redis `7-alpine` → `alpine`
+
+    **Entity Type Hierarchy (Sub-Types):**
+    - **Migration 000019** — `parent_type_id` column on `entity_types` with self-referencing FK
+    - **Model/Repo/Service/Handler** — Full stack for creating child types. Max 1 level deep.
+    - **Layout Studio** — Nested display with "+" sub-type button per parent category.
+      Child types shown indented with their own icon/color.
+    - **CreateEntityType JSON fix** — Handler was returning HTMX redirect instead of JSON for
+      API callers (Layout Studio, sidebar quick-create). Now returns 201 JSON.
+    - **Sidebar drill "+"** — Now passes `?type={ID}` to pre-select category on entity form.
+
+    **Settings Page Redesign:**
+    - **Features tab** — Merged Plugin Hub into Settings as 5th tab (owner-only). Compact 3-column
+      card grid with instant Alpine.js optimistic toggles (no page reload).
+    - **General tab compaction** — 2-column grid for Details+Welcome, Visibility+System. Reduced
+      padding (p-6→p-4), gaps (space-y-6→space-y-4), heading sizes (text-lg→text-sm).
+
+    **Mobile UX:**
+    - Editor toolbar: 40px touch targets, responsive insert dropdown, reduced content padding
+    - Entity pages: responsive title (text-xl/text-3xl), horizontal-scroll breadcrumbs, tighter grid gaps
+    - Main content area: reduced mobile padding (px-3/py-3)
+
+    **Sidebar Nav CSS:**
+    - Fixed conflict: `input.css` had simplified box-shadow version overriding the fancy asymmetric
+      8-gradient corner bleed from `sidebar.css`. Replaced with correct version.
+
+    **Debug logging added (needs user testing):**
+    - Template editor: handleDrop() and save() console logs
+    - Entity tooltip: hover trigger console log
+
+    **NEXT SPRINT: Sidebar Edit Mode Rewrite (W-7) — COMPLETE**
+    Replaced 2 JS files (1,150 lines) with unified `sidebar_editor.js` (575 lines).
+    Single pencil trigger replaces gear + grip icons. Inline edit mode with direct
+    drag-and-drop (no grip handles). Eye toggles, section/link CRUD, touch support.
+    Sub-types display indented under parents in sidebar navigation.
+    Old files (sidebar_reorg.js, sidebar_layout_editor.js) kept on disk for reference,
+    removed from script tags.
 
 67. **Layout Editor Debug + Sidebar Quick-Create (2 items).**
 

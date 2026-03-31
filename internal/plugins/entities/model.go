@@ -29,15 +29,17 @@ type EntityType struct {
 	NamePlural      string            `json:"name_plural"`
 	Icon            string            `json:"icon"`
 	Color           string            `json:"color"`
-	PresetCategory  *string           `json:"preset_category,omitempty"` // System preset category ("character", "item", "creature").
-	Description     *string           `json:"description,omitempty"`     // Rich text shown on category dashboard.
+	PresetCategory  *string           `json:"preset_category,omitempty"`   // System preset category ("character", "item", "creature").
+	ParentTypeID    *int              `json:"parent_type_id,omitempty"`    // Parent entity type ID for sub-type hierarchy.
+	Description     *string           `json:"description,omitempty"`       // Rich text shown on category dashboard.
 	PinnedEntityIDs []string          `json:"pinned_entity_ids,omitempty"` // Entity IDs pinned to dashboard top.
-	DashboardLayout *string           `json:"dashboard_layout,omitempty"` // JSON layout; nil = use hardcoded default.
+	DashboardLayout *string           `json:"dashboard_layout,omitempty"`  // JSON layout; nil = use hardcoded default.
 	Fields          []FieldDefinition `json:"fields"`
 	Layout          EntityTypeLayout  `json:"layout"`
 	SortOrder       int               `json:"sort_order"`
 	IsDefault       bool              `json:"is_default"`
 	Enabled         bool              `json:"enabled"`
+	ParentTypeName  *string           `json:"parent_type_name,omitempty"`  // Joined field: parent type's name (not stored).
 }
 
 // ParseCategoryDashboardLayout parses the entity type's dashboard_layout JSON
@@ -424,10 +426,11 @@ func (o ListOptions) Offset() int {
 
 // CreateEntityTypeRequest holds the data submitted by the entity type creation form.
 type CreateEntityTypeRequest struct {
-	Name       string `json:"name" form:"name"`
-	NamePlural string `json:"name_plural" form:"name_plural"`
-	Icon       string `json:"icon" form:"icon"`
-	Color      string `json:"color" form:"color"`
+	Name         string `json:"name" form:"name"`
+	NamePlural   string `json:"name_plural" form:"name_plural"`
+	Icon         string `json:"icon" form:"icon"`
+	Color        string `json:"color" form:"color"`
+	ParentTypeID *int   `json:"parent_type_id" form:"parent_type_id"`
 }
 
 // UpdateEntityTypeRequest holds the data submitted by the entity type edit form.
@@ -448,6 +451,7 @@ type CreateEntityTypeInput struct {
 	Icon           string
 	Color          string
 	PresetCategory string // Optional system preset category (e.g., "item", "character").
+	ParentTypeID   *int   // Optional parent type for sub-type hierarchy.
 }
 
 // UpdateEntityTypeInput is the validated input for updating an entity type.

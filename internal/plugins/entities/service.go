@@ -808,6 +808,21 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		presetCategory = &input.PresetCategory
 	}
 
+	// Validate parent type if provided (sub-type hierarchy).
+	if input.ParentTypeID != nil {
+		parent, err := s.types.FindByID(ctx, *input.ParentTypeID)
+		if err != nil {
+			return nil, apperror.NewBadRequest("parent entity type not found")
+		}
+		if parent.CampaignID != campaignID {
+			return nil, apperror.NewBadRequest("parent entity type belongs to a different campaign")
+		}
+		// Prevent deep nesting: parent must be a top-level type.
+		if parent.ParentTypeID != nil {
+			return nil, apperror.NewBadRequest("sub-types cannot be nested more than one level deep")
+		}
+	}
+
 	et := &EntityType{
 		CampaignID:     campaignID,
 		Slug:           slug,
@@ -816,6 +831,7 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		Icon:           icon,
 		Color:          color,
 		PresetCategory: presetCategory,
+		ParentTypeID:   input.ParentTypeID,
 		Fields:         []FieldDefinition{},
 		Layout:         DefaultLayout(),
 		SortOrder:      maxOrder + 1,

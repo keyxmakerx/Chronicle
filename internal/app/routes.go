@@ -116,12 +116,13 @@ func (a *entityTypeListerAdapter) GetEntityTypesForSettings(ctx context.Context,
 	result := make([]campaigns.SettingsEntityType, len(etypes))
 	for i, et := range etypes {
 		result[i] = campaigns.SettingsEntityType{
-			ID:          et.ID,
-			Name:        et.Name,
-			NamePlural:  et.NamePlural,
-			Icon:        et.Icon,
-			Color:       et.Color,
-			Description: et.Description,
+			ID:           et.ID,
+			Name:         et.Name,
+			NamePlural:   et.NamePlural,
+			Icon:         et.Icon,
+			Color:        et.Color,
+			Description:  et.Description,
+			ParentTypeID: et.ParentTypeID,
 		}
 	}
 	return result, nil
@@ -1881,13 +1882,14 @@ func (a *App) RegisterRoutes() {
 				sidebarTypes := make([]layouts.SidebarEntityType, len(etypes))
 				for i, et := range etypes {
 					sidebarTypes[i] = layouts.SidebarEntityType{
-						ID:         et.ID,
-						Slug:       et.Slug,
-						Name:       et.Name,
-						NamePlural: et.NamePlural,
-						Icon:       et.Icon,
-						Color:      et.Color,
-						SortOrder:  et.SortOrder,
+						ID:           et.ID,
+						Slug:         et.Slug,
+						Name:         et.Name,
+						NamePlural:   et.NamePlural,
+						Icon:         et.Icon,
+						Color:        et.Color,
+						SortOrder:    et.SortOrder,
+						ParentTypeID: et.ParentTypeID,
 					}
 				}
 
@@ -1923,6 +1925,7 @@ func (a *App) RegisterRoutes() {
 								sidebarItems = append(sidebarItems, layouts.SidebarItemView{
 									Type: "category", TypeID: et.ID,
 									Label: et.NamePlural, Icon: et.Icon, Color: et.Color,
+									ParentTypeID: et.ParentTypeID,
 								})
 							}
 						case "all_pages":

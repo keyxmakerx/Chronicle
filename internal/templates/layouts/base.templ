@@ -78,8 +78,8 @@ templ Base(title string) {
 		<script src="/static/js/sidebar_drill.js" defer></script>
 		<!-- Sidebar tree: collapsible hierarchy + drag-and-drop reordering -->
 		<script src="/static/js/sidebar_tree.js" defer></script>
-		<!-- Sidebar reorg mode: toggle inline category/entity reordering -->
-		<script src="/static/js/sidebar_reorg.js" defer></script>
+		<!-- Unified sidebar edit mode: pencil-triggered inline editing -->
+		<script src="/static/js/sidebar_editor.js" defer></script>
 
 		<!-- Recently viewed entities tracker (localStorage-backed sidebar list) -->
 		<script src="/static/js/recent_entities.js" defer></script>
@@ -136,9 +136,6 @@ templ Base(title string) {
 
 		<!-- Sidebar nav editor widget (custom sections & links for campaign sidebar) -->
 		<script src="/static/js/widgets/sidebar_nav_editor.js" defer></script>
-
-		<!-- Unified sidebar layout editor (replaces sidebar_config + sidebar_nav_editor) -->
-		<script src="/static/js/widgets/sidebar_layout_editor.js" defer></script>
 
 		<!-- Tag filtering in sidebar drill panel -->
 		<script src="/static/js/sidebar_tag_filter.js" defer></script>

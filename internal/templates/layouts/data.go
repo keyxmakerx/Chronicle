@@ -52,13 +52,14 @@ const (
 // SidebarEntityType holds the minimum entity type info needed for sidebar
 // rendering. Defined here to avoid importing the entities package.
 type SidebarEntityType struct {
-	ID         int
-	Slug       string
-	Name       string
-	NamePlural string
-	Icon       string
-	Color      string
-	SortOrder  int
+	ID           int
+	Slug         string
+	Name         string
+	NamePlural   string
+	Icon         string
+	Color        string
+	SortOrder    int
+	ParentTypeID *int // Parent entity type ID for sub-type hierarchy.
 }
 
 // SortSidebarTypes reorders entity types according to a sidebar config
@@ -366,15 +367,16 @@ func GetCustomLinks(ctx context.Context) []SidebarLink {
 // SidebarItemView is the template-ready representation of a sidebar item.
 // Populated by the LayoutInjector from the campaign's SidebarConfig.Items.
 type SidebarItemView struct {
-	Type    string // "dashboard", "addon", "category", "section", "link", "all_pages"
-	Slug    string // Addon slug (for addon items).
-	TypeID  int    // Entity type ID (for category items).
-	ID      string // Unique ID (for sections/links).
-	Label   string // Display label.
-	URL     string // Navigation URL.
-	Icon    string // FontAwesome icon class.
-	Color   string // Category color.
-	Count   int    // Entity count (for categories).
+	Type         string // "dashboard", "addon", "category", "section", "link", "all_pages"
+	Slug         string // Addon slug (for addon items).
+	TypeID       int    // Entity type ID (for category items).
+	ID           string // Unique ID (for sections/links).
+	Label        string // Display label.
+	URL          string // Navigation URL.
+	Icon         string // FontAwesome icon class.
+	Color        string // Category color.
+	Count        int    // Entity count (for categories).
+	ParentTypeID *int   // Parent entity type ID (for sub-type hierarchy).
 }
 
 // SetSidebarItems stores the unified sidebar items in context.
