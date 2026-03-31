@@ -153,7 +153,7 @@
   function activate() {
     active = true;
     level = isDrilled() ? 'entities' : 'global';
-    document.body.classList.add('sidebar-edit-active');
+    document.body.classList.add('sidebar-reorg-active');
     updateButton(true);
 
     if (level === 'global') {
@@ -171,7 +171,7 @@
     }
     active = false;
     level = null;
-    document.body.classList.remove('sidebar-edit-active');
+    document.body.classList.remove('sidebar-reorg-active');
     updateButton(false);
   }
 
@@ -238,7 +238,13 @@
     var catList = document.getElementById('sidebar-cat-list');
     if (catList) {
       Array.from(catList.children).forEach(function (child) {
-        child.style.display = '';
+        // Only unhide children that were visible before edit mode.
+        if (child.dataset.editWasHidden === 'yes') {
+          // Was already hidden — leave it hidden.
+        } else {
+          child.style.display = '';
+        }
+        delete child.dataset.editWasHidden;
       });
     }
   }
@@ -289,8 +295,14 @@
     editPanel.appendChild(actions);
 
     // Hide original sidebar content, append edit panel.
+    // Track which children were already hidden so we don't unhide them on restore.
     Array.from(catList.children).forEach(function (child) {
-      if (child.id !== 'sidebar-edit-panel') child.style.display = 'none';
+      if (child.id !== 'sidebar-edit-panel') {
+        if (!child.dataset.editWasHidden) {
+          child.dataset.editWasHidden = child.style.display === 'none' ? 'yes' : 'no';
+        }
+        child.style.display = 'none';
+      }
     });
     catList.appendChild(editPanel);
   }
@@ -381,6 +393,12 @@
 
     row.addEventListener('dragend', function () {
       row.classList.remove('opacity-40');
+      // Clean up any lingering highlight on all rows.
+      if (editPanel) {
+        editPanel.querySelectorAll('.sidebar-edit-item').forEach(function (r) {
+          r.classList.remove('ring-1', 'ring-accent/50', 'opacity-40');
+        });
+      }
     });
 
     // Touch drag-and-drop.
