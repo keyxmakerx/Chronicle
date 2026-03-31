@@ -15,6 +15,7 @@
  */
 Chronicle.register('template-editor', {
   init(el) {
+    console.log('[template-editor] init called, endpoint:', el.dataset.endpoint);
     this.el = el;
     this.endpoint = el.dataset.endpoint;
     this.campaignId = el.dataset.campaignId;
@@ -1516,8 +1517,14 @@ Chronicle.register('template-editor', {
 
   bindSave() {
     const btn = this.findSaveBtn();
+    console.log('[template-editor] bindSave: btn found =', !!btn, btn);
     if (btn) {
-      btn.addEventListener('click', () => this.save());
+      btn.addEventListener('click', () => {
+        console.log('[template-editor] Save button clicked');
+        this.save();
+      });
+    } else {
+      console.warn('[template-editor] Save button #te-save-btn NOT FOUND — save will not work');
     }
 
     // Ctrl+S / Cmd+S shortcut. Store reference for cleanup in destroy().
