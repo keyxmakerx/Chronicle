@@ -667,19 +667,6 @@ templ settingsPeopleTab(cc *CampaignContext, members []CampaignMember, transfer 
 // settingsIntegrationsTab renders Foundry VTT, API keys, export/import, and quick links.
 templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
 	<div class="space-y-6">
-		// Quick links.
-		<div class="flex flex-wrap gap-3">
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) } class="btn-secondary text-sm inline-flex items-center gap-1.5">
-				<i class="fa-solid fa-paintbrush text-xs"></i> Customization Hub
-			</a>
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/plugins", cc.Campaign.ID)) } class="btn-secondary text-sm inline-flex items-center gap-1.5">
-				<i class="fa-solid fa-puzzle-piece text-xs"></i> Feature Hub
-			</a>
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", cc.Campaign.ID)) } class="btn-secondary text-sm inline-flex items-center gap-1.5">
-				<i class="fa-solid fa-key text-xs"></i> API Keys
-			</a>
-		</div>
-
 		// Foundry VTT.
 		if baseURL != "" {
 			<div class="card p-6">
