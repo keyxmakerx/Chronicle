@@ -453,9 +453,9 @@
 
       clearDropTargets(container);
 
-      // Determine drop position: top third = reorder, bottom two-thirds = reparent.
+      // Determine drop position: top 40% = reorder, bottom 60% = reparent.
       var rect = target.getBoundingClientRect();
-      var thirdY = rect.top + rect.height / 3;
+      var thirdY = rect.top + rect.height * 0.4;
 
       if (e.clientY < thirdY) {
         // Reorder: insert before — show indicator line above target.
@@ -492,7 +492,7 @@
       if (targetId === droppedId) return;
 
       var rect = target.getBoundingClientRect();
-      var thirdY = rect.top + rect.height / 3;
+      var thirdY = rect.top + rect.height * 0.4;
 
       if (e.clientY < thirdY) {
         // Reorder: place before target (same parent).
@@ -583,7 +583,7 @@
         var target = el ? el.closest('.sidebar-tree-node') : null;
         if (target && target !== touchState.src) {
           var rect = target.getBoundingClientRect();
-          var thirdY = rect.top + rect.height / 3;
+          var thirdY = rect.top + rect.height * 0.4;
           if (touch.clientY < thirdY) {
             showDropIndicator(target, 'before');
           } else {
@@ -610,7 +610,7 @@
         var targetEntityId = target.getAttribute('data-entity-id');
         var targetNodeId = target.getAttribute('data-node-id');
         var rect = target.getBoundingClientRect();
-        var thirdY = rect.top + rect.height / 3;
+        var thirdY = rect.top + rect.height * 0.4;
 
         if (lastTouch.clientY < thirdY) {
           var targetParentNodeId = target.getAttribute('data-parent-node-id') || null;
