@@ -112,6 +112,7 @@ type packageService struct {
 	settings       SettingsReader
 	settingsWriter SettingsWriter
 	mediaDir       string // Root media directory (e.g., ./media).
+	onSystemInstall func() // Called after a system package is installed.
 }
 
 // NewPackageService creates a new package service with the given dependencies.
@@ -120,6 +121,14 @@ func NewPackageService(repo PackageRepository, github *GitHubClient, mediaDir st
 		repo:     repo,
 		github:   github,
 		mediaDir: mediaDir,
+	}
+}
+
+// SetOnSystemInstall wires a callback invoked after a system package is installed.
+// Used to rescan the system registry so newly installed systems appear immediately.
+func SetOnSystemInstall(svc PackageService, fn func()) {
+	if s, ok := svc.(*packageService); ok {
+		s.onSystemInstall = fn
 	}
 }
 
@@ -396,6 +405,12 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 		slog.String("version", version),
 		slog.String("path", destDir),
 	)
+
+	// Notify system registry to rescan after a system package install.
+	if pkg.Type != PackageTypeFoundryModule && s.onSystemInstall != nil {
+		s.onSystemInstall()
+	}
+
 	return nil
 }
 

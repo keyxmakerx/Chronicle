@@ -1192,6 +1192,11 @@ func (a *App) RegisterRoutes() {
 	pkgRepo := packages.NewPackageRepository(a.DB)
 	pkgGitHub := packages.NewGitHubClient()
 	pkgService := packages.NewPackageService(pkgRepo, pkgGitHub, a.Config.Upload.MediaPath)
+	// Rescan system registry when a new system package is installed so it
+	// appears in the campaign Settings > Game System dropdown immediately.
+	packages.SetOnSystemInstall(pkgService, func() {
+		systems.ScanPackageDir(filepath.Join(a.Config.Upload.MediaPath, "packages", "systems"))
+	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
 	pkgHandler := packages.NewHandler(pkgService)
 	pkgOwnerHandler := packages.NewOwnerHandler(pkgService)

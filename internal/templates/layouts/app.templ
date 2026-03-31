@@ -423,17 +423,6 @@ templ Sidebar() {
 						</svg>
 						Members
 					</a>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/plugins", GetCampaignID(ctx))) }
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/plugins", GetCampaignID(ctx)))),
-							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/plugins", GetCampaignID(ctx)))) }
-					>
-						<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-							<i class="fa-solid fa-puzzle-piece text-xs"></i>
-						</span>
-						Features
-					</a>
 					if GetCampaignRole(ctx) >= 3 {
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/activity", GetCampaignID(ctx))) }
