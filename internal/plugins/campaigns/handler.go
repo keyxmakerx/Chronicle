@@ -465,6 +465,75 @@ func (h *Handler) RemoveBackdrop(c echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
 }
 
+// UploadTopbarImage handles POST /campaigns/:id/topbar-image. Accepts an image
+// file, stores it via the media service, and sets the topbar style to image mode.
+func (h *Handler) UploadTopbarImage(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can change the topbar")
+	}
+	if h.mediaUploader == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		return apperror.NewBadRequest("no file provided")
+	}
+	src, err := file.Open()
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	defer func() { _ = src.Close() }()
+
+	fileBytes, err := io.ReadAll(src)
+	if err != nil {
+		return apperror.NewBadRequest("failed to read file")
+	}
+	mimeType := http.DetectContentType(fileBytes)
+
+	// Reuse backdrop upload logic for media storage.
+	filename, err := h.mediaUploader.UploadBackdrop(
+		c.Request().Context(), cc.Campaign.ID,
+		auth.GetUserID(c), fileBytes, file.Filename, mimeType,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Update topbar style to image mode with the uploaded file.
+	style := TopbarStyle{Mode: "image", ImagePath: filename}
+	if err := h.service.UpdateTopbarStyle(c.Request().Context(), cc.Campaign.ID, &style); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.topbar_image.uploaded", nil)
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "image_path": filename})
+}
+
+// RemoveTopbarImage handles DELETE /campaigns/:id/topbar-image. Resets topbar
+// style to default (no image).
+func (h *Handler) RemoveTopbarImage(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can change the topbar")
+	}
+
+	style := TopbarStyle{Mode: ""}
+	if err := h.service.UpdateTopbarStyle(c.Request().Context(), cc.Campaign.ID, &style); err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, "campaign.topbar_image.removed", nil)
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // UpdateAccentColorAPI handles PUT /campaigns/:id/accent-color. Sets the
 // campaign's accent color for branding customization.
 func (h *Handler) UpdateAccentColorAPI(c echo.Context) error {

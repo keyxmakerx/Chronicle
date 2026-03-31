@@ -40,7 +40,7 @@
         brandName: config.brandName || '',
         accentColor: config.accentColor || '',
         fontFamily: config.fontFamily || '',
-        topbarStyle: { mode: '', color: '', gradient_from: '', gradient_to: '', gradient_dir: 'to-r' },
+        topbarStyle: { mode: '', color: '', gradient_from: '', gradient_to: '', gradient_dir: 'to-r', image_path: '' },
         topbarContent: { mode: 'none', links: [], quote: '' }
       };
 
@@ -91,6 +91,75 @@
       var modeContainer = el.querySelector('#appearance-topbar-mode');
       var solidPanel = el.querySelector('#appearance-topbar-solid');
       var gradientPanel = el.querySelector('#appearance-topbar-gradient');
+      var imagePanel = el.querySelector('#appearance-topbar-image');
+
+      // Dynamically add "Image" button and upload panel if not in template.
+      if (modeContainer && !modeContainer.querySelector('[data-mode="image"]')) {
+        var imgBtn = document.createElement('button');
+        imgBtn.type = 'button';
+        imgBtn.className = 'btn-secondary text-xs px-3 py-1.5';
+        imgBtn.setAttribute('data-mode', 'image');
+        imgBtn.textContent = 'Image';
+        modeContainer.appendChild(imgBtn);
+      }
+      if (!imagePanel && modeContainer) {
+        imagePanel = document.createElement('div');
+        imagePanel.id = 'appearance-topbar-image';
+        imagePanel.className = 'hidden space-y-2';
+        imagePanel.innerHTML =
+          '<p class="text-xs text-fg-secondary">Upload a background image for the topbar.</p>' +
+          '<div class="flex items-center gap-3">' +
+          '  <label class="btn-secondary text-xs cursor-pointer">' +
+          '    <i class="fa-solid fa-upload mr-1.5"></i>Choose Image' +
+          '    <input type="file" accept="image/*" class="hidden" id="topbar-image-input"/>' +
+          '  </label>' +
+          '  <button type="button" id="topbar-image-remove" class="text-xs text-fg-muted hover:text-rose-400 transition-colors">' +
+          '    <i class="fa-solid fa-trash mr-1"></i>Remove' +
+          '  </button>' +
+          '</div>';
+        // Insert after gradient panel.
+        if (gradientPanel) {
+          gradientPanel.parentNode.insertBefore(imagePanel, gradientPanel.nextSibling);
+        }
+
+        // Wire upload handler.
+        var imgInput = imagePanel.querySelector('#topbar-image-input');
+        if (imgInput) {
+          imgInput.addEventListener('change', function () {
+            var file = imgInput.files[0];
+            if (!file) return;
+            var form = new FormData();
+            form.append('file', file);
+            fetch('/campaigns/' + config.campaignId + '/topbar-image', {
+              method: 'POST', body: form, credentials: 'same-origin',
+              headers: { 'X-CSRF-Token': Chronicle.getCsrf() }
+            }).then(function (res) {
+              if (res.ok) {
+                Chronicle.notify('Topbar image uploaded — reloading...', 'success');
+                setTimeout(function () { window.location.reload(); }, 600);
+              } else {
+                Chronicle.notify('Failed to upload image', 'error');
+              }
+            });
+          });
+        }
+        var imgRemove = imagePanel.querySelector('#topbar-image-remove');
+        if (imgRemove) {
+          imgRemove.addEventListener('click', function () {
+            Chronicle.apiFetch('/campaigns/' + config.campaignId + '/topbar-image', { method: 'DELETE' })
+              .then(function (res) {
+                if (res.ok) {
+                  draft.topbarStyle.mode = '';
+                  draft.topbarStyle.image_path = '';
+                  setActiveMode('');
+                  updateTopbarPreview();
+                  Chronicle.notify('Topbar image removed', 'success');
+                  setTimeout(function () { window.location.reload(); }, 600);
+                }
+              });
+          });
+        }
+      }
       var solidColorInput = el.querySelector('#appearance-topbar-color');
       var gradFromInput = el.querySelector('#appearance-topbar-gradient-from');
       var gradToInput = el.querySelector('#appearance-topbar-gradient-to');
@@ -609,6 +678,9 @@
         if (gradientPanel) {
           gradientPanel.classList.toggle('hidden', mode !== 'gradient');
         }
+        if (imagePanel) {
+          imagePanel.classList.toggle('hidden', mode !== 'image');
+        }
       }
 
       /**
@@ -626,6 +698,9 @@
           var dir = GRADIENT_DIR_CSS[draft.topbarStyle.gradient_dir] || 'to right';
           previewTopbar.style.background = 'linear-gradient(' + dir + ', ' + draft.topbarStyle.gradient_from + ', ' + draft.topbarStyle.gradient_to + ')';
           previewTopbar.style.color = isLightColor(draft.topbarStyle.gradient_from) ? '' : '#f9fafb';
+        } else if (mode === 'image' && draft.topbarStyle.image_path) {
+          previewTopbar.style.background = 'url(/media/' + draft.topbarStyle.image_path + ') center/cover no-repeat';
+          previewTopbar.style.color = '#f9fafb';
         } else {
           previewTopbar.style.background = '';
           previewTopbar.style.color = '';
