@@ -216,41 +216,15 @@ templ Sidebar() {
 								@click="$dispatch('chronicle:toggle-sidebar-editor')"
 								class="w-5 h-5 flex items-center justify-center rounded text-gray-500 hover:text-gray-300 hover:bg-white/10 transition-colors shrink-0"
 								title="Edit sidebar"
+								data-sidebar-edit-toggle
 							>
-								<i class="fa-solid fa-gear text-[10px]"></i>
+								<i class="fa-solid fa-pencil text-[10px]"></i>
 							</button>
 						}
 					</div>
-					<!-- Sidebar layout editor panel (owners only) -->
+					<!-- Sidebar entity types data for sidebar_editor.js -->
 					if GetCampaignRole(ctx) >= 3 {
-						<div
-							x-data="{ editing: false }"
-							@chronicle:toggle-sidebar-editor.window="editing = !editing"
-							x-show="editing"
-							x-cloak
-							x-transition:enter="transition ease-out duration-150"
-							x-transition:enter-start="opacity-0 -translate-y-1"
-							x-transition:enter-end="opacity-100 translate-y-0"
-							x-transition:leave="transition ease-in duration-100"
-							x-transition:leave-start="opacity-100"
-							x-transition:leave-end="opacity-0"
-							class="border-b border-gray-700 px-3 py-3 max-h-[65vh] overflow-y-auto"
-							style="background: #13141a;"
-						>
-							<div class="flex items-center justify-between mb-2">
-								<span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Edit Navigation</span>
-								<button @click="editing = false" class="text-gray-500 hover:text-gray-300 transition-colors">
-									<i class="fa-solid fa-xmark text-xs"></i>
-								</button>
-							</div>
-							<p class="text-[10px] text-gray-500 mb-2">Drag to reorder. Toggle visibility. Add sections &amp; links.</p>
-							<div
-								data-widget="sidebar-layout-editor"
-								data-endpoint={ fmt.Sprintf("/campaigns/%s/sidebar-config", GetCampaignID(ctx)) }
-								data-campaign-id={ GetCampaignID(ctx) }
-								data-entity-types={ EntityTypesJSON(ctx) }
-							></div>
-						</div>
+						<div data-sidebar-entity-types={ EntityTypesJSON(ctx) } data-campaign-id={ GetCampaignID(ctx) } class="hidden"></div>
 					}
 					if len(GetSidebarItems(ctx)) > 0 {
 						<!-- Unified sidebar: render items in owner-defined order -->
@@ -969,18 +943,6 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 					>{ strconv.Itoa(count) }</span>
 				}
 			</a>
-			<!-- Reorg toggle for owners (dispatches custom event to sidebar_reorg.js) -->
-			if GetCampaignRole(ctx) >= 3 {
-				<button
-					type="button"
-					class="w-5 h-5 flex items-center justify-center rounded text-gray-500 hover:text-gray-300 hover:bg-white/10 transition-colors shrink-0"
-					title="Reorder pages"
-					data-reorg-toggle
-					onclick="document.dispatchEvent(new CustomEvent('chronicle:toggle-reorg'))"
-				>
-					<i class="fa-solid fa-grip-vertical text-[10px]"></i>
-				</button>
-			}
 			<!-- New entity button -->
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", campaignID, et.ID)) }
