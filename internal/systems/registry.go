@@ -10,6 +10,8 @@ package systems
 import (
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 )
 
 // Status represents the implementation status of a module.
@@ -57,6 +59,51 @@ func Init(modulesDir string) error {
 		)
 	}
 	return nil
+}
+
+// ScanPackageDir scans the package manager's systems directory for installed
+// systems and adds them to the registry. Structure: dir/{slug}/{version}/manifest.json.
+// Finds the latest version directory for each slug and loads it.
+func ScanPackageDir(dir string) {
+	if globalLoader == nil {
+		return
+	}
+	slugDirs, err := os.ReadDir(dir)
+	if err != nil {
+		return // Directory doesn't exist or is unreadable — no installed packages.
+	}
+	for _, slugDir := range slugDirs {
+		if !slugDir.IsDir() {
+			continue
+		}
+		slugPath := filepath.Join(dir, slugDir.Name())
+		// Find the latest version subdirectory.
+		versionDirs, err := os.ReadDir(slugPath)
+		if err != nil {
+			continue
+		}
+		var latestVersion string
+		for _, vDir := range versionDirs {
+			if vDir.IsDir() {
+				latestVersion = vDir.Name() // Last alphabetical = latest semver.
+			}
+		}
+		if latestVersion == "" {
+			continue
+		}
+		versionPath := filepath.Join(slugPath, latestVersion)
+		if err := globalLoader.DiscoverDir(versionPath); err != nil {
+			slog.Warn("failed to load package system",
+				slog.String("slug", slugDir.Name()),
+				slog.String("version", latestVersion),
+				slog.Any("error", err),
+			)
+		}
+	}
+	slog.Info("scanned package systems directory",
+		slog.String("dir", dir),
+		slog.Int("total_count", globalLoader.Count()),
+	)
 }
 
 // Registry returns all discovered module manifests, sorted by name.
