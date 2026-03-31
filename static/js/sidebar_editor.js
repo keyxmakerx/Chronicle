@@ -510,18 +510,45 @@
       .then(function (res) { return res.ok ? res.json() : {}; })
       .then(function (data) {
         config = data || {};
-        // Signal sidebar_tree.js to enable drag-drop.
-        document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
-          detail: {
-            active: true,
-            hidden_entity_ids: config.hidden_entity_ids || [],
-            hidden_node_ids: config.hidden_node_ids || []
-          }
-        }));
+
+        // Set data-reorg-active on tree element (sidebar_tree.js checks this).
+        var tree = document.getElementById('sidebar-entity-tree');
+        if (tree) {
+          tree.setAttribute('data-reorg-active', 'true');
+          document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
+            detail: {
+              active: true,
+              hiddenEntityIds: config.hidden_entity_ids || [],
+              hiddenNodeIds: config.hidden_node_ids || []
+            }
+          }));
+        } else {
+          // Tree not loaded yet (HTMX lazy load). Wait for it.
+          document.addEventListener('htmx:afterSwap', function onSwap() {
+            var t = document.getElementById('sidebar-entity-tree');
+            if (t && active) {
+              t.setAttribute('data-reorg-active', 'true');
+              setTimeout(function () {
+                document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
+                  detail: {
+                    active: true,
+                    hiddenEntityIds: (config && config.hidden_entity_ids) || [],
+                    hiddenNodeIds: (config && config.hidden_node_ids) || []
+                  }
+                }));
+              }, 50);
+              document.removeEventListener('htmx:afterSwap', onSwap);
+            }
+          });
+        }
       });
   }
 
   function deactivateEntities() {
+    var tree = document.getElementById('sidebar-entity-tree');
+    if (tree) {
+      tree.removeAttribute('data-reorg-active');
+    }
     document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
       detail: { active: false }
     }));
