@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -127,6 +128,8 @@ func main() {
 	if err := systems.Init("internal/systems"); err != nil {
 		slog.Warn("system initialization failed", slog.Any("error", err))
 	}
+	// Also scan package-manager-installed systems.
+	systems.ScanPackageDir(filepath.Join(cfg.Upload.MediaPath, "packages", "systems"))
 
 	// --- Create Application ---
 	application := app.New(cfg, db, rdb, pluginHealth, pluginSchemas)

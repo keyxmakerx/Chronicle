@@ -221,10 +221,25 @@
       .catch(function () { renderEditPanel(); });
   }
 
+  var configChanged = false;
+
   function deactivateGlobal() {
     if (editPanel) {
       editPanel.remove();
       editPanel = null;
+    }
+    // Reload page to reflect sidebar changes (order, visibility, sections).
+    if (configChanged) {
+      configChanged = false;
+      window.location.reload();
+      return;
+    }
+    // Restore original sidebar content if no changes were made.
+    var catList = document.getElementById('sidebar-cat-list');
+    if (catList) {
+      Array.from(catList.children).forEach(function (child) {
+        child.style.display = '';
+      });
     }
   }
 
@@ -273,8 +288,10 @@
 
     editPanel.appendChild(actions);
 
-    // Replace the category list content.
-    catList.innerHTML = '';
+    // Hide original sidebar content, append edit panel.
+    Array.from(catList.children).forEach(function (child) {
+      if (child.id !== 'sidebar-edit-panel') child.style.display = 'none';
+    });
     catList.appendChild(editPanel);
   }
 
@@ -448,6 +465,7 @@
   function saveConfig() {
     var ep = getEndpoint();
     if (!ep) return;
+    configChanged = true;
 
     Chronicle.apiFetch(ep, {
       method: 'PUT',
