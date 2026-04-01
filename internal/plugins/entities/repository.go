@@ -31,6 +31,7 @@ type EntityTypeRepository interface {
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
 	MaxSortOrder(ctx context.Context, campaignID string) (int, error)
 	SeedDefaults(ctx context.Context, campaignID string) error
+	SeedFromTypes(ctx context.Context, campaignID string, types []EntityType) error
 }
 
 // entityTypeRepository implements EntityTypeRepository with MariaDB queries.
@@ -423,6 +424,45 @@ var defaultEntityTypes = []EntityType{
 			{Key: "currency", Label: "Currency", Type: "text", Section: "Basics"},
 			{Key: "price_modifier", Label: "Price Modifier (%)", Type: "number", Section: "Basics"},
 		}},
+}
+
+// SeedFromTypes inserts a specific set of entity types for a campaign.
+// Used by genre presets to seed genre-specific types instead of defaults.
+func (r *entityTypeRepository) SeedFromTypes(ctx context.Context, campaignID string, types []EntityType) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning seed tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	query := `INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon, color, fields, layout_json, sort_order, is_default, enabled)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	for _, et := range types {
+		fieldsJSON, err := json.Marshal(et.Fields)
+		if err != nil {
+			return fmt.Errorf("marshaling fields for %s: %w", et.Slug, err)
+		}
+		layout := et.Layout
+		if len(layout.Rows) == 0 {
+			layout = DefaultLayout()
+		}
+		layoutJSON, err := json.Marshal(layout)
+		if err != nil {
+			return fmt.Errorf("marshaling layout for %s: %w", et.Slug, err)
+		}
+
+		_, err = tx.ExecContext(ctx, query,
+			campaignID, et.Slug, et.Name, et.NamePlural,
+			et.Icon, et.Color, fieldsJSON, layoutJSON, et.SortOrder,
+			et.IsDefault, et.Enabled,
+		)
+		if err != nil {
+			return fmt.Errorf("seeding entity type %s: %w", et.Slug, err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 // SeedDefaults inserts the default entity types for a newly created campaign.

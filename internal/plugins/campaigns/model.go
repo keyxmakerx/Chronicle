@@ -617,6 +617,7 @@ type MailService interface {
 // entities package directly.
 type EntityTypeSeeder interface {
 	SeedDefaults(ctx context.Context, campaignID string) error
+	SeedGenre(ctx context.Context, campaignID string, genre string) error
 }
 
 // ContentTemplateSeeder seeds default content templates when a campaign is
@@ -643,6 +644,7 @@ type LayoutPresetSeeder interface {
 type CreateCampaignRequest struct {
 	Name        string `json:"name" form:"name"`
 	Description string `json:"description" form:"description"`
+	Genre       string `json:"genre" form:"genre"`
 }
 
 // UpdateCampaignRequest holds the data submitted by the campaign edit form.
@@ -685,6 +687,7 @@ type UpdateSidebarConfigRequest struct {
 type CreateCampaignInput struct {
 	Name        string
 	Description string
+	Genre       string // Optional genre preset for entity type seeding.
 }
 
 // UpdateCampaignInput is the validated input for updating a campaign.
