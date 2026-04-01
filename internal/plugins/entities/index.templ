@@ -5,11 +5,33 @@
 package entities
 
 import (
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
+
+// entityTypesJSONForBulk serializes entity types for the bulk actions widget.
+func entityTypesJSONForBulk(types []EntityType) string {
+	type etMin struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	out := make([]etMin, len(types))
+	for i, t := range types {
+		out[i] = etMin{ID: t.ID, Name: t.Name}
+	}
+	b, _ := json.Marshal(out)
+	return string(b)
+}
+
+// tagsJSONForBulk returns an empty array placeholder. Tags are loaded
+// dynamically by the bulk actions widget if needed.
+func tagsJSONForBulk(cc *campaigns.CampaignContext) string {
+	return "[]"
+}
 
 // EntityIndexPage renders the full entity list page.
 templ EntityIndexPage(cc *campaigns.CampaignContext, entities []Entity, entityTypes []EntityType, counts map[int]int, total int, opts ListOptions, activeTypeID int, activeTypeSlug string, csrfToken string) {
@@ -25,6 +47,12 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 		id="entity-list"
 		x-data="{ view: localStorage.getItem('chronicle_entities_view') || 'grid' }"
 		x-effect="localStorage.setItem('chronicle_entities_view', view)"
+		data-widget="bulk-actions"
+		data-campaign-id={ cc.Campaign.ID }
+		data-csrf-token={ csrfToken }
+		data-role={ strconv.Itoa(int(cc.MemberRole)) }
+		data-entity-types={ entityTypesJSONForBulk(entityTypes) }
+		data-tags={ tagsJSONForBulk(cc) }
 	>
 		<!-- Page header with title, search, and create button -->
 		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">

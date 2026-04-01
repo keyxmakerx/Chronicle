@@ -29,6 +29,8 @@ import (
 // includeDmOnly controls whether dm_only tags are returned (true for Scribes+).
 type EntityTagFetcher interface {
 	GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]EntityTagInfo, error)
+	GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]EntityTagInfo, error)
+	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error
 }
 
 // AddonChecker is a narrow interface for checking whether an addon is enabled
@@ -955,6 +957,193 @@ func (h *Handler) BulkMoveAPI(c echo.Context) error {
 		"status": "ok",
 		"moved":  len(req.EntityIDs),
 	})
+}
+
+// BulkChangeTypeAPI changes the entity type for multiple entities.
+// POST /campaigns/:id/entities/bulk-type
+func (h *Handler) BulkChangeTypeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		EntityIDs    []string `json:"entity_ids"`
+		EntityTypeID int      `json:"entity_type_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if len(req.EntityIDs) == 0 {
+		return apperror.NewBadRequest("no entities selected")
+	}
+	if len(req.EntityIDs) > 200 {
+		return apperror.NewBadRequest("maximum 200 entities per request")
+	}
+
+	updated, err := h.service.BulkUpdateType(c.Request().Context(), cc.Campaign.ID, req.EntityIDs, req.EntityTypeID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "updated": updated})
+}
+
+// BulkTagsAPI assigns, removes, or sets tags on multiple entities.
+// POST /campaigns/:id/entities/bulk-tags
+func (h *Handler) BulkTagsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		EntityIDs []string `json:"entity_ids"`
+		TagIDs    []int    `json:"tag_ids"`
+		Action    string   `json:"action"` // "add", "remove", "set"
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if len(req.EntityIDs) == 0 {
+		return apperror.NewBadRequest("no entities selected")
+	}
+	if len(req.EntityIDs) > 200 {
+		return apperror.NewBadRequest("maximum 200 entities per request")
+	}
+	if req.Action != "add" && req.Action != "remove" && req.Action != "set" {
+		return apperror.NewBadRequest("action must be add, remove, or set")
+	}
+
+	if h.tagFetcher == nil {
+		return apperror.NewInternal(nil)
+	}
+
+	ctx := c.Request().Context()
+	processed := 0
+	for _, eid := range req.EntityIDs {
+		switch req.Action {
+		case "add":
+			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, true)
+			existingIDs := make([]int, len(existing))
+			for i, t := range existing {
+				existingIDs[i] = t.ID
+			}
+			merged := mergeIntSets(existingIDs, req.TagIDs)
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, merged); err == nil {
+				processed++
+			}
+		case "remove":
+			existing, _ := h.tagFetcher.GetEntityTags(ctx, eid, true)
+			removeSet := make(map[int]bool)
+			for _, id := range req.TagIDs {
+				removeSet[id] = true
+			}
+			var remaining []int
+			for _, t := range existing {
+				if !removeSet[t.ID] {
+					remaining = append(remaining, t.ID)
+				}
+			}
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, remaining); err == nil {
+				processed++
+			}
+		case "set":
+			if err := h.tagFetcher.SetEntityTags(ctx, eid, cc.Campaign.ID, req.TagIDs); err == nil {
+				processed++
+			}
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "processed": processed})
+}
+
+// BulkVisibilityAPI toggles privacy for multiple entities.
+// POST /campaigns/:id/entities/bulk-visibility
+func (h *Handler) BulkVisibilityAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		EntityIDs []string `json:"entity_ids"`
+		Private   bool     `json:"private"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if len(req.EntityIDs) == 0 {
+		return apperror.NewBadRequest("no entities selected")
+	}
+
+	ctx := c.Request().Context()
+	toggled := 0
+	for _, eid := range req.EntityIDs {
+		entity, err := h.service.GetByID(ctx, eid)
+		if err != nil || entity.CampaignID != cc.Campaign.ID {
+			continue
+		}
+		if entity.IsPrivate != req.Private {
+			if _, err := h.service.TogglePrivate(ctx, eid); err == nil {
+				toggled++
+			}
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "toggled": toggled})
+}
+
+// BulkDeleteAPI deletes multiple entities. Owner only.
+// POST /campaigns/:id/entities/bulk-delete
+func (h *Handler) BulkDeleteAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	var req struct {
+		EntityIDs []string `json:"entity_ids"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if len(req.EntityIDs) == 0 {
+		return apperror.NewBadRequest("no entities selected")
+	}
+	if len(req.EntityIDs) > 100 {
+		return apperror.NewBadRequest("maximum 100 entities per delete request")
+	}
+
+	ctx := c.Request().Context()
+	deleted := 0
+	for _, eid := range req.EntityIDs {
+		entity, err := h.service.GetByID(ctx, eid)
+		if err != nil || entity.CampaignID != cc.Campaign.ID {
+			continue
+		}
+		if err := h.service.Delete(ctx, eid); err == nil {
+			deleted++
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "deleted": deleted})
+}
+
+// mergeIntSets merges two int slices, deduplicating.
+func mergeIntSets(a, b []int) []int {
+	seen := make(map[int]bool, len(a)+len(b))
+	for _, v := range a {
+		seen[v] = true
+	}
+	for _, v := range b {
+		seen[v] = true
+	}
+	result := make([]int, 0, len(seen))
+	for v := range seen {
+		result = append(result, v)
+	}
+	return result
 }
 
 // --- Favorites API ---
