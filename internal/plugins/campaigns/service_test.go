@@ -300,6 +300,13 @@ func (m *mockSeeder) SeedDefaults(ctx context.Context, campaignID string) error 
 	return nil
 }
 
+func (m *mockSeeder) SeedGenre(ctx context.Context, campaignID string, genre string) error {
+	if m.seedDefaultsFn != nil {
+		return m.seedDefaultsFn(ctx, campaignID)
+	}
+	return nil
+}
+
 // --- Test Helpers ---
 
 func newTestCampaignService(repo *mockCampaignRepo, users *mockUserFinder) CampaignService {

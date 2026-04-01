@@ -334,6 +334,7 @@ func MergeFields(typeFields []FieldDefinition, overrides *FieldOverrides) []Fiel
 // EntityTagInfo holds minimal tag display data for entity cards and lists.
 // Avoids importing the tags widget package from the entities plugin.
 type EntityTagInfo struct {
+	ID    int    `json:"id"`
 	Name  string `json:"name"`
 	Color string `json:"color"`
 }

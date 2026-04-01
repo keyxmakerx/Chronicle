@@ -82,6 +82,10 @@ func (m *mockEntityTypeRepo) SeedDefaults(ctx context.Context, campaignID string
 	return nil
 }
 
+func (m *mockEntityTypeRepo) SeedFromTypes(ctx context.Context, campaignID string, types []EntityType) error {
+	return nil
+}
+
 func (m *mockEntityTypeRepo) Update(ctx context.Context, et *EntityType) error {
 	if m.updateFn != nil {
 		return m.updateFn(ctx, et)

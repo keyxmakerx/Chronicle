@@ -313,11 +313,29 @@ func (a *entityTagFetcherAdapter) GetEntityTagsBatch(ctx context.Context, entity
 	for eid, tagList := range tagsMap {
 		infos := make([]entities.EntityTagInfo, len(tagList))
 		for i, t := range tagList {
-			infos[i] = entities.EntityTagInfo{Name: t.Name, Color: t.Color}
+			infos[i] = entities.EntityTagInfo{ID: t.ID, Name: t.Name, Color: t.Color}
 		}
 		result[eid] = infos
 	}
 	return result, nil
+}
+
+// GetEntityTags returns tags for a single entity.
+func (a *entityTagFetcherAdapter) GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]entities.EntityTagInfo, error) {
+	tagList, err := a.svc.GetEntityTags(ctx, entityID, includeDmOnly)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]entities.EntityTagInfo, len(tagList))
+	for i, t := range tagList {
+		infos[i] = entities.EntityTagInfo{ID: t.ID, Name: t.Name, Color: t.Color}
+	}
+	return infos, nil
+}
+
+// SetEntityTags sets the tags for a single entity.
+func (a *entityTagFetcherAdapter) SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error {
+	return a.svc.SetEntityTags(ctx, entityID, campaignID, tagIDs)
 }
 
 // entityCampaignCheckerAdapter wraps entities.EntityService to implement the

@@ -70,6 +70,55 @@ templ CampaignCreateForm(csrfToken string, req *CreateCampaignRequest, errMsg st
 				</textarea>
 			</div>
 
+			<div>
+				<label for="genre" class="block text-sm font-medium text-fg-body mb-1">Campaign Genre</label>
+				<p class="text-xs text-fg-secondary mb-2">Choose a genre to get pre-configured entity types tailored to your setting.</p>
+				<div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="genre-picker" x-data="{ genre: '' }">
+					<label class="cursor-pointer">
+						<input type="radio" name="genre" value="" class="peer sr-only" x-model="genre" checked/>
+						<div class="flex items-center gap-2 px-3 py-2 rounded-lg border border-edge text-sm peer-checked:border-accent peer-checked:bg-accent/5 hover:border-edge transition-colors">
+							<i class="fa-solid fa-hat-wizard text-fg-muted"></i>
+							<span class="text-fg">Standard</span>
+						</div>
+					</label>
+					<label class="cursor-pointer">
+						<input type="radio" name="genre" value="fantasy" class="peer sr-only" x-model="genre"/>
+						<div class="flex items-center gap-2 px-3 py-2 rounded-lg border border-edge text-sm peer-checked:border-accent peer-checked:bg-accent/5 hover:border-edge transition-colors">
+							<i class="fa-solid fa-hat-wizard text-fg-muted"></i>
+							<span class="text-fg">Fantasy / D&amp;D</span>
+						</div>
+					</label>
+					<label class="cursor-pointer">
+						<input type="radio" name="genre" value="sci-fi" class="peer sr-only" x-model="genre"/>
+						<div class="flex items-center gap-2 px-3 py-2 rounded-lg border border-edge text-sm peer-checked:border-accent peer-checked:bg-accent/5 hover:border-edge transition-colors">
+							<i class="fa-solid fa-rocket text-fg-muted"></i>
+							<span class="text-fg">Sci-Fi</span>
+						</div>
+					</label>
+					<label class="cursor-pointer">
+						<input type="radio" name="genre" value="horror" class="peer sr-only" x-model="genre"/>
+						<div class="flex items-center gap-2 px-3 py-2 rounded-lg border border-edge text-sm peer-checked:border-accent peer-checked:bg-accent/5 hover:border-edge transition-colors">
+							<i class="fa-solid fa-ghost text-fg-muted"></i>
+							<span class="text-fg">Horror</span>
+						</div>
+					</label>
+					<label class="cursor-pointer">
+						<input type="radio" name="genre" value="modern" class="peer sr-only" x-model="genre"/>
+						<div class="flex items-center gap-2 px-3 py-2 rounded-lg border border-edge text-sm peer-checked:border-accent peer-checked:bg-accent/5 hover:border-edge transition-colors">
+							<i class="fa-solid fa-city text-fg-muted"></i>
+							<span class="text-fg">Modern</span>
+						</div>
+					</label>
+					<label class="cursor-pointer">
+						<input type="radio" name="genre" value="historical" class="peer sr-only" x-model="genre"/>
+						<div class="flex items-center gap-2 px-3 py-2 rounded-lg border border-edge text-sm peer-checked:border-accent peer-checked:bg-accent/5 hover:border-edge transition-colors">
+							<i class="fa-solid fa-landmark text-fg-muted"></i>
+							<span class="text-fg">Historical</span>
+						</div>
+					</label>
+				</div>
+			</div>
+
 			<div class="flex items-center space-x-4">
 				<button type="submit" class="btn-primary">Create Campaign</button>
 				<a href="/campaigns" class="btn-secondary">Cancel</a>

@@ -239,13 +239,19 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 		return nil, apperror.NewInternal(fmt.Errorf("adding owner member: %w", err))
 	}
 
-	// Seed default entity types for the new campaign.
+	// Seed entity types for the new campaign (genre-specific or defaults).
 	if s.seeder != nil {
-		if err := s.seeder.SeedDefaults(ctx, campaign.ID); err != nil {
-			// Non-fatal: campaign is still usable without default types.
-			slog.Warn("failed to seed default entity types",
+		var seedErr error
+		if input.Genre != "" {
+			seedErr = s.seeder.SeedGenre(ctx, campaign.ID, input.Genre)
+		} else {
+			seedErr = s.seeder.SeedDefaults(ctx, campaign.ID)
+		}
+		if seedErr != nil {
+			slog.Warn("failed to seed entity types",
 				slog.String("campaign_id", campaign.ID),
-				slog.Any("error", err),
+				slog.String("genre", input.Genre),
+				slog.Any("error", seedErr),
 			)
 		}
 	}

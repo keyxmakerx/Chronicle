@@ -68,7 +68,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/entities/:eid/clone", h.Clone, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid", h.Update, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/entities/:eid/reorder", h.ReorderAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.POST("/entities/bulk-move", h.BulkMoveAPI, campaigns.RequireRole(campaigns.RoleScribe)) // Multi-select reorg mode.
+	cg.POST("/entities/bulk-move", h.BulkMoveAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/entities/bulk-type", h.BulkChangeTypeAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/entities/bulk-tags", h.BulkTagsAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/entities/bulk-visibility", h.BulkVisibilityAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/entities/bulk-delete", h.BulkDeleteAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Saved filter presets (per-user tag filter combos, Player+).
 	cg.GET("/saved-filters", h.ListSavedFiltersAPI, campaigns.RequireRole(campaigns.RolePlayer))

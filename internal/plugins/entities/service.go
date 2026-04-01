@@ -99,6 +99,7 @@ type EntityService interface {
 
 	// Seeder (satisfies campaigns.EntityTypeSeeder interface).
 	SeedDefaults(ctx context.Context, campaignID string) error
+	SeedGenre(ctx context.Context, campaignID string, genre string) error
 
 	// Wiring.
 	SetEventPublisher(pub EntityEventPublisher)
@@ -1261,6 +1262,20 @@ func (s *entityService) CheckEntityAccess(ctx context.Context, entityID string, 
 // satisfies the campaigns.EntityTypeSeeder interface.
 func (s *entityService) SeedDefaults(ctx context.Context, campaignID string) error {
 	return s.types.SeedDefaults(ctx, campaignID)
+}
+
+// SeedGenre seeds genre-specific entity types for a campaign. If the genre
+// is empty or "standard", falls back to SeedDefaults. Otherwise uses the
+// genre preset definitions from genre_presets.go.
+func (s *entityService) SeedGenre(ctx context.Context, campaignID string, genre string) error {
+	if genre == "" || genre == "standard" {
+		return s.SeedDefaults(ctx, campaignID)
+	}
+	preset := FindGenrePreset(genre)
+	if preset == nil {
+		return s.SeedDefaults(ctx, campaignID)
+	}
+	return s.types.SeedFromTypes(ctx, campaignID, preset.Types)
 }
 
 // --- Helpers ---
