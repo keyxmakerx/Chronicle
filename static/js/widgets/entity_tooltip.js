@@ -368,7 +368,6 @@
     // Debounce: wait 300ms before fetching/showing.
     hoverTimer = setTimeout(function () {
       var url = trigger.getAttribute('data-entity-preview');
-      console.log('[Tooltip] Hover triggered for:', url);
       showTooltip(trigger, url);
     }, 300);
   });
