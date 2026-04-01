@@ -4,13 +4,13 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 
 // DesignLabPage renders the component showcase for previewing UI variants.
 templ DesignLabPage() {
-	@layouts.App("Design Lab - Admin") {
+	@layouts.App("Demo Page - Admin") {
 		<div class="max-w-6xl mx-auto space-y-4" x-data="{ tab: 'buttons' }">
 			<div class="flex items-center justify-between">
 				<h1 class="text-xl font-bold text-fg">
-					<i class="fa-solid fa-palette mr-2 text-accent"></i>Design Lab
+					<i class="fa-solid fa-palette mr-2 text-accent"></i>Demo Page
 				</h1>
-				<span class="text-xs text-fg-muted">Component showcase &mdash; changes here don&apos;t affect the live site</span>
+				<span class="text-xs text-fg-muted">Component showcase &mdash; preview all UI components in one place</span>
 			</div>
 
 			<!-- Tabs -->
