@@ -379,8 +379,8 @@
         h += '<span class="text-sm font-medium text-fg">' + Chronicle.escapeHtml(ctx.etName || 'Entity') + ' Page Template</span>';
         h += '</div>';
         h += '<div class="flex items-center gap-2">';
-        h += '<span id="ls-te-save-status" class="text-xs text-fg-muted"></span>';
-        h += '<button id="ls-te-save-btn" class="btn-primary text-sm">Save Layout</button>';
+        h += '<span id="te-save-status" class="text-xs text-fg-muted"></span>';
+        h += '<button id="te-save-btn" class="btn-primary text-sm">Save Layout</button>';
         h += '</div>';
       } else if (ctx.type === CTX_CATEGORY_DASH) {
         h += '<div class="flex items-center gap-2">';
