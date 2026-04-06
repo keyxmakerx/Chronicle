@@ -121,6 +121,9 @@ func (s *drawingService) CreateDrawing(ctx context.Context, input CreateDrawingI
 	if len(input.Points) == 0 {
 		return nil, apperror.NewBadRequest("points are required")
 	}
+	if len(input.Points) > 10000 {
+		return nil, apperror.NewBadRequest("too many points (maximum 10,000)")
+	}
 
 	vis := input.Visibility
 	if vis == "" {

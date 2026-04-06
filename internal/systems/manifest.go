@@ -89,6 +89,9 @@ type WidgetDef struct {
 	// ScriptFile is the relative path to the JS file within the system
 	// directory (e.g., "widgets/stat-block.js").
 	ScriptFile string `json:"script_file"`
+
+	// File is an alias for ScriptFile for backward compatibility.
+	File string `json:"file"`
 }
 
 // CategoryDef describes one category of reference content within a module.
@@ -553,6 +556,11 @@ func ValidateManifest(m *SystemManifest) error {
 		}
 		if w.Name == "" {
 			return fmt.Errorf("widget %d (%s): name is required", i, w.Slug)
+		}
+		// Accept "file" as an alias for "script_file" (backward compatibility).
+		if w.ScriptFile == "" && w.File != "" {
+			m.Widgets[i].ScriptFile = w.File
+			w.ScriptFile = w.File
 		}
 		if w.ScriptFile == "" {
 			return fmt.Errorf("widget %d (%s): script_file is required", i, w.Slug)

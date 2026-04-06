@@ -8,9 +8,68 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-03-30 -- **Pre-Reddit Launch + Entity Type Hierarchy + Settings Redesign.**
+2026-04-06 -- **Major Feature Sprint: Map Drawing, Bulk Ops, Genre Presets, Topbar Image.**
 
-68. **Pre-Reddit Launch + Entity Type Hierarchy + Settings Redesign (15+ items).**
+69. **Major Feature Sprint (30+ commits).**
+
+    **New Features:**
+    - **Map Drawing Tools (W-2)** — Interactive Leaflet drawing toolbar: freehand, rectangle,
+      circle, polygon, text annotation. Color picker + stroke width. Right-click to delete.
+      No external dependency (native Leaflet APIs). Persists via REST API, broadcasts via
+      WebSocket. Floating toolbar for Scribe+. Max 10K points security validation.
+    - **Bulk Operations (W-4)** — Multi-select checkboxes on entity list (grid + table views),
+      floating action bar with: Change Type, Add Tags, Visibility toggle, Delete. 4 new
+      web-facing endpoints. Select-all in table header. Re-injects on HTMX pagination.
+    - **Genre Presets (T-4b)** — 5 genre presets for campaign creation: Fantasy, Sci-Fi,
+      Horror, Modern, Historical. Visual radio-card picker on campaign form. Each genre
+      seeds tailored entity types with appropriate icons, colors, and custom fields.
+    - **Topbar Image Upload** — Image mode button in Appearance editor. POST/DELETE endpoints.
+      Upload sets topbar to image mode with background-image: cover. JS dynamically adds
+      the Image button and upload panel to the existing mode selector.
+    - **Entity Type Hierarchy** — Migration 000019: parent_type_id on entity_types. Sub-types
+      with max 1 level. Layout Studio: nested display + "Add sub-type" button. Sidebar:
+      child types indented under parents.
+
+    **Settings & Admin Consolidation:**
+    - Features tab merged into Settings (instant Alpine.js toggles, no page reload)
+    - Settings General tab compacted (2-column grids, reduced padding/gaps)
+    - Standalone /plugins page redirects to Settings > Features tab
+    - Duplicate nav links removed (Features sidebar, Activity sidebar, quick links row)
+    - Campaign dashboard "Plugins" → "Features" terminology fix
+    - Admin sidebar cleaned: Content Packs hidden (WIP badge), Design Lab → Demo Page
+    - Demo Page link on admin dashboard (opens new tab)
+
+    **Sidebar Editor Rewrite (W-7):**
+    - Single pencil icon replaces gear + grip buttons
+    - Inline edit mode (hides nav, shows draggable item list)
+    - Restores nav on exit (reload if changes made)
+    - Entity-level reorg: wired to sidebar_tree.js via chronicle:reorg-changed event
+    - Body class: sidebar-reorg-active (matches tree expectations)
+    - Sub-type hierarchy display in sidebar navigation
+
+    **Nav Glow CSS:**
+    - Refined to: bottom 2/3 border + right edge + small top-right wrap
+    - Right-side gradient wash (inset box-shadow) fading left
+    - Click: border completes full wrap, gradient deepens
+    - Removed 418 lines of design lab A/B test CSS
+    - Removed duplicate sidebar.css glow definitions
+
+    **Bug Fixes:**
+    - Layout editor save: button ID mismatch (ls-te-save-btn vs te-save-btn)
+    - Game system not loading: manifest "file" vs "script_file" field name
+    - Game system discovery: ScanPackageDir at startup + callback on install
+    - CreateEntityType: returns JSON for API callers (was HTMX redirect)
+    - Sidebar drill "+": passes ?type= to pre-select category
+    - Sidebar editor: doesn't destroy nav content (hide/show instead)
+    - Mobile: editor touch targets, responsive entity pages
+
+    **Infrastructure:**
+    - Foundry module unbundled (package-manager installed now)
+    - Docker: MariaDB/Redis → latest
+    - LICENSE: AGPL-3.0
+    - README: cleaned TODO comments, v0.1 feature list
+
+68. **Pre-Reddit Launch Cleanup + Entity Type Hierarchy + Settings Redesign.**
 
     **Pre-Reddit Launch Fixes:**
     - **LICENSE file** — AGPL-3.0 (662 lines, fetched from GitHub API)
