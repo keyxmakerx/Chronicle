@@ -52,6 +52,8 @@ func RegisterPublicRoutes(e *echo.Echo, sh *ServeHandler, rl echo.MiddlewareFunc
 
 	// Backwards-compatible alias for Foundry VTT module discovery.
 	// Foundry expects module.json at a stable URL like /foundry-module/module.json.
+	// The download route serves the cached ZIP for module installation.
+	e.GET("/foundry-module/download", sh.ServeFoundryDownload, rl)
 	e.GET("/foundry-module/*", sh.ServeFoundryAlias, rl)
 }
 
