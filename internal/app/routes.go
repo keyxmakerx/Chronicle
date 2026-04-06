@@ -1210,10 +1210,20 @@ func (a *App) RegisterRoutes() {
 	pkgRepo := packages.NewPackageRepository(a.DB)
 	pkgGitHub := packages.NewGitHubClient()
 	pkgService := packages.NewPackageService(pkgRepo, pkgGitHub, a.Config.Upload.MediaPath)
-	// Rescan system registry when a new system package is installed so it
-	// appears in the campaign Settings > Game System dropdown immediately.
+	// Rescan system registry and re-register addons when a system package
+	// is installed or updated, so it appears in the campaign Settings >
+	// Game System dropdown immediately without requiring a server restart.
 	packages.SetOnSystemInstall(pkgService, func() {
 		systems.ScanPackageDir(filepath.Join(a.Config.Upload.MediaPath, "packages", "systems"))
+		// Re-register discovered systems as addons (idempotent — updates
+		// existing entries, adds new ones) and upsert to DB so campaign
+		// addon associations are preserved.
+		for _, info := range systems.AddonInfos() {
+			addons.RegisterSystemAddon(info.Slug, info.Name, info.Description, info.Version, info.Icon, info.Author)
+		}
+		if err := addonService.SeedInstalledAddons(context.Background()); err != nil {
+			slog.Error("failed to re-seed addons after system install", slog.Any("error", err))
+		}
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
 	pkgHandler := packages.NewHandler(pkgService)

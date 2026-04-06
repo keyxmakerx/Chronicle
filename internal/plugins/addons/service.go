@@ -199,10 +199,24 @@ func IsInstalled(slug string) bool {
 
 // RegisterSystemAddon registers a dynamically discovered game system as
 // a built-in addon. Called from app wiring after the systems registry
-// has been initialized, before SeedInstalledAddons(). This eliminates
-// the need to hardcode system addon definitions — any system with a
-// valid manifest.json is automatically registered.
+// has been initialized, before SeedInstalledAddons(). Also called at
+// runtime when a system package is installed/updated so the addon
+// metadata stays current without requiring a server restart.
+//
+// Idempotent: if the slug already exists, its metadata is updated in
+// place rather than creating a duplicate entry.
 func RegisterSystemAddon(slug, name, description, version, icon, author string) {
+	// Update existing entry if already registered (handles package updates).
+	for i := range builtinAddons {
+		if builtinAddons[i].Slug == slug {
+			builtinAddons[i].Name = name
+			builtinAddons[i].Description = description
+			builtinAddons[i].Version = version
+			builtinAddons[i].Icon = icon
+			builtinAddons[i].Author = author
+			return
+		}
+	}
 	builtinAddons = append(builtinAddons, addonDef{
 		Slug:        slug,
 		Name:        name,
