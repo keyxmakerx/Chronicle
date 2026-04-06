@@ -103,6 +103,11 @@ type PackageService interface {
 	// ReconcileOrphanedInstalls detects package directories on disk that have
 	// no corresponding DB record (e.g. after a database wipe).
 	ReconcileOrphanedInstalls(ctx context.Context) ([]OrphanedInstall, error)
+
+	// InstalledPackagePath returns the on-disk install path for the active
+	// (installed + approved) package matching the given type and slug.
+	// Returns empty string if no matching package is installed.
+	InstalledPackagePath(pkgType PackageType, slug string) string
 }
 
 // packageService implements PackageService.
@@ -111,8 +116,9 @@ type packageService struct {
 	github         *GitHubClient
 	settings       SettingsReader
 	settingsWriter SettingsWriter
-	mediaDir       string // Root media directory (e.g., ./media).
+	mediaDir        string // Root media directory (e.g., ./media).
 	onSystemInstall func() // Called after a system package is installed.
+	onServeInvalidate func() // Called after install/remove to invalidate serve cache.
 }
 
 // NewPackageService creates a new package service with the given dependencies.
@@ -129,6 +135,14 @@ func NewPackageService(repo PackageRepository, github *GitHubClient, mediaDir st
 func SetOnSystemInstall(svc PackageService, fn func()) {
 	if s, ok := svc.(*packageService); ok {
 		s.onSystemInstall = fn
+	}
+}
+
+// SetOnServeInvalidate wires a callback invoked after a package is installed,
+// updated, or removed. Used to invalidate the serve handler's path cache.
+func SetOnServeInvalidate(svc PackageService, fn func()) {
+	if s, ok := svc.(*packageService); ok {
+		s.onServeInvalidate = fn
 	}
 }
 
@@ -280,6 +294,12 @@ func (s *packageService) RemovePackage(ctx context.Context, id string) error {
 		slog.String("id", id),
 		slog.String("slug", pkg.Slug),
 	)
+
+	// Invalidate serve cache so removed packages stop being served.
+	if s.onServeInvalidate != nil {
+		s.onServeInvalidate()
+	}
+
 	return nil
 }
 
@@ -409,6 +429,11 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 	// Notify system registry to rescan after a system package install.
 	if pkg.Type != PackageTypeFoundryModule && s.onSystemInstall != nil {
 		s.onSystemInstall()
+	}
+
+	// Invalidate serve cache so the new install path is picked up.
+	if s.onServeInvalidate != nil {
+		s.onServeInvalidate()
 	}
 
 	return nil
@@ -578,6 +603,23 @@ func (s *packageService) FoundryModulePath() string {
 	}
 	for _, pkg := range packages {
 		if pkg.Type == PackageTypeFoundryModule && pkg.InstallPath != "" && pkg.Status == StatusApproved {
+			return pkg.InstallPath
+		}
+	}
+	return ""
+}
+
+// InstalledPackagePath returns the on-disk install path for the active
+// (installed + approved) package matching the given type and slug.
+// Returns empty string if no matching package is installed.
+func (s *packageService) InstalledPackagePath(pkgType PackageType, slug string) string {
+	ctx := context.Background()
+	packages, err := s.repo.ListPackages(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, pkg := range packages {
+		if pkg.Type == pkgType && pkg.Slug == slug && pkg.InstallPath != "" && pkg.Status == StatusApproved {
 			return pkg.InstallPath
 		}
 	}
