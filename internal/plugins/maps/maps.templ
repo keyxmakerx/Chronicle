@@ -621,8 +621,21 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 					Chronicle.notify('Network error: ' + err.message, 'error');
 				}
 			};
+			// Expose map context for drawing tools.
+			window.chronicleMap = {
+				map: map,
+				campaignID: campaignID,
+				mapID: mapID,
+				imageW: w,
+				imageH: h,
+				isScribe: isScribe
+			};
 		})();
 	</script>
+
+	if data.IsScribe {
+		<script src="/static/js/map_drawing_tools.js"></script>
+	}
 
 	<!-- Minimal CSS for Leaflet marker icons -->
 	<style>
@@ -634,6 +647,7 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 			color: #fff; background: rgba(59, 130, 246, 0.85);
 			border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
 		}
+		.map-text-annotation { background: none !important; border: none !important; }
 	</style>
 }
 
