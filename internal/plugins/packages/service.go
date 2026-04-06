@@ -58,6 +58,10 @@ type PackageService interface {
 	// or empty string if none is installed.
 	FoundryModulePath() string
 
+	// FoundryModuleZipPath returns the cached ZIP file path for the active
+	// Foundry module, or empty string if not available.
+	FoundryModuleZipPath() string
+
 	// --- Submission/Approval Workflow ---
 
 	// SubmitPackage lets a campaign owner submit a repo URL for review.
@@ -604,6 +608,27 @@ func (s *packageService) FoundryModulePath() string {
 	for _, pkg := range packages {
 		if pkg.Type == PackageTypeFoundryModule && pkg.InstallPath != "" && pkg.Status == StatusApproved {
 			return pkg.InstallPath
+		}
+	}
+	return ""
+}
+
+// FoundryModuleZipPath returns the cached ZIP file path for the active
+// Foundry module package. Foundry VTT downloads this ZIP when installing
+// the module via the manifest URL. Returns empty string if unavailable.
+func (s *packageService) FoundryModuleZipPath() string {
+	ctx := context.Background()
+	packages, err := s.repo.ListPackages(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, pkg := range packages {
+		if pkg.Type == PackageTypeFoundryModule && pkg.InstalledVersion != "" && pkg.Status == StatusApproved {
+			zipName := fmt.Sprintf("%s-%s.zip", pkg.Slug, pkg.InstalledVersion)
+			zipPath := filepath.Join(s.downloadsDir(), zipName)
+			if _, err := os.Stat(zipPath); err == nil {
+				return zipPath
+			}
 		}
 	}
 	return ""
