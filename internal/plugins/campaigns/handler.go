@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -98,6 +99,13 @@ type AddonLister interface {
 	ListForPluginHub(ctx context.Context, campaignID string) ([]PluginHubAddon, error)
 }
 
+// SystemAddonEnabler enables/disables game system addons for a campaign.
+// Called when the user changes the Game System dropdown in settings.
+type SystemAddonEnabler interface {
+	EnableSystemForCampaign(ctx context.Context, campaignID, systemSlug, userID string) error
+	DisableAllSystemsForCampaign(ctx context.Context, campaignID string) error
+}
+
 // MediaUploader uploads media files for campaign backdrops. Avoids importing the
 // media package directly.
 type MediaUploader interface {
@@ -125,11 +133,12 @@ type Handler struct {
 	layoutFetcher EntityTypeLayoutFetcher
 	recentLister  RecentEntityLister
 	auditLogger   AuditLogger
-	addonLister   AddonLister
-	mediaUploader MediaUploader
-	smtpChecker   SMTPChecker
-	systemLister  SystemLister
-	baseURL       string
+	addonLister       AddonLister
+	systemAddonEnabler SystemAddonEnabler
+	mediaUploader     MediaUploader
+	smtpChecker       SMTPChecker
+	systemLister      SystemLister
+	baseURL           string
 }
 
 // NewHandler creates a new campaign handler.
@@ -169,6 +178,12 @@ func (h *Handler) SetAuditLogger(logger AuditLogger) {
 // SetAddonLister sets the addon lister for the plugin hub page.
 func (h *Handler) SetAddonLister(lister AddonLister) {
 	h.addonLister = lister
+}
+
+// SetSystemAddonEnabler sets the addon enabler for auto-enabling game system
+// addons when the user changes the Game System dropdown.
+func (h *Handler) SetSystemAddonEnabler(enabler SystemAddonEnabler) {
+	h.systemAddonEnabler = enabler
 }
 
 // SetMediaUploader sets the media uploader for backdrop image uploads.
@@ -1785,6 +1800,8 @@ func (h *Handler) JoinByCode(c echo.Context) error {
 }
 
 // UpdateSystemID sets the game system for a campaign (PUT /campaigns/:id/system).
+// Also auto-enables the corresponding addon so the system's widgets and scripts
+// are immediately available without a separate toggle in the Features tab.
 func (h *Handler) UpdateSystemID(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
@@ -1798,8 +1815,30 @@ func (h *Handler) UpdateSystemID(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.service.UpdateSystemID(c.Request().Context(), cc.Campaign.ID, req.SystemID); err != nil {
+	ctx := c.Request().Context()
+
+	if err := h.service.UpdateSystemID(ctx, cc.Campaign.ID, req.SystemID); err != nil {
 		return err
+	}
+
+	// Auto-enable/disable the system addon so widgets and scripts activate
+	// immediately. Selecting "None" disables all system addons.
+	if h.systemAddonEnabler != nil {
+		userID := auth.GetUserID(c)
+		if req.SystemID != "" && !strings.HasPrefix(req.SystemID, "custom:") {
+			if err := h.systemAddonEnabler.EnableSystemForCampaign(ctx, cc.Campaign.ID, req.SystemID, userID); err != nil {
+				slog.Warn("failed to auto-enable system addon",
+					slog.String("system_id", req.SystemID),
+					slog.Any("error", err),
+				)
+			}
+		} else if req.SystemID == "" {
+			if err := h.systemAddonEnabler.DisableAllSystemsForCampaign(ctx, cc.Campaign.ID); err != nil {
+				slog.Warn("failed to disable system addons",
+					slog.Any("error", err),
+				)
+			}
+		}
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.system.updated", map[string]any{"system_id": req.SystemID})
