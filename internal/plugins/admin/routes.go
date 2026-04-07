@@ -52,6 +52,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.DELETE("/data-hygiene/orphaned-api-keys", h.PurgeOrphanedAPIKeysAPI)
 	admin.DELETE("/data-hygiene/stale-files", h.PurgeStaleFilesAPI)
 
+	// System diagnostics.
+	admin.GET("/systems", h.Systems)
+
 	// Database explorer.
 	admin.GET("/database", h.Database)
 	admin.GET("/database/schema", h.DatabaseSchemaAPI)

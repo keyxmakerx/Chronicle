@@ -18,6 +18,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 )
 
@@ -717,6 +718,35 @@ func (h *Handler) ApplyMigrationsAPI(c echo.Context) error {
 	}
 
 	return middleware.HTMXRedirect(c, "/admin/database")
+}
+
+// Systems renders the system diagnostics page (GET /admin/systems).
+func (h *Handler) Systems(c echo.Context) error {
+	manifests := systems.Registry()
+	allSystems := systems.AllSystems()
+
+	// Build a set of instantiated system IDs for fast lookup.
+	instantiated := make(map[string]bool, len(allSystems))
+	for _, sys := range allSystems {
+		instantiated[sys.Info().ID] = true
+	}
+
+	// Build diagnostic entries from manifests.
+	entries := make([]SystemDiagnosticEntry, 0, len(manifests))
+	for _, m := range manifests {
+		entries = append(entries, SystemDiagnosticEntry{
+			ID:           m.ID,
+			Name:         m.Name,
+			Version:      m.Version,
+			Status:       string(m.Status),
+			Instantiated: instantiated[m.ID],
+			Dir:          systems.Dir(m.ID),
+		})
+	}
+
+	events := systems.DiagnosticEvents()
+
+	return middleware.Render(c, http.StatusOK, AdminSystemsPage(entries, events))
 }
 
 // SecurityPageData holds all data needed for the security dashboard page.

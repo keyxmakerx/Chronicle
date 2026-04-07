@@ -211,12 +211,21 @@ func (a *campaignAuditAdapter) LogEvent(ctx context.Context, campaignID, userID,
 // campaigns.SystemLister interface for the game system dropdown.
 type systemListerAdapter struct{}
 
-// ListSystems returns all available game systems.
+// ListSystems returns all available game systems with loading status.
+// Systems that are "available" but failed to instantiate are flagged
+// with HasError so the settings page can show a warning.
 func (a *systemListerAdapter) ListSystems() []campaigns.SystemOption {
 	manifests := systems.Registry()
 	opts := make([]campaigns.SystemOption, 0, len(manifests))
 	for _, m := range manifests {
-		opts = append(opts, campaigns.SystemOption{ID: m.ID, Name: m.Name})
+		// A system is in error state if its manifest says "available" but
+		// it wasn't successfully instantiated into a live System instance.
+		hasError := m.Status == systems.StatusAvailable && systems.FindSystem(m.ID) == nil
+		opts = append(opts, campaigns.SystemOption{
+			ID:       m.ID,
+			Name:     m.Name,
+			HasError: hasError,
+		})
 	}
 	return opts
 }

@@ -48,6 +48,7 @@ func RegisterFactory(id string, factory SystemFactory) {
 // called once at application startup before any Registry()/Find() calls.
 func Init(modulesDir string) error {
 	globalLoader = NewSystemLoader(modulesDir)
+	globalEventLog = NewEventLog(100)
 	if err := globalLoader.DiscoverAll(); err != nil {
 		return fmt.Errorf("system discovery failed: %w", err)
 	}
@@ -98,6 +99,13 @@ func ScanPackageDir(dir string) {
 				slog.String("version", latestVersion),
 				slog.Any("error", err),
 			)
+			RecordEvent(LoadEvent{
+				SystemID: slugDir.Name(),
+				Kind:     EventFailed,
+				Source:   "package",
+				Error:    err.Error(),
+				Dir:      versionPath,
+			})
 		}
 	}
 	slog.Info("scanned package systems directory",
