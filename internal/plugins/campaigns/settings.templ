@@ -355,6 +355,8 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 							this.customUrl = this.systemId.substring(7);
 							this.isCustom = true;
 							this.systemId = 'custom';
+						} else if (this.systemId && !this.systems.find(s => s.id === this.systemId)) {
+							this.systems.push({ id: this.systemId, name: this.systemId + ' (not loaded)' });
 						}
 					},
 					async save() {

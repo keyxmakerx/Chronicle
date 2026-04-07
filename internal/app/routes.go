@@ -1562,6 +1562,7 @@ func (a *App) RegisterRoutes() {
 
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
+	campaignHandler.SetSystemAddonEnabler(addonService)
 	campaignHandler.SetMediaUploader(&backdropUploaderAdapter{svc: mediaService})
 	campaignHandler.SetSMTPChecker(smtpService)
 	campaignHandler.SetSystemLister(&systemListerAdapter{})

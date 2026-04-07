@@ -36,6 +36,13 @@ type AddonService interface {
 	IsEnabledForCampaign(ctx context.Context, campaignID string, addonSlug string) (bool, error)
 	UpdateCampaignConfig(ctx context.Context, campaignID string, addonID int, config map[string]any) error
 
+	// EnableSystemForCampaign looks up a system addon by slug and enables it
+	// for the campaign. Other system addons are auto-disabled (mutual exclusivity).
+	EnableSystemForCampaign(ctx context.Context, campaignID, systemSlug, userID string) error
+
+	// DisableAllSystemsForCampaign disables all game system addons for the campaign.
+	DisableAllSystemsForCampaign(ctx context.Context, campaignID string) error
+
 	// SetPresetApplier injects the preset applier for auto-creating entity
 	// types when a game system addon is enabled. Optional — if nil, no
 	// presets are applied.
@@ -469,6 +476,46 @@ func (s *addonService) DisableForCampaign(ctx context.Context, campaignID string
 // IsEnabledForCampaign checks if a specific addon is enabled for a campaign.
 func (s *addonService) IsEnabledForCampaign(ctx context.Context, campaignID string, addonSlug string) (bool, error) {
 	return s.repo.IsEnabledForCampaign(ctx, campaignID, addonSlug)
+}
+
+// EnableSystemForCampaign looks up a system addon by slug and enables it for
+// the campaign. Any previously enabled system addon is auto-disabled (mutual
+// exclusivity handled by EnableForCampaign). Called when the user selects a
+// game system from the Settings > General dropdown.
+func (s *addonService) EnableSystemForCampaign(ctx context.Context, campaignID, systemSlug, userID string) error {
+	addon, err := s.repo.FindBySlug(ctx, systemSlug)
+	if err != nil {
+		return fmt.Errorf("looking up system addon %q: %w", systemSlug, err)
+	}
+	if addon == nil {
+		// System slug doesn't have a matching addon record yet — silently skip.
+		slog.Warn("system addon not found, skipping auto-enable",
+			slog.String("slug", systemSlug),
+			slog.String("campaign_id", campaignID),
+		)
+		return nil
+	}
+	return s.EnableForCampaign(ctx, campaignID, addon.ID, userID)
+}
+
+// DisableAllSystemsForCampaign disables every game system addon for a campaign.
+// Called when the user sets the game system to "None".
+func (s *addonService) DisableAllSystemsForCampaign(ctx context.Context, campaignID string) error {
+	campaignAddons, err := s.repo.ListForCampaign(ctx, campaignID)
+	if err != nil {
+		return fmt.Errorf("listing campaign addons: %w", err)
+	}
+	for _, ca := range campaignAddons {
+		if ca.AddonCategory == CategorySystem && ca.Enabled {
+			if err := s.repo.DisableForCampaign(ctx, campaignID, ca.AddonID); err != nil {
+				slog.Warn("failed to disable system addon",
+					slog.String("slug", ca.AddonSlug),
+					slog.Any("error", err),
+				)
+			}
+		}
+	}
+	return nil
 }
 
 // UpdateCampaignConfig updates the addon-specific configuration for a campaign.
