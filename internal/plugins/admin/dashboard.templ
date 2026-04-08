@@ -76,16 +76,16 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 					<p class="text-3xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", addonCount) }</p>
 					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage features &rarr;</p>
 				</a>
-				<!-- Content Packs -->
-				<a href="/admin/extensions" class="card hover:shadow-md transition-shadow group">
+				<!-- Systems -->
+				<a href="/admin/systems" class="card hover:shadow-md transition-shadow group">
 					<div class="flex items-center justify-between">
-						<p class="text-sm font-medium text-fg-secondary">Content Packs</p>
+						<p class="text-sm font-medium text-fg-secondary">Systems</p>
 						<span class="stat-icon-purple">
-							<i class="fa-solid fa-puzzle-piece"></i>
+							<i class="fa-solid fa-microchip"></i>
 						</span>
 					</div>
-					<p class="text-lg font-semibold text-fg mt-2">Extensions & Game Systems</p>
-					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage content packs &rarr;</p>
+					<p class="text-lg font-semibold text-fg mt-2">Game System Diagnostics</p>
+					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">View system status &rarr;</p>
 				</a>
 				<!-- API Monitor -->
 				<a href="/admin/api" class="card hover:shadow-md transition-shadow group">
