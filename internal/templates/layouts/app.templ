@@ -621,16 +621,17 @@ templ AdminSidebarNav() {
 				</span>
 				SMTP Settings
 			</a>
-			<div
-				class="flex items-center pl-3.5 pr-4 py-2 text-sm text-fg-muted/50 cursor-not-allowed"
-				title="Community Content Packs: Install community-created content like calendar presets, entity type collections, map icon packs, and tag sets. Coming soon."
+			<a
+				href="/admin/systems"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/systems")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/systems")) }
 			>
 				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-					<i class="fa-solid fa-puzzle-piece text-xs"></i>
+					<i class="fa-solid fa-microchip text-xs"></i>
 				</span>
-				<span>Content Packs</span>
-				<span class="ml-auto text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 font-medium">WIP</span>
-			</div>
+				Systems
+			</a>
 			<div class="pb-2"></div>
 			</div>
 		</div>

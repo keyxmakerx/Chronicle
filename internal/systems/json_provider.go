@@ -32,6 +32,11 @@ func NewJSONProvider(moduleID, dataDir string) (*JSONProvider, error) {
 
 	entries, err := os.ReadDir(dataDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			// No data directory is valid — widget-only systems don't need
+			// reference data. Return an empty provider.
+			return p, nil
+		}
 		return nil, fmt.Errorf("reading data dir %s: %w", dataDir, err)
 	}
 
