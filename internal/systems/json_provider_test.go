@@ -46,13 +46,13 @@ func TestNewJSONProvider(t *testing.T) {
 			wantCats: 0,
 		},
 		{
-			name: "invalid JSON returns error",
+			name: "invalid JSON is skipped gracefully",
 			setup: func(t *testing.T, dir string) {
 				if err := os.WriteFile(filepath.Join(dir, "bad.json"), []byte("{not valid json"), 0o644); err != nil {
 					t.Fatalf("write bad.json: %v", err)
 				}
 			},
-			wantErr: true,
+			wantCats: 0,
 		},
 		{
 			name: "non-json files are skipped",

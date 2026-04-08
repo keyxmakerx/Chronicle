@@ -3,6 +3,7 @@ package systems
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -50,12 +51,24 @@ func NewJSONProvider(moduleID, dataDir string) (*JSONProvider, error) {
 
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", filePath, err)
+			slog.Warn("skipping unreadable data file",
+				slog.String("file", filePath),
+				slog.String("error", err.Error()),
+			)
+			continue
 		}
 
 		var items []ReferenceItem
 		if err := json.Unmarshal(data, &items); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", filePath, err)
+			// Skip files that aren't arrays of ReferenceItem. Game system
+			// packages may include widget-specific data files in formats
+			// that don't match the reference item schema.
+			slog.Warn("skipping non-reference data file",
+				slog.String("file", filePath),
+				slog.String("module", moduleID),
+				slog.String("error", err.Error()),
+			)
+			continue
 		}
 
 		// Stamp each item with the module ID and category.
