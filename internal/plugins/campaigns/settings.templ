@@ -31,8 +31,9 @@ func entityTypesJSON(types []SettingsEntityType) string {
 
 // SystemOption is a minimal system manifest for the game system selector dropdown.
 type SystemOption struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	HasError bool   `json:"has_error,omitempty"`
 }
 
 // systemOptionsJSON serializes system options to JSON for Alpine.js.
@@ -356,8 +357,12 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 							this.isCustom = true;
 							this.systemId = 'custom';
 						} else if (this.systemId && !this.systems.find(s => s.id === this.systemId)) {
-							this.systems.push({ id: this.systemId, name: this.systemId + ' (not loaded)' });
+							this.systems.push({ id: this.systemId, name: this.systemId + ' (not loaded)', has_error: true });
 						}
+					},
+					get selectedHasError() {
+						var sel = this.systems.find(s => s.id === this.systemId);
+						return sel && sel.has_error;
 					},
 					async save() {
 						this.saving = true;
@@ -389,6 +394,12 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 					</template>
 					<option value="custom">Custom...</option>
 				</select>
+				<div x-show="selectedHasError" x-transition x-cloak class="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 mb-2">
+					<i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5 shrink-0"></i>
+					<p class="text-xs text-amber-700 dark:text-amber-300">
+						This game system failed to load. Widgets, tooltips, and reference data may be unavailable. See <b>Admin &gt; Systems</b> { "for" } details.
+					</p>
+				</div>
 				<div x-show="isCustom" x-transition class="flex items-center gap-2 mt-2">
 					<input type="url" x-model="customUrl" class="input flex-1" placeholder="https://example.com/system/manifest.json"/>
 					<button type="button" class="btn-primary text-sm" @click="save()">Install</button>

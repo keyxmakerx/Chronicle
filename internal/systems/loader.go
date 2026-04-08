@@ -65,6 +65,13 @@ func (l *SystemLoader) DiscoverAll() error {
 				slog.String("dir", entry.Name()),
 				slog.String("error", err.Error()),
 			)
+			RecordEvent(LoadEvent{
+				SystemID: entry.Name(),
+				Kind:     EventFailed,
+				Source:   "bundled",
+				Error:    err.Error(),
+				Dir:      filepath.Join(l.systemsDir, entry.Name()),
+			})
 			continue
 		}
 
@@ -74,12 +81,13 @@ func (l *SystemLoader) DiscoverAll() error {
 			dir:      sysDir,
 		}
 
-		slog.Info("discovered system",
-			slog.String("id", manifest.ID),
-			slog.String("name", manifest.Name),
-			slog.String("version", manifest.Version),
-			slog.String("status", string(manifest.Status)),
-		)
+		RecordEvent(LoadEvent{
+			SystemID: manifest.ID,
+			Name:     manifest.Name,
+			Kind:     EventDiscovered,
+			Source:   "bundled",
+			Dir:      sysDir,
+		})
 
 		// Attempt to instantiate available modules via registered factories.
 		// If no factory is registered, fall back to the generic system
@@ -94,12 +102,24 @@ func (l *SystemLoader) DiscoverAll() error {
 						slog.String("id", manifest.ID),
 						slog.String("error", err.Error()),
 					)
+					RecordEvent(LoadEvent{
+						SystemID: manifest.ID,
+						Name:     manifest.Name,
+						Kind:     EventFailed,
+						Source:   "bundled",
+						Error:    "instantiation: " + err.Error(),
+						Dir:      sysDir,
+					})
 					continue
 				}
 				l.RegisterSystem(mod)
-				slog.Info("instantiated system",
-					slog.String("id", manifest.ID),
-				)
+				RecordEvent(LoadEvent{
+					SystemID: manifest.ID,
+					Name:     manifest.Name,
+					Kind:     EventInstantiated,
+					Source:   "bundled",
+					Dir:      sysDir,
+				})
 			} else {
 				// No custom factory — try generic system with JSON data.
 				mod, err := NewGenericSystem(manifest, dataDir)
@@ -108,12 +128,24 @@ func (l *SystemLoader) DiscoverAll() error {
 						slog.String("id", manifest.ID),
 						slog.String("error", err.Error()),
 					)
+					RecordEvent(LoadEvent{
+						SystemID: manifest.ID,
+						Name:     manifest.Name,
+						Kind:     EventFailed,
+						Source:   "bundled",
+						Error:    "generic instantiation: " + err.Error(),
+						Dir:      sysDir,
+					})
 					continue
 				}
 				l.RegisterSystem(mod)
-				slog.Info("instantiated generic system",
-					slog.String("id", manifest.ID),
-				)
+				RecordEvent(LoadEvent{
+					SystemID: manifest.ID,
+					Name:     manifest.Name,
+					Kind:     EventInstantiated,
+					Source:   "bundled",
+					Dir:      sysDir,
+				})
 			}
 		}
 	}
@@ -171,6 +203,13 @@ func (l *SystemLoader) loadSingleSystem(sysDir string) error {
 		slog.String("name", manifest.Name),
 		slog.String("dir", sysDir),
 	)
+	RecordEvent(LoadEvent{
+		SystemID: manifest.ID,
+		Name:     manifest.Name,
+		Kind:     EventDiscovered,
+		Source:   "package",
+		Dir:      sysDir,
+	})
 
 	// Instantiate if available.
 	if manifest.Status == StatusAvailable {
@@ -178,16 +217,39 @@ func (l *SystemLoader) loadSingleSystem(sysDir string) error {
 		if factory, ok := factories[manifest.ID]; ok {
 			mod, fErr := factory(manifest, dataDir)
 			if fErr != nil {
+				RecordEvent(LoadEvent{
+					SystemID: manifest.ID,
+					Name:     manifest.Name,
+					Kind:     EventFailed,
+					Source:   "package",
+					Error:    "factory: " + fErr.Error(),
+					Dir:      sysDir,
+				})
 				return fmt.Errorf("factory failed for %s: %w", manifest.ID, fErr)
 			}
 			l.RegisterSystem(mod)
 		} else {
 			mod, gErr := NewGenericSystem(manifest, dataDir)
 			if gErr != nil {
+				RecordEvent(LoadEvent{
+					SystemID: manifest.ID,
+					Name:     manifest.Name,
+					Kind:     EventFailed,
+					Source:   "package",
+					Error:    "generic: " + gErr.Error(),
+					Dir:      sysDir,
+				})
 				return fmt.Errorf("generic system failed for %s: %w", manifest.ID, gErr)
 			}
 			l.RegisterSystem(mod)
 		}
+		RecordEvent(LoadEvent{
+			SystemID: manifest.ID,
+			Name:     manifest.Name,
+			Kind:     EventInstantiated,
+			Source:   "package",
+			Dir:      sysDir,
+		})
 	}
 
 	return nil
