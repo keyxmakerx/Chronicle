@@ -207,6 +207,26 @@ func (a *campaignAuditAdapter) LogEvent(ctx context.Context, campaignID, userID,
 	})
 }
 
+// systemManifestFinderAdapter bridges systems.Find to addons.SystemManifestFinder.
+// Used for self-healing addon registration when a system is in the registry but
+// not yet in the addons database.
+type systemManifestFinderAdapter struct{}
+
+func (a *systemManifestFinderAdapter) FindManifest(id string) *addons.SystemManifestInfo {
+	m := systems.Find(id)
+	if m == nil {
+		return nil
+	}
+	return &addons.SystemManifestInfo{
+		ID:          m.ID,
+		Name:        m.Name,
+		Description: m.Description,
+		Version:     m.Version,
+		Icon:        m.Icon,
+		Author:      m.Author,
+	}
+}
+
 // systemListerAdapter wraps systems.Registry to implement the
 // campaigns.SystemLister interface for the game system dropdown.
 type systemListerAdapter struct{}
@@ -1183,7 +1203,10 @@ func (a *App) RegisterRoutes() {
 	// Auto-register discovered game systems as addons so new systems
 	// (from internal/systems/, package manager, or GitHub) appear in the
 	// addon UI without hardcoded definitions.
-	for _, info := range systems.AddonInfos() {
+	sysAddonInfos := systems.AddonInfos()
+	slog.Info("registering system addons at startup", slog.Int("count", len(sysAddonInfos)))
+	for _, info := range sysAddonInfos {
+		slog.Info("registering system addon", slog.String("slug", info.Slug), slog.String("name", info.Name))
 		addons.RegisterSystemAddon(info.Slug, info.Name, info.Description, info.Version, info.Icon, info.Author)
 	}
 	// Seed all built-in addons (plugins, widgets, integrations + auto-registered
@@ -1192,6 +1215,7 @@ func (a *App) RegisterRoutes() {
 		slog.Error("failed to seed built-in addons", slog.String("error", err.Error()))
 	}
 	addonService.SetPresetApplier(newPresetApplier(entityService))
+	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
 	addons.RegisterAdminRoutes(adminGroup, addonHandler)
 	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)

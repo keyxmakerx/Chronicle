@@ -47,6 +47,10 @@ type AddonService interface {
 	// types when a game system addon is enabled. Optional — if nil, no
 	// presets are applied.
 	SetPresetApplier(applier PresetApplier)
+
+	// SetSystemFinder injects the system manifest finder for self-healing
+	// addon registration. Optional — if nil, missing addons return an error.
+	SetSystemFinder(finder SystemManifestFinder)
 }
 
 // PresetApplier creates entity types from system presets when a game system
@@ -56,15 +60,40 @@ type PresetApplier interface {
 	ApplySystemPresets(ctx context.Context, campaignID, systemSlug string) (int, error)
 }
 
+// SystemManifestInfo holds the minimal manifest data needed to auto-register
+// a system addon. Avoids importing the systems package directly.
+type SystemManifestInfo struct {
+	ID          string
+	Name        string
+	Description string
+	Version     string
+	Icon        string
+	Author      string
+}
+
+// SystemManifestFinder looks up a system manifest by ID. Used for self-healing
+// addon registration when a system is in the registry but not in the addons DB.
+type SystemManifestFinder interface {
+	FindManifest(id string) *SystemManifestInfo
+}
+
 // addonService implements AddonService.
 type addonService struct {
 	repo           AddonRepository
 	presetApplier  PresetApplier
+	systemFinder   SystemManifestFinder
 }
 
 // NewAddonService creates a new addon service.
 func NewAddonService(repo AddonRepository) AddonService {
 	return &addonService{repo: repo}
+}
+
+// SetSystemFinder injects the system manifest finder for self-healing addon
+// registration. When a user selects a game system that exists in the registry
+// but not in the addons DB, the service auto-registers it.
+func (s *addonService) SetSystemFinder(finder SystemManifestFinder) {
+	s.systemFinder = finder
 }
 
 // SetPresetApplier injects the preset applier for auto-creating entity types
@@ -482,19 +511,51 @@ func (s *addonService) IsEnabledForCampaign(ctx context.Context, campaignID stri
 // the campaign. Any previously enabled system addon is auto-disabled (mutual
 // exclusivity handled by EnableForCampaign). Called when the user selects a
 // game system from the Settings > General dropdown.
+//
+// Self-healing: if the addon doesn't exist in the DB but the system IS in the
+// registry, it auto-registers and seeds the addon. This handles the case where
+// the system was installed after the last boot or boot-time registration failed.
 func (s *addonService) EnableSystemForCampaign(ctx context.Context, campaignID, systemSlug, userID string) error {
 	addon, err := s.repo.FindBySlug(ctx, systemSlug)
 	if err != nil {
 		return fmt.Errorf("looking up system addon %q: %w", systemSlug, err)
 	}
+
+	// Self-healing: addon not in DB but system may be in the registry.
 	if addon == nil {
-		// System slug doesn't have a matching addon record yet — silently skip.
-		slog.Warn("system addon not found, skipping auto-enable",
+		if s.systemFinder == nil {
+			return apperror.NewBadRequest(
+				fmt.Sprintf("game system %q not found — is the package installed?", systemSlug))
+		}
+
+		manifest := s.systemFinder.FindManifest(systemSlug)
+		if manifest == nil {
+			return apperror.NewBadRequest(
+				fmt.Sprintf("game system %q not found — is the package installed?", systemSlug))
+		}
+
+		// Register the system addon (same as boot-time registration).
+		RegisterSystemAddon(manifest.ID, manifest.Name, manifest.Description,
+			manifest.Version, manifest.Icon, manifest.Author)
+
+		// Upsert to database.
+		if err := s.SeedInstalledAddons(ctx); err != nil {
+			return fmt.Errorf("auto-registering system addon: %w", err)
+		}
+
+		// Re-fetch the now-existing addon.
+		addon, err = s.repo.FindBySlug(ctx, systemSlug)
+		if err != nil || addon == nil {
+			return apperror.NewInternal(
+				fmt.Errorf("system addon %q still not found after auto-registration", systemSlug))
+		}
+
+		slog.Info("auto-registered system addon on first use",
 			slog.String("slug", systemSlug),
-			slog.String("campaign_id", campaignID),
+			slog.Int("addon_id", addon.ID),
 		)
-		return nil
 	}
+
 	return s.EnableForCampaign(ctx, campaignID, addon.ID, userID)
 }
 
