@@ -197,8 +197,8 @@ func (h *ServeHandler) serveFile(c echo.Context, baseDir, requestedPath string) 
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	// Verify the file exists and is not a directory.
-	info, err := os.Stat(fullPath)
+	// Use Lstat (not Stat) so we can detect symlinks before following them.
+	info, err := os.Lstat(fullPath)
 	if err != nil || info.IsDir() {
 		return c.NoContent(http.StatusNotFound)
 	}

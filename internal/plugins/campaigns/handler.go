@@ -847,11 +847,6 @@ func (h *Handler) Settings(c echo.Context) error {
 	if h.systemLister != nil {
 		systemOptions = h.systemLister.ListSystems()
 	}
-	slog.Debug("settings page: system state",
-		slog.String("campaign_id", cc.Campaign.ID),
-		slog.String("saved_system_id", cc.Campaign.ParseSettings().SystemID),
-		slog.Int("system_options_count", len(systemOptions)),
-	)
 
 	// Fetch addons for the Features tab (owner only).
 	var addons []PluginHubAddon
@@ -1825,11 +1820,6 @@ func (h *Handler) UpdateSystemID(c echo.Context) error {
 	if err := h.service.UpdateSystemID(ctx, cc.Campaign.ID, req.SystemID); err != nil {
 		return err
 	}
-
-	slog.Info("game system updated",
-		slog.String("campaign_id", cc.Campaign.ID),
-		slog.String("system_id", req.SystemID),
-	)
 
 	// Auto-enable/disable the system addon so widgets and scripts activate
 	// immediately. Selecting "None" disables all system addons.
