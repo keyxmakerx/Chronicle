@@ -248,7 +248,14 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		}
 	}
 
-	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured, addonCount, securityStats, degradedPlugins, pendingSubmissions))
+	// System counts for the Systems dashboard card.
+	registeredSystems := len(systems.Registry())
+	failedSystems := registeredSystems - len(systems.AllSystems())
+	if failedSystems < 0 {
+		failedSystems = 0
+	}
+
+	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured, addonCount, securityStats, degradedPlugins, pendingSubmissions, registeredSystems, failedSystems))
 }
 
 // --- Users ---

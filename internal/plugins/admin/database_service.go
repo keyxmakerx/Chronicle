@@ -109,6 +109,9 @@ var pluginTablePrefixes = []struct {
 	{"ext_", "extensions"},
 	{"extension_", "extensions"},
 	{"plugin_schema_", "system"},
+	{"package", "packages"},
+	{"addon", "addons"},
+	{"campaign_addon", "addons"},
 }
 
 // classifyTable returns the plugin slug that owns a table based on its name.

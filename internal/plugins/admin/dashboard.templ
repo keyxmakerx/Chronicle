@@ -7,7 +7,7 @@ import (
 )
 
 // AdminDashboardPage renders the admin overview with high-level stats.
-templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool, addonCount int, securityStats *SecurityStats, degradedPlugins []string, pendingSubmissions int) {
+templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool, addonCount int, securityStats *SecurityStats, degradedPlugins []string, pendingSubmissions, registeredSystems, failedSystems int) {
 	@layouts.App("Admin Dashboard") {
 		<div class="max-w-5xl mx-auto space-y-6">
 			<h1 class="text-2xl font-bold text-fg">Admin Dashboard</h1>
@@ -79,13 +79,20 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 				<!-- Systems -->
 				<a href="/admin/systems" class="card hover:shadow-md transition-shadow group">
 					<div class="flex items-center justify-between">
-						<p class="text-sm font-medium text-fg-secondary">Systems</p>
+						<p class="text-sm font-medium text-fg-secondary">Game Systems</p>
 						<span class="stat-icon-purple">
 							<i class="fa-solid fa-microchip"></i>
 						</span>
 					</div>
-					<p class="text-lg font-semibold text-fg mt-2">Game System Diagnostics</p>
-					<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">View system status &rarr;</p>
+					<p class="text-3xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", registeredSystems) }</p>
+					if failedSystems > 0 {
+						<p class="text-xs text-amber-600 dark:text-amber-400 mt-1">{ fmt.Sprintf("%d", failedSystems) } failed to load</p>
+					} else if registeredSystems > 0 {
+						<p class="text-xs text-emerald-600 dark:text-emerald-400 mt-1">All loaded</p>
+					} else {
+						<p class="text-xs text-fg-muted mt-1">No systems installed</p>
+					}
+					<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">System diagnostics &rarr;</p>
 				</a>
 				<!-- API Monitor -->
 				<a href="/admin/api" class="card hover:shadow-md transition-shadow group">

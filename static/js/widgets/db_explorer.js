@@ -14,7 +14,7 @@
 (function () {
   'use strict';
 
-  var D3_SRC = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js';
+  var D3_SRC = '/static/vendor/d3.min.js';
 
   // Plugin color palette — tuned for both light and dark modes.
   var PLUGIN_COLORS = {

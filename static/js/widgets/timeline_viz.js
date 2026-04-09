@@ -42,7 +42,7 @@
 (function() {
 var _impl = {
   /** CDN URL used to dynamically load D3 when it's not already available. */
-  _d3Src: 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js',
+  _d3Src: '/static/vendor/d3.min.js',
 
   /**
    * Target scale factors for each zoom level (midpoints of threshold ranges).
