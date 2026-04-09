@@ -69,10 +69,14 @@ func ScanPackageDir(dir string) {
 	if globalLoader == nil {
 		return
 	}
+	slog.Info("scanning package systems directory", slog.String("dir", dir))
 	slugDirs, err := os.ReadDir(dir)
 	if err != nil {
-		return // Directory doesn't exist or is unreadable — no installed packages.
+		slog.Warn("cannot read package systems directory — no installed systems will load",
+			slog.String("dir", dir), slog.Any("error", err))
+		return
 	}
+	slog.Info("found system package slugs", slog.Int("count", len(slugDirs)))
 	for _, slugDir := range slugDirs {
 		if !slugDir.IsDir() {
 			continue
@@ -195,6 +199,10 @@ func AddonInfos() []AddonInfo {
 			Author:      m.Author,
 		})
 	}
+	slog.Info("system addon infos generated",
+		slog.Int("total_manifests", len(manifests)),
+		slog.Int("available_count", len(infos)),
+	)
 	return infos
 }
 

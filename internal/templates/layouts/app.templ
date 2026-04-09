@@ -517,6 +517,8 @@ templ AdminSidebarNav() {
 				</span>
 				Dashboard
 			</a>
+			// -- Content --
+			<div class="px-4 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-widest text-gray-600">Content</div>
 			<a
 				href="/admin/users"
 				class={ sidebarNavLink,
@@ -537,18 +539,7 @@ templ AdminSidebarNav() {
 				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 					<i class="fa-solid fa-book-open text-xs"></i>
 				</span>
-				All Campaigns
-			</a>
-			<a
-				href="/admin/storage"
-				class={ sidebarNavLink,
-					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/storage")),
-					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/storage")) }
-			>
-				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-					<i class="fa-solid fa-hard-drive text-xs"></i>
-				</span>
-				Storage
+				Campaigns
 			</a>
 			<a
 				href="/admin/addons"
@@ -562,28 +553,6 @@ templ AdminSidebarNav() {
 				Features
 			</a>
 			<a
-				href="/admin/api"
-				class={ sidebarNavLink,
-					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/api")),
-					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/api")) }
-			>
-				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-					<i class="fa-solid fa-satellite-dish text-xs"></i>
-				</span>
-				API Monitor
-			</a>
-			<a
-				href="/admin/security"
-				class={ sidebarNavLink,
-					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/security")),
-					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/security")) }
-			>
-				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-					<i class="fa-solid fa-shield-halved text-xs"></i>
-				</span>
-				Security
-			</a>
-			<a
 				href="/admin/packages"
 				class={ sidebarNavLink,
 					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/packages")),
@@ -593,6 +562,30 @@ templ AdminSidebarNav() {
 					<i class="fa-solid fa-box text-xs"></i>
 				</span>
 				Packages
+			</a>
+			<a
+				href="/admin/systems"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/systems")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/systems")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-microchip text-xs"></i>
+				</span>
+				Systems
+			</a>
+			// -- Infrastructure --
+			<div class="px-4 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-widest text-gray-600">Infrastructure</div>
+			<a
+				href="/admin/storage"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/storage")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/storage")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-hard-drive text-xs"></i>
+				</span>
+				Storage
 			</a>
 			<a
 				href="/admin/database"
@@ -619,18 +612,42 @@ templ AdminSidebarNav() {
 				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 					<i class="fa-solid fa-envelope text-xs"></i>
 				</span>
-				SMTP Settings
+				SMTP
 			</a>
 			<a
-				href="/admin/systems"
+				href="/admin/api"
 				class={ sidebarNavLink,
-					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/systems")),
-					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/systems")) }
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/api")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/api")) }
 			>
 				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-					<i class="fa-solid fa-microchip text-xs"></i>
+					<i class="fa-solid fa-satellite-dish text-xs"></i>
 				</span>
-				Systems
+				API Monitor
+			</a>
+			// -- Security --
+			<div class="px-4 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-widest text-gray-600">Security</div>
+			<a
+				href="/admin/security"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/security")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/security")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-shield-halved text-xs"></i>
+				</span>
+				Security
+			</a>
+			<a
+				href="/admin/data-hygiene"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/data-hygiene")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/data-hygiene")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-broom text-xs"></i>
+				</span>
+				Data Hygiene
 			</a>
 			<div class="pb-2"></div>
 			</div>
