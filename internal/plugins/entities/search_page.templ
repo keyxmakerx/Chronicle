@@ -24,13 +24,13 @@ templ SearchPage(cc *campaigns.CampaignContext, entityTypes []EntityType) {
 					<p class="text-sm text-fg-secondary">Find pages across your campaign</p>
 				</div>
 				<!-- Search input + filters -->
-				<div class="flex flex-col sm:flex-row gap-3 mb-6">
+				<div class="flex flex-col sm:flex-row gap-3 mb-3">
 					<div class="relative flex-1">
 						<input
 							type="text"
 							x-model="query"
 							class="input w-full pl-10"
-							placeholder="Search by name..."
+							placeholder="Search names, content, fields..."
 							autofocus
 						/>
 						<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-muted pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -43,6 +43,24 @@ templ SearchPage(cc *campaigns.CampaignContext, entityTypes []EntityType) {
 							<option value={ fmt.Sprintf("%d", et.ID) }>{ et.NamePlural }</option>
 						}
 					</select>
+				</div>
+				<!-- Tag filter chips -->
+				<div x-show="allTags.length > 0" class="flex flex-wrap gap-1.5 mb-6">
+					<template x-for="tag in allTags" :key="tag.slug">
+						<button
+							@click="toggleTag(tag.slug)"
+							class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all cursor-pointer"
+							:class="activeTags.includes(tag.slug)
+								? 'ring-2 ring-accent/50 font-medium'
+								: 'opacity-60 hover:opacity-100'"
+							:style="'background-color:' + (tag.color || '#6b7280') + '20; color:' + (tag.color || '#6b7280')"
+						>
+							<i class="fa-solid fa-tag text-[8px]"></i>
+							<span x-text="tag.name"></span>
+							<i x-show="activeTags.includes(tag.slug)" class="fa-solid fa-xmark text-[8px] ml-0.5"></i>
+						</button>
+					</template>
+					<button x-show="activeTags.length > 0" @click="clearTags()" class="text-[10px] text-fg-muted hover:text-accent ml-1">clear all</button>
 				</div>
 				<!-- Results count -->
 				<div class="flex items-center justify-between mb-4">
@@ -85,6 +103,8 @@ templ searchPageScript(campaignID string) {
 			return {
 				query: new URLSearchParams(window.location.search).get('q') || '',
 				typeFilter: '',
+				activeTags: [],
+				allTags: [],
 				results: [],
 				total: 0,
 				page: 1,
@@ -93,9 +113,28 @@ templ searchPageScript(campaignID string) {
 
 				init: function () {
 					var self = this;
+					// Load campaign tags for the filter chips.
+					Chronicle.apiFetch('/campaigns/' + campaignId + '/tags')
+						.then(function (r) { return r.json(); })
+						.then(function (tags) { self.allTags = tags || []; })
+						.catch(function () {});
 					if (self.query) self.search();
 					self.$watch('query', function () { self.debouncedSearch(); });
 					self.$watch('typeFilter', function () { self.page = 1; self.search(); });
+				},
+
+				toggleTag: function (slug) {
+					var idx = this.activeTags.indexOf(slug);
+					if (idx >= 0) this.activeTags.splice(idx, 1);
+					else this.activeTags.push(slug);
+					this.page = 1;
+					this.search();
+				},
+
+				clearTags: function () {
+					this.activeTags = [];
+					this.page = 1;
+					this.search();
 				},
 
 				debouncedSearch: function () {
@@ -111,6 +150,7 @@ templ searchPageScript(campaignID string) {
 					var url = '/campaigns/' + campaignId + '/entities/search?per_page=24&page=' + self.page;
 					if (self.query) url += '&q=' + encodeURIComponent(self.query);
 					if (self.typeFilter) url += '&type=' + self.typeFilter;
+					if (self.activeTags.length > 0) url += '&tags=' + self.activeTags.join(',');
 					Chronicle.apiFetch(url)
 						.then(function (r) { return r.json(); })
 						.then(function (data) {
