@@ -66,12 +66,22 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 				<label for="entity_type_id" class="block text-sm font-medium text-fg-body mb-1">Category</label>
 				<select id="entity_type_id" name="entity_type_id" required class="input w-full">
 					<option value="">Select a category...</option>
+					// Top-level types first, then sub-types indented under parents.
 					for _, et := range entityTypes {
-						if et.Enabled {
+						if et.Enabled && et.ParentTypeID == nil {
 							<option
 								value={ strconv.Itoa(et.ID) }
 								selected?={ et.ID == preselect }
 							>{ et.Name }</option>
+							// Render children indented under this parent.
+							for _, child := range entityTypes {
+								if child.Enabled && child.ParentTypeID != nil && *child.ParentTypeID == et.ID {
+									<option
+										value={ strconv.Itoa(child.ID) }
+										selected?={ child.ID == preselect }
+									>{ "  └ " + child.Name }</option>
+								}
+							}
 						}
 					}
 				</select>
