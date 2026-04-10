@@ -343,26 +343,27 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 		<div class="card p-4">
 			<h2 class="text-sm font-semibold text-fg mb-1">Game System</h2>
 			<p class="text-xs text-fg-secondary mb-3">Reference content, tooltips, and presets.</p>
-			<!-- DEBUG: remove after confirming -->
-			<p class="text-[10px] font-mono text-fg-muted/50 mb-2 break-all">
-				debug: saved_id="{ cc.Campaign.ParseSettings().SystemID }" options={ systemOptionsJSON }
-			</p>
 			<div
 				x-data={ fmt.Sprintf(`{
-					systemId: '%s',
+					_savedSystemId: '%s',
+					systemId: '',
 					customUrl: '',
 					isCustom: false,
 					saving: false,
 					saved: false,
 					systems: %s,
 					init() {
-						if (this.systemId.startsWith('custom:')) {
-							this.customUrl = this.systemId.substring(7);
+						var saved = this._savedSystemId;
+						if (saved.startsWith('custom:')) {
+							this.customUrl = saved.substring(7);
 							this.isCustom = true;
-							this.systemId = 'custom';
-						} else if (this.systemId && !this.systems.find(s => s.id === this.systemId)) {
-							this.systems.push({ id: this.systemId, name: this.systemId + ' (not loaded)', has_error: true });
+							this._savedSystemId = 'custom';
+						} else if (saved && !this.systems.find(s => s.id === saved)) {
+							this.systems.push({ id: saved, name: saved + ' (not loaded)', has_error: true });
 						}
+						this.$nextTick(() => {
+							this.systemId = this._savedSystemId;
+						});
 					},
 					get selectedHasError() {
 						var sel = this.systems.find(s => s.id === this.systemId);
