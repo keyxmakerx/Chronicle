@@ -167,7 +167,7 @@ make docker-down     # Stop containers
 cmd/server/          # Application entrypoint
 internal/
   plugins/           # Feature apps (auth, campaigns, entities, calendar, ...)
-  modules/           # Game system content packs (dnd5e)
+  systems/           # Game system content packs (installed via package manager)
   widgets/           # Reusable UI components (editor, tags, relations, notes, ...)
   templates/         # Templ layouts and shared components
   middleware/        # HTTP middleware (auth, CSRF, logging, recovery)
@@ -188,7 +188,7 @@ Chronicle uses a **three-tier extension architecture**:
 | Tier | Purpose | Example |
 |------|---------|---------|
 | **Plugin** | Feature app with handler/service/repo/templates | auth, campaigns, entities, calendar, maps |
-| **Module** | Game system content pack (read-only reference data) | dnd5e, pathfinder |
+| **System** | Game system content pack (installed via package manager) | drawsteel, dnd5e, pathfinder2e |
 | **Widget** | Reusable UI component (self-contained JS + API) | editor, tags, relations, notes |
 
 Request flow: `Router → Middleware → Handler → Service → Repository → MariaDB`

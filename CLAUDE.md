@@ -41,8 +41,8 @@ a Plugin, System, or Widget:
 Router -> Middleware -> Handler -> Service -> Repository -> MariaDB
 
 **Templates:**
-Handler calls Templ component -> returns full page OR HTMX fragment (based on
-`HX-Request` header).
+Handler calls Templ component -> returns full page OR HTMX fragment (via
+`middleware.IsHTMX(c)`).
 
 **Widgets:**
 Self-contained JS modules that mount to a DOM element via `data-widget` attributes,
@@ -56,7 +56,7 @@ See `.ai/architecture.md` for the full architecture document.
 - **Services own business logic.** Services NEVER import Echo types.
 - **Repositories own SQL.** One repository per aggregate root. Hand-written SQL.
 - **Templ components:** one file per visual component. Layouts in `internal/templates/layouts/`.
-- **HTMX detection:** check `c.Request().Header.Get("HX-Request")` to return fragment vs full page.
+- **HTMX detection:** use `middleware.IsHTMX(c)` to return fragment vs full page (also checks `HX-Boosted`).
 - **Errors:** use domain error types from `internal/apperror/`. Never return raw DB errors.
 - **Tests:** table-driven tests. Interfaces for all service/repo boundaries.
 - **Naming:** `snake_case.go` for files, `PascalCase` for exported Go types, `camelCase` for JSON.

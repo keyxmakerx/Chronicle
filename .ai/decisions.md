@@ -24,13 +24,14 @@ extensions: full feature apps, game system content packs, and reusable UI pieces
 - **Plugins** (`internal/plugins/`): Feature apps with handler/service/repo/templates.
   Core plugins (auth, campaigns, entities) always enabled. Optional plugins
   (calendar, maps, timeline) enabled per-campaign.
-- **Modules** (`internal/modules/`): Game system content packs (D&D 5e, Pathfinder,
-  Draw Steel). Reference data, tooltips, dedicated pages. Read-only.
+- **Systems** (`internal/systems/`): Game system content packs (Draw Steel, D&D 5e,
+  Pathfinder 2e). Reference data, tooltips, dedicated pages. Read-only.
+  Installed via package manager.
 - **Widgets** (`internal/widgets/`): Reusable UI building blocks (editor, title,
   tags, attributes, mentions). Mount to DOM, fetch own data.
 
 **Alternatives Considered:**
-- Flat `internal/modules/` for everything: conflates apps with UI components
+- Flat structure for everything: conflates apps with UI components
   and content packs. Naming becomes ambiguous.
 - Plugin-only: widgets and modules have fundamentally different structures.
 
@@ -548,11 +549,11 @@ to implement without accessing the database or Echo router.
 
 **Decision:** Replace the static registry with a manifest-driven framework:
 
-1. **manifest.json** — Each module declares metadata in a JSON file: id, name,
+1. **manifest.json** — Each system declares metadata in a JSON file: id, name,
    version, author, license, categories, API version, entity presets, etc.
-2. **ModuleLoader** — Scans `internal/modules/*/manifest.json` at startup,
-   validates required fields, logs warnings for invalid manifests without
-   failing startup.
+2. **SystemLoader** — Scans `internal/systems/*/manifest.json` and package-installed
+   systems at startup, validates required fields, logs warnings for invalid
+   manifests without failing startup.
 3. **Module interface** — Sandboxed: `Info() *ModuleManifest`,
    `DataProvider() DataProvider`, `TooltipRenderer() TooltipRenderer`.
    Modules can only serve data through these interfaces.
