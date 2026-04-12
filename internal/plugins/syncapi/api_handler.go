@@ -45,6 +45,7 @@ type APIHandler struct {
 	relationSvc          relations.RelationService
 	addonChecker         AddonChecker
 	addonLister          AddonLister
+	systemEnabler        SystemEnabler
 	campaignSystemLister CampaignSystemLister
 }
 
@@ -747,6 +748,14 @@ func (h *APIHandler) SetAddonLister(al AddonLister) {
 	h.addonLister = al
 }
 
+// SetSystemEnabler injects the system enabler for API-level self-healing.
+// When a campaign has a selected system that isn't enabled as an addon,
+// the ListSystems endpoint auto-enables it so the Foundry module sees
+// the system with enabled=true.
+func (h *APIHandler) SetSystemEnabler(se SystemEnabler) {
+	h.systemEnabler = se
+}
+
 // --- Systems ---
 
 // systemInfoResponse is the API-safe representation of a game system.
@@ -756,8 +765,16 @@ type systemInfoResponse struct {
 	Status             string `json:"status"`
 	HasCharacterFields bool   `json:"has_character_fields"`
 	HasItemFields      bool   `json:"has_item_fields"`
-	FoundrySystemID    string `json:"foundry_system_id,omitempty"`
+	FoundrySystemID    string `json:"foundry_system_id"`
 	Enabled            bool   `json:"enabled"`
+}
+
+// SystemEnabler enables a game system addon for a campaign. Used for
+// API-level self-healing: if the campaign's selected system isn't enabled
+// as an addon (e.g., set before self-healing was deployed), the API
+// auto-enables it on read so the Foundry module sees enabled=true.
+type SystemEnabler interface {
+	EnableSystemForCampaign(ctx context.Context, campaignID, systemSlug, userID string) error
 }
 
 // CampaignSystemLister provides access to per-campaign custom systems.
@@ -769,22 +786,24 @@ type CampaignSystemLister interface {
 // Includes built-in systems from the global registry with an enabled flag
 // based on per-campaign addon state. Used by the Foundry module to detect
 // whether the current game system matches a Chronicle system.
+//
+// Self-healing: if the campaign has a selected system (in settings) but
+// the addon isn't enabled — e.g., the system was set before self-healing
+// was deployed — the endpoint auto-enables the addon on read so the
+// Foundry module sees enabled=true without manual intervention.
 // GET /api/v1/campaigns/:id/systems
 func (h *APIHandler) ListSystems(c echo.Context) error {
 	campaignID := c.Param("id")
 	ctx := c.Request().Context()
 
+	// Resolve the campaign's selected system for self-healing.
+	selectedSystemID := h.getSelectedSystemID(ctx, campaignID)
+
 	registry := systems.Registry()
 	result := make([]systemInfoResponse, 0, len(registry))
 
 	for _, manifest := range registry {
-		enabled := false
-		if h.addonChecker != nil {
-			ok, err := h.addonChecker.IsEnabledForCampaign(ctx, campaignID, manifest.ID)
-			if err == nil && ok {
-				enabled = true
-			}
-		}
+		enabled := h.checkOrHealSystemAddon(ctx, campaignID, manifest.ID, selectedSystemID)
 
 		result = append(result, systemInfoResponse{
 			ID:                 manifest.ID,
@@ -800,13 +819,7 @@ func (h *APIHandler) ListSystems(c echo.Context) error {
 	// Include the campaign's custom system if one is uploaded.
 	if h.campaignSystemLister != nil {
 		if custom := h.campaignSystemLister.GetManifest(campaignID); custom != nil {
-			enabled := false
-			if h.addonChecker != nil {
-				ok, err := h.addonChecker.IsEnabledForCampaign(ctx, campaignID, custom.ID)
-				if err == nil && ok {
-					enabled = true
-				}
-			}
+			enabled := h.checkOrHealSystemAddon(ctx, campaignID, custom.ID, selectedSystemID)
 			result = append(result, systemInfoResponse{
 				ID:                 custom.ID,
 				Name:               custom.Name,
@@ -818,10 +831,56 @@ func (h *APIHandler) ListSystems(c echo.Context) error {
 		}
 	}
 
+	slog.Debug("ListSystems response",
+		slog.String("campaign_id", campaignID),
+		slog.Int("count", len(result)),
+	)
+
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":  result,
 		"total": len(result),
 	})
+}
+
+// getSelectedSystemID returns the campaign's configured system ID from
+// settings, or empty string if none is set or the campaign can't be loaded.
+func (h *APIHandler) getSelectedSystemID(ctx context.Context, campaignID string) string {
+	campaign, err := h.campaignSvc.GetByID(ctx, campaignID)
+	if err != nil || campaign == nil {
+		return ""
+	}
+	return campaign.ParseSettings().SystemID
+}
+
+// checkOrHealSystemAddon checks if a system addon is enabled for a campaign.
+// If the addon is NOT enabled but the system IS the campaign's selected system,
+// it auto-enables the addon (self-healing for pre-deployment system selections).
+func (h *APIHandler) checkOrHealSystemAddon(ctx context.Context, campaignID, systemID, selectedSystemID string) bool {
+	if h.addonChecker == nil {
+		return false
+	}
+
+	ok, err := h.addonChecker.IsEnabledForCampaign(ctx, campaignID, systemID)
+	if err == nil && ok {
+		return true
+	}
+
+	// Self-heal: system is selected in campaign settings but addon not enabled.
+	if h.systemEnabler != nil && selectedSystemID != "" && systemID == selectedSystemID {
+		if err := h.systemEnabler.EnableSystemForCampaign(ctx, campaignID, systemID, ""); err == nil {
+			slog.Info("auto-healed system addon via API",
+				slog.String("campaign_id", campaignID),
+				slog.String("system_id", systemID),
+			)
+			return true
+		}
+		slog.Warn("API self-heal failed for system addon",
+			slog.String("campaign_id", campaignID),
+			slog.String("system_id", systemID),
+		)
+	}
+
+	return false
 }
 
 // GetCharacterFields returns the character preset field definitions for a

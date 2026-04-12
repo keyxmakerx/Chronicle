@@ -141,13 +141,13 @@ func TestValidateManifest(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "missing version",
+			name: "missing version defaults to 0.0.0",
 			m: SystemManifest{
 				ID:         "test",
 				Name:       "Test",
 				APIVersion: "1",
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "missing api_version",
@@ -523,6 +523,23 @@ func TestBuildValidationReport_NoFoundryPaths(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("Expected warning about missing foundry_path, got: %v", r.Warnings)
+	}
+}
+
+func TestValidateManifest_DefaultsEmptyVersion(t *testing.T) {
+	m := SystemManifest{
+		ID:         "test",
+		Name:       "Test",
+		APIVersion: "1",
+		Version:    "",
+	}
+
+	if err := ValidateManifest(&m); err != nil {
+		t.Fatalf("ValidateManifest() error = %v", err)
+	}
+
+	if m.Version != "0.0.0" {
+		t.Errorf("Version = %q, want %q (should default)", m.Version, "0.0.0")
 	}
 }
 

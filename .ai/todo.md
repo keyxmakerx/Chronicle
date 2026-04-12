@@ -80,6 +80,13 @@ Known broken or missing things, ordered by severity.
 - [x] **Chronicle.toast stale API** — Replaced `Chronicle.toast` with `Chronicle.notify` in `media_browser.templ`.
 - [x] **Hardcoded GitHub URLs** — `GITHUB_ORG` env var, generic placeholders replace hardcoded URLs.
 
+### Recently Fixed (2026-04-12)
+
+- [x] **Systems API `foundry_system_id` missing + no self-healing** — Removed `omitempty`, added API-level self-healing in `ListSystems()` that auto-enables system addon when campaign has selected system but addon not enabled.
+- [x] **System manifest version mismatch** — Added `rewriteSystemManifestVersion()` in packages service to overwrite `manifest.json` version with release tag during install.
+- [x] **Package usage query slug mismatch** — `GetUsage()` passed `pkg.Slug` not manifest ID. Added `getManifestIDFromDir()` to resolve system package slug to addon slug.
+- [x] **Admin systems diagnostics** — Added Foundry System ID + Campaign Count columns to admin systems page. New `CountCampaignsUsingAddon()` in addons.
+
 ### Low (Original)
 
 _See `.ai/audit.md` for the full feature parity & completeness audit. Audit items now organized into Phases M0-M3 and Backlog below._
@@ -247,6 +254,10 @@ favorites, unified sidebar model, and large campaign support._
 - [x] **Sprint N-6: Layout Editor Polish** — Auto-inject missing addons/entity types into items array on config load.
 - [x] **Sprint N-8: Saved Filter Presets** — Migration 000015, SavedFilterRepository CRUD, REST API, sidebar_tag_filter.js preset UI (save/apply/delete).
 - [x] **Responsive/Mobile Fixes** — Touch drag for layout editor, WCAG touch targets, long-press context menu, inline rename mobile improvements.
+
+### Backlog: Integrations Tab Redesign (COMPLETE)
+
+- [x] **Integrations tab inline API keys** — Full 6-section connection management hub. HTMX lazy-loading from syncapi. Connection status dots, inline key cards with VTT tag badges, collapsible VTT guides, sync management, CORS note, data portability. Migration 002 (vtt_tag). Owner-only with existing RequireRole(RoleOwner).
 
 ### Backlog: Remaining Audit Items (address opportunistically)
 

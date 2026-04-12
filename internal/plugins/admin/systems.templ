@@ -11,12 +11,14 @@ import (
 
 // SystemDiagnosticEntry represents a single system's status for the admin page.
 type SystemDiagnosticEntry struct {
-	ID           string
-	Name         string
-	Version      string
-	Status       string // "available" or "coming_soon"
-	Instantiated bool
-	Dir          string
+	ID              string
+	Name            string
+	Version         string
+	Status          string // "available" or "coming_soon"
+	Instantiated    bool
+	Dir             string
+	FoundrySystemID string // Foundry VTT system ID for matching (e.g., "draw-steel").
+	CampaignCount   int    // Number of campaigns using this system.
 }
 
 // AdminSystemsPage renders the system diagnostics page.
@@ -69,6 +71,8 @@ templ AdminSystemsPage(entries []SystemDiagnosticEntry, events []systems.LoadEve
 									<th class="px-4 py-2">Name</th>
 									<th class="px-4 py-2">ID</th>
 									<th class="px-4 py-2">Version</th>
+									<th class="px-4 py-2">Foundry ID</th>
+									<th class="px-4 py-2">Campaigns</th>
 									<th class="px-4 py-2">Status</th>
 									<th class="px-4 py-2">Loaded</th>
 									<th class="px-4 py-2">Path</th>
@@ -80,6 +84,22 @@ templ AdminSystemsPage(entries []SystemDiagnosticEntry, events []systems.LoadEve
 										<td class="px-4 py-2.5 font-medium text-fg">{ e.Name }</td>
 										<td class="px-4 py-2.5 font-mono text-xs text-fg-muted">{ e.ID }</td>
 										<td class="px-4 py-2.5 text-fg-secondary">{ e.Version }</td>
+										<td class="px-4 py-2.5 font-mono text-xs text-fg-muted">
+											if e.FoundrySystemID != "" {
+												{ e.FoundrySystemID }
+											} else {
+												<span class="text-fg-muted">—</span>
+											}
+										</td>
+										<td class="px-4 py-2.5">
+											if e.CampaignCount > 0 {
+												<span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+													{ fmt.Sprintf("%d", e.CampaignCount) }
+												</span>
+											} else {
+												<span class="text-fg-muted text-xs">0</span>
+											}
+										</td>
 										<td class="px-4 py-2.5">
 											if e.Status == "available" {
 												<span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">

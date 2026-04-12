@@ -122,10 +122,16 @@ func (s *syncAPIService) CreateKey(ctx context.Context, userID string, input Cre
 		return nil, apperror.NewInternal(fmt.Errorf("hashing key: %w", err))
 	}
 
+	var vttTag *string
+	if tag := strings.TrimSpace(input.VTTTag); tag != "" {
+		vttTag = &tag
+	}
+
 	key := &APIKey{
 		KeyHash:     string(hash),
 		KeyPrefix:   prefix,
 		Name:        name,
+		VTTTag:      vttTag,
 		UserID:      userID,
 		CampaignID:  input.CampaignID,
 		Permissions: input.Permissions,

@@ -20,6 +20,7 @@ type APIKey struct {
 	KeyHash     string             `json:"-"`                       // Never exposed in JSON.
 	KeyPrefix   string             `json:"key_prefix"`              // First 8 chars for display.
 	Name        string             `json:"name"`
+	VTTTag      *string            `json:"vtt_tag,omitempty"`       // Cosmetic label: "foundry", "custom".
 	UserID      string             `json:"user_id"`
 	CampaignID  string             `json:"campaign_id"`
 	Permissions []APIKeyPermission `json:"permissions"`
@@ -56,6 +57,7 @@ func (k *APIKey) HasPermission(perm APIKeyPermission) bool {
 // CreateAPIKeyInput is the validated input for creating a new API key.
 type CreateAPIKeyInput struct {
 	Name        string
+	VTTTag      string
 	CampaignID  string
 	Permissions []APIKeyPermission
 	IPAllowlist []string

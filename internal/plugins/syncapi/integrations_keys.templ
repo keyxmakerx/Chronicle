@@ -1,0 +1,284 @@
+// integrations_keys.templ renders HTMX fragments for the campaign Settings >
+// Integrations tab. Lazy-loaded by the settings page so the campaigns handler
+// doesn't need to import syncapi types.
+
+package syncapi
+
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+// IntegrationsKeysFragmentTempl renders the full keys section: connection status,
+// key cards, and the create form. Loaded via HTMX into the Integrations tab.
+templ IntegrationsKeysFragmentTempl(campaignID string, keys []APIKey, stats *APIStats, csrfToken, baseURL string) {
+	<div class="space-y-6">
+		// Connection Status — per-key health at a glance.
+		if len(keys) > 0 {
+			<div class="card p-4">
+				<h2 class="text-sm font-semibold text-fg mb-3">Connection Status</h2>
+				<div class="flex flex-wrap gap-3">
+					for _, k := range keys {
+						<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-alt">
+							<span class={ "w-2.5 h-2.5 rounded-full shrink-0", connectionDotColor(k) }></span>
+							<span class="text-sm text-fg">{ k.Name }</span>
+							if k.VTTTag != nil {
+								<span class="text-xs px-1.5 py-0.5 rounded bg-accent/10 text-accent">{ *k.VTTTag }</span>
+							}
+							<span class="text-xs text-fg-muted">{ connectionStatusText(k) }</span>
+						</div>
+					}
+				</div>
+			</div>
+		}
+
+		// Quick Stats.
+		if stats != nil && stats.ActiveKeys > 0 {
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+				<div class="card p-3 text-center">
+					<p class="text-lg font-bold text-fg">{ fmt.Sprintf("%d", stats.ActiveKeys) }</p>
+					<p class="text-xs text-fg-muted">Active Keys</p>
+				</div>
+				<div class="card p-3 text-center">
+					<p class="text-lg font-bold text-fg">{ fmt.Sprintf("%d", stats.TotalRequests) }</p>
+					<p class="text-xs text-fg-muted">Requests (24h)</p>
+				</div>
+				<div class="card p-3 text-center">
+					<p class="text-lg font-bold text-fg">{ fmt.Sprintf("%d", stats.TotalErrors) }</p>
+					<p class="text-xs text-fg-muted">Errors (24h)</p>
+				</div>
+				<div class="card p-3 text-center">
+					<p class="text-lg font-bold text-fg">{ fmt.Sprintf("%d", stats.UniqueIPs) }</p>
+					<p class="text-xs text-fg-muted">Unique IPs (24h)</p>
+				</div>
+			</div>
+		}
+
+		// API Keys list.
+		<div class="card p-4">
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="text-sm font-semibold text-fg">API Keys</h2>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", campaignID)) } class="text-xs text-fg-muted hover:text-accent">
+					View All <i class="fa-solid fa-arrow-right text-[10px] ml-0.5"></i>
+				</a>
+			</div>
+			if len(keys) > 0 {
+				<div class="space-y-2">
+					for _, k := range keys {
+						@integrationsKeyCard(campaignID, k, csrfToken)
+					}
+				</div>
+			} else {
+				<div class="text-center py-6">
+					<i class="fa-solid fa-key text-2xl text-fg-muted mb-2 block"></i>
+					<p class="text-sm text-fg-muted">No API keys yet. Create one to connect your VTT.</p>
+				</div>
+			}
+		</div>
+
+		// Create Key form.
+		<div class="card p-4" x-data="{ expanded: false }">
+			<button @click="expanded = !expanded" class="flex items-center justify-between w-full text-left">
+				<h2 class="text-sm font-semibold text-fg"><i class="fa-solid fa-plus mr-1.5 text-xs"></i> Create New Key</h2>
+				<i class="fa-solid fa-chevron-down text-xs text-fg-muted transition-transform" :class="expanded && 'rotate-180'"></i>
+			</button>
+			<div x-show="expanded" x-collapse class="mt-4">
+				<form
+					method="POST"
+					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", campaignID)) }
+					hx-post={ fmt.Sprintf("/campaigns/%s/api-keys", campaignID) }
+					hx-target="#integrations-keys"
+					hx-swap="innerHTML"
+					class="space-y-4"
+				>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<div>
+							<label for="int-key-name" class="block text-sm font-medium text-fg-body mb-1">Key Name</label>
+							<input type="text" id="int-key-name" name="name" required class="input w-full" placeholder="Foundry VTT Sync"/>
+						</div>
+						<div>
+							<label for="int-vtt-tag" class="block text-sm font-medium text-fg-body mb-1">VTT Type</label>
+							<select id="int-vtt-tag" name="vtt_tag" class="input w-full">
+								<option value="">None</option>
+								<option value="foundry">Foundry VTT</option>
+								<option value="custom">Custom / Other</option>
+							</select>
+						</div>
+					</div>
+
+					<div>
+						<label class="block text-sm font-medium text-fg-body mb-2">Permissions</label>
+						<div class="flex flex-wrap gap-4">
+							<label class="flex items-center gap-2 text-sm text-fg-body">
+								<input type="checkbox" name="perm_read" class="h-4 w-4 text-accent border-edge rounded" checked/>
+								<span>Read</span>
+							</label>
+							<label class="flex items-center gap-2 text-sm text-fg-body">
+								<input type="checkbox" name="perm_write" class="h-4 w-4 text-accent border-edge rounded"/>
+								<span>Write</span>
+							</label>
+							<label class="flex items-center gap-2 text-sm text-fg-body">
+								<input type="checkbox" name="perm_sync" class="h-4 w-4 text-accent border-edge rounded"/>
+								<span>Sync</span>
+							</label>
+						</div>
+						<p class="text-xs text-fg-muted mt-1">Read: fetch data. Write: create/update. Sync: bi-directional sync.</p>
+					</div>
+
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<div>
+							<label for="int-rate-limit" class="block text-sm font-medium text-fg-body mb-1">Rate Limit (req/min)</label>
+							<input type="number" id="int-rate-limit" name="rate_limit" value="60" min="1" max="1000" class="input w-full"/>
+						</div>
+						<div>
+							<label for="int-expires" class="block text-sm font-medium text-fg-body mb-1">Expires (optional)</label>
+							<input type="date" id="int-expires" name="expires_at" class="input w-full"/>
+						</div>
+					</div>
+
+					<div>
+						<label for="int-ip-list" class="block text-sm font-medium text-fg-body mb-1">IP Allowlist (optional)</label>
+						<textarea id="int-ip-list" name="ip_allowlist" class="input w-full h-16 text-sm" placeholder="One IP per line, e.g.&#10;192.168.1.0/24"></textarea>
+					</div>
+
+					<div class="flex justify-end">
+						<button type="submit" class="btn-primary text-sm">Generate Key</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</div>
+}
+
+// integrationsKeyCard renders a compact key card for the Integrations tab.
+templ integrationsKeyCard(campaignID string, k APIKey, csrfToken string) {
+	<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
+		<div class="flex items-center gap-3 flex-1 min-w-0">
+			<span class={ "w-2.5 h-2.5 rounded-full shrink-0", connectionDotColor(k) }></span>
+			<div class="min-w-0">
+				<div class="flex items-center gap-2">
+					<span class="text-sm font-medium text-fg truncate">{ k.Name }</span>
+					if k.VTTTag != nil {
+						<span class="text-xs px-1.5 py-0.5 rounded bg-accent/10 text-accent">{ *k.VTTTag }</span>
+					}
+				</div>
+				<div class="flex items-center gap-2 mt-0.5">
+					<span class="text-xs text-fg-muted font-mono">{ k.KeyPrefix }...</span>
+					<span class="text-xs text-fg-muted">{ formatPermissions(k.Permissions) }</span>
+					<span class="text-xs text-fg-muted">{ connectionStatusText(k) }</span>
+				</div>
+			</div>
+		</div>
+		<div class="flex items-center gap-1.5 ml-3 shrink-0">
+			// Toggle active/inactive.
+			<form method="POST"
+				hx-put={ fmt.Sprintf("/campaigns/%s/api-keys/%d/toggle", campaignID, k.ID) }
+				hx-target="#integrations-keys"
+				hx-swap="innerHTML"
+				class="inline">
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				if k.IsActive {
+					<input type="hidden" name="action" value="deactivate"/>
+					<button type="submit" class="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-emerald-200" title="Deactivate">
+						Active
+					</button>
+				} else {
+					<input type="hidden" name="action" value="activate"/>
+					<button type="submit" class="text-xs px-2 py-1 rounded bg-surface-alt text-fg-muted border border-edge hover:bg-accent/10" title="Activate">
+						Inactive
+					</button>
+				}
+			</form>
+			// Revoke.
+			<form method="POST"
+				hx-delete={ fmt.Sprintf("/campaigns/%s/api-keys/%d", campaignID, k.ID) }
+				hx-target="#integrations-keys"
+				hx-swap="innerHTML"
+				hx-confirm="Revoke this API key? This cannot be undone."
+				class="inline">
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<button type="submit" class="text-xs text-red-500 hover:text-red-600 px-1.5 py-1" title="Revoke">
+					<i class="fa-solid fa-trash"></i>
+				</button>
+			</form>
+		</div>
+	</div>
+}
+
+// connectionDotColor returns the CSS class for a connection health dot.
+// Green: used in last hour. Amber: last 24h. Red: 24h+ or never used.
+func connectionDotColor(k APIKey) string {
+	if !k.IsActive || k.IsExpired() {
+		return "bg-red-500"
+	}
+	if k.LastUsedAt == nil {
+		return "bg-red-500"
+	}
+	since := time.Since(*k.LastUsedAt)
+	if since < time.Hour {
+		return "bg-emerald-500"
+	}
+	if since < 24*time.Hour {
+		return "bg-amber-500"
+	}
+	return "bg-red-500"
+}
+
+// connectionStatusText returns a human-readable connection status string.
+func connectionStatusText(k APIKey) string {
+	if !k.IsActive {
+		return "Inactive"
+	}
+	if k.IsExpired() {
+		return "Expired"
+	}
+	if k.LastUsedAt == nil {
+		return "Never used"
+	}
+	return relativeTime(*k.LastUsedAt)
+}
+
+// relativeTime formats a time as a human-readable relative string.
+func relativeTime(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		m := int(d.Minutes())
+		if m == 1 {
+			return "1m ago"
+		}
+		return fmt.Sprintf("%dm ago", m)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		if h == 1 {
+			return "1h ago"
+		}
+		return fmt.Sprintf("%dh ago", h)
+	default:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "1d ago"
+		}
+		return fmt.Sprintf("%dd ago", days)
+	}
+}
+
+// vttTagLabel returns a display label for a VTT tag.
+func vttTagLabel(tag *string) string {
+	if tag == nil {
+		return ""
+	}
+	switch strings.ToLower(*tag) {
+	case "foundry":
+		return "Foundry VTT"
+	case "custom":
+		return "Custom"
+	default:
+		return *tag
+	}
+}

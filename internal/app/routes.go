@@ -1225,6 +1225,7 @@ func (a *App) RegisterRoutes() {
 
 	// Wire addon count into admin dashboard for the Extensions stat card.
 	adminHandler.SetAddonCounter(addonService)
+	adminHandler.SetAddonUsageCounter(addonService)
 
 	// Wire addon checker into entity handler for conditional attributes rendering.
 	entityHandler.SetAddonChecker(addonService)
@@ -1321,6 +1322,7 @@ func (a *App) RegisterRoutes() {
 	syncMappingSvcEarly := syncapi.NewSyncMappingService(syncMappingRepoEarly)
 	syncHandler.SetSyncMappingService(syncMappingSvcEarly)
 	syncHandler.SetCORSOriginLister(settingsService)
+	syncHandler.SetBaseURL(a.Config.BaseURL)
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAdminRoutes(adminGroup, syncHandler)
 		syncapi.RegisterCampaignRoutes(e, syncHandler, campaignService, authService)
@@ -1423,6 +1425,7 @@ func (a *App) RegisterRoutes() {
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
 	syncAPIHandler.SetAddonLister(&addonListerAPIAdapter{svc: addonService})
+	syncAPIHandler.SetSystemEnabler(addonService)
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {
@@ -2073,6 +2076,24 @@ func (a *App) RegisterRoutes() {
 			if sysScripts := systemHandler.GetSystemWidgetScriptURLs(reqCtx, cc.Campaign.ID); len(sysScripts) > 0 {
 				existing := layouts.GetExtWidgetScripts(ctx)
 				ctx = layouts.SetExtWidgetScripts(ctx, append(existing, sysScripts...))
+			}
+		}
+
+		// Inject user campaigns for topbar navigation on non-campaign pages.
+		// Skipped inside campaigns (sidebar handles navigation there).
+		if session := auth.GetSession(c); session != nil && campaigns.GetCampaignContext(c) == nil {
+			reqCtx := c.Request().Context()
+			opts := campaigns.DefaultListOptions()
+			opts.PerPage = 10
+			if userCampaigns, _, err := campaignService.List(reqCtx, session.UserID, opts); err == nil && len(userCampaigns) > 0 {
+				navCampaigns := make([]layouts.NavCampaign, len(userCampaigns))
+				for i, uc := range userCampaigns {
+					navCampaigns[i] = layouts.NavCampaign{
+						ID:   uc.ID,
+						Name: uc.Name,
+					}
+				}
+				ctx = layouts.SetUserCampaigns(ctx, navCampaigns)
 			}
 		}
 

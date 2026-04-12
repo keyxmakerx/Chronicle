@@ -23,9 +23,10 @@ type CORSOriginLister interface {
 // Handler handles sync API HTTP requests for both the management UI
 // (key management, dashboards) and the actual sync API endpoints.
 type Handler struct {
-	service         SyncAPIService
-	syncMapSvc      SyncMappingService
+	service          SyncAPIService
+	syncMapSvc       SyncMappingService
 	corsOriginLister CORSOriginLister
+	baseURL          string
 }
 
 // NewHandler creates a new sync API handler.
@@ -41,6 +42,11 @@ func (h *Handler) SetSyncMappingService(svc SyncMappingService) {
 // SetCORSOriginLister injects the CORS origin provider for the admin dashboard.
 func (h *Handler) SetCORSOriginLister(lister CORSOriginLister) {
 	h.corsOriginLister = lister
+}
+
+// SetBaseURL sets the Chronicle server base URL for connection details display.
+func (h *Handler) SetBaseURL(url string) {
+	h.baseURL = url
 }
 
 // --- Campaign Owner: API Key Management ---
@@ -62,6 +68,29 @@ func (h *Handler) KeysPage(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, OwnerKeysPageTempl(cc.Campaign.ID, keys, stats, csrfToken))
+}
+
+// IntegrationsKeysFragment renders the API keys section as an HTMX fragment
+// for the Settings > Integrations tab. Includes connection status, key cards,
+// and the inline key creation form.
+// GET /campaigns/:id/integrations/keys
+func (h *Handler) IntegrationsKeysFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewForbidden("campaign context required")
+	}
+
+	ctx := c.Request().Context()
+	keys, err := h.service.ListKeysByCampaign(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	since := time.Now().Add(-24 * time.Hour)
+	stats, _ := h.service.GetCampaignStats(ctx, cc.Campaign.ID, since)
+
+	csrfToken := middleware.GetCSRFToken(c)
+	return middleware.Render(c, http.StatusOK, IntegrationsKeysFragmentTempl(cc.Campaign.ID, keys, stats, csrfToken, h.baseURL))
 }
 
 // CreateKey handles POST /campaigns/:id/api-keys to create a new API key.
@@ -116,6 +145,7 @@ func (h *Handler) CreateKey(c echo.Context) error {
 
 	input := CreateAPIKeyInput{
 		Name:        c.FormValue("name"),
+		VTTTag:      c.FormValue("vtt_tag"),
 		CampaignID:  cc.Campaign.ID,
 		Permissions: perms,
 		IPAllowlist: ipAllowlist,
@@ -169,6 +199,10 @@ func (h *Handler) ToggleKey(c echo.Context) error {
 		}
 	}
 
+	// When toggled from the Integrations tab, re-render the inline fragment.
+	if c.Request().Header.Get("HX-Target") == "integrations-keys" {
+		return h.IntegrationsKeysFragment(c)
+	}
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/api-keys")
 }
 
@@ -196,6 +230,10 @@ func (h *Handler) RevokeKey(c echo.Context) error {
 		return err
 	}
 
+	// When revoked from the Integrations tab, re-render the inline fragment.
+	if c.Request().Header.Get("HX-Target") == "integrations-keys" {
+		return h.IntegrationsKeysFragment(c)
+	}
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/api-keys")
 }
 

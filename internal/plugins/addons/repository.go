@@ -30,6 +30,7 @@ type AddonRepository interface {
 	EnableForCampaign(ctx context.Context, campaignID string, addonID int, userID string) error
 	DisableForCampaign(ctx context.Context, campaignID string, addonID int) error
 	IsEnabledForCampaign(ctx context.Context, campaignID string, addonSlug string) (bool, error)
+	CountCampaignsUsingAddon(ctx context.Context, addonSlug string) (int, error)
 	UpdateCampaignConfig(ctx context.Context, campaignID string, addonID int, config map[string]any) error
 }
 
@@ -304,6 +305,20 @@ func (r *addonRepository) IsEnabledForCampaign(ctx context.Context, campaignID s
 		return false, fmt.Errorf("checking addon enabled: %w", err)
 	}
 	return enabled, nil
+}
+
+// CountCampaignsUsingAddon returns the number of campaigns that have the
+// specified addon enabled. Used by admin diagnostics to show system usage.
+func (r *addonRepository) CountCampaignsUsingAddon(ctx context.Context, addonSlug string) (int, error) {
+	query := `SELECT COUNT(*) FROM campaign_addons ca
+	          INNER JOIN addons a ON a.id = ca.addon_id
+	          WHERE a.slug = ? AND ca.enabled = 1`
+	var count int
+	err := r.db.QueryRowContext(ctx, query, addonSlug).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting campaigns using addon %s: %w", addonSlug, err)
+	}
+	return count, nil
 }
 
 // UpdateCampaignConfig updates the addon-specific configuration for a campaign.

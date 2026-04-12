@@ -72,9 +72,9 @@ func (r *syncAPIRepository) CreateKey(ctx context.Context, key *APIKey) error {
 	}
 
 	result, err := r.db.ExecContext(ctx,
-		`INSERT INTO api_keys (key_hash, key_prefix, name, user_id, campaign_id, permissions, ip_allowlist, rate_limit, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		key.KeyHash, key.KeyPrefix, key.Name, key.UserID, key.CampaignID,
+		`INSERT INTO api_keys (key_hash, key_prefix, name, vtt_tag, user_id, campaign_id, permissions, ip_allowlist, rate_limit, expires_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		key.KeyHash, key.KeyPrefix, key.Name, key.VTTTag, key.UserID, key.CampaignID,
 		permsJSON, ipJSON, key.RateLimit, key.ExpiresAt,
 	)
 	if err != nil {
@@ -88,7 +88,7 @@ func (r *syncAPIRepository) CreateKey(ctx context.Context, key *APIKey) error {
 // FindKeyByID retrieves an API key by its ID.
 func (r *syncAPIRepository) FindKeyByID(ctx context.Context, id int) (*APIKey, error) {
 	return r.scanKey(r.db.QueryRowContext(ctx,
-		`SELECT id, key_hash, key_prefix, name, user_id, campaign_id, permissions, ip_allowlist,
+		`SELECT id, key_hash, key_prefix, name, vtt_tag, user_id, campaign_id, permissions, ip_allowlist,
 		        rate_limit, is_active, last_used_at, last_used_ip, expires_at, device_fingerprint, device_bound_at, created_at, updated_at
 		 FROM api_keys WHERE id = ?`, id))
 }
@@ -96,7 +96,7 @@ func (r *syncAPIRepository) FindKeyByID(ctx context.Context, id int) (*APIKey, e
 // FindKeyByPrefix retrieves an API key by its prefix (for auth lookup).
 func (r *syncAPIRepository) FindKeyByPrefix(ctx context.Context, prefix string) (*APIKey, error) {
 	return r.scanKey(r.db.QueryRowContext(ctx,
-		`SELECT id, key_hash, key_prefix, name, user_id, campaign_id, permissions, ip_allowlist,
+		`SELECT id, key_hash, key_prefix, name, vtt_tag, user_id, campaign_id, permissions, ip_allowlist,
 		        rate_limit, is_active, last_used_at, last_used_ip, expires_at, device_fingerprint, device_bound_at, created_at, updated_at
 		 FROM api_keys WHERE key_prefix = ?`, prefix))
 }
@@ -104,7 +104,7 @@ func (r *syncAPIRepository) FindKeyByPrefix(ctx context.Context, prefix string) 
 // ListKeysByUser returns all API keys owned by a user.
 func (r *syncAPIRepository) ListKeysByUser(ctx context.Context, userID string) ([]APIKey, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, key_hash, key_prefix, name, user_id, campaign_id, permissions, ip_allowlist,
+		`SELECT id, key_hash, key_prefix, name, vtt_tag, user_id, campaign_id, permissions, ip_allowlist,
 		        rate_limit, is_active, last_used_at, last_used_ip, expires_at, device_fingerprint, device_bound_at, created_at, updated_at
 		 FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`, userID)
 	if err != nil {
@@ -117,7 +117,7 @@ func (r *syncAPIRepository) ListKeysByUser(ctx context.Context, userID string) (
 // ListKeysByCampaign returns all API keys for a campaign.
 func (r *syncAPIRepository) ListKeysByCampaign(ctx context.Context, campaignID string) ([]APIKey, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, key_hash, key_prefix, name, user_id, campaign_id, permissions, ip_allowlist,
+		`SELECT id, key_hash, key_prefix, name, vtt_tag, user_id, campaign_id, permissions, ip_allowlist,
 		        rate_limit, is_active, last_used_at, last_used_ip, expires_at, device_fingerprint, device_bound_at, created_at, updated_at
 		 FROM api_keys WHERE campaign_id = ? ORDER BY created_at DESC`, campaignID)
 	if err != nil {
@@ -135,7 +135,7 @@ func (r *syncAPIRepository) ListAllKeys(ctx context.Context, limit, offset int) 
 	}
 
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, key_hash, key_prefix, name, user_id, campaign_id, permissions, ip_allowlist,
+		`SELECT id, key_hash, key_prefix, name, vtt_tag, user_id, campaign_id, permissions, ip_allowlist,
 		        rate_limit, is_active, last_used_at, last_used_ip, expires_at, device_fingerprint, device_bound_at, created_at, updated_at
 		 FROM api_keys ORDER BY created_at DESC LIMIT ? OFFSET ?`, limit, offset)
 	if err != nil {
@@ -555,13 +555,14 @@ func (r *syncAPIRepository) GetCampaignStats(ctx context.Context, campaignID str
 func (r *syncAPIRepository) scanKey(row *sql.Row) (*APIKey, error) {
 	k := &APIKey{}
 	var permsRaw, ipRaw []byte
+	var vttTag sql.NullString
 	var lastUsedAt sql.NullTime
 	var lastUsedIP sql.NullString
 	var expiresAt sql.NullTime
 	var deviceFP sql.NullString
 	var deviceBoundAt sql.NullTime
 
-	err := row.Scan(&k.ID, &k.KeyHash, &k.KeyPrefix, &k.Name, &k.UserID, &k.CampaignID,
+	err := row.Scan(&k.ID, &k.KeyHash, &k.KeyPrefix, &k.Name, &vttTag, &k.UserID, &k.CampaignID,
 		&permsRaw, &ipRaw, &k.RateLimit, &k.IsActive,
 		&lastUsedAt, &lastUsedIP, &expiresAt, &deviceFP, &deviceBoundAt,
 		&k.CreatedAt, &k.UpdatedAt)
@@ -577,6 +578,9 @@ func (r *syncAPIRepository) scanKey(row *sql.Row) (*APIKey, error) {
 	}
 	if len(ipRaw) > 0 {
 		_ = json.Unmarshal(ipRaw, &k.IPAllowlist)
+	}
+	if vttTag.Valid {
+		k.VTTTag = &vttTag.String
 	}
 	if lastUsedAt.Valid {
 		k.LastUsedAt = &lastUsedAt.Time
@@ -602,13 +606,14 @@ func (r *syncAPIRepository) scanKeys(rows *sql.Rows) ([]APIKey, error) {
 	for rows.Next() {
 		var k APIKey
 		var permsRaw, ipRaw []byte
+		var vttTag sql.NullString
 		var lastUsedAt sql.NullTime
 		var lastUsedIP sql.NullString
 		var expiresAt sql.NullTime
 		var deviceFP sql.NullString
 		var deviceBoundAt sql.NullTime
 
-		if err := rows.Scan(&k.ID, &k.KeyHash, &k.KeyPrefix, &k.Name, &k.UserID, &k.CampaignID,
+		if err := rows.Scan(&k.ID, &k.KeyHash, &k.KeyPrefix, &k.Name, &vttTag, &k.UserID, &k.CampaignID,
 			&permsRaw, &ipRaw, &k.RateLimit, &k.IsActive,
 			&lastUsedAt, &lastUsedIP, &expiresAt, &deviceFP, &deviceBoundAt,
 			&k.CreatedAt, &k.UpdatedAt); err != nil {
@@ -620,6 +625,9 @@ func (r *syncAPIRepository) scanKeys(rows *sql.Rows) ([]APIKey, error) {
 		}
 		if len(ipRaw) > 0 {
 			_ = json.Unmarshal(ipRaw, &k.IPAllowlist)
+		}
+		if vttTag.Valid {
+			k.VTTTag = &vttTag.String
 		}
 		if lastUsedAt.Valid {
 			k.LastUsedAt = &lastUsedAt.Time

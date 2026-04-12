@@ -8,7 +8,68 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-04-06 -- **Major Feature Sprint: Map Drawing, Bulk Ops, Genre Presets, Topbar Image.**
+2026-04-12 -- **Systems API Fixes, Package Manager Fixes, Admin Diagnostics.**
+
+71. **Version Handling + Integrations Tab Redesign.**
+
+    **Improvements:**
+    - **Manifest version optional** — `ValidateManifest()` now defaults empty version
+      to `"0.0.0"` instead of erroring. Safety net for manifests that omit version
+      (package manager overwrites from GitHub release tag during install).
+
+    **Integrations Tab Redesign (full rewrite):**
+    - **6-section connection management hub** replacing the minimal Foundry URL + export page:
+      1. Connection Status — per-key health dots (green/amber/red based on LastUsedAt)
+      2. API Keys inline — key cards with VTT tag badges, permission pills, toggle/revoke
+      3. VTT Setup Guides — collapsible Alpine.js disclosure (Foundry + Custom)
+      4. Sync Management — lazy-loaded from existing sync overview endpoint
+      5. CORS Note — info box about cross-domain configuration
+      6. Data Portability — export/import buttons (moved to bottom)
+    - **HTMX lazy-loading architecture** — API key content loads from new
+      `GET /campaigns/:id/integrations/keys` syncapi endpoint. Keeps plugin
+      boundaries clean (campaigns handler never imports syncapi types).
+    - **VTT tag on API keys** — Migration 002 adds `vtt_tag` column. Cosmetic
+      label (Foundry/Custom) shown as badge on key cards.
+    - **Inline key management** — Toggle/revoke respond with re-rendered fragment
+      when target is `#integrations-keys`. Separate `/api-keys` page preserved.
+    - **New template** — `integrations_keys.templ` with `IntegrationsKeysFragmentTempl`,
+      connection status helpers, relative time formatting.
+
+70. **Systems API + Package Manager Fixes + Admin Diagnostics.**
+
+    **Bug Fixes:**
+    - **FIX 1: Systems API `foundry_system_id` always present + self-healing** —
+      Removed `omitempty` from `foundry_system_id` JSON tag so it always appears in
+      `GET /api/v1/campaigns/:id/systems`. Added API-level self-healing: if the
+      campaign has a selected system (in settings) but the addon isn't enabled
+      (set before self-healing was deployed), the endpoint auto-enables it on read.
+      New `SystemEnabler` interface, `checkOrHealSystemAddon()` helper, wired via
+      `addonService` in app/routes.go. Foundry module now sees `enabled: true`.
+    - **FIX 2: System manifest version rewrite** — Added `rewriteSystemManifestVersion()`
+      to overwrite `manifest.json` version field with the GitHub release tag during
+      package installation. Mirrors `rewriteModuleJSONVersion()` for Foundry modules.
+      Fixes version mismatch where manifest said `0.2.0` but release tag was `0.0.2`.
+    - **FIX 3: Package usage query slug mismatch** — `GetUsage()` was passing `pkg.Slug`
+      (e.g., `"Chronicle-Draw-Steel"`) to `GetUsageByCampaign()`, but the SQL queries
+      `addons.slug` which is the manifest ID (e.g., `"drawsteel"`). Added
+      `getManifestIDFromDir()` helper that reads the manifest `id` field from disk
+      for system packages. Admin packages page now shows correct campaign usage.
+    - **FIX 4: Nav ml-auto misalignment** — (Previous commit) Fixed nav item push.
+    
+    **New Features:**
+    - **FEATURE 1: Campaign quick-nav** — (Previous commit) Quick navigation between
+      campaigns from sidebar.
+    - **FEATURE 3: Admin systems diagnostics** — Added `FoundrySystemID` and
+      `CampaignCount` columns to admin systems page. New `CountCampaignsUsingAddon()`
+      method in addons repo/service. `AddonUsageCounter` interface in admin handler.
+      Admins can now see which Foundry system ID each system maps to and how many
+      campaigns use each system.
+    
+    **Deferred:**
+    - **FEATURE 2: Integrations tab redesign** — Documented in plan file at
+      `/root/.claude/plans/zippy-scribbling-backus.md`. Moves API keys inline,
+      adds connection details card, connection status, VTT setup instructions.
+      Security requirement: owner-only with backend authorization on every endpoint.
 
 69. **Major Feature Sprint (30+ commits).**
 

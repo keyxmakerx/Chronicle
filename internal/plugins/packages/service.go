@@ -416,6 +416,17 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 		}
 	}
 
+	// For system packages, rewrite manifest.json version to match the release
+	// tag. The manifest embedded in the GitHub release may have a stale version.
+	if pkg.Type == PackageTypeSystem {
+		if err := rewriteSystemManifestVersion(destDir, version); err != nil {
+			slog.Warn("failed to update system manifest.json version",
+				slog.String("version", version),
+				slog.Any("error", err),
+			)
+		}
+	}
+
 	now := time.Now()
 	pkg.InstalledVersion = version
 	pkg.InstallPath = destDir
@@ -495,7 +506,11 @@ func (s *packageService) SetAutoUpdate(ctx context.Context, packageID string, po
 
 // GetUsage returns which campaigns are using a given package. It looks up
 // the package by ID, then queries campaign_addons for campaigns that have
-// enabled an addon matching the package's slug.
+// enabled an addon matching the package's addon slug.
+//
+// For system packages, the addon slug is the manifest ID (e.g., "drawsteel"),
+// NOT the package slug (e.g., "Chronicle-Draw-Steel"). We read the manifest
+// to resolve the correct addon slug.
 func (s *packageService) GetUsage(ctx context.Context, packageID string) ([]PackageUsage, error) {
 	pkg, err := s.repo.GetPackage(ctx, packageID)
 	if err != nil {
@@ -504,7 +519,34 @@ func (s *packageService) GetUsage(ctx context.Context, packageID string) ([]Pack
 	if pkg == nil {
 		return []PackageUsage{}, nil
 	}
-	return s.repo.GetUsageByCampaign(ctx, pkg.Slug)
+
+	addonSlug := pkg.Slug
+	if pkg.Type == PackageTypeSystem {
+		if manifestID := getManifestIDFromDir(pkg.InstallPath); manifestID != "" {
+			addonSlug = manifestID
+		}
+	}
+	return s.repo.GetUsageByCampaign(ctx, addonSlug)
+}
+
+// getManifestIDFromDir reads the "id" field from a system package's
+// manifest.json. Returns empty string on any error (missing file, bad JSON).
+func getManifestIDFromDir(installPath string) string {
+	if installPath == "" {
+		return ""
+	}
+	manifestPath := filepath.Join(installPath, "manifest.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return ""
+	}
+	var m struct {
+		ID string `json:"id"`
+	}
+	if json.Unmarshal(data, &m) != nil {
+		return ""
+	}
+	return m.ID
 }
 
 // --- Auto-Update Worker ---
@@ -1313,6 +1355,36 @@ func rewriteModuleJSONVersion(dir, version string) error {
 
 	if err := os.WriteFile(manifestPath, out, 0644); err != nil {
 		return fmt.Errorf("write module.json: %w", err)
+	}
+	return nil
+}
+
+// rewriteSystemManifestVersion updates the "version" field in a system
+// package's manifest.json to match the installed version tag. Same purpose
+// as rewriteModuleJSONVersion but for system packages: the GitHub release
+// tag is the source of truth, not the version embedded in the manifest.
+func rewriteSystemManifestVersion(dir, version string) error {
+	manifestPath := filepath.Join(dir, "manifest.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("read manifest.json: %w", err)
+	}
+
+	var manifest map[string]any
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return fmt.Errorf("parse manifest.json: %w", err)
+	}
+
+	manifest["version"] = version
+
+	out, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal manifest.json: %w", err)
+	}
+	out = append(out, '\n')
+
+	if err := os.WriteFile(manifestPath, out, 0644); err != nil {
+		return fmt.Errorf("write manifest.json: %w", err)
 	}
 	return nil
 }

@@ -682,40 +682,106 @@ templ settingsPeopleTab(cc *CampaignContext, members []CampaignMember, transfer 
 	</div>
 }
 
-// settingsIntegrationsTab renders Foundry VTT, API keys, export/import, and quick links.
+// settingsIntegrationsTab renders the connection management hub with 6 sections:
+// connection status + API keys (HTMX), VTT guides, sync management, CORS note,
+// and data export/import. API key content is lazy-loaded from syncapi routes
+// so the campaigns handler doesn't need sync service dependencies.
 templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
 	<div class="space-y-6">
-		// Foundry VTT.
-		if baseURL != "" {
-			<div class="card p-6">
-				<h2 class="text-lg font-semibold text-fg mb-2">Foundry VTT Integration</h2>
-				<p class="text-sm text-fg-secondary mb-4">Install the Chronicle Sync module in Foundry VTT to sync journals, maps, tokens, and calendars.</p>
-				<div class="mb-4">
-					<label class="block text-sm font-medium text-fg-body mb-1">Campaign ID</label>
-					<div class="flex items-center gap-2">
-						<input type="text" readonly value={ cc.Campaign.ID } class="input w-full font-mono text-sm bg-surface-alt" id="foundry-campaign-id"/>
-						<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('foundry-campaign-id').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })" class="btn-secondary text-sm px-3 py-2 shrink-0" title="Copy">
-							<i class="fa-solid fa-copy"></i>
-						</button>
-					</div>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Module Install URL</label>
-					<div class="flex items-center gap-2">
-						<input type="text" readonly value={ fmt.Sprintf("%s/foundry-module/module.json", baseURL) } class="input w-full font-mono text-sm bg-surface-alt" id="foundry-install-url"/>
-						<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('foundry-install-url').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })" class="btn-secondary text-sm px-3 py-2 shrink-0" title="Copy">
-							<i class="fa-solid fa-copy"></i>
-						</button>
-					</div>
-					<p class="text-xs text-fg-muted mt-2">In Foundry VTT, go to <strong>Add-on Modules → Install Module</strong>, paste this URL, and click <strong>Install</strong>.</p>
+		// S1+S2: Connection Status + API Keys (HTMX lazy-loaded from syncapi, owner only).
+		if cc.MemberRole >= RoleOwner {
+			<div id="integrations-keys"
+				hx-get={ fmt.Sprintf("/campaigns/%s/integrations/keys", cc.Campaign.ID) }
+				hx-trigger="load"
+				hx-swap="innerHTML"
+			>
+				<div class="card p-6 text-center">
+					<i class="fa-solid fa-spinner fa-spin text-fg-muted"></i>
+					<p class="text-sm text-fg-muted mt-2">Loading API keys...</p>
 				</div>
 			</div>
 		}
 
-		// Data export & import.
-		<div class="card p-6">
-			<h2 class="text-lg font-semibold text-fg mb-2">Data Export &amp; Import</h2>
-			<p class="text-sm text-fg-secondary mb-4">Export your entire campaign as a JSON file for backup or migration.</p>
+		// S3: VTT Setup Guides (static, Alpine.js disclosure).
+		<div class="card p-4" x-data="{ guide: null }">
+			<h2 class="text-sm font-semibold text-fg mb-3">VTT Setup Guides</h2>
+			<div class="space-y-2">
+				// Foundry VTT guide.
+				if baseURL != "" {
+					<div class="border border-edge rounded-lg overflow-hidden">
+						<button @click="guide = guide === 'foundry' ? null : 'foundry'" class="flex items-center justify-between w-full px-4 py-2.5 text-left text-sm hover:bg-surface-alt transition-colors">
+							<span class="font-medium text-fg"><i class="fa-solid fa-dice-d20 mr-2 text-xs text-fg-muted"></i> Foundry VTT</span>
+							<i class="fa-solid fa-chevron-down text-xs text-fg-muted transition-transform" :class="guide === 'foundry' && 'rotate-180'"></i>
+						</button>
+						<div x-show="guide === 'foundry'" x-collapse>
+							<div class="px-4 pb-4 space-y-3 border-t border-edge pt-3">
+								<div>
+									<label class="block text-xs font-medium text-fg-muted mb-1">Campaign ID</label>
+									<div class="flex items-center gap-2">
+										<input type="text" readonly value={ cc.Campaign.ID } class="input w-full font-mono text-xs bg-surface-alt py-1.5" id="foundry-campaign-id"/>
+										<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('foundry-campaign-id').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })" class="btn-secondary text-xs px-2.5 py-1.5 shrink-0" title="Copy">
+											<i class="fa-solid fa-copy"></i>
+										</button>
+									</div>
+								</div>
+								<div>
+									<label class="block text-xs font-medium text-fg-muted mb-1">Module Install URL</label>
+									<div class="flex items-center gap-2">
+										<input type="text" readonly value={ fmt.Sprintf("%s/foundry-module/module.json", baseURL) } class="input w-full font-mono text-xs bg-surface-alt py-1.5" id="foundry-install-url"/>
+										<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('foundry-install-url').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })" class="btn-secondary text-xs px-2.5 py-1.5 shrink-0" title="Copy">
+											<i class="fa-solid fa-copy"></i>
+										</button>
+									</div>
+									<p class="text-xs text-fg-muted mt-1.5">In Foundry VTT, go to <strong>Add-on Modules → Install Module</strong>, paste this URL, and click <strong>Install</strong>.</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				}
+				// Other / Custom VTT guide.
+				<div class="border border-edge rounded-lg overflow-hidden">
+					<button @click="guide = guide === 'custom' ? null : 'custom'" class="flex items-center justify-between w-full px-4 py-2.5 text-left text-sm hover:bg-surface-alt transition-colors">
+						<span class="font-medium text-fg"><i class="fa-solid fa-code mr-2 text-xs text-fg-muted"></i> Custom / Other VTT</span>
+						<i class="fa-solid fa-chevron-down text-xs text-fg-muted transition-transform" :class="guide === 'custom' && 'rotate-180'"></i>
+					</button>
+					<div x-show="guide === 'custom'" x-collapse>
+						<div class="px-4 pb-4 border-t border-edge pt-3">
+							<p class="text-sm text-fg-secondary">Use the REST API to integrate Chronicle with any tool. Create an API key above, then use the <code class="text-xs bg-surface-alt px-1 py-0.5 rounded">/api/v1/</code> endpoints.</p>
+							if baseURL != "" {
+								<p class="text-xs text-fg-muted mt-2">Server URL: <code class="bg-surface-alt px-1 py-0.5 rounded">{ baseURL }</code></p>
+							}
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		// S4: Sync Management (HTMX lazy-loaded, reuses existing endpoints, owner only).
+		if cc.MemberRole >= RoleOwner {
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/api-keys/sync-overview", cc.Campaign.ID) }
+				hx-trigger="load"
+				hx-swap="innerHTML"
+			>
+				<div class="card p-4 text-center">
+					<i class="fa-solid fa-spinner fa-spin text-fg-muted text-xs"></i>
+					<p class="text-xs text-fg-muted mt-1">Loading sync status...</p>
+				</div>
+			</div>
+		}
+
+		// S5: CORS Note (static info box).
+		<div class="card p-4 flex items-start gap-3">
+			<i class="fa-solid fa-circle-info text-blue-500 dark:text-blue-400 mt-0.5 shrink-0"></i>
+			<p class="text-xs text-fg-secondary">
+				If your VTT is on a different domain, a site admin needs to whitelist it in the CORS settings.
+			</p>
+		</div>
+
+		// S6: Data Portability.
+		<div class="card p-4">
+			<h2 class="text-sm font-semibold text-fg mb-3">Data Export &amp; Import</h2>
+			<p class="text-xs text-fg-secondary mb-3">Export your entire campaign as a JSON file for backup or migration.</p>
 			<div class="flex items-center gap-3">
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
 					<i class="fa-solid fa-download text-xs"></i> Export Campaign

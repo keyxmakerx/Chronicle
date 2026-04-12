@@ -116,6 +116,10 @@ func (m *mockAddonRepo) IsEnabledForCampaign(ctx context.Context, campaignID str
 	return false, nil
 }
 
+func (m *mockAddonRepo) CountCampaignsUsingAddon(ctx context.Context, addonSlug string) (int, error) {
+	return 0, nil
+}
+
 func (m *mockAddonRepo) UpdateCampaignConfig(ctx context.Context, campaignID string, addonID int, config map[string]any) error {
 	if m.updateCampaignCfgFn != nil {
 		return m.updateCampaignCfgFn(ctx, campaignID, addonID, config)
