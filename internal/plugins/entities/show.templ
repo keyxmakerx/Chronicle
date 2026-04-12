@@ -541,6 +541,9 @@ templ blockExtWidget(cc *campaigns.CampaignContext, entity *Entity, block Templa
 			data-widget={ widgetSlug }
 			data-campaign-id={ cc.Campaign.ID }
 			data-entity-id={ entity.ID }
+			if cc.MemberRole >= campaigns.RoleScribe {
+				data-editable="true"
+			}
 			class="ext-widget-block"
 		></div>
 	} else {
