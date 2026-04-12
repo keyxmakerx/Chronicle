@@ -933,7 +933,13 @@ func (h *APIHandler) GetItemFields(c echo.Context) error {
 
 	resp := manifest.ItemFieldsForAPI()
 	if resp == nil {
-		return apperror.NewNotFound("item fields not found for system: " + systemID)
+		// System has no item preset — return empty fields instead of 404.
+		// This is expected for systems like Draw Steel that have character
+		// and creature presets but no formal item preset.
+		return c.JSON(http.StatusOK, map[string]any{
+			"system_id": systemID,
+			"fields":    []any{},
+		})
 	}
 
 	return c.JSON(http.StatusOK, resp)

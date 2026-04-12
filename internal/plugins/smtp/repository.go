@@ -3,6 +3,7 @@ package smtp
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -39,6 +40,14 @@ func (r *smtpRepository) Get(ctx context.Context) (*smtpRow, error) {
 		&row.FromAddress, &row.FromName, &row.Encryption, &row.Enabled,
 		&row.UpdatedAt,
 	)
+	if errors.Is(err, sql.ErrNoRows) {
+		// No settings row yet — return defaults so the page renders cleanly.
+		return &smtpRow{
+			Port:       587,
+			FromName:   "Chronicle",
+			Encryption: "starttls",
+		}, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("querying smtp settings: %w", err)
 	}

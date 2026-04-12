@@ -3,6 +3,7 @@ package systems
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -356,11 +357,17 @@ func (h *SystemHandler) WidgetScriptAPI(c echo.Context) error {
 // checking both built-in addon systems and campaign custom systems.
 func (h *SystemHandler) resolveEnabledSystem(ctx context.Context, campaignID string) System {
 	if h.addonSvc == nil {
+		slog.Debug("resolveEnabledSystem: addonSvc is nil", slog.String("campaign_id", campaignID))
 		return nil
 	}
 
 	// Check all live built-in systems.
-	for _, sys := range AllSystems() {
+	allSys := AllSystems()
+	slog.Debug("resolveEnabledSystem: checking systems",
+		slog.String("campaign_id", campaignID),
+		slog.Int("system_count", len(allSys)),
+	)
+	for _, sys := range allSys {
 		enabled, err := h.addonSvc.IsEnabledForCampaign(ctx, campaignID, sys.Info().ID)
 		if err == nil && enabled {
 			return sys
@@ -374,6 +381,7 @@ func (h *SystemHandler) resolveEnabledSystem(ctx context.Context, campaignID str
 		}
 	}
 
+	slog.Debug("resolveEnabledSystem: no enabled system found", slog.String("campaign_id", campaignID))
 	return nil
 }
 
