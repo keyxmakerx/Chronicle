@@ -1054,39 +1054,115 @@ templ Topbar() {
 				<i class="fa-solid fa-bars text-base"></i>
 			</button>
 			if IsAuthenticated(ctx) {
-				<!-- Campaign selector dropdown -->
-				<div x-data="{ open: false }" class="relative">
-					<button
-						@click="open = !open"
-						@click.outside="open = false"
+				if InCampaign(ctx) {
+					<!-- In-campaign: current name + picker dropdown for switching -->
+					<div x-data="{ open: false }" class="relative">
+						<button
+							@click="open = !open"
+							@click.outside="open = false"
+							class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold text-fg hover:bg-surface-alt transition-colors"
+						>
+							<span class="truncate max-w-[160px]">{ GetCampaignName(ctx) }</span>
+							<svg class="w-3.5 h-3.5 text-fg-muted shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+							</svg>
+						</button>
+						<div
+							x-show="open"
+							x-cloak
+							x-transition:enter="transition ease-out duration-100"
+							x-transition:enter-start="opacity-0 scale-95"
+							x-transition:enter-end="opacity-100 scale-100"
+							x-transition:leave="transition ease-in duration-75"
+							x-transition:leave-start="opacity-100 scale-100"
+							x-transition:leave-end="opacity-0 scale-95"
+							class="absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
+							hx-get="/campaigns/picker"
+							hx-trigger="intersect once"
+							hx-swap="innerHTML"
+						>
+							<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+						</div>
+					</div>
+				} else if len(GetUserCampaigns(ctx)) == 1 {
+					<!-- Single campaign: direct link -->
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetUserCampaigns(ctx)[0].ID)) }
 						class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold text-fg hover:bg-surface-alt transition-colors"
 					>
-						if InCampaign(ctx) {
-							<span class="truncate max-w-[160px]">{ GetCampaignName(ctx) }</span>
-						} else {
-							<span class="text-fg-secondary">Select Campaign</span>
-						}
-						<svg class="w-3.5 h-3.5 text-fg-muted shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-						</svg>
-					</button>
-					<div
-						x-show="open"
-						x-cloak
-						x-transition:enter="transition ease-out duration-100"
-						x-transition:enter-start="opacity-0 scale-95"
-						x-transition:enter-end="opacity-100 scale-100"
-						x-transition:leave="transition ease-in duration-75"
-						x-transition:leave-start="opacity-100 scale-100"
-						x-transition:leave-end="opacity-0 scale-95"
-						class="absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
-						hx-get="/campaigns/picker"
-						hx-trigger="intersect once"
-						hx-swap="innerHTML"
-					>
-						<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+						<span class="truncate max-w-[160px]">{ GetUserCampaigns(ctx)[0].Name }</span>
+					</a>
+				} else if len(GetUserCampaigns(ctx)) > 1 {
+					<!-- Multiple campaigns: dropdown with names pre-rendered -->
+					<div x-data="{ open: false }" class="relative">
+						<button
+							@click="open = !open"
+							@click.outside="open = false"
+							class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold text-fg hover:bg-surface-alt transition-colors"
+						>
+							<span class="text-fg-secondary">My Campaigns</span>
+							<svg class="w-3.5 h-3.5 text-fg-muted shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+							</svg>
+						</button>
+						<div
+							x-show="open"
+							x-cloak
+							x-transition:enter="transition ease-out duration-100"
+							x-transition:enter-start="opacity-0 scale-95"
+							x-transition:enter-end="opacity-100 scale-100"
+							x-transition:leave="transition ease-in duration-75"
+							x-transition:leave-start="opacity-100 scale-100"
+							x-transition:leave-end="opacity-0 scale-95"
+							class="absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
+						>
+							for _, uc := range GetUserCampaigns(ctx) {
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", uc.ID)) }
+									class="flex items-center px-4 py-2 text-sm text-fg-body hover:bg-surface-alt transition-colors"
+									@click="open = false"
+								>
+									<span class="truncate">{ uc.Name }</span>
+								</a>
+							}
+							<div class="border-t border-edge-light">
+								<a href="/campaigns" class="flex items-center px-4 py-2 text-sm text-fg-secondary hover:bg-surface-alt hover:text-fg-body transition-colors" @click="open = false">
+									All Campaigns
+								</a>
+							</div>
+						</div>
 					</div>
-				</div>
+				} else {
+					<!-- No campaigns in context (fallback): HTMX lazy-load -->
+					<div x-data="{ open: false }" class="relative">
+						<button
+							@click="open = !open"
+							@click.outside="open = false"
+							class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold text-fg hover:bg-surface-alt transition-colors"
+						>
+							<span class="text-fg-secondary">Select Campaign</span>
+							<svg class="w-3.5 h-3.5 text-fg-muted shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+							</svg>
+						</button>
+						<div
+							x-show="open"
+							x-cloak
+							x-transition:enter="transition ease-out duration-100"
+							x-transition:enter-start="opacity-0 scale-95"
+							x-transition:enter-end="opacity-100 scale-100"
+							x-transition:leave="transition ease-in duration-75"
+							x-transition:leave-start="opacity-100 scale-100"
+							x-transition:leave-end="opacity-0 scale-95"
+							class="absolute left-0 top-full mt-1 w-64 bg-surface rounded-lg shadow-lg border border-edge z-50 overflow-hidden"
+							hx-get="/campaigns/picker"
+							hx-trigger="intersect once"
+							hx-swap="innerHTML"
+						>
+							<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+						</div>
+					</div>
+				}
 			} else if InCampaign(ctx) {
 				<span class="px-2.5 py-1.5 text-sm font-semibold text-fg">
 					{ GetCampaignName(ctx) }
@@ -1123,7 +1199,7 @@ templ Topbar() {
 		}
 
 		<!-- Right: Search + Notes + Dark mode + User menu -->
-		<div class="flex items-center gap-1 shrink-0">
+		<div class="flex items-center gap-1 shrink-0 ml-auto">
 			if InCampaign(ctx) {
 				<!-- Search trigger (magnifying glass) -->
 				<button

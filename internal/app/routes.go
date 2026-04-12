@@ -2076,6 +2076,24 @@ func (a *App) RegisterRoutes() {
 			}
 		}
 
+		// Inject user campaigns for topbar navigation on non-campaign pages.
+		// Skipped inside campaigns (sidebar handles navigation there).
+		if session := auth.GetSession(c); session != nil && campaigns.GetCampaignContext(c) == nil {
+			reqCtx := c.Request().Context()
+			opts := campaigns.DefaultListOptions()
+			opts.PerPage = 10
+			if userCampaigns, _, err := campaignService.List(reqCtx, session.UserID, opts); err == nil && len(userCampaigns) > 0 {
+				navCampaigns := make([]layouts.NavCampaign, len(userCampaigns))
+				for i, uc := range userCampaigns {
+					navCampaigns[i] = layouts.NavCampaign{
+						ID:   uc.ID,
+						Name: uc.Name,
+					}
+				}
+				ctx = layouts.SetUserCampaigns(ctx, navCampaigns)
+			}
+		}
+
 		// CSRF token for forms.
 		ctx = layouts.SetCSRFToken(ctx, middleware.GetCSRFToken(c))
 

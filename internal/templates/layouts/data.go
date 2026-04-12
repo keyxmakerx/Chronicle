@@ -47,7 +47,15 @@ const (
 	keyTopbarContent         ctxKey = "layout_topbar_content"
 	keyDegradedPluginCount   ctxKey = "layout_degraded_plugin_count"
 	keyFontFamily            ctxKey = "layout_font_family"
+	keyUserCampaigns         ctxKey = "layout_user_campaigns"
 )
+
+// NavCampaign holds the minimum info needed to render a campaign link
+// in the topbar navigation. Defined here to avoid importing the campaigns package.
+type NavCampaign struct {
+	ID   string
+	Name string
+}
 
 // SidebarEntityType holds the minimum entity type info needed for sidebar
 // rendering. Defined here to avoid importing the entities package.
@@ -251,6 +259,19 @@ func GetActivePath(ctx context.Context) string {
 // InCampaign returns true if we're currently in a campaign context.
 func InCampaign(ctx context.Context) bool {
 	return GetCampaignID(ctx) != ""
+}
+
+// --- User Campaigns (for topbar navigation) ---
+
+// SetUserCampaigns stores the user's campaign list for topbar navigation.
+func SetUserCampaigns(ctx context.Context, campaigns []NavCampaign) context.Context {
+	return context.WithValue(ctx, keyUserCampaigns, campaigns)
+}
+
+// GetUserCampaigns returns the user's campaigns for topbar navigation, or nil.
+func GetUserCampaigns(ctx context.Context) []NavCampaign {
+	campaigns, _ := ctx.Value(keyUserCampaigns).([]NavCampaign)
+	return campaigns
 }
 
 // --- Entity Types (for sidebar) ---
