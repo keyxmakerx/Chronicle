@@ -121,19 +121,18 @@ templ CampaignCard(campaign *model.Campaign) {
 
 ## HTMX Fragment Detection
 
-```go
-// isHTMX returns true if this request was initiated by HTMX.
-func isHTMX(c echo.Context) bool {
-    return c.Request().Header.Get("HX-Request") == "true"
-}
+Use the shared middleware helpers — not local copies:
 
-// render writes a Templ component to the response with the given status code.
-func render(c echo.Context, status int, component templ.Component) error {
-    c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
-    c.Response().WriteHeader(status)
-    return component.Render(c.Request().Context(), c.Response().Writer)
+```go
+// Check if request is HTMX (also rejects HX-Boosted to avoid fragments on navigation).
+if middleware.IsHTMX(c) {
+    return middleware.Render(c, http.StatusOK, MyFragment(data))
 }
+return middleware.Render(c, http.StatusOK, MyFullPage(data))
 ```
+
+`middleware.IsHTMX(c)` checks both `HX-Request == "true"` and `HX-Boosted != "true"`.
+`middleware.Render(c, status, component)` sets Content-Type and writes the Templ component.
 
 ## Error Handling
 

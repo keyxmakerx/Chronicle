@@ -57,7 +57,7 @@ it not being purpose-built for the task. Key takeaways:
 Everything below is organized by WHERE it lives in Chronicle's architecture:
 - **Core** = base website infrastructure, shared templates, middleware
 - **Plugin** = `internal/plugins/<name>/` -- feature app with handler/service/repo/templates
-- **Module** = `internal/modules/<name>/` -- game system content pack (read-only)
+- **System** = `internal/systems/` -- game system content pack (read-only, installed via package manager)
 - **Widget** = `internal/widgets/<name>/` + `static/js/widgets/` -- reusable UI block
 - **External** = separate repositories (Foundry VTT module, API docs site)
 
@@ -168,12 +168,12 @@ layout JSON per role. Natural extension of existing dashboard system.
 **What**: Browsable pages at `/modules/dnd5e/`. Category cards, searchable lists,
 formatted stat block detail pages. Quick-search integration.
 
-#### Pathfinder 2e Module
-**Location**: `internal/modules/pathfinder/`
+#### Pathfinder 2e System
+**Location**: Installed via package manager (Admin > Packages)
 **What**: Same pattern as D&D 5e but for PF2e ORC content.
 
-#### Draw Steel Module
-**Location**: `internal/modules/drawsteel/`
+#### Draw Steel System
+**Location**: Installed via package manager (Admin > Packages)
 **What**: MCDM's Draw Steel reference data.
 
 ---

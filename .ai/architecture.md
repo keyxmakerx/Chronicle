@@ -30,7 +30,8 @@ three tiers.
 │  │  PLUGINS -- Feature Applications                      │    │
 │  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
 │  │  admin/  addons/  syncapi/  media/  audit/             │    │
-│  │  relations/  tags/  posts/  settings/  timeline/       │    │
+│  │  settings/  timeline/  sessions/  packages/            │    │
+│  │  smtp/  armory/  bestiary/  designlab/  npcs/          │    │
 │  │  sessions/  extensions/  smtp/                         │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
@@ -42,7 +43,7 @@ three tiers.
 │  ┌──────────────────────────────────────────────────────┐    │
 │  │  WIDGETS -- Reusable UI Building Blocks                │    │
 │  │  editor/  title/  tags/  attributes/  mentions/        │    │
-│  │  notes/  relations/                                    │    │
+│  │  notes/  relations/  posts/                            │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │

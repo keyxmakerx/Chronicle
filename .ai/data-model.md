@@ -276,22 +276,27 @@ User --< CampaignMember >-- Campaign
 | enabled_by | CHAR(36) | NULL | User who enabled it |
 | UNIQUE(campaign_id, addon_id) | | | |
 
-### api_keys (implemented -- migration 000016)
+### api_keys (implemented -- syncapi plugin migration 001, 002)
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
-| id | CHAR(36) | PK | UUID |
-| campaign_id | CHAR(36) | FK -> campaigns.id ON DELETE CASCADE | |
-| user_id | CHAR(36) | FK -> users.id ON DELETE CASCADE | Key owner |
-| name | VARCHAR(200) | NOT NULL | Display name |
-| key_prefix | VARCHAR(8) | NOT NULL | First 8 chars (for identification) |
+| id | INT | PK, AUTO_INCREMENT | |
 | key_hash | VARCHAR(255) | NOT NULL | bcrypt hash of full key |
-| permissions | JSON | NOT NULL | ['read', 'write', 'sync'] |
+| key_prefix | VARCHAR(8) | NOT NULL, UNIQUE | First 8 chars (for identification) |
+| name | VARCHAR(100) | NOT NULL | Display name |
+| vtt_tag | VARCHAR(50) | NULL | Cosmetic VTT label: "foundry", "custom" (migration 002) |
+| user_id | VARCHAR(36) | NOT NULL | Key owner |
+| campaign_id | VARCHAR(36) | NOT NULL, INDEX | FK -> campaigns.id |
+| permissions | JSON | | ['read', 'write', 'sync'] |
 | ip_allowlist | JSON | NULL | Optional IP whitelist |
+| device_fingerprint | VARCHAR(255) | NULL | Device binding |
+| device_bound_at | DATETIME | NULL | When device was bound |
 | rate_limit | INT | DEFAULT 60 | Requests per minute |
-| is_active | BOOLEAN | DEFAULT true | |
-| expires_at | DATETIME | NULL | Optional expiry |
+| is_active | TINYINT(1) | DEFAULT 1 | |
 | last_used_at | DATETIME | NULL | |
-| created_at | DATETIME | NOT NULL | |
+| last_used_ip | VARCHAR(45) | NULL | |
+| expires_at | DATETIME | NULL | Optional expiry |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | |
+| updated_at | DATETIME | DEFAULT CURRENT_TIMESTAMP ON UPDATE | |
 
 ### notes (implemented -- migrations 000017, 000022, 000051)
 | Column | Type | Constraints | Notes |

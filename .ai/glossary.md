@@ -33,9 +33,9 @@
 - **Plugin** -- A self-contained feature application in `internal/plugins/`.
   Has its own handler, service, repository, and templates. Examples: auth,
   campaigns, entities, calendar, maps.
-- **Module** -- A game system content pack in `internal/modules/`. Provides
-  reference data, tooltips, and dedicated pages. Read-only. Examples: dnd5e,
-  pathfinder, drawsteel.
+- **System** -- A game system content pack in `internal/systems/`. Provides
+  reference data, tooltips, and dedicated pages. Read-only. Installed via
+  Admin > Packages. Examples: drawsteel, dnd5e, pathfinder2e.
 - **Widget** -- A reusable UI building block in `internal/widgets/`. Mounts to a
   DOM element via `data-widget` attribute, fetches its own data. Examples:
   editor, title, tags, attributes, mentions.

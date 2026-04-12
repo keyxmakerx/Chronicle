@@ -8,7 +8,7 @@
 
 ## 1. Manifest Schema Design
 
-The manifest extends Chronicle's existing `ModuleManifest` pattern (see `internal/modules/manifest.go`) but generalizes it beyond game-system modules to cover all declarative content types.
+The manifest extends Chronicle's existing `SystemManifest` pattern (see `internal/systems/manifest.go`) but generalizes it beyond game systems to cover all declarative content types.
 
 ### Design Influences
 
@@ -1100,7 +1100,7 @@ The admin extension management page follows the same pattern as the existing adm
 
 2. **Content extensions that provide `reference_data` reuse `JSONProvider`.** The extension importer creates a `JSONProvider` instance from the extension's data files and registers it with the module system under a unique ID (`ext:<ext-id>`).
 
-3. **Shared interfaces:** The existing `DataProvider` and `ReferenceItem` types in `internal/modules/module.go` are used by both internal modules and content extension reference data. No duplication.
+3. **Shared interfaces:** The existing `DataProvider` and `ReferenceItem` types in `internal/systems/system.go` are used by both built-in systems and content extension reference data. No duplication.
 
 4. **Addon integration:** Content extensions register themselves in the `addons` table with `category='extension'`. The existing `campaign_addons` per-campaign enable/disable system works for them. The new `campaign_extensions` table adds extension-specific metadata (applied contents, provenance).
 
