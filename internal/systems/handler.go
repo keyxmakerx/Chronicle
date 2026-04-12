@@ -309,14 +309,24 @@ func (h *SystemHandler) WidgetScriptAPI(c echo.Context) error {
 	}
 
 	manifest := mod.Info()
-	var widget *WidgetDef
+
+	// Look up the script file path — check widgets first, then text renderers.
+	var scriptFile string
 	for i := range manifest.Widgets {
 		if manifest.Widgets[i].Slug == slug {
-			widget = &manifest.Widgets[i]
+			scriptFile = manifest.Widgets[i].ScriptFile
 			break
 		}
 	}
-	if widget == nil {
+	if scriptFile == "" {
+		for i := range manifest.TextRenderers {
+			if manifest.TextRenderers[i].Slug == slug {
+				scriptFile = manifest.TextRenderers[i].File
+				break
+			}
+		}
+	}
+	if scriptFile == "" {
 		return apperror.NewNotFound("widget not found")
 	}
 
@@ -336,7 +346,7 @@ func (h *SystemHandler) WidgetScriptAPI(c echo.Context) error {
 	}
 
 	// Resolve and validate the script file path.
-	scriptPath := filepath.Join(sysDir, widget.ScriptFile)
+	scriptPath := filepath.Join(sysDir, scriptFile)
 	scriptPath = filepath.Clean(scriptPath)
 	// Ensure resolved path stays within system directory.
 	if !strings.HasPrefix(scriptPath, filepath.Clean(sysDir)+string(os.PathSeparator)) {
@@ -417,6 +427,8 @@ func (h *SystemHandler) GetSystemWidgetBlockMetas(ctx context.Context, campaignI
 
 // GetSystemWidgetScriptURLs returns the URLs to load system widget JS files
 // for the campaign's enabled game system. Injected into pages via base.templ.
+// Text renderer scripts are included first so they define globals that
+// widget scripts can depend on (e.g., DrawSteelRefRenderer).
 func (h *SystemHandler) GetSystemWidgetScriptURLs(ctx context.Context, campaignID string) []string {
 	sys := h.resolveEnabledSystem(ctx, campaignID)
 	if sys == nil {
@@ -424,11 +436,16 @@ func (h *SystemHandler) GetSystemWidgetScriptURLs(ctx context.Context, campaignI
 	}
 
 	manifest := sys.Info()
-	if len(manifest.Widgets) == 0 {
+	total := len(manifest.TextRenderers) + len(manifest.Widgets)
+	if total == 0 {
 		return nil
 	}
 
-	urls := make([]string, 0, len(manifest.Widgets))
+	urls := make([]string, 0, total)
+	// Text renderers first — they define globals that widgets depend on.
+	for _, tr := range manifest.TextRenderers {
+		urls = append(urls, fmt.Sprintf("/campaigns/%s/systems/%s/widgets/%s.js", campaignID, manifest.ID, tr.Slug))
+	}
 	for _, w := range manifest.Widgets {
 		urls = append(urls, fmt.Sprintf("/campaigns/%s/systems/%s/widgets/%s.js", campaignID, manifest.ID, w.Slug))
 	}

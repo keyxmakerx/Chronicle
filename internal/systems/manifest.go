@@ -67,6 +67,11 @@ type SystemManifest struct {
 	// to entity page layouts via the template editor. Each widget is a
 	// self-contained JS file that registers via Chronicle.register().
 	Widgets []WidgetDef `json:"widgets,omitempty"`
+
+	// TextRenderers declares JS text renderers that define global utility
+	// classes for processing text content. Loaded before widget scripts
+	// so widgets can depend on them (e.g., DrawSteelRefRenderer).
+	TextRenderers []TextRendererDef `json:"text_renderers,omitempty"`
 }
 
 // WidgetDef describes a JS widget provided by a game system module.
@@ -92,6 +97,27 @@ type WidgetDef struct {
 
 	// File is an alias for ScriptFile for backward compatibility.
 	File string `json:"file"`
+}
+
+// TextRendererDef describes a JS text renderer provided by a game system.
+// Text renderers define global classes/functions that process text content
+// (e.g., resolving rule references to tooltips). They load before widgets
+// so widgets can depend on them.
+type TextRendererDef struct {
+	// Slug is the unique identifier for the text renderer.
+	Slug string `json:"slug"`
+
+	// Name is the display name.
+	Name string `json:"name"`
+
+	// File is the relative path to the JS file within the system directory.
+	File string `json:"file"`
+
+	// EntryPoint is the global variable/class name exported by the script.
+	EntryPoint string `json:"entry_point,omitempty"`
+
+	// Description is a short summary of what the renderer does.
+	Description string `json:"description,omitempty"`
 }
 
 // CategoryDef describes one category of reference content within a module.
@@ -456,6 +482,7 @@ const (
 	maxEntityPresets      = 10
 	maxRelationPresets    = 20
 	maxWidgets            = 10
+	maxTextRenderers      = 5
 )
 
 // slugPattern matches valid manifest IDs and preset slugs.
@@ -576,6 +603,28 @@ func ValidateManifest(m *SystemManifest) error {
 		}
 	}
 
+	// Validate text renderers.
+	if len(m.TextRenderers) > maxTextRenderers {
+		return fmt.Errorf("too many text_renderers (%d, max %d)", len(m.TextRenderers), maxTextRenderers)
+	}
+	for i, tr := range m.TextRenderers {
+		if tr.Slug == "" {
+			return fmt.Errorf("text_renderer %d: slug is required", i)
+		}
+		if !slugPattern.MatchString(tr.Slug) {
+			return fmt.Errorf("text_renderer %d: slug %q must contain only lowercase letters, numbers, hyphens, and underscores", i, tr.Slug)
+		}
+		if tr.File == "" {
+			return fmt.Errorf("text_renderer %d (%s): file is required", i, tr.Slug)
+		}
+		if !strings.HasSuffix(tr.File, ".js") {
+			return fmt.Errorf("text_renderer %d (%s): file must end in .js", i, tr.Slug)
+		}
+		if strings.Contains(tr.File, "..") {
+			return fmt.Errorf("text_renderer %d (%s): file must not contain path traversal", i, tr.Slug)
+		}
+	}
+
 	// Sanitize text fields to prevent stored XSS.
 	sanitizeManifestStrings(m)
 
@@ -627,5 +676,10 @@ func sanitizeManifestStrings(m *SystemManifest) {
 	for i := range m.Widgets {
 		m.Widgets[i].Name = html.EscapeString(m.Widgets[i].Name)
 		m.Widgets[i].Description = html.EscapeString(m.Widgets[i].Description)
+	}
+
+	for i := range m.TextRenderers {
+		m.TextRenderers[i].Name = html.EscapeString(m.TextRenderers[i].Name)
+		m.TextRenderers[i].Description = html.EscapeString(m.TextRenderers[i].Description)
 	}
 }
