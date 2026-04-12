@@ -470,8 +470,11 @@ func ValidateManifest(m *SystemManifest) error {
 	if m.Name == "" {
 		return fmt.Errorf("name is required")
 	}
+	// Default version when omitted — the package manager overwrites this
+	// with the GitHub release tag during install. This prevents validation
+	// failures for manifests that rely on external version management.
 	if m.Version == "" {
-		return fmt.Errorf("version is required")
+		m.Version = "0.0.0"
 	}
 	if m.APIVersion == "" {
 		return fmt.Errorf("api_version is required")

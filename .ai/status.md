@@ -10,6 +10,31 @@
 ## Last Updated
 2026-04-12 -- **Systems API Fixes, Package Manager Fixes, Admin Diagnostics.**
 
+71. **Version Handling + Integrations Tab Redesign.**
+
+    **Improvements:**
+    - **Manifest version optional** — `ValidateManifest()` now defaults empty version
+      to `"0.0.0"` instead of erroring. Safety net for manifests that omit version
+      (package manager overwrites from GitHub release tag during install).
+
+    **Integrations Tab Redesign (full rewrite):**
+    - **6-section connection management hub** replacing the minimal Foundry URL + export page:
+      1. Connection Status — per-key health dots (green/amber/red based on LastUsedAt)
+      2. API Keys inline — key cards with VTT tag badges, permission pills, toggle/revoke
+      3. VTT Setup Guides — collapsible Alpine.js disclosure (Foundry + Custom)
+      4. Sync Management — lazy-loaded from existing sync overview endpoint
+      5. CORS Note — info box about cross-domain configuration
+      6. Data Portability — export/import buttons (moved to bottom)
+    - **HTMX lazy-loading architecture** — API key content loads from new
+      `GET /campaigns/:id/integrations/keys` syncapi endpoint. Keeps plugin
+      boundaries clean (campaigns handler never imports syncapi types).
+    - **VTT tag on API keys** — Migration 002 adds `vtt_tag` column. Cosmetic
+      label (Foundry/Custom) shown as badge on key cards.
+    - **Inline key management** — Toggle/revoke respond with re-rendered fragment
+      when target is `#integrations-keys`. Separate `/api-keys` page preserved.
+    - **New template** — `integrations_keys.templ` with `IntegrationsKeysFragmentTempl`,
+      connection status helpers, relative time formatting.
+
 70. **Systems API + Package Manager Fixes + Admin Diagnostics.**
 
     **Bug Fixes:**

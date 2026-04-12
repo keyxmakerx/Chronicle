@@ -1322,6 +1322,7 @@ func (a *App) RegisterRoutes() {
 	syncMappingSvcEarly := syncapi.NewSyncMappingService(syncMappingRepoEarly)
 	syncHandler.SetSyncMappingService(syncMappingSvcEarly)
 	syncHandler.SetCORSOriginLister(settingsService)
+	syncHandler.SetBaseURL(a.Config.BaseURL)
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAdminRoutes(adminGroup, syncHandler)
 		syncapi.RegisterCampaignRoutes(e, syncHandler, campaignService, authService)

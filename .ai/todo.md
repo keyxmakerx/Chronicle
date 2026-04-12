@@ -255,9 +255,9 @@ favorites, unified sidebar model, and large campaign support._
 - [x] **Sprint N-8: Saved Filter Presets** — Migration 000015, SavedFilterRepository CRUD, REST API, sidebar_tag_filter.js preset UI (save/apply/delete).
 - [x] **Responsive/Mobile Fixes** — Touch drag for layout editor, WCAG touch targets, long-press context menu, inline rename mobile improvements.
 
-### Backlog: Integrations Tab Redesign (Deferred)
+### Backlog: Integrations Tab Redesign (COMPLETE)
 
-- [ ] **Integrations tab inline API keys** — Move API key management from separate page into campaign settings Integrations tab. Connection details card (Server URL + Campaign ID + API Key with copy buttons). Connection status indicators (green/amber/red per key). VTT setup instructions (collapsible per-VTT). Clear sync mappings button. CORS note. Data export/import section. **Security: owner-only with backend auth checks on every endpoint.** Full design documented in `/root/.claude/plans/zippy-scribbling-backus.md`.
+- [x] **Integrations tab inline API keys** — Full 6-section connection management hub. HTMX lazy-loading from syncapi. Connection status dots, inline key cards with VTT tag badges, collapsible VTT guides, sync management, CORS note, data portability. Migration 002 (vtt_tag). Owner-only with existing RequireRole(RoleOwner).
 
 ### Backlog: Remaining Audit Items (address opportunistically)
 
