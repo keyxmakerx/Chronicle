@@ -122,14 +122,14 @@ templ packageCard(pkg Package, csrfToken string) {
 				>
 					<i class="fa-solid fa-rotate"></i>
 				</button>
-				<!-- Foundry Module Settings (only for foundry-module type) -->
+				// Foundry module: link to API monitor (configuration is per-campaign).
 				if pkg.Type == PackageTypeFoundryModule {
 					<a
-						href="/admin/foundry"
+						href="/admin/api"
 						class="btn-secondary text-sm"
-						title="Foundry module settings"
+						title="API monitor"
 					>
-						<i class="fa-solid fa-gear"></i>
+						<i class="fa-solid fa-chart-line"></i>
 					</a>
 				}
 				<!-- Version Picker -->

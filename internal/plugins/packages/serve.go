@@ -150,6 +150,10 @@ func (h *ServeHandler) serveFoundryManifest(c echo.Context, installPath string) 
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	if h.baseURL == "" {
+		slog.Warn("foundry manifest served with empty baseURL — manifest/download URLs will be malformed; set BASE_URL in config")
+	}
+
 	// Rewrite manifest URL to point at this instance.
 	manifest["manifest"] = fmt.Sprintf("%s/foundry-module/module.json", h.baseURL)
 

@@ -510,7 +510,8 @@ func (s *packageService) SetAutoUpdate(ctx context.Context, packageID string, po
 //
 // For system packages, the addon slug is the manifest ID (e.g., "drawsteel"),
 // NOT the package slug (e.g., "Chronicle-Draw-Steel"). We read the manifest
-// to resolve the correct addon slug.
+// to resolve the correct addon slug. For Foundry module packages, the addon
+// slug is always "sync-api" (the builtin sync API addon).
 func (s *packageService) GetUsage(ctx context.Context, packageID string) ([]PackageUsage, error) {
 	pkg, err := s.repo.GetPackage(ctx, packageID)
 	if err != nil {
@@ -520,13 +521,27 @@ func (s *packageService) GetUsage(ctx context.Context, packageID string) ([]Pack
 		return []PackageUsage{}, nil
 	}
 
-	addonSlug := pkg.Slug
-	if pkg.Type == PackageTypeSystem {
-		if manifestID := getManifestIDFromDir(pkg.InstallPath); manifestID != "" {
-			addonSlug = manifestID
-		}
-	}
+	addonSlug := resolveAddonSlug(pkg)
 	return s.repo.GetUsageByCampaign(ctx, addonSlug)
+}
+
+// resolveAddonSlug maps a package to its corresponding addon slug in the
+// campaign_addons table. Package slugs (e.g., "Chronicle-Draw-Steel") don't
+// match addon slugs (e.g., "drawsteel"), so we resolve based on package type.
+func resolveAddonSlug(pkg *Package) string {
+	switch pkg.Type {
+	case PackageTypeSystem:
+		// System packages register addons using the manifest ID.
+		if id := getManifestIDFromDir(pkg.InstallPath); id != "" {
+			return id
+		}
+		return pkg.Slug
+	case PackageTypeFoundryModule:
+		// The Foundry sync module always corresponds to the "sync-api" addon.
+		return "sync-api"
+	default:
+		return pkg.Slug
+	}
 }
 
 // getManifestIDFromDir reads the "id" field from a system package's
