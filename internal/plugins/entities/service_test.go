@@ -164,7 +164,7 @@ func (m *mockEntityRepo) Update(ctx context.Context, entity *Entity) error {
 	return nil
 }
 
-func (m *mockEntityRepo) UpdateEntry(ctx context.Context, id, entryJSON, entryHTML string) error {
+func (m *mockEntityRepo) UpdateEntry(ctx context.Context, id, entryJSON, entryHTML, searchText string) error {
 	if m.updateEntryFn != nil {
 		return m.updateEntryFn(ctx, id, entryJSON, entryHTML)
 	}
@@ -175,7 +175,7 @@ func (m *mockEntityRepo) UpdatePlayerNotes(ctx context.Context, id, notesJSON, n
 	return nil
 }
 
-func (m *mockEntityRepo) UpdateFields(ctx context.Context, id string, fieldsData map[string]any) error {
+func (m *mockEntityRepo) UpdateFields(ctx context.Context, id string, fieldsData map[string]any, searchText string) error {
 	return nil
 }
 

@@ -508,9 +508,9 @@ type EntityRepository interface {
 	FindByID(ctx context.Context, id string) (*Entity, error)
 	FindBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entity *Entity) error
-	UpdateEntry(ctx context.Context, id, entryJSON, entryHTML string) error
+	UpdateEntry(ctx context.Context, id, entryJSON, entryHTML, searchText string) error
 	UpdatePlayerNotes(ctx context.Context, id, notesJSON, notesHTML string) error
-	UpdateFields(ctx context.Context, id string, fieldsData map[string]any) error
+	UpdateFields(ctx context.Context, id string, fieldsData map[string]any, searchText string) error
 	UpdateFieldOverrides(ctx context.Context, id string, overrides *FieldOverrides) error
 	UpdateImage(ctx context.Context, id, imagePath string) error
 	UpdateCoverImage(ctx context.Context, id, coverImagePath string) error
@@ -597,14 +597,21 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 		return fmt.Errorf("marshaling fields data: %w", err)
 	}
 
-	query := `INSERT INTO entities (id, campaign_id, entity_type_id, name, slug, entry, entry_html,
+	// Build search_text for full-text search (entry content + field values).
+	var entryHTML string
+	if entity.EntryHTML != nil {
+		entryHTML = *entity.EntryHTML
+	}
+	searchText := buildSearchText(entryHTML, entity.FieldsData)
+
+	query := `INSERT INTO entities (id, campaign_id, entity_type_id, name, slug, entry, entry_html, search_text,
 	          player_notes, player_notes_html,
 	          image_path, parent_id, parent_node_id, sort_order, type_label, is_private, is_template, fields_data, created_by, created_at, updated_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err = r.db.ExecContext(ctx, query,
 		entity.ID, entity.CampaignID, entity.EntityTypeID,
-		entity.Name, entity.Slug, entity.Entry, entity.EntryHTML,
+		entity.Name, entity.Slug, entity.Entry, entity.EntryHTML, searchText,
 		entity.PlayerNotes, entity.PlayerNotesHTML,
 		entity.ImagePath, entity.ParentID, entity.ParentNodeID, entity.SortOrder, entity.TypeLabel,
 		entity.IsPrivate, entity.IsTemplate, fieldsJSON,
@@ -719,10 +726,10 @@ func (r *entityRepository) Update(ctx context.Context, entity *Entity) error {
 
 // UpdateEntry updates only the entry content (JSON + rendered HTML) for an entity.
 // Used by the editor widget's autosave without touching other fields.
-func (r *entityRepository) UpdateEntry(ctx context.Context, id, entryJSON, entryHTML string) error {
-	query := `UPDATE entities SET entry = ?, entry_html = ?, updated_at = NOW() WHERE id = ?`
+func (r *entityRepository) UpdateEntry(ctx context.Context, id, entryJSON, entryHTML, searchText string) error {
+	query := `UPDATE entities SET entry = ?, entry_html = ?, search_text = ?, updated_at = NOW() WHERE id = ?`
 
-	result, err := r.db.ExecContext(ctx, query, entryJSON, entryHTML, id)
+	result, err := r.db.ExecContext(ctx, query, entryJSON, entryHTML, searchText, id)
 	if err != nil {
 		return fmt.Errorf("updating entity entry: %w", err)
 	}
@@ -760,14 +767,14 @@ func (r *entityRepository) UpdatePlayerNotes(ctx context.Context, id, notesJSON,
 // UpdateFields updates only the fields_data JSON column for an entity.
 // Used by the attributes widget to save individual field changes without
 // touching other entity properties.
-func (r *entityRepository) UpdateFields(ctx context.Context, id string, fieldsData map[string]any) error {
+func (r *entityRepository) UpdateFields(ctx context.Context, id string, fieldsData map[string]any, searchText string) error {
 	fieldsJSON, err := json.Marshal(fieldsData)
 	if err != nil {
 		return fmt.Errorf("marshaling fields_data: %w", err)
 	}
 
-	query := `UPDATE entities SET fields_data = ?, updated_at = NOW() WHERE id = ?`
-	result, err := r.db.ExecContext(ctx, query, string(fieldsJSON), id)
+	query := `UPDATE entities SET fields_data = ?, search_text = ?, updated_at = NOW() WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, string(fieldsJSON), searchText, id)
 	if err != nil {
 		return fmt.Errorf("updating entity fields: %w", err)
 	}
@@ -998,31 +1005,37 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 	return entities, total, rows.Err()
 }
 
-// Search performs a text search on entity names with visibility filtering.
-// Uses FULLTEXT for queries >= 4 chars, LIKE for shorter queries.
+// Search performs a text search on entities with visibility filtering.
+// Matches against name (FULLTEXT), aliases (LIKE), entry/field content
+// (FULLTEXT on search_text), and type label (LIKE).
 func (r *entityRepository) Search(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	where := "WHERE e.campaign_id = ?"
 	args := []any{campaignID}
 
 	// FULLTEXT for longer queries, LIKE for short ones.
-	var nameCondition string
-	var nameArg string
+	var nameCondition, contentCondition string
+	var nameArg, contentArg string
 	if len(query) >= 4 {
 		cleaned := stripFTOperators(query)
 		nameCondition = "MATCH(e.name) AGAINST(? IN BOOLEAN MODE)"
 		nameArg = cleaned + "*"
+		contentCondition = "MATCH(e.search_text) AGAINST(? IN BOOLEAN MODE)"
+		contentArg = cleaned + "*"
 	} else {
 		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
 		nameCondition = "e.name LIKE ?"
 		nameArg = "%" + escaped + "%"
+		contentCondition = "e.search_text LIKE ?"
+		contentArg = "%" + escaped + "%"
 	}
 
-	// Match entity name OR any alias.
+	// Match name, alias, entry/field content, or type label.
 	aliasEscaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
+	labelEscaped := "%" + strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query) + "%"
 	where += fmt.Sprintf(` AND (%s OR e.id IN (
 		SELECT ea.entity_id FROM entity_aliases ea WHERE ea.alias LIKE ?
-	))`, nameCondition)
-	args = append(args, nameArg, "%"+aliasEscaped+"%")
+	) OR %s OR e.type_label LIKE ?)`, nameCondition, contentCondition)
+	args = append(args, nameArg, "%"+aliasEscaped+"%", contentArg, labelEscaped)
 
 	if typeID > 0 {
 		where += " AND e.entity_type_id = ?"

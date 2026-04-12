@@ -519,7 +519,15 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 	}
 	// Sanitize HTML to strip dangerous content (script tags, event handlers, etc.).
 	entryHTML = sanitize.HTML(entryHTML)
-	if err := s.entities.UpdateEntry(ctx, entityID, entryJSON, entryHTML); err != nil {
+
+	// Build search_text from sanitized HTML + existing field values.
+	var fieldsData map[string]any
+	if entity, err := s.entities.FindByID(ctx, entityID); err == nil {
+		fieldsData = entity.FieldsData
+	}
+	searchText := buildSearchText(entryHTML, fieldsData)
+
+	if err := s.entities.UpdateEntry(ctx, entityID, entryJSON, entryHTML, searchText); err != nil {
 		return err
 	}
 	slog.Info("entity entry updated", slog.String("entity_id", entityID))
@@ -552,7 +560,15 @@ func (s *entityService) UpdateFields(ctx context.Context, entityID string, field
 	if fieldsData == nil {
 		fieldsData = make(map[string]any)
 	}
-	if err := s.entities.UpdateFields(ctx, entityID, fieldsData); err != nil {
+
+	// Build search_text from existing entry HTML + new field values.
+	var entryHTML string
+	if entity, err := s.entities.FindByID(ctx, entityID); err == nil && entity.EntryHTML != nil {
+		entryHTML = *entity.EntryHTML
+	}
+	searchText := buildSearchText(entryHTML, fieldsData)
+
+	if err := s.entities.UpdateFields(ctx, entityID, fieldsData, searchText); err != nil {
 		return err
 	}
 	slog.Info("entity fields updated", slog.String("entity_id", entityID))
@@ -1434,6 +1450,27 @@ var htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
 
 func stripHTMLTags(s string) string {
 	return htmlTagRegex.ReplaceAllString(s, "")
+}
+
+// buildSearchText creates the denormalized search text for an entity by
+// combining stripped HTML entry content with flattened custom field values.
+// Used to populate the search_text column for FULLTEXT search.
+func buildSearchText(entryHTML string, fieldsData map[string]any) string {
+	var parts []string
+	if entryHTML != "" {
+		parts = append(parts, stripHTMLTags(entryHTML))
+	}
+	for _, v := range fieldsData {
+		switch val := v.(type) {
+		case string:
+			if val != "" {
+				parts = append(parts, val)
+			}
+		case float64:
+			parts = append(parts, fmt.Sprintf("%g", val))
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // generateUUID creates a new v4 UUID string using crypto/rand.
