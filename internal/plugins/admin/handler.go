@@ -35,6 +35,12 @@ type PendingCounter interface {
 	CountPendingSubmissions(ctx context.Context) (int, error)
 }
 
+// AddonUsageCounter provides campaign usage counts for addon slugs.
+// Used by the system diagnostics page to show how many campaigns use each system.
+type AddonUsageCounter interface {
+	CountCampaignsUsingAddon(ctx context.Context, addonSlug string) (int, error)
+}
+
 // Handler handles admin dashboard HTTP requests. Depends on other plugins'
 // services via interfaces -- no direct repo access.
 type Handler struct {
@@ -49,8 +55,9 @@ type Handler struct {
 	securityService  SecurityService
 	hygieneScanner   DataHygieneScanner
 	databaseExplorer DatabaseExplorer
-	pendingCounter   PendingCounter
-	baseURL          string
+	pendingCounter    PendingCounter
+	addonUsageCounter AddonUsageCounter
+	baseURL           string
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
@@ -119,6 +126,11 @@ func (h *Handler) SetBaseURL(url string) {
 // SetPendingCounter wires the pending submission counter for the dashboard.
 func (h *Handler) SetPendingCounter(counter PendingCounter) {
 	h.pendingCounter = counter
+}
+
+// SetAddonUsageCounter wires the addon usage counter for system diagnostics.
+func (h *Handler) SetAddonUsageCounter(counter AddonUsageCounter) {
+	h.addonUsageCounter = counter
 }
 
 // --- Data Hygiene ---
@@ -729,6 +741,7 @@ func (h *Handler) ApplyMigrationsAPI(c echo.Context) error {
 
 // Systems renders the system diagnostics page (GET /admin/systems).
 func (h *Handler) Systems(c echo.Context) error {
+	ctx := c.Request().Context()
 	manifests := systems.Registry()
 	allSystems := systems.AllSystems()
 
@@ -741,13 +754,22 @@ func (h *Handler) Systems(c echo.Context) error {
 	// Build diagnostic entries from manifests.
 	entries := make([]SystemDiagnosticEntry, 0, len(manifests))
 	for _, m := range manifests {
+		campaignCount := 0
+		if h.addonUsageCounter != nil {
+			if n, err := h.addonUsageCounter.CountCampaignsUsingAddon(ctx, m.ID); err == nil {
+				campaignCount = n
+			}
+		}
+
 		entries = append(entries, SystemDiagnosticEntry{
-			ID:           m.ID,
-			Name:         m.Name,
-			Version:      m.Version,
-			Status:       string(m.Status),
-			Instantiated: instantiated[m.ID],
-			Dir:          systems.Dir(m.ID),
+			ID:              m.ID,
+			Name:            m.Name,
+			Version:         m.Version,
+			Status:          string(m.Status),
+			Instantiated:    instantiated[m.ID],
+			Dir:             systems.Dir(m.ID),
+			FoundrySystemID: m.FoundrySystemID,
+			CampaignCount:   campaignCount,
 		})
 	}
 

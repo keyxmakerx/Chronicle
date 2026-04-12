@@ -34,6 +34,7 @@ type AddonService interface {
 	EnableForCampaign(ctx context.Context, campaignID string, addonID int, userID string) error
 	DisableForCampaign(ctx context.Context, campaignID string, addonID int) error
 	IsEnabledForCampaign(ctx context.Context, campaignID string, addonSlug string) (bool, error)
+	CountCampaignsUsingAddon(ctx context.Context, addonSlug string) (int, error)
 	UpdateCampaignConfig(ctx context.Context, campaignID string, addonID int, config map[string]any) error
 
 	// EnableSystemForCampaign looks up a system addon by slug and enables it
@@ -505,6 +506,11 @@ func (s *addonService) DisableForCampaign(ctx context.Context, campaignID string
 // IsEnabledForCampaign checks if a specific addon is enabled for a campaign.
 func (s *addonService) IsEnabledForCampaign(ctx context.Context, campaignID string, addonSlug string) (bool, error) {
 	return s.repo.IsEnabledForCampaign(ctx, campaignID, addonSlug)
+}
+
+// CountCampaignsUsingAddon returns the number of campaigns that have the addon enabled.
+func (s *addonService) CountCampaignsUsingAddon(ctx context.Context, addonSlug string) (int, error) {
+	return s.repo.CountCampaignsUsingAddon(ctx, addonSlug)
 }
 
 // EnableSystemForCampaign looks up a system addon by slug and enables it for

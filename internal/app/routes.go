@@ -1225,6 +1225,7 @@ func (a *App) RegisterRoutes() {
 
 	// Wire addon count into admin dashboard for the Extensions stat card.
 	adminHandler.SetAddonCounter(addonService)
+	adminHandler.SetAddonUsageCounter(addonService)
 
 	// Wire addon checker into entity handler for conditional attributes rendering.
 	entityHandler.SetAddonChecker(addonService)
@@ -1423,6 +1424,7 @@ func (a *App) RegisterRoutes() {
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
 	syncAPIHandler.SetAddonLister(&addonListerAPIAdapter{svc: addonService})
+	syncAPIHandler.SetSystemEnabler(addonService)
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {
