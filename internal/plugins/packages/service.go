@@ -548,18 +548,32 @@ func resolveAddonSlug(pkg *Package) string {
 // manifest.json. Returns empty string on any error (missing file, bad JSON).
 func getManifestIDFromDir(installPath string) string {
 	if installPath == "" {
+		slog.Warn("getManifestIDFromDir: empty install path")
 		return ""
 	}
 	manifestPath := filepath.Join(installPath, "manifest.json")
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
+		slog.Warn("getManifestIDFromDir: cannot read manifest",
+			slog.String("path", manifestPath),
+			slog.Any("error", err),
+		)
 		return ""
 	}
 	var m struct {
 		ID string `json:"id"`
 	}
-	if json.Unmarshal(data, &m) != nil {
+	if err := json.Unmarshal(data, &m); err != nil {
+		slog.Warn("getManifestIDFromDir: invalid manifest JSON",
+			slog.String("path", manifestPath),
+			slog.Any("error", err),
+		)
 		return ""
+	}
+	if m.ID == "" {
+		slog.Warn("getManifestIDFromDir: manifest has no id field",
+			slog.String("path", manifestPath),
+		)
 	}
 	return m.ID
 }
