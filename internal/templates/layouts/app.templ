@@ -288,16 +288,13 @@ templ Sidebar() {
 							@sidebarCreateCategory(ctx)
 						}
 						if len(GetSidebarItems(ctx)) > 0 {
-							<!-- Unified: render categories with sub-types indented -->
+							<!-- Unified: render all categories flat in config order -->
 							for _, item := range GetSidebarItems(ctx) {
 								if item.Type == "category" && item.ParentTypeID == nil {
 									@entityTypeLink(getEntityTypeSlug(ctx, item.TypeID), item.Label, item.Color, item.Icon, GetEntityCount(ctx, item.TypeID), item.TypeID)
-									<!-- Render child types indented under parent -->
-									for _, child := range GetSidebarItems(ctx) {
-										if child.Type == "category" && child.ParentTypeID != nil && *child.ParentTypeID == item.TypeID {
-											@entityTypeChildLink(getEntityTypeSlug(ctx, child.TypeID), child.Label, child.Color, child.Icon, GetEntityCount(ctx, child.TypeID), child.TypeID)
-										}
-									}
+								}
+								if item.Type == "category" && item.ParentTypeID != nil {
+									@entityTypeChildLink(getEntityTypeSlug(ctx, item.TypeID), item.Label, item.Color, item.Icon, GetEntityCount(ctx, item.TypeID), item.TypeID)
 								}
 							}
 						} else {

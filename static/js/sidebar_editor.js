@@ -99,6 +99,15 @@
     return '';
   }
 
+  // Returns true if the item is a sub-type category (has a parent_type_id).
+  function isSubType(item) {
+    if (item.type !== 'category') return false;
+    for (var i = 0; i < entityTypes.length; i++) {
+      if (entityTypes[i].id === item.type_id) return !!entityTypes[i].parent_type_id;
+    }
+    return false;
+  }
+
   function injectMissing(existingItems, types) {
     var hasDashboard = false, hasAllPages = false;
     var addonSlugs = {}, categoryIds = {};
@@ -133,9 +142,19 @@
     KNOWN_ADDONS.forEach(function (a) {
       defaults.push({ type: 'addon', slug: a.slug, label: a.label, icon: a.icon, visible: true });
     });
-    types.forEach(function (et) {
-      defaults.push({ type: 'category', type_id: et.id, visible: true });
+    // Add parent types first, then their children right after each parent.
+    var parents = types.filter(function (t) { return !t.parent_type_id; });
+    parents.forEach(function (parent) {
+      defaults.push({ type: 'category', type_id: parent.id, visible: true });
+      var children = types.filter(function (t) { return t.parent_type_id === parent.id; });
+      children.forEach(function (child) {
+        defaults.push({ type: 'category', type_id: child.id, visible: true });
+      });
     });
+    // Add any orphan sub-types whose parent isn't in the list.
+    var addedIds = {};
+    defaults.forEach(function (d) { if (d.type_id) addedIds[d.type_id] = true; });
+    types.forEach(function (t) { if (!addedIds[t.id]) defaults.push({ type: 'category', type_id: t.id, visible: true }); });
     defaults.push({ type: 'all_pages', visible: true });
     return defaults;
   }
@@ -314,8 +333,10 @@
     var color = getItemColor(item);
 
     var row = document.createElement('div');
+    var subType = isSubType(item);
     row.className = 'sidebar-edit-item flex items-center gap-1.5 px-2 py-1.5 rounded-md group transition-all cursor-grab' +
-      (vis ? '' : ' opacity-40');
+      (vis ? '' : ' opacity-40') +
+      (subType ? ' ml-4' : '');
     row.draggable = true;
     row.dataset.editIdx = idx;
 
