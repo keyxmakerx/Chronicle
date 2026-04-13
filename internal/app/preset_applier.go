@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -54,6 +55,13 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 		}
 	}
 
+	// Build set of existing names to catch entity types created before
+	// preset_category was introduced or created manually by the user.
+	existingNames := make(map[string]bool, len(existingTypes))
+	for _, et := range existingTypes {
+		existingNames[strings.ToLower(et.Name)] = true
+	}
+
 	created := 0
 	for _, preset := range manifest.EntityPresets {
 		// Skip if this category already has an entity type.
@@ -62,6 +70,17 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 				slog.String("campaign_id", campaignID),
 				slog.String("preset", preset.Slug),
 				slog.String("category", preset.Category),
+			)
+			continue
+		}
+
+		// Skip if an entity type with the same name already exists (catches
+		// types created before preset_category was added or manually created).
+		if existingNames[strings.ToLower(preset.Name)] {
+			slog.Debug("skipping preset (name already exists)",
+				slog.String("campaign_id", campaignID),
+				slog.String("preset", preset.Slug),
+				slog.String("name", preset.Name),
 			)
 			continue
 		}

@@ -130,8 +130,18 @@ func ParseLayoutJSON(raw []byte) EntityTypeLayout {
 
 	// Try new format first (rows key).
 	var layout EntityTypeLayout
-	if err := json.Unmarshal(raw, &layout); err == nil && len(layout.Rows) > 0 {
-		return layout
+	if err := json.Unmarshal(raw, &layout); err == nil {
+		if len(layout.Rows) > 0 {
+			return layout
+		}
+		// Check if JSON explicitly has a "rows" key (new format, just empty).
+		// Respect it rather than silently replacing with default layout.
+		var probe map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &probe); err == nil {
+			if _, hasRows := probe["rows"]; hasRows {
+				return layout
+			}
+		}
 	}
 
 	// Try old format (sections key).
