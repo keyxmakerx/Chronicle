@@ -120,33 +120,18 @@ func DefaultLayout() EntityTypeLayout {
 
 // ParseLayoutJSON decodes layout JSON with backward compatibility.
 // Handles three cases:
-//  1. New format with "rows" key → unmarshal directly (even if empty)
+//  1. New format with "rows" key → unmarshal directly
 //  2. Old format with "sections" key → convert sections to rows/columns
 //  3. Empty/invalid → return DefaultLayout()
-//
-// IMPORTANT: Once a layout has been saved in the new format, it is
-// returned as-is even if rows is empty. This prevents silently
-// replacing a user's customized layout with the default.
 func ParseLayoutJSON(raw []byte) EntityTypeLayout {
 	if len(raw) == 0 {
 		return DefaultLayout()
 	}
 
-	// Try new format first (rows key). Return even if rows is empty —
-	// a saved layout with zero rows is the user's choice, not corruption.
+	// Try new format first (rows key).
 	var layout EntityTypeLayout
-	if err := json.Unmarshal(raw, &layout); err == nil {
-		if len(layout.Rows) > 0 {
-			return layout
-		}
-		// Check if the JSON actually contained a "rows" key (new format)
-		// vs being an empty object or legacy format.
-		var probe map[string]json.RawMessage
-		if err := json.Unmarshal(raw, &probe); err == nil {
-			if _, hasRows := probe["rows"]; hasRows {
-				return layout // New format with empty rows — respect it.
-			}
-		}
+	if err := json.Unmarshal(raw, &layout); err == nil && len(layout.Rows) > 0 {
+		return layout
 	}
 
 	// Try old format (sections key).

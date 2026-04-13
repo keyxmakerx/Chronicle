@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -47,18 +46,12 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 		return 0, fmt.Errorf("listing existing types: %w", err)
 	}
 
-	// Build sets of existing preset categories AND names to skip duplicates.
-	// Check both because entity types created before the preset_category
-	// feature was added won't have a category set, but would still conflict
-	// by name. This prevents duplicate "Hero"/"Creature" entity types from
-	// being created and avoids overwriting customized layouts.
+	// Build set of existing preset categories to skip duplicates.
 	existingCategories := make(map[string]bool, len(existingTypes))
-	existingNames := make(map[string]bool, len(existingTypes))
 	for _, et := range existingTypes {
 		if et.PresetCategory != nil {
 			existingCategories[*et.PresetCategory] = true
 		}
-		existingNames[strings.ToLower(et.Name)] = true
 	}
 
 	created := 0
@@ -69,18 +62,6 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 				slog.String("campaign_id", campaignID),
 				slog.String("preset", preset.Slug),
 				slog.String("category", preset.Category),
-			)
-			continue
-		}
-
-		// Skip if an entity type with the same name already exists.
-		// Protects legacy entity types that lack preset_category from
-		// being duplicated, which would replace customized layouts with defaults.
-		if existingNames[strings.ToLower(preset.Name)] {
-			slog.Debug("skipping preset (name already exists)",
-				slog.String("campaign_id", campaignID),
-				slog.String("preset", preset.Slug),
-				slog.String("name", preset.Name),
 			)
 			continue
 		}
