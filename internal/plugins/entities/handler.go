@@ -673,6 +673,16 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	query := c.QueryParam("q")
 	typeID, _ := strconv.Atoi(c.QueryParam("type"))
 
+	// Parse nested sub-type IDs for cross-type drill panel search.
+	var nestedTypeIDs []int
+	if nested := c.QueryParam("nested_types"); nested != "" {
+		for _, s := range strings.Split(nested, ",") {
+			if id, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+				nestedTypeIDs = append(nestedTypeIDs, id)
+			}
+		}
+	}
+
 	opts := DefaultListOptions()
 	opts.PerPage = 20
 
@@ -704,6 +714,16 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 
 	if q := strings.TrimSpace(query); len(q) >= 2 {
 		results, total, err = h.service.Search(c.Request().Context(), cc.Campaign.ID, query, typeID, role, userID, opts)
+		// Also search nested sub-types and merge results for drill panel search.
+		if err == nil && len(nestedTypeIDs) > 0 {
+			for _, ntid := range nestedTypeIDs {
+				nr, nt, nerr := h.service.Search(c.Request().Context(), cc.Campaign.ID, query, ntid, role, userID, opts)
+				if nerr == nil {
+					results = append(results, nr...)
+					total += nt
+				}
+			}
+		}
 	} else if q == "" {
 		results, total, err = h.service.List(c.Request().Context(), cc.Campaign.ID, typeID, role, userID, opts)
 	} else {

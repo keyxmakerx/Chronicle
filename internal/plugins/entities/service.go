@@ -960,6 +960,26 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 		et.Fields = input.Fields
 	}
 
+	// Handle parent type changes.
+	if input.ClearParent {
+		et.ParentTypeID = nil
+	} else if input.ParentTypeID != nil {
+		if *input.ParentTypeID == et.ID {
+			return nil, apperror.NewBadRequest("entity type cannot be its own parent")
+		}
+		parent, err := s.types.FindByID(ctx, *input.ParentTypeID)
+		if err != nil {
+			return nil, apperror.NewBadRequest("parent entity type not found")
+		}
+		if parent.CampaignID != et.CampaignID {
+			return nil, apperror.NewBadRequest("parent entity type belongs to a different campaign")
+		}
+		if parent.ParentTypeID != nil {
+			return nil, apperror.NewBadRequest("sub-types cannot be nested more than one level deep")
+		}
+		et.ParentTypeID = input.ParentTypeID
+	}
+
 	if err := s.types.Update(ctx, et); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("updating entity type: %w", err))
 	}

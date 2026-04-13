@@ -160,6 +160,7 @@ type SidebarItem struct {
 	Label   string `json:"label,omitempty"`   // Display label (for sections/links).
 	URL     string `json:"url,omitempty"`     // Link URL (for type=link).
 	Icon    string `json:"icon,omitempty"`    // FontAwesome icon (for type=link).
+	Nested  bool   `json:"nested,omitempty"`  // Sub-type: render inside parent's drill panel instead of standalone.
 }
 
 // HasUnifiedItems returns true if the sidebar uses the unified items model.

@@ -340,12 +340,20 @@
     row.draggable = true;
     row.dataset.editIdx = idx;
 
+    var isNested = subType && item.nested;
+    var nestedLabel = isNested ? '<span class="text-[9px] text-gray-600 italic">(nested)</span>' : '';
     var iconStyle = color ? ' style="color:' + Chronicle.escapeAttr(color) + '"' : '';
     row.innerHTML =
       '<span class="w-4 h-4 flex items-center justify-center shrink-0"' + iconStyle + '>' +
       '<i class="fa-solid ' + Chronicle.escapeHtml(icon) + ' text-[10px]"></i></span>' +
       '<span class="flex-1 text-[11px] text-sidebar-text truncate">' + label + '</span>' +
+      nestedLabel +
       '<span class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">' +
+      (subType
+        ? '<button type="button" class="w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-fg" data-action="nest" title="' +
+          (isNested ? 'Show standalone' : 'Nest under parent') + '">' +
+          '<i class="fa-solid ' + (isNested ? 'fa-outdent' : 'fa-indent') + '"></i></button>'
+        : '') +
       (item.type === 'section' || item.type === 'link'
         ? '<button type="button" class="w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-fg" data-action="edit" title="Edit">' +
           '<i class="fa-solid fa-pen"></i></button>' +
@@ -378,6 +386,16 @@
         e.stopPropagation();
         if (!confirm('Remove "' + getItemLabel(items[idx]) + '"?')) return;
         items.splice(idx, 1);
+        saveConfig();
+        renderEditPanel();
+      });
+    }
+
+    var nestBtn = row.querySelector('[data-action="nest"]');
+    if (nestBtn) {
+      nestBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        items[idx].nested = !items[idx].nested;
         saveConfig();
         renderEditPanel();
       });

@@ -314,11 +314,11 @@ func (r *entityTypeRepository) Update(ctx context.Context, et *EntityType) error
 		return fmt.Errorf("marshaling fields: %w", err)
 	}
 
-	query := `UPDATE entity_types SET name = ?, name_plural = ?, slug = ?, icon = ?, color = ?, fields = ?
-	          WHERE id = ?`
+	query := `UPDATE entity_types SET name = ?, name_plural = ?, slug = ?, icon = ?, color = ?, fields = ?,
+	          parent_type_id = ? WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query,
-		et.Name, et.NamePlural, et.Slug, et.Icon, et.Color, fieldsJSON, et.ID,
+		et.Name, et.NamePlural, et.Slug, et.Icon, et.Color, fieldsJSON, et.ParentTypeID, et.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating entity type: %w", err)
