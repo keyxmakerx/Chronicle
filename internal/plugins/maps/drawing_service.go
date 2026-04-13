@@ -68,6 +68,7 @@ type MapEventPublisher interface {
 	PublishTokenPositionEvent(campaignID, tokenID string, x, y float64)
 	PublishLayerEvent(eventType string, campaignID string, layer *Layer)
 	PublishFogEvent(eventType string, campaignID, mapID string, region *FogRegion)
+	PublishMarkerEvent(eventType string, campaignID string, marker *Marker)
 }
 
 // NoopMapEventPublisher is a no-op implementation for tests.
@@ -78,6 +79,7 @@ func (NoopMapEventPublisher) PublishTokenEvent(string, string, *Token)          
 func (NoopMapEventPublisher) PublishTokenPositionEvent(string, string, float64, float64) {}
 func (NoopMapEventPublisher) PublishLayerEvent(string, string, *Layer)                  {}
 func (NoopMapEventPublisher) PublishFogEvent(string, string, string, *FogRegion)        {}
+func (NoopMapEventPublisher) PublishMarkerEvent(string, string, *Marker)                {}
 
 // drawingService implements DrawingService.
 type drawingService struct {
