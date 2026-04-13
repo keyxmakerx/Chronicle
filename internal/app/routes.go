@@ -703,6 +703,25 @@ func (a *mapEventPublisherAdapter) PublishFogEvent(eventType string, campaignID,
 	a.bus.Publish(ws.NewMessage(ws.MsgFogUpdated, campaignID, mapID, payload))
 }
 
+// PublishMarkerEvent translates map marker domain events into WebSocket messages.
+func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaignID string, marker *maps.Marker) {
+	if campaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case "created":
+		msgType = ws.MsgMarkerCreated
+	case "updated":
+		msgType = ws.MsgMarkerUpdated
+	case "deleted":
+		msgType = ws.MsgMarkerDeleted
+	default:
+		return
+	}
+	a.bus.Publish(ws.NewMessage(msgType, campaignID, marker.ID, marker))
+}
+
 // mediaMemberCheckerAdapter wraps campaigns.CampaignService to implement the
 // media.MemberChecker interface without creating a circular import.
 // Uses background context since membership checks happen on unauthenticated
@@ -2159,6 +2178,7 @@ func (a *App) RegisterRoutes() {
 		}
 		return m.CampaignID, nil
 	})
+	mapsService.SetEventPublisher(&mapEventPublisherAdapter{bus: wsEventBus})
 
 	// --- Module Routes ---
 	// Game system reference pages and tooltip APIs.

@@ -42,16 +42,34 @@ type MapService interface {
 	UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput) error
 	DeleteMarker(ctx context.Context, id string) error
 	ListMarkers(ctx context.Context, mapID string, role int, userID string) ([]Marker, error)
+
+	// Wiring.
+	SetEventPublisher(pub MapEventPublisher)
 }
 
 // mapService is the default MapService implementation.
 type mapService struct {
-	repo MapRepository
+	repo   MapRepository
+	events MapEventPublisher
 }
 
 // NewMapService creates a MapService backed by the given repository.
 func NewMapService(repo MapRepository) MapService {
-	return &mapService{repo: repo}
+	return &mapService{repo: repo, events: NoopMapEventPublisher{}}
+}
+
+// SetEventPublisher sets the event publisher for real-time marker sync.
+func (s *mapService) SetEventPublisher(pub MapEventPublisher) {
+	s.events = pub
+}
+
+// campaignForMap resolves the campaign ID for a map (used for event publishing).
+func (s *mapService) campaignForMap(ctx context.Context, mapID string) string {
+	m, err := s.repo.GetMap(ctx, mapID)
+	if err != nil || m == nil {
+		return ""
+	}
+	return m.CampaignID
 }
 
 // CreateMap creates a new map for a campaign.
@@ -188,6 +206,7 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 	if err := s.repo.CreateMarker(ctx, mk); err != nil {
 		return nil, fmt.Errorf("create marker: %w", err)
 	}
+	s.events.PublishMarkerEvent("created", s.campaignForMap(ctx, mk.MapID), mk)
 	return mk, nil
 }
 
@@ -243,6 +262,7 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	if err := s.repo.UpdateMarker(ctx, mk); err != nil {
 		return fmt.Errorf("update marker: %w", err)
 	}
+	s.events.PublishMarkerEvent("updated", s.campaignForMap(ctx, mk.MapID), mk)
 	return nil
 }
 
@@ -258,6 +278,7 @@ func (s *mapService) DeleteMarker(ctx context.Context, id string) error {
 	if err := s.repo.DeleteMarker(ctx, id); err != nil {
 		return fmt.Errorf("delete marker: %w", err)
 	}
+	s.events.PublishMarkerEvent("deleted", s.campaignForMap(ctx, mk.MapID), mk)
 	return nil
 }
 
