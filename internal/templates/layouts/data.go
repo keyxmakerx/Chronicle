@@ -292,15 +292,16 @@ func GetEntityTypes(ctx context.Context) []SidebarEntityType {
 func EntityTypesJSON(ctx context.Context) string {
 	types := GetEntityTypes(ctx)
 	type jsonET struct {
-		ID         int    `json:"id"`
-		Name       string `json:"name"`
-		NamePlural string `json:"name_plural"`
-		Icon       string `json:"icon"`
-		Color      string `json:"color"`
+		ID           int    `json:"id"`
+		Name         string `json:"name"`
+		NamePlural   string `json:"name_plural"`
+		Icon         string `json:"icon"`
+		Color        string `json:"color"`
+		ParentTypeID *int   `json:"parent_type_id,omitempty"`
 	}
 	out := make([]jsonET, len(types))
 	for i, t := range types {
-		out[i] = jsonET{ID: t.ID, Name: t.Name, NamePlural: t.NamePlural, Icon: t.Icon, Color: t.Color}
+		out[i] = jsonET{ID: t.ID, Name: t.Name, NamePlural: t.NamePlural, Icon: t.Icon, Color: t.Color, ParentTypeID: t.ParentTypeID}
 	}
 	b, err := json.Marshal(out)
 	if err != nil {

@@ -104,6 +104,7 @@ type EntityService interface {
 	// Wiring.
 	SetEventPublisher(pub EntityEventPublisher)
 	SetBlockRegistry(reg *BlockRegistry)
+	SetSidebarAutoAdder(adder SidebarAutoAdder)
 }
 
 // EntityEventPublisher emits domain events when entities or entity types change.
@@ -119,22 +120,36 @@ type NoopEntityEventPublisher struct{}
 func (NoopEntityEventPublisher) PublishEntityEvent(string, string, string, *Entity)  {}
 func (NoopEntityEventPublisher) PublishEntityTypeEvent(string, string, *EntityType)  {}
 
+// SidebarAutoAdder auto-adds new entity types to the campaign's sidebar config.
+// Implemented by a campaigns-backed adapter in routes.go. Prevents the
+// "I created a sub-type and it doesn't appear" problem.
+type SidebarAutoAdder interface {
+	AddEntityTypeToSidebar(ctx context.Context, campaignID string, typeID int) error
+}
+
+// NoopSidebarAutoAdder is a no-op implementation for tests.
+type NoopSidebarAutoAdder struct{}
+
+func (NoopSidebarAutoAdder) AddEntityTypeToSidebar(context.Context, string, int) error { return nil }
+
 // entityService implements EntityService.
 type entityService struct {
 	entities      EntityRepository
 	types         EntityTypeRepository
 	permissions   EntityPermissionRepository
 	events        EntityEventPublisher
+	sidebarAdder  SidebarAutoAdder
 	blockRegistry *BlockRegistry
 }
 
 // NewEntityService creates a new entity service with the given dependencies.
 func NewEntityService(entities EntityRepository, types EntityTypeRepository, permissions EntityPermissionRepository) EntityService {
 	return &entityService{
-		entities:    entities,
-		types:       types,
-		permissions: permissions,
-		events:      NoopEntityEventPublisher{},
+		entities:     entities,
+		types:        types,
+		permissions:  permissions,
+		events:       NoopEntityEventPublisher{},
+		sidebarAdder: NoopSidebarAutoAdder{},
 	}
 }
 
@@ -147,6 +162,12 @@ func (s *entityService) SetEventPublisher(pub EntityEventPublisher) {
 // Called after all plugins have registered their block types.
 func (s *entityService) SetBlockRegistry(reg *BlockRegistry) {
 	s.blockRegistry = reg
+}
+
+// SetSidebarAutoAdder sets the callback that auto-adds new entity types to the
+// campaign's sidebar config so they appear immediately after creation.
+func (s *entityService) SetSidebarAutoAdder(adder SidebarAutoAdder) {
+	s.sidebarAdder = adder
 }
 
 // --- Entity CRUD ---
@@ -868,6 +889,19 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 	)
 
 	s.events.PublishEntityTypeEvent("created", campaignID, et)
+
+	// Auto-add the new entity type to the sidebar config so it appears
+	// immediately without requiring a manual sidebar edit.
+	if err := s.sidebarAdder.AddEntityTypeToSidebar(ctx, campaignID, et.ID); err != nil {
+		slog.Warn("failed to auto-add entity type to sidebar",
+			slog.Int("entity_type_id", et.ID),
+			slog.String("campaign_id", campaignID),
+			slog.Any("error", err),
+		)
+		// Non-fatal: entity type was created successfully, sidebar can be
+		// updated manually by the user.
+	}
+
 	return et, nil
 }
 

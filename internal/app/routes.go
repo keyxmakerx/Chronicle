@@ -600,6 +600,54 @@ func (a *entityEventPublisherAdapter) PublishEntityTypeEvent(eventType, campaign
 	a.bus.Publish(ws.NewMessage(msgType, campaignID, fmt.Sprintf("%d", entityType.ID), entityType))
 }
 
+// sidebarAutoAdderAdapter implements entities.SidebarAutoAdder by appending
+// new entity types to the campaign's unified sidebar config.
+type sidebarAutoAdderAdapter struct {
+	campaignService campaigns.CampaignService
+}
+
+func (a *sidebarAutoAdderAdapter) AddEntityTypeToSidebar(ctx context.Context, campaignID string, typeID int) error {
+	cfg, err := a.campaignService.GetSidebarConfig(ctx, campaignID)
+	if err != nil {
+		return fmt.Errorf("get sidebar config: %w", err)
+	}
+
+	// Only auto-add to unified sidebar. Legacy sidebars use entity_type_order
+	// which is rebuilt from the entity types list on each render.
+	if !cfg.HasUnifiedItems() {
+		return nil
+	}
+
+	// Check if the type is already present to avoid duplicates.
+	for _, item := range cfg.Items {
+		if item.Type == "category" && item.TypeID == typeID {
+			return nil
+		}
+	}
+
+	// Insert before "all_pages" if it exists, otherwise append to end.
+	newItem := campaigns.SidebarItem{
+		Type:    "category",
+		TypeID:  typeID,
+		Visible: true,
+	}
+
+	inserted := false
+	for i, item := range cfg.Items {
+		if item.Type == "all_pages" {
+			cfg.Items = append(cfg.Items[:i+1], cfg.Items[i:]...)
+			cfg.Items[i] = newItem
+			inserted = true
+			break
+		}
+	}
+	if !inserted {
+		cfg.Items = append(cfg.Items, newItem)
+	}
+
+	return a.campaignService.UpdateSidebarConfig(ctx, campaignID, *cfg)
+}
+
 // noteEventPublisherAdapter bridges the websocket.EventBus to the
 // notes.NoteEventPublisher interface.
 type noteEventPublisherAdapter struct {
@@ -2167,6 +2215,7 @@ func (a *App) RegisterRoutes() {
 	wsEventBus := ws.NewEventBus(wsHub)
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
+	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	calendarService.SetEventPublisher(&calendarEventPublisherAdapter{bus: wsEventBus})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
 
