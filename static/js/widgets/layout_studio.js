@@ -483,8 +483,11 @@
           widgetEl.setAttribute('data-csrf-token', self.csrfToken);
           widgetEl.setAttribute('data-context', 'template');
           widgetEl.setAttribute('data-features', 'containers,visibility,height,presets,preview');
-          if (data) {
-            widgetEl.setAttribute('data-layout', JSON.stringify(data));
+          if (data && data.layout) {
+            widgetEl.setAttribute('data-layout', JSON.stringify(data.layout));
+          }
+          if (data && data.fields) {
+            widgetEl.setAttribute('data-fields', JSON.stringify(data.fields));
           }
           // Find the matching entity type for the name.
           var et = self.entityTypes.find(function (e) { return e.id == etid; });

@@ -2047,6 +2047,37 @@ func (a *App) RegisterRoutes() {
 						typeMap[et.ID] = et
 					}
 
+					// Inject entity types missing from the config (e.g., sub-types
+					// created before auto-add, or types from preset application).
+					// Mirrors injectMissing() in sidebar_editor.js.
+					presentIDs := make(map[int]bool)
+					allPagesIdx := -1
+					for i, item := range sidebarCfg.Items {
+						if item.Type == "category" {
+							presentIDs[item.TypeID] = true
+						}
+						if item.Type == "all_pages" {
+							allPagesIdx = i
+						}
+					}
+					for _, et := range sidebarTypes {
+						if !presentIDs[et.ID] {
+							newItem := campaigns.SidebarItem{
+								Type:    "category",
+								TypeID:  et.ID,
+								Visible: true,
+							}
+							if allPagesIdx >= 0 {
+								// Insert before "all_pages".
+								sidebarCfg.Items = append(sidebarCfg.Items[:allPagesIdx+1], sidebarCfg.Items[allPagesIdx:]...)
+								sidebarCfg.Items[allPagesIdx] = newItem
+								allPagesIdx++ // Shift all_pages index forward.
+							} else {
+								sidebarCfg.Items = append(sidebarCfg.Items, newItem)
+							}
+						}
+					}
+
 					var sidebarItems []layouts.SidebarItemView
 					for _, item := range sidebarCfg.Items {
 						if !item.Visible {
