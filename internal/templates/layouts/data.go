@@ -399,6 +399,7 @@ type SidebarItemView struct {
 	Color        string // Category color.
 	Count        int    // Entity count (for categories).
 	ParentTypeID *int   // Parent entity type ID (for sub-type hierarchy).
+	Nested       bool   // Sub-type: render inside parent's drill panel instead of standalone.
 }
 
 // SetSidebarItems stores the unified sidebar items in context.
@@ -411,6 +412,50 @@ func SetSidebarItems(ctx context.Context, items []SidebarItemView) context.Conte
 func GetSidebarItems(ctx context.Context) []SidebarItemView {
 	items, _ := ctx.Value(keySidebarItems).([]SidebarItemView)
 	return items
+}
+
+// GetNestedChildTypes returns sub-types that are marked as nested inside the
+// given parent type's drill panel. Used by SidebarDrillPanel to render child
+// sections within the parent's slide-over.
+func GetNestedChildTypes(ctx context.Context, parentTypeID int) []SidebarEntityType {
+	items := GetSidebarItems(ctx)
+	nestedIDs := make(map[int]bool)
+	for _, item := range items {
+		if item.Type == "category" && item.Nested {
+			nestedIDs[item.TypeID] = true
+		}
+	}
+	var children []SidebarEntityType
+	for _, t := range GetEntityTypes(ctx) {
+		if t.ParentTypeID != nil && *t.ParentTypeID == parentTypeID && nestedIDs[t.ID] {
+			children = append(children, t)
+		}
+	}
+	return children
+}
+
+// nestedTypeIDs returns a comma-separated string of nested child type IDs for
+// a parent type. Used by the drill panel search input to include nested types.
+func nestedTypeIDs(ctx context.Context, parentID int) string {
+	children := GetNestedChildTypes(ctx, parentID)
+	if len(children) == 0 {
+		return ""
+	}
+	ids := make([]string, len(children))
+	for i, c := range children {
+		ids[i] = strconv.Itoa(c.ID)
+	}
+	return strings.Join(ids, ",")
+}
+
+// drillSearchURL builds the search endpoint URL for a drill panel, including
+// nested sub-type IDs if any are configured.
+func drillSearchURL(ctx context.Context, campaignID string, typeID int) string {
+	base := fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, typeID)
+	if nested := nestedTypeIDs(ctx, typeID); nested != "" {
+		base += "&nested_types=" + nested
+	}
+	return base
 }
 
 // getEntityTypeSlug looks up the slug for an entity type by ID from context.

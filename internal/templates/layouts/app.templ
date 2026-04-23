@@ -288,12 +288,12 @@ templ Sidebar() {
 							@sidebarCreateCategory(ctx)
 						}
 						if len(GetSidebarItems(ctx)) > 0 {
-							<!-- Unified: render all categories flat in config order -->
+							<!-- Unified: render all categories flat in config order (skip nested) -->
 							for _, item := range GetSidebarItems(ctx) {
-								if item.Type == "category" && item.ParentTypeID == nil {
+								if item.Type == "category" && !item.Nested && item.ParentTypeID == nil {
 									@entityTypeLink(getEntityTypeSlug(ctx, item.TypeID), item.Label, item.Color, item.Icon, GetEntityCount(ctx, item.TypeID), item.TypeID)
 								}
-								if item.Type == "category" && item.ParentTypeID != nil {
+								if item.Type == "category" && !item.Nested && item.ParentTypeID != nil {
 									@entityTypeChildLink(getEntityTypeSlug(ctx, item.TypeID), item.Label, item.Color, item.Icon, GetEntityCount(ctx, item.TypeID), item.TypeID)
 								}
 							}
@@ -945,7 +945,7 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 					type="search"
 					placeholder={ fmt.Sprintf("Search %s...", et.NamePlural) }
 					class="w-full px-2.5 py-1.5 pl-7 text-[11px] rounded bg-gray-800/50 border border-gray-700/50 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
-					hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, et.ID) }
+					hx-get={ drillSearchURL(ctx, campaignID, et.ID) }
 					hx-trigger="keyup changed delay:300ms"
 					hx-target="#sidebar-cat-results"
 					hx-swap="innerHTML"
@@ -970,6 +970,45 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 				</div>
 			</div>
 		</div>
+		<!-- Nested sub-type sections -->
+		for _, child := range GetNestedChildTypes(ctx, et.ID) {
+			<div class="px-4 mt-3 mb-1 flex items-center gap-2">
+				<span
+					class="w-4 h-4 rounded flex items-center justify-center shrink-0"
+					style={ fmt.Sprintf("color: %s", child.Color) }
+				>
+					<i class={ "fa-solid " + child.Icon, "text-[9px]" }></i>
+				</span>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", campaignID, child.Slug)) }
+					class="text-[11px] font-semibold text-gray-400 hover:text-white truncate"
+				>
+					{ child.NamePlural }
+				</a>
+				<span class="text-[9px] text-gray-600">
+					{ strconv.Itoa(GetEntityCount(ctx, child.ID)) }
+				</span>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", campaignID, child.ID)) }
+					class="ml-auto w-4 h-4 flex items-center justify-center rounded text-gray-600 hover:text-white transition-colors"
+					hx-boost="false"
+					title={ fmt.Sprintf("New %s", child.Name) }
+				>
+					<i class="fa-solid fa-plus text-[8px]"></i>
+				</a>
+			</div>
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, child.ID) }
+				hx-trigger="load"
+				hx-target="this"
+				hx-swap="innerHTML"
+			>
+				<div class="px-4 py-1 space-y-1">
+					<div class="skeleton-shimmer h-2.5 w-2/3"></div>
+					<div class="skeleton-shimmer h-2.5 w-1/2"></div>
+				</div>
+			</div>
+		}
 		<!-- Favorites -->
 		<div id="sidebar-cat-favorites-header" class="px-4 mt-3 mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600" style="display:none">
 			<i class="fa-solid fa-star text-amber-400/70 mr-0.5"></i> Favorites

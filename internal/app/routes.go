@@ -2100,6 +2100,7 @@ func (a *App) RegisterRoutes() {
 									Type: "category", TypeID: et.ID,
 									Label: et.NamePlural, Icon: et.Icon, Color: et.Color,
 									ParentTypeID: et.ParentTypeID,
+									Nested:       item.Nested,
 								})
 							}
 						case "all_pages":
@@ -2151,6 +2152,14 @@ func (a *App) RegisterRoutes() {
 				layoutUserID = session.UserID
 			}
 			if counts, err := entityService.CountByType(reqCtx, cc.Campaign.ID, effectiveRole, layoutUserID); err == nil {
+				// Aggregate nested sub-type entity counts into parent badges.
+				for _, item := range layouts.GetSidebarItems(ctx) {
+					if item.Nested && item.ParentTypeID != nil {
+						if cnt, ok := counts[item.TypeID]; ok {
+							counts[*item.ParentTypeID] += cnt
+						}
+					}
+				}
 				ctx = layouts.SetEntityCounts(ctx, counts)
 			}
 

@@ -446,11 +446,13 @@ type CreateEntityTypeRequest struct {
 
 // UpdateEntityTypeRequest holds the data submitted by the entity type edit form.
 type UpdateEntityTypeRequest struct {
-	Name       string            `json:"name" form:"name"`
-	NamePlural string            `json:"name_plural" form:"name_plural"`
-	Icon       string            `json:"icon" form:"icon"`
-	Color      string            `json:"color" form:"color"`
-	Fields     []FieldDefinition `json:"fields"`
+	Name         string            `json:"name" form:"name"`
+	NamePlural   string            `json:"name_plural" form:"name_plural"`
+	Icon         string            `json:"icon" form:"icon"`
+	Color        string            `json:"color" form:"color"`
+	Fields       []FieldDefinition `json:"fields"`
+	ParentTypeID *int              `json:"parent_type_id"` // New parent (nil = no change).
+	ClearParent  bool              `json:"clear_parent"`   // Explicitly remove parent (make top-level).
 }
 
 // --- Entity Type Service Input DTOs ---
@@ -467,11 +469,13 @@ type CreateEntityTypeInput struct {
 
 // UpdateEntityTypeInput is the validated input for updating an entity type.
 type UpdateEntityTypeInput struct {
-	Name       string
-	NamePlural string
-	Icon       string
-	Color      string
-	Fields     []FieldDefinition
+	Name         string
+	NamePlural   string
+	Icon         string
+	Color        string
+	Fields       []FieldDefinition
+	ParentTypeID *int // New parent type (nil = no change).
+	ClearParent  bool // Explicitly remove parent (make top-level).
 }
 
 // --- Slug Generation ---
