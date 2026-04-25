@@ -1,6 +1,12 @@
 -- Data-fix migration: ensure game system addons are active and enabled for
--- campaigns that have them selected. Fixes state left over from before the
+-- campaigns that have them selected. Heals state left over from before the
 -- self-healing and version-optional changes were deployed.
+--
+-- Layering note: this migration touches ONLY core tables (addons, campaigns,
+-- campaign_addons). Plugin-owned tables are NOT referenced here — core
+-- migrations run before plugin migrations, so on a fresh DB those tables
+-- don't exist yet. Any heals that span plugin schema live in the owning
+-- plugin's migrations/ directory (see ADR-028).
 
 -- 1. Activate all system-category addons that packages have loaded.
 --    The baseline migration seeds them as 'planned', but RegisterSystemAddon
@@ -30,14 +36,4 @@ WHERE c.settings IS NOT NULL
   AND JSON_EXTRACT(c.settings, '$.system_id') IS NOT NULL
   AND JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.system_id')) != ''
   AND a.category = 'system'
-ON DUPLICATE KEY UPDATE enabled = 1;
-
--- 4. Auto-enable sync-api addon for campaigns that have at least one API key
---    but don't have the addon enabled. This ensures the sync API shows as
---    active in the features list for campaigns already using it.
-INSERT INTO campaign_addons (campaign_id, addon_id, enabled, enabled_by)
-SELECT DISTINCT ak.campaign_id, a.id, 1, NULL
-FROM api_keys ak
-JOIN addons a ON a.slug = 'sync-api'
-WHERE a.id IS NOT NULL
 ON DUPLICATE KEY UPDATE enabled = 1;

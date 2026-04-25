@@ -167,3 +167,112 @@ func TestMigrations_UpDownPairs(t *testing.T) {
 		}
 	}
 }
+
+// pluginCreateTableRe matches `CREATE TABLE [IF NOT EXISTS] <name>` and captures
+// the table name. Used to derive the set of plugin-owned tables.
+var pluginCreateTableRe = regexp.MustCompile(`(?i)CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+` + "`?" + `(\w+)` + "`?")
+
+// pluginsDir returns the absolute path to internal/plugins/ from the project root.
+func pluginsDir(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot determine test file path")
+	}
+	projectRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
+	dir := filepath.Join(projectRoot, "internal", "plugins")
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("plugins directory not found at %s: %v", dir, err)
+	}
+	return dir
+}
+
+// collectPluginOwnedTables walks every plugin migrations/ directory and
+// extracts the set of tables created there. These tables are off-limits to
+// core migrations because plugin migrations run AFTER core (ADR-028) — a core
+// migration that references them crashes on a fresh DB.
+func collectPluginOwnedTables(t *testing.T) map[string]string {
+	t.Helper()
+	owned := map[string]string{} // table -> owning plugin slug
+
+	entries, err := os.ReadDir(pluginsDir(t))
+	if err != nil {
+		t.Fatalf("reading plugins dir: %v", err)
+	}
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		slug := e.Name()
+		migDir := filepath.Join(pluginsDir(t), slug, "migrations")
+		if _, err := os.Stat(migDir); err != nil {
+			continue
+		}
+		ups, err := filepath.Glob(filepath.Join(migDir, "*.up.sql"))
+		if err != nil {
+			t.Fatalf("globbing %s: %v", migDir, err)
+		}
+		for _, f := range ups {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatalf("reading %s: %v", f, err)
+			}
+			for _, m := range pluginCreateTableRe.FindAllStringSubmatch(string(data), -1) {
+				owned[strings.ToLower(m[1])] = slug
+			}
+		}
+	}
+	return owned
+}
+
+// TestMigrations_NoPluginTableReferences enforces the migration layering rule
+// (see .ai/conventions.md §"Migration Safety Rules" #7): core migrations may
+// only reference core schema. Referencing a plugin-owned table from
+// db/migrations/ guarantees a crash on a fresh DB because plugin migrations
+// haven't run yet.
+//
+// The plugin-owned table set is derived dynamically from each plugin's
+// migrations/ directory, so adding a new plugin table automatically extends
+// this guard with no test maintenance.
+func TestMigrations_NoPluginTableReferences(t *testing.T) {
+	owned := collectPluginOwnedTables(t)
+	if len(owned) == 0 {
+		t.Fatal("no plugin-owned tables discovered; guard would be vacuous")
+	}
+
+	dir := migrationsDir(t)
+	files, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+	if err != nil {
+		t.Fatalf("globbing migration files: %v", err)
+	}
+
+	// Match identifiers in contexts that read or write a table:
+	// FROM, JOIN, INTO, UPDATE, DELETE FROM, REFERENCES.
+	refPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\bFROM\s+` + "`?" + `(\w+)` + "`?"),
+		regexp.MustCompile(`(?i)\bJOIN\s+` + "`?" + `(\w+)` + "`?"),
+		regexp.MustCompile(`(?i)\bINTO\s+` + "`?" + `(\w+)` + "`?"),
+		regexp.MustCompile(`(?i)\bUPDATE\s+` + "`?" + `(\w+)` + "`?"),
+		regexp.MustCompile(`(?i)\bREFERENCES\s+` + "`?" + `(\w+)` + "`?"),
+	}
+
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("reading %s: %v", f, err)
+		}
+		content := string(data)
+
+		for _, re := range refPatterns {
+			for _, m := range re.FindAllStringSubmatch(content, -1) {
+				name := strings.ToLower(m[1])
+				if slug, ok := owned[name]; ok {
+					t.Errorf("%s references plugin-owned table %q (owned by plugin %q); "+
+						"move this statement to internal/plugins/%s/migrations/",
+						filepath.Base(f), name, slug, slug)
+				}
+			}
+		}
+	}
+}
