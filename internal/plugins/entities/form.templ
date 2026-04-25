@@ -73,9 +73,18 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 				// variant the new entity is created with. The selected radio
 				// carries the actual entity_type_id; variants[0] is the parent
 				// (default) and the rest are its children.
+				//
+				// Visual: the native radio is sr-only and used as a `peer` so
+				// the wrapping span gets the canonical Chronicle pill-select
+				// treatment (accent border + tinted background on
+				// peer-checked, accent ring on peer-focus-visible). Same
+				// pattern used in campaigns/form.templ and
+				// entity_type_config.templ — accent variables flow from the
+				// theme so a campaign-level accent override automatically
+				// retints this picker.
 				<div>
 					<label class="block text-sm font-medium text-fg-body mb-1">Category</label>
-					<div class="text-sm text-fg-body py-2 px-3 rounded-md bg-bg-muted/40">
+					<div class="text-sm text-fg-body py-2 px-3 rounded-md bg-surface-alt border border-edge">
 						{ variants[0].Name }
 					</div>
 				</div>
@@ -83,22 +92,25 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 					<label class="block text-sm font-medium text-fg-body mb-2">Create as</label>
 					<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Layout variant">
 						for i, v := range variants {
-							<label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-subtle bg-bg-muted/30 hover:bg-bg-muted/60 cursor-pointer text-sm">
+							<label class="cursor-pointer select-none">
 								<input
 									type="radio"
 									name="entity_type_id"
 									value={ strconv.Itoa(v.ID) }
 									required
+									class="peer sr-only"
 									checked?={ (preselect == v.ID) || (preselect == variants[0].ID && i == 0) }
 								/>
-								if i == 0 {
-									<span>{ v.Name } <span class="text-xs text-fg-muted">(default)</span></span>
-								} else {
-									<span>{ v.Name }</span>
-								}
+								<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-edge bg-surface text-fg-body text-sm transition-colors hover:bg-surface-alt peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:font-medium peer-focus-visible:ring-2 peer-focus-visible:ring-accent/40 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-surface peer-disabled:opacity-50 peer-disabled:cursor-not-allowed">
+									{ v.Name }
+									if i == 0 {
+										<span class="text-xs text-fg-muted">(default)</span>
+									}
+								</span>
 							</label>
 						}
 					</div>
+					<p class="mt-1.5 text-xs text-fg-muted">Each variant uses its own page layout.</p>
 				</div>
 			} else {
 				<div>
