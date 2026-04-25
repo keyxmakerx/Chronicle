@@ -90,6 +90,9 @@ type BestiaryService interface {
 	SetEntityCreator(ec EntityCreator)
 	// SetCampaignRoleChecker sets the cross-plugin interface for campaign role checks.
 	SetCampaignRoleChecker(rc CampaignRoleChecker)
+	// SetCampaignSystemFetcher sets the cross-plugin interface for resolving
+	// a campaign's selected game system slug.
+	SetCampaignSystemFetcher(csf CampaignSystemFetcher)
 }
 
 // flagThreshold is the number of user flags that triggers auto-flagging.
@@ -101,6 +104,7 @@ type bestiaryService struct {
 	users    UserFetcher
 	entities EntityCreator
 	roles    CampaignRoleChecker
+	systems  CampaignSystemFetcher
 }
 
 // NewBestiaryService creates a BestiaryService backed by the given repository.
@@ -128,9 +132,16 @@ func (s *bestiaryService) Publish(ctx context.Context, creatorID string, input C
 	if err := validateVisibility(input.Visibility); err != nil {
 		return nil, err
 	}
-	// Default to "drawsteel" if no system specified, but accept any system slug.
-	if input.SystemID == "" {
-		input.SystemID = "drawsteel"
+	// Resolve the system tag. Priority: explicit input > source campaign's
+	// selected system > empty string. We deliberately do NOT hard-code a
+	// fallback slug here — bestiary content is system-dependent, and the
+	// system tag must come from the publishing context. A hard-coded
+	// fallback would silently mis-tag publications when the assumed
+	// system isn't installed.
+	if input.SystemID == "" && input.SourceCampaignID != nil && *input.SourceCampaignID != "" && s.systems != nil {
+		if sysID, err := s.systems.GetCampaignSystemID(ctx, *input.SourceCampaignID); err == nil {
+			input.SystemID = sysID
+		}
 	}
 	validateOptionalText(&input.Description, 5000)
 	validateOptionalText(&input.FlavorText, 5000)
@@ -460,6 +471,12 @@ func (s *bestiaryService) SetEntityCreator(ec EntityCreator) {
 // SetCampaignRoleChecker sets the cross-plugin interface for campaign role checks.
 func (s *bestiaryService) SetCampaignRoleChecker(rc CampaignRoleChecker) {
 	s.roles = rc
+}
+
+// SetCampaignSystemFetcher sets the cross-plugin interface for resolving a
+// campaign's selected game system slug.
+func (s *bestiaryService) SetCampaignSystemFetcher(csf CampaignSystemFetcher) {
+	s.systems = csf
 }
 
 // Import imports a publication's creature into a campaign as a new entity.

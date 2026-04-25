@@ -725,8 +725,14 @@ func (s *packageService) InstalledPackagePath(pkgType PackageType, slug string) 
 
 // --- Submission/Approval Workflow ---
 
-// SubmitPackage lets a campaign owner submit a repo URL for review.
-// If admin approval is not required, the package is auto-approved and fetched.
+// SubmitPackage lets a campaign owner submit a repo URL for admin review.
+// The submission always lands in the admin review queue as StatusPending,
+// regardless of any settings. Install only happens after an admin explicitly
+// approves the package via ReviewPackage. This prevents any non-admin user
+// from triggering an outbound network fetch through this route.
+//
+// Submissions are also gated by OwnerUploadPolicy: when set to "disabled",
+// this method refuses the submission outright before any DB write.
 func (s *packageService) SubmitPackage(ctx context.Context, userID string, input SubmitPackageInput) (*Package, error) {
 	repoURL := strings.TrimSpace(input.RepoURL)
 	if repoURL == "" {
@@ -737,6 +743,13 @@ func (s *packageService) SubmitPackage(ctx context.Context, userID string, input
 	secSettings, _ := s.GetSecuritySettings(ctx)
 	if err := ValidateRepoURL(repoURL, secSettings.RepoPolicy); err != nil {
 		return nil, err
+	}
+
+	// Honor the owner upload policy. "disabled" rejects the submission
+	// before any DB write; the other values let it through to the admin
+	// review queue.
+	if secSettings.OwnerUploadPolicy == OwnerUploadDisabled {
+		return nil, fmt.Errorf("owner submissions are disabled")
 	}
 
 	// Check for duplicates.
@@ -768,12 +781,6 @@ func (s *packageService) SubmitPackage(ctx context.Context, userID string, input
 		name = slug
 	}
 
-	// Determine initial status based on approval setting.
-	status := StatusPending
-	if !secSettings.RequireApproval {
-		status = StatusApproved
-	}
-
 	now := time.Now()
 	description := "Submitted by user"
 	if owner != "" && repo != "" {
@@ -790,7 +797,7 @@ func (s *packageService) SubmitPackage(ctx context.Context, userID string, input
 		// Auto-update is opt-in (see AddPackage for rationale).
 		AutoUpdate:    UpdateOff,
 		SubmittedBy:   userID,
-		Status:        status,
+		Status:        StatusPending,
 		LastCheckedAt: &now,
 	}
 
@@ -801,13 +808,7 @@ func (s *packageService) SubmitPackage(ctx context.Context, userID string, input
 	slog.Info("package submitted",
 		slog.String("slug", pkg.Slug),
 		slog.String("submitted_by", userID),
-		slog.String("status", string(status)),
 	)
-
-	// If auto-approved, immediately fetch versions and install.
-	if status == StatusApproved {
-		s.fetchAndInstallLatest(ctx, pkg)
-	}
 
 	return s.repo.GetPackage(ctx, pkg.ID)
 }
