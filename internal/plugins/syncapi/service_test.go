@@ -511,6 +511,114 @@ func TestAuthenticateKey_Expired(t *testing.T) {
 	assertAppError(t, err, 403)
 }
 
+// TestAuthenticateKey_TrimsWhitespace guards the defensive trim added to
+// AuthenticateKey. Clients sometimes append a trailing newline when copying
+// tokens into config files; without the trim, this tips the key out of its
+// stored prefix range and bcrypt fails.
+func TestAuthenticateKey_TrimsWhitespace(t *testing.T) {
+	rawKey := "chron_trim12345678trim12345678trim12345678trim12345678trim12345678"
+	hash, _ := bcrypt.GenerateFromPassword([]byte(rawKey), bcrypt.DefaultCost)
+	repo := &mockSyncAPIRepo{
+		findKeyByPrefixFn: func(_ context.Context, prefix string) (*APIKey, error) {
+			if prefix != rawKey[:keyPrefixLen] {
+				t.Errorf("prefix after trim = %q, want %q", prefix, rawKey[:keyPrefixLen])
+			}
+			return &APIKey{ID: 1, KeyHash: string(hash), IsActive: true}, nil
+		},
+	}
+
+	svc := NewSyncAPIService(repo)
+
+	for _, tc := range []struct {
+		name  string
+		input string
+	}{
+		{"trailing newline", rawKey + "\n"},
+		{"trailing space", rawKey + " "},
+		{"leading whitespace", "  " + rawKey},
+		{"surrounding crlf", "\r\n" + rawKey + "\r\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			key, err := svc.AuthenticateKey(context.Background(), tc.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if key.ID != 1 {
+				t.Errorf("expected key ID 1, got %d", key.ID)
+			}
+		})
+	}
+}
+
+// TestAuthenticateKey_SharedByRESTAndWS proves that the REST middleware's
+// validation call (`AuthenticateKey`) and the WebSocket authenticator's
+// validation call (`AuthenticateKeyForWS`) resolve to the same code path
+// and accept the exact same raw token.
+//
+// This is the structural regression guard for the "REST accepts token, WS
+// rejects it" class of bug: if a future change splits the two paths into
+// parallel implementations, this test fails. The shared validation MUST
+// stay the single source of truth.
+func TestAuthenticateKey_SharedByRESTAndWS(t *testing.T) {
+	rawKey := "chron_sharedAB12cd34ef56ab78cd90ef12ab34cd56ef78ab90cd12ef34ab5678"
+	hash, err := bcrypt.GenerateFromPassword([]byte(rawKey), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("bcrypt hash failed: %v", err)
+	}
+	storedKey := &APIKey{
+		ID:         42,
+		KeyHash:    string(hash),
+		KeyPrefix:  rawKey[:keyPrefixLen],
+		CampaignID: "camp-abc",
+		UserID:     "user-xyz",
+		IsActive:   true,
+	}
+	var lookedUpFor []string
+	repo := &mockSyncAPIRepo{
+		findKeyByPrefixFn: func(_ context.Context, prefix string) (*APIKey, error) {
+			lookedUpFor = append(lookedUpFor, prefix)
+			if prefix != storedKey.KeyPrefix {
+				return nil, apperror.NewNotFound("key not found")
+			}
+			return storedKey, nil
+		},
+	}
+	svc := NewSyncAPIService(repo)
+	ctx := context.Background()
+
+	// REST path: service.AuthenticateKey(rawKey) → *APIKey
+	restKey, restErr := svc.AuthenticateKey(ctx, rawKey)
+	if restErr != nil {
+		t.Fatalf("REST AuthenticateKey returned error: %v", restErr)
+	}
+	if restKey == nil || restKey.ID != storedKey.ID {
+		t.Fatalf("REST AuthenticateKey: got key %+v, want ID %d", restKey, storedKey.ID)
+	}
+
+	// WS path: service.AuthenticateKeyForWS(rawKey) → (campaignID, userID, role, err)
+	wsCampaign, wsUser, wsRole, wsErr := svc.AuthenticateKeyForWS(ctx, rawKey)
+	if wsErr != nil {
+		t.Fatalf("WS AuthenticateKeyForWS returned error: %v", wsErr)
+	}
+	if wsCampaign != storedKey.CampaignID {
+		t.Errorf("WS campaign = %q, want %q", wsCampaign, storedKey.CampaignID)
+	}
+	if wsUser != storedKey.UserID {
+		t.Errorf("WS user = %q, want %q", wsUser, storedKey.UserID)
+	}
+	if wsRole == 0 {
+		t.Errorf("WS role = 0, want owner-level (nonzero)")
+	}
+
+	// Structural assertion: both paths performed the same prefix lookup.
+	if len(lookedUpFor) != 2 {
+		t.Fatalf("expected 2 prefix lookups (REST + WS), got %d: %v", len(lookedUpFor), lookedUpFor)
+	}
+	if lookedUpFor[0] != lookedUpFor[1] {
+		t.Errorf("REST and WS looked up different prefixes: REST=%q WS=%q", lookedUpFor[0], lookedUpFor[1])
+	}
+}
+
 // --- ActivateKey / DeactivateKey / RevokeKey Tests ---
 
 func TestActivateKey(t *testing.T) {

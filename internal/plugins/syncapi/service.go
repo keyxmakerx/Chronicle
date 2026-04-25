@@ -206,29 +206,65 @@ func (s *syncAPIService) RevokeKey(ctx context.Context, id int) error {
 
 // AuthenticateKey validates a raw API key and returns the associated key record.
 // It extracts the prefix, looks up the key, and verifies with bcrypt.
+//
+// This is the single source of truth for API key validation. Both the REST
+// middleware (RequireAPIKey) and the WebSocket authenticator call through
+// here — the token-to-key translation is shared so they cannot diverge.
+//
+// The raw key is trimmed of surrounding whitespace before processing to
+// defensively handle clients that append stray whitespace or line endings
+// when copying tokens into config files.
+//
+// Failure paths log at debug level with the truncated prefix so admins can
+// diagnose "REST accepts, WS rejects" style issues without exposing full
+// tokens. The public error returned is always the same opaque
+// "invalid api key" to avoid leaking which keys exist.
 func (s *syncAPIService) AuthenticateKey(ctx context.Context, rawKey string) (*APIKey, error) {
+	rawKey = strings.TrimSpace(rawKey)
 	if len(rawKey) < keyPrefixLen {
+		slog.Debug("api key auth failed",
+			slog.String("reason", "token too short"),
+			slog.Int("length", len(rawKey)),
+		)
 		return nil, apperror.NewBadRequest("invalid api key format")
 	}
 
 	prefix := rawKey[:keyPrefixLen]
 	key, err := s.repo.FindKeyByPrefix(ctx, prefix)
 	if err != nil {
+		slog.Debug("api key auth failed",
+			slog.String("reason", "prefix not found"),
+			slog.String("prefix", prefix),
+			slog.Any("error", err),
+		)
 		return nil, apperror.NewForbidden("invalid api key")
 	}
 
 	// Verify the full key against the stored hash.
 	if err := bcrypt.CompareHashAndPassword([]byte(key.KeyHash), []byte(rawKey)); err != nil {
+		slog.Debug("api key auth failed",
+			slog.String("reason", "bcrypt mismatch"),
+			slog.String("prefix", prefix),
+			slog.Int("key_id", key.ID),
+		)
 		return nil, apperror.NewForbidden("invalid api key")
 	}
 
 	// Check if the key is active.
 	if !key.IsActive {
+		slog.Debug("api key auth failed",
+			slog.String("reason", "deactivated"),
+			slog.Int("key_id", key.ID),
+		)
 		return nil, apperror.NewForbidden("api key is deactivated")
 	}
 
 	// Check expiry.
 	if key.IsExpired() {
+		slog.Debug("api key auth failed",
+			slog.String("reason", "expired"),
+			slog.Int("key_id", key.ID),
+		)
 		return nil, apperror.NewForbidden("api key has expired")
 	}
 
