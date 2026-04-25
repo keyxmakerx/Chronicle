@@ -80,6 +80,10 @@ Known broken or missing things, ordered by severity.
 - [x] **Chronicle.toast stale API** — Replaced `Chronicle.toast` with `Chronicle.notify` in `media_browser.templ`.
 - [x] **Hardcoded GitHub URLs** — `GITHUB_ORG` env var, generic placeholders replace hardcoded URLs.
 
+### Recently Fixed (2026-04-25)
+
+- [x] **0.0.1 release readiness — backup pipeline, deployment doc** — In-process `PreMigrationBackup` was silently no-op'ing in production because `mysqldump` wasn't in the runtime image. Fixed Dockerfile (mariadb-client + gzip), defaulted `BACKUP_DIR=/app/data/backups` in compose, shipped operator scripts (`scripts/backup.sh` / `restore.sh` / `README.md`), wired `make backup` / `backup-check` / `backup-list` / `restore` targets, and wrote `docs/deployment.md` (12 sections — TL;DR through 0.0.1 non-goals). ADR-035 records the shell-script-vs-Go-subcommand decision. Rollback story uses existing `RunStartupHealthChecks` + pre-migration backup; no new server code.
+
 ### Recently Fixed (2026-04-12)
 
 - [x] **Systems API `foundry_system_id` missing + no self-healing** — Removed `omitempty`, added API-level self-healing in `ListSystems()` that auto-enables system addon when campaign has selected system but addon not enabled.

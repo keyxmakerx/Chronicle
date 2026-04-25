@@ -131,3 +131,27 @@ docker-build: ## Build the Chronicle Docker image
 .PHONY: docker-all
 docker-all: ## Start full stack (app + db + redis)
 	docker compose -f $(DOCKER_COMP) up -d
+
+# ============================================================================
+# Backup & Restore
+# ============================================================================
+# Operator-facing wrappers around scripts/backup.sh and scripts/restore.sh.
+# All targets invoke the script inside the chronicle container, where
+# mariadb-client and the data volume are already in place. See
+# docs/deployment.md for the full operator runbook.
+
+.PHONY: backup
+backup: ## Snapshot DB + media to $$BACKUP_DIR (pass BACKUP_ARGS for flags)
+	docker compose -f $(DOCKER_COMP) exec -T chronicle /app/scripts/backup.sh $(BACKUP_ARGS)
+
+.PHONY: backup-check
+backup-check: ## Validate backup environment without writing anything
+	docker compose -f $(DOCKER_COMP) exec -T chronicle /app/scripts/backup.sh --check
+
+.PHONY: backup-list
+backup-list: ## List backup artifacts in the chronicle-data volume
+	docker compose -f $(DOCKER_COMP) exec -T chronicle ls -lh /app/data/backups
+
+.PHONY: restore
+restore: ## Restore from a manifest (usage: make restore RESTORE_ARGS="--manifest=/app/data/backups/chronicle_manifest_TS.txt")
+	docker compose -f $(DOCKER_COMP) exec chronicle /app/scripts/restore.sh $(RESTORE_ARGS)
