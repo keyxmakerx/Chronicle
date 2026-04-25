@@ -75,10 +75,10 @@ func main() {
 	// Validates migration version, schema columns, DB health, and security.
 	// Server refuses to start if any fatal check fails.
 	if err := database.RunStartupHealthChecks(db, database.HealthCheckConfig{
-		ExpectedMigrationVersion: 21,
+		ExpectedMigrationVersion: 22,
 		CriticalColumns: map[string][]string{
 			"campaigns":        {"id", "name", "slug", "archived_at", "join_code", "settings", "sidebar_config"},
-			"entities":         {"id", "campaign_id", "name", "slug", "entry", "entry_html", "fields_data", "visibility"},
+			"entities":         {"id", "campaign_id", "name", "slug", "entry", "entry_html", "fields_data", "visibility", "owner_user_id"},
 			"users":            {"id", "email", "display_name", "password_hash"},
 			"campaign_members": {"campaign_id", "user_id", "role"},
 		},

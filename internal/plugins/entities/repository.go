@@ -652,8 +652,9 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 
 	query := `INSERT INTO entities (id, campaign_id, entity_type_id, name, slug, entry, entry_html, search_text,
 	          player_notes, player_notes_html,
-	          image_path, parent_id, parent_node_id, sort_order, type_label, is_private, is_template, fields_data, created_by, created_at, updated_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	          image_path, parent_id, parent_node_id, sort_order, type_label, is_private, is_template, fields_data,
+	          created_by, owner_user_id, created_at, updated_at)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err = r.db.ExecContext(ctx, query,
 		entity.ID, entity.CampaignID, entity.EntityTypeID,
@@ -661,7 +662,7 @@ func (r *entityRepository) Create(ctx context.Context, entity *Entity) error {
 		entity.PlayerNotes, entity.PlayerNotesHTML,
 		entity.ImagePath, entity.ParentID, entity.ParentNodeID, entity.SortOrder, entity.TypeLabel,
 		entity.IsPrivate, entity.IsTemplate, fieldsJSON,
-		entity.CreatedBy, entity.CreatedAt, entity.UpdatedAt,
+		entity.CreatedBy, entity.OwnerUserID, entity.CreatedAt, entity.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting entity: %w", err)
@@ -674,7 +675,7 @@ const entitySelectColumns = `e.id, e.campaign_id, e.entity_type_id, e.name, e.sl
 	                 e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	                 e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	                 e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	                 e.created_by, e.created_at, e.updated_at,
+	                 e.created_by, e.owner_user_id, e.created_at, e.updated_at,
 	                 et.name, et.icon, et.color, et.slug`
 
 // FindByID retrieves an entity with joined type info.
@@ -707,7 +708,7 @@ func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 		&e.Entry, &e.EntryHTML, &e.PlayerNotes, &e.PlayerNotesHTML,
 		&e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
-		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
+		&e.CreatedBy, &e.OwnerUserID, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1260,7 +1261,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	           e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	           e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	           e.created_by, e.created_at, e.updated_at,
+	           e.created_by, e.owner_user_id, e.created_at, e.updated_at,
 	           1 AS depth
 	    FROM entities e
 	    WHERE e.id = (SELECT parent_id FROM entities WHERE id = ?)
@@ -1269,7 +1270,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	           e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	           e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	           e.created_by, e.created_at, e.updated_at,
+	           e.created_by, e.owner_user_id, e.created_at, e.updated_at,
 	           a.depth + 1
 	    FROM entities e
 	    INNER JOIN ancestors a ON e.id = a.parent_id
@@ -1279,7 +1280,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	       a.entry, a.entry_html, a.player_notes, a.player_notes_html,
 	       a.image_path, a.cover_image_path, a.parent_id, a.parent_node_id, a.sort_order, a.type_label,
 	       a.is_private, a.visibility, a.is_template, a.fields_data, a.field_overrides, a.popup_config,
-	       a.created_by, a.created_at, a.updated_at,
+	       a.created_by, a.owner_user_id, a.created_at, a.updated_at,
 	       et.name, et.icon, et.color, et.slug
 	FROM ancestors a
 	INNER JOIN entity_types et ON et.id = a.entity_type_id
@@ -1461,7 +1462,7 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 		&e.Entry, &e.EntryHTML, &e.PlayerNotes, &e.PlayerNotesHTML,
 		&e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
-		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
+		&e.CreatedBy, &e.OwnerUserID, &e.CreatedAt, &e.UpdatedAt,
 		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
 	if err != nil {

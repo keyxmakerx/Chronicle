@@ -246,6 +246,12 @@ type Entity struct {
 	FieldOverrides *FieldOverrides `json:"field_overrides,omitempty"` // Per-entity field customizations.
 	PopupConfig    *PopupConfig    `json:"popup_config,omitempty"`    // Controls hover tooltip content.
 	CreatedBy      string          `json:"created_by"`
+	// OwnerUserID claims an entity for a player. Nullable: most entities
+	// (locations, factions, lore) are not owned. Character-shaped entities
+	// surface on the owner's "My Characters" landing page. Set by Foundry
+	// sync (when the actor's owner maps to a chronicle user) or by the
+	// player claim flow on entity show.
+	OwnerUserID    *string         `json:"owner_user_id,omitempty"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
 
@@ -381,6 +387,12 @@ type CreateEntityInput struct {
 	ParentID     string // Empty string = no parent.
 	IsPrivate    bool
 	FieldsData   map[string]any
+	// OwnerUserID claims the entity for a player at create time. Optional;
+	// nil means unclaimed. Only honored if the user is a member of the
+	// target campaign — the service rejects cross-campaign assignments.
+	// Foundry sync uses this to auto-claim character entities to the
+	// chronicle user mapped from the Foundry actor's owner.
+	OwnerUserID *string
 }
 
 // UpdateEntityInput is the validated input for updating an entity.

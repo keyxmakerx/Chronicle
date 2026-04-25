@@ -257,6 +257,12 @@ type apiCreateEntityRequest struct {
 	TypeLabel    string         `json:"type_label"`
 	IsPrivate    bool           `json:"is_private"`
 	FieldsData   map[string]any `json:"fields_data"`
+	// OwnerUserID claims the entity for a player at create time.
+	// Optional. The server validates the user is a member of the
+	// target campaign and rejects with 400 otherwise. Foundry sync
+	// uses this to auto-claim character entities at creation; manual
+	// API consumers can omit and let the player claim later via the UI.
+	OwnerUserID *string `json:"owner_user_id,omitempty"`
 }
 
 // CreateEntity creates a new entity in the campaign.
@@ -281,12 +287,24 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 		req.EntityTypeID = types[0].ID
 	}
 
+	// Validate owner_user_id (if provided) is a member of the target
+	// campaign. Cross-campaign assignment would orphan the claim — a
+	// user not in the campaign cannot see the entity, so the claim is
+	// useless and likely a bug in the caller.
+	if req.OwnerUserID != nil && *req.OwnerUserID != "" {
+		member, err := h.campaignSvc.GetMember(c.Request().Context(), c.Param("id"), *req.OwnerUserID)
+		if err != nil || member == nil {
+			return apperror.NewBadRequest("owner_user_id is not a member of this campaign")
+		}
+	}
+
 	entity, err := h.entitySvc.Create(c.Request().Context(), c.Param("id"), key.UserID, entities.CreateEntityInput{
 		Name:         req.Name,
 		EntityTypeID: req.EntityTypeID,
 		TypeLabel:    req.TypeLabel,
 		IsPrivate:    req.IsPrivate,
 		FieldsData:   req.FieldsData,
+		OwnerUserID:  req.OwnerUserID,
 	})
 	if err != nil {
 		return err

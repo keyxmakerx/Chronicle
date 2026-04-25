@@ -222,6 +222,19 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		fieldsData = make(map[string]any)
 	}
 
+	// Owner trim: empty-string and whitespace-only values are treated as
+	// unclaimed. Cross-campaign membership validation lives at the call
+	// site (sync API handler today) — the service trusts the caller has
+	// confirmed the user belongs to this campaign. Service-side double-
+	// check would be duplicate work since every code path that reaches
+	// here has already done a campaign auth check.
+	var ownerUserIDPtr *string
+	if input.OwnerUserID != nil {
+		if owner := strings.TrimSpace(*input.OwnerUserID); owner != "" {
+			ownerUserIDPtr = &owner
+		}
+	}
+
 	entity := &Entity{
 		ID:           generateUUID(),
 		CampaignID:   campaignID,
@@ -234,6 +247,7 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		IsTemplate:   false,
 		FieldsData:   fieldsData,
 		CreatedBy:    userID,
+		OwnerUserID:  ownerUserIDPtr,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
