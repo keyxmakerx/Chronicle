@@ -102,6 +102,8 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 
 ## Quick Start
 
+> For production deployment, backups, upgrades, and rollback procedures, see [`docs/deployment.md`](docs/deployment.md).
+
 ### Docker (Recommended)
 
 ```bash

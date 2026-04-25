@@ -36,6 +36,14 @@ services:
       - DB_NAME=${DB_NAME:-chronicle}
       - REDIS_URL=${REDIS_URL:-redis://chronicle-redis:6379}
       - MEDIA_PATH=${MEDIA_PATH:-./data/media}
+      # Pre-migration backup destination (internal/database/healthcheck.go).
+      # Defaults ON so every upgrade gets a safety-net dump before migrations
+      # run. Lives inside the chronicle-data volume so it survives container
+      # rebuilds; for offsite copies, see docs/deployment.md §8 (Backups).
+      - BACKUP_DIR=${BACKUP_DIR:-/app/data/backups}
+      # Retention for scripts/backup.sh outputs. The in-process pre-migration
+      # rotator uses a separate 7-day default in code (BackupMaxAge).
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
     volumes:
       - chronicle-data:/app/data
     depends_on:

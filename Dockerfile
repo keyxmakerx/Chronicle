@@ -42,9 +42,13 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /chronicle ./cmd/server
 # --- Stage 3: Runtime ---
 FROM alpine:3.20
 
-# Install CA certificates for HTTPS calls, timezone data, and su-exec for
-# dropping privileges in the entrypoint.
-RUN apk add --no-cache ca-certificates tzdata su-exec
+# Install CA certificates for HTTPS calls, timezone data, su-exec for
+# dropping privileges in the entrypoint, and mariadb-client + gzip so the
+# in-process pre-migration backup (internal/database/healthcheck.go) and
+# the operator-runnable scripts/backup.sh actually have mysqldump and
+# gzip on PATH. Without mariadb-client, PreMigrationBackup silently
+# WARN-skips and operators who set BACKUP_DIR get no backup. ~+15 MB.
+RUN apk add --no-cache ca-certificates tzdata su-exec mariadb-client gzip
 
 # Create non-root user with a fixed UID/GID for predictable bind-mount
 # ownership. Host dirs must be owned by this UID for non-root operation.
@@ -59,6 +63,12 @@ COPY --from=builder /src/static /app/static
 
 # Copy database migrations for auto-migration on startup.
 COPY --from=builder /src/db/migrations /app/db/migrations
+
+# Copy operator scripts (backup, restore). Invoked via
+# `docker compose exec chronicle /app/scripts/backup.sh` — see
+# docs/deployment.md for the full operator runbook.
+COPY --from=builder /src/scripts /app/scripts
+RUN chmod +x /app/scripts/*.sh
 
 # Create persistent data directory owned by the chronicle user.
 # Media uploads go under /app/data/media (matches MEDIA_PATH default "./data/media").

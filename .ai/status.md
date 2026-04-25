@@ -8,7 +8,36 @@
 <!-- ====================================================================== -->
 
 ## Last Updated
-2026-04-12 -- **Systems API Fixes, Package Manager Fixes, Admin Diagnostics.**
+2026-04-25 -- **0.0.1 Release Readiness: backup scripts, mariadb-client in image, deployment runbook.**
+
+72. **Release Readiness for 0.0.1 (Task C1).**
+
+    **Bug surfaced in audit:** the in-process `PreMigrationBackup`
+    (`internal/database/healthcheck.go:305-350`) silently no-ops in
+    production because the runtime Docker image was missing
+    `mysqldump`. Operators who set `BACKUP_DIR` got a `WARN`-level
+    "skipped" log and no backup. **Fix:** runtime stage of the
+    Dockerfile now installs `mariadb-client gzip` (~+15MB).
+
+    **What shipped:**
+    - `Dockerfile` runtime stage: `mariadb-client gzip` added; `COPY scripts /app/scripts` + `chmod +x` so `docker compose exec chronicle /app/scripts/backup.sh` resolves.
+    - `docker-compose.yml`: `BACKUP_DIR=/app/data/backups` defaulted ON; `BACKUP_RETENTION_DAYS=7` env wired through.
+    - `docker-entrypoint.sh`: creates `/app/data/backups` with chronicle ownership at boot, mirroring the existing `media` handling.
+    - `.env.example`: new "Backups" section documenting `BACKUP_DIR` + `BACKUP_RETENTION_DAYS`.
+    - `scripts/` directory (new): `backup.sh`, `restore.sh`, `README.md`. POSIX `sh`. Manifest-driven (sha256 + migration version + chronicle version pairs DB/media/redis artifacts). `--check` mode for cheap CI verification. Exit codes 0/1/2/3 by class.
+    - `Makefile`: `make backup`, `make backup-check`, `make backup-list`, `make restore` (all delegate via `docker compose exec`).
+    - `docs/deployment.md` (new, 12 sections): TL;DR / system reqs / persistence inventory / install / config / upgrade / rollback / backup / restore / troubleshooting (keyed off real log strings) / security checklist / 0.0.1 non-goals.
+    - `README.md`: pointer to `docs/deployment.md`.
+    - `.ai/decisions.md`: ADR-035 records the shell-script-vs-Go-subcommand choice and the rationale.
+
+    **Rollback story** (documented in §7) leans entirely on the existing
+    `RunStartupHealthChecks` gate plus the in-process pre-migration
+    backup — no new server code. Three scenarios: A) boot-time health
+    check failure, B) feature broken but server up, C) data corruption.
+
+    **Out of scope for 0.0.1:** point-in-time recovery, snapshot
+    replication, encrypted-at-rest backups, S3 shipping, automated DR
+    drills, restore-from-UI. Tracked under "Future" in `deployment.md` §12.
 
 71. **Version Handling + Integrations Tab Redesign.**
 

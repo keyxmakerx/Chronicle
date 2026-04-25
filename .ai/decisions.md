@@ -1273,3 +1273,64 @@ tooltip which uses `::after`. Glow is suppressed in icon-only mode (too narrow).
 - Pure CSS except for the 300ms linger JavaScript (6 lines in boot.js).
 - Two pseudo-elements needed per element (one for glow, tooltips need separate).
 - Sidebar nav avoids `::after` conflict by using `::before` instead.
+
+---
+
+## ADR-035: Operator Backup as POSIX Shell Script + Make Target
+
+**Date:** 2026-04-25
+**Status:** Accepted
+
+**Context:** Chronicle 0.0.1 needed an operator-runnable backup mechanism
+plus a deployment runbook. The Go codebase already had
+`PreMigrationBackup` (`internal/database/healthcheck.go:305-350`) — a
+boot-time safety net invoked before migrations — but no on-demand path
+for operators, no media or Redis coverage, and no manifest pairing.
+Worse, the in-process backup was silently disabled in production
+because the runtime image didn't ship `mysqldump`.
+
+The choice was: build the operator backup as a Go subcommand of the
+`chronicle` binary, or as a shell script under `scripts/`.
+
+**Decision:** Shell script (`scripts/backup.sh`, `scripts/restore.sh`)
+invoked via Make targets (`make backup`, `make restore`,
+`make backup-check`, `make backup-list`). Inside the chronicle container
+via `docker compose exec` for the compose path; same script runs
+standalone on bare-metal hosts.
+
+POSIX `sh` (Alpine `/bin/sh` is `ash`); no bashisms. `set -eu`. Exit
+codes: `0` success, `1` operator error, `2` precondition failure,
+`3` backend tool failure. Manifest pairs DB + media + redis artifacts
+with sha256 + chronicle version + migration version so `restore.sh` can
+refuse mismatched sets.
+
+**Alternatives considered:**
+- Go subcommand (`chronicle backup`, `chronicle restore`): would require
+  rebuilding the image to update backup logic, adds a Cobra-style CLI
+  surface to maintain, and still has to shell out to `mysqldump`
+  internally — net loss vs. a shell script.
+- Sidecar `chronicle-backup` service in compose: extra image, extra
+  cron surface, more state to keep in sync. Rejected; the existing
+  chronicle container already has the credentials, the volume, and
+  (after this change) `mariadb-client`.
+- Host-only script: forces every operator to install `mariadb-client`
+  outside the container. Same script supports this case via env
+  variables, but in-container is the documented primary path.
+
+**Consequences:**
+- Operators can update backup logic without rebuilding the image.
+- `make backup-check` is a cheap CI surface for verifying that env vars
+  and tool availability are correct.
+- The `Dockerfile` runtime stage now installs `mariadb-client` and
+  `gzip`. ~+15MB; this also lets the existing `PreMigrationBackup`
+  actually function in production.
+- Two retention systems coexist: `BackupMaxAge` (hardcoded 7d) for the
+  in-process pre-migration files, and `BACKUP_RETENTION_DAYS` (default
+  7d) for the operator-script artifacts. Filename prefix
+  (`chronicle_pre_migrate_*` vs `chronicle_db_*`/`chronicle_media_*`)
+  cleanly partitions which rotator owns which file. Future cleanup PR
+  may unify; not a 0.0.1 blocker.
+- Restore is a sysadmin operation only — no admin-UI restore path,
+  intentionally. Documented in `docs/deployment.md` §9.
+- Documentation lives in `docs/deployment.md`; `scripts/README.md`
+  documents the script convention itself.
