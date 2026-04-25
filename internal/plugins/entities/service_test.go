@@ -52,6 +52,10 @@ func (m *mockEntityTypeRepo) ListByCampaign(ctx context.Context, campaignID stri
 	return nil, nil
 }
 
+func (m *mockEntityTypeRepo) ListChildTypes(_ context.Context, _ int) ([]EntityType, error) {
+	return nil, nil
+}
+
 func (m *mockEntityTypeRepo) ListByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error) {
 	return nil, nil
 }
@@ -124,8 +128,8 @@ type mockEntityRepo struct {
 	updateImageFn    func(ctx context.Context, id, imagePath string) error
 	deleteFn         func(ctx context.Context, id string) error
 	slugExistsFn     func(ctx context.Context, campaignID, slug string) (bool, error)
-	listByCampaignFn func(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
-	searchFn         func(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
+	listByCampaignFn func(ctx context.Context, campaignID string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error)
+	searchFn         func(ctx context.Context, campaignID, query string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error)
 	countByTypeFn    func(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error)
 	listRecentFn     func(ctx context.Context, campaignID string, role int, userID string, limit int) ([]Entity, error)
 	findChildrenFn   func(ctx context.Context, parentID string, role int, userID string) ([]Entity, error)
@@ -204,16 +208,16 @@ func (m *mockEntityRepo) SlugExists(ctx context.Context, campaignID, slug string
 	return false, nil
 }
 
-func (m *mockEntityRepo) ListByCampaign(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
+func (m *mockEntityRepo) ListByCampaign(ctx context.Context, campaignID string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	if m.listByCampaignFn != nil {
-		return m.listByCampaignFn(ctx, campaignID, typeID, role, userID, opts)
+		return m.listByCampaignFn(ctx, campaignID, typeIDs, role, userID, opts)
 	}
 	return nil, 0, nil
 }
 
-func (m *mockEntityRepo) Search(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
+func (m *mockEntityRepo) Search(ctx context.Context, campaignID, query string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	if m.searchFn != nil {
-		return m.searchFn(ctx, campaignID, query, typeID, role, userID, opts)
+		return m.searchFn(ctx, campaignID, query, typeIDs, role, userID, opts)
 	}
 	return nil, 0, nil
 }
@@ -761,7 +765,7 @@ func TestDelete_RepoError(t *testing.T) {
 func TestList_DefaultPagination(t *testing.T) {
 	called := false
 	entityRepo := &mockEntityRepo{
-		listByCampaignFn: func(_ context.Context, _ string, _ int, _ int, _ string, opts ListOptions) ([]Entity, int, error) {
+		listByCampaignFn: func(_ context.Context, _ string, _ []int, _ int, _ string, opts ListOptions) ([]Entity, int, error) {
 			called = true
 			if opts.PerPage != 24 {
 				t.Errorf("expected default per_page 24, got %d", opts.PerPage)
@@ -785,7 +789,7 @@ func TestList_DefaultPagination(t *testing.T) {
 
 func TestList_ClampsPerPage(t *testing.T) {
 	entityRepo := &mockEntityRepo{
-		listByCampaignFn: func(_ context.Context, _ string, _ int, _ int, _ string, opts ListOptions) ([]Entity, int, error) {
+		listByCampaignFn: func(_ context.Context, _ string, _ []int, _ int, _ string, opts ListOptions) ([]Entity, int, error) {
 			if opts.PerPage != 24 {
 				t.Errorf("expected clamped per_page 24, got %d", opts.PerPage)
 			}
@@ -813,7 +817,7 @@ func TestSearch_TrimsQuery(t *testing.T) {
 
 func TestSearch_ValidQuery(t *testing.T) {
 	entityRepo := &mockEntityRepo{
-		searchFn: func(_ context.Context, _ string, query string, _ int, _ int, _ string, _ ListOptions) ([]Entity, int, error) {
+		searchFn: func(_ context.Context, _ string, query string, _ []int, _ int, _ string, _ ListOptions) ([]Entity, int, error) {
 			if query != "gandalf" {
 				t.Errorf("expected trimmed query 'gandalf', got %q", query)
 			}

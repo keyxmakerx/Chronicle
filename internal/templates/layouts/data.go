@@ -388,6 +388,12 @@ func GetCustomLinks(ctx context.Context) []SidebarLink {
 
 // SidebarItemView is the template-ready representation of a sidebar item.
 // Populated by the LayoutInjector from the campaign's SidebarConfig.Items.
+//
+// Sub-category entity_types (ParentTypeID != nil) are filtered out at
+// build time in routes.go and never become SidebarItemViews — they are
+// template variants of their parent, not navigable collections. The
+// ParentTypeID field here is always nil in practice; it is retained as
+// defensive documentation of the invariant.
 type SidebarItemView struct {
 	Type         string // "dashboard", "addon", "category", "section", "link", "all_pages"
 	Slug         string // Addon slug (for addon items).
@@ -398,13 +404,7 @@ type SidebarItemView struct {
 	Icon         string // FontAwesome icon class.
 	Color        string // Category color.
 	Count        int    // Entity count (for categories).
-	ParentTypeID *int   // Parent entity type ID (for sub-type hierarchy).
-	// Nested is derived from ParentTypeID by the LayoutInjector — it is NOT
-	// configurable per-item. A category is nested iff its entity type has a
-	// parent_type_id. Kept on the view struct so GetNestedChildTypes and
-	// the sidebar templates can select against it without re-walking the
-	// parent map; do not reintroduce a persisted "nested" flag.
-	Nested bool
+	ParentTypeID *int   // Always nil for items in the sidebar; see type comment.
 }
 
 // SetSidebarItems stores the unified sidebar items in context.
@@ -419,48 +419,12 @@ func GetSidebarItems(ctx context.Context) []SidebarItemView {
 	return items
 }
 
-// GetNestedChildTypes returns sub-types that are marked as nested inside the
-// given parent type's drill panel. Used by SidebarDrillPanel to render child
-// sections within the parent's slide-over.
-func GetNestedChildTypes(ctx context.Context, parentTypeID int) []SidebarEntityType {
-	items := GetSidebarItems(ctx)
-	nestedIDs := make(map[int]bool)
-	for _, item := range items {
-		if item.Type == "category" && item.Nested {
-			nestedIDs[item.TypeID] = true
-		}
-	}
-	var children []SidebarEntityType
-	for _, t := range GetEntityTypes(ctx) {
-		if t.ParentTypeID != nil && *t.ParentTypeID == parentTypeID && nestedIDs[t.ID] {
-			children = append(children, t)
-		}
-	}
-	return children
-}
-
-// nestedTypeIDs returns a comma-separated string of nested child type IDs for
-// a parent type. Used by the drill panel search input to include nested types.
-func nestedTypeIDs(ctx context.Context, parentID int) string {
-	children := GetNestedChildTypes(ctx, parentID)
-	if len(children) == 0 {
-		return ""
-	}
-	ids := make([]string, len(children))
-	for i, c := range children {
-		ids[i] = strconv.Itoa(c.ID)
-	}
-	return strings.Join(ids, ",")
-}
-
-// drillSearchURL builds the search endpoint URL for a drill panel, including
-// nested sub-type IDs if any are configured.
-func drillSearchURL(ctx context.Context, campaignID string, typeID int) string {
-	base := fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, typeID)
-	if nested := nestedTypeIDs(ctx, typeID); nested != "" {
-		base += "&nested_types=" + nested
-	}
-	return base
+// drillSearchURL builds the search endpoint URL for a drill panel.
+// Sub-category entity_types are not surfaced in the sidebar, so the drill
+// panel searches only the parent's own type — child entities flow into the
+// parent's listing via aggregation in the entities service.
+func drillSearchURL(_ context.Context, campaignID string, typeID int) string {
+	return fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, typeID)
 }
 
 // getEntityTypeSlug looks up the slug for an entity type by ID from context.

@@ -729,6 +729,33 @@ func (s *entityService) BulkUpdateType(ctx context.Context, campaignID string, e
 
 // --- Listing and Search ---
 
+// expandTypeIDsForListing returns the set of entity_type IDs to include when
+// listing/searching entities under the given typeID. Under the sub-category-
+// as-template model, a parent's listing aggregates entities from itself and
+// all its child entity_types. Returns nil when typeID <= 0 (no filter).
+//
+// Errors from the child lookup are logged and swallowed — the caller falls
+// back to the single typeID, preserving historical behavior rather than
+// failing the whole list/search call.
+func (s *entityService) expandTypeIDsForListing(ctx context.Context, typeID int) []int {
+	if typeID <= 0 {
+		return nil
+	}
+	typeIDs := []int{typeID}
+	children, err := s.types.ListChildTypes(ctx, typeID)
+	if err != nil {
+		slog.Warn("listing child entity types for aggregation",
+			slog.Int("parent_type_id", typeID),
+			slog.Any("error", err),
+		)
+		return typeIDs
+	}
+	for _, c := range children {
+		typeIDs = append(typeIDs, c.ID)
+	}
+	return typeIDs
+}
+
 // List returns entities with pagination, optional type filter, and visibility enforcement.
 func (s *entityService) List(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	if opts.PerPage < 1 || opts.PerPage > 100 {
@@ -737,7 +764,7 @@ func (s *entityService) List(ctx context.Context, campaignID string, typeID int,
 	if opts.Page < 1 {
 		opts.Page = 1
 	}
-	return s.entities.ListByCampaign(ctx, campaignID, typeID, role, userID, opts)
+	return s.entities.ListByCampaign(ctx, campaignID, s.expandTypeIDsForListing(ctx, typeID), role, userID, opts)
 }
 
 // ListRecent returns the most recently updated entities for a campaign dashboard.
@@ -760,7 +787,7 @@ func (s *entityService) Search(ctx context.Context, campaignID, query string, ty
 	if opts.Page < 1 {
 		opts.Page = 1
 	}
-	return s.entities.Search(ctx, campaignID, q, typeID, role, userID, opts)
+	return s.entities.Search(ctx, campaignID, q, s.expandTypeIDsForListing(ctx, typeID), role, userID, opts)
 }
 
 // --- Entity Types ---
@@ -787,8 +814,40 @@ func (s *entityService) GetEntityTypeByID(ctx context.Context, id int) (*EntityT
 }
 
 // CountByType returns entity counts per entity type for sidebar badges.
+//
+// Under the sub-category-as-template model, a parent entity_type's count
+// includes entities stored under any of its child entity_types. This method
+// fetches the raw per-type counts, then walks the entity_type tree to roll
+// child counts into their parent. The parent still keeps its own direct
+// count in the map (entities directly typed as the parent), but the value
+// visible to the caller is the aggregate — which matches what the user
+// sees on the parent's listing page.
 func (s *entityService) CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error) {
-	return s.entities.CountByType(ctx, campaignID, role, userID)
+	counts, err := s.entities.CountByType(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Walk the entity type list once to find parent→child relationships and
+	// roll up. If the lookup fails, return raw counts rather than failing the
+	// badge render — unaggregated counts are better than no counts.
+	types, err := s.types.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		slog.Warn("listing entity types for count aggregation",
+			slog.String("campaign_id", campaignID),
+			slog.Any("error", err),
+		)
+		return counts, nil
+	}
+	for _, t := range types {
+		if t.ParentTypeID == nil {
+			continue
+		}
+		if cnt, ok := counts[t.ID]; ok {
+			counts[*t.ParentTypeID] += cnt
+		}
+	}
+	return counts, nil
 }
 
 // --- Entity Type CRUD ---
@@ -891,15 +950,20 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 	s.events.PublishEntityTypeEvent("created", campaignID, et)
 
 	// Auto-add the new entity type to the sidebar config so it appears
-	// immediately without requiring a manual sidebar edit.
-	if err := s.sidebarAdder.AddEntityTypeToSidebar(ctx, campaignID, et.ID); err != nil {
-		slog.Warn("failed to auto-add entity type to sidebar",
-			slog.Int("entity_type_id", et.ID),
-			slog.String("campaign_id", campaignID),
-			slog.Any("error", err),
-		)
-		// Non-fatal: entity type was created successfully, sidebar can be
-		// updated manually by the user.
+	// immediately without requiring a manual sidebar edit. Sub-category
+	// entity_types (ParentTypeID != nil) are template variants, not
+	// navigable collections, so they never get a sidebar entry — they
+	// surface through the +New picker on the parent instead.
+	if et.ParentTypeID == nil {
+		if err := s.sidebarAdder.AddEntityTypeToSidebar(ctx, campaignID, et.ID); err != nil {
+			slog.Warn("failed to auto-add entity type to sidebar",
+				slog.Int("entity_type_id", et.ID),
+				slog.String("campaign_id", campaignID),
+				slog.Any("error", err),
+			)
+			// Non-fatal: entity type was created successfully, sidebar can be
+			// updated manually by the user.
+		}
 	}
 
 	return et, nil
