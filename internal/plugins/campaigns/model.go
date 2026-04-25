@@ -151,6 +151,12 @@ type SidebarConfig struct {
 // SidebarItem represents a single item in the unified sidebar navigation.
 // All sidebar content (dashboard, addons, categories, sections, links) is
 // modeled as items so owners can freely reorder everything.
+//
+// Nesting is intentionally NOT a field here. Whether a category renders
+// nested under a parent is derived from entity_types.parent_type_id (the
+// structural source of truth). A persisted "nested" flag would be a second
+// source of truth that can drift; old persisted values for the removed
+// "nested" JSON key are silently ignored on unmarshal.
 type SidebarItem struct {
 	Type    string `json:"type"`              // "dashboard", "addon", "category", "section", "link", "all_pages"
 	Visible bool   `json:"visible"`           // Whether to show this item.
@@ -160,7 +166,6 @@ type SidebarItem struct {
 	Label   string `json:"label,omitempty"`   // Display label (for sections/links).
 	URL     string `json:"url,omitempty"`     // Link URL (for type=link).
 	Icon    string `json:"icon,omitempty"`    // FontAwesome icon (for type=link).
-	Nested  bool   `json:"nested,omitempty"`  // Sub-type: render inside parent's drill panel instead of standalone.
 }
 
 // HasUnifiedItems returns true if the sidebar uses the unified items model.
