@@ -965,14 +965,41 @@ templ SidebarDrillFragment(slug string) {
 	}
 }
 
-// activeDrillSlug returns the entity type slug that matches the current URL path,
-// or "" if no category is active. Used for server-side auto-drill on page load.
+// activeDrillSlug returns the entity type slug whose drill panel should be
+// auto-opened for the current request, or "" if none. The slug returned is
+// always a TOP-LEVEL category's slug — when the URL matches a sub-category
+// (template-variant) entity type, this resolves up to the parent so the
+// sidebar highlights the canonical Characters / Locations / etc. drill
+// panel rather than treating the variant as its own first-class category.
+//
+// Sub-categories are template variants per ADR (sub-cats-as-templates,
+// PR #241): they live in the entity_types table for layout/template
+// scoping but never appear as their own sidebar items. Without the
+// parent-walk here, navigating to a URL whose slug is a variant
+// (typically because the user navigated via a sub-cat-typed entity's
+// dynamic slug route) would orphan the drill — no matching top-level
+// item in the icon list.
 func activeDrillSlug(ctx context.Context) string {
-	for _, et := range GetEntityTypes(ctx) {
+	types := GetEntityTypes(ctx)
+	for _, et := range types {
 		prefix := fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), et.Slug)
-		if isPathPrefix(ctx, prefix) {
+		if !isPathPrefix(ctx, prefix) {
+			continue
+		}
+		if et.ParentTypeID == nil {
 			return et.Slug
 		}
+		// Sub-cat: walk up to its parent and return the parent's slug.
+		// Linear scan is fine — entity_types per campaign is small.
+		for _, parent := range types {
+			if parent.ID == *et.ParentTypeID {
+				return parent.Slug
+			}
+		}
+		// Parent not found in the type list (data inconsistency): fall back
+		// to the variant's own slug so the drill at least opens, rather
+		// than silently dropping the highlight.
+		return et.Slug
 	}
 	return ""
 }
