@@ -2115,11 +2115,17 @@ func (a *App) RegisterRoutes() {
 							})
 						case "category":
 							if et, ok := typeMap[item.TypeID]; ok {
+								// Nesting is derived from the entity-type hierarchy
+								// (parent_type_id), the structural source of truth — NOT
+								// from a per-item flag. Reading a separate flag here
+								// allowed it to drift out of sync with the schema and
+								// caused new sub-categories to render as top-level
+								// siblings instead of nested under their parent.
 								sidebarItems = append(sidebarItems, layouts.SidebarItemView{
 									Type: "category", TypeID: et.ID,
 									Label: et.NamePlural, Icon: et.Icon, Color: et.Color,
 									ParentTypeID: et.ParentTypeID,
-									Nested:       item.Nested,
+									Nested:       et.ParentTypeID != nil,
 								})
 							}
 						case "all_pages":
