@@ -127,7 +127,11 @@
       }
     });
 
+    // Only add TOP-LEVEL entity types. Sub-category entity_types
+    // (parent_type_id != null) are template variants of their parent, not
+    // navigable collections, and must never appear in the sidebar config.
     types.forEach(function (et) {
+      if (et.parent_type_id) return;
       if (!categoryIds[et.id]) {
         existingItems.push({ type: 'category', type_id: et.id, visible: true });
       }
@@ -142,19 +146,11 @@
     KNOWN_ADDONS.forEach(function (a) {
       defaults.push({ type: 'addon', slug: a.slug, label: a.label, icon: a.icon, visible: true });
     });
-    // Add parent types first, then their children right after each parent.
+    // Only top-level types; sub-categories are template variants.
     var parents = types.filter(function (t) { return !t.parent_type_id; });
     parents.forEach(function (parent) {
       defaults.push({ type: 'category', type_id: parent.id, visible: true });
-      var children = types.filter(function (t) { return t.parent_type_id === parent.id; });
-      children.forEach(function (child) {
-        defaults.push({ type: 'category', type_id: child.id, visible: true });
-      });
     });
-    // Add any orphan sub-types whose parent isn't in the list.
-    var addedIds = {};
-    defaults.forEach(function (d) { if (d.type_id) addedIds[d.type_id] = true; });
-    types.forEach(function (t) { if (!addedIds[t.id]) defaults.push({ type: 'category', type_id: t.id, visible: true }); });
     defaults.push({ type: 'all_pages', visible: true });
     return defaults;
   }
@@ -231,7 +227,16 @@
       .then(function (data) {
         config = data || {};
         if (config.items && config.items.length > 0) {
-          items = injectMissing(config.items, entityTypes);
+          // Strip any persisted sub-category items from older configs — they
+          // are now template variants and must not appear in the editor.
+          var filtered = config.items.filter(function (item) {
+            if (item.type !== 'category') return true;
+            for (var i = 0; i < entityTypes.length; i++) {
+              if (entityTypes[i].id === item.type_id) return !entityTypes[i].parent_type_id;
+            }
+            return true;
+          });
+          items = injectMissing(filtered, entityTypes);
         } else {
           items = generateDefaults(entityTypes);
         }

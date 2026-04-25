@@ -356,6 +356,11 @@ func (h *Handler) Index(c echo.Context) error {
 }
 
 // NewForm renders the entity creation form (GET /campaigns/:id/entities/new).
+//
+// When the ?type= preselect is a top-level entity_type that has sub-category
+// children, those children are passed through as layout variants so the form
+// can render a variant picker scoped to that category. Sub-category entity_types
+// are not navigable collections — they carry the layout differentiation.
 func (h *Handler) NewForm(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -366,6 +371,10 @@ func (h *Handler) NewForm(c echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
 	preselect, _ := strconv.Atoi(c.QueryParam("type"))
 
+	// Collect sub-category variants for the preselected parent, if any.
+	// These drive the "Create as: Default | Test | Monster" picker on the form.
+	variants := collectVariants(entityTypes, preselect)
+
 	// Pre-fill parent if ?parent_id= is set (from "Create sub-page" button).
 	var parentEntity *Entity
 	if parentID := c.QueryParam("parent_id"); parentID != "" {
@@ -375,7 +384,39 @@ func (h *Handler) NewForm(c echo.Context) error {
 		}
 	}
 
-	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, parentEntity, csrfToken, ""))
+	return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, preselect, variants, parentEntity, csrfToken, ""))
+}
+
+// collectVariants returns the parent entity_type plus all its child entity_types,
+// flattened in a stable order (parent first, then children by sort_order / name
+// which is already ListByCampaign's ORDER BY). Returns nil if preselect is zero,
+// unknown, or a type that has no children — the caller treats this as "no
+// variant picker, use the normal category dropdown."
+func collectVariants(entityTypes []EntityType, preselect int) []EntityType {
+	if preselect <= 0 {
+		return nil
+	}
+	var parent *EntityType
+	for i := range entityTypes {
+		if entityTypes[i].ID == preselect {
+			parent = &entityTypes[i]
+			break
+		}
+	}
+	if parent == nil || parent.ParentTypeID != nil {
+		return nil
+	}
+	variants := []EntityType{*parent}
+	for i := range entityTypes {
+		et := entityTypes[i]
+		if et.ParentTypeID != nil && *et.ParentTypeID == parent.ID && et.Enabled {
+			variants = append(variants, et)
+		}
+	}
+	if len(variants) == 1 {
+		return nil // No children — caller falls back to the normal dropdown.
+	}
+	return variants
 }
 
 // Create processes the entity creation form (POST /campaigns/:id/entities).
@@ -425,7 +466,10 @@ func (h *Handler) Create(c echo.Context) error {
 		entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := apperror.UserMessage(err, "failed to create entity")
-		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, nil, csrfToken, errMsg))
+		// Preserve the same variant-aware picker across error re-render so a
+		// failed submission doesn't drop the user back to the flat dropdown.
+		variants := collectVariants(entityTypes, req.EntityTypeID)
+		return middleware.Render(c, http.StatusOK, EntityNewPage(cc, entityTypes, req.EntityTypeID, variants, nil, csrfToken, errMsg))
 	}
 
 	// Apply content template if one was selected.
@@ -673,16 +717,6 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	query := c.QueryParam("q")
 	typeID, _ := strconv.Atoi(c.QueryParam("type"))
 
-	// Parse nested sub-type IDs for cross-type drill panel search.
-	var nestedTypeIDs []int
-	if nested := c.QueryParam("nested_types"); nested != "" {
-		for _, s := range strings.Split(nested, ",") {
-			if id, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
-				nestedTypeIDs = append(nestedTypeIDs, id)
-			}
-		}
-	}
-
 	opts := DefaultListOptions()
 	opts.PerPage = 20
 
@@ -713,17 +747,10 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 	var err error
 
 	if q := strings.TrimSpace(query); len(q) >= 2 {
+		// When typeID references a parent, service.Search rolls up child
+		// entity_types automatically (sub-category-as-template model), so no
+		// per-type merge is needed here.
 		results, total, err = h.service.Search(c.Request().Context(), cc.Campaign.ID, query, typeID, role, userID, opts)
-		// Also search nested sub-types and merge results for drill panel search.
-		if err == nil && len(nestedTypeIDs) > 0 {
-			for _, ntid := range nestedTypeIDs {
-				nr, nt, nerr := h.service.Search(c.Request().Context(), cc.Campaign.ID, query, ntid, role, userID, opts)
-				if nerr == nil {
-					results = append(results, nr...)
-					total += nt
-				}
-			}
-		}
 	} else if q == "" {
 		results, total, err = h.service.List(c.Request().Context(), cc.Campaign.ID, typeID, role, userID, opts)
 	} else {

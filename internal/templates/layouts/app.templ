@@ -288,25 +288,22 @@ templ Sidebar() {
 							@sidebarCreateCategory(ctx)
 						}
 						if len(GetSidebarItems(ctx)) > 0 {
-							<!-- Unified: render all categories flat in config order (skip nested) -->
+							<!-- Unified: render top-level categories in config order. Sub-category
+							     entity_types (ParentTypeID != nil) are template variants of their
+							     parent and are filtered out upstream in the LayoutInjector, so the
+							     ParentTypeID == nil check here is defensive. -->
 							for _, item := range GetSidebarItems(ctx) {
-								if item.Type == "category" && !item.Nested && item.ParentTypeID == nil {
+								if item.Type == "category" && item.ParentTypeID == nil {
 									@entityTypeLink(getEntityTypeSlug(ctx, item.TypeID), item.Label, item.Color, item.Icon, GetEntityCount(ctx, item.TypeID), item.TypeID)
-								}
-								if item.Type == "category" && !item.Nested && item.ParentTypeID != nil {
-									@entityTypeChildLink(getEntityTypeSlug(ctx, item.TypeID), item.Label, item.Color, item.Icon, GetEntityCount(ctx, item.TypeID), item.TypeID)
 								}
 							}
 						} else {
-							<!-- Legacy: render entity types with sub-types -->
+							<!-- Legacy: render top-level entity types only. Sub-category variants
+							     surface through the +New picker on the parent, not as their own
+							     nav items. -->
 							for _, et := range GetEntityTypes(ctx) {
 								if et.ParentTypeID == nil {
 									@entityTypeLink(et.Slug, et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID), et.ID)
-									for _, child := range GetEntityTypes(ctx) {
-										if child.ParentTypeID != nil && *child.ParentTypeID == et.ID {
-											@entityTypeChildLink(child.Slug, child.NamePlural, child.Color, child.Icon, GetEntityCount(ctx, child.ID), child.ID)
-										}
-									}
 								}
 							}
 							<a
@@ -842,33 +839,6 @@ templ sidebarCreateCategory(ctx context.Context) {
 	</div>
 }
 
-// entityTypeChildLink renders a sub-type link indented under its parent category.
-templ entityTypeChildLink(slug string, label string, color string, icon string, count int, typeID int) {
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug)) }
-		hx-boost="false"
-		data-drill-url={ fmt.Sprintf("/campaigns/%s/sidebar/drill/%s", GetCampaignID(ctx), slug) }
-		class={ "sidebar-category-link ml-4", sidebarNavLink,
-			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))),
-			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))) }
-		data-cat-slug={ slug }
-		data-cat-url={ fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug) }
-		data-entity-type-id={ strconv.Itoa(typeID) }
-		data-tooltip={ label }
-	>
-		<span class="w-3 h-3 mr-2 shrink-0 flex items-center justify-center">
-			if icon != "" {
-				<i class={ "fa-solid " + icon, "text-[10px]" } style={ fmt.Sprintf("color: %s", color) }></i>
-			} else {
-				<span class="w-1.5 h-1.5 rounded-full" style={ fmt.Sprintf("background-color: %s", color) }></span>
-			}
-		</span>
-		<span class="flex-1 text-[11px]">{ label }</span>
-		if count > 0 {
-			<span class="ml-auto text-[10px] text-gray-500">{ strconv.Itoa(count) }</span>
-		}
-	</a>
-}
 
 templ entityTypeLink(slug string, label string, color string, icon string, count int, typeID int) {
 	<a
@@ -970,45 +940,6 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 				</div>
 			</div>
 		</div>
-		<!-- Nested sub-type sections -->
-		for _, child := range GetNestedChildTypes(ctx, et.ID) {
-			<div class="px-4 mt-3 mb-1 flex items-center gap-2">
-				<span
-					class="w-4 h-4 rounded flex items-center justify-center shrink-0"
-					style={ fmt.Sprintf("color: %s", child.Color) }
-				>
-					<i class={ "fa-solid " + child.Icon, "text-[9px]" }></i>
-				</span>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", campaignID, child.Slug)) }
-					class="text-[11px] font-semibold text-gray-400 hover:text-white truncate"
-				>
-					{ child.NamePlural }
-				</a>
-				<span class="text-[9px] text-gray-600">
-					{ strconv.Itoa(GetEntityCount(ctx, child.ID)) }
-				</span>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", campaignID, child.ID)) }
-					class="ml-auto w-4 h-4 flex items-center justify-center rounded text-gray-600 hover:text-white transition-colors"
-					hx-boost="false"
-					title={ fmt.Sprintf("New %s", child.Name) }
-				>
-					<i class="fa-solid fa-plus text-[8px]"></i>
-				</a>
-			</div>
-			<div
-				hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, child.ID) }
-				hx-trigger="load"
-				hx-target="this"
-				hx-swap="innerHTML"
-			>
-				<div class="px-4 py-1 space-y-1">
-					<div class="skeleton-shimmer h-2.5 w-2/3"></div>
-					<div class="skeleton-shimmer h-2.5 w-1/2"></div>
-				</div>
-			</div>
-		}
 		<!-- Favorites -->
 		<div id="sidebar-cat-favorites-header" class="px-4 mt-3 mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600" style="display:none">
 			<i class="fa-solid fa-star text-amber-400/70 mr-0.5"></i> Favorites

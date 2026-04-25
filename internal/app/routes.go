@@ -2080,6 +2080,12 @@ func (a *App) RegisterRoutes() {
 						}
 					}
 					for _, et := range sidebarTypes {
+						// Skip sub-category entity_types: they are template
+						// variants of their parent, not navigable collections,
+						// so they never get a sidebar entry.
+						if et.ParentTypeID != nil {
+							continue
+						}
 						if !presentIDs[et.ID] {
 							newItem := campaigns.SidebarItem{
 								Type:    "category",
@@ -2115,17 +2121,19 @@ func (a *App) RegisterRoutes() {
 							})
 						case "category":
 							if et, ok := typeMap[item.TypeID]; ok {
-								// Nesting is derived from the entity-type hierarchy
-								// (parent_type_id), the structural source of truth — NOT
-								// from a per-item flag. Reading a separate flag here
-								// allowed it to drift out of sync with the schema and
-								// caused new sub-categories to render as top-level
-								// siblings instead of nested under their parent.
+								// Sub-category entity_types (ParentTypeID != nil) are
+								// template variants of their parent, not navigable
+								// collections. They must not appear in the sidebar —
+								// they surface through the +New picker on the parent
+								// instead. Skip them at build time; any persisted
+								// sub-category SidebarItem rows are silently ignored.
+								if et.ParentTypeID != nil {
+									continue
+								}
 								sidebarItems = append(sidebarItems, layouts.SidebarItemView{
 									Type: "category", TypeID: et.ID,
 									Label: et.NamePlural, Icon: et.Icon, Color: et.Color,
 									ParentTypeID: et.ParentTypeID,
-									Nested:       et.ParentTypeID != nil,
 								})
 							}
 						case "all_pages":
@@ -2177,14 +2185,8 @@ func (a *App) RegisterRoutes() {
 				layoutUserID = session.UserID
 			}
 			if counts, err := entityService.CountByType(reqCtx, cc.Campaign.ID, effectiveRole, layoutUserID); err == nil {
-				// Aggregate nested sub-type entity counts into parent badges.
-				for _, item := range layouts.GetSidebarItems(ctx) {
-					if item.Nested && item.ParentTypeID != nil {
-						if cnt, ok := counts[item.TypeID]; ok {
-							counts[*item.ParentTypeID] += cnt
-						}
-					}
-				}
+				// CountByType already rolls child entity_type counts up into
+				// their parent under the sub-category-as-template model.
 				ctx = layouts.SetEntityCounts(ctx, counts)
 			}
 

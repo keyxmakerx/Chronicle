@@ -210,13 +210,17 @@
         '<i class="fa-solid ' + Chronicle.escapeAttr(et.icon || 'fa-file') + '"></i></span>' +
         '<span class="truncate">' + Chronicle.escapeHtml(et.name_plural || et.name) + '</span>';
 
-      // Category actions (edit/add sub-type/delete).
+      // Category actions (edit / add layout variant / delete). A "layout
+      // variant" is a child entity_type that shares the parent's listing but
+      // carries its own layout and content template — e.g. "Monster" as a
+      // variant of "Characters". Variants do not appear in the sidebar;
+      // they surface through the +New picker on the parent.
       var actions = document.createElement('div');
       actions.className = 'flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0';
       var addSubBtn = document.createElement('button');
       addSubBtn.className = 'w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-accent hover:bg-accent/10';
       addSubBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
-      addSubBtn.title = 'Add sub-type';
+      addSubBtn.title = 'Add layout variant';
       addSubBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         self.showCreateCategory(et.id);
@@ -268,7 +272,7 @@
       subItems.appendChild(pageBtn);
       subItems.appendChild(dashBtn);
 
-      // Render child types (sub-types) under this parent.
+      // Render layout variants (child entity_types) under this parent.
       children.forEach(function (child) {
         var childRow = document.createElement('div');
         childRow.className = 'flex items-center gap-1 group/child mt-0.5';
@@ -524,9 +528,9 @@
       // Check if form already exists.
       if (this.catListEl.querySelector('.ls-cat-form')) return;
 
-      var isSubType = !!parentTypeId;
+      var isVariant = !!parentTypeId;
       var parentName = '';
-      if (isSubType) {
+      if (isVariant) {
         var parent = this.entityTypes.find(function (et) { return et.id == parentTypeId; });
         parentName = parent ? parent.name : '';
       }
@@ -534,9 +538,9 @@
       var form = document.createElement('div');
       form.className = 'ls-cat-form mx-1 my-1 p-2 rounded-md border border-accent/30 bg-accent/5 space-y-2';
       form.innerHTML =
-        (isSubType ? '<div class="text-[10px] text-accent font-medium mb-1"><i class="fa-solid fa-turn-down-right mr-1"></i>New sub-type of ' + Chronicle.escapeHtml(parentName) + '</div>' : '') +
-        '<input type="text" class="input text-xs w-full" placeholder="' + (isSubType ? 'Sub-type name (e.g. NPC)' : 'Category name (singular)') + '" id="ls-cat-name"/>' +
-        (isSubType ? '' : '<input type="text" class="input text-xs w-full" placeholder="Plural name" id="ls-cat-plural"/>') +
+        (isVariant ? '<div class="text-[10px] text-accent font-medium mb-1"><i class="fa-solid fa-turn-down-right mr-1"></i>New layout variant of ' + Chronicle.escapeHtml(parentName) + '</div>' : '') +
+        '<input type="text" class="input text-xs w-full" placeholder="' + (isVariant ? 'Variant name (e.g. Monster)' : 'Category name (singular)') + '" id="ls-cat-name"/>' +
+        (isVariant ? '' : '<input type="text" class="input text-xs w-full" placeholder="Plural name" id="ls-cat-plural"/>') +
         '<div class="flex gap-2">' +
         '  <input type="text" class="input text-xs flex-1" placeholder="Icon (e.g. fa-user)" id="ls-cat-icon" value="fa-file"/>' +
         '  <input type="color" class="w-8 h-8 rounded border border-edge cursor-pointer shrink-0" id="ls-cat-color" value="#6366f1"/>' +
@@ -587,11 +591,11 @@
           });
           form.remove();
           self.renderCategoryList();
-          Chronicle.notify(isSubType ? 'Sub-type created' : 'Category created', 'success');
+          Chronicle.notify(isVariant ? 'Layout variant created' : 'Category created', 'success');
         }).catch(function () {
           saveBtn.disabled = false;
           saveBtn.textContent = 'Create';
-          Chronicle.notify('Failed to create ' + (isSubType ? 'sub-type' : 'category'), 'error');
+          Chronicle.notify('Failed to create ' + (isVariant ? 'layout variant' : 'category'), 'error');
         });
       });
 

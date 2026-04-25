@@ -21,6 +21,7 @@ type EntityTypeRepository interface {
 	FindByID(ctx context.Context, id int) (*EntityType, error)
 	FindBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]EntityType, error)
+	ListChildTypes(ctx context.Context, parentID int) ([]EntityType, error)
 	ListByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error)
 	Update(ctx context.Context, et *EntityType) error
 	Delete(ctx context.Context, id int) error
@@ -170,6 +171,48 @@ func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID st
 		}
 		if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
 			return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
+		}
+		et.Layout = ParseLayoutJSON(layoutRaw)
+		if len(pinnedRaw) > 0 {
+			if err := json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs); err != nil {
+				return nil, fmt.Errorf("unmarshaling pinned entity IDs: %w", err)
+			}
+		}
+		types = append(types, et)
+	}
+	return types, rows.Err()
+}
+
+// ListChildTypes returns all entity types that reference the given parent via
+// parent_type_id. Sub-category entity_types are template variants of their
+// parent; this lookup drives both the parent's aggregated entity listing and
+// the +New picker that offers them as layout variants.
+func (r *entityTypeRepository) ListChildTypes(ctx context.Context, parentID int) ([]EntityType, error) {
+	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
+	                 preset_category, parent_type_id, description, pinned_entity_ids, dashboard_layout,
+	                 fields, layout_json, sort_order, is_default, enabled
+	          FROM entity_types WHERE parent_type_id = ? ORDER BY sort_order, name`
+
+	rows, err := r.db.QueryContext(ctx, query, parentID)
+	if err != nil {
+		return nil, fmt.Errorf("listing child entity types: %w", err)
+	}
+	defer rows.Close()
+
+	var types []EntityType
+	for rows.Next() {
+		var et EntityType
+		var fieldsRaw, layoutRaw, pinnedRaw []byte
+		if err := rows.Scan(
+			&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
+			&et.Icon, &et.Color, &et.PresetCategory, &et.ParentTypeID, &et.Description, &pinnedRaw, &et.DashboardLayout,
+			&fieldsRaw, &layoutRaw, &et.SortOrder,
+			&et.IsDefault, &et.Enabled,
+		); err != nil {
+			return nil, fmt.Errorf("scanning child entity type row: %w", err)
+		}
+		if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
+			return nil, fmt.Errorf("unmarshaling child fields: %w", err)
 		}
 		et.Layout = ParseLayoutJSON(layoutRaw)
 		if len(pinnedRaw) > 0 {
@@ -517,12 +560,15 @@ type EntityRepository interface {
 	Delete(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
 
-	// ListByCampaign returns entities filtered by campaign, optional type, and visibility.
-	// Uses visibilityFilter to handle both legacy is_private and custom permissions.
-	ListByCampaign(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
+	// ListByCampaign returns entities filtered by campaign, optional types, and visibility.
+	// typeIDs is matched via IN clause; nil or empty means no type filter. This supports
+	// the sub-category-as-template model where a parent entity_type's listing aggregates
+	// entities across itself and all its child entity_types.
+	ListByCampaign(ctx context.Context, campaignID string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error)
 
 	// Search performs a FULLTEXT search on entity names with visibility filtering.
-	Search(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error)
+	// typeIDs semantics match ListByCampaign.
+	Search(ctx context.Context, campaignID, query string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error)
 
 	// CountByType returns entity counts per type for the sidebar badges.
 	CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error)
@@ -950,15 +996,36 @@ func visibilityFilter(role int, userID string) (string, []any) {
 	return filter, []any{role, role, userID, userID}
 }
 
+// entityTypeInClause builds " AND e.entity_type_id [= ? | IN (?, ...)]" plus
+// the corresponding args, or returns empty strings when the filter is disabled
+// (nil/empty input). Single-ID callers get "=" so existing query plans stay
+// stable; multi-ID callers get IN (...) for the sub-category aggregation path.
+func entityTypeInClause(typeIDs []int) (string, []any) {
+	if len(typeIDs) == 0 {
+		return "", nil
+	}
+	if len(typeIDs) == 1 {
+		return " AND e.entity_type_id = ?", []any{typeIDs[0]}
+	}
+	placeholders := strings.Repeat("?,", len(typeIDs))
+	placeholders = placeholders[:len(placeholders)-1] // strip trailing comma
+	args := make([]any, len(typeIDs))
+	for i, id := range typeIDs {
+		args[i] = id
+	}
+	return " AND e.entity_type_id IN (" + placeholders + ")", args
+}
+
 // ListByCampaign returns entities with pagination and optional type filtering.
 // Visibility filtering considers both legacy is_private and custom permissions.
-func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
+// typeIDs is an OR'd set (IN clause); nil or empty disables the type filter.
+func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	where := "WHERE e.campaign_id = ?"
 	args := []any{campaignID}
 
-	if typeID > 0 {
-		where += " AND e.entity_type_id = ?"
-		args = append(args, typeID)
+	if clause, typeArgs := entityTypeInClause(typeIDs); clause != "" {
+		where += clause
+		args = append(args, typeArgs...)
 	}
 
 	// Tag filtering: entity must have ALL specified tags (AND logic).
@@ -1008,7 +1075,8 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 // Search performs a text search on entities with visibility filtering.
 // Matches against name (FULLTEXT), aliases (LIKE), entry/field content
 // (FULLTEXT on search_text), and type label (LIKE).
-func (r *entityRepository) Search(ctx context.Context, campaignID, query string, typeID int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
+// typeIDs semantics match ListByCampaign — IN clause, nil/empty disables.
+func (r *entityRepository) Search(ctx context.Context, campaignID, query string, typeIDs []int, role int, userID string, opts ListOptions) ([]Entity, int, error) {
 	where := "WHERE e.campaign_id = ?"
 	args := []any{campaignID}
 
@@ -1037,9 +1105,9 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 	) OR %s OR e.type_label LIKE ?)`, nameCondition, contentCondition)
 	args = append(args, nameArg, "%"+aliasEscaped+"%", contentArg, labelEscaped)
 
-	if typeID > 0 {
-		where += " AND e.entity_type_id = ?"
-		args = append(args, typeID)
+	if clause, typeArgs := entityTypeInClause(typeIDs); clause != "" {
+		where += clause
+		args = append(args, typeArgs...)
 	}
 
 	// Tag filtering: entity must have ALL specified tags (AND logic).
