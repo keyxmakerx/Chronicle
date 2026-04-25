@@ -399,7 +399,12 @@ type SidebarItemView struct {
 	Color        string // Category color.
 	Count        int    // Entity count (for categories).
 	ParentTypeID *int   // Parent entity type ID (for sub-type hierarchy).
-	Nested       bool   // Sub-type: render inside parent's drill panel instead of standalone.
+	// Nested is derived from ParentTypeID by the LayoutInjector — it is NOT
+	// configurable per-item. A category is nested iff its entity type has a
+	// parent_type_id. Kept on the view struct so GetNestedChildTypes and
+	// the sidebar templates can select against it without re-walking the
+	// parent map; do not reintroduce a persisted "nested" flag.
+	Nested bool
 }
 
 // SetSidebarItems stores the unified sidebar items in context.
