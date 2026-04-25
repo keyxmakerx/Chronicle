@@ -1342,9 +1342,6 @@ func (a *App) RegisterRoutes() {
 		ownerGroup := e.Group("", auth.RequireAuth(authService))
 		packages.RegisterOwnerRoutes(ownerGroup, pkgOwnerHandler)
 
-		// Seed official Chronicle repos if no packages exist yet.
-		pkgService.SeedOfficialPackages(context.Background())
-
 		// Load systems from package manager install paths so externally
 		// managed system packs override the bundled fallbacks.
 		a.loadSystemsFromPackages(pkgService)
