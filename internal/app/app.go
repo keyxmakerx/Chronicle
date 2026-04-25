@@ -257,7 +257,7 @@ func defaultErrorMessage(code int) string {
 	case http.StatusBadRequest:
 		return "The request was invalid or cannot be processed."
 	case http.StatusUnauthorized:
-		return "You need to log in to access this page."
+		return "Your session has ended. Please reload the page and sign in again."
 	case http.StatusForbidden:
 		return "You don't have permission to access this resource."
 	case http.StatusNotFound:

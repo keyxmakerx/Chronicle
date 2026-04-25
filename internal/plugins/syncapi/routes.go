@@ -54,10 +54,19 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 }
 
 // RegisterAPIRoutes adds the public REST API endpoints under /api/v1/.
-// All routes require API key authentication. Permission middleware enforces
-// read/write/sync access levels. Campaign match middleware ensures keys can
-// only access their scoped campaign.
-func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, tagAPI *TagAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService, addonChecker AddonChecker, opts ...func(*APIHandler)) {
+// Routes accept EITHER a session cookie (for in-app browser widgets — same
+// origin as the UI) OR an Authorization: Bearer API key (external clients
+// like Foundry VTT). The RequireAuthOrAPIKey middleware is the single
+// identity resolver for both auth shapes: it synthesises an APIKey from a
+// valid session so downstream middleware (RequireCampaignMatch,
+// RequirePermission) works uniformly without duplicated logic. See the
+// doc comment on RequireAuthOrAPIKey for the full flow and CSRF analysis.
+//
+// Permission middleware enforces read/write/sync access levels. Campaign
+// match middleware ensures Bearer keys can only access their scoped
+// campaign (session users are naturally scoped to campaigns they belong
+// to by the membership lookup in RequireAuthOrAPIKey).
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, tagAPI *TagAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService, addonChecker AddonChecker, authSvc auth.AuthService, campaignSvc campaigns.CampaignService, opts ...func(*APIHandler)) {
 	// Inject addon checker into API handler for system-aware endpoints.
 	api.SetAddonChecker(addonChecker)
 
@@ -66,9 +75,10 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		opt(api)
 	}
 
-	// API v1 group with key auth and rate limiting.
+	// API v1 group with session-or-bearer auth and rate limiting. Rate
+	// limiting is a no-op for session callers (see RateLimit comment).
 	v1 := e.Group("/api/v1",
-		RequireAPIKey(syncSvc),
+		RequireAuthOrAPIKey(authSvc, campaignSvc, syncSvc),
 		RateLimit(syncSvc),
 	)
 

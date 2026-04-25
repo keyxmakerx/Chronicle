@@ -306,15 +306,15 @@ func (h *Handler) ChangePasswordAPI(c echo.Context) error {
 		ConfirmPassword string `json:"confirmPassword"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if req.NewPassword != req.ConfirmPassword {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "passwords do not match"})
+		return apperror.NewBadRequest("new password and confirmation do not match")
 	}
 
 	if err := h.service.ChangePassword(c.Request().Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
-		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.UserMessage(err, "failed to change password")})
+		return err
 	}
 
 	h.logSecurityEvent(c.Request().Context(), "password.changed", userID, "", c.RealIP(), c.Request().UserAgent(), nil)
@@ -333,11 +333,11 @@ func (h *Handler) UpdateDisplayNameAPI(c echo.Context) error {
 		DisplayName string `json:"displayName"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.service.UpdateDisplayName(c.Request().Context(), userID, req.DisplayName); err != nil {
-		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.UserMessage(err, "failed to update display name")})
+		return err
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -353,12 +353,12 @@ func (h *Handler) UploadAvatarAPI(c echo.Context) error {
 
 	file, err := c.FormFile("avatar")
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no file provided"})
+		return apperror.NewBadRequest("no avatar file provided")
 	}
 
 	// Validate file size (max 2MB).
 	if file.Size > 2*1024*1024 {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "avatar must be under 2MB"})
+		return apperror.NewBadRequest("avatar must be under 2MB")
 	}
 
 	// Read file bytes for content-based MIME detection.
@@ -383,7 +383,7 @@ func (h *Handler) UploadAvatarAPI(c echo.Context) error {
 	}
 	ext, ok := allowedAvatarTypes[contentType]
 	if !ok {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "file must be a JPEG, PNG, GIF, or WebP image"})
+		return apperror.NewBadRequest("avatar must be a JPEG, PNG, GIF, or WebP image")
 	}
 
 	// Use file extension from filename if it matches the detected type.
@@ -418,7 +418,7 @@ func (h *Handler) UploadAvatarAPI(c echo.Context) error {
 	// Update user's avatar path.
 	webPath := "/uploads/avatars/" + filename
 	if err := h.service.UpdateAvatarPath(c.Request().Context(), userID, &webPath); err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update avatar"})
+		return apperror.NewInternal(fmt.Errorf("updating avatar path: %w", err))
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "avatar_path": webPath})
@@ -437,11 +437,11 @@ func (h *Handler) RequestEmailChangeAPI(c echo.Context) error {
 		CurrentPassword string `json:"currentPassword"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.service.RequestEmailChange(c.Request().Context(), userID, req.NewEmail, req.CurrentPassword); err != nil {
-		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.UserMessage(err, "failed to initiate email change")})
+		return err
 	}
 
 	h.logSecurityEvent(c.Request().Context(), "email.change_requested", userID, "", c.RealIP(), c.Request().UserAgent(), map[string]any{"new_email": req.NewEmail})
@@ -501,18 +501,18 @@ func (h *Handler) AccountPage(c echo.Context) error {
 func (h *Handler) UpdateTimezoneAPI(c echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+		return apperror.NewUnauthorized("not authenticated")
 	}
 
 	var req struct {
 		Timezone string `json:"timezone"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.service.UpdateTimezone(c.Request().Context(), userID, req.Timezone); err != nil {
-		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.UserMessage(err, "failed to update timezone")})
+		return err
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -628,22 +628,16 @@ func validateRegisterRequest(req *RegisterRequest) string {
 func (h *Handler) ReauthConfirm(c echo.Context) error {
 	session := GetSession(c)
 	if session == nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": "authentication required",
-		})
+		return apperror.NewUnauthorized("authentication required")
 	}
 
 	password := c.FormValue("password")
 	if password == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "password is required",
-		})
+		return apperror.NewBadRequest("password is required")
 	}
 
 	if err := h.service.ConfirmReauth(c.Request().Context(), session.UserID, password); err != nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": "incorrect password",
-		})
+		return apperror.NewUnauthorized("incorrect password")
 	}
 
 	// Log the reauth event for the security dashboard.
