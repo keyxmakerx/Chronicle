@@ -267,6 +267,15 @@ type CampaignRoleChecker interface {
 	HasMinRole(ctx context.Context, campaignID, userID string, minRole int) (bool, error)
 }
 
+// CampaignSystemFetcher returns the game system slug a campaign has selected
+// in its settings (e.g. "dnd5e", "drawsteel"). Returns an empty string if
+// the campaign has no system selected. Used by Publish to tag a publication
+// with the source campaign's system rather than guessing a default.
+// Implemented via an adapter wrapping the campaigns service in routes.go.
+type CampaignSystemFetcher interface {
+	GetCampaignSystemID(ctx context.Context, campaignID string) (string, error)
+}
+
 // ImportResult is the response returned after importing a publication into a campaign.
 type ImportResult struct {
 	EntityID      string `json:"entity_id"`

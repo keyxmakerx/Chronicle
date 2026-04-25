@@ -101,9 +101,6 @@ type PackageService interface {
 	// SaveSecuritySettings persists updated security settings.
 	SaveSecuritySettings(ctx context.Context, s *PackageSecuritySettings) error
 
-	// SeedOfficialPackages creates the official Chronicle repos if none exist.
-	SeedOfficialPackages(ctx context.Context)
-
 	// ReconcileOrphanedInstalls detects package directories on disk that have
 	// no corresponding DB record (e.g. after a database wipe).
 	ReconcileOrphanedInstalls(ctx context.Context) ([]OrphanedInstall, error)
@@ -231,13 +228,17 @@ func (s *packageService) AddPackage(ctx context.Context, input AddPackageInput) 
 
 	now := time.Now()
 	pkg := &Package{
-		ID:            generateUUID(),
-		Type:          pkgType,
-		Slug:          slug,
-		Name:          name,
-		RepoURL:       repoURL,
-		Description:   fmt.Sprintf("Package from %s/%s", owner, repo),
-		AutoUpdate:    UpdateNightly,
+		ID:          generateUUID(),
+		Type:        pkgType,
+		Slug:        slug,
+		Name:        name,
+		RepoURL:     repoURL,
+		Description: fmt.Sprintf("Package from %s/%s", owner, repo),
+		// Auto-update is opt-in. The admin can switch this to nightly /
+		// weekly / on-release in the package settings UI after install.
+		// Defaulting to off prevents the server from making unattended
+		// outbound fetches on a schedule.
+		AutoUpdate:    UpdateOff,
 		Status:        StatusApproved, // Admin-created = auto-approved.
 		LastCheckedAt: &now,
 	}
@@ -724,8 +725,14 @@ func (s *packageService) InstalledPackagePath(pkgType PackageType, slug string) 
 
 // --- Submission/Approval Workflow ---
 
-// SubmitPackage lets a campaign owner submit a repo URL for review.
-// If admin approval is not required, the package is auto-approved and fetched.
+// SubmitPackage lets a campaign owner submit a repo URL for admin review.
+// The submission always lands in the admin review queue as StatusPending,
+// regardless of any settings. Install only happens after an admin explicitly
+// approves the package via ReviewPackage. This prevents any non-admin user
+// from triggering an outbound network fetch through this route.
+//
+// Submissions are also gated by OwnerUploadPolicy: when set to "disabled",
+// this method refuses the submission outright before any DB write.
 func (s *packageService) SubmitPackage(ctx context.Context, userID string, input SubmitPackageInput) (*Package, error) {
 	repoURL := strings.TrimSpace(input.RepoURL)
 	if repoURL == "" {
@@ -736,6 +743,13 @@ func (s *packageService) SubmitPackage(ctx context.Context, userID string, input
 	secSettings, _ := s.GetSecuritySettings(ctx)
 	if err := ValidateRepoURL(repoURL, secSettings.RepoPolicy); err != nil {
 		return nil, err
+	}
+
+	// Honor the owner upload policy. "disabled" rejects the submission
+	// before any DB write; the other values let it through to the admin
+	// review queue.
+	if secSettings.OwnerUploadPolicy == OwnerUploadDisabled {
+		return nil, fmt.Errorf("owner submissions are disabled")
 	}
 
 	// Check for duplicates.
@@ -767,12 +781,6 @@ func (s *packageService) SubmitPackage(ctx context.Context, userID string, input
 		name = slug
 	}
 
-	// Determine initial status based on approval setting.
-	status := StatusPending
-	if !secSettings.RequireApproval {
-		status = StatusApproved
-	}
-
 	now := time.Now()
 	description := "Submitted by user"
 	if owner != "" && repo != "" {
@@ -780,15 +788,16 @@ func (s *packageService) SubmitPackage(ctx context.Context, userID string, input
 	}
 
 	pkg := &Package{
-		ID:            generateUUID(),
-		Type:          pkgType,
-		Slug:          slug,
-		Name:          name,
-		RepoURL:       repoURL,
-		Description:   description,
-		AutoUpdate:    UpdateNightly,
+		ID:          generateUUID(),
+		Type:        pkgType,
+		Slug:        slug,
+		Name:        name,
+		RepoURL:     repoURL,
+		Description: description,
+		// Auto-update is opt-in (see AddPackage for rationale).
+		AutoUpdate:    UpdateOff,
 		SubmittedBy:   userID,
-		Status:        status,
+		Status:        StatusPending,
 		LastCheckedAt: &now,
 	}
 
@@ -799,13 +808,7 @@ func (s *packageService) SubmitPackage(ctx context.Context, userID string, input
 	slog.Info("package submitted",
 		slog.String("slug", pkg.Slug),
 		slog.String("submitted_by", userID),
-		slog.String("status", string(status)),
 	)
-
-	// If auto-approved, immediately fetch versions and install.
-	if status == StatusApproved {
-		s.fetchAndInstallLatest(ctx, pkg)
-	}
 
 	return s.repo.GetPackage(ctx, pkg.ID)
 }
@@ -985,152 +988,6 @@ func (s *packageService) SaveSecuritySettings(ctx context.Context, settings *Pac
 	}
 
 	return nil
-}
-
-// SeedOfficialPackages creates the official Chronicle repos if no packages
-// exist yet. This runs on startup to ensure the default system pack and
-// Foundry module repos are registered. Existing installations are untouched.
-// The GitHub org is read from GITHUB_ORG env var (default: "keyxmakerx").
-func (s *packageService) SeedOfficialPackages(ctx context.Context) {
-	existing, err := s.repo.ListPackages(ctx)
-	if err != nil {
-		slog.Warn("failed to list packages for seeding", slog.Any("error", err))
-		return
-	}
-
-	// Don't seed if any packages already exist.
-	if len(existing) > 0 {
-		return
-	}
-
-	// GitHub org is configurable so forks can point to their own repos.
-	githubOrg := os.Getenv("GITHUB_ORG")
-	if githubOrg == "" {
-		githubOrg = "keyxmakerx"
-	}
-	baseURL := "https://github.com/" + githubOrg + "/"
-
-	seeds := []struct {
-		name    string
-		repo    string // Just the repo name, not full URL.
-		pkgType PackageType
-	}{
-		{
-			name:    "D&D 5th Edition (2024)",
-			repo:    "chronicle-dnd-5.5e",
-			pkgType: PackageTypeSystem,
-		},
-		{
-			name:    "Draw Steel",
-			repo:    "chronicle-draw-steel",
-			pkgType: PackageTypeSystem,
-		},
-		{
-			name:    "Chronicle Foundry Module",
-			repo:    "chronicle-foundry-module",
-			pkgType: PackageTypeFoundryModule,
-		},
-	}
-
-	for _, seed := range seeds {
-		now := time.Now()
-		pkg := &Package{
-			ID:            generateUUID(),
-			Type:          seed.pkgType,
-			Slug:          seed.repo,
-			Name:          seed.name,
-			RepoURL:       baseURL + seed.repo,
-			Description:   "Official Chronicle package",
-			AutoUpdate:    UpdateNightly,
-			Status:        StatusApproved,
-			LastCheckedAt: &now,
-		}
-
-		if err := s.repo.CreatePackage(ctx, pkg); err != nil {
-			slog.Warn("failed to seed official package",
-				slog.String("name", seed.name),
-				slog.Any("error", err),
-			)
-			continue
-		}
-
-		slog.Info("seeded official package",
-			slog.String("name", seed.name),
-			slog.String("repo", baseURL+seed.repo),
-		)
-
-		// Check if files already exist on disk from a previous install
-		// (e.g. the DB was wiped but package files remain). If we find a
-		// valid manifest, reuse the existing files instead of re-downloading.
-		if reused := s.tryReuseExistingInstall(ctx, pkg); reused {
-			continue
-		}
-
-		// Attempt to fetch and install (non-fatal if GitHub is unreachable).
-		s.fetchAndInstallLatest(ctx, pkg)
-	}
-}
-
-// tryReuseExistingInstall checks if a package's expected install directory
-// already contains valid files. If so, updates the DB record with the install
-// path and returns true. Returns false if no existing files are found.
-func (s *packageService) tryReuseExistingInstall(ctx context.Context, pkg *Package) bool {
-	// Look in the type-specific directory for any version subdirectory.
-	var baseDir string
-	switch pkg.Type {
-	case PackageTypeFoundryModule:
-		baseDir = filepath.Join(s.packagesDir(), "foundry-module")
-	default:
-		baseDir = filepath.Join(s.packagesDir(), "systems", pkg.Slug)
-	}
-
-	entries, err := os.ReadDir(baseDir)
-	if err != nil {
-		return false
-	}
-
-	// Find the first version directory with a valid manifest.
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		candidatePath := filepath.Join(baseDir, entry.Name())
-
-		// Check for manifest.json or module.json.
-		hasManifest := false
-		for _, name := range []string{"manifest.json", "module.json"} {
-			if _, err := os.Stat(filepath.Join(candidatePath, name)); err == nil {
-				hasManifest = true
-				break
-			}
-		}
-		if !hasManifest {
-			continue
-		}
-
-		// Found existing files — reuse them.
-		now := time.Now()
-		pkg.InstalledVersion = entry.Name()
-		pkg.InstallPath = candidatePath
-		pkg.LastInstalledAt = &now
-
-		if err := s.repo.UpdatePackage(ctx, pkg); err != nil {
-			slog.Warn("failed to update package with reused install",
-				slog.String("package", pkg.Slug),
-				slog.Any("error", err),
-			)
-			return false
-		}
-
-		slog.Info("reused existing package install from disk",
-			slog.String("package", pkg.Slug),
-			slog.String("version", entry.Name()),
-			slog.String("path", candidatePath),
-		)
-		return true
-	}
-
-	return false
 }
 
 // ReconcileOrphanedInstalls detects package directories on disk that have no

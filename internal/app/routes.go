@@ -101,6 +101,27 @@ func (a *bestiaryCampaignRoleAdapter) HasMinRole(ctx context.Context, campaignID
 	return int(member.Role) >= minRole, nil
 }
 
+// bestiaryCampaignSystemAdapter wraps campaigns.CampaignService to implement
+// the bestiary.CampaignSystemFetcher interface. Used by Publish to tag a
+// publication with the source campaign's selected game system rather than
+// guessing a default.
+type bestiaryCampaignSystemAdapter struct {
+	svc campaigns.CampaignService
+}
+
+// GetCampaignSystemID returns the system_id from a campaign's settings JSON,
+// or empty string if the campaign has no system selected or cannot be found.
+func (a *bestiaryCampaignSystemAdapter) GetCampaignSystemID(ctx context.Context, campaignID string) (string, error) {
+	c, err := a.svc.GetByID(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	if c == nil {
+		return "", nil
+	}
+	return c.ParseSettings().SystemID, nil
+}
+
 // entityTypeListerAdapter wraps entities.EntityService to implement the
 // campaigns.EntityTypeLister interface without creating a circular import.
 type entityTypeListerAdapter struct {
@@ -1342,9 +1363,6 @@ func (a *App) RegisterRoutes() {
 		ownerGroup := e.Group("", auth.RequireAuth(authService))
 		packages.RegisterOwnerRoutes(ownerGroup, pkgOwnerHandler)
 
-		// Seed official Chronicle repos if no packages exist yet.
-		pkgService.SeedOfficialPackages(context.Background())
-
 		// Load systems from package manager install paths so externally
 		// managed system packs override the bundled fallbacks.
 		a.loadSystemsFromPackages(pkgService)
@@ -1417,6 +1435,7 @@ func (a *App) RegisterRoutes() {
 	bestiarySvc.SetUserFetcher(&bestiaryUserFetcherAdapter{authSvc: authService})
 	bestiarySvc.SetEntityCreator(&bestiaryEntityCreatorAdapter{svc: entityService})
 	bestiarySvc.SetCampaignRoleChecker(&bestiaryCampaignRoleAdapter{svc: campaignService})
+	bestiarySvc.SetCampaignSystemFetcher(&bestiaryCampaignSystemAdapter{svc: campaignService})
 	bestiaryHandler := bestiary.NewHandler(bestiarySvc)
 	if a.PluginHealth.IsHealthy("bestiary") {
 		bestiary.RegisterRoutes(e, bestiaryHandler, authService)
