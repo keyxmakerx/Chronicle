@@ -441,27 +441,27 @@ templ SecuritySettingsPage(settings PackageSecuritySettings, csrfToken string) {
 					<!-- Owner Upload Policy -->
 					<div>
 						<label class="block text-sm font-semibold text-fg mb-2">Campaign Owner Upload Policy</label>
-						<p class="text-xs text-fg-muted mb-2">Controls whether campaign owners can upload custom game systems directly.</p>
+						<p class="text-xs text-fg-muted mb-2">Controls whether campaign owners can submit GitHub package URLs and upload custom game system ZIPs. GitHub submissions always land in the admin review queue at <code class="text-[11px]">/admin/packages</code> regardless of which option is selected here — only Disabled blocks them outright.</p>
 						<div class="space-y-2">
 							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
 								<input type="radio" name="owner_upload_policy" value="auto_approve" checked?={ settings.OwnerUploadPolicy == OwnerUploadAutoApprove } class="text-accent"/>
 								<div>
-									<span class="text-sm font-medium text-fg">Auto-Approve</span>
-									<span class="text-xs text-fg-muted block">Owners can upload and install custom systems immediately. Best for trusted private instances.</span>
+									<span class="text-sm font-medium text-fg">Allow</span>
+									<span class="text-xs text-fg-muted block">Owners can submit GitHub URLs (admin still reviews before install) and upload custom system ZIPs (installed immediately for the uploading owner).</span>
 								</div>
 							</label>
 							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
 								<input type="radio" name="owner_upload_policy" value="require_approval" checked?={ settings.OwnerUploadPolicy == OwnerUploadRequireApproval } class="text-accent"/>
 								<div>
-									<span class="text-sm font-medium text-fg">Require Admin Approval</span>
-									<span class="text-xs text-fg-muted block">Uploads are staged for admin review before installation. Best for public hosted instances.</span>
+									<span class="text-sm font-medium text-fg">Allow, Require Admin Review</span>
+									<span class="text-xs text-fg-muted block">Equivalent to Allow in the current release. Reserved for a future option that gates custom system ZIP installs behind admin review too.</span>
 								</div>
 							</label>
 							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
 								<input type="radio" name="owner_upload_policy" value="disabled" checked?={ settings.OwnerUploadPolicy == OwnerUploadDisabled } class="text-accent"/>
 								<div>
 									<span class="text-sm font-medium text-fg">Disabled</span>
-									<span class="text-xs text-fg-muted block">Campaign owners cannot upload custom systems. Only admin-approved packages are available.</span>
+									<span class="text-xs text-fg-muted block">Campaign owners cannot submit GitHub URLs or upload custom system ZIPs. Only admin-curated packages are available.</span>
 								</div>
 							</label>
 						</div>
