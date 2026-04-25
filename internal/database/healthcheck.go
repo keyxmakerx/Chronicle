@@ -108,6 +108,9 @@ func RunStartupHealthChecks(db *sql.DB, cfg HealthCheckConfig) error {
 	// 5. Smoke-test queries — verify critical SELECT+Scan patterns work.
 	checkSmokeTests(db, cfg, result)
 
+	// 6. Data-shape hygiene — invariants the FK schema can't enforce.
+	checkDataHygiene(db, result)
+
 	// Log summary.
 	for _, c := range result.Checks {
 		switch c.Status {
