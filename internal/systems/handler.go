@@ -207,7 +207,7 @@ func (h *SystemHandler) SearchAPI(c echo.Context) error {
 
 	mod := h.resolveSystem(c)
 	if mod == nil {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "system not found"})
+		return apperror.NewNotFound("system not found")
 	}
 
 	query := strings.TrimSpace(c.QueryParam("q"))
@@ -250,14 +250,14 @@ func (h *SystemHandler) TooltipAPI(c echo.Context) error {
 
 	mod := h.resolveSystem(c)
 	if mod == nil {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "system not found"})
+		return apperror.NewNotFound("system not found")
 	}
 
 	catSlug := c.Param("cat")
 	itemID := c.Param("item")
 	dp := mod.DataProvider()
 	if dp == nil {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "no data"})
+		return apperror.NewNotFound("this system has no reference data")
 	}
 
 	item, err := dp.Get(catSlug, itemID)
@@ -265,7 +265,7 @@ func (h *SystemHandler) TooltipAPI(c echo.Context) error {
 		return err
 	}
 	if item == nil {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "item not found"})
+		return apperror.NewNotFound("item not found")
 	}
 
 	// Try the system's tooltip renderer for rich HTML.

@@ -13,15 +13,137 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // apiKeyContextKey is the Echo context key for the authenticated API key.
 const apiKeyContextKey = "api_key"
 
+// synthKeySessionID is the sentinel KeyID used for synthetic APIKeys that
+// represent a session-authed caller on /api/v1/*. A real api_keys row has
+// an AUTO_INCREMENT id >= 1, so ID == 0 unambiguously flags a synthetic
+// identity and lets downstream middleware (RateLimit, logging) skip work
+// that only makes sense for real keys.
+const synthKeySessionID = 0
+
 // GetAPIKey retrieves the authenticated API key from the request context.
+// Under the multi-auth path (RequireAuthOrAPIKey), a session-authed caller
+// gets a synthetic APIKey with ID == 0; callers that need to distinguish
+// real keys from session callers should check for that sentinel.
 func GetAPIKey(c echo.Context) *APIKey {
 	key, _ := c.Get(apiKeyContextKey).(*APIKey)
 	return key
+}
+
+// permissionsForCampaignRole maps a user's campaign membership role onto the
+// API-key permission model so session-authed callers on /api/v1/* get the
+// same downstream authorization as an equivalent Bearer request. The mapping
+// is the natural least-surprising one: Owner grants everything; Scribe can
+// read + write content but not configure sync endpoints; Player is read-only.
+// Called by RequireAuthOrAPIKey when synthesising an APIKey from a session.
+func permissionsForCampaignRole(role campaigns.Role) []APIKeyPermission {
+	switch role {
+	case campaigns.RoleOwner:
+		return []APIKeyPermission{PermRead, PermWrite, PermSync}
+	case campaigns.RoleScribe:
+		return []APIKeyPermission{PermRead, PermWrite}
+	case campaigns.RolePlayer:
+		return []APIKeyPermission{PermRead}
+	default:
+		return nil
+	}
+}
+
+// RequireAuthOrAPIKey authenticates /api/v1/* requests by EITHER a session
+// cookie OR an Authorization: Bearer API key. This is the single source of
+// truth for "who is the caller?" on the public API: in-app browser widgets
+// authenticate by the same session cookie they already carry for the web UI,
+// and external REST / Foundry VTT clients continue to use Bearer tokens.
+//
+// Flow:
+//  1. If a chronicle_session cookie is present AND validates, look up the
+//     caller's membership in the campaign named by the :id URL parameter.
+//     Synthesise an APIKey whose CampaignID, UserID, and Permissions match
+//     the session + campaign role, and expose it on the context under the
+//     same apiKeyContextKey that the Bearer path uses. Downstream middleware
+//     (RequireCampaignMatch, RequirePermission) then works uniformly.
+//  2. Otherwise, delegate to RequireAPIKey for the traditional Bearer path.
+//
+// Security notes:
+//   - The session cookie is SameSite=Lax (see auth.setSessionCookie), so a
+//     cross-origin POST will NOT include it. Explicit CSRF tokens are
+//     therefore not required here — the cookie attribute already provides
+//     the CSRF defense for the multi-auth flow.
+//   - Synthesised keys carry ID == synthKeySessionID so the rate limiter and
+//     LogRequest path can distinguish session callers from real API keys.
+//   - IP blocklist / IP allowlist / device fingerprint enforcement run only
+//     on the Bearer path. Session auth trusts the upstream auth service's
+//     session validation (cookie rotation, expiry, IP rate limits on login).
+//
+// Must be wired in place of RequireAPIKey on the /api/v1 group.
+func RequireAuthOrAPIKey(authSvc auth.AuthService, campaignSvc campaigns.CampaignService, syncSvc SyncAPIService) echo.MiddlewareFunc {
+	apiKey := RequireAPIKey(syncSvc)
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		apiKeyChain := apiKey(next)
+		return func(c echo.Context) error {
+			if key, ok := tryAuthFromSession(c, authSvc, campaignSvc); ok {
+				c.Set(apiKeyContextKey, key)
+				return next(c)
+			}
+			return apiKeyChain(c)
+		}
+	}
+}
+
+// tryAuthFromSession attempts to resolve the caller from a session cookie.
+// Returns (key, true) when a valid session maps to a campaign membership
+// the URL allows, where `key` is a synthetic APIKey with permissions
+// derived from the membership role. Returns (nil, false) on any negative
+// outcome — "no cookie", "invalid cookie", "not a member" — so the caller
+// can cleanly fall through to the Bearer path. A user who is signed in but
+// isn't a member of the campaign in the URL must return false here rather
+// than 403, otherwise a real API key for the same campaign would be
+// blocked by the session-membership failure.
+func tryAuthFromSession(c echo.Context, authSvc auth.AuthService, campaignSvc campaigns.CampaignService) (*APIKey, bool) {
+	token := auth.GetSessionTokenFromCookie(c)
+	if token == "" {
+		return nil, false
+	}
+	session, err := authSvc.ValidateSession(c.Request().Context(), token)
+	if err != nil || session == nil {
+		return nil, false
+	}
+
+	campaignID := c.Param("id")
+	if campaignID == "" {
+		// Routes that don't carry :id can still authenticate by session
+		// (e.g. a future /api/v1/me endpoint); synthesise a minimal key.
+		auth.SetSession(c, session)
+		return &APIKey{
+			ID:       synthKeySessionID,
+			UserID:   session.UserID,
+			IsActive: true,
+		}, true
+	}
+
+	member, err := campaignSvc.GetMember(c.Request().Context(), campaignID, session.UserID)
+	if err != nil || member == nil {
+		// Session is valid but the user isn't a member of this campaign.
+		// Fall through to the Bearer path; a site admin still lands on
+		// 403 when the Bearer path also fails, which is the correct
+		// outcome.
+		return nil, false
+	}
+
+	auth.SetSession(c, session)
+	return &APIKey{
+		ID:          synthKeySessionID,
+		CampaignID:  campaignID,
+		UserID:      session.UserID,
+		Permissions: permissionsForCampaignRole(member.Role),
+		IsActive:    true,
+	}, true
 }
 
 // RequireAPIKey returns middleware that authenticates requests via API key.
@@ -226,11 +348,20 @@ var globalRateLimiter = &rateLimiter{
 
 // RateLimit returns middleware that enforces per-key request rate limits.
 // Uses a simple fixed-window counter per minute.
+//
+// Synthetic session keys (ID == synthKeySessionID) skip this limiter —
+// they represent an authenticated browser user, not an external client,
+// and would otherwise all share the ID == 0 bucket. Browser-paced users
+// are naturally rate-limited by human speed; abusive session behavior is
+// the auth service's responsibility, not the API-key limiter's.
 func RateLimit(service SyncAPIService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			key := GetAPIKey(c)
 			if key == nil {
+				return next(c)
+			}
+			if key.ID == synthKeySessionID {
 				return next(c)
 			}
 

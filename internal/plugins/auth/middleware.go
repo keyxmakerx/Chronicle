@@ -44,12 +44,18 @@ func RequireAuth(service AuthService) echo.MiddlewareFunc {
 
 // handleUnauthenticated returns the appropriate response for unauthenticated
 // requests: redirect for browsers, 401 JSON for API clients.
+//
+// The JSON message is deliberately action-oriented — a widget showing the
+// server's message field needs a string the end-user can act on, not the
+// bare word "unauthorized". In-app widgets usually hit this when their
+// session quietly expires mid-session, so "reload" is the correct next
+// step for the user.
 func handleUnauthenticated(c echo.Context) error {
 	// API requests get a JSON 401 response.
 	if isAPIRequest(c) {
 		return c.JSON(http.StatusUnauthorized, map[string]string{
 			"error":   "unauthorized",
-			"message": "authentication required",
+			"message": "Your session has ended. Please reload the page and sign in again.",
 		})
 	}
 
@@ -86,7 +92,7 @@ func OptionalAuth(service AuthService) echo.MiddlewareFunc {
 	}
 }
 
-// --- Exported getters for other plugins ---
+// --- Exported helpers for other plugins ---
 
 // GetSession retrieves the authenticated session from the Echo context.
 // Returns nil if the request is not authenticated (middleware not applied).
@@ -106,6 +112,27 @@ func GetUserID(c echo.Context) string {
 		return ""
 	}
 	return id
+}
+
+// GetSessionTokenFromCookie reads the raw session token from the cookie on
+// the incoming request. Exported so that other plugins which implement
+// their own session-aware middleware (e.g. the syncapi multi-auth
+// middleware that lets in-app widgets authenticate with a cookie instead
+// of a Bearer token) can read the cookie without reaching into unexported
+// helpers.
+func GetSessionTokenFromCookie(c echo.Context) string {
+	return getSessionToken(c)
+}
+
+// SetSession stores an authenticated session on the Echo context, using the
+// same keys that RequireAuth populates. Exported so other plugins that
+// run their own session validation (see syncapi.RequireAuthOrAPIKey) can
+// advertise the session to downstream code — anything calling GetSession /
+// GetUserID afterwards sees a uniform result regardless of which middleware
+// did the validation.
+func SetSession(c echo.Context, session *Session) {
+	c.Set(contextKeySession, session)
+	c.Set(contextKeyUserID, session.UserID)
 }
 
 // RequireSiteAdmin returns middleware that ensures the user has the site-wide

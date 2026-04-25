@@ -1535,7 +1535,7 @@ func (a *App) RegisterRoutes() {
 	tagAPIHandler := syncapi.NewTagAPIHandler(syncService, tagService, entityService, campaignService)
 
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncService, addonService)
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncService, addonService, authService, campaignService)
 	}
 
 	// NPC plugin: gallery/hub view for revealed character entities.
