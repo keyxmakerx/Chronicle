@@ -60,7 +60,7 @@ See `.ai/architecture.md` for the full architecture document.
 - **Errors:** use domain error types from `internal/apperror/`. Never return raw DB errors.
 - **Tests:** table-driven tests. Interfaces for all service/repo boundaries.
 - **Naming:** `snake_case.go` for files, `PascalCase` for exported Go types, `camelCase` for JSON.
-- **Migrations:** sequential numbered SQL files in `db/migrations/`. Never edit an applied migration.
+- **Migrations:** sequential numbered SQL files in `db/migrations/`. Never edit an applied migration. Core migrations may only reference core tables — plugin tables (e.g. `api_keys`, `maps`, `calendars`) live in `internal/plugins/<slug>/migrations/` and run *after* core, so a core migration referencing them crashes on a fresh DB. Span-the-layers data fixes must be split (core part in core, plugin part in the plugin). See `.ai/conventions.md` §"Migration Safety Rules".
 - **Comments:** every package, every exported type, every non-obvious block. WHY not WHAT.
 - **Database:** MariaDB. Use `database/sql` + `go-sql-driver/mysql`. No ORM.
 

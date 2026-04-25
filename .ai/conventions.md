@@ -285,6 +285,13 @@ CREATE TABLE IF NOT EXISTS calendars ( ... );
    Migrations are embedded in the binary via `embed.FS` (ADR-030). When adding a
    new plugin with migrations, create an `embed.go` in the plugin package and
    register it in `registeredPlugins()` in `cmd/server/main.go`.
+7. **Migration layering**: Core migrations (`db/migrations/`) may reference ONLY
+   core schema. Plugin migrations (`internal/plugins/<slug>/migrations/`) own
+   their tables and any data backfills/heals that touch them. Core runs before
+   plugins, so a core migration that references a plugin-owned table (`api_keys`,
+   `maps`, `calendars`, etc.) crashes on a fresh DB. If a single data fix needs
+   to span both layers, split it: the core part stays in `db/migrations/`, the
+   plugin part moves to that plugin's `migrations/` directory.
 
 ### Permission Model
 
