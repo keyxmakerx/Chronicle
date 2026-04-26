@@ -209,3 +209,86 @@ The slug-keyed registry is for **system-specific page rendering**:
 "a Draw Steel character should look like *this*, not like a
 collection of generic blocks." If that doesn't match your need,
 one of the lighter-weight extension points above probably does.
+
+## Declaring renderers in `manifest.json` (CH4.5)
+
+The Go-side `Register` call described above is the low-level path. If
+all you need is "render this entity type by mounting that widget,"
+you don't have to touch Go at all — declare the binding in your
+package's `manifest.json` and the host wires it up at boot:
+
+```json
+{
+  "id": "drawsteel",
+  "name": "Draw Steel",
+  "api_version": "1",
+  "entity_presets": [
+    { "slug": "drawsteel-character", "name": "Draw Steel Character" }
+  ],
+  "widgets": [
+    { "slug": "drawsteel-character-card", "name": "Character Card",
+      "script_file": "widgets/character-card.js" }
+  ],
+  "renderers": [
+    { "slug": "drawsteel-character",
+      "widget": "drawsteel-character-card",
+      "description": "Stat-block style character sheet." }
+  ]
+}
+```
+
+For each entry the host registers a renderer that emits a single
+mount point — `<div data-widget="drawsteel-character-card"
+data-entity-id="…" data-campaign-id="…">` — and the existing
+`boot.js` auto-mounter takes over: it finds the element, calls the
+widget's registered `init(el, config)`, and the widget owns the
+rest of the page from there. The `data-*` attributes round-trip
+into `config.entityId` and `config.campaignId` (see
+`static/js/boot.js` for the kebab-to-camel conversion rules).
+
+### Validation rules (enforced at install time)
+
+A manifest with an invalid `renderers` block is rejected during
+package install — the package never lands on disk and never reaches
+the renderer registry. Every entry must satisfy:
+
+- `slug` matches one of this manifest's `entity_presets[].slug`.
+  Cross-manifest references are forbidden — a manifest can only
+  register renderers for entity types it owns.
+- `widget` matches one of this manifest's `widgets[].slug`. Same
+  rule — a renderer must mount a widget the same package ships.
+- `slug` and `widget` are valid slugs (lowercase letters, numbers,
+  hyphens, underscores).
+- A manifest declares no more than 10 renderers.
+
+### Lifecycle and overrides
+
+CH4.5 uses the same V1 lifecycle as the Go-side path: registration
+happens once, at boot, after `loadSystemsFromPackages` runs and
+before the registry global is published. Installing a new package
+or upgrading one requires a Chronicle restart for the new renderers
+to take effect. There is no live reload.
+
+If two installed manifests declare a renderer for the same slug,
+the last one to register wins — the underlying registry's
+documented "last write wins" semantics. Admins control which
+packages are installed, so this collision case is rare in practice;
+if you need a deterministic override, use the Go-side `Register`
+path and order the registration calls explicitly in
+`internal/app/routes.go`.
+
+### When to use the Go path instead
+
+The manifest path is the right fit when "this entity type renders
+as that widget" is a complete description of what you want. Use
+the Go-side `Register` API when you need:
+
+- A renderer that does server-side work before producing markup
+  (e.g., loading sibling entities, computing derived values).
+- Conditional dispatch based on the entity's data, not just its
+  slug.
+- A renderer that emits multiple widgets or a non-widget layout.
+- Behavior that overrides another package's manifest renderer.
+
+Both paths share the same `EntityShowRendererRegistry` — choose per
+renderer based on what each one needs.

@@ -20,6 +20,9 @@
 package entities
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"sync"
 
 	"github.com/a-h/templ"
@@ -120,6 +123,60 @@ func SetGlobalEntityShowRendererRegistry(r *EntityShowRendererRegistry) {
 // rendering code). All read-time callers must nil-check.
 func GetGlobalEntityShowRendererRegistry() *EntityShowRendererRegistry {
 	return globalEntityShowRendererRegistry
+}
+
+// MakeWidgetMountRenderer returns an EntityShowRenderer that emits a single
+// <div data-widget="…" data-entity-id="…" data-campaign-id="…"> element.
+// The standard boot.js auto-mounter (static/js/boot.js) picks the element
+// up at page load (and after htmx:afterSettle) and runs the registered
+// widget's init(el, config) against it; the widget owns the rest of the
+// page from there.
+//
+// This is the bridge that lets system-package authors declare a renderer
+// in their manifest's `renderers` field — `{slug, widget}` — without
+// shipping any Go code. The host's CH4.5 auto-registration walks the
+// manifest at boot, calls this helper for each entry, and registers the
+// returned function under the entry's slug.
+//
+// The widget slug is captured by value at registration time, so changing
+// the manifest after install (without a restart) does not affect already-
+// registered renderers — matching the registry's V1 restart-required
+// lifecycle.
+func MakeWidgetMountRenderer(widget string) EntityShowRenderer {
+	return func(ctx EntityShowRenderContext) templ.Component {
+		entityID := ""
+		if ctx.Entity != nil {
+			entityID = ctx.Entity.ID
+		}
+		campaignID := ""
+		if ctx.CC != nil && ctx.CC.Campaign != nil {
+			campaignID = ctx.CC.Campaign.ID
+		}
+		return widgetMount{widget: widget, entityID: entityID, campaignID: campaignID}
+	}
+}
+
+// widgetMount is a tiny templ.Component that renders one boot.js mount
+// point. Implemented directly (rather than via a generated templ file)
+// because it's three attributes on a single div — generating a .templ
+// for it would obscure more than it clarifies, and keeping the helper
+// here lets system-package auto-registration avoid a circular import on
+// any rendering scaffold.
+type widgetMount struct {
+	widget     string
+	entityID   string
+	campaignID string
+}
+
+func (w widgetMount) Render(_ context.Context, out io.Writer) error {
+	_, err := fmt.Fprintf(
+		out,
+		`<div data-widget="%s" data-entity-id="%s" data-campaign-id="%s"></div>`,
+		templ.EscapeString(w.widget),
+		templ.EscapeString(w.entityID),
+		templ.EscapeString(w.campaignID),
+	)
+	return err
 }
 
 // lookupEntityShowRenderer is the templ-callable helper that

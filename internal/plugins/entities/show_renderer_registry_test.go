@@ -3,10 +3,13 @@ package entities
 import (
 	"context"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/a-h/templ"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // markerComponent is a tiny templ.Component that writes a fixed string,
@@ -199,3 +202,67 @@ func (b *bytesBufferLike) Write(p []byte) (int, error) {
 }
 
 func (b *bytesBufferLike) String() string { return string(b.b) }
+
+// TestMakeWidgetMountRenderer_EmitsBootJSMountPoint pins the contract
+// CH4.5 promises to manifest authors: a renderer built from
+// MakeWidgetMountRenderer renders one <div> with three data-* attributes
+// that boot.js can find and mount the widget against.
+func TestMakeWidgetMountRenderer_EmitsBootJSMountPoint(t *testing.T) {
+	renderer := MakeWidgetMountRenderer("drawsteel-character-card")
+	ctx := EntityShowRenderContext{
+		CC:     &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-123"}},
+		Entity: &Entity{ID: "ent-456"},
+	}
+	component := renderer(ctx)
+
+	buf := &bytesBufferLike{}
+	if err := component.Render(context.Background(), buf); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	got := buf.String()
+	for _, want := range []string{
+		`data-widget="drawsteel-character-card"`,
+		`data-entity-id="ent-456"`,
+		`data-campaign-id="camp-123"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered HTML missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// TestMakeWidgetMountRenderer_HandlesMissingContext is paranoia for the
+// boot path: if the registry is consulted before CC/Entity are populated
+// (shouldn't happen in real flow, but cheap to defend), the renderer
+// must not panic — it should emit empty data-* attributes instead.
+func TestMakeWidgetMountRenderer_HandlesMissingContext(t *testing.T) {
+	renderer := MakeWidgetMountRenderer("x")
+	component := renderer(EntityShowRenderContext{})
+	buf := &bytesBufferLike{}
+	if err := component.Render(context.Background(), buf); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(buf.String(), `data-widget="x"`) {
+		t.Errorf("widget attr missing: %s", buf.String())
+	}
+}
+
+// TestMakeWidgetMountRenderer_EscapesAttributes pins the XSS guard. The
+// widget slug comes from the manifest (already validated), but
+// entity/campaign IDs come from the database — defense-in-depth says
+// any attempt to break out of the attribute value via raw quotes is
+// neutralized by HTML escaping before it reaches the response.
+func TestMakeWidgetMountRenderer_EscapesAttributes(t *testing.T) {
+	renderer := MakeWidgetMountRenderer("ok")
+	ctx := EntityShowRenderContext{
+		Entity: &Entity{ID: `"><script>x</script>`},
+	}
+	buf := &bytesBufferLike{}
+	if err := renderer(ctx).Render(context.Background(), buf); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(buf.String(), "<script>") {
+		t.Errorf("script tag leaked through escaping: %s", buf.String())
+	}
+}

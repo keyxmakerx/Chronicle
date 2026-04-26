@@ -1092,6 +1092,28 @@ func (a *App) loadSystemsFromPackages(pkgService packages.PackageService) {
 	}
 }
 
+// registerManifestRenderers walks every loaded system manifest and
+// auto-registers an EntityShowRenderer for every entry in its `renderers`
+// field. This is the CH4.5 path that lets JSON-only system packages ship
+// page-level renderers without shipping Go: the manifest declares
+// {slug, widget} pairs, and we register a renderer that emits the widget
+// mount point and lets boot.js take over.
+//
+// Must be called after loadSystemsFromPackages (so packaged manifests are
+// in the registry) and before SetGlobalEntityShowRendererRegistry (so
+// the global is published with renderers already in place — no observable
+// half-built state for incoming requests).
+func registerManifestRenderers(showRegistry *entities.EntityShowRendererRegistry) {
+	for _, manifest := range systems.Registry() {
+		if manifest == nil {
+			continue
+		}
+		for _, r := range manifest.Renderers {
+			showRegistry.Register(r.Slug, entities.MakeWidgetMountRenderer(r.Widget))
+		}
+	}
+}
+
 // RegisterRoutes sets up all application routes. It registers public routes
 // directly and delegates to each plugin's route registration function.
 //
@@ -1698,6 +1720,7 @@ func (a *App) RegisterRoutes() {
 	//   drawsteel.RegisterEntityShowRenderers(showRegistry)
 	//
 	showRegistry := entities.NewEntityShowRendererRegistry()
+	registerManifestRenderers(showRegistry)
 	entities.SetGlobalEntityShowRendererRegistry(showRegistry)
 
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})

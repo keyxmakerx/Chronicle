@@ -560,3 +560,80 @@ func TestValidateManifest_DefaultsEmptyStatus(t *testing.T) {
 		t.Errorf("Status = %q, want %q (should default)", m.Status, StatusComingSoon)
 	}
 }
+
+// validRendererManifest builds a minimal manifest with a single renderer
+// entry that references an existing preset and widget. Test cases mutate
+// the result to drive specific validation paths.
+func validRendererManifest() SystemManifest {
+	return SystemManifest{
+		ID:         "test-system",
+		Name:       "Test",
+		APIVersion: "1",
+		Version:    "1.0.0",
+		EntityPresets: []EntityPresetDef{
+			{Slug: "test-character", Name: "Test Character"},
+		},
+		Widgets: []WidgetDef{
+			{Slug: "test-character-card", Name: "Card", ScriptFile: "widgets/card.js"},
+		},
+		Renderers: []RendererDef{
+			{Slug: "test-character", Widget: "test-character-card"},
+		},
+	}
+}
+
+func TestValidateManifest_RendererAcceptsValid(t *testing.T) {
+	m := validRendererManifest()
+	if err := ValidateManifest(&m); err != nil {
+		t.Fatalf("ValidateManifest() error = %v", err)
+	}
+}
+
+func TestValidateManifest_RendererRequiresMatchingPreset(t *testing.T) {
+	m := validRendererManifest()
+	m.Renderers[0].Slug = "no-such-preset"
+	err := ValidateManifest(&m)
+	if err == nil {
+		t.Fatal("expected error for renderer slug with no matching preset")
+	}
+}
+
+func TestValidateManifest_RendererRequiresMatchingWidget(t *testing.T) {
+	m := validRendererManifest()
+	m.Renderers[0].Widget = "no-such-widget"
+	err := ValidateManifest(&m)
+	if err == nil {
+		t.Fatal("expected error for renderer widget with no matching widget def")
+	}
+}
+
+func TestValidateManifest_RendererRejectsEmptySlug(t *testing.T) {
+	m := validRendererManifest()
+	m.Renderers[0].Slug = ""
+	err := ValidateManifest(&m)
+	if err == nil {
+		t.Fatal("expected error for empty renderer slug")
+	}
+}
+
+func TestValidateManifest_RendererRejectsEmptyWidget(t *testing.T) {
+	m := validRendererManifest()
+	m.Renderers[0].Widget = ""
+	err := ValidateManifest(&m)
+	if err == nil {
+		t.Fatal("expected error for empty renderer widget")
+	}
+}
+
+func TestValidateManifest_RendererCapEnforced(t *testing.T) {
+	m := validRendererManifest()
+	// Pad with valid-looking entries so the cap check (not slug/widget
+	// validation) is what fails.
+	for i := 0; i < maxRenderers; i++ {
+		m.Renderers = append(m.Renderers, RendererDef{Slug: "test-character", Widget: "test-character-card"})
+	}
+	err := ValidateManifest(&m)
+	if err == nil {
+		t.Fatalf("expected error for %d renderers (cap %d)", len(m.Renderers), maxRenderers)
+	}
+}
