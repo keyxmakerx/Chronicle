@@ -67,12 +67,18 @@ func (h *Handler) Run(c echo.Context) error {
 // Download serves a single artifact file (GET /admin/backup/files/:name).
 // The :name parameter is validated against BACKUP_DIR; any attempt at
 // path traversal is rejected with 400.
+//
+// Uses echo.Context.Attachment which RFC 5987-encodes the filename in
+// the Content-Disposition header. ResolveArtifactPath rejects path
+// separators and ".." but does not reject quotes or newlines in
+// basenames — Linux filesystems allow both. Without proper encoding,
+// an admin who renamed a backup artifact on disk to include `"` or
+// `\n` could inject HTTP headers via this response.
 func (h *Handler) Download(c echo.Context) error {
 	name := c.Param("name")
 	full, err := ResolveArtifactPath(h.svc.BackupDir(), name)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	c.Response().Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
-	return c.File(full)
+	return c.Attachment(full, name)
 }

@@ -107,18 +107,35 @@ func (h *ExportHandler) ExportCampaign(c echo.Context) error {
 	c.Response().Header().Set("Content-Disposition",
 		fmt.Sprintf(`attachment; filename="%s"`, zipName))
 	c.Response().Header().Set("Content-Type", "application/zip")
-	c.Response().WriteHeader(http.StatusOK)
 
+	// We stream the zip directly to the response writer. The first
+	// byte to the response writer commits the 200 OK + headers — once
+	// that happens we can no longer signal failure with a 5xx. Two
+	// consequences:
+	//
+	//   1. zip.Writer.Create is metadata-only and does NOT write to
+	//      the underlying writer, so a Create failure before the
+	//      first entry's Write can still return 5xx cleanly.
+	//   2. Once we begin writing entry bodies, per-file failures are
+	//      logged and skipped rather than returned. A partial media
+	//      file is preferable to a truncated download with no signal.
 	zw := zip.NewWriter(c.Response().Writer)
 	defer func() { _ = zw.Close() }()
 
-	// 1. campaign.json at the root.
+	// 1. campaign.json at the root. Create is metadata-only; if it
+	// fails here, no bytes are on the wire yet and 5xx is honest.
 	jsonEntry, err := zw.Create("campaign.json")
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("create campaign.json entry: %w", err))
 	}
+	// First Write commits the response — headers are sent now. From
+	// here on we log failures rather than return them.
 	if _, err := jsonEntry.Write(jsonData); err != nil {
-		return apperror.NewInternal(fmt.Errorf("write campaign.json: %w", err))
+		slog.Warn("export: failed to write campaign.json into zip; bundle will be truncated",
+			slog.String("campaign", cc.Campaign.ID),
+			slog.Any("error", err),
+		)
+		return nil
 	}
 
 	// 2. media/<filename> for each file. UUID-based filenames mean no
@@ -134,7 +151,11 @@ func (h *ExportHandler) ExportCampaign(c echo.Context) error {
 		}
 		entry, err := zw.Create("media/" + f.Filename)
 		if err != nil {
-			return apperror.NewInternal(fmt.Errorf("create zip entry %q: %w", f.Filename, err))
+			slog.Warn("export: failed to create zip entry; skipping",
+				slog.String("filename", f.Filename),
+				slog.Any("error", err),
+			)
+			continue
 		}
 		src, err := f.Open()
 		if err != nil {
@@ -150,7 +171,11 @@ func (h *ExportHandler) ExportCampaign(c echo.Context) error {
 		_, copyErr := io.Copy(entry, src)
 		_ = src.Close()
 		if copyErr != nil {
-			return apperror.NewInternal(fmt.Errorf("copy media bytes for %q: %w", f.Filename, copyErr))
+			slog.Warn("export: failed to copy media bytes; bundle entry truncated",
+				slog.String("filename", f.Filename),
+				slog.Any("error", copyErr),
+			)
+			continue
 		}
 	}
 	return nil
@@ -179,10 +204,11 @@ func (h *ExportHandler) ImportCampaign(c echo.Context) error {
 		return apperror.NewBadRequest("file upload required")
 	}
 
-	// Pick the size cap based on whether this looks like a zip. We
-	// can't know for sure until we sniff the bytes, so the cap is the
-	// larger zip ceiling — once we know the format, we re-check
-	// against the format-specific cap.
+	// First-pass size cap uses the larger zip ceiling because we
+	// haven't sniffed the format yet. Once we know it's a zip, the
+	// embedded campaign.json is re-capped at maxImportSize inside
+	// extractCampaignJSONFromZip; non-zip uploads are re-capped
+	// against maxImportSize directly below.
 	if file.Size > maxImportZipSize {
 		return apperror.NewBadRequest(fmt.Sprintf("file too large, maximum %d MB", maxImportZipSize/(1024*1024)))
 	}

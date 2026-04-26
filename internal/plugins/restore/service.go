@@ -158,7 +158,15 @@ func (s *service) RunRestore(ctx context.Context, manifestName string) (*RunResu
 		if cmd.Process == nil {
 			return nil
 		}
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		// ESRCH means the process group has already exited; treat as
+		// success so a process that finishes naturally between the
+		// context cancellation and our Kill call doesn't surface as a
+		// spurious error.
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if err == syscall.ESRCH {
+			return nil
+		}
+		return err
 	}
 
 	stdoutBuf, stderrBuf := newCapBuf(64*1024), newCapBuf(64*1024)
