@@ -88,6 +88,22 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return blockPosts(ctx.CC, ctx.Entity, ctx.CSRFToken)
 	})
 
+	// Player-facing per-user notes on entity pages. Each member sees
+	// their own notes plus whatever others have shared with them
+	// according to the audience field (private / dm_only / dm_scribe /
+	// everyone / custom). Backed by internal/widgets/entity_notes; the
+	// data layer enforces visibility, this block is just the mount
+	// point. Gated by the "player-notes" addon so campaigns can disable
+	// it cleanly without leaving an empty block lying around.
+	r.Register(BlockMeta{
+		Type: "entity_notes", Label: "Player Notes", Icon: "fa-sticky-note",
+		Description: "Per-user notes with private / DM-only / shared / custom audiences",
+		Addon:       "player-notes",
+		Contexts:    []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockEntityNotes(ctx.CC, ctx.Entity, ctx.CSRFToken)
+	})
+
 	r.Register(BlockMeta{
 		Type: "shop_inventory", Label: "Shop Inventory", Icon: "fa-store",
 		Description: "Shop items with prices",

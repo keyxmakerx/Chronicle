@@ -211,8 +211,9 @@ var builtinAddons = []addonDef{
 	{Slug: "notes", Name: "Notes", Description: "Floating notebook panel for personal and shared campaign notes. Includes checklists, color coding, version history, and edit locking.", Version: "0.1.0", Category: CategoryWidget, Status: StatusActive, Icon: "fa-book", Author: "Chronicle"},
 	{Slug: "attributes", Name: "Attributes", Description: "Custom attribute fields on entity pages (e.g. race, alignment, HP). When disabled, attribute panels are hidden.", Version: "0.1.0", Category: CategoryWidget, Status: StatusActive, Icon: "fa-sliders", Author: "Chronicle"},
 
+	{Slug: "player-notes", Name: "Player Notes", Description: "Per-user notes on entity pages with private / DM-only / shared / custom audiences. Real-time updates over WebSocket.", Version: "0.1.0", Category: CategoryWidget, Status: StatusActive, Icon: "fa-sticky-note", Author: "Chronicle"},
+
 	// Planned (no backing code yet).
-	{Slug: "player-notes", Name: "Player Notes", Description: "Collaborative note-taking block for entity pages.", Version: "0.1.0", Category: CategoryWidget, Status: StatusPlanned, Icon: "fa-sticky-note", Author: "Chronicle"},
 	{Slug: "family-tree", Name: "Family Tree", Description: "Visual family/org tree diagram from entity relations", Version: "0.1.0", Category: CategoryWidget, Status: StatusPlanned, Icon: "fa-sitemap", Author: "Chronicle"},
 	{Slug: "dice-roller", Name: "Dice Roller", Description: "In-app dice rolling with formula support and history", Version: "0.1.0", Category: CategoryWidget, Status: StatusPlanned, Icon: "fa-dice-d20", Author: "Chronicle"},
 }

@@ -153,8 +153,8 @@ func TestIsInstalled(t *testing.T) {
 	if !IsInstalled("notes") {
 		t.Error("expected notes to be installed")
 	}
-	if IsInstalled("player-notes") {
-		t.Error("expected player-notes to NOT be installed (planned, no backing code yet)")
+	if !IsInstalled("player-notes") {
+		t.Error("expected player-notes to be installed (active as of #263)")
 	}
 	if !IsInstalled("attributes") {
 		t.Error("expected attributes to be installed")

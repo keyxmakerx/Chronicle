@@ -40,6 +40,7 @@ import (
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
+	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/posts"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
@@ -694,6 +695,51 @@ func (a *noteEventPublisherAdapter) PublishNoteEvent(eventType, campaignID, note
 		return
 	}
 	a.bus.Publish(ws.NewMessage(msgType, campaignID, noteID, note))
+}
+
+// entityNotesNotifierHolder is the late-bound bridge from
+// entity_notes.Service.Notify (function-typed) to the WebSocket bus.
+// We construct the service before wsHub exists, so the holder lets us
+// inject the bus once boot reaches the WebSocket setup. Until then,
+// Notify is a safe no-op — mutations during startup don't broadcast,
+// which matters not at all because no client is connected.
+//
+// The `bus` field is plain (no mutex) because there's no concurrent
+// writer: it's set exactly once in RegisterRoutes between two
+// synchronous statements, before the HTTP server starts accepting
+// connections.
+type entityNotesNotifierHolder struct {
+	bus ws.EventBus
+}
+
+// Notify is the entity_notes.Notifier callback. Translates the
+// service's string event into a websocket message type and broadcasts
+// to the campaign that owns the note. Never to specific users — the
+// audience filter is server-side on the next list refresh; clients
+// just need a "something changed, refetch" nudge.
+func (h *entityNotesNotifierHolder) Notify(event string, note *entity_notes.Note, _ entity_notes.Audience) {
+	if h.bus == nil || note == nil || note.CampaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch event {
+	case "entity_notes.created":
+		msgType = ws.MsgEntityNoteCreated
+	case "entity_notes.updated":
+		msgType = ws.MsgEntityNoteUpdated
+	case "entity_notes.deleted":
+		msgType = ws.MsgEntityNoteDeleted
+	default:
+		return
+	}
+	// Payload is the note ID + entity ID only — clients refetch the list
+	// for fresh ACL filtering. We deliberately do NOT broadcast the note
+	// body so a private note's contents never leave the server, even
+	// if a misconfigured client subscribes to the wrong campaign.
+	h.bus.Publish(ws.NewMessage(msgType, note.CampaignID, note.ID, map[string]string{
+		"entityId": note.EntityID,
+		"noteId":   note.ID,
+	}))
 }
 
 // mapEventPublisherAdapter bridges the websocket.EventBus to the maps.MapEventPublisher
@@ -1551,6 +1597,22 @@ func (a *App) RegisterRoutes() {
 	postHandler := posts.NewHandler(postService)
 	posts.RegisterRoutes(e, postHandler, campaignService, authService)
 
+	// Player Notes (entity_notes) widget: per-user, per-entity notes
+	// with a 5-tier audience ACL (private / dm_only / dm_scribe /
+	// everyone / custom). The notifier is wired below after wsEventBus
+	// is constructed; until then, mutations don't broadcast (which is
+	// fine — this code path executes at startup, before any client can
+	// reach the API).
+	//
+	// The holder is heap-allocated (pointer) so the method value bound
+	// into the service captures the same struct that we mutate later
+	// when wsEventBus exists.
+	entityNotesRepo := entity_notes.NewRepository(a.DB)
+	entityNotesNotifier := &entityNotesNotifierHolder{}
+	entityNotesService := entity_notes.NewService(entityNotesRepo, entityNotesNotifier.Notify)
+	entityNotesHandler := entity_notes.NewHandler(entityNotesService)
+	entity_notes.RegisterRoutes(e, entityNotesHandler, campaignService, authService)
+
 	// Tags widget: campaign-scoped entity tagging (CRUD + entity associations).
 	// Created before sync API so the tag service is available for the REST API handler.
 	tagRepo := tags.NewTagRepository(a.DB)
@@ -2356,6 +2418,11 @@ func (a *App) RegisterRoutes() {
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	calendarService.SetEventPublisher(&calendarEventPublisherAdapter{bus: wsEventBus})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
+
+	// Late-bind the entity_notes notifier now that wsEventBus exists.
+	// The service was constructed earlier with a holder.Notify reference;
+	// setting holder.bus here makes future mutations broadcast over WS.
+	entityNotesNotifier.bus = wsEventBus
 
 	drawingService.SetEventPublisher(&mapEventPublisherAdapter{bus: wsEventBus})
 	drawingService.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {
