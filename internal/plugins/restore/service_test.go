@@ -200,8 +200,8 @@ func TestListManifests_ParsesAndSorts(t *testing.T) {
 	}
 	// Set explicit mtimes so sort order is deterministic.
 	now := time.Now()
-	os.Chtimes(filepath.Join(backupDir, older), now.Add(-1*time.Hour), now.Add(-1*time.Hour))
-	os.Chtimes(filepath.Join(backupDir, newer), now, now)
+	_ = os.Chtimes(filepath.Join(backupDir, older), now.Add(-1*time.Hour), now.Add(-1*time.Hour))
+	_ = os.Chtimes(filepath.Join(backupDir, newer), now, now)
 
 	// Drop a non-manifest file to confirm the filter excludes it.
 	if err := os.WriteFile(filepath.Join(backupDir, "chronicle_db_x.sql.gz"), []byte("x"), 0o644); err != nil {
@@ -299,7 +299,7 @@ func TestFirstToken(t *testing.T) {
 // implementation; both go away when the helper is extracted.)
 func TestCapBuf_Truncates(t *testing.T) {
 	b := newCapBuf(5)
-	b.Write([]byte(strings.Repeat("x", 100)))
+	_, _ = b.Write([]byte(strings.Repeat("x", 100)))
 	if b.String() != "xxxxx" {
 		t.Errorf("buffer = %q, want %q", b.String(), "xxxxx")
 	}
