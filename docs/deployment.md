@@ -71,6 +71,14 @@ Everything operator-controlled lives in three named volumes
 (`chronicle-data`, `chronicle-dbdata`, `chronicle-redisdata`) and one host
 file (`.env`). Back those up, you can resurrect anything else.
 
+The MariaDB tablespace row covers all relational state, including the
+player-to-character claim relationships introduced in 0.0.2
+(`entities.owner_user_id`, migration 22). `mysqldump --single-transaction`
+captures the column transparently — no separate handling — and `restore.sh`
+brings it back identically. If a player has claimed a character, that link
+is in the DB dump; if it isn't in the dump, the link didn't exist at backup
+time.
+
 ## 4. Install
 
 ### Docker Compose (primary path)
@@ -196,6 +204,30 @@ docker compose exec -T chronicle sh -c \
 docker compose up -d chronicle
 ```
 
+#### Worked example — rolling back across the 0.0.2 → 0.0.1 boundary (migration 22)
+
+0.0.2 adds migration 22 (`entities.owner_user_id`, the player-character
+claim column). Two failure modes cross this boundary:
+
+- **0.0.2 binary boots, migration 22 succeeds, but a regression appears
+  later.** Roll the image tag back to 0.0.1 *without* restoring the DB.
+  The 0.0.1 binary's `ExpectedMigrationVersion` is 21 and `RunStartupHealthChecks`
+  will refuse to start against a schema at version 22 — that's the gate
+  doing its job. To downgrade safely, restore the most recent
+  `chronicle_pre_migrate_*.sql.gz` (taken just before migration 22 ran)
+  using the steps above, then pin `chronicle:0.0.1` and restart. Any
+  claim relationships created on 0.0.2 are dropped by this rollback —
+  that's intrinsic to undoing migration 22, not a bug in the procedure.
+- **0.0.2 binary fails health checks at boot.** `os.Exit(1)` happens
+  before any traffic is served. Use the standard Scenario A flow above;
+  the pre-migration backup is the version-21 schema and any
+  `entities.owner_user_id` column added by the failed 0.0.2 boot will be
+  rolled away with it.
+
+There is **no forward-compat fallback**: a 0.0.1 binary will not boot
+against a 0.0.2 schema. Either match the binary to the schema, or
+restore the schema to match the older binary.
+
 ### Scenario B — server is up but a feature is broken
 
 No DB restore needed unless the broken release introduced a destructive
@@ -298,6 +330,28 @@ make restore RESTORE_ARGS="--manifest=/app/data/backups/chronicle_manifest_<TS>.
 docker compose start chronicle
 docker compose logs -f chronicle
 ```
+
+### Verifying a 0.0.2+ restore
+
+After restore, confirm the player-character claim data round-tripped.
+Pre-restore claims must reappear post-restore — if they don't, the dump
+was taken before the claim was made (expected) or the dump's at a schema
+version below 22 (the binary will have refused to boot already). To
+verify manually:
+
+```sh
+# Quick row-count check.
+docker compose exec -T chronicle-db sh -c \
+  'MYSQL_PWD="$MARIADB_PASSWORD" mysql -u "$MARIADB_USER" "$MARIADB_DATABASE" \
+     -e "SELECT COUNT(*) AS claimed_characters FROM entities WHERE owner_user_id IS NOT NULL;"'
+```
+
+End-to-end verification: log in as a player whose owned character
+predates the backup, navigate to `My Characters`
+(`GET /campaigns/:id/me`), and confirm the character card appears. If
+the player was claiming a character on 0.0.2 and the card is missing
+post-restore, the claim was created after the dump was taken — not a
+restore bug.
 
 ### Common restore arguments
 
