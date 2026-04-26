@@ -72,6 +72,37 @@ type SystemManifest struct {
 	// classes for processing text content. Loaded before widget scripts
 	// so widgets can depend on them (e.g., DrawSteelRefRenderer).
 	TextRenderers []TextRendererDef `json:"text_renderers,omitempty"`
+
+	// Renderers declares page-level entity-show renderers (CH4.5). Each
+	// entry binds an entity_type slug owned by this manifest to a widget
+	// that should render the entity's show page in place of the standard
+	// layout-block dispatch. The host auto-registers each entry into the
+	// EntityShowRendererRegistry at system-load time so JSON-only system
+	// packages don't need a Chronicle Go release to ship a custom
+	// renderer.
+	Renderers []RendererDef `json:"renderers,omitempty"`
+}
+
+// RendererDef binds an entity_type slug to the widget that should render
+// its show page. The slug must match a slug declared in this manifest's
+// entity_presets list, and the widget must be declared in this manifest's
+// widgets list — these constraints keep a manifest's renderers contained
+// to its own contributions and prevent silent drift if a preset or widget
+// is renamed.
+type RendererDef struct {
+	// Slug is the entity_type slug whose show page this renderer takes
+	// over. Must equal one of the entity_presets[].slug values declared
+	// in the same manifest.
+	Slug string `json:"slug"`
+
+	// Widget is the slug of the JS widget that should mount when an
+	// entity of the matching type is rendered. Must equal one of the
+	// widgets[].slug values declared in the same manifest.
+	Widget string `json:"widget"`
+
+	// Description is an optional human-readable note (shown in admin UI
+	// or debug logs only — does not affect runtime behavior).
+	Description string `json:"description,omitempty"`
 }
 
 // WidgetDef describes a JS widget provided by a game system module.
@@ -483,6 +514,7 @@ const (
 	maxRelationPresets    = 20
 	maxWidgets            = 10
 	maxTextRenderers      = 5
+	maxRenderers          = 10
 )
 
 // slugPattern matches valid manifest IDs and preset slugs.
@@ -622,6 +654,44 @@ func ValidateManifest(m *SystemManifest) error {
 		}
 		if strings.Contains(tr.File, "..") {
 			return fmt.Errorf("text_renderer %d (%s): file must not contain path traversal", i, tr.Slug)
+		}
+	}
+
+	// Validate renderers. Each renderer.slug must reference an entity preset
+	// declared in this same manifest, and renderer.widget must reference a
+	// widget declared in this manifest. Cross-manifest references are
+	// forbidden — a manifest must own everything it claims to render.
+	if len(m.Renderers) > maxRenderers {
+		return fmt.Errorf("too many renderers (%d, max %d)", len(m.Renderers), maxRenderers)
+	}
+	if len(m.Renderers) > 0 {
+		presetSlugs := make(map[string]struct{}, len(m.EntityPresets))
+		for _, p := range m.EntityPresets {
+			presetSlugs[p.Slug] = struct{}{}
+		}
+		widgetSlugs := make(map[string]struct{}, len(m.Widgets))
+		for _, w := range m.Widgets {
+			widgetSlugs[w.Slug] = struct{}{}
+		}
+		for i, r := range m.Renderers {
+			if r.Slug == "" {
+				return fmt.Errorf("renderer %d: slug is required", i)
+			}
+			if !slugPattern.MatchString(r.Slug) {
+				return fmt.Errorf("renderer %d: slug %q must contain only lowercase letters, numbers, hyphens, and underscores", i, r.Slug)
+			}
+			if r.Widget == "" {
+				return fmt.Errorf("renderer %d (%s): widget is required", i, r.Slug)
+			}
+			if !slugPattern.MatchString(r.Widget) {
+				return fmt.Errorf("renderer %d (%s): widget %q must contain only lowercase letters, numbers, hyphens, and underscores", i, r.Slug, r.Widget)
+			}
+			if _, ok := presetSlugs[r.Slug]; !ok {
+				return fmt.Errorf("renderer %d (%s): slug must match an entity_presets[].slug declared in this manifest", i, r.Slug)
+			}
+			if _, ok := widgetSlugs[r.Widget]; !ok {
+				return fmt.Errorf("renderer %d (%s): widget %q must match a widgets[].slug declared in this manifest", i, r.Slug, r.Widget)
+			}
 		}
 	}
 
