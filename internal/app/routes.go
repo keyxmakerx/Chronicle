@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -1288,6 +1289,19 @@ func (a *App) RegisterRoutes() {
 	adminHandler.SetMediaDeps(mediaRepo, mediaService, a.Config.Upload.MaxSize)
 	adminHandler.SetBaseURL(a.Config.BaseURL)
 	adminGroup := admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
+
+	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
+	// shells out to scripts/restore.sh under a typed-RESTORE
+	// confirmation. Reverses ADR-035's "sysadmin-only" stance — see
+	// ADR-036 for the policy reasoning.
+	if a.Config.BackupDir != "" {
+		restoreSvc := restore.NewService(restore.Config{
+			ScriptPath: a.Config.RestoreScriptPath,
+			BackupDir:  a.Config.BackupDir,
+		})
+		restoreHandler := restore.NewHandler(restoreSvc)
+		restore.RegisterRoutes(adminGroup, restoreHandler)
+	}
 
 	// Settings plugin: editable storage limits (global, per-user, per-campaign).
 	// Registers on the admin group since all settings routes require site admin.

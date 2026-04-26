@@ -1,0 +1,188 @@
+// restore.templ renders the admin restore dashboard. Lists parsed
+// manifests and exposes a per-row "Restore from this" button gated by
+// a typed-in RESTORE confirmation. Heavy red warning banner makes
+// clear that the running site will be unavailable during restore.
+package restore
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// RestorePageData bundles everything the RestorePage templ needs.
+type RestorePageData struct {
+	BackupDir  string
+	Manifests  []ManifestSummary
+	ListError  string
+	LastRun    *RunResult
+	RunningNow bool
+	CSRFToken  string
+}
+
+templ RestorePage(d RestorePageData) {
+	@layouts.App("Restore - Admin") {
+		<div class="max-w-5xl mx-auto space-y-6">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">Restore from backup</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					Restoring overwrites the live database, media tree, and Redis snapshot from the chosen backup. The site will be unavailable for the duration of the restore.
+				</p>
+			</div>
+
+			@warningBanner()
+
+			if d.LastRun != nil {
+				@lastRunStatus(d.LastRun)
+			}
+
+			if d.ListError != "" {
+				<div class="card p-4 border-l-4 border-red-500">
+					<p class="text-sm text-red-700 dark:text-red-300">
+						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+						Could not list manifests in <code>{ d.BackupDir }</code>: { d.ListError }
+					</p>
+				</div>
+			}
+
+			@manifestList(d)
+		</div>
+	}
+}
+
+// warningBanner is the always-on red banner that tells the operator
+// what they're about to do. It's not a confirmation by itself — that's
+// the per-row form below — but it sets context so the operator can't
+// claim they didn't know.
+templ warningBanner() {
+	<div class="card p-4 border-l-4 border-red-500 bg-red-500/5">
+		<p class="text-sm text-red-700 dark:text-red-300 font-semibold mb-1">
+			<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+			Restore is destructive
+		</p>
+		<ul class="text-xs text-red-700 dark:text-red-300 list-disc ml-5 space-y-0.5">
+			<li>Drops every table in the live database and reloads from the backup's mysqldump.</li>
+			<li>Replaces the media directory's contents with the backup's tarball.</li>
+			<li>Reloads the Redis snapshot if one was bundled (active sessions are dropped — every user is logged out).</li>
+			<li>Cannot be undone except by restoring a different backup. Take a fresh backup first if the live state is even partially trustworthy.</li>
+		</ul>
+	</div>
+}
+
+// lastRunStatus renders the most-recent-restore summary block.
+templ lastRunStatus(r *RunResult) {
+	<div class="card p-4 border-l-4 border-edge text-sm">
+		if r.Succeeded() {
+			<div class="text-green-700 dark:text-green-300">
+				<i class="fa-solid fa-circle-check mr-1"></i>
+				Last restore succeeded — { r.FinishedAt.Format("2006-01-02 15:04:05") }
+				<span class="text-fg-muted ml-2">({ r.Duration().Round(1e9).String() })</span>
+				<span class="text-fg-muted ml-2">from { r.ManifestName }</span>
+			</div>
+		} else if r.TimedOut {
+			<div class="text-red-700 dark:text-red-300">
+				<i class="fa-solid fa-clock mr-1"></i>
+				Last restore timed out — { r.FinishedAt.Format("2006-01-02 15:04:05") }
+			</div>
+		} else {
+			<div class="text-red-700 dark:text-red-300">
+				<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+				Last restore failed — exit { fmt.Sprintf("%d", r.ExitCode) } at { r.FinishedAt.Format("2006-01-02 15:04:05") }
+			</div>
+		}
+		if r.Stderr != "" {
+			<details class="mt-2">
+				<summary class="cursor-pointer text-xs text-fg-muted">Show stderr</summary>
+				<pre class="mt-2 p-2 bg-surface-alt text-xs text-fg-body whitespace-pre-wrap">{ r.Stderr }</pre>
+			</details>
+		}
+	</div>
+}
+
+// manifestList renders the table of available backups (each represented
+// by its manifest file). Each row has its own confirmation form so an
+// admin can target a specific backup without a separate "select-then-
+// confirm" flow.
+templ manifestList(d RestorePageData) {
+	<div class="card p-5">
+		<h2 class="text-lg font-semibold text-fg mb-3">Available backups</h2>
+		if len(d.Manifests) == 0 {
+			<div class="text-sm text-fg-muted py-6 text-center">
+				No backup manifests found in <code>{ d.BackupDir }</code>. Run a backup from /admin/backup first, or check your BACKUP_DIR config.
+			</div>
+		} else {
+			<div class="space-y-3">
+				for _, m := range d.Manifests {
+					@manifestRow(m, d.RunningNow, d.CSRFToken)
+				}
+			</div>
+		}
+	</div>
+}
+
+// manifestRow renders one backup with its parsed details and its own
+// confirmation form. Each form is independent so the admin can scroll
+// to the backup they want and act there without page state interleaving.
+templ manifestRow(m ManifestSummary, runningNow bool, csrfToken string) {
+	<div class="border border-edge rounded p-3 space-y-2">
+		<div class="flex items-start justify-between gap-3">
+			<div class="flex-1 min-w-0">
+				<div class="text-sm font-medium font-mono">{ m.Name }</div>
+				<div class="text-xs text-fg-muted mt-0.5">
+					{ m.ModTime.Format("2006-01-02 15:04:05") }
+					if m.ChronicleVersion != "" {
+						<span class="ml-2">chronicle { m.ChronicleVersion }</span>
+					}
+					if m.MigrationVersion != "" {
+						<span class="ml-2">schema v{ m.MigrationVersion }</span>
+					}
+				</div>
+				<div class="text-xs text-fg-muted mt-1 space-x-3">
+					if m.DBFile != "" {
+						<span><i class="fa-solid fa-database mr-1"></i>{ m.DBFile }</span>
+					}
+					if m.MediaFile != "" {
+						<span><i class="fa-solid fa-image mr-1"></i>{ m.MediaFile }</span>
+					}
+					if m.RedisFile != "" {
+						<span><i class="fa-solid fa-bolt mr-1"></i>{ m.RedisFile }</span>
+					}
+				</div>
+				if m.ParseError != "" {
+					<div class="text-xs text-red-600 mt-1">
+						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+						Manifest parse error: { m.ParseError }
+					</div>
+				}
+			</div>
+		</div>
+		<form
+			method="POST"
+			action="/admin/restore/run"
+			hx-post="/admin/restore/run"
+			hx-confirm={ fmt.Sprintf("This will overwrite the live database and media with the contents of %s. Are you sure?", m.Name) }
+			class="flex items-center gap-2 pt-2 border-t border-edge"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			<input type="hidden" name="manifest" value={ m.Name }/>
+			<input
+				type="text"
+				name="confirm"
+				placeholder="Type RESTORE to enable"
+				required
+				autocomplete="off"
+				class="input text-sm flex-1"
+			/>
+			if runningNow {
+				<button type="button" class="btn-danger text-sm opacity-50 cursor-not-allowed" disabled>
+					<i class="fa-solid fa-spinner fa-spin mr-1"></i>
+					Restore in progress…
+				</button>
+			} else {
+				<button type="submit" class="btn-danger text-sm">
+					<i class="fa-solid fa-rotate-left mr-1"></i>
+					Restore from this backup
+				</button>
+			}
+		</form>
+	</div>
+}

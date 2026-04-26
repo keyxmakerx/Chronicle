@@ -43,6 +43,16 @@ type Config struct {
 
 	// ExtensionsPath is the root directory for user-installed content extensions.
 	ExtensionsPath string
+
+	// BackupDir is the directory where the operator backup script writes
+	// artifacts and where the admin restore UI lists them. Same value
+	// passed to the backup.sh / restore.sh scripts via BACKUP_DIR env.
+	BackupDir string
+
+	// RestoreScriptPath is the absolute path to scripts/restore.sh. The
+	// admin restore UI shells out to this. Default
+	// "/app/scripts/restore.sh" matches the Docker image layout.
+	RestoreScriptPath string
 }
 
 // DatabaseConfig holds MariaDB connection parameters. Individual fields
@@ -186,6 +196,9 @@ func Load() (*Config, error) {
 		},
 
 		ExtensionsPath: getEnv("EXTENSIONS_PATH", "./extensions"),
+
+		BackupDir:         getEnv("BACKUP_DIR", ""),
+		RestoreScriptPath: getEnv("RESTORE_SCRIPT_PATH", "/app/scripts/restore.sh"),
 
 		Upload: UploadConfig{
 			MaxSize:        getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
