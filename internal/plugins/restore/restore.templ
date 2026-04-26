@@ -23,11 +23,13 @@ templ RestorePage(d RestorePageData) {
 	@layouts.App("Restore - Admin") {
 		<div class="max-w-5xl mx-auto space-y-6">
 			<div>
-				<h1 class="text-2xl font-bold text-fg">Restore from backup</h1>
+				<h1 class="text-2xl font-bold text-fg">Backup &amp; Restore</h1>
 				<p class="text-sm text-fg-secondary mt-1">
 					Restoring overwrites the live database, media tree, and Redis snapshot from the chosen backup. The site will be unavailable for the duration of the restore.
 				</p>
 			</div>
+
+			@tabStrip("restore")
 
 			@warningBanner()
 
@@ -47,6 +49,30 @@ templ RestorePage(d RestorePageData) {
 			@manifestList(d)
 		</div>
 	}
+}
+
+// tabStrip renders the two-tab navigation shared with /admin/backup.
+// Sidebar collapses both pages into one entry, so this strip is the
+// only way to flip between snapshot list and restore list. The
+// `active` parameter is "snapshots" or "restore".
+templ tabStrip(active string) {
+	<nav class="flex gap-1 border-b border-edge text-sm" aria-label="Backup &amp; restore tabs">
+		if active == "snapshots" {
+			<a href="/admin/backup" class="px-3 py-2 border-b-2 border-accent text-fg font-medium" aria-current="page">
+				<i class="fa-solid fa-box-archive mr-1"></i> Snapshots
+			</a>
+			<a href="/admin/restore" class="px-3 py-2 border-b-2 border-transparent text-fg-muted hover:text-fg">
+				<i class="fa-solid fa-rotate-left mr-1"></i> Restore
+			</a>
+		} else {
+			<a href="/admin/backup" class="px-3 py-2 border-b-2 border-transparent text-fg-muted hover:text-fg">
+				<i class="fa-solid fa-box-archive mr-1"></i> Snapshots
+			</a>
+			<a href="/admin/restore" class="px-3 py-2 border-b-2 border-accent text-fg font-medium" aria-current="page">
+				<i class="fa-solid fa-rotate-left mr-1"></i> Restore
+			</a>
+		}
+	</nav>
 }
 
 // warningBanner is the always-on red banner that tells the operator

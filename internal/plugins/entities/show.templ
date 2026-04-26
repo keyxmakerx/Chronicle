@@ -611,6 +611,31 @@ templ blockPosts(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 	></div>
 }
 
+// blockEntityNotes renders the player-notes widget mount point. The JS
+// widget at static/js/widgets/entity_notes.js fetches and renders the
+// note list, gates editor capabilities by role, and (when WebSocket is
+// connected) listens for entity_notes.* messages to refresh in place.
+//
+// Role hints exposed via data-* attributes so the JS doesn't have to
+// re-query — the server already knows the viewer's role and the JS
+// can show/hide the audience picker options accordingly. The hard
+// security gate is on the API; data-* hints are for UX only.
+templ blockEntityNotes(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
+	<div
+		data-widget="entity-notes"
+		data-entity-id={ entity.ID }
+		data-campaign-id={ cc.Campaign.ID }
+		data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/notes", cc.Campaign.ID, entity.ID) }
+		data-csrf={ csrfToken }
+		if cc.MemberRole == campaigns.RoleOwner {
+			data-can-author-dm-only="true"
+		}
+		if cc.MemberRole == campaigns.RoleOwner || cc.MemberRole == campaigns.RoleScribe || cc.IsDmGranted {
+			data-can-author-dm-scribe="true"
+		}
+	></div>
+}
+
 // blockTextBlock renders a static rich text / HTML content block.
 // The content is stored in the block config under the "content" key.
 templ blockTextBlock(config map[string]any) {

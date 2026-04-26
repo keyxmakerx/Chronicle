@@ -60,6 +60,15 @@ const (
 	MsgNoteDeleted MessageType = "note.deleted"
 )
 
+// Entity notes sync messages (player-notes addon). Distinct from note.*
+// because the data model + audience semantics are different — these
+// fire from internal/widgets/entity_notes, those from internal/widgets/notes.
+const (
+	MsgEntityNoteCreated MessageType = "entity_note.created"
+	MsgEntityNoteUpdated MessageType = "entity_note.updated"
+	MsgEntityNoteDeleted MessageType = "entity_note.deleted"
+)
+
 // Sync control messages.
 const (
 	MsgSyncStatus   MessageType = "sync.status"
@@ -100,6 +109,9 @@ var validMessageTypes = map[MessageType]struct{}{
 	MsgNoteCreated:          {},
 	MsgNoteUpdated:          {},
 	MsgNoteDeleted:          {},
+	MsgEntityNoteCreated:    {},
+	MsgEntityNoteUpdated:    {},
+	MsgEntityNoteDeleted:    {},
 	MsgSyncStatus:           {},
 	MsgSyncError:            {},
 	MsgSyncConflict:         {},

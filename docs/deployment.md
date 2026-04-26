@@ -137,7 +137,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `MEDIA_PATH` | `./data/media` | Resolves to `/app/data/media` in the container. |
 | `MEDIA_SIGNING_SECRET` | (auto) | Auto-generated if empty; HMAC-SHA256 for signed media URLs. |
 | `MEDIA_SERVE_RATE_LIMIT` | `300` | Requests/min/IP for `GET /media/:id`. |
-| `BACKUP_DIR` | `/app/data/backups` (compose) / empty (bare) | Empty disables the in-process pre-migration backup safety net AND the admin backup/restore UIs. Compose defaults it on. |
+| `BACKUP_DIR` | `/app/data/backups` | Where backups land. Defaults to the persistent `/app/data` volume so a fresh deploy works without operator setup. Override only if you mount backups on a different path. Setting it explicitly to empty is unsupported (the admin UI will surface a "not configured" error and the in-process pre-migration backup will be skipped). |
 | `BACKUP_RETENTION_DAYS` | `7` | Used by `scripts/backup.sh`. The in-process rotator uses a separate hardcoded 7d for `chronicle_pre_migrate_*` artifacts. |
 | `BACKUP_REQUIRED` | `0` | When `1` or `true`, the in-process pre-migration capture is mandatory: any failure (mysqldump missing, dump zero bytes, manifest write fails) aborts startup before migrations apply. Use in production. The default fail-open behavior (warn + proceed) preserves the legacy semantics for development setups that don't have `mariadb-client` installed. |
 | `BACKUP_SCRIPT_PATH` | `/app/scripts/backup.sh` | Used by the admin "Run backup" button. |

@@ -22,11 +22,13 @@ templ BackupPage(d BackupPageData) {
 	@layouts.App("Backups - Admin") {
 		<div class="max-w-5xl mx-auto space-y-6">
 			<div>
-				<h1 class="text-2xl font-bold text-fg">Backups</h1>
+				<h1 class="text-2xl font-bold text-fg">Backup &amp; Restore</h1>
 				<p class="text-sm text-fg-secondary mt-1">
 					Run an on-demand backup or download an existing artifact. Backups bundle the database, media files, and Redis snapshot — see the operator runbook in docs/deployment.md for the artifact format.
 				</p>
 			</div>
+
+			@tabStrip("snapshots")
 
 			@runCard(d)
 
@@ -42,6 +44,30 @@ templ BackupPage(d BackupPageData) {
 			@artifactList(d)
 		</div>
 	}
+}
+
+// tabStrip renders the two-tab navigation shared by /admin/backup and
+// /admin/restore. Sidebar collapses both into one entry, so this strip
+// is the only way to flip between snapshot list and restore list. The
+// `active` parameter is "snapshots" or "restore".
+templ tabStrip(active string) {
+	<nav class="flex gap-1 border-b border-edge text-sm" aria-label="Backup &amp; restore tabs">
+		if active == "snapshots" {
+			<a href="/admin/backup" class="px-3 py-2 border-b-2 border-accent text-fg font-medium" aria-current="page">
+				<i class="fa-solid fa-box-archive mr-1"></i> Snapshots
+			</a>
+			<a href="/admin/restore" class="px-3 py-2 border-b-2 border-transparent text-fg-muted hover:text-fg">
+				<i class="fa-solid fa-rotate-left mr-1"></i> Restore
+			</a>
+		} else {
+			<a href="/admin/backup" class="px-3 py-2 border-b-2 border-transparent text-fg-muted hover:text-fg">
+				<i class="fa-solid fa-box-archive mr-1"></i> Snapshots
+			</a>
+			<a href="/admin/restore" class="px-3 py-2 border-b-2 border-accent text-fg font-medium" aria-current="page">
+				<i class="fa-solid fa-rotate-left mr-1"></i> Restore
+			</a>
+		}
+	</nav>
 }
 
 // runCard renders the "Run backup now" button plus the most recent run's
