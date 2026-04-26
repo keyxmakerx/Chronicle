@@ -66,7 +66,7 @@ func main() {
 	backupRequired := strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "1") ||
 		strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "true")
 	preMigrateErr := database.PreMigrationBackup(db, database.HealthCheckConfig{
-		BackupDir:      getEnvDefault("BACKUP_DIR", ""),
+		BackupDir:      cfg.BackupDir,
 		BackupRequired: backupRequired,
 		MediaPath:      cfg.Upload.MediaPath,
 		RedisURL:       cfg.Redis.URL,

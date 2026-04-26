@@ -588,27 +588,21 @@ templ AdminSidebarNav() {
 				</span>
 				Storage
 			</a>
+			<!-- Combined "Backup & Restore" entry. The two pages still live at
+			     /admin/backup and /admin/restore (separate plugins, separate
+			     templates) but share one sidebar slot with a tab strip on each
+			     page so operators don't have to scroll the sidebar to flip
+			     between snapshot list and restore list. -->
 			<a
 				href="/admin/backup"
 				class={ sidebarNavLink,
-					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/backup")),
-					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/backup")) }
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/backup") || isPathPrefix(ctx, "/admin/restore")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/backup") && !isPathPrefix(ctx, "/admin/restore")) }
 			>
 				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 					<i class="fa-solid fa-box-archive text-xs"></i>
 				</span>
-				Backups
-			</a>
-			<a
-				href="/admin/restore"
-				class={ sidebarNavLink,
-					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/restore")),
-					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/restore")) }
-			>
-				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-					<i class="fa-solid fa-rotate-left text-xs"></i>
-				</span>
-				Restore
+				Backup &amp; Restore
 			</a>
 			<a
 				href="/admin/database"

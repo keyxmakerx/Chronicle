@@ -1305,14 +1305,18 @@ func (a *App) RegisterRoutes() {
 	// shells out to scripts/restore.sh under a typed-RESTORE
 	// confirmation. Reverses ADR-035's "sysadmin-only" stance — see
 	// ADR-036 for the policy reasoning.
-	if a.Config.BackupDir != "" {
-		restoreSvc := restore.NewService(restore.Config{
-			ScriptPath: a.Config.RestoreScriptPath,
-			BackupDir:  a.Config.BackupDir,
-		})
-		restoreHandler := restore.NewHandler(restoreSvc)
-		restore.RegisterRoutes(adminGroup, restoreHandler)
-	}
+	//
+	// Always registered: BackupDir now defaults to /app/data/backups in
+	// config.Load, so the panic in restore.NewService(BackupDir=="") is
+	// unreachable from production wiring. Removing the conditional fixes
+	// the "Restore link is in the sidebar but 404s" bug that operators
+	// who hadn't set BACKUP_DIR explicitly hit on first deploy.
+	restoreSvc := restore.NewService(restore.Config{
+		ScriptPath: a.Config.RestoreScriptPath,
+		BackupDir:  a.Config.BackupDir,
+	})
+	restoreHandler := restore.NewHandler(restoreSvc)
+	restore.RegisterRoutes(adminGroup, restoreHandler)
 
 	// Settings plugin: editable storage limits (global, per-user, per-campaign).
 	// Registers on the admin group since all settings routes require site admin.
