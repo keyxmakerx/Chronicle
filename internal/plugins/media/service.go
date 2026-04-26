@@ -465,6 +465,25 @@ func (s *mediaService) CleanupOrphans(ctx context.Context) (int, error) {
 			return nil
 		}
 
+		// Defense in depth: skip symlinks. filepath.Walk uses Lstat, so
+		// symlinks never resolve under our cleanup, but a symlink in
+		// the media tree is unexpected enough that we'd rather not
+		// touch it. Refuse to os.Remove it — even though Remove unlinks
+		// the symlink itself rather than its target, leaving it in
+		// place lets an operator investigate how it got there.
+		if info.Mode()&os.ModeSymlink != 0 {
+			slog.Warn("skipping symlink in media directory",
+				slog.String("path", path),
+			)
+			return nil
+		}
+		// Also refuse anything that isn't a regular file (sockets,
+		// devices, named pipes). os.FileInfo.Mode().IsRegular() is the
+		// idiomatic check.
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+
 		// Get the relative path from mediaPath for comparison with DB filenames.
 		rel, relErr := filepath.Rel(s.mediaPath, path)
 		if relErr != nil {

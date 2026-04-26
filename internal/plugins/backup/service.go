@@ -155,7 +155,18 @@ func (s *service) RunBackup(ctx context.Context) (*RunResult, error) {
 		}
 		// Negative PID == process group: SIGKILL the script, mysqldump,
 		// gzip, tar, and any other descendants in one shot.
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		//
+		// ESRCH is tolerated because it means the process group has
+		// already exited — without this, a process that finishes
+		// naturally between the context cancellation and our Kill call
+		// would surface as a spurious error. PID-reuse risk is moot
+		// here: by the time the kernel reaps a finished child, our
+		// goroutine watching ctx.Done has already exited.
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if err == syscall.ESRCH {
+			return nil
+		}
+		return err
 	}
 
 	stdoutBuf, stderrBuf := newCapBuf(64*1024), newCapBuf(64*1024)
