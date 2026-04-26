@@ -19,6 +19,7 @@ func RegisterRoutes(admin *echo.Group, h *Handler) {
 	g.DELETE("/:id/pin", h.ClearPinnedVersion)
 	g.PUT("/:id/auto-update", h.SetAutoUpdate)
 	g.POST("/:id/check", h.CheckForUpdates)
+	g.POST("/:id/repack", h.RepackFoundryZip)
 
 	// Usage tracking.
 	g.GET("/:id/usage", h.GetUsage)

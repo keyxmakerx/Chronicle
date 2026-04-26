@@ -1353,7 +1353,7 @@ func (a *App) RegisterRoutes() {
 	// Package manager: external repo management for systems and Foundry module.
 	pkgRepo := packages.NewPackageRepository(a.DB)
 	pkgGitHub := packages.NewGitHubClient()
-	pkgService := packages.NewPackageService(pkgRepo, pkgGitHub, a.Config.Upload.MediaPath)
+	pkgService := packages.NewPackageService(pkgRepo, pkgGitHub, a.Config.Upload.MediaPath, a.Config.BaseURL)
 	// Rescan system registry and re-register addons when a system package
 	// is installed or updated, so it appears in the campaign Settings >
 	// Game System dropdown immediately without requiring a server restart.

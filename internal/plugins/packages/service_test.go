@@ -147,7 +147,7 @@ func (s *fakeSettings) Set(_ context.Context, key, value string) error {
 // for every newly-added package — exactly the class of bug we just removed.
 func TestAddPackage_DefaultsAutoUpdateOff(t *testing.T) {
 	repo := newFakeRepo()
-	svc := NewPackageService(repo, newOfflineGitHubClient(), t.TempDir())
+	svc := NewPackageService(repo, newOfflineGitHubClient(), t.TempDir(), "https://example.test")
 
 	pkg, err := svc.AddPackage(context.Background(), AddPackageInput{
 		RepoURL: "https://github.com/test/test",
@@ -191,7 +191,7 @@ func TestSubmitPackage_AlwaysPending(t *testing.T) {
 				"packages.require_approval":    tc.requireApproval,
 				"packages.owner_upload_policy": OwnerUploadAutoApprove,
 			}}
-			svc := NewPackageService(repo, newOfflineGitHubClient(), t.TempDir())
+			svc := NewPackageService(repo, newOfflineGitHubClient(), t.TempDir(), "https://example.test")
 			ConfigureSettings(svc, settings)
 
 			pkg, err := svc.SubmitPackage(context.Background(), "user-1", SubmitPackageInput{
@@ -222,7 +222,7 @@ func TestSubmitPackage_OwnerPolicyDisabled(t *testing.T) {
 	settings := &fakeSettings{values: map[string]string{
 		"packages.owner_upload_policy": OwnerUploadDisabled,
 	}}
-	svc := NewPackageService(repo, newOfflineGitHubClient(), t.TempDir())
+	svc := NewPackageService(repo, newOfflineGitHubClient(), t.TempDir(), "https://example.test")
 	ConfigureSettings(svc, settings)
 
 	_, err := svc.SubmitPackage(context.Background(), "user-1", SubmitPackageInput{

@@ -131,6 +131,16 @@ templ packageCard(pkg Package, csrfToken string) {
 					>
 						<i class="fa-solid fa-chart-line"></i>
 					</a>
+					// Re-bake the cached zip's manifest URLs to current BASE_URL.
+					// Needed if BASE_URL changed since the package was installed.
+					<button
+						hx-post={ fmt.Sprintf("/admin/packages/%s/repack", pkg.ID) }
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+						class="btn-secondary text-sm"
+						title="Repack zip with current BASE_URL"
+					>
+						<i class="fa-solid fa-box"></i>
+					</button>
 				}
 				<!-- Version Picker -->
 				<button
