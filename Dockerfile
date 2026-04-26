@@ -43,12 +43,19 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /chronicle ./cmd/server
 FROM alpine:3.20
 
 # Install CA certificates for HTTPS calls, timezone data, su-exec for
-# dropping privileges in the entrypoint, and mariadb-client + gzip so the
-# in-process pre-migration backup (internal/database/healthcheck.go) and
-# the operator-runnable scripts/backup.sh actually have mysqldump and
-# gzip on PATH. Without mariadb-client, PreMigrationBackup silently
-# WARN-skips and operators who set BACKUP_DIR get no backup. ~+15 MB.
-RUN apk add --no-cache ca-certificates tzdata su-exec mariadb-client gzip
+# dropping privileges in the entrypoint, and the backup-toolchain
+# packages so the in-process PreMigrationBackup
+# (internal/database/pre_migration_backup.go) and the operator
+# scripts/backup.sh actually have mysqldump, gzip, and redis-cli on
+# PATH. Without these:
+#   - mariadb-client → PreMigrationBackup WARN-skips (or aborts boot
+#     when BACKUP_REQUIRED=1) and operators who set BACKUP_DIR get
+#     no DB rollback.
+#   - redis-tools   → Redis snapshots are skipped (sessions are
+#     recoverable, so non-fatal, but the safety net is incomplete).
+#   - gzip          → tarballs and SQL dumps are uncompressed.
+# Total cost: ~+18 MB.
+RUN apk add --no-cache ca-certificates tzdata su-exec mariadb-client redis gzip
 
 # Create non-root user with a fixed UID/GID for predictable bind-mount
 # ownership. Host dirs must be owned by this UID for non-root operation.

@@ -1409,3 +1409,84 @@ Security guarantees on top of the existing `RequireSiteAdmin` and
   restoring. A future enhancement may add an opt-in pre-restore
   backup, but for now the operator owns that step (and the existing
   in-process pre-migration backup gives some protection too).
+
+## ADR-037: Pre-migration backup symmetry with operator backups
+
+**Status:** Accepted (2026-04-26).
+**Refines:** ADR-035 (operator backup) and ADR-036 (admin UI for backup
+and restore).
+
+**Context:**
+The original `PreMigrationBackup` (added in the ADR-035 era) captured
+only the database — a single `chronicle_pre_migrate_<TS>.sql.gz` per
+boot. Three gaps surfaced once the operator backup pipeline matured:
+
+1. **No media or Redis snapshot.** A migration that changes how media
+   IDs are encoded would leave the on-disk media tree out-of-sync
+   with any restored DB. Same for Redis (sessions only, but
+   recoverable).
+2. **Fail-open on tool absence.** If `mysqldump` was missing from the
+   image, the function logged a warning and returned. Migrations
+   proceeded with no rollback. In production that's a silent
+   data-loss risk hidden behind a green deploy.
+3. **No version stamping.** The artifact filename was just a
+   timestamp; the operator had to remember which schema version the
+   DB was at when it was taken. Operator backups already embed
+   `migration_version=<N>` in their manifest; pre-migration didn't.
+
+**Decision:**
+Extend `PreMigrationBackup` so its output is interchangeable with
+`scripts/backup.sh` output:
+
+- Same artifact prefixes
+  (`chronicle_pre_migrate_db_*.sql.gz`,
+  `chronicle_pre_migrate_media_*.tar.gz`,
+  `chronicle_pre_migrate_redis_*.rdb`).
+- Same manifest format (`chronicle_pre_migrate_manifest_*.txt`) with
+  `chronicle_manifest_version=1`, `chronicle_version=`,
+  `migration_version=`, plus per-artifact sha256 + size.
+- One distinguishing line: `chronicle_pre_migrate=1` so restore
+  tooling can label boot-time bundles separately from
+  operator-triggered ones.
+
+Add `BACKUP_REQUIRED=1` env var: when set, any artifact failure
+aborts startup before migrations apply. Default remains fail-open
+for backwards compatibility with development setups that lack
+`mariadb-client`.
+
+Three security/correctness defenses:
+
+- **Atomic writes.** Each artifact written to `<file>.partial` and
+  renamed only after sha256 + size verification. Half-written files
+  never persist.
+- **0600 file mode** on every artifact and the manifest. The dump
+  contains all data; loose permissions on a multi-user host would
+  leak it.
+- **Zero-byte rejection.** Any artifact that ends up zero bytes is
+  treated as a capture failure (covers silent `mysqldump` exit-zero
+  on empty DB, `redis-cli` writing nothing on no-permission, etc.).
+
+**Consequences:**
+
+- Pre-migration snapshots become **first-class restorable artifacts**.
+  `scripts/restore.sh --manifest chronicle_pre_migrate_manifest_<TS>.txt`
+  works the same as it does for operator backups; the admin restore
+  UI surfaces them in the same list.
+- Production deployments can opt into fail-closed via
+  `BACKUP_REQUIRED=1` for a real "no rollback story = no migration"
+  guarantee. Existing deployments are unaffected (default still
+  fail-open).
+- The retention sweep was extended to glob the four new artifact
+  families plus a backwards-compat pattern for legacy
+  `chronicle_pre_migrate_<TS>.sql.gz` files (no `_db_` infix). 7-day
+  retention applies to all five; legacy files time out and disappear
+  on their own as the new format takes over.
+- `redis-cli` is now a soft dependency: present → Redis snapshot
+  included; absent → skipped with a debug log. Chronicle's only
+  Redis state is sessions, so a missing snapshot only means "users
+  get logged out on rollback" — not data loss. Production images
+  should still include `redis-tools` for the safety net.
+- Documentation: `docs/deployment.md` §5 gains `BACKUP_REQUIRED`,
+  `BACKUP_SCRIPT_PATH`, `RESTORE_SCRIPT_PATH`, `CHRONICLE_VERSION`
+  entries; §7 (Rollback / Scenario A) is rewritten to use
+  `scripts/restore.sh --manifest` against pre-migration manifests.

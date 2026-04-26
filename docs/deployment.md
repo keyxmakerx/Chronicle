@@ -137,8 +137,12 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `MEDIA_PATH` | `./data/media` | Resolves to `/app/data/media` in the container. |
 | `MEDIA_SIGNING_SECRET` | (auto) | Auto-generated if empty; HMAC-SHA256 for signed media URLs. |
 | `MEDIA_SERVE_RATE_LIMIT` | `300` | Requests/min/IP for `GET /media/:id`. |
-| `BACKUP_DIR` | `/app/data/backups` (compose) / empty (bare) | Empty disables the in-process pre-migration backup safety net. Compose defaults it on. |
-| `BACKUP_RETENTION_DAYS` | `7` | Used by `scripts/backup.sh`. The in-process rotator uses a separate hardcoded 7d. |
+| `BACKUP_DIR` | `/app/data/backups` (compose) / empty (bare) | Empty disables the in-process pre-migration backup safety net AND the admin backup/restore UIs. Compose defaults it on. |
+| `BACKUP_RETENTION_DAYS` | `7` | Used by `scripts/backup.sh`. The in-process rotator uses a separate hardcoded 7d for `chronicle_pre_migrate_*` artifacts. |
+| `BACKUP_REQUIRED` | `0` | When `1` or `true`, the in-process pre-migration capture is mandatory: any failure (mysqldump missing, dump zero bytes, manifest write fails) aborts startup before migrations apply. Use in production. The default fail-open behavior (warn + proceed) preserves the legacy semantics for development setups that don't have `mariadb-client` installed. |
+| `BACKUP_SCRIPT_PATH` | `/app/scripts/backup.sh` | Used by the admin "Run backup" button. |
+| `RESTORE_SCRIPT_PATH` | `/app/scripts/restore.sh` | Used by the admin restore page. |
+| `CHRONICLE_VERSION` | `unknown` | Stamped into the pre-migration manifest's `chronicle_version=` line. Set by Docker build args / release pipeline; unset is fine for development. |
 | `MYSQL_ROOT_PASSWORD` | (compose) | Compose-only; sets root password for the bundled MariaDB. |
 | `MYSQL_PASSWORD` | (compose) | Compose-only; must match `DB_PASSWORD`. |
 
@@ -187,21 +191,43 @@ docker compose logs chronicle | grep -E 'health check|migration|critical column'
 Read which check failed. If it's a migration version mismatch and you
 need to roll back the schema:
 
-```sh
-# Find the pre-migration backup taken just before the bad migration ran.
-docker compose exec -T chronicle ls -lt /app/data/backups/chronicle_pre_migrate_*.sql.gz | head -3
+As of the symmetry refactor, pre-migration captures emit the same
+manifest format as `scripts/backup.sh` (`chronicle_pre_migrate_manifest_<TS>.txt`
+plus per-artifact db/media/redis files with sha256 verification). That
+means `scripts/restore.sh --manifest <path>` can roll back from a
+pre-migration snapshot directly:
 
-# Stop the broken chronicle, leave DB up.
+```sh
+# Find the most recent pre-migration manifest (one per boot that ran
+# migrations on a non-empty BackupDir).
+docker compose exec -T chronicle ls -lt /app/data/backups/chronicle_pre_migrate_manifest_*.txt | head -3
+
+# Stop chronicle, leave DB + Redis up.
 docker compose stop chronicle
 
-# Restore the DB from the pre-migration dump.
+# Restore from the pre-migration bundle. restore.sh verifies sha256
+# of each artifact before touching the live DB.
+docker compose run --rm chronicle sh /app/scripts/restore.sh \
+  --manifest /app/data/backups/chronicle_pre_migrate_manifest_<TS>.txt \
+  --yes --force
+
+# Pin the previous image tag in docker-compose.yml or your registry, then:
+docker compose up -d chronicle
+```
+
+The same approach works from the **admin restore UI** at `/admin/restore`
+— pre-migration manifests appear in the list alongside operator-triggered
+backups, distinguished by a `chronicle_pre_migrate=1` line in the manifest
+body (the listing UI labels them as such).
+
+For DB-only rollbacks against a legacy `chronicle_pre_migrate_<TS>.sql.gz`
+file (taken before the symmetry refactor), the manual `gunzip | mysql`
+approach still works:
+
+```sh
 docker compose exec -T chronicle sh -c \
   'gunzip -c /app/data/backups/chronicle_pre_migrate_<TS>.sql.gz \
      | MYSQL_PWD="$DB_PASSWORD" mysql -h "$DB_HOST" -u "$DB_USER" "$DB_NAME"'
-
-# Pin the previous image tag in docker-compose.yml or your registry.
-# Then:
-docker compose up -d chronicle
 ```
 
 #### Worked example — rolling back across the 0.0.2 → 0.0.1 boundary (migration 22)
