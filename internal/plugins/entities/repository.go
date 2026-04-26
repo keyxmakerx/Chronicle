@@ -573,6 +573,19 @@ type EntityRepository interface {
 	// CountByType returns entity counts per type for the sidebar badges.
 	CountByType(ctx context.Context, campaignID string, role int, userID string) (map[int]int, error)
 
+	// ListByOwner returns entities in a campaign owned by a specific user.
+	// Used by the player landing page ("My Characters"). Visibility filtering
+	// is intentionally NOT applied: a player owning the entity implies they
+	// can see it, even if a GM marked it private to hide it from other
+	// players. Cross-campaign isolation is enforced by the campaign_id
+	// filter.
+	ListByOwner(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
+
+	// UpdateOwner sets or clears entities.owner_user_id. Pass a nil
+	// pointer to clear (unassign). Service-level callers are responsible
+	// for verifying the new owner is a campaign member.
+	UpdateOwner(ctx context.Context, entityID string, ownerUserID *string) error
+
 	// ListRecent returns the N most recently updated entities for a campaign,
 	// ordered by updated_at DESC. Used for the campaign dashboard "recent pages" section.
 	ListRecent(ctx context.Context, campaignID string, role int, userID string, limit int) ([]Entity, error)
@@ -1071,6 +1084,50 @@ func (r *entityRepository) ListByCampaign(ctx context.Context, campaignID string
 		entities = append(entities, *e)
 	}
 	return entities, total, rows.Err()
+}
+
+// ListByOwner returns all entities in a campaign owned by the given user.
+// Ordered by updated_at DESC so the player's most recently touched character
+// surfaces first on their landing page. Joins entity_types so the type's
+// name/icon/color are populated for the card grid.
+//
+// Visibility filtering is intentionally absent — see the interface
+// docstring. The (campaign_id, owner_user_id) composite index from
+// migration 000022 backs this query.
+func (r *entityRepository) ListByOwner(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error) {
+	query := `SELECT ` + entitySelectColumns + `
+	          FROM entities e
+	          INNER JOIN entity_types et ON et.id = e.entity_type_id
+	          WHERE e.campaign_id = ? AND e.owner_user_id = ?
+	          ORDER BY e.updated_at DESC`
+	rows, err := r.db.QueryContext(ctx, query, campaignID, ownerUserID)
+	if err != nil {
+		return nil, fmt.Errorf("listing owned entities: %w", err)
+	}
+	defer rows.Close()
+
+	var entities []Entity
+	for rows.Next() {
+		e, err := r.scanEntityRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		entities = append(entities, *e)
+	}
+	return entities, rows.Err()
+}
+
+// UpdateOwner sets entities.owner_user_id. Pass nil to clear (unassign).
+// updated_at is bumped so the entity appears at the top of the new owner's
+// "My Characters" listing right after the claim.
+func (r *entityRepository) UpdateOwner(ctx context.Context, entityID string, ownerUserID *string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE entities SET owner_user_id = ?, updated_at = NOW() WHERE id = ?`,
+		ownerUserID, entityID)
+	if err != nil {
+		return fmt.Errorf("updating entity owner: %w", err)
+	}
+	return nil
 }
 
 // Search performs a text search on entities with visibility filtering.

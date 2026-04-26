@@ -34,6 +34,32 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				<span class="text-fg">{ entity.Name }</span>
 			</nav>
 
+			<!-- Player Character claim banner (CH3). Visible only when:
+			     - entity is unclaimed (owner_user_id IS NULL)
+			     - the entity_type is character-shaped (preset_category=="character"
+			       or slug ends in "-character"). The handler enforces the same
+			       check at POST time, so this guard is purely UX.
+			     The banner uses the Chronicle accent variables so a campaign
+			     theme override automatically retints. -->
+			if entityType != nil && entity.OwnerUserID == nil && isClaimableType(entityType) {
+				<div class="mb-4 rounded-md border border-accent/30 bg-accent/5 px-4 py-3 flex items-center gap-3">
+					<i class="fa-solid fa-user-shield text-accent"></i>
+					<div class="flex-1 min-w-0">
+						<p class="text-sm text-fg">This character is unclaimed.</p>
+						<p class="text-xs text-fg-muted">Claim it to surface on your "My Characters" page.</p>
+					</div>
+					<form
+						method="POST"
+						action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID)) }
+						hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID) }
+						hx-swap="none"
+					>
+						<input type="hidden" name="csrf_token" value={ csrfToken }/>
+						<button type="submit" class="btn-primary text-sm">Claim character</button>
+					</form>
+				</div>
+			}
+
 			<!-- Dynamic layout from entity type template -->
 			if entityType != nil && len(entityType.Layout.Rows) > 0 {
 				for _, row := range entityType.Layout.Rows {
