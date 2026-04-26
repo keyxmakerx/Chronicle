@@ -1740,6 +1740,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
 	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonService})
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
+	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
 	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
 	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
