@@ -7,7 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
@@ -662,6 +664,43 @@ func (a *addonExportAdapter) ExportAddons(ctx context.Context, campaignID string
 }
 
 // --- Media Export Adapter ---
+
+// mediaBundleAdapter implements campaigns.MediaBundler. Walks the same
+// per-campaign listing as mediaExportAdapter, but pairs each file's
+// metadata with an Open closure that the export handler can call when
+// it's actually about to write the bytes into the zip — keeps the
+// metadata pass cheap and the per-file IO lazy.
+type mediaBundleAdapter struct {
+	svc media.MediaService
+}
+
+func (a *mediaBundleAdapter) BundleMedia(ctx context.Context, campaignID string) ([]campaigns.BundledMediaFile, error) {
+	var result []campaigns.BundledMediaFile
+	page := 1
+	for {
+		files, _, err := a.svc.ListCampaignMedia(ctx, campaignID, page, 100)
+		if err != nil {
+			return nil, err
+		}
+		if len(files) == 0 {
+			break
+		}
+		for _, f := range files {
+			f := f // capture
+			path := a.svc.FilePath(&f)
+			result = append(result, campaigns.BundledMediaFile{
+				Filename:  f.Filename,
+				SizeBytes: f.FileSize,
+				MimeType:  f.MimeType,
+				Open: func() (io.ReadCloser, error) {
+					return os.Open(path)
+				},
+			})
+		}
+		page++
+	}
+	return result, nil
+}
 
 // mediaExportAdapter implements campaigns.MediaExporter.
 type mediaExportAdapter struct {

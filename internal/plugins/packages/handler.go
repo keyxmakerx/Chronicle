@@ -167,6 +167,22 @@ func (h *Handler) CheckForUpdates(c echo.Context) error {
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
+// RepackFoundryZip re-bakes the cached Foundry-module zip's manifest URLs to
+// the current BASE_URL (POST /admin/packages/:id/repack). Operator-facing
+// escape hatch when BASE_URL changes after a Foundry module was installed —
+// without this, the served zip would keep handing out stale URLs until the
+// next upstream release triggered a reinstall.
+func (h *Handler) RepackFoundryZip(c echo.Context) error {
+	ctx := c.Request().Context()
+	id := c.Param("id")
+
+	if err := h.service.RepackFoundryZip(ctx, id); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return middleware.HTMXRedirect(c, "/admin/packages")
+}
+
 // GetUsage shows which campaigns use a package (GET /admin/packages/:id/usage).
 func (h *Handler) GetUsage(c echo.Context) error {
 	ctx := c.Request().Context()

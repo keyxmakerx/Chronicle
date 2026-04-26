@@ -781,15 +781,21 @@ templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
 		// S6: Data Portability.
 		<div class="card p-4">
 			<h2 class="text-sm font-semibold text-fg mb-3">Data Export &amp; Import</h2>
-			<p class="text-xs text-fg-secondary mb-3">Export your entire campaign as a JSON file for backup or migration.</p>
-			<div class="flex items-center gap-3">
+			<p class="text-xs text-fg-secondary mb-3">Export your campaign as a JSON file (or a zip with media bytes) for backup or migration.</p>
+			<div class="flex flex-wrap items-center gap-3">
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
-					<i class="fa-solid fa-download text-xs"></i> Export Campaign
+					<i class="fa-solid fa-download text-xs"></i> Export JSON
+				</a>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export?include_media=1", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
+					<i class="fa-solid fa-file-zipper text-xs"></i> Export ZIP (with media)
 				</a>
 				<a href="/campaigns/import" class="btn-secondary text-sm inline-flex items-center gap-1.5">
 					<i class="fa-solid fa-upload text-xs"></i> Import Campaign
 				</a>
 			</div>
+			<p class="text-[11px] text-fg-muted mt-2">
+				Note: media bytes are bundled into the ZIP, but importing a ZIP currently restores only structural data — media files require manual restoration. JSON-only exports are a manifest of media metadata; the bytes are not included.
+			</p>
 		</div>
 	</div>
 }

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"time"
 
@@ -63,6 +64,38 @@ type AddonExporter interface {
 // MediaExporter gathers media file metadata for a campaign export.
 type MediaExporter interface {
 	ExportMedia(ctx context.Context, campaignID string) ([]ExportMediaFile, error)
+}
+
+// BundledMediaFile pairs a media file's metadata with an opener that
+// returns the file's raw bytes. The export handler walks these and
+// embeds each in the output zip when ?include_media=1 is set. Open is
+// a function rather than an io.Reader so the handler can size-cap the
+// total bundle before it touches disk for the bytes themselves.
+type BundledMediaFile struct {
+	// Filename is the on-disk basename (UUID-based, the same name the
+	// MediaService uses to serve the file). Used as the zip entry name
+	// under media/. Must not contain path separators.
+	Filename string
+
+	// SizeBytes is the file size from the database. Used to enforce the
+	// per-bundle cap before any reader is opened.
+	SizeBytes int64
+
+	// MimeType is the stored mime type, surfaced in the manifest entry.
+	MimeType string
+
+	// Open returns a reader for the file's raw bytes. The handler is
+	// responsible for closing the returned ReadCloser.
+	Open func() (io.ReadCloser, error)
+}
+
+// MediaBundler returns the per-campaign media files paired with byte
+// readers. Used by the export handler to build a zip-with-bytes when
+// the caller opts in via ?include_media=1. Separate from MediaExporter
+// because the JSON-only export path doesn't need the byte-opener
+// machinery and shouldn't pay for it.
+type MediaBundler interface {
+	BundleMedia(ctx context.Context, campaignID string) ([]BundledMediaFile, error)
 }
 
 // GroupExporter gathers campaign groups for export.
@@ -138,6 +171,7 @@ type ExportImportService struct {
 	noteExp     NoteExporter
 	addonExp    AddonExporter
 	mediaExp    MediaExporter
+	mediaBundler MediaBundler
 	groupExp    GroupExporter
 	postExp     PostExporter
 
@@ -183,6 +217,14 @@ func (s *ExportImportService) SetAddonExporter(e AddonExporter) { s.addonExp = e
 
 // SetMediaExporter wires the media export adapter.
 func (s *ExportImportService) SetMediaExporter(e MediaExporter) { s.mediaExp = e }
+
+// SetMediaBundler wires the optional media bytes bundler. If unset,
+// ?include_media=1 export requests fall back to the JSON-only path.
+func (s *ExportImportService) SetMediaBundler(b MediaBundler) { s.mediaBundler = b }
+
+// MediaBundler returns the wired bundler, or nil if none is configured.
+// Used by the export handler to decide whether to honor ?include_media.
+func (s *ExportImportService) MediaBundlerImpl() MediaBundler { return s.mediaBundler }
 
 // SetEntityImporter wires the entity import adapter.
 func (s *ExportImportService) SetEntityImporter(i EntityImporter) { s.entityImp = i }

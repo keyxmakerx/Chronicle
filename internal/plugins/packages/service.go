@@ -62,6 +62,12 @@ type PackageService interface {
 	// Foundry module, or empty string if not available.
 	FoundryModuleZipPath() string
 
+	// RepackFoundryZip re-runs the bake-on-import zip repack against the
+	// currently cached Foundry-module zip for the given package ID. Used
+	// when BASE_URL changes after install and the operator needs the
+	// served zip's manifest/download URLs refreshed without reinstalling.
+	RepackFoundryZip(ctx context.Context, packageID string) error
+
 	// --- Submission/Approval Workflow ---
 
 	// SubmitPackage lets a campaign owner submit a repo URL for review.
@@ -118,16 +124,25 @@ type packageService struct {
 	settings       SettingsReader
 	settingsWriter SettingsWriter
 	mediaDir        string // Root media directory (e.g., ./media).
+	// baseURL is the chronicle host's external URL (BASE_URL config). Used
+	// to rewrite the in-zip Foundry module manifest at install time so
+	// Foundry's on-disk module.json polls chronicle, not the upstream
+	// GitHub repo. Always trimmed of trailing slash.
+	baseURL string
 	onSystemInstall func() // Called after a system package is installed.
 	onServeInvalidate func() // Called after install/remove to invalidate serve cache.
 }
 
 // NewPackageService creates a new package service with the given dependencies.
-func NewPackageService(repo PackageRepository, github *GitHubClient, mediaDir string) PackageService {
+// baseURL is the chronicle host's external URL (BASE_URL config); it is used
+// only to rewrite the manifest/download URLs inside the cached Foundry-module
+// zip so Foundry's installed copy points at chronicle rather than upstream.
+func NewPackageService(repo PackageRepository, github *GitHubClient, mediaDir, baseURL string) PackageService {
 	return &packageService{
 		repo:     repo,
 		github:   github,
 		mediaDir: mediaDir,
+		baseURL:  strings.TrimRight(baseURL, "/"),
 	}
 }
 
@@ -406,12 +421,25 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 
 	// For Foundry module packages, update the version in module.json to match
 	// the installed version tag. The GitHub release may contain a stale version
-	// string in the manifest. Manifest/download URLs are rewritten at serve
-	// time, so we only need to fix the version field here.
+	// string in the manifest.
 	if pkg.Type == PackageTypeFoundryModule {
 		if err := rewriteModuleJSONVersion(destDir, version); err != nil {
 			slog.Warn("failed to update module.json version",
 				slog.String("version", version),
+				slog.Any("error", err),
+			)
+		}
+		// Bake-on-import zip repack: the cached zip we serve to Foundry must
+		// have manifest/download in its in-zip module.json pointing at this
+		// chronicle host, not the upstream GitHub repo. Without this rewrite,
+		// Foundry installs the module fine, but the on-disk module.json it
+		// polls for updates still points at GitHub and bypasses chronicle on
+		// the next "Check for Updates". Failure is non-fatal; the install
+		// still succeeds and the operator can re-run via the admin "Repack"
+		// button after fixing the underlying issue.
+		if err := repackFoundryZip(zipPath, s.baseURL); err != nil {
+			slog.Warn("failed to repack foundry-module zip",
+				slog.String("path", zipPath),
 				slog.Any("error", err),
 			)
 		}
@@ -704,6 +732,44 @@ func (s *packageService) FoundryModuleZipPath() string {
 		}
 	}
 	return ""
+}
+
+// RepackFoundryZip re-runs the bake-on-import zip repack against the cached
+// Foundry-module zip for the given package, using the service's current
+// baseURL. Operator-facing escape hatch when BASE_URL changes after install.
+func (s *packageService) RepackFoundryZip(ctx context.Context, packageID string) error {
+	pkg, err := s.repo.GetPackage(ctx, packageID)
+	if err != nil {
+		return fmt.Errorf("fetching package: %w", err)
+	}
+	if pkg == nil {
+		return fmt.Errorf("package not found")
+	}
+	if pkg.Type != PackageTypeFoundryModule {
+		return fmt.Errorf("package %s is not a foundry-module", pkg.Slug)
+	}
+	if pkg.InstalledVersion == "" {
+		return fmt.Errorf("package %s is not installed", pkg.Slug)
+	}
+
+	zipName := fmt.Sprintf("%s-%s.zip", pkg.Slug, pkg.InstalledVersion)
+	zipPath := filepath.Join(s.downloadsDir(), zipName)
+	if _, err := os.Stat(zipPath); err != nil {
+		return fmt.Errorf("cached zip not found: %w", err)
+	}
+
+	if err := repackFoundryZip(zipPath, s.baseURL); err != nil {
+		return fmt.Errorf("repack: %w", err)
+	}
+
+	if s.onServeInvalidate != nil {
+		s.onServeInvalidate()
+	}
+	slog.Info("foundry-module zip repacked",
+		slog.String("package", pkg.Slug),
+		slog.String("version", pkg.InstalledVersion),
+	)
+	return nil
 }
 
 // InstalledPackagePath returns the on-disk install path for the active
@@ -1243,6 +1309,116 @@ func rewriteModuleJSONVersion(dir, version string) error {
 		return fmt.Errorf("write module.json: %w", err)
 	}
 	return nil
+}
+
+// repackFoundryZip rewrites the manifest and download fields of the in-zip
+// module.json so they point at the chronicle host rather than the upstream
+// GitHub repo. Every other field — version, id, esmodules, styles,
+// compatibility, etc. — is preserved verbatim. The new zip is written to a
+// temp file alongside the original and renamed atomically, so a partial
+// failure cannot leave a half-written zip in place of the cached one.
+//
+// Bake-on-import is the agreed contract: chronicle's manifest endpoint also
+// rewrites these URLs in the JSON response, but Foundry stores the in-zip
+// module.json on disk and polls it for updates, so the response-side rewrite
+// alone is insufficient.
+//
+// If baseURL is empty (e.g., misconfigured BASE_URL), the function leaves
+// the zip untouched rather than baking in a broken URL.
+func repackFoundryZip(zipPath, baseURL string) error {
+	baseURL = strings.TrimRight(baseURL, "/")
+	if baseURL == "" {
+		return fmt.Errorf("baseURL is empty; refusing to bake broken URLs")
+	}
+
+	reader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return fmt.Errorf("open zip: %w", err)
+	}
+	defer reader.Close()
+
+	tmpPath := zipPath + ".repack.tmp"
+	tmpFile, err := os.Create(tmpPath)
+	if err != nil {
+		return fmt.Errorf("create temp zip: %w", err)
+	}
+	// Best-effort cleanup if anything below fails before the rename.
+	defer func() {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+	}()
+
+	writer := zip.NewWriter(tmpFile)
+
+	rewroteManifest := false
+	for _, entry := range reader.File {
+		header := entry.FileHeader
+		dst, err := writer.CreateHeader(&header)
+		if err != nil {
+			return fmt.Errorf("create entry %q: %w", entry.Name, err)
+		}
+
+		src, err := entry.Open()
+		if err != nil {
+			return fmt.Errorf("open entry %q: %w", entry.Name, err)
+		}
+
+		if entry.Name == "module.json" && !entry.FileInfo().IsDir() {
+			data, err := io.ReadAll(src)
+			src.Close()
+			if err != nil {
+				return fmt.Errorf("read module.json: %w", err)
+			}
+			rewritten, err := rewriteFoundryManifestURLs(data, baseURL)
+			if err != nil {
+				return fmt.Errorf("rewrite module.json: %w", err)
+			}
+			if _, err := dst.Write(rewritten); err != nil {
+				return fmt.Errorf("write rewritten module.json: %w", err)
+			}
+			rewroteManifest = true
+			continue
+		}
+
+		if _, err := io.Copy(dst, src); err != nil {
+			src.Close()
+			return fmt.Errorf("copy entry %q: %w", entry.Name, err)
+		}
+		src.Close()
+	}
+
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("close zip writer: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("close temp zip: %w", err)
+	}
+
+	if !rewroteManifest {
+		return fmt.Errorf("module.json not found at zip root")
+	}
+
+	if err := os.Rename(tmpPath, zipPath); err != nil {
+		return fmt.Errorf("replace original zip: %w", err)
+	}
+	return nil
+}
+
+// rewriteFoundryManifestURLs replaces the "manifest" and "download" fields of
+// a Foundry module manifest with chronicle-relative URLs. All other fields
+// pass through unchanged.
+func rewriteFoundryManifestURLs(data []byte, baseURL string) ([]byte, error) {
+	var manifest map[string]any
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, fmt.Errorf("parse module.json: %w", err)
+	}
+	manifest["manifest"] = baseURL + "/foundry-module/module.json"
+	manifest["download"] = baseURL + "/foundry-module/download"
+	out, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal module.json: %w", err)
+	}
+	return append(out, '\n'), nil
 }
 
 // rewriteSystemManifestVersion updates the "version" field in a system

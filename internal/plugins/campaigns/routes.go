@@ -1,8 +1,11 @@
 package campaigns
 
 import (
+	"time"
+
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
 
@@ -141,16 +144,24 @@ func RegisterInviteRoutes(e *echo.Echo, ih *InviteHandler, svc CampaignService, 
 
 // RegisterExportRoutes sets up campaign export/import routes.
 // Export is campaign-scoped (owner only). Import is auth-only (creates new campaign).
+//
+// Export and import are both heavy: export with media zips per-campaign
+// bytes; import unpacks a possibly-large blob and runs adapters across
+// many tables. The rate limits below cap how often a single IP can hit
+// these so a runaway browser refresh or malicious POST flood can't
+// monopolize the server. The numbers are deliberately tight (export
+// happens during planned backups; import happens once per migration);
+// real users won't notice the limit.
 func RegisterExportRoutes(e *echo.Echo, eh *ExportHandler, svc CampaignService, authSvc auth.AuthService) {
 	// Import creates a new campaign (auth only, no campaign scope needed).
 	authed := e.Group("", auth.RequireAuth(authSvc))
 	authed.GET("/campaigns/import", eh.ImportCampaignForm)
-	authed.POST("/campaigns/import", eh.ImportCampaign)
+	authed.POST("/campaigns/import", eh.ImportCampaign, middleware.RateLimit(5, 1*time.Hour))
 
 	// Export requires campaign owner access.
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		RequireCampaignAccess(svc),
 	)
-	cg.GET("/export", eh.ExportCampaign, RequireRole(RoleOwner))
+	cg.GET("/export", eh.ExportCampaign, RequireRole(RoleOwner), middleware.RateLimit(10, 1*time.Hour))
 }

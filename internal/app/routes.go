@@ -19,6 +19,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
+	"github.com/keyxmakerx/chronicle/internal/plugins/backup"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
@@ -1290,6 +1291,16 @@ func (a *App) RegisterRoutes() {
 	adminHandler.SetBaseURL(a.Config.BaseURL)
 	adminGroup := admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
 
+	// Admin Backup plugin: lists backup artifacts and exposes a "Run
+	// backup" button that shells out to scripts/backup.sh under the
+	// configured timeout.
+	backupSvc := backup.NewService(backup.Config{
+		ScriptPath: a.Config.BackupScriptPath,
+		BackupDir:  a.Config.BackupDir,
+	})
+	backupHandler := backup.NewHandler(backupSvc)
+	backup.RegisterRoutes(adminGroup, backupHandler)
+
 	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
 	// shells out to scripts/restore.sh under a typed-RESTORE
 	// confirmation. Reverses ADR-035's "sysadmin-only" stance — see
@@ -1367,7 +1378,7 @@ func (a *App) RegisterRoutes() {
 	// Package manager: external repo management for systems and Foundry module.
 	pkgRepo := packages.NewPackageRepository(a.DB)
 	pkgGitHub := packages.NewGitHubClient()
-	pkgService := packages.NewPackageService(pkgRepo, pkgGitHub, a.Config.Upload.MediaPath)
+	pkgService := packages.NewPackageService(pkgRepo, pkgGitHub, a.Config.Upload.MediaPath, a.Config.BaseURL)
 	// Rescan system registry and re-register addons when a system package
 	// is installed or updated, so it appears in the campaign Settings >
 	// Game System dropdown immediately without requiring a server restart.
@@ -1754,6 +1765,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
 	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonService})
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
+	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
 	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
 	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})

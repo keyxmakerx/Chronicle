@@ -45,9 +45,17 @@ type Config struct {
 	ExtensionsPath string
 
 	// BackupDir is the directory where the operator backup script writes
-	// artifacts and where the admin restore UI lists them. Same value
+	// artifacts and where the admin backup UI lists them. Same value
 	// passed to the backup.sh / restore.sh scripts via BACKUP_DIR env.
+	// Empty disables both the in-process pre-migration backup and the
+	// admin backup UI's "Run backup" button (the page still renders so
+	// admins can see the misconfiguration).
 	BackupDir string
+
+	// BackupScriptPath is the absolute path to scripts/backup.sh. The
+	// admin "Run backup" button shells out to this. Default
+	// "/app/scripts/backup.sh" matches the Docker image layout.
+	BackupScriptPath string
 
 	// RestoreScriptPath is the absolute path to scripts/restore.sh. The
 	// admin restore UI shells out to this. Default
@@ -198,6 +206,7 @@ func Load() (*Config, error) {
 		ExtensionsPath: getEnv("EXTENSIONS_PATH", "./extensions"),
 
 		BackupDir:         getEnv("BACKUP_DIR", ""),
+		BackupScriptPath:  getEnv("BACKUP_SCRIPT_PATH", "/app/scripts/backup.sh"),
 		RestoreScriptPath: getEnv("RESTORE_SCRIPT_PATH", "/app/scripts/restore.sh"),
 
 		Upload: UploadConfig{
