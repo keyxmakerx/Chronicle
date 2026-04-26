@@ -60,39 +60,58 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				</div>
 			}
 
-			<!-- Dynamic layout from entity type template -->
-			if entityType != nil && len(entityType.Layout.Rows) > 0 {
-				for _, row := range entityType.Layout.Rows {
-					<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6">
-						for _, col := range row.Columns {
-							<div class={ entityColSpan(col.Width) }>
-								for _, block := range col.Blocks {
-									@entityBlock(block, cc, entity, entityType, showAttributes, csrfToken)
-								}
-							</div>
-						}
+			<!-- Slug-keyed system-package renderer (CH4). When a system
+			     package has registered a renderer for this entity_type
+			     slug, that renderer owns the page contents in place of
+			     the layout-block dispatch. The fallback IS the existing
+			     block dispatch — same code path that ran before CH4,
+			     unchanged. Documented in docs/system-package-rendering.md. -->
+			if comp := lookupEntityShowRenderer(EntityShowRenderContext{
+				CC:             cc,
+				Entity:         entity,
+				EntityType:     entityType,
+				Ancestors:      ancestors,
+				Children:       children,
+				ShowAttributes: showAttributes,
+				ShowCalendar:   showCalendar,
+				CSRFToken:      csrfToken,
+			}); comp != nil {
+				@comp
+			} else {
+				<!-- Dynamic layout from entity type template -->
+				if entityType != nil && len(entityType.Layout.Rows) > 0 {
+					for _, row := range entityType.Layout.Rows {
+						<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6">
+							for _, col := range row.Columns {
+								<div class={ entityColSpan(col.Width) }>
+									for _, block := range col.Blocks {
+										@entityBlock(block, cc, entity, entityType, showAttributes, csrfToken)
+									}
+								</div>
+							}
+						</div>
+					}
+				} else {
+					<!-- Fallback: default two-column layout if no layout defined -->
+					<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6">
+						<div class="col-span-1 md:col-span-8 space-y-4">
+							@blockTitle(cc, entity, csrfToken)
+							@blockTags(cc, entity, csrfToken)
+							if entity.TypeSlug == "shop" {
+								@blockShopInventory(cc, entity, csrfToken)
+							}
+							@blockRelations(cc, entity, csrfToken)
+							@blockEntry(cc, entity, csrfToken)
+						</div>
+						<div class="col-span-1 md:col-span-4 space-y-4">
+							@blockImage(cc, entity, csrfToken)
+							if showAttributes {
+								@blockAttributes(cc, entity, entityType, csrfToken)
+							}
+							@blockDetails(entity)
+						</div>
 					</div>
 				}
-			} else {
-				<!-- Fallback: default two-column layout if no layout defined -->
-				<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6">
-					<div class="col-span-1 md:col-span-8 space-y-4">
-						@blockTitle(cc, entity, csrfToken)
-						@blockTags(cc, entity, csrfToken)
-						if entity.TypeSlug == "shop" {
-							@blockShopInventory(cc, entity, csrfToken)
-						}
-						@blockRelations(cc, entity, csrfToken)
-						@blockEntry(cc, entity, csrfToken)
-					</div>
-					<div class="col-span-1 md:col-span-4 space-y-4">
-						@blockImage(cc, entity, csrfToken)
-						if showAttributes {
-							@blockAttributes(cc, entity, entityType, csrfToken)
-						}
-						@blockDetails(entity)
-					</div>
-				</div>
 			}
 
 			// Children section: shown below the layout if this entity has children.

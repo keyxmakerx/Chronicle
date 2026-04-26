@@ -1682,6 +1682,24 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetBlockRegistry(blockRegistry)
 	entityHandler.SetWidgetBlockLister(&widgetBlockListerAdapter{extHandler: extHandler})
 
+	// Slug-keyed entity-show renderer registry (CH4). System packages
+	// register character / monster / item renderers here at startup.
+	// Empty registry is fine: lookupEntityShowRenderer returns nil for
+	// every slug → show.templ falls through to the standard block
+	// dispatch. See docs/system-package-rendering.md for the
+	// system-package-author contract.
+	//
+	// V1 registers no built-in renderers — the host ships zero
+	// character-specific code by design. System packages (Draw Steel,
+	// future D&D 5.5e, etc.) hook in by adding a call here, mirroring
+	// the calendar.RegisterCalendarBlock pattern. Example, commented
+	// out until DS-CH1 lands the function:
+	//
+	//   drawsteel.RegisterEntityShowRenderers(showRegistry)
+	//
+	showRegistry := entities.NewEntityShowRendererRegistry()
+	entities.SetGlobalEntityShowRendererRegistry(showRegistry)
+
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
 	campaignHandler.SetSystemAddonEnabler(addonService)
