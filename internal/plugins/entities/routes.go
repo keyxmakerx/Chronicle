@@ -84,6 +84,16 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/favorites", h.ListFavoritesAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/favorite-ids", h.FavoriteIDsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
+	// Player Character Experience (CH2 + CH3).
+	// /me — per-campaign player landing page listing the caller's characters.
+	cg.GET("/me", h.MyCharacters, campaigns.RequireRole(campaigns.RolePlayer))
+	// Claim flow: any campaign member can claim an unclaimed character.
+	// Type-shape gate (only character-shaped entity_types) lives in the
+	// service so the route surface stays uniform.
+	cg.POST("/entities/:eid/claim", h.ClaimEntity, campaigns.RequireRole(campaigns.RolePlayer))
+	// Owner reassignment: Scribe+ only. Pass owner_user_id=null to clear.
+	cg.PUT("/entities/:eid/owner", h.AssignOwner, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Sidebar node (pure folder) routes (Scribe+ for create/reorder, Owner for delete).
 	cg.POST("/sidebar-nodes", h.CreateSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/sidebar-nodes/:nid", h.RenameSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))

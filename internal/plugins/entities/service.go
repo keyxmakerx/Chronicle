@@ -92,6 +92,25 @@ type EntityService interface {
 	// Used by the NPC gallery reveal toggle.
 	TogglePrivate(ctx context.Context, entityID string) (newPrivate bool, err error)
 
+	// ListByOwner returns entities in a campaign owned by the given user,
+	// ordered most-recently-updated first. Powers the player landing page
+	// ("My Characters") at GET /campaigns/:id/me. No visibility filter:
+	// owning the entity implies the player can see it.
+	ListByOwner(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
+
+	// ClaimEntity assigns the calling user as owner of an entity. Idempotent
+	// when the caller already owns it; returns 409 Conflict when claimed by
+	// a different user (the user must ask the GM to reassign). Refuses to
+	// claim non-character entities — only entity_types whose preset_category
+	// is "character" or whose slug ends in "-character" are claimable.
+	ClaimEntity(ctx context.Context, entityID, userID string) (*Entity, error)
+
+	// AssignOwner sets or clears entity ownership. Used by Owner/Scribe
+	// to reassign characters between players. Pass ownerUserID = nil to
+	// unclaim. Cross-campaign membership is the caller's (handler's)
+	// responsibility — the service trusts upstream campaign auth.
+	AssignOwner(ctx context.Context, entityID string, ownerUserID *string) (*Entity, error)
+
 	// BulkUpdateType changes the entity type for multiple entities at once.
 	// Returns the count of successfully updated entities. Validates that the
 	// target type belongs to the campaign and each entity is campaign-scoped.
@@ -703,6 +722,112 @@ func (s *entityService) TogglePrivate(ctx context.Context, entityID string) (boo
 	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 
 	return newPrivate, nil
+}
+
+// ListByOwner returns entities in a campaign owned by the given user.
+// Powers GET /campaigns/:id/me. Trusts the caller (handler) has already
+// verified the user is a member of the campaign.
+func (s *entityService) ListByOwner(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error) {
+	if ownerUserID == "" {
+		return nil, apperror.NewBadRequest("owner user id is required")
+	}
+	return s.entities.ListByOwner(ctx, campaignID, ownerUserID)
+}
+
+// isClaimableType reports whether an entity_type is a "character" — i.e.
+// the kind of entity a player can claim ownership of. Two heuristics:
+//   - preset_category == "character" (set when seeded from a system pack
+//     or the default seed), or
+//   - slug ends in "-character" (e.g. drawsteel-character, dnd5e-character).
+//
+// Catches both the canonical preset path and the convention used by
+// system packages that ship their own character entity_type.
+func isClaimableType(et *EntityType) bool {
+	if et == nil {
+		return false
+	}
+	if et.PresetCategory != nil && *et.PresetCategory == "character" {
+		return true
+	}
+	if strings.HasSuffix(et.Slug, "-character") || et.Slug == "character" {
+		return true
+	}
+	return false
+}
+
+// ClaimEntity assigns the calling user as owner. Idempotent for the same
+// user (returns the entity unchanged); 409 Conflict if owned by a
+// different user; 400 if the entity type isn't character-shaped.
+func (s *entityService) ClaimEntity(ctx context.Context, entityID, userID string) (*Entity, error) {
+	if userID == "" {
+		return nil, apperror.NewBadRequest("user id is required")
+	}
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Idempotent: already owned by this user, no-op.
+	if entity.OwnerUserID != nil && *entity.OwnerUserID == userID {
+		return entity, nil
+	}
+	// Owned by someone else: refuse. The user must ask the GM to reassign.
+	if entity.OwnerUserID != nil {
+		return nil, apperror.NewConflict("entity is already claimed by another player")
+	}
+
+	// Type guardrail: only character-shaped entities are claimable.
+	et, err := s.types.FindByID(ctx, entity.EntityTypeID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("loading entity type for claim: %w", err))
+	}
+	if !isClaimableType(et) {
+		return nil, apperror.NewBadRequest("only character entities can be claimed")
+	}
+
+	if err := s.entities.UpdateOwner(ctx, entityID, &userID); err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+
+	entity.OwnerUserID = &userID
+	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	slog.Info("entity claimed",
+		slog.String("entity_id", entityID),
+		slog.String("user_id", userID),
+		slog.String("campaign_id", entity.CampaignID),
+	)
+	return entity, nil
+}
+
+// AssignOwner sets or clears entity ownership, used by Owner/Scribe to
+// reassign characters between players. Pass ownerUserID = nil to unclaim.
+// Cross-campaign membership is validated at the handler before calling
+// in; this function trusts the upstream auth chain.
+func (s *entityService) AssignOwner(ctx context.Context, entityID string, ownerUserID *string) (*Entity, error) {
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return nil, err
+	}
+	// No-op if the new value matches current.
+	switch {
+	case ownerUserID == nil && entity.OwnerUserID == nil:
+		return entity, nil
+	case ownerUserID != nil && entity.OwnerUserID != nil && *ownerUserID == *entity.OwnerUserID:
+		return entity, nil
+	}
+
+	if err := s.entities.UpdateOwner(ctx, entityID, ownerUserID); err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+
+	entity.OwnerUserID = ownerUserID
+	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	slog.Info("entity owner reassigned",
+		slog.String("entity_id", entityID),
+		slog.String("campaign_id", entity.CampaignID),
+		slog.Any("new_owner", ownerUserID),
+	)
+	return entity, nil
 }
 
 // BulkUpdateType changes the entity type for multiple entities. Validates

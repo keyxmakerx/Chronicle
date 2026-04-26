@@ -1,0 +1,120 @@
+// mycharacters.templ — per-campaign player landing page ("My Characters").
+// Renders the cards for entities owned by the current user. Card design
+// uses the canonical Chronicle accent variables so a campaign-level theme
+// override automatically retints the page; system packages don't need to
+// know about it. Mirrors the visual language Draw Steel will use for the
+// bestiary refresh so the two pages feel like siblings.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// MyCharactersPage renders the full "My Characters" page for a campaign.
+// Empty state directs the player to ask their GM or claim from the
+// existing entity list.
+templ MyCharactersPage(cc *campaigns.CampaignContext, characters []Entity) {
+	@layouts.App("My Characters - " + cc.Campaign.Name) {
+		<div class="max-w-5xl mx-auto px-4 py-6">
+			<div class="mb-6 flex items-baseline justify-between gap-4">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">My Characters</h1>
+					<p class="mt-1 text-sm text-fg-secondary">Characters in { cc.Campaign.Name } that belong to you.</p>
+				</div>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) }
+					class="text-sm text-fg-secondary hover:text-fg"
+				>
+					Browse all pages →
+				</a>
+			</div>
+
+			if len(characters) == 0 {
+				@myCharactersEmptyState(cc.Campaign.ID)
+			} else {
+				<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+					for _, ch := range characters {
+						@myCharacterCard(cc.Campaign.ID, ch)
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+// myCharactersEmptyState is the friendly "you don't have any characters
+// yet" panel. Two CTAs: one to browse and claim an existing character,
+// one passive (ask the GM).
+templ myCharactersEmptyState(campaignID string) {
+	<div class="rounded-lg border border-edge bg-surface p-8 text-center">
+		<div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-accent/10 text-accent mb-4">
+			<i class="fa-solid fa-user-shield text-lg"></i>
+		</div>
+		<h2 class="text-lg font-semibold text-fg mb-2">No characters yet</h2>
+		<p class="text-sm text-fg-secondary max-w-md mx-auto mb-4">
+			Ask your GM to assign a character to you, or browse the campaign and claim one yourself.
+		</p>
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", campaignID)) }
+			class="btn-primary text-sm"
+		>
+			<i class="fa-solid fa-search mr-2"></i>
+			Browse pages to claim
+		</a>
+	</div>
+}
+
+// myCharacterCard is one tile in the My Characters grid. Hover lifts the
+// card with a subtle accent ring; clicking the whole card navigates to
+// the entity show page.
+//
+// Image preference: cover_image_path > image_path > placeholder. The
+// placeholder uses the entity_type's icon so character types that ship
+// their own iconography render distinctly even before media is added.
+templ myCharacterCard(campaignID string, ch Entity) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", campaignID, ch.ID)) }
+		class="group block rounded-lg border border-edge bg-surface overflow-hidden transition-all hover:border-accent hover:shadow-md hover:-translate-y-0.5"
+	>
+		<div class="aspect-[3/2] bg-surface-alt relative overflow-hidden">
+			if ch.CoverImagePath != nil && *ch.CoverImagePath != "" {
+				<img
+					src={ layouts.MediaURL(ctx, *ch.CoverImagePath) }
+					alt=""
+					class="w-full h-full object-cover transition-transform group-hover:scale-105"
+					loading="lazy"
+				/>
+			} else if ch.ImagePath != nil && *ch.ImagePath != "" {
+				<img
+					src={ layouts.MediaURL(ctx, *ch.ImagePath) }
+					alt=""
+					class="w-full h-full object-cover transition-transform group-hover:scale-105"
+					loading="lazy"
+				/>
+			} else {
+				<div class="w-full h-full flex items-center justify-center text-fg-muted">
+					if ch.TypeIcon != "" {
+						<i class={ "fa-solid " + ch.TypeIcon, "text-3xl" } style={ fmt.Sprintf("color: %s", ch.TypeColor) }></i>
+					} else {
+						<i class="fa-solid fa-user text-3xl"></i>
+					}
+				</div>
+			}
+		</div>
+		<div class="p-4">
+			<h3 class="font-semibold text-fg truncate group-hover:text-accent transition-colors">{ ch.Name }</h3>
+			<p class="text-xs text-fg-muted mt-1">
+				if ch.TypeName != "" {
+					{ ch.TypeName }
+				}
+				if ch.TypeLabel != nil && *ch.TypeLabel != "" {
+					<span class="mx-1">·</span>
+					{ *ch.TypeLabel }
+				}
+			</p>
+		</div>
+	</a>
+}

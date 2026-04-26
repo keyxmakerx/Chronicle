@@ -2979,3 +2979,135 @@ func (h *Handler) invalidateCachePattern(ctx context.Context, pattern string) {
 		slog.Error("failed to invalidate cache", slog.String("pattern", pattern), slog.Any("error", err))
 	}
 }
+
+// --- Player Character Experience (CH2 + CH3) ---
+
+// MyCharacters renders the per-campaign "My Characters" landing page for
+// the current player. Lists every entity in this campaign owned by the
+// caller, ordered most-recently-updated first. Card grid links into the
+// standard entity show page.
+//
+// Route: GET /campaigns/:id/me  (Player+ role required by the route group).
+func (h *Handler) MyCharacters(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+
+	chars, err := h.service.ListByOwner(c.Request().Context(), cc.Campaign.ID, userID)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, MyCharactersPage(cc, chars))
+}
+
+// ClaimEntity assigns the calling user as the owner of an entity. Idempotent
+// when the caller already owns it; 409 if claimed by a different player;
+// 400 if the entity isn't a character-shaped type. The route is
+// Player+ — anyone with campaign access can claim an unclaimed character;
+// the type-shape check in the service is what prevents claiming a Location.
+//
+// Route: POST /campaigns/:id/entities/:eid/claim
+func (h *Handler) ClaimEntity(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+	entityID := c.Param("eid")
+
+	// IDOR protection — entity must belong to the URL campaign.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	updated, err := h.service.ClaimEntity(c.Request().Context(), entityID, userID)
+	if err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, "claimed by "+userID)
+
+	if middleware.IsHTMX(c) {
+		// Return the entity show page so the claim button disappears.
+		return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities/"+entityID)
+	}
+	return c.JSON(http.StatusOK, updated)
+}
+
+// assignOwnerRequest is the JSON body for PUT .../owner. owner_user_id may
+// be null (clear) or a campaign-member user ID.
+type assignOwnerRequest struct {
+	OwnerUserID *string `json:"owner_user_id"`
+}
+
+// AssignOwner sets or clears entity ownership. Used by Owner/Scribe to
+// hand a character to a different player or unassign one. Cross-campaign
+// membership is validated here before delegating to the service.
+//
+// Route: PUT /campaigns/:id/entities/:eid/owner  (Scribe+ role required).
+func (h *Handler) AssignOwner(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	entityID := c.Param("eid")
+
+	// IDOR protection — entity must belong to the URL campaign.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var req assignOwnerRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	// Membership validation when assigning (not when clearing).
+	if req.OwnerUserID != nil && *req.OwnerUserID != "" {
+		if h.memberLister == nil {
+			return apperror.NewInternal(fmt.Errorf("member lister not configured"))
+		}
+		members, err := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID)
+		if err != nil {
+			return apperror.NewInternal(err)
+		}
+		isMember := false
+		for _, m := range members {
+			if m.UserID == *req.OwnerUserID {
+				isMember = true
+				break
+			}
+		}
+		if !isMember {
+			return apperror.NewBadRequest("owner_user_id is not a member of this campaign")
+		}
+	} else {
+		// Treat empty string as "unassign" for caller convenience.
+		req.OwnerUserID = nil
+	}
+
+	updated, err := h.service.AssignOwner(c.Request().Context(), entityID, req.OwnerUserID)
+	if err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, "owner reassigned")
+
+	return c.JSON(http.StatusOK, updated)
+}

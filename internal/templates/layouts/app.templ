@@ -336,6 +336,13 @@ templ Sidebar() {
 								}
 							}
 						}
+						<!-- My Characters link (CH2). Visible to Players (the
+						     primary audience) and to Owner/Scribe when
+						     "view as player" mode is on so the owner can
+						     preview the player landing experience. -->
+						if GetCampaignRole(ctx) == 1 || (GetCampaignRole(ctx) >= 2 && IsViewingAsPlayer(ctx)) {
+							@sidebarMyCharactersLink(ctx)
+						}
 					</div>
 
 					<!-- Category slide-over panel (overlays icon list) -->
@@ -766,6 +773,24 @@ templ sidebarAllPagesLink(ctx context.Context) {
 			<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
 		</span>
 		<span class="flex-1">All Pages</span>
+	</a>
+}
+
+// sidebarMyCharactersLink renders the "My Characters" entry shown to
+// players (CH2). Owners/Scribes see it only when "view as player" mode
+// is enabled — outside that mode it stays hidden so the owner UI
+// doesn't gain a player-only menu item.
+templ sidebarMyCharactersLink(ctx context.Context) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/me", GetCampaignID(ctx))) }
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/me", GetCampaignID(ctx)))),
+			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/me", GetCampaignID(ctx)))) }
+	>
+		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+			<i class="fa-solid fa-user-shield text-xs text-gray-400"></i>
+		</span>
+		<span class="flex-1">My Characters</span>
 	</a>
 }
 

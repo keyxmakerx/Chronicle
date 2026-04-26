@@ -138,6 +138,8 @@ type mockEntityRepo struct {
 	findBacklinksFn  func(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
 	setAliasesFn     func(ctx context.Context, entityID string, aliases []string) error
 	updatePrivateFn  func(ctx context.Context, entityID string, isPrivate bool) error
+	listByOwnerFn    func(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
+	updateOwnerFn    func(ctx context.Context, entityID string, ownerUserID *string) error
 }
 
 func (m *mockEntityRepo) Create(ctx context.Context, entity *Entity) error {
@@ -311,6 +313,20 @@ func (m *mockEntityRepo) UpdatePrivate(ctx context.Context, entityID string, isP
 }
 
 func (m *mockEntityRepo) UpdateEntityType(_ context.Context, _ string, _ int) error {
+	return nil
+}
+
+func (m *mockEntityRepo) ListByOwner(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error) {
+	if m.listByOwnerFn != nil {
+		return m.listByOwnerFn(ctx, campaignID, ownerUserID)
+	}
+	return nil, nil
+}
+
+func (m *mockEntityRepo) UpdateOwner(ctx context.Context, entityID string, ownerUserID *string) error {
+	if m.updateOwnerFn != nil {
+		return m.updateOwnerFn(ctx, entityID, ownerUserID)
+	}
 	return nil
 }
 
@@ -1618,4 +1634,190 @@ func TestSetEntityPermissions_InvalidVisibility(t *testing.T) {
 // strPtr returns a pointer to the given string.
 func strPtr(s string) *string {
 	return &s
+}
+
+// --- Player Character Experience tests (CH2 + CH3) ---
+
+// TestListByOwner_Forwards confirms the service is a thin wrapper over
+// the repository call. The interesting policy choice (no visibility
+// filter, ordered by updated_at DESC) lives in the repo SQL — the
+// service just delegates and validates the user ID is non-empty.
+func TestListByOwner_Forwards(t *testing.T) {
+	want := []Entity{{ID: "e1"}, {ID: "e2"}}
+	repo := &mockEntityRepo{
+		listByOwnerFn: func(_ context.Context, campaignID, ownerUserID string) ([]Entity, error) {
+			if campaignID != "camp-1" || ownerUserID != "user-x" {
+				t.Errorf("unexpected args: campaign=%s owner=%s", campaignID, ownerUserID)
+			}
+			return want, nil
+		},
+	}
+	svc := newTestService(repo, &mockEntityTypeRepo{})
+	got, err := svc.ListByOwner(context.Background(), "camp-1", "user-x")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != len(want) {
+		t.Errorf("expected %d entities, got %d", len(want), len(got))
+	}
+}
+
+// TestListByOwner_RejectsEmptyUser guards against a bug-shape where a
+// caller passes an empty owner_user_id and the repo returns "all
+// entities with NULL owner_user_id" — which would surface unowned
+// entities on someone's My Characters page.
+func TestListByOwner_RejectsEmptyUser(t *testing.T) {
+	svc := newTestService(&mockEntityRepo{}, &mockEntityTypeRepo{})
+	_, err := svc.ListByOwner(context.Background(), "camp-1", "")
+	assertAppError(t, err, 400)
+}
+
+// TestClaimEntity_Success exercises the happy path: an unclaimed
+// character entity gets owner_user_id set and the persisted update
+// is captured.
+func TestClaimEntity_Success(t *testing.T) {
+	entity := &Entity{
+		ID:           "e-char",
+		CampaignID:   "camp-1",
+		EntityTypeID: 7,
+		OwnerUserID:  nil,
+	}
+	character := &EntityType{ID: 7, Slug: "drawsteel-character", PresetCategory: strPtr("character")}
+	var capturedOwner *string
+	repo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, id string) (*Entity, error) { return entity, nil },
+		updateOwnerFn: func(_ context.Context, _ string, owner *string) error {
+			capturedOwner = owner
+			return nil
+		},
+	}
+	typeRepo := &mockEntityTypeRepo{
+		findByIDFn: func(_ context.Context, _ int) (*EntityType, error) { return character, nil },
+	}
+	svc := newTestService(repo, typeRepo)
+	updated, err := svc.ClaimEntity(context.Background(), "e-char", "player-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedOwner == nil || *capturedOwner != "player-1" {
+		t.Errorf("expected owner_user_id update to player-1, got %v", capturedOwner)
+	}
+	if updated.OwnerUserID == nil || *updated.OwnerUserID != "player-1" {
+		t.Errorf("expected returned entity to reflect new owner, got %v", updated.OwnerUserID)
+	}
+}
+
+// TestClaimEntity_Idempotent confirms re-claiming an already-owned
+// entity returns success without touching the DB. Players who hit
+// the claim button twice in quick succession (or HTMX double-submits)
+// should not see a 409.
+func TestClaimEntity_Idempotent(t *testing.T) {
+	entity := &Entity{ID: "e1", CampaignID: "c1", EntityTypeID: 1, OwnerUserID: strPtr("player-1")}
+	called := false
+	repo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return entity, nil },
+		updateOwnerFn: func(_ context.Context, _ string, _ *string) error {
+			called = true
+			return nil
+		},
+	}
+	svc := newTestService(repo, &mockEntityTypeRepo{})
+	_, err := svc.ClaimEntity(context.Background(), "e1", "player-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if called {
+		t.Error("expected no UpdateOwner call on idempotent claim; got one")
+	}
+}
+
+// TestClaimEntity_RejectsAlreadyClaimed: when entity is owned by a
+// different player, the service returns 409 Conflict so the caller
+// knows to ask the GM rather than silently steal ownership.
+func TestClaimEntity_RejectsAlreadyClaimed(t *testing.T) {
+	entity := &Entity{ID: "e1", CampaignID: "c1", EntityTypeID: 1, OwnerUserID: strPtr("player-other")}
+	repo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return entity, nil },
+	}
+	svc := newTestService(repo, &mockEntityTypeRepo{})
+	_, err := svc.ClaimEntity(context.Background(), "e1", "player-mine")
+	assertAppError(t, err, 409)
+}
+
+// TestClaimEntity_RejectsNonCharacter prevents claiming a Location or
+// Faction by entity_type slug. The handler-level route is Player+ for
+// flexibility; the type-shape gate is what stops misuse.
+func TestClaimEntity_RejectsNonCharacter(t *testing.T) {
+	entity := &Entity{ID: "e1", CampaignID: "c1", EntityTypeID: 99, OwnerUserID: nil}
+	location := &EntityType{ID: 99, Slug: "location"}
+	repo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return entity, nil },
+	}
+	typeRepo := &mockEntityTypeRepo{
+		findByIDFn: func(_ context.Context, _ int) (*EntityType, error) { return location, nil },
+	}
+	svc := newTestService(repo, typeRepo)
+	_, err := svc.ClaimEntity(context.Background(), "e1", "player-1")
+	assertAppError(t, err, 400)
+}
+
+// TestIsClaimableType pins the heuristic. Two paths to "claimable":
+// preset_category=="character", or slug ends in "-character" / equals
+// "character". Anything else is not claimable.
+func TestIsClaimableType(t *testing.T) {
+	cases := []struct {
+		name string
+		et   *EntityType
+		want bool
+	}{
+		{"nil", nil, false},
+		{"location is not", &EntityType{Slug: "location"}, false},
+		{"preset character", &EntityType{Slug: "anything", PresetCategory: strPtr("character")}, true},
+		{"slug character", &EntityType{Slug: "character"}, true},
+		{"slug suffix dnd5e-character", &EntityType{Slug: "dnd5e-character"}, true},
+		{"slug suffix drawsteel-character", &EntityType{Slug: "drawsteel-character"}, true},
+		{"random suffix", &EntityType{Slug: "shopkeeper"}, false},
+	}
+	for _, tc := range cases {
+		if got := isClaimableType(tc.et); got != tc.want {
+			t.Errorf("%s: isClaimableType=%v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestAssignOwner_SetAndClear: Owner/Scribe can both set a new owner
+// and unassign by passing nil. Idempotent if the value matches current.
+func TestAssignOwner_SetAndClear(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		current     *string
+		newOwner    *string
+		wantUpdated bool
+	}{
+		{"unowned -> owned", nil, strPtr("p1"), true},
+		{"owned -> different owner", strPtr("p1"), strPtr("p2"), true},
+		{"owned -> unowned", strPtr("p1"), nil, true},
+		{"unowned -> unowned (no-op)", nil, nil, false},
+		{"same owner (no-op)", strPtr("p1"), strPtr("p1"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ent := &Entity{ID: "e1", CampaignID: "c1", OwnerUserID: tc.current}
+			called := false
+			repo := &mockEntityRepo{
+				findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return ent, nil },
+				updateOwnerFn: func(_ context.Context, _ string, _ *string) error {
+					called = true
+					return nil
+				},
+			}
+			svc := newTestService(repo, &mockEntityTypeRepo{})
+			_, err := svc.AssignOwner(context.Background(), "e1", tc.newOwner)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if called != tc.wantUpdated {
+				t.Errorf("UpdateOwner called=%v, want %v", called, tc.wantUpdated)
+			}
+		})
+	}
 }
