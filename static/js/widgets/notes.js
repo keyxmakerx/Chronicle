@@ -75,11 +75,13 @@ Chronicle.register('notes', {
     el.appendChild(fab);
     el.appendChild(panel);
 
-    // Hide the floating FAB if the topbar has a notes trigger button.
-    // The topbar button calls Chronicle.toggleNotes() which clicks the FAB.
-    if (document.getElementById('topbar-notes-trigger')) {
-      fab.classList.add('notes-fab-hidden');
-    }
+    // Both the bottom-right FAB and the topbar notes button stay
+    // visible — they target the same toggle, but the FAB is the
+    // primary call-to-action and was previously hidden at init when
+    // the topbar trigger existed. That created a confusing "the
+    // bottom-right icon only appears after you open the panel from
+    // the top-right" experience because the close handler unhid the
+    // FAB. Keeping both visible is duplicate but unambiguous.
 
     // --- Saved preferences (localStorage) ---
     var STORAGE_KEY = 'chronicle_notes_size';
@@ -273,17 +275,28 @@ Chronicle.register('notes', {
       });
     }
 
-    // Quick-add: Enter creates note instantly.
+    // Quick-add: Enter in the text input OR clicking the plus button
+    // both create a note from the current input value. The plus button
+    // had previously been a decorative <i> tag with no handler, so only
+    // Enter worked — confusing because the button looked clickable.
+    function quickAddFromInput() {
+      if (!quickInput) return;
+      var text = quickInput.value.trim();
+      if (!text) return;
+      quickInput.value = '';
+      quickCreateNote(text);
+    }
     if (quickInput) {
       quickInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          var text = quickInput.value.trim();
-          if (!text) return;
-          quickInput.value = '';
-          quickCreateNote(text);
+          quickAddFromInput();
         }
       });
+    }
+    var quickAddBtn = panel.querySelector('.notes-quick-add-btn');
+    if (quickAddBtn) {
+      quickAddBtn.addEventListener('click', quickAddFromInput);
     }
 
     // Search filter: re-render on input with debounce.
@@ -1543,9 +1556,9 @@ Chronicle.register('notes', {
         '</div>' +
         tabsHtml +
         '<div class="notes-quick-add">' +
-        '<i class="fa-solid fa-plus text-[10px] text-fg-muted"></i>' +
+        '<button class="note-btn notes-quick-add-btn" title="Add note" type="button"><i class="fa-solid fa-plus text-[10px]"></i></button>' +
         '<input type="text" class="notes-quick-input" placeholder="' + Chronicle.escapeAttr(quickPlaceholder) + '" autocomplete="off">' +
-        '<button class="note-btn notes-new-folder-btn" title="New folder"><i class="fa-solid fa-folder-plus text-[11px]"></i></button>' +
+        '<button class="note-btn notes-new-folder-btn" title="New folder" type="button"><i class="fa-solid fa-folder-plus text-[11px]"></i></button>' +
         '</div>' +
         '<div class="notes-search" style="padding:4px 8px">' +
         '<input type="text" class="notes-search-input" placeholder="Filter notes..." autocomplete="off" style="width:100%;padding:4px 8px;font-size:12px;border:1px solid var(--border-color,#e5e7eb);border-radius:4px;outline:none;background:transparent;color:inherit;">' +
