@@ -589,6 +589,17 @@ templ AdminSidebarNav() {
 				Storage
 			</a>
 			<a
+				href="/admin/backup"
+				class={ sidebarNavLink,
+					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/backup")),
+					templ.KV(sidebarNavInactive, !isPathPrefix(ctx, "/admin/backup")) }
+			>
+				<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+					<i class="fa-solid fa-box-archive text-xs"></i>
+				</span>
+				Backups
+			</a>
+			<a
 				href="/admin/database"
 				class={ sidebarNavLink,
 					templ.KV(sidebarNavActive, isPathPrefix(ctx, "/admin/database")),

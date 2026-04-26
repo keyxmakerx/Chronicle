@@ -19,6 +19,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
+	"github.com/keyxmakerx/chronicle/internal/plugins/backup"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -1288,6 +1289,17 @@ func (a *App) RegisterRoutes() {
 	adminHandler.SetMediaDeps(mediaRepo, mediaService, a.Config.Upload.MaxSize)
 	adminHandler.SetBaseURL(a.Config.BaseURL)
 	adminGroup := admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
+
+	// Admin Backup plugin: lists backup artifacts and exposes a "Run
+	// backup" button that shells out to scripts/backup.sh under the
+	// configured timeout. Restore is a separate plugin (see ADR-035 /
+	// ADR-036) because its blast radius warrants extra confirmation.
+	backupSvc := backup.NewService(backup.Config{
+		ScriptPath: a.Config.BackupScriptPath,
+		BackupDir:  a.Config.BackupDir,
+	})
+	backupHandler := backup.NewHandler(backupSvc)
+	backup.RegisterRoutes(adminGroup, backupHandler)
 
 	// Settings plugin: editable storage limits (global, per-user, per-campaign).
 	// Registers on the admin group since all settings routes require site admin.

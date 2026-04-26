@@ -1,0 +1,180 @@
+// backup.templ renders the admin backup dashboard. Lists artifacts in
+// BACKUP_DIR with size + modtime + kind classification, exposes a
+// "Run backup now" button, and surfaces the last in-process run's status.
+package backup
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// BackupPageData bundles everything the BackupPage templ needs.
+type BackupPageData struct {
+	BackupDir  string
+	Artifacts  []Artifact
+	ListError  string
+	LastRun    *RunResult
+	RunningNow bool
+	CSRFToken  string
+}
+
+templ BackupPage(d BackupPageData) {
+	@layouts.App("Backups - Admin") {
+		<div class="max-w-5xl mx-auto space-y-6">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">Backups</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					Run an on-demand backup or download an existing artifact. Backups bundle the database, media files, and Redis snapshot — see the operator runbook in docs/deployment.md for the artifact format.
+				</p>
+			</div>
+
+			@runCard(d)
+
+			if d.ListError != "" {
+				<div class="card p-4 border-l-4 border-red-500">
+					<p class="text-sm text-red-700 dark:text-red-300">
+						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+						Could not list artifacts in <code>{ d.BackupDir }</code>: { d.ListError }
+					</p>
+				</div>
+			}
+
+			@artifactList(d)
+		</div>
+	}
+}
+
+// runCard renders the "Run backup now" button plus the most recent run's
+// outcome. The button is disabled while a backup is in flight to keep the
+// admin from triggering 409s by clicking through the cooldown.
+templ runCard(d BackupPageData) {
+	<div class="card p-5 space-y-4">
+		<div class="flex items-center justify-between">
+			<div>
+				<h2 class="text-lg font-semibold text-fg">Run backup now</h2>
+				<p class="text-xs text-fg-muted mt-1">
+					Backup directory: <code>{ d.BackupDir }</code>
+				</p>
+			</div>
+			<form
+				method="POST"
+				action="/admin/backup/run"
+				hx-post="/admin/backup/run"
+				hx-confirm="Start a backup now? This will hold the request open until the backup finishes (up to 20 minutes)."
+			>
+				<input type="hidden" name="csrf_token" value={ d.CSRFToken }/>
+				if d.RunningNow {
+					<button type="button" class="btn-primary text-sm opacity-50 cursor-not-allowed" disabled>
+						<i class="fa-solid fa-spinner fa-spin mr-1"></i>
+						Backup running…
+					</button>
+				} else {
+					<button type="submit" class="btn-primary text-sm">
+						<i class="fa-solid fa-play mr-1"></i>
+						Run backup
+					</button>
+				}
+			</form>
+		</div>
+		if d.LastRun != nil {
+			@lastRunStatus(d.LastRun)
+		}
+	</div>
+}
+
+// lastRunStatus renders the most-recent-run summary block. Three visual
+// states (success / timeout / failure) so an admin can see at a glance
+// whether the last attempt landed.
+templ lastRunStatus(r *RunResult) {
+	<div class="border-t border-edge pt-3 text-sm">
+		if r.Succeeded() {
+			<div class="text-green-700 dark:text-green-300">
+				<i class="fa-solid fa-circle-check mr-1"></i>
+				Last run succeeded — { r.FinishedAt.Format("2006-01-02 15:04:05") }
+				<span class="text-fg-muted ml-2">({ r.Duration().Round(1e9).String() })</span>
+			</div>
+		} else if r.TimedOut {
+			<div class="text-red-700 dark:text-red-300">
+				<i class="fa-solid fa-clock mr-1"></i>
+				Last run timed out — { r.FinishedAt.Format("2006-01-02 15:04:05") }
+			</div>
+		} else {
+			<div class="text-red-700 dark:text-red-300">
+				<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+				Last run failed — exit { fmt.Sprintf("%d", r.ExitCode) } at { r.FinishedAt.Format("2006-01-02 15:04:05") }
+			</div>
+		}
+		if r.Stderr != "" {
+			<details class="mt-2">
+				<summary class="cursor-pointer text-xs text-fg-muted">Show stderr</summary>
+				<pre class="mt-2 p-2 bg-surface-alt text-xs text-fg-body whitespace-pre-wrap">{ r.Stderr }</pre>
+			</details>
+		}
+	</div>
+}
+
+// artifactList renders the table of files found in BACKUP_DIR. Empty
+// state explains how artifacts get there in the first place.
+templ artifactList(d BackupPageData) {
+	<div class="card p-5">
+		<h2 class="text-lg font-semibold text-fg mb-3">Existing artifacts</h2>
+		if len(d.Artifacts) == 0 {
+			<div class="text-sm text-fg-muted py-6 text-center">
+				No artifacts in <code>{ d.BackupDir }</code> yet. Click "Run backup" above to create one,
+				or run <code>scripts/backup.sh</code> from the host shell.
+			</div>
+		} else {
+			<table class="w-full text-sm">
+				<thead>
+					<tr class="text-left text-xs uppercase text-fg-muted border-b border-edge">
+						<th class="py-2">Name</th>
+						<th class="py-2">Kind</th>
+						<th class="py-2 text-right">Size</th>
+						<th class="py-2">Modified</th>
+						<th class="py-2"></th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, a := range d.Artifacts {
+						<tr class="border-b border-edge/50">
+							<td class="py-2 font-mono text-xs">{ a.Name }</td>
+							<td class="py-2">
+								@kindBadge(a.Kind)
+							</td>
+							<td class="py-2 text-right text-fg-muted">{ humanBytes(a.SizeBytes) }</td>
+							<td class="py-2 text-fg-muted">{ a.ModTime.Format("2006-01-02 15:04") }</td>
+							<td class="py-2 text-right">
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/admin/backup/files/%s", a.Name)) }
+									class="btn-secondary text-xs inline-flex items-center gap-1"
+									title="Download artifact"
+								>
+									<i class="fa-solid fa-download"></i>
+									Download
+								</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+}
+
+// kindBadge colors each artifact kind so admins can scan the table for
+// gaps (e.g. a backup run that produced a manifest but no media tarball).
+templ kindBadge(kind string) {
+	if kind == "db" {
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-600">db</span>
+	} else if kind == "media" {
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-500/10 text-purple-600">media</span>
+	} else if kind == "redis" {
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-500/10 text-orange-600">redis</span>
+	} else if kind == "manifest" {
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-600">manifest</span>
+	} else if kind == "pre-migrate" {
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/10 text-yellow-700">pre-migrate</span>
+	} else {
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-500/10 text-gray-600">other</span>
+	}
+}
