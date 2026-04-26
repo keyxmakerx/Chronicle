@@ -422,6 +422,86 @@ func TestCreate_Success(t *testing.T) {
 	}
 }
 
+// TestCreate_OwnerUserID guards CH1+CH5 plumbing: when the API
+// passes through an owner_user_id, the service must forward it onto
+// the persisted Entity row so the player landing query
+// ("characters owned by current user") finds the new entity.
+//
+// Cross-campaign membership validation deliberately lives at the call
+// site (sync API handler) rather than the service — the test for
+// that lives where the validation lives.
+func TestCreate_OwnerUserID(t *testing.T) {
+	typeRepo := &mockEntityTypeRepo{
+		findByIDFn: func(_ context.Context, id int) (*EntityType, error) {
+			return &EntityType{ID: 1, CampaignID: "camp-1", Slug: "character"}, nil
+		},
+	}
+	var captured *Entity
+	entityRepo := &mockEntityRepo{
+		slugExistsFn: func(_ context.Context, _, _ string) (bool, error) { return false, nil },
+		createFn: func(_ context.Context, e *Entity) error {
+			captured = e
+			return nil
+		},
+	}
+	svc := newTestService(entityRepo, typeRepo)
+
+	for _, tc := range []struct {
+		name        string
+		input       *string
+		wantOwner   *string
+		description string
+	}{
+		{
+			name:        "claimed at create",
+			input:       strPtr("user-claim"),
+			wantOwner:   strPtr("user-claim"),
+			description: "owner_user_id flows through to the persisted row",
+		},
+		{
+			name:        "nil leaves unclaimed",
+			input:       nil,
+			wantOwner:   nil,
+			description: "omitted owner_user_id results in nil OwnerUserID",
+		},
+		{
+			name:        "empty string normalised to unclaimed",
+			input:       strPtr(""),
+			wantOwner:   nil,
+			description: "empty-string owner_user_id is treated as unclaimed (defensive)",
+		},
+		{
+			name:        "whitespace normalised to unclaimed",
+			input:       strPtr("   "),
+			wantOwner:   nil,
+			description: "whitespace-only owner_user_id is treated as unclaimed (defensive)",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			captured = nil
+			_, err := svc.Create(context.Background(), "camp-1", "user-1", CreateEntityInput{
+				Name:         "Gandalf",
+				EntityTypeID: 1,
+				OwnerUserID:  tc.input,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if captured == nil {
+				t.Fatal("expected CreatePackage to be called; nothing captured")
+			}
+			switch {
+			case tc.wantOwner == nil && captured.OwnerUserID != nil:
+				t.Errorf("%s: expected nil OwnerUserID, got %q", tc.description, *captured.OwnerUserID)
+			case tc.wantOwner != nil && captured.OwnerUserID == nil:
+				t.Errorf("%s: expected OwnerUserID %q, got nil", tc.description, *tc.wantOwner)
+			case tc.wantOwner != nil && *captured.OwnerUserID != *tc.wantOwner:
+				t.Errorf("%s: expected OwnerUserID %q, got %q", tc.description, *tc.wantOwner, *captured.OwnerUserID)
+			}
+		})
+	}
+}
+
 func TestCreate_EmptyName(t *testing.T) {
 	svc := newTestService(&mockEntityRepo{}, &mockEntityTypeRepo{})
 	_, err := svc.Create(context.Background(), "camp-1", "user-1", CreateEntityInput{
