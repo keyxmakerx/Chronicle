@@ -28,8 +28,8 @@ func TestCapBuf_TruncatesAtMax(t *testing.T) {
 // before the cap is hit.
 func TestCapBuf_PartialFill(t *testing.T) {
 	b := newCapBuf(100)
-	b.Write([]byte("hello "))
-	b.Write([]byte("world"))
+	_, _ = b.Write([]byte("hello "))
+	_, _ = b.Write([]byte("world"))
 	if got := b.String(); got != "hello world" {
 		t.Errorf("buffer = %q, want %q", got, "hello world")
 	}
