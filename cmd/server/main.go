@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -57,14 +58,34 @@ func main() {
 	// migrations are skipped. This eliminates the need to run migrate
 	// manually after deployment.
 
-	// Pre-migration backup: dump the database before applying any changes.
-	database.PreMigrationBackup(database.HealthCheckConfig{
-		BackupDir:  getEnvDefault("BACKUP_DIR", ""),
-		DBName:     cfg.Database.Name,
-		DBHost:     cfg.Database.Host,
-		DBUser:     cfg.Database.User,
-		DBPassword: cfg.Database.Password,
+	// Pre-migration backup: capture DB + media + Redis before applying any
+	// schema changes. When BACKUP_REQUIRED=1 the boot aborts on any
+	// capture failure; otherwise (legacy default) the failure is logged
+	// and migrations proceed. See ADR-035/ADR-036/ADR-037 in
+	// .ai/decisions.md for the policy.
+	backupRequired := strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "1") ||
+		strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "true")
+	preMigrateErr := database.PreMigrationBackup(db, database.HealthCheckConfig{
+		BackupDir:      getEnvDefault("BACKUP_DIR", ""),
+		BackupRequired: backupRequired,
+		MediaPath:      cfg.Upload.MediaPath,
+		RedisURL:       cfg.Redis.URL,
+		DBName:         cfg.Database.Name,
+		DBHost:         cfg.Database.Host,
+		DBUser:         cfg.Database.User,
+		DBPassword:     cfg.Database.Password,
 	})
+	if preMigrateErr != nil {
+		if backupRequired {
+			slog.Error("pre-migration backup failed and BACKUP_REQUIRED=1; refusing to apply migrations",
+				slog.Any("error", preMigrateErr),
+			)
+			os.Exit(1)
+		}
+		slog.Warn("pre-migration backup failed (non-fatal in default mode); migrations will still apply",
+			slog.Any("error", preMigrateErr),
+		)
+	}
 
 	if err := database.RunMigrations(db, cfg.Database.DSN(), "db/migrations"); err != nil {
 		slog.Error("failed to run migrations", slog.Any("error", err))

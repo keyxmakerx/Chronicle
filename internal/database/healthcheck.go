@@ -10,8 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -25,11 +23,29 @@ type HealthCheckConfig struct {
 	// to function. Catches schema drift from unapplied or failed migrations.
 	CriticalColumns map[string][]string
 
-	// BackupDir is where pre-migration backups are stored. Empty disables backups.
+	// BackupDir is where pre-migration backups are stored. Empty disables
+	// the entire pre-migration capture subsystem (legacy behavior).
 	BackupDir string
 
 	// BackupMaxAge is how long to keep old backups. Defaults to 7 days.
 	BackupMaxAge time.Duration
+
+	// BackupRequired switches PreMigrationBackup from fail-open
+	// (legacy: log a warning, return nil so migrations proceed) to
+	// fail-closed (return an error). main() surfaces the error as a
+	// startup failure when this flag is true. Use in production where
+	// no rollback story is acceptable.
+	BackupRequired bool
+
+	// MediaPath is the on-disk root of the media tree. When set, the
+	// pre-migration capture also tar+gzips this directory alongside
+	// the DB dump. Empty skips media capture (DB-only mode).
+	MediaPath string
+
+	// RedisURL is the connection string passed to `redis-cli --rdb`
+	// during pre-migration capture. Empty skips redis capture
+	// (sessions only; recoverable). Format matches REDIS_URL env var.
+	RedisURL string
 
 	// DSN is the database connection string (needed for mysqldump).
 	DSN string
@@ -305,87 +321,10 @@ func checkSecurity(db *sql.DB, cfg HealthCheckConfig, result *HealthCheckResult)
 	}
 }
 
-// PreMigrationBackup creates a mysqldump before migrations run.
-// Silently skips if mysqldump is not available or backupDir is empty.
-func PreMigrationBackup(cfg HealthCheckConfig) {
-	if cfg.BackupDir == "" {
-		return
-	}
-
-	// Check if mysqldump is available.
-	if _, err := exec.LookPath("mysqldump"); err != nil {
-		slog.Warn("pre-migration backup skipped: mysqldump not found in PATH")
-		return
-	}
-
-	timestamp := time.Now().UTC().Format("20060102T150405Z")
-	filename := filepath.Join(cfg.BackupDir, fmt.Sprintf("chronicle_pre_migrate_%s.sql.gz", timestamp))
-
-	slog.Info("creating pre-migration backup", slog.String("file", filename))
-
-	// Build mysqldump command. Pipe through gzip for compression.
-	host := cfg.DBHost
-	port := "3306"
-	if parts := strings.SplitN(host, ":", 2); len(parts) == 2 {
-		host = parts[0]
-		port = parts[1]
-	}
-
-	dumpCmd := fmt.Sprintf(
-		"mysqldump -h %s -P %s -u %s --single-transaction --routines --triggers %s | gzip > %s",
-		host, port, cfg.DBUser, cfg.DBName, filename)
-
-	cmd := exec.Command("sh", "-c", dumpCmd)
-	cmd.Env = append(cmd.Environ(), "MYSQL_PWD="+cfg.DBPassword)
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		slog.Warn("pre-migration backup failed (non-fatal)",
-			slog.Any("error", err),
-			slog.String("output", string(output)),
-		)
-		return
-	}
-
-	slog.Info("pre-migration backup completed", slog.String("file", filename))
-
-	// Rotate old backups.
-	rotateBackups(cfg)
-}
-
-// rotateBackups removes backup files older than BackupMaxAge.
-func rotateBackups(cfg HealthCheckConfig) {
-	maxAge := cfg.BackupMaxAge
-	if maxAge == 0 {
-		maxAge = 7 * 24 * time.Hour
-	}
-	cutoff := time.Now().Add(-maxAge)
-
-	matches, err := filepath.Glob(filepath.Join(cfg.BackupDir, "chronicle_pre_migrate_*.sql.gz"))
-	if err != nil {
-		return
-	}
-
-	removed := 0
-	for _, f := range matches {
-		// Parse timestamp from filename: chronicle_pre_migrate_20260326T120000Z.sql.gz
-		base := filepath.Base(f)
-		tsStr := strings.TrimPrefix(base, "chronicle_pre_migrate_")
-		tsStr = strings.TrimSuffix(tsStr, ".sql.gz")
-		t, err := time.Parse("20060102T150405Z", tsStr)
-		if err != nil {
-			continue
-		}
-		if t.Before(cutoff) {
-			if err := exec.Command("rm", "-f", f).Run(); err == nil {
-				removed++
-			}
-		}
-	}
-	if removed > 0 {
-		slog.Info("rotated old backups", slog.Int("removed", removed),
-			slog.Duration("max_age", maxAge))
-	}
-}
+// PreMigrationBackup and the helpers it relies on now live in
+// pre_migration_backup.go. Kept here as a doc anchor — the function's
+// signature changed in the symmetry refactor (now takes *sql.DB and
+// returns error so the caller can fail-closed when BACKUP_REQUIRED=1).
 
 // checkSmokeTests runs each registered smoke test to verify that critical
 // query+scan patterns work end-to-end. An empty table (sql.ErrNoRows) is
