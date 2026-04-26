@@ -1332,5 +1332,80 @@ refuse mismatched sets.
   may unify; not a 0.0.1 blocker.
 - Restore is a sysadmin operation only — no admin-UI restore path,
   intentionally. Documented in `docs/deployment.md` §9.
+  *(Reversed by ADR-036 below.)*
 - Documentation lives in `docs/deployment.md`; `scripts/README.md`
   documents the script convention itself.
+
+## ADR-036: Admin UI for Backup and Restore
+
+**Status:** Accepted (2026-04-26).
+**Reverses:** ADR-035's "restore is sysadmin-only, no admin-UI path"
+consequence.
+
+**Context:**
+ADR-035 deferred a web UI for both backup and restore on the grounds
+that backup is rare enough for `make backup` from the host, and
+restore is destructive enough that gating it behind a shell session
+adds useful friction. A user request now makes that compromise the
+bottleneck: operators who deploy chronicle to a VPS or container host
+don't always have direct host shell access (or the muscle memory for
+`make` invocations under their orchestrator), and "log in to the host
+to recover from a backup" turns recovery from "click a button" into
+"find the runbook, get an SSH key, hope BACKUP_DIR is mounted where I
+think." For users running their own host, the UI is the only realistic
+path.
+
+**Decision:**
+Two new admin-only plugins:
+
+- `internal/plugins/backup` — `/admin/backup` page lists artifacts in
+  `BACKUP_DIR` and exposes "Run backup now" + "Download artifact"
+  buttons. Shells out to `scripts/backup.sh` synchronously under a
+  20-minute timeout.
+- `internal/plugins/restore` — `/admin/restore` page lists parsed
+  manifests, with a per-row form requiring the operator to type the
+  literal word `RESTORE` into a text field before the request is
+  accepted. Shells out to `scripts/restore.sh --manifest <path>
+  --yes --force` under a 30-minute timeout.
+
+Security guarantees on top of the existing `RequireSiteAdmin` and
+`CSRF` middleware:
+
+- **Single-flight lock**: in-process mutex serializes both backup and
+  restore against themselves. Concurrent requests get HTTP 409 with a
+  clear message rather than spawning a second mysqldump or restore.
+- **Rate limit**: per-IP sliding window — backup `2/hour`, downloads
+  `20/hour`, restore `1/hour`. Bounds attack surface even when
+  CSRF-protected.
+- **Process group kills**: every shell-out runs with `Setpgid: true`;
+  cancel sends `SIGKILL` to the negative PID so any descendants
+  (mysqldump, tar, gzip, mariadb) die together.
+- **Output cap**: stdout and stderr go through 64 KB ring buffers so
+  a runaway script can't OOM the chronicle process.
+- **Path safety**: every filename parameter is validated against
+  `BACKUP_DIR` with both basename and prefix checks. Restore
+  additionally requires the file to match `chronicle_manifest_*.txt`.
+- **Typed-string confirmation**: restore requires `confirm=RESTORE`
+  in the request body. Mirrors the shell script's interactive prompt
+  so muscle memory transfers between the two surfaces.
+- **No silent coalescing**: if a backup or restore is in flight,
+  concurrent requests get 409, never "you joined the running one".
+
+**Consequences:**
+- Admins can recover without shell access. Big UX win for anyone
+  running chronicle as a managed service.
+- Restore from the UI is now possible — `docs/deployment.md` §9 must
+  document this as the recommended path for VPS deployments while
+  keeping the `make restore` flow as the in-shell escape hatch.
+- The two plugins ship as independent PRs (backup #257, restore here).
+  They duplicate small helpers (`capBuf`, basename validation) — once
+  both land we can extract a shared internal package without churning
+  the public surface.
+- The 1/hour rate limit on restore is deliberately tighter than
+  backup. Restore is at most an emergency operation and even one
+  call/hour is generous.
+- The "run backup before restore" advice in the UI's red banner is
+  human-only safety; the system does NOT auto-snapshot before
+  restoring. A future enhancement may add an opt-in pre-restore
+  backup, but for now the operator owns that step (and the existing
+  in-process pre-migration backup gives some protection too).

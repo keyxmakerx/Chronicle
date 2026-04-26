@@ -22,6 +22,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/backup"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -1292,14 +1293,26 @@ func (a *App) RegisterRoutes() {
 
 	// Admin Backup plugin: lists backup artifacts and exposes a "Run
 	// backup" button that shells out to scripts/backup.sh under the
-	// configured timeout. Restore is a separate plugin (see ADR-035 /
-	// ADR-036) because its blast radius warrants extra confirmation.
+	// configured timeout.
 	backupSvc := backup.NewService(backup.Config{
 		ScriptPath: a.Config.BackupScriptPath,
 		BackupDir:  a.Config.BackupDir,
 	})
 	backupHandler := backup.NewHandler(backupSvc)
 	backup.RegisterRoutes(adminGroup, backupHandler)
+
+	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
+	// shells out to scripts/restore.sh under a typed-RESTORE
+	// confirmation. Reverses ADR-035's "sysadmin-only" stance — see
+	// ADR-036 for the policy reasoning.
+	if a.Config.BackupDir != "" {
+		restoreSvc := restore.NewService(restore.Config{
+			ScriptPath: a.Config.RestoreScriptPath,
+			BackupDir:  a.Config.BackupDir,
+		})
+		restoreHandler := restore.NewHandler(restoreSvc)
+		restore.RegisterRoutes(adminGroup, restoreHandler)
+	}
 
 	// Settings plugin: editable storage limits (global, per-user, per-campaign).
 	// Registers on the admin group since all settings routes require site admin.

@@ -1335,7 +1335,7 @@ func repackFoundryZip(zipPath, baseURL string) error {
 	if err != nil {
 		return fmt.Errorf("open zip: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	tmpPath := zipPath + ".repack.tmp"
 	tmpFile, err := os.Create(tmpPath)
@@ -1365,7 +1365,7 @@ func repackFoundryZip(zipPath, baseURL string) error {
 
 		if entry.Name == "module.json" && !entry.FileInfo().IsDir() {
 			data, err := io.ReadAll(src)
-			src.Close()
+			_ = src.Close()
 			if err != nil {
 				return fmt.Errorf("read module.json: %w", err)
 			}
@@ -1381,10 +1381,10 @@ func repackFoundryZip(zipPath, baseURL string) error {
 		}
 
 		if _, err := io.Copy(dst, src); err != nil {
-			src.Close()
+			_ = src.Close()
 			return fmt.Errorf("copy entry %q: %w", entry.Name, err)
 		}
-		src.Close()
+		_ = src.Close()
 	}
 
 	if err := writer.Close(); err != nil {

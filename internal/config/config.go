@@ -57,8 +57,9 @@ type Config struct {
 	// "/app/scripts/backup.sh" matches the Docker image layout.
 	BackupScriptPath string
 
-	// RestoreScriptPath is the absolute path to scripts/restore.sh. Used
-	// by the admin restore UI. Default "/app/scripts/restore.sh".
+	// RestoreScriptPath is the absolute path to scripts/restore.sh. The
+	// admin restore UI shells out to this. Default
+	// "/app/scripts/restore.sh" matches the Docker image layout.
 	RestoreScriptPath string
 }
 
