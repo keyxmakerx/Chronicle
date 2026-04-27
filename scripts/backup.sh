@@ -119,10 +119,14 @@ command -v tar >/dev/null 2>&1 || \
 command -v sha256sum >/dev/null 2>&1 || \
     fail_tool tool_missing "sha256sum not on PATH (install coreutils)"
 
-# Probe DB connectivity (a cheap query that doesn't dump).
+# Probe DB connectivity (a cheap query that doesn't dump). Stdout is
+# discarded but stderr flows up to the parent so an operator who hits
+# this can see the actual mysql error (auth, TLS, host unreachable)
+# in the admin UI's "Show stderr" panel rather than only the generic
+# "cannot connect to ..." line below.
 if ! MYSQL_PWD="$DB_PASSWORD" mysql \
         -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" \
-        -e "SELECT 1" "$DB_NAME" >/dev/null 2>&1; then
+        -e "SELECT 1" "$DB_NAME" >/dev/null; then
     fail_pre db_unreachable "cannot connect to $DB_HOST:$DB_PORT/$DB_NAME as $DB_USER"
 fi
 
@@ -162,13 +166,18 @@ trap cleanup_partials EXIT
 # without relying on PIPESTATUS (not POSIX). Trade some IO for
 # correctness; gzip -9 is fast on a uncompressed dump.
 DB_SQL_TMP="$BACKUP_DIR/chronicle_db_${TS}.sql.partial"
+# Stderr intentionally NOT redirected to /dev/null: the admin UI captures
+# the script's stderr and surfaces it in the "Show stderr" disclosure.
+# Without the actual mysqldump error (privilege denied, server has gone
+# away, version mismatch, etc.), an operator has no way to diagnose the
+# generic "exited non-zero" message below.
 if ! MYSQL_PWD="$DB_PASSWORD" mysqldump \
         -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" \
         --single-transaction --routines --triggers \
         --set-gtid-purged=OFF \
-        "$DB_NAME" > "$DB_SQL_TMP" 2>/dev/null; then
+        "$DB_NAME" > "$DB_SQL_TMP"; then
     rm -f "$DB_SQL_TMP"
-    fail_tool mysqldump_failed "mysqldump exited non-zero"
+    fail_tool mysqldump_failed "mysqldump exited non-zero (see stderr above for the real reason)"
 fi
 if ! gzip -9 -c "$DB_SQL_TMP" > "$DB_TMP"; then
     rm -f "$DB_SQL_TMP" "$DB_TMP"
@@ -193,9 +202,11 @@ MEDIA_SIZE=""
 if [ "$SKIP_MEDIA" = "0" ] && [ -d "$MEDIA_PATH" ]; then
     MEDIA_PARENT="$(dirname "$MEDIA_PATH")"
     MEDIA_BASE="$(basename "$MEDIA_PATH")"
-    if ! tar -czf "$MEDIA_TMP" -C "$MEDIA_PARENT" "$MEDIA_BASE" 2>/dev/null; then
+    # Stderr passes through so disk-full / permission errors are visible
+    # in the admin UI rather than being lost.
+    if ! tar -czf "$MEDIA_TMP" -C "$MEDIA_PARENT" "$MEDIA_BASE"; then
         rm -f "$MEDIA_TMP"
-        fail_tool tar_failed "tar of $MEDIA_PATH exited non-zero"
+        fail_tool tar_failed "tar of $MEDIA_PATH exited non-zero (see stderr above)"
     fi
     mv "$MEDIA_TMP" "$MEDIA_OUT"
     MEDIA_SHA="$(sha256sum "$MEDIA_OUT" | awk '{print $1}')"
