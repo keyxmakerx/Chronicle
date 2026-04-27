@@ -32,12 +32,27 @@
   // Audience options visible in the picker. Order = display order.
   // The dm_* options are hidden when the viewer can't author them
   // (see filterAudienceOptions). Server checks again.
+  //
+  // borderClass is the audience-coded left edge of each note card —
+  // gives the file-list a quick scan affordance (DM-only stuff is red,
+  // shared-everyone is green, etc.) without needing to read the badge.
+  // badgeClass is for the small inline label.
   var ALL_AUDIENCES = [
-    { value: 'private',    label: 'Private',    icon: 'fa-lock',           desc: 'Only you can see this' },
-    { value: 'dm_only',    label: 'DM Only',    icon: 'fa-user-secret',    desc: 'GM (and DM-granted users) only' },
-    { value: 'dm_scribe',  label: 'DM + Co-DM', icon: 'fa-user-shield',    desc: 'GM, Co-DMs, DM-granted users' },
-    { value: 'everyone',   label: 'Everyone',   icon: 'fa-users',          desc: 'All campaign members' },
-    { value: 'custom',     label: 'Custom',     icon: 'fa-user-plus',      desc: 'Specific users (advanced)' }
+    { value: 'private',   label: 'Private',    icon: 'fa-lock',        desc: 'Only you can see this',
+      borderClass: 'border-l-gray-400 dark:border-l-gray-500',
+      badgeClass:  'bg-gray-500/10 text-gray-600 dark:text-gray-400' },
+    { value: 'dm_only',   label: 'DM Only',    icon: 'fa-user-secret', desc: 'GM (and DM-granted users) only',
+      borderClass: 'border-l-red-500',
+      badgeClass:  'bg-red-500/10 text-red-700 dark:text-red-300' },
+    { value: 'dm_scribe', label: 'DM + Co-DM', icon: 'fa-user-shield', desc: 'GM, Co-DMs, DM-granted users',
+      borderClass: 'border-l-amber-500',
+      badgeClass:  'bg-amber-500/10 text-amber-700 dark:text-amber-300' },
+    { value: 'everyone',  label: 'Everyone',   icon: 'fa-users',       desc: 'All campaign members',
+      borderClass: 'border-l-emerald-500',
+      badgeClass:  'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
+    { value: 'custom',    label: 'Custom',     icon: 'fa-user-plus',   desc: 'Specific users (advanced)',
+      borderClass: 'border-l-purple-500',
+      badgeClass:  'bg-purple-500/10 text-purple-700 dark:text-purple-300' }
   ];
 
   Chronicle.register('entity-notes', {
@@ -56,6 +71,12 @@
         composeTitle: '',
         composeBody: '',
         composeSharedWith: [],
+        // expandedIds tracks which collapsed note rows are currently
+        // open. A Set so multiple notes can be expanded simultaneously
+        // (matches a file-browser feel — open multiple folders at once).
+        expandedIds: {},
+        // editingId is the single note currently in edit mode. Editing
+        // implies expanded; collapsing the row cancels the edit.
         editingId: null,
         editingTitle: '',
         editingBody: '',
@@ -354,7 +375,7 @@
         if (state.notes.length === 0) {
           return '<div class="card p-6 text-center"><i class="fa-solid fa-sticky-note text-2xl text-fg-muted mb-2"></i><p class="text-sm text-fg-muted">No notes yet. Click <strong>New Note</strong> to add one.</p></div>';
         }
-        var h = '<div class="space-y-2">';
+        var h = '<div class="space-y-1.5">';
         for (var i = 0; i < state.notes.length; i++) {
           h += renderNote(state.notes[i]);
         }
@@ -362,63 +383,122 @@
         return h;
       }
 
+      // renderNote builds one row in the file-list.
+      //
+      // Three modes:
+      //   collapsed   — header only (file-list row)
+      //   expanded    — header + body content + action footer
+      //   editing     — header + edit form (title/body/audience/picker)
+      //
+      // editing implies expanded; the header pencil icon is the entry
+      // point. Cancel returns to expanded read-only.
       function renderNote(note) {
+        var isExpanded = !!state.expandedIds[note.id] || state.editingId === note.id;
         var isEditing = state.editingId === note.id;
+        var aud = audienceMeta(note.audience);
         var h = '';
-        h += '<div class="card overflow-hidden" data-note-id="' + esc(note.id) + '">';
-
-        if (isEditing) {
-          h += renderNoteEditor(note);
-        } else {
-          h += renderNoteView(note);
+        h += '<div class="card overflow-hidden border-l-4 ' + aud.borderClass + '" data-note-id="' + esc(note.id) + '">';
+        h += renderNoteHeader(note, aud, isExpanded, isEditing);
+        if (isExpanded) {
+          h += '<div class="border-t border-edge">';
+          if (isEditing) {
+            h += renderNoteEditor(note);
+          } else {
+            h += renderNoteContent(note);
+          }
+          h += '</div>';
         }
         h += '</div>';
         return h;
       }
 
-      function renderNoteView(note) {
-        var aud = audienceMeta(note.audience);
+      // renderNoteHeader is the always-visible row: chevron, title,
+      // metadata, audience badge, pin indicator, kebab menu.
+      // The whole row (except action buttons) toggles expand/collapse.
+      function renderNoteHeader(note, aud, isExpanded, isEditing) {
+        var h = '';
+        var titleText = note.title && note.title.trim()
+          ? note.title
+          : (firstLineOf(stripHtml(note.bodyHtml || '')) || 'Untitled');
+        h += '<div class="px-3 py-2 flex items-center gap-2 select-none ' +
+             (isEditing ? '' : 'cursor-pointer hover:bg-surface-alt/50 transition-colors') + '" ' +
+             (isEditing ? '' : 'data-action="toggle-note" data-note-id="' + esc(note.id) + '"') + '>';
+
+        // Chevron
+        h += '<i class="fa-solid fa-chevron-' + (isExpanded ? 'down' : 'right') + ' text-[10px] text-fg-muted w-3"></i>';
+
+        // Title (or first-line excerpt fallback)
+        h += '<span class="text-sm font-medium text-fg flex-1 truncate">' + esc(titleText) + '</span>';
+
+        // Pinned indicator
+        if (note.pinned) {
+          h += '<i class="fa-solid fa-thumbtack text-[10px] text-amber-500" title="Pinned"></i>';
+        }
+
+        // Audience badge
+        h += '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ' + aud.badgeClass + '" title="' + esc(aud.desc) + '">';
+        h += '<i class="fa-solid ' + aud.icon + ' mr-1 text-[9px]"></i>' + esc(aud.label);
+        h += '</span>';
+
+        // Updated timestamp (compact)
+        h += '<span class="text-[10px] text-fg-muted hidden md:inline">' + esc(formatShortDate(note.updatedAt)) + '</span>';
+
+        // Kebab menu — only when not editing.
+        if (!isEditing) {
+          h += '<div class="relative" data-dropdown>';
+          h += '<button class="text-fg-muted hover:text-fg text-xs p-1" data-action="note-menu" data-note-id="' + esc(note.id) + '" title="More actions" onclick="event.stopPropagation()"><i class="fa-solid fa-ellipsis-vertical"></i></button>';
+          h += '<div class="hidden absolute right-0 top-full mt-1 bg-surface border border-edge rounded-lg shadow-lg py-1 z-20 min-w-[140px]" data-menu="' + esc(note.id) + '">';
+          h += '<button class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-alt" data-action="edit-note" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-pen mr-2 w-3"></i>Edit</button>';
+          h += '<button class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-alt" data-action="toggle-pin" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-thumbtack mr-2 w-3"></i>' + (note.pinned ? 'Unpin' : 'Pin') + '</button>';
+          h += '<button class="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" data-action="delete-note" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-trash mr-2 w-3"></i>Delete</button>';
+          h += '</div></div>';
+        }
+
+        h += '</div>';
+        return h;
+      }
+
+      // renderNoteContent is the read-only expanded body view: rendered
+      // HTML plus a small footer bar with primary actions.
+      function renderNoteContent(note) {
         var h = '';
         h += '<div class="px-4 py-3">';
-        h += '<div class="flex items-start justify-between gap-2">';
-        h += '<div class="flex-1 min-w-0">';
-        if (note.title) {
-          h += '<div class="font-medium text-sm text-fg">' + esc(note.title) + '</div>';
-        }
-        h += '<div class="text-xs text-fg-muted mt-0.5">';
-        h += '<i class="fa-solid ' + aud.icon + ' mr-1"></i>' + esc(aud.label);
-        if (note.pinned) h += ' <span class="ml-2"><i class="fa-solid fa-thumbtack text-amber-500"></i></span>';
-        h += '</div>';
-        h += '</div>';
-        // Only the author can edit/delete; the API enforces this regardless.
-        // We approximate "is this mine" by audience: if it's `private` or
-        // shows up in the list at all, it might be ours; the server returns
-        // 404 on non-author edit attempts so wrong guesses are safe.
-        h += '<div class="flex gap-1">';
-        h += '<button class="text-fg-muted hover:text-fg text-xs p-1" data-action="edit-note" data-note-id="' + esc(note.id) + '" title="Edit"><i class="fa-solid fa-pen"></i></button>';
-        h += '<button class="text-fg-muted hover:text-red-500 text-xs p-1" data-action="delete-note" data-note-id="' + esc(note.id) + '" title="Delete"><i class="fa-solid fa-trash"></i></button>';
-        h += '</div>';
-        h += '</div>';
         if (note.bodyHtml) {
-          h += '<div class="prose prose-sm dark:prose-invert max-w-none mt-2">' + note.bodyHtml + '</div>';
+          h += '<div class="prose prose-sm dark:prose-invert max-w-none">' + note.bodyHtml + '</div>';
         } else if (note.body) {
-          // Fallback: render plain text from the JSON. Rare path.
-          h += '<div class="text-sm text-fg whitespace-pre-wrap mt-2">' + esc(extractText(note.body)) + '</div>';
+          h += '<div class="text-sm text-fg whitespace-pre-wrap">' + esc(extractText(note.body)) + '</div>';
+        } else {
+          h += '<div class="text-sm text-fg-muted italic">(empty)</div>';
         }
+        // Custom-audience: show recipients so the author remembers who has access.
+        if (note.audience === 'custom' && Array.isArray(note.sharedWith) && note.sharedWith.length > 0) {
+          h += '<div class="mt-3 pt-2 border-t border-edge text-xs text-fg-muted">';
+          h += '<i class="fa-solid fa-user-plus mr-1"></i>Shared with ' + note.sharedWith.length + ' user' + (note.sharedWith.length === 1 ? '' : 's');
+          h += '</div>';
+        }
+        // Action footer
+        h += '<div class="mt-3 pt-2 border-t border-edge flex items-center gap-2 text-xs">';
+        h += '<button class="btn-secondary btn-sm" data-action="edit-note" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-pen mr-1"></i>Edit</button>';
+        h += '<button class="btn-ghost btn-sm" data-action="toggle-pin" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-thumbtack mr-1"></i>' + (note.pinned ? 'Unpin' : 'Pin') + '</button>';
+        h += '<div class="flex-1"></div>';
+        if (note.createdAt) {
+          h += '<span class="text-fg-muted">Created ' + esc(formatShortDate(note.createdAt)) + '</span>';
+        }
+        h += '</div>';
         h += '</div>';
         return h;
       }
 
       function renderNoteEditor(note) {
         var h = '';
-        h += '<div class="px-4 py-3 space-y-2 border-l-4 border-accent">';
+        h += '<div class="px-4 py-3 space-y-2 bg-surface-alt/30">';
         h += '<input type="text" class="input w-full text-sm" data-field="title" data-note-id="' + esc(note.id) + '" value="' + esc(state.editingTitle) + '" placeholder="Title (optional)"/>';
-        h += '<textarea class="input w-full text-sm font-sans" rows="4" data-field="body" data-note-id="' + esc(note.id) + '" placeholder="Your note…">' + esc(state.editingBody) + '</textarea>';
+        h += '<textarea class="input w-full text-sm font-sans" rows="6" data-field="body" data-note-id="' + esc(note.id) + '" placeholder="Your note…">' + esc(state.editingBody) + '</textarea>';
         h += '<div class="flex items-center gap-2 flex-wrap">';
         h += renderAudiencePicker(state.editingAudience, 'edit-' + note.id);
         h += '<div class="flex-1"></div>';
         h += '<button class="btn-secondary text-xs" data-action="cancel-edit">Cancel</button>';
-        h += '<button class="btn-primary text-xs" data-action="save-edit" data-note-id="' + esc(note.id) + '">Save</button>';
+        h += '<button class="btn-primary text-xs" data-action="save-edit" data-note-id="' + esc(note.id) + '">Save changes</button>';
         h += '</div>';
         if (state.editingAudience === 'custom') {
           h += renderMemberPicker(state.editingSharedWith, 'edit-' + note.id);
@@ -480,12 +560,61 @@
             });
           });
         }
-        // Edit note.
-        bindAll('[data-action="edit-note"]', 'click', function () {
+        // Toggle expand/collapse on row click.
+        bindAll('[data-action="toggle-note"]', 'click', function (e) {
+          // Bail out if the click landed on a nested action button —
+          // those have their own handlers and we don't want clicking
+          // "Edit" inside the kebab to also toggle the row state.
+          if (e.target.closest('[data-action]') !== this) return;
+          var id = this.getAttribute('data-note-id');
+          if (state.expandedIds[id]) {
+            delete state.expandedIds[id];
+          } else {
+            state.expandedIds[id] = true;
+          }
+          render();
+        });
+
+        // Kebab menu open/close. Click outside closes (handled below).
+        bindAll('[data-action="note-menu"]', 'click', function (e) {
+          e.stopPropagation();
+          var id = this.getAttribute('data-note-id');
+          var menu = el.querySelector('[data-menu="' + id + '"]');
+          if (!menu) return;
+          // Close any other open menus first.
+          var allMenus = el.querySelectorAll('[data-menu]');
+          for (var k = 0; k < allMenus.length; k++) {
+            if (allMenus[k] !== menu) allMenus[k].classList.add('hidden');
+          }
+          menu.classList.toggle('hidden');
+        });
+
+        // Pin/unpin shortcut. Optimistic update so the star indicator
+        // flips immediately; on error, the next poll cycle will undo.
+        bindAll('[data-action="toggle-pin"]', 'click', function (e) {
+          e.stopPropagation();
+          var id = this.getAttribute('data-note-id');
+          var note = findNote(id);
+          if (!note) return;
+          var newPinned = !note.pinned;
+          updateNote(id, { pinned: newPinned })
+            .then(render)
+            .catch(function (err) {
+              console.error('[EntityNotes] Pin error:', err);
+              Chronicle.notify && Chronicle.notify(humanError(err), 'error');
+            });
+        });
+
+        // Edit note — entry point from kebab menu OR from expanded
+        // content footer "Edit" button. Auto-expands the row if the
+        // user clicked Edit from a collapsed state.
+        bindAll('[data-action="edit-note"]', 'click', function (e) {
+          e.stopPropagation();
           var id = this.getAttribute('data-note-id');
           var note = findNote(id);
           if (!note) return;
           state.editingId = id;
+          state.expandedIds[id] = true; // editing implies expanded
           state.editingTitle = note.title || '';
           state.editingBody = stripHtml(note.bodyHtml || '');
           state.editingAudience = note.audience || 'private';
@@ -530,7 +659,8 @@
           });
         });
         // Delete note.
-        bindAll('[data-action="delete-note"]', 'click', function () {
+        bindAll('[data-action="delete-note"]', 'click', function (e) {
+          e.stopPropagation();
           var id = this.getAttribute('data-note-id');
           if (!window.confirm('Delete this note? This cannot be undone.')) return;
           deleteNote(id)
@@ -540,6 +670,21 @@
               Chronicle.notify && Chronicle.notify(humanError(err), 'error');
             });
         });
+
+        // Close kebab menus when clicking anywhere outside one.
+        // Bound on the widget root rather than document so we don't
+        // step on other widgets' menus.
+        if (!el.__notesMenuCloseBound) {
+          el.__notesMenuCloseBound = true;
+          document.addEventListener('click', function (e) {
+            if (e.target.closest('[data-dropdown]')) return;
+            var menus = el.querySelectorAll('[data-menu]');
+            for (var i = 0; i < menus.length; i++) {
+              menus[i].classList.add('hidden');
+            }
+          });
+        }
+
         // Edit field bindings.
         bindEditFields();
       }
@@ -669,6 +814,48 @@
         if (err && err.message) return err.message;
         if (typeof err === 'string') return err;
         return 'Something went wrong';
+      }
+
+      // firstLineOf returns the first non-empty line of a string,
+      // truncated. Used as a fallback display when a note has no
+      // explicit title — gives the file-list row something readable.
+      function firstLineOf(s) {
+        if (!s) return '';
+        var lines = String(s).split(/\r?\n/);
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (line) {
+            return line.length > 80 ? line.slice(0, 80) + '…' : line;
+          }
+        }
+        return '';
+      }
+
+      // formatShortDate returns a compact relative-ish timestamp for
+      // header rows. "Today 14:23", "Yesterday", "Apr 22", "2025-12-09".
+      function formatShortDate(iso) {
+        if (!iso) return '';
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        var now = new Date();
+        var sameDay = d.getFullYear() === now.getFullYear() &&
+                      d.getMonth() === now.getMonth() &&
+                      d.getDate() === now.getDate();
+        if (sameDay) {
+          var hh = String(d.getHours()).padStart(2, '0');
+          var mm = String(d.getMinutes()).padStart(2, '0');
+          return hh + ':' + mm;
+        }
+        var yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        var sameYesterday = d.getFullYear() === yesterday.getFullYear() &&
+                            d.getMonth() === yesterday.getMonth() &&
+                            d.getDate() === yesterday.getDate();
+        if (sameYesterday) return 'Yesterday';
+        var sameYear = d.getFullYear() === now.getFullYear();
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        if (sameYear) return months[d.getMonth()] + ' ' + d.getDate();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
       }
 
       function esc(s) {
