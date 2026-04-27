@@ -375,7 +375,12 @@
         if (state.notes.length === 0) {
           return '<div class="card p-6 text-center"><i class="fa-solid fa-sticky-note text-2xl text-fg-muted mb-2"></i><p class="text-sm text-fg-muted">No notes yet. Click <strong>New Note</strong> to add one.</p></div>';
         }
-        var h = '<div class="space-y-1.5">';
+        // Single bordered container with thin row dividers — like a
+        // file-list. The wrapper override (`!p-0`) cancels .card's
+        // default p-4 so rows go edge-to-edge. `overflow-visible` is
+        // important: the kebab dropdown lives inside a row and would
+        // otherwise be clipped by the wrapper.
+        var h = '<div class="card !p-0 divide-y divide-edge overflow-visible">';
         for (var i = 0; i < state.notes.length; i++) {
           h += renderNote(state.notes[i]);
         }
@@ -390,14 +395,20 @@
       //   expanded    — header + body content + action footer
       //   editing     — header + edit form (title/body/audience/picker)
       //
-      // editing implies expanded; the header pencil icon is the entry
-      // point. Cancel returns to expanded read-only.
+      // editing implies expanded; the kebab "Edit" entry expands the
+      // row first. Cancel returns to expanded read-only.
+      //
+      // No `overflow-hidden` anywhere in this subtree — the kebab
+      // dropdown extends past the row bounds and was previously
+      // clipped by the outer card.
       function renderNote(note) {
         var isExpanded = !!state.expandedIds[note.id] || state.editingId === note.id;
         var isEditing = state.editingId === note.id;
         var aud = audienceMeta(note.audience);
         var h = '';
-        h += '<div class="card overflow-hidden border-l-4 ' + aud.borderClass + '" data-note-id="' + esc(note.id) + '">';
+        h += '<div class="border-l-4 ' + aud.borderClass +
+             (isExpanded ? ' bg-surface-alt/30' : '') +
+             '" data-note-id="' + esc(note.id) + '">';
         h += renderNoteHeader(note, aud, isExpanded, isEditing);
         if (isExpanded) {
           h += '<div class="border-t border-edge">';
@@ -415,43 +426,45 @@
       // renderNoteHeader is the always-visible row: chevron, title,
       // metadata, audience badge, pin indicator, kebab menu.
       // The whole row (except action buttons) toggles expand/collapse.
+      //
+      // The kebab dropdown uses position: fixed (set in JS at click time)
+      // so it escapes any clipping from ancestor overflow contexts. The
+      // markup just renders it hidden; bindEvents positions and shows.
       function renderNoteHeader(note, aud, isExpanded, isEditing) {
         var h = '';
         var titleText = note.title && note.title.trim()
           ? note.title
           : (firstLineOf(stripHtml(note.bodyHtml || '')) || 'Untitled');
-        h += '<div class="px-3 py-2 flex items-center gap-2 select-none ' +
-             (isEditing ? '' : 'cursor-pointer hover:bg-surface-alt/50 transition-colors') + '" ' +
+        h += '<div class="px-2.5 py-1.5 flex items-center gap-2 select-none text-sm ' +
+             (isEditing ? '' : 'cursor-pointer hover:bg-surface-alt/40 transition-colors') + '" ' +
              (isEditing ? '' : 'data-action="toggle-note" data-note-id="' + esc(note.id) + '"') + '>';
 
         // Chevron
-        h += '<i class="fa-solid fa-chevron-' + (isExpanded ? 'down' : 'right') + ' text-[10px] text-fg-muted w-3"></i>';
+        h += '<i class="fa-solid fa-chevron-' + (isExpanded ? 'down' : 'right') + ' text-[9px] text-fg-muted w-2.5"></i>';
 
-        // Title (or first-line excerpt fallback)
-        h += '<span class="text-sm font-medium text-fg flex-1 truncate">' + esc(titleText) + '</span>';
+        // Title (or first-line excerpt fallback). Slightly lighter
+        // weight than the previous design — file-list, not card title.
+        h += '<span class="text-fg flex-1 truncate">' + esc(titleText) + '</span>';
 
         // Pinned indicator
         if (note.pinned) {
-          h += '<i class="fa-solid fa-thumbtack text-[10px] text-amber-500" title="Pinned"></i>';
+          h += '<i class="fa-solid fa-thumbtack text-[10px] text-amber-500 shrink-0" title="Pinned"></i>';
         }
 
-        // Audience badge
-        h += '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ' + aud.badgeClass + '" title="' + esc(aud.desc) + '">';
-        h += '<i class="fa-solid ' + aud.icon + ' mr-1 text-[9px]"></i>' + esc(aud.label);
+        // Audience badge — icon-only on small screens, +label on md+.
+        h += '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ' + aud.badgeClass + '" title="' + esc(aud.desc) + '">';
+        h += '<i class="fa-solid ' + aud.icon + ' text-[9px] md:mr-1"></i>';
+        h += '<span class="hidden md:inline">' + esc(aud.label) + '</span>';
         h += '</span>';
 
         // Updated timestamp (compact)
-        h += '<span class="text-[10px] text-fg-muted hidden md:inline">' + esc(formatShortDate(note.updatedAt)) + '</span>';
+        h += '<span class="text-[10px] text-fg-muted hidden lg:inline shrink-0">' + esc(formatShortDate(note.updatedAt)) + '</span>';
 
-        // Kebab menu — only when not editing.
+        // Kebab — only when not editing. Note: NO `data-dropdown` div
+        // wrapper (we used to use it for outside-click; now the menu is
+        // body-mounted so the close handler tracks the menu directly).
         if (!isEditing) {
-          h += '<div class="relative" data-dropdown>';
-          h += '<button class="text-fg-muted hover:text-fg text-xs p-1" data-action="note-menu" data-note-id="' + esc(note.id) + '" title="More actions" onclick="event.stopPropagation()"><i class="fa-solid fa-ellipsis-vertical"></i></button>';
-          h += '<div class="hidden absolute right-0 top-full mt-1 bg-surface border border-edge rounded-lg shadow-lg py-1 z-20 min-w-[140px]" data-menu="' + esc(note.id) + '">';
-          h += '<button class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-alt" data-action="edit-note" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-pen mr-2 w-3"></i>Edit</button>';
-          h += '<button class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-alt" data-action="toggle-pin" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-thumbtack mr-2 w-3"></i>' + (note.pinned ? 'Unpin' : 'Pin') + '</button>';
-          h += '<button class="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" data-action="delete-note" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-trash mr-2 w-3"></i>Delete</button>';
-          h += '</div></div>';
+          h += '<button class="text-fg-muted hover:text-fg text-xs p-1 shrink-0" data-action="note-menu" data-note-id="' + esc(note.id) + '" title="More actions" onclick="event.stopPropagation()"><i class="fa-solid fa-ellipsis-vertical"></i></button>';
         }
 
         h += '</div>';
@@ -575,18 +588,18 @@
           render();
         });
 
-        // Kebab menu open/close. Click outside closes (handled below).
+        // Kebab menu open/close.
+        //
+        // The menu is body-mounted with position: fixed so it never gets
+        // clipped by any ancestor's overflow context. There's exactly
+        // one menu element shared by every kebab button — we rebuild
+        // its contents and position on each click. Click outside closes.
         bindAll('[data-action="note-menu"]', 'click', function (e) {
           e.stopPropagation();
           var id = this.getAttribute('data-note-id');
-          var menu = el.querySelector('[data-menu="' + id + '"]');
-          if (!menu) return;
-          // Close any other open menus first.
-          var allMenus = el.querySelectorAll('[data-menu]');
-          for (var k = 0; k < allMenus.length; k++) {
-            if (allMenus[k] !== menu) allMenus[k].classList.add('hidden');
-          }
-          menu.classList.toggle('hidden');
+          var note = findNote(id);
+          if (!note) return;
+          openKebabMenu(this, note);
         });
 
         // Pin/unpin shortcut. Optimistic update so the star indicator
@@ -671,22 +684,116 @@
             });
         });
 
-        // Close kebab menus when clicking anywhere outside one.
-        // Bound on the widget root rather than document so we don't
-        // step on other widgets' menus.
-        if (!el.__notesMenuCloseBound) {
-          el.__notesMenuCloseBound = true;
-          document.addEventListener('click', function (e) {
-            if (e.target.closest('[data-dropdown]')) return;
-            var menus = el.querySelectorAll('[data-menu]');
-            for (var i = 0; i < menus.length; i++) {
-              menus[i].classList.add('hidden');
-            }
+        // Edit field bindings.
+        bindEditFields();
+      }
+
+      // --- Kebab menu (body-mounted, position: fixed) ---
+      //
+      // A single dropdown element is appended to document.body once per
+      // widget instance. Every kebab click repositions it next to the
+      // clicked button and rebuilds its contents for the right note.
+      // Outside click closes it. position: fixed lets it escape any
+      // ancestor overflow contexts cleanly.
+
+      var menuEl = null;
+
+      function ensureMenuEl() {
+        if (menuEl) return menuEl;
+        menuEl = document.createElement('div');
+        menuEl.className = 'fixed z-[9999] hidden bg-surface border border-edge rounded-lg shadow-lg py-1 min-w-[140px]';
+        menuEl.setAttribute('data-entity-notes-menu', '');
+        document.body.appendChild(menuEl);
+        // Outside-click closes. Bound once per widget instance via
+        // the el.__cleanup for safe teardown on widget destroy.
+        var outsideHandler = function (ev) {
+          if (!menuEl || menuEl.classList.contains('hidden')) return;
+          if (ev.target.closest('[data-entity-notes-menu]')) return;
+          if (ev.target.closest('[data-action="note-menu"]')) return;
+          menuEl.classList.add('hidden');
+        };
+        document.addEventListener('click', outsideHandler);
+        // Reposition / close on scroll or resize so the menu doesn't
+        // float in mid-air after the user scrolls the entity page.
+        var closeOnInteraction = function () {
+          if (menuEl) menuEl.classList.add('hidden');
+        };
+        window.addEventListener('scroll', closeOnInteraction, true);
+        window.addEventListener('resize', closeOnInteraction);
+        // Stash teardown refs on the widget root so destroy() can
+        // remove the listeners + node.
+        el.__entityNotesMenuTeardown = function () {
+          document.removeEventListener('click', outsideHandler);
+          window.removeEventListener('scroll', closeOnInteraction, true);
+          window.removeEventListener('resize', closeOnInteraction);
+          if (menuEl && menuEl.parentNode) menuEl.parentNode.removeChild(menuEl);
+          menuEl = null;
+        };
+        return menuEl;
+      }
+
+      function openKebabMenu(button, note) {
+        var menu = ensureMenuEl();
+        menu.innerHTML = '' +
+          '<button class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-alt" data-menu-action="edit"><i class="fa-solid fa-pen mr-2 w-3"></i>Edit</button>' +
+          '<button class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-alt" data-menu-action="pin"><i class="fa-solid fa-thumbtack mr-2 w-3"></i>' + (note.pinned ? 'Unpin' : 'Pin') + '</button>' +
+          '<button class="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" data-menu-action="delete"><i class="fa-solid fa-trash mr-2 w-3"></i>Delete</button>';
+
+        // Wire menu items now that the contents are fresh.
+        var items = menu.querySelectorAll('[data-menu-action]');
+        for (var i = 0; i < items.length; i++) {
+          items[i].addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            var action = this.getAttribute('data-menu-action');
+            menu.classList.add('hidden');
+            handleMenuAction(action, note);
           });
         }
 
-        // Edit field bindings.
-        bindEditFields();
+        // Position relative to the button. Right-aligned, just below.
+        // Falls back to dropping ABOVE if there's no room below.
+        var rect = button.getBoundingClientRect();
+        // Show first (so we can read offsetWidth/Height) then move.
+        menu.classList.remove('hidden');
+        var menuW = menu.offsetWidth;
+        var menuH = menu.offsetHeight;
+        var top = rect.bottom + 4;
+        if (top + menuH > window.innerHeight - 8) {
+          top = rect.top - menuH - 4;
+        }
+        var left = rect.right - menuW;
+        if (left < 8) left = 8;
+        menu.style.top = top + 'px';
+        menu.style.left = left + 'px';
+      }
+
+      function handleMenuAction(action, note) {
+        if (action === 'edit') {
+          // Reuse the existing edit-init logic by faking a click
+          // through the same code path: set state and render.
+          state.editingId = note.id;
+          state.expandedIds[note.id] = true;
+          state.editingTitle = note.title || '';
+          state.editingBody = stripHtml(note.bodyHtml || '');
+          state.editingAudience = note.audience || 'private';
+          state.editingSharedWith = Array.isArray(note.sharedWith) ? note.sharedWith.slice() : [];
+          render();
+        } else if (action === 'pin') {
+          updateNote(note.id, { pinned: !note.pinned })
+            .then(render)
+            .catch(function (err) {
+              console.error('[EntityNotes] Pin error:', err);
+              Chronicle.notify && Chronicle.notify(humanError(err), 'error');
+            });
+        } else if (action === 'delete') {
+          if (!window.confirm('Delete this note? This cannot be undone.')) return;
+          deleteNote(note.id)
+            .then(render)
+            .catch(function (err) {
+              console.error('[EntityNotes] Delete error:', err);
+              Chronicle.notify && Chronicle.notify(humanError(err), 'error');
+            });
+        }
       }
 
       function bindComposeFields() {
@@ -879,6 +986,12 @@
       el.__entityNotesCleanup = function () {
         if (pollTimer) { window.clearInterval(pollTimer); pollTimer = null; }
         if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+        // Tear down the body-mounted kebab menu + its global listeners.
+        // Set up by ensureMenuEl on first kebab click.
+        if (typeof el.__entityNotesMenuTeardown === 'function') {
+          el.__entityNotesMenuTeardown();
+          delete el.__entityNotesMenuTeardown;
+        }
       };
     },
 
