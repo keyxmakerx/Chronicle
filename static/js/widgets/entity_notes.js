@@ -62,9 +62,31 @@
       };
 
       // --- API ---
+      //
+      // Chronicle.apiFetch returns a raw Response object, NOT parsed JSON
+      // (it's a thin wrapper around fetch() — see boot.js:522). Every call
+      // here funnels through asJSON which (a) parses the body, (b) bubbles
+      // server-side error messages up to the .catch handlers so the
+      // operator sees "you do not have permission to use this audience"
+      // instead of "Something went wrong."
+      function asJSON(resp) {
+        if (!resp.ok) {
+          return resp.json().then(
+            function (body) {
+              var msg = (body && (body.message || body.error)) || ('HTTP ' + resp.status);
+              return Promise.reject(new Error(msg));
+            },
+            function () {
+              return Promise.reject(new Error('HTTP ' + resp.status));
+            }
+          );
+        }
+        return resp.json();
+      }
 
       function loadNotes() {
         Chronicle.apiFetch(endpoint)
+          .then(asJSON)
           .then(function (notes) {
             state.notes = Array.isArray(notes) ? notes : [];
             state.loading = false;
@@ -81,28 +103,38 @@
         return Chronicle.apiFetch(endpoint, {
           method: 'POST',
           body: JSON.stringify(payload),
-        }).then(function (note) {
-          // Optimistic insert in case the WS broadcast hasn't reached us yet.
-          state.notes.unshift(note);
-          return note;
-        });
+        })
+          .then(asJSON)
+          .then(function (note) {
+            // Optimistic insert in case the WS broadcast hasn't reached us yet.
+            state.notes.unshift(note);
+            return note;
+          });
       }
 
       function updateNote(id, payload) {
         return Chronicle.apiFetch(endpoint + '/' + id, {
           method: 'PUT',
           body: JSON.stringify(payload),
-        }).then(function (note) {
-          for (var i = 0; i < state.notes.length; i++) {
-            if (state.notes[i].id === id) { state.notes[i] = note; break; }
-          }
-          return note;
-        });
+        })
+          .then(asJSON)
+          .then(function (note) {
+            for (var i = 0; i < state.notes.length; i++) {
+              if (state.notes[i].id === id) { state.notes[i] = note; break; }
+            }
+            return note;
+          });
       }
 
       function deleteNote(id) {
         return Chronicle.apiFetch(endpoint + '/' + id, { method: 'DELETE' })
-          .then(function () {
+          .then(function (resp) {
+            if (!resp.ok) {
+              return resp.json().then(
+                function (body) { throw new Error((body && body.message) || 'HTTP ' + resp.status); },
+                function () { throw new Error('HTTP ' + resp.status); }
+              );
+            }
             state.notes = state.notes.filter(function (n) { return n.id !== id; });
           });
       }
@@ -144,7 +176,14 @@
             }
           });
           ws.addEventListener('close', function () { ws = null; });
-          ws.addEventListener('error', function () { /* fall back to polling */ });
+          // Connection failures (reverse proxy not forwarding Upgrade
+          // headers, /ws endpoint not reachable, etc.) are non-fatal —
+          // the 30s polling layer carries the feature. Suppressing the
+          // error event prevents Firefox/Chrome from spamming the
+          // operator's console; the polling continues regardless.
+          ws.addEventListener('error', function (e) {
+            e.preventDefault && e.preventDefault();
+          });
         } catch (e) {
           // Ignore; polling carries us.
         }
