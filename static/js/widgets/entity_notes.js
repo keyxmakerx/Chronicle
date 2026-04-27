@@ -160,7 +160,11 @@
         if (typeof window.WebSocket !== 'function') return;
         try {
           var protocol = (window.location.protocol === 'https:') ? 'wss:' : 'ws:';
-          var url = protocol + '//' + window.location.host + '/ws?campaignId=' + encodeURIComponent(campaignId);
+          // Server-side WS auth (internal/websocket/auth.go:79) reads
+          // the campaign from `?campaign=` (not `?campaignId=`). Mismatch
+          // here causes "campaign parameter required for session auth"
+          // 401 even though the cookie is fine.
+          var url = protocol + '//' + window.location.host + '/ws?campaign=' + encodeURIComponent(campaignId);
           ws = new WebSocket(url);
           ws.addEventListener('message', function (ev) {
             var msg;
