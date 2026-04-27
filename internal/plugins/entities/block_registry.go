@@ -6,6 +6,7 @@ package entities
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
 	"github.com/a-h/templ"
@@ -210,10 +211,27 @@ func (r *BlockRegistry) Render(goCtx context.Context, ctx BlockRenderContext) te
 		return nil
 	}
 
-	// Skip blocks whose addon is disabled for this campaign.
+	// Skip blocks whose addon is disabled for this campaign. Diagnostic
+	// logging on both branches: a Debug line on the silent-skip path
+	// (so an operator can flip to debug level and immediately see why
+	// a block isn't rendering) and a Warn line on the checker-error
+	// path (previously swallowed via `if err == nil`, which masked any
+	// DB outage hitting the addon-gate query).
 	if entry.meta.Addon != "" && r.addonChecker != nil && ctx.CC != nil {
 		enabled, err := r.addonChecker.IsEnabledForCampaign(goCtx, ctx.CC.Campaign.ID, entry.meta.Addon)
-		if err == nil && !enabled {
+		if err != nil {
+			slog.Warn("block_registry: addon-gate check errored; rendering block anyway",
+				slog.String("block_type", entry.meta.Type),
+				slog.String("addon_slug", entry.meta.Addon),
+				slog.String("campaign_id", ctx.CC.Campaign.ID),
+				slog.Any("error", err),
+			)
+		} else if !enabled {
+			slog.Debug("block_registry: skipping block, addon disabled for campaign",
+				slog.String("block_type", entry.meta.Type),
+				slog.String("addon_slug", entry.meta.Addon),
+				slog.String("campaign_id", ctx.CC.Campaign.ID),
+			)
 			return nil
 		}
 	}

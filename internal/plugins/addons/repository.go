@@ -156,6 +156,17 @@ func (r *addonRepository) Create(ctx context.Context, addon *Addon) error {
 // Upsert inserts a new addon or updates an existing one matched by slug.
 // Used during startup to register all built-in addons without requiring
 // separate SQL migrations for each addon.
+//
+// `status` IS included in the UPDATE clause because the in-code definition
+// (builtinAddons in service.go) is the source of truth — when an addon flips
+// from StatusPlanned to StatusActive in a release, the next deploy MUST
+// propagate that to the DB. Without `status` in the update list, existing
+// rows kept their old status forever and EnableForCampaign rejected with
+// "only active addons can be enabled" — silently breaking the addon for
+// any campaign that tried to enable it post-flip.
+//
+// `category` is also included so a corrected category (e.g., a widget that
+// was mis-seeded as a plugin) propagates the same way.
 func (r *addonRepository) Upsert(ctx context.Context, addon *Addon) error {
 	query := `INSERT INTO addons (slug, name, description, version, category, status, icon, author)
 	          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -163,6 +174,8 @@ func (r *addonRepository) Upsert(ctx context.Context, addon *Addon) error {
 	            name = VALUES(name),
 	            description = VALUES(description),
 	            version = VALUES(version),
+	            category = VALUES(category),
+	            status = VALUES(status),
 	            icon = VALUES(icon),
 	            author = VALUES(author)`
 
