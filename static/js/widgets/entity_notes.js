@@ -55,10 +55,17 @@
         composeAudience: 'private',
         composeTitle: '',
         composeBody: '',
+        composeSharedWith: [],
         editingId: null,
         editingTitle: '',
         editingBody: '',
         editingAudience: 'private',
+        editingSharedWith: [],
+        // Campaign members lazy-loaded the first time the user picks
+        // 'custom' audience. Cached afterwards so the picker stays
+        // snappy for repeat sharing actions.
+        members: null,
+        membersLoading: false,
       };
 
       // --- API ---
@@ -136,6 +143,33 @@
               );
             }
             state.notes = state.notes.filter(function (n) { return n.id !== id; });
+          });
+      }
+
+      // loadMembers fetches the campaign roster (lazy, cached). Used to
+      // populate the custom-audience picker with display names instead
+      // of raw UUIDs.
+      function loadMembers() {
+        if (state.members !== null || state.membersLoading) return;
+        state.membersLoading = true;
+        Chronicle.apiFetch('/campaigns/' + campaignId + '/members', {
+          headers: { 'Accept': 'application/json' },
+        })
+          .then(asJSON)
+          .then(function (members) {
+            // Filter out the current viewer — sharing with yourself is
+            // a no-op (author always sees own). Keep one row per user.
+            state.members = (Array.isArray(members) ? members : []).filter(function (m) {
+              return m && m.user_id;
+            });
+            state.membersLoading = false;
+            render();
+          })
+          .catch(function (err) {
+            console.error('[EntityNotes] Members load error:', err);
+            state.members = [];
+            state.membersLoading = false;
+            render();
           });
       }
 
@@ -235,6 +269,9 @@
         h += '<div class="flex-1"></div>';
         h += '<button class="btn-primary text-xs" data-action="save-compose">Save Note</button>';
         h += '</div>';
+        if (state.composeAudience === 'custom') {
+          h += renderMemberPicker(state.composeSharedWith, 'compose');
+        }
         h += '</div>';
         return h;
       }
@@ -261,6 +298,56 @@
           if (o.value === 'dm_scribe') return canAuthorDMScribe;
           return true;
         });
+      }
+
+      // renderMemberPicker is a checkbox list of campaign members shown
+      // when the user picks 'custom' audience. Each checkbox toggles
+      // the user_id in/out of state.composeSharedWith (or editingSharedWith).
+      // Members list is lazy-loaded via loadMembers() the first time
+      // 'custom' is chosen.
+      function renderMemberPicker(selected, namespace) {
+        if (state.members === null) {
+          // Trigger fetch (no-op if already in flight). loadMembers
+          // calls render() when it lands.
+          loadMembers();
+          return '<div class="mt-2 text-xs text-fg-muted italic px-2">Loading campaign members…</div>';
+        }
+        if (state.membersLoading) {
+          return '<div class="mt-2 text-xs text-fg-muted italic px-2">Loading campaign members…</div>';
+        }
+        var visibleMembers = state.members.filter(function (m) {
+          // Don't show the viewer in their own picker — they always
+          // see their own notes regardless of shared_with.
+          return m.user_id !== currentUserID();
+        });
+        if (visibleMembers.length === 0) {
+          return '<div class="mt-2 text-xs text-fg-muted italic px-2">No other members in this campaign yet.</div>';
+        }
+        var sel = {};
+        for (var i = 0; i < selected.length; i++) sel[selected[i]] = true;
+        var h = '<div class="mt-2 px-2 py-2 rounded bg-surface-alt/50 border border-edge">';
+        h += '<div class="text-[11px] font-semibold uppercase tracking-wider text-fg-muted mb-1.5">Share with</div>';
+        h += '<div class="flex flex-wrap gap-x-3 gap-y-1.5">';
+        for (var j = 0; j < visibleMembers.length; j++) {
+          var m = visibleMembers[j];
+          var checked = sel[m.user_id] ? ' checked' : '';
+          var label = m.display_name || m.email || m.user_id;
+          h += '<label class="inline-flex items-center gap-1.5 text-xs cursor-pointer">';
+          h += '<input type="checkbox" class="rounded" data-shared-user-id="' + esc(m.user_id) + '" data-shared-namespace="' + esc(namespace) + '"' + checked + '/>';
+          h += '<span>' + esc(label) + '</span>';
+          h += '</label>';
+        }
+        h += '</div>';
+        h += '</div>';
+        return h;
+      }
+
+      // currentUserID returns the viewer's user_id by reading the body's
+      // notes data-widget mount (which carries it). Falls back to ''
+      // if not found — in which case the picker just shows everyone.
+      function currentUserID() {
+        var notesEl = document.querySelector('[data-widget="notes"][data-user-id]');
+        return notesEl ? notesEl.getAttribute('data-user-id') : '';
       }
 
       function renderList() {
@@ -333,6 +420,9 @@
         h += '<button class="btn-secondary text-xs" data-action="cancel-edit">Cancel</button>';
         h += '<button class="btn-primary text-xs" data-action="save-edit" data-note-id="' + esc(note.id) + '">Save</button>';
         h += '</div>';
+        if (state.editingAudience === 'custom') {
+          h += renderMemberPicker(state.editingSharedWith, 'edit-' + note.id);
+        }
         h += '</div>';
         return h;
       }
@@ -365,15 +455,24 @@
               Chronicle.notify && Chronicle.notify('Please write something first', 'warn');
               return;
             }
-            createNote({
+            var payload = {
               audience: state.composeAudience,
               title: title,
               bodyHtml: bodyToHTML(body),
-            }).then(function () {
+            };
+            if (state.composeAudience === 'custom') {
+              if (state.composeSharedWith.length === 0) {
+                Chronicle.notify && Chronicle.notify('Pick at least one person to share with, or change the audience', 'warn');
+                return;
+              }
+              payload.sharedWith = state.composeSharedWith.slice();
+            }
+            createNote(payload).then(function () {
               state.composeOpen = false;
               state.composeTitle = '';
               state.composeBody = '';
               state.composeAudience = 'private';
+              state.composeSharedWith = [];
               render();
             }).catch(function (err) {
               console.error('[EntityNotes] Create error:', err);
@@ -390,22 +489,40 @@
           state.editingTitle = note.title || '';
           state.editingBody = stripHtml(note.bodyHtml || '');
           state.editingAudience = note.audience || 'private';
+          // Hydrate shared list from the note so the edit picker shows
+          // the existing recipients pre-checked. Server returns
+          // sharedWith as an array (never null) per the model.
+          state.editingSharedWith = Array.isArray(note.sharedWith) ? note.sharedWith.slice() : [];
           render();
         });
         // Cancel edit.
         bindAll('[data-action="cancel-edit"]', 'click', function () {
           state.editingId = null;
+          state.editingSharedWith = [];
           render();
         });
         // Save edit.
         bindAll('[data-action="save-edit"]', 'click', function () {
           var id = this.getAttribute('data-note-id');
-          updateNote(id, {
+          var payload = {
             audience: state.editingAudience,
             title: state.editingTitle.trim(),
             bodyHtml: bodyToHTML(state.editingBody.trim()),
-          }).then(function () {
+          };
+          if (state.editingAudience === 'custom') {
+            if (state.editingSharedWith.length === 0) {
+              Chronicle.notify && Chronicle.notify('Pick at least one person to share with, or change the audience', 'warn');
+              return;
+            }
+            payload.sharedWith = state.editingSharedWith.slice();
+          } else {
+            // Explicit empty list so the server clears any previous
+            // shared_with when leaving custom audience.
+            payload.sharedWith = [];
+          }
+          updateNote(id, payload).then(function () {
             state.editingId = null;
+            state.editingSharedWith = [];
             render();
           }).catch(function (err) {
             console.error('[EntityNotes] Update error:', err);
@@ -438,8 +555,18 @@
         }
         var audInput = el.querySelector('[data-field="audience"][data-namespace="compose"]');
         if (audInput) {
-          audInput.addEventListener('change', function () { state.composeAudience = audInput.value; });
+          audInput.addEventListener('change', function () {
+            state.composeAudience = audInput.value;
+            // Reset shared list when leaving custom; trigger render to
+            // show/hide the picker. loadMembers fires inside the picker
+            // render path on first display.
+            if (state.composeAudience !== 'custom') {
+              state.composeSharedWith = [];
+            }
+            render();
+          });
         }
+        bindSharedCheckboxes('compose');
       }
 
       function bindEditFields() {
@@ -454,7 +581,33 @@
         }
         var audInput = el.querySelector('[data-field="audience"][data-namespace="edit-' + state.editingId + '"]');
         if (audInput) {
-          audInput.addEventListener('change', function () { state.editingAudience = audInput.value; });
+          audInput.addEventListener('change', function () {
+            state.editingAudience = audInput.value;
+            if (state.editingAudience !== 'custom') {
+              state.editingSharedWith = [];
+            }
+            render();
+          });
+        }
+        bindSharedCheckboxes('edit-' + state.editingId);
+      }
+
+      // bindSharedCheckboxes wires the picker checkboxes. The same
+      // markup is used for compose + every edit form, distinguished by
+      // the namespace data attribute. Toggling a checkbox edits the
+      // matching state slice in-place.
+      function bindSharedCheckboxes(namespace) {
+        var boxes = el.querySelectorAll('[data-shared-user-id][data-shared-namespace="' + namespace + '"]');
+        for (var i = 0; i < boxes.length; i++) {
+          boxes[i].addEventListener('change', function () {
+            var uid = this.getAttribute('data-shared-user-id');
+            var target = (namespace === 'compose') ? 'composeSharedWith' : 'editingSharedWith';
+            if (this.checked) {
+              if (state[target].indexOf(uid) === -1) state[target].push(uid);
+            } else {
+              state[target] = state[target].filter(function (id) { return id !== uid; });
+            }
+          });
         }
       }
 
