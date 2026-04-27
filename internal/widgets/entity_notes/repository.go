@@ -76,7 +76,12 @@ const noteColumns = `id, entity_id, campaign_id, author_user_id, audience,
 //   4. viewer.CanSeeDMOnly()   boolean
 //
 // The order matters — read it once, then never reorder without updating
-// every call site. Tests in service_test.go pin the contract.
+// every call site. The pure-Go mirror NotePassesACL pins the same logic
+// in service_test.go so a regression in EITHER the SQL or the Go code
+// (someone editing this filter without updating the helper, or vice
+// versa) can be caught by `go test`. Without that mirror, the headline
+// privacy invariant ("Owner cannot read another user's private note")
+// has no automated test — manual MariaDB checks don't survive refactors.
 const noteACLFilter = `(
     author_user_id = ?
     OR audience = 'everyone'
@@ -84,6 +89,47 @@ const noteACLFilter = `(
     OR (audience = 'dm_scribe' AND ?)
     OR (audience = 'dm_only'   AND ?)
 )`
+
+// NotePassesACL is the pure-Go mirror of noteACLFilter. The repo's SQL
+// is the production filter; this function exists so tests can exercise
+// the audience matrix in process. The two MUST stay in lockstep — any
+// change to the SQL must be reflected here, and vice versa.
+//
+// Used by service_test.go's full audience×viewer matrix. If you're
+// reading this because a security review caught a leak, check that
+// the SQL and this function still tell the same story for every
+// (audience, author, viewer-flags) combination.
+func NotePassesACL(note *Note, viewer ViewerContext) bool {
+	if note == nil {
+		return false
+	}
+	// Author always sees own notes regardless of audience.
+	if note.AuthorUserID == viewer.UserID {
+		return true
+	}
+	switch note.Audience {
+	case AudienceEveryone:
+		return true
+	case AudienceCustom:
+		for _, id := range note.SharedWith {
+			if id == viewer.UserID {
+				return true
+			}
+		}
+		return false
+	case AudienceDMScribe:
+		return viewer.CanSeeDMScribe()
+	case AudienceDMOnly:
+		return viewer.CanSeeDMOnly()
+	case AudiencePrivate:
+		// Already handled by author check above; reach here only if
+		// viewer is NOT the author, in which case private = no access.
+		return false
+	}
+	// Unknown audience defaults to deny (defense in depth — DB enum
+	// should have rejected it long before this).
+	return false
+}
 
 type repository struct {
 	db *sql.DB

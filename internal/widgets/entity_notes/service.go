@@ -75,6 +75,12 @@ func (s *service) Create(ctx context.Context, entityID string, viewer ViewerCont
 	if err := checkSharedWith(audience, req.SharedWith); err != nil {
 		return nil, err
 	}
+	if err := checkBodySize(req.Body); err != nil {
+		return nil, err
+	}
+	if err := checkBodyHTMLSize(req.BodyHTML); err != nil {
+		return nil, err
+	}
 
 	now := time.Now().UTC()
 	note := &Note{
@@ -162,6 +168,13 @@ func (s *service) Update(ctx context.Context, id string, viewer ViewerContext, r
 	} else if existing.Audience != AudienceCustom {
 		// Audience changed to non-custom: drop any stale sharing list.
 		existing.SharedWith = nil
+	} else if req.Audience != nil && existing.Audience == AudienceCustom && len(existing.SharedWith) == 0 {
+		// Caller flipped audience to `custom` but didn't send a fresh
+		// shared_with and the existing list is empty. Reject rather
+		// than silently saving a custom-audience note no one but the
+		// author can see — that's the "I shared this and nobody can
+		// read it" UX hole. Force callers to be explicit.
+		return nil, apperror.NewBadRequest("changing audience to custom requires shared_with")
 	}
 	if req.Title != nil {
 		t := strings.TrimSpace(*req.Title)
@@ -171,9 +184,15 @@ func (s *service) Update(ctx context.Context, id string, viewer ViewerContext, r
 		existing.Title = t
 	}
 	if req.Body != nil {
+		if err := checkBodySize(req.Body); err != nil {
+			return nil, err
+		}
 		existing.Body = req.Body
 	}
 	if req.BodyHTML != nil {
+		if err := checkBodyHTMLSize(*req.BodyHTML); err != nil {
+			return nil, err
+		}
 		existing.BodyHTML = sanitizeHTML(*req.BodyHTML)
 	}
 	if req.Pinned != nil {
@@ -231,7 +250,15 @@ func checkAudienceWrite(audience Audience, viewer ViewerContext) error {
 
 // checkSharedWith validates the SharedWith list against the audience.
 // Non-custom audiences must not have entries (they'd be silently
-// ignored, which is confusing); custom audiences must have at least one.
+// ignored, which is confusing); custom audiences must have at least
+// one valid UUID.
+//
+// UUID validation here is the cheap defensive layer — it doesn't
+// guarantee the user exists or is a campaign member (those checks
+// require a service round-trip we don't currently do). What it does
+// catch: a buggy client sending arbitrary strings, which would
+// otherwise sit in the JSON column and produce confusing UX when the
+// "shared user" never matches anything.
 func checkSharedWith(audience Audience, ids []string) error {
 	if audience == AudienceCustom {
 		if len(ids) == 0 {
@@ -242,6 +269,9 @@ func checkSharedWith(audience Audience, ids []string) error {
 			if id == "" {
 				return apperror.NewBadRequest("shared_with contains empty user id")
 			}
+			if _, err := uuid.Parse(id); err != nil {
+				return apperror.NewBadRequest("shared_with contains malformed user id")
+			}
 			if _, dup := seen[id]; dup {
 				return apperror.NewBadRequest("shared_with contains duplicate user ids")
 			}
@@ -251,6 +281,32 @@ func checkSharedWith(audience Audience, ids []string) error {
 	}
 	if len(ids) > 0 {
 		return apperror.NewBadRequest("shared_with is only valid with audience='custom'")
+	}
+	return nil
+}
+
+// maxBodyBytes is the cap on the raw TipTap JSON body we accept. 1 MB
+// holds a several-thousand-word note with structured content; beyond
+// that we're either dealing with a runaway client or someone trying
+// to fill the column. The DB column is JSON (max 4 GB) so the schema
+// won't reject; this is the application-level brake.
+const maxBodyBytes = 1 << 20 // 1 MiB
+
+// maxBodyHTMLBytes is the cap on the rendered HTML body, applied
+// before sanitize.HTML runs. Set to 2× the JSON cap because HTML
+// inflates relative to ProseMirror JSON for the same content.
+const maxBodyHTMLBytes = 2 << 20 // 2 MiB
+
+func checkBodySize(body []byte) error {
+	if len(body) > maxBodyBytes {
+		return apperror.NewBadRequest("note body too large (1 MB max)")
+	}
+	return nil
+}
+
+func checkBodyHTMLSize(html string) error {
+	if len(html) > maxBodyHTMLBytes {
+		return apperror.NewBadRequest("note body HTML too large (2 MB max)")
 	}
 	return nil
 }
