@@ -37,30 +37,24 @@
   // gives the file-list a quick scan affordance (DM-only stuff is red,
   // shared-everyone is green, etc.) without needing to read the badge.
   // badgeClass is for the small inline label.
-  // Border + badge colors are paired with semi-transparent fills so
-  // they sit comfortably alongside the campaign accent color (used
-  // for hover, expanded tint, chevron, kebab hover). The border is
-  // always 2px (set in renderNote) — slim enough to be a scan
-  // affordance, not a visual hammer.
-  //
-  // Private uses neutral edge color so it reads as "default visibility"
-  // — the most common case shouldn't shout for attention.
+  // Each row carries audience info via its small badge (icon + label).
+  // The row itself stays neutral so the campaign accent — used for
+  // hover, the expanded-row tint, the chevron, and buttons — owns the
+  // visual hierarchy. Earlier iterations also used colored left borders
+  // (red/amber/green/purple) per audience, which fought the campaign
+  // accent in any campaign whose accent didn't already match. The
+  // badge is enough; one signal beats two.
   var ALL_AUDIENCES = [
     { value: 'private',   label: 'Private',    icon: 'fa-lock',        desc: 'Only you can see this',
-      borderClass: 'border-l-edge',
-      badgeClass:  'bg-slate-500/10 text-slate-600 dark:text-slate-400' },
+      badgeClass: 'bg-slate-500/10 text-slate-600 dark:text-slate-400' },
     { value: 'dm_only',   label: 'DM Only',    icon: 'fa-user-secret', desc: 'GM (and DM-granted users) only',
-      borderClass: 'border-l-red-400/70',
-      badgeClass:  'bg-red-500/10 text-red-700 dark:text-red-300' },
+      badgeClass: 'bg-red-500/10 text-red-700 dark:text-red-300' },
     { value: 'dm_scribe', label: 'DM + Co-DM', icon: 'fa-user-shield', desc: 'GM, Co-DMs, DM-granted users',
-      borderClass: 'border-l-amber-400/70',
-      badgeClass:  'bg-amber-500/10 text-amber-700 dark:text-amber-300' },
+      badgeClass: 'bg-amber-500/10 text-amber-700 dark:text-amber-300' },
     { value: 'everyone',  label: 'Everyone',   icon: 'fa-users',       desc: 'All campaign members',
-      borderClass: 'border-l-emerald-400/70',
-      badgeClass:  'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
+      badgeClass: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
     { value: 'custom',    label: 'Custom',     icon: 'fa-user-plus',   desc: 'Specific users (advanced)',
-      borderClass: 'border-l-purple-400/70',
-      badgeClass:  'bg-purple-500/10 text-purple-700 dark:text-purple-300' }
+      badgeClass: 'bg-purple-500/10 text-purple-700 dark:text-purple-300' }
   ];
 
   Chronicle.register('entity-notes', {
@@ -407,22 +401,25 @@
       // row first. Cancel returns to expanded read-only.
       //
       // Visual treatment:
-      //   - Audience border on the left (border-l-2 — slim so it's a
-      //     scan affordance, not a visual hammer).
-      //   - Expanded rows tint with the campaign accent (bg-accent/5),
-      //     so the active row picks up the campaign theme color
-      //     instead of looking generically gray.
-      //   - No `overflow-hidden` anywhere in this subtree — the kebab
-      //     dropdown is body-mounted (position: fixed) so clipping
-      //     doesn't apply, but keeping things overflow-visible avoids
-      //     surprises.
+      //   - Audience info lives in the small badge inside the header,
+      //     not on a colored left border. Earlier iterations carried
+      //     audience colors on the border too, but the bold left
+      //     stripes fought the campaign accent in any campaign whose
+      //     accent didn't already match (a green-themed campaign with
+      //     red/amber/green/purple borders looked chaotic). Single
+      //     signal — the badge — is enough.
+      //   - Expanded rows tint with the campaign accent (bg-accent/5)
+      //     and gain a 2px accent-colored left border so the active
+      //     row picks up the campaign theme color.
+      //   - Collapsed rows have no left border at all — clean, uniform
+      //     file-list feel.
       function renderNote(note) {
         var isExpanded = !!state.expandedIds[note.id] || state.editingId === note.id;
         var isEditing = state.editingId === note.id;
         var aud = audienceMeta(note.audience);
         var h = '';
-        h += '<div class="border-l-2 ' + aud.borderClass +
-             (isExpanded ? ' bg-accent/5' : '') +
+        h += '<div class="' +
+             (isExpanded ? 'border-l-2 border-l-accent bg-accent/5' : '') +
              '" data-note-id="' + esc(note.id) + '">';
         h += renderNoteHeader(note, aud, isExpanded, isEditing);
         if (isExpanded) {
