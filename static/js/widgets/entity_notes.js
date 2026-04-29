@@ -37,22 +37,24 @@
   // gives the file-list a quick scan affordance (DM-only stuff is red,
   // shared-everyone is green, etc.) without needing to read the badge.
   // badgeClass is for the small inline label.
+  // Each row carries audience info via its small badge (icon + label).
+  // The row itself stays neutral so the campaign accent — used for
+  // hover, the expanded-row tint, the chevron, and buttons — owns the
+  // visual hierarchy. Earlier iterations also used colored left borders
+  // (red/amber/green/purple) per audience, which fought the campaign
+  // accent in any campaign whose accent didn't already match. The
+  // badge is enough; one signal beats two.
   var ALL_AUDIENCES = [
     { value: 'private',   label: 'Private',    icon: 'fa-lock',        desc: 'Only you can see this',
-      borderClass: 'border-l-gray-400 dark:border-l-gray-500',
-      badgeClass:  'bg-gray-500/10 text-gray-600 dark:text-gray-400' },
+      badgeClass: 'bg-slate-500/10 text-slate-600 dark:text-slate-400' },
     { value: 'dm_only',   label: 'DM Only',    icon: 'fa-user-secret', desc: 'GM (and DM-granted users) only',
-      borderClass: 'border-l-red-500',
-      badgeClass:  'bg-red-500/10 text-red-700 dark:text-red-300' },
+      badgeClass: 'bg-red-500/10 text-red-700 dark:text-red-300' },
     { value: 'dm_scribe', label: 'DM + Co-DM', icon: 'fa-user-shield', desc: 'GM, Co-DMs, DM-granted users',
-      borderClass: 'border-l-amber-500',
-      badgeClass:  'bg-amber-500/10 text-amber-700 dark:text-amber-300' },
+      badgeClass: 'bg-amber-500/10 text-amber-700 dark:text-amber-300' },
     { value: 'everyone',  label: 'Everyone',   icon: 'fa-users',       desc: 'All campaign members',
-      borderClass: 'border-l-emerald-500',
-      badgeClass:  'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
+      badgeClass: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
     { value: 'custom',    label: 'Custom',     icon: 'fa-user-plus',   desc: 'Specific users (advanced)',
-      borderClass: 'border-l-purple-500',
-      badgeClass:  'bg-purple-500/10 text-purple-700 dark:text-purple-300' }
+      badgeClass: 'bg-purple-500/10 text-purple-700 dark:text-purple-300' }
   ];
 
   Chronicle.register('entity-notes', {
@@ -398,16 +400,26 @@
       // editing implies expanded; the kebab "Edit" entry expands the
       // row first. Cancel returns to expanded read-only.
       //
-      // No `overflow-hidden` anywhere in this subtree — the kebab
-      // dropdown extends past the row bounds and was previously
-      // clipped by the outer card.
+      // Visual treatment:
+      //   - Audience info lives in the small badge inside the header,
+      //     not on a colored left border. Earlier iterations carried
+      //     audience colors on the border too, but the bold left
+      //     stripes fought the campaign accent in any campaign whose
+      //     accent didn't already match (a green-themed campaign with
+      //     red/amber/green/purple borders looked chaotic). Single
+      //     signal — the badge — is enough.
+      //   - Expanded rows tint with the campaign accent (bg-accent/5)
+      //     and gain a 2px accent-colored left border so the active
+      //     row picks up the campaign theme color.
+      //   - Collapsed rows have no left border at all — clean, uniform
+      //     file-list feel.
       function renderNote(note) {
         var isExpanded = !!state.expandedIds[note.id] || state.editingId === note.id;
         var isEditing = state.editingId === note.id;
         var aud = audienceMeta(note.audience);
         var h = '';
-        h += '<div class="border-l-4 ' + aud.borderClass +
-             (isExpanded ? ' bg-surface-alt/30' : '') +
+        h += '<div class="' +
+             (isExpanded ? 'border-l-2 border-l-accent bg-accent/5' : '') +
              '" data-note-id="' + esc(note.id) + '">';
         h += renderNoteHeader(note, aud, isExpanded, isEditing);
         if (isExpanded) {
@@ -427,20 +439,33 @@
       // metadata, audience badge, pin indicator, kebab menu.
       // The whole row (except action buttons) toggles expand/collapse.
       //
+      // Polish notes:
+      //   - Hover uses bg-accent/5 — picks up the campaign accent so
+      //     the row you're about to click is unambiguously highlighted
+      //     (the previous bg-surface-alt/40 was too subtle to read as
+      //     "this is the active row").
+      //   - When expanded, the chevron flips to text-accent so the
+      //     "open" affordance is consistent with the row tint.
+      //   - The date column has a fixed width (w-16, right-aligned) so
+      //     audience badges across rows line up vertically. Without
+      //     this, "14:23" vs "Yesterday" vs "Apr 22" pushed the badge
+      //     by a few pixels each row, which read as misalignment.
+      //
       // The kebab dropdown uses position: fixed (set in JS at click time)
-      // so it escapes any clipping from ancestor overflow contexts. The
-      // markup just renders it hidden; bindEvents positions and shows.
+      // so it escapes any clipping from ancestor overflow contexts.
       function renderNoteHeader(note, aud, isExpanded, isEditing) {
         var h = '';
         var titleText = note.title && note.title.trim()
           ? note.title
           : (firstLineOf(stripHtml(note.bodyHtml || '')) || 'Untitled');
         h += '<div class="px-2.5 py-1.5 flex items-center gap-2 select-none text-sm ' +
-             (isEditing ? '' : 'cursor-pointer hover:bg-surface-alt/40 transition-colors') + '" ' +
+             (isEditing ? '' : 'cursor-pointer hover:bg-accent/5 transition-colors') + '" ' +
              (isEditing ? '' : 'data-action="toggle-note" data-note-id="' + esc(note.id) + '"') + '>';
 
-        // Chevron
-        h += '<i class="fa-solid fa-chevron-' + (isExpanded ? 'down' : 'right') + ' text-[9px] text-fg-muted w-2.5"></i>';
+        // Chevron — accent color when row is expanded so it ties into
+        // the campaign theme (not just gray).
+        h += '<i class="fa-solid fa-chevron-' + (isExpanded ? 'down' : 'right') +
+             ' text-[9px] w-2.5 ' + (isExpanded ? 'text-accent' : 'text-fg-muted') + '"></i>';
 
         // Title (or first-line excerpt fallback). Slightly lighter
         // weight than the previous design — file-list, not card title.
@@ -451,20 +476,21 @@
           h += '<i class="fa-solid fa-thumbtack text-[10px] text-amber-500 shrink-0" title="Pinned"></i>';
         }
 
+        // Updated timestamp — fixed-width column. Renders BEFORE the
+        // badge so the badge stays at a consistent horizontal offset
+        // from the kebab regardless of how wide the date string is.
+        // Hidden on small screens to save horizontal real estate.
+        h += '<span class="text-[10px] text-fg-muted hidden lg:inline-block shrink-0 w-16 text-right">' + esc(formatShortDate(note.updatedAt)) + '</span>';
+
         // Audience badge — icon-only on small screens, +label on md+.
         h += '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ' + aud.badgeClass + '" title="' + esc(aud.desc) + '">';
         h += '<i class="fa-solid ' + aud.icon + ' text-[9px] md:mr-1"></i>';
         h += '<span class="hidden md:inline">' + esc(aud.label) + '</span>';
         h += '</span>';
 
-        // Updated timestamp (compact)
-        h += '<span class="text-[10px] text-fg-muted hidden lg:inline shrink-0">' + esc(formatShortDate(note.updatedAt)) + '</span>';
-
-        // Kebab — only when not editing. Note: NO `data-dropdown` div
-        // wrapper (we used to use it for outside-click; now the menu is
-        // body-mounted so the close handler tracks the menu directly).
+        // Kebab — only when not editing.
         if (!isEditing) {
-          h += '<button class="text-fg-muted hover:text-fg text-xs p-1 shrink-0" data-action="note-menu" data-note-id="' + esc(note.id) + '" title="More actions" onclick="event.stopPropagation()"><i class="fa-solid fa-ellipsis-vertical"></i></button>';
+          h += '<button class="text-fg-muted hover:text-accent text-xs p-1 shrink-0 transition-colors" data-action="note-menu" data-note-id="' + esc(note.id) + '" title="More actions" onclick="event.stopPropagation()"><i class="fa-solid fa-ellipsis-vertical"></i></button>';
         }
 
         h += '</div>';
