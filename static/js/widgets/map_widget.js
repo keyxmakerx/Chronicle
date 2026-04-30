@@ -28,91 +28,41 @@
       this._leafletMap = null;
 
       if (this.mapId) {
-        this._loadMap(this.mapId);
+        this._fetchMapData(this.mapId);
       } else {
         this._loadMapPicker();
       }
     },
 
     /**
-     * Load a specific map and render it in the widget.
-     */
-    _loadMap: function (mapId) {
-      var self = this;
-      var url = '/campaigns/' + encodeURIComponent(this.campaignId) + '/maps/' + encodeURIComponent(mapId);
-
-      // Fetch map data as JSON via HX-Request header to get fragment, but
-      // we actually need the raw map data. Use the API if available, else
-      // parse from the page. For simplicity, fetch the map list and find ours.
-      var listUrl = '/campaigns/' + encodeURIComponent(this.campaignId) + '/maps/' + encodeURIComponent(mapId);
-
-      // We need the map's image and markers. Fetch the show page as HTMX
-      // fragment to extract the JS data, or better yet, use a direct approach.
-      // The map show page embeds data in script tags. Instead, let's fetch
-      // map data from the markers API directly.
-      this._fetchMapData(mapId);
-    },
-
-    /**
-     * Fetch map metadata and markers, then render Leaflet.
+     * Fetch the map (with markers) from the JSON API and render Leaflet.
+     * Uses the same endpoint Foundry sync hits, so role-filtering and
+     * per-player marker visibility are applied server-side without
+     * duplicating the logic here.
      */
     _fetchMapData: function (mapId) {
       var self = this;
-      var baseUrl = '/campaigns/' + encodeURIComponent(this.campaignId) + '/maps/' + encodeURIComponent(mapId);
+      var url = '/api/v1/campaigns/' + encodeURIComponent(this.campaignId) +
+        '/maps/' + encodeURIComponent(mapId);
 
-      // Fetch the map show page with HX-Request to get the fragment.
-      // The fragment contains all the data we need in script tags.
-      // Alternative: use the map list API to get basic info.
-      Chronicle.apiFetch(baseUrl, {
-        headers: { 'Accept': 'application/json' }
-      })
+      Chronicle.apiFetch(url, { headers: { 'Accept': 'application/json' } })
         .then(function (res) {
           if (!res.ok) throw new Error('HTTP ' + res.status);
-          return res.text();
+          return res.json();
         })
-        .then(function (html) {
-          // Parse map data from the response. The show page template embeds
-          // JSON in script variables. Extract what we need.
-          self._renderFromHTML(html, mapId);
+        .then(function (m) {
+          if (!m || !m.image_id || !m.image_width || !m.image_height) {
+            self._renderEmpty(mapId);
+            return;
+          }
+          var imageUrl = '/media/' + encodeURIComponent(m.image_id);
+          var markers = Array.isArray(m.markers) ? m.markers : [];
+          self._renderLeaflet(imageUrl, m.image_width, m.image_height, markers, mapId);
         })
         .catch(function (err) {
           console.error('[map-widget] Failed to load map:', err);
           self._renderError('Failed to load map');
         });
-    },
-
-    /**
-     * Parse map data from the HTMX response HTML and render Leaflet.
-     */
-    _renderFromHTML: function (html, mapId) {
-      var self = this;
-
-      // Extract mapImageURL, imageW, imageH, and markers from the script.
-      var imgMatch = html.match(/var mapImageURL\s*=\s*"([^"]+)"/);
-      var wMatch = html.match(/var imageW\s*=\s*"(\d+)"/);
-      var hMatch = html.match(/var imageH\s*=\s*"(\d+)"/);
-      var markersMatch = html.match(/var markers\s*=\s*(\[[\s\S]*?\]);/);
-
-      if (!imgMatch || !wMatch || !hMatch) {
-        // No image — show placeholder.
-        this._renderEmpty(mapId);
-        return;
-      }
-
-      var imageUrl = imgMatch[1];
-      var imageW = parseInt(wMatch[1], 10);
-      var imageH = parseInt(hMatch[1], 10);
-      var markers = [];
-
-      if (markersMatch) {
-        try {
-          markers = JSON.parse(markersMatch[1]);
-        } catch (e) {
-          // Ignore parse errors.
-        }
-      }
-
-      this._renderLeaflet(imageUrl, imageW, imageH, markers, mapId);
     },
 
     /**
@@ -200,7 +150,14 @@
           iconAnchor: [10, 10],
         });
 
-        var marker = L.marker([mk.y, mk.x], { icon: icon }).addTo(markerTarget);
+        // Markers are stored as percentages (0-100). Convert to pixel coords
+        // for Leaflet's CRS.Simple, with Y flipped because the simple CRS
+        // origin is bottom-left while marker coordinates are top-left.
+        // Mirrors the conversion the full map page does in maps.templ; the
+        // earlier embed used raw [y, x] which placed pins at wrong positions.
+        var lat = imageH - (mk.y / 100) * imageH;
+        var lng = (mk.x / 100) * imageW;
+        var marker = L.marker([lat, lng], { icon: icon }).addTo(markerTarget);
 
         var popupContent = '<div class="text-xs">' +
           '<strong>' + Chronicle.escapeHtml(mk.name) + '</strong>';

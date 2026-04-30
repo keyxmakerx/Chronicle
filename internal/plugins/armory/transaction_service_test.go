@@ -67,12 +67,23 @@ func (m *mockMetadataUpdater) UpdateMetadata(ctx context.Context, id int, metada
 	return nil
 }
 
+type mockBuyerAccess struct {
+	canFn func(ctx context.Context, entityID, userID string, role int) (bool, error)
+}
+
+func (m *mockBuyerAccess) CanUserActAsBuyer(ctx context.Context, entityID, userID string, role int) (bool, error) {
+	if m.canFn != nil {
+		return m.canFn(ctx, entityID, userID, role)
+	}
+	return true, nil
+}
+
 // --- Tests ---
 
 func TestPurchase_Success(t *testing.T) {
 	repo := &mockTransactionRepo{}
 	svc := NewTransactionService(repo)
-	result, err := svc.Purchase(context.Background(), "camp-1", "user-1", CreateTransactionInput{
+	result, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, CreateTransactionInput{
 		ShopEntityID: "shop-1",
 		ItemEntityID: "item-1",
 		Quantity:     1,
@@ -90,7 +101,7 @@ func TestPurchase_Success(t *testing.T) {
 
 func TestPurchase_ZeroQuantity(t *testing.T) {
 	svc := NewTransactionService(&mockTransactionRepo{})
-	_, err := svc.Purchase(context.Background(), "camp-1", "user-1", CreateTransactionInput{
+	_, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, CreateTransactionInput{
 		ShopEntityID: "shop-1",
 		ItemEntityID: "item-1",
 		Quantity:     0,
@@ -102,7 +113,7 @@ func TestPurchase_ZeroQuantity(t *testing.T) {
 
 func TestPurchase_MissingEntityIDs(t *testing.T) {
 	svc := NewTransactionService(&mockTransactionRepo{})
-	_, err := svc.Purchase(context.Background(), "camp-1", "user-1", CreateTransactionInput{
+	_, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, CreateTransactionInput{
 		Quantity: 1,
 	})
 	if err == nil {
@@ -118,7 +129,7 @@ func TestPurchase_InsufficientStock(t *testing.T) {
 			return &RelationInfo{ID: 1, CampaignID: "camp-1", Metadata: meta}, nil
 		},
 	})
-	_, err := svc.Purchase(context.Background(), "camp-1", "user-1", CreateTransactionInput{
+	_, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, CreateTransactionInput{
 		ShopEntityID: "shop-1",
 		ItemEntityID: "item-1",
 		RelationID:   1,
@@ -144,7 +155,7 @@ func TestPurchase_StockDecrement(t *testing.T) {
 			return nil
 		},
 	})
-	result, err := svc.Purchase(context.Background(), "camp-1", "user-1", CreateTransactionInput{
+	result, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, CreateTransactionInput{
 		ShopEntityID: "shop-1",
 		ItemEntityID: "item-1",
 		RelationID:   1,
@@ -173,7 +184,7 @@ func TestPurchase_WrongCampaign(t *testing.T) {
 			return &RelationInfo{ID: 1, CampaignID: "camp-other"}, nil
 		},
 	})
-	_, err := svc.Purchase(context.Background(), "camp-1", "user-1", CreateTransactionInput{
+	_, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, CreateTransactionInput{
 		ShopEntityID: "shop-1",
 		ItemEntityID: "item-1",
 		RelationID:   1,
@@ -261,5 +272,116 @@ func TestParseShopMeta(t *testing.T) {
 				t.Errorf("quantity = %d, want %d", m.Quantity, tt.expected)
 			}
 		})
+	}
+}
+
+// TestPurchase_BuyerAccessAllowed pins the happy path for the buyer
+// cross-check: when the access checker returns true, Purchase succeeds and
+// the transaction record carries the buyer entity ID through unchanged.
+func TestPurchase_BuyerAccessAllowed(t *testing.T) {
+	var checkedID, checkedUser string
+	svc := NewTransactionService(&mockTransactionRepo{})
+	svc.SetBuyerAccessChecker(&mockBuyerAccess{
+		canFn: func(_ context.Context, entityID, userID string, _ int) (bool, error) {
+			checkedID = entityID
+			checkedUser = userID
+			return true, nil
+		},
+	})
+	result, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, CreateTransactionInput{
+		ShopEntityID:  "shop-1",
+		ItemEntityID:  "item-1",
+		BuyerEntityID: "buyer-1",
+		Quantity:      1,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if checkedID != "buyer-1" {
+		t.Errorf("checker called with entityID=%q, want %q", checkedID, "buyer-1")
+	}
+	if checkedUser != "user-1" {
+		t.Errorf("checker called with userID=%q, want %q", checkedUser, "user-1")
+	}
+	if result.Transaction.BuyerEntityID == nil || *result.Transaction.BuyerEntityID != "buyer-1" {
+		t.Errorf("transaction did not preserve buyer entity ID")
+	}
+}
+
+// TestPurchase_BuyerAccessDenied pins the spoofing-defence path: the
+// transaction service must reject Purchase when the access checker says no,
+// without writing a transaction or decrementing stock. This is the test
+// that pins the C-Phase-2 ownership cross-check.
+func TestPurchase_BuyerAccessDenied(t *testing.T) {
+	createCalled := false
+	repo := &mockTransactionRepo{createFn: func(_ context.Context, _ *Transaction) error {
+		createCalled = true
+		return nil
+	}}
+	stockUpdated := false
+	svc := NewTransactionService(repo)
+	svc.SetRelationFinder(&mockRelationFinder{
+		getByIDFn: func(_ context.Context, _ int) (*RelationInfo, error) {
+			meta, _ := json.Marshal(shopMeta{Quantity: 5})
+			return &RelationInfo{ID: 1, CampaignID: "camp-1", Metadata: meta}, nil
+		},
+	})
+	svc.SetRelationMetadataUpdater(&mockMetadataUpdater{
+		updateFn: func(_ context.Context, _ int, _ json.RawMessage) error {
+			stockUpdated = true
+			return nil
+		},
+	})
+	svc.SetBuyerAccessChecker(&mockBuyerAccess{
+		canFn: func(_ context.Context, _, _ string, _ int) (bool, error) {
+			return false, nil
+		},
+	})
+
+	_, err := svc.Purchase(context.Background(), "camp-1", "user-attacker", 1, CreateTransactionInput{
+		ShopEntityID:  "shop-1",
+		ItemEntityID:  "item-1",
+		BuyerEntityID: "victim-character",
+		RelationID:    1,
+		Quantity:      1,
+	})
+	if err == nil {
+		t.Fatal("expected forbidden error for buyer the user cannot act as")
+	}
+	if createCalled {
+		t.Error("transaction was created despite access denial")
+	}
+	// NOTE: stock-decrement happens BEFORE the buyer check today only because
+	// stock is keyed off the relation, not the buyer. The buyer check is
+	// the first thing executed in Purchase(), so stock must NOT be touched.
+	if stockUpdated {
+		t.Error("shop stock was decremented despite access denial")
+	}
+}
+
+// TestPurchase_BuyerAccessSkippedWhenNoBuyer pins that the cross-check is
+// only invoked when a buyer entity is named — purchases without a buyer
+// (e.g. GM-mediated cash sale) must not trip the check.
+func TestPurchase_BuyerAccessSkippedWhenNoBuyer(t *testing.T) {
+	checkerCalled := false
+	svc := NewTransactionService(&mockTransactionRepo{})
+	svc.SetBuyerAccessChecker(&mockBuyerAccess{
+		canFn: func(_ context.Context, _, _ string, _ int) (bool, error) {
+			checkerCalled = true
+			return false, nil // would fail if invoked
+		},
+	})
+
+	_, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, CreateTransactionInput{
+		ShopEntityID: "shop-1",
+		ItemEntityID: "item-1",
+		// BuyerEntityID intentionally empty.
+		Quantity: 1,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if checkerCalled {
+		t.Error("access checker was invoked for a no-buyer purchase")
 	}
 }
