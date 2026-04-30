@@ -75,6 +75,13 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		opt(api)
 	}
 
+	// Public version endpoint — no auth, no rate limit. External clients
+	// (Foundry module dashboard) probe this to display "Connected to
+	// Chronicle vX.Y.Z". Lives outside the /api/v1 group on purpose: it
+	// pre-dates auth, intentionally requires none, and the path
+	// /api/version is the contract the module already targets.
+	e.GET("/api/version", VersionHandler)
+
 	// API v1 group with session-or-bearer auth and rate limiting. Rate
 	// limiting is a no-op for session callers (see RateLimit comment).
 	v1 := e.Group("/api/v1",

@@ -711,6 +711,7 @@ func (h *CalendarAPIHandler) UpdateCalendarSettings(c echo.Context) error {
 		Name             string  `json:"name"`
 		Description      *string `json:"description"`
 		EpochName        *string `json:"epoch_name"`
+		Mode             string  `json:"mode"`
 		CurrentYear      int     `json:"current_year"`
 		CurrentMonth     int     `json:"current_month"`
 		CurrentDay       int     `json:"current_day"`
@@ -730,6 +731,7 @@ func (h *CalendarAPIHandler) UpdateCalendarSettings(c echo.Context) error {
 		Name:             req.Name,
 		Description:      req.Description,
 		EpochName:        req.EpochName,
+		Mode:             req.Mode,
 		CurrentYear:      req.CurrentYear,
 		CurrentMonth:     req.CurrentMonth,
 		CurrentDay:       req.CurrentDay,
@@ -982,15 +984,21 @@ func (h *CalendarAPIHandler) ExportCalendar(c echo.Context) error {
 }
 
 // ImportCalendar imports a calendar configuration from a JSON body.
+// If no calendar exists for the campaign yet, one is auto-created from the
+// import payload — this lets external bootstrappers (Foundry's Calendaria
+// sync) populate a fresh campaign in a single request rather than a
+// create-then-import dance.
+//
+// Mode fallback: the supported import formats (Chronicle / SimpleCalendar /
+// Calendaria / Fantasy-Calendar) don't carry a calendar mode, so an
+// auto-created calendar defaults to ModeFantasy. The created calendar is
+// not pinned to that mode — callers can later flip it via
+// PUT /calendar/settings (which now accepts `mode`).
+//
 // POST /api/v1/campaigns/:id/calendar/import
 func (h *CalendarAPIHandler) ImportCalendar(c echo.Context) error {
 	campaignID := c.Param("id")
 	ctx := c.Request().Context()
-
-	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
-	if err != nil || cal == nil {
-		return apperror.NewNotFound("calendar not found")
-	}
 
 	data, err := io.ReadAll(io.LimitReader(c.Request().Body, 10*1024*1024))
 	if err != nil || len(data) == 0 {
@@ -1002,19 +1010,54 @@ func (h *CalendarAPIHandler) ImportCalendar(c echo.Context) error {
 		return apperror.NewBadRequest(fmt.Sprintf("parse error: %s", parseErr.Error()))
 	}
 
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil {
+		slog.Error("api: failed to lookup calendar for import", slog.Any("error", err))
+		return apperror.NewInternal(fmt.Errorf("failed to lookup calendar"))
+	}
+	autoCreated := false
+	if cal == nil {
+		// Auto-create from import payload. Mode fallback is ModeFantasy
+		// because no supported import format carries a mode — the
+		// CreateCalendar service applies the same default if Mode is empty,
+		// but we set it explicitly here so the audit trail is unambiguous.
+		newCal, createErr := h.calendarSvc.CreateCalendar(ctx, campaignID, calendar.CreateCalendarInput{
+			Mode:             calendar.ModeFantasy,
+			Name:             result.CalendarName,
+			EpochName:        result.Settings.EpochName,
+			CurrentYear:      result.Settings.CurrentYear,
+			HoursPerDay:      result.Settings.HoursPerDay,
+			MinutesPerHour:   result.Settings.MinutesPerHour,
+			SecondsPerMinute: result.Settings.SecondsPerMinute,
+			LeapYearEvery:    result.Settings.LeapYearEvery,
+			LeapYearOffset:   result.Settings.LeapYearOffset,
+		})
+		if createErr != nil {
+			slog.Error("api: failed to auto-create calendar for import", slog.Any("error", createErr))
+			return createErr
+		}
+		cal = newCal
+		autoCreated = true
+	}
+
 	if err := h.calendarSvc.ApplyImport(ctx, cal.ID, result); err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{
-		"status":   "ok",
-		"format":   result.Format,
-		"name":     result.CalendarName,
-		"months":   len(result.Months),
-		"weekdays": len(result.Weekdays),
-		"moons":    len(result.Moons),
-		"seasons":  len(result.Seasons),
-		"eras":     len(result.Eras),
+	status := http.StatusOK
+	if autoCreated {
+		status = http.StatusCreated
+	}
+	return c.JSON(status, map[string]any{
+		"status":       "ok",
+		"format":       result.Format,
+		"name":         result.CalendarName,
+		"months":       len(result.Months),
+		"weekdays":     len(result.Weekdays),
+		"moons":        len(result.Moons),
+		"seasons":      len(result.Seasons),
+		"eras":         len(result.Eras),
+		"auto_created": autoCreated,
 	})
 }
 

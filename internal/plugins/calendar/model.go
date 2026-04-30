@@ -466,10 +466,13 @@ type CreateCalendarInput struct {
 }
 
 // UpdateCalendarInput is the validated input for updating calendar settings.
+// Mode is optional: empty means "leave unchanged"; non-empty must be one of
+// the calendar Mode constants (ModeFantasy / ModeRealLife).
 type UpdateCalendarInput struct {
 	Name             string
 	Description      *string
 	EpochName        *string
+	Mode             string
 	CurrentYear      int
 	CurrentMonth     int
 	CurrentDay       int

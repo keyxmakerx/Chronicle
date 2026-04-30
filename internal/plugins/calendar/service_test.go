@@ -494,6 +494,105 @@ func TestUpdateCalendar_InvalidCurrentMonth(t *testing.T) {
 	assertAppError(t, err, 422)
 }
 
+// TestUpdateCalendar_AcceptsMode pins C-CAL1 Gap 1: a non-empty `mode` field
+// on the input is validated and assigned to the calendar. Without this,
+// Foundry's Calendaria bootstrap can't complete because the mode flip from
+// fantasy → reallife (or vice versa) silently drops.
+func TestUpdateCalendar_AcceptsMode(t *testing.T) {
+	var captured *Calendar
+	repo := &mockCalendarRepo{
+		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) {
+			return &Calendar{ID: "cal-1", Mode: ModeFantasy, CampaignID: "camp-1"}, nil
+		},
+		updateFn: func(_ context.Context, cal *Calendar) error {
+			captured = cal
+			return nil
+		},
+	}
+	svc := newTestCalendarService(repo)
+
+	err := svc.UpdateCalendar(context.Background(), "cal-1", UpdateCalendarInput{
+		Name:             "Greg",
+		Mode:             ModeRealLife,
+		CurrentMonth:     1,
+		CurrentDay:       1,
+		HoursPerDay:      24,
+		MinutesPerHour:   60,
+		SecondsPerMinute: 60,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if captured == nil {
+		t.Fatal("update was not invoked")
+	}
+	if captured.Mode != ModeRealLife {
+		t.Errorf("expected Mode=%q, got %q", ModeRealLife, captured.Mode)
+	}
+}
+
+// TestUpdateCalendar_RejectsInvalidMode pins the validation guard. An
+// unknown mode string must not silently drop or get assigned — return 422.
+func TestUpdateCalendar_RejectsInvalidMode(t *testing.T) {
+	repo := &mockCalendarRepo{
+		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) {
+			return &Calendar{ID: "cal-1", Mode: ModeFantasy}, nil
+		},
+		updateFn: func(_ context.Context, _ *Calendar) error {
+			t.Fatal("update should not be invoked when mode is invalid")
+			return nil
+		},
+	}
+	svc := newTestCalendarService(repo)
+
+	err := svc.UpdateCalendar(context.Background(), "cal-1", UpdateCalendarInput{
+		Name:             "X",
+		Mode:             "gibberish",
+		CurrentMonth:     1,
+		CurrentDay:       1,
+		HoursPerDay:      24,
+		MinutesPerHour:   60,
+		SecondsPerMinute: 60,
+	})
+	assertAppError(t, err, 422)
+}
+
+// TestUpdateCalendar_EmptyModeLeavesUnchanged pins the "empty means leave
+// unchanged" contract — clients that don't send `mode` must not have the
+// stored mode clobbered to the empty string.
+func TestUpdateCalendar_EmptyModeLeavesUnchanged(t *testing.T) {
+	var captured *Calendar
+	repo := &mockCalendarRepo{
+		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) {
+			return &Calendar{ID: "cal-1", Mode: ModeRealLife}, nil
+		},
+		updateFn: func(_ context.Context, cal *Calendar) error {
+			captured = cal
+			return nil
+		},
+	}
+	svc := newTestCalendarService(repo)
+
+	err := svc.UpdateCalendar(context.Background(), "cal-1", UpdateCalendarInput{
+		Name:             "X",
+		// Mode intentionally omitted.
+		CurrentMonth:     1,
+		CurrentDay:       1,
+		HoursPerDay:      24,
+		MinutesPerHour:   60,
+		SecondsPerMinute: 60,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if captured == nil {
+		t.Fatal("update was not invoked")
+	}
+	if captured.Mode != ModeRealLife {
+		t.Errorf("Mode was clobbered: expected %q (unchanged), got %q", ModeRealLife, captured.Mode)
+	}
+}
+
 // --- DeleteCalendar Tests ---
 
 func TestDeleteCalendar_Success(t *testing.T) {

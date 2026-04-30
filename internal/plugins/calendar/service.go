@@ -374,10 +374,19 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID string,
 	if input.LeapYearEvery < 0 {
 		return apperror.NewValidation("leap_year_every must not be negative")
 	}
+	// Mode is optional on update. Empty means "leave unchanged"; any non-empty
+	// value must be a known mode constant. Mode is mutable post-create — the
+	// model itself doesn't pin mode at creation time.
+	if input.Mode != "" && input.Mode != ModeFantasy && input.Mode != ModeRealLife {
+		return apperror.NewValidation("mode must be 'fantasy' or 'reallife'")
+	}
 
 	cal.Name = input.Name
 	cal.Description = input.Description
 	cal.EpochName = input.EpochName
+	if input.Mode != "" {
+		cal.Mode = input.Mode
+	}
 	cal.CurrentYear = input.CurrentYear
 	cal.CurrentMonth = input.CurrentMonth
 	cal.CurrentDay = input.CurrentDay
