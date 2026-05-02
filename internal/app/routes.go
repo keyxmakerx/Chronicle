@@ -1769,10 +1769,18 @@ func (a *App) RegisterRoutes() {
 
 	// Maps plugin blocks (requires "maps" addon).
 	// map_preview is available in both dashboard and template contexts.
+	// The "map" config field type renders as a dropdown of the campaign's
+	// maps in the layout editor; without it, BlockMapPreview falls through
+	// to the picker fallback that just says "Configure a map for this
+	// block. View all maps." — which is what the operator hit before this
+	// fix.
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "map_preview", Label: "Map", Icon: "fa-map",
 		Description: "Embedded map viewer", Addon: "maps",
 		Contexts: []string{"dashboard", "template"},
+		ConfigFields: []entities.ConfigFieldMeta{
+			{Key: "map_id", Label: "Map", Type: "map"},
+		},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
 		return maps.BlockMapPreview(ctx.CC, entities.BlockConfigString(ctx.Block.Config, "map_id"))
 	})

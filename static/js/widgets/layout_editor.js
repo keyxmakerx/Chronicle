@@ -1339,6 +1339,41 @@
             }
             break;
 
+          case 'map':
+            // Renders the campaign's maps as a dropdown. Without this, the
+            // map_preview / map_full block configs had no map_id picker —
+            // the layout editor would skip the field, the renderer would
+            // get an empty map_id, and the map widget would fall through
+            // to the "Configure a map for this block. View all maps."
+            // placeholder. Hits the v1 JSON API (the web /maps endpoint
+            // is HTML-only).
+            input = document.createElement('select');
+            input.className = 'w-full px-3 py-1.5 text-sm border border-edge rounded bg-surface text-fg focus:outline-none focus:ring-1 focus:ring-accent';
+            var mapEmptyOpt = document.createElement('option');
+            mapEmptyOpt.value = '';
+            mapEmptyOpt.textContent = '— Select map —';
+            input.appendChild(mapEmptyOpt);
+            if (self.campaignId) {
+              Chronicle.apiFetch('/api/v1/campaigns/' + self.campaignId + '/maps')
+                .then(function (r) { return r.ok ? r.json() : []; })
+                .then(function (mapList) {
+                  // ListMaps returns a bare array; older responses may
+                  // wrap it in { data: [...] }. Handle both defensively
+                  // since the response shape could change without
+                  // breaking other callers.
+                  var arr = Array.isArray(mapList) ? mapList : (mapList && mapList.data) || [];
+                  arr.forEach(function (m) {
+                    var o = document.createElement('option');
+                    o.value = m.id;
+                    o.textContent = m.name || '(unnamed map)';
+                    if (String(currentVal) === String(m.id)) o.selected = true;
+                    input.appendChild(o);
+                  });
+                })
+                .catch(function () {});
+            }
+            break;
+
           default:
             input = document.createElement('input');
             input.type = 'text';

@@ -295,7 +295,9 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		Addon: "maps", Contexts: []string{"dashboard"},
 		ConfigFields: []ConfigFieldMeta{
 			{Key: "height", Label: "Height (px)", Type: "number", Min: IntPtr(300), Max: IntPtr(1000), Default: 500},
-			{Key: "map_id", Label: "Map ID", Type: "text"},
+			// "map" type renders as a dropdown of the campaign's maps in
+			// the layout editor (vs. the prior plain-text UUID input).
+			{Key: "map_id", Label: "Map", Type: "map"},
 		},
 	}, nil)
 

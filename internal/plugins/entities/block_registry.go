@@ -33,7 +33,7 @@ type BlockMeta struct {
 type ConfigFieldMeta struct {
 	Key     string   `json:"key"`
 	Label   string   `json:"label"`
-	Type    string   `json:"type"`              // "number", "text", "textarea", "select", "entity_type"
+	Type    string   `json:"type"`              // "number", "text", "textarea", "select", "entity_type", "map"
 	Min     *int     `json:"min,omitempty"`      // For "number" type.
 	Max     *int     `json:"max,omitempty"`      // For "number" type.
 	Default any      `json:"default,omitempty"`
