@@ -252,7 +252,14 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 			var imageW = cfg.dataset.imageWidth;
 			var imageH = cfg.dataset.imageHeight;
 			var isScribe = cfg.dataset.isScribe === 'true';
-			var markers = JSON.parse(cfg.dataset.markers || '[]');
+			// Coerce defensively: JSON.parse('null') returns null and would
+			// crash on every markers.length / markers.forEach below. Server
+			// now returns "[]" for empty (mustMarshalMarkers), but keep this
+			// belt-and-braces so a stale deploy or a freshly-created map
+			// doesn't take the page down.
+			var markers;
+			try { markers = JSON.parse(cfg.dataset.markers || '[]'); } catch (e) { markers = []; }
+			if (!Array.isArray(markers)) markers = [];
 
 			var w = parseInt(imageW) || 1000;
 			var h = parseInt(imageH) || 1000;
@@ -894,7 +901,16 @@ func mapImageSignedURL(ctx context.Context, imageID *string) string {
 }
 
 // mustMarshalMarkers serializes markers to JSON for the JS initialization.
+// Empty/nil slices both serialize to "[]" — without the explicit guard,
+// json.Marshal returns the literal "null" for a nil slice, the JS sees
+// the string "null" via dataset, JSON.parse turns it into the JS value
+// null, and markers.length on the next line throws. The IIFE then dies
+// before assigning window.uploadMapImage / saveMapSettings / etc., which
+// surfaces as the cascading "is not defined" errors in the console.
 func mustMarshalMarkers(markers []Marker) string {
+	if len(markers) == 0 {
+		return "[]"
+	}
 	b, err := json.Marshal(markers)
 	if err != nil {
 		return "[]"
