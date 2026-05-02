@@ -620,6 +620,11 @@ templ blockPosts(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 // re-query — the server already knows the viewer's role and the JS
 // can show/hide the audience picker options accordingly. The hard
 // security gate is on the API; data-* hints are for UX only.
+//
+// data-current-user-id lets the widget gate edit/pin/delete affordances
+// to the note's author. The server already enforces author-only writes;
+// hiding the buttons on non-authored notes prevents the confusing 404
+// users see when they click Delete on a note someone else authored.
 templ blockEntityNotes(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	<div
 		data-widget="entity-notes"
@@ -627,6 +632,7 @@ templ blockEntityNotes(cc *campaigns.CampaignContext, entity *Entity, csrfToken 
 		data-campaign-id={ cc.Campaign.ID }
 		data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/notes", cc.Campaign.ID, entity.ID) }
 		data-csrf={ csrfToken }
+		data-current-user-id={ layouts.GetUserID(ctx) }
 		if cc.MemberRole == campaigns.RoleOwner {
 			data-can-author-dm-only="true"
 		}

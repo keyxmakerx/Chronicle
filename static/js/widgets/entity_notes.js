@@ -64,6 +64,12 @@
       var entityId = config.entityId || '';
       var canAuthorDMOnly = config.canAuthorDmOnly === 'true';
       var canAuthorDMScribe = config.canAuthorDmScribe === 'true';
+      // The viewer's user ID, emitted by show.templ on the mount element.
+      // Required to gate edit/pin/delete affordances to a note's author —
+      // the server enforces author-only writes, but without this gate the
+      // kebab menu shows up on every note and clicks return a confusing
+      // 404 ("note not found") for any note the viewer didn't author.
+      var currentUserId = config.currentUserId || '';
 
       var state = {
         notes: [],
@@ -341,7 +347,7 @@
         var visibleMembers = state.members.filter(function (m) {
           // Don't show the viewer in their own picker — they always
           // see their own notes regardless of shared_with.
-          return m.user_id !== currentUserID();
+          return m.user_id !== currentUserId;
         });
         if (visibleMembers.length === 0) {
           return '<div class="mt-2 text-xs text-fg-muted italic px-2">No other members in this campaign yet.</div>';
@@ -365,12 +371,12 @@
         return h;
       }
 
-      // currentUserID returns the viewer's user_id by reading the body's
-      // notes data-widget mount (which carries it). Falls back to ''
-      // if not found — in which case the picker just shows everyone.
-      function currentUserID() {
-        var notesEl = document.querySelector('[data-widget="notes"][data-user-id]');
-        return notesEl ? notesEl.getAttribute('data-user-id') : '';
+      // isAuthor returns true when the viewer authored the given note.
+      // Used to gate edit/pin/delete UI — the server enforces author-only
+      // writes, but the UI must match or the user gets confusing 404s
+      // when clicking Delete on a note that's visible-but-not-theirs.
+      function isAuthor(note) {
+        return !!note && !!currentUserId && note.authorUserId === currentUserId;
       }
 
       function renderList() {
@@ -488,8 +494,12 @@
         h += '<span class="hidden md:inline">' + esc(aud.label) + '</span>';
         h += '</span>';
 
-        // Kebab — only when not editing.
-        if (!isEditing) {
+        // Kebab — only when not editing AND viewer authored the note.
+        // The kebab opens the edit/pin/delete menu; all three are
+        // author-only on the server, so hiding the entry point on
+        // non-authored notes is the right UX. The audience badge plus
+        // expanded body is what non-authors get.
+        if (!isEditing && isAuthor(note)) {
           h += '<button class="text-fg-muted hover:text-accent text-xs p-1 shrink-0 transition-colors" data-action="note-menu" data-note-id="' + esc(note.id) + '" title="More actions" onclick="event.stopPropagation()"><i class="fa-solid fa-ellipsis-vertical"></i></button>';
         }
 
@@ -515,10 +525,15 @@
           h += '<i class="fa-solid fa-user-plus mr-1"></i>Shared with ' + note.sharedWith.length + ' user' + (note.sharedWith.length === 1 ? '' : 's');
           h += '</div>';
         }
-        // Action footer
+        // Action footer.
+        // Edit/Pin are author-only (mirrors the server gate). For
+        // non-authors we still render the footer so the "Created X" date
+        // stays in place — it's read-only and useful context.
         h += '<div class="mt-3 pt-2 border-t border-edge flex items-center gap-2 text-xs">';
-        h += '<button class="btn-secondary btn-sm" data-action="edit-note" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-pen mr-1"></i>Edit</button>';
-        h += '<button class="btn-ghost btn-sm" data-action="toggle-pin" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-thumbtack mr-1"></i>' + (note.pinned ? 'Unpin' : 'Pin') + '</button>';
+        if (isAuthor(note)) {
+          h += '<button class="btn-secondary btn-sm" data-action="edit-note" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-pen mr-1"></i>Edit</button>';
+          h += '<button class="btn-ghost btn-sm" data-action="toggle-pin" data-note-id="' + esc(note.id) + '"><i class="fa-solid fa-thumbtack mr-1"></i>' + (note.pinned ? 'Unpin' : 'Pin') + '</button>';
+        }
         h += '<div class="flex-1"></div>';
         if (note.createdAt) {
           h += '<span class="text-fg-muted">Created ' + esc(formatShortDate(note.createdAt)) + '</span>';

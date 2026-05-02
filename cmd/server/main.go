@@ -102,6 +102,12 @@ func main() {
 			"entities":         {"id", "campaign_id", "name", "slug", "entry", "entry_html", "fields_data", "visibility", "owner_user_id"},
 			"users":            {"id", "email", "display_name", "password_hash"},
 			"campaign_members": {"campaign_id", "user_id", "role"},
+			// entity_notes was added by migration 23. Listing it here makes
+			// the boot fail fast if a deploy somehow lands without the
+			// migration applied — better than the widget rendering, the
+			// list query 500-ing, and the operator chasing a "delete is
+			// broken" bug report when the table just isn't there.
+			"entity_notes": {"id", "entity_id", "campaign_id", "author_user_id", "audience", "shared_with", "pinned"},
 		},
 		Env:        cfg.Env,
 		BaseURL:    cfg.BaseURL,
