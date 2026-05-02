@@ -98,7 +98,7 @@ templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
 templ createMapModal(data MapListData) {
 	<div
 		id="create-map-modal"
-		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/50"
 		onclick="if(event.target===this)this.classList.add('hidden')"
 	>
 		<div class="card p-6 w-full max-w-md space-y-4">
@@ -679,7 +679,7 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 templ markerModal(data MapViewData) {
 	<div
 		id="marker-modal"
-		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/50"
 		onclick="if(event.target===this)closeMarkerModal()"
 	>
 		<div class="card p-6 w-full max-w-md space-y-4">
@@ -828,7 +828,7 @@ templ markerModal(data MapViewData) {
 templ mapSettingsModal(data MapViewData) {
 	<div
 		id="map-settings-modal"
-		class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/50"
 		onclick="if(event.target===this)this.classList.add('hidden')"
 	>
 		<div class="card p-6 w-full max-w-md space-y-4">
