@@ -252,7 +252,13 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 			var imageW = cfg.dataset.imageWidth;
 			var imageH = cfg.dataset.imageHeight;
 			var isScribe = cfg.dataset.isScribe === 'true';
-			var markers = JSON.parse(cfg.dataset.markers || '[]');
+			// Coerce defensively: JSON.parse('null') is null and would crash
+			// on the markers.length read below. Server now sends "[]" for
+			// empty (mustMarshalMarkers), but keep this so a stale deploy
+			// or an unexpected dataset value doesn't take the page down.
+			var markers;
+			try { markers = JSON.parse(cfg.dataset.markers || '[]'); } catch (e) { markers = []; }
+			if (!Array.isArray(markers)) markers = [];
 
 			var w = parseInt(imageW) || 1000;
 			var h = parseInt(imageH) || 1000;
@@ -894,7 +900,16 @@ func mapImageSignedURL(ctx context.Context, imageID *string) string {
 }
 
 // mustMarshalMarkers serializes markers to JSON for the JS initialization.
+// nil and empty slices both serialize to "[]" — without this, json.Marshal
+// returns the literal "null" for a nil slice, the JS gets the string
+// "null" via dataset, and JSON.parse turns it into the JS value null,
+// which then trips markers.length on the next line. The IIFE dies and
+// every window-attached function below (uploadMapImage, saveMapSettings,
+// etc.) is never assigned. Defense in depth — the JS also coerces.
 func mustMarshalMarkers(markers []Marker) string {
+	if len(markers) == 0 {
+		return "[]"
+	}
 	b, err := json.Marshal(markers)
 	if err != nil {
 		return "[]"
