@@ -1094,6 +1094,33 @@ func (a *armoryRelationMetadataAdapter) UpdateMetadata(ctx context.Context, id i
 	return a.svc.UpdateMetadata(ctx, id, metadata)
 }
 
+// armoryBuyerAccessAdapter wraps entities.EntityService to implement
+// armory.BuyerAccessChecker. Used by the transaction service to verify
+// the calling user can act on the buyer entity (own / shared / Owner /
+// Scribe-with-grant) before a Purchase. Mitigates buyer_entity_id
+// spoofing from clients with a single per-campaign API key.
+//
+// Acting-as is mapped to CanEdit (not just CanView) because purchasing
+// modifies the buyer's state — currency deduction, transaction log entry.
+// CanView would let any campaign member buy as anyone, which is the
+// vulnerability we're closing.
+type armoryBuyerAccessAdapter struct {
+	svc entities.EntityService
+}
+
+// CanUserActAsBuyer returns true if the user has edit-level access to the
+// buyer entity. Owners short-circuit true at the entity-service layer.
+func (a *armoryBuyerAccessAdapter) CanUserActAsBuyer(ctx context.Context, entityID, userID string, role int) (bool, error) {
+	perm, err := a.svc.CheckEntityAccess(ctx, entityID, role, userID)
+	if err != nil {
+		return false, err
+	}
+	if perm == nil {
+		return false, nil
+	}
+	return perm.CanEdit, nil
+}
+
 // armoryRelationFinderAdapter wraps the relations service to implement
 // armory.RelationFinder. Used by the transaction service to validate stock
 // before a purchase.
@@ -1674,6 +1701,7 @@ func (a *App) RegisterRoutes() {
 	txSvc := armory.NewTransactionService(txRepo)
 	txSvc.SetRelationMetadataUpdater(&armoryRelationMetadataAdapter{svc: relService})
 	txSvc.SetRelationFinder(&armoryRelationFinderAdapter{svc: relService})
+	txSvc.SetBuyerAccessChecker(&armoryBuyerAccessAdapter{svc: entityService})
 	txHandler := armory.NewTransactionHandler(txSvc)
 	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, campaignService, authService, addonService)
 

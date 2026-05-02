@@ -38,7 +38,7 @@ func (h *TransactionHandler) Purchase(c echo.Context) error {
 	}
 
 	userID := auth.GetUserID(c)
-	result, err := h.svc.Purchase(c.Request().Context(), cc.Campaign.ID, userID, input)
+	result, err := h.svc.Purchase(c.Request().Context(), cc.Campaign.ID, userID, int(cc.MemberRole), input)
 	if err != nil {
 		return err
 	}

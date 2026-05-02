@@ -42,7 +42,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	cg.DELETE("/armory/instances/:iid/items/:eid", ih.RemoveItem, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Transaction routes.
-	cg.POST("/armory/purchase", th.Purchase, campaigns.RequireRole(campaigns.RoleScribe))
+	// Purchase is the player-initiated buy path: a Player buys an item from
+	// a shop with their own character. CreateTransaction below is the
+	// admin-mediated path (gift/transfer/restock) and stays Scribe-gated.
+	// No prior ADR or comment justified the previous Scribe gate on
+	// Purchase — buyer ownership is enforced server-side in transaction_service.
+	cg.POST("/armory/purchase", th.Purchase, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/transactions", th.CreateTransaction, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.GET("/armory/transactions", th.ListTransactions, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/shops/:eid/transactions", th.ListShopTransactions, campaigns.RequireRole(campaigns.RolePlayer))

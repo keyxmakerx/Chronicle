@@ -37,11 +37,24 @@ type EntityFieldUpdater interface {
 	UpdateEntityFields(ctx context.Context, entityID string, fields map[string]any) error
 }
 
+// BuyerAccessChecker validates that the calling user can act on the buyer
+// entity (i.e. the character making the purchase belongs to them, or is
+// shared/visible per the campaign's per-entity ACL).
+//
+// Implemented by an adapter over entities.EntityService.CheckEntityAccess
+// — wired in routes.go. Without this guard, Foundry — which authenticates
+// with a single per-campaign API key — could spoof `buyer_entity_id` to
+// purchase on behalf of any character in the campaign.
+type BuyerAccessChecker interface {
+	CanUserActAsBuyer(ctx context.Context, entityID, userID string, role int) (bool, error)
+}
+
 // TransactionService defines the business logic contract for shop transactions.
 type TransactionService interface {
 	// Purchase executes a purchase: validates stock, creates transaction,
-	// decrements stock, and optionally deducts buyer currency.
-	Purchase(ctx context.Context, campaignID, userID string, input CreateTransactionInput) (*PurchaseResult, error)
+	// decrements stock, and optionally deducts buyer currency. The role is
+	// the caller's campaign role — passed through to the buyer access check.
+	Purchase(ctx context.Context, campaignID, userID string, role int, input CreateTransactionInput) (*PurchaseResult, error)
 
 	// CreateTransaction records a transaction without stock/currency logic.
 	// Used for manual logging (gifts, transfers, restocks).
@@ -59,10 +72,11 @@ type TransactionService interface {
 
 // transactionService implements TransactionService.
 type transactionService struct {
-	repo             TransactionRepository
-	metadataUpdater  RelationMetadataUpdater
-	relationFinder   RelationFinder
-	entityFields     EntityFieldUpdater
+	repo            TransactionRepository
+	metadataUpdater RelationMetadataUpdater
+	relationFinder  RelationFinder
+	entityFields    EntityFieldUpdater
+	buyerAccess     BuyerAccessChecker
 }
 
 // NewTransactionService creates a new transaction service. Returns the concrete
@@ -86,14 +100,35 @@ func (s *transactionService) SetEntityFieldUpdater(u EntityFieldUpdater) {
 	s.entityFields = u
 }
 
+// SetBuyerAccessChecker injects the buyer-access check used by Purchase.
+// When unset (e.g. unit tests that don't exercise the buyer path), the
+// check is skipped — same behavior as before this guard was added.
+func (s *transactionService) SetBuyerAccessChecker(b BuyerAccessChecker) {
+	s.buyerAccess = b
+}
+
 // Purchase validates stock, creates the transaction, decrements shop stock,
 // and optionally deducts currency from the buyer entity.
-func (s *transactionService) Purchase(ctx context.Context, campaignID, userID string, input CreateTransactionInput) (*PurchaseResult, error) {
+func (s *transactionService) Purchase(ctx context.Context, campaignID, userID string, role int, input CreateTransactionInput) (*PurchaseResult, error) {
 	if input.Quantity < 1 {
 		return nil, apperror.NewBadRequest("quantity must be at least 1")
 	}
 	if input.ShopEntityID == "" || input.ItemEntityID == "" {
 		return nil, apperror.NewBadRequest("shop and item entity IDs are required")
+	}
+
+	// Buyer cross-check: when a buyer entity is named, the calling user
+	// must be able to act on it (own / shared / Owner / Scribe-via-grant).
+	// Mitigates buyer_entity_id spoofing from clients that authenticate
+	// with a single per-campaign identity (Foundry module's API key).
+	if input.BuyerEntityID != "" && s.buyerAccess != nil {
+		ok, err := s.buyerAccess.CanUserActAsBuyer(ctx, input.BuyerEntityID, userID, role)
+		if err != nil {
+			return nil, fmt.Errorf("verify buyer access: %w", err)
+		}
+		if !ok {
+			return nil, apperror.NewForbidden("you cannot purchase as that character")
+		}
 	}
 	if input.TransactionType == "" {
 		input.TransactionType = TxPurchase
