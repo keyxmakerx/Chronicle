@@ -224,18 +224,35 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 		@mapSettingsModal(data)
 	}
 
+	<!-- Server-rendered map data, read by the script below.
+	     templ's `{ expr }` interpolation does not run inside <script> blocks
+	     (the contents are emitted as raw text), so we ferry data through
+	     attribute interpolation instead. A hidden div is the simplest stable
+	     channel — dataset reads handle quoting/escaping for us. -->
+	<div
+		id="map-config"
+		class="hidden"
+		data-map-id={ data.Map.ID }
+		data-image-id={ derefStr(data.Map.ImageID) }
+		data-image-url={ mapImageSignedURL(ctx, data.Map.ImageID) }
+		data-image-width={ fmt.Sprintf("%d", data.Map.ImageWidth) }
+		data-image-height={ fmt.Sprintf("%d", data.Map.ImageHeight) }
+		data-is-scribe={ fmt.Sprintf("%t", data.IsScribe) }
+		data-markers={ mustMarshalMarkers(data.Markers) }
+	></div>
+
 	<!-- Map initialization script -->
 	<script>
 		(function() {
+			var cfg = document.getElementById('map-config');
 			var campaignID = window.location.pathname.split('/')[2];
-			var mapID = { templ.JSONString(data.Map.ID) };
-			var imageID = { templ.JSONString(derefStr(data.Map.ImageID)) };
-			var mapImageURL = { templ.JSONString(mapImageSignedURL(ctx, data.Map.ImageID)) };
-			var imageW = { templ.JSONString(fmt.Sprintf("%d", data.Map.ImageWidth)) };
-			var imageH = { templ.JSONString(fmt.Sprintf("%d", data.Map.ImageHeight)) };
-			var isScribe = { templ.JSONString(fmt.Sprintf("%t", data.IsScribe)) } === "true";
-			var markersJSON = { templ.JSONString(mustMarshalMarkers(data.Markers)) };
-			var markers = JSON.parse(markersJSON);
+			var mapID = cfg.dataset.mapId;
+			var imageID = cfg.dataset.imageId;
+			var mapImageURL = cfg.dataset.imageUrl;
+			var imageW = cfg.dataset.imageWidth;
+			var imageH = cfg.dataset.imageHeight;
+			var isScribe = cfg.dataset.isScribe === 'true';
+			var markers = JSON.parse(cfg.dataset.markers || '[]');
 
 			var w = parseInt(imageW) || 1000;
 			var h = parseInt(imageH) || 1000;
