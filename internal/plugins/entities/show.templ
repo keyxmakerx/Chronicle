@@ -23,7 +23,18 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>
 				if entity.TypeSlug != "" {
 					<span class="mx-1">/</span>
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%ss", cc.Campaign.ID, entity.TypeSlug)) } class="hover:text-fg-body">{ entity.TypeName }s</a>
+					{{
+						// Display label: prefer the type's NamePlural ("Maps") over
+						// naively appending "s" to TypeName, which doubled the s on
+						// already-plural names ("Maps" → "Mapss"). Falls back to
+						// TypeName + "s" only when NamePlural is empty (legacy types
+						// without the column populated).
+						breadcrumbLabel := entity.TypeNamePlural
+						if breadcrumbLabel == "" {
+							breadcrumbLabel = entity.TypeName + "s"
+						}
+					}}
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, entity.TypeSlug)) } class="hover:text-fg-body">{ breadcrumbLabel }</a>
 				}
 				// Ancestors: furthest first, immediate parent last.
 				for i := len(ancestors) - 1; i >= 0; i-- {

@@ -262,10 +262,11 @@ type Entity struct {
 	UpdatedAt      time.Time       `json:"updated_at"`
 
 	// Joined fields from entity_types (populated by repository queries).
-	TypeName  string `json:"type_name,omitempty"`
-	TypeIcon  string `json:"type_icon,omitempty"`
-	TypeColor string `json:"type_color,omitempty"`
-	TypeSlug  string `json:"type_slug,omitempty"`
+	TypeName        string `json:"type_name,omitempty"`
+	TypeNamePlural  string `json:"type_name_plural,omitempty"` // Joined entity_types.name_plural — used by breadcrumbs and category links.
+	TypeIcon        string `json:"type_icon,omitempty"`
+	TypeColor       string `json:"type_color,omitempty"`
+	TypeSlug        string `json:"type_slug,omitempty"`
 
 	// Tags is populated at the handler level via batch fetch, not by the repository.
 	Tags []EntityTagInfo `json:"tags,omitempty"`

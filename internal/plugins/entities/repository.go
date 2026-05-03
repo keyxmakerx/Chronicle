@@ -694,7 +694,7 @@ const entitySelectColumns = `e.id, e.campaign_id, e.entity_type_id, e.name, e.sl
 	                 e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	                 e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
 	                 e.created_by, e.owner_user_id, e.map_id, e.created_at, e.updated_at,
-	                 et.name, et.icon, et.color, et.slug`
+	                 et.name, et.name_plural, et.icon, et.color, et.slug`
 
 // FindByID retrieves an entity with joined type info.
 func (r *entityRepository) FindByID(ctx context.Context, id string) (*Entity, error) {
@@ -727,7 +727,7 @@ func (r *entityRepository) scanEntity(row *sql.Row) (*Entity, error) {
 		&e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.OwnerUserID, &e.MapID, &e.CreatedAt, &e.UpdatedAt,
-		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
+		&e.TypeName, &e.TypeNamePlural, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("entity not found")
@@ -1357,7 +1357,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string) (
 	       a.image_path, a.cover_image_path, a.parent_id, a.parent_node_id, a.sort_order, a.type_label,
 	       a.is_private, a.visibility, a.is_template, a.fields_data, a.field_overrides, a.popup_config,
 	       a.created_by, a.owner_user_id, a.map_id, a.created_at, a.updated_at,
-	       et.name, et.icon, et.color, et.slug
+	       et.name, et.name_plural, et.icon, et.color, et.slug
 	FROM ancestors a
 	INNER JOIN entity_types et ON et.id = a.entity_type_id
 	ORDER BY a.depth ASC`
@@ -1539,7 +1539,7 @@ func (r *entityRepository) scanEntityRow(rows *sql.Rows) (*Entity, error) {
 		&e.ImagePath, &e.CoverImagePath, &e.ParentID, &e.ParentNodeID, &e.SortOrder, &e.TypeLabel,
 		&e.IsPrivate, &e.Visibility, &e.IsTemplate, &fieldsRaw, &overridesRaw, &popupRaw,
 		&e.CreatedBy, &e.OwnerUserID, &e.MapID, &e.CreatedAt, &e.UpdatedAt,
-		&e.TypeName, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
+		&e.TypeName, &e.TypeNamePlural, &e.TypeIcon, &e.TypeColor, &e.TypeSlug,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scanning entity row: %w", err)
