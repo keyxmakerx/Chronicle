@@ -147,15 +147,12 @@ templ MapShowFragment(cc *campaigns.CampaignContext, data MapViewData) {
 	@mapShowContent(cc, data)
 }
 
-// mapShowContent renders the Leaflet map viewer with markers and controls.
+// mapShowContent renders the dedicated map page: page-level wrapper + the
+// breadcrumbs/title header + the editor body. The editor body itself is
+// extracted into MapEditorBody so it can be reused inline by the per-entity
+// Map Editor block (the iframe approach got blocked by the app's
+// frame-ancestors 'none' CSP — inline-render is the future-proof path).
 templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
-	<!-- Leaflet CSS + JS (vendored locally for CSP compliance) -->
-	<link rel="stylesheet" href="/static/vendor/leaflet.css"/>
-	<script src="/static/vendor/leaflet.js"></script>
-	<!-- MarkerCluster plugin for auto-grouping dense markers at low zoom -->
-	<link rel="stylesheet" href="/static/vendor/MarkerCluster.css"/>
-	<script src="/static/vendor/leaflet.markercluster.js"></script>
-
 	<div class="h-full flex flex-col -mx-5 -my-4">
 		<!-- Map header with name, back link, and controls -->
 		<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
@@ -183,41 +180,84 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 					}
 				</div>
 			</div>
-			<div class="flex items-center gap-2">
-				<!-- Marker search -->
-				<div class="relative">
-					<input
-						type="text"
-						id="marker-search"
-						class="input text-xs py-1.5 pl-7 pr-2 w-40"
-						placeholder="Search markers..."
-						autocomplete="off"
-					/>
-					<i class="fa-solid fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-fg-muted pointer-events-none"></i>
-				</div>
-				if data.IsScribe {
-					<button
-						id="place-marker-btn"
-						class="btn-secondary text-xs"
-						onclick="togglePlaceMode()"
-					>
-						<i class="fa-solid fa-map-pin mr-1"></i> Place Marker
-					</button>
-				}
-				if data.IsScribe {
-					<button
-						class="btn-secondary text-xs"
-						onclick="document.getElementById('map-settings-modal').classList.remove('hidden')"
-					>
-						<i class="fa-solid fa-gear"></i>
-					</button>
-				}
-			</div>
 		</div>
 
-		<!-- Map container (fills remaining space) -->
-		<div id="map-container" class="flex-1 relative bg-surface-alt"></div>
+		<!-- Editor body. flex-1 makes it fill the remaining page height. -->
+		@MapEditorBody(cc, data, "flex-1 relative bg-surface-alt", "")
 	</div>
+}
+
+// MapEditorBody renders the meat of the map editor: Leaflet imports, the
+// inline toolbar (search + place-marker + gear, role-gated), the map
+// container, modals, the server-rendered config div, and the IIFE that
+// wires everything together. Reusable in two contexts:
+//
+//   1. The dedicated map page (mapShowContent) calls it with
+//      mapContainerClass="flex-1 relative bg-surface-alt", mapContainerStyle=""
+//      so the container fills the remaining flex height.
+//   2. The per-entity Map Editor block (BlockEntityMapEmbed) calls it with
+//      mapContainerClass="relative bg-surface-alt rounded-lg border border-edge overflow-hidden"
+//      and mapContainerStyle="height: 600px;" for a fixed-height embed.
+//
+// All editor functionality (markers, drawings, settings modal, Foundry
+// sync compatibility) is identical in both contexts — same IDs, same
+// IIFE — so a single map_editor block on an entity page gets the full
+// dedicated-page experience inline.
+//
+// CONSTRAINT: only one MapEditorBody may render per page (the IIFE binds
+// to fixed IDs like #map-container, #marker-modal, etc.). Callers must
+// not include this twice in the same DOM. The map_editor block is
+// declared template-context-only and entity templates only ever render
+// one map per page, so this is enforced by the layout editor in practice.
+templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContainerClass, mapContainerStyle string) {
+	<!-- Leaflet CSS + JS (vendored locally for CSP compliance).
+	     Browsers dedupe link/script by URL, so two MapEditorBody mounts
+	     on different pages don't double-load. -->
+	<link rel="stylesheet" href="/static/vendor/leaflet.css"/>
+	<script src="/static/vendor/leaflet.js"></script>
+	<!-- MarkerCluster plugin for auto-grouping dense markers at low zoom -->
+	<link rel="stylesheet" href="/static/vendor/MarkerCluster.css"/>
+	<script src="/static/vendor/leaflet.markercluster.js"></script>
+
+	<!-- Inline toolbar: search + (Scribe+) place marker + (Scribe+) settings.
+	     Scoped to the editor body itself rather than the page header so the
+	     entity-page embed gets the same controls without duplicating them in
+	     two places. -->
+	<div class="flex items-center gap-2 mb-2">
+		<div class="relative">
+			<input
+				type="text"
+				id="marker-search"
+				class="input text-xs py-1.5 pl-7 pr-2 w-40"
+				placeholder="Search markers..."
+				autocomplete="off"
+			/>
+			<i class="fa-solid fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-fg-muted pointer-events-none"></i>
+		</div>
+		if data.IsScribe {
+			<button
+				id="place-marker-btn"
+				type="button"
+				class="btn-secondary text-xs"
+				onclick="togglePlaceMode()"
+			>
+				<i class="fa-solid fa-map-pin mr-1"></i> Place Marker
+			</button>
+			<button
+				type="button"
+				class="btn-secondary text-xs"
+				onclick="document.getElementById('map-settings-modal').classList.remove('hidden')"
+				title="Map settings"
+			>
+				<i class="fa-solid fa-gear"></i>
+			</button>
+		}
+	</div>
+
+	<!-- Map container. Caller controls class + height via the parameters
+	     so the same body works for flex-fill (dedicated page) and
+	     fixed-height embed (entity block). -->
+	<div id="map-container" class={ mapContainerClass } style={ mapContainerStyle }></div>
 
 	if data.IsScribe {
 		@markerModal(data)

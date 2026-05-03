@@ -1,15 +1,14 @@
 // entity_map_block.templ renders the per-entity Map Editor block. The
 // block reads from entities.map_id (added in migration 025): if set, the
-// full dedicated map page is embedded as an iframe so the entity page
-// gets every feature the standalone page has — markers, drawing tools,
-// settings modal, Foundry sync — without duplicating any code.
-// If no map is assigned, Scribe+ users see a thumbnail picker; players
-// see a friendly empty state.
+// full inline map editor renders directly in the entity page; otherwise
+// Scribe+ users see a thumbnail picker and players see a friendly empty
+// state.
 //
-// Iframe over inline-render is a deliberate trade: a slim variant of
-// mapShowContent would mean ~700 lines of duplicated templ, and the
-// dedicated page is already the source of truth. Same-origin cookies
-// authenticate the iframe transparently.
+// Inline-render via the shared MapEditorBody templ — earlier iterations
+// used a same-origin iframe, but the app's Content-Security-Policy sets
+// `frame-ancestors 'none'` so the iframe was being silently blocked at
+// the browser. Inline rendering is the future-proof path: same Leaflet
+// code, same modals, same IIFE — just hosted on the entity page.
 package maps
 
 import (
@@ -28,39 +27,37 @@ type EntityMapPickerCard struct {
 	ImageID     string // empty if the map has no image yet
 }
 
-// BlockEntityMapEmbed renders the iframe-embedded full map editor when
-// the entity has an assigned map. The iframe URL is the dedicated map
-// page; same-origin auth carries over via cookies. Scribe+ viewers get
-// a "Change map" button that re-opens the picker.
+// BlockEntityMapEmbed renders the per-entity map inline (full editor for
+// Scribe+, view-only for players — the role gate lives inside
+// MapEditorBody). Above the editor: a slim header with the map name plus
+// "Open" (jump to the dedicated map page) and "Change map" (Scribe+ only,
+// drops the assignment so the picker re-renders).
 //
-// Sizing: 600px tall by default — tall enough to be useful, short
-// enough to not dominate the entity page. Could become a config field
-// later but isn't worth it for v1.
-templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID, mapID, mapName string, isScribe bool) {
+// Sizing: 600px tall by default. Could become a config field later but
+// isn't worth it for v1 — most embeds get a fixed height anyway.
+templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID string, data MapViewData, isScribe bool) {
 	<div
 		data-widget="entity-map"
 		data-entity-id={ entityID }
 		data-campaign-id={ cc.Campaign.ID }
-		data-map-id={ mapID }
+		data-map-id={ data.Map.ID }
 		data-is-scribe={ fmt.Sprintf("%t", isScribe) }
 		class="entity-map-embed"
 	>
 		<div class="flex items-center justify-between mb-2">
 			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-map-location-dot mr-1.5"></i>
-				if mapName != "" {
-					{ mapName }
+				if data.Map.Name != "" {
+					{ data.Map.Name }
 				} else {
 					Map
 				}
 			</h2>
 			<div class="flex items-center gap-2">
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, mapID)) }
-					target="_blank"
-					rel="noopener"
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, data.Map.ID)) }
 					class="text-xs text-accent hover:underline"
-					title="Open the full map page in a new tab"
+					title="Open the full map page"
 				>
 					<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>Open
 				</a>
@@ -76,22 +73,18 @@ templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID, mapID, mapNam
 				}
 			</div>
 		</div>
-		<!-- Same-origin iframe; session cookie authenticates it. The dedicated
-		     map page already gates edits behind the IsScribe flag, so players
-		     get view-only without any extra wiring here. -->
-		<iframe
-			src={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, mapID)) }
-			class="w-full rounded-lg border border-edge"
-			style="height: 600px;"
-			loading="lazy"
-			title={ fmt.Sprintf("Map: %s", mapName) }
-		></iframe>
+		<!-- Inline editor body. Fixed 600px height for the embed (vs.
+		     flex-fill on the dedicated page). The player-vs-Scribe gate
+		     is handled inside MapEditorBody via data.IsScribe — players
+		     get clickable markers with name+description popups, Scribe+
+		     gets the full marker/drawing/settings affordances. -->
+		@MapEditorBody(cc, data, "relative bg-surface-alt rounded-lg border border-edge overflow-hidden", "height: 600px;")
 	</div>
 }
 
 // BlockEntityMapPicker renders the thumbnail grid Scribe+ users see when
 // the entity has no map assigned yet. Click a card → PUT to the assign
-// endpoint → page refreshes with the iframe embed.
+// endpoint → page refreshes with the inline editor.
 templ BlockEntityMapPicker(cc *campaigns.CampaignContext, entityID string, cards []EntityMapPickerCard, csrfToken string) {
 	<div
 		data-widget="entity-map"

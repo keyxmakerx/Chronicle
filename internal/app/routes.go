@@ -1803,54 +1803,80 @@ func (a *App) RegisterRoutes() {
 	})
 
 	// Maps plugin blocks (requires "maps" addon).
-	// map_preview is available in both dashboard and template contexts.
-	// The "map" config field type renders as a dropdown of the campaign's
-	// maps in the layout editor; without it, BlockMapPreview falls through
-	// to the picker fallback that just says "Configure a map for this
-	// block. View all maps." — which is what the operator hit before this
-	// fix.
-	blockRegistry.Register(entities.BlockMeta{
-		Type: "map_preview", Label: "Map", Icon: "fa-map",
-		Description: "Embedded map viewer", Addon: "maps",
-		Contexts: []string{"dashboard", "template"},
-		ConfigFields: []entities.ConfigFieldMeta{
-			{Key: "map_id", Label: "Map", Type: "map"},
-		},
-	}, func(ctx entities.BlockRenderContext) templ.Component {
-		return maps.BlockMapPreview(ctx.CC, entities.BlockConfigString(ctx.Block.Config, "map_id"))
-	})
-
+	//
 	// map_editor — per-entity Map Editor block. Reads from entities.map_id
 	// (NOT from block config) so the choice lives on the entity itself,
 	// not on a shared entity-type layout. Template context only — this
-	// block doesn't make sense on a dashboard since it's tied to a single
-	// entity. Three render branches:
-	//   - entity has map_id: full inline editor (iframe of the dedicated
-	//     map page) with a "Change map" button for Scribe+.
+	// block is tied to a specific entity. Three render branches:
+	//   - entity has map_id: full inline editor (markers + drawings +
+	//     settings — same widget the dedicated map page uses) with a
+	//     "Change map" button for Scribe+. Players get view-only.
 	//   - no map_id + Scribe+: thumbnail picker grid.
 	//   - no map_id + Player: friendly empty state.
 	// The closure captures mapsService (built earlier in this file) so
-	// the picker grid can list the campaign's maps server-side.
+	// the picker grid can list the campaign's maps and the embed branch
+	// can build a full MapViewData server-side.
+	//
+	// Replaced map_preview / map_full as the recommended way to embed a
+	// map on an entity page — those were limited to view-only and stored
+	// the map_id at the layout level (same map across all entities of a
+	// type), which the operator's per-entity use case made awkward.
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "map_editor", Label: "Map Editor", Icon: "fa-map-location-dot",
 		Description: "Full per-entity map (markers, drawings, settings)",
 		Addon: "maps", Contexts: []string{"template"},
 		// No ConfigFields — the source of truth is entity.MapID. The
 		// picker is rendered by the block itself, not the layout editor.
+		// Singleton: only one map_editor per layout. The IIFE inside
+		// MapEditorBody binds fixed DOM IDs (#map-container, #marker-modal,
+		// etc.) that would collide with multiple instances. Enforced in
+		// three layers — see BlockMeta.Singleton docstring.
+		Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		if rc.Entity == nil || rc.CC == nil {
 			return templ.NopComponent
 		}
 		isScribe := rc.CC.MemberRole >= campaigns.RoleScribe
-		// Map assigned: render the iframe embed with the map's name in
-		// the header. Look up the name best-effort; on failure show the
-		// embed with a blank name rather than blocking the whole render.
+		// Map assigned: render the inline editor. Build the full
+		// MapViewData server-side so the same templ that powers the
+		// dedicated page can render here. Markers are role+user filtered
+		// at the service layer (player visibility rules).
 		if rc.Entity.MapID != nil && *rc.Entity.MapID != "" {
-			mapName := ""
-			if m, err := mapsService.GetMap(context.Background(), *rc.Entity.MapID); err == nil && m != nil {
-				mapName = m.Name
+			ctx := context.Background()
+			m, err := mapsService.GetMap(ctx, *rc.Entity.MapID)
+			if err != nil || m == nil {
+				// FK should keep this from happening (ON DELETE SET NULL),
+				// but if a race or schema-skew left a dangling map_id,
+				// fall back to the empty state for everyone — better than
+				// 500-ing the whole entity page.
+				slog.Warn("map_editor block: assigned map not found, falling back to empty state",
+					slog.String("entity_id", rc.Entity.ID),
+					slog.String("map_id", *rc.Entity.MapID),
+					slog.Any("error", err),
+				)
+				if !isScribe {
+					return maps.BlockEntityMapEmpty()
+				}
+				// Fall through to the picker for Scribe+.
+			} else {
+				markers, mErr := mapsService.ListMarkers(ctx, m.ID, int(rc.CC.MemberRole), rc.UserID)
+				if mErr != nil {
+					// Non-fatal — render the map without markers rather than
+					// blocking the page.
+					slog.Warn("map_editor block: failed to list markers",
+						slog.String("map_id", m.ID),
+						slog.Any("error", mErr),
+					)
+					markers = nil
+				}
+				viewData := maps.MapViewData{
+					CampaignID: rc.CC.Campaign.ID,
+					Map:        m,
+					Markers:    markers,
+					IsScribe:   isScribe,
+				}
+				return maps.BlockEntityMapEmbed(rc.CC, rc.Entity.ID, viewData, isScribe)
 			}
-			return maps.BlockEntityMapEmbed(rc.CC, rc.Entity.ID, *rc.Entity.MapID, mapName, isScribe)
 		}
 		// No map + player: empty state.
 		if !isScribe {

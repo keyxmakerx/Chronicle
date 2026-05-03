@@ -1364,6 +1364,16 @@ func (s *entityService) isValidBlockType(blockType string) bool {
 	return defaultBlockTypes[blockType]
 }
 
+// isSingletonBlockType checks the block registry for blocks declared as
+// max-one-per-layout. Returns false (no singleton constraints) if no
+// registry is wired — tests don't need to exercise this path.
+func (s *entityService) isSingletonBlockType(blockType string) bool {
+	if s.blockRegistry == nil {
+		return false
+	}
+	return s.blockRegistry.IsSingleton(blockType)
+}
+
 // defaultBlockTypes is used when no block registry is set (e.g., unit tests).
 var defaultBlockTypes = map[string]bool{
 	"title": true, "image": true, "entry": true,
@@ -1376,60 +1386,101 @@ var defaultBlockTypes = map[string]bool{
 const maxLayoutSize = 102400
 
 // ValidateLayout checks that a layout conforms to structural constraints.
-// The optional isValidBlock callback validates block types; if nil, block type
-// validation is skipped (useful for layout presets where block availability is
-// campaign-dependent).
-func ValidateLayout(layout EntityTypeLayout, isValidBlock func(string) bool) error {
+// The optional isValidBlock callback validates block types; if nil, block
+// type validation is skipped (useful for layout presets where block
+// availability is campaign-dependent). The optional isSingletonBlock
+// callback identifies block types that may only appear once per layout
+// (e.g., map_editor — see BlockMeta.Singleton); if nil, the singleton
+// check is skipped.
+//
+// Error messages are written for the *user* in the layout editor:
+// concise, no internal IDs, no block-system jargon. The save toast in
+// layout_editor.js surfaces them verbatim, so they're the operator's
+// only feedback when a save fails.
+func ValidateLayout(layout EntityTypeLayout, isValidBlock func(string) bool, isSingletonBlock func(string) bool) error {
 	if len(layout.Rows) > maxLayoutRows {
-		return apperror.NewBadRequest("too many layout rows")
+		return apperror.NewBadRequest(fmt.Sprintf("Layout has too many rows (max %d). Remove a row before saving.", maxLayoutRows))
 	}
 
 	seenBlockIDs := make(map[string]bool)
-	for _, row := range layout.Rows {
+	singletonCount := make(map[string]int) // type → count, for friendly multi-instance error
+	blockLabels := make(map[string]string) // type → "Map Editor" for the error message; populated lazily
+	for rowIdx, row := range layout.Rows {
 		if strings.TrimSpace(row.ID) == "" {
-			return apperror.NewBadRequest("row ID is required")
+			return apperror.NewBadRequest("Internal: a row is missing its ID. Refresh the page and try again.")
 		}
 		if len(row.Columns) == 0 || len(row.Columns) > maxLayoutCols {
-			return apperror.NewBadRequest("each row must have 1-4 columns")
+			return apperror.NewBadRequest(fmt.Sprintf("Row %d must have between 1 and %d columns.", rowIdx+1, maxLayoutCols))
 		}
 
 		totalWidth := 0
 		for _, col := range row.Columns {
 			if strings.TrimSpace(col.ID) == "" {
-				return apperror.NewBadRequest("column ID is required")
+				return apperror.NewBadRequest("Internal: a column is missing its ID. Refresh the page and try again.")
 			}
 			if col.Width < 1 || col.Width > gridWidth {
-				return apperror.NewBadRequest("column width must be 1-12")
+				return apperror.NewBadRequest(fmt.Sprintf("Row %d has a column with an invalid width — column widths must be between 1 and %d.", rowIdx+1, gridWidth))
 			}
 			totalWidth += col.Width
 
 			if len(col.Blocks) > maxLayoutBlocks {
-				return apperror.NewBadRequest("too many blocks in column")
+				return apperror.NewBadRequest(fmt.Sprintf("A column in row %d has too many blocks (max %d). Move some to another column.", rowIdx+1, maxLayoutBlocks))
 			}
 			for _, blk := range col.Blocks {
 				if strings.TrimSpace(blk.ID) == "" {
-					return apperror.NewBadRequest("block ID is required")
+					return apperror.NewBadRequest("Internal: a block is missing its ID. Refresh the page and try again.")
 				}
 				if seenBlockIDs[blk.ID] {
-					return apperror.NewBadRequest("duplicate block ID: " + blk.ID)
+					return apperror.NewBadRequest("This layout contains the same block twice. Refresh the page — the editor may have lost track of a drag.")
 				}
 				seenBlockIDs[blk.ID] = true
 				if isValidBlock != nil && !isValidBlock(blk.Type) {
-					return apperror.NewBadRequest("invalid block type: " + blk.Type)
+					return apperror.NewBadRequest(fmt.Sprintf("This layout contains an unknown block type (%q). It may have been removed or its addon disabled — delete the block and save again.", blk.Type))
+				}
+				if isSingletonBlock != nil && isSingletonBlock(blk.Type) {
+					singletonCount[blk.Type]++
+					blockLabels[blk.Type] = humanizeBlockType(blk.Type)
 				}
 			}
 		}
 		if totalWidth != gridWidth {
-			return apperror.NewBadRequest("column widths in a row must sum to 12")
+			return apperror.NewBadRequest(fmt.Sprintf("Row %d has columns that don't fit (their widths add up to %d, but each row must total %d). Adjust the column widths and save again.", rowIdx+1, totalWidth, gridWidth))
+		}
+	}
+
+	// Singleton enforcement — runs after the per-block loop so the error
+	// names the type once even when 3+ instances are present.
+	for blkType, n := range singletonCount {
+		if n > 1 {
+			return apperror.NewBadRequest(fmt.Sprintf("Only one %s block is allowed per layout. Remove the extra one and save again.", blockLabels[blkType]))
 		}
 	}
 	return nil
 }
 
+// humanizeBlockType turns a block type slug into a human-friendly label
+// for error messages ("map_editor" → "Map Editor"). Strict slug→label
+// transform — the registry has the real Label but exposing it from a
+// non-receiver helper would tangle the import graph more than this
+// warrants. Block-type slugs are stable so the heuristic is safe.
+func humanizeBlockType(t string) string {
+	if t == "" {
+		return "this"
+	}
+	parts := strings.Split(t, "_")
+	for i, p := range parts {
+		if p == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(p[:1]) + p[1:]
+	}
+	return strings.Join(parts, " ")
+}
+
 // UpdateEntityTypeLayout validates and persists a new layout for an entity type.
 // Accepts the new row/column/block format.
 func (s *entityService) UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error {
-	if err := ValidateLayout(layout, s.isValidBlockType); err != nil {
+	if err := ValidateLayout(layout, s.isValidBlockType, s.isSingletonBlockType); err != nil {
 		return err
 	}
 

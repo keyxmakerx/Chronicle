@@ -36,8 +36,11 @@ templ CategoryBlockSwitch(cc *campaigns.CampaignContext, et *EntityType, block c
 			@catCalendarPreview(cc, block.Config)
 		case "timeline_preview":
 			@catTimelinePreview(cc, block.Config)
-		case "map_preview":
-			@catMapPreview(cc, block.Config)
+		// map_preview was removed in favor of the per-entity map_editor
+		// block (see internal/plugins/maps/entity_map_block.templ). The
+		// old type silently drops at render — existing category layouts
+		// keep the JSON entry but no UI shows. Scribe+ can re-add via
+		// the new block in the layout editor.
 	}
 }
 

@@ -26,7 +26,8 @@
     { type: 'pinned_pages',   label: 'Pinned Pages',    icon: 'fa-thumbtack',  desc: 'Hand-picked entity cards' },
     { type: 'calendar_preview', label: 'Calendar',     icon: 'fa-calendar-days', desc: 'Upcoming calendar events', addon: 'calendar' },
     { type: 'timeline_preview', label: 'Timeline',     icon: 'fa-timeline',      desc: 'Timeline list with event counts', addon: 'timeline' },
-    { type: 'map_preview',      label: 'Map',          icon: 'fa-map',           desc: 'Embedded map viewer', addon: 'maps' },
+    // map_preview retired — use map_full for dashboard map embeds.
+    // The per-entity map_editor block is template-context only.
     { type: 'calendar_full',    label: 'Full Calendar',  icon: 'fa-calendar',      desc: 'Full interactive calendar grid', addon: 'calendar' },
     { type: 'timeline_full',    label: 'Full Timeline',  icon: 'fa-timeline',      desc: 'Full timeline D3 visualization', addon: 'timeline' },
     { type: 'relations_graph_full', label: 'Full Relations Graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph', addon: 'relations' },

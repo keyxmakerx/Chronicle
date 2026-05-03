@@ -61,7 +61,8 @@
     { type: 'pinned_pages',     label: 'Pinned Pages',     icon: 'fa-thumbtack',         desc: 'Hand-picked entity cards' },
     { type: 'calendar_preview', label: 'Calendar',         icon: 'fa-calendar-days',     desc: 'Upcoming calendar events',       addon: 'calendar' },
     { type: 'timeline_preview', label: 'Timeline',         icon: 'fa-timeline',          desc: 'Timeline list with event counts', addon: 'timeline' },
-    { type: 'map_preview',      label: 'Map',              icon: 'fa-map',               desc: 'Embedded map viewer',            addon: 'maps' },
+    // map_preview retired — superseded by map_editor (entity templates)
+    // and map_full (dashboards). See PR notes / routes.go map_editor block.
     { type: 'calendar_full',    label: 'Full Calendar',    icon: 'fa-calendar',          desc: 'Full interactive calendar grid', addon: 'calendar' },
     { type: 'timeline_full',    label: 'Full Timeline',    icon: 'fa-timeline',          desc: 'Full timeline D3 visualization', addon: 'timeline' },
     { type: 'relations_graph_full', label: 'Full Relations Graph', icon: 'fa-diagram-project', desc: 'Large entity relations graph', addon: 'relations' },
@@ -240,6 +241,7 @@
               var bt = {
                 type: t.type, label: t.label, icon: t.icon, desc: t.description,
                 container: !!t.container,
+                singleton: !!t.singleton, // Carries BlockMeta.Singleton — drives the singleton drop guard.
               };
               if (t.addon) bt.addon = t.addon;
               if (t.widget_slug) bt.widget_slug = t.widget_slug;
@@ -1132,11 +1134,87 @@
 
     // ── Drop Handlers ──────────────────────────────────────────────
 
+    // _isSingletonType reads the registry's `singleton` flag for a block
+    // type. Falls back to false if the registry didn't load (palette is in
+    // fallback mode) — matches server behavior where the registry is the
+    // single source of truth.
+    _isSingletonType: function (blockType) {
+      var bt = this.blockTypes.find(function (b) { return b.type === blockType; });
+      return !!(bt && bt.singleton);
+    },
+
+    // _countBlocksOfType walks the current layout and counts blocks of the
+    // given type at every nesting level (top-level columns + container
+    // sub-blocks). Used by the singleton drop guard.
+    _countBlocksOfType: function (blockType) {
+      var count = 0;
+      var self = this;
+      if (!this.layout || !this.layout.rows) return 0;
+      this.layout.rows.forEach(function (row) {
+        (row.columns || []).forEach(function (col) {
+          (col.blocks || []).forEach(function (blk) {
+            if (blk.type === blockType) count++;
+            // Container blocks (two_column, tabs, section) hold sub-blocks;
+            // walk those too so a singleton dropped inside a container
+            // still counts.
+            if (self.isContainer(blk.type)) {
+              self._countSubBlocksOfType(blk, blockType, function (n) { count += n; });
+            }
+          });
+        });
+      });
+      return count;
+    },
+
+    // _countSubBlocksOfType inspects the various sub-block storage shapes
+    // (slots[], columns[].blocks[], tabs[].blocks[]) used by container
+    // block configs. Defensive on shape — older container configs may not
+    // have the array yet.
+    _countSubBlocksOfType: function (containerBlock, blockType, addFn) {
+      var cfg = containerBlock.config || {};
+      var self = this;
+      var walkArr = function (arr) {
+        if (!Array.isArray(arr)) return;
+        var n = 0;
+        arr.forEach(function (b) {
+          if (b && b.type === blockType) n++;
+          if (b && self.isContainer(b.type)) self._countSubBlocksOfType(b, blockType, addFn);
+        });
+        if (n > 0) addFn(n);
+      };
+      // two_column / three_column store {columns: [{blocks: []}]}
+      if (Array.isArray(cfg.columns)) {
+        cfg.columns.forEach(function (c) { walkArr(c && c.blocks); });
+      }
+      // tabs stores {tabs: [{blocks: []}]}
+      if (Array.isArray(cfg.tabs)) {
+        cfg.tabs.forEach(function (t) { walkArr(t && t.blocks); });
+      }
+      // section stores {blocks: []}
+      if (Array.isArray(cfg.blocks)) {
+        walkArr(cfg.blocks);
+      }
+    },
+
     handleDrop: function (e, targetRowIdx, targetColIdx, insertIdx) {
       var data;
       try { data = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (err) { return; }
 
       if (data.source === 'palette') {
+        // Singleton guard: refuse the drop if this block type is declared
+        // max-one-per-layout (BlockMeta.Singleton on the server) and a
+        // copy is already on the canvas. The server-side ValidateLayout
+        // would also reject it on save, but stopping here gives the
+        // operator immediate visual feedback instead of an error toast
+        // 30 seconds later when they finally hit Save.
+        if (this._isSingletonType(data.type) && this._countBlocksOfType(data.type) >= 1) {
+          var bt = this.blockTypes.find(function (b) { return b.type === data.type; });
+          var label = (bt && bt.label) || data.type;
+          if (Chronicle.notify) {
+            Chronicle.notify('Only one ' + label + ' block is allowed per layout.', 'error');
+          }
+          return;
+        }
         var config = this.defaultBlockConfig(data.type);
         if (data.widget_slug) config.widget_slug = data.widget_slug;
         var block = { id: uid('blk'), type: data.type, config: config };
@@ -1173,6 +1251,16 @@
       if (dropType && this.isContainer(dropType)) return;
 
       if (data.source === 'palette') {
+        // Same singleton guard as handleDrop — covers drops into
+        // container slots (two_column, tabs, section).
+        if (this._isSingletonType(data.type) && this._countBlocksOfType(data.type) >= 1) {
+          var sbBt = this.blockTypes.find(function (b) { return b.type === data.type; });
+          var sbLabel = (sbBt && sbBt.label) || data.type;
+          if (Chronicle.notify) {
+            Chronicle.notify('Only one ' + sbLabel + ' block is allowed per layout.', 'error');
+          }
+          return;
+        }
         var cfg = {};
         if (data.widget_slug) cfg.widget_slug = data.widget_slug;
         targetBlocks.splice(insertIdx, 0, { id: uid('blk'), type: data.type, config: cfg });
@@ -1689,21 +1777,36 @@
 
       Chronicle.apiFetch(this.endpoint, { method: 'PUT', body: body })
         .then(function (res) {
-          if (!res.ok) {
-            var label = self.context === 'template' ? 'template' : 'dashboard layout';
-            Chronicle.notify('Failed to save ' + label, 'error');
-          } else {
-            self.dirty = false;
-            var label = self.context === 'template' ? 'Template saved' : 'Dashboard layout saved';
-            if (status) { status.textContent = 'Saved'; setTimeout(function () { if (status && !self.dirty) status.textContent = ''; }, 2000); }
-            Chronicle.notify(label, 'success');
-          }
-          if (btn) { btn.disabled = false; btn.textContent = self.context === 'template' ? 'Save Template' : 'Save Layout'; }
-          if (callback) callback();
-        })
-        .catch(function () {
           var label = self.context === 'template' ? 'template' : 'dashboard layout';
-          Chronicle.notify('Failed to save ' + label, 'error');
+          if (!res.ok) {
+            // Surface the server's specific message — ValidateLayout
+            // returns operator-friendly text like "Only one Map Editor
+            // block is allowed per layout." Generic "Failed to save"
+            // hides that detail and was the source of multiple
+            // mystery-failure bug reports.
+            return res.json().then(
+              function (body) {
+                var msg = (body && (body.message || body.error)) || ('Failed to save ' + label);
+                Chronicle.notify(msg, 'error');
+              },
+              function () {
+                Chronicle.notify('Failed to save ' + label + ' (HTTP ' + res.status + ')', 'error');
+              }
+            );
+          }
+          self.dirty = false;
+          var successLabel = self.context === 'template' ? 'Template saved' : 'Dashboard layout saved';
+          if (status) { status.textContent = 'Saved'; setTimeout(function () { if (status && !self.dirty) status.textContent = ''; }, 2000); }
+          Chronicle.notify(successLabel, 'success');
+        })
+        .catch(function (err) {
+          var label = self.context === 'template' ? 'template' : 'dashboard layout';
+          // Distinguish network failures from server-rejected saves so
+          // the operator knows whether to retry vs. fix their layout.
+          var msg = (err && err.message) ? ('Network error saving ' + label + ': ' + err.message) : ('Network error saving ' + label);
+          Chronicle.notify(msg, 'error');
+        })
+        .finally(function () {
           if (btn) { btn.disabled = false; btn.textContent = self.context === 'template' ? 'Save Template' : 'Save Layout'; }
           if (callback) callback();
         });

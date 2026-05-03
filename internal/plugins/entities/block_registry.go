@@ -11,6 +11,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // BlockMeta describes a block type for the layout editor UI and validation.
@@ -26,6 +27,15 @@ type BlockMeta struct {
 	WidgetSlug   string            `json:"widget_slug,omitempty"`     // For ext_widget blocks: the extension widget slug.
 	Contexts     []string          `json:"contexts,omitempty"`        // Editor contexts: "dashboard", "template". Empty = all.
 	ConfigFields []ConfigFieldMeta `json:"config_fields,omitempty"`   // Declarative config schema for the editor dialog.
+	// Singleton blocks may only appear once per layout. Used by blocks
+	// whose render path binds fixed DOM IDs (e.g., map_editor's
+	// #map-container, #marker-modal) and would silently misbehave with
+	// multiple instances on the same page. Enforcement is layered:
+	//   1. Layout-editor JS refuses the second drop (UX guard).
+	//   2. ValidateLayout rejects the saved JSON (server defense).
+	//   3. RenderBlock renders subsequent instances as a clear error
+	//      message (last-resort guard if both layers are bypassed).
+	Singleton bool `json:"singleton,omitempty"`
 }
 
 // ConfigFieldMeta describes a single configurable field for a block type.
@@ -47,12 +57,19 @@ type Option struct {
 }
 
 // BlockRenderContext holds the data available to every block renderer.
+// UserID carries the viewing user's ID (extracted from the request
+// context inside RenderBlock). Empty string when unauthenticated.
+// Renderers that need per-user content filtering (e.g. the map editor's
+// per-player marker visibility) read it directly off this struct
+// instead of calling back into the layouts helpers — which keeps the
+// renderer closure signature uniform across all block types.
 type BlockRenderContext struct {
 	Block      TemplateBlock
 	CC         *campaigns.CampaignContext
 	Entity     *Entity
 	EntityType *EntityType
 	CSRFToken  string
+	UserID     string
 }
 
 // BlockRenderer returns a templ.Component for the given block context.
@@ -104,6 +121,20 @@ func (r *BlockRegistry) IsValid(blockType string) bool {
 	defer r.mu.RUnlock()
 	_, ok := r.entries[blockType]
 	return ok
+}
+
+// IsSingleton returns true if blockType is registered AND declared as a
+// singleton (max one per layout). Used by ValidateLayout to enforce the
+// max-one rule and by the layout editor JS for UX-side guarding. Unknown
+// types return false — they're caught separately by IsValid.
+func (r *BlockRegistry) IsSingleton(blockType string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.entries[blockType]
+	if !ok {
+		return false
+	}
+	return entry.meta.Singleton
 }
 
 // Types returns all registered block metadata in registration order.
@@ -319,13 +350,62 @@ func GetGlobalBlockRegistry() *BlockRegistry {
 	return globalRegistry
 }
 
+// renderedSingletonsKey is a context key used to track which singleton
+// block types have already rendered during a single page render. Per-
+// request state lives in the goCtx itself so each call to RenderBlock
+// can detect duplicates without needing a separate "render session"
+// object passed through templ.
+type renderedSingletonsKey struct{}
+
+// WithSingletonTracker returns a child context carrying a fresh
+// singleton-tracking map. The page-level templ (entity show, dashboard)
+// should call this once before iterating blocks so the per-request
+// tracker is in scope. If a page forgets, the tracker simply isn't
+// active — duplicate singletons would render twice and break the IIFE,
+// matching pre-tracker behavior. Server-side ValidateLayout still
+// catches it on save.
+func WithSingletonTracker(ctx context.Context) context.Context {
+	return context.WithValue(ctx, renderedSingletonsKey{}, map[string]bool{})
+}
+
+// markRenderedSingleton records that the given singleton type has
+// rendered in this request. Returns true if this is the FIRST render
+// (allow it through) or false if a previous render already happened
+// (caller should swap in the duplicate-error component instead).
+func markRenderedSingleton(ctx context.Context, blockType string) bool {
+	tracker, ok := ctx.Value(renderedSingletonsKey{}).(map[string]bool)
+	if !ok {
+		// No tracker installed — treat as first render. Page-level
+		// templ should be calling WithSingletonTracker; this fallback
+		// keeps existing pages working until they're updated.
+		return true
+	}
+	if tracker[blockType] {
+		return false
+	}
+	tracker[blockType] = true
+	return true
+}
+
 // RenderBlock dispatches to the global registry. Called by templ components.
 // Returns an empty component if the block type is unregistered or its addon
-// is disabled. The goCtx is the request context from the templ render call.
+// is disabled. The goCtx is the request context from the templ render call;
+// UserID is extracted from it via layouts.GetUserID so renderers don't
+// need to reach back into request-scoped state themselves.
+//
+// Singleton enforcement (last-resort guard, layered behind ValidateLayout
+// + the layout editor JS): if a singleton block type has already rendered
+// in this request, subsequent instances are replaced with an inline error
+// message. Catches the edge case where a layout slipped past both upstream
+// guards (direct API write, race between save & validate, etc.) without
+// the page silently breaking via duplicate DOM IDs.
 func RenderBlock(goCtx context.Context, block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) templ.Component {
 	reg := GetGlobalBlockRegistry()
 	if reg == nil {
 		return templ.NopComponent
+	}
+	if reg.IsSingleton(block.Type) && !markRenderedSingleton(goCtx, block.Type) {
+		return blockSingletonDuplicateError(block.Type)
 	}
 	ctx := BlockRenderContext{
 		Block:      block,
@@ -333,6 +413,7 @@ func RenderBlock(goCtx context.Context, block TemplateBlock, cc *campaigns.Campa
 		Entity:     entity,
 		EntityType: entityType,
 		CSRFToken:  csrfToken,
+		UserID:     layouts.GetUserID(goCtx),
 	}
 	comp := reg.Render(goCtx, ctx)
 	if comp == nil {
