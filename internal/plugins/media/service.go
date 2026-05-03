@@ -159,10 +159,19 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		return nil, apperror.NewBadRequest("unsupported file type: " + input.MimeType)
 	}
 
-	// Validate file size against static limit (fallback).
-	maxUpload := s.maxSize
-	if input.FileSize > maxUpload {
-		return nil, apperror.NewBadRequest(fmt.Sprintf("file too large; maximum size is %d MB", maxUpload/(1024*1024)))
+	// Validate file size. When the dynamic limiter is wired (production
+	// path), the live setting from settings.GetEffectiveLimits is the
+	// source of truth — checkQuotas() below enforces it with the same
+	// "file too large" error shape. Skipping the static check here
+	// prevents the env-var ceiling from silently overriding the admin
+	// panel's saved value, which is the bug operators hit when raising
+	// the cap from 10 MB to 100 MB and seeing uploads still 413 at
+	// 10 MB. Tests without a limiter still get the static fallback.
+	if s.limiter == nil {
+		maxUpload := s.maxSize
+		if input.FileSize > maxUpload {
+			return nil, apperror.NewBadRequest(fmt.Sprintf("file too large; maximum size is %d MB", maxUpload/(1024*1024)))
+		}
 	}
 
 	// Enforce dynamic storage limits from site settings if available.
