@@ -258,8 +258,9 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		},
 	}, nil)
 
-	// NOTE: map_preview is registered in routes.go with both contexts
-	// since it has a real templ renderer from the maps plugin.
+	// NOTE: map_editor (per-entity full editor) is registered in routes.go
+	// because its renderer needs the maps service injected via closure.
+	// map_full (dashboard map embed) lives below in this file.
 
 	r.Register(BlockMeta{
 		Type: "calendar_full", Label: "Full Calendar", Icon: "fa-calendar",

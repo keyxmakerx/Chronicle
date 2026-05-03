@@ -552,8 +552,11 @@ const (
 	BlockPinnedPages     = "pinned_pages"     // Pinned entities grid.
 	BlockCalendarPreview = "calendar_preview" // Upcoming calendar events.
 	BlockTimelinePreview = "timeline_preview" // Timeline visualization preview.
-	BlockMapPreview      = "map_preview"      // Embedded map viewer.
-	BlockRelationsGraph  = "relations_graph"  // Entity relations force-directed graph.
+	// BlockMapPreview ("map_preview") was retired — superseded by the
+	// per-entity map_editor block (entity templates) and BlockMapFull
+	// (dashboards). Constant removed; existing layouts with the type
+	// silently drop the block at render via the case-handler removal.
+	BlockRelationsGraph = "relations_graph" // Entity relations force-directed graph.
 	BlockCalendarFull    = "calendar_full"    // Full interactive calendar grid view.
 	BlockTimelineFull    = "timeline_full"    // Full timeline visualization with D3.
 	BlockRelationsGraphFull = "relations_graph_full" // Large relations graph view.
@@ -579,7 +582,6 @@ var ValidBlockTypes = map[string]bool{
 	BlockPinnedPages:     true,
 	BlockCalendarPreview: true,
 	BlockTimelinePreview: true,
-	BlockMapPreview:      true,
 	BlockRelationsGraph:  true,
 	BlockCalendarFull:    true,
 	BlockTimelineFull:    true,

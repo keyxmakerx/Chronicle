@@ -11,6 +11,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // BlockMeta describes a block type for the layout editor UI and validation.
@@ -47,12 +48,19 @@ type Option struct {
 }
 
 // BlockRenderContext holds the data available to every block renderer.
+// UserID carries the viewing user's ID (extracted from the request
+// context inside RenderBlock). Empty string when unauthenticated.
+// Renderers that need per-user content filtering (e.g. the map editor's
+// per-player marker visibility) read it directly off this struct
+// instead of calling back into the layouts helpers — which keeps the
+// renderer closure signature uniform across all block types.
 type BlockRenderContext struct {
 	Block      TemplateBlock
 	CC         *campaigns.CampaignContext
 	Entity     *Entity
 	EntityType *EntityType
 	CSRFToken  string
+	UserID     string
 }
 
 // BlockRenderer returns a templ.Component for the given block context.
@@ -321,7 +329,9 @@ func GetGlobalBlockRegistry() *BlockRegistry {
 
 // RenderBlock dispatches to the global registry. Called by templ components.
 // Returns an empty component if the block type is unregistered or its addon
-// is disabled. The goCtx is the request context from the templ render call.
+// is disabled. The goCtx is the request context from the templ render call;
+// UserID is extracted from it via layouts.GetUserID so renderers don't
+// need to reach back into request-scoped state themselves.
 func RenderBlock(goCtx context.Context, block TemplateBlock, cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) templ.Component {
 	reg := GetGlobalBlockRegistry()
 	if reg == nil {
@@ -333,6 +343,7 @@ func RenderBlock(goCtx context.Context, block TemplateBlock, cc *campaigns.Campa
 		Entity:     entity,
 		EntityType: entityType,
 		CSRFToken:  csrfToken,
+		UserID:     layouts.GetUserID(goCtx),
 	}
 	comp := reg.Render(goCtx, ctx)
 	if comp == nil {
