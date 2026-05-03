@@ -305,7 +305,8 @@ templ EntityTypeCustomizeFragmentTmpl(cc *campaigns.CampaignContext, et *EntityT
 				<div class="pt-3 border-t border-edge-light">
 					<label class="block text-xs font-medium text-fg-body mb-2">Dashboard Blocks</label>
 					<div
-						data-widget="dashboard-editor"
+						data-widget="layout-editor"
+						data-context="dashboard"
 						data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/dashboard-layout", cc.Campaign.ID, et.ID) }
 						data-campaign-id={ cc.Campaign.ID }
 						data-csrf-token={ csrfToken }
@@ -514,7 +515,8 @@ templ categoryDashboardTab(cc *campaigns.CampaignContext, et *EntityType, csrfTo
 				Drag and drop blocks to build the layout for the { et.NamePlural } landing page.
 			</p>
 			<div
-				data-widget="dashboard-editor"
+				data-widget="layout-editor"
+				data-context="dashboard"
 				data-endpoint={ fmt.Sprintf("/campaigns/%s/entity-types/%d/dashboard-layout", cc.Campaign.ID, et.ID) }
 				data-campaign-id={ cc.Campaign.ID }
 				data-csrf-token={ csrfToken }

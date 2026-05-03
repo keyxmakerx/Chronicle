@@ -142,8 +142,11 @@ templ Base(title string) {
 		<!-- Tag filtering in sidebar drill panel -->
 		<script src="/static/js/sidebar_tag_filter.js" defer></script>
 
-		<!-- Dashboard editor widget (drag-and-drop dashboard layout builder) -->
-		<script src="/static/js/widgets/dashboard_editor.js" defer></script>
+		<!-- Dashboard layouts use the unified layout-editor widget (loaded
+		     further down). dashboard_editor.js was retired in favor of
+		     that widget — kept ~600 lines of duplicated drag/drop/save
+		     logic in sync was a recurring bug source (e.g. silent save
+		     errors, missing config field types).  -->
 
 		<!-- Timeline D3 visualization widget (interactive SVG chart) -->
 		<script src="/static/js/widgets/timeline_viz.js" defer></script>

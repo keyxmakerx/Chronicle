@@ -170,7 +170,9 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 		<div class="flex-1 overflow-y-auto px-6 py-2">
 			<div
 				id="campaign-page-editor"
-				data-widget="dashboard-editor"
+				data-widget="layout-editor"
+				data-context="dashboard"
+				data-features="roles"
 				data-endpoint={ fmt.Sprintf("/campaigns/%s/dashboard-layout", cc.Campaign.ID) }
 				data-campaign-id={ cc.Campaign.ID }
 				data-csrf-token={ csrfToken }
@@ -187,7 +189,8 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 		</div>
 		<div class="flex-1 overflow-y-auto px-6 py-2">
 			<div
-				data-widget="dashboard-editor"
+				data-widget="layout-editor"
+				data-context="dashboard"
 				data-endpoint={ fmt.Sprintf("/campaigns/%s/owner-dashboard-layout", cc.Campaign.ID) }
 				data-campaign-id={ cc.Campaign.ID }
 				data-csrf-token={ csrfToken }
