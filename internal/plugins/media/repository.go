@@ -33,6 +33,21 @@ type AdminMediaFile struct {
 type MediaRepository interface {
 	Create(ctx context.Context, file *MediaFile) error
 	FindByID(ctx context.Context, id string) (*MediaFile, error)
+	// FindByContentHash returns the media file in `campaignID` whose
+	// content_hash matches, or (nil, nil) if no row exists. Used for
+	// per-campaign upload deduplication: if a hash already exists in
+	// the campaign, the upload service short-circuits and returns the
+	// existing file instead of writing a duplicate to disk.
+	FindByContentHash(ctx context.Context, campaignID, hash string) (*MediaFile, error)
+	// ListMissingContentHash returns up to `limit` media files in the
+	// campaign whose content_hash is NULL. Used by the startup backfill
+	// goroutine to populate hashes for rows that pre-date migration 26.
+	// Pass campaignID="" to scan across all campaigns.
+	ListMissingContentHash(ctx context.Context, limit int) ([]MediaFile, error)
+	// SetContentHash writes a content_hash for an existing media file.
+	// Used by the backfill goroutine; the regular Create path sets the
+	// hash inline so this is rarely called outside of backfill.
+	SetContentHash(ctx context.Context, id, hash string) error
 	Delete(ctx context.Context, id string) error
 	ListByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error)
 	GetStorageStats(ctx context.Context) (*StorageStats, error)
@@ -74,13 +89,21 @@ func (r *mediaRepository) Create(ctx context.Context, file *MediaFile) error {
 	}
 
 	query := `INSERT INTO media_files (id, campaign_id, uploaded_by, filename, original_name,
-	          mime_type, file_size, usage_type, thumbnail_paths, created_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	          mime_type, file_size, content_hash, usage_type, thumbnail_paths, created_at)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	// content_hash may be empty for legacy callers — store NULL in that
+	// case so the (campaign_id, content_hash) dedup index doesn't return
+	// stale matches against empty strings.
+	var contentHash any
+	if file.ContentHash != "" {
+		contentHash = file.ContentHash
+	}
 
 	_, err = r.db.ExecContext(ctx, query,
 		file.ID, file.CampaignID, file.UploadedBy,
 		file.Filename, file.OriginalName, file.MimeType,
-		file.FileSize, file.UsageType, string(thumbJSON),
+		file.FileSize, contentHash, file.UsageType, string(thumbJSON),
 		file.CreatedAt,
 	)
 	if err != nil {
@@ -94,7 +117,7 @@ func (r *mediaRepository) Create(ctx context.Context, file *MediaFile) error {
 // lookups when the serve handler checks campaign privacy.
 func (r *mediaRepository) FindByID(ctx context.Context, id string) (*MediaFile, error) {
 	query := `SELECT m.id, m.campaign_id, m.uploaded_by, m.filename, m.original_name,
-	                 m.mime_type, m.file_size, m.usage_type, m.thumbnail_paths, m.created_at,
+	                 m.mime_type, m.file_size, m.content_hash, m.usage_type, m.thumbnail_paths, m.created_at,
 	                 c.is_public
 	          FROM media_files m
 	          LEFT JOIN campaigns c ON m.campaign_id = c.id
@@ -102,12 +125,16 @@ func (r *mediaRepository) FindByID(ctx context.Context, id string) (*MediaFile, 
 
 	file := &MediaFile{}
 	var thumbJSON string
+	var contentHash sql.NullString
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&file.ID, &file.CampaignID, &file.UploadedBy,
 		&file.Filename, &file.OriginalName, &file.MimeType,
-		&file.FileSize, &file.UsageType, &thumbJSON,
+		&file.FileSize, &contentHash, &file.UsageType, &thumbJSON,
 		&file.CreatedAt, &file.CampaignIsPublic,
 	)
+	if contentHash.Valid {
+		file.ContentHash = contentHash.String
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("media file not found")
 	}
@@ -122,6 +149,105 @@ func (r *mediaRepository) FindByID(ctx context.Context, id string) (*MediaFile, 
 		}
 	}
 	return file, nil
+}
+
+// FindByContentHash returns the media file in the campaign whose
+// content_hash matches the given hex sha256, or (nil, nil) if none.
+// Used by the upload service to short-circuit duplicate uploads.
+//
+// Scoped to a single campaign on purpose — cross-campaign dedup is
+// off, so each campaign's media space stays isolated for clean
+// export / cascade-delete behavior.
+func (r *mediaRepository) FindByContentHash(ctx context.Context, campaignID, hash string) (*MediaFile, error) {
+	if campaignID == "" || hash == "" {
+		return nil, nil
+	}
+	query := `SELECT m.id, m.campaign_id, m.uploaded_by, m.filename, m.original_name,
+	                 m.mime_type, m.file_size, m.content_hash, m.usage_type, m.thumbnail_paths, m.created_at,
+	                 c.is_public
+	          FROM media_files m
+	          LEFT JOIN campaigns c ON m.campaign_id = c.id
+	          WHERE m.campaign_id = ? AND m.content_hash = ?
+	          LIMIT 1`
+
+	file := &MediaFile{}
+	var thumbJSON string
+	var contentHash sql.NullString
+	err := r.db.QueryRowContext(ctx, query, campaignID, hash).Scan(
+		&file.ID, &file.CampaignID, &file.UploadedBy,
+		&file.Filename, &file.OriginalName, &file.MimeType,
+		&file.FileSize, &contentHash, &file.UsageType, &thumbJSON,
+		&file.CreatedAt, &file.CampaignIsPublic,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying media file by content hash: %w", err)
+	}
+	if contentHash.Valid {
+		file.ContentHash = contentHash.String
+	}
+	file.ThumbnailPaths = make(map[string]string)
+	if thumbJSON != "" && thumbJSON != "{}" {
+		if err := json.Unmarshal([]byte(thumbJSON), &file.ThumbnailPaths); err != nil {
+			// Non-fatal — the file is still usable, just without thumbnail metadata.
+			file.ThumbnailPaths = make(map[string]string)
+		}
+	}
+	return file, nil
+}
+
+// ListMissingContentHash returns up to `limit` rows that have no
+// content_hash yet. The startup backfill goroutine iterates these in
+// batches and computes hashes from disk. Order is unspecified — we
+// just need to cover them all eventually.
+func (r *mediaRepository) ListMissingContentHash(ctx context.Context, limit int) ([]MediaFile, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	query := `SELECT id, campaign_id, uploaded_by, filename, original_name,
+	                 mime_type, file_size, usage_type, thumbnail_paths, created_at
+	          FROM media_files
+	          WHERE content_hash IS NULL
+	          LIMIT ?`
+	rows, err := r.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("listing media missing content_hash: %w", err)
+	}
+	defer rows.Close()
+
+	var files []MediaFile
+	for rows.Next() {
+		var f MediaFile
+		var thumbJSON string
+		if err := rows.Scan(
+			&f.ID, &f.CampaignID, &f.UploadedBy,
+			&f.Filename, &f.OriginalName, &f.MimeType,
+			&f.FileSize, &f.UsageType, &thumbJSON,
+			&f.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning media file row: %w", err)
+		}
+		files = append(files, f)
+	}
+	return files, rows.Err()
+}
+
+// SetContentHash backfills the content_hash for an existing row.
+// No-op if hash is empty (caller error).
+func (r *mediaRepository) SetContentHash(ctx context.Context, id, hash string) error {
+	if hash == "" {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE media_files SET content_hash = ? WHERE id = ?`,
+		hash, id,
+	)
+	if err != nil {
+		return fmt.Errorf("updating media content_hash: %w", err)
+	}
+	return nil
 }
 
 // Delete removes a media file record.
@@ -151,7 +277,7 @@ func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string,
 	}
 
 	query := `SELECT id, campaign_id, uploaded_by, filename, original_name,
-	                 mime_type, file_size, usage_type, thumbnail_paths, created_at
+	                 mime_type, file_size, content_hash, usage_type, thumbnail_paths, created_at
 	          FROM media_files WHERE campaign_id = ?
 	          ORDER BY created_at DESC LIMIT ? OFFSET ?`
 
@@ -165,13 +291,17 @@ func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string,
 	for rows.Next() {
 		var f MediaFile
 		var thumbJSON string
+		var contentHash sql.NullString
 		if err := rows.Scan(
 			&f.ID, &f.CampaignID, &f.UploadedBy,
 			&f.Filename, &f.OriginalName, &f.MimeType,
-			&f.FileSize, &f.UsageType, &thumbJSON,
+			&f.FileSize, &contentHash, &f.UsageType, &thumbJSON,
 			&f.CreatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning media file row: %w", err)
+		}
+		if contentHash.Valid {
+			f.ContentHash = contentHash.String
 		}
 		f.ThumbnailPaths = make(map[string]string)
 		if thumbJSON != "" && thumbJSON != "{}" {

@@ -14,6 +14,9 @@ import (
 type mockMediaRepo struct {
 	createFn           func(ctx context.Context, file *MediaFile) error
 	findByIDFn         func(ctx context.Context, id string) (*MediaFile, error)
+	findByContentHashFn   func(ctx context.Context, campaignID, hash string) (*MediaFile, error)
+	listMissingHashFn     func(ctx context.Context, limit int) ([]MediaFile, error)
+	setContentHashFn      func(ctx context.Context, id, hash string) error
 	deleteFn           func(ctx context.Context, id string) error
 	listByCampaignFn   func(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error)
 	getStorageStatsFn  func(ctx context.Context) (*StorageStats, error)
@@ -36,6 +39,27 @@ func (m *mockMediaRepo) FindByID(ctx context.Context, id string) (*MediaFile, er
 		return m.findByIDFn(ctx, id)
 	}
 	return nil, apperror.NewNotFound("media file not found")
+}
+
+func (m *mockMediaRepo) FindByContentHash(ctx context.Context, campaignID, hash string) (*MediaFile, error) {
+	if m.findByContentHashFn != nil {
+		return m.findByContentHashFn(ctx, campaignID, hash)
+	}
+	return nil, nil
+}
+
+func (m *mockMediaRepo) ListMissingContentHash(ctx context.Context, limit int) ([]MediaFile, error) {
+	if m.listMissingHashFn != nil {
+		return m.listMissingHashFn(ctx, limit)
+	}
+	return nil, nil
+}
+
+func (m *mockMediaRepo) SetContentHash(ctx context.Context, id, hash string) error {
+	if m.setContentHashFn != nil {
+		return m.setContentHashFn(ctx, id, hash)
+	}
+	return nil
 }
 
 func (m *mockMediaRepo) Delete(ctx context.Context, id string) error {
@@ -470,6 +494,78 @@ func TestUpload_FileTooLarge(t *testing.T) {
 
 	_, err := svc.Upload(context.Background(), input)
 	assertMediaAppError(t, err, 400)
+}
+
+// TestUpload_DedupReturnsExisting pins the per-campaign dedup
+// short-circuit: when FindByContentHash returns a hit, Upload returns
+// that record directly without calling Create or writing to disk. This
+// is the core of migration 26's storage-saving behavior.
+func TestUpload_DedupReturnsExisting(t *testing.T) {
+	createCalled := false
+	existingID := "existing-media-id"
+	repo := &mockMediaRepo{
+		findByContentHashFn: func(_ context.Context, campaignID, hash string) (*MediaFile, error) {
+			if campaignID != "camp-1" {
+				t.Errorf("expected lookup on camp-1, got %q", campaignID)
+			}
+			if len(hash) != 64 {
+				t.Errorf("expected 64-char hex sha256, got %d chars: %q", len(hash), hash)
+			}
+			return &MediaFile{ID: existingID, MimeType: "image/png"}, nil
+		},
+		createFn: func(_ context.Context, _ *MediaFile) error {
+			createCalled = true
+			return nil
+		},
+	}
+	svc := newTestMediaService(repo)
+
+	input := UploadInput{
+		CampaignID: "camp-1",
+		UploadedBy: "user-1",
+		MimeType:   "image/png",
+		FileSize:   100,
+		FileBytes:  []byte("pretend this is a png"),
+	}
+	got, err := svc.Upload(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil || got.ID != existingID {
+		t.Errorf("expected existing file %q, got %+v", existingID, got)
+	}
+	if createCalled {
+		t.Error("Create should not be called when dedup hits")
+	}
+}
+
+// TestUpload_DedupSkippedWithoutCampaign pins that uploads with no
+// campaign context (avatars, system files) bypass dedup entirely —
+// the (campaign_id, content_hash) index can't help there and we don't
+// want a false hit from another user's avatar.
+func TestUpload_DedupSkippedWithoutCampaign(t *testing.T) {
+	dedupCalled := false
+	repo := &mockMediaRepo{
+		findByContentHashFn: func(_ context.Context, _, _ string) (*MediaFile, error) {
+			dedupCalled = true
+			return nil, nil
+		},
+	}
+	svc := newTestMediaService(repo)
+
+	input := UploadInput{
+		CampaignID: "", // no campaign — avatar / system upload path
+		UploadedBy: "user-1",
+		MimeType:   "image/png",
+		FileSize:   100,
+		FileBytes:  []byte("avatar bytes"),
+	}
+	// We don't care about success/failure of the rest of the upload —
+	// just verify the dedup query was NOT issued.
+	_, _ = svc.Upload(context.Background(), input)
+	if dedupCalled {
+		t.Error("FindByContentHash was called for a no-campaign upload")
+	}
 }
 
 func TestUpload_ConcurrencyLimit(t *testing.T) {

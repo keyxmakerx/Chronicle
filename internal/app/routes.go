@@ -1375,6 +1375,23 @@ func (a *App) RegisterRoutes() {
 	settingsService := settings.NewSettingsService(settingsRepo)
 	mediaService.SetStorageLimiter(&storageLimiterAdapter{svc: settingsService})
 
+	// Migration 26 added media_files.content_hash for per-campaign upload
+	// dedup. Existing rows from before the migration have NULL hashes —
+	// run the backfill in a detached goroutine so a campaign with
+	// thousands of legacy media files doesn't stall startup. New uploads
+	// always populate the hash inline; this only catches the gap.
+	go func() {
+		bgCtx := context.Background()
+		n, err := mediaService.BackfillContentHashes(bgCtx, 100)
+		if err != nil {
+			slog.Warn("media: content_hash backfill aborted", slog.Any("error", err), slog.Int("hashed_so_far", n))
+			return
+		}
+		if n > 0 {
+			slog.Info("media: content_hash backfill complete", slog.Int("hashed", n))
+		}
+	}()
+
 	// Resolver consulted by the media body-limit middleware on every
 	// /media/upload to honor the live admin-configured limit. Falls back
 	// to the env-var value if the settings lookup fails so a transient

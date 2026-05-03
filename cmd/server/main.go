@@ -96,7 +96,7 @@ func main() {
 	// Validates migration version, schema columns, DB health, and security.
 	// Server refuses to start if any fatal check fails.
 	if err := database.RunStartupHealthChecks(db, database.HealthCheckConfig{
-		ExpectedMigrationVersion: 25,
+		ExpectedMigrationVersion: 26,
 		CriticalColumns: map[string][]string{
 			"campaigns":        {"id", "name", "slug", "archived_at", "join_code", "settings", "sidebar_config"},
 			"entities":         {"id", "campaign_id", "name", "slug", "entry", "entry_html", "fields_data", "visibility", "owner_user_id", "map_id"},
@@ -108,6 +108,11 @@ func main() {
 			// list query 500-ing, and the operator chasing a "delete is
 			// broken" bug report when the table just isn't there.
 			"entity_notes": {"id", "entity_id", "campaign_id", "author_user_id", "audience", "shared_with", "pinned"},
+			// content_hash (migration 26) powers per-campaign upload dedup;
+			// pinning it here means a deploy without the migration fails
+			// fast instead of every upload silently bypassing dedup and
+			// duplicating storage.
+			"media_files": {"id", "campaign_id", "uploaded_by", "filename", "mime_type", "file_size", "content_hash"},
 		},
 		Env:        cfg.Env,
 		BaseURL:    cfg.BaseURL,
