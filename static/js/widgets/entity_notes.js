@@ -62,8 +62,8 @@
       var endpoint = config.endpoint || '';
       var campaignId = config.campaignId || '';
       var entityId = config.entityId || '';
-      var canAuthorDMOnly = config.canAuthorDmOnly === 'true';
-      var canAuthorDMScribe = config.canAuthorDmScribe === 'true';
+      var canAuthorDMOnly = config.canAuthorDmOnly === true;
+      var canAuthorDMScribe = config.canAuthorDmScribe === true;
       // The viewer's user ID, emitted by show.templ on the mount element.
       // Required to gate edit/pin/delete affordances to a note's author —
       // the server enforces author-only writes, but without this gate the

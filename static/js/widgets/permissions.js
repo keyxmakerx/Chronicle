@@ -26,7 +26,7 @@ Chronicle.register('permissions', {
       error: null,
       abortController: null
     };
-    var editable = config.editable === 'true';
+    var editable = config.editable === true;
 
     // Inject scoped styles once.
     if (!document.getElementById('perm-widget-styles')) {

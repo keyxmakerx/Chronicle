@@ -31,7 +31,12 @@
       this.el = el;
       this.entityId = config.entityId || '';
       this.campaignId = config.campaignId || '';
-      this.isScribe = config.isScribe === 'true';
+      // boot.js auto-converts data-is-scribe="true" / "false" to a JS
+      // boolean BEFORE passing config to the widget — comparing to the
+      // string 'true' here would always be false, which is what stopped
+      // click handlers from binding (the picker rendered fine, but
+      // clicks did nothing). Strict-equal to the boolean.
+      this.isScribe = config.isScribe === true;
       // No-op for non-Scribe viewers — they have no actions to bind.
       // (The empty state has no widget mount, but defensive anyway.)
       if (!this.isScribe) return;
