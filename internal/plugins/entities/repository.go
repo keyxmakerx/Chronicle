@@ -285,6 +285,32 @@ func (r *entityTypeRepository) UpdateLayout(ctx context.Context, id int, layoutJ
 	return nil
 }
 
+// HealDoubledPluralS rewrites name_plural for any entity_types row
+// whose plural was produced by the legacy auto-pluralize default on a
+// name already ending in 's' — e.g., name="Maps" + naive +s →
+// name_plural="Mapss". The healed value is just `name`.
+//
+// Surgical: only matches rows where name_plural is literally name + 's'
+// AND the lowered name ends in 's'. Won't touch legitimate plurals
+// like "Bus" → "Buses" (different shape) or operator-edited values
+// like "Maps" → "Atlases" (also different shape).
+//
+// Runs once at startup as a best-effort cleanup; the upsert into
+// entity_types is idempotent.
+func (r *entityTypeRepository) HealDoubledPluralS(ctx context.Context) (int, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE entity_types
+		 SET name_plural = name
+		 WHERE name_plural = CONCAT(name, 's')
+		   AND RIGHT(LOWER(name), 1) = 's'`,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("heal doubled plural-s: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
 // UpdateColor updates only the color for an entity type. Used by the
 // entity type settings widget to change the display color.
 func (r *entityTypeRepository) UpdateColor(ctx context.Context, id int, color string) error {

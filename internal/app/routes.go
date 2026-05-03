@@ -1281,6 +1281,21 @@ func (a *App) RegisterRoutes() {
 	entityPermRepo := entities.NewEntityPermissionRepository(a.DB)
 	entityService := entities.NewEntityService(entityRepo, entityTypeRepo, entityPermRepo)
 
+	// One-shot heal of legacy auto-pluralize defaults that produced
+	// "Mapss"-style values (name="Maps", plural="Mapss"). Idempotent;
+	// failures are logged but never block boot. Runs in a goroutine
+	// so a hung query can't stall startup.
+	go func() {
+		n, err := entityService.HealAutoPluralizedTypes(context.Background())
+		if err != nil {
+			slog.Warn("entity_types: doubled-plural heal failed", slog.Any("error", err))
+			return
+		}
+		if n > 0 {
+			slog.Info("entity_types: doubled-plural heal corrected rows", slog.Int("rows", n))
+		}
+	}()
+
 	// Campaigns plugin: CRUD, membership, ownership transfer.
 	// EntityService is passed as EntityTypeSeeder to seed defaults on campaign creation.
 	userFinder := campaigns.NewUserFinderAdapter(authRepo)

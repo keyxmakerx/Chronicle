@@ -183,15 +183,29 @@
       })
         .then(function (res) {
           if (!res.ok) {
-            Chronicle.notify('Failed to save dashboard layout', 'error');
-          } else {
-            self.dirty = false;
-            Chronicle.notify('Dashboard layout saved', 'success');
+            // Surface the server's specific reason — ValidateLayout
+            // emits operator-friendly text ("Row 1 has columns that
+            // don't fit...", "Only one Map Editor block is allowed
+            // per layout"). The old generic toast hid all of that
+            // and was the source of "I can't save dashboards" reports.
+            return res.json().then(
+              function (body) {
+                var msg = (body && (body.message || body.error)) || 'Failed to save dashboard layout';
+                Chronicle.notify(msg, 'error');
+              },
+              function () {
+                Chronicle.notify('Failed to save dashboard layout (HTTP ' + res.status + ')', 'error');
+              }
+            );
           }
-          if (callback) callback();
+          self.dirty = false;
+          Chronicle.notify('Dashboard layout saved', 'success');
         })
-        .catch(function () {
-          Chronicle.notify('Failed to save dashboard layout', 'error');
+        .catch(function (err) {
+          var msg = (err && err.message) ? ('Network error saving dashboard layout: ' + err.message) : 'Network error saving dashboard layout';
+          Chronicle.notify(msg, 'error');
+        })
+        .finally(function () {
           if (callback) callback();
         });
     },
