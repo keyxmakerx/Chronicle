@@ -1365,6 +1365,30 @@ func (a *App) RegisterRoutes() {
 	}
 	mediaHandler := media.NewHandler(mediaService)
 
+	// Settings service is built here (instead of with the other admin
+	// services below) because the media body-limit middleware needs to
+	// resolve the live max-upload-size from settings on every request.
+	// Without this ordering, the body-limit would freeze at the env-var
+	// default forever and admin changes wouldn't take effect — which is
+	// exactly the bug operators hit when raising the cap from 10 MB.
+	settingsRepo := settings.NewSettingsRepository(a.DB)
+	settingsService := settings.NewSettingsService(settingsRepo)
+	mediaService.SetStorageLimiter(&storageLimiterAdapter{svc: settingsService})
+
+	// Resolver consulted by the media body-limit middleware on every
+	// /media/upload to honor the live admin-configured limit. Falls back
+	// to the env-var value if the settings lookup fails so a transient
+	// DB hiccup can't block all uploads.
+	resolveMaxUpload := func(c echo.Context) int64 {
+		userID := auth.GetUserID(c)
+		if eff, err := settingsService.GetEffectiveLimits(c.Request().Context(), userID, ""); err == nil && eff != nil {
+			if eff.MaxUploadSize > 0 {
+				return eff.MaxUploadSize
+			}
+		}
+		return a.Config.Upload.MaxSize
+	}
+
 	// Initialize HMAC URL signer for secure media access.
 	// Auto-generate a signing secret on first boot if not configured.
 	signingSecret := a.Config.Upload.SigningSecret
@@ -1386,12 +1410,20 @@ func (a *App) RegisterRoutes() {
 	// Wire campaign membership checker for private media access control.
 	mediaHandler.SetMemberChecker(&mediaMemberCheckerAdapter{svc: campaignService})
 
-	media.RegisterRoutes(e, mediaHandler, authService, a.Config.Upload.MaxSize, a.Config.Upload.ServeRateLimit)
+	media.RegisterRoutes(e, mediaHandler, authService, resolveMaxUpload, a.Config.Upload.ServeRateLimit)
 	// Campaign media routes registered after addon service init (needs media-gallery addon gating).
 
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings, storage).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
-	adminHandler.SetMediaDeps(mediaRepo, mediaService, a.Config.Upload.MaxSize)
+	// Pass a function so the storage admin page reads the LIVE limit
+	// (matching what the body-limit middleware enforces) rather than the
+	// frozen-at-startup env value.
+	adminHandler.SetMediaDeps(mediaRepo, mediaService, func() int64 {
+		if g, err := settingsService.GetStorageLimits(context.Background()); err == nil && g != nil && g.MaxUploadSize > 0 {
+			return g.MaxUploadSize
+		}
+		return a.Config.Upload.MaxSize
+	})
 	adminHandler.SetBaseURL(a.Config.BaseURL)
 	adminGroup := admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
 
@@ -1422,10 +1454,11 @@ func (a *App) RegisterRoutes() {
 	restoreHandler := restore.NewHandler(restoreSvc)
 	restore.RegisterRoutes(adminGroup, restoreHandler)
 
-	// Settings plugin: editable storage limits (global, per-user, per-campaign).
-	// Registers on the admin group since all settings routes require site admin.
-	settingsRepo := settings.NewSettingsRepository(a.DB)
-	settingsService := settings.NewSettingsService(settingsRepo)
+	// Settings plugin route registration. The service + repo were
+	// constructed earlier (above the media routes) so the body-limit
+	// middleware can read live settings — see the resolveMaxUpload
+	// closure. Per-user/campaign quotas wired via SetStorageLimiter
+	// up there too. Here we just register the admin HTTP routes.
 	settingsHandler := settings.NewHandler(settingsService)
 	settings.RegisterRoutes(adminGroup, settingsHandler)
 
@@ -1435,10 +1468,6 @@ func (a *App) RegisterRoutes() {
 
 	// Wire settings service into admin handler for the combined storage page.
 	adminHandler.SetSettingsDeps(settingsService)
-
-	// Wire dynamic storage limits into the media service so uploads
-	// respect per-user and per-campaign quotas from site settings.
-	mediaService.SetStorageLimiter(&storageLimiterAdapter{svc: settingsService})
 
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
 	addonRepo := addons.NewAddonRepository(a.DB)
