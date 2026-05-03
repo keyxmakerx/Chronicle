@@ -121,6 +121,12 @@ type EntityService interface {
 	// AssignMap. Production startup wires an adapter over maps.MapsService.
 	SetMapVerifier(v MapCampaignVerifier)
 
+	// HealAutoPluralizedTypes corrects entity_types rows whose
+	// name_plural was double-s'd by the legacy auto-pluralize default.
+	// Returns the count of healed rows. Idempotent; safe to call on
+	// every boot.
+	HealAutoPluralizedTypes(ctx context.Context) (int, error)
+
 	// BulkUpdateType changes the entity type for multiple entities at once.
 	// Returns the count of successfully updated entities. Validates that the
 	// target type belongs to the campaign and each entity is campaign-scoped.
@@ -1098,8 +1104,14 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 
 	namePlural := strings.TrimSpace(input.NamePlural)
 	if namePlural == "" {
-		// Auto-pluralize by appending "s" if not provided.
-		namePlural = name + "s"
+		// Auto-pluralize when not provided. Naive +s doubled the s on
+		// names already ending in 's' ("Maps" → "Mapss") which then
+		// surfaced verbatim on the dashboard category cards. Detect
+		// the s-ending case and use the name unchanged so the cards
+		// don't say "Mapss". Doesn't cover irregular plurals (Mouse →
+		// Mice) — author can supply name_plural explicitly when the
+		// default is wrong.
+		namePlural = autoPluralize(name)
 	}
 	if len(namePlural) > 100 {
 		return nil, apperror.NewBadRequest("entity type plural name must be at most 100 characters")
@@ -1217,7 +1229,9 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 
 	namePlural := strings.TrimSpace(input.NamePlural)
 	if namePlural == "" {
-		namePlural = name + "s"
+		// Same s-ending guard as Create — see autoPluralize for the
+		// rationale.
+		namePlural = autoPluralize(name)
 	}
 	if len(namePlural) > 100 {
 		return nil, apperror.NewBadRequest("entity type plural name must be at most 100 characters")
@@ -1885,4 +1899,54 @@ func generateUUID() string {
 	uuid[8] = (uuid[8] & 0x3f) | 0x80 // Variant RFC 4122
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:16])
+}
+
+// autoPluralize returns a default plural form of name for entity-type
+// creation when the operator didn't supply name_plural explicitly.
+// Trivial heuristics — not a full English pluralizer:
+//   - Empty stays empty.
+//   - Names ending in 's' (case-insensitive) stay unchanged so "Maps"
+//     doesn't become "Mapss" (the bug operators reported on dashboard
+//     category cards).
+//   - Everything else gets a literal 's' appended.
+//
+// Irregular plurals (Mouse → Mice, Person → People) need the operator
+// to fill in name_plural in the entity-type form. The heuristic only
+// has to NOT make things visibly worse than the user's input.
+func autoPluralize(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	last := name[len(name)-1]
+	if last == 's' || last == 'S' {
+		return name
+	}
+	return name + "s"
+}
+
+// HealAutoPluralizedTypes walks entity_types and corrects name_plural
+// values that the legacy auto-pluralize default produced as
+// "<name-ending-in-s> + s" (e.g., "Maps" → "Mapss"). Idempotent —
+// rows that already have a sane plural are skipped at the WHERE
+// clause. Runs once at startup as a best-effort cleanup; failures
+// are logged but don't block boot.
+//
+// Conservative match: only renames rows where
+//   LOWER(name) ends in 's' AND LOWER(name_plural) = LOWER(name) || 's'
+// so a legitimate "Bus" → "Buses" stays put (the plural isn't just
+// name + s) and a user-set "Mapss" stays put if it doesn't match
+// the bad-default pattern.
+func (s *entityService) HealAutoPluralizedTypes(ctx context.Context) (int, error) {
+	if s.types == nil {
+		return 0, nil
+	}
+	healer, ok := s.types.(interface {
+		HealDoubledPluralS(ctx context.Context) (int, error)
+	})
+	if !ok {
+		// Repository doesn't implement the heal — non-fatal, no-op.
+		return 0, nil
+	}
+	return healer.HealDoubledPluralS(ctx)
 }
