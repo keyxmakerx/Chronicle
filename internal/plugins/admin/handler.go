@@ -49,8 +49,12 @@ type Handler struct {
 	smtpService      smtp.SMTPService
 	mediaRepo        media.MediaRepository
 	mediaService     media.MediaService
-	maxUploadSize    int64
-	settingsService  settings.SettingsService
+	// resolveMaxUploadSize returns the live max-upload-size from the
+	// settings service. Used by the storage admin page so the displayed
+	// "Max upload" matches what /media/upload's body-limit actually
+	// enforces — was previously the env-var value frozen at startup.
+	resolveMaxUploadSize func() int64
+	settingsService      settings.SettingsService
 	addonCounter     AddonCounter
 	securityService  SecurityService
 	hygieneScanner   DataHygieneScanner
@@ -87,10 +91,16 @@ func NewHandler(authRepo auth.UserRepository, campaignService campaigns.Campaign
 
 // SetMediaDeps sets the media dependencies for the storage admin page.
 // Called after media plugin is wired to avoid constructor bloat.
-func (h *Handler) SetMediaDeps(repo media.MediaRepository, svc media.MediaService, maxUploadSize int64) {
+//
+// resolveMaxUploadSize is a function so the storage page reflects the
+// LIVE limit configured by the admin (matching what the body-limit
+// middleware actually enforces) rather than the value frozen at startup.
+// Reports surface the resolver's result; if nil, the page falls back to
+// the legacy maxUploadSize field.
+func (h *Handler) SetMediaDeps(repo media.MediaRepository, svc media.MediaService, resolveMaxUploadSize func() int64) {
 	h.mediaRepo = repo
 	h.mediaService = svc
-	h.maxUploadSize = maxUploadSize
+	h.resolveMaxUploadSize = resolveMaxUploadSize
 }
 
 // SetSettingsDeps sets the settings service for the combined storage page.
@@ -477,13 +487,20 @@ func (h *Handler) Storage(c echo.Context) error {
 	allCampaigns, _, _ := h.campaignService.ListAll(ctx, campaigns.ListOptions{Page: 1, PerPage: 1000})
 
 	csrfToken := middleware.GetCSRFToken(c)
+	// Resolve the live max-upload-size for display. The resolver reads
+	// the same source the body-limit middleware reads, so the page can't
+	// disagree with what /media/upload actually enforces.
+	var maxUpload int64
+	if h.resolveMaxUploadSize != nil {
+		maxUpload = h.resolveMaxUploadSize()
+	}
 	data := StoragePageData{
 		Stats:          stats,
 		Files:          files,
 		TotalFiles:     total,
 		Page:           page,
 		PerPage:        perPage,
-		MaxUploadSize:  h.maxUploadSize,
+		MaxUploadSize:  maxUpload,
 		Global:         global,
 		UserLimits:     userLimits,
 		CampaignLimits: campaignLimits,
