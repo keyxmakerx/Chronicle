@@ -22,8 +22,8 @@
       this.el = el;
       this.campaignId = config.campaignId;
       this.mapId = config.mapId;
-      this.showDrawings = config.showDrawings === 'true';
-      this.showTokens = config.showTokens === 'true';
+      this.showDrawings = config.showDrawings === true;
+      this.showTokens = config.showTokens === true;
       this.customHeight = parseInt(config.height, 10) || 0;
       this._leafletMap = null;
 

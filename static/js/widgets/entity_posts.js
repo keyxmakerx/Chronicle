@@ -20,7 +20,7 @@
       var endpoint = config.endpoint || '';
       var campaignId = config.campaignId || '';
       var entityId = config.entityId || '';
-      var editable = config.editable === 'true';
+      var editable = config.editable === true;
       var csrf = config.csrf || '';
 
       var state = {

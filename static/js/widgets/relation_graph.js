@@ -28,7 +28,7 @@
       var apiUrl = config.apiUrl || '';
       var campaignId = config.campaignId || '';
       var height = parseInt(config.height, 10) || 500;
-      var showFilters = config.showFilters === 'true';
+      var showFilters = config.showFilters === true;
       var focusEntity = config.focusEntity || '';
       var hops = parseInt(config.hops, 10) || 2;
       var entityTypes = [];
