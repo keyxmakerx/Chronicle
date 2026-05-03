@@ -93,6 +93,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/entities/:eid/claim", h.ClaimEntity, campaigns.RequireRole(campaigns.RolePlayer))
 	// Owner reassignment: Scribe+ only. Pass owner_user_id=null to clear.
 	cg.PUT("/entities/:eid/owner", h.AssignOwner, campaigns.RequireRole(campaigns.RoleScribe))
+	// Map assignment for the per-entity Map Editor block: Scribe+ only.
+	// Pass map_id=null (or empty string) to unassign.
+	cg.PUT("/entities/:eid/map", h.AssignMap, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Sidebar node (pure folder) routes (Scribe+ for create/reorder, Owner for delete).
 	cg.POST("/sidebar-nodes", h.CreateSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))

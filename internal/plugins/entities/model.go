@@ -252,6 +252,12 @@ type Entity struct {
 	// sync (when the actor's owner maps to a chronicle user) or by the
 	// player claim flow on entity show.
 	OwnerUserID    *string         `json:"owner_user_id,omitempty"`
+	// MapID points the entity at one of the campaign's maps and powers
+	// the per-entity Map Editor block. Nullable — most entities aren't
+	// "a map." FK enforces same-campaign integrity (added by the maps
+	// plugin migration 005); ON DELETE SET NULL handles map deletion
+	// gracefully (entity falls back to the picker / empty state).
+	MapID          *string         `json:"map_id,omitempty"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
 

@@ -96,10 +96,10 @@ func main() {
 	// Validates migration version, schema columns, DB health, and security.
 	// Server refuses to start if any fatal check fails.
 	if err := database.RunStartupHealthChecks(db, database.HealthCheckConfig{
-		ExpectedMigrationVersion: 24,
+		ExpectedMigrationVersion: 25,
 		CriticalColumns: map[string][]string{
 			"campaigns":        {"id", "name", "slug", "archived_at", "join_code", "settings", "sidebar_config"},
-			"entities":         {"id", "campaign_id", "name", "slug", "entry", "entry_html", "fields_data", "visibility", "owner_user_id"},
+			"entities":         {"id", "campaign_id", "name", "slug", "entry", "entry_html", "fields_data", "visibility", "owner_user_id", "map_id"},
 			"users":            {"id", "email", "display_name", "password_hash"},
 			"campaign_members": {"campaign_id", "user_id", "role"},
 			// entity_notes was added by migration 23. Listing it here makes
