@@ -18,6 +18,13 @@ type MediaFile struct {
 	OriginalName   string            `json:"original_name"`  // User's original filename.
 	MimeType       string            `json:"mime_type"`
 	FileSize       int64             `json:"file_size"`
+	// ContentHash is the sha256 of the original file bytes (hex). Populated
+	// at upload time (after MIME validation, before disk write) so a
+	// later upload of identical bytes within the same campaign reuses
+	// this row instead of duplicating storage. Nullable on the DB side
+	// for legacy rows that pre-date the column — they get backfilled
+	// at startup.
+	ContentHash    string            `json:"content_hash,omitempty"`
 	UsageType      string            `json:"usage_type"`     // attachment, entity_image, avatar, backdrop.
 	ThumbnailPaths map[string]string `json:"thumbnail_paths"` // size -> filename (e.g., "300" -> "uuid_300.jpg").
 	CreatedAt      time.Time         `json:"created_at"`

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"image"
 	"image/gif"
@@ -61,6 +63,14 @@ type MediaService interface {
 	// CleanupOrphans finds files on disk without a corresponding DB record and
 	// deletes them. Returns the number of files removed.
 	CleanupOrphans(ctx context.Context) (int, error)
+
+	// BackfillContentHashes hashes the on-disk bytes of any media row
+	// whose content_hash is NULL (legacy rows from before migration 26)
+	// and persists the result. Iterates in batches to bound memory and
+	// stops when the row count reaches zero. Returns the total number
+	// of rows hashed. Safe to call repeatedly — rows that already have
+	// a hash are skipped at the SELECT stage.
+	BackfillContentHashes(ctx context.Context, batchSize int) (int, error)
 
 	// ValidateMediaPath ensures the storage directory exists and is writable.
 	ValidateMediaPath() error
@@ -159,6 +169,41 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		return nil, apperror.NewBadRequest("unsupported file type: " + input.MimeType)
 	}
 
+	// Per-campaign dedup: hash the *original* bytes (before sanitization
+	// re-encodes them, which is non-deterministic). If the same hash
+	// already exists for this campaign, return that record instead of
+	// writing a duplicate to disk + DB. Saves storage, dodges thumbnail
+	// regeneration, and gives the caller the same UploadResponse it
+	// would have got on a fresh upload.
+	//
+	// Skipped for uploads with no campaign context (avatars, backdrops,
+	// system-level files) — those are scoped per-user/global and the
+	// dedup index is keyed on (campaign_id, content_hash). Hashing them
+	// would still be useful for global dedup but that's intentionally
+	// out of scope: each campaign owns its media space.
+	contentHash := ""
+	if len(input.FileBytes) > 0 {
+		sum := sha256.Sum256(input.FileBytes)
+		contentHash = hex.EncodeToString(sum[:])
+		if input.CampaignID != "" {
+			if existing, err := s.repo.FindByContentHash(ctx, input.CampaignID, contentHash); err != nil {
+				// Non-fatal — continue with a fresh upload rather than
+				// blocking the user on a transient DB hiccup.
+				slog.Warn("media dedup: lookup failed, proceeding with new upload",
+					slog.String("campaign_id", input.CampaignID),
+					slog.Any("error", err),
+				)
+			} else if existing != nil {
+				slog.Info("media dedup: returning existing file for duplicate upload",
+					slog.String("campaign_id", input.CampaignID),
+					slog.String("existing_id", existing.ID),
+					slog.String("hash", contentHash),
+				)
+				return existing, nil
+			}
+		}
+	}
+
 	// Validate file size. When the dynamic limiter is wired (production
 	// path), the live setting from settings.GetEffectiveLimits is the
 	// source of truth — checkQuotas() below enforces it with the same
@@ -249,6 +294,10 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		OriginalName:   input.OriginalName,
 		MimeType:       input.MimeType,
 		FileSize:       input.FileSize,
+		// contentHash was computed above (sha256 of original bytes,
+		// before sanitization). Persisting it here makes future dedup
+		// lookups for this same content short-circuit immediately.
+		ContentHash:    contentHash,
 		UsageType:      input.UsageType,
 		ThumbnailPaths: make(map[string]string),
 		CreatedAt:      now,
@@ -374,6 +423,64 @@ func (s *mediaService) Delete(ctx context.Context, id string) error {
 // FilePath returns the absolute path to a media file on disk.
 func (s *mediaService) FilePath(file *MediaFile) string {
 	return filepath.Join(s.mediaPath, file.Filename)
+}
+
+// BackfillContentHashes is the migration 26 backfill: any row with a
+// NULL content_hash gets its bytes read from disk, hashed, and the
+// hash written back. Iterates in batches so a campaign with thousands
+// of legacy media files doesn't load them all at once.
+//
+// Errors per file are logged and skipped (missing-on-disk, permission,
+// IO) — the goal is to make as much progress as possible. Returns when
+// a SELECT comes back empty.
+func (s *mediaService) BackfillContentHashes(ctx context.Context, batchSize int) (int, error) {
+	if batchSize <= 0 {
+		batchSize = 100
+	}
+	hashed := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return hashed, ctx.Err()
+		default:
+		}
+		batch, err := s.repo.ListMissingContentHash(ctx, batchSize)
+		if err != nil {
+			return hashed, fmt.Errorf("backfill list batch: %w", err)
+		}
+		if len(batch) == 0 {
+			return hashed, nil
+		}
+		for _, f := range batch {
+			path := s.FilePath(&f)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				slog.Warn("media backfill: cannot read file, skipping",
+					slog.String("media_id", f.ID),
+					slog.String("path", path),
+					slog.Any("error", err),
+				)
+				// Mark with a sentinel so the next batch doesn't pick
+				// it up forever. We use a 64-char placeholder distinct
+				// from any real sha256 — all-zeros prefix + "missing".
+				// This trades dedup correctness for backfill convergence:
+				// "missing" rows won't dedup against each other, which
+				// is fine since they're already broken on disk.
+				_ = s.repo.SetContentHash(ctx, f.ID, "0000000000000000000000000000000000000000000000000000000missing0")
+				continue
+			}
+			sum := sha256.Sum256(data)
+			hash := hex.EncodeToString(sum[:])
+			if err := s.repo.SetContentHash(ctx, f.ID, hash); err != nil {
+				slog.Warn("media backfill: set hash failed",
+					slog.String("media_id", f.ID),
+					slog.Any("error", err),
+				)
+				continue
+			}
+			hashed++
+		}
+	}
 }
 
 // ThumbnailPath returns the absolute path to a thumbnail on disk.
