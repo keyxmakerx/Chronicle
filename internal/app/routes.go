@@ -1827,6 +1827,11 @@ func (a *App) RegisterRoutes() {
 		Addon: "maps", Contexts: []string{"template"},
 		// No ConfigFields — the source of truth is entity.MapID. The
 		// picker is rendered by the block itself, not the layout editor.
+		// Singleton: only one map_editor per layout. The IIFE inside
+		// MapEditorBody binds fixed DOM IDs (#map-container, #marker-modal,
+		// etc.) that would collide with multiple instances. Enforced in
+		// three layers — see BlockMeta.Singleton docstring.
+		Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		if rc.Entity == nil || rc.CC == nil {
 			return templ.NopComponent

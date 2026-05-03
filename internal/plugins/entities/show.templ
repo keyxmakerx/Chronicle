@@ -885,3 +885,24 @@ templ blockLocalGraph(cc *campaigns.CampaignContext, entity *Entity, config map[
 		></div>
 	</div>
 }
+
+// blockSingletonDuplicateError renders an inline notice when a layout
+// somehow contains more than one of a singleton block type. Last-resort
+// guard behind ValidateLayout (server) and the layout editor JS drop
+// guard — if both are bypassed, this keeps the page from silently
+// breaking on duplicate DOM IDs.
+templ blockSingletonDuplicateError(blockType string) {
+	<div class="card p-4 border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20">
+		<div class="flex items-start gap-2">
+			<i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5"></i>
+			<div>
+				<p class="text-sm font-medium text-fg">Duplicate block skipped</p>
+				<p class="text-xs text-fg-secondary mt-1">
+					This layout contains more than one <code class="text-xs font-mono">{ blockType }</code> block, but only one is allowed per page.
+					Open the entity type customizer and remove the extra one to dismiss this notice.
+				</p>
+			</div>
+		</div>
+	</div>
+}
+

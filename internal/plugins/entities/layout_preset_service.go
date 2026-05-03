@@ -139,8 +139,11 @@ func (s *layoutPresetService) validateInput(name, desc, icon, layoutJSONRaw stri
 	if err := json.Unmarshal([]byte(layoutJSON), &layout); err != nil {
 		return "", "", "", "", apperror.NewBadRequest("layout_json is not a valid layout structure")
 	}
-	// Skip block type validation for presets — block availability is campaign-dependent.
-	if err := ValidateLayout(layout, nil); err != nil {
+	// Skip block type + singleton validation for presets — block availability
+	// is campaign-dependent, and presets ship pre-vetted (any singleton
+	// duplication would be a packaging bug, not a user input we need to
+	// surface a friendly message for).
+	if err := ValidateLayout(layout, nil, nil); err != nil {
 		return "", "", "", "", err
 	}
 

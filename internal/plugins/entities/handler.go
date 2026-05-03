@@ -563,6 +563,11 @@ func (h *Handler) Show(c echo.Context) error {
 	// instead of collapsing because /entities/{eid} doesn't match any category.
 	categoryPath := fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, entityType.Slug)
 	ctx := layouts.SetActivePath(c.Request().Context(), categoryPath)
+	// Install the per-request singleton tracker — RenderBlock uses it to
+	// detect duplicate singleton blocks (e.g., two map_editor on one
+	// page) and swap the second instance for an inline error rather
+	// than letting their fixed DOM IDs collide silently.
+	ctx = WithSingletonTracker(ctx)
 	c.SetRequest(c.Request().WithContext(ctx))
 
 	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, csrfToken))
