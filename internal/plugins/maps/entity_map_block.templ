@@ -1,0 +1,177 @@
+// entity_map_block.templ renders the per-entity Map Editor block. The
+// block reads from entities.map_id (added in migration 025): if set, the
+// full dedicated map page is embedded as an iframe so the entity page
+// gets every feature the standalone page has — markers, drawing tools,
+// settings modal, Foundry sync — without duplicating any code.
+// If no map is assigned, Scribe+ users see a thumbnail picker; players
+// see a friendly empty state.
+//
+// Iframe over inline-render is a deliberate trade: a slim variant of
+// mapShowContent would mean ~700 lines of duplicated templ, and the
+// dedicated page is already the source of truth. Same-origin cookies
+// authenticate the iframe transparently.
+package maps
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// EntityMapPickerCard is the data for one card in the map picker grid.
+// Kept here (not in model.go) because it's specific to the picker render
+// path — nothing else in the plugin builds these.
+type EntityMapPickerCard struct {
+	ID          string
+	Name        string
+	Description string
+	ImageID     string // empty if the map has no image yet
+}
+
+// BlockEntityMapEmbed renders the iframe-embedded full map editor when
+// the entity has an assigned map. The iframe URL is the dedicated map
+// page; same-origin auth carries over via cookies. Scribe+ viewers get
+// a "Change map" button that re-opens the picker.
+//
+// Sizing: 600px tall by default — tall enough to be useful, short
+// enough to not dominate the entity page. Could become a config field
+// later but isn't worth it for v1.
+templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID, mapID, mapName string, isScribe bool) {
+	<div
+		data-widget="entity-map"
+		data-entity-id={ entityID }
+		data-campaign-id={ cc.Campaign.ID }
+		data-map-id={ mapID }
+		data-is-scribe={ fmt.Sprintf("%t", isScribe) }
+		class="entity-map-embed"
+	>
+		<div class="flex items-center justify-between mb-2">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-map-location-dot mr-1.5"></i>
+				if mapName != "" {
+					{ mapName }
+				} else {
+					Map
+				}
+			</h2>
+			<div class="flex items-center gap-2">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, mapID)) }
+					target="_blank"
+					rel="noopener"
+					class="text-xs text-accent hover:underline"
+					title="Open the full map page in a new tab"
+				>
+					<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>Open
+				</a>
+				if isScribe {
+					<button
+						type="button"
+						class="btn-secondary btn-sm text-xs"
+						data-action="entity-map-change"
+						title="Pick a different map"
+					>
+						<i class="fa-solid fa-shuffle mr-1"></i>Change map
+					</button>
+				}
+			</div>
+		</div>
+		<!-- Same-origin iframe; session cookie authenticates it. The dedicated
+		     map page already gates edits behind the IsScribe flag, so players
+		     get view-only without any extra wiring here. -->
+		<iframe
+			src={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, mapID)) }
+			class="w-full rounded-lg border border-edge"
+			style="height: 600px;"
+			loading="lazy"
+			title={ fmt.Sprintf("Map: %s", mapName) }
+		></iframe>
+	</div>
+}
+
+// BlockEntityMapPicker renders the thumbnail grid Scribe+ users see when
+// the entity has no map assigned yet. Click a card → PUT to the assign
+// endpoint → page refreshes with the iframe embed.
+templ BlockEntityMapPicker(cc *campaigns.CampaignContext, entityID string, cards []EntityMapPickerCard, csrfToken string) {
+	<div
+		data-widget="entity-map"
+		data-entity-id={ entityID }
+		data-campaign-id={ cc.Campaign.ID }
+		data-is-scribe="true"
+		data-csrf={ csrfToken }
+		class="entity-map-picker"
+	>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-map-location-dot mr-1.5"></i>Assign a Map
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				Manage maps
+			</a>
+		</div>
+		if len(cards) == 0 {
+			<div class="card p-8 text-center">
+				<i class="fa-solid fa-map text-3xl text-fg-muted mb-3"></i>
+				<p class="text-sm text-fg-secondary mb-3">No maps in this campaign yet.</p>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", cc.Campaign.ID)) }
+					class="btn-primary text-xs"
+				>
+					<i class="fa-solid fa-plus mr-1"></i>Create the first map
+				</a>
+			</div>
+		} else {
+			<div class="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
+				for _, card := range cards {
+					@entityMapPickerCard(cc, card)
+				}
+			</div>
+		}
+	</div>
+}
+
+// entityMapPickerCard renders one map as a clickable thumbnail card.
+// The button carries the map ID; the widget JS issues the PUT and
+// reloads the block on success.
+templ entityMapPickerCard(cc *campaigns.CampaignContext, card EntityMapPickerCard) {
+	<button
+		type="button"
+		class="card p-0 text-left hover:ring-2 hover:ring-accent/50 transition-all overflow-hidden group"
+		data-action="entity-map-pick"
+		data-map-id={ card.ID }
+	>
+		if card.ImageID != "" {
+			<div class="aspect-video bg-surface-alt overflow-hidden">
+				<img
+					src={ layouts.MediaURL(ctx, card.ImageID) }
+					alt={ card.Name }
+					class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+					loading="lazy"
+				/>
+			</div>
+		} else {
+			<div class="aspect-video bg-surface-alt flex items-center justify-center">
+				<i class="fa-solid fa-map text-2xl text-fg-muted"></i>
+			</div>
+		}
+		<div class="p-3">
+			<h3 class="text-sm font-semibold text-fg truncate">{ card.Name }</h3>
+			if card.Description != "" {
+				<p class="text-xs text-fg-secondary mt-1 line-clamp-2">{ card.Description }</p>
+			}
+		</div>
+	</button>
+}
+
+// BlockEntityMapEmpty renders the player-facing empty state when no map
+// has been assigned. Players don't get the picker — only Scribe+ can
+// assign — so we just say so plainly.
+templ BlockEntityMapEmpty() {
+	<div class="card p-8 text-center">
+		<i class="fa-solid fa-map text-3xl text-fg-muted mb-3"></i>
+		<p class="text-sm text-fg-muted">No map assigned to this entity yet.</p>
+	</div>
+}

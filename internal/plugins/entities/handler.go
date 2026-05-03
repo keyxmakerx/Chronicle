@@ -3111,3 +3111,52 @@ func (h *Handler) AssignOwner(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, updated)
 }
+
+// assignMapRequest is the JSON body for PUT .../map. map_id may be null
+// (unassign) or a UUID of a map in the same campaign as the entity.
+type assignMapRequest struct {
+	MapID *string `json:"map_id"`
+}
+
+// AssignMap sets or clears the entity's assigned map. Drives the
+// per-entity Map Editor block — Scribe+ DMs use this to point an entity
+// (typically a Location) at one of the campaign's maps.
+//
+// Cross-campaign integrity is enforced inside the service via the
+// MapCampaignVerifier (the FK alone catches non-existence but not
+// wrong-campaign — that would silently succeed).
+//
+// Route: PUT /campaigns/:id/entities/:eid/map  (Scribe+ role required).
+func (h *Handler) AssignMap(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	entityID := c.Param("eid")
+
+	// IDOR protection — entity must belong to the URL campaign.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	var req assignMapRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	// Treat empty string as unassign — caller convenience.
+	if req.MapID != nil && *req.MapID == "" {
+		req.MapID = nil
+	}
+
+	updated, err := h.service.AssignMap(c.Request().Context(), entityID, req.MapID)
+	if err != nil {
+		return err
+	}
+
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, "map assigned")
+	return c.JSON(http.StatusOK, updated)
+}

@@ -111,6 +111,16 @@ type EntityService interface {
 	// responsibility — the service trusts upstream campaign auth.
 	AssignOwner(ctx context.Context, entityID string, ownerUserID *string) (*Entity, error)
 
+	// AssignMap sets or clears the entity's map_id (the per-entity Map
+	// Editor block reads from this). Pass mapID = nil to unassign.
+	// Verifies the map exists in the entity's own campaign before
+	// writing — closes the cross-campaign IDOR the FK alone wouldn't.
+	AssignMap(ctx context.Context, entityID string, mapID *string) (*Entity, error)
+
+	// SetMapVerifier wires the cross-campaign existence check used by
+	// AssignMap. Production startup wires an adapter over maps.MapsService.
+	SetMapVerifier(v MapCampaignVerifier)
+
 	// BulkUpdateType changes the entity type for multiple entities at once.
 	// Returns the count of successfully updated entities. Validates that the
 	// target type belongs to the campaign and each entity is campaign-scoped.
@@ -151,6 +161,29 @@ type NoopSidebarAutoAdder struct{}
 
 func (NoopSidebarAutoAdder) AddEntityTypeToSidebar(context.Context, string, int) error { return nil }
 
+// MapCampaignVerifier confirms a map exists and belongs to a given
+// campaign. Implemented by an adapter over maps.MapsService — kept as
+// a minimal interface here so the entities package doesn't import the
+// maps plugin (which would create a cycle: maps → entities for blocks,
+// entities → maps for the verifier).
+//
+// Used by AssignMap to enforce same-campaign integrity *before* the
+// FK constraint kicks in. The FK alone would catch "map doesn't exist"
+// but not "map exists in a different campaign" — that would silently
+// succeed and leak cross-campaign data.
+type MapCampaignVerifier interface {
+	MapExistsInCampaign(ctx context.Context, mapID, campaignID string) (bool, error)
+}
+
+// noopMapVerifier is the default — when no verifier is wired, AssignMap
+// rejects all non-nil map IDs to be safe. Production startup wires a
+// real verifier; tests can either wire a stub or test the unset path.
+type noopMapVerifier struct{}
+
+func (noopMapVerifier) MapExistsInCampaign(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
 // entityService implements EntityService.
 type entityService struct {
 	entities      EntityRepository
@@ -159,6 +192,7 @@ type entityService struct {
 	events        EntityEventPublisher
 	sidebarAdder  SidebarAutoAdder
 	blockRegistry *BlockRegistry
+	mapVerifier   MapCampaignVerifier
 }
 
 // NewEntityService creates a new entity service with the given dependencies.
@@ -169,7 +203,18 @@ func NewEntityService(entities EntityRepository, types EntityTypeRepository, per
 		permissions:  permissions,
 		events:       NoopEntityEventPublisher{},
 		sidebarAdder: NoopSidebarAutoAdder{},
+		mapVerifier:  noopMapVerifier{},
 	}
+}
+
+// SetMapVerifier wires the map-existence + same-campaign check used by
+// AssignMap. Call from startup after the maps service is constructed.
+func (s *entityService) SetMapVerifier(v MapCampaignVerifier) {
+	if v == nil {
+		s.mapVerifier = noopMapVerifier{}
+		return
+	}
+	s.mapVerifier = v
 }
 
 // SetEventPublisher sets the event publisher for real-time sync.
@@ -826,6 +871,53 @@ func (s *entityService) AssignOwner(ctx context.Context, entityID string, ownerU
 		slog.String("entity_id", entityID),
 		slog.String("campaign_id", entity.CampaignID),
 		slog.Any("new_owner", ownerUserID),
+	)
+	return entity, nil
+}
+
+// AssignMap sets or clears entity.map_id. Pass mapID = nil to unassign.
+//
+// Enforces same-campaign integrity for non-nil mapIDs: the map must
+// exist and live in the entity's campaign. Without this check, the FK
+// alone would let a Scribe in campaign A point an entity at a map from
+// campaign B (FK only enforces existence, not campaign scoping). The
+// FK is still useful — it covers map-deletion cleanup via ON DELETE
+// SET NULL — but cross-campaign IDOR is closed here.
+func (s *entityService) AssignMap(ctx context.Context, entityID string, mapID *string) (*Entity, error) {
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return nil, err
+	}
+	// No-op if the new value matches current.
+	switch {
+	case mapID == nil && entity.MapID == nil:
+		return entity, nil
+	case mapID != nil && entity.MapID != nil && *mapID == *entity.MapID:
+		return entity, nil
+	}
+
+	if mapID != nil {
+		exists, err := s.mapVerifier.MapExistsInCampaign(ctx, *mapID, entity.CampaignID)
+		if err != nil {
+			return nil, apperror.NewInternal(fmt.Errorf("verifying map: %w", err))
+		}
+		if !exists {
+			// Same response for "doesn't exist" and "wrong campaign" —
+			// don't leak existence of cross-campaign maps.
+			return nil, apperror.NewNotFound("map not found in this campaign")
+		}
+	}
+
+	if err := s.entities.UpdateMapID(ctx, entityID, mapID); err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+
+	entity.MapID = mapID
+	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	slog.Info("entity map assigned",
+		slog.String("entity_id", entityID),
+		slog.String("campaign_id", entity.CampaignID),
+		slog.Any("map_id", mapID),
 	)
 	return entity, nil
 }

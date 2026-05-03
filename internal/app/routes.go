@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -1094,6 +1096,35 @@ func (a *armoryRelationMetadataAdapter) UpdateMetadata(ctx context.Context, id i
 	return a.svc.UpdateMetadata(ctx, id, metadata)
 }
 
+// entityMapVerifierAdapter wraps maps.MapService to implement
+// entities.MapCampaignVerifier. Used by entityService.AssignMap to
+// confirm a map exists AND lives in the entity's own campaign before
+// writing entities.map_id. The FK alone catches non-existence; this
+// adapter closes the cross-campaign IDOR (Scribe in campaign A cannot
+// point an entity at a map from campaign B).
+type entityMapVerifierAdapter struct {
+	svc maps.MapService
+}
+
+// MapExistsInCampaign returns true only when the map exists AND its
+// CampaignID matches. Map-not-found is NOT an error here — it's just
+// false, since the caller's question is "is this a valid choice?"
+func (a *entityMapVerifierAdapter) MapExistsInCampaign(ctx context.Context, mapID, campaignID string) (bool, error) {
+	m, err := a.svc.GetMap(ctx, mapID)
+	if err != nil {
+		// Treat "not found" as a clean false; bubble other errors.
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	if m == nil {
+		return false, nil
+	}
+	return m.CampaignID == campaignID, nil
+}
+
 // armoryBuyerAccessAdapter wraps entities.EntityService to implement
 // armory.BuyerAccessChecker. Used by the transaction service to verify
 // the calling user can act on the buyer entity (own / shared / Owner /
@@ -1575,6 +1606,10 @@ func (a *App) RegisterRoutes() {
 	mapsHandler := maps.NewHandler(mapsService)
 	drawingRepo := maps.NewDrawingRepository(a.DB)
 	drawingService := maps.NewDrawingService(drawingRepo)
+	// Wire the map-existence + same-campaign check used by AssignMap on
+	// entities. This sits BELOW where entityService is constructed (1251)
+	// and is set as a post-construction dependency.
+	entityService.SetMapVerifier(&entityMapVerifierAdapter{svc: mapsService})
 	if a.PluginHealth.IsHealthy("maps") {
 		maps.RegisterRoutes(e, mapsHandler, campaignService, authService, addonService)
 		drawingHandler := maps.NewDrawingHandler(mapsService, drawingService)
@@ -1783,6 +1818,74 @@ func (a *App) RegisterRoutes() {
 		},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
 		return maps.BlockMapPreview(ctx.CC, entities.BlockConfigString(ctx.Block.Config, "map_id"))
+	})
+
+	// map_editor — per-entity Map Editor block. Reads from entities.map_id
+	// (NOT from block config) so the choice lives on the entity itself,
+	// not on a shared entity-type layout. Template context only — this
+	// block doesn't make sense on a dashboard since it's tied to a single
+	// entity. Three render branches:
+	//   - entity has map_id: full inline editor (iframe of the dedicated
+	//     map page) with a "Change map" button for Scribe+.
+	//   - no map_id + Scribe+: thumbnail picker grid.
+	//   - no map_id + Player: friendly empty state.
+	// The closure captures mapsService (built earlier in this file) so
+	// the picker grid can list the campaign's maps server-side.
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "map_editor", Label: "Map Editor", Icon: "fa-map-location-dot",
+		Description: "Full per-entity map (markers, drawings, settings)",
+		Addon: "maps", Contexts: []string{"template"},
+		// No ConfigFields — the source of truth is entity.MapID. The
+		// picker is rendered by the block itself, not the layout editor.
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.Entity == nil || rc.CC == nil {
+			return templ.NopComponent
+		}
+		isScribe := rc.CC.MemberRole >= campaigns.RoleScribe
+		// Map assigned: render the iframe embed with the map's name in
+		// the header. Look up the name best-effort; on failure show the
+		// embed with a blank name rather than blocking the whole render.
+		if rc.Entity.MapID != nil && *rc.Entity.MapID != "" {
+			mapName := ""
+			if m, err := mapsService.GetMap(context.Background(), *rc.Entity.MapID); err == nil && m != nil {
+				mapName = m.Name
+			}
+			return maps.BlockEntityMapEmbed(rc.CC, rc.Entity.ID, *rc.Entity.MapID, mapName, isScribe)
+		}
+		// No map + player: empty state.
+		if !isScribe {
+			return maps.BlockEntityMapEmpty()
+		}
+		// No map + Scribe+: render the picker. Pull all maps in the
+		// campaign and present them as cards. ListMaps is cheap (one
+		// query per campaign); the page only renders this branch for
+		// the unassigned case so it's not on the hot path.
+		mapList, err := mapsService.ListMaps(context.Background(), rc.CC.Campaign.ID)
+		if err != nil {
+			slog.Warn("map_editor block: failed to list maps for picker",
+				slog.String("campaign_id", rc.CC.Campaign.ID),
+				slog.Any("error", err),
+			)
+			mapList = nil
+		}
+		cards := make([]maps.EntityMapPickerCard, 0, len(mapList))
+		for _, m := range mapList {
+			imgID := ""
+			if m.ImageID != nil {
+				imgID = *m.ImageID
+			}
+			desc := ""
+			if m.Description != nil {
+				desc = *m.Description
+			}
+			cards = append(cards, maps.EntityMapPickerCard{
+				ID:          m.ID,
+				Name:        m.Name,
+				Description: desc,
+				ImageID:     imgID,
+			})
+		}
+		return maps.BlockEntityMapPicker(rc.CC, rc.Entity.ID, cards, rc.CSRFToken)
 	})
 
 	// NPC gallery block — embeds a compact NPC grid on entity pages/dashboards.

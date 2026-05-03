@@ -140,6 +140,7 @@ type mockEntityRepo struct {
 	updatePrivateFn  func(ctx context.Context, entityID string, isPrivate bool) error
 	listByOwnerFn    func(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
 	updateOwnerFn    func(ctx context.Context, entityID string, ownerUserID *string) error
+	updateMapIDFn    func(ctx context.Context, entityID string, mapID *string) error
 }
 
 func (m *mockEntityRepo) Create(ctx context.Context, entity *Entity) error {
@@ -326,6 +327,13 @@ func (m *mockEntityRepo) ListByOwner(ctx context.Context, campaignID, ownerUserI
 func (m *mockEntityRepo) UpdateOwner(ctx context.Context, entityID string, ownerUserID *string) error {
 	if m.updateOwnerFn != nil {
 		return m.updateOwnerFn(ctx, entityID, ownerUserID)
+	}
+	return nil
+}
+
+func (m *mockEntityRepo) UpdateMapID(ctx context.Context, entityID string, mapID *string) error {
+	if m.updateMapIDFn != nil {
+		return m.updateMapIDFn(ctx, entityID, mapID)
 	}
 	return nil
 }
@@ -1819,5 +1827,130 @@ func TestAssignOwner_SetAndClear(t *testing.T) {
 				t.Errorf("UpdateOwner called=%v, want %v", called, tc.wantUpdated)
 			}
 		})
+	}
+}
+
+// stubMapVerifier is a one-line MapCampaignVerifier for tests. Returning
+// (false, nil) is the "default reject" behavior; tests that exercise the
+// allow path replace .ok with true.
+type stubMapVerifier struct {
+	ok      bool
+	err     error
+	gotMap  string
+	gotCamp string
+}
+
+func (s *stubMapVerifier) MapExistsInCampaign(_ context.Context, mapID, campaignID string) (bool, error) {
+	s.gotMap = mapID
+	s.gotCamp = campaignID
+	return s.ok, s.err
+}
+
+// TestAssignMap_SetClearAndNoOp pins the same shape AssignOwner has —
+// transitions write, no-op transitions don't, and the return reflects
+// the new state.
+func TestAssignMap_SetClearAndNoOp(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		current     *string
+		newMap      *string
+		wantUpdated bool
+	}{
+		{"unassigned -> assigned", nil, strPtr("m1"), true},
+		{"assigned -> different map", strPtr("m1"), strPtr("m2"), true},
+		{"assigned -> unassigned", strPtr("m1"), nil, true},
+		{"unassigned -> unassigned (no-op)", nil, nil, false},
+		{"same map (no-op)", strPtr("m1"), strPtr("m1"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ent := &Entity{ID: "e1", CampaignID: "c1", MapID: tc.current}
+			called := false
+			repo := &mockEntityRepo{
+				findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return ent, nil },
+				updateMapIDFn: func(_ context.Context, _ string, _ *string) error {
+					called = true
+					return nil
+				},
+			}
+			svc := newTestService(repo, &mockEntityTypeRepo{})
+			svc.SetMapVerifier(&stubMapVerifier{ok: true})
+
+			updated, err := svc.AssignMap(context.Background(), "e1", tc.newMap)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if called != tc.wantUpdated {
+				t.Errorf("UpdateMapID called=%v, want %v", called, tc.wantUpdated)
+			}
+			// On a real assignment, the returned entity should reflect the new value.
+			if tc.wantUpdated && tc.newMap != nil {
+				if updated.MapID == nil || *updated.MapID != *tc.newMap {
+					t.Errorf("returned MapID = %v, want %v", updated.MapID, *tc.newMap)
+				}
+			}
+		})
+	}
+}
+
+// TestAssignMap_RejectsCrossCampaign is the IDOR test: a map from
+// another campaign must not be assignable, even if the FK alone would
+// succeed (FK enforces existence, not campaign scoping).
+func TestAssignMap_RejectsCrossCampaign(t *testing.T) {
+	ent := &Entity{ID: "e1", CampaignID: "campA"}
+	updateCalled := false
+	repo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return ent, nil },
+		updateMapIDFn: func(_ context.Context, _ string, _ *string) error {
+			updateCalled = true
+			return nil
+		},
+	}
+	svc := newTestService(repo, &mockEntityTypeRepo{})
+	verifier := &stubMapVerifier{ok: false} // map doesn't exist in this campaign
+	svc.SetMapVerifier(verifier)
+
+	_, err := svc.AssignMap(context.Background(), "e1", strPtr("m-from-campB"))
+	if err == nil {
+		t.Fatal("expected NotFound error for cross-campaign map")
+	}
+	if updateCalled {
+		t.Error("UpdateMapID was called despite verifier rejecting the assignment")
+	}
+	if verifier.gotMap != "m-from-campB" || verifier.gotCamp != "campA" {
+		t.Errorf("verifier called with wrong args: gotMap=%q gotCamp=%q", verifier.gotMap, verifier.gotCamp)
+	}
+}
+
+// TestAssignMap_VerifierErrorBubbles pins that real DB errors from the
+// verifier propagate as 500-shape errors instead of being swallowed
+// into "not found" — operators need to see the underlying failure.
+func TestAssignMap_VerifierErrorBubbles(t *testing.T) {
+	ent := &Entity{ID: "e1", CampaignID: "c1"}
+	repo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return ent, nil },
+	}
+	svc := newTestService(repo, &mockEntityTypeRepo{})
+	svc.SetMapVerifier(&stubMapVerifier{err: errors.New("db down")})
+
+	_, err := svc.AssignMap(context.Background(), "e1", strPtr("m1"))
+	if err == nil {
+		t.Fatal("expected verifier error to bubble up")
+	}
+}
+
+// TestAssignMap_NoVerifierWiredRejectsAll pins the safe default: the
+// noopMapVerifier returns false for everything, so unwired callers
+// can't sneak past the IDOR check.
+func TestAssignMap_NoVerifierWiredRejectsAll(t *testing.T) {
+	ent := &Entity{ID: "e1", CampaignID: "c1"}
+	repo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return ent, nil },
+	}
+	svc := newTestService(repo, &mockEntityTypeRepo{})
+	// Intentionally do NOT call SetMapVerifier — the constructor seeds noopMapVerifier.
+
+	_, err := svc.AssignMap(context.Background(), "e1", strPtr("m1"))
+	if err == nil {
+		t.Fatal("expected default verifier to reject all map IDs")
 	}
 }
