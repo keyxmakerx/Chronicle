@@ -662,10 +662,16 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 						};
 						img.src = data.url;
 					} else {
-						Chronicle.notify('Upload failed', 'error');
+						// Surface the server's specific message — Upload returns
+						// concrete reasons like "file too large", "MIME type not
+						// allowed", "campaign quota exceeded". The old generic
+						// "Upload failed" hid all of that, leading to "i can't
+						// upload an image" reports with no diagnostic info.
+						var errData = await resp.json().catch(function() { return {}; });
+						Chronicle.notify(errData.message || ('Upload failed (HTTP ' + resp.status + ')'), 'error');
 					}
 				} catch (err) {
-					Chronicle.notify('Upload error: ' + err.message, 'error');
+					Chronicle.notify('Network error during upload: ' + err.message, 'error');
 				}
 			};
 
@@ -679,10 +685,11 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 					if (resp.ok) {
 						window.location.href = '/campaigns/' + campaignID + '/maps';
 					} else {
-						Chronicle.notify('Failed to delete map', 'error');
+						var delData = await resp.json().catch(function() { return {}; });
+						Chronicle.notify(delData.message || ('Failed to delete map (HTTP ' + resp.status + ')'), 'error');
 					}
 				} catch (err) {
-					Chronicle.notify('Network error: ' + err.message, 'error');
+					Chronicle.notify('Network error during delete: ' + err.message, 'error');
 				}
 			};
 			// Expose map context for drawing tools.
