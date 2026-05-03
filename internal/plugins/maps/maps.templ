@@ -636,6 +636,35 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				}
 			};
 
+			// Listen for the media-picker's selection event. Same effect
+			// as a successful upload — sets ms-image-id, refreshes the
+			// preview, derives the natural dimensions — but skips the
+			// /media/upload round-trip entirely (the file already exists
+			// in the campaign). The picker fires the event on the button
+			// it was opened from; we listen on the modal so a re-render
+			// of the modal doesn't strand the listener.
+			(function () {
+				var modal = document.getElementById('map-settings-modal');
+				if (!modal) return;
+				modal.addEventListener('media-picker:select', function (ev) {
+					var d = ev.detail || {};
+					if (!d.id || !d.url) return;
+					document.getElementById('ms-image-id').value = d.id;
+					var preview = document.getElementById('ms-image-preview');
+					preview.src = d.url;
+					preview.classList.remove('hidden');
+					var img = new Image();
+					img.onload = function () {
+						document.getElementById('ms-image-width').value = img.naturalWidth;
+						document.getElementById('ms-image-height').value = img.naturalHeight;
+					};
+					img.src = d.url;
+					if (Chronicle.notify) {
+						Chronicle.notify('Image selected — Save Settings to apply.', 'success');
+					}
+				});
+			})();
+
 			// Image upload handler for map settings.
 			window.uploadMapImage = async function(input) {
 				if (!input.files || !input.files[0]) return;
@@ -904,13 +933,31 @@ templ mapSettingsModal(data MapViewData) {
 					} else {
 						<img id="ms-image-preview" src="" class="hidden w-full rounded-md mb-2 max-h-48 object-contain bg-surface-alt"/>
 					}
-					<input
-						type="file"
-						accept="image/*"
-						class="input w-full text-xs"
-						onchange="uploadMapImage(this)"
-					/>
-					<p class="text-xs text-fg-muted mt-1">Upload a map image (JPEG, PNG, WebP). Image dimensions set the coordinate space.</p>
+					<div class="flex items-center gap-2 flex-wrap">
+						<input
+							type="file"
+							accept="image/*"
+							class="input flex-1 min-w-0 text-xs"
+							onchange="uploadMapImage(this)"
+						/>
+						<!-- Picker is opt-in; uploads stay the default. The
+						     widget mounts as a button — clicking it opens
+						     the slideout. The map-settings IIFE listens for
+						     the media-picker:select event below to update
+						     ms-image-id + the preview without uploading. -->
+						<button
+							type="button"
+							id="ms-pick-existing"
+							data-widget="media-picker"
+							data-campaign-id={ data.CampaignID }
+							data-mime-prefix="image/"
+							class="btn-secondary text-xs whitespace-nowrap"
+							title="Choose an image already in this campaign"
+						>
+							<i class="fa-solid fa-images mr-1"></i> Choose existing
+						</button>
+					</div>
+					<p class="text-xs text-fg-muted mt-1">Upload a map image (JPEG, PNG, WebP) or choose one already in this campaign. Image dimensions set the coordinate space.</p>
 				</div>
 				<div class="flex items-center justify-between pt-2">
 					<button type="button" class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded transition-colors" onclick="deleteMap()">

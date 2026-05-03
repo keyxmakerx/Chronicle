@@ -64,16 +64,28 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authSvc auth.AuthService, resolveM
 // RegisterCampaignRoutes sets up campaign-scoped media management routes.
 // The media browser is Owner-only and gated behind the media-gallery addon.
 // When the addon is disabled for a campaign, these routes return 404.
+//
+// The /media/list JSON endpoint is registered separately (without addon
+// gating) — picking existing media is core editor functionality, not an
+// addon-gated feature. Used by the media-picker widget.
 func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
-	cg := e.Group("/campaigns/:id",
+	gallery := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "media-gallery"),
 	)
 
-	cg.GET("/media", h.CampaignMedia, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.DELETE("/media/:mid", h.CampaignDeleteMedia, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.GET("/media/:mid/refs", h.CampaignMediaRefs, campaigns.RequireRole(campaigns.RoleOwner))
+	gallery.GET("/media", h.CampaignMedia, campaigns.RequireRole(campaigns.RoleOwner))
+	gallery.DELETE("/media/:mid", h.CampaignDeleteMedia, campaigns.RequireRole(campaigns.RoleOwner))
+	gallery.GET("/media/:mid/refs", h.CampaignMediaRefs, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// Picker JSON endpoint — NOT addon-gated, Scribe+ for editing
+	// surfaces (map settings, entity images) that consume the picker.
+	picker := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+	)
+	picker.GET("/media/list", h.CampaignMediaList, campaigns.RequireRole(campaigns.RoleScribe))
 }
 
 // dynamicBodyLimitMiddleware rejects request bodies exceeding the cap

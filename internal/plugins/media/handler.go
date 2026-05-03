@@ -437,6 +437,98 @@ type CampaignMediaPageData struct {
 	CSRFToken string
 }
 
+// CampaignMediaList returns paginated campaign media as JSON. Drives
+// the media-picker widget (the slideout the operator opens via "Choose
+// from campaign" next to file inputs). Distinct from CampaignMedia
+// which renders the admin browser HTML page.
+//
+// Scribe+ at the route level. The handler also folds in URL strings
+// (signed media URLs and thumbnails) so the widget doesn't need to
+// know the signing scheme — keeps the picker decoupled from media-
+// internal details.
+//
+// GET /campaigns/:id/media/list?page=N&perPage=M
+func (h *Handler) CampaignMediaList(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	ctx := c.Request().Context()
+
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	if page < 1 {
+		page = 1
+	}
+	perPage, _ := strconv.Atoi(c.QueryParam("perPage"))
+	if perPage <= 0 || perPage > 100 {
+		perPage = 24
+	}
+
+	files, total, err := h.service.ListCampaignMedia(ctx, cc.Campaign.ID, page, perPage)
+	if err != nil {
+		return err
+	}
+
+	type mediaListItem struct {
+		ID           string    `json:"id"`
+		OriginalName string    `json:"original_name"`
+		MimeType     string    `json:"mime_type"`
+		FileSize     int64     `json:"file_size"`
+		URL          string    `json:"url"`
+		ThumbnailURL string    `json:"thumbnail_url,omitempty"`
+		CreatedAt    time.Time `json:"created_at"`
+	}
+
+	out := make([]mediaListItem, 0, len(files))
+	for i := range files {
+		f := &files[i]
+		item := mediaListItem{
+			ID:           f.ID,
+			OriginalName: f.OriginalName,
+			MimeType:     f.MimeType,
+			FileSize:     f.FileSize,
+			CreatedAt:    f.CreatedAt,
+		}
+		// Same signed-URL logic the upload handler uses — keep the
+		// picker's URLs valid for an hour, fall back to unsigned when
+		// no signer is configured (dev / tests).
+		if h.signer != nil {
+			item.URL = h.signer.Sign(f.ID, 1*time.Hour)
+			if thumb := pickThumbnail(f); thumb != "" {
+				item.ThumbnailURL = h.signer.SignThumb(f.ID, thumb, 1*time.Hour)
+			}
+		} else {
+			item.URL = "/media/" + f.ID
+			if thumb := pickThumbnail(f); thumb != "" {
+				item.ThumbnailURL = "/media/" + f.ID + "/thumb/" + thumb
+			}
+		}
+		out = append(out, item)
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"items":    out,
+		"total":    total,
+		"page":     page,
+		"per_page": perPage,
+	})
+}
+
+// pickThumbnail picks the smallest available thumbnail size key for a
+// file. Picker UIs prefer small thumbs to keep the slideout snappy.
+func pickThumbnail(f *MediaFile) string {
+	if !f.IsImage() || len(f.ThumbnailPaths) == 0 {
+		return ""
+	}
+	// Prefer 300px if present; fall back to anything else.
+	if _, ok := f.ThumbnailPaths["300"]; ok {
+		return "300"
+	}
+	for size := range f.ThumbnailPaths {
+		return size
+	}
+	return ""
+}
+
 // CampaignMedia renders the campaign media browser page (GET /campaigns/:id/media).
 func (h *Handler) CampaignMedia(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
