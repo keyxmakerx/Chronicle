@@ -277,6 +277,36 @@ type OwnershipTransfer struct {
 
 // --- Dashboard Layout Types ---
 
+// DefaultDashboardLayout returns the synthesized dashboard layout used
+// when a campaign has no custom layout saved. Single source of truth for
+// both the live page render and the customization editor — operators
+// see the same structure they're about to edit. Each row is full-width
+// (12-grid) so existing block components render at their natural width.
+func DefaultDashboardLayout() *DashboardLayout {
+	full := func(id, blockType string) DashboardRow {
+		return DashboardRow{
+			ID: "row-" + id,
+			Columns: []DashboardColumn{
+				{
+					ID:    "col-" + id,
+					Width: 12,
+					Blocks: []DashboardBlock{
+						{ID: "blk-" + id, Type: blockType},
+					},
+				},
+			},
+		}
+	}
+	return &DashboardLayout{
+		Rows: []DashboardRow{
+			full("welcome", BlockWelcomeBanner),
+			full("quick", BlockQuickActions),
+			full("categories", BlockCategoryGrid),
+			full("recent", BlockRecentPages),
+		},
+	}
+}
+
 // DashboardLayout defines a configurable dashboard using a row/column/block
 // grid system inspired by Kanka. Stored as JSON in the dashboard_layout column
 // of campaigns (and entity_types for category dashboards). NULL means "use the
@@ -545,6 +575,7 @@ func (c *Campaign) ParseSettings() CampaignSettings {
 const (
 	// Campaign dashboard blocks.
 	BlockWelcomeBanner = "welcome_banner" // Campaign name + description hero.
+	BlockQuickActions  = "quick_actions"  // All Pages / Members / Categories cards.
 	BlockCategoryGrid  = "category_grid"  // Quick-nav grid of entity types.
 	BlockRecentPages   = "recent_pages"   // Recently updated entities.
 	BlockEntityList    = "entity_list"    // Filtered entity list by category.
@@ -575,6 +606,7 @@ const (
 // validation when saving layouts (both campaign and category dashboards).
 var ValidBlockTypes = map[string]bool{
 	BlockWelcomeBanner:  true,
+	BlockQuickActions:   true,
 	BlockCategoryGrid:   true,
 	BlockRecentPages:    true,
 	BlockEntityList:     true,
