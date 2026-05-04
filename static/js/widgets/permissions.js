@@ -375,7 +375,21 @@ Chronicle.register('permissions', {
         signal: state.abortController.signal
       })
         .then(function (resp) {
-          if (!resp.ok) throw new Error('Failed to save permissions');
+          if (!resp.ok) {
+            // Surface the server's specific error so the operator sees
+            // the actual cause (validation, auth, etc.) instead of a
+            // generic "Failed to save". Mirrors the layout-editor
+            // widget's error handling.
+            return resp.json().then(
+              function (body) {
+                var msg = (body && (body.message || body.error)) || ('Failed to save permissions (HTTP ' + resp.status + ')');
+                throw new Error(msg);
+              },
+              function () {
+                throw new Error('Failed to save permissions (HTTP ' + resp.status + ')');
+              }
+            );
+          }
           state.saving = false;
           state.saved = true;
           showStatus('saved', 'Saved');
@@ -387,9 +401,9 @@ Chronicle.register('permissions', {
         .catch(function (err) {
           if (err.name === 'AbortError') return;
           state.saving = false;
-          showStatus('error', 'Error saving permissions');
+          showStatus('error', err.message || 'Error saving permissions');
           console.error('permissions: save error', err);
-          Chronicle.notify('Failed to save permissions', 'error');
+          Chronicle.notify(err.message || 'Failed to save permissions', 'error');
         });
     }
 

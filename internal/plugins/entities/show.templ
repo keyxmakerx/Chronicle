@@ -656,17 +656,21 @@ templ blockEntityNotes(cc *campaigns.CampaignContext, entity *Entity, csrfToken 
 // blockPermissions renders the per-entity permissions widget on the
 // entity show page. Mirrors the mount in form.templ — the widget is
 // fully self-contained: it fetches the current visibility / role-grants /
-// per-user grants from the endpoint and (for Owners) lets them edit.
-// Non-owners get a read-only summary so players can see who else has
-// access. Auto-added to every entity-type layout via the heal goroutine
-// in routes.go so operators don't have to drag it in manually.
+// per-user grants from the endpoint and lets Owners edit. The
+// permissions API is Owner-only, so the block renders nothing for
+// non-owners — they'd just see a "Failed to load permissions" error
+// on every entity page otherwise. Auto-added to every entity-type
+// layout via the heal goroutine in routes.go so operators don't have
+// to drag it in manually.
 templ blockPermissions(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
-	<div
-		data-widget="permissions"
-		data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/permissions", cc.Campaign.ID, entity.ID) }
-		data-editable={ fmt.Sprintf("%v", cc.MemberRole >= campaigns.RoleOwner) }
-		data-csrf={ csrfToken }
-	></div>
+	if cc.MemberRole >= campaigns.RoleOwner {
+		<div
+			data-widget="permissions"
+			data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/permissions", cc.Campaign.ID, entity.ID) }
+			data-editable="true"
+			data-csrf={ csrfToken }
+		></div>
+	}
 }
 
 // blockTextBlock renders a static rich text / HTML content block.
