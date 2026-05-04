@@ -36,9 +36,16 @@ type Map struct {
 	ImageID     *string   `json:"image_id,omitempty"`
 	ImageWidth  int       `json:"image_width"`
 	ImageHeight int       `json:"image_height"`
-	SortOrder   int       `json:"sort_order"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	// BackgroundColor optionally overrides the default theme-following
+	// canvas color (bg-surface-alt, which adapts to dark/light via CSS
+	// vars) with a fixed CSS color (e.g. "#000000"). Nil means "follow
+	// theme" — the renderer falls back to the Tailwind class. Stored in
+	// the maps.background_color VARCHAR(7) column that has existed since
+	// migration 001 but was previously unused.
+	BackgroundColor *string   `json:"background_color,omitempty"`
+	SortOrder       int       `json:"sort_order"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 
 	// Eager-loaded (populated by service, not every query).
 	Markers []Marker `json:"markers,omitempty"`
@@ -97,12 +104,16 @@ type CreateMapInput struct {
 }
 
 // UpdateMapInput is the validated input for updating a map.
+// BackgroundColor is a tri-state: nil pointer = leave unchanged;
+// pointer-to-empty-string = clear the override (revert to theme); any
+// other CSS color string = set as the override.
 type UpdateMapInput struct {
-	Name        string
-	Description *string
-	ImageID     *string
-	ImageWidth  int
-	ImageHeight int
+	Name            string
+	Description     *string
+	ImageID         *string
+	ImageWidth      int
+	ImageHeight     int
+	BackgroundColor *string
 }
 
 // CreateMarkerInput is the validated input for placing a marker on a map.

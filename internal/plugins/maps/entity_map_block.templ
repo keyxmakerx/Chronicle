@@ -78,7 +78,7 @@ templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID string, data M
 		     is handled inside MapEditorBody via data.IsScribe — players
 		     get clickable markers with name+description popups, Scribe+
 		     gets the full marker/drawing/settings affordances. -->
-		@MapEditorBody(cc, data, "relative bg-surface-alt rounded-lg border border-edge overflow-hidden", "height: 600px;")
+		@MapEditorBody(cc, data, "relative bg-surface-alt rounded-lg border border-edge overflow-hidden", "height: 600px;"+mapBackgroundStyle(data.Map.BackgroundColor))
 	</div>
 }
 

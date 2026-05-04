@@ -39,15 +39,22 @@ func NewMapRepository(db *sql.DB) MapRepository {
 
 // mapCols is the column list for map queries.
 const mapCols = `id, campaign_id, name, description, image_id,
-       image_width, image_height, sort_order, created_at, updated_at`
+       image_width, image_height, background_color, sort_order, created_at, updated_at`
 
-// scanMap reads a row into a Map struct.
+// scanMap reads a row into a Map struct. background_color is nullable
+// (most maps follow the campaign's theme); sql.NullString unwraps it
+// into the *string field on Map.
 func scanMap(scanner interface{ Scan(...any) error }) (*Map, error) {
 	m := &Map{}
+	var bg sql.NullString
 	err := scanner.Scan(&m.ID, &m.CampaignID, &m.Name, &m.Description, &m.ImageID,
-		&m.ImageWidth, &m.ImageHeight, &m.SortOrder, &m.CreatedAt, &m.UpdatedAt)
+		&m.ImageWidth, &m.ImageHeight, &bg, &m.SortOrder, &m.CreatedAt, &m.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
+	}
+	if bg.Valid {
+		s := bg.String
+		m.BackgroundColor = &s
 	}
 	return m, err
 }
@@ -56,10 +63,10 @@ func scanMap(scanner interface{ Scan(...any) error }) (*Map, error) {
 func (r *mapRepo) CreateMap(ctx context.Context, m *Map) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO maps (id, campaign_id, name, description, image_id,
-		        image_width, image_height, sort_order)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		        image_width, image_height, background_color, sort_order)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.ID, m.CampaignID, m.Name, m.Description, m.ImageID,
-		m.ImageWidth, m.ImageHeight, m.SortOrder,
+		m.ImageWidth, m.ImageHeight, m.BackgroundColor, m.SortOrder,
 	)
 	return err
 }
@@ -74,10 +81,10 @@ func (r *mapRepo) GetMap(ctx context.Context, id string) (*Map, error) {
 func (r *mapRepo) UpdateMap(ctx context.Context, m *Map) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE maps SET name = ?, description = ?, image_id = ?,
-		        image_width = ?, image_height = ?
+		        image_width = ?, image_height = ?, background_color = ?
 		 WHERE id = ?`,
 		m.Name, m.Description, m.ImageID,
-		m.ImageWidth, m.ImageHeight, m.ID,
+		m.ImageWidth, m.ImageHeight, m.BackgroundColor, m.ID,
 	)
 	return err
 }
