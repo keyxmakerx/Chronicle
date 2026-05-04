@@ -127,6 +127,14 @@ type EntityService interface {
 	// every boot.
 	HealAutoPluralizedTypes(ctx context.Context) (int, error)
 
+	// EnsurePermissionsBlockInDefaults walks every entity_types row
+	// and appends a permissions block to the layout if one isn't
+	// already present. Returns the count of types that were updated.
+	// Idempotent; safe to call on every boot. Mirrors the pattern of
+	// HealAutoPluralizedTypes but operates on layout JSON rather than
+	// a single column.
+	EnsurePermissionsBlockInDefaults(ctx context.Context) (int, error)
+
 	// BulkUpdateType changes the entity type for multiple entities at once.
 	// Returns the count of successfully updated entities. Validates that the
 	// target type belongs to the campaign and each entity is campaign-scoped.
@@ -1949,4 +1957,71 @@ func (s *entityService) HealAutoPluralizedTypes(ctx context.Context) (int, error
 		return 0, nil
 	}
 	return healer.HealDoubledPluralS(ctx)
+}
+
+// EnsurePermissionsBlockInDefaults walks every entity_types row and
+// appends a permissions block (in a new bottom row) if the layout
+// doesn't already contain one. Idempotent: a second call is a no-op
+// because the block is already present. Best-effort — a failure on one
+// row logs and continues so a single bad layout JSON can't block boot.
+func (s *entityService) EnsurePermissionsBlockInDefaults(ctx context.Context) (int, error) {
+	if s.types == nil {
+		return 0, nil
+	}
+	types, err := s.types.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("listing entity types for permissions heal: %w", err)
+	}
+
+	updated := 0
+	for i := range types {
+		et := &types[i]
+		if layoutContainsBlockType(et.Layout, "permissions") {
+			continue
+		}
+		et.Layout.Rows = append(et.Layout.Rows, TemplateRow{
+			ID: fmt.Sprintf("row-perm-%d", et.ID),
+			Columns: []TemplateColumn{
+				{
+					ID:    fmt.Sprintf("col-perm-%d", et.ID),
+					Width: 12,
+					Blocks: []TemplateBlock{
+						{ID: fmt.Sprintf("blk-perm-%d", et.ID), Type: "permissions"},
+					},
+				},
+			},
+		})
+		layoutJSON, mErr := json.Marshal(et.Layout)
+		if mErr != nil {
+			slog.Warn("permissions heal: failed to marshal layout",
+				slog.Int("entity_type_id", et.ID),
+				slog.Any("error", mErr),
+			)
+			continue
+		}
+		if uErr := s.types.UpdateLayout(ctx, et.ID, string(layoutJSON)); uErr != nil {
+			slog.Warn("permissions heal: failed to update layout",
+				slog.Int("entity_type_id", et.ID),
+				slog.Any("error", uErr),
+			)
+			continue
+		}
+		updated++
+	}
+	return updated, nil
+}
+
+// layoutContainsBlockType returns true if the layout already has a block
+// of the given type anywhere in any row/column.
+func layoutContainsBlockType(layout EntityTypeLayout, blockType string) bool {
+	for _, row := range layout.Rows {
+		for _, col := range row.Columns {
+			for _, blk := range col.Blocks {
+				if blk.Type == blockType {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

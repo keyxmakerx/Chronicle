@@ -21,6 +21,7 @@ type EntityTypeRepository interface {
 	FindByID(ctx context.Context, id int) (*EntityType, error)
 	FindBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]EntityType, error)
+	ListAll(ctx context.Context) ([]EntityType, error)
 	ListChildTypes(ctx context.Context, parentID int) ([]EntityType, error)
 	ListByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error)
 	Update(ctx context.Context, et *EntityType) error
@@ -283,6 +284,48 @@ func (r *entityTypeRepository) UpdateLayout(ctx context.Context, id int, layoutJ
 		return apperror.NewNotFound("entity type not found")
 	}
 	return nil
+}
+
+// ListAll returns every entity_types row across every campaign.
+// Used by startup heal goroutines that need to walk the full table —
+// per-campaign helpers don't fit when there's no caller campaign.
+// Heavy on a large server; only call from background tasks.
+func (r *entityTypeRepository) ListAll(ctx context.Context) ([]EntityType, error) {
+	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
+	                 preset_category, parent_type_id, description, pinned_entity_ids, dashboard_layout,
+	                 fields, layout_json, sort_order, is_default, enabled
+	          FROM entity_types ORDER BY campaign_id, sort_order, name`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("listing all entity types: %w", err)
+	}
+	defer rows.Close()
+
+	var types []EntityType
+	for rows.Next() {
+		var et EntityType
+		var fieldsRaw, layoutRaw, pinnedRaw []byte
+		if err := rows.Scan(
+			&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
+			&et.Icon, &et.Color, &et.PresetCategory, &et.ParentTypeID, &et.Description, &pinnedRaw, &et.DashboardLayout,
+			&fieldsRaw, &layoutRaw, &et.SortOrder,
+			&et.IsDefault, &et.Enabled,
+		); err != nil {
+			return nil, fmt.Errorf("scanning entity type row: %w", err)
+		}
+		if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
+			return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
+		}
+		et.Layout = ParseLayoutJSON(layoutRaw)
+		if len(pinnedRaw) > 0 {
+			if err := json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs); err != nil {
+				return nil, fmt.Errorf("unmarshaling pinned entity IDs: %w", err)
+			}
+		}
+		types = append(types, et)
+	}
+	return types, rows.Err()
 }
 
 // HealDoubledPluralS rewrites name_plural for any entity_types row
