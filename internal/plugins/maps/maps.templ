@@ -183,7 +183,7 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 		</div>
 
 		<!-- Editor body. flex-1 makes it fill the remaining page height. -->
-		@MapEditorBody(cc, data, "flex-1 relative bg-surface-alt", "")
+		@MapEditorBody(cc, data, "flex-1 relative bg-surface-alt", mapBackgroundStyle(data.Map.BackgroundColor))
 	</div>
 }
 
@@ -608,7 +608,30 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				}
 			};
 
-			// Map settings: image upload + name/description.
+			// Background-color reset: clears the override + flips the
+			// hidden "is set" flag so saveMapSettings sends the empty
+			// string to the server (which the service layer treats as
+			// "revert to theme").
+			window.resetMapBackgroundColor = function () {
+				var setEl = document.getElementById('ms-background-color-set');
+				if (setEl) setEl.value = 'false';
+				if (Chronicle.notify) {
+					Chronicle.notify('Background color will revert to theme on save.', 'success');
+				}
+			};
+
+			// Detect when the operator interacts with the color picker
+			// (any click/change implies they want a custom color, not
+			// theme follow-through). Flip the "is set" flag so the save
+			// path sends the chosen color through.
+			(function () {
+				var picker = document.getElementById('ms-background-color');
+				var setEl = document.getElementById('ms-background-color-set');
+				if (!picker || !setEl) return;
+				picker.addEventListener('input', function () { setEl.value = 'true'; });
+			})();
+
+			// Map settings: image upload + name/description + background.
 			window.saveMapSettings = async function() {
 				var name = document.getElementById('ms-name').value;
 				var desc = document.getElementById('ms-description').value;
@@ -619,6 +642,18 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				var body = { name: name, image_width: imgW, image_height: imgH };
 				if (desc) body.description = desc;
 				if (imgID) body.image_id = imgID;
+
+				// Background color tri-state: omit the field entirely if
+				// neither the picker nor the reset button was touched.
+				// Server treats omitted-pointer as "leave unchanged" and
+				// empty-string as "clear to theme default".
+				var bgSet = document.getElementById('ms-background-color-set').value;
+				var bgVal = document.getElementById('ms-background-color').value;
+				if (bgSet === 'true') {
+					body.background_color = bgVal;
+				} else if (bgSet === 'false') {
+					body.background_color = '';
+				}
 
 				try {
 					var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID, {
@@ -959,6 +994,43 @@ templ mapSettingsModal(data MapViewData) {
 					</div>
 					<p class="text-xs text-fg-muted mt-1">Upload a map image (JPEG, PNG, WebP) or choose one already in this campaign. Image dimensions set the coordinate space.</p>
 				</div>
+				<!-- Background color override.
+				     Default (no override) follows the campaign theme — the
+				     map canvas uses bg-surface-alt which CSS-var-swaps
+				     between dark and light. Setting a color here forces a
+				     fixed canvas color regardless of theme (useful for
+				     "this dungeon is always pitch black" or "this map's
+				     parchment background must show through transparent
+				     PNGs"). The hidden input carries the tri-state to the
+				     save flow: empty string = clear; any value = set. -->
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Background color</label>
+					<div class="flex items-center gap-2">
+						<input
+							type="color"
+							id="ms-background-color"
+							value={ backgroundColorOrDefault(data.Map.BackgroundColor) }
+							class="w-10 h-10 rounded border border-edge cursor-pointer"
+							title="Click to override the canvas background color"
+						/>
+						<input type="hidden" id="ms-background-color-set" value={ backgroundColorIsSet(data.Map.BackgroundColor) }/>
+						<button
+							type="button"
+							class="btn-secondary text-xs"
+							onclick="resetMapBackgroundColor()"
+							title="Revert to the campaign theme (light/dark adaptive)"
+						>
+							<i class="fa-solid fa-rotate-left mr-1"></i> Reset to theme
+						</button>
+					</div>
+					<p class="text-xs text-fg-muted mt-1">
+						if data.Map.BackgroundColor != nil {
+							Custom color set — the canvas ignores theme switches.
+						} else {
+							Following theme — canvas adapts to light/dark mode.
+						}
+					</p>
+				</div>
 				<div class="flex items-center justify-between pt-2">
 					<button type="button" class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded transition-colors" onclick="deleteMap()">
 						<i class="fa-solid fa-trash mr-1"></i> Delete Map
@@ -983,6 +1055,43 @@ func derefStr(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// backgroundColorOrDefault returns the value used as the color picker's
+// initial state. <input type="color"> requires a hex value, so we fall
+// back to a neutral dark gray when no override is set — purely cosmetic
+// for the picker UI; whether the color is actually applied to the map
+// canvas depends on the hidden "is set" flag and what the renderer
+// receives. Don't mistake this default for the rendered fallback;
+// that's bg-surface-alt (theme-following) further down.
+func backgroundColorOrDefault(s *string) string {
+	if s == nil || *s == "" {
+		return "#1f2937"
+	}
+	return *s
+}
+
+// backgroundColorIsSet returns "true" when the map has a stored
+// override (so the save flow knows to preserve it on the next save
+// even if the operator doesn't touch the picker), and "" when no
+// override is set (so the save flow omits the field, keeping NULL).
+func backgroundColorIsSet(s *string) string {
+	if s != nil {
+		return "true"
+	}
+	return ""
+}
+
+// mapBackgroundStyle returns an inline style="background-color: ..."
+// fragment when the map has a custom color override, or empty string
+// when no override is set (theme-following bg-surface-alt remains in
+// effect via the container class). Used by MapEditorBody callers to
+// thread the override into mapContainerStyle.
+func mapBackgroundStyle(s *string) string {
+	if s == nil || *s == "" {
+		return ""
+	}
+	return "background-color: " + *s + ";"
 }
 
 // mapImageSignedURL returns a signed media URL for the map image, or an

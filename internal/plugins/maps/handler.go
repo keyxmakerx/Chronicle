@@ -186,22 +186,27 @@ func (h *Handler) UpdateMapAPI(c echo.Context) error {
 	}
 
 	var req struct {
-		Name        string  `json:"name"`
-		Description *string `json:"description"`
-		ImageID     *string `json:"image_id"`
-		ImageWidth  int     `json:"image_width"`
-		ImageHeight int     `json:"image_height"`
+		Name            string  `json:"name"`
+		Description     *string `json:"description"`
+		ImageID         *string `json:"image_id"`
+		ImageWidth      int     `json:"image_width"`
+		ImageHeight     int     `json:"image_height"`
+		// background_color is tri-state: omitted (nil) leaves the
+		// stored value unchanged; "" clears the override (revert to
+		// theme); any CSS color sets the override.
+		BackgroundColor *string `json:"background_color"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.UpdateMap(ctx, mapID, UpdateMapInput{
-		Name:        req.Name,
-		Description: req.Description,
-		ImageID:     req.ImageID,
-		ImageWidth:  req.ImageWidth,
-		ImageHeight: req.ImageHeight,
+		Name:            req.Name,
+		Description:     req.Description,
+		ImageID:         req.ImageID,
+		ImageWidth:      req.ImageWidth,
+		ImageHeight:     req.ImageHeight,
+		BackgroundColor: req.BackgroundColor,
 	})
 }
 

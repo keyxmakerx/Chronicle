@@ -127,6 +127,18 @@ func (s *mapService) UpdateMap(ctx context.Context, id string, input UpdateMapIn
 	m.ImageID = input.ImageID
 	m.ImageWidth = input.ImageWidth
 	m.ImageHeight = input.ImageHeight
+	// BackgroundColor tri-state per the input docstring: nil leaves
+	// unchanged; pointer-to-empty clears the override; any other value
+	// sets it. Maps the empty-string clear to a nil DB value so
+	// `WHERE background_color IS NULL` queries continue to work.
+	if input.BackgroundColor != nil {
+		if *input.BackgroundColor == "" {
+			m.BackgroundColor = nil
+		} else {
+			s := *input.BackgroundColor
+			m.BackgroundColor = &s
+		}
+	}
 
 	if err := s.repo.UpdateMap(ctx, m); err != nil {
 		return fmt.Errorf("update map: %w", err)
