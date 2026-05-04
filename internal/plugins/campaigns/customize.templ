@@ -168,16 +168,26 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 			</div>
 		</div>
 		<div class="flex-1 overflow-y-auto px-6 py-2">
-			<div
-				id="campaign-page-editor"
-				data-widget="layout-editor"
-				data-context="dashboard"
-				data-features="roles"
-				data-endpoint={ fmt.Sprintf("/campaigns/%s/dashboard-layout", cc.Campaign.ID) }
-				data-campaign-id={ cc.Campaign.ID }
-				data-csrf-token={ csrfToken }
-				data-role="default"
-			></div>
+			<!-- data-te-container scopes the layout editor's #te-save-btn lookup
+			     so this editor and the Owner Dashboard editor below each find
+			     their own save controls. -->
+			<div data-te-container class="h-full flex flex-col">
+				<div class="flex items-center justify-end gap-2 mb-2">
+					<span id="te-save-status" class="text-xs text-fg-muted"></span>
+					<button id="te-save-btn" class="btn-primary text-sm">Save Layout</button>
+				</div>
+				<div
+					id="campaign-page-editor"
+					class="flex-1"
+					data-widget="layout-editor"
+					data-context="dashboard"
+					data-features="roles"
+					data-endpoint={ fmt.Sprintf("/campaigns/%s/dashboard-layout", cc.Campaign.ID) }
+					data-campaign-id={ cc.Campaign.ID }
+					data-csrf-token={ csrfToken }
+					data-role="default"
+				></div>
+			</div>
 		</div>
 		<div class="px-6 pt-6 pb-2 shrink-0 border-t border-edge mt-4">
 			<div class="max-w-3xl mx-auto">
@@ -188,13 +198,20 @@ templ dashboardEditorTab(cc *CampaignContext, csrfToken string) {
 			</div>
 		</div>
 		<div class="flex-1 overflow-y-auto px-6 py-2">
-			<div
-				data-widget="layout-editor"
-				data-context="dashboard"
-				data-endpoint={ fmt.Sprintf("/campaigns/%s/owner-dashboard-layout", cc.Campaign.ID) }
-				data-campaign-id={ cc.Campaign.ID }
-				data-csrf-token={ csrfToken }
-			></div>
+			<div data-te-container class="h-full flex flex-col">
+				<div class="flex items-center justify-end gap-2 mb-2">
+					<span id="te-save-status" class="text-xs text-fg-muted"></span>
+					<button id="te-save-btn" class="btn-primary text-sm">Save Layout</button>
+				</div>
+				<div
+					class="flex-1"
+					data-widget="layout-editor"
+					data-context="dashboard"
+					data-endpoint={ fmt.Sprintf("/campaigns/%s/owner-dashboard-layout", cc.Campaign.ID) }
+					data-campaign-id={ cc.Campaign.ID }
+					data-csrf-token={ csrfToken }
+				></div>
+			</div>
 		</div>
 	</div>
 }
