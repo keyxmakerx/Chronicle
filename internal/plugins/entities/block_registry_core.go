@@ -206,6 +206,16 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		Contexts:    []string{"dashboard"},
 	}, nil)
 
+	// Three-card row matching the legacy hardcoded dashboard's All Pages /
+	// Members / Categories shortcuts. Lifted into a block so the default
+	// dashboard can be expressed entirely as a layout JSON, which lets the
+	// customization editor edit the same structure the live page renders.
+	r.Register(BlockMeta{
+		Type: "quick_actions", Label: "Quick Actions", Icon: "fa-bolt",
+		Description: "All Pages / Members / Categories shortcut cards",
+		Contexts:    []string{"dashboard"},
+	}, nil)
+
 	r.Register(BlockMeta{
 		Type: "category_grid", Label: "Category Grid", Icon: "fa-grid-2",
 		Description: "Quick-nav entity type grid",

@@ -1034,6 +1034,13 @@ func (h *Handler) GetDashboardLayout(c echo.Context) error {
 	}
 
 	layout := campaign.GetRoleDashboardJSON(roleName)
+	// When no layout is saved for this role, hand the editor the
+	// synthesized default — same structure the live page renders so the
+	// operator can immediately drag/edit/delete the pre-populated blocks
+	// instead of staring at an empty canvas.
+	if layout == nil {
+		layout = DefaultDashboardLayout()
+	}
 	return c.JSON(http.StatusOK, layout)
 }
 
