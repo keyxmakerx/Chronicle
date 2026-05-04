@@ -89,6 +89,8 @@ type TemplateBlock struct {
 }
 
 // DefaultLayout returns the standard two-column layout used for new entity types.
+// Includes a full-width permissions block at the bottom so operators can
+// share entities per-player without hunting through edit forms.
 func DefaultLayout() EntityTypeLayout {
 	return EntityTypeLayout{
 		Rows: []TemplateRow{
@@ -110,6 +112,18 @@ func DefaultLayout() EntityTypeLayout {
 							{ID: "blk-image", Type: "image"},
 							{ID: "blk-attrs", Type: "attributes"},
 							{ID: "blk-details", Type: "details"},
+						},
+					},
+				},
+			},
+			{
+				ID: "row-perm",
+				Columns: []TemplateColumn{
+					{
+						ID:    "col-perm",
+						Width: 12,
+						Blocks: []TemplateBlock{
+							{ID: "blk-perm", Type: "permissions"},
 						},
 					},
 				},

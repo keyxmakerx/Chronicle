@@ -56,6 +56,10 @@ func (m *mockEntityTypeRepo) ListChildTypes(_ context.Context, _ int) ([]EntityT
 	return nil, nil
 }
 
+func (m *mockEntityTypeRepo) ListAll(_ context.Context) ([]EntityType, error) {
+	return nil, nil
+}
+
 func (m *mockEntityTypeRepo) ListByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error) {
 	return nil, nil
 }

@@ -1296,6 +1296,22 @@ func (a *App) RegisterRoutes() {
 		}
 	}()
 
+	// One-shot backfill: append a permissions block to every entity
+	// type layout that doesn't already have one. Means existing
+	// campaigns get the per-entity permissions UI without operators
+	// hand-editing layouts. Idempotent; failures per row are logged
+	// and skipped, the goroutine never blocks boot.
+	go func() {
+		n, err := entityService.EnsurePermissionsBlockInDefaults(context.Background())
+		if err != nil {
+			slog.Warn("entity_types: permissions block backfill failed", slog.Any("error", err))
+			return
+		}
+		if n > 0 {
+			slog.Info("entity_types: permissions block backfill added to layouts", slog.Int("rows", n))
+		}
+	}()
+
 	// Campaigns plugin: CRUD, membership, ownership transfer.
 	// EntityService is passed as EntityTypeSeeder to seed defaults on campaign creation.
 	userFinder := campaigns.NewUserFinderAdapter(authRepo)

@@ -112,6 +112,20 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return blockShopInventory(ctx.CC, ctx.Entity, ctx.CSRFToken)
 	})
 
+	// Per-entity permissions widget. Mounts the same JS widget the
+	// entity edit form uses so operators can manage visibility and
+	// per-user/role grants without leaving the entity page. Auto-added
+	// to every entity-type layout via EnsurePermissionsBlockInDefaults
+	// — singleton because the widget binds fixed DOM IDs internally.
+	r.Register(BlockMeta{
+		Type: "permissions", Label: "Permissions", Icon: "fa-user-shield",
+		Description: "Visibility and per-user / per-role access grants",
+		Contexts:    []string{"template"},
+		Singleton:   true,
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockPermissions(ctx.CC, ctx.Entity, ctx.CSRFToken)
+	})
+
 	r.Register(BlockMeta{
 		Type: "inventory", Label: "Inventory", Icon: "fa-shield-halved",
 		Description: "Character inventory — items with quantity, equipped, and attuned",
