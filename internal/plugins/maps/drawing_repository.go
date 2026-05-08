@@ -35,6 +35,7 @@ type DrawingRepository interface {
 
 	// Fog CRUD.
 	CreateFog(ctx context.Context, f *FogRegion) error
+	GetFog(ctx context.Context, id string) (*FogRegion, error)
 	DeleteFog(ctx context.Context, id string) error
 	ListFog(ctx context.Context, mapID string) ([]FogRegion, error)
 	ResetFog(ctx context.Context, mapID string) error
@@ -346,10 +347,10 @@ func (r *drawingRepo) GetLayer(ctx context.Context, id string) (*Layer, error) {
 	var l Layer
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, map_id, name, layer_type, sort_order, is_visible, opacity,
-			is_locked, created_at
+			is_locked, created_at, updated_at
 		FROM map_layers WHERE id = ?`, id,
 	).Scan(&l.ID, &l.MapID, &l.Name, &l.LayerType, &l.SortOrder,
-		&l.IsVisible, &l.Opacity, &l.IsLocked, &l.CreatedAt)
+		&l.IsVisible, &l.Opacity, &l.IsLocked, &l.CreatedAt, &l.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, apperror.NewNotFound("layer not found: " + id)
 	}
@@ -392,7 +393,7 @@ func (r *drawingRepo) DeleteLayer(ctx context.Context, id string) error {
 func (r *drawingRepo) ListLayers(ctx context.Context, mapID string) ([]Layer, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, map_id, name, layer_type, sort_order, is_visible, opacity,
-			is_locked, created_at
+			is_locked, created_at, updated_at
 		FROM map_layers WHERE map_id = ?
 		ORDER BY sort_order ASC`, mapID)
 	if err != nil {
@@ -404,7 +405,7 @@ func (r *drawingRepo) ListLayers(ctx context.Context, mapID string) ([]Layer, er
 	for rows.Next() {
 		var l Layer
 		err := rows.Scan(&l.ID, &l.MapID, &l.Name, &l.LayerType, &l.SortOrder,
-			&l.IsVisible, &l.Opacity, &l.IsLocked, &l.CreatedAt)
+			&l.IsVisible, &l.Opacity, &l.IsLocked, &l.CreatedAt, &l.UpdatedAt)
 		if err != nil {
 			return nil, apperror.NewInternal(err)
 		}
@@ -428,6 +429,22 @@ func (r *drawingRepo) CreateFog(ctx context.Context, f *FogRegion) error {
 	return nil
 }
 
+// GetFog retrieves a fog region by ID.
+func (r *drawingRepo) GetFog(ctx context.Context, id string) (*FogRegion, error) {
+	var f FogRegion
+	err := r.db.QueryRowContext(ctx, `
+		SELECT id, map_id, points, is_explored, created_at, updated_at
+		FROM map_fog WHERE id = ?`, id,
+	).Scan(&f.ID, &f.MapID, &f.Points, &f.IsExplored, &f.CreatedAt, &f.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, apperror.NewNotFound("fog region not found: " + id)
+	}
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return &f, nil
+}
+
 // DeleteFog removes a fog region.
 func (r *drawingRepo) DeleteFog(ctx context.Context, id string) error {
 	result, err := r.db.ExecContext(ctx, `DELETE FROM map_fog WHERE id = ?`, id)
@@ -443,7 +460,7 @@ func (r *drawingRepo) DeleteFog(ctx context.Context, id string) error {
 // ListFog returns all fog regions for a map.
 func (r *drawingRepo) ListFog(ctx context.Context, mapID string) ([]FogRegion, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, map_id, points, is_explored, created_at
+		SELECT id, map_id, points, is_explored, created_at, updated_at
 		FROM map_fog WHERE map_id = ?
 		ORDER BY created_at ASC`, mapID)
 	if err != nil {
@@ -454,7 +471,7 @@ func (r *drawingRepo) ListFog(ctx context.Context, mapID string) ([]FogRegion, e
 	var regions []FogRegion
 	for rows.Next() {
 		var f FogRegion
-		err := rows.Scan(&f.ID, &f.MapID, &f.Points, &f.IsExplored, &f.CreatedAt)
+		err := rows.Scan(&f.ID, &f.MapID, &f.Points, &f.IsExplored, &f.CreatedAt, &f.UpdatedAt)
 		if err != nil {
 			return nil, apperror.NewInternal(err)
 		}

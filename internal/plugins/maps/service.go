@@ -5,8 +5,10 @@ import (
 	"crypto/rand"
 	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/concurrency"
 )
 
 // iconPattern validates FontAwesome icon class names to prevent XSS injection
@@ -27,12 +29,17 @@ func generateID() string {
 }
 
 // MapService defines business logic for the maps plugin.
+//
+// Mutation methods that mutate row-level state (Update*, Delete*) accept
+// an optional expectedUpdatedAt token for optimistic concurrency. Pass
+// nil for last-writer-wins; pass the caller's last-known UpdatedAt to
+// trigger 409 Conflict if the row has been modified since.
 type MapService interface {
 	// Map CRUD.
 	CreateMap(ctx context.Context, input CreateMapInput) (*Map, error)
 	GetMap(ctx context.Context, id string) (*Map, error)
 	UpdateMap(ctx context.Context, id string, input UpdateMapInput) error
-	DeleteMap(ctx context.Context, id string) error
+	DeleteMap(ctx context.Context, id string, expectedUpdatedAt *time.Time) error
 	ListMaps(ctx context.Context, campaignID string) ([]Map, error)
 	SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
@@ -40,7 +47,7 @@ type MapService interface {
 	CreateMarker(ctx context.Context, input CreateMarkerInput) (*Marker, error)
 	GetMarker(ctx context.Context, id string) (*Marker, error)
 	UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput) error
-	DeleteMarker(ctx context.Context, id string) error
+	DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time) error
 	ListMarkers(ctx context.Context, mapID string, role int, userID string) ([]Marker, error)
 
 	// Wiring.
@@ -118,6 +125,10 @@ func (s *mapService) UpdateMap(ctx context.Context, id string, input UpdateMapIn
 		return apperror.NewNotFound("map not found")
 	}
 
+	if err := concurrency.Check(m.UpdatedAt, input.ExpectedUpdatedAt, "map"); err != nil {
+		return err
+	}
+
 	if input.Name == "" {
 		return apperror.NewValidation("map name is required")
 	}
@@ -147,13 +158,16 @@ func (s *mapService) UpdateMap(ctx context.Context, id string, input UpdateMapIn
 }
 
 // DeleteMap removes a map and its markers.
-func (s *mapService) DeleteMap(ctx context.Context, id string) error {
+func (s *mapService) DeleteMap(ctx context.Context, id string, expectedUpdatedAt *time.Time) error {
 	m, err := s.repo.GetMap(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get map for delete: %w", err)
 	}
 	if m == nil {
 		return apperror.NewNotFound("map not found")
+	}
+	if err := concurrency.Check(m.UpdatedAt, expectedUpdatedAt, "map"); err != nil {
+		return err
 	}
 	if err := s.repo.DeleteMap(ctx, id); err != nil {
 		return fmt.Errorf("delete map: %w", err)
@@ -244,6 +258,10 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 		return apperror.NewNotFound("marker not found")
 	}
 
+	if err := concurrency.Check(mk.UpdatedAt, input.ExpectedUpdatedAt, "marker"); err != nil {
+		return err
+	}
+
 	if input.Name == "" {
 		return apperror.NewValidation("marker name is required")
 	}
@@ -279,13 +297,16 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 }
 
 // DeleteMarker removes a marker.
-func (s *mapService) DeleteMarker(ctx context.Context, id string) error {
+func (s *mapService) DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time) error {
 	mk, err := s.repo.GetMarker(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get marker for delete: %w", err)
 	}
 	if mk == nil {
 		return apperror.NewNotFound("marker not found")
+	}
+	if err := concurrency.Check(mk.UpdatedAt, expectedUpdatedAt, "marker"); err != nil {
+		return err
 	}
 	if err := s.repo.DeleteMarker(ctx, id); err != nil {
 		return fmt.Errorf("delete marker: %w", err)

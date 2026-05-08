@@ -107,13 +107,19 @@ type CreateMapInput struct {
 // BackgroundColor is a tri-state: nil pointer = leave unchanged;
 // pointer-to-empty-string = clear the override (revert to theme); any
 // other CSS color string = set as the override.
+//
+// ExpectedUpdatedAt is the optional optimistic-concurrency token: when
+// non-nil, the service rejects with 409 Conflict if the row's UpdatedAt
+// has advanced past it. Omitting the field falls back to last-writer-wins
+// for backwards compatibility — see internal/concurrency.Check.
 type UpdateMapInput struct {
-	Name            string
-	Description     *string
-	ImageID         *string
-	ImageWidth      int
-	ImageHeight     int
-	BackgroundColor *string
+	Name              string
+	Description       *string
+	ImageID           *string
+	ImageWidth        int
+	ImageHeight       int
+	BackgroundColor   *string
+	ExpectedUpdatedAt *time.Time
 }
 
 // CreateMarkerInput is the validated input for placing a marker on a map.
@@ -134,18 +140,20 @@ type CreateMarkerInput struct {
 }
 
 // UpdateMarkerInput is the validated input for updating a marker.
+// ExpectedUpdatedAt is the optimistic-concurrency token (optional).
 type UpdateMarkerInput struct {
-	Name            string
-	Description     *string
-	X               float64
-	Y               float64
-	Icon            string
-	Color           string
-	PinCategory     *string
-	EntityID        *string
-	Visibility      string
-	VisibilityRules *string
-	FoundryID       *string
+	Name              string
+	Description       *string
+	X                 float64
+	Y                 float64
+	Icon              string
+	Color             string
+	PinCategory       *string
+	EntityID          *string
+	Visibility        string
+	VisibilityRules   *string
+	FoundryID         *string
+	ExpectedUpdatedAt *time.Time
 }
 
 // MapViewData holds all data needed to render a single map page.

@@ -77,9 +77,12 @@ func newUpgrader(allowedOrigins []string, dynamicOrigins DynamicOrigins) gorilla
 // Implemented by the syncapi plugin for API key auth and by the auth plugin
 // for browser session auth.
 type Authenticator interface {
-	// AuthenticateWS extracts campaign ID, user ID, source, and role from
-	// the upgrade request. Returns an error if authentication fails.
-	AuthenticateWS(r *http.Request) (campaignID, userID, source string, role int, err error)
+	// AuthenticateWS extracts campaign ID, user ID, source, role, and the
+	// IsDmGranted flag from the upgrade request. The IsDmGranted flag
+	// mirrors campaigns.CampaignContext and lets the hub deliver
+	// RequiresDM messages to non-Owner users the campaign Owner has
+	// granted dm_only visibility. Returns an error if authentication fails.
+	AuthenticateWS(r *http.Request) (campaignID, userID, source string, role int, isDmGranted bool, err error)
 }
 
 // HandleUpgrade returns an Echo handler that upgrades HTTP connections to WebSocket
@@ -94,7 +97,7 @@ func HandleUpgrade(hub *Hub, auth Authenticator, allowedOrigins []string, dynami
 	return func(c echo.Context) error {
 		r := c.Request()
 
-		campaignID, userID, source, role, err := auth.AuthenticateWS(r)
+		campaignID, userID, source, role, isDmGranted, err := auth.AuthenticateWS(r)
 		if err != nil {
 			slog.Warn("ws: auth failed",
 				slog.Any("error", err),
@@ -112,7 +115,7 @@ func HandleUpgrade(hub *Hub, auth Authenticator, allowedOrigins []string, dynami
 			return nil // Upgrade already sent HTTP response.
 		}
 
-		hub.RegisterClient(conn, campaignID, userID, source, role)
+		hub.RegisterClient(conn, campaignID, userID, source, role, isDmGranted)
 		return nil
 	}
 }

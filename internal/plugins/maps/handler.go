@@ -3,6 +3,7 @@ package maps
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -194,19 +195,21 @@ func (h *Handler) UpdateMapAPI(c echo.Context) error {
 		// background_color is tri-state: omitted (nil) leaves the
 		// stored value unchanged; "" clears the override (revert to
 		// theme); any CSS color sets the override.
-		BackgroundColor *string `json:"background_color"`
+		BackgroundColor   *string    `json:"background_color"`
+		ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
 
 	return h.svc.UpdateMap(ctx, mapID, UpdateMapInput{
-		Name:            req.Name,
-		Description:     req.Description,
-		ImageID:         req.ImageID,
-		ImageWidth:      req.ImageWidth,
-		ImageHeight:     req.ImageHeight,
-		BackgroundColor: req.BackgroundColor,
+		Name:              req.Name,
+		Description:       req.Description,
+		ImageID:           req.ImageID,
+		ImageWidth:        req.ImageWidth,
+		ImageHeight:       req.ImageHeight,
+		BackgroundColor:   req.BackgroundColor,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	})
 }
 
@@ -222,10 +225,31 @@ func (h *Handler) DeleteMapAPI(c echo.Context) error {
 		return err
 	}
 
-	if err := h.svc.DeleteMap(ctx, mapID); err != nil {
+	if err := h.svc.DeleteMap(ctx, mapID, ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
+}
+
+// ParseExpectedUpdatedAt extracts the optional optimistic-concurrency
+// token. Callers may send it via a JSON body field on DELETE requests
+// (`{"expected_updated_at": "..."}`) or via the `expected_updated_at`
+// query parameter — both are accepted because curl-style DELETE often
+// avoids bodies. Invalid values fall through to nil (last-writer-wins)
+// rather than 400 — the field is advisory.
+func ParseExpectedUpdatedAt(c echo.Context) *time.Time {
+	if q := c.QueryParam("expected_updated_at"); q != "" {
+		if t, err := time.Parse(time.RFC3339Nano, q); err == nil {
+			return &t
+		}
+	}
+	var body struct {
+		ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
+	}
+	if err := c.Bind(&body); err == nil && body.ExpectedUpdatedAt != nil {
+		return body.ExpectedUpdatedAt
+	}
+	return nil
 }
 
 // CreateMarkerAPI places a new marker on a map.
@@ -309,16 +333,17 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 	}
 
 	var req struct {
-		Name            string  `json:"name"`
-		Description     *string `json:"description"`
-		X               float64 `json:"x"`
-		Y               float64 `json:"y"`
-		Icon            string  `json:"icon"`
-		Color           string  `json:"color"`
-		PinCategory     *string `json:"pin_category"`
-		EntityID        *string `json:"entity_id"`
-		Visibility      string  `json:"visibility"`
-		VisibilityRules *string `json:"visibility_rules"`
+		Name              string     `json:"name"`
+		Description       *string    `json:"description"`
+		X                 float64    `json:"x"`
+		Y                 float64    `json:"y"`
+		Icon              string     `json:"icon"`
+		Color             string     `json:"color"`
+		PinCategory       *string    `json:"pin_category"`
+		EntityID          *string    `json:"entity_id"`
+		Visibility        string     `json:"visibility"`
+		VisibilityRules   *string    `json:"visibility_rules"`
+		ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -336,16 +361,17 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 	}
 
 	return h.svc.UpdateMarker(ctx, markerID, UpdateMarkerInput{
-		Name:            req.Name,
-		Description:     req.Description,
-		X:               req.X,
-		Y:               req.Y,
-		Icon:            req.Icon,
-		Color:           req.Color,
-		PinCategory:     req.PinCategory,
-		EntityID:        req.EntityID,
-		Visibility:      visibility,
-		VisibilityRules: visRules,
+		Name:              req.Name,
+		Description:       req.Description,
+		X:                 req.X,
+		Y:                 req.Y,
+		Icon:              req.Icon,
+		Color:             req.Color,
+		PinCategory:       req.PinCategory,
+		EntityID:          req.EntityID,
+		Visibility:        visibility,
+		VisibilityRules:   visRules,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	})
 }
 
@@ -361,7 +387,7 @@ func (h *Handler) DeleteMarkerAPI(c echo.Context) error {
 		return err
 	}
 
-	if err := h.svc.DeleteMarker(ctx, markerID); err != nil {
+	if err := h.svc.DeleteMarker(ctx, markerID, ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

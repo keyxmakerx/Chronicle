@@ -3,8 +3,10 @@ package maps
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/concurrency"
 )
 
 // validDrawingTypes enumerates allowed drawing types.
@@ -26,12 +28,19 @@ var validLayerTypes = map[string]bool{
 }
 
 // DrawingService defines business logic for drawings, tokens, layers, and fog.
+//
+// Mutation methods (Update*, Delete*) accept an optional optimistic-
+// concurrency token. Layer and fog gain UpdatedAt on migration 006 so
+// they participate in the same pattern as drawings/tokens. Fog mutations
+// are short-lived and don't expose an Update path; only Delete carries
+// the token in case a "delete this fog you saw at time T" call races a
+// concurrent reset.
 type DrawingService interface {
 	// Drawing CRUD.
 	CreateDrawing(ctx context.Context, input CreateDrawingInput) (*Drawing, error)
 	GetDrawing(ctx context.Context, id string) (*Drawing, error)
 	UpdateDrawing(ctx context.Context, id string, input UpdateDrawingInput) error
-	DeleteDrawing(ctx context.Context, id string) error
+	DeleteDrawing(ctx context.Context, id string, expectedUpdatedAt *time.Time) error
 	ListDrawings(ctx context.Context, mapID string, role int) ([]Drawing, error)
 
 	// Token CRUD.
@@ -39,14 +48,14 @@ type DrawingService interface {
 	GetToken(ctx context.Context, id string) (*Token, error)
 	UpdateToken(ctx context.Context, id string, input UpdateTokenInput) error
 	UpdateTokenPosition(ctx context.Context, id string, input UpdateTokenPositionInput) error
-	DeleteToken(ctx context.Context, id string) error
+	DeleteToken(ctx context.Context, id string, expectedUpdatedAt *time.Time) error
 	ListTokens(ctx context.Context, mapID string, role int) ([]Token, error)
 
 	// Layer CRUD.
 	CreateLayer(ctx context.Context, input CreateLayerInput) (*Layer, error)
 	GetLayer(ctx context.Context, id string) (*Layer, error)
 	UpdateLayer(ctx context.Context, id string, input UpdateLayerInput) error
-	DeleteLayer(ctx context.Context, id string) error
+	DeleteLayer(ctx context.Context, id string, expectedUpdatedAt *time.Time) error
 	ListLayers(ctx context.Context, mapID string) ([]Layer, error)
 
 	// Fog CRUD.
@@ -176,6 +185,10 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id string, input Upd
 		return err
 	}
 
+	if err := concurrency.Check(d.UpdatedAt, input.ExpectedUpdatedAt, "drawing"); err != nil {
+		return err
+	}
+
 	if len(input.Points) > 0 {
 		d.Points = input.Points
 	}
@@ -202,9 +215,12 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id string, input Upd
 }
 
 // DeleteDrawing removes a drawing.
-func (s *drawingService) DeleteDrawing(ctx context.Context, id string) error {
+func (s *drawingService) DeleteDrawing(ctx context.Context, id string, expectedUpdatedAt *time.Time) error {
 	d, err := s.repo.GetDrawing(ctx, id)
 	if err != nil {
+		return err
+	}
+	if err := concurrency.Check(d.UpdatedAt, expectedUpdatedAt, "drawing"); err != nil {
 		return err
 	}
 	if err := s.repo.DeleteDrawing(ctx, id); err != nil {
@@ -294,6 +310,10 @@ func (s *drawingService) UpdateToken(ctx context.Context, id string, input Updat
 		return err
 	}
 
+	if err := concurrency.Check(t.UpdatedAt, input.ExpectedUpdatedAt, "token"); err != nil {
+		return err
+	}
+
 	if input.Name != "" {
 		t.Name = input.Name
 	}
@@ -329,9 +349,25 @@ func (s *drawingService) UpdateToken(ctx context.Context, id string, input Updat
 }
 
 // UpdateTokenPosition updates only the position (optimized for drag).
+//
+// When expectedUpdatedAt is provided, the call refetches the token first
+// to enforce optimistic concurrency. Drag pipelines that fire many
+// position updates per second can simply omit it and accept last-writer-
+// wins; deliberate "drop here" actions can include it to detect
+// cross-user collisions. The pre-fetch is skipped on the no-token path
+// to keep the drag fast path on the same code shape as before.
 func (s *drawingService) UpdateTokenPosition(ctx context.Context, id string, input UpdateTokenPositionInput) error {
 	if input.X < 0 || input.X > 100 || input.Y < 0 || input.Y > 100 {
 		return apperror.NewBadRequest("token coordinates must be between 0 and 100")
+	}
+	if input.ExpectedUpdatedAt != nil {
+		t, err := s.repo.GetToken(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := concurrency.Check(t.UpdatedAt, input.ExpectedUpdatedAt, "token"); err != nil {
+			return err
+		}
 	}
 	if err := s.repo.UpdateTokenPosition(ctx, id, input.X, input.Y); err != nil {
 		return err
@@ -345,9 +381,12 @@ func (s *drawingService) UpdateTokenPosition(ctx context.Context, id string, inp
 }
 
 // DeleteToken removes a token.
-func (s *drawingService) DeleteToken(ctx context.Context, id string) error {
+func (s *drawingService) DeleteToken(ctx context.Context, id string, expectedUpdatedAt *time.Time) error {
 	t, err := s.repo.GetToken(ctx, id)
 	if err != nil {
+		return err
+	}
+	if err := concurrency.Check(t.UpdatedAt, expectedUpdatedAt, "token"); err != nil {
 		return err
 	}
 	if err := s.repo.DeleteToken(ctx, id); err != nil {
@@ -407,6 +446,10 @@ func (s *drawingService) UpdateLayer(ctx context.Context, id string, input Updat
 		return err
 	}
 
+	if err := concurrency.Check(l.UpdatedAt, input.ExpectedUpdatedAt, "layer"); err != nil {
+		return err
+	}
+
 	if input.Name != "" {
 		l.Name = input.Name
 	}
@@ -423,9 +466,12 @@ func (s *drawingService) UpdateLayer(ctx context.Context, id string, input Updat
 }
 
 // DeleteLayer removes a layer.
-func (s *drawingService) DeleteLayer(ctx context.Context, id string) error {
+func (s *drawingService) DeleteLayer(ctx context.Context, id string, expectedUpdatedAt *time.Time) error {
 	l, err := s.repo.GetLayer(ctx, id)
 	if err != nil {
+		return err
+	}
+	if err := concurrency.Check(l.UpdatedAt, expectedUpdatedAt, "layer"); err != nil {
 		return err
 	}
 	if err := s.repo.DeleteLayer(ctx, id); err != nil {
@@ -462,13 +508,18 @@ func (s *drawingService) CreateFog(ctx context.Context, input CreateFogInput) (*
 	return f, nil
 }
 
-// DeleteFog removes a fog region.
+// DeleteFog removes a fog region. Looks the row up first so the delete
+// event can carry mapID and so the handler still gets a 404 when the fog
+// region doesn't exist (rather than a silent success).
 func (s *drawingService) DeleteFog(ctx context.Context, id string) error {
+	f, err := s.repo.GetFog(ctx, id)
+	if err != nil {
+		return err
+	}
 	if err := s.repo.DeleteFog(ctx, id); err != nil {
 		return err
 	}
-	// Fog events don't carry the mapID easily after delete, but the handler
-	// already verified ownership. Emit a generic fog updated event.
+	s.events.PublishFogEvent("deleted", s.campaignForMap(ctx, f.MapID), f.MapID, f)
 	return nil
 }
 

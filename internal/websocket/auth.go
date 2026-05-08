@@ -22,11 +22,15 @@ type SessionAuthenticator interface {
 	AuthenticateSessionForWS(r *http.Request) (userID string, err error)
 }
 
-// CampaignRoleLookup resolves a user's role in a campaign.
+// CampaignRoleLookup resolves a user's role and DM-grant status in a campaign.
 // Implemented by the campaigns service.
 type CampaignRoleLookup interface {
 	// GetUserCampaignRole returns the user's role in the campaign (0 if not a member).
 	GetUserCampaignRole(ctx context.Context, campaignID, userID string) (int, error)
+	// IsUserDmGranted returns true if the campaign Owner has granted this
+	// user dm_only visibility via CampaignSettings.DmGrantIDs. Lets the
+	// hub deliver RequiresDM messages to trusted non-Owner members.
+	IsUserDmGranted(ctx context.Context, campaignID, userID string) (bool, error)
 }
 
 // MultiAuthenticator combines API key and session authentication for WS upgrades.
@@ -49,30 +53,31 @@ func NewMultiAuthenticator(apiKey APIKeyAuthenticator, session SessionAuthentica
 
 // AuthenticateWS implements the Authenticator interface.
 // Priority: API key (via ?token= query param) > Session cookie.
-func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID, source string, role int, err error) {
+func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID, source string, role int, isDmGranted bool, err error) {
 	ctx := r.Context()
 
 	// Try API key auth first (Foundry VTT uses this).
 	token := r.URL.Query().Get("token")
 	if token != "" {
 		if a.apiKeyAuth == nil {
-			return "", "", "", 0, fmt.Errorf("api key auth not configured")
+			return "", "", "", 0, false, fmt.Errorf("api key auth not configured")
 		}
 		campaignID, userID, role, err = a.apiKeyAuth.AuthenticateKeyForWS(ctx, token)
 		if err != nil {
-			return "", "", "", 0, fmt.Errorf("api key auth: %w", err)
+			return "", "", "", 0, false, fmt.Errorf("api key auth: %w", err)
 		}
-		return campaignID, userID, "foundry", role, nil
+		isDmGranted = a.lookupDmGranted(ctx, campaignID, userID)
+		return campaignID, userID, "foundry", role, isDmGranted, nil
 	}
 
 	// Fall back to session cookie auth (browser clients).
 	if a.sessionAuth == nil {
-		return "", "", "", 0, fmt.Errorf("no authentication provided")
+		return "", "", "", 0, false, fmt.Errorf("no authentication provided")
 	}
 
 	userID, err = a.sessionAuth.AuthenticateSessionForWS(r)
 	if err != nil {
-		return "", "", "", 0, fmt.Errorf("session auth: %w", err)
+		return "", "", "", 0, false, fmt.Errorf("session auth: %w", err)
 	}
 
 	// Session auth requires a campaign parameter.
@@ -85,24 +90,42 @@ func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID
 			if a.apiKeyAuth != nil {
 				campaignID, userID, role, err = a.apiKeyAuth.AuthenticateKeyForWS(ctx, rawKey)
 				if err != nil {
-					return "", "", "", 0, fmt.Errorf("bearer auth: %w", err)
+					return "", "", "", 0, false, fmt.Errorf("bearer auth: %w", err)
 				}
-				return campaignID, userID, "foundry", role, nil
+				isDmGranted = a.lookupDmGranted(ctx, campaignID, userID)
+				return campaignID, userID, "foundry", role, isDmGranted, nil
 			}
 		}
-		return "", "", "", 0, fmt.Errorf("campaign parameter required for session auth")
+		return "", "", "", 0, false, fmt.Errorf("campaign parameter required for session auth")
 	}
 
 	// Look up the user's role in the campaign.
 	if a.roleLookup != nil {
 		role, err = a.roleLookup.GetUserCampaignRole(ctx, campaignID, userID)
 		if err != nil {
-			return "", "", "", 0, fmt.Errorf("role lookup: %w", err)
+			return "", "", "", 0, false, fmt.Errorf("role lookup: %w", err)
 		}
 		if role == 0 {
-			return "", "", "", 0, fmt.Errorf("user is not a member of campaign %s", campaignID)
+			return "", "", "", 0, false, fmt.Errorf("user is not a member of campaign %s", campaignID)
 		}
 	}
 
-	return campaignID, userID, "browser", role, nil
+	isDmGranted = a.lookupDmGranted(ctx, campaignID, userID)
+	return campaignID, userID, "browser", role, isDmGranted, nil
+}
+
+// lookupDmGranted resolves the user's IsDmGranted flag, swallowing lookup
+// errors as "not granted" — auth has already succeeded and a stale grant
+// flag is a soft failure (worst case the user temporarily can't see
+// dm_only messages until they reconnect). Logging would belong on the
+// adapter side; the websocket package stays free of slog noise.
+func (a *MultiAuthenticator) lookupDmGranted(ctx context.Context, campaignID, userID string) bool {
+	if a.roleLookup == nil || campaignID == "" || userID == "" {
+		return false
+	}
+	granted, err := a.roleLookup.IsUserDmGranted(ctx, campaignID, userID)
+	if err != nil {
+		return false
+	}
+	return granted
 }

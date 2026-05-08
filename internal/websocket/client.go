@@ -43,6 +43,15 @@ type Client struct {
 	// Role is the user's campaign role (for permission filtering).
 	Role int
 
+	// IsDmGranted mirrors campaigns.CampaignContext.IsDmGranted —
+	// non-Owner members the campaign Owner has granted dm_only
+	// visibility to via CampaignSettings.DmGrantIDs. The hub's
+	// broadcast gate (see hub.go) treats Role>=Owner OR IsDmGranted as
+	// "may receive RequiresDM messages." Resolved once at registration
+	// from the auth path so the gate is a per-message constant-time
+	// check; revoking a grant requires the user to reconnect.
+	IsDmGranted bool
+
 	hub  *Hub
 	conn *gorillaWs.Conn
 	send chan []byte
