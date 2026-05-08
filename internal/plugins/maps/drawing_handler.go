@@ -3,6 +3,7 @@ package maps
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -146,30 +147,32 @@ func (h *DrawingHandler) UpdateDrawing(c echo.Context) error {
 	}
 
 	var req struct {
-		Points      json.RawMessage `json:"points"`
-		StrokeColor string          `json:"stroke_color"`
-		StrokeWidth float64         `json:"stroke_width"`
-		FillColor   *string         `json:"fill_color"`
-		FillAlpha   float64         `json:"fill_alpha"`
-		TextContent *string         `json:"text_content"`
-		FontSize    *int            `json:"font_size"`
-		Rotation    float64         `json:"rotation"`
-		Visibility  string          `json:"visibility"`
+		Points            json.RawMessage `json:"points"`
+		StrokeColor       string          `json:"stroke_color"`
+		StrokeWidth       float64         `json:"stroke_width"`
+		FillColor         *string         `json:"fill_color"`
+		FillAlpha         float64         `json:"fill_alpha"`
+		TextContent       *string         `json:"text_content"`
+		FontSize          *int            `json:"font_size"`
+		Rotation          float64         `json:"rotation"`
+		Visibility        string          `json:"visibility"`
+		ExpectedUpdatedAt *time.Time      `json:"expected_updated_at"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), UpdateDrawingInput{
-		Points:      req.Points,
-		StrokeColor: req.StrokeColor,
-		StrokeWidth: req.StrokeWidth,
-		FillColor:   req.FillColor,
-		FillAlpha:   req.FillAlpha,
-		TextContent: req.TextContent,
-		FontSize:    req.FontSize,
-		Rotation:    req.Rotation,
-		Visibility:  req.Visibility,
+		Points:            req.Points,
+		StrokeColor:       req.StrokeColor,
+		StrokeWidth:       req.StrokeWidth,
+		FillColor:         req.FillColor,
+		FillAlpha:         req.FillAlpha,
+		TextContent:       req.TextContent,
+		FontSize:          req.FontSize,
+		Rotation:          req.Rotation,
+		Visibility:        req.Visibility,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	}); err != nil {
 		return err
 	}
@@ -186,7 +189,7 @@ func (h *DrawingHandler) DeleteDrawing(c echo.Context) error {
 		return err
 	}
 
-	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("did")); err != nil {
+	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("did"), ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
@@ -323,60 +326,62 @@ func (h *DrawingHandler) UpdateToken(c echo.Context) error {
 	}
 
 	var req struct {
-		Name           string          `json:"name"`
-		ImagePath      *string         `json:"image_path"`
-		X              float64         `json:"x"`
-		Y              float64         `json:"y"`
-		Width          float64         `json:"width"`
-		Height         float64         `json:"height"`
-		Rotation       float64         `json:"rotation"`
-		Scale          float64         `json:"scale"`
-		IsHidden       bool            `json:"is_hidden"`
-		IsLocked       bool            `json:"is_locked"`
-		Bar1Value      *int            `json:"bar1_value"`
-		Bar1Max        *int            `json:"bar1_max"`
-		Bar2Value      *int            `json:"bar2_value"`
-		Bar2Max        *int            `json:"bar2_max"`
-		AuraRadius     *float64        `json:"aura_radius"`
-		AuraColor      *string         `json:"aura_color"`
-		LightRadius    *float64        `json:"light_radius"`
-		LightDimRadius *float64        `json:"light_dim_radius"`
-		LightColor     *string         `json:"light_color"`
-		VisionEnabled  bool            `json:"vision_enabled"`
-		VisionRange    *float64        `json:"vision_range"`
-		Elevation      int             `json:"elevation"`
-		StatusEffects  json.RawMessage `json:"status_effects"`
-		Flags          json.RawMessage `json:"flags"`
+		Name              string          `json:"name"`
+		ImagePath         *string         `json:"image_path"`
+		X                 float64         `json:"x"`
+		Y                 float64         `json:"y"`
+		Width             float64         `json:"width"`
+		Height            float64         `json:"height"`
+		Rotation          float64         `json:"rotation"`
+		Scale             float64         `json:"scale"`
+		IsHidden          bool            `json:"is_hidden"`
+		IsLocked          bool            `json:"is_locked"`
+		Bar1Value         *int            `json:"bar1_value"`
+		Bar1Max           *int            `json:"bar1_max"`
+		Bar2Value         *int            `json:"bar2_value"`
+		Bar2Max           *int            `json:"bar2_max"`
+		AuraRadius        *float64        `json:"aura_radius"`
+		AuraColor         *string         `json:"aura_color"`
+		LightRadius       *float64        `json:"light_radius"`
+		LightDimRadius    *float64        `json:"light_dim_radius"`
+		LightColor        *string         `json:"light_color"`
+		VisionEnabled     bool            `json:"vision_enabled"`
+		VisionRange       *float64        `json:"vision_range"`
+		Elevation         int             `json:"elevation"`
+		StatusEffects     json.RawMessage `json:"status_effects"`
+		Flags             json.RawMessage `json:"flags"`
+		ExpectedUpdatedAt *time.Time      `json:"expected_updated_at"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.drawingSvc.UpdateToken(c.Request().Context(), c.Param("tid"), UpdateTokenInput{
-		Name:           req.Name,
-		ImagePath:      req.ImagePath,
-		X:              req.X,
-		Y:              req.Y,
-		Width:          req.Width,
-		Height:         req.Height,
-		Rotation:       req.Rotation,
-		Scale:          req.Scale,
-		IsHidden:       req.IsHidden,
-		IsLocked:       req.IsLocked,
-		Bar1Value:      req.Bar1Value,
-		Bar1Max:        req.Bar1Max,
-		Bar2Value:      req.Bar2Value,
-		Bar2Max:        req.Bar2Max,
-		AuraRadius:     req.AuraRadius,
-		AuraColor:      req.AuraColor,
-		LightRadius:    req.LightRadius,
-		LightDimRadius: req.LightDimRadius,
-		LightColor:     req.LightColor,
-		VisionEnabled:  req.VisionEnabled,
-		VisionRange:    req.VisionRange,
-		Elevation:      req.Elevation,
-		StatusEffects:  req.StatusEffects,
-		Flags:          req.Flags,
+		Name:              req.Name,
+		ImagePath:         req.ImagePath,
+		X:                 req.X,
+		Y:                 req.Y,
+		Width:             req.Width,
+		Height:            req.Height,
+		Rotation:          req.Rotation,
+		Scale:             req.Scale,
+		IsHidden:          req.IsHidden,
+		IsLocked:          req.IsLocked,
+		Bar1Value:         req.Bar1Value,
+		Bar1Max:           req.Bar1Max,
+		Bar2Value:         req.Bar2Value,
+		Bar2Max:           req.Bar2Max,
+		AuraRadius:        req.AuraRadius,
+		AuraColor:         req.AuraColor,
+		LightRadius:       req.LightRadius,
+		LightDimRadius:    req.LightDimRadius,
+		LightColor:        req.LightColor,
+		VisionEnabled:     req.VisionEnabled,
+		VisionRange:       req.VisionRange,
+		Elevation:         req.Elevation,
+		StatusEffects:     req.StatusEffects,
+		Flags:             req.Flags,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	}); err != nil {
 		return err
 	}
@@ -394,16 +399,18 @@ func (h *DrawingHandler) UpdateTokenPosition(c echo.Context) error {
 	}
 
 	var req struct {
-		X float64 `json:"x"`
-		Y float64 `json:"y"`
+		X                 float64    `json:"x"`
+		Y                 float64    `json:"y"`
+		ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), c.Param("tid"), UpdateTokenPositionInput{
-		X: req.X,
-		Y: req.Y,
+		X:                 req.X,
+		Y:                 req.Y,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	}); err != nil {
 		return err
 	}
@@ -420,7 +427,7 @@ func (h *DrawingHandler) DeleteToken(c echo.Context) error {
 		return err
 	}
 
-	if err := h.drawingSvc.DeleteToken(c.Request().Context(), c.Param("tid")); err != nil {
+	if err := h.drawingSvc.DeleteToken(c.Request().Context(), c.Param("tid"), ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
@@ -513,22 +520,24 @@ func (h *DrawingHandler) UpdateLayer(c echo.Context) error {
 	}
 
 	var req struct {
-		Name      string  `json:"name"`
-		SortOrder int     `json:"sort_order"`
-		IsVisible bool    `json:"is_visible"`
-		Opacity   float64 `json:"opacity"`
-		IsLocked  bool    `json:"is_locked"`
+		Name              string     `json:"name"`
+		SortOrder         int        `json:"sort_order"`
+		IsVisible         bool       `json:"is_visible"`
+		Opacity           float64    `json:"opacity"`
+		IsLocked          bool       `json:"is_locked"`
+		ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
 	if err := h.drawingSvc.UpdateLayer(c.Request().Context(), c.Param("lid"), UpdateLayerInput{
-		Name:      req.Name,
-		SortOrder: req.SortOrder,
-		IsVisible: req.IsVisible,
-		Opacity:   req.Opacity,
-		IsLocked:  req.IsLocked,
+		Name:              req.Name,
+		SortOrder:         req.SortOrder,
+		IsVisible:         req.IsVisible,
+		Opacity:           req.Opacity,
+		IsLocked:          req.IsLocked,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	}); err != nil {
 		return err
 	}
@@ -545,7 +554,7 @@ func (h *DrawingHandler) DeleteLayer(c echo.Context) error {
 		return err
 	}
 
-	if err := h.drawingSvc.DeleteLayer(c.Request().Context(), c.Param("lid")); err != nil {
+	if err := h.drawingSvc.DeleteLayer(c.Request().Context(), c.Param("lid"), ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

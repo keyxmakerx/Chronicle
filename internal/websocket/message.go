@@ -131,6 +131,16 @@ type Message struct {
 	ResourceID string         `json:"resourceId,omitempty"` // ID of the affected resource.
 	SenderID   string         `json:"senderId,omitempty"`   // Connection ID of sender (for echo suppression).
 	Payload    json.RawMessage `json:"payload,omitempty"`    // Type-specific data.
+
+	// RequiresDM marks a message that must only be delivered to clients
+	// with DM-equivalent visibility (campaign Owner or IsDmGranted=true).
+	// Set by emitters whose source row carries dm_only / hidden state
+	// (e.g. a marker with visibility="dm_only", a drawing flagged
+	// dm_only, a hidden token, or any fog event). The hub's broadcast
+	// loop drops the message for non-DM connections at delivery time —
+	// see hub.go. JSON-omitted by default so existing payloads are
+	// unaffected for non-sensitive events.
+	RequiresDM bool `json:"requiresDm,omitempty"`
 }
 
 // Encode serializes a Message to JSON bytes.

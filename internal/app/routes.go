@@ -545,6 +545,12 @@ func (a *wsCampaignRoleAdapter) GetUserCampaignRole(ctx context.Context, campaig
 	return int(member.Role), nil
 }
 
+// IsUserDmGranted reports whether the campaign Owner has granted this user
+// dm_only visibility via CampaignSettings.DmGrantIDs.
+func (a *wsCampaignRoleAdapter) IsUserDmGranted(ctx context.Context, campaignID, userID string) (bool, error) {
+	return a.svc.IsUserDmGranted(ctx, campaignID, userID)
+}
+
 // calendarEventPublisherAdapter bridges the websocket.EventBus to the
 // calendar.CalendarEventPublisher interface.
 type calendarEventPublisherAdapter struct {
@@ -750,6 +756,15 @@ type mapEventPublisherAdapter struct {
 	bus ws.EventBus
 }
 
+// publishWithAudience wraps ws.NewMessage with the RequiresDM audience
+// flag derived from the source row. Pulled out so every map sub-resource
+// emit funnels the same way — one place to audit, not five.
+func (a *mapEventPublisherAdapter) publishWithAudience(msgType ws.MessageType, campaignID, resourceID string, payload any, dmOnly bool) {
+	msg := ws.NewMessage(msgType, campaignID, resourceID, payload)
+	msg.RequiresDM = dmOnly
+	a.bus.Publish(msg)
+}
+
 // PublishDrawingEvent translates map drawing domain events into WebSocket messages.
 func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaignID string, drawing *maps.Drawing) {
 	if campaignID == "" {
@@ -766,10 +781,12 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, drawing.ID, drawing))
+	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, drawing.Visibility == "dm_only")
 }
 
 // PublishTokenEvent translates map token domain events into WebSocket messages.
+// Tokens flagged is_hidden are GM-only — same gate as the SQL filter in
+// drawing_repository.ListTokens.
 func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignID string, token *maps.Token) {
 	if campaignID == "" {
 		return
@@ -785,10 +802,17 @@ func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignI
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, token.ID, token))
+	a.publishWithAudience(msgType, campaignID, token.ID, token, token.IsHidden)
 }
 
 // PublishTokenPositionEvent broadcasts a token position update via WebSocket.
+// The fast-drag path doesn't carry the source token, so we conservatively
+// treat position updates as everyone-visible — a hidden token's position
+// is leaked to non-GMs only as percentage coordinates with no other
+// metadata, which is the same shape clients already filter on receipt.
+// To plug that gap fully, the service would need to thread is_hidden
+// through PublishTokenPositionEvent; leave a TODO to revisit when the
+// drag path can afford the extra fetch.
 func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, tokenID string, x, y float64) {
 	if campaignID == "" {
 		return
@@ -799,7 +823,10 @@ func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, tokenID
 	}))
 }
 
-// PublishLayerEvent broadcasts a map layer update via WebSocket.
+// PublishLayerEvent broadcasts a map layer update via WebSocket. Layers
+// don't carry a visibility flag — they're z-order containers — so layer
+// events are everyone-visible. Hiding individual drawings/tokens on a
+// layer happens via their own visibility/is_hidden gates.
 func (a *mapEventPublisherAdapter) PublishLayerEvent(eventType string, campaignID string, layer *maps.Layer) {
 	if campaignID == "" {
 		return
@@ -807,7 +834,9 @@ func (a *mapEventPublisherAdapter) PublishLayerEvent(eventType string, campaignI
 	a.bus.Publish(ws.NewMessage(ws.MsgLayerUpdated, campaignID, layer.ID, layer))
 }
 
-// PublishFogEvent broadcasts a fog-of-war update via WebSocket.
+// PublishFogEvent broadcasts a fog-of-war update via WebSocket. All fog
+// events are GM-only — non-GM clients should never learn the shape of
+// the fog mask, since that'd reveal what they haven't explored yet.
 func (a *mapEventPublisherAdapter) PublishFogEvent(eventType string, campaignID, mapID string, region *maps.FogRegion) {
 	if campaignID == "" {
 		return
@@ -819,7 +848,7 @@ func (a *mapEventPublisherAdapter) PublishFogEvent(eventType string, campaignID,
 	if region != nil {
 		payload["region"] = region
 	}
-	a.bus.Publish(ws.NewMessage(ws.MsgFogUpdated, campaignID, mapID, payload))
+	a.publishWithAudience(ws.MsgFogUpdated, campaignID, mapID, payload, true)
 }
 
 // PublishMarkerEvent translates map marker domain events into WebSocket messages.
@@ -838,7 +867,7 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, marker.ID, marker))
+	a.publishWithAudience(msgType, campaignID, marker.ID, marker, marker.IsDMOnly())
 }
 
 // mediaMemberCheckerAdapter wraps campaigns.CampaignService to implement the

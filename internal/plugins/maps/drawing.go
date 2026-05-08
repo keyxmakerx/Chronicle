@@ -46,16 +46,18 @@ type CreateDrawingInput struct {
 }
 
 // UpdateDrawingInput is the validated input for updating a drawing.
+// ExpectedUpdatedAt is the optimistic-concurrency token (optional).
 type UpdateDrawingInput struct {
-	Points      json.RawMessage
-	StrokeColor string
-	StrokeWidth float64
-	FillColor   *string
-	FillAlpha   float64
-	TextContent *string
-	FontSize    *int
-	Rotation    float64
-	Visibility  string
+	Points            json.RawMessage
+	StrokeColor       string
+	StrokeWidth       float64
+	FillColor         *string
+	FillAlpha         float64
+	TextContent       *string
+	FontSize          *int
+	Rotation          float64
+	Visibility        string
+	ExpectedUpdatedAt *time.Time
 }
 
 // Token represents a character, NPC, or object placed on a map.
@@ -130,37 +132,44 @@ type CreateTokenInput struct {
 }
 
 // UpdateTokenInput is the validated input for updating a token.
+// ExpectedUpdatedAt is the optimistic-concurrency token (optional).
 type UpdateTokenInput struct {
-	Name           string
-	ImagePath      *string
-	X              float64
-	Y              float64
-	Width          float64
-	Height         float64
-	Rotation       float64
-	Scale          float64
-	IsHidden       bool
-	IsLocked       bool
-	Bar1Value      *int
-	Bar1Max        *int
-	Bar2Value      *int
-	Bar2Max        *int
-	AuraRadius     *float64
-	AuraColor      *string
-	LightRadius    *float64
-	LightDimRadius *float64
-	LightColor     *string
-	VisionEnabled  bool
-	VisionRange    *float64
-	Elevation      int
-	StatusEffects  json.RawMessage
-	Flags          json.RawMessage
+	Name              string
+	ImagePath         *string
+	X                 float64
+	Y                 float64
+	Width             float64
+	Height            float64
+	Rotation          float64
+	Scale             float64
+	IsHidden          bool
+	IsLocked          bool
+	Bar1Value         *int
+	Bar1Max           *int
+	Bar2Value         *int
+	Bar2Max           *int
+	AuraRadius        *float64
+	AuraColor         *string
+	LightRadius       *float64
+	LightDimRadius    *float64
+	LightColor        *string
+	VisionEnabled     bool
+	VisionRange       *float64
+	Elevation         int
+	StatusEffects     json.RawMessage
+	Flags             json.RawMessage
+	ExpectedUpdatedAt *time.Time
 }
 
 // UpdateTokenPositionInput is a lightweight update for token position only.
+// ExpectedUpdatedAt is the optimistic-concurrency token (optional). Drag
+// pipelines that fire many position updates per second can simply omit it
+// and accept last-writer-wins; deliberate "drop here" actions can include
+// it to detect cross-user collisions.
 type UpdateTokenPositionInput struct {
-	X float64
-	Y float64
+	X                 float64
+	Y                 float64
+	ExpectedUpdatedAt *time.Time
 }
 
 // Layer organizes map content into z-ordered groups (background, drawing, token, gm, fog).
@@ -174,6 +183,7 @@ type Layer struct {
 	Opacity   float64   `json:"opacity"`
 	IsLocked  bool      `json:"is_locked"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // CreateLayerInput is the validated input for creating a layer.
@@ -188,12 +198,14 @@ type CreateLayerInput struct {
 }
 
 // UpdateLayerInput is the validated input for updating a layer.
+// ExpectedUpdatedAt is the optimistic-concurrency token (optional).
 type UpdateLayerInput struct {
-	Name      string
-	SortOrder int
-	IsVisible bool
-	Opacity   float64
-	IsLocked  bool
+	Name              string
+	SortOrder         int
+	IsVisible         bool
+	Opacity           float64
+	IsLocked          bool
+	ExpectedUpdatedAt *time.Time
 }
 
 // FogRegion represents a revealed/hidden area of fog of war.
@@ -203,6 +215,7 @@ type FogRegion struct {
 	Points     json.RawMessage `json:"points"` // Polygon vertices.
 	IsExplored bool            `json:"is_explored"`
 	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
 // CreateFogInput is the validated input for creating a fog region.

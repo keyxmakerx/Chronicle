@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	gorillaWs "github.com/gorilla/websocket"
+
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // Hub manages all WebSocket connections across campaigns. It routes messages
@@ -105,6 +107,18 @@ func (h *Hub) Run() {
 					continue
 				}
 
+				// Audience gate: messages flagged RequiresDM only go to
+				// clients with Owner role or IsDmGranted=true. This is
+				// the server-side defense that pairs with client-side
+				// visibility filters — clients can't receive what we
+				// never send. permissions.CanSeeDmOnly takes the role
+				// plus an optional dmGranted flag; passing both keeps
+				// the predicate aligned with how HTTP handlers gate
+				// dm_only content.
+				if msg.RequiresDM && !permissions.CanSeeDmOnly(client.Role, client.IsDmGranted) {
+					continue
+				}
+
 				select {
 				case client.send <- data:
 				default:
@@ -170,17 +184,23 @@ func (h *Hub) TotalClientCount() int {
 
 // RegisterClient creates a new client and starts its read/write pumps.
 // Returns the client for external reference (e.g., to track in tests).
-func (h *Hub) RegisterClient(conn WSConn, campaignID, userID, source string, role int) *Client {
+//
+// isDmGranted reflects CampaignContext.IsDmGranted resolved at auth time;
+// it lets the broadcast loop deliver RequiresDM messages to non-Owner
+// users that the campaign Owner has explicitly trusted with DM-only
+// visibility, without a per-message DB hit.
+func (h *Hub) RegisterClient(conn WSConn, campaignID, userID, source string, role int, isDmGranted bool) *Client {
 	client := &Client{
-		ID:         uuid.New().String(),
-		CampaignID: campaignID,
-		UserID:     userID,
-		Source:     source,
-		Role:       role,
-		hub:        h,
-		conn:       conn.(*gorillaWs.Conn),
-		send:       make(chan []byte, sendBufferSize),
-		done:       make(chan struct{}),
+		ID:          uuid.New().String(),
+		CampaignID:  campaignID,
+		UserID:      userID,
+		Source:      source,
+		Role:        role,
+		IsDmGranted: isDmGranted,
+		hub:         h,
+		conn:        conn.(*gorillaWs.Conn),
+		send:        make(chan []byte, sendBufferSize),
+		done:        make(chan struct{}),
 	}
 
 	h.register <- client

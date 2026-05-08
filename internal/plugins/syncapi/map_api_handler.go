@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -182,15 +183,16 @@ func (h *MapAPIHandler) CreateDrawing(c echo.Context) error {
 
 // apiUpdateDrawingRequest is the JSON body for updating a drawing.
 type apiUpdateDrawingRequest struct {
-	Points      json.RawMessage `json:"points"`
-	StrokeColor string          `json:"stroke_color"`
-	StrokeWidth float64         `json:"stroke_width"`
-	FillColor   *string         `json:"fill_color"`
-	FillAlpha   float64         `json:"fill_alpha"`
-	TextContent *string         `json:"text_content"`
-	FontSize    *int            `json:"font_size"`
-	Rotation    float64         `json:"rotation"`
-	Visibility  string          `json:"visibility"`
+	Points            json.RawMessage `json:"points"`
+	StrokeColor       string          `json:"stroke_color"`
+	StrokeWidth       float64         `json:"stroke_width"`
+	FillColor         *string         `json:"fill_color"`
+	FillAlpha         float64         `json:"fill_alpha"`
+	TextContent       *string         `json:"text_content"`
+	FontSize          *int            `json:"font_size"`
+	Rotation          float64         `json:"rotation"`
+	Visibility        string          `json:"visibility"`
+	ExpectedUpdatedAt *time.Time      `json:"expected_updated_at"`
 }
 
 // UpdateDrawing updates an existing drawing.
@@ -207,15 +209,16 @@ func (h *MapAPIHandler) UpdateDrawing(c echo.Context) error {
 	}
 
 	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, maps.UpdateDrawingInput{
-		Points:      req.Points,
-		StrokeColor: req.StrokeColor,
-		StrokeWidth: req.StrokeWidth,
-		FillColor:   req.FillColor,
-		FillAlpha:   req.FillAlpha,
-		TextContent: req.TextContent,
-		FontSize:    req.FontSize,
-		Rotation:    req.Rotation,
-		Visibility:  req.Visibility,
+		Points:            req.Points,
+		StrokeColor:       req.StrokeColor,
+		StrokeWidth:       req.StrokeWidth,
+		FillColor:         req.FillColor,
+		FillAlpha:         req.FillAlpha,
+		TextContent:       req.TextContent,
+		FontSize:          req.FontSize,
+		Rotation:          req.Rotation,
+		Visibility:        req.Visibility,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	})
 	if err != nil {
 		return err
@@ -229,7 +232,7 @@ func (h *MapAPIHandler) DeleteDrawing(c echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
-	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("drawingID")); err != nil {
+	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("drawingID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -339,30 +342,31 @@ func (h *MapAPIHandler) CreateToken(c echo.Context) error {
 
 // apiUpdateTokenRequest is the JSON body for updating a token.
 type apiUpdateTokenRequest struct {
-	Name           string          `json:"name"`
-	ImagePath      *string         `json:"image_path"`
-	X              float64         `json:"x"`
-	Y              float64         `json:"y"`
-	Width          float64         `json:"width"`
-	Height         float64         `json:"height"`
-	Rotation       float64         `json:"rotation"`
-	Scale          float64         `json:"scale"`
-	IsHidden       bool            `json:"is_hidden"`
-	IsLocked       bool            `json:"is_locked"`
-	Bar1Value      *int            `json:"bar1_value"`
-	Bar1Max        *int            `json:"bar1_max"`
-	Bar2Value      *int            `json:"bar2_value"`
-	Bar2Max        *int            `json:"bar2_max"`
-	AuraRadius     *float64        `json:"aura_radius"`
-	AuraColor      *string         `json:"aura_color"`
-	LightRadius    *float64        `json:"light_radius"`
-	LightDimRadius *float64        `json:"light_dim_radius"`
-	LightColor     *string         `json:"light_color"`
-	VisionEnabled  bool            `json:"vision_enabled"`
-	VisionRange    *float64        `json:"vision_range"`
-	Elevation      int             `json:"elevation"`
-	StatusEffects  json.RawMessage `json:"status_effects"`
-	Flags          json.RawMessage `json:"flags"`
+	Name              string          `json:"name"`
+	ImagePath         *string         `json:"image_path"`
+	X                 float64         `json:"x"`
+	Y                 float64         `json:"y"`
+	Width             float64         `json:"width"`
+	Height            float64         `json:"height"`
+	Rotation          float64         `json:"rotation"`
+	Scale             float64         `json:"scale"`
+	IsHidden          bool            `json:"is_hidden"`
+	IsLocked          bool            `json:"is_locked"`
+	Bar1Value         *int            `json:"bar1_value"`
+	Bar1Max           *int            `json:"bar1_max"`
+	Bar2Value         *int            `json:"bar2_value"`
+	Bar2Max           *int            `json:"bar2_max"`
+	AuraRadius        *float64        `json:"aura_radius"`
+	AuraColor         *string         `json:"aura_color"`
+	LightRadius       *float64        `json:"light_radius"`
+	LightDimRadius    *float64        `json:"light_dim_radius"`
+	LightColor        *string         `json:"light_color"`
+	VisionEnabled     bool            `json:"vision_enabled"`
+	VisionRange       *float64        `json:"vision_range"`
+	Elevation         int             `json:"elevation"`
+	StatusEffects     json.RawMessage `json:"status_effects"`
+	Flags             json.RawMessage `json:"flags"`
+	ExpectedUpdatedAt *time.Time      `json:"expected_updated_at"`
 }
 
 // UpdateToken updates an existing token.
@@ -379,30 +383,31 @@ func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
 	}
 
 	err := h.drawingSvc.UpdateToken(c.Request().Context(), tokenID, maps.UpdateTokenInput{
-		Name:           req.Name,
-		ImagePath:      req.ImagePath,
-		X:              req.X,
-		Y:              req.Y,
-		Width:          req.Width,
-		Height:         req.Height,
-		Rotation:       req.Rotation,
-		Scale:          req.Scale,
-		IsHidden:       req.IsHidden,
-		IsLocked:       req.IsLocked,
-		Bar1Value:      req.Bar1Value,
-		Bar1Max:        req.Bar1Max,
-		Bar2Value:      req.Bar2Value,
-		Bar2Max:        req.Bar2Max,
-		AuraRadius:     req.AuraRadius,
-		AuraColor:      req.AuraColor,
-		LightRadius:    req.LightRadius,
-		LightDimRadius: req.LightDimRadius,
-		LightColor:     req.LightColor,
-		VisionEnabled:  req.VisionEnabled,
-		VisionRange:    req.VisionRange,
-		Elevation:      req.Elevation,
-		StatusEffects:  req.StatusEffects,
-		Flags:          req.Flags,
+		Name:              req.Name,
+		ImagePath:         req.ImagePath,
+		X:                 req.X,
+		Y:                 req.Y,
+		Width:             req.Width,
+		Height:            req.Height,
+		Rotation:          req.Rotation,
+		Scale:             req.Scale,
+		IsHidden:          req.IsHidden,
+		IsLocked:          req.IsLocked,
+		Bar1Value:         req.Bar1Value,
+		Bar1Max:           req.Bar1Max,
+		Bar2Value:         req.Bar2Value,
+		Bar2Max:           req.Bar2Max,
+		AuraRadius:        req.AuraRadius,
+		AuraColor:         req.AuraColor,
+		LightRadius:       req.LightRadius,
+		LightDimRadius:    req.LightDimRadius,
+		LightColor:        req.LightColor,
+		VisionEnabled:     req.VisionEnabled,
+		VisionRange:       req.VisionRange,
+		Elevation:         req.Elevation,
+		StatusEffects:     req.StatusEffects,
+		Flags:             req.Flags,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	})
 	if err != nil {
 		return err
@@ -412,8 +417,9 @@ func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
 
 // apiUpdateTokenPositionRequest is the JSON body for moving a token.
 type apiUpdateTokenPositionRequest struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
+	X                 float64    `json:"x"`
+	Y                 float64    `json:"y"`
+	ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
 }
 
 // UpdateTokenPosition updates only the position (optimized for drag sync).
@@ -430,8 +436,9 @@ func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
 	}
 
 	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, maps.UpdateTokenPositionInput{
-		X: req.X,
-		Y: req.Y,
+		X:                 req.X,
+		Y:                 req.Y,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	})
 	if err != nil {
 		return err
@@ -445,7 +452,7 @@ func (h *MapAPIHandler) DeleteToken(c echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
-	if err := h.drawingSvc.DeleteToken(c.Request().Context(), c.Param("tokenID")); err != nil {
+	if err := h.drawingSvc.DeleteToken(c.Request().Context(), c.Param("tokenID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -507,11 +514,12 @@ func (h *MapAPIHandler) CreateLayer(c echo.Context) error {
 
 // apiUpdateLayerRequest is the JSON body for updating a layer.
 type apiUpdateLayerRequest struct {
-	Name      string  `json:"name"`
-	SortOrder int     `json:"sort_order"`
-	IsVisible bool    `json:"is_visible"`
-	Opacity   float64 `json:"opacity"`
-	IsLocked  bool    `json:"is_locked"`
+	Name              string     `json:"name"`
+	SortOrder         int        `json:"sort_order"`
+	IsVisible         bool       `json:"is_visible"`
+	Opacity           float64    `json:"opacity"`
+	IsLocked          bool       `json:"is_locked"`
+	ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
 }
 
 // UpdateLayer updates an existing layer.
@@ -528,11 +536,12 @@ func (h *MapAPIHandler) UpdateLayer(c echo.Context) error {
 	}
 
 	err := h.drawingSvc.UpdateLayer(c.Request().Context(), layerID, maps.UpdateLayerInput{
-		Name:      req.Name,
-		SortOrder: req.SortOrder,
-		IsVisible: req.IsVisible,
-		Opacity:   req.Opacity,
-		IsLocked:  req.IsLocked,
+		Name:              req.Name,
+		SortOrder:         req.SortOrder,
+		IsVisible:         req.IsVisible,
+		Opacity:           req.Opacity,
+		IsLocked:          req.IsLocked,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	})
 	if err != nil {
 		return err
@@ -546,7 +555,7 @@ func (h *MapAPIHandler) DeleteLayer(c echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
-	if err := h.drawingSvc.DeleteLayer(c.Request().Context(), c.Param("layerID")); err != nil {
+	if err := h.drawingSvc.DeleteLayer(c.Request().Context(), c.Param("layerID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -642,17 +651,18 @@ type apiCreateMarkerRequest struct {
 
 // apiUpdateMarkerRequest is the JSON body for updating a marker.
 type apiUpdateMarkerRequest struct {
-	Name            string  `json:"name"`
-	Description     *string `json:"description"`
-	X               float64 `json:"x"`
-	Y               float64 `json:"y"`
-	Icon            string  `json:"icon"`
-	Color           string  `json:"color"`
-	PinCategory     *string `json:"pin_category"`
-	EntityID        *string `json:"entity_id"`
-	Visibility      string  `json:"visibility"`
-	VisibilityRules *string `json:"visibility_rules"`
-	FoundryID       *string `json:"foundry_id"`
+	Name              string     `json:"name"`
+	Description       *string    `json:"description"`
+	X                 float64    `json:"x"`
+	Y                 float64    `json:"y"`
+	Icon              string     `json:"icon"`
+	Color             string     `json:"color"`
+	PinCategory       *string    `json:"pin_category"`
+	EntityID          *string    `json:"entity_id"`
+	Visibility        string     `json:"visibility"`
+	VisibilityRules   *string    `json:"visibility_rules"`
+	FoundryID         *string    `json:"foundry_id"`
+	ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
 }
 
 // ListMarkers returns all markers for a map, filtered by the caller's role.
@@ -743,17 +753,18 @@ func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
 	}
 
 	err := h.mapSvc.UpdateMarker(c.Request().Context(), markerID, maps.UpdateMarkerInput{
-		Name:            req.Name,
-		Description:     req.Description,
-		X:               req.X,
-		Y:               req.Y,
-		Icon:            req.Icon,
-		Color:           req.Color,
-		PinCategory:     req.PinCategory,
-		EntityID:        req.EntityID,
-		Visibility:      req.Visibility,
-		VisibilityRules: req.VisibilityRules,
-		FoundryID:       req.FoundryID,
+		Name:              req.Name,
+		Description:       req.Description,
+		X:                 req.X,
+		Y:                 req.Y,
+		Icon:              req.Icon,
+		Color:             req.Color,
+		PinCategory:       req.PinCategory,
+		EntityID:          req.EntityID,
+		Visibility:        req.Visibility,
+		VisibilityRules:   req.VisibilityRules,
+		FoundryID:         req.FoundryID,
+		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	})
 	if err != nil {
 		return err
@@ -767,7 +778,7 @@ func (h *MapAPIHandler) DeleteMarker(c echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
-	if err := h.mapSvc.DeleteMarker(c.Request().Context(), c.Param("markerID")); err != nil {
+	if err := h.mapSvc.DeleteMarker(c.Request().Context(), c.Param("markerID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

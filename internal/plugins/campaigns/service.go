@@ -58,6 +58,10 @@ type CampaignService interface {
 	// UpdateTopbarContent sets the campaign's topbar center content (quick-links, quote).
 	UpdateTopbarContent(ctx context.Context, campaignID string, content *TopbarContent) error
 	UpdateDmGrants(ctx context.Context, campaignID string, userIDs []string) error
+	// IsUserDmGranted reports whether the user appears in the campaign's
+	// DmGrantIDs setting. Used by the WS hub to gate RequiresDM messages
+	// to non-Owner members the Owner has trusted with dm_only visibility.
+	IsUserDmGranted(ctx context.Context, campaignID, userID string) (bool, error)
 	// UpdateFontFamily sets the campaign's body font family.
 	UpdateFontFamily(ctx context.Context, campaignID, fontFamily string) error
 	// UpdateWelcomeMessage sets the campaign's MOTD banner message.
@@ -839,6 +843,28 @@ func isValidHexColor(s string) bool {
 		}
 	}
 	return true
+}
+
+// IsUserDmGranted reports whether the campaign Owner has granted the
+// given user dm_only visibility via CampaignSettings.DmGrantIDs.
+//
+// Mirrors the package-private hasDmGrant helper used by middleware so
+// the websocket hub can resolve the same flag without importing the
+// campaigns package directly. The campaign lookup is the same call the
+// HTTP middleware makes on every request, so a 1:1 cache hit on the
+// repo's campaign cache (if any) is expected.
+func (s *campaignService) IsUserDmGranted(ctx context.Context, campaignID, userID string) (bool, error) {
+	if campaignID == "" || userID == "" {
+		return false, nil
+	}
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return false, err
+	}
+	if campaign == nil {
+		return false, nil
+	}
+	return hasDmGrant(campaign, userID), nil
 }
 
 // UpdateDmGrants sets which users are granted dm_only content visibility.
