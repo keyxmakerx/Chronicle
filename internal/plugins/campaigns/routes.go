@@ -46,6 +46,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.GET("/members", h.Members, RequireRole(RolePlayer))
 	cg.GET("/plugins", h.PluginHub, RequireRole(RolePlayer))
 	cg.GET("/plugins/fragment", h.PluginHubFragment, RequireRole(RolePlayer))
+	// Operator diagnostic: is the Foundry module currently reaching
+	// Chronicle for this campaign? Any campaign member can read.
+	cg.GET("/foundry-presence", h.GetFoundryPresenceAPI, RequireRole(RolePlayer))
 
 	// Owner-only routes.
 	cg.GET("/edit", h.EditForm, RequireRole(RoleOwner))

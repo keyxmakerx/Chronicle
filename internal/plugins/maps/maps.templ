@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -174,7 +176,10 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 						<span class="mx-1">/</span>
 						<span class="text-fg-secondary">{ data.Map.Name }</span>
 					</nav>
-					<h1 class="text-lg font-semibold text-fg">{ data.Map.Name }</h1>
+					<div class="flex items-center gap-2">
+						<h1 class="text-lg font-semibold text-fg">{ data.Map.Name }</h1>
+						@foundryPresencePill(data.FoundryPresence)
+					</div>
 					if data.Map.Description != nil && *data.Map.Description != "" {
 						<p class="text-xs text-fg-muted">{ *data.Map.Description }</p>
 					}
@@ -1080,6 +1085,70 @@ func backgroundColorIsSet(s *string) string {
 		return "true"
 	}
 	return ""
+}
+
+// foundryPresencePill renders the "Connected to Foundry" status chip
+// next to the map title. Three-state: yes (green), no/last-seen (gray),
+// never (gray). Reflects state at page-load only — no live JS poll.
+// The operator's primary diagnostic question is "is Foundry reaching
+// Chronicle at all?"; per-map verification is deferred to a follow-up.
+templ foundryPresencePill(p FoundryPresenceView) {
+	if p.Connected {
+		<span
+			class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/15 text-green-700 dark:text-green-300 ring-1 ring-green-500/30"
+			title="A Foundry module is currently connected to this campaign"
+		>
+			<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+			Connected to Foundry
+		</span>
+	} else if p.NeverSeen {
+		<span
+			class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-fg-muted/10 text-fg-muted ring-1 ring-edge"
+			title="No Foundry module has ever connected to this campaign"
+		>
+			<span class="w-1.5 h-1.5 rounded-full bg-fg-muted/40"></span>
+			Foundry: never connected
+		</span>
+	} else {
+		<span
+			class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-fg-muted/10 text-fg-muted ring-1 ring-edge"
+			title={ "Foundry was last seen " + foundryPresenceTimestamp(p.LastSeen) }
+		>
+			<span class="w-1.5 h-1.5 rounded-full bg-fg-muted/40"></span>
+			Foundry: last seen { foundryPresenceRelative(p.LastSeen) }
+		</span>
+	}
+}
+
+// foundryPresenceRelative renders a coarse relative-time string for
+// the presence pill ("just now", "5m ago", "2h ago", "3d ago"). Kept
+// intentionally coarse because the pill is a glance-level indicator —
+// finer granularity belongs in the tooltip via the absolute timestamp.
+func foundryPresenceRelative(t *time.Time) string {
+	if t == nil {
+		return "never"
+	}
+	d := time.Since(*t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
+// foundryPresenceTimestamp renders the absolute timestamp for the
+// pill's tooltip so operators can see exactly when the last heartbeat
+// landed.
+func foundryPresenceTimestamp(t *time.Time) string {
+	if t == nil {
+		return "never"
+	}
+	return t.Format("2006-01-02 15:04:05 MST")
 }
 
 // mapBackgroundStyle returns an inline style="background-color: ..."

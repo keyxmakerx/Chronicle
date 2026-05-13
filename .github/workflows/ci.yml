@@ -40,7 +40,11 @@ jobs:
           go-version: '1.24'
 
       - name: Install templ
-        run: go install github.com/a-h/templ/cmd/templ@latest
+        # Pin to the runtime version in go.mod. The generator and the
+        # runtime go in lockstep — `@latest` drifts ahead of go.mod and
+        # emits symbols (e.g. templ.ResolveAttributeValue) the pinned
+        # runtime doesn't have, breaking every PR until go.mod catches up.
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
 
       - name: Generate templ files
         run: templ generate
@@ -66,7 +70,11 @@ jobs:
           go-version: '1.24'
 
       - name: Install templ
-        run: go install github.com/a-h/templ/cmd/templ@latest
+        # Pin to the runtime version in go.mod. The generator and the
+        # runtime go in lockstep — `@latest` drifts ahead of go.mod and
+        # emits symbols (e.g. templ.ResolveAttributeValue) the pinned
+        # runtime doesn't have, breaking every PR until go.mod catches up.
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
 
       - name: Generate templ files
         run: templ generate

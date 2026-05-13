@@ -162,6 +162,24 @@ type MapViewData struct {
 	Map        *Map
 	Markers    []Marker
 	IsScribe   bool
+
+	// FoundryPresence reflects the most recent state of the campaign's
+	// Foundry-module WS connection, captured at page-load time (no live
+	// poll). When the lookup isn't wired or no module has ever
+	// connected, FoundryPresence.NeverSeen is true and the pill renders
+	// "never." Otherwise the pill shows the connected/last-seen state.
+	FoundryPresence FoundryPresenceView
+}
+
+// FoundryPresenceView is the renderable subset of the Foundry-presence
+// state for the map detail page pill. Mirrors the JSON shape returned
+// by GET /campaigns/:id/foundry-presence so JS and templ share one
+// vocabulary; populated by the maps Handler at request time from the
+// hub.
+type FoundryPresenceView struct {
+	Connected bool
+	NeverSeen bool
+	LastSeen  *time.Time
 }
 
 // MapListData holds all data needed to render the map list page.
