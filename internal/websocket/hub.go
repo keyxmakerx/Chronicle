@@ -3,12 +3,19 @@ package websocket
 import (
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	gorillaWs "github.com/gorilla/websocket"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
+
+// foundryPresenceTTL is the window inside which a Foundry-module WS
+// connection counts as "connected" for the /foundry-presence pill.
+// Slightly longer than 3× the WS pingPeriod (30s) so a missed pong
+// or two doesn't flicker the pill to disconnected.
+const foundryPresenceTTL = 90 * time.Second
 
 // Hub manages all WebSocket connections across campaigns. It routes messages
 // to clients in the same campaign and handles connection lifecycle.
@@ -29,16 +36,53 @@ type Hub struct {
 	unregister chan *Client
 
 	mu sync.RWMutex
+
+	// foundryPresence tracks the most recent activity for each campaign's
+	// Foundry-module WS connection (source=="foundry-module"). Updated on
+	// connect and on pong receipt; read by the /foundry-presence endpoint.
+	// In-memory by design — presence is a transient property, no migration
+	// or persistence needed.
+	foundryMu       sync.RWMutex
+	foundryLastSeen map[string]time.Time
 }
 
 // NewHub creates a new WebSocket hub. Call Run() to start processing.
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[string]map[string]*Client),
-		broadcast:  make(chan *Message, 256),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		clients:         make(map[string]map[string]*Client),
+		broadcast:       make(chan *Message, 256),
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		foundryLastSeen: make(map[string]time.Time),
 	}
+}
+
+// MarkFoundrySeen records activity from a Foundry-module connection for
+// the campaign. Called on connect and on pong receipt so the presence
+// window slides with the live heartbeat.
+func (h *Hub) MarkFoundrySeen(campaignID string) {
+	if campaignID == "" {
+		return
+	}
+	h.foundryMu.Lock()
+	h.foundryLastSeen[campaignID] = time.Now()
+	h.foundryMu.Unlock()
+}
+
+// FoundryPresence returns the last-seen timestamp and whether the
+// Foundry-module connection is considered live for the given campaign.
+// A nil lastSeen means we've never recorded a Foundry-module connection
+// for this campaign; connected is true when lastSeen is within the
+// foundryPresenceTTL window.
+func (h *Hub) FoundryPresence(campaignID string) (lastSeen *time.Time, connected bool) {
+	h.foundryMu.RLock()
+	t, ok := h.foundryLastSeen[campaignID]
+	h.foundryMu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	out := t
+	return &out, time.Since(t) < foundryPresenceTTL
 }
 
 // Run starts the hub's event loop. It should be called in a goroutine.
@@ -56,6 +100,10 @@ func (h *Hub) Run() {
 			}
 			campaign[client.ID] = client
 			h.mu.Unlock()
+
+			if client.Source == "foundry-module" {
+				h.MarkFoundrySeen(client.CampaignID)
+			}
 
 			slog.Info("ws: client connected",
 				slog.String("client", client.ID),

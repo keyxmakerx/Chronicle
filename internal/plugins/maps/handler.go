@@ -12,14 +12,30 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// FoundryPresenceLookup reports whether the campaign's Foundry-module WS
+// connection is currently live. Same interface shape as the one in the
+// campaigns package — duplicated here so the maps plugin doesn't import
+// campaigns for a single accessor. The hub satisfies both.
+type FoundryPresenceLookup interface {
+	FoundryPresence(campaignID string) (lastSeen *time.Time, connected bool)
+}
+
 // Handler processes HTTP requests for the maps plugin.
 type Handler struct {
-	svc MapService
+	svc             MapService
+	foundryPresence FoundryPresenceLookup
 }
 
 // NewHandler creates a new maps Handler.
 func NewHandler(svc MapService) *Handler {
 	return &Handler{svc: svc}
+}
+
+// SetFoundryPresence wires the WS hub's presence lookup so the map detail
+// page can render the "Connected to Foundry" pill. Set after the hub is
+// constructed in routes.go.
+func (h *Handler) SetFoundryPresence(p FoundryPresenceLookup) {
+	h.foundryPresence = p
 }
 
 // Index lists all maps for a campaign, or redirects to the first map.
@@ -93,16 +109,33 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 
 	data := MapViewData{
-		CampaignID: cc.Campaign.ID,
-		Map:        m,
-		Markers:    markers,
-		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
+		CampaignID:      cc.Campaign.ID,
+		Map:             m,
+		Markers:         markers,
+		IsScribe:        cc.MemberRole >= campaigns.RoleScribe,
+		FoundryPresence: h.resolveFoundryPresence(cc.Campaign.ID),
 	}
 
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, MapShowFragment(cc, data))
 	}
 	return middleware.Render(c, http.StatusOK, MapShowPage(cc, data))
+}
+
+// resolveFoundryPresence returns the renderable view of the campaign's
+// Foundry-module connection state. Falls back to "never seen" when no
+// lookup is wired (test fixtures, WS disabled, etc.) so the pill always
+// renders something coherent rather than panicking on a nil dereference.
+func (h *Handler) resolveFoundryPresence(campaignID string) FoundryPresenceView {
+	if h.foundryPresence == nil {
+		return FoundryPresenceView{NeverSeen: true}
+	}
+	lastSeen, connected := h.foundryPresence.FoundryPresence(campaignID)
+	return FoundryPresenceView{
+		Connected: connected,
+		NeverSeen: lastSeen == nil,
+		LastSeen:  lastSeen,
+	}
 }
 
 // CreateMapAPI creates a new map.

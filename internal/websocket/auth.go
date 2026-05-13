@@ -56,6 +56,20 @@ func NewMultiAuthenticator(apiKey APIKeyAuthenticator, session SessionAuthentica
 func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID, source string, role int, isDmGranted bool, err error) {
 	ctx := r.Context()
 
+	// foundrySource picks "foundry-module" when the Foundry module
+	// self-identifies via ?client=foundry-module on its WS upgrade URL;
+	// otherwise we keep the legacy "foundry" tag for any external API-
+	// key client. The "foundry-module" source is what feeds the Hub's
+	// presence tracker — only the module is treated as authoritative
+	// for the /foundry-presence pill, not generic Foundry-style API
+	// key callers (CLI scripts, integration tests, etc.).
+	foundrySource := func() string {
+		if r.URL.Query().Get("client") == "foundry-module" {
+			return "foundry-module"
+		}
+		return "foundry"
+	}
+
 	// Try API key auth first (Foundry VTT uses this).
 	token := r.URL.Query().Get("token")
 	if token != "" {
@@ -67,7 +81,7 @@ func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID
 			return "", "", "", 0, false, fmt.Errorf("api key auth: %w", err)
 		}
 		isDmGranted = a.lookupDmGranted(ctx, campaignID, userID)
-		return campaignID, userID, "foundry", role, isDmGranted, nil
+		return campaignID, userID, foundrySource(), role, isDmGranted, nil
 	}
 
 	// Fall back to session cookie auth (browser clients).
@@ -93,7 +107,7 @@ func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID
 					return "", "", "", 0, false, fmt.Errorf("bearer auth: %w", err)
 				}
 				isDmGranted = a.lookupDmGranted(ctx, campaignID, userID)
-				return campaignID, userID, "foundry", role, isDmGranted, nil
+				return campaignID, userID, foundrySource(), role, isDmGranted, nil
 			}
 		}
 		return "", "", "", 0, false, fmt.Errorf("campaign parameter required for session auth")

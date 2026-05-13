@@ -72,6 +72,12 @@ func (c *Client) readPump() {
 		return
 	}
 	c.conn.SetPongHandler(func(string) error {
+		// Foundry-module pong receipts refresh the presence window so
+		// the /foundry-presence pill stays "connected" as long as the
+		// WS heartbeat is alive. Browser clients aren't tracked.
+		if c.Source == "foundry-module" {
+			c.hub.MarkFoundrySeen(c.CampaignID)
+		}
 		return c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	})
 

@@ -29,8 +29,17 @@ const (
 	MsgMarkerCreated    MessageType = "marker.created"
 	MsgMarkerUpdated    MessageType = "marker.updated"
 	MsgMarkerDeleted    MessageType = "marker.deleted"
-	MsgFogUpdated       MessageType = "fog.updated"
-	MsgLayerUpdated     MessageType = "layer.updated"
+	// Fog and layer messages split into per-lifecycle types so clients
+	// can discriminate create / update / delete without re-fetching the
+	// full sub-resource list. The original MsgFogUpdated / MsgLayerUpdated
+	// constants stay valid for actual updates; the *Created / *Deleted
+	// types are added alongside.
+	MsgFogCreated   MessageType = "fog.created"
+	MsgFogUpdated   MessageType = "fog.updated"
+	MsgFogDeleted   MessageType = "fog.deleted"
+	MsgLayerCreated MessageType = "layer.created"
+	MsgLayerUpdated MessageType = "layer.updated"
+	MsgLayerDeleted MessageType = "layer.deleted"
 )
 
 // Calendar sync messages.
@@ -92,8 +101,12 @@ var validMessageTypes = map[MessageType]struct{}{
 	MsgMarkerCreated:        {},
 	MsgMarkerUpdated:        {},
 	MsgMarkerDeleted:        {},
-	MsgFogUpdated:           {},
-	MsgLayerUpdated:         {},
+	MsgFogCreated:   {},
+	MsgFogUpdated:   {},
+	MsgFogDeleted:   {},
+	MsgLayerCreated: {},
+	MsgLayerUpdated: {},
+	MsgLayerDeleted: {},
 	MsgCalendarEventCreated: {},
 	MsgCalendarEventUpdated: {},
 	MsgCalendarEventDeleted: {},

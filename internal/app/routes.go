@@ -823,22 +823,56 @@ func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, tokenID
 	}))
 }
 
-// PublishLayerEvent broadcasts a map layer update via WebSocket. Layers
+// PublishLayerEvent broadcasts a map layer event via WebSocket. Layers
 // don't carry a visibility flag — they're z-order containers — so layer
 // events are everyone-visible. Hiding individual drawings/tokens on a
 // layer happens via their own visibility/is_hidden gates.
+//
+// Before C-MAP-EVT this adapter flattened all lifecycle events to
+// MsgLayerUpdated, which forced Foundry to refetch the full layer list
+// just to find out what changed. Now the eventType drives the message
+// type so clients can discriminate create / update / delete and apply
+// a targeted local mutation.
 func (a *mapEventPublisherAdapter) PublishLayerEvent(eventType string, campaignID string, layer *maps.Layer) {
 	if campaignID == "" {
 		return
 	}
-	a.bus.Publish(ws.NewMessage(ws.MsgLayerUpdated, campaignID, layer.ID, layer))
+	var msgType ws.MessageType
+	switch eventType {
+	case "created":
+		msgType = ws.MsgLayerCreated
+	case "updated":
+		msgType = ws.MsgLayerUpdated
+	case "deleted":
+		msgType = ws.MsgLayerDeleted
+	default:
+		return
+	}
+	a.bus.Publish(ws.NewMessage(msgType, campaignID, layer.ID, layer))
 }
 
-// PublishFogEvent broadcasts a fog-of-war update via WebSocket. All fog
+// PublishFogEvent broadcasts a fog-of-war event via WebSocket. All fog
 // events are GM-only — non-GM clients should never learn the shape of
 // the fog mask, since that'd reveal what they haven't explored yet.
+//
+// Before C-MAP-EVT this adapter flattened all lifecycle events to
+// MsgFogUpdated and squeezed the actual event name into the payload.
+// Promoting eventType to the message type lets clients dispatch
+// without parsing the payload first; the redundant "event" key in the
+// payload stays for backwards compatibility with the existing handler.
 func (a *mapEventPublisherAdapter) PublishFogEvent(eventType string, campaignID, mapID string, region *maps.FogRegion) {
 	if campaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case "created":
+		msgType = ws.MsgFogCreated
+	case "updated", "reset":
+		msgType = ws.MsgFogUpdated
+	case "deleted":
+		msgType = ws.MsgFogDeleted
+	default:
 		return
 	}
 	payload := map[string]any{
@@ -848,7 +882,7 @@ func (a *mapEventPublisherAdapter) PublishFogEvent(eventType string, campaignID,
 	if region != nil {
 		payload["region"] = region
 	}
-	a.publishWithAudience(ws.MsgFogUpdated, campaignID, mapID, payload, true)
+	a.publishWithAudience(msgType, campaignID, mapID, payload, true)
 }
 
 // PublishMarkerEvent translates map marker domain events into WebSocket messages.
@@ -2661,6 +2695,13 @@ func (a *App) RegisterRoutes() {
 	// Real-time bidirectional sync for Foundry VTT and browser clients.
 	wsHub := ws.NewHub()
 	go wsHub.Run()
+
+	// Wire the hub's Foundry-presence lookup into the campaigns handler
+	// (for GET /campaigns/:id/foundry-presence) and the maps handler
+	// (for the "Connected to Foundry" pill on the map detail page).
+	// Hub already implements both FoundryPresenceLookup interface shapes.
+	campaignHandler.SetFoundryPresence(wsHub)
+	mapsHandler.SetFoundryPresence(wsHub)
 
 	wsAuth := ws.NewMultiAuthenticator(
 		syncService,
