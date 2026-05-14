@@ -20,6 +20,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	foundry_modules "github.com/keyxmakerx/chronicle/internal/plugins/foundry_modules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
@@ -247,5 +248,6 @@ func registeredPlugins() []database.PluginSchema {
 		{Slug: "timeline", MigrationsFS: mustSub(timeline.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "syncapi", MigrationsFS: mustSub(syncapi.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "packages", MigrationsFS: mustSub(packages.MigrationsFS, database.PluginMigrationsSubdir)},
+		{Slug: "foundry_modules", MigrationsFS: mustSub(foundry_modules.MigrationsFS, database.PluginMigrationsSubdir)},
 	}
 }

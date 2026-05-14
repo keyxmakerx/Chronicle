@@ -62,6 +62,16 @@ type CampaignService interface {
 	// DmGrantIDs setting. Used by the WS hub to gate RequiresDM messages
 	// to non-Owner members the Owner has trusted with dm_only visibility.
 	IsUserDmGranted(ctx context.Context, campaignID, userID string) (bool, error)
+
+	// SetFoundryModulePin pins the campaign to a specific Foundry
+	// module version (or clears the pin when version is "").
+	SetFoundryModulePin(ctx context.Context, campaignID, version string) error
+	// GetFoundryModulePin returns the campaign's current Foundry
+	// module pin, or "" if none.
+	GetFoundryModulePin(ctx context.Context, campaignID string) (string, error)
+	// CampaignExistsByID is a thin existence check for adapters that
+	// don't need the full Campaign struct.
+	CampaignExistsByID(ctx context.Context, campaignID string) (bool, error)
 	// UpdateFontFamily sets the campaign's body font family.
 	UpdateFontFamily(ctx context.Context, campaignID, fontFamily string) error
 	// UpdateWelcomeMessage sets the campaign's MOTD banner message.
@@ -865,6 +875,52 @@ func (s *campaignService) IsUserDmGranted(ctx context.Context, campaignID, userI
 		return false, nil
 	}
 	return hasDmGrant(campaign, userID), nil
+}
+
+// SetFoundryModulePin updates CampaignSettings.FoundryModulePin and
+// re-persists the settings JSON. An empty version clears the pin
+// (campaign tracks LatestAvailable). The foundry_modules service
+// owns version validation (exists + not withdrawn) and calls this
+// only after that check passes.
+func (s *campaignService) SetFoundryModulePin(ctx context.Context, campaignID, version string) error {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	if campaign == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+	settings := campaign.ParseSettings()
+	settings.FoundryModulePin = version
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// GetFoundryModulePin returns the campaign's current pin string, or
+// "" if unpinned. Used by the foundry_modules manifest resolver.
+func (s *campaignService) GetFoundryModulePin(ctx context.Context, campaignID string) (string, error) {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	if campaign == nil {
+		return "", apperror.NewNotFound("campaign not found")
+	}
+	return campaign.ParseSettings().FoundryModulePin, nil
+}
+
+// CampaignExistsByID returns true iff the campaign exists. Used by
+// the foundry_modules service to reject install-URL requests for
+// unknown campaigns before any DB writes happen.
+func (s *campaignService) CampaignExistsByID(ctx context.Context, campaignID string) (bool, error) {
+	c, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return false, err
+	}
+	return c != nil, nil
 }
 
 // UpdateDmGrants sets which users are granted dm_only content visibility.
