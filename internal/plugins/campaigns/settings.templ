@@ -108,6 +108,9 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 				}
 				<button @click="tab = 'people'; history.replaceState(null, '', '?tab=people')" :class="tab === 'people' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-users mr-1.5 text-xs"></i> People</button>
 				<button @click="tab = 'integrations'; history.replaceState(null, '', '?tab=integrations')" :class="tab === 'integrations' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-plug mr-1.5 text-xs"></i> Integrations</button>
+				if cc.MemberRole >= RoleOwner {
+					<button @click="tab = 'foundry'; history.replaceState(null, '', '?tab=foundry')" :class="tab === 'foundry' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-dice-d20 mr-1.5 text-xs"></i> Foundry Module</button>
+				}
 				<button @click="tab = 'activity'; history.replaceState(null, '', '?tab=activity')" :class="tab === 'activity' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-clock-rotate-left mr-1.5 text-xs"></i> Activity</button>
 			</div>
 			// Tab content.
@@ -125,6 +128,20 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 			<div x-show="tab === 'integrations'" x-cloak>
 				@settingsIntegrationsTab(cc, csrfToken, baseURL)
 			</div>
+			if cc.MemberRole >= RoleOwner {
+				// Foundry Module tab content is served as an HTMX
+				// fragment by the foundry_modules plugin so the
+				// campaigns plugin doesn't have to import it
+				// (avoiding a cycle since foundry_modules already
+				// imports campaigns). Lazy-loaded on tab activation
+				// via the htmx:on-intersect-once pattern the
+				// Activity tab already uses.
+				<div x-show="tab === 'foundry'" x-cloak>
+					<div hx-get={ fmt.Sprintf("/campaigns/%s/foundry/settings-tab", cc.Campaign.ID) } hx-trigger="intersect once" hx-swap="innerHTML">
+						<div class="text-center py-12 text-fg-muted text-sm"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Loading Foundry module settings&hellip;</div>
+					</div>
+				</div>
+			}
 			<div x-show="tab === 'activity'" x-cloak>
 				<div id="activity-content" hx-get={ fmt.Sprintf("/campaigns/%s/activity/fragment", cc.Campaign.ID) } hx-trigger="intersect once" hx-swap="innerHTML">
 					<div class="text-center py-12 text-fg-muted text-sm"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Loading activity...</div>

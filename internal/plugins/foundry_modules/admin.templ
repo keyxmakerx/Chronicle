@@ -1,0 +1,441 @@
+// foundry_modules — admin.templ renders the version catalog page at
+// /admin/modules/foundry. One card per version with the operator's
+// expand-on-click pattern (the same x-data="{expanded:false}" +
+// x-collapse idiom syncapi/integrations_keys.templ already uses on
+// this codebase).
+//
+// The dispatch's "uplift the shared packages-card" foundation is
+// deferred: packageCard has exactly one consumer today, so a new
+// abstraction would be premature. The card structure here is
+// duplicated inline; a follow-up can extract it once a third
+// consumer materializes.
+
+package foundry_modules
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// AdminPage is the page-level template for the admin module catalog.
+// versions is the full catalog (including withdrawn) sorted newest-
+// uploaded-first; usageByVersion maps version → campaigns currently
+// pinned to it (rendered in the expanded body).
+templ AdminPage(versions []*ModuleVersion, usageByVersion map[string][]CampaignUsage, csrfToken string) {
+	@layouts.App("Foundry Module Versions") {
+		<div class="max-w-5xl mx-auto space-y-6 py-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Foundry Module Versions</h1>
+					<p class="text-sm text-fg-muted mt-1">
+						Upload, deprecate, and force-pin Chronicle's Foundry VTT module releases.
+						Campaigns hit a per-campaign manifest URL that resolves to the pinned version.
+					</p>
+				</div>
+				<button
+					type="button"
+					id="fmc-upload-btn"
+					class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
+				>
+					<i class="fa-solid fa-upload"></i>
+					Upload New Version
+				</button>
+			</div>
+
+			if len(versions) == 0 {
+				<div class="card text-center py-12">
+					<i class="fa-solid fa-dice-d20 text-fg-muted text-4xl mb-3"></i>
+					<p class="text-sm text-fg-secondary">No module versions uploaded yet.</p>
+					<p class="text-xs text-fg-muted mt-1">Use "Upload New Version" to add the first release.</p>
+				</div>
+			} else {
+				<div class="space-y-3">
+					for _, v := range versions {
+						@adminVersionCard(v, usageByVersion[v.Version], csrfToken)
+					}
+				</div>
+			}
+		</div>
+
+		@adminUploadModal(csrfToken)
+		@adminPageScript()
+	}
+}
+
+// adminVersionCard renders one row in the catalog. Header is always
+// visible; the body (compatibility chips, release notes, campaign
+// list, action row) is gated on the expanded Alpine state. Border
+// radius standardized at rounded-md per the operator's directive.
+templ adminVersionCard(v *ModuleVersion, usage []CampaignUsage, csrfToken string) {
+	<div
+		class="card p-0 overflow-hidden rounded-md"
+		x-data="{ expanded: false }"
+		data-version={ v.Version }
+	>
+		<button
+			type="button"
+			@click="expanded = !expanded"
+			class="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-surface-alt transition-colors"
+		>
+			<i class="fa-solid fa-chevron-right text-xs text-fg-muted transition-transform" :class="expanded && 'rotate-90'"></i>
+			<span class="text-sm font-mono font-semibold text-fg">{ v.Version }</span>
+			@statusBadge(v.Status)
+			<span class="text-xs text-fg-muted ml-auto whitespace-nowrap">
+				{ fmt.Sprintf("%d campaigns", len(usage)) }
+			</span>
+			<span class="text-xs text-fg-muted whitespace-nowrap">
+				{ v.UploadedAt.Format("2006-01-02") }
+			</span>
+		</button>
+
+		<div x-show="expanded" x-collapse>
+			<div class="px-4 pb-4 pt-1 space-y-4 border-t border-edge">
+				@compatibilityRow(v)
+				if v.ReleaseNotes != "" {
+					<div>
+						<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-1">Release Notes</p>
+						<p class="text-sm text-fg whitespace-pre-wrap">{ v.ReleaseNotes }</p>
+					</div>
+				}
+				@campaignUsageList(v.Version, usage)
+				@actionRow(v, csrfToken)
+			</div>
+		</div>
+	</div>
+}
+
+// statusBadge colors the version status. Available is unobtrusive
+// (no badge) because the default state is implied; deprecated and
+// withdrawn get explicit visual treatment.
+templ statusBadge(s ModuleStatus) {
+	switch s {
+		case StatusAvailable:
+			<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+				available
+			</span>
+		case StatusDeprecated:
+			<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400">
+				<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+				deprecated
+			</span>
+		case StatusWithdrawn:
+			<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-fg-muted/15 text-fg-muted">
+				<i class="fa-solid fa-ban mr-1"></i>
+				withdrawn
+			</span>
+	}
+}
+
+// compatibilityRow renders Foundry version chips (min / verified / max).
+// Empty chips are skipped — many module.json files only set one or two.
+templ compatibilityRow(v *ModuleVersion) {
+	if v.CompatibilityMinimum != "" || v.CompatibilityVerified != "" || v.CompatibilityMaximum != "" {
+		<div class="flex flex-wrap gap-2">
+			if v.CompatibilityMinimum != "" {
+				<span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-surface-alt text-fg-secondary">
+					min: { v.CompatibilityMinimum }
+				</span>
+			}
+			if v.CompatibilityVerified != "" {
+				<span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-surface-alt text-fg-secondary">
+					verified: { v.CompatibilityVerified }
+				</span>
+			}
+			if v.CompatibilityMaximum != "" {
+				<span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-surface-alt text-fg-secondary">
+					max: { v.CompatibilityMaximum }
+				</span>
+			}
+		</div>
+	}
+}
+
+// campaignUsageList renders the sub-card pattern the dispatch
+// described: a small row per campaign currently pinned to this
+// version. Owner name + last-active timestamp + a "Notify owner"
+// button each. Force-bump per-row is intentionally not wired in
+// v1 — it'd need a version picker on every row; deferred.
+templ campaignUsageList(version string, usage []CampaignUsage) {
+	<div>
+		<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">
+			Campaigns Using This Version
+		</p>
+		if len(usage) == 0 {
+			<p class="text-xs text-fg-muted italic">No campaigns currently pinned.</p>
+		} else {
+			<div class="space-y-1.5">
+				for _, c := range usage {
+					<div class="flex items-center gap-3 px-3 py-2 rounded-md bg-surface-alt text-sm">
+						<div class="flex-1 min-w-0">
+							<p class="font-medium text-fg truncate">{ c.CampaignName }</p>
+							<p class="text-xs text-fg-muted">
+								owner: { c.OwnerName }
+								if c.LastActiveAt != nil {
+									<span class="ml-2">last active { relativeTime(*c.LastActiveAt) }</span>
+								}
+							</p>
+						</div>
+					</div>
+				}
+			</div>
+		}
+	</div>
+}
+
+// actionRow groups the per-version admin actions. Visibility-toggling
+// (deprecate / withdraw / restore) goes through the same status
+// endpoint; the buttons just send different payloads. Notify is the
+// "tell older-pinned campaigns" fan-out.
+templ actionRow(v *ModuleVersion, csrfToken string) {
+	<div class="flex flex-wrap gap-2 pt-2 border-t border-edge">
+		if v.Status != StatusDeprecated {
+			<button
+				type="button"
+				class="fmc-action-btn px-3 py-1.5 text-xs rounded-md border border-edge hover:bg-surface-alt"
+				data-action="deprecate"
+				data-version={ v.Version }
+			>
+				<i class="fa-solid fa-triangle-exclamation mr-1"></i> Mark Deprecated
+			</button>
+		}
+		if v.Status != StatusWithdrawn {
+			<button
+				type="button"
+				class="fmc-action-btn px-3 py-1.5 text-xs rounded-md border border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10"
+				data-action="withdraw"
+				data-version={ v.Version }
+			>
+				<i class="fa-solid fa-ban mr-1"></i> Withdraw
+			</button>
+		}
+		if v.Status != StatusAvailable {
+			<button
+				type="button"
+				class="fmc-action-btn px-3 py-1.5 text-xs rounded-md border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+				data-action="restore"
+				data-version={ v.Version }
+			>
+				<i class="fa-solid fa-arrow-rotate-left mr-1"></i> Restore to Available
+			</button>
+		}
+		<button
+			type="button"
+			class="fmc-action-btn px-3 py-1.5 text-xs rounded-md border border-edge hover:bg-surface-alt"
+			data-action="notify"
+			data-version={ v.Version }
+		>
+			<i class="fa-solid fa-bullhorn mr-1"></i> Notify Older-Version Campaigns
+		</button>
+	</div>
+	{{ _ = csrfToken }}
+}
+
+// adminUploadModal is the drag-drop upload modal. Hidden by default;
+// shown when the operator clicks "Upload New Version". The Alpine
+// state is local so multiple modals could coexist on a complex page
+// (none today, but cheap insurance).
+templ adminUploadModal(csrfToken string) {
+	<div
+		id="fmc-upload-modal"
+		x-data="fmcUploader()"
+		x-show="open"
+		x-cloak
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+		@keydown.escape.window="open = false"
+	>
+		<div class="bg-surface rounded-md w-full max-w-md shadow-xl border border-edge" @click.stop>
+			<div class="px-5 py-3 border-b border-edge flex items-center justify-between">
+				<h2 class="text-base font-semibold text-fg">Upload Foundry Module</h2>
+				<button type="button" @click="open = false" class="text-fg-muted hover:text-fg">
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+			<div class="p-5 space-y-4">
+				<div
+					class="border-2 border-dashed border-edge rounded-md px-4 py-8 text-center cursor-pointer hover:border-accent transition-colors"
+					:class="dragOver && 'border-accent bg-accent/5'"
+					@click="$refs.fileInput.click()"
+					@dragover.prevent="dragOver = true"
+					@dragleave.prevent="dragOver = false"
+					@drop.prevent="onDrop($event)"
+				>
+					<input
+						type="file"
+						accept=".zip"
+						class="hidden"
+						x-ref="fileInput"
+						@change="onFileSelected($event)"
+					/>
+					<i class="fa-solid fa-cloud-arrow-up text-2xl text-fg-muted mb-2"></i>
+					<p class="text-sm text-fg" x-text="file ? file.name : 'Drop .zip here or click to choose'"></p>
+					<p class="text-xs text-fg-muted mt-1" x-show="!file">
+						Foundry VTT module zip with module.json
+					</p>
+				</div>
+
+				<div x-show="status === 'uploading'" class="text-sm text-fg-muted">
+					<i class="fa-solid fa-spinner fa-spin mr-1"></i> Uploading and validating&hellip;
+				</div>
+				<div x-show="status === 'error'" class="text-sm text-red-600 dark:text-red-400" x-text="errorMessage"></div>
+				<div x-show="status === 'done'" class="text-sm text-emerald-600 dark:text-emerald-400">
+					<i class="fa-solid fa-circle-check mr-1"></i>
+					<span x-text="successMessage"></span>
+				</div>
+
+				<div class="flex items-center justify-end gap-2 pt-2">
+					<button type="button" @click="open = false" class="px-4 py-1.5 text-sm rounded-md border border-edge hover:bg-surface-alt">
+						Cancel
+					</button>
+					<button
+						type="button"
+						@click="upload()"
+						:disabled="!file || status === 'uploading'"
+						class="px-4 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						Upload
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+	{{ _ = csrfToken }}
+}
+
+// adminPageScript glues the upload button + action buttons to their
+// fetch calls. Lives inline because the admin page is the only
+// caller and Chronicle's pattern (see admin/storage.templ:605) is
+// inline scripts for page-local glue. Uses Chronicle.apiFetch so
+// CSRF is handled automatically.
+templ adminPageScript() {
+	<script>
+		(function () {
+			// Upload-modal Alpine component. Registered before any
+			// x-data="fmcUploader()" expression is evaluated.
+			window.fmcUploader = function () {
+				return {
+					open: false,
+					file: null,
+					dragOver: false,
+					status: 'idle',
+					errorMessage: '',
+					successMessage: '',
+					onDrop(e) {
+						this.dragOver = false;
+						if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+							this.file = e.dataTransfer.files[0];
+							this.status = 'idle';
+						}
+					},
+					onFileSelected(e) {
+						if (e.target.files && e.target.files.length > 0) {
+							this.file = e.target.files[0];
+							this.status = 'idle';
+						}
+					},
+					upload() {
+						if (!this.file) return;
+						const fd = new FormData();
+						fd.append('file', this.file);
+						this.status = 'uploading';
+						this.errorMessage = '';
+						this.successMessage = '';
+						const self = this;
+						Chronicle.apiFetch('/admin/modules/foundry/upload', { method: 'POST', body: fd })
+							.then(function (resp) {
+								if (resp && resp.version) {
+									self.status = 'done';
+									self.successMessage = 'Version ' + resp.version + ' uploaded. Reloading…';
+									setTimeout(function () { window.location.reload(); }, 800);
+								} else {
+									self.status = 'done';
+									self.successMessage = 'Uploaded. Reloading…';
+									setTimeout(function () { window.location.reload(); }, 800);
+								}
+							})
+							.catch(function (err) {
+								self.status = 'error';
+								self.errorMessage = (err && err.message) ? err.message : 'Upload failed';
+							});
+					},
+				};
+			};
+
+			// Open the modal.
+			document.addEventListener('click', function (e) {
+				if (e.target && e.target.closest('#fmc-upload-btn')) {
+					const modal = document.getElementById('fmc-upload-modal');
+					if (modal && modal._x_dataStack && modal._x_dataStack[0]) {
+						modal._x_dataStack[0].open = true;
+					}
+				}
+			});
+
+			// Per-version action buttons (deprecate / withdraw / restore / notify).
+			// Same delegated-listener pattern so dynamically-rendered cards work
+			// after partial reloads.
+			document.addEventListener('click', function (e) {
+				const btn = e.target.closest('.fmc-action-btn');
+				if (!btn) return;
+				const action = btn.dataset.action;
+				const version = btn.dataset.version;
+				if (!action || !version) return;
+
+				if (action === 'deprecate' || action === 'withdraw' || action === 'restore') {
+					const statusMap = { deprecate: 'deprecated', withdraw: 'withdrawn', restore: 'available' };
+					const confirmMsg = action === 'withdraw'
+						? 'Withdraw ' + version + '? Foundry update checks for campaigns pinned to it will start 404ing.'
+						: action === 'deprecate'
+						? 'Deprecate ' + version + '? It stays pinnable but a warning shows on the owner selector.'
+						: 'Restore ' + version + ' to available?';
+					if (!window.confirm(confirmMsg)) return;
+					Chronicle.apiFetch('/admin/modules/foundry/' + encodeURIComponent(version) + '/status', {
+						method: 'PUT',
+						body: JSON.stringify({ status: statusMap[action] }),
+						headers: { 'Content-Type': 'application/json' },
+					})
+						.then(function () { window.location.reload(); })
+						.catch(function (err) {
+							window.Chronicle.notify('Status update failed: ' + ((err && err.message) || ''), 'error');
+						});
+					return;
+				}
+
+				if (action === 'notify') {
+					if (!window.confirm('Send update notifications to every campaign with a pin older than ' + version + '?')) return;
+					Chronicle.apiFetch('/admin/modules/foundry/' + encodeURIComponent(version) + '/notify', {
+						method: 'POST',
+					})
+						.then(function (resp) {
+							const n = (resp && typeof resp.notified === 'number') ? resp.notified : 0;
+							window.Chronicle.notify('Notified ' + n + ' campaign(s).', 'success');
+						})
+						.catch(function (err) {
+							window.Chronicle.notify('Notify failed: ' + ((err && err.message) || ''), 'error');
+						});
+				}
+			});
+		})();
+	</script>
+}
+
+// relativeTime renders a coarse "Xm ago / Xh ago / Xd ago" string for
+// the campaign list. Local helper rather than a shared util because
+// other plugins each have their own (the codebase pattern is
+// per-plugin formatting helpers — see campaigns/dashboardRelativeTime,
+// syncapi/syncRelativeTime, etc.).
+func relativeTime(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+

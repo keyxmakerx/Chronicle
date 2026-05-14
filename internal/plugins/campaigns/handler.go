@@ -127,6 +127,28 @@ type FoundryPresenceLookup interface {
 	FoundryPresence(campaignID string) (lastSeen *time.Time, connected bool)
 }
 
+// FoundryModuleBanner is the renderable banner state for the campaign
+// show page. Empty / zero-valued instance = no banner. Populated by
+// the foundry_modules adapter wired in routes.go.
+type FoundryModuleBanner struct {
+	// HasUpdate is true when a newer non-deprecated version exists
+	// than what this campaign currently resolves to. False (the
+	// zero value) suppresses the banner entirely.
+	HasUpdate bool
+	// CurrentVersion is what Foundry sees today (pin if pinned, else latest).
+	CurrentVersion string
+	// LatestVersion is the newest available release (admin-side).
+	LatestVersion string
+}
+
+// FoundryModuleBannerLookup reports whether this campaign should see
+// the "newer Foundry module version available" dashboard banner.
+// Implemented by an adapter in routes.go over the foundry_modules
+// service so the campaigns plugin doesn't import foundry_modules.
+type FoundryModuleBannerLookup interface {
+	GetFoundryModuleBanner(ctx context.Context, campaignID string) (FoundryModuleBanner, error)
+}
+
 // SystemLister lists available game systems for the settings page dropdown.
 // Avoids importing the systems package directly (prevents import cycle).
 type SystemLister interface {
@@ -148,6 +170,7 @@ type Handler struct {
 	smtpChecker       SMTPChecker
 	systemLister      SystemLister
 	foundryPresence   FoundryPresenceLookup
+	foundryBanner     FoundryModuleBannerLookup
 	baseURL           string
 }
 
@@ -160,6 +183,13 @@ func NewHandler(service CampaignService) *Handler {
 // Set after the WS hub is constructed in routes.go.
 func (h *Handler) SetFoundryPresence(p FoundryPresenceLookup) {
 	h.foundryPresence = p
+}
+
+// SetFoundryModuleBanner wires the lookup used by the campaign show
+// page to render the "newer module version available" banner.
+// Set after the foundry_modules service is constructed in routes.go.
+func (h *Handler) SetFoundryModuleBanner(b FoundryModuleBannerLookup) {
+	h.foundryBanner = b
 }
 
 // FoundryPresenceResponse is the JSON shape returned by the
@@ -377,7 +407,17 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, CampaignShowPage(cc, transfer, recentEntities, csrfToken))
+
+	// Foundry module update banner. Owner-only because non-owners
+	// can't act on it (the pin selector lives on the Owner settings
+	// tab). Soft-fail to zero-value (no banner) on lookup error so
+	// a flaky foundry_modules check doesn't break the dashboard.
+	var fmBanner FoundryModuleBanner
+	if h.foundryBanner != nil && cc.MemberRole >= RoleOwner {
+		fmBanner, _ = h.foundryBanner.GetFoundryModuleBanner(c.Request().Context(), cc.Campaign.ID)
+	}
+
+	return middleware.Render(c, http.StatusOK, CampaignShowPage(cc, transfer, recentEntities, csrfToken, fmBanner))
 }
 
 // EditForm redirects to the unified settings page (GET /campaigns/:id/edit).

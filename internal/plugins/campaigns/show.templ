@@ -15,9 +15,15 @@ import (
 // CampaignShowPage renders the campaign dashboard. If the campaign has a custom
 // dashboard_layout JSON set, renders from that layout. Otherwise falls back to
 // the hardcoded default dashboard.
-templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentEntities []RecentEntity, csrfToken string) {
+templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentEntities []RecentEntity, csrfToken string, fmBanner FoundryModuleBanner) {
 	@layouts.App(cc.Campaign.Name) {
 		<div class="max-w-5xl mx-auto">
+			// Foundry module update available banner (owner-only —
+			// the resolver in handler.go gates the lookup by role
+			// before populating).
+			if fmBanner.HasUpdate {
+				@foundryModuleUpdateBanner(cc.Campaign.ID, fmBanner)
+			}
 			// Pending transfer banner for the target user.
 			if transfer != nil {
 				<div class="alert-warning mb-6">
@@ -112,6 +118,58 @@ templ welcomeMessageBanner(campaignID, message string) {
 func welcomeMessageQuoted(msg string) string {
 	b, _ := json.Marshal(msg)
 	return string(b)
+}
+
+// foundryModuleUpdateBanner renders the owner-only "newer Foundry
+// module version available" banner. Dismissible per-session via a
+// session-storage flag — banner reappears on next session until the
+// owner updates the pin.
+//
+// Per-session (not per-version) so a deliberately-pinned older
+// campaign that wants to stay on the deprecated build can dismiss
+// every session without rebuilding the dismissal-by-version state
+// the dispatch's MOTD banner uses.
+templ foundryModuleUpdateBanner(campaignID string, b FoundryModuleBanner) {
+	<div
+		x-data={ fmt.Sprintf(`{
+			dismissed: false,
+			key: 'fmc-banner-dismissed-' + '%s',
+			init() {
+				if (sessionStorage.getItem(this.key) === '1') this.dismissed = true;
+			},
+			dismiss() {
+				this.dismissed = true;
+				sessionStorage.setItem(this.key, '1');
+			}
+		}`, campaignID) }
+		x-show="!dismissed"
+		x-transition
+		class="mb-6 p-4 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-start gap-3"
+	>
+		<i class="fa-solid fa-dice-d20 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0"></i>
+		<div class="flex-1 text-sm">
+			<p class="font-medium text-fg">
+				Foundry module v{ b.LatestVersion } is available.
+				if b.CurrentVersion != "" {
+					You&rsquo;re currently on v{ b.CurrentVersion }.
+				}
+			</p>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=foundry", campaignID)) }
+				class="text-amber-700 dark:text-amber-300 underline hover:no-underline text-xs mt-1 inline-block"
+			>
+				Update pin in campaign settings &rarr;
+			</a>
+		</div>
+		<button
+			type="button"
+			@click="dismiss()"
+			class="text-fg-muted hover:text-fg transition-colors shrink-0"
+			title="Dismiss until next session"
+		>
+			<i class="fa-solid fa-xmark text-xs"></i>
+		</button>
+	</div>
 }
 
 // customDashboard renders the campaign dashboard from a custom DashboardLayout

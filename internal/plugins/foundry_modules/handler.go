@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -21,6 +22,31 @@ type Handler struct {
 // NewHandler constructs the Handler.
 func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
+}
+
+// --- admin HTML page ---
+
+// AdminPageHandler serves the catalog page at /admin/modules/foundry.
+// Queries the catalog + per-version usage in two service calls (one for
+// the version list, one usage call per version — N+1 by design since
+// admin catalogs are small, typically < 20 rows; refactor to a
+// joined query if a deployment shows > 100 versions).
+func (h *Handler) AdminPageHandler(c echo.Context) error {
+	ctx := c.Request().Context()
+	versions, err := h.svc.ListVersions(ctx, true)
+	if err != nil {
+		return err
+	}
+	usageByVersion := make(map[string][]CampaignUsage, len(versions))
+	for _, v := range versions {
+		u, err := h.svc.CampaignsUsingVersion(ctx, v.Version)
+		if err != nil {
+			return err
+		}
+		usageByVersion[v.Version] = u
+	}
+	return middleware.Render(c, http.StatusOK,
+		AdminPage(versions, usageByVersion, middleware.GetCSRFToken(c)))
 }
 
 // --- admin handlers ---
@@ -139,6 +165,53 @@ func (h *Handler) ForcePinAPI(c echo.Context) error {
 		}
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// --- owner HTML fragment ---
+
+// OwnerTabFragmentHandler serves the Foundry Module settings tab as an
+// HTMX fragment. Called by the empty <div hx-get=...> placeholder in
+// campaigns/settings.templ. Separated from a full page because the
+// surrounding chrome (settings page + tab nav) lives in the campaigns
+// plugin, which can't import this plugin without a cycle.
+//
+// GET /campaigns/:id/foundry/settings-tab
+func (h *Handler) OwnerTabFragmentHandler(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	ctx := c.Request().Context()
+
+	// List of pinnable versions (excludes withdrawn).
+	versions, err := h.svc.ListVersions(ctx, false)
+	if err != nil {
+		return err
+	}
+	current, err := h.svc.GetVersionForCampaign(ctx, cc.Campaign.ID)
+	if err != nil {
+		// 404 from the resolver means the catalog is empty OR pin is
+		// withdrawn. Either way, render the tab without a "current"
+		// section rather than failing the whole fragment.
+		current = nil
+	}
+	installURL, err := h.svc.BuildInstallURL(ctx, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	// Current pin string (may be empty for latest-tracking campaigns).
+	// The selector preselects this so the dropdown defaults match
+	// what's actually saved.
+	pin, _ := h.svc.GetCampaignPin(ctx, cc.Campaign.ID)
+	return middleware.Render(c, http.StatusOK,
+		OwnerTabFragment(OwnerTabData{
+			CampaignID:     cc.Campaign.ID,
+			CurrentPin:     pin,
+			CurrentVersion: current,
+			Versions:       versions,
+			InstallURL:     installURL,
+			CSRFToken:      middleware.GetCSRFToken(c),
+		}))
 }
 
 // --- owner handlers ---

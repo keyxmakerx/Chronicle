@@ -545,6 +545,72 @@ func TestUploadVersion_FailedInsertRemovesFile(t *testing.T) {
 	}
 }
 
+// --- banner status ---
+
+// Banner status is the dashboard banner driver. The semantics:
+//
+//   - Pin older than latest available → HasUpdate=true.
+//   - Pin equal to / newer than latest → HasUpdate=false.
+//   - Unpinned (latest-tracking) campaign → HasUpdate=false (their
+//     manifest endpoint already resolves to latest each fetch).
+//   - Empty catalog → HasUpdate=false.
+func TestGetBannerStatus_OlderPinShowsBanner(t *testing.T) {
+	repo := &mockRepo{
+		latestAvailableFn: func(_ context.Context) (*ModuleVersion, error) {
+			return &ModuleVersion{Version: "0.2.0", Status: StatusAvailable}, nil
+		},
+	}
+	settings := &mockSettings{pin: "0.1.5"}
+	svc, _ := newTestService(t, repo, settings, &mockEvents{}, &mockMail{}, &mockOwners{})
+
+	b, err := svc.GetBannerStatus(context.Background(), "camp-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !b.HasUpdate || b.CurrentVersion != "0.1.5" || b.LatestVersion != "0.2.0" {
+		t.Errorf("expected HasUpdate=true with 0.1.5→0.2.0, got %+v", b)
+	}
+}
+
+func TestGetBannerStatus_LatestTrackingCampaignSuppressesBanner(t *testing.T) {
+	repo := &mockRepo{
+		latestAvailableFn: func(_ context.Context) (*ModuleVersion, error) {
+			return &ModuleVersion{Version: "0.2.0", Status: StatusAvailable}, nil
+		},
+	}
+	settings := &mockSettings{pin: ""}
+	svc, _ := newTestService(t, repo, settings, &mockEvents{}, &mockMail{}, &mockOwners{})
+
+	b, _ := svc.GetBannerStatus(context.Background(), "camp-1")
+	if b.HasUpdate {
+		t.Error("latest-tracking campaigns should never see the banner")
+	}
+}
+
+func TestGetBannerStatus_PinEqualToLatestSuppressesBanner(t *testing.T) {
+	repo := &mockRepo{
+		latestAvailableFn: func(_ context.Context) (*ModuleVersion, error) {
+			return &ModuleVersion{Version: "0.2.0", Status: StatusAvailable}, nil
+		},
+	}
+	settings := &mockSettings{pin: "0.2.0"}
+	svc, _ := newTestService(t, repo, settings, &mockEvents{}, &mockMail{}, &mockOwners{})
+
+	b, _ := svc.GetBannerStatus(context.Background(), "camp-1")
+	if b.HasUpdate {
+		t.Error("pin == latest should not show banner")
+	}
+}
+
+func TestGetBannerStatus_EmptyCatalogSuppressesBanner(t *testing.T) {
+	// LatestAvailable returns (nil, nil) when the catalog is empty.
+	svc, _ := newTestService(t, &mockRepo{}, &mockSettings{pin: "0.1.0"}, &mockEvents{}, &mockMail{}, &mockOwners{})
+	b, _ := svc.GetBannerStatus(context.Background(), "camp-1")
+	if b.HasUpdate {
+		t.Error("empty catalog should suppress banner")
+	}
+}
+
 // helper: substring check that doesn't depend on strings package for the
 // tiny number of uses in this file. Keeps imports minimal.
 func contains(s, sub string) bool {
