@@ -28,6 +28,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	foundry_modules "github.com/keyxmakerx/chronicle/internal/plugins/foundry_modules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
@@ -904,6 +905,66 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	a.publishWithAudience(msgType, campaignID, marker.ID, marker, marker.IsDMOnly())
 }
 
+// foundryCampaignSettingsAdapter wraps campaigns.CampaignService to
+// implement foundry_modules.CampaignSettingsWriter without creating
+// a circular import. The foundry_modules service reads / writes the
+// FoundryModulePin field on CampaignSettings through this adapter.
+type foundryCampaignSettingsAdapter struct {
+	svc campaigns.CampaignService
+}
+
+// SetFoundryModulePin delegates to the campaigns service's typed setter.
+func (a *foundryCampaignSettingsAdapter) SetFoundryModulePin(ctx context.Context, campaignID, version string) error {
+	return a.svc.SetFoundryModulePin(ctx, campaignID, version)
+}
+
+// GetFoundryModulePin delegates to the campaigns service's typed getter.
+func (a *foundryCampaignSettingsAdapter) GetFoundryModulePin(ctx context.Context, campaignID string) (string, error) {
+	return a.svc.GetFoundryModulePin(ctx, campaignID)
+}
+
+// CampaignExists is the existence check the foundry_modules install-URL
+// builder uses to reject token rotations against unknown campaigns.
+func (a *foundryCampaignSettingsAdapter) CampaignExists(ctx context.Context, campaignID string) (bool, error) {
+	return a.svc.CampaignExistsByID(ctx, campaignID)
+}
+
+// foundryCampaignOwnerLookupAdapter resolves a campaign's owner email
+// for the foundry_modules NotifyOlderCampaigns SMTP fan-out. Pulls the
+// owner_user_id from the campaign row, then the user's email from the
+// auth service. Best-effort — soft-fails to ("", "", err) which the
+// notify path treats as "skip email but still log the audit event."
+type foundryCampaignOwnerLookupAdapter struct {
+	campaignSvc campaigns.CampaignService
+	authSvc     auth.AuthService
+}
+
+// GetCampaignOwnerEmail returns (email, displayName, error). The
+// foundry_modules service handles a non-nil error by skipping the
+// email send and falling back to the in-app banner.
+func (a *foundryCampaignOwnerLookupAdapter) GetCampaignOwnerEmail(ctx context.Context, campaignID string) (string, string, error) {
+	c, err := a.campaignSvc.GetByID(ctx, campaignID)
+	if err != nil {
+		return "", "", err
+	}
+	if c == nil {
+		return "", "", nil
+	}
+	// Campaign's original creator is treated as the primary owner for
+	// notify emails. Campaigns can have multiple RoleOwner members but
+	// the dispatch's notify path is "tell THE owner" — emailing every
+	// owner is a follow-up.
+	user, err := a.authSvc.GetUser(ctx, c.CreatedBy)
+	if err != nil || user == nil {
+		return "", "", err
+	}
+	display := user.DisplayName
+	if display == "" {
+		display = user.Email
+	}
+	return user.Email, display, nil
+}
+
 // mediaMemberCheckerAdapter wraps campaigns.CampaignService to implement the
 // media.MemberChecker interface without creating a circular import.
 // Uses background context since membership checks happen on unauthenticated
@@ -1691,6 +1752,46 @@ func (a *App) RegisterRoutes() {
 	// Wire security event logging into the media handler so uploads, deletes,
 	// and quota failures are recorded in the admin security dashboard.
 	mediaHandler.SetSecurityLogger(securityService)
+
+	// Foundry module catalog (C-FMC-1): admin-uploaded Foundry VTT module
+	// versions + per-campaign pinning + public signed manifest endpoint
+	// Foundry hits in place of GitHub. Storage dir lives under the
+	// configured media root so it's covered by the same backup story.
+	foundryModuleStorageDir := filepath.Join(a.Config.Upload.MediaPath, "foundry_modules")
+	fmRepo := foundry_modules.NewRepository(a.DB)
+	fmTokenSigner := foundry_modules.NewTokenSigner(signingSecret)
+	fmCampaignAdapter := &foundryCampaignSettingsAdapter{svc: campaignService}
+	fmOwnerLookup := &foundryCampaignOwnerLookupAdapter{
+		campaignSvc: campaignService,
+		authSvc:     authService,
+	}
+	fmService := foundry_modules.NewService(
+		fmRepo, fmTokenSigner, fmCampaignAdapter,
+		securityService, smtpService, fmOwnerLookup,
+		foundryModuleStorageDir, a.Config.BaseURL,
+	)
+	fmHandler := foundry_modules.NewHandler(fmService)
+	if a.PluginHealth.IsHealthy("foundry_modules") {
+		// Admin routes: list / upload / status / notify / usage / force-pin.
+		// Force-pin route additionally requires password re-auth (applied
+		// inside RegisterAdminRoutes when the middleware is non-nil).
+		foundry_modules.RegisterAdminRoutes(adminGroup, fmHandler, auth.RequireReauth(authService))
+		// Owner-facing routes: pin / token-rotate / install-url. Mounted on
+		// the campaign-scoped group so RequireCampaignAccess fires before
+		// the role gate; RoleOwner is enforced inside RegisterOwnerRoutes.
+		campaignAuthed := e.Group("/campaigns/:id",
+			auth.RequireAuth(authService),
+			campaigns.RequireCampaignAccess(campaignService),
+		)
+		foundry_modules.RegisterOwnerRoutes(campaignAuthed, fmHandler,
+			campaigns.RequireRole(campaigns.RoleOwner))
+		// Public manifest + download. Rate-limited at the same cadence as
+		// packages.RegisterPublicRoutes so a misbehaving Foundry client
+		// can't hammer the manifest endpoint into the DB.
+		foundry_modules.RegisterPublicRoutes(e, fmHandler, middleware.RateLimit(300, time.Minute))
+	} else {
+		slog.Warn("foundry_modules plugin degraded — routes not registered")
+	}
 
 	// Sync API plugin: external tool integration with API key auth,
 	// request logging, security monitoring, and admin dashboard.

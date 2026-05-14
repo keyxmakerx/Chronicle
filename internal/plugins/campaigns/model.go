@@ -532,6 +532,13 @@ type CampaignSettings struct {
 	WelcomeMessage    string       `json:"welcome_message,omitempty"`     // MOTD banner shown on campaign dashboard (max 500 chars).
 	DefaultVisibility string       `json:"default_visibility,omitempty"`  // Default visibility for new entities: "", "dm_only", "private".
 	SystemID          string       `json:"system_id,omitempty"`           // Game system ID (e.g. "dnd5e", "drawsteel") or "custom:<url>".
+
+	// FoundryModulePin is the version string the campaign is pinned
+	// to for the Chronicle-served Foundry module catalog (e.g. "0.1.5").
+	// Empty = follow latest available (manifest endpoint resolves to
+	// LatestAvailable). Set via the owner-side Foundry Module settings
+	// tab; admins can override via the force-pin admin action.
+	FoundryModulePin string `json:"foundry_module_pin,omitempty"`
 }
 
 // TopbarStyle configures the visual appearance of the campaign's top navigation bar.
