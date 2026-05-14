@@ -89,6 +89,27 @@ type Service interface {
 
 	// --- pinning validation (for the owner-side PUT settings handler) ---
 	ValidatePinnable(ctx context.Context, version string) error
+
+	// GetCampaignPin returns the raw pin string for a campaign (or
+	// "" if unpinned). Wraps the campaigns-side getter so the owner
+	// settings tab can render the dropdown with the saved value
+	// preselected.
+	GetCampaignPin(ctx context.Context, campaignID string) (string, error)
+
+	// GetBannerStatus reports whether the campaign should see the
+	// "newer version available" dashboard banner. Returns a zero-
+	// value status (HasUpdate=false) when the catalog is empty, the
+	// campaign already resolves to the latest, or any lookup fails
+	// — the banner is best-effort UX, not security state.
+	GetBannerStatus(ctx context.Context, campaignID string) (BannerStatus, error)
+}
+
+// BannerStatus is the renderable banner state for the owner dashboard.
+// HasUpdate=false suppresses the banner entirely.
+type BannerStatus struct {
+	HasUpdate      bool
+	CurrentVersion string
+	LatestVersion  string
 }
 
 // UploadVersionInput is what the handler hands to the service after
@@ -392,6 +413,45 @@ func (s *service) SetPinnedVersion(ctx context.Context, campaignID, version stri
 		return apperror.NewInternal(fmt.Errorf("setting pin: %w", err))
 	}
 	return nil
+}
+
+// GetCampaignPin returns the campaign's currently-saved pin string
+// ("" when unpinned). Thin pass-through to the settings adapter.
+func (s *service) GetCampaignPin(ctx context.Context, campaignID string) (string, error) {
+	return s.settings.GetFoundryModulePin(ctx, campaignID)
+}
+
+// GetBannerStatus reports whether a "newer module version available"
+// banner should render for this campaign's owner. Comparison is by
+// semver — a campaign pinned to v0.1.5 with latest=v0.2.0 sees the
+// banner; a latest-tracking campaign never sees the banner because
+// its current always equals latest by definition.
+//
+// All errors are swallowed to zero-value (no banner). The banner is
+// soft UX; a flaky lookup shouldn't break the dashboard.
+func (s *service) GetBannerStatus(ctx context.Context, campaignID string) (BannerStatus, error) {
+	latest, err := s.repo.LatestAvailable(ctx)
+	if err != nil || latest == nil {
+		return BannerStatus{}, nil
+	}
+	pin, err := s.settings.GetFoundryModulePin(ctx, campaignID)
+	if err != nil {
+		return BannerStatus{}, nil
+	}
+	if pin == "" {
+		// Latest-tracking campaigns auto-resolve to latest; no banner needed.
+		return BannerStatus{}, nil
+	}
+	if !semverLess(pin, latest.Version) {
+		// Pin is at-or-after latest. Could be a deliberate stay-on-
+		// older choice or simply current; either way no banner.
+		return BannerStatus{}, nil
+	}
+	return BannerStatus{
+		HasUpdate:      true,
+		CurrentVersion: pin,
+		LatestVersion:  latest.Version,
+	}, nil
 }
 
 // ValidatePinnable returns nil iff the version exists and is not

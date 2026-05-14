@@ -905,6 +905,31 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	a.publishWithAudience(msgType, campaignID, marker.ID, marker, marker.IsDMOnly())
 }
 
+// foundryModuleBannerAdapter wraps a foundry_modules.Service to satisfy
+// campaigns.FoundryModuleBannerLookup without the campaigns package
+// importing foundry_modules (which would cycle). Translates the
+// foundry_modules.BannerStatus shape into the campaigns-side
+// FoundryModuleBanner — same fields, different types, deliberately
+// decoupled so the campaigns plugin's templ doesn't gain a transitive
+// dep on foundry_modules.
+type foundryModuleBannerAdapter struct {
+	svc foundry_modules.Service
+}
+
+// GetFoundryModuleBanner translates the foundry_modules banner status
+// into the campaigns-side renderable struct.
+func (a *foundryModuleBannerAdapter) GetFoundryModuleBanner(ctx context.Context, campaignID string) (campaigns.FoundryModuleBanner, error) {
+	s, err := a.svc.GetBannerStatus(ctx, campaignID)
+	if err != nil {
+		return campaigns.FoundryModuleBanner{}, err
+	}
+	return campaigns.FoundryModuleBanner{
+		HasUpdate:      s.HasUpdate,
+		CurrentVersion: s.CurrentVersion,
+		LatestVersion:  s.LatestVersion,
+	}, nil
+}
+
 // foundryCampaignSettingsAdapter wraps campaigns.CampaignService to
 // implement foundry_modules.CampaignSettingsWriter without creating
 // a circular import. The foundry_modules service reads / writes the
@@ -1771,6 +1796,10 @@ func (a *App) RegisterRoutes() {
 		foundryModuleStorageDir, a.Config.BaseURL,
 	)
 	fmHandler := foundry_modules.NewHandler(fmService)
+	// Wire the banner-status adapter into the campaigns handler so
+	// the campaign show page can render the "newer version available"
+	// banner without importing foundry_modules.
+	campaignHandler.SetFoundryModuleBanner(&foundryModuleBannerAdapter{svc: fmService})
 	if a.PluginHealth.IsHealthy("foundry_modules") {
 		// Admin routes: list / upload / status / notify / usage / force-pin.
 		// Force-pin route additionally requires password re-auth (applied

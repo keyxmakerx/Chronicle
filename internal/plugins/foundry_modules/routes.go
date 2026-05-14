@@ -13,6 +13,8 @@ import (
 // can't silently relocate campaigns to arbitrary versions.
 func RegisterAdminRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	g := admin.Group("/modules/foundry")
+	// Admin HTML page (catalog + upload modal).
+	g.GET("", h.AdminPageHandler)
 	g.GET("/versions", h.ListVersionsAPI)
 	g.POST("/upload", h.UploadAPI)
 	g.PUT("/:version/status", h.SetStatusAPI)
@@ -32,11 +34,15 @@ func RegisterAdminRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFu
 // the campaigns Group (`/campaigns/:id`) plus the role-gate middleware
 // for RoleOwner.
 func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.MiddlewareFunc) {
-	// All three are owner-only (the campaign owner controls which
+	// All four are owner-only (the campaign owner controls which
 	// version Foundry sees + can rotate the URL).
 	cg.PUT("/foundry/pin", h.SetPinAPI, requireOwner)
 	cg.POST("/foundry/token/rotate", h.RotateTokenAPI, requireOwner)
 	cg.GET("/foundry/install-url", h.InstallURLAPI, requireOwner)
+	// Owner-only settings-page tab fragment, served as HTML for HTMX
+	// lazy-load. The settings.templ tab content is an hx-get
+	// placeholder targeting this URL.
+	cg.GET("/foundry/settings-tab", h.OwnerTabFragmentHandler, requireOwner)
 }
 
 // RegisterPublicRoutes mounts the unauthenticated manifest and
