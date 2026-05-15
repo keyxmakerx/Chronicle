@@ -1802,6 +1802,7 @@ func (a *App) RegisterRoutes() {
 	fvttService := foundry_vtt.NewService(
 		fvttRepo, fvttTokenSigner, fvttCampaignAdapter, pkgService,
 		securityService, smtpService, fvttOwnerLookup,
+		settingsRepo, // C-FMC-8: powers the auto-pin install banner
 		a.Config.BaseURL,
 	)
 	fvttHandler := foundry_vtt.NewHandler(fvttService)

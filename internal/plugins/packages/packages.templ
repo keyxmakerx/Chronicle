@@ -37,6 +37,20 @@ templ PackagesPage(packages []Package, csrfToken string) {
 			     the foundry_vtt plugin via hx-get hooks on each version row;
 			     see the VersionList templ further down. -->
 
+			<!-- C-FMC-8: auto-pin install banner. foundry_vtt's banner
+			     handler returns the banner card if an unread install
+			     summary exists, or empty content if not. Packages plugin
+			     stays foundry-agnostic — it just embeds the fragment via
+			     hx-get. If foundry_vtt isn't healthy, the 404 leaves the
+			     placeholder div empty (no banner displayed; same outcome
+			     as "no unread summary"). The banner self-renders its own
+			     Dismiss button using inline IIFE. -->
+			<div
+				hx-get="/admin/foundry-vtt/autopin-banner"
+				hx-trigger="load"
+				hx-swap="innerHTML"
+			></div>
+
 			<!-- External package repositories (game systems + Foundry modules). -->
 			<div class="card p-5">
 				<h2 class="text-lg font-semibold text-fg mb-3">Add Package Repository</h2>

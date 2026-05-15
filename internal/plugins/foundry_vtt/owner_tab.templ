@@ -4,13 +4,20 @@
 // The campaigns plugin's VTT Setup Guides → Foundry VTT disclosure
 // section embeds this via hx-get.
 //
-// Patterns inherited from foundry_modules/owner_tab.templ:
-//   - Inline onclick (not delegated listeners) — avoids the HTMX
-//     evalScripts ↔ Alpine MutationObserver race C-FMC-2 hit.
-//   - templ script helpers for the pin / rotate submissions so the
-//     handlers work as soon as the HTML lands in the DOM.
+// HTMX-swap-safe patterns (load-bearing — see admin.templ's file
+// header for the full reasoning + the production bug history that
+// produced this rule):
 //
-// Differences from the foundry_modules version (intentional):
+//   - Inline `onclick="(function(){...})()"` IIFEs, NOT templ
+//     `script` helpers. The templ script approach was used in the
+//     C-FMC-5b version of this file and produced
+//     "ReferenceError: __templ_pinSaveScript_X is not defined" on
+//     every button click after HTMX swap. Fixed in C-FMC-8 by
+//     converting Save Pin + Rotate Token to inline IIFEs built in
+//     onclick_handlers.go.
+//   - Inline literal Alpine `x-data` only; no external function refs.
+//
+// Differences from the deleted foundry_modules version:
 //   - Empty state when no foundry-module package is registered in
 //     the packages plugin. The templ shows "ask an admin to add the
 //     Chronicle Foundry module package" instead of a broken UI.
@@ -128,7 +135,7 @@ templ ownerVersionSelector(data OwnerTabData) {
 			<div class="flex items-center justify-end gap-2">
 				<button
 					type="button"
-					onclick={ pinSaveScript(data.CampaignID) }
+					onclick={ pinSaveOnClick(data.CampaignID) }
 					class="px-4 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent/90"
 				>
 					Save Pin
@@ -166,7 +173,7 @@ templ ownerInstallURLBlock(data OwnerTabData) {
 			</p>
 			<button
 				type="button"
-				onclick={ rotateTokenScript(data.CampaignID) }
+				onclick={ rotateTokenOnClick(data.CampaignID) }
 				class="px-3 py-1.5 text-xs rounded-md border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
 			>
 				<i class="fa-solid fa-rotate mr-1"></i> Rotate Token
@@ -190,34 +197,11 @@ templ ownerPlayerInstructions(data OwnerTabData) {
 	</div>
 }
 
-// pinSaveScript submits the dropdown selection to the pin endpoint.
-script pinSaveScript(campaignID string) {
-	var sel = document.getElementById('fvtt-pin-selector');
-	if (!sel) return;
-	var version = sel.value;
-	Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignID) + '/foundry-vtt/pin', {
-		method: 'PUT',
-		body: JSON.stringify({ version: version }),
-		headers: { 'Content-Type': 'application/json' },
-	})
-		.then(function () {
-			window.Chronicle.notify(version ? ('Pinned to ' + version) : 'Set to auto-update', 'success');
-			setTimeout(function () { window.location.reload(); }, 600);
-		})
-		.catch(function (err) {
-			window.Chronicle.notify('Pin failed: ' + ((err && err.message) || ''), 'error');
-		});
-}
-
-// rotateTokenScript handles the rotate-token click with a confirm.
-script rotateTokenScript(campaignID string) {
-	if (!window.confirm('Rotate the install token? Every player will need to reinstall with the new URL.')) return;
-	Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignID) + '/foundry-vtt/token/rotate', { method: 'POST' })
-		.then(function () {
-			window.Chronicle.notify('Token rotated. All players will need to reinstall.', 'success');
-			setTimeout(function () { window.location.reload(); }, 600);
-		})
-		.catch(function (err) {
-			window.Chronicle.notify('Rotate failed: ' + ((err && err.message) || ''), 'error');
-		});
-}
+// C-FMC-8: the Save Pin + Rotate Token click handlers used to be
+// templ `script` helpers. Those don't execute reliably in HTMX-
+// swapped fragments (this owner_tab fragment is hx-get'd from the
+// campaigns settings page). Replaced with inline IIFE bodies built
+// in onclick_handlers.go (pinSaveOnClick + rotateTokenOnClick).
+// The Copy button above already used the correct inline-IIFE
+// pattern and was left untouched. See onclick_handlers.go for the
+// architectural rule + reasoning.

@@ -107,3 +107,41 @@ func (h *Handler) AdminForcePinOlderHandler(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]any{"pinned": pinned})
 }
+
+// AdminAutoPinBannerHandler returns the auto-pin notification banner
+// fragment if an unread summary exists, or empty if not. Embedded
+// into /admin/packages via an hx-get block — packages.templ stays
+// foundry-agnostic; this handler is the only place that knows the
+// banner shape.
+//
+// GET /admin/foundry-vtt/autopin-banner
+//
+// Always returns 200 OK; the response is either the banner HTML or
+// an empty body. Empty body = HTMX swaps nothing visible into the
+// target div, so the banner gracefully absents itself.
+func (h *Handler) AdminAutoPinBannerHandler(c echo.Context) error {
+	summary, err := h.svc.GetUnreadAutoPinSummary(c.Request().Context())
+	if err != nil {
+		// Banner is supplementary; never fail the admin page load
+		// over a banner-read issue. Log via the framework + emit
+		// an empty body.
+		return c.NoContent(http.StatusOK)
+	}
+	if summary == nil || summary.Affected == 0 {
+		// No unread summary, or the install affected zero campaigns
+		// (nothing meaningful to surface). Empty body.
+		return c.NoContent(http.StatusOK)
+	}
+	return middleware.Render(c, http.StatusOK, AutoPinBanner(*summary))
+}
+
+// AdminAutoPinBannerDismissHandler stamps the dismissal timestamp.
+// The next AdminAutoPinBannerHandler request will return empty.
+//
+// POST /admin/foundry-vtt/autopin-banner/dismiss
+func (h *Handler) AdminAutoPinBannerDismissHandler(c echo.Context) error {
+	if err := h.svc.DismissAutoPinBanner(c.Request().Context()); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
