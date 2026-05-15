@@ -22,6 +22,41 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	cg.GET("/foundry-vtt/settings-tab", h.OwnerTabFragmentHandler, requireOwner)
 }
 
+// RegisterAdminRoutes mounts the admin endpoints used by the
+// "Campaigns Using v0.1.5" expandable UI on /admin/packages. Caller
+// passes the existing admin Group (which is already RequireAuth +
+// RequireSiteAdmin gated). The force-pin routes additionally take
+// the admin password re-auth middleware — applied inline so a
+// hijacked admin session can't silently relocate every campaign.
+//
+// Force-pin reauth follows the same pattern foundry_modules' force-
+// pin used (deleted in C-FMC-5c). reauth=nil is supported for
+// dev/test contexts; production wiring always passes a non-nil
+// middleware.
+func RegisterAdminRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
+	g := admin.Group("/foundry-vtt")
+
+	// Campaigns-using fragment — embedded in /admin/packages per
+	// foundry-module typed package's version row.
+	g.GET("/version/:version/campaigns", h.AdminVersionCampaignsHandler)
+
+	// Per-campaign actions.
+	g.POST("/version/:version/notify/:cid", h.AdminNotifyCampaignHandler)
+	if reauth != nil {
+		g.POST("/version/:version/force-pin/:cid", h.AdminForcePinCampaignHandler, reauth)
+	} else {
+		g.POST("/version/:version/force-pin/:cid", h.AdminForcePinCampaignHandler)
+	}
+
+	// Mass actions.
+	g.POST("/version/:version/notify-older", h.AdminNotifyOlderHandler)
+	if reauth != nil {
+		g.POST("/version/:version/force-pin-older", h.AdminForcePinOlderHandler, reauth)
+	} else {
+		g.POST("/version/:version/force-pin-older", h.AdminForcePinOlderHandler)
+	}
+}
+
 // RegisterPublicRoutes mounts the unauthenticated manifest and
 // download endpoints. Foundry hits these on every update check.
 // The per-campaign signed token is the only access control.

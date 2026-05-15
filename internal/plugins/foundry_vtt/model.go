@@ -2,6 +2,24 @@ package foundry_vtt
 
 import "time"
 
+// BannerStatus is the renderable shape the campaigns dashboard's
+// "newer Foundry module version available" banner consumes. The
+// campaigns plugin imports a structurally-identical
+// campaigns.FoundryModuleBanner type and renders the banner via its
+// own template — the adapter in routes.go translates between the
+// two. Keeping these as distinct types preserves the one-way
+// import direction (campaigns doesn't know foundry_vtt exists).
+type BannerStatus struct {
+	// HasUpdate is the gate: false suppresses the banner entirely.
+	HasUpdate bool
+	// CurrentVersion is what the campaign currently resolves to
+	// (could be the pin or could be "latest" if unpinned).
+	CurrentVersion string
+	// LatestVersion is the latest installed-on-disk version of the
+	// foundry-module package. Only meaningful when HasUpdate=true.
+	LatestVersion string
+}
+
 // CampaignToken is one row of foundry_module_campaign_tokens — the
 // per-campaign signing version counter that gates manifest URL
 // signatures. Schema-compatible with foundry_modules.CampaignToken

@@ -53,6 +53,42 @@ type PackageReader interface {
 	// stats the returned path to confirm the version is actually
 	// installed on disk.
 	InstallDirForVersion(pkgType packages.PackageType, slug, version string) string
+
+	// ListVersions enumerates every version known to the packages
+	// plugin for a given packageID (installed + uninstalled). The
+	// admin's "campaigns using version X" UI iterates this list to
+	// know which version cards to render.
+	ListVersions(ctx context.Context, packageID string) ([]packages.PackageVersion, error)
+}
+
+// SecurityEventLogger writes one row per admin action to the audit
+// log table. Same shape as admin's SecurityService.LogEvent; passed
+// as an interface so the plugin doesn't import admin directly.
+//
+// Used for foundry_vtt.module_force_pin (admin direct-pins a campaign)
+// and foundry_vtt.module_update_notify (admin notifies older-version
+// campaigns) — distinct event types so the audit trail can
+// distinguish "told the owner to update" from "updated for them".
+type SecurityEventLogger interface {
+	LogEvent(ctx context.Context, eventType, userID, actorID, ip, userAgent string, details map[string]any) error
+}
+
+// MailNotifier is the SMTP boundary used by the notify-older-campaigns
+// admin action. Same shape as smtp.MailService. The service treats
+// IsConfigured=false as a soft fallback: the in-app banner (via
+// security_events) is the primary surface, email is a courtesy.
+type MailNotifier interface {
+	IsConfigured(ctx context.Context) bool
+	SendMail(ctx context.Context, to []string, subject, body string) error
+}
+
+// CampaignOwnerLookup resolves a campaign's owner email so the
+// notify action knows where to send. Implemented by an adapter in
+// routes.go that wraps campaigns.CampaignService + auth.AuthService.
+// Best-effort — a non-nil error skips the email and logs only the
+// security event.
+type CampaignOwnerLookup interface {
+	GetCampaignOwnerEmail(ctx context.Context, campaignID string) (email, displayName string, err error)
 }
 
 // Service is the foundry_vtt plugin's business-logic surface.
@@ -107,6 +143,54 @@ type Service interface {
 	// by setting flags on the returned struct rather than
 	// returning errors.
 	OwnerTabData(ctx context.Context, campaignID string) (OwnerTabData, error)
+
+	// GetBannerStatus reports whether the campaign should see the
+	// "newer version available" dashboard banner. Returns HasUpdate=
+	// false when the catalog is empty, the campaign resolves to the
+	// latest installed version, or any lookup fails — the banner is
+	// best-effort UX, not security state.
+	GetBannerStatus(ctx context.Context, campaignID string) (BannerStatus, error)
+
+	// --- admin operations (C-FMC-5c) ---
+
+	// FindFoundryPackage looks up the foundry-module typed package
+	// row. Public on the Service interface so the admin handlers can
+	// resolve packageID → slug + version list without re-implementing
+	// the type filter. Returns (nil, nil) if no foundry-module
+	// package is registered.
+	FindFoundryPackage(ctx context.Context) (*packages.Package, error)
+
+	// CampaignsUsingVersion returns the campaigns currently pinned
+	// to a specific Foundry module version. The admin's expandable
+	// "Campaigns Using v0.1.5" card lists these.
+	CampaignsUsingVersion(ctx context.Context, version string) ([]CampaignUsage, error)
+
+	// ForcePinCampaign mutates a campaign's FoundryModulePin directly,
+	// bypassing the owner-side flow. Used by the admin "Force-update
+	// this campaign" action. Validates the target version exists on
+	// disk + logs a security_events row for the audit trail.
+	ForcePinCampaign(ctx context.Context, campaignID, version, actorID, actorIP, actorUA string) error
+
+	// NotifyCampaignOfUpdate logs a security_events row + sends an
+	// SMTP courtesy email (best-effort). Does NOT change the pin —
+	// this is the "tell the owner" action that complements the
+	// "do it for them" force-pin path. Audit trail distinction:
+	// foundry_vtt.module_update_notify vs foundry_vtt.module_force_pin.
+	NotifyCampaignOfUpdate(ctx context.Context, campaignID, newVersion, actorID, actorIP, actorUA string) error
+
+	// NotifyOlderCampaigns is the mass variant of
+	// NotifyCampaignOfUpdate. Iterates every campaign whose pin is
+	// strictly older (per semverLess) than the target version and
+	// calls the per-campaign notify path. Returns the count of
+	// campaigns notified.
+	NotifyOlderCampaigns(ctx context.Context, version, actorID, actorIP, actorUA string) (notified int, err error)
+
+	// ForcePinAllToVersion is the mass variant of ForcePinCampaign.
+	// Iterates every campaign whose pin is strictly older than the
+	// target and pins them all to it. Returns the count of campaigns
+	// repinned. Partial failures don't abort — each campaign's
+	// pin operation is independent.
+	ForcePinAllToVersion(ctx context.Context, version, actorID, actorIP, actorUA string) (pinned int, err error)
 }
 
 // service is the default Service implementation.
@@ -116,14 +200,39 @@ type service struct {
 	settings CampaignSettingsAdapter
 	pkgs     PackageReader
 	baseURL  string // public Chronicle origin, trimmed of trailing slash
+
+	// Admin-action dependencies. Nil-safe — the per-campaign owner
+	// flow doesn't need them, only the admin flow. If a deployment
+	// doesn't wire SMTP/security events (e.g. tests), the admin
+	// methods soft-fail on those steps and continue.
+	events SecurityEventLogger
+	mail   MailNotifier
+	owners CampaignOwnerLookup
 }
 
-// NewService constructs the foundry_vtt service.
+// Security event types — distinct rows in security_events per admin
+// action so the audit trail can distinguish "notified" from "force-
+// pinned" without parsing the details JSON.
+const (
+	// EventModuleForcePin — admin directly mutated a campaign's pin.
+	EventModuleForcePin = "foundry_vtt.module_force_pin"
+
+	// EventModuleUpdateNotify — admin notified the campaign owner
+	// of a newer version. No pin change.
+	EventModuleUpdateNotify = "foundry_vtt.module_update_notify"
+)
+
+// NewService constructs the foundry_vtt service. events/mail/owners
+// are admin-action dependencies; passing nil for any of them disables
+// the corresponding behavior softly (no panic, no per-request error).
 func NewService(
 	repo Repository,
 	tokens *TokenSigner,
 	settings CampaignSettingsAdapter,
 	pkgs PackageReader,
+	events SecurityEventLogger,
+	mail MailNotifier,
+	owners CampaignOwnerLookup,
 	baseURL string,
 ) Service {
 	return &service{
@@ -131,6 +240,9 @@ func NewService(
 		tokens:   tokens,
 		settings: settings,
 		pkgs:     pkgs,
+		events:   events,
+		mail:     mail,
+		owners:   owners,
 		baseURL:  strings.TrimRight(baseURL, "/"),
 	}
 }
@@ -231,7 +343,7 @@ func (s *service) VerifyManifestToken(ctx context.Context, campaignID, token str
 // PR.
 func (s *service) BuildManifestForCampaign(ctx context.Context, campaignID string) (json.RawMessage, string, error) {
 	// 1. Find the foundry-module package row.
-	pkg, err := s.findFoundryPackage(ctx)
+	pkg, err := s.FindFoundryPackage(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -338,11 +450,11 @@ func substituteURLTemplate(tmpl, campaignID, token string) string {
 	return out
 }
 
-// findFoundryPackage looks up the foundry-module typed package row.
+// FindFoundryPackage looks up the foundry-module typed package row.
 // Returns (nil, nil) if none exists — caller treats this as the
 // "no package registered" empty state. Multiple foundry-module
 // packages would be unusual; the first installed one wins.
-func (s *service) findFoundryPackage(ctx context.Context) (*packages.Package, error) {
+func (s *service) FindFoundryPackage(ctx context.Context) (*packages.Package, error) {
 	all, err := s.pkgs.ListPackages(ctx)
 	if err != nil {
 		return nil, ErrInternal("list_packages", err)
@@ -362,7 +474,7 @@ func (s *service) findFoundryPackage(ctx context.Context) (*packages.Package, er
 // the campaigns adapter.
 func (s *service) SetPinnedVersion(ctx context.Context, campaignID, version string) error {
 	if version != "" {
-		pkg, err := s.findFoundryPackage(ctx)
+		pkg, err := s.FindFoundryPackage(ctx)
 		if err != nil {
 			return err
 		}
@@ -404,7 +516,7 @@ func (s *service) GetCampaignPin(ctx context.Context, campaignID string) (string
 func (s *service) OwnerTabData(ctx context.Context, campaignID string) (OwnerTabData, error) {
 	out := OwnerTabData{CampaignID: campaignID}
 
-	pkg, err := s.findFoundryPackage(ctx)
+	pkg, err := s.FindFoundryPackage(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -486,4 +598,175 @@ func (s *service) listInstalledVersionsOnDisk(slug string) []string {
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(versions)))
 	return versions
+}
+
+// --- admin operations (C-FMC-5c) ---
+
+// CampaignsUsingVersion lists campaigns currently pinned to the given
+// version. Used by the admin's expandable "Campaigns Using v0.1.5"
+// card on /admin/packages.
+func (s *service) CampaignsUsingVersion(ctx context.Context, version string) ([]CampaignUsage, error) {
+	usage, err := s.repo.CampaignsUsingVersion(ctx, version)
+	if err != nil {
+		return nil, ErrInternal("campaigns_using_version", err)
+	}
+	return usage, nil
+}
+
+// ForcePinCampaign is the admin "Force-update this campaign to v0.X"
+// action. Validates the version is actually installed on disk before
+// touching CampaignSettings — refuses to pin to a missing version so
+// Foundry update checks don't immediately 404.
+//
+// Logs a security_events row (EventModuleForcePin) for the audit
+// trail. The event details include version + actor metadata so the
+// admin dashboard can render "Admin <name> force-pinned campaign
+// <id> to v0.1.5" in the audit log.
+func (s *service) ForcePinCampaign(ctx context.Context, campaignID, version, actorID, actorIP, actorUA string) error {
+	if version == "" {
+		// Pinning to empty is the "clear pin / latest-tracking"
+		// operation, which doesn't make sense for a force-update
+		// flow — admin would use the per-campaign unpin endpoint
+		// instead. Reject loudly.
+		return &Error{
+			Category: ErrCategoryValidation,
+			Code:     "force_pin_empty_version",
+			Message: "Cannot force-pin a campaign to an empty version: " +
+				"force-pin is for redirecting campaigns TO a specific newer version. " +
+				"The admin endpoint requires a non-empty version. " +
+				"If the goal is to clear a campaign's pin, the owner can do that " +
+				"from campaign settings → VTT Setup Guides; admins don't have a " +
+				"force-clear endpoint by design (clearing is a non-destructive choice).",
+		}
+	}
+
+	// Validate the version is installed on disk. Reuses SetPinnedVersion's
+	// validation path (which calls FindFoundryPackage + InstallDirForVersion).
+	if err := s.SetPinnedVersion(ctx, campaignID, version); err != nil {
+		return err
+	}
+
+	// Audit log. Soft-fail if events is unwired (e.g. tests).
+	if s.events != nil {
+		_ = s.events.LogEvent(ctx, EventModuleForcePin,
+			"", actorID, actorIP, actorUA,
+			map[string]any{
+				"campaign_id": campaignID,
+				"version":     version,
+			})
+	}
+	return nil
+}
+
+// NotifyCampaignOfUpdate logs the audit event + sends a courtesy SMTP
+// email (when configured). Does NOT change the pin — the owner stays
+// in control of the actual update timing.
+//
+// SMTP failures are intentionally swallowed: the in-app banner (via
+// security_events) is the primary surface, email is supplementary.
+// The audit event still gets logged so the operator's dashboard can
+// see "notify was triggered, email may or may not have arrived".
+func (s *service) NotifyCampaignOfUpdate(ctx context.Context, campaignID, newVersion, actorID, actorIP, actorUA string) error {
+	if s.events == nil {
+		// Without an events sink, the notify is a no-op — the
+		// banner depends on security_events row presence. Surface
+		// this as an internal error rather than silently dropping.
+		return ErrInternal("notify_events_unwired",
+			fmt.Errorf("SecurityEventLogger is nil; can't record notify event for campaign %q", campaignID))
+	}
+	if err := s.events.LogEvent(ctx, EventModuleUpdateNotify,
+		"", actorID, actorIP, actorUA,
+		map[string]any{
+			"campaign_id": campaignID,
+			"new_version": newVersion,
+		}); err != nil {
+		return ErrInternal("log_notify_event", err)
+	}
+
+	// Best-effort email. Don't fail the call if SMTP isn't
+	// configured — banner still fires.
+	if s.mail != nil && s.owners != nil && s.mail.IsConfigured(ctx) {
+		email, name, err := s.owners.GetCampaignOwnerEmail(ctx, campaignID)
+		if err == nil && email != "" {
+			subject := "Foundry module update available"
+			body := fmt.Sprintf(
+				"Hi %s,\n\nA newer version of the Chronicle Foundry module (%s) is available "+
+					"for your campaign. Open campaign settings → VTT Setup Guides to switch.\n",
+				name, newVersion)
+			_ = s.mail.SendMail(ctx, []string{email}, subject, body)
+		}
+	}
+	return nil
+}
+
+// NotifyOlderCampaigns is the mass-notify variant. Pulls every campaign
+// with a pin strictly older than `version` and fires the per-campaign
+// notify path on each. Partial failures don't abort — the count
+// reflects how many succeeded.
+func (s *service) NotifyOlderCampaigns(ctx context.Context, version, actorID, actorIP, actorUA string) (int, error) {
+	older, err := s.repo.CampaignsOlderThan(ctx, version, semverLess)
+	if err != nil {
+		return 0, ErrInternal("campaigns_older_than", err)
+	}
+	count := 0
+	for _, c := range older {
+		if err := s.NotifyCampaignOfUpdate(ctx, c.CampaignID, version, actorID, actorIP, actorUA); err != nil {
+			// Skip and continue — one campaign's failure shouldn't
+			// abort the fan-out.
+			continue
+		}
+		count++
+	}
+	return count, nil
+}
+
+// ForcePinAllToVersion is the mass force-update variant. Iterates
+// every campaign whose pin is strictly older than the target and
+// repins them. Returns the count of campaigns successfully repinned.
+// Partial failures don't abort — see NotifyOlderCampaigns rationale.
+func (s *service) ForcePinAllToVersion(ctx context.Context, version, actorID, actorIP, actorUA string) (int, error) {
+	older, err := s.repo.CampaignsOlderThan(ctx, version, semverLess)
+	if err != nil {
+		return 0, ErrInternal("campaigns_older_than", err)
+	}
+	count := 0
+	for _, c := range older {
+		if err := s.ForcePinCampaign(ctx, c.CampaignID, version, actorID, actorIP, actorUA); err != nil {
+			continue
+		}
+		count++
+	}
+	return count, nil
+}
+
+// GetBannerStatus reports whether the dashboard banner should fire.
+// Empty pin (latest-tracking) → no banner, the campaign auto-resolves
+// to latest. Pin matches or exceeds the latest installed version →
+// no banner. Pin strictly older → banner shows pin → latest.
+//
+// All errors swallow to zero-value because the banner is soft UX —
+// a flaky DB read shouldn't crash the campaign dashboard.
+func (s *service) GetBannerStatus(ctx context.Context, campaignID string) (BannerStatus, error) {
+	pkg, err := s.FindFoundryPackage(ctx)
+	if err != nil || pkg == nil || pkg.InstalledVersion == "" {
+		return BannerStatus{}, nil
+	}
+	pin, err := s.settings.GetFoundryModulePin(ctx, campaignID)
+	if err != nil {
+		return BannerStatus{}, nil
+	}
+	if pin == "" {
+		// Latest-tracking — by definition at-or-after latest.
+		return BannerStatus{}, nil
+	}
+	if !semverLess(pin, pkg.InstalledVersion) {
+		// Pin is at-or-after the latest installed version. Could
+		// be a deliberate stay-on-older or just current; no banner.
+		return BannerStatus{}, nil
+	}
+	return BannerStatus{
+		HasUpdate:      true,
+		CurrentVersion: pin,
+		LatestVersion:  pkg.InstalledVersion,
+	}, nil
 }

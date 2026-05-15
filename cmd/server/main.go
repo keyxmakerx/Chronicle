@@ -20,7 +20,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	foundry_modules "github.com/keyxmakerx/chronicle/internal/plugins/foundry_modules"
+	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
@@ -134,6 +134,18 @@ func main() {
 	// Each plugin runs its own schema migrations independently. Failures
 	// disable the plugin instead of crashing the app. Migrations are
 	// embedded in the binary via embed.FS so they work in any environment.
+	//
+	// C-FMC-5c: invoke foundry_vtt's pre-migration check BEFORE running
+	// the migration loop. The check refuses to start the server if the
+	// foundry_module_versions table has rows (the operator's bnuuy.haus
+	// was empty as of audit; a manual upload between C-FMC-5b deploy and
+	// C-FMC-5c deploy would otherwise be silently dropped by the
+	// migration). The check is idempotent + cheap; re-running after the
+	// migration has applied returns nil.
+	if err := foundry_vtt.PreMigrationCheck(context.Background(), db); err != nil {
+		slog.Error("foundry_vtt pre-migration check failed", slog.Any("error", err))
+		os.Exit(1)
+	}
 	pluginHealth := database.NewPluginHealthRegistry()
 	pluginSchemas := registeredPlugins()
 	pluginResults := database.RunPluginMigrations(db, pluginSchemas)
@@ -248,6 +260,14 @@ func registeredPlugins() []database.PluginSchema {
 		{Slug: "timeline", MigrationsFS: mustSub(timeline.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "syncapi", MigrationsFS: mustSub(syncapi.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "packages", MigrationsFS: mustSub(packages.MigrationsFS, database.PluginMigrationsSubdir)},
-		{Slug: "foundry_modules", MigrationsFS: mustSub(foundry_modules.MigrationsFS, database.PluginMigrationsSubdir)},
+		// foundry_vtt's migration 001 (C-FMC-5c) renames
+		// foundry_module_campaign_tokens → foundry_vtt_campaign_tokens
+		// AND drops the orphaned foundry_module_versions table. A Go-
+		// side pre-check (foundry_vtt.PreMigrationCheck, invoked from
+		// the main bootstrap path before plugin migrations run) aborts
+		// startup if foundry_module_versions has rows — protecting
+		// against accidental data destruction if a manual upload
+		// happened between the C-FMC-5b deploy and C-FMC-5c deploy.
+		{Slug: "foundry_vtt", MigrationsFS: mustSub(foundry_vtt.MigrationsFS, database.PluginMigrationsSubdir)},
 	}
 }

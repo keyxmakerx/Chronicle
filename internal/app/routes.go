@@ -28,7 +28,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
-	foundry_modules "github.com/keyxmakerx/chronicle/internal/plugins/foundry_modules"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
@@ -906,20 +905,20 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	a.publishWithAudience(msgType, campaignID, marker.ID, marker, marker.IsDMOnly())
 }
 
-// foundryModuleBannerAdapter wraps a foundry_modules.Service to satisfy
+// foundryVTTBannerAdapter wraps a foundry_vtt.Service to satisfy
 // campaigns.FoundryModuleBannerLookup without the campaigns package
-// importing foundry_modules (which would cycle). Translates the
-// foundry_modules.BannerStatus shape into the campaigns-side
-// FoundryModuleBanner — same fields, different types, deliberately
-// decoupled so the campaigns plugin's templ doesn't gain a transitive
-// dep on foundry_modules.
-type foundryModuleBannerAdapter struct {
-	svc foundry_modules.Service
+// importing foundry_vtt (which would cycle). C-FMC-5c replacement
+// for the old foundryModuleBannerAdapter (foundry_modules deleted).
+// The campaigns-side FoundryModuleBanner type stays (still consumed
+// by show.templ); only the source service changed.
+type foundryVTTBannerAdapter struct {
+	svc foundry_vtt.Service
 }
 
-// GetFoundryModuleBanner translates the foundry_modules banner status
-// into the campaigns-side renderable struct.
-func (a *foundryModuleBannerAdapter) GetFoundryModuleBanner(ctx context.Context, campaignID string) (campaigns.FoundryModuleBanner, error) {
+// GetFoundryModuleBanner translates foundry_vtt's BannerStatus into
+// the campaigns-side renderable struct. Field shape is identical to
+// the deleted adapter — only the source type changed.
+func (a *foundryVTTBannerAdapter) GetFoundryModuleBanner(ctx context.Context, campaignID string) (campaigns.FoundryModuleBanner, error) {
 	s, err := a.svc.GetBannerStatus(ctx, campaignID)
 	if err != nil {
 		return campaigns.FoundryModuleBanner{}, err
@@ -932,9 +931,9 @@ func (a *foundryModuleBannerAdapter) GetFoundryModuleBanner(ctx context.Context,
 }
 
 // foundryCampaignSettingsAdapter wraps campaigns.CampaignService to
-// implement foundry_modules.CampaignSettingsWriter without creating
-// a circular import. The foundry_modules service reads / writes the
-// FoundryModulePin field on CampaignSettings through this adapter.
+// implement foundry_vtt.CampaignSettingsAdapter without creating
+// a circular import. Reads/writes the FoundryModulePin field on
+// CampaignSettings + checks campaign existence.
 type foundryCampaignSettingsAdapter struct {
 	svc campaigns.CampaignService
 }
@@ -949,24 +948,24 @@ func (a *foundryCampaignSettingsAdapter) GetFoundryModulePin(ctx context.Context
 	return a.svc.GetFoundryModulePin(ctx, campaignID)
 }
 
-// CampaignExists is the existence check the foundry_modules install-URL
-// builder uses to reject token rotations against unknown campaigns.
+// CampaignExists is the existence check foundry_vtt's install-URL
+// builder and token-rotation flow use to reject unknown campaigns.
 func (a *foundryCampaignSettingsAdapter) CampaignExists(ctx context.Context, campaignID string) (bool, error) {
 	return a.svc.CampaignExistsByID(ctx, campaignID)
 }
 
 // foundryCampaignOwnerLookupAdapter resolves a campaign's owner email
-// for the foundry_modules NotifyOlderCampaigns SMTP fan-out. Pulls the
-// owner_user_id from the campaign row, then the user's email from the
-// auth service. Best-effort — soft-fails to ("", "", err) which the
-// notify path treats as "skip email but still log the audit event."
+// for foundry_vtt's NotifyOlderCampaigns SMTP fan-out. Pulls the
+// creator's user row, then their email from the auth service.
+// Best-effort — soft-fails to ("", "", err) which the notify path
+// treats as "skip email but still log the audit event."
 type foundryCampaignOwnerLookupAdapter struct {
 	campaignSvc campaigns.CampaignService
 	authSvc     auth.AuthService
 }
 
 // GetCampaignOwnerEmail returns (email, displayName, error). The
-// foundry_modules service handles a non-nil error by skipping the
+// foundry_vtt service handles a non-nil error by skipping the
 // email send and falling back to the in-app banner.
 func (a *foundryCampaignOwnerLookupAdapter) GetCampaignOwnerEmail(ctx context.Context, campaignID string) (string, string, error) {
 	c, err := a.campaignSvc.GetByID(ctx, campaignID)
@@ -978,8 +977,8 @@ func (a *foundryCampaignOwnerLookupAdapter) GetCampaignOwnerEmail(ctx context.Co
 	}
 	// Campaign's original creator is treated as the primary owner for
 	// notify emails. Campaigns can have multiple RoleOwner members but
-	// the dispatch's notify path is "tell THE owner" — emailing every
-	// owner is a follow-up.
+	// the notify path is "tell THE owner" — multi-owner emailing is
+	// a future iteration.
 	user, err := a.authSvc.GetUser(ctx, c.CreatedBy)
 	if err != nil || user == nil {
 		return "", "", err
@@ -1779,99 +1778,52 @@ func (a *App) RegisterRoutes() {
 	// and quota failures are recorded in the admin security dashboard.
 	mediaHandler.SetSecurityLogger(securityService)
 
-	// Foundry module catalog (C-FMC-1): admin-uploaded Foundry VTT module
-	// versions + per-campaign pinning + public signed manifest endpoint
-	// Foundry hits in place of GitHub. Storage dir lives under the
-	// configured media root so it's covered by the same backup story.
-	foundryModuleStorageDir := filepath.Join(a.Config.Upload.MediaPath, "foundry_modules")
-	fmRepo := foundry_modules.NewRepository(a.DB)
-	fmTokenSigner := foundry_modules.NewTokenSigner(signingSecret)
-	fmCampaignAdapter := &foundryCampaignSettingsAdapter{svc: campaignService}
-	fmOwnerLookup := &foundryCampaignOwnerLookupAdapter{
+	// foundry_vtt sub-plugin (C-FMC-5b + C-FMC-5c): the Foundry-VTT-
+	// specific extension to the generic packages plugin. Owns every
+	// Foundry-specific behavior: per-campaign signed manifest URLs,
+	// per-campaign pinning, chronicle-package.json descriptor reading
+	// + the post-install module.json version rewrite, admin "campaigns
+	// using v0.1.5" expandable cards on /admin/packages.
+	//
+	// C-FMC-5c is the cleanup PR that deleted the parallel
+	// foundry_modules plugin, renamed the token table to
+	// foundry_vtt_campaign_tokens (via this plugin's migration 001),
+	// added admin endpoints (force-pin, notify, mass variants) here,
+	// and removed Foundry coupling from the packages plugin. After
+	// this PR ships, the packages plugin has zero Foundry-specific
+	// code — Chronicle is fully Foundry-agnostic at the packages layer.
+	fvttRepo := foundry_vtt.NewRepository(a.DB)
+	fvttTokenSigner := foundry_vtt.NewTokenSigner(signingSecret)
+	fvttCampaignAdapter := &foundryCampaignSettingsAdapter{svc: campaignService}
+	fvttOwnerLookup := &foundryCampaignOwnerLookupAdapter{
 		campaignSvc: campaignService,
 		authSvc:     authService,
 	}
-	fmService := foundry_modules.NewService(
-		fmRepo, fmTokenSigner, fmCampaignAdapter,
-		securityService, smtpService, fmOwnerLookup,
-		foundryModuleStorageDir, a.Config.BaseURL,
-	)
-	fmHandler := foundry_modules.NewHandler(fmService)
-	// GitHub release poller: auto-fetches Chronicle Foundry module
-	// releases into the catalog so the admin doesn't have to upload
-	// every .zip manually. FOUNDRY_MODULE_POLL_INTERVAL=0 disables
-	// the background goroutine; the admin "Fetch now" button stays
-	// functional in either case.
-	fmPoller := foundry_modules.NewPoller(fmRepo, securityService, foundryModuleStorageDir)
-	fmHandler.SetPoller(fmPoller)
-	// Wire the banner-status adapter into the campaigns handler so
-	// the campaign show page can render the "newer version available"
-	// banner without importing foundry_modules.
-	campaignHandler.SetFoundryModuleBanner(&foundryModuleBannerAdapter{svc: fmService})
-	if a.PluginHealth.IsHealthy("foundry_modules") {
-		// Admin routes: list / upload / status / notify / usage / force-pin.
-		// Force-pin route additionally requires password re-auth (applied
-		// inside RegisterAdminRoutes when the middleware is non-nil).
-		foundry_modules.RegisterAdminRoutes(adminGroup, fmHandler, auth.RequireReauth(authService))
-		// Owner-facing routes: pin / token-rotate / install-url. Mounted on
-		// the campaign-scoped group so RequireCampaignAccess fires before
-		// the role gate; RoleOwner is enforced inside RegisterOwnerRoutes.
-		campaignAuthed := e.Group("/campaigns/:id",
-			auth.RequireAuth(authService),
-			campaigns.RequireCampaignAccess(campaignService),
-		)
-		foundry_modules.RegisterOwnerRoutes(campaignAuthed, fmHandler,
-			campaigns.RequireRole(campaigns.RoleOwner))
-		// Public manifest + download. Rate-limited at the same cadence as
-		// packages.RegisterPublicRoutes so a misbehaving Foundry client
-		// can't hammer the manifest endpoint into the DB.
-		foundry_modules.RegisterPublicRoutes(e, fmHandler, middleware.RateLimit(300, time.Minute))
-		// Start the background poller after routes are registered so
-		// the initial tick can populate the catalog without racing
-		// the admin endpoints that surface its output. Uses
-		// context.Background() — the goroutine runs for the lifetime
-		// of the process; graceful shutdown wiring is a separate
-		// concern handled at the http.Server level.
-		fmPoller.Start(context.Background())
-	} else {
-		slog.Warn("foundry_modules plugin degraded — routes not registered")
-	}
-
-	// foundry_vtt sub-plugin (C-FMC-5b): the descriptor-aware Foundry-
-	// VTT-specific extension to the generic packages plugin. Reads
-	// chronicle-package.json from the extracted install dir, rewrites
-	// module.json version on install, serves per-campaign signed
-	// manifests at /api/v1/campaigns/:cid/foundry-vtt/... URLs.
-	//
-	// Coexists with foundry_modules for the C-FMC-5b parallel period:
-	// both plugins read the same foundry_module_campaign_tokens table
-	// (renamed to foundry_vtt_campaign_tokens in C-FMC-5c). Both share
-	// the signing secret via separate token-domain prefixes so a token
-	// minted in one plugin doesn't verify in the other (and vice
-	// versa) — the operator's existing tokens keep working in the old
-	// endpoint; new tokens for the new endpoint are minted from this
-	// plugin's owner tab.
-	fvttRepo := foundry_vtt.NewRepository(a.DB)
-	fvttTokenSigner := foundry_vtt.NewTokenSigner(signingSecret)
-	// The existing foundryCampaignSettingsAdapter satisfies foundry_vtt's
-	// CampaignSettingsAdapter interface by structural typing — same
-	// three methods (Get/Set/CampaignExists). Reusing it avoids a
-	// second adapter doing identical wrapping.
 	fvttService := foundry_vtt.NewService(
-		fvttRepo, fvttTokenSigner, fmCampaignAdapter, pkgService, a.Config.BaseURL,
+		fvttRepo, fvttTokenSigner, fvttCampaignAdapter, pkgService,
+		securityService, smtpService, fvttOwnerLookup,
+		a.Config.BaseURL,
 	)
 	fvttHandler := foundry_vtt.NewHandler(fvttService)
-	// Register the PostInstallHook with the packages plugin. The hook
-	// fires after every foundry-module typed install and rewrites
-	// module.json's version field to match the installed version (the
-	// fix for the operator's version-stale bug end-to-end). Empty
-	// PluginHealth slot until foundry_vtt grows migrations in C-FMC-5c.
+	// Wire the banner-status adapter into the campaigns handler so
+	// the campaign show page can render the "newer version available"
+	// banner without importing foundry_vtt.
+	campaignHandler.SetFoundryModuleBanner(&foundryVTTBannerAdapter{svc: fvttService})
 	if a.PluginHealth.IsHealthy("foundry_vtt") && a.PluginHealth.IsHealthy("packages") {
+		// Register the PostInstallHook with the packages plugin. The
+		// hook fires after every foundry-module typed install and
+		// rewrites module.json's version field to match the installed
+		// version (the fix for the operator's version-stale bug end-
+		// to-end).
 		packages.RegisterPostInstallHook(pkgService, foundry_vtt.NewPostInstallHook())
 
+		// Admin routes: "campaigns using v0.1.5" fragment + force-pin
+		// + notify + mass variants. Force-pin routes additionally
+		// require admin password re-auth.
+		foundry_vtt.RegisterAdminRoutes(adminGroup, fvttHandler, auth.RequireReauth(authService))
+
 		// Owner-facing routes (per-campaign pin, token rotate, install
-		// URL, settings tab fragment). Same campaign-scoped group +
-		// RoleOwner gate foundry_modules uses.
+		// URL, settings tab fragment).
 		fvttCampaignAuthed := e.Group("/campaigns/:id",
 			auth.RequireAuth(authService),
 			campaigns.RequireCampaignAccess(campaignService),
@@ -1880,9 +1832,9 @@ func (a *App) RegisterRoutes() {
 			campaigns.RequireRole(campaigns.RoleOwner))
 
 		// Public manifest + download. Same rate limit as the packages
-		// and foundry_modules public endpoints — manifest hits are
-		// frequent (every Foundry update check) so the limit needs
-		// headroom for a moderately-sized table.
+		// public endpoints — manifest hits are frequent (every Foundry
+		// update check), the limit needs headroom for moderately-
+		// sized deployments.
 		foundry_vtt.RegisterPublicRoutes(e, fvttHandler, middleware.RateLimit(300, time.Minute))
 	} else {
 		slog.Warn("foundry_vtt plugin degraded — routes not registered")

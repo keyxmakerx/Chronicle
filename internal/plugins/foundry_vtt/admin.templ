@@ -1,0 +1,192 @@
+// foundry_vtt — admin.templ renders the "campaigns using v0.1.5"
+// expandable card UI that the operator asked for. The packages plugin's
+// /admin/packages page calls these fragments via hx-get on each
+// foundry-module typed package's version row.
+//
+// HTMX-swap-safe pattern requirements (non-negotiable per the C-FMC-5c
+// dispatch — these patterns matter because PRs #302/#303 hit bugs
+// from violating them):
+//
+//  1. Inline `onclick="..."` handlers, NOT delegated event listeners.
+//     A <script> tag inside an HTMX-swapped fragment may not execute
+//     before the user clicks. Inline onclick works the moment HTML
+//     lands in the DOM.
+//  2. templ `script` helpers for any code that needs encoding of
+//     parameters (CSRF tokens, IDs). Generated as static JS in the
+//     templ output, executes synchronously, no race window.
+//  3. No `x-data="someExternalFunction()"` — external function
+//     references can be undefined when Alpine processes the directive
+//     after HTMX swap. Use inline literal objects: `x-data="{ open: false }"`.
+//  4. For modal-like reveals, use `<details>` (browser-native, no JS
+//     race window) OR an inline `x-data` with `style="display:none"`
+//     as defense-in-depth.
+//
+// The /admin/foundry-vtt/version/:version/campaigns endpoint serves
+// this campaignUsageSection fragment. Per-version expandable cards
+// embed via the AdminVersionCampaignsBlock entry point.
+
+package foundry_vtt
+
+import "fmt"
+
+// AdminVersionCampaignsBlock is the HTMX fragment served at
+// GET /admin/foundry-vtt/version/:version/campaigns. Embedded into
+// the packages plugin's per-version row (foundry-module type only)
+// via hx-get. Lists the campaigns currently pinned to this version
+// + the per-version admin actions.
+templ AdminVersionCampaignsBlock(version string, usage []CampaignUsage, csrfToken string) {
+	<div class="border-t border-edge mt-2 pt-3 px-3 pb-3 bg-surface-alt/30 rounded-b-md">
+		@campaignUsageList(version, usage, csrfToken)
+		@versionActionRow(version, usage, csrfToken)
+	</div>
+}
+
+// campaignUsageList renders one row per pinned campaign. Owner name +
+// last-active relative time + per-campaign Force-update + Notify
+// buttons. The buttons' onclick handlers are templ-generated `script`
+// helpers (HTMX-swap-safe: inline string interpolation, no external
+// function references).
+templ campaignUsageList(version string, usage []CampaignUsage, csrfToken string) {
+	<div>
+		<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">
+			Campaigns Pinned to { version }
+		</p>
+		if len(usage) == 0 {
+			<p class="text-xs text-fg-muted italic">
+				No campaigns currently pinned to this version.
+			</p>
+		} else {
+			<div class="space-y-1.5">
+				for _, c := range usage {
+					<div class="flex items-center gap-3 px-3 py-2 rounded-md bg-surface text-sm">
+						<div class="flex-1 min-w-0">
+							<p class="font-medium text-fg truncate">{ c.CampaignName }</p>
+							<p class="text-xs text-fg-muted">
+								owner: { c.OwnerName }
+								if c.LastActiveAt != nil {
+									<span class="ml-2">last active { relativeTime(*c.LastActiveAt) }</span>
+								}
+							</p>
+						</div>
+						<div class="flex items-center gap-1.5">
+							<button
+								type="button"
+								onclick={ notifyCampaignScript(c.CampaignID, version) }
+								class="px-2 py-1 text-xs rounded border border-edge hover:bg-surface-alt"
+								title={ fmt.Sprintf("Notify owner that v%s is available", version) }
+							>
+								<i class="fa-solid fa-bullhorn mr-1"></i> Notify
+							</button>
+							<button
+								type="button"
+								onclick={ forcePinCampaignScript(c.CampaignID, version) }
+								class="px-2 py-1 text-xs rounded border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+								title={ fmt.Sprintf("Force-update this campaign to v%s", version) }
+							>
+								<i class="fa-solid fa-thumbtack mr-1"></i> Force-update
+							</button>
+						</div>
+					</div>
+				}
+			</div>
+		}
+		{{ _ = csrfToken }}
+	</div>
+}
+
+// versionActionRow renders the version-level batch actions:
+// "Notify older-version campaigns" + "Force-update older-version
+// campaigns". Both fan out to every campaign whose pin is strictly
+// older than this version per semver.
+templ versionActionRow(version string, usage []CampaignUsage, csrfToken string) {
+	<div class="flex flex-wrap gap-2 pt-3 mt-2 border-t border-edge">
+		<button
+			type="button"
+			onclick={ notifyOlderScript(version) }
+			class="px-3 py-1.5 text-xs rounded-md border border-edge hover:bg-surface-alt"
+			title="Notify every campaign with a pin older than this version"
+		>
+			<i class="fa-solid fa-bullhorn mr-1"></i> Notify Older Campaigns
+		</button>
+		<button
+			type="button"
+			onclick={ forcePinOlderScript(version) }
+			class="px-3 py-1.5 text-xs rounded-md border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+			title="Force-update every campaign with a pin older than this version"
+		>
+			<i class="fa-solid fa-arrow-up mr-1"></i> Force-update All Older
+		</button>
+		{{ _ = usage }}
+		{{ _ = csrfToken }}
+	</div>
+}
+
+// --- inline scripts (templ-generated; HTMX-swap-safe) ---
+//
+// All four scripts use the same pattern: confirm → apiFetch →
+// Chronicle.notify → optional reload. No external function
+// references; nothing depends on script-tag execution order with
+// HTMX swap.
+
+// notifyCampaignScript handles the per-campaign "Notify" click.
+// Posts to the notify endpoint; doesn't reload (no DOM change to
+// reflect; the notification banner fires async on the campaign
+// dashboard).
+script notifyCampaignScript(campaignID, version string) {
+	if (!window.confirm('Notify campaign owner that ' + version + ' is available?')) return;
+	Chronicle.apiFetch('/admin/foundry-vtt/version/' + encodeURIComponent(version) + '/notify/' + encodeURIComponent(campaignID), { method: 'POST' })
+		.then(function () {
+			window.Chronicle.notify('Notified campaign ' + campaignID, 'success');
+		})
+		.catch(function (err) {
+			window.Chronicle.notify('Notify failed: ' + ((err && err.message) || ''), 'error');
+		});
+}
+
+// forcePinCampaignScript handles the per-campaign "Force-update"
+// click. Confirm dialog is firmer (destructive — overrides the
+// owner's pin); reloads the page on success so the updated card
+// list reflects the new pin state.
+script forcePinCampaignScript(campaignID, version string) {
+	if (!window.confirm('Force-update campaign ' + campaignID + ' to ' + version + '? This overrides the owner\'s current pin. The owner will be notified on next login.')) return;
+	Chronicle.apiFetch('/admin/foundry-vtt/version/' + encodeURIComponent(version) + '/force-pin/' + encodeURIComponent(campaignID), { method: 'POST' })
+		.then(function () {
+			window.Chronicle.notify('Force-updated campaign to ' + version, 'success');
+			setTimeout(function () { window.location.reload(); }, 600);
+		})
+		.catch(function (err) {
+			window.Chronicle.notify('Force-update failed: ' + ((err && err.message) || ''), 'error');
+		});
+}
+
+// notifyOlderScript handles the mass-notify version-level action.
+// Server returns {notified: N}; surface N via Chronicle.notify so
+// the operator sees how many fan-outs fired.
+script notifyOlderScript(version string) {
+	if (!window.confirm('Notify EVERY campaign with a pin older than ' + version + '?')) return;
+	Chronicle.apiFetch('/admin/foundry-vtt/version/' + encodeURIComponent(version) + '/notify-older', { method: 'POST' })
+		.then(function (resp) {
+			var n = (resp && typeof resp.notified === 'number') ? resp.notified : 0;
+			window.Chronicle.notify('Notified ' + n + ' campaign(s).', 'success');
+		})
+		.catch(function (err) {
+			window.Chronicle.notify('Mass-notify failed: ' + ((err && err.message) || ''), 'error');
+		});
+}
+
+// forcePinOlderScript handles the mass force-update action.
+// Confirm is sterner (irreversible from the admin side; owners can
+// manually re-pin). Reloads on success.
+script forcePinOlderScript(version string) {
+	if (!window.confirm('Force-update EVERY campaign with a pin older than ' + version + '? This overrides every affected owner\'s pin. Confirm only if rolling out a critical security update.')) return;
+	Chronicle.apiFetch('/admin/foundry-vtt/version/' + encodeURIComponent(version) + '/force-pin-older', { method: 'POST' })
+		.then(function (resp) {
+			var n = (resp && typeof resp.pinned === 'number') ? resp.pinned : 0;
+			window.Chronicle.notify('Force-updated ' + n + ' campaign(s) to ' + version, 'success');
+			setTimeout(function () { window.location.reload(); }, 600);
+		})
+		.catch(function (err) {
+			window.Chronicle.notify('Mass force-update failed: ' + ((err && err.message) || ''), 'error');
+		});
+}
+

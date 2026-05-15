@@ -1,4 +1,4 @@
-package foundry_modules
+package foundry_vtt
 
 import (
 	"strconv"
@@ -6,20 +6,20 @@ import (
 )
 
 // semverLess reports whether version a is strictly older than version b.
-// Used by the "notify older campaigns" repository query and by the
-// service's LatestAvailable fallback when only deprecated versions
-// remain.
+// Used by the admin's "notify older-version campaigns" action to filter
+// campaigns whose pin is older than a given target.
 //
-// Implementation handles the dialect Foundry modules actually ship:
+// Ported from foundry_modules/semver.go (deleted in C-FMC-5c). Handles
+// the Foundry module version dialect:
 //
-//   - Optional leading "v" (Foundry release tags vary)
+//   - Optional leading "v" (Foundry release tags vary on this)
 //   - 3-segment dotted decimals: "0.1.5", "1.10.0"
 //   - Optional pre-release after "-": "0.2.0-beta.1" sorts < "0.2.0"
 //
-// Non-numeric segments compare lexicographically (so "alpha" < "beta").
-// Missing segments are treated as 0 ("1.0" == "1.0.0"). This is
-// intentionally permissive — Chronicle isn't enforcing strict semver,
-// just ordering versions the way operators expect.
+// Non-numeric segments compare lexicographically. Missing segments
+// are treated as 0 ("1.0" == "1.0.0"). Permissive on purpose —
+// Chronicle isn't enforcing strict semver, just ordering versions
+// the way operators expect.
 func semverLess(a, b string) bool {
 	pa, pra := splitVersion(a)
 	pb, prb := splitVersion(b)
@@ -37,8 +37,9 @@ func semverLess(a, b string) bool {
 		}
 	}
 
-	// Numeric parts equal — compare pre-release. Per semver, a version
-	// with a pre-release sorts BEFORE the same version without one.
+	// Numeric parts equal — compare pre-release. Per semver, a
+	// version with a pre-release sorts BEFORE the same version
+	// without one. ("0.2.0-beta" < "0.2.0".)
 	switch {
 	case pra == "" && prb == "":
 		return false
@@ -51,7 +52,7 @@ func semverLess(a, b string) bool {
 	}
 }
 
-// splitVersion drops a leading "v", splits on "-" to separate the
+// splitVersion drops a leading "v"/"V", splits on "-" to separate the
 // core dotted-decimal from the pre-release tag, and returns the
 // dotted segments + the (possibly empty) pre-release string.
 func splitVersion(s string) ([]string, string) {
