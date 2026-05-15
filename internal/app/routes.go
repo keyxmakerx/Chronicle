@@ -1816,6 +1816,28 @@ func (a *App) RegisterRoutes() {
 		// version (the fix for the operator's version-stale bug end-
 		// to-end).
 		packages.RegisterPostInstallHook(pkgService, foundry_vtt.NewPostInstallHook())
+		// C-FMC-6: second hook for install-time auto-pinning. Runs
+		// alongside the C-FMC-5b version-rewrite hook. Pins auto-
+		// tracking campaigns to the previous version on every
+		// foundry-module install so the admin sees the version
+		// spread instead of silently bumping everyone.
+		packages.RegisterPostInstallHook(pkgService, foundry_vtt.NewAutoPinHook(fvttService))
+
+		// C-FMC-6: one-time auto-pin migration for pre-feature
+		// campaigns. Pins all auto-tracking campaigns to the
+		// foundry-module's currently-installed version so future
+		// installs trigger the AutoPinHook flow (which preserves
+		// state) instead of silently bumping. Idempotent via a
+		// settings key — re-runs are no-ops after first completion.
+		// Runs synchronously here so it completes before any
+		// campaign loads its settings page. Errors abort startup
+		// loudly (matches the C-FMC-5c PreMigrationCheck pattern).
+		if err := foundry_vtt.AutoPinMigrate(context.Background(), fvttService, settingsRepo); err != nil {
+			slog.Error("foundry_vtt autopin migration failed", slog.Any("error", err))
+			// Not fatal — migration is best-effort. Log + continue.
+			// A future boot can retry once the operator addresses
+			// the underlying issue (DB connection, schema state).
+		}
 
 		// Admin routes: "campaigns using v0.1.5" fragment + force-pin
 		// + notify + mass variants. Force-pin routes additionally

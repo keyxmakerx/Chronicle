@@ -52,7 +52,7 @@ func TestPostInstallHook_FallbackRewritesModuleJSON(t *testing.T) {
 
 	h := NewPostInstallHook()
 	pkg := &packages.Package{Type: packages.PackageTypeFoundryModule, Slug: "chronicle-sync"}
-	if err := h.AfterInstall(context.Background(), pkg, "v0.1.10", dir); err != nil {
+	if err := h.AfterInstall(context.Background(), pkg, "v0.1.10", "", dir); err != nil {
 		t.Fatalf("AfterInstall returned error: %v", err)
 	}
 
@@ -88,7 +88,7 @@ func TestPostInstallHook_DescriptorOverridesModuleJSONPath(t *testing.T) {
 
 	h := NewPostInstallHook()
 	pkg := &packages.Package{Type: packages.PackageTypeFoundryModule, Slug: "x"}
-	if err := h.AfterInstall(context.Background(), pkg, "v1.2.3", dir); err != nil {
+	if err := h.AfterInstall(context.Background(), pkg, "v1.2.3", "", dir); err != nil {
 		t.Fatalf("AfterInstall returned error: %v", err)
 	}
 
@@ -109,7 +109,7 @@ func TestPostInstallHook_InvalidDescriptorFailsLoudly(t *testing.T) {
 
 	h := NewPostInstallHook()
 	pkg := &packages.Package{Type: packages.PackageTypeFoundryModule}
-	err := h.AfterInstall(context.Background(), pkg, "v1.0.0", dir)
+	err := h.AfterInstall(context.Background(), pkg, "v1.0.0", "", dir)
 	if err == nil {
 		t.Fatal("expected hook to fail on invalid descriptor, got nil error")
 	}
@@ -134,7 +134,7 @@ func TestPostInstallHook_MissingModuleJSON(t *testing.T) {
 
 	h := NewPostInstallHook()
 	pkg := &packages.Package{Type: packages.PackageTypeFoundryModule}
-	err := h.AfterInstall(context.Background(), pkg, "v1.0.0", dir)
+	err := h.AfterInstall(context.Background(), pkg, "v1.0.0", "", dir)
 	if err == nil {
 		t.Fatal("expected hook to fail when module.json is missing, got nil error")
 	}

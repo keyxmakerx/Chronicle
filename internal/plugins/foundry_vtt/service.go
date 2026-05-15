@@ -191,6 +191,31 @@ type Service interface {
 	// repinned. Partial failures don't abort — each campaign's
 	// pin operation is independent.
 	ForcePinAllToVersion(ctx context.Context, version, actorID, actorIP, actorUA string) (pinned int, err error)
+
+	// AutoPinOnInstall is called by the install-time auto-pin hook
+	// (C-FMC-6) after a foundry-module package is installed. Every
+	// campaign with an empty pin (auto-tracking) gets explicit-pinned
+	// to `previousVersion` so it stays on the version it was
+	// effectively running — admin sees the version spread via the
+	// "Campaigns Using v0.X" expandable UI and decides per-campaign
+	// whether to bump.
+	//
+	// Returns the count of campaigns affected. Empty previousVersion
+	// (first-ever install) is a no-op. Per-campaign security_events
+	// are logged with type EventModuleAutoPinOnInstall; the install
+	// summary lives in a separate event of type
+	// EventModuleAutoPinInstallSummary.
+	AutoPinOnInstall(ctx context.Context, previousVersion, newVersion, actorID, actorIP, actorUA string) (affected int, err error)
+
+	// MigrateAutoPinToVersion is the C-FMC-6 one-time migration's
+	// inner step: pin every empty-pin campaign to the given version,
+	// logging EventModuleAutoPinMigration per campaign.
+	//
+	// Distinct from AutoPinOnInstall because the audit event type
+	// differs (migration vs. install-hook) and because this path
+	// doesn't short-circuit on previous==new — the migration's
+	// whole point is to make an effective state explicit.
+	MigrateAutoPinToVersion(ctx context.Context, version string) (affected int, err error)
 }
 
 // service is the default Service implementation.
@@ -220,6 +245,25 @@ const (
 	// EventModuleUpdateNotify — admin notified the campaign owner
 	// of a newer version. No pin change.
 	EventModuleUpdateNotify = "foundry_vtt.module_update_notify"
+
+	// EventModuleAutoPinOnInstall — one per campaign auto-pinned by
+	// the install hook (C-FMC-6). Records the from-version + the
+	// new installed version + the campaign so the audit log shows
+	// exactly which campaigns the install affected.
+	EventModuleAutoPinOnInstall = "foundry_vtt.module_autopin_on_install"
+
+	// EventModuleAutoPinInstallSummary — single event per install
+	// summarising how many campaigns got auto-pinned. The admin
+	// banner on /admin/packages reads the latest event of this type
+	// to display "N campaigns were auto-pinned to v0.X; review via..."
+	EventModuleAutoPinInstallSummary = "foundry_vtt.module_autopin_install_summary"
+
+	// EventModuleAutoPinMigration — one per campaign touched by the
+	// one-time C-FMC-6 migration (auto-tracking → explicit pin to
+	// the currently-installed version). Distinct event type from the
+	// install-hook variant so the migration is auditable as a
+	// separate operation.
+	EventModuleAutoPinMigration = "foundry_vtt.module_autopin_migration"
 )
 
 // NewService constructs the foundry_vtt service. events/mail/owners
@@ -769,4 +813,122 @@ func (s *service) GetBannerStatus(ctx context.Context, campaignID string) (Banne
 		CurrentVersion: pin,
 		LatestVersion:  pkg.InstalledVersion,
 	}, nil
+}
+
+// AutoPinOnInstall is the install-time auto-pin path. previousVersion
+// is the foundry-module version installed BEFORE the current install
+// (captured by packages.InstallVersion and passed through the
+// PostInstallHook). Auto-tracking campaigns get explicit-pinned to
+// previousVersion so they stay on the version they were effectively
+// running — the admin sees the version spread in the C-FMC-5c
+// "Campaigns Using v0.X" expandable UI and decides per-campaign
+// whether to bump.
+//
+// Empty previousVersion (first-ever install) is a no-op — there's no
+// prior state to preserve.
+//
+// Logs one EventModuleAutoPinOnInstall per affected campaign + a
+// single EventModuleAutoPinInstallSummary that drives the admin
+// notification surface. Partial failures don't abort the fan-out;
+// each campaign is independent.
+func (s *service) AutoPinOnInstall(ctx context.Context, previousVersion, newVersion, actorID, actorIP, actorUA string) (int, error) {
+	if previousVersion == "" {
+		// First-ever install of the foundry-module package. No prior
+		// state to preserve; nothing to do.
+		return 0, nil
+	}
+	if previousVersion == newVersion {
+		// Re-install of the same version. No version transition; no
+		// auto-pin needed. Defensive — packages.InstallVersion shouldn't
+		// call the hook in this case but the no-op is cheap.
+		return 0, nil
+	}
+
+	campaigns, err := s.repo.CampaignsWithEmptyPin(ctx)
+	if err != nil {
+		return 0, ErrInternal("campaigns_with_empty_pin", err)
+	}
+
+	affected := 0
+	for _, c := range campaigns {
+		if err := s.settings.SetFoundryModulePin(ctx, c.CampaignID, previousVersion); err != nil {
+			// Skip and continue — one campaign's failure shouldn't
+			// abort the rest. The summary event records the
+			// successful count for admin visibility.
+			continue
+		}
+		if s.events != nil {
+			_ = s.events.LogEvent(ctx, EventModuleAutoPinOnInstall,
+				"", actorID, actorIP, actorUA,
+				map[string]any{
+					"campaign_id":   c.CampaignID,
+					"campaign_name": c.CampaignName,
+					"from":          "auto-latest",
+					"to_pin":        previousVersion,
+					"new_installed": newVersion,
+					"reason":        "preserve state on admin install",
+				})
+		}
+		affected++
+	}
+
+	// Summary event: one row per install (regardless of affected
+	// count). The admin /admin/packages banner reads the latest of
+	// these to render "N campaigns auto-pinned" until acknowledged.
+	if s.events != nil {
+		_ = s.events.LogEvent(ctx, EventModuleAutoPinInstallSummary,
+			"", actorID, actorIP, actorUA,
+			map[string]any{
+				"previous_version": previousVersion,
+				"new_version":      newVersion,
+				"affected":         affected,
+			})
+	}
+	return affected, nil
+}
+
+// MigrateAutoPinToVersion pins every empty-pin campaign to the
+// given version. Logs EventModuleAutoPinMigration per campaign.
+// Called from AutoPinMigrate (the one-time bootstrap path).
+//
+// Distinct from AutoPinOnInstall in three ways:
+//   - No short-circuit when previous==new: the migration's whole
+//     point is to make an effective state explicit, so a same-
+//     version pin is the meaningful operation.
+//   - Different event type (EventModuleAutoPinMigration) so the
+//     audit log distinguishes "migration ran at startup" from
+//     "install-hook fired on a version change".
+//   - No summary event (the AutoPinMigrate caller emits its own
+//     completion log line; a single summary event for a one-time
+//     migration adds noise without diagnostic value).
+//
+// Partial failures are skipped + logged; the count reflects only
+// successful pins.
+func (s *service) MigrateAutoPinToVersion(ctx context.Context, version string) (int, error) {
+	if version == "" {
+		return 0, fmt.Errorf("MigrateAutoPinToVersion: empty version")
+	}
+	campaigns, err := s.repo.CampaignsWithEmptyPin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("CampaignsWithEmptyPin: %w", err)
+	}
+	count := 0
+	for _, c := range campaigns {
+		if err := s.settings.SetFoundryModulePin(ctx, c.CampaignID, version); err != nil {
+			continue
+		}
+		if s.events != nil {
+			_ = s.events.LogEvent(ctx, EventModuleAutoPinMigration,
+				"", "", "", "",
+				map[string]any{
+					"campaign_id":   c.CampaignID,
+					"campaign_name": c.CampaignName,
+					"from":          "auto-latest",
+					"to":            version,
+					"reason":        "C-FMC-6 one-time migration: auto-tracking campaigns get explicit pin to current installed version",
+				})
+		}
+		count++
+	}
+	return count, nil
 }

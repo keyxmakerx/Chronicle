@@ -34,6 +34,17 @@ type Repository interface {
 	// Campaigns with empty pin (latest-tracking) are excluded — they
 	// auto-resolve to latest on next manifest fetch.
 	CampaignsOlderThan(ctx context.Context, version string, semverLess func(a, b string) bool) ([]CampaignUsage, error)
+
+	// CampaignsWithEmptyPin returns every campaign whose
+	// foundry_module_pin is NULL, missing from settings JSON, or "".
+	// These are the auto-tracking campaigns that silently follow
+	// whatever foundry-module version is currently installed.
+	//
+	// Added in C-FMC-6 for the auto-pin install hook and the one-time
+	// migration: both flows iterate these campaigns and explicit-pin
+	// them to a specific version, so future installs surface the
+	// version-spread to the admin instead of silently bumping.
+	CampaignsWithEmptyPin(ctx context.Context) ([]CampaignUsage, error)
 }
 
 // repository is the default Repository implementation against MariaDB.
@@ -144,7 +155,29 @@ func (r *repository) CampaignsOlderThan(ctx context.Context, version string, sem
 	return out, nil
 }
 
-// queryCampaignUsage is the shared scanner for the two campaign-list
+// CampaignsWithEmptyPin lists every campaign whose pin is NULL,
+// missing from the settings JSON, or empty string. These are the
+// auto-tracking campaigns C-FMC-6's auto-pin logic targets.
+//
+// JSON_EXTRACT returns NULL when the key is missing; the OR with
+// the empty-string comparison handles both shapes. JSON_UNQUOTE on
+// a NULL is a literal "null" string in some MySQL configs, so we
+// compare both NULL (the JSON shape) AND "null" (the unquoted shape)
+// defensively.
+func (r *repository) CampaignsWithEmptyPin(ctx context.Context) ([]CampaignUsage, error) {
+	return r.queryCampaignUsage(ctx, `
+		SELECT c.id, c.name, c.created_by, COALESCE(u.display_name, ''),
+		       JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')),
+		       c.updated_at
+		  FROM campaigns c
+		  LEFT JOIN users u ON u.id = c.created_by
+		  WHERE JSON_EXTRACT(c.settings, '$.foundry_module_pin') IS NULL
+		     OR JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) = ''
+		     OR JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) = 'null'
+		  ORDER BY c.name`)
+}
+
+// queryCampaignUsage is the shared scanner for the campaign-list
 // queries. Columns must match the SELECT projections above.
 func (r *repository) queryCampaignUsage(ctx context.Context, query string, args ...any) ([]CampaignUsage, error) {
 	rows, err := r.db.QueryContext(ctx, query, args...)
