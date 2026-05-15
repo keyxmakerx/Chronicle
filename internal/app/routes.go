@@ -29,6 +29,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	foundry_modules "github.com/keyxmakerx/chronicle/internal/plugins/foundry_modules"
+	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
@@ -1834,6 +1835,57 @@ func (a *App) RegisterRoutes() {
 		fmPoller.Start(context.Background())
 	} else {
 		slog.Warn("foundry_modules plugin degraded — routes not registered")
+	}
+
+	// foundry_vtt sub-plugin (C-FMC-5b): the descriptor-aware Foundry-
+	// VTT-specific extension to the generic packages plugin. Reads
+	// chronicle-package.json from the extracted install dir, rewrites
+	// module.json version on install, serves per-campaign signed
+	// manifests at /api/v1/campaigns/:cid/foundry-vtt/... URLs.
+	//
+	// Coexists with foundry_modules for the C-FMC-5b parallel period:
+	// both plugins read the same foundry_module_campaign_tokens table
+	// (renamed to foundry_vtt_campaign_tokens in C-FMC-5c). Both share
+	// the signing secret via separate token-domain prefixes so a token
+	// minted in one plugin doesn't verify in the other (and vice
+	// versa) — the operator's existing tokens keep working in the old
+	// endpoint; new tokens for the new endpoint are minted from this
+	// plugin's owner tab.
+	fvttRepo := foundry_vtt.NewRepository(a.DB)
+	fvttTokenSigner := foundry_vtt.NewTokenSigner(signingSecret)
+	// The existing foundryCampaignSettingsAdapter satisfies foundry_vtt's
+	// CampaignSettingsAdapter interface by structural typing — same
+	// three methods (Get/Set/CampaignExists). Reusing it avoids a
+	// second adapter doing identical wrapping.
+	fvttService := foundry_vtt.NewService(
+		fvttRepo, fvttTokenSigner, fmCampaignAdapter, pkgService, a.Config.BaseURL,
+	)
+	fvttHandler := foundry_vtt.NewHandler(fvttService)
+	// Register the PostInstallHook with the packages plugin. The hook
+	// fires after every foundry-module typed install and rewrites
+	// module.json's version field to match the installed version (the
+	// fix for the operator's version-stale bug end-to-end). Empty
+	// PluginHealth slot until foundry_vtt grows migrations in C-FMC-5c.
+	if a.PluginHealth.IsHealthy("foundry_vtt") && a.PluginHealth.IsHealthy("packages") {
+		packages.RegisterPostInstallHook(pkgService, foundry_vtt.NewPostInstallHook())
+
+		// Owner-facing routes (per-campaign pin, token rotate, install
+		// URL, settings tab fragment). Same campaign-scoped group +
+		// RoleOwner gate foundry_modules uses.
+		fvttCampaignAuthed := e.Group("/campaigns/:id",
+			auth.RequireAuth(authService),
+			campaigns.RequireCampaignAccess(campaignService),
+		)
+		foundry_vtt.RegisterOwnerRoutes(fvttCampaignAuthed, fvttHandler,
+			campaigns.RequireRole(campaigns.RoleOwner))
+
+		// Public manifest + download. Same rate limit as the packages
+		// and foundry_modules public endpoints — manifest hits are
+		// frequent (every Foundry update check) so the limit needs
+		// headroom for a moderately-sized table.
+		foundry_vtt.RegisterPublicRoutes(e, fvttHandler, middleware.RateLimit(300, time.Minute))
+	} else {
+		slog.Warn("foundry_vtt plugin degraded — routes not registered")
 	}
 
 	// Sync API plugin: external tool integration with API key auth,

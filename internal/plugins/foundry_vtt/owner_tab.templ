@@ -1,0 +1,223 @@
+// foundry_vtt — owner_tab.templ renders the per-campaign Foundry VTT
+// install URL + pin selector + rotate-token button as an HTMX
+// fragment served at GET /campaigns/:id/foundry-vtt/settings-tab.
+// The campaigns plugin's VTT Setup Guides → Foundry VTT disclosure
+// section embeds this via hx-get.
+//
+// Patterns inherited from foundry_modules/owner_tab.templ:
+//   - Inline onclick (not delegated listeners) — avoids the HTMX
+//     evalScripts ↔ Alpine MutationObserver race C-FMC-2 hit.
+//   - templ script helpers for the pin / rotate submissions so the
+//     handlers work as soon as the HTML lands in the DOM.
+//
+// Differences from the foundry_modules version (intentional):
+//   - Empty state when no foundry-module package is registered in
+//     the packages plugin. The templ shows "ask an admin to add the
+//     Chronicle Foundry module package" instead of a broken UI.
+//   - "Descriptor: present" / "Descriptor: defaults" transparency
+//     cue — operator can see at a glance whether chronicle-package.json
+//     drove this version's serve config or hardcoded fallback did.
+//   - Available versions come from packages plugin's on-disk install
+//     dirs, not foundry_modules' catalog (which is deleted in
+//     C-FMC-5c).
+
+package foundry_vtt
+
+// OwnerTabFragment is the top-level HTMX fragment. Renders one of
+// two states: empty (no foundry-module package registered) or
+// configured (package registered, full UI).
+templ OwnerTabFragment(data OwnerTabData) {
+	if !data.PackageRegistered {
+		@ownerEmptyState()
+	} else {
+		<div class="space-y-6">
+			@ownerCurrentVersionCard(data)
+			@ownerVersionSelector(data)
+			@ownerInstallURLBlock(data)
+			@ownerPlayerInstructions(data)
+		</div>
+	}
+}
+
+// ownerEmptyState renders when no foundry-module typed package
+// exists in the packages catalog. The user can't fix this — they
+// have to ask an admin to add the package via /admin/packages.
+templ ownerEmptyState() {
+	<div class="card p-4 rounded-md">
+		<p class="text-sm text-amber-600 dark:text-amber-400">
+			<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+			No Foundry VTT module package is registered on this Chronicle
+			instance yet.
+		</p>
+		<p class="text-sm text-fg-secondary mt-2">
+			An admin must add the
+			<code class="text-xs font-mono">keyxmakerx/Chronicle-Foundry-Module</code>
+			repo via <code class="text-xs font-mono">/admin/packages</code>,
+			approve it, and install a version before campaigns can serve
+			the module to Foundry. Once that's done, this tab will show
+			your campaign-specific install URL.
+		</p>
+	</div>
+}
+
+// ownerCurrentVersionCard surfaces what version this campaign
+// resolves to right now. Distinguishes pinned (CurrentPin != "")
+// from latest-tracking (CurrentPin == "").
+templ ownerCurrentVersionCard(data OwnerTabData) {
+	<div class="card p-4 rounded-md">
+		<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">Currently Serving</p>
+		if data.CurrentVersion == "" {
+			<p class="text-sm text-amber-600 dark:text-amber-400">
+				<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+				No module version is installed yet. An admin needs to install a version via
+				<code class="text-xs font-mono">/admin/packages</code>.
+			</p>
+		} else {
+			<div class="flex items-center gap-3 flex-wrap">
+				<span class="text-base font-mono font-semibold text-fg">{ data.CurrentVersion }</span>
+				if data.CurrentPin == "" {
+					<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent/10 text-accent">
+						<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>
+						auto: latest
+					</span>
+				} else {
+					<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-500/15 text-yellow-700 dark:text-yellow-400">
+						<i class="fa-solid fa-thumbtack mr-1"></i>
+						pinned
+					</span>
+				}
+				@descriptorBadge(data.DescriptorPresent)
+			</div>
+		}
+	</div>
+}
+
+// descriptorBadge is the "Descriptor: present" / "Descriptor:
+// defaults" transparency cue. Operators flagged that they want to
+// see at a glance which path is active without reading source.
+templ descriptorBadge(present bool) {
+	if present {
+		<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" title="Module ships chronicle-package.json — serve behavior is descriptor-driven">
+			<i class="fa-solid fa-file-circle-check mr-1"></i>
+			descriptor: present
+		</span>
+	} else {
+		<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-700 dark:text-blue-400" title="No chronicle-package.json found — using hardcoded fallback defaults">
+			<i class="fa-solid fa-gear mr-1"></i>
+			descriptor: defaults
+		</span>
+	}
+}
+
+// ownerVersionSelector renders the dropdown the operator uses to
+// change the pin. Versions come from the packages plugin's on-disk
+// install dirs, not foundry_modules' catalog. Latest-tracking is
+// the empty-string option.
+templ ownerVersionSelector(data OwnerTabData) {
+	if len(data.AvailableVersions) > 0 {
+		<div class="card p-4 rounded-md space-y-3">
+			<div>
+				<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">Pin to Version</p>
+				<select id="fvtt-pin-selector" class="w-full px-3 py-2 rounded-md border border-edge bg-surface text-sm">
+					<option value="">Auto-update (track latest installed)</option>
+					for _, v := range data.AvailableVersions {
+						<option value={ v } selected?={ v == data.CurrentPin }>{ v }</option>
+					}
+				</select>
+			</div>
+			<div class="flex items-center justify-end gap-2">
+				<button
+					type="button"
+					onclick={ pinSaveScript(data.CampaignID) }
+					class="px-4 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent/90"
+				>
+					Save Pin
+				</button>
+			</div>
+		</div>
+	}
+}
+
+// ownerInstallURLBlock shows the Foundry-facing install URL plus
+// the rotate-token button.
+templ ownerInstallURLBlock(data OwnerTabData) {
+	<div class="card p-4 rounded-md space-y-3">
+		<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider">Install URL</p>
+		<div class="flex items-stretch gap-2">
+			<input
+				id="fvtt-install-url"
+				type="text"
+				readonly
+				value={ data.InstallURL }
+				class="flex-1 px-3 py-2 rounded-md border border-edge bg-surface-alt text-xs font-mono text-fg overflow-x-auto"
+			/>
+			<button
+				type="button"
+				onclick="(function(b){var t=document.getElementById('fvtt-install-url');if(t&&navigator.clipboard){navigator.clipboard.writeText(t.value).then(function(){var html=b.innerHTML;b.innerHTML='<i class=\'fa-solid fa-check text-emerald-500\'></i> Copied';setTimeout(function(){b.innerHTML=html;},2000);})}})(this)"
+				class="px-3 py-2 text-sm rounded-md border border-edge hover:bg-surface-alt whitespace-nowrap"
+				title="Copy install URL to clipboard"
+			>
+				<i class="fa-solid fa-copy"></i> Copy
+			</button>
+		</div>
+		<div class="flex items-center justify-between gap-2 pt-2 border-t border-edge">
+			<p class="text-xs text-fg-muted">
+				Rotating regenerates the signing token. Every player will need to reinstall with the new URL.
+			</p>
+			<button
+				type="button"
+				onclick={ rotateTokenScript(data.CampaignID) }
+				class="px-3 py-1.5 text-xs rounded-md border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
+			>
+				<i class="fa-solid fa-rotate mr-1"></i> Rotate Token
+			</button>
+		</div>
+	</div>
+}
+
+// ownerPlayerInstructions is the copy-pasteable steps block the
+// owner shares with their table.
+templ ownerPlayerInstructions(data OwnerTabData) {
+	<div class="card p-4 rounded-md">
+		<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">Player Install Instructions</p>
+		<ol class="list-decimal list-inside text-sm text-fg-secondary space-y-1">
+			<li>Open Foundry &rarr; Add-on Modules &rarr; Install Module</li>
+			<li>Paste this URL in the "Manifest URL" field:
+				<code class="block mt-1 px-2 py-1 rounded-md bg-surface-alt text-xs break-all">{ data.InstallURL }</code>
+			</li>
+			<li>Click Install</li>
+		</ol>
+	</div>
+}
+
+// pinSaveScript submits the dropdown selection to the pin endpoint.
+script pinSaveScript(campaignID string) {
+	var sel = document.getElementById('fvtt-pin-selector');
+	if (!sel) return;
+	var version = sel.value;
+	Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignID) + '/foundry-vtt/pin', {
+		method: 'PUT',
+		body: JSON.stringify({ version: version }),
+		headers: { 'Content-Type': 'application/json' },
+	})
+		.then(function () {
+			window.Chronicle.notify(version ? ('Pinned to ' + version) : 'Set to auto-update', 'success');
+			setTimeout(function () { window.location.reload(); }, 600);
+		})
+		.catch(function (err) {
+			window.Chronicle.notify('Pin failed: ' + ((err && err.message) || ''), 'error');
+		});
+}
+
+// rotateTokenScript handles the rotate-token click with a confirm.
+script rotateTokenScript(campaignID string) {
+	if (!window.confirm('Rotate the install token? Every player will need to reinstall with the new URL.')) return;
+	Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignID) + '/foundry-vtt/token/rotate', { method: 'POST' })
+		.then(function () {
+			window.Chronicle.notify('Token rotated. All players will need to reinstall.', 'success');
+			setTimeout(function () { window.location.reload(); }, 600);
+		})
+		.catch(function (err) {
+			window.Chronicle.notify('Rotate failed: ' + ((err && err.message) || ''), 'error');
+		});
+}
