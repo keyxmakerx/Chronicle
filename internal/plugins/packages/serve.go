@@ -8,8 +8,6 @@
 package packages
 
 import (
-	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -85,84 +83,6 @@ func (h *ServeHandler) ServePackageFile(c echo.Context) error {
 	}
 
 	return h.serveFile(c, installPath, filePath)
-}
-
-// ServeFoundryAlias handles GET /foundry-module/* for backwards compatibility.
-// It resolves the active Foundry module's install path automatically.
-// For module.json requests, manifest and download URLs are rewritten to
-// point at this Chronicle instance so Foundry can install/update the module
-// without needing access to GitHub.
-func (h *ServeHandler) ServeFoundryAlias(c echo.Context) error {
-	filePath := c.Param("*")
-	if filePath == "" {
-		return c.NoContent(http.StatusNotFound)
-	}
-
-	installPath := h.resolvePath(string(PackageTypeFoundryModule), "chronicle-foundry")
-	if installPath == "" {
-		// Fallback: try resolving any foundry-module type package.
-		installPath = h.svc.FoundryModulePath()
-		if installPath == "" {
-			return c.NoContent(http.StatusNotFound)
-		}
-	}
-
-	// Intercept module.json to rewrite manifest/download URLs.
-	if filePath == "module.json" {
-		return h.serveFoundryManifest(c, installPath)
-	}
-
-	return h.serveFile(c, installPath, filePath)
-}
-
-// ServeFoundryDownload handles GET /foundry-module/download to serve the
-// cached ZIP file for Foundry module installation. Foundry expects a ZIP
-// at the URL specified in module.json's "download" field.
-func (h *ServeHandler) ServeFoundryDownload(c echo.Context) error {
-	zipPath := h.svc.FoundryModuleZipPath()
-	if zipPath == "" {
-		return c.NoContent(http.StatusNotFound)
-	}
-
-	info, err := os.Stat(zipPath)
-	if err != nil || info.IsDir() {
-		return c.NoContent(http.StatusNotFound)
-	}
-
-	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
-	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
-	c.Response().Header().Set("Content-Type", "application/zip")
-	return c.File(zipPath)
-}
-
-// serveFoundryManifest reads module.json from disk, rewrites the manifest
-// and download URLs to point at this Chronicle instance, and returns it.
-func (h *ServeHandler) serveFoundryManifest(c echo.Context, installPath string) error {
-	manifestPath := filepath.Join(installPath, "module.json")
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return c.NoContent(http.StatusNotFound)
-	}
-
-	var manifest map[string]any
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		slog.Error("foundry manifest: invalid JSON", slog.Any("error", err))
-		return c.NoContent(http.StatusInternalServerError)
-	}
-
-	if h.baseURL == "" {
-		slog.Warn("foundry manifest served with empty baseURL — manifest/download URLs will be malformed; set BASE_URL in config")
-	}
-
-	// Rewrite manifest URL to point at this instance.
-	manifest["manifest"] = fmt.Sprintf("%s/foundry-module/module.json", h.baseURL)
-
-	// Rewrite download URL to serve the cached ZIP from this instance.
-	manifest["download"] = fmt.Sprintf("%s/foundry-module/download", h.baseURL)
-
-	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
-	c.Response().Header().Set("Cache-Control", "public, max-age=300")
-	return c.JSON(http.StatusOK, manifest)
 }
 
 // serveFile safely resolves and serves a file from the given base directory.

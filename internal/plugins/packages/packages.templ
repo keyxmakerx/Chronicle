@@ -28,23 +28,16 @@ templ PackagesPage(packages []Package, csrfToken string) {
 				</div>
 			</div>
 
-			<!-- Foundry module version catalog (HTMX fragment served by
-			     foundry_modules plugin so packages doesn't import it).
-			     Lazy-loads on page render. If foundry_modules is
-			     degraded the fragment 404s, the placeholder text stays. -->
-			<div
-				id="foundry-modules-section"
-				hx-get="/admin/modules/foundry/section"
-				hx-trigger="load"
-				hx-swap="innerHTML"
-			>
-				<div class="card text-center py-8 text-sm text-fg-muted">
-					<i class="fa-solid fa-spinner fa-spin mr-1"></i>
-					Loading Foundry module versions&hellip;
-				</div>
-			</div>
+			<!-- C-FMC-5c removed the duplicate "Foundry Module Versions"
+			     section that lived here. The foundry_modules plugin and its
+			     /admin/modules/foundry/section fragment are deleted. Foundry
+			     module versions now appear in the unified package list
+			     below (any package whose Type=foundry-module). Per-version
+			     "campaigns using this version" cards are rendered inline by
+			     the foundry_vtt plugin via hx-get hooks on each version row;
+			     see the VersionList templ further down. -->
 
-			<!-- External package repositories (game systems + chronicle-sync). -->
+			<!-- External package repositories (game systems + Foundry modules). -->
 			<div class="card p-5">
 				<h2 class="text-lg font-semibold text-fg mb-3">Add Package Repository</h2>
 				<form
@@ -156,16 +149,9 @@ templ packageCard(pkg Package, csrfToken string) {
 					>
 						<i class="fa-solid fa-chart-line"></i>
 					</a>
-					// Re-bake the cached zip's manifest URLs to current BASE_URL.
-					// Needed if BASE_URL changed since the package was installed.
-					<button
-						hx-post={ fmt.Sprintf("/admin/packages/%s/repack", pkg.ID) }
-						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-						class="btn-secondary text-sm"
-						title="Repack zip with current BASE_URL"
-					>
-						<i class="fa-solid fa-box"></i>
-					</button>
+					// C-FMC-5c removed the Repack zip button. The per-campaign
+					// manifest endpoint (foundry_vtt) rewrites URLs at serve time
+					// per-request, so there's no cached zip to repack.
 				}
 				<!-- Version Picker -->
 				<button
@@ -260,46 +246,69 @@ templ VersionList(pkg *Package, versions []PackageVersion, csrfToken string) {
 		} else {
 			<div class="space-y-1 max-h-64 overflow-y-auto">
 				for _, v := range versions {
-					<div class={ "flex items-center justify-between py-2 px-3 rounded text-sm",
+					<div class={ "py-2 px-3 rounded text-sm",
 						templ.KV("bg-green-50 dark:bg-green-900/20", v.Version == pkg.InstalledVersion) }>
-						<div class="flex items-center gap-3">
-							<span class="font-mono font-medium text-fg">{ v.Version }</span>
-							<span class="text-fg-muted">{ v.TagName }</span>
-							if v.Prerelease {
-								<span class="text-xs text-purple-600 font-medium bg-purple-500/10 px-1.5 py-0.5 rounded">pre-release</span>
-							}
-							if v.Version == pkg.InstalledVersion {
-								<span class="text-xs text-green-600 font-medium">installed</span>
-							}
-							if v.Version == pkg.PinnedVersion {
-								<span class="text-xs text-yellow-600 font-medium">pinned</span>
-							}
-							<span class="text-xs text-fg-muted">{ v.PublishedAt.Format("Jan 2, 2006") }</span>
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-3">
+								<span class="font-mono font-medium text-fg">{ v.Version }</span>
+								<span class="text-fg-muted">{ v.TagName }</span>
+								if v.Prerelease {
+									<span class="text-xs text-purple-600 font-medium bg-purple-500/10 px-1.5 py-0.5 rounded">pre-release</span>
+								}
+								if v.Version == pkg.InstalledVersion {
+									<span class="text-xs text-green-600 font-medium">installed</span>
+								}
+								if v.Version == pkg.PinnedVersion {
+									<span class="text-xs text-yellow-600 font-medium">pinned</span>
+								}
+								<span class="text-xs text-fg-muted">{ v.PublishedAt.Format("Jan 2, 2006") }</span>
+							</div>
+							<div class="flex items-center gap-2">
+								if v.Version != pkg.InstalledVersion {
+									<button
+										hx-put={ fmt.Sprintf("/admin/packages/%s/version", pkg.ID) }
+										hx-vals={ fmt.Sprintf(`{"version":"%s"}`, v.Version) }
+										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+										hx-confirm={ fmt.Sprintf("Install version %s?", v.Version) }
+										class="text-xs text-accent hover:text-accent/80 transition-colors"
+									>
+										Install
+									</button>
+								}
+								if v.Version != pkg.PinnedVersion {
+									<button
+										hx-put={ fmt.Sprintf("/admin/packages/%s/pin", pkg.ID) }
+										hx-vals={ fmt.Sprintf(`{"version":"%s"}`, v.Version) }
+										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+										class="text-xs text-yellow-600 hover:text-yellow-800 transition-colors"
+										title="Pin to this version"
+									>
+										Pin
+									</button>
+								}
+								// C-FMC-5c: foundry-module typed packages get a
+								// per-version "Campaigns" expand that lazy-loads the
+								// foundry_vtt plugin's "campaigns using v0.X.Y" card.
+								// Hardcoded URL (not a dispatch interface) is a
+								// deliberate trade-off — see packages/.ai.md
+								// Extension points note about per-type embed URLs.
+								if pkg.Type == PackageTypeFoundryModule {
+									<button
+										hx-get={ fmt.Sprintf("/admin/foundry-vtt/version/%s/campaigns", v.Version) }
+										hx-target={ fmt.Sprintf("#fvtt-campaigns-%s-%s", pkg.ID, sanitizeForID(v.Version)) }
+										hx-swap="innerHTML"
+										class="text-xs text-fg-muted hover:text-fg transition-colors"
+										title="Show campaigns pinned to this version + admin actions"
+									>
+										<i class="fa-solid fa-chevron-down mr-1"></i>
+										Campaigns
+									</button>
+								}
+							</div>
 						</div>
-						<div class="flex items-center gap-2">
-							if v.Version != pkg.InstalledVersion {
-								<button
-									hx-put={ fmt.Sprintf("/admin/packages/%s/version", pkg.ID) }
-									hx-vals={ fmt.Sprintf(`{"version":"%s"}`, v.Version) }
-									hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-									hx-confirm={ fmt.Sprintf("Install version %s?", v.Version) }
-									class="text-xs text-accent hover:text-accent/80 transition-colors"
-								>
-									Install
-								</button>
-							}
-							if v.Version != pkg.PinnedVersion {
-								<button
-									hx-put={ fmt.Sprintf("/admin/packages/%s/pin", pkg.ID) }
-									hx-vals={ fmt.Sprintf(`{"version":"%s"}`, v.Version) }
-									hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-									class="text-xs text-yellow-600 hover:text-yellow-800 transition-colors"
-									title="Pin to this version"
-								>
-									Pin
-								</button>
-							}
-						</div>
+						if pkg.Type == PackageTypeFoundryModule {
+							<div id={ fmt.Sprintf("fvtt-campaigns-%s-%s", pkg.ID, sanitizeForID(v.Version)) }></div>
+						}
 					</div>
 				}
 			</div>

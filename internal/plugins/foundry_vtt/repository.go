@@ -3,53 +3,57 @@ package foundry_vtt
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
-// Repository is the foundry_vtt plugin's data layer. Currently only
-// manages the per-campaign token table; everything else (packages,
-// pin storage on CampaignSettings) is owned by other plugins and
-// reached via interface adapters.
+// Repository is the foundry_vtt plugin's data layer.
 //
-// NOTE on table name during the C-FMC-5b parallel period: this
-// plugin reads/writes the EXISTING `foundry_module_campaign_tokens`
-// table (created by foundry_modules' migration 001). The table is
-// renamed to `foundry_vtt_campaign_tokens` in C-FMC-5c when the
-// foundry_modules plugin is deleted. Both plugins coexist on the
-// same physical table during C-FMC-5b — token rotation in one
-// plugin is visible to the other, by design.
+// As of C-FMC-5c the per-campaign token table is renamed from
+// foundry_module_campaign_tokens (under the deleted foundry_modules
+// plugin's namespace) to foundry_vtt_campaign_tokens. Existing token
+// rows are preserved by the rename; HMAC verification continues to
+// work for already-minted URLs because tokens use this plugin's
+// "foundry-vtt:" domain prefix, not the table name.
 //
-// The literal table name `foundry_module_campaign_tokens` in the
-// queries below is the source-of-truth for what gets renamed.
+// CampaignsUsingVersion + CampaignsOlderThan are admin-UI queries that
+// list which campaigns are pinned to a given Foundry module version.
+// Used by the "campaigns using v0.1.5" expandable cards in the admin
+// /admin/packages page and by the "notify older campaigns" action.
 type Repository interface {
 	GetCampaignToken(ctx context.Context, campaignID string) (*CampaignToken, error)
 	UpsertCampaignToken(ctx context.Context, t *CampaignToken) error
 	BumpCampaignTokenVersion(ctx context.Context, campaignID string) (newVersion int, err error)
+
+	// CampaignsUsingVersion returns campaigns whose FoundryModulePin
+	// equals the given version. Joined with users for owner display
+	// names. ORDER BY name for stable admin UI rendering.
+	CampaignsUsingVersion(ctx context.Context, version string) ([]CampaignUsage, error)
+
+	// CampaignsOlderThan returns campaigns whose pin is strictly less
+	// than the given target per the supplied semver comparator.
+	// Campaigns with empty pin (latest-tracking) are excluded — they
+	// auto-resolve to latest on next manifest fetch.
+	CampaignsOlderThan(ctx context.Context, version string, semverLess func(a, b string) bool) ([]CampaignUsage, error)
 }
 
-// repository is the default Repository implementation against a
-// MariaDB *sql.DB. Hand-written SQL per the project conventions —
-// no ORM.
+// repository is the default Repository implementation against MariaDB.
 type repository struct {
 	db *sql.DB
 }
 
-// NewRepository constructs a Repository backed by the given DB
-// handle.
+// NewRepository constructs a Repository backed by the given DB handle.
 func NewRepository(db *sql.DB) Repository {
 	return &repository{db: db}
 }
 
-// GetCampaignToken returns the current token row for a campaign,
-// or nil if no row has been minted yet (token_version=1 will be
-// created lazily by the service on first install URL request).
-//
-// Reads from foundry_module_campaign_tokens during the C-FMC-5b
-// parallel period. C-FMC-5c renames to foundry_vtt_campaign_tokens.
+// GetCampaignToken returns the current token row for a campaign, or
+// nil if no row has been minted yet (the service mints lazily at
+// version=1 on first install URL request).
 func (r *repository) GetCampaignToken(ctx context.Context, campaignID string) (*CampaignToken, error) {
 	t := &CampaignToken{}
 	err := r.db.QueryRowContext(ctx,
 		`SELECT campaign_id, token_version, rotated_at
-		   FROM foundry_module_campaign_tokens
+		   FROM foundry_vtt_campaign_tokens
 		   WHERE campaign_id = ?`, campaignID,
 	).Scan(&t.CampaignID, &t.TokenVersion, &t.RotatedAt)
 	if err == sql.ErrNoRows {
@@ -66,7 +70,7 @@ func (r *repository) GetCampaignToken(ctx context.Context, campaignID string) (*
 // install-URL request.
 func (r *repository) UpsertCampaignToken(ctx context.Context, t *CampaignToken) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO foundry_module_campaign_tokens (campaign_id, token_version)
+		INSERT INTO foundry_vtt_campaign_tokens (campaign_id, token_version)
 		VALUES (?, ?)
 		ON DUPLICATE KEY UPDATE token_version = VALUES(token_version),
 		                        rotated_at = CURRENT_TIMESTAMP`,
@@ -77,11 +81,11 @@ func (r *repository) UpsertCampaignToken(ctx context.Context, t *CampaignToken) 
 // BumpCampaignTokenVersion atomically increments token_version,
 // returning the new value. INSERT...ON DUPLICATE KEY handles the
 // cold-start case where a campaign has never minted a token: it
-// starts at 2 (so the old implicit "1" is invalidated even though
-// it never had a row).
+// starts at 2 (so any client that somehow guessed token_version=1
+// without a row is also invalidated).
 func (r *repository) BumpCampaignTokenVersion(ctx context.Context, campaignID string) (int, error) {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO foundry_module_campaign_tokens (campaign_id, token_version)
+		INSERT INTO foundry_vtt_campaign_tokens (campaign_id, token_version)
 		VALUES (?, 2)
 		ON DUPLICATE KEY UPDATE token_version = token_version + 1,
 		                        rotated_at = CURRENT_TIMESTAMP`,
@@ -91,7 +95,93 @@ func (r *repository) BumpCampaignTokenVersion(ctx context.Context, campaignID st
 	}
 	var v int
 	err = r.db.QueryRowContext(ctx,
-		`SELECT token_version FROM foundry_module_campaign_tokens WHERE campaign_id = ?`,
+		`SELECT token_version FROM foundry_vtt_campaign_tokens WHERE campaign_id = ?`,
 		campaignID).Scan(&v)
 	return v, err
+}
+
+// CampaignsUsingVersion lists campaigns with FoundryModulePin == version.
+// JSON_UNQUOTE(JSON_EXTRACT(...)) walks the campaigns.settings JSON to
+// the foundry_module_pin field. Keeping the column name as
+// "foundry_module_pin" (not "foundry_vtt_pin") matches the campaigns
+// plugin's existing CampaignSettings struct from PR #300 — renaming
+// that field is out of scope for this PR.
+func (r *repository) CampaignsUsingVersion(ctx context.Context, version string) ([]CampaignUsage, error) {
+	return r.queryCampaignUsage(ctx, `
+		SELECT c.id, c.name, c.created_by, COALESCE(u.display_name, ''),
+		       JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')),
+		       c.updated_at
+		  FROM campaigns c
+		  LEFT JOIN users u ON u.id = c.created_by
+		  WHERE JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) = ?
+		  ORDER BY c.name`, version)
+}
+
+// CampaignsOlderThan returns campaigns whose pinned version is
+// strictly less than `version` per the supplied semver-comparator.
+// Two-stage: pull all pinned campaigns, then filter in Go (MySQL
+// can't do semver comparison on JSON-extracted strings).
+func (r *repository) CampaignsOlderThan(ctx context.Context, version string, semverLess func(a, b string) bool) ([]CampaignUsage, error) {
+	rows, err := r.queryCampaignUsage(ctx, `
+		SELECT c.id, c.name, c.created_by, COALESCE(u.display_name, ''),
+		       JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')),
+		       c.updated_at
+		  FROM campaigns c
+		  LEFT JOIN users u ON u.id = c.created_by
+		  WHERE JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) IS NOT NULL
+		    AND JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) != ''
+		    AND JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.foundry_module_pin')) != ?
+		  ORDER BY c.name`, version)
+	if err != nil {
+		return nil, err
+	}
+	var out []CampaignUsage
+	for _, c := range rows {
+		if semverLess(c.PinnedTo, version) {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
+// queryCampaignUsage is the shared scanner for the two campaign-list
+// queries. Columns must match the SELECT projections above.
+func (r *repository) queryCampaignUsage(ctx context.Context, query string, args ...any) ([]CampaignUsage, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []CampaignUsage
+	for rows.Next() {
+		var u CampaignUsage
+		var pin sql.NullString
+		var lastActive sql.NullTime
+		if err := rows.Scan(&u.CampaignID, &u.CampaignName, &u.OwnerUserID, &u.OwnerName, &pin, &lastActive); err != nil {
+			return nil, err
+		}
+		u.PinnedTo = pin.String
+		if lastActive.Valid {
+			t := lastActive.Time
+			u.LastActiveAt = &t
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// CampaignUsage is the renderable row for the admin's "campaigns
+// using version X" panel. Joined fields come from the queries above.
+//
+// Defined here (not in model.go) because it's tightly coupled to the
+// repository's column projection. Moving it would require keeping
+// the SELECT in sync with model.go separately; colocating keeps the
+// contract in one file.
+type CampaignUsage struct {
+	CampaignID   string     `json:"campaign_id"`
+	CampaignName string     `json:"campaign_name"`
+	OwnerUserID  string     `json:"owner_user_id"`
+	OwnerName    string     `json:"owner_name"`
+	PinnedTo     string     `json:"pinned_to"`              // version string or "" (latest-tracking)
+	LastActiveAt *time.Time `json:"last_active_at,omitempty"`
 }

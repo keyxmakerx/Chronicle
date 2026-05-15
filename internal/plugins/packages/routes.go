@@ -19,7 +19,6 @@ func RegisterRoutes(admin *echo.Group, h *Handler) {
 	g.DELETE("/:id/pin", h.ClearPinnedVersion)
 	g.PUT("/:id/auto-update", h.SetAutoUpdate)
 	g.POST("/:id/check", h.CheckForUpdates)
-	g.POST("/:id/repack", h.RepackFoundryZip)
 
 	// Usage tracking.
 	g.GET("/:id/usage", h.GetUsage)
@@ -51,11 +50,12 @@ func RegisterPublicRoutes(e *echo.Echo, sh *ServeHandler, rl echo.MiddlewareFunc
 	g.Use(rl)
 	g.GET("/:type/:slug/*", sh.ServePackageFile)
 
-	// Backwards-compatible alias for Foundry VTT module discovery.
-	// Foundry expects module.json at a stable URL like /foundry-module/module.json.
-	// The download route serves the cached ZIP for module installation.
-	e.GET("/foundry-module/download", sh.ServeFoundryDownload, rl)
-	e.GET("/foundry-module/*", sh.ServeFoundryAlias, rl)
+	// C-FMC-5c removed the /foundry-module/* alias routes. Foundry now
+	// installs from per-campaign signed URLs at
+	// /api/v1/campaigns/:cid/foundry-vtt/module.json (foundry_vtt
+	// plugin's RegisterPublicRoutes). The old shared URL had no per-
+	// campaign isolation and was incompatible with the per-campaign
+	// pin model from PR #300.
 }
 
 // RegisterOwnerRoutes mounts the owner-facing system submission routes.
