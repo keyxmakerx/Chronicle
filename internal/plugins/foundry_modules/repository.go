@@ -21,6 +21,10 @@ type Repository interface {
 	InsertVersion(ctx context.Context, v *ModuleVersion) error
 	GetVersion(ctx context.Context, version string) (*ModuleVersion, error)
 	GetVersionByID(ctx context.Context, id string) (*ModuleVersion, error)
+	// GetVersionByGitHubReleaseID is the poller's idempotency check:
+	// before ingesting a release it asks "have I already pulled this
+	// one?" by release ID. Returns (nil, nil) when not found.
+	GetVersionByGitHubReleaseID(ctx context.Context, releaseID int64) (*ModuleVersion, error)
 	ListVersions(ctx context.Context, includeWithdrawn bool) ([]*ModuleVersion, error)
 	SetVersionStatus(ctx context.Context, version string, status ModuleStatus) error
 	LatestAvailable(ctx context.Context) (*ModuleVersion, error)
@@ -48,19 +52,22 @@ func NewRepository(db *sql.DB) Repository {
 const versionCols = `id, version, file_path, file_size, content_sha256,
 	manifest_json, compatibility_minimum, compatibility_verified,
 	compatibility_maximum, status, release_notes, uploaded_by_user_id,
-	uploaded_at, created_at, updated_at`
+	uploaded_at, source, github_release_tag, github_release_id,
+	created_at, updated_at`
 
 // scanVersion reads one row into a ModuleVersion. Several columns are
 // NULL-able in the schema; we use sql.NullString so an absent
 // compatibility floor doesn't blow up the scan.
 func scanVersion(s interface{ Scan(...any) error }) (*ModuleVersion, error) {
 	v := &ModuleVersion{}
-	var compatMin, compatVer, compatMax, notes sql.NullString
+	var compatMin, compatVer, compatMax, notes, ghTag, uploader sql.NullString
+	var ghID sql.NullInt64
 	err := s.Scan(
 		&v.ID, &v.Version, &v.FilePath, &v.FileSize, &v.ContentSHA256,
 		&v.ManifestJSON, &compatMin, &compatVer, &compatMax,
-		&v.Status, &notes, &v.UploadedByUserID,
-		&v.UploadedAt, &v.CreatedAt, &v.UpdatedAt,
+		&v.Status, &notes, &uploader,
+		&v.UploadedAt, &v.Source, &ghTag, &ghID,
+		&v.CreatedAt, &v.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -72,24 +79,43 @@ func scanVersion(s interface{ Scan(...any) error }) (*ModuleVersion, error) {
 	v.CompatibilityVerified = compatVer.String
 	v.CompatibilityMaximum = compatMax.String
 	v.ReleaseNotes = notes.String
+	if uploader.Valid {
+		s := uploader.String
+		v.UploadedByUserID = &s
+	}
+	v.GitHubReleaseTag = ghTag.String
+	if ghID.Valid {
+		id := ghID.Int64
+		v.GitHubReleaseID = &id
+	}
 	return v, nil
 }
 
 // InsertVersion writes a new row. Translates the MySQL unique-key
-// violation on uk_foundry_module_version into ErrVersionExists so
-// the service can return a clean 409.
+// violation on uk_foundry_module_version (the version string) OR
+// uk_github_release (the GitHub release ID) into ErrVersionExists so
+// the service can return a clean 409 / the poller can skip silently.
 func (r *repository) InsertVersion(ctx context.Context, v *ModuleVersion) error {
+	source := v.Source
+	if source == "" {
+		source = SourceManualUpload
+	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO foundry_module_versions
 			(id, version, file_path, file_size, content_sha256, manifest_json,
 			 compatibility_minimum, compatibility_verified, compatibility_maximum,
-			 status, release_notes, uploaded_by_user_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 status, release_notes, uploaded_by_user_id,
+			 source, github_release_tag, github_release_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		v.ID, v.Version, v.FilePath, v.FileSize, v.ContentSHA256, v.ManifestJSON,
 		nullableString(v.CompatibilityMinimum),
 		nullableString(v.CompatibilityVerified),
 		nullableString(v.CompatibilityMaximum),
-		string(v.Status), nullableString(v.ReleaseNotes), v.UploadedByUserID,
+		string(v.Status), nullableString(v.ReleaseNotes),
+		nullableUploader(v.UploadedByUserID),
+		string(source),
+		nullableString(v.GitHubReleaseTag),
+		nullableInt64(v.GitHubReleaseID),
 	)
 	if err != nil && isDuplicateKey(err) {
 		return ErrVersionExists
@@ -105,6 +131,15 @@ func (r *repository) GetVersion(ctx context.Context, version string) (*ModuleVer
 func (r *repository) GetVersionByID(ctx context.Context, id string) (*ModuleVersion, error) {
 	return scanVersion(r.db.QueryRowContext(ctx,
 		`SELECT `+versionCols+` FROM foundry_module_versions WHERE id = ?`, id))
+}
+
+// GetVersionByGitHubReleaseID looks up a row by GitHub release ID. Used
+// by the poller as an idempotency pre-check so a re-poll doesn't
+// trigger a UNIQUE-constraint INSERT failure (which would also work
+// but is noisier in the logs).
+func (r *repository) GetVersionByGitHubReleaseID(ctx context.Context, releaseID int64) (*ModuleVersion, error) {
+	return scanVersion(r.db.QueryRowContext(ctx,
+		`SELECT `+versionCols+` FROM foundry_module_versions WHERE github_release_id = ?`, releaseID))
 }
 
 // ListVersions returns the catalog ordered newest-uploaded first. When
@@ -297,6 +332,27 @@ func nullableString(s string) any {
 		return nil
 	}
 	return s
+}
+
+// nullableUploader maps a *string (which may be nil for poller-sourced
+// rows whose uploaded_by_user_id is NULL) onto the driver's NULL
+// representation. The pre-PR-002 schema had this column NOT NULL; the
+// 002 migration relaxes it to NULL so the poller can insert without a
+// synthetic system user.
+func nullableUploader(s *string) any {
+	if s == nil || *s == "" {
+		return nil
+	}
+	return *s
+}
+
+// nullableInt64 maps a *int64 onto the driver's NULL representation.
+// Used for github_release_id which is NULL on manual uploads.
+func nullableInt64(i *int64) any {
+	if i == nil {
+		return nil
+	}
+	return *i
 }
 
 // isDuplicateKey reports whether a driver error is a MySQL 1062

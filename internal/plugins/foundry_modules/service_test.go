@@ -44,6 +44,9 @@ func (m *mockRepo) GetVersion(ctx context.Context, version string) (*ModuleVersi
 func (m *mockRepo) GetVersionByID(_ context.Context, _ string) (*ModuleVersion, error) {
 	return nil, nil
 }
+func (m *mockRepo) GetVersionByGitHubReleaseID(_ context.Context, _ int64) (*ModuleVersion, error) {
+	return nil, nil
+}
 func (m *mockRepo) ListVersions(ctx context.Context, includeWithdrawn bool) ([]*ModuleVersion, error) {
 	if m.listVersionsFn != nil {
 		return m.listVersionsFn(ctx, includeWithdrawn)

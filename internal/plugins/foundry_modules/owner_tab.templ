@@ -1,18 +1,19 @@
-// foundry_modules — owner_tab.templ renders the Foundry Module tab
-// inside the campaign settings page. Served as an HTMX fragment so
-// the campaigns plugin doesn't have to import foundry_modules
-// (which would create a cycle: foundry_modules already depends on
-// campaigns for CampaignContext / RoleOwner).
+// foundry_modules — owner_tab.templ renders the Foundry Module
+// settings as an HTMX fragment served at
+// GET /campaigns/:id/foundry/settings-tab. The campaigns plugin's
+// VTT Setup Guides → Foundry VTT disclosure section embeds this
+// fragment with `hx-get` so the campaigns plugin doesn't have to
+// import foundry_modules (foundry_modules already imports
+// campaigns; the other direction would cycle).
 //
-// Mounted at GET /campaigns/:id/foundry/settings-tab; the campaigns
-// settings.templ Foundry Module tab is an empty <div hx-get=…
-// hx-trigger="load"> that pulls this in.
+// All buttons use inline `onclick` (via templ `script` helpers)
+// rather than `data-foo` + delegated document listeners. The
+// C-FMC-2 / C-FMC-3 dispatch-pattern (delegated listeners) raced
+// HTMX's evalScripts pass against Alpine's MutationObserver, so
+// the listeners weren't always attached when the user clicked.
+// Inline `onclick` works the moment HTML lands in the DOM.
 
 package foundry_modules
-
-import (
-	"fmt"
-)
 
 // OwnerTabData is everything the tab needs at render time. Built by
 // the handler in one service round-trip per resource.
@@ -52,7 +53,7 @@ templ ownerCurrentPinCard(data OwnerTabData) {
 		if data.CurrentVersion == nil {
 			<p class="text-sm text-amber-600 dark:text-amber-400">
 				<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-				No module versions uploaded yet. Ask the site admin to upload one.
+				No module versions in the catalog yet. Chronicle auto-fetches from GitHub on a schedule; an admin can also trigger a fetch or upload manually via <code class="text-xs">/admin/packages</code>.
 			</p>
 		} else {
 			<div class="flex items-center gap-3 flex-wrap">
@@ -86,12 +87,15 @@ templ ownerCurrentPinCard(data OwnerTabData) {
 // layer (svc.ListVersions(includeWithdrawn=false)); deprecated
 // versions stay in the list but are flagged in the option label so
 // the owner sees they're picking something marked deprecated.
+//
+// Save button uses the templ-generated `pinSaveScript` so the call
+// works regardless of whether HTMX's evalScripts pass has run yet.
 templ ownerVersionSelector(data OwnerTabData) {
 	if len(data.Versions) > 0 {
-		<div class="card p-4 rounded-md space-y-3" x-data={ fmt.Sprintf("{ selection: '%s' }", data.CurrentPin) }>
+		<div class="card p-4 rounded-md space-y-3">
 			<div>
 				<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">Pin to Version</p>
-				<select x-model="selection" class="w-full px-3 py-2 rounded-md border border-edge bg-surface text-sm">
+				<select id="fmc-pin-selector" class="w-full px-3 py-2 rounded-md border border-edge bg-surface text-sm">
 					<option value="">Auto-update (track latest available)</option>
 					for _, v := range data.Versions {
 						<option value={ v.Version } selected?={ v.Version == data.CurrentPin }>
@@ -106,9 +110,8 @@ templ ownerVersionSelector(data OwnerTabData) {
 			<div class="flex items-center justify-end gap-2">
 				<button
 					type="button"
-					data-fmc-pin-campaign={ data.CampaignID }
-					class="fmc-pin-btn px-4 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent/90"
-					x-bind:data-fmc-pin-version="selection"
+					onclick={ pinSaveScript(data.CampaignID) }
+					class="px-4 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent/90"
 				>
 					Save Pin
 				</button>
@@ -118,9 +121,9 @@ templ ownerVersionSelector(data OwnerTabData) {
 }
 
 // ownerInstallURLBlock shows the Foundry-facing install URL plus the
-// rotate-token button. Rotation is destructive (invalidates every
-// player's stored URL) so we wrap the button in a confirm dialog
-// inside the inline script.
+// rotate-token button. Both inline onclick — the copy handler is the
+// same `navigator.clipboard.writeText` pattern the existing
+// campaigns settings.templ "Copy Campaign ID" button uses.
 templ ownerInstallURLBlock(data OwnerTabData) {
 	<div class="card p-4 rounded-md space-y-3">
 		<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider">Install URL</p>
@@ -134,8 +137,9 @@ templ ownerInstallURLBlock(data OwnerTabData) {
 			/>
 			<button
 				type="button"
-				class="fmc-copy-btn px-3 py-2 text-sm rounded-md border border-edge hover:bg-surface-alt whitespace-nowrap"
-				data-fmc-copy-target="fmc-install-url"
+				onclick="(function(b){var t=document.getElementById('fmc-install-url');if(t&&navigator.clipboard){navigator.clipboard.writeText(t.value).then(function(){var html=b.innerHTML;b.innerHTML='<i class=\'fa-solid fa-check text-emerald-500\'></i> Copied';setTimeout(function(){b.innerHTML=html;},2000);})}})(this)"
+				class="px-3 py-2 text-sm rounded-md border border-edge hover:bg-surface-alt whitespace-nowrap"
+				title="Copy install URL to clipboard"
 			>
 				<i class="fa-solid fa-copy"></i> Copy
 			</button>
@@ -146,8 +150,8 @@ templ ownerInstallURLBlock(data OwnerTabData) {
 			</p>
 			<button
 				type="button"
-				data-fmc-rotate-campaign={ data.CampaignID }
-				class="fmc-rotate-btn px-3 py-1.5 text-xs rounded-md border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
+				onclick={ rotateTokenScript(data.CampaignID) }
+				class="px-3 py-1.5 text-xs rounded-md border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
 			>
 				<i class="fa-solid fa-rotate mr-1"></i> Rotate Token
 			</button>
@@ -169,63 +173,41 @@ templ ownerPlayerInstructions(data OwnerTabData) {
 			<li>Click Install</li>
 		</ol>
 	</div>
-	@ownerTabScript()
 }
 
-// ownerTabScript binds the pin / copy / rotate buttons to API calls.
-// Inline-script pattern matches admin.templ and admin/storage.templ:605.
-templ ownerTabScript() {
-	<script>
-		(function () {
-			document.addEventListener('click', function (e) {
-				// --- pin save ---
-				const pinBtn = e.target.closest('.fmc-pin-btn');
-				if (pinBtn) {
-					const cid = pinBtn.dataset.fmcPinCampaign;
-					const version = pinBtn.dataset.fmcPinVersion || '';
-					Chronicle.apiFetch('/campaigns/' + encodeURIComponent(cid) + '/foundry/pin', {
-						method: 'PUT',
-						body: JSON.stringify({ version: version }),
-						headers: { 'Content-Type': 'application/json' },
-					})
-						.then(function () {
-							window.Chronicle.notify(version ? ('Pinned to ' + version) : 'Set to auto-update', 'success');
-							setTimeout(function () { window.location.reload(); }, 600);
-						})
-						.catch(function (err) {
-							window.Chronicle.notify('Pin failed: ' + ((err && err.message) || ''), 'error');
-						});
-					return;
-				}
-
-				// --- copy install URL ---
-				const copyBtn = e.target.closest('.fmc-copy-btn');
-				if (copyBtn) {
-					const targetID = copyBtn.dataset.fmcCopyTarget;
-					const target = document.getElementById(targetID);
-					if (target && navigator.clipboard) {
-						navigator.clipboard.writeText(target.value).then(function () {
-							window.Chronicle.notify('Install URL copied to clipboard', 'success');
-						});
-					}
-					return;
-				}
-
-				// --- rotate token ---
-				const rotateBtn = e.target.closest('.fmc-rotate-btn');
-				if (rotateBtn) {
-					const cid = rotateBtn.dataset.fmcRotateCampaign;
-					if (!window.confirm('Rotate the install token? Every player will need to reinstall with the new URL.')) return;
-					Chronicle.apiFetch('/campaigns/' + encodeURIComponent(cid) + '/foundry/token/rotate', { method: 'POST' })
-						.then(function () {
-							window.Chronicle.notify('Token rotated. All players will need to reinstall.', 'success');
-							setTimeout(function () { window.location.reload(); }, 600);
-						})
-						.catch(function (err) {
-							window.Chronicle.notify('Rotate failed: ' + ((err && err.message) || ''), 'error');
-						});
-				}
-			});
-		})();
-	</script>
+// pinSaveScript handles the "Save Pin" click. Reads the dropdown's
+// selected value (rather than relying on Alpine state that may not
+// have initialized) and submits it to the campaign's pin endpoint.
+script pinSaveScript(campaignID string) {
+	var sel = document.getElementById('fmc-pin-selector');
+	if (!sel) return;
+	var version = sel.value;
+	Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignID) + '/foundry/pin', {
+		method: 'PUT',
+		body: JSON.stringify({ version: version }),
+		headers: { 'Content-Type': 'application/json' },
+	})
+		.then(function () {
+			window.Chronicle.notify(version ? ('Pinned to ' + version) : 'Set to auto-update', 'success');
+			setTimeout(function () { window.location.reload(); }, 600);
+		})
+		.catch(function (err) {
+			window.Chronicle.notify('Pin failed: ' + ((err && err.message) || ''), 'error');
+		});
 }
+
+// rotateTokenScript handles the "Rotate Token" click with a confirm
+// dialog (the action is destructive — invalidates every player's
+// install URL).
+script rotateTokenScript(campaignID string) {
+	if (!window.confirm('Rotate the install token? Every player will need to reinstall with the new URL.')) return;
+	Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignID) + '/foundry/token/rotate', { method: 'POST' })
+		.then(function () {
+			window.Chronicle.notify('Token rotated. All players will need to reinstall.', 'success');
+			setTimeout(function () { window.location.reload(); }, 600);
+		})
+		.catch(function (err) {
+			window.Chronicle.notify('Rotate failed: ' + ((err && err.message) || ''), 'error');
+		});
+}
+

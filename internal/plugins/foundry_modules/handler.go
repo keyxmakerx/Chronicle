@@ -1,6 +1,8 @@
 package foundry_modules
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"os"
 
@@ -12,16 +14,33 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// PollRunner is the minimal slice of *Poller the handler needs for the
+// admin "Fetch from GitHub now" button. Defined as an interface so
+// tests can plug in a stub without a real http.Client. The poller
+// itself satisfies this trivially via its PollOnce method.
+type PollRunner interface {
+	PollOnce(ctx context.Context) (newVersions int, errs []string)
+}
+
 // Handler serves HTTP for the foundry_modules plugin. Echo handlers
 // stay thin per the project conventions — bind, validate, call the
 // service, render JSON.
 type Handler struct {
-	svc Service
+	svc    Service
+	poller PollRunner // optional; nil disables the "Fetch now" button
 }
 
 // NewHandler constructs the Handler.
 func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
+}
+
+// SetPoller wires the GitHub release poller so the admin "Fetch from
+// GitHub now" button has something to call. Set after the poller is
+// constructed in routes.go. Nil-safe — the FetchGitHubAPI handler
+// reports "polling not configured" rather than crashing.
+func (h *Handler) SetPoller(p PollRunner) {
+	h.poller = p
 }
 
 // --- admin HTML fragment ---
@@ -143,6 +162,20 @@ func (h *Handler) NotifyAPI(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"notified": notified})
+}
+
+// FetchGitHubAPI triggers an immediate GitHub release poll. Returns
+// {new_versions: N, errors: [...]} so the admin can see whether the
+// catalog grew without reloading. POST /admin/modules/foundry/fetch-github
+func (h *Handler) FetchGitHubAPI(c echo.Context) error {
+	if h.poller == nil {
+		return apperror.NewBadRequest("github polling is not configured (FOUNDRY_MODULE_POLL_INTERVAL=0 or poller not wired)")
+	}
+	newCount, errs := h.poller.PollOnce(c.Request().Context())
+	return c.JSON(http.StatusOK, map[string]any{
+		"new_versions": newCount,
+		"errors":       errs,
+	})
 }
 
 // ForcePinAPI directly pins one or more campaigns to a version.
@@ -284,6 +317,9 @@ func (h *Handler) InstallURLAPI(c echo.Context) error {
 // GET /api/v1/campaigns/:cid/foundry/module.json?token=...
 //
 // 404 on token failure (don't leak whether the campaign exists).
+// 503 with informative JSON when the catalog is empty — distinct from
+// 404 so the Foundry-side "Check Chronicle for updates" button can
+// surface the message rather than guessing "endpoint broken."
 func (h *Handler) PublicManifestAPI(c echo.Context) error {
 	cid := c.Param("cid")
 	token := c.QueryParam("token")
@@ -294,6 +330,15 @@ func (h *Handler) PublicManifestAPI(c echo.Context) error {
 		return err
 	}
 	manifest, _, err := h.svc.BuildManifestForCampaign(c.Request().Context(), cid)
+	if errors.Is(err, ErrNoVersionAvailable) {
+		// Catalog is empty (no manual upload, no GitHub fetch yet).
+		// 503 + actionable copy so Foundry's update check shows
+		// the operator what to do instead of a useless 404.
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{
+			"error":   "no_version_available",
+			"message": "No Foundry module version is available for this campaign. An admin needs to publish a version via /admin/packages, or wait for the GitHub auto-fetch to discover one.",
+		})
+	}
 	if err != nil {
 		return err
 	}

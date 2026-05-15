@@ -1796,6 +1796,13 @@ func (a *App) RegisterRoutes() {
 		foundryModuleStorageDir, a.Config.BaseURL,
 	)
 	fmHandler := foundry_modules.NewHandler(fmService)
+	// GitHub release poller: auto-fetches Chronicle Foundry module
+	// releases into the catalog so the admin doesn't have to upload
+	// every .zip manually. FOUNDRY_MODULE_POLL_INTERVAL=0 disables
+	// the background goroutine; the admin "Fetch now" button stays
+	// functional in either case.
+	fmPoller := foundry_modules.NewPoller(fmRepo, securityService, foundryModuleStorageDir)
+	fmHandler.SetPoller(fmPoller)
 	// Wire the banner-status adapter into the campaigns handler so
 	// the campaign show page can render the "newer version available"
 	// banner without importing foundry_modules.
@@ -1818,6 +1825,13 @@ func (a *App) RegisterRoutes() {
 		// packages.RegisterPublicRoutes so a misbehaving Foundry client
 		// can't hammer the manifest endpoint into the DB.
 		foundry_modules.RegisterPublicRoutes(e, fmHandler, middleware.RateLimit(300, time.Minute))
+		// Start the background poller after routes are registered so
+		// the initial tick can populate the catalog without racing
+		// the admin endpoints that surface its output. Uses
+		// context.Background() — the goroutine runs for the lifetime
+		// of the process; graceful shutdown wiring is a separate
+		// concern handled at the http.Server level.
+		fmPoller.Start(context.Background())
 	} else {
 		slog.Warn("foundry_modules plugin degraded — routes not registered")
 	}

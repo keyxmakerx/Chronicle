@@ -20,6 +20,10 @@ func RegisterAdminRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFu
 	g.GET("/section", h.AdminVersionsSectionHandler)
 	g.GET("/versions", h.ListVersionsAPI)
 	g.POST("/upload", h.UploadAPI)
+	// "Fetch from GitHub now" — triggers an immediate poll of the
+	// configured GitHub repo. Idempotent (already-ingested releases
+	// are skipped); see poller.go.
+	g.POST("/fetch-github", h.FetchGitHubAPI)
 	g.PUT("/:version/status", h.SetStatusAPI)
 	g.POST("/:version/notify", h.NotifyAPI)
 	g.GET("/:version/usage", h.UsageAPI)
