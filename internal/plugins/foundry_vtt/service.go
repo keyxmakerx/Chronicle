@@ -125,6 +125,14 @@ type Service interface {
 	// HTTP status + JSON shape.
 	BuildManifestForCampaign(ctx context.Context, campaignID string) (manifestJSON json.RawMessage, downloadDir string, err error)
 
+	// BuildDownloadParams returns the params needed to stream a
+	// per-campaign rewritten zip from the download endpoint:
+	// install dir to walk, path of module.json within it, and the
+	// rewritten manifest bytes to embed in place of the on-disk
+	// module.json. Added in C-FMC-7 — see resolveCampaignManifest
+	// for the shared resolution + rewrite logic.
+	BuildDownloadParams(ctx context.Context, campaignID string) (DownloadParams, error)
+
 	// --- owner pin management ---
 
 	// SetPinnedVersion writes the campaign's pin. Empty version
@@ -386,22 +394,81 @@ func (s *service) VerifyManifestToken(ctx context.Context, campaignID, token str
 // a single-flight cache keyed on (packageID, version) at a future
 // PR.
 func (s *service) BuildManifestForCampaign(ctx context.Context, campaignID string) (json.RawMessage, string, error) {
-	// 1. Find the foundry-module package row.
-	pkg, err := s.FindFoundryPackage(ctx)
+	params, err := s.resolveCampaignManifest(ctx, campaignID)
 	if err != nil {
 		return nil, "", err
 	}
+	return params.RewrittenManifest, params.InstallDir, nil
+}
+
+// BuildDownloadParams returns everything the download handler needs
+// to stream a per-campaign rewritten zip: the install dir to walk,
+// the path of module.json within it (so the handler can swap in the
+// rewritten bytes), and the rewritten manifest bytes themselves.
+//
+// Same resolution path as BuildManifestForCampaign — both methods
+// call resolveCampaignManifest, which is the single source of truth
+// for the descriptor + rewrite logic. The manifest endpoint serves
+// the rewritten JSON; the download endpoint embeds the same bytes
+// into the streamed zip's module.json entry. Both stay consistent
+// because they come from the same call.
+//
+// Added in C-FMC-7 to fix the bug where Foundry's update checks
+// reverted to GitHub after install. The download endpoint used to
+// stream the install dir as-is, so the zip's embedded module.json
+// carried the upstream GitHub URLs; Foundry's first manifest fetch
+// hit Chronicle (because the install URL was Chronicle's), but
+// every update check after that read the extracted on-disk
+// module.json, which still pointed at GitHub. Per-campaign zip
+// rewriting at download time embeds Chronicle URLs into the zip's
+// module.json so subsequent update checks stay on Chronicle.
+func (s *service) BuildDownloadParams(ctx context.Context, campaignID string) (DownloadParams, error) {
+	return s.resolveCampaignManifest(ctx, campaignID)
+}
+
+// DownloadParams is the bundle of values the download handler needs
+// to stream a rewritten zip. RewrittenManifest is what gets written
+// in place of the file at ModuleJSONPath (relative to InstallDir).
+// Every other file in InstallDir is copied byte-for-byte.
+type DownloadParams struct {
+	// InstallDir is the absolute path to the version's extracted
+	// directory on disk. Walk this to assemble the zip.
+	InstallDir string
+	// ModuleJSONPath is the path to the manifest INSIDE InstallDir
+	// (e.g. "module.json" or "dist/module.json"). The descriptor
+	// declares this; defaults apply when no chronicle-package.json
+	// exists in the install dir.
+	ModuleJSONPath string
+	// RewrittenManifest is the bytes to write for the ModuleJSONPath
+	// zip entry. Contains the per-campaign Chronicle URLs (whatever
+	// fields the descriptor's rewriteFields lists). Every other key
+	// from the upstream module.json is preserved verbatim.
+	RewrittenManifest []byte
+}
+
+// resolveCampaignManifest is the shared resolution path for the
+// manifest endpoint AND the download endpoint. Single source of
+// truth for descriptor loading + rewrite — both serve-time paths
+// produce identical bytes for the rewritten module.json.
+//
+// Returns *Error on failure (categorized for the JSON response).
+func (s *service) resolveCampaignManifest(ctx context.Context, campaignID string) (DownloadParams, error) {
+	// 1. Find the foundry-module package row.
+	pkg, err := s.FindFoundryPackage(ctx)
+	if err != nil {
+		return DownloadParams{}, err
+	}
 	if pkg == nil {
-		return nil, "", ErrNoPackageRegistered()
+		return DownloadParams{}, ErrNoPackageRegistered()
 	}
 	if pkg.InstalledVersion == "" {
-		return nil, "", ErrNoVersionAvailable()
+		return DownloadParams{}, ErrNoVersionAvailable()
 	}
 
 	// 2. Resolve the campaign's pin to a version string.
 	pin, err := s.settings.GetFoundryModulePin(ctx, campaignID)
 	if err != nil {
-		return nil, "", ErrInternal("get_campaign_pin", err)
+		return DownloadParams{}, ErrInternal("get_campaign_pin", err)
 	}
 	version := pin
 	if version == "" {
@@ -412,13 +479,13 @@ func (s *service) BuildManifestForCampaign(ctx context.Context, campaignID strin
 	// 3. Resolve version → install dir; confirm it exists on disk.
 	installDir := s.pkgs.InstallDirForVersion(packages.PackageTypeFoundryModule, pkg.Slug, version)
 	if installDir == "" {
-		return nil, "", ErrPinnedVersionNotInstalled(version)
+		return DownloadParams{}, ErrPinnedVersionNotInstalled(version)
 	}
 	if _, statErr := os.Stat(installDir); statErr != nil {
 		if os.IsNotExist(statErr) {
-			return nil, "", ErrPinnedVersionNotInstalled(version)
+			return DownloadParams{}, ErrPinnedVersionNotInstalled(version)
 		}
-		return nil, "", ErrInternal("stat_install_dir", statErr)
+		return DownloadParams{}, ErrInternal("stat_install_dir", statErr)
 	}
 
 	// 4. Load this version's descriptor (or fall back to defaults).
@@ -429,26 +496,26 @@ func (s *service) BuildManifestForCampaign(ctx context.Context, campaignID strin
 	desc, descErr := loadDescriptor(installDir)
 	if descErr != nil && descErr != errDescriptorNotFound {
 		// Real validation error — surface it.
-		return nil, "", descErr
+		return DownloadParams{}, descErr
 	}
 
 	// 5. Read module.json at the descriptor-declared path.
 	manifestPath := filepath.Join(installDir, desc.Package.ModuleJSONPath)
 	manifestBytes, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, "", ErrModuleJSONMissing(manifestPath, err)
+		return DownloadParams{}, ErrModuleJSONMissing(manifestPath, err)
 	}
 
 	// 6. Mint a fresh signed URL for this campaign's current token.
 	tok, err := s.repo.GetCampaignToken(ctx, campaignID)
 	if err != nil {
-		return nil, "", ErrInternal("get_campaign_token", err)
+		return DownloadParams{}, ErrInternal("get_campaign_token", err)
 	}
 	if tok == nil {
 		// VerifyManifestToken already passed, so a nil row here is
 		// a real anomaly — the row was deleted between Verify and
 		// BuildManifest. Not the operator's normal failure mode.
-		return nil, "", ErrInternal("token_row_disappeared",
+		return DownloadParams{}, ErrInternal("token_row_disappeared",
 			fmt.Errorf("token row for verified campaign %q vanished", campaignID))
 	}
 	signed := s.tokens.Sign(campaignID, tok.TokenVersion)
@@ -459,7 +526,7 @@ func (s *service) BuildManifestForCampaign(ctx context.Context, campaignID strin
 	//    except for the ones explicitly listed in rewriteFields.
 	var m map[string]any
 	if err := json.Unmarshal(manifestBytes, &m); err != nil {
-		return nil, "", ErrInternal("parse_module_json",
+		return DownloadParams{}, ErrInternal("parse_module_json",
 			fmt.Errorf("parse module.json at %s: %w", manifestPath, err))
 	}
 	for _, field := range desc.Serving.RewriteFields {
@@ -478,9 +545,13 @@ func (s *service) BuildManifestForCampaign(ctx context.Context, campaignID strin
 	}
 	rewritten, err := json.Marshal(m)
 	if err != nil {
-		return nil, "", ErrInternal("marshal_rewritten_manifest", err)
+		return DownloadParams{}, ErrInternal("marshal_rewritten_manifest", err)
 	}
-	return rewritten, installDir, nil
+	return DownloadParams{
+		InstallDir:        installDir,
+		ModuleJSONPath:    desc.Package.ModuleJSONPath,
+		RewrittenManifest: rewritten,
+	}, nil
 }
 
 // substituteURLTemplate replaces {campaign_id} and {token} in a URL
