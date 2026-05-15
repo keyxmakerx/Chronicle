@@ -7,6 +7,15 @@ import (
 )
 
 // PackagesPage renders the main package management admin page.
+//
+// Layout: two sections. The Foundry module version catalog (managed
+// inside Chronicle, not pulled from GitHub) comes first because that's
+// the surface the operator's most-frequent workflow — uploading a new
+// module .zip, pinning campaigns — lives on. The external-package
+// repository list (game systems + the chronicle-sync GitHub mirror)
+// comes below. Both have their own card shapes; no shared abstraction
+// because the data shapes differ (packages are repo-backed with
+// auto-update policies; modules are admin-uploaded version rows).
 templ PackagesPage(packages []Package, csrfToken string) {
 	@layouts.App("Packages - Admin") {
 		<div class="max-w-5xl mx-auto space-y-6">
@@ -14,12 +23,28 @@ templ PackagesPage(packages []Package, csrfToken string) {
 				<div>
 					<h1 class="text-2xl font-bold text-fg">Packages</h1>
 					<p class="text-sm text-fg-secondary mt-1">
-						Manage external package repositories: game systems and the Foundry VTT module.
+						Manage Foundry module versions, external game system repositories, and the chronicle-sync GitHub mirror.
 					</p>
 				</div>
 			</div>
 
-			<!-- Add Package Form -->
+			<!-- Foundry module version catalog (HTMX fragment served by
+			     foundry_modules plugin so packages doesn't import it).
+			     Lazy-loads on page render. If foundry_modules is
+			     degraded the fragment 404s, the placeholder text stays. -->
+			<div
+				id="foundry-modules-section"
+				hx-get="/admin/modules/foundry/section"
+				hx-trigger="load"
+				hx-swap="innerHTML"
+			>
+				<div class="card text-center py-8 text-sm text-fg-muted">
+					<i class="fa-solid fa-spinner fa-spin mr-1"></i>
+					Loading Foundry module versions&hellip;
+				</div>
+			</div>
+
+			<!-- External package repositories (game systems + chronicle-sync). -->
 			<div class="card p-5">
 				<h2 class="text-lg font-semibold text-fg mb-3">Add Package Repository</h2>
 				<form
@@ -58,7 +83,7 @@ templ PackagesPage(packages []Package, csrfToken string) {
 			if len(packages) == 0 {
 				<div class="card p-8 text-center">
 					<i class="fa-solid fa-box-open text-4xl text-fg-muted mb-3"></i>
-					<p class="text-fg-secondary">No packages registered yet.</p>
+					<p class="text-fg-secondary">No external package repositories registered yet.</p>
 					<p class="text-sm text-fg-muted mt-1">Add a GitHub repository URL above to get started.</p>
 				</div>
 			} else {
