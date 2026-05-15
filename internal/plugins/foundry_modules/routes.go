@@ -13,8 +13,11 @@ import (
 // can't silently relocate campaigns to arbitrary versions.
 func RegisterAdminRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	g := admin.Group("/modules/foundry")
-	// Admin HTML page (catalog + upload modal).
-	g.GET("", h.AdminPageHandler)
+	// Admin section served as an HTMX fragment embedded in the
+	// existing admin Packages page (/admin/packages). PR #301's
+	// standalone /admin/modules/foundry page route is removed
+	// per C-FMC-3 — one admin nav target instead of two.
+	g.GET("/section", h.AdminVersionsSectionHandler)
 	g.GET("/versions", h.ListVersionsAPI)
 	g.POST("/upload", h.UploadAPI)
 	g.PUT("/:version/status", h.SetStatusAPI)

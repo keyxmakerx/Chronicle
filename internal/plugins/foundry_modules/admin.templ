@@ -1,67 +1,66 @@
-// foundry_modules — admin.templ renders the version catalog page at
-// /admin/modules/foundry. One card per version with the operator's
-// expand-on-click pattern (the same x-data="{expanded:false}" +
-// x-collapse idiom syncapi/integrations_keys.templ already uses on
-// this codebase).
+// foundry_modules — admin.templ renders the version catalog as a
+// section embedded in the existing admin Packages page. PR #301
+// introduced this as a standalone /admin/modules/foundry page; per
+// C-FMC-3 the page surface is gone and the catalog now hx-loads
+// into Packages so the operator has one nav target for everything
+// version-managed.
 //
-// The dispatch's "uplift the shared packages-card" foundation is
-// deferred: packageCard has exactly one consumer today, so a new
-// abstraction would be premature. The card structure here is
-// duplicated inline; a follow-up can extract it once a third
-// consumer materializes.
+// The expand-on-click card pattern matches syncapi/integrations_keys.templ:86 —
+// x-data="{expanded:false}" + x-collapse — no shared abstraction
+// (packageCard still has its own shape; the two cards stay distinct).
 
 package foundry_modules
 
 import (
 	"fmt"
 	"time"
-
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// AdminPage is the page-level template for the admin module catalog.
+// AdminVersionsSection renders the foundry module catalog as a
+// standalone section (no @layouts.App wrapper). Served as an HTMX
+// fragment from packages.templ, which is the single admin nav target
+// for both package management and module version management.
+//
 // versions is the full catalog (including withdrawn) sorted newest-
 // uploaded-first; usageByVersion maps version → campaigns currently
 // pinned to it (rendered in the expanded body).
-templ AdminPage(versions []*ModuleVersion, usageByVersion map[string][]CampaignUsage, csrfToken string) {
-	@layouts.App("Foundry Module Versions") {
-		<div class="max-w-5xl mx-auto space-y-6 py-6">
-			<div class="flex items-center justify-between">
-				<div>
-					<h1 class="text-2xl font-bold text-fg">Foundry Module Versions</h1>
-					<p class="text-sm text-fg-muted mt-1">
-						Upload, deprecate, and force-pin Chronicle's Foundry VTT module releases.
-						Campaigns hit a per-campaign manifest URL that resolves to the pinned version.
-					</p>
-				</div>
-				<button
-					type="button"
-					id="fmc-upload-btn"
-					class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
-				>
-					<i class="fa-solid fa-upload"></i>
-					Upload New Version
-				</button>
+templ AdminVersionsSection(versions []*ModuleVersion, usageByVersion map[string][]CampaignUsage, csrfToken string) {
+	<div class="space-y-3">
+		<div class="flex items-center justify-between">
+			<div>
+				<h2 class="text-lg font-semibold text-fg">Foundry Module Versions</h2>
+				<p class="text-sm text-fg-muted mt-1">
+					Upload, deprecate, and force-pin Chronicle's Foundry VTT module releases.
+					Campaigns hit a per-campaign manifest URL that resolves to the pinned version.
+				</p>
 			</div>
-
-			if len(versions) == 0 {
-				<div class="card text-center py-12">
-					<i class="fa-solid fa-dice-d20 text-fg-muted text-4xl mb-3"></i>
-					<p class="text-sm text-fg-secondary">No module versions uploaded yet.</p>
-					<p class="text-xs text-fg-muted mt-1">Use "Upload New Version" to add the first release.</p>
-				</div>
-			} else {
-				<div class="space-y-3">
-					for _, v := range versions {
-						@adminVersionCard(v, usageByVersion[v.Version], csrfToken)
-					}
-				</div>
-			}
+			<button
+				type="button"
+				id="fmc-upload-btn"
+				class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
+			>
+				<i class="fa-solid fa-upload"></i>
+				Upload New Version
+			</button>
 		</div>
+
+		if len(versions) == 0 {
+			<div class="card text-center py-12">
+				<i class="fa-solid fa-dice-d20 text-fg-muted text-4xl mb-3"></i>
+				<p class="text-sm text-fg-secondary">No module versions uploaded yet.</p>
+				<p class="text-xs text-fg-muted mt-1">Use "Upload New Version" to add the first release.</p>
+			</div>
+		} else {
+			<div class="space-y-3">
+				for _, v := range versions {
+					@adminVersionCard(v, usageByVersion[v.Version], csrfToken)
+				}
+			</div>
+		}
 
 		@adminUploadModal(csrfToken)
 		@adminPageScript()
-	}
+	</div>
 }
 
 // adminVersionCard renders one row in the catalog. Header is always

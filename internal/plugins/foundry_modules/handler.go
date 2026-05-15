@@ -24,14 +24,20 @@ func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// --- admin HTML page ---
+// --- admin HTML fragment ---
 
-// AdminPageHandler serves the catalog page at /admin/modules/foundry.
-// Queries the catalog + per-version usage in two service calls (one for
-// the version list, one usage call per version — N+1 by design since
-// admin catalogs are small, typically < 20 rows; refactor to a
-// joined query if a deployment shows > 100 versions).
-func (h *Handler) AdminPageHandler(c echo.Context) error {
+// AdminVersionsSectionHandler serves the catalog as an HTMX fragment
+// embedded in the admin Packages page. Returns the raw section
+// content (no @layouts.App wrapper); the surrounding chrome — sidebar,
+// breadcrumbs, page title — comes from packages.templ.
+//
+// Queries the catalog + per-version usage in N+1 calls (one list,
+// one usage call per version). Admin catalogs are small (typically
+// < 20 rows) so the N+1 is acceptable; refactor to a joined query
+// if a deployment shows > 100 versions.
+//
+// GET /admin/modules/foundry/section
+func (h *Handler) AdminVersionsSectionHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	versions, err := h.svc.ListVersions(ctx, true)
 	if err != nil {
@@ -46,7 +52,7 @@ func (h *Handler) AdminPageHandler(c echo.Context) error {
 		usageByVersion[v.Version] = u
 	}
 	return middleware.Render(c, http.StatusOK,
-		AdminPage(versions, usageByVersion, middleware.GetCSRFToken(c)))
+		AdminVersionsSection(versions, usageByVersion, middleware.GetCSRFToken(c)))
 }
 
 // --- admin handlers ---
