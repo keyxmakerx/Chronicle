@@ -247,14 +247,15 @@ type fakePostInstallHook struct {
 }
 
 type fakePostInstallCall struct {
-	pkg     *Package
-	version string
-	destDir string
+	pkg             *Package
+	version         string
+	previousVersion string
+	destDir         string
 }
 
 func (h *fakePostInstallHook) PackageType() PackageType { return h.pkgType }
-func (h *fakePostInstallHook) AfterInstall(_ context.Context, pkg *Package, version, destDir string) error {
-	h.calls = append(h.calls, fakePostInstallCall{pkg: pkg, version: version, destDir: destDir})
+func (h *fakePostInstallHook) AfterInstall(_ context.Context, pkg *Package, version, previousVersion, destDir string) error {
+	h.calls = append(h.calls, fakePostInstallCall{pkg: pkg, version: version, previousVersion: previousVersion, destDir: destDir})
 	return h.err
 }
 
@@ -303,7 +304,7 @@ func TestPostInstallHook_TypeFilter(t *testing.T) {
 		if hook.PackageType() != pkg.Type {
 			continue
 		}
-		if err := hook.AfterInstall(context.Background(), pkg, "v0.1.5", "/tmp/destdir"); err != nil {
+		if err := hook.AfterInstall(context.Background(), pkg, "v0.1.5", "v0.1.4", "/tmp/destdir"); err != nil {
 			t.Fatalf("hook returned error: %v", err)
 		}
 	}
@@ -331,7 +332,7 @@ func TestPostInstallHook_ErrorPropagates(t *testing.T) {
 		err:     fmt.Errorf("simulated hook failure"),
 	}
 	pkg := &Package{Type: PackageTypeFoundryModule}
-	err := failing.AfterInstall(context.Background(), pkg, "v0.1.5", "/tmp/destdir")
+	err := failing.AfterInstall(context.Background(), pkg, "v0.1.5", "v0.1.4", "/tmp/destdir")
 	if err == nil {
 		t.Fatal("expected hook to return error")
 	}

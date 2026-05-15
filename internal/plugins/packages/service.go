@@ -136,11 +136,21 @@ type PostInstallHook interface {
 	PackageType() PackageType
 
 	// AfterInstall runs after the install has otherwise completed.
-	// destDir is the extracted package's on-disk directory; version
-	// is the version string that was just installed. Returning an
-	// error fails the install and the caller is responsible for any
-	// rollback they want (packages.InstallVersion removes destDir).
-	AfterInstall(ctx context.Context, pkg *Package, version, destDir string) error
+	//
+	// Parameters:
+	//   - pkg: the package row with the NEW version already applied
+	//     (Package.InstalledVersion == version).
+	//   - version: the version string that was just installed.
+	//   - previousVersion: the version that was installed before this
+	//     call. Empty string on a first-ever install (no prior state).
+	//     Added in C-FMC-6 so foundry_vtt's auto-pin hook knows which
+	//     version to preserve for auto-tracking campaigns.
+	//   - destDir: the extracted package's on-disk directory.
+	//
+	// Returning an error fails the install and the caller is
+	// responsible for any rollback they want (packages.InstallVersion
+	// removes destDir).
+	AfterInstall(ctx context.Context, pkg *Package, version, previousVersion, destDir string) error
 }
 
 // packageService implements PackageService.
@@ -498,6 +508,16 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 		}
 	}
 
+	// Capture the previous installed version BEFORE updating the
+	// package row, so the post-install hook receives both the new
+	// and the previous version. foundry_vtt's auto-pin hook
+	// (C-FMC-6) needs this to know which version campaigns were
+	// effectively running so it can pin them there before the new
+	// version takes over. Empty string on first-ever install — the
+	// hook treats that as "no auto-pin needed" since there's no
+	// prior state to preserve.
+	previousVersion := pkg.InstalledVersion
+
 	now := time.Now()
 	pkg.InstalledVersion = version
 	pkg.InstallPath = destDir
@@ -516,7 +536,7 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 		if hook.PackageType() != pkg.Type {
 			continue
 		}
-		if err := hook.AfterInstall(ctx, pkg, version, destDir); err != nil {
+		if err := hook.AfterInstall(ctx, pkg, version, previousVersion, destDir); err != nil {
 			_ = os.RemoveAll(destDir)
 			return fmt.Errorf("post-install hook for %q: %w", pkg.Type, err)
 		}

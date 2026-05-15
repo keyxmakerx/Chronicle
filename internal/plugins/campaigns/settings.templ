@@ -725,16 +725,29 @@ templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
 									</div>
 								</div>
 								// Foundry module pin + dynamic install URL.
-								// Server-rendered fragment from the foundry_modules
-								// plugin so the campaigns plugin doesn't have to
-								// import it (foundry_modules already imports
-								// campaigns, so this direction would cycle).
-								// Lazy-loaded on disclosure expansion via
-								// hx-trigger="intersect once".
+								// Server-rendered fragment from the foundry_vtt
+								// sub-plugin so the campaigns plugin doesn't have
+								// to import it (foundry_vtt imports campaigns; the
+								// reverse would cycle). Lazy-loaded on disclosure
+								// expansion via hx-trigger="intersect once".
+								//
+								// C-FMC-6: corrected the URL from the deleted
+								// foundry_modules path (/foundry/settings-tab) to
+								// foundry_vtt's path (/foundry-vtt/settings-tab).
+								// C-FMC-5c deleted the old plugin and its routes
+								// but left this hx-get pointing at the dead URL,
+								// so owners saw a 404 / stalled loader where the
+								// install URL used to be. The fragment itself
+								// self-renders an empty state when no foundry-
+								// module package is registered — no gating needed
+								// in this campaigns templ. Future readers: if you
+								// add a new VTT integration, mirror this pattern
+								// (separate sub-plugin + this templ embeds its
+								// fragment).
 								if cc.MemberRole >= RoleOwner {
 									<div
 										id="foundry-module-pin-section"
-										hx-get={ fmt.Sprintf("/campaigns/%s/foundry/settings-tab", cc.Campaign.ID) }
+										hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/settings-tab", cc.Campaign.ID) }
 										hx-trigger="intersect once"
 										hx-swap="innerHTML"
 									>

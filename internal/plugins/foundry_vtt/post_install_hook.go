@@ -53,7 +53,8 @@ func (h *PostInstallHook) PackageType() packages.PackageType {
 // fail-loud contract). The operator sees the failure immediately
 // instead of debugging "why is Foundry still showing v0.1.0 after
 // I installed v0.2.0" hours later.
-func (h *PostInstallHook) AfterInstall(ctx context.Context, pkg *packages.Package, version, destDir string) error {
+func (h *PostInstallHook) AfterInstall(ctx context.Context, pkg *packages.Package, version, previousVersion, destDir string) error {
+	_ = previousVersion // The on-disk rewrite hook doesn't need the previous version; AutoPinHook (C-FMC-6) consumes it.
 	// 1. Load the descriptor. A missing descriptor is the normal
 	//    fallback path; a present-but-invalid descriptor is an
 	//    upstream packaging bug we fail loudly.
