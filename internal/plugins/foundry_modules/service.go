@@ -177,6 +177,14 @@ const (
 	// is now invalid; the UI surfaces this so all players know to
 	// reinstall.
 	EventFoundryModuleTokenRotated = "foundry.module_token_rotated"
+
+	// EventFoundryModuleGitHubPoll — one row per poll cycle (whether
+	// triggered by the background goroutine or the admin "Fetch from
+	// GitHub now" button), summarising how many new versions were
+	// ingested and any errors. Lets operators see at a glance whether
+	// the poller is alive and healthy from the security-events
+	// dashboard.
+	EventFoundryModuleGitHubPoll = "foundry.module_github_poll_completed"
 )
 
 // --- admin: upload ---
@@ -240,6 +248,7 @@ func (s *service) UploadVersion(ctx context.Context, in UploadVersionInput) (*Mo
 
 	sum := sha256.Sum256(buf)
 
+	uploader := in.UploaderID
 	v := &ModuleVersion{
 		ID:               generateID(),
 		Version:          parsed.Version,
@@ -249,8 +258,12 @@ func (s *service) UploadVersion(ctx context.Context, in UploadVersionInput) (*Mo
 		ManifestJSON:     manifestBytes,
 		Status:           StatusAvailable,
 		ReleaseNotes:     firstNonEmpty(in.ReleaseNotes, parsed.Description),
-		UploadedByUserID: in.UploaderID,
+		UploadedByUserID: &uploader,
 		UploadedAt:       time.Now().UTC(),
+		// Manual uploads are explicitly tagged so the catalog UI can
+		// render "Manual upload by …" rather than "GitHub release …"
+		// next to the version. The DB default covers older rows.
+		Source: SourceManualUpload,
 	}
 	if parsed.Compatibility != nil {
 		v.CompatibilityMinimum = parsed.Compatibility.Minimum
@@ -302,11 +315,21 @@ func (s *service) SetVersionStatus(ctx context.Context, version string, status M
 	return nil
 }
 
+// ErrNoVersionAvailable is the sentinel returned by LatestAvailable
+// (and by GetVersionForCampaign indirectly) when the catalog is
+// completely empty — no available, no deprecated. Distinct from a
+// generic 404 so the public manifest endpoint can render the
+// informative 503 response the Foundry-side "Check Chronicle for
+// updates" button knows how to surface.
+var ErrNoVersionAvailable = errors.New("no foundry module version available")
+
 // LatestAvailable returns the newest non-deprecated version. When no
 // version is marked available (admin deprecated everything), falls
 // back to the newest deprecated as a degraded mode — better than
 // returning 404 to Foundry, which would freeze every campaign mid-
-// session. Caller decides whether to flag this state in the response.
+// session. When the catalog is truly empty, returns
+// ErrNoVersionAvailable so the manifest endpoint can return a 503
+// with operator-actionable copy instead of an opaque 404.
 func (s *service) LatestAvailable(ctx context.Context) (*ModuleVersion, error) {
 	v, err := s.repo.LatestAvailable(ctx)
 	if err != nil {
@@ -321,7 +344,7 @@ func (s *service) LatestAvailable(ctx context.Context) (*ModuleVersion, error) {
 		return nil, apperror.NewInternal(err)
 	}
 	if len(all) == 0 {
-		return nil, apperror.NewNotFound("no module versions available")
+		return nil, ErrNoVersionAvailable
 	}
 	return all[0], nil
 }
