@@ -1,0 +1,56 @@
+// foundry_vtt — autopin_banner.templ renders the admin notification
+// surface added in C-FMC-8 (deferred from C-FMC-6).
+//
+// HTMX-served at GET /admin/foundry-vtt/autopin-banner. Embedded into
+// /admin/packages via a small hx-get block in the packages plugin's
+// packages.templ. Returns either the banner card or empty content
+// based on whether an unread auto-pin summary exists.
+//
+// Inline-IIFE pattern (C-FMC-8): the Dismiss button uses
+// dismissAutoPinBannerOnClick from onclick_handlers.go.
+// `templ script` helpers are FORBIDDEN in HTMX-loaded fragments per
+// the C-FMC-8 architectural rule (see onclick_handlers.go header).
+
+package foundry_vtt
+
+import "fmt"
+
+// AutoPinBanner renders the unread-summary card. Caller (the admin
+// banner handler) only invokes this when summary is non-nil; pass
+// the resolved summary directly. Empty render path is handled at
+// the handler layer (renders no content when GetUnreadAutoPinSummary
+// returns nil).
+templ AutoPinBanner(summary AutoPinSummary) {
+	<div id="fvtt-autopin-banner" class="card p-4 rounded-md border border-blue-500/30 bg-blue-500/5 mb-4 flex items-start gap-3">
+		<i class="fa-solid fa-circle-info text-blue-600 dark:text-blue-400 mt-0.5"></i>
+		<div class="flex-1 min-w-0">
+			<p class="text-sm font-medium text-fg">
+				{ autoPinBannerHeadline(summary) }
+			</p>
+			<p class="text-xs text-fg-secondary mt-1">
+				Affected campaigns were pinned to <span class="font-mono">{ summary.PreviousVersion }</span> to preserve their state. To bump them to <span class="font-mono">{ summary.NewVersion }</span>, find the foundry-module package below, expand version <span class="font-mono">{ summary.PreviousVersion }</span>, and click <em>Campaigns</em> to see the per-campaign action buttons.
+			</p>
+		</div>
+		<button
+			type="button"
+			onclick={ dismissAutoPinBannerOnClick() }
+			class="text-xs text-fg-muted hover:text-fg px-2 py-1 rounded hover:bg-surface-alt whitespace-nowrap"
+			title="Dismiss this notification"
+		>
+			<i class="fa-solid fa-xmark mr-1"></i> Dismiss
+		</button>
+	</div>
+}
+
+// autoPinBannerHeadline phrases the summary as a sentence keyed off
+// the affected count. Plural-aware; doesn't surface "0 campaigns"
+// (the handler skips the banner when affected==0 — see comment in
+// the handler).
+func autoPinBannerHeadline(summary AutoPinSummary) string {
+	if summary.Affected == 1 {
+		return fmt.Sprintf("You installed Foundry module %s. 1 campaign was auto-pinned to %s to preserve its state.",
+			summary.NewVersion, summary.PreviousVersion)
+	}
+	return fmt.Sprintf("You installed Foundry module %s. %d campaigns were auto-pinned to %s to preserve their state.",
+		summary.NewVersion, summary.Affected, summary.PreviousVersion)
+}

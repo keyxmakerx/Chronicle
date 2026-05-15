@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 )
@@ -224,6 +225,19 @@ type Service interface {
 	// doesn't short-circuit on previous==new — the migration's
 	// whole point is to make an effective state explicit.
 	MigrateAutoPinToVersion(ctx context.Context, version string) (affected int, err error)
+
+	// --- admin auto-pin banner (C-FMC-8; deferred from C-FMC-6) ---
+
+	// GetUnreadAutoPinSummary returns the latest auto-pin install
+	// summary if the admin hasn't dismissed it yet, or nil if there's
+	// nothing to surface. Drives the banner on /admin/packages.
+	GetUnreadAutoPinSummary(ctx context.Context) (*AutoPinSummary, error)
+
+	// DismissAutoPinBanner marks the banner read by stamping the
+	// current time into the dismissal settings key. Subsequent calls
+	// to GetUnreadAutoPinSummary return nil until a new install
+	// produces a fresh summary.
+	DismissAutoPinBanner(ctx context.Context) error
 }
 
 // service is the default Service implementation.
@@ -233,6 +247,13 @@ type service struct {
 	settings CampaignSettingsAdapter
 	pkgs     PackageReader
 	baseURL  string // public Chronicle origin, trimmed of trailing slash
+
+	// kv is the site-settings KV store (settings.SettingsRepository
+	// in production). Used by the auto-pin install hook to persist
+	// the summary + by the banner handler to read it. Optional —
+	// nil disables the banner path softly (tests without settings
+	// don't need it).
+	kv SettingsKVStore
 
 	// Admin-action dependencies. Nil-safe — the per-campaign owner
 	// flow doesn't need them, only the admin flow. If a deployment
@@ -285,6 +306,7 @@ func NewService(
 	events SecurityEventLogger,
 	mail MailNotifier,
 	owners CampaignOwnerLookup,
+	kv SettingsKVStore,
 	baseURL string,
 ) Service {
 	return &service{
@@ -295,6 +317,7 @@ func NewService(
 		events:   events,
 		mail:     mail,
 		owners:   owners,
+		kv:       kv,
 		baseURL:  strings.TrimRight(baseURL, "/"),
 	}
 }
@@ -944,8 +967,8 @@ func (s *service) AutoPinOnInstall(ctx context.Context, previousVersion, newVers
 	}
 
 	// Summary event: one row per install (regardless of affected
-	// count). The admin /admin/packages banner reads the latest of
-	// these to render "N campaigns auto-pinned" until acknowledged.
+	// count). The admin audit log shows every summary; the banner
+	// (below) shows only the latest unread one.
 	if s.events != nil {
 		_ = s.events.LogEvent(ctx, EventModuleAutoPinInstallSummary,
 			"", actorID, actorIP, actorUA,
@@ -955,6 +978,17 @@ func (s *service) AutoPinOnInstall(ctx context.Context, previousVersion, newVers
 				"affected":         affected,
 			})
 	}
+
+	// C-FMC-8: persist the summary to the settings KV so the admin
+	// /admin/packages banner can read + display it. Soft-fail: the
+	// summary is supplementary; missing it doesn't break the install.
+	_ = s.storeAutoPinSummary(ctx, AutoPinSummary{
+		PreviousVersion: previousVersion,
+		NewVersion:      newVersion,
+		Affected:        affected,
+		Timestamp:       time.Now().Unix(),
+	})
+
 	return affected, nil
 }
 

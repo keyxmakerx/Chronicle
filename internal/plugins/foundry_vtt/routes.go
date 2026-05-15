@@ -55,6 +55,15 @@ func RegisterAdminRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFu
 	} else {
 		g.POST("/version/:version/force-pin-older", h.AdminForcePinOlderHandler)
 	}
+
+	// C-FMC-8: auto-pin banner endpoints. The banner surfaces the
+	// most recent install summary so the admin can see "N campaigns
+	// were auto-pinned to v0.X" inline at the top of /admin/packages
+	// (vs. having to dig into the security_events panel). Dismiss
+	// stamps a timestamp so a banner doesn't keep firing across page
+	// reloads after the admin has acknowledged it.
+	g.GET("/autopin-banner", h.AdminAutoPinBannerHandler)
+	g.POST("/autopin-banner/dismiss", h.AdminAutoPinBannerDismissHandler)
 }
 
 // RegisterPublicRoutes mounts the unauthenticated manifest and

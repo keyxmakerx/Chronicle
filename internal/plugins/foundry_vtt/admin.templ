@@ -3,27 +3,42 @@
 // /admin/packages page calls these fragments via hx-get on each
 // foundry-module typed package's version row.
 //
-// HTMX-swap-safe pattern requirements (non-negotiable per the C-FMC-5c
-// dispatch — these patterns matter because PRs #302/#303 hit bugs
-// from violating them):
+// HTMX-swap-safe pattern requirements (load-bearing — PRs #302, #303,
+// C-FMC-5c, and C-FMC-6's owner_tab.templ all hit bugs from violating
+// these):
 //
-//  1. Inline `onclick="..."` handlers, NOT delegated event listeners.
-//     A <script> tag inside an HTMX-swapped fragment may not execute
-//     before the user clicks. Inline onclick works the moment HTML
-//     lands in the DOM.
-//  2. templ `script` helpers for any code that needs encoding of
-//     parameters (CSRF tokens, IDs). Generated as static JS in the
-//     templ output, executes synchronously, no race window.
-//  3. No `x-data="someExternalFunction()"` — external function
-//     references can be undefined when Alpine processes the directive
-//     after HTMX swap. Use inline literal objects: `x-data="{ open: false }"`.
-//  4. For modal-like reveals, use `<details>` (browser-native, no JS
-//     race window) OR an inline `x-data` with `style="display:none"`
-//     as defense-in-depth.
+//  1. Inline `onclick="(function(){...})()"` IIFEs, NOT delegated event
+//     listeners and NOT `templ script` helpers. The latter emit a
+//     <script>function __templ_X(){...}</script> tag alongside the
+//     button + a button onclick that references __templ_X(...) by
+//     name. When the fragment is loaded via hx-get and innerHTML-
+//     swapped, browsers do NOT reliably execute the <script> tag
+//     synchronously with the surrounding HTML. The button can be
+//     clicked before the function is defined, raising:
 //
-// The /admin/foundry-vtt/version/:version/campaigns endpoint serves
-// this campaignUsageSection fragment. Per-version expandable cards
-// embed via the AdminVersionCampaignsBlock entry point.
+//       Uncaught ReferenceError: __templ_X is not defined
+//
+//     This was the production bug pattern in C-FMC-5c (admin buttons)
+//     and C-FMC-5b's owner_tab.templ (Save Pin / Rotate Token). Fixed
+//     in C-FMC-8 by converting every templ `script` helper in HTMX-
+//     loaded fragments to inline IIFE via the onclick_handlers.go
+//     Go-side string builders.
+//
+//  2. Inline literal Alpine `x-data="{ open: false }"`. NEVER
+//     `x-data="someExternalFunction()"` — external references can
+//     be undefined when Alpine processes the directive after HTMX
+//     swap.
+//
+//  3. `<details>` + `<summary>` for collapsible reveals when JS
+//     isn't needed — browser-native, no race window.
+//
+//  4. Defense-in-depth `style="display:none"` alongside x-show=open
+//     for modal-like reveals.
+//
+// Prior versions of this file claimed templ scripts were "HTMX-swap-
+// safe" — that claim was a load-bearing wrong statement. Templ
+// scripts are NOT safe inside HTMX-loaded fragments. Strike from
+// memory; don't reintroduce.
 
 package foundry_vtt
 
@@ -43,9 +58,9 @@ templ AdminVersionCampaignsBlock(version string, usage []CampaignUsage, csrfToke
 
 // campaignUsageList renders one row per pinned campaign. Owner name +
 // last-active relative time + per-campaign Force-update + Notify
-// buttons. The buttons' onclick handlers are templ-generated `script`
-// helpers (HTMX-swap-safe: inline string interpolation, no external
-// function references).
+// buttons. The buttons' onclick handlers are inline IIFEs built in
+// onclick_handlers.go (HTMX-swap-safe: the JS body lives entirely in
+// the attribute, no external function reference).
 templ campaignUsageList(version string, usage []CampaignUsage, csrfToken string) {
 	<div>
 		<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">
@@ -71,7 +86,7 @@ templ campaignUsageList(version string, usage []CampaignUsage, csrfToken string)
 						<div class="flex items-center gap-1.5">
 							<button
 								type="button"
-								onclick={ notifyCampaignScript(c.CampaignID, version) }
+								onclick={ notifyCampaignOnClick(c.CampaignID, version) }
 								class="px-2 py-1 text-xs rounded border border-edge hover:bg-surface-alt"
 								title={ fmt.Sprintf("Notify owner that v%s is available", version) }
 							>
@@ -79,7 +94,7 @@ templ campaignUsageList(version string, usage []CampaignUsage, csrfToken string)
 							</button>
 							<button
 								type="button"
-								onclick={ forcePinCampaignScript(c.CampaignID, version) }
+								onclick={ forcePinCampaignOnClick(c.CampaignID, version) }
 								class="px-2 py-1 text-xs rounded border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
 								title={ fmt.Sprintf("Force-update this campaign to v%s", version) }
 							>
@@ -97,12 +112,12 @@ templ campaignUsageList(version string, usage []CampaignUsage, csrfToken string)
 // versionActionRow renders the version-level batch actions:
 // "Notify older-version campaigns" + "Force-update older-version
 // campaigns". Both fan out to every campaign whose pin is strictly
-// older than this version per semver.
+// older than this version per semver. Same inline-IIFE pattern.
 templ versionActionRow(version string, usage []CampaignUsage, csrfToken string) {
 	<div class="flex flex-wrap gap-2 pt-3 mt-2 border-t border-edge">
 		<button
 			type="button"
-			onclick={ notifyOlderScript(version) }
+			onclick={ notifyOlderOnClick(version) }
 			class="px-3 py-1.5 text-xs rounded-md border border-edge hover:bg-surface-alt"
 			title="Notify every campaign with a pin older than this version"
 		>
@@ -110,7 +125,7 @@ templ versionActionRow(version string, usage []CampaignUsage, csrfToken string) 
 		</button>
 		<button
 			type="button"
-			onclick={ forcePinOlderScript(version) }
+			onclick={ forcePinOlderOnClick(version) }
 			class="px-3 py-1.5 text-xs rounded-md border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
 			title="Force-update every campaign with a pin older than this version"
 		>
@@ -121,72 +136,10 @@ templ versionActionRow(version string, usage []CampaignUsage, csrfToken string) 
 	</div>
 }
 
-// --- inline scripts (templ-generated; HTMX-swap-safe) ---
-//
-// All four scripts use the same pattern: confirm → apiFetch →
-// Chronicle.notify → optional reload. No external function
-// references; nothing depends on script-tag execution order with
-// HTMX swap.
-
-// notifyCampaignScript handles the per-campaign "Notify" click.
-// Posts to the notify endpoint; doesn't reload (no DOM change to
-// reflect; the notification banner fires async on the campaign
-// dashboard).
-script notifyCampaignScript(campaignID, version string) {
-	if (!window.confirm('Notify campaign owner that ' + version + ' is available?')) return;
-	Chronicle.apiFetch('/admin/foundry-vtt/version/' + encodeURIComponent(version) + '/notify/' + encodeURIComponent(campaignID), { method: 'POST' })
-		.then(function () {
-			window.Chronicle.notify('Notified campaign ' + campaignID, 'success');
-		})
-		.catch(function (err) {
-			window.Chronicle.notify('Notify failed: ' + ((err && err.message) || ''), 'error');
-		});
-}
-
-// forcePinCampaignScript handles the per-campaign "Force-update"
-// click. Confirm dialog is firmer (destructive — overrides the
-// owner's pin); reloads the page on success so the updated card
-// list reflects the new pin state.
-script forcePinCampaignScript(campaignID, version string) {
-	if (!window.confirm('Force-update campaign ' + campaignID + ' to ' + version + '? This overrides the owner\'s current pin. The owner will be notified on next login.')) return;
-	Chronicle.apiFetch('/admin/foundry-vtt/version/' + encodeURIComponent(version) + '/force-pin/' + encodeURIComponent(campaignID), { method: 'POST' })
-		.then(function () {
-			window.Chronicle.notify('Force-updated campaign to ' + version, 'success');
-			setTimeout(function () { window.location.reload(); }, 600);
-		})
-		.catch(function (err) {
-			window.Chronicle.notify('Force-update failed: ' + ((err && err.message) || ''), 'error');
-		});
-}
-
-// notifyOlderScript handles the mass-notify version-level action.
-// Server returns {notified: N}; surface N via Chronicle.notify so
-// the operator sees how many fan-outs fired.
-script notifyOlderScript(version string) {
-	if (!window.confirm('Notify EVERY campaign with a pin older than ' + version + '?')) return;
-	Chronicle.apiFetch('/admin/foundry-vtt/version/' + encodeURIComponent(version) + '/notify-older', { method: 'POST' })
-		.then(function (resp) {
-			var n = (resp && typeof resp.notified === 'number') ? resp.notified : 0;
-			window.Chronicle.notify('Notified ' + n + ' campaign(s).', 'success');
-		})
-		.catch(function (err) {
-			window.Chronicle.notify('Mass-notify failed: ' + ((err && err.message) || ''), 'error');
-		});
-}
-
-// forcePinOlderScript handles the mass force-update action.
-// Confirm is sterner (irreversible from the admin side; owners can
-// manually re-pin). Reloads on success.
-script forcePinOlderScript(version string) {
-	if (!window.confirm('Force-update EVERY campaign with a pin older than ' + version + '? This overrides every affected owner\'s pin. Confirm only if rolling out a critical security update.')) return;
-	Chronicle.apiFetch('/admin/foundry-vtt/version/' + encodeURIComponent(version) + '/force-pin-older', { method: 'POST' })
-		.then(function (resp) {
-			var n = (resp && typeof resp.pinned === 'number') ? resp.pinned : 0;
-			window.Chronicle.notify('Force-updated ' + n + ' campaign(s) to ' + version, 'success');
-			setTimeout(function () { window.location.reload(); }, 600);
-		})
-		.catch(function (err) {
-			window.Chronicle.notify('Mass force-update failed: ' + ((err && err.message) || ''), 'error');
-		});
-}
+// C-FMC-8: all click handlers in this file used to be templ `script`
+// helpers (which emit <script> tags + named function references in
+// the onclick attribute). Those don't execute reliably in HTMX-
+// swapped fragments — see the file header comment + onclick_handlers.go.
+// The replacements live in onclick_handlers.go as Go-side string
+// builders that emit inline IIFE bodies for direct attribute injection.
 
