@@ -115,6 +115,19 @@ type PackageService interface {
 	// (installed + approved) package matching the given type and slug.
 	// Returns empty string if no matching package is installed.
 	InstalledPackagePath(pkgType PackageType, slug string) string
+
+	// InstallDirForVersion returns the on-disk path for a SPECIFIC
+	// historical version of a package — regardless of which version
+	// is marked "installed" in the DB. Used by sub-plugins (foundry_vtt
+	// in C-FMC-5b) to serve a campaign-pinned version that may not be
+	// the package's currently-active install.
+	//
+	// The path is computed deterministically from (type, slug, version);
+	// no filesystem check is performed. Callers needing existence
+	// confirmation should stat the returned path themselves.
+	//
+	// Added in C-FMC-5b. Empty string return if pkgType is unknown.
+	InstallDirForVersion(pkgType PackageType, slug, version string) string
 }
 
 // PostInstallHook is the extension point sub-plugins use to attach
@@ -239,6 +252,19 @@ func (s *packageService) installDir(pkgType PackageType, slug, version string) s
 	default:
 		return filepath.Join(s.packagesDir(), "systems", slug, version)
 	}
+}
+
+// InstallDirForVersion is the public counterpart of installDir.
+// foundry_vtt (C-FMC-5b) calls this to resolve a campaign-pinned
+// historical version to its on-disk extracted directory so it can
+// read that version's module.json without going through the singular
+// Package.InstallPath field (which only tracks the currently-active
+// install, not every version still on disk).
+func (s *packageService) InstallDirForVersion(pkgType PackageType, slug, version string) string {
+	if version == "" {
+		return ""
+	}
+	return s.installDir(pkgType, slug, version)
 }
 
 // --- Package CRUD ---
