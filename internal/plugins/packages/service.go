@@ -117,6 +117,33 @@ type PackageService interface {
 	InstalledPackagePath(pkgType PackageType, slug string) string
 }
 
+// PostInstallHook is the extension point sub-plugins use to attach
+// package-type-specific logic to the generic install pipeline. The
+// foundry_vtt sub-plugin (C-FMC-5b) is the first consumer: it
+// registers a hook for PackageTypeFoundryModule that rewrites the
+// version field in the on-disk module.json so served manifests
+// reflect the installed version (not the upstream GitHub tag).
+//
+// The hook list is iterated AFTER the zip is extracted, validated,
+// and the DB row updated. Hook errors fail the install loudly —
+// no silent warn-and-continue. Operators see immediate failures
+// instead of stale-on-disk state lasting hours.
+//
+// Defined here in C-FMC-5a; first caller wires in C-FMC-5b.
+type PostInstallHook interface {
+	// PackageType returns the type this hook fires for. The packages
+	// service iterates registered hooks and calls only those matching
+	// the installed package's type. No matching type → no-op.
+	PackageType() PackageType
+
+	// AfterInstall runs after the install has otherwise completed.
+	// destDir is the extracted package's on-disk directory; version
+	// is the version string that was just installed. Returning an
+	// error fails the install and the caller is responsible for any
+	// rollback they want (packages.InstallVersion removes destDir).
+	AfterInstall(ctx context.Context, pkg *Package, version, destDir string) error
+}
+
 // packageService implements PackageService.
 type packageService struct {
 	repo           PackageRepository
@@ -131,6 +158,12 @@ type packageService struct {
 	baseURL string
 	onSystemInstall func() // Called after a system package is installed.
 	onServeInvalidate func() // Called after install/remove to invalidate serve cache.
+
+	// postInstallHooks are the type-specific extension hooks. Slice
+	// (not map) so registration order is preserved and multiple hooks
+	// per type are allowed. Sub-plugins call RegisterPostInstallHook
+	// at boot to attach themselves.
+	postInstallHooks []PostInstallHook
 }
 
 // NewPackageService creates a new package service with the given dependencies.
@@ -159,6 +192,20 @@ func SetOnSystemInstall(svc PackageService, fn func()) {
 func SetOnServeInvalidate(svc PackageService, fn func()) {
 	if s, ok := svc.(*packageService); ok {
 		s.onServeInvalidate = fn
+	}
+}
+
+// RegisterPostInstallHook attaches a PostInstallHook to the install
+// pipeline. Sub-plugins call this at boot; the hook fires after every
+// install whose package type matches. Multiple hooks per type are
+// allowed; they fire in registration order.
+//
+// Defined in C-FMC-5a; first caller (foundry_vtt) wires in C-FMC-5b.
+// Until then the slice stays empty and the iteration in InstallVersion
+// is a no-op.
+func RegisterPostInstallHook(svc PackageService, h PostInstallHook) {
+	if s, ok := svc.(*packageService); ok {
+		s.postInstallHooks = append(s.postInstallHooks, h)
 	}
 }
 
@@ -422,37 +469,49 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 	// For Foundry module packages, update the version in module.json to match
 	// the installed version tag. The GitHub release may contain a stale version
 	// string in the manifest.
+	//
+	// C-FMC-5a (this PR): promote rewrite failures from slog.Warn to a fatal
+	// return. The previous warn-and-continue behavior was the root cause of
+	// the version-stale bug — install would succeed, the DB would update to
+	// the new version, but the on-disk module.json kept the upstream GitHub
+	// release's version string. Foundry then polled the served manifest and
+	// saw the stale version forever. Failing loudly surfaces the issue
+	// immediately. Cleanup removes destDir so a retry installs cleanly.
+	//
+	// In C-FMC-5b this block moves into the foundry_vtt sub-plugin's
+	// PostInstallHook; the Foundry-type branch leaves this file.
 	if pkg.Type == PackageTypeFoundryModule {
 		if err := rewriteModuleJSONVersion(destDir, version); err != nil {
-			slog.Warn("failed to update module.json version",
-				slog.String("version", version),
-				slog.Any("error", err),
-			)
+			_ = os.RemoveAll(destDir)
+			return fmt.Errorf("rewriting module.json version: %w", err)
 		}
 		// Bake-on-import zip repack: the cached zip we serve to Foundry must
 		// have manifest/download in its in-zip module.json pointing at this
 		// chronicle host, not the upstream GitHub repo. Without this rewrite,
 		// Foundry installs the module fine, but the on-disk module.json it
 		// polls for updates still points at GitHub and bypasses chronicle on
-		// the next "Check for Updates". Failure is non-fatal; the install
-		// still succeeds and the operator can re-run via the admin "Repack"
-		// button after fixing the underlying issue.
+		// the next "Check for Updates".
+		//
+		// C-FMC-5a: same warn → fatal promotion as the version rewrite above.
+		// repackFoundryZip mutates the cached zip in place; if it fails we
+		// have a half-rewritten zip on disk that could serve stale URLs.
+		// Cleanup + retry is the safe path.
 		if err := repackFoundryZip(zipPath, s.baseURL); err != nil {
-			slog.Warn("failed to repack foundry-module zip",
-				slog.String("path", zipPath),
-				slog.Any("error", err),
-			)
+			_ = os.RemoveAll(destDir)
+			return fmt.Errorf("repacking foundry-module zip: %w", err)
 		}
 	}
 
 	// For system packages, rewrite manifest.json version to match the release
 	// tag. The manifest embedded in the GitHub release may have a stale version.
+	//
+	// C-FMC-5a: same promotion as the foundry branch above. A system whose
+	// served manifest.json has a stale version misleads downstream tooling
+	// the same way Foundry was being misled; fail loudly.
 	if pkg.Type == PackageTypeSystem {
 		if err := rewriteSystemManifestVersion(destDir, version); err != nil {
-			slog.Warn("failed to update system manifest.json version",
-				slog.String("version", version),
-				slog.Any("error", err),
-			)
+			_ = os.RemoveAll(destDir)
+			return fmt.Errorf("rewriting system manifest.json version: %w", err)
 		}
 	}
 
@@ -462,6 +521,22 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 	pkg.LastInstalledAt = &now
 	if err := s.repo.UpdatePackage(ctx, pkg); err != nil {
 		return fmt.Errorf("updating package record: %w", err)
+	}
+
+	// Run any registered PostInstallHook whose PackageType matches.
+	// Sub-plugins (e.g. foundry_vtt in C-FMC-5b) hook here to attach
+	// type-specific behavior. The slice is empty in C-FMC-5a so this
+	// loop is a no-op until a sub-plugin registers. Errors fail the
+	// install and clean up destDir so retries start fresh — matches
+	// the warn-to-fatal promotion above. Order is registration order.
+	for _, hook := range s.postInstallHooks {
+		if hook.PackageType() != pkg.Type {
+			continue
+		}
+		if err := hook.AfterInstall(ctx, pkg, version, destDir); err != nil {
+			_ = os.RemoveAll(destDir)
+			return fmt.Errorf("post-install hook for %q: %w", pkg.Type, err)
+		}
 	}
 
 	slog.Info("package version installed",
