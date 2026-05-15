@@ -129,25 +129,37 @@ func (h *Handler) PublicManifestAPI(c echo.Context) error {
 	return c.JSONBlob(http.StatusOK, manifest)
 }
 
-// PublicDownloadAPI streams the zip for the campaign's currently-
-// resolved version. The per-campaign token is the only access
-// control; same shape as manifest endpoint.
+// PublicDownloadAPI streams the per-campaign rewritten zip. The
+// per-campaign token is the only access control; same shape as
+// the manifest endpoint.
 //
 // GET /api/v1/campaigns/:cid/foundry-vtt/module.zip?token=...
 //
-// NOTE on download semantics: foundry_vtt does NOT bake URLs into
-// a per-version cached zip (foundry_modules' RepackFoundryZip
-// approach). Instead, the manifest endpoint rewrites URLs at serve-
-// time, and the download endpoint streams the version's on-disk
-// module dir as a fresh zip. This is the C-FMC-5b architectural
-// shift the operator called out: per-campaign URLs require per-
-// request URL rewriting; cached repacked zips are incompatible
-// with that.
+// C-FMC-7 architectural correction: this endpoint now does per-
+// campaign zip REWRITING at download time. Earlier (C-FMC-5b/5c)
+// the endpoint streamed the install dir as-is, on the assumption
+// that serve-time manifest rewriting at the manifest endpoint was
+// sufficient. That was wrong — Foundry's update checks AFTER
+// install read the extracted on-disk module.json (from the zip
+// Chronicle served), and that file carried the upstream GitHub
+// URLs. So update checks reverted to GitHub even though the
+// install URL was Chronicle's.
 //
-// For now this PR streams the packages plugin's installed-version
-// dir as-is (re-zipped on the fly). Profiling under load may
-// reveal we need a per-version cached zip with manifest stamped
-// in — defer that to a future PR.
+// The fix: each download walks the install dir, copies every file
+// byte-for-byte EXCEPT the module.json at the descriptor-declared
+// path, which gets replaced with the same rewritten bytes the
+// manifest endpoint serves. Foundry extracts a zip whose embedded
+// module.json points at Chronicle URLs; update checks stay on
+// Chronicle forever.
+//
+// Two different campaigns get different rewritten zips (different
+// per-campaign signed manifest URLs in their module.json) even
+// though both reference the same on-disk install dir. No caching —
+// signatures must be freshly computed per request since token
+// rotation invalidates earlier signatures.
+//
+// chronicle-package.json is excluded from the zip output (it's
+// Chronicle-side metadata, not part of the module Foundry installs).
 func (h *Handler) PublicDownloadAPI(c echo.Context) error {
 	cid := c.Param("cid")
 	token := c.QueryParam("token")
@@ -157,16 +169,14 @@ func (h *Handler) PublicDownloadAPI(c echo.Context) error {
 	if err := h.svc.VerifyManifestToken(c.Request().Context(), cid, token); err != nil {
 		return h.respondError(c, err)
 	}
-	_, installDir, err := h.svc.BuildManifestForCampaign(c.Request().Context(), cid)
+	params, err := h.svc.BuildDownloadParams(c.Request().Context(), cid)
 	if err != nil {
 		return h.respondError(c, err)
 	}
-	// Stream the directory as a zip. zipDir handles the directory
-	// walk + zip encoding to the response writer.
 	c.Response().Header().Set("Content-Type", "application/zip")
 	c.Response().Header().Set("Content-Disposition", `attachment; filename="chronicle-foundry-module.zip"`)
 	c.Response().WriteHeader(http.StatusOK)
-	if err := zipDirToWriter(installDir, c.Response()); err != nil {
+	if err := zipDirToWriterWithRewrite(params.InstallDir, params.ModuleJSONPath, params.RewrittenManifest, c.Response()); err != nil {
 		// Headers already sent; can't return a JSON error. Log
 		// path via the framework's request logger.
 		return err
@@ -195,17 +205,37 @@ func (h *Handler) respondError(c echo.Context, err error) error {
 
 // --- zip helpers ---
 
-// zipDirToWriter walks installDir and writes a zip stream to w.
-// Files are stored at paths relative to installDir so the zip
-// extracts to the same structure Foundry expects.
+// zipDirToWriterWithRewrite walks installDir and writes a zip
+// stream to w. The file at moduleJSONPath (relative to installDir,
+// e.g. "module.json" or "dist/module.json") is REPLACED with
+// rewrittenManifest — the per-campaign Chronicle-URL-rewritten
+// bytes the service produced. Every other file is copied byte-for-
+// byte.
 //
-// Skips chronicle-package.json — the descriptor is Chronicle-side
-// metadata, not part of the module Foundry installs. Including it
-// would leak the descriptor contract into the client's filesystem
+// chronicle-package.json is excluded — the descriptor is Chronicle-
+// side metadata, not part of the module Foundry installs. Including
+// it would leak the descriptor contract into the client's filesystem
 // and confuse Foundry's manifest reader.
-func zipDirToWriter(installDir string, w io.Writer) error {
+//
+// C-FMC-7: this is the load-bearing piece of the URL-rewriting fix.
+// Foundry's "Check for Update" reads the on-disk module.json that
+// came from the installed zip; if THAT file's manifest field points
+// at GitHub, update checks bypass Chronicle forever. Replacing
+// module.json inside the streamed zip is the only place where we
+// can guarantee Foundry's extracted file carries Chronicle URLs.
+//
+// Path comparison uses filepath.Clean on both sides — descriptors
+// may declare the path as "module.json" or "./module.json" or
+// "dist/module.json"; filepath.Walk produces forward-slash relative
+// paths on Linux but the comparison normalizes either form.
+func zipDirToWriterWithRewrite(installDir, moduleJSONPath string, rewrittenManifest []byte, w io.Writer) error {
 	zw := zip.NewWriter(w)
 	defer func() { _ = zw.Close() }()
+
+	// Normalize the target path so descriptor variants (with or
+	// without "./" prefix) compare equal to filepath.Rel's output.
+	wantRel := filepath.Clean(moduleJSONPath)
+
 	return filepath.Walk(installDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -221,11 +251,21 @@ func zipDirToWriter(installDir string, w io.Writer) error {
 		if rel == descriptorFilename {
 			return nil
 		}
+		// Replace the manifest entry with the rewritten bytes.
+		if filepath.Clean(rel) == wantRel {
+			entry, err := zw.Create(rel)
+			if err != nil {
+				return err
+			}
+			_, err = entry.Write(rewrittenManifest)
+			return err
+		}
+		// Copy every other file byte-for-byte.
 		f, err := os.Open(path)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		entry, err := zw.Create(rel)
 		if err != nil {
 			return err
