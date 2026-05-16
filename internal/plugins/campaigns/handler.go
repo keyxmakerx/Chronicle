@@ -129,7 +129,11 @@ type FoundryPresenceLookup interface {
 
 // FoundryModuleBanner is the renderable banner state for the campaign
 // show page. Empty / zero-valued instance = no banner. Populated by
-// the foundry_modules adapter wired in routes.go.
+// the foundry_vtt adapter wired in routes.go (foundryVTTBannerAdapter
+// — replaced the original foundryModuleBannerAdapter when
+// foundry_modules was deleted in C-FMC-5c; the type name on this
+// side stays `FoundryModuleBanner` because the templ field is
+// stable and the rename was out of scope).
 type FoundryModuleBanner struct {
 	// HasUpdate is true when a newer non-deprecated version exists
 	// than what this campaign currently resolves to. False (the
@@ -143,8 +147,9 @@ type FoundryModuleBanner struct {
 
 // FoundryModuleBannerLookup reports whether this campaign should see
 // the "newer Foundry module version available" dashboard banner.
-// Implemented by an adapter in routes.go over the foundry_modules
-// service so the campaigns plugin doesn't import foundry_modules.
+// Implemented by an adapter in routes.go over the foundry_vtt
+// service so the campaigns plugin doesn't import foundry_vtt
+// (which would cycle — foundry_vtt imports campaigns).
 type FoundryModuleBannerLookup interface {
 	GetFoundryModuleBanner(ctx context.Context, campaignID string) (FoundryModuleBanner, error)
 }
@@ -187,7 +192,7 @@ func (h *Handler) SetFoundryPresence(p FoundryPresenceLookup) {
 
 // SetFoundryModuleBanner wires the lookup used by the campaign show
 // page to render the "newer module version available" banner.
-// Set after the foundry_modules service is constructed in routes.go.
+// Set after the foundry_vtt service is constructed in routes.go.
 func (h *Handler) SetFoundryModuleBanner(b FoundryModuleBannerLookup) {
 	h.foundryBanner = b
 }
@@ -411,7 +416,7 @@ func (h *Handler) Show(c echo.Context) error {
 	// Foundry module update banner. Owner-only because non-owners
 	// can't act on it (the pin selector lives on the Owner settings
 	// tab). Soft-fail to zero-value (no banner) on lookup error so
-	// a flaky foundry_modules check doesn't break the dashboard.
+	// a flaky foundry_vtt check doesn't break the dashboard.
 	var fmBanner FoundryModuleBanner
 	if h.foundryBanner != nil && cc.MemberRole >= RoleOwner {
 		fmBanner, _ = h.foundryBanner.GetFoundryModuleBanner(c.Request().Context(), cc.Campaign.ID)

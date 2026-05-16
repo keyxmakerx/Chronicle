@@ -11,10 +11,12 @@ import (
 // All four endpoints are owner-only — the campaign owner controls
 // which version Foundry installs + can rotate the URL.
 //
-// Routes are namespaced under `/foundry-vtt/` to coexist with
-// foundry_modules' `/foundry/` during the C-FMC-5b parallel period.
-// C-FMC-5c deletes foundry_modules and its `/foundry/` namespace
-// (this plugin's `/foundry-vtt/` is the survivor).
+// Routes are namespaced under `/foundry-vtt/`. The prefix was
+// originally chosen to coexist with the deleted foundry_modules
+// plugin's `/foundry/` namespace during the C-FMC-5b parallel
+// period; foundry_modules + its `/foundry/` routes were deleted in
+// C-FMC-5c, but the `/foundry-vtt/` prefix kept (it's the URL
+// shape Foundry clients already have stored in their install URLs).
 func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.MiddlewareFunc) {
 	cg.PUT("/foundry-vtt/pin", h.SetPinAPI, requireOwner)
 	cg.POST("/foundry-vtt/token/rotate", h.RotateTokenAPI, requireOwner)
