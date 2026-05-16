@@ -20,12 +20,13 @@ type BannerStatus struct {
 	LatestVersion string
 }
 
-// CampaignToken is one row of foundry_module_campaign_tokens — the
+// CampaignToken is one row of foundry_vtt_campaign_tokens — the
 // per-campaign signing version counter that gates manifest URL
-// signatures. Schema-compatible with foundry_modules.CampaignToken
-// (intentional: both plugins read the same table during the C-FMC-5b
-// parallel period; C-FMC-5c renames the table to
-// foundry_vtt_campaign_tokens and deletes foundry_modules).
+// signatures. The table was originally created as
+// foundry_module_campaign_tokens by the deleted foundry_modules
+// plugin's migration 001; C-FMC-5c renamed it to its current
+// namespace via migrations/001_consolidate_foundry_modules.up.sql.
+// Existing token rows were preserved by `RENAME TABLE`.
 type CampaignToken struct {
 	CampaignID   string    `json:"campaign_id"`
 	TokenVersion int       `json:"token_version"`

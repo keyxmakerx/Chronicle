@@ -879,8 +879,8 @@ func (s *campaignService) IsUserDmGranted(ctx context.Context, campaignID, userI
 
 // SetFoundryModulePin updates CampaignSettings.FoundryModulePin and
 // re-persists the settings JSON. An empty version clears the pin
-// (campaign tracks LatestAvailable). The foundry_modules service
-// owns version validation (exists + not withdrawn) and calls this
+// (campaign auto-tracks the installed version). The foundry_vtt
+// service owns version validation (exists on disk) and calls this
 // only after that check passes.
 func (s *campaignService) SetFoundryModulePin(ctx context.Context, campaignID, version string) error {
 	campaign, err := s.repo.FindByID(ctx, campaignID)
@@ -900,7 +900,9 @@ func (s *campaignService) SetFoundryModulePin(ctx context.Context, campaignID, v
 }
 
 // GetFoundryModulePin returns the campaign's current pin string, or
-// "" if unpinned. Used by the foundry_modules manifest resolver.
+// "" if unpinned. Used by foundry_vtt's manifest resolver
+// (resolveCampaignManifest) to pick which on-disk version's
+// module.json to serve for a given campaign.
 func (s *campaignService) GetFoundryModulePin(ctx context.Context, campaignID string) (string, error) {
 	campaign, err := s.repo.FindByID(ctx, campaignID)
 	if err != nil {
@@ -913,8 +915,9 @@ func (s *campaignService) GetFoundryModulePin(ctx context.Context, campaignID st
 }
 
 // CampaignExistsByID returns true iff the campaign exists. Used by
-// the foundry_modules service to reject install-URL requests for
-// unknown campaigns before any DB writes happen.
+// the foundry_vtt service to reject install-URL minting + token
+// rotation requests for unknown campaigns before any DB writes
+// happen.
 func (s *campaignService) CampaignExistsByID(ctx context.Context, campaignID string) (bool, error) {
 	c, err := s.repo.FindByID(ctx, campaignID)
 	if err != nil {

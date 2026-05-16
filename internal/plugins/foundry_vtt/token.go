@@ -12,15 +12,17 @@ import (
 
 // tokenDomain is the HMAC payload prefix that domain-separates this
 // plugin's manifest tokens from any other HMAC the same secret might
-// sign (media URLSigner, foundry_modules' tokenSigner during the
-// parallel period).
+// sign (currently the media URLSigner; future signers should each
+// pick a distinct domain string).
 //
-// Distinct from foundry_modules' "foundry-module" prefix on purpose:
-// tokens issued by foundry_modules' old URL shape must NOT verify
-// against this plugin's endpoint, and vice versa. Existing tokens
-// continue to work in the old foundry_modules endpoint (parallel
-// coexistence during C-FMC-5b); operators mint NEW foundry-vtt:
-// tokens via this plugin's owner tab for the new endpoint.
+// Historical note: during the C-FMC-5b parallel period, the deleted
+// foundry_modules plugin signed with a "foundry-module" prefix.
+// Tokens stored by Foundry clients from that era were intentionally
+// designed to NOT verify against this plugin's endpoint, and vice
+// versa — operators minted fresh foundry-vtt-domain tokens via the
+// new owner tab. foundry_modules was deleted in C-FMC-5c so the
+// old domain is no longer in use; this comment preserved as
+// attribution for the chosen prefix.
 const tokenDomain = "foundry-vtt"
 
 // TokenSigner mints and verifies the per-campaign manifest URL tokens
@@ -42,9 +44,9 @@ type TokenSigner struct {
 }
 
 // NewTokenSigner constructs a signer with the given HMAC key. The
-// secret is shared with the media URLSigner and foundry_modules'
-// signer — the tokenDomain prefix keeps the three signers
-// signature-incompatible.
+// secret is shared with the media URLSigner — the tokenDomain
+// prefix keeps the two signers signature-incompatible so a media
+// signature can't be replayed as a foundry-vtt token (or vice versa).
 func NewTokenSigner(secret string) *TokenSigner {
 	return &TokenSigner{secret: []byte(secret)}
 }
