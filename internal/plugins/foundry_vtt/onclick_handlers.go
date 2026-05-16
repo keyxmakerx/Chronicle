@@ -184,3 +184,65 @@ func dismissAutoPinBannerOnClick() templ.ComponentScript {
 		`})()`
 	return inlineOnClick("fvtt_dismissAutoPinBanner", body)
 }
+
+// showAffectedCampaignsOnClick returns the inline IIFE for the
+// banner's "Show affected campaigns" call-to-action button (C-FMC-9
+// Bug 1).
+//
+// Locates the Campaigns expand button for the affected version on
+// the current /admin/packages page, scrolls it into view, and
+// programmatically clicks it. The button's existing hx-get then
+// fetches the campaigns-using-version fragment, surfacing the
+// per-campaign Force-update / Notify actions inline.
+//
+// Without this, admins after an install had to manually scroll +
+// expand the prior-version row to see which campaigns were auto-
+// pinned. The banner already showed the count; this button is the
+// missing "act on it" affordance.
+//
+// Targets the version-scoped button ID set by packages.templ's
+// VersionList. If the button isn't found (e.g., page hasn't
+// rendered the package row yet, or the page isn't /admin/packages),
+// surfaces a Chronicle.notify message rather than failing silently.
+func showAffectedCampaignsOnClick(previousVersion string) templ.ComponentScript {
+	// sanitizeForID(version) replaces dots/plus/slash with hyphens —
+	// must match the packages.templ sanitizeForID helper. Calling
+	// that helper would create an inter-plugin import. The IDs are
+	// version strings so the replacement is straightforward; pre-
+	// compute on the server side for the inline IIFE.
+	sanitized := sanitizeVersionForDOMID(previousVersion)
+	id := template.JSEscapeString("fvtt-campaigns-trigger-" + sanitized)
+	body := fmt.Sprintf(
+		`(function(){`+
+			`var b=document.getElementById('%s');`+
+			`if(!b){window.Chronicle.notify('Could not find the version row on this page. Open /admin/packages and expand the foundry-module package manually.','error');return;}`+
+			`b.scrollIntoView({behavior:'smooth',block:'center'});`+
+			`b.click();`+
+			`})()`,
+		id)
+	return inlineOnClick("fvtt_showAffected", body)
+}
+
+// sanitizeVersionForDOMID mirrors packages.sanitizeForID's behavior
+// for the foundry-module version strings the banner needs to target.
+// Keeping the logic local (rather than importing packages) avoids
+// the cross-plugin coupling that C-FMC-5c worked hard to remove.
+//
+// IMPORTANT: stay in lock-step with packages/templ_helpers.go's
+// sanitizeForID. If a future packages PR changes the sanitization
+// rules, update both. Both produce DOM IDs from version strings; a
+// mismatch makes showAffectedCampaignsOnClick silently fail to find
+// the target button.
+func sanitizeVersionForDOMID(s string) string {
+	out := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch c {
+		case '.', '+', '/':
+			out = append(out, '-')
+		default:
+			out = append(out, c)
+		}
+	}
+	return string(out)
+}
