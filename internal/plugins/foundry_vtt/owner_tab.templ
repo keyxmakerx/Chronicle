@@ -38,12 +38,44 @@ templ OwnerTabFragment(data OwnerTabData) {
 		@ownerEmptyState()
 	} else {
 		<div class="space-y-6">
+			@ownerInstallURLBlock(data)
 			@ownerCurrentVersionCard(data)
 			@ownerVersionSelector(data)
-			@ownerInstallURLBlock(data)
 			@ownerPlayerInstructions(data)
 		</div>
 	}
+}
+
+// OwnerTabErrorState renders an inline error message INSIDE the same
+// hx-swap target the success path uses, so HTMX swap never leaves the
+// owner's settings page blank.
+//
+// Bug 3 / C-FMC-9: previously, if OwnerTabFragmentHandler hit any
+// error path (missing context, downstream service failure), the
+// handler returned apperror.* and Echo's error middleware produced
+// a 4xx/5xx JSON body that HTMX wouldn't swap in. The owner saw a
+// stuck loading spinner forever. The handler now renders this
+// component instead so the user gets a real, actionable error
+// message in the same container.
+//
+// The message follows the four-clause format (what / detail /
+// cause / action) per the operator's error-quality acceptance
+// criterion from C-FMC-5b.
+templ OwnerTabErrorState(message, action string) {
+	<div class="card p-4 rounded-md border border-red-500/30 bg-red-500/5">
+		<p class="text-sm font-medium text-red-700 dark:text-red-400">
+			<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+			Foundry VTT settings could not load
+		</p>
+		<p class="text-sm text-fg-secondary mt-2">
+			{ message }
+		</p>
+		if action != "" {
+			<p class="text-xs text-fg-muted mt-2">
+				{ action }
+			</p>
+		}
+	</div>
 }
 
 // ownerEmptyState renders when no foundry-module typed package
@@ -145,31 +177,44 @@ templ ownerVersionSelector(data OwnerTabData) {
 	}
 }
 
-// ownerInstallURLBlock shows the Foundry-facing install URL plus
-// the rotate-token button.
+// ownerInstallURLBlock is the primary card on the owner tab.
+//
+// C-FMC-9 (Bug 4): elevated to focal-point status — bigger label,
+// accent border, single-line explanation under the URL field so
+// owners immediately understand what to do with it. Token rotation
+// is still here but visually de-emphasized: smaller text, less
+// border weight, the action lives in a secondary row at the bottom
+// of the card rather than next to the Copy button.
 templ ownerInstallURLBlock(data OwnerTabData) {
-	<div class="card p-4 rounded-md space-y-3">
-		<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider">Install URL</p>
+	<div class="card p-5 rounded-md border-2 border-accent/30 bg-accent/5 space-y-3">
+		<div>
+			<p class="text-sm font-semibold text-fg">
+				<i class="fa-solid fa-link mr-1"></i> Module Install URL
+			</p>
+			<p class="text-xs text-fg-secondary mt-1">
+				Share this URL with players to install the Chronicle Foundry module in Foundry. The URL is unique to this campaign — players who install with it get this campaign's pinned module version and update channel.
+			</p>
+		</div>
 		<div class="flex items-stretch gap-2">
 			<input
 				id="fvtt-install-url"
 				type="text"
 				readonly
 				value={ data.InstallURL }
-				class="flex-1 px-3 py-2 rounded-md border border-edge bg-surface-alt text-xs font-mono text-fg overflow-x-auto"
+				class="flex-1 px-3 py-2 rounded-md border border-edge bg-surface text-xs font-mono text-fg overflow-x-auto"
 			/>
 			<button
 				type="button"
 				onclick="(function(b){var t=document.getElementById('fvtt-install-url');if(t&&navigator.clipboard){navigator.clipboard.writeText(t.value).then(function(){var html=b.innerHTML;b.innerHTML='<i class=\'fa-solid fa-check text-emerald-500\'></i> Copied';setTimeout(function(){b.innerHTML=html;},2000);})}})(this)"
-				class="px-3 py-2 text-sm rounded-md border border-edge hover:bg-surface-alt whitespace-nowrap"
+				class="px-4 py-2 text-sm rounded-md bg-accent text-white hover:bg-accent/90 whitespace-nowrap"
 				title="Copy install URL to clipboard"
 			>
 				<i class="fa-solid fa-copy"></i> Copy
 			</button>
 		</div>
-		<div class="flex items-center justify-between gap-2 pt-2 border-t border-edge">
+		<div class="flex items-center justify-between gap-2 pt-2 border-t border-edge/50">
 			<p class="text-xs text-fg-muted">
-				Rotating regenerates the signing token. Every player will need to reinstall with the new URL.
+				Rotating regenerates the signing token — every player will need to reinstall with the new URL.
 			</p>
 			<button
 				type="button"
@@ -184,17 +229,24 @@ templ ownerInstallURLBlock(data OwnerTabData) {
 
 // ownerPlayerInstructions is the copy-pasteable steps block the
 // owner shares with their table.
+//
+// C-FMC-9 (Bug 4): wrapped in <details> so the helper content is
+// collapsed-by-default. Owners who already know how to install a
+// Foundry module don't need the steps front-and-center; the
+// install URL is the primary content.
 templ ownerPlayerInstructions(data OwnerTabData) {
-	<div class="card p-4 rounded-md">
-		<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">Player Install Instructions</p>
-		<ol class="list-decimal list-inside text-sm text-fg-secondary space-y-1">
+	<details class="card p-4 rounded-md">
+		<summary class="text-xs font-semibold text-fg-muted uppercase tracking-wider cursor-pointer">
+			<i class="fa-solid fa-circle-question mr-1"></i> Player install instructions (click to expand)
+		</summary>
+		<ol class="list-decimal list-inside text-sm text-fg-secondary space-y-1 mt-3">
 			<li>Open Foundry &rarr; Add-on Modules &rarr; Install Module</li>
 			<li>Paste this URL in the "Manifest URL" field:
 				<code class="block mt-1 px-2 py-1 rounded-md bg-surface-alt text-xs break-all">{ data.InstallURL }</code>
 			</li>
 			<li>Click Install</li>
 		</ol>
-	</div>
+	</details>
 }
 
 // C-FMC-8: the Save Pin + Rotate Token click handlers used to be

@@ -306,8 +306,19 @@ templ VersionList(pkg *Package, versions []PackageVersion, csrfToken string) {
 								// Hardcoded URL (not a dispatch interface) is a
 								// deliberate trade-off — see packages/.ai.md
 								// Extension points note about per-type embed URLs.
+								//
+								// C-FMC-9 (Bug 1): the button carries a stable ID
+								// (fvtt-campaigns-trigger-{sanitized-version}) so the
+								// autopin banner's "Show affected campaigns" inline
+								// IIFE can locate + programmatically click it after
+								// an install. Version-scoped only (not packageID-
+								// scoped) because deployments have at most one
+								// foundry-module package; documenting the assumption
+								// here so a future multi-package deployment knows
+								// to revisit the selector.
 								if pkg.Type == PackageTypeFoundryModule {
 									<button
+										id={ fmt.Sprintf("fvtt-campaigns-trigger-%s", sanitizeForID(v.Version)) }
 										hx-get={ fmt.Sprintf("/admin/foundry-vtt/version/%s/campaigns", v.Version) }
 										hx-target={ fmt.Sprintf("#fvtt-campaigns-%s-%s", pkg.ID, sanitizeForID(v.Version)) }
 										hx-swap="innerHTML"

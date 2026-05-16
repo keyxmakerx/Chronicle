@@ -745,11 +745,22 @@ templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
 								// (separate sub-plugin + this templ embeds its
 								// fragment).
 								if cc.MemberRole >= RoleOwner {
+									// C-FMC-9 (Bug 3): hx-on::htmx:responseError replaces
+									// the loading spinner with an inline error message if
+									// the fragment request fails (4xx/5xx, network error).
+									// Without this fallback the spinner stayed forever and
+									// owners saw a "blank" settings section. The handler
+									// itself was also fixed in C-FMC-9 to always return 200
+									// with a rendered error state, so this client-side
+									// fallback only triggers on genuine network failures
+					 				// (HTMX skips swap on connection errors regardless of
+					 				// the server's intent).
 									<div
 										id="foundry-module-pin-section"
 										hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/settings-tab", cc.Campaign.ID) }
 										hx-trigger="intersect once"
 										hx-swap="innerHTML"
+										hx-on::response-error="this.innerHTML = '<div class=&quot;card p-4 rounded-md border border-red-500/30 bg-red-500/5&quot;><p class=&quot;text-sm font-medium text-red-700 dark:text-red-400&quot;><i class=&quot;fa-solid fa-triangle-exclamation mr-1&quot;></i>Could not load Foundry VTT settings</p><p class=&quot;text-sm text-fg-secondary mt-2&quot;>The request to /campaigns/.../foundry-vtt/settings-tab failed at the network layer.</p><p class=&quot;text-xs text-fg-muted mt-2&quot;>Refresh the page. If this persists, contact a site admin.</p></div>'"
 									>
 										<div class="text-center py-6 text-fg-muted text-xs">
 											<i class="fa-solid fa-spinner fa-spin mr-1"></i>

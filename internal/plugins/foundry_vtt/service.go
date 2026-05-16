@@ -780,8 +780,18 @@ func (s *service) ForcePinCampaign(ctx context.Context, campaignID, version, act
 
 	// Validate the version is installed on disk. Reuses SetPinnedVersion's
 	// validation path (which calls FindFoundryPackage + InstallDirForVersion).
+	//
+	// C-FMC-9: wrap the error with explicit context. SetPinnedVersion can
+	// return any of several typed errors (NoPackageRegistered,
+	// PinnedVersionNotInstalled, internal_get_pin, set_foundry_module_pin).
+	// Returning them raw made it hard to distinguish "force-pin failed
+	// because the version isn't installed" from "force-pin failed because
+	// the DB write rejected" in operator-facing reports — the wrapped
+	// error keeps the original typed error intact (via %w) while making
+	// the audit log say "force-pin: ..." so it's obvious the failure is
+	// on the force-pin code path.
 	if err := s.SetPinnedVersion(ctx, campaignID, version); err != nil {
-		return err
+		return fmt.Errorf("force-pin campaign %q to %q: %w", campaignID, version, err)
 	}
 
 	// Audit log. Soft-fail if events is unwired (e.g. tests).

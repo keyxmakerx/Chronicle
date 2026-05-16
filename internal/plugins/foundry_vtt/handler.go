@@ -37,14 +37,42 @@ func NewHandler(svc Service) *Handler {
 // VTT Setup Guides → Foundry VTT disclosure section via hx-get.
 //
 // GET /campaigns/:id/foundry-vtt/settings-tab
+//
+// C-FMC-9 (Bug 3): error paths now render an inline error state
+// INSIDE the swap target instead of returning apperror.NewMissingContext
+// or 4xx/5xx. HTMX wouldn't swap a 4xx/5xx response by default, so
+// owners hit a stuck-on-spinner state — visually "blank settings
+// page". This handler now ALWAYS returns 200 with a rendered
+// fragment; errors are surfaced via OwnerTabErrorState within the
+// same container.
 func (h *Handler) OwnerTabFragmentHandler(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewMissingContext()
+		// Defensive — middleware should set this. If we get here,
+		// either the route group's RequireCampaignAccess wasn't
+		// applied, or campaign loading failed silently. Either way,
+		// render an actionable message rather than a blank tab.
+		return middleware.Render(c, http.StatusOK, OwnerTabErrorState(
+			"Chronicle couldn't load the campaign for this Foundry VTT settings page.",
+			"Reload the campaign settings page. If this persists, the campaign URL "+
+				"may be malformed — contact a site admin.",
+		))
 	}
 	data, err := h.svc.OwnerTabData(c.Request().Context(), cc.Campaign.ID)
 	if err != nil {
-		return h.respondError(c, err)
+		// Surface the typed error's actionable message inline. The
+		// foundry_vtt typed errors already follow the four-clause
+		// format; pass the full Message + an empty action (the
+		// message already includes the next step).
+		if fe := AsError(err); fe != nil {
+			return middleware.Render(c, http.StatusOK, OwnerTabErrorState(fe.Message, ""))
+		}
+		// Untyped error: generic fallback that points at the admin
+		// so the operator's logs are the recovery path.
+		return middleware.Render(c, http.StatusOK, OwnerTabErrorState(
+			"Chronicle hit an internal error preparing the Foundry VTT settings.",
+			"Check the Chronicle server logs around this request timestamp; if the error persists, contact a site admin.",
+		))
 	}
 	data.CSRFToken = middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, OwnerTabFragment(data))

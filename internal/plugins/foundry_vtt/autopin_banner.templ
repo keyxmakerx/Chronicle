@@ -20,6 +20,15 @@ import "fmt"
 // the resolved summary directly. Empty render path is handled at
 // the handler layer (renders no content when GetUnreadAutoPinSummary
 // returns nil).
+//
+// C-FMC-9 (Bug 1): added the "Show affected campaigns" call-to-
+// action button. Previously the banner had only a Dismiss button +
+// text instructions telling admins to manually scroll/click. The
+// action button is an inline IIFE that locates the foundry-module
+// package's previous-version row, scrolls it into view, and
+// programmatically clicks its Campaigns expand button — surfacing
+// the per-campaign Force-update / Notify actions in one click
+// instead of three.
 templ AutoPinBanner(summary AutoPinSummary) {
 	<div id="fvtt-autopin-banner" class="card p-4 rounded-md border border-blue-500/30 bg-blue-500/5 mb-4 flex items-start gap-3">
 		<i class="fa-solid fa-circle-info text-blue-600 dark:text-blue-400 mt-0.5"></i>
@@ -28,17 +37,27 @@ templ AutoPinBanner(summary AutoPinSummary) {
 				{ autoPinBannerHeadline(summary) }
 			</p>
 			<p class="text-xs text-fg-secondary mt-1">
-				Affected campaigns were pinned to <span class="font-mono">{ summary.PreviousVersion }</span> to preserve their state. To bump them to <span class="font-mono">{ summary.NewVersion }</span>, find the foundry-module package below, expand version <span class="font-mono">{ summary.PreviousVersion }</span>, and click <em>Campaigns</em> to see the per-campaign action buttons.
+				Affected campaigns were pinned to <span class="font-mono">{ summary.PreviousVersion }</span> to preserve their state. Use the action button to jump to the Force-update / Notify controls, or dismiss if no action needed right now.
 			</p>
 		</div>
-		<button
-			type="button"
-			onclick={ dismissAutoPinBannerOnClick() }
-			class="text-xs text-fg-muted hover:text-fg px-2 py-1 rounded hover:bg-surface-alt whitespace-nowrap"
-			title="Dismiss this notification"
-		>
-			<i class="fa-solid fa-xmark mr-1"></i> Dismiss
-		</button>
+		<div class="flex items-center gap-2 shrink-0">
+			<button
+				type="button"
+				onclick={ showAffectedCampaignsOnClick(summary.PreviousVersion) }
+				class="text-xs px-3 py-1.5 rounded border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
+				title="Scroll to and expand the campaigns-using-version block"
+			>
+				<i class="fa-solid fa-arrow-right mr-1"></i> Show affected campaigns
+			</button>
+			<button
+				type="button"
+				onclick={ dismissAutoPinBannerOnClick() }
+				class="text-xs text-fg-muted hover:text-fg px-2 py-1 rounded hover:bg-surface-alt whitespace-nowrap"
+				title="Dismiss this notification"
+			>
+				<i class="fa-solid fa-xmark mr-1"></i> Dismiss
+			</button>
+		</div>
 	</div>
 }
 
