@@ -44,6 +44,10 @@ clean: ## Remove built artifacts
 templ: ## Regenerate Templ .go files from .templ sources
 	templ generate
 
+.PHONY: foundry-error-catalog
+foundry-error-catalog: ## Regenerate the foundry_vtt error-catalog.json from errors.go (C-FMC-DRIFT-GUARD)
+	go run ./cmd/foundry-error-catalog
+
 .PHONY: tailwind
 tailwind: ## Regenerate Tailwind CSS
 	tailwindcss -i static/css/input.css -o static/css/app.css --minify

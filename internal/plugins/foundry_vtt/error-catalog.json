@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": "internal/plugins/foundry_vtt/errors.go",
+  "categories": [
+    "auth",
+    "config",
+    "not_found",
+    "validation",
+    "internal"
+  ],
+  "responseShape": {
+    "category": "<category>",
+    "error": "<code>",
+    "message": "<4-clause>"
+  },
+  "codes": [
+    {
+      "constructor": "ErrCampaignNotFound",
+      "code": "campaign_not_found",
+      "category": "not_found",
+      "httpStatus": 404
+    },
+    {
+      "constructor": "ErrDescriptorInvalid",
+      "code": "descriptor_invalid",
+      "category": "validation",
+      "httpStatus": 422
+    },
+    {
+      "constructor": "ErrInternal",
+      "code": "<dynamic>",
+      "category": "internal",
+      "httpStatus": 500,
+      "wildcard": true
+    },
+    {
+      "constructor": "ErrInvalidToken",
+      "code": "invalid_token",
+      "category": "auth",
+      "httpStatus": 403
+    },
+    {
+      "constructor": "ErrModuleJSONMissing",
+      "code": "module_json_missing",
+      "category": "internal",
+      "httpStatus": 500
+    },
+    {
+      "constructor": "ErrNoPackageRegistered",
+      "code": "no_package_registered",
+      "category": "config",
+      "httpStatus": 503
+    },
+    {
+      "constructor": "ErrNoVersionAvailable",
+      "code": "no_version_available",
+      "category": "config",
+      "httpStatus": 503
+    },
+    {
+      "constructor": "ErrPinnedVersionNotInstalled",
+      "code": "pinned_version_not_installed",
+      "category": "config",
+      "httpStatus": 503
+    },
+    {
+      "constructor": "ErrTokenNotInitialized",
+      "code": "token_not_initialized",
+      "category": "config",
+      "httpStatus": 503
+    }
+  ]
+}
