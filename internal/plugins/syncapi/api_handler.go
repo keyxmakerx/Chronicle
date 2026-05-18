@@ -344,10 +344,16 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
+	// syncapi callers always provide is_private in the request body
+	// (it's documented in the sync contract). Pass through as an explicit
+	// pointer so the service writes it. UpdateEntityInput.IsPrivate is
+	// nil-preserving since C-PERMISSIONS-INLINE-COMPONENT made the in-app
+	// form-side handlers stop carrying the field.
+	isPrivate := req.IsPrivate
 	updated, err := h.entitySvc.Update(ctx, entityID, entities.UpdateEntityInput{
 		Name:              req.Name,
 		TypeLabel:         req.TypeLabel,
-		IsPrivate:         req.IsPrivate,
+		IsPrivate:         &isPrivate,
 		Entry:             req.Entry,
 		PlayerNotes:       req.PlayerNotes,
 		FieldsData:        req.FieldsData,
@@ -603,10 +609,15 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				result.Status = "error"
 				result.Error = "entity not found"
 			} else {
+				// Batch sync: the change carries is_private explicitly,
+				// so pass through as a pointer to keep the always-overwrite
+				// behavior the sync contract documents. See
+				// UpdateEntityInput.IsPrivate for why this is nil-preserving.
+				isPrivate := change.IsPrivate
 				_, err := h.entitySvc.Update(ctx, change.EntityID, entities.UpdateEntityInput{
 					Name:       change.Name,
 					TypeLabel:  change.TypeLabel,
-					IsPrivate:  change.IsPrivate,
+					IsPrivate:  &isPrivate,
 					Entry:      change.Entry,
 					FieldsData: change.FieldsData,
 				})

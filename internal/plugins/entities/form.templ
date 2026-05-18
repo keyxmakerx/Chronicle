@@ -176,17 +176,19 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 
 			@parentSelector(cc.Campaign.ID, parentEntity)
 
-			<div class="flex items-center">
-				<input type="hidden" name="is_private" value="false"/>
-				<input
-					type="checkbox"
-					id="is_private"
-					name="is_private"
-					value="true"
-					class="rounded border-edge text-blue-600 mr-2"
-				/>
-				<label for="is_private" class="text-sm text-fg-body">Private (visible to GM only)</label>
-			</div>
+			// Permissions trigger + slide-in card (C-PERMISSIONS-INLINE-COMPONENT).
+			// The widget runs in draft mode here (no endpoint): the mode
+			// selection is written to the hidden `is_private` input below,
+			// which the Create handler reads. Custom mode is shown but
+			// disabled — granular grants are configured after the entity
+			// exists (PUT /entities/:eid/permissions needs an entity ID).
+			<input type="hidden" name="is_private" value="false" id="is_private_draft"/>
+			<div
+				data-widget="permissions"
+				data-mode="draft"
+				data-draft-target="#is_private_draft"
+				data-editable="true"
+			></div>
 
 			<div class="flex items-center space-x-4">
 				<button type="submit" class="btn-primary">Create Page</button>
@@ -272,10 +274,12 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 				<p class="mt-1 text-xs text-fg-secondary">Plain text fallback. Use the rich text editor on the page view for full formatting.</p>
 			</div>
 
-				<!-- Preserve is_private in form submission so Update handler does not reset it. -->
-			<input type="hidden" name="is_private" value={ fmt.Sprintf("%v", entity.IsPrivate) }/>
-
-			<!-- Per-entity permissions widget (Owner: full editor, others: read-only badge). -->
+			// Per-entity permissions slide-in card (C-PERMISSIONS-INLINE-COMPONENT).
+			// The hidden is_private input that used to ride on this form was
+			// removed because UpdateEntityInput.IsPrivate is now nil-preserving;
+			// the service no longer resets is_private when the field is absent
+			// from the request. The card writes is_private (and visibility +
+			// grants) directly via PUT /permissions.
 			<div
 				data-widget="permissions"
 				data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/permissions", cc.Campaign.ID, entity.ID) }

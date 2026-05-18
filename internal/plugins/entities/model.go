@@ -389,11 +389,15 @@ type CreateEntityRequest struct {
 }
 
 // UpdateEntityRequest holds the data submitted by the entity edit form.
+//
+// is_private no longer rides on the form. The permissions slide-in card
+// owns that field and writes directly via /permissions. See dispatch
+// C-PERMISSIONS-INLINE-COMPONENT and UpdateEntityInput.IsPrivate
+// (pointer-typed for preserve-on-absence semantics).
 type UpdateEntityRequest struct {
 	Name              string     `json:"name" form:"name"`
 	TypeLabel         string     `json:"type_label" form:"type_label"`
 	ParentID          string     `json:"parent_id" form:"parent_id"`
-	IsPrivate         bool       `json:"is_private" form:"is_private"`
 	Entry             string     `json:"entry" form:"entry"`
 	ExpectedUpdatedAt *time.Time `json:"expected_updated_at"` // Optimistic concurrency (optional, JSON API only).
 }
@@ -417,11 +421,21 @@ type CreateEntityInput struct {
 }
 
 // UpdateEntityInput is the validated input for updating an entity.
+//
+// IsPrivate is a pointer so callers can express "don't change" (nil)
+// vs. "set to this value" (&true / &false). Before C-PERMISSIONS-INLINE-
+// COMPONENT, this was a plain bool and the form-side Update +
+// UpdateMetadataAPI handlers — which previously round-tripped the value
+// via a hidden checkbox — relied on the request always carrying the
+// current state. Removing the UI toggles in this dispatch means those
+// requests no longer carry is_private, so the service must preserve the
+// existing value when the caller omits it. The permissions widget is
+// now the sole authoritative writer of is_private.
 type UpdateEntityInput struct {
 	Name              string
 	TypeLabel         string
 	ParentID          string // Empty string = clear parent.
-	IsPrivate         bool
+	IsPrivate         *bool  // nil = preserve current; non-nil = set to *IsPrivate.
 	Entry             string
 	PlayerNotes       *string // Player-facing content (nil = don't change).
 	ImagePath         string

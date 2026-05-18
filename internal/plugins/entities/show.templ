@@ -263,11 +263,10 @@ templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entit
 templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	<div
 		if cc.MemberRole >= campaigns.RoleScribe {
-			x-data={ fmt.Sprintf("{ editing: false, saving: false, saved: false, error: '', name: '%s', typeLabel: '%s', parentId: '%s', isPrivate: %t }",
+			x-data={ fmt.Sprintf("{ editing: false, saving: false, saved: false, error: '', name: '%s', typeLabel: '%s', parentId: '%s' }",
 				jsEsc(entity.Name),
 				jsEsc(derefStr(entity.TypeLabel)),
-				jsEsc(derefStr(entity.ParentID)),
-				entity.IsPrivate) }
+				jsEsc(derefStr(entity.ParentID))) }
 		}
 	>
 		<div class="flex items-center justify-between">
@@ -344,19 +343,15 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 					</div>
 				</div>
 
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-					<div>
-						<label class="block text-xs font-medium text-fg-body mb-1">Parent Page</label>
-						<input type="text" x-model="parentId" class="input w-full text-sm" placeholder="Parent entity ID (or leave empty)"/>
-					</div>
-					<div class="flex items-center gap-2 pt-5">
-						<label class="relative inline-flex items-center cursor-pointer">
-							<input type="checkbox" x-model="isPrivate" class="sr-only peer"/>
-							<div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent/50 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
-							<span class="ml-2 text-xs text-fg-body">DM Only (Private)</span>
-						</label>
-					</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Parent Page</label>
+					<input type="text" x-model="parentId" class="input w-full text-sm" placeholder="Parent entity ID (or leave empty)"/>
 				</div>
+				// DM-Only toggle removed in C-PERMISSIONS-INLINE-COMPONENT.
+				// Visibility is owned by the slide-in permissions card
+				// (see blockPermissions). The metadata PUT below no longer
+				// carries is_private; UpdateMetadataAPI's nil-preserving
+				// service call keeps the entity's current value.
 
 				<div class="flex items-center justify-end gap-3 pt-1">
 					<span x-show="saved" x-transition class="text-xs text-green-600">Saved!</span>
@@ -374,7 +369,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 							saving = true; saved = false; error = '';
 							Chronicle.apiFetch('/campaigns/%s/entities/%s/metadata', {
 								method: 'PUT',
-								body: { name: name.trim(), type_label: typeLabel.trim(), parent_id: parentId.trim(), is_private: isPrivate }
+								body: { name: name.trim(), type_label: typeLabel.trim(), parent_id: parentId.trim() }
 							}).then(r => {
 								if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Failed to save'); });
 								return r.json();

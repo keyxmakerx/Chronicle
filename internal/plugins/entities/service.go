@@ -458,7 +458,9 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 	}
 
 	entity.Name = name
-	entity.IsPrivate = input.IsPrivate
+	if input.IsPrivate != nil {
+		entity.IsPrivate = *input.IsPrivate
+	}
 
 	typeLabel := strings.TrimSpace(input.TypeLabel)
 	if typeLabel != "" {
