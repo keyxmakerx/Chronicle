@@ -68,6 +68,15 @@ type CalendarRepository interface {
 	ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error)
 	ListUpcomingEvents(ctx context.Context, calendarID string, year, month, day int, role int, limit int) ([]Event, error)
 	SearchEvents(ctx context.Context, calendarID, query string, role int) ([]Event, error)
+	// ListAllEvents returns every event for a calendar with no
+	// role-based visibility filtering and no date constraint.
+	// Used by the public Foundry-facing API (C-CALENDAR-ENDPOINTS):
+	// that API gates by per-campaign signed token rather than user
+	// role, and the wire response carries the `visibility` field
+	// for the module to interpret. Sort order is calendar-stable
+	// (year/month/day/start_hour/start_minute/name) so consumers
+	// can rely on it for diffs.
+	ListAllEvents(ctx context.Context, calendarID string) ([]Event, error)
 
 	// Event visibility.
 	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error
@@ -608,6 +617,25 @@ func (r *calendarRepo) ListEventsForYear(ctx context.Context, calendarID string,
 		ORDER BY e.month, e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
 	rows, err := r.db.QueryContext(ctx, query, calendarID, year)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanEvents(rows)
+}
+
+// ListAllEvents returns every event for a calendar with no role
+// filter and no date constraint. Public Foundry API consumer:
+// see the CalendarRepository interface comment for why.
+func (r *calendarRepo) ListAllEvents(ctx context.Context, calendarID string) ([]Event, error) {
+	query := `
+		SELECT ` + eventCols + `
+		FROM calendar_events e ` + eventJoins + `
+		WHERE e.calendar_id = ?
+		ORDER BY e.year, e.month, e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`
+
+	rows, err := r.db.QueryContext(ctx, query, calendarID)
 	if err != nil {
 		return nil, err
 	}

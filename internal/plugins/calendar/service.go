@@ -65,6 +65,10 @@ type CalendarService interface {
 	ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int, userID string) ([]Event, error)
 	ListEventsForYear(ctx context.Context, calendarID string, year int, role int, userID string) ([]Event, error)
 	ListEventsForDateRange(ctx context.Context, calendarID string, year, startMonth, startDay, endMonth, endDay int, role int, userID string) ([]Event, error)
+	// ListAllEventsForCalendar returns every event with no role
+	// filter — for the public Foundry API only. See repository
+	// comment for the rationale.
+	ListAllEventsForCalendar(ctx context.Context, calendarID string) ([]Event, error)
 
 	// Search.
 	SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
@@ -787,6 +791,14 @@ func (s *calendarService) DeleteEvent(ctx context.Context, eventID string) error
 		}
 	}
 	return nil
+}
+
+// ListAllEventsForCalendar returns every event for a calendar
+// with no visibility filtering. Only intended for the public
+// Foundry-facing API (C-CALENDAR-ENDPOINTS); UI paths should keep
+// using the role-filtered variants.
+func (s *calendarService) ListAllEventsForCalendar(ctx context.Context, calendarID string) ([]Event, error) {
+	return s.repo.ListAllEvents(ctx, calendarID)
 }
 
 // ListEventsForMonth returns events for a given month/year, filtered by role and per-user rules.

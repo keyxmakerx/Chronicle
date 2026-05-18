@@ -229,6 +229,13 @@ func (m *mockCalendarRepo) ListEventsForDateRange(ctx context.Context, calendarI
 	return nil, nil
 }
 
+func (m *mockCalendarRepo) ListAllEvents(_ context.Context, _ string) ([]Event, error) {
+	// C-CALENDAR-ENDPOINTS: unfiltered list used by the public
+	// Foundry API. Existing service tests don't exercise this
+	// path, so the default zero-value return is fine.
+	return nil, nil
+}
+
 func (m *mockCalendarRepo) ListEventsForEntity(ctx context.Context, entityID string, role int) ([]Event, error) {
 	if m.listEventsForEntityFn != nil {
 		return m.listEventsForEntityFn(ctx, entityID, role)
