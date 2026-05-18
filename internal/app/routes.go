@@ -1587,16 +1587,45 @@ func (a *App) RegisterRoutes() {
 	}
 
 	// Initialize HMAC URL signer for secure media access.
-	// Auto-generate a signing secret on first boot if not configured.
-	signingSecret := a.Config.Upload.SigningSecret
-	if signingSecret == "" {
-		generated, err := media.GenerateSigningSecret()
-		if err != nil {
-			slog.Error("failed to generate media signing secret", slog.Any("error", err))
-		} else {
-			signingSecret = generated
-			slog.Warn("MEDIA_SIGNING_SECRET not set, using auto-generated secret (will change on restart)")
-		}
+	//
+	// The same secret feeds foundry_vtt.NewTokenSigner below, where
+	// it signs the per-campaign manifest tokens Foundry stores
+	// indefinitely. Auto-generating in-memory and discarding on
+	// restart used to silently invalidate every outstanding Foundry
+	// token (cordinator Issue #17 / C-UPDATER-MANIFEST-403).
+	// LoadOrInitSigningSecret persists the auto-generated secret so
+	// it survives restarts; env-managed deploys see no behavior change.
+	signingSecret, secretSource, secretErr := media.LoadOrInitSigningSecret(
+		a.Config.Upload.SigningSecret,
+		a.Config.Upload.SigningSecretFile,
+	)
+	switch secretSource {
+	case media.SecretFromEnv:
+		// Operator-managed via MEDIA_SIGNING_SECRET; nothing to log.
+	case media.SecretFromFile:
+		slog.Info("media signing secret loaded from persisted file",
+			slog.String("path", a.Config.Upload.SigningSecretFile))
+	case media.SecretGeneratedAndPersisted:
+		slog.Warn("MEDIA_SIGNING_SECRET not set; generated a new secret and "+
+			"persisted it. Subsequent restarts will reuse this secret. For "+
+			"production, set MEDIA_SIGNING_SECRET in env so the secret is "+
+			"managed alongside other credentials.",
+			slog.String("path", a.Config.Upload.SigningSecretFile))
+	case media.SecretGeneratedInMemory:
+		slog.Error("MEDIA_SIGNING_SECRET not set AND failed to persist a "+
+			"generated secret. Foundry manifest tokens WILL be invalidated "+
+			"on next restart. Set MEDIA_SIGNING_SECRET in env, or ensure "+
+			"the configured path is writable.",
+			slog.Any("error", secretErr),
+			slog.String("path", a.Config.Upload.SigningSecretFile))
+	}
+	if secretErr != nil && secretSource != media.SecretGeneratedInMemory {
+		// Non-fatal soft error (e.g., read error on a stale file
+		// that we recovered from by regenerating). Surface it so
+		// the operator can investigate.
+		slog.Warn("media signing secret load reported a recoverable error",
+			slog.Any("error", secretErr),
+			slog.String("source", string(secretSource)))
 	}
 	var urlSigner *media.URLSigner
 	if signingSecret != "" {

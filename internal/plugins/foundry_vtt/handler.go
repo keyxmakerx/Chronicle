@@ -3,6 +3,7 @@ package foundry_vtt
 import (
 	"archive/zip"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -218,11 +219,25 @@ func (h *Handler) PublicDownloadAPI(c echo.Context) error {
 // foundry_vtt typed errors, returns the categorized JSON body
 // Foundry's FM-CSU-DIAG knows how to parse. For other errors,
 // re-returns them so Echo's apperror middleware handles them.
+//
+// Logs a structured breadcrumb for every typed error response so
+// server-side operators can root-cause without depending on
+// Foundry's client-side error rendering — Foundry core code emits
+// generic "is forbidden" on 403 regardless of the structured body
+// Chronicle sends, so the server log is the operator's only
+// reliable diagnostic for cases like cordinator Issue #17.
 func (h *Handler) respondError(c echo.Context, err error) error {
 	fe := AsError(err)
 	if fe == nil {
 		return err
 	}
+	slog.Warn("foundry_vtt error response",
+		slog.String("path", c.Request().URL.Path),
+		slog.String("category", string(fe.Category)),
+		slog.String("code", fe.Code),
+		slog.Int("http_status", fe.HTTPStatus()),
+		slog.Any("cause", fe.Cause),
+	)
 	body := map[string]any{
 		"error":    fe.Code,
 		"message":  fe.Message,

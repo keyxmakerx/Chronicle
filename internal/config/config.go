@@ -169,6 +169,17 @@ type UploadConfig struct {
 	// Auto-generated on first boot if not set. Must be at least 32 bytes.
 	SigningSecret string
 
+	// SigningSecretFile is the path where an auto-generated signing
+	// secret is persisted so it survives restarts. Only used when
+	// SigningSecret is empty (env var unset). Empty value disables
+	// persistence — test environments only; production deploys
+	// should leave this at the default or set MEDIA_SIGNING_SECRET
+	// in env. See cordinator Issue #17: without persistence, every
+	// restart silently invalidates every outstanding Foundry
+	// manifest token, because foundry_vtt's TokenSigner shares this
+	// secret as its HMAC key.
+	SigningSecretFile string
+
 	// ServeRateLimit is the max requests per minute per IP for media serve
 	// routes (GET /media/:id). 0 means use default (300/min).
 	ServeRateLimit int
@@ -211,10 +222,11 @@ func Load() (*Config, error) {
 		RestoreScriptPath: getEnv("RESTORE_SCRIPT_PATH", "/app/scripts/restore.sh"),
 
 		Upload: UploadConfig{
-			MaxSize:        getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
-			MediaPath:      getEnv("MEDIA_PATH", "./data/media"),
-			SigningSecret:  getEnv("MEDIA_SIGNING_SECRET", ""),
-			ServeRateLimit: getEnvInt("MEDIA_SERVE_RATE_LIMIT", 300),
+			MaxSize:           getEnvInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
+			MediaPath:         getEnv("MEDIA_PATH", "./data/media"),
+			SigningSecret:     getEnv("MEDIA_SIGNING_SECRET", ""),
+			SigningSecretFile: getEnv("MEDIA_SIGNING_SECRET_FILE", "./data/.signing-secret"),
+			ServeRateLimit:    getEnvInt("MEDIA_SERVE_RATE_LIMIT", 300),
 		},
 	}
 

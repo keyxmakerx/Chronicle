@@ -9,8 +9,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -93,4 +98,98 @@ func GenerateSigningSecret() (string, error) {
 		return "", fmt.Errorf("generating signing secret: %w", err)
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// SigningSecretSource describes where LoadOrInitSigningSecret got
+// its secret, so the caller can log the right warning. The signer
+// itself doesn't care about provenance, but the operator does — an
+// in-memory secret means every restart silently invalidates every
+// outstanding Foundry manifest token (since foundry_vtt's
+// TokenSigner shares this secret with the media URLSigner).
+type SigningSecretSource string
+
+const (
+	// SecretFromEnv — secret came from the env var (operator-managed).
+	// Subsequent restarts will read the same env. No persistence
+	// concern.
+	SecretFromEnv SigningSecretSource = "env"
+
+	// SecretFromFile — secret was previously generated and persisted;
+	// this boot read the persisted value. Restart-stable.
+	SecretFromFile SigningSecretSource = "file"
+
+	// SecretGeneratedAndPersisted — generated this boot AND written
+	// to disk. Restart-stable from now on. Operator should still
+	// switch to env-managed for production hygiene.
+	SecretGeneratedAndPersisted SigningSecretSource = "generated_and_persisted"
+
+	// SecretGeneratedInMemory — generated this boot, persistence
+	// failed (data dir not writable, or path empty). DANGER: every
+	// restart will silently invalidate every Foundry manifest
+	// token. This is the Issue #17 mode.
+	SecretGeneratedInMemory SigningSecretSource = "generated_in_memory"
+)
+
+// LoadOrInitSigningSecret resolves the HMAC signing secret used by
+// both the media URLSigner and the foundry_vtt TokenSigner.
+// Priority:
+//
+//  1. envSecret if non-empty (operator set MEDIA_SIGNING_SECRET).
+//  2. The persisted file at path if it exists.
+//  3. A freshly generated secret, persisted to path. If persist
+//     fails, the secret is still returned but flagged in-memory.
+//
+// Persistence is load-bearing: the foundry_vtt TokenSigner uses this
+// secret as its HMAC key, and Foundry stores manifest URLs (which
+// embed tokens signed with this secret) indefinitely. Without
+// persistence, restart → new secret → every outstanding manifest
+// token 403s — the symptom diagnosed in cordinator Issue #17.
+//
+// Pass path="" to disable persistence (test-only; production should
+// always pass a path).
+//
+// Returns (secret, source, error). A non-nil error never means the
+// secret is unusable — it's a soft signal that something prevented
+// persistence (most often "data dir not writable"). The caller
+// should log the source + error to the operator either way.
+func LoadOrInitSigningSecret(envSecret, path string) (string, SigningSecretSource, error) {
+	if envSecret != "" {
+		return envSecret, SecretFromEnv, nil
+	}
+
+	if path != "" {
+		if b, err := os.ReadFile(path); err == nil {
+			secret := strings.TrimSpace(string(b))
+			if secret != "" {
+				return secret, SecretFromFile, nil
+			}
+			// Empty file — fall through to regenerate. The file
+			// will be overwritten with the new secret.
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			// Read error other than "doesn't exist" — return it so
+			// the caller can log it, but proceed to generate.
+			generated, genErr := GenerateSigningSecret()
+			if genErr != nil {
+				return "", SecretGeneratedInMemory, fmt.Errorf("read %s: %w; then generate: %v", path, err, genErr)
+			}
+			return generated, SecretGeneratedInMemory, fmt.Errorf("read %s: %w", path, err)
+		}
+	}
+
+	generated, err := GenerateSigningSecret()
+	if err != nil {
+		return "", SecretGeneratedInMemory, err
+	}
+
+	if path == "" {
+		return generated, SecretGeneratedInMemory, nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return generated, SecretGeneratedInMemory, fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(generated), 0o600); err != nil {
+		return generated, SecretGeneratedInMemory, fmt.Errorf("write %s: %w", path, err)
+	}
+	return generated, SecretGeneratedAndPersisted, nil
 }
