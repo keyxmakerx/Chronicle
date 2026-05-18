@@ -1920,6 +1920,18 @@ func (a *App) RegisterRoutes() {
 	calendarHandler.SetAddonService(addonService)
 	if a.PluginHealth.IsHealthy("calendar") {
 		calendar.RegisterRoutes(e, calendarHandler, campaignService, authService, addonService)
+
+		// C-CALENDAR-ENDPOINTS: public Foundry-facing calendar API
+		// gated by the same per-campaign signed token foundry_vtt
+		// uses for the manifest endpoint. fvttService satisfies
+		// the calendar.TokenVerifier interface so the calendar
+		// plugin has no compile-time edge into foundry_vtt.
+		// Skipped if foundry_vtt is degraded — the token verifier
+		// wouldn't exist.
+		if a.PluginHealth.IsHealthy("foundry_vtt") {
+			calendarAPIHandler := calendar.NewAPIHandler(calendarService, fvttService)
+			calendar.RegisterPublicAPIRoutes(e, calendarAPIHandler, middleware.RateLimit(300, time.Minute))
+		}
 	} else {
 		slog.Warn("calendar plugin degraded — routes not registered")
 	}

@@ -120,6 +120,11 @@ func (s *stubCalendarSvc) ListEventsForYear(context.Context, string, int, int, s
 func (s *stubCalendarSvc) ListEventsForDateRange(context.Context, string, int, int, int, int, int, int, string) ([]calendar.Event, error) {
 	return nil, nil
 }
+func (s *stubCalendarSvc) ListAllEventsForCalendar(context.Context, string) ([]calendar.Event, error) {
+	// C-CALENDAR-ENDPOINTS added this to CalendarService; syncapi
+	// doesn't use it. Zero-value return is fine for these tests.
+	return nil, nil
+}
 func (s *stubCalendarSvc) SearchCalendarEvents(context.Context, string, string, int) ([]map[string]string, error) {
 	return nil, nil
 }
