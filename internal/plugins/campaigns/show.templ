@@ -155,7 +155,7 @@ templ foundryModuleUpdateBanner(campaignID string, b FoundryModuleBanner) {
 				}
 			</p>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=foundry", campaignID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=integrations", campaignID)) }
 				class="text-amber-700 dark:text-amber-300 underline hover:no-underline text-xs mt-1 inline-block"
 			>
 				Update pin in campaign settings &rarr;
