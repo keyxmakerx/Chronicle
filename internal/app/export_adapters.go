@@ -832,10 +832,13 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 
 		// Apply entry content and image via Update.
 		if e.Entry != nil || e.ImagePath != nil {
+			// Import carries the source row's is_private; pass through
+			// as a pointer so the nil-preserving service layer writes it.
+			isPrivate := e.IsPrivate
 			_, updateErr := a.entitySvc.Update(ctx, newEntity.ID, entities.UpdateEntityInput{
 				Name:       e.Name,
 				TypeLabel:  ptrString(e.TypeLabel),
-				IsPrivate:  e.IsPrivate,
+				IsPrivate:  &isPrivate,
 				Entry:      ptrString(e.Entry),
 				ImagePath:  ptrString(e.ImagePath),
 				FieldsData: fieldsData,
@@ -905,11 +908,13 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			_ = json.Unmarshal(e.FieldsData, &fieldsData)
 		}
 
+		// Second-pass parent resolve carries the source is_private.
+		isPrivate := e.IsPrivate
 		_, err := a.entitySvc.Update(ctx, entityNewID, entities.UpdateEntityInput{
 			Name:       e.Name,
 			TypeLabel:  ptrString(e.TypeLabel),
 			ParentID:   parentNewID,
-			IsPrivate:  e.IsPrivate,
+			IsPrivate:  &isPrivate,
 			Entry:      ptrString(e.Entry),
 			ImagePath:  ptrString(e.ImagePath),
 			FieldsData: fieldsData,

@@ -633,11 +633,15 @@ func (h *Handler) Update(c echo.Context) error {
 
 	fieldsData := h.parseFieldsFromForm(c, cc.Campaign.ID, entity.EntityTypeID)
 
+	// IsPrivate intentionally omitted: the form no longer carries this
+	// field (the permissions card owns it now via /permissions). A nil
+	// IsPrivate means the service preserves the entity's current value
+	// instead of resetting it to false on every save. See model.go
+	// UpdateEntityInput for the rationale.
 	input := UpdateEntityInput{
 		Name:              req.Name,
 		TypeLabel:         req.TypeLabel,
 		ParentID:          req.ParentID,
-		IsPrivate:         req.IsPrivate,
 		Entry:             req.Entry,
 		FieldsData:        fieldsData,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
@@ -2014,11 +2018,15 @@ func (h *Handler) UpdateMetadataAPI(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	// is_private intentionally absent. The permissions card writes it
+	// via /permissions; the inline metadata panel only owns name,
+	// descriptor, and parent. Passing IsPrivate=nil tells the service
+	// to preserve the entity's current value. See
+	// C-PERMISSIONS-INLINE-COMPONENT.
 	var req struct {
 		Name      string `json:"name"`
 		TypeLabel string `json:"type_label"`
 		ParentID  string `json:"parent_id"`
-		IsPrivate bool   `json:"is_private"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
@@ -2029,7 +2037,6 @@ func (h *Handler) UpdateMetadataAPI(c echo.Context) error {
 		Name:      req.Name,
 		TypeLabel: req.TypeLabel,
 		ParentID:  req.ParentID,
-		IsPrivate: req.IsPrivate,
 	}
 
 	updated, err := h.service.Update(c.Request().Context(), entityID, input)
