@@ -2085,7 +2085,7 @@ type setPermissionsRequest struct {
 func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewMissingContext()
+		return respondPermissionsError(c, apperror.NewMissingContext())
 	}
 
 	entityID := c.Param("eid")
@@ -2093,16 +2093,16 @@ func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 
 	entity, err := h.service.GetByID(ctx, entityID)
 	if err != nil {
-		return err
+		return respondPermissionsError(c, err)
 	}
 	if entity.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("entity not found")
+		return respondPermissionsError(c, apperror.NewNotFound("entity not found"))
 	}
 
 	// Fetch current permission grants.
 	grants, err := h.service.GetEntityPermissions(ctx, entityID)
 	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("get entity permissions: %w", err))
+		return respondPermissionsError(c, wrapPermissionError(ctx, "loading existing grants", err))
 	}
 	if grants == nil {
 		grants = []EntityPermission{}
@@ -2167,7 +2167,7 @@ func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 func (h *Handler) SetPermissionsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
-		return apperror.NewMissingContext()
+		return respondPermissionsError(c, apperror.NewMissingContext())
 	}
 
 	entityID := c.Param("eid")
@@ -2175,19 +2175,19 @@ func (h *Handler) SetPermissionsAPI(c echo.Context) error {
 
 	entity, err := h.service.GetByID(ctx, entityID)
 	if err != nil {
-		return err
+		return respondPermissionsError(c, err)
 	}
 	if entity.CampaignID != cc.Campaign.ID {
-		return apperror.NewNotFound("entity not found")
+		return respondPermissionsError(c, apperror.NewNotFound("entity not found"))
 	}
 
 	var req setPermissionsRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
-		return apperror.NewBadRequest("invalid JSON body")
+		return respondPermissionsError(c, apperror.NewBadRequest("invalid JSON body"))
 	}
 
 	if err := h.service.SetEntityPermissions(ctx, entityID, SetPermissionsInput(req)); err != nil {
-		return err
+		return respondPermissionsError(c, err)
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})

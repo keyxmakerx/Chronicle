@@ -1603,6 +1603,13 @@ func (s *entityService) GetEntityPermissions(ctx context.Context, entityID strin
 // SetEntityPermissions replaces all permission grants and updates visibility mode.
 // When visibility is "default", existing custom permissions are cleared.
 // When visibility is "custom", the provided grants are validated and stored.
+//
+// Stage failures preserve typed AppError causes (e.g. NotFound when
+// UpdateVisibility hits a row deleted by a concurrent client) so the
+// wire response surfaces the actual category rather than smothering
+// every sub-error as generic Internal — see cordinator Issue #5 +
+// the wrapPermissionError helper in permissions_api.go for the
+// rationale.
 func (s *entityService) SetEntityPermissions(ctx context.Context, entityID string, input SetPermissionsInput) error {
 	entity, err := s.entities.FindByID(ctx, entityID)
 	if err != nil {
@@ -1615,13 +1622,13 @@ func (s *entityService) SetEntityPermissions(ctx context.Context, entityID strin
 		entity.IsPrivate = input.IsPrivate
 		entity.UpdatedAt = time.Now().UTC()
 		if err := s.entities.Update(ctx, entity); err != nil {
-			return apperror.NewInternal(fmt.Errorf("updating entity privacy: %w", err))
+			return wrapPermissionError(ctx, "updating entity privacy", err)
 		}
 		if err := s.permissions.DeleteByEntity(ctx, entityID); err != nil {
-			return apperror.NewInternal(fmt.Errorf("clearing permissions: %w", err))
+			return wrapPermissionError(ctx, "clearing existing grants", err)
 		}
 		if err := s.permissions.UpdateVisibility(ctx, entityID, VisibilityDefault); err != nil {
-			return apperror.NewInternal(fmt.Errorf("updating visibility mode: %w", err))
+			return wrapPermissionError(ctx, "switching visibility to default", err)
 		}
 
 	case VisibilityCustom:
@@ -1639,10 +1646,10 @@ func (s *entityService) SetEntityPermissions(ctx context.Context, entityID strin
 		}
 
 		if err := s.permissions.SetPermissions(ctx, entityID, input.Permissions); err != nil {
-			return apperror.NewInternal(fmt.Errorf("setting permissions: %w", err))
+			return wrapPermissionError(ctx, "writing grant rows", err)
 		}
 		if err := s.permissions.UpdateVisibility(ctx, entityID, VisibilityCustom); err != nil {
-			return apperror.NewInternal(fmt.Errorf("updating visibility mode: %w", err))
+			return wrapPermissionError(ctx, "switching visibility to custom", err)
 		}
 
 	default:
