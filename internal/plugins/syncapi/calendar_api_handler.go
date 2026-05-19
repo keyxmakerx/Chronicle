@@ -1061,6 +1061,332 @@ func (h *CalendarAPIHandler) ImportCalendar(c echo.Context) error {
 	})
 }
 
+// --- C-CAL-CREATE-SYNCAPI-ALIGN: POST /api/v1/campaigns/:id/calendar ---
+
+// apiCreateCalendarBody is the JSON request body for the syncapi
+// surface's calendar-create endpoint. Mirrors the per-campaign-token
+// surface's apiCreateCalendarBody (calendar.api_handler.go) so the
+// Foundry-side transform in FM-CAL-EDITOR-PR3 binds against one
+// canonical wire shape. Pinned in
+// cordinator/decisions/2026-05-19-calendar-create-wire.md.
+//
+// Defined in the syncapi package (not imported from the calendar
+// package) because the syncapi handler is a thin adapter — keeping
+// the DTO local lets a future divergence land here without
+// cross-package coupling. If a v2 amendment introduces real divergence
+// the two surfaces stay independently mutable.
+type apiCreateCalendarBody struct {
+	Name          string                 `json:"name"`
+	CurrentYear   int                    `json:"current_year"`
+	CurrentMonth  int                    `json:"current_month"`
+	CurrentDay    int                    `json:"current_day"`
+	CurrentHour   int                    `json:"current_hour"`
+	CurrentMinute int                    `json:"current_minute"`
+	Months        []apiCreateMonth       `json:"months"`
+	Weekdays      []apiCreateWeekday     `json:"weekdays"`
+	Seasons       []apiCreateSeason      `json:"seasons,omitempty"`
+	Moons         []apiCreateMoon        `json:"moons,omitempty"`
+	Eras          []apiCreateEra         `json:"eras,omitempty"`
+}
+
+type apiCreateMonth struct {
+	Name        string `json:"name"`
+	Days        int    `json:"days"`
+	Intercalary bool   `json:"intercalary,omitempty"`
+}
+
+type apiCreateWeekday struct {
+	Name      string `json:"name"`
+	IsRestDay bool   `json:"is_rest_day,omitempty"`
+}
+
+type apiCreateSeason struct {
+	Name       string `json:"name"`
+	MonthStart int    `json:"month_start"`
+	DayStart   int    `json:"day_start"`
+	MonthEnd   int    `json:"month_end"`
+	DayEnd     int    `json:"day_end"`
+	Color      string `json:"color,omitempty"`
+}
+
+type apiCreateMoon struct {
+	Name        string  `json:"name"`
+	CycleDays   float64 `json:"cycle_days"`
+	PhaseOffset float64 `json:"phase_offset,omitempty"`
+	Color       string  `json:"color,omitempty"`
+}
+
+type apiCreateEra struct {
+	Name      string `json:"name"`
+	StartYear int    `json:"start_year"`
+	EndYear   *int   `json:"end_year,omitempty"`
+	Color     string `json:"color,omitempty"`
+}
+
+type apiCalendarCreated struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	CurrentYear   int    `json:"current_year"`
+	CurrentMonth  int    `json:"current_month"`
+	CurrentDay    int    `json:"current_day"`
+	CurrentHour   int    `json:"current_hour"`
+	CurrentMinute int    `json:"current_minute"`
+	MonthCount    int    `json:"month_count"`
+	WeekdayCount  int    `json:"weekday_count"`
+	SeasonCount   int    `json:"season_count"`
+	MoonCount     int    `json:"moon_count"`
+	EraCount      int    `json:"era_count"`
+}
+
+// CreateCalendar imports a Calendaria-shaped payload as a new
+// Chronicle calendar on the syncapi per-campaign-token surface.
+//
+// Closes the routing gap operator surfaced 2026-05-19: chronicle#323
+// landed the POST on the calendar plugin's `:cid`-parametered
+// per-campaign-token surface, but Echo's router resolves the duplicate
+// URL `/api/v1/campaigns/{*}/calendar` in favor of the syncapi
+// `:id`-parametered registration (later-wins for conflicting param
+// names). The result: browser-session smoke tests reached syncapi's
+// GET but had no POST handler to hit; the failure surfaced as a 403
+// from the older calendar-plugin POST that the router DID still serve
+// for the POST-only entry but with `?token=` auth the browser session
+// didn't satisfy.
+//
+// Fix: thin adapter handler that delegates to calendarSvc.CreateCalendar
+// and calendarSvc.ApplyImport — mirrors how the syncapi calendar
+// surface's other writers (CreateEvent, AdvanceDate, ImportCalendar)
+// adapt to the service layer. Authentication is the syncapi standard
+// (session-or-API-key), addon-gated, write-permission-required —
+// matching every other write on this surface.
+//
+// POST /api/v1/campaigns/:id/calendar
+func (h *CalendarAPIHandler) CreateCalendar(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	var req apiCreateCalendarBody
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+	if vErr := validateCreateCalendarBody(&req); vErr != nil {
+		return vErr
+	}
+
+	// 409 if a calendar already exists for this campaign. Foundry's
+	// import banner needs to distinguish "already imported" from
+	// "validation error" so the client renders the right banner.
+	if existing, gErr := h.calendarSvc.GetCalendar(ctx, campaignID); gErr == nil && existing != nil {
+		return apperror.NewConflict(
+			fmt.Sprintf("calendar %q is already configured for this campaign; "+
+				"use the existing calendar's UI to edit it, or delete it before re-importing.",
+				existing.Name))
+	} else if gErr != nil && apperror.SafeCode(gErr) != http.StatusNotFound {
+		return apperror.NewInternal(fmt.Errorf("check existing calendar: %w", gErr))
+	}
+
+	// Create the calendar row + seed defaults via the existing service
+	// surface. ApplyImport then overlays the import data on the seeded
+	// defaults; on failure we rollback by DeleteCalendar so the
+	// operator never sees a zombie row.
+	newCal, err := h.calendarSvc.CreateCalendar(ctx, campaignID, calendar.CreateCalendarInput{
+		Mode:        calendar.ModeFantasy,
+		Name:        req.Name,
+		CurrentYear: req.CurrentYear,
+	})
+	if err != nil {
+		slog.Error("syncapi calendar create: CreateCalendar failed",
+			slog.String("campaign_id", campaignID),
+			slog.Any("error", err),
+		)
+		return apperror.NewInternal(fmt.Errorf("create calendar: %w", err))
+	}
+
+	result := buildImportResultFromAPI(&req)
+	if aErr := h.calendarSvc.ApplyImport(ctx, newCal.ID, result); aErr != nil {
+		// Rollback the half-created calendar so the next attempt
+		// doesn't trip the 409 above on a zombie row.
+		if dErr := h.calendarSvc.DeleteCalendar(ctx, newCal.ID); dErr != nil {
+			slog.Error("syncapi calendar create: rollback DeleteCalendar failed",
+				slog.String("calendar_id", newCal.ID),
+				slog.Any("apply_error", aErr),
+				slog.Any("delete_error", dErr),
+			)
+		}
+		// ApplyImport surfaces validation errors from inner Set*
+		// methods as AppErrors with Type=="validation_error".
+		// Translate to NewValidation so the wire stays 422.
+		if apperror.SafeCode(aErr) == http.StatusUnprocessableEntity ||
+			apperror.SafeCode(aErr) == http.StatusBadRequest {
+			return apperror.NewValidation(apperror.SafeMessage(aErr))
+		}
+		return apperror.NewInternal(fmt.Errorf("apply import: %w", aErr))
+	}
+
+	// Refine current-date fields. CreateCalendar seeds the row at
+	// month=1 day=1; honor explicit caller preferences when present.
+	if req.CurrentMonth > 0 && req.CurrentDay > 0 {
+		uErr := h.calendarSvc.UpdateCalendar(ctx, newCal.ID, calendar.UpdateCalendarInput{
+			Name:             newCal.Name,
+			Mode:             newCal.Mode,
+			CurrentYear:      req.CurrentYear,
+			CurrentMonth:     req.CurrentMonth,
+			CurrentDay:       req.CurrentDay,
+			CurrentHour:      req.CurrentHour,
+			CurrentMinute:    req.CurrentMinute,
+			HoursPerDay:      newCal.HoursPerDay,
+			MinutesPerHour:   newCal.MinutesPerHour,
+			SecondsPerMinute: newCal.SecondsPerMinute,
+			LeapYearEvery:    newCal.LeapYearEvery,
+			LeapYearOffset:   newCal.LeapYearOffset,
+		})
+		if uErr != nil {
+			// Date refinement is post-import; the calendar itself is
+			// already created. Log and continue so the operator can
+			// correct via PUT /date.
+			slog.Warn("syncapi calendar create: date refinement failed; calendar import otherwise complete",
+				slog.String("calendar_id", newCal.ID),
+				slog.Any("error", uErr),
+			)
+		}
+	}
+
+	return c.JSON(http.StatusCreated, apiCalendarCreated{
+		ID:            newCal.ID,
+		Name:          req.Name,
+		CurrentYear:   req.CurrentYear,
+		CurrentMonth:  defaultIfZero(req.CurrentMonth, 1),
+		CurrentDay:    defaultIfZero(req.CurrentDay, 1),
+		CurrentHour:   req.CurrentHour,
+		CurrentMinute: req.CurrentMinute,
+		MonthCount:    len(req.Months),
+		WeekdayCount:  len(req.Weekdays),
+		SeasonCount:   len(req.Seasons),
+		MoonCount:     len(req.Moons),
+		EraCount:      len(req.Eras),
+	})
+}
+
+// validateCreateCalendarBody enforces wire-shape invariants. Validate
+// at the API layer because the service's Set* methods accept empty
+// arrays for replace-all-to-zero semantics — the wire contract
+// requires non-empty months / weekdays.
+func validateCreateCalendarBody(req *apiCreateCalendarBody) error {
+	if req.Name == "" {
+		return apperror.NewValidation("name is required")
+	}
+	if len(req.Months) == 0 {
+		return apperror.NewValidation("months must be a non-empty array")
+	}
+	if len(req.Weekdays) == 0 {
+		return apperror.NewValidation("weekdays must be a non-empty array")
+	}
+	for i, m := range req.Months {
+		if m.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("months[%d].name is required", i))
+		}
+		if m.Days < 1 {
+			return apperror.NewValidation(fmt.Sprintf("months[%d].days must be >= 1", i))
+		}
+	}
+	for i, w := range req.Weekdays {
+		if w.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("weekdays[%d].name is required", i))
+		}
+	}
+	for i, m := range req.Moons {
+		if m.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("moons[%d].name is required", i))
+		}
+		if m.CycleDays <= 0 {
+			return apperror.NewValidation(fmt.Sprintf("moons[%d].cycle_days must be > 0", i))
+		}
+	}
+	for i, s := range req.Seasons {
+		if s.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("seasons[%d].name is required", i))
+		}
+		if s.MonthStart < 1 || s.DayStart < 1 || s.MonthEnd < 1 || s.DayEnd < 1 {
+			return apperror.NewValidation(fmt.Sprintf("seasons[%d] month/day fields must be 1-indexed", i))
+		}
+	}
+	for i, e := range req.Eras {
+		if e.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("eras[%d].name is required", i))
+		}
+		if e.EndYear != nil && *e.EndYear < e.StartYear {
+			return apperror.NewValidation(fmt.Sprintf("eras[%d].end_year must be >= start_year (open-ended era should omit end_year)", i))
+		}
+	}
+	return nil
+}
+
+// buildImportResultFromAPI translates the wire shape into the
+// calendar.ImportResult shape the existing ApplyImport path consumes.
+// Reuses the service-level Set* sequence (and its WS publishes)
+// without re-implementing the dispatch chain at the API layer.
+func buildImportResultFromAPI(req *apiCreateCalendarBody) *calendar.ImportResult {
+	r := &calendar.ImportResult{
+		Format:       calendar.FormatUnknown,
+		CalendarName: req.Name,
+		Settings: calendar.ImportedSettings{
+			CurrentYear: req.CurrentYear,
+		},
+	}
+	for i, m := range req.Months {
+		r.Months = append(r.Months, calendar.MonthInput{
+			Name:          m.Name,
+			Days:          m.Days,
+			SortOrder:     i,
+			IsIntercalary: m.Intercalary,
+		})
+	}
+	for i, w := range req.Weekdays {
+		r.Weekdays = append(r.Weekdays, calendar.WeekdayInput{
+			Name:      w.Name,
+			SortOrder: i,
+			IsRestDay: w.IsRestDay,
+		})
+	}
+	for _, m := range req.Moons {
+		r.Moons = append(r.Moons, calendar.MoonInput{
+			Name:        m.Name,
+			CycleDays:   m.CycleDays,
+			PhaseOffset: m.PhaseOffset,
+			Color:       m.Color,
+		})
+	}
+	for _, s := range req.Seasons {
+		r.Seasons = append(r.Seasons, calendar.Season{
+			Name:       s.Name,
+			StartMonth: s.MonthStart,
+			StartDay:   s.DayStart,
+			EndMonth:   s.MonthEnd,
+			EndDay:     s.DayEnd,
+			Color:      s.Color,
+		})
+	}
+	for i, e := range req.Eras {
+		r.Eras = append(r.Eras, calendar.EraInput{
+			Name:      e.Name,
+			StartYear: e.StartYear,
+			EndYear:   e.EndYear,
+			Color:     e.Color,
+			SortOrder: i,
+		})
+	}
+	return r
+}
+
+// defaultIfZero returns v if non-zero, otherwise fallback. Used to
+// echo "1" back for current_month/current_day when the request omitted
+// them (ApplyImport defaults those to 1).
+func defaultIfZero(v, fallback int) int {
+	if v == 0 {
+		return fallback
+	}
+	return v
+}
+
 // --- Helpers ---
 
 // resolveRole returns the API key owner's role for privacy filtering.

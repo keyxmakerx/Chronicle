@@ -21,6 +21,10 @@ type stubCalendarSvc struct {
 	onGet    func(context.Context, string) (*calendar.Calendar, error)
 	onCreate func(context.Context, string, calendar.CreateCalendarInput) (*calendar.Calendar, error)
 	onApply  func(context.Context, string, *calendar.ImportResult) error
+	// C-CAL-CREATE-SYNCAPI-ALIGN: rollback hook for CreateCalendar's
+	// atomic-rollback path so tests can assert DeleteCalendar was
+	// called when ApplyImport fails.
+	onDelete func(context.Context, string) error
 }
 
 // --- methods we actually use in tests ---
@@ -54,7 +58,12 @@ func (s *stubCalendarSvc) GetCalendarByID(context.Context, string) (*calendar.Ca
 func (s *stubCalendarSvc) UpdateCalendar(context.Context, string, calendar.UpdateCalendarInput) error {
 	return nil
 }
-func (s *stubCalendarSvc) DeleteCalendar(context.Context, string) error    { return nil }
+func (s *stubCalendarSvc) DeleteCalendar(ctx context.Context, calendarID string) error {
+	if s.onDelete != nil {
+		return s.onDelete(ctx, calendarID)
+	}
+	return nil
+}
 func (s *stubCalendarSvc) ListCalendars(context.Context, string) ([]calendar.Calendar, error) {
 	return nil, nil
 }

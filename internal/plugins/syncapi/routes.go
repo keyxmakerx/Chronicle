@@ -154,6 +154,11 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.DELETE("/entities/:entityID", api.DeleteEntity, RequirePermission(PermWrite))
 
 	// Calendar write endpoints (require "write" permission + calendar addon).
+	// POST /calendar imports a Calendaria-shaped payload as a new
+	// Chronicle calendar — closes the routing gap operator surfaced
+	// 2026-05-19. Wire contract pinned in cordinator/decisions/
+	// 2026-05-19-calendar-create-wire.md. C-CAL-CREATE-SYNCAPI-ALIGN.
+	calGroup.POST("/calendar", calAPI.CreateCalendar, RequirePermission(PermWrite))
 	calGroup.POST("/calendar/events", calAPI.CreateEvent, RequirePermission(PermWrite))
 	calGroup.PUT("/calendar/events/:eventID", calAPI.UpdateEvent, RequirePermission(PermWrite))
 	calGroup.DELETE("/calendar/events/:eventID", calAPI.DeleteEvent, RequirePermission(PermWrite))
