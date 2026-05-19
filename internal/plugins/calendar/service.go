@@ -392,8 +392,20 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID string,
 	}
 
 	cal.Name = input.Name
-	cal.Description = input.Description
-	cal.EpochName = input.EpochName
+	// Description + EpochName are pointer-typed (nullable in storage); nil
+	// from a partial-update bind should mean "preserve current value", not
+	// "blank to NULL". Without the guard, any UpdateCalendar call that
+	// omits these fields (e.g. an advance-date UI that only sends date
+	// fields) silently clears the operator's setup-time description and
+	// epoch. Same class of bug C-PERMISSIONS-INLINE-COMPONENT fixed for
+	// UpdateEntityInput.IsPrivate via *bool in chronicle#318. See audit at
+	// reports/chronicle/2026-05-19-c-cal-null-preserve-audit.md §2.
+	if input.Description != nil {
+		cal.Description = input.Description
+	}
+	if input.EpochName != nil {
+		cal.EpochName = input.EpochName
+	}
 	if input.Mode != "" {
 		cal.Mode = input.Mode
 	}
@@ -589,15 +601,100 @@ func (s *calendarService) GetWeather(ctx context.Context, calendarID string) (*W
 }
 
 // SetWeather sets the current weather state for a calendar.
+//
+// Load-merge-write: any nil field on the input preserves the corresponding
+// stored value rather than blanking it. Without this, a partial-save (the
+// operator edits PresetID only via the settings tab; sync sends preset
+// updates without re-asserting wind/precip) silently clears the unsent
+// fields to NULL. Same class as C-PERMISSIONS-INLINE-COMPONENT's IsPrivate
+// silent-flip; entities solved it with `*bool` at the input layer + a
+// nil-guard at the service. Weather's input is already all-pointer, so the
+// fix lives entirely at the service layer here. Audit at
+// reports/chronicle/2026-05-19-c-cal-null-preserve-audit.md §2 + §3.
+//
+// One extra SELECT per write — fine for an Owner-only low-traffic edit.
+// A future caller that wants explicit replace-all semantics should hit a
+// DELETE endpoint first; "send all-nil" no longer round-trips as "blank
+// everything" through this path.
 func (s *calendarService) SetWeather(ctx context.Context, calendarID string, input WeatherInput) error {
-	if err := s.repo.SetWeather(ctx, calendarID, input); err != nil {
+	existing, err := s.repo.GetWeather(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("load weather for merge: %w", err)
+	}
+	merged := mergeWeatherInput(existing, input)
+	if err := s.repo.SetWeather(ctx, calendarID, merged); err != nil {
 		return fmt.Errorf("set weather: %w", err)
 	}
-	// Publish weather change event.
+	// Publish weather change event — payload reflects the merged state so
+	// subscribers see the final value, not the sparse input.
 	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
-		s.events.PublishCalendarEvent("calendar.weather.changed", cal.CampaignID, calendarID, input)
+		s.events.PublishCalendarEvent("calendar.weather.changed", cal.CampaignID, calendarID, merged)
 	}
 	return nil
+}
+
+// mergeWeatherInput overlays the non-nil fields of `in` on top of `existing`,
+// returning the WeatherInput to persist. If `existing` is nil (no row yet),
+// `in` is returned as-is (first write seeds the row directly).
+//
+// Pointer types throughout WeatherInput let us use nil as the "absent /
+// preserve" signal. A future caller that wants to clear a single field
+// would need a dedicated endpoint or explicit-null escape hatch; pointer
+// types collapse "absent" and "explicit null" at the JSON-bind layer so the
+// nil-preserve choice is the safe default. Same trade-off C-PERMISSIONS-
+// INLINE-COMPONENT made for entities.IsPrivate.
+func mergeWeatherInput(existing *Weather, in WeatherInput) WeatherInput {
+	if existing == nil {
+		return in
+	}
+	out := in
+	if out.PresetID == nil {
+		out.PresetID = existing.PresetID
+	}
+	if out.PresetLabel == nil {
+		out.PresetLabel = existing.PresetLabel
+	}
+	if out.Icon == nil {
+		out.Icon = existing.Icon
+	}
+	if out.Color == nil {
+		out.Color = existing.Color
+	}
+	if out.TemperatureCelsius == nil {
+		out.TemperatureCelsius = existing.TemperatureCelsius
+	}
+	if existing.Wind != nil {
+		if out.WindSpeedKPH == nil {
+			out.WindSpeedKPH = existing.Wind.SpeedKPH
+		}
+		if out.WindSpeedTier == nil {
+			out.WindSpeedTier = existing.Wind.SpeedTier
+		}
+		if out.WindDirection == nil {
+			out.WindDirection = existing.Wind.Direction
+		}
+		if out.WindDirectionDeg == nil {
+			out.WindDirectionDeg = existing.Wind.DirectionDegrees
+		}
+	}
+	if existing.Precipitation != nil {
+		if out.PrecipitationType == nil {
+			out.PrecipitationType = existing.Precipitation.Type
+		}
+		if out.PrecipitationIntensity == nil {
+			out.PrecipitationIntensity = existing.Precipitation.Intensity
+		}
+	}
+	if out.ZoneID == nil {
+		out.ZoneID = existing.ZoneID
+	}
+	if out.ZoneName == nil {
+		out.ZoneName = existing.ZoneName
+	}
+	if out.Description == nil {
+		out.Description = existing.Description
+	}
+	return out
 }
 
 // GetCycles returns all cycles for a calendar.
@@ -774,38 +871,105 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 		return err
 	}
 
+	// C-CAL-NULL-PRESERVE (chronicle PR for 2026-05-19 audit):
+	// 18 pointer-typed input fields are nil-guarded so a partial-save
+	// (e.g. title-only edit via the FM-CAL-EDITOR day inspector) doesn't
+	// silently blank description, color, times, recurrence config, or
+	// per-user visibility rules. Same pattern as
+	// UpdateEntityInput.IsPrivate *bool from chronicle#318. Audit
+	// context: reports/chronicle/2026-05-19-c-cal-null-preserve-audit.md
+	// §2 risk matrix.
+	//
+	// Value-typed fields stay unguarded by design — they have no
+	// "absent" semantic distinct from "false/default/empty":
+	//   Name      — required; empty string would fail validation upstream.
+	//   Year/Month/Day — required for an event edit.
+	//   Visibility    — defaulted to evt.Visibility above when empty.
+	//   IsRecurring   — bool: false IS the value, not "absent".
+	//   AllDay        — same.
 	evt.Name = input.Name
-	evt.Description = input.Description
-	// Sanitize rich text HTML if provided.
-	if input.DescriptionHTML != nil && *input.DescriptionHTML != "" {
-		sanitized := sanitize.HTML(*input.DescriptionHTML)
-		evt.DescriptionHTML = &sanitized
-	} else {
-		evt.DescriptionHTML = input.DescriptionHTML
+	if input.Description != nil {
+		evt.Description = input.Description
 	}
+	// Sanitize rich text HTML if provided. nil input.DescriptionHTML
+	// means "preserve current" (the nil-guard), not "clear". Empty-string
+	// inside a non-nil pointer falls through to the else branch, which
+	// preserves the original behavior of writing the (empty) value.
+	if input.DescriptionHTML != nil {
+		if *input.DescriptionHTML != "" {
+			sanitized := sanitize.HTML(*input.DescriptionHTML)
+			evt.DescriptionHTML = &sanitized
+		} else {
+			evt.DescriptionHTML = input.DescriptionHTML
+		}
+	}
+	// EntityID intentionally NOT nil-guarded here pending C-ENTITY-LINK-
+	// DESIGN (see cordinator/plans/BACKLOG.md). Today nil EntityID
+	// continues to mean "clear the entity link" to preserve the existing
+	// wire semantic until the entity-linking surface is reworked
+	// holistically — including the deferred multi-entity N:M support
+	// (C-CALENDAR-AUDIT Chunk 3) and cross-plugin link consistency. A
+	// regression test (TestUpdateEvent_EntityIDStillClearsOnNil) pins
+	// this deliberate non-fix so a future sweep can't accidentally
+	// include it without revisiting the design dispatch. Audit context:
+	// reports/chronicle/2026-05-19-c-cal-null-preserve-audit.md §5 risk #1.
 	evt.EntityID = input.EntityID
 	evt.Year = input.Year
 	evt.Month = input.Month
 	evt.Day = input.Day
-	evt.StartHour = input.StartHour
-	evt.StartMinute = input.StartMinute
-	evt.EndYear = input.EndYear
-	evt.EndMonth = input.EndMonth
-	evt.EndDay = input.EndDay
-	evt.EndHour = input.EndHour
-	evt.EndMinute = input.EndMinute
+	if input.StartHour != nil {
+		evt.StartHour = input.StartHour
+	}
+	if input.StartMinute != nil {
+		evt.StartMinute = input.StartMinute
+	}
+	if input.EndYear != nil {
+		evt.EndYear = input.EndYear
+	}
+	if input.EndMonth != nil {
+		evt.EndMonth = input.EndMonth
+	}
+	if input.EndDay != nil {
+		evt.EndDay = input.EndDay
+	}
+	if input.EndHour != nil {
+		evt.EndHour = input.EndHour
+	}
+	if input.EndMinute != nil {
+		evt.EndMinute = input.EndMinute
+	}
 	evt.IsRecurring = input.IsRecurring
-	evt.RecurrenceType = input.RecurrenceType
-	evt.RecurrenceInterval = input.RecurrenceInterval
-	evt.RecurrenceEndYear = input.RecurrenceEndYear
-	evt.RecurrenceEndMonth = input.RecurrenceEndMonth
-	evt.RecurrenceEndDay = input.RecurrenceEndDay
-	evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences
+	if input.RecurrenceType != nil {
+		evt.RecurrenceType = input.RecurrenceType
+	}
+	if input.RecurrenceInterval != nil {
+		evt.RecurrenceInterval = input.RecurrenceInterval
+	}
+	if input.RecurrenceEndYear != nil {
+		evt.RecurrenceEndYear = input.RecurrenceEndYear
+	}
+	if input.RecurrenceEndMonth != nil {
+		evt.RecurrenceEndMonth = input.RecurrenceEndMonth
+	}
+	if input.RecurrenceEndDay != nil {
+		evt.RecurrenceEndDay = input.RecurrenceEndDay
+	}
+	if input.RecurrenceMaxOccurrences != nil {
+		evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences
+	}
 	evt.Visibility = input.Visibility
-	evt.VisibilityRules = input.VisibilityRules
-	evt.Category = input.Category
-	evt.Color = input.Color
-	evt.Icon = input.Icon
+	if input.VisibilityRules != nil {
+		evt.VisibilityRules = input.VisibilityRules
+	}
+	if input.Category != nil {
+		evt.Category = input.Category
+	}
+	if input.Color != nil {
+		evt.Color = input.Color
+	}
+	if input.Icon != nil {
+		evt.Icon = input.Icon
+	}
 	evt.AllDay = input.AllDay
 
 	if err := s.repo.UpdateEvent(ctx, evt); err != nil {
