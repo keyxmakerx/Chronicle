@@ -340,6 +340,12 @@ func (s *calendarService) eagerLoad(ctx context.Context, cal *Calendar) (*Calend
 	if cal.Festivals, err = s.repo.GetFestivals(ctx, cal.ID); err != nil {
 		return nil, fmt.Errorf("get festivals: %w", err)
 	}
+	// Weather is best-effort: a missing row is a normal "no weather
+	// set yet" state, not a load failure. Repo returns nil + nil err
+	// in that case.
+	if cal.Weather, err = s.repo.GetWeather(ctx, cal.ID); err != nil {
+		return nil, fmt.Errorf("get weather: %w", err)
+	}
 	return cal, nil
 }
 
@@ -606,6 +612,16 @@ func (s *calendarService) GetCycles(ctx context.Context, calendarID string) ([]C
 // moved, refetch") plus the granular calendar.cycle.changed (for the
 // Foundry-side editor's targeted refresh path).
 func (s *calendarService) SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error {
+	// Name validation added in C-CAL-WCF-UI to align with SetMonths /
+	// SetWeekdays / SetMoons / SetSeasons / SetEras / SetEventCategories,
+	// all of which already reject empty names with NewValidation. The
+	// internal settings UI relies on this surface for inline error
+	// rendering ("category: validation" → amber banner in the form).
+	for i, c := range cycles {
+		if c.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("cycle %d: name is required", i+1))
+		}
+	}
 	if err := s.repo.SetCycles(ctx, calendarID, cycles); err != nil {
 		return fmt.Errorf("set cycles: %w", err)
 	}
@@ -626,6 +642,21 @@ func (s *calendarService) GetFestivals(ctx context.Context, calendarID string) (
 // Mirrors SetCycles' double-emit: structure.updated for the broad
 // listener + festival.changed for granular refresh. See C-CAL-WS-DOTTED.
 func (s *calendarService) SetFestivals(ctx context.Context, calendarID string, festivals []FestivalInput) error {
+	// Name + date validation added in C-CAL-WCF-UI. Mirrors the rest
+	// of the Set* surface; the settings UI displays the resulting
+	// "category: validation" payload inline so the operator doesn't
+	// have to dig in server logs to find a typo.
+	for i, f := range festivals {
+		if f.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("festival %d: name is required", i+1))
+		}
+		// A festival is anchored either on a specific month+day or
+		// between two months (after_month). Both empty leaves the
+		// festival un-dated, which renders nowhere; reject it.
+		if f.Month == nil && f.AfterMonth == nil {
+			return apperror.NewValidation(fmt.Sprintf("festival %d: must have either month+day or after_month", i+1))
+		}
+	}
 	if err := s.repo.SetFestivals(ctx, calendarID, festivals); err != nil {
 		return fmt.Errorf("set festivals: %w", err)
 	}

@@ -55,6 +55,14 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 					@settingsTab("eras", "fa-solid fa-landmark", "Eras")
 				}
 				@settingsTab("categories", "fa-solid fa-tag", "Categories")
+				if !cal.IsRealLife() {
+					// Weather / Cycles / Festivals — added in C-CAL-WCF-UI.
+					// Hidden in real-life mode (no fantasy-style cycles or
+					// custom weather plumbing there).
+					@settingsTab("weather", "fa-solid fa-cloud", "Weather")
+					@settingsTab("cycles", "fa-solid fa-arrows-spin", "Cycles")
+					@settingsTab("festivals", "fa-solid fa-champagne-glasses", "Festivals")
+				}
 			</div>
 			<!-- Tab content -->
 			<div class="flex-1 overflow-hidden">
@@ -97,6 +105,23 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 						@categoriesSettingsTab(cc, cal, csrfToken)
 					</div>
 				</div>
+				if !cal.IsRealLife() {
+					<div x-show="tab === 'weather'" x-cloak class="h-full overflow-y-auto">
+						<div class="max-w-3xl mx-auto px-6 py-6">
+							@weatherSettingsTab(cc, cal, csrfToken)
+						</div>
+					</div>
+					<div x-show="tab === 'cycles'" x-cloak class="h-full overflow-y-auto">
+						<div class="max-w-3xl mx-auto px-6 py-6">
+							@cyclesSettingsTab(cc, cal, csrfToken)
+						</div>
+					</div>
+					<div x-show="tab === 'festivals'" x-cloak class="h-full overflow-y-auto">
+						<div class="max-w-3xl mx-auto px-6 py-6">
+							@festivalsSettingsTab(cc, cal, csrfToken)
+						</div>
+					</div>
+				}
 			</div>
 		</div>
 	}

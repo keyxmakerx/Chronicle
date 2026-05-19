@@ -1,0 +1,440 @@
+// calendar_settings_wcf.templ renders the Weather / Cycles / Festivals
+// tabs added in C-CAL-WCF-UI. Pattern mirrors the existing seasons /
+// moons / eras tabs in calendar_settings.templ — Alpine.js x-data
+// seeded by a Go helper, save button POSTs via Chronicle.apiFetch,
+// inline error region renders the wire-contract { error, message,
+// category } payload from respondSettingsError.
+//
+// Operator vision (2026-05-19): festivals are first-class structural
+// entries, weather is editable from the UI (no more bouncing through
+// Calendaria), cycles are CRUD'able through the same surface.
+
+package calendar
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// weatherSettingsTab renders the current weather state and a form to
+// update it. PresetID is the operator's primary lever; the rest of
+// the fields are optional overrides.
+templ weatherSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Weather</h2>
+			<p class="text-sm text-fg-secondary">
+				Set the current weather state. PresetID is the canonical lever (e.g. "rain", "thunderstorm") and the rest are optional overrides. Saving fires a calendar.weather.changed WebSocket event so connected Foundry clients refresh.
+			</p>
+		</div>
+		<div x-data={ weatherData(cal.Weather) } class="card p-4 space-y-3">
+			<div class="grid grid-cols-3 gap-3">
+				<div>
+					<label class="block text-[10px] text-fg-secondary mb-0.5">Preset ID</label>
+					<input type="text" x-model="weather.preset_id" class="input text-sm w-full" placeholder="rain"/>
+				</div>
+				<div>
+					<label class="block text-[10px] text-fg-secondary mb-0.5">Label</label>
+					<input type="text" x-model="weather.preset_label" class="input text-sm w-full" placeholder="Steady rain"/>
+				</div>
+				<div>
+					<label class="block text-[10px] text-fg-secondary mb-0.5">Icon</label>
+					<input type="text" x-model="weather.icon" class="input text-sm w-full" placeholder="cloud-rain"/>
+				</div>
+			</div>
+			<div class="grid grid-cols-3 gap-3">
+				<div>
+					<label class="block text-[10px] text-fg-secondary mb-0.5">Color</label>
+					<input type="color" x-model="weather.color" class="input w-full h-[34px]"/>
+				</div>
+				<div>
+					<label class="block text-[10px] text-fg-secondary mb-0.5">Temperature (°C)</label>
+					<input type="number" step="0.1" x-model.number="weather.temperature_celsius" class="input text-sm w-full"/>
+				</div>
+				<div>
+					<label class="block text-[10px] text-fg-secondary mb-0.5">Zone ID</label>
+					<input type="text" x-model="weather.zone_id" class="input text-sm w-full" placeholder="temperate"/>
+				</div>
+			</div>
+			<div class="grid grid-cols-4 gap-3">
+				<div>
+					<label class="block text-[10px] text-fg-secondary mb-0.5">Wind Speed (kph)</label>
+					<input type="number" step="0.1" x-model.number="weather.wind_speed_kph" class="input text-sm w-full"/>
+				</div>
+				<div>
+					<label class="block text-[10px] text-fg-secondary mb-0.5">Wind Direction</label>
+					<input type="text" x-model="weather.wind_direction" class="input text-sm w-full" placeholder="NW"/>
+				</div>
+				<div>
+					<label class="block text-[10px] text-fg-secondary mb-0.5">Precipitation</label>
+					<input type="text" x-model="weather.precipitation_type" class="input text-sm w-full" placeholder="rain"/>
+				</div>
+				<div>
+					<label class="block text-[10px] text-fg-secondary mb-0.5">Intensity (0-1)</label>
+					<input type="number" step="0.1" min="0" max="1" x-model.number="weather.precipitation_intensity" class="input text-sm w-full"/>
+				</div>
+			</div>
+			<div>
+				<label class="block text-[10px] text-fg-secondary mb-0.5">Description</label>
+				<input type="text" x-model="weather.description" class="input text-sm w-full" placeholder="Optional GM narration"/>
+			</div>
+			<div class="flex items-center justify-end gap-2">
+				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
+				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false; error = '';
+						const w = weather;
+						const payload = {
+							preset_id: w.preset_id || null,
+							preset_label: w.preset_label || null,
+							icon: w.icon || null,
+							color: w.color || null,
+							temperature_celsius: typeof w.temperature_celsius === 'number' ? w.temperature_celsius : null,
+							wind_speed_kph: typeof w.wind_speed_kph === 'number' ? w.wind_speed_kph : null,
+							wind_direction: w.wind_direction || null,
+							precipitation_type: w.precipitation_type || null,
+							precipitation_intensity: typeof w.precipitation_intensity === 'number' ? w.precipitation_intensity : null,
+							zone_id: w.zone_id || null,
+							description: w.description || null
+						};
+						Chronicle.apiFetch('/campaigns/%s/calendars/%s/weather', { method: 'PUT', body: payload })
+							.then(r => { if (!r.ok) { return r.json().then(b => { throw new Error((b && b.message) || 'Save failed'); }, () => { throw new Error('Save failed'); }); } saved = true; setTimeout(() => saved = false, 3000); })
+							.catch(e => { error = e.message; })
+							.finally(() => { saving = false; })
+					`, cc.Campaign.ID, cal.ID) }
+				>
+					<span x-show="!saving">Save Weather</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// cyclesSettingsTab renders the cycles + cycle entries editor. Each
+// cycle has a name, length (years per rotation), type, and an ordered
+// list of entries (e.g. Tyr's Endlean cycle has 11 stages).
+templ cyclesSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Cycles</h2>
+			<p class="text-sm text-fg-secondary">
+				Define periodic named cycles (zodiac, elemental, seasonal). Each cycle rotates through its entries over cycle_length years. Example: Tyr's 11-stage Endlean cycle.
+			</p>
+		</div>
+		<div x-data={ cyclesData(cal.Cycles) }>
+			<div class="space-y-2 mb-4">
+				<template x-for="(cyc, i) in cycles" :key="i">
+					<div class="card p-3 space-y-2">
+						<div class="flex items-center justify-between">
+							<span class="text-sm font-medium text-fg" x-text="cyc.name || 'Unnamed Cycle'"></span>
+							<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="cycles.splice(i, 1)">
+								<i class="fa-solid fa-trash-can"></i>
+							</button>
+						</div>
+						<div class="grid grid-cols-3 gap-2">
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Name</label>
+								<input type="text" x-model="cyc.name" class="input text-sm w-full" placeholder="Cycle name"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Length (years)</label>
+								<input type="number" x-model.number="cyc.cycle_length" class="input text-sm w-full" min="1"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Type</label>
+								<input type="text" x-model="cyc.type" class="input text-sm w-full" placeholder="yearly"/>
+							</div>
+						</div>
+						<div class="space-y-1">
+							<div class="text-[10px] text-fg-secondary">Entries</div>
+							<template x-for="(en, j) in cyc.entries" :key="j">
+								<div class="flex items-center gap-2">
+									<input type="text" x-model="en.name" class="input text-xs flex-1" placeholder="Entry name"/>
+									<input type="text" x-model="en.icon" class="input text-xs w-24" placeholder="Icon"/>
+									<input type="number" x-model.number="en.year_offset" class="input text-xs w-20" placeholder="Offset"/>
+									<button type="button" class="text-red-500 hover:text-red-400 text-xs" @click="cyc.entries.splice(j, 1)">
+										<i class="fa-solid fa-xmark"></i>
+									</button>
+								</div>
+							</template>
+							<button type="button" class="text-xs text-fg-secondary hover:text-fg" @click="cyc.entries.push({ name: 'New Entry', icon: '', year_offset: cyc.entries.length })">
+								<i class="fa-solid fa-plus mr-1"></i> Add entry
+							</button>
+						</div>
+					</div>
+				</template>
+			</div>
+			<button
+				type="button"
+				class="btn-secondary text-sm w-full"
+				@click="cycles.push({ name: 'New Cycle', cycle_length: 12, type: 'yearly', sort_order: cycles.length, entries: [] })"
+			>
+				<i class="fa-solid fa-plus mr-1"></i> Add Cycle
+			</button>
+			<div class="flex items-center justify-end gap-2 mt-4">
+				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
+				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false; error = '';
+						const payload = cycles.map((c, idx) => ({
+							name: c.name,
+							cycle_length: c.cycle_length || 1,
+							type: c.type || 'yearly',
+							sort_order: idx,
+							entries: (c.entries || []).map((e, ej) => ({
+								name: e.name,
+								icon: e.icon || null,
+								year_offset: e.year_offset || 0,
+								sort_order: ej
+							}))
+						}));
+						Chronicle.apiFetch('/campaigns/%s/calendars/%s/cycles', { method: 'PUT', body: payload })
+							.then(r => { if (!r.ok) { return r.json().then(b => { throw new Error((b && b.message) || 'Save failed'); }, () => { throw new Error('Save failed'); }); } saved = true; setTimeout(() => saved = false, 3000); })
+							.catch(e => { error = e.message; })
+							.finally(() => { saving = false; })
+					`, cc.Campaign.ID, cal.ID) }
+				>
+					<span x-show="!saving">Save All Cycles</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// festivalsSettingsTab renders the festivals editor. A festival is
+// either dated (month+day) OR intercalary (after_month). Service-side
+// validation rejects un-dated festivals so the UI surfaces a wire-
+// contract category=validation error inline.
+templ festivalsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Festivals</h2>
+			<p class="text-sm text-fg-secondary">
+				Define fixed calendar entries (holidays, named days). A festival is either dated (month + day) or intercalary (sits after a given month). Operator-confirmed 2026-05-19: festivals are first-class structural entries, not actor entities.
+			</p>
+		</div>
+		<div x-data={ festivalsData(cal.Festivals) }>
+			<div class="space-y-2 mb-4">
+				<template x-for="(f, i) in festivals" :key="i">
+					<div class="card p-3 space-y-2">
+						<div class="flex items-center justify-between">
+							<span class="text-sm font-medium text-fg" x-text="f.name || 'Unnamed Festival'"></span>
+							<button type="button" class="text-red-500 hover:text-red-400 text-sm" @click="festivals.splice(i, 1)">
+								<i class="fa-solid fa-trash-can"></i>
+							</button>
+						</div>
+						<div class="grid grid-cols-4 gap-2">
+							<div class="col-span-2">
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Name</label>
+								<input type="text" x-model="f.name" class="input text-sm w-full" placeholder="Festival name"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Month</label>
+								<input type="number" x-model.number="f.month" class="input text-sm w-full" min="1"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Day</label>
+								<input type="number" x-model.number="f.day" class="input text-sm w-full" min="1"/>
+							</div>
+						</div>
+						<div class="grid grid-cols-4 gap-2">
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">After Month</label>
+								<input type="number" x-model.number="f.after_month" class="input text-sm w-full" min="0" placeholder="(intercalary)"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Color</label>
+								<input type="color" x-model="f.color" class="input w-full h-[34px]"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Icon</label>
+								<input type="text" x-model="f.icon" class="input text-sm w-full" placeholder="star"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-0.5">Description</label>
+								<input type="text" x-model="f.description" class="input text-sm w-full" placeholder="Optional"/>
+							</div>
+						</div>
+					</div>
+				</template>
+			</div>
+			<button
+				type="button"
+				class="btn-secondary text-sm w-full"
+				@click="festivals.push({ name: 'New Festival', month: 1, day: 1, color: '#f59e0b', icon: 'star', description: '' })"
+			>
+				<i class="fa-solid fa-plus mr-1"></i> Add Festival
+			</button>
+			<div class="flex items-center justify-end gap-2 mt-4">
+				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
+				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					:disabled="saving"
+					@click={ fmt.Sprintf(`
+						saving = true; saved = false; error = '';
+						const payload = festivals.map((f, idx) => ({
+							name: f.name,
+							month: typeof f.month === 'number' ? f.month : null,
+							day: typeof f.day === 'number' ? f.day : null,
+							after_month: typeof f.after_month === 'number' && f.after_month > 0 ? f.after_month : null,
+							color: f.color || null,
+							icon: f.icon || null,
+							description: f.description || null,
+							sort_order: idx
+						}));
+						Chronicle.apiFetch('/campaigns/%s/calendars/%s/festivals', { method: 'PUT', body: payload })
+							.then(r => { if (!r.ok) { return r.json().then(b => { throw new Error((b && b.message) || 'Save failed'); }, () => { throw new Error('Save failed'); }); } saved = true; setTimeout(() => saved = false, 3000); })
+							.catch(e => { error = e.message; })
+							.finally(() => { saving = false; })
+					`, cc.Campaign.ID, cal.ID) }
+				>
+					<span x-show="!saving">Save All Festivals</span>
+					<span x-show="saving">Saving...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// weatherData returns the Alpine.js x-data JSON for the weather form.
+// Seeds from cal.Weather (nil → empty defaults). Field names match
+// WeatherInput's JSON tags so the save payload round-trips cleanly.
+func weatherData(w *Weather) string {
+	type form struct {
+		PresetID               string  `json:"preset_id"`
+		PresetLabel            string  `json:"preset_label"`
+		Icon                   string  `json:"icon"`
+		Color                  string  `json:"color"`
+		TemperatureCelsius     float64 `json:"temperature_celsius"`
+		WindSpeedKPH           float64 `json:"wind_speed_kph"`
+		WindDirection          string  `json:"wind_direction"`
+		PrecipitationType      string  `json:"precipitation_type"`
+		PrecipitationIntensity float64 `json:"precipitation_intensity"`
+		ZoneID                 string  `json:"zone_id"`
+		Description            string  `json:"description"`
+	}
+	var f form
+	if w != nil {
+		f.PresetID = derefStringOr(w.PresetID, "")
+		f.PresetLabel = derefStringOr(w.PresetLabel, "")
+		f.Icon = derefStringOr(w.Icon, "")
+		f.Color = derefStringOr(w.Color, "")
+		if w.TemperatureCelsius != nil {
+			f.TemperatureCelsius = *w.TemperatureCelsius
+		}
+		if w.Wind != nil {
+			if w.Wind.SpeedKPH != nil {
+				f.WindSpeedKPH = *w.Wind.SpeedKPH
+			}
+			f.WindDirection = derefStringOr(w.Wind.Direction, "")
+		}
+		if w.Precipitation != nil {
+			f.PrecipitationType = derefStringOr(w.Precipitation.Type, "")
+			if w.Precipitation.Intensity != nil {
+				f.PrecipitationIntensity = *w.Precipitation.Intensity
+			}
+		}
+		f.ZoneID = derefStringOr(w.ZoneID, "")
+		f.Description = derefStringOr(w.Description, "")
+	}
+	b, _ := json.Marshal(f)
+	return fmt.Sprintf("{ weather: %s, saving: false, saved: false, error: '' }", string(b))
+}
+
+// cyclesData returns the Alpine.js x-data JSON for the cycles list.
+// Each cycle carries its entries array inline so the editor can manage
+// add/remove without a second fetch.
+func cyclesData(cycles []Cycle) string {
+	type entryItem struct {
+		Name       string `json:"name"`
+		Icon       string `json:"icon"`
+		YearOffset int    `json:"year_offset"`
+	}
+	type cycleItem struct {
+		Name        string      `json:"name"`
+		CycleLength int         `json:"cycle_length"`
+		Type        string      `json:"type"`
+		Entries     []entryItem `json:"entries"`
+	}
+	items := make([]cycleItem, len(cycles))
+	for i, c := range cycles {
+		entries := make([]entryItem, len(c.Entries))
+		for j, e := range c.Entries {
+			entries[j] = entryItem{
+				Name:       e.Name,
+				Icon:       derefStringOr(e.Icon, ""),
+				YearOffset: e.YearOffset,
+			}
+		}
+		items[i] = cycleItem{
+			Name:        c.Name,
+			CycleLength: c.CycleLength,
+			Type:        c.Type,
+			Entries:     entries,
+		}
+	}
+	b, _ := json.Marshal(items)
+	return fmt.Sprintf("{ cycles: %s, saving: false, saved: false, error: '' }", string(b))
+}
+
+// festivalsData returns the Alpine.js x-data JSON for the festivals list.
+// Nullable month/day/after_month are projected to 0 in JSON so Alpine's
+// number inputs work; the save handler reads the field as null when 0
+// for after_month and treats month/day as required (validation).
+func festivalsData(festivals []Festival) string {
+	type festItem struct {
+		Name        string `json:"name"`
+		Month       int    `json:"month"`
+		Day         int    `json:"day"`
+		AfterMonth  int    `json:"after_month"`
+		Color       string `json:"color"`
+		Icon        string `json:"icon"`
+		Description string `json:"description"`
+	}
+	items := make([]festItem, len(festivals))
+	for i, f := range festivals {
+		items[i] = festItem{
+			Name:        f.Name,
+			Month:       derefIntOr(f.Month, 0),
+			Day:         derefIntOr(f.Day, 0),
+			AfterMonth:  derefIntOr(f.AfterMonth, 0),
+			Color:       derefStringOr(f.Color, "#f59e0b"),
+			Icon:        derefStringOr(f.Icon, ""),
+			Description: derefStringOr(f.Description, ""),
+		}
+	}
+	b, _ := json.Marshal(items)
+	return fmt.Sprintf("{ festivals: %s, saving: false, saved: false, error: '' }", string(b))
+}
+
+// derefStringOr returns *p or fallback when p is nil. Local helper —
+// the calendar package already has a half-dozen *string fields and
+// inline-deref everywhere; pulling it out keeps the data helpers tidy.
+func derefStringOr(p *string, fallback string) string {
+	if p == nil {
+		return fallback
+	}
+	return *p
+}
+
+// derefIntOr is the int companion to derefStringOr.
+func derefIntOr(p *int, fallback int) int {
+	if p == nil {
+		return fallback
+	}
+	return *p
+}
