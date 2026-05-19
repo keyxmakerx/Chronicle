@@ -100,7 +100,11 @@ func TestSetFestivals_EmitsDottedStructureAndFestivalEvents(t *testing.T) {
 	svc := NewCalendarService(repo)
 	svc.SetEventPublisher(pub)
 
-	if err := svc.SetFestivals(context.Background(), "cal-1", []FestivalInput{{Name: "Test"}}); err != nil {
+	// Festivals need either month+day or after_month per the validation
+	// added in C-CAL-WCF-UI; provide a month so this test stays
+	// focused on the WS emit assertion (not the validation guard).
+	month := 1
+	if err := svc.SetFestivals(context.Background(), "cal-1", []FestivalInput{{Name: "Test", Month: &month}}); err != nil {
 		t.Fatalf("SetFestivals returned unexpected error: %v", err)
 	}
 

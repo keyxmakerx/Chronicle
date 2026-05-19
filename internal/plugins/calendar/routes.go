@@ -38,6 +38,15 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/calendars/:calId/eras", h.UpdateErasAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.GET("/calendars/:calId/event-categories", h.GetEventCategoriesAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendars/:calId/event-categories", h.UpdateEventCategoriesAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// C-CAL-WCF-UI: internal UI bindings for weather, cycles, festivals.
+	// Data layer / service / syncapi were already shipped; these three
+	// PUTs are what the settings page calls when the operator clicks
+	// save. Errors emit the wire-contract `{error, message, category}`
+	// body via respondSettingsError so the inline error region in each
+	// form gets a structured payload to render.
+	cg.PUT("/calendars/:calId/weather", h.UpdateWeatherAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/calendars/:calId/cycles", h.UpdateCyclesAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.PUT("/calendars/:calId/festivals", h.UpdateFestivalsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Advance date/time (Owner only — GMs advance time during play).
 	cg.POST("/calendars/:calId/advance", h.AdvanceDateAPI, campaigns.RequireRole(campaigns.RoleOwner))

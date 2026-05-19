@@ -66,6 +66,10 @@ type Calendar struct {
 	EventCategories []EventCategory `json:"event_categories,omitempty"`
 	Cycles          []Cycle         `json:"cycles,omitempty"`
 	Festivals       []Festival      `json:"festivals,omitempty"`
+	// Weather is nil when no row exists in calendar_weather for this
+	// calendar. Added in C-CAL-WCF-UI so the settings page can render
+	// the current state without a second handler-side fetch.
+	Weather *Weather `json:"weather,omitempty"`
 }
 
 // GetCampaignID returns the campaign ID this calendar belongs to.

@@ -898,6 +898,95 @@ func (h *Handler) UpdateErasAPI(c echo.Context) error {
 	return h.svc.SetEras(ctx, cal.ID, eras)
 }
 
+// --- C-CAL-WCF-UI: weather / cycles / festivals settings handlers ---
+//
+// Internal UI bindings for sub-resources that previously only had
+// syncapi (Foundry-facing) endpoints. The data layer + service + repo
+// were already shipped; this layer is the HTTP wiring the Chronicle
+// web UI calls.
+//
+// All three responders route validation errors through
+// respondSettingsError so the inline error region in each form gets
+// the structured `{ error, message, category }` body it expects.
+// Untyped errors fall through to Echo's framework handler (the
+// existing safety net).
+
+// UpdateWeatherAPI sets the current weather state for a calendar.
+// PUT /campaigns/:id/calendars/:calId/weather
+//
+// PUT-only on purpose: GetWeather is implicit in ShowSettings, which
+// eager-loads cal.Weather. The form re-renders from that state.
+func (h *Handler) UpdateWeatherAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	calID := c.Param("calId")
+
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return respondSettingsError(c, err)
+	}
+
+	var input WeatherInput
+	if err := c.Bind(&input); err != nil {
+		return respondSettingsError(c, apperror.NewBadRequest("invalid weather payload"))
+	}
+
+	if err := h.svc.SetWeather(ctx, cal.ID, input); err != nil {
+		return respondSettingsError(c, err)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateCyclesAPI replaces all cycles for a calendar.
+// PUT /campaigns/:id/calendars/:calId/cycles
+func (h *Handler) UpdateCyclesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	calID := c.Param("calId")
+
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return respondSettingsError(c, err)
+	}
+
+	var cycles []CycleInput
+	if err := c.Bind(&cycles); err != nil {
+		return respondSettingsError(c, apperror.NewBadRequest("invalid cycles payload"))
+	}
+
+	if err := h.svc.SetCycles(ctx, cal.ID, cycles); err != nil {
+		return respondSettingsError(c, err)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// UpdateFestivalsAPI replaces all festivals for a calendar.
+// PUT /campaigns/:id/calendars/:calId/festivals
+//
+// Operator-confirmed (2026-05-19): festivals are first-class entries
+// on the calendar structure, distinct from the orphaned festival-as-
+// Character entities surfaced in Issue #19 (operator-side cleanup).
+func (h *Handler) UpdateFestivalsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	calID := c.Param("calId")
+
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return respondSettingsError(c, err)
+	}
+
+	var festivals []FestivalInput
+	if err := c.Bind(&festivals); err != nil {
+		return respondSettingsError(c, apperror.NewBadRequest("invalid festivals payload"))
+	}
+
+	if err := h.svc.SetFestivals(ctx, cal.ID, festivals); err != nil {
+		return respondSettingsError(c, err)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // UpdateEventCategoriesAPI replaces all event categories.
 // PUT /campaigns/:id/calendars/:calId/event-categories
 func (h *Handler) UpdateEventCategoriesAPI(c echo.Context) error {
