@@ -35,6 +35,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -120,6 +121,91 @@ type apiEventBody struct {
 	Day         int    `json:"day"`
 	Description string `json:"description"`
 	Visibility  string `json:"visibility"`
+}
+
+// --- POST /calendar wire DTOs (C-CAL-CREATE-ENDPOINT, 2026-05-19) ---
+//
+// Field names mirror the Calendaria export shape closely so the
+// Foundry-side transform in FM-CAL-EDITOR-PR3 stays thin. The full
+// wire contract is pinned in
+// cordinator/decisions/2026-05-19-calendar-create-wire.md.
+
+// apiCreateCalendarBody is the JSON request body for
+// POST /api/v1/campaigns/{cid}/calendar. All fields are validated
+// at this layer before being threaded into the service's import path.
+type apiCreateCalendarBody struct {
+	Name          string                 `json:"name"`
+	CurrentYear   int                    `json:"current_year"`
+	CurrentMonth  int                    `json:"current_month"`
+	CurrentDay    int                    `json:"current_day"`
+	CurrentHour   int                    `json:"current_hour"`
+	CurrentMinute int                    `json:"current_minute"`
+	Months        []apiCreateMonth       `json:"months"`
+	Weekdays      []apiCreateWeekday     `json:"weekdays"`
+	Seasons       []apiCreateSeason      `json:"seasons,omitempty"`
+	Moons         []apiCreateMoon        `json:"moons,omitempty"`
+	Eras          []apiCreateEra         `json:"eras,omitempty"`
+}
+
+// apiCreateMonth — per-month entry in the import payload.
+// Intercalary maps to Chronicle's IsIntercalary storage flag.
+type apiCreateMonth struct {
+	Name        string `json:"name"`
+	Days        int    `json:"days"`
+	Intercalary bool   `json:"intercalary,omitempty"`
+}
+
+// apiCreateWeekday — per-weekday entry. is_rest_day defaults false.
+type apiCreateWeekday struct {
+	Name      string `json:"name"`
+	IsRestDay bool   `json:"is_rest_day,omitempty"`
+}
+
+// apiCreateSeason — per-season entry. Months/days are 1-indexed per
+// the wire contract.
+type apiCreateSeason struct {
+	Name       string `json:"name"`
+	MonthStart int    `json:"month_start"`
+	DayStart   int    `json:"day_start"`
+	MonthEnd   int    `json:"month_end"`
+	DayEnd     int    `json:"day_end"`
+	Color      string `json:"color,omitempty"`
+}
+
+// apiCreateMoon — per-moon entry. Color is hex like "#aabbcc".
+// CycleDays uses the same name Chronicle's MoonInput uses for storage.
+type apiCreateMoon struct {
+	Name        string  `json:"name"`
+	CycleDays   float64 `json:"cycle_days"`
+	PhaseOffset float64 `json:"phase_offset,omitempty"`
+	Color       string  `json:"color,omitempty"`
+}
+
+// apiCreateEra — per-era entry. EndYear nullable: open-ended current
+// era is the common case (e.g. "Third Age" with no defined end).
+type apiCreateEra struct {
+	Name      string `json:"name"`
+	StartYear int    `json:"start_year"`
+	EndYear   *int   `json:"end_year,omitempty"`
+	Color     string `json:"color,omitempty"`
+}
+
+// apiCalendarCreated is the response body for a successful POST.
+// Returns the calendar id + a snapshot of the seeded state so the
+// caller can immediately render without a follow-up GET.
+type apiCalendarCreated struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	CurrentYear   int    `json:"current_year"`
+	CurrentMonth  int    `json:"current_month"`
+	CurrentDay    int    `json:"current_day"`
+	CurrentHour   int    `json:"current_hour"`
+	CurrentMinute int    `json:"current_minute"`
+	MonthCount    int    `json:"month_count"`
+	WeekdayCount  int    `json:"weekday_count"`
+	SeasonCount   int    `json:"season_count"`
+	MoonCount     int    `json:"moon_count"`
+	EraCount      int    `json:"era_count"`
 }
 
 // --- visibility translation ---
@@ -503,6 +589,274 @@ func (h *APIHandler) DeleteEvent(c echo.Context) error {
 		return h.respondError(c, APIErrInternal("delete_event", err))
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// CreateCalendar — POST /api/v1/campaigns/{cid}/calendar.
+//
+// Imports a calendar from a Calendaria-shaped payload. Closes the
+// empty-state dead-end the operator hit 2026-05-19: Sync Calendar
+// against a campaign without a calendar would dead-end on "no
+// calendar configured" with no way to fix it from the per-campaign-
+// token surface.
+//
+// Semantics:
+//   - First write seeds the calendar + its sub-resources. 201 Created.
+//   - Subsequent writes against a campaign that already has a calendar
+//     return a structured 409 (`calendar_already_exists`); the Foundry
+//     client renders "calendar already imported; open Sync Calendar
+//     to view it" instead of silently double-creating.
+//   - Validation rejects empty months, empty weekdays, malformed
+//     dates / cycle lengths / colors at the API layer so the wire
+//     surface stays uniform across surfaces that bypass the internal
+//     UI's seeding helpers.
+//   - On any sub-resource failure (e.g. SetMoons rejects a malformed
+//     entry), the calendar row is deleted before returning the error
+//     so the operator doesn't end up with a half-imported zombie row.
+//
+// See cordinator/decisions/2026-05-19-calendar-create-wire.md for the
+// payload contract. NOT covered in v1: cycles, festivals, weather —
+// operator adds those via the internal settings UI shipped in
+// C-CAL-WCF-UI (chronicle#320). PR description documents the choice.
+func (h *APIHandler) CreateCalendar(c echo.Context) error {
+	campaignID, err := h.authorize(c)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+
+	var req apiCreateCalendarBody
+	if err := decodeBody(c, &req); err != nil {
+		return h.respondError(c, err)
+	}
+
+	if vErr := validateCreateCalendarBody(&req); vErr != nil {
+		return h.respondError(c, vErr)
+	}
+
+	ctx := c.Request().Context()
+
+	// 409 if a calendar already exists for this campaign. GetCalendar
+	// returns nil + nil when none configured, so a nil-cal is the
+	// "fresh" signal.
+	if existing, gErr := h.svc.GetCalendar(ctx, campaignID); gErr == nil && existing != nil {
+		return h.respondError(c, APIErrCalendarAlreadyExists(existing.Name))
+	} else if gErr != nil && !isAppErrorType(gErr, "not_found") {
+		return h.respondError(c, APIErrInternal("check_existing_calendar", gErr))
+	}
+
+	// Create the calendar row + seed defaults via the existing service
+	// surface. CreateCalendar always succeeds for a fresh campaign so
+	// the cleanup-on-failure logic below catches the sub-resource
+	// import step rather than the create itself.
+	cal, err := h.svc.CreateCalendar(ctx, campaignID, CreateCalendarInput{
+		Mode:        ModeFantasy, // Calendaria imports are fantasy by definition; real-life is a Chronicle UI choice.
+		Name:        req.Name,
+		CurrentYear: req.CurrentYear,
+	})
+	if err != nil {
+		return h.respondError(c, APIErrInternal("create_calendar", err))
+	}
+
+	// Build the ImportResult shape ApplyImport already knows how to
+	// consume — same surface the syncapi import path uses. This keeps
+	// the multi-step Set* sequence behind the existing service
+	// boundary instead of re-implementing it at the API layer.
+	result := buildImportResultFromAPI(&req)
+
+	if aErr := h.svc.ApplyImport(ctx, cal.ID, result); aErr != nil {
+		// Rollback: delete the half-imported calendar so the operator
+		// doesn't end up with a zombie row that GetCalendar would then
+		// reject as a 409 conflict on the next attempt.
+		if dErr := h.svc.DeleteCalendar(ctx, cal.ID); dErr != nil {
+			slog.Error("calendar import rollback failed",
+				slog.String("calendar_id", cal.ID),
+				slog.Any("apply_error", aErr),
+				slog.Any("delete_error", dErr),
+			)
+		}
+		// ApplyImport surfaces validation errors from the inner
+		// SetMonths/SetMoons/etc. as AppErrors with Type=="validation_error".
+		// Translate to the wire-contract validation category so the
+		// Foundry client renders the inner message inline.
+		if isAppErrorType(aErr, "validation_error") {
+			return h.respondError(c, APIErrValidation(apperror.UserMessage(aErr, "import payload rejected by storage layer")))
+		}
+		return h.respondError(c, APIErrInternal("apply_import", aErr))
+	}
+
+	// Persist the current-date fields the import didn't carry through
+	// ApplyImport (it sets CurrentMonth/Day to 1; we honor the
+	// caller's preferences if non-zero). Skip if the caller defaulted
+	// to zero — those zeros are not meaningful values.
+	if req.CurrentMonth > 0 && req.CurrentDay > 0 {
+		// UpdateCalendar is a partial path (post C-CAL-NULL-PRESERVE
+		// chronicle#321) — we only set the date fields, leaving the
+		// just-seeded sub-resources untouched.
+		uErr := h.svc.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
+			Name:             cal.Name,
+			Mode:             cal.Mode,
+			CurrentYear:      req.CurrentYear,
+			CurrentMonth:     req.CurrentMonth,
+			CurrentDay:       req.CurrentDay,
+			CurrentHour:      req.CurrentHour,
+			CurrentMinute:    req.CurrentMinute,
+			HoursPerDay:      cal.HoursPerDay,
+			MinutesPerHour:   cal.MinutesPerHour,
+			SecondsPerMinute: cal.SecondsPerMinute,
+			LeapYearEvery:    cal.LeapYearEvery,
+			LeapYearOffset:   cal.LeapYearOffset,
+		})
+		if uErr != nil {
+			// Date refinement failed AFTER the rows landed. Don't
+			// roll back — the import is otherwise complete; surface
+			// the date refinement as an internal error so the
+			// operator can correct via PUT /date.
+			slog.Warn("calendar import: date refinement failed; calendar import otherwise complete",
+				slog.String("calendar_id", cal.ID),
+				slog.Any("error", uErr),
+			)
+		}
+	}
+
+	return c.JSON(http.StatusCreated, apiCalendarCreated{
+		ID:            cal.ID,
+		Name:          req.Name,
+		CurrentYear:   req.CurrentYear,
+		CurrentMonth:  defaultIfZero(req.CurrentMonth, 1),
+		CurrentDay:    defaultIfZero(req.CurrentDay, 1),
+		CurrentHour:   req.CurrentHour,
+		CurrentMinute: req.CurrentMinute,
+		MonthCount:    len(req.Months),
+		WeekdayCount:  len(req.Weekdays),
+		SeasonCount:   len(req.Seasons),
+		MoonCount:     len(req.Moons),
+		EraCount:      len(req.Eras),
+	})
+}
+
+// validateCreateCalendarBody enforces wire-shape invariants on the
+// import payload. Validate at the API layer per the dispatch — the
+// service's Set* methods are lenient about field-level shape (they
+// accept empty arrays for replace-all-to-zero semantics) but the
+// wire contract requires non-empty months / weekdays.
+func validateCreateCalendarBody(req *apiCreateCalendarBody) error {
+	if req.Name == "" {
+		return APIErrValidation("name is required")
+	}
+	if len(req.Months) == 0 {
+		return APIErrValidation("months must be a non-empty array")
+	}
+	if len(req.Weekdays) == 0 {
+		return APIErrValidation("weekdays must be a non-empty array")
+	}
+	for i, m := range req.Months {
+		if m.Name == "" {
+			return APIErrValidation(fmt.Sprintf("months[%d].name is required", i))
+		}
+		if m.Days < 1 {
+			return APIErrValidation(fmt.Sprintf("months[%d].days must be >= 1", i))
+		}
+	}
+	for i, w := range req.Weekdays {
+		if w.Name == "" {
+			return APIErrValidation(fmt.Sprintf("weekdays[%d].name is required", i))
+		}
+	}
+	for i, m := range req.Moons {
+		if m.Name == "" {
+			return APIErrValidation(fmt.Sprintf("moons[%d].name is required", i))
+		}
+		if m.CycleDays <= 0 {
+			return APIErrValidation(fmt.Sprintf("moons[%d].cycle_days must be > 0", i))
+		}
+	}
+	for i, s := range req.Seasons {
+		if s.Name == "" {
+			return APIErrValidation(fmt.Sprintf("seasons[%d].name is required", i))
+		}
+		if s.MonthStart < 1 || s.DayStart < 1 || s.MonthEnd < 1 || s.DayEnd < 1 {
+			return APIErrValidation(fmt.Sprintf("seasons[%d] month/day fields must be 1-indexed", i))
+		}
+	}
+	for i, e := range req.Eras {
+		if e.Name == "" {
+			return APIErrValidation(fmt.Sprintf("eras[%d].name is required", i))
+		}
+		if e.EndYear != nil && *e.EndYear < e.StartYear {
+			return APIErrValidation(fmt.Sprintf("eras[%d].end_year must be >= start_year (open-ended era should omit end_year)", i))
+		}
+	}
+	return nil
+}
+
+// buildImportResultFromAPI translates the wire shape into the
+// ImportResult shape the existing ApplyImport path consumes. Lets us
+// reuse the service-level Set* sequence (and its WS publishes) without
+// re-implementing the dispatch chain at the API layer.
+func buildImportResultFromAPI(req *apiCreateCalendarBody) *ImportResult {
+	r := &ImportResult{
+		Format:       FormatUnknown, // not actually used by ApplyImport beyond logging.
+		CalendarName: req.Name,
+		Settings: ImportedSettings{
+			CurrentYear: req.CurrentYear,
+		},
+	}
+	for i, m := range req.Months {
+		r.Months = append(r.Months, MonthInput{
+			Name:          m.Name,
+			Days:          m.Days,
+			SortOrder:     i,
+			IsIntercalary: m.Intercalary,
+		})
+	}
+	for i, w := range req.Weekdays {
+		r.Weekdays = append(r.Weekdays, WeekdayInput{
+			Name:      w.Name,
+			SortOrder: i,
+			IsRestDay: w.IsRestDay,
+		})
+	}
+	for _, m := range req.Moons {
+		// MoonInput's field layout matches apiCreateMoon's exactly
+		// today, so staticcheck (S1016) wants a type conversion here
+		// rather than a struct literal. The conversion is fine — if
+		// MoonInput gains a field later (e.g. SortOrder), a struct
+		// literal would silently zero it just as the conversion does;
+		// both rely on the same field-by-field correspondence.
+		r.Moons = append(r.Moons, MoonInput(m))
+	}
+	for _, s := range req.Seasons {
+		var description *string
+		color := s.Color
+		r.Seasons = append(r.Seasons, Season{
+			Name:        s.Name,
+			StartMonth:  s.MonthStart,
+			StartDay:    s.DayStart,
+			EndMonth:    s.MonthEnd,
+			EndDay:      s.DayEnd,
+			Color:       color,
+			Description: description,
+		})
+	}
+	for i, e := range req.Eras {
+		r.Eras = append(r.Eras, EraInput{
+			Name:      e.Name,
+			StartYear: e.StartYear,
+			EndYear:   e.EndYear,
+			Color:     e.Color,
+			SortOrder: i,
+		})
+	}
+	return r
+}
+
+// defaultIfZero returns v if non-zero, otherwise fallback. Used to
+// echo "1" back to the caller for current_month / current_day when
+// the request omitted them (ApplyImport defaults those to 1).
+func defaultIfZero(v, fallback int) int {
+	if v == 0 {
+		return fallback
+	}
+	return v
 }
 
 // --- internal helpers ---

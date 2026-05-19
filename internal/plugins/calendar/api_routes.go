@@ -25,6 +25,12 @@ func RegisterPublicAPIRoutes(e *echo.Echo, h *APIHandler, rateLimit echo.Middlew
 		g.Use(rateLimit)
 	}
 	g.GET("", h.GetCalendar)
+	// POST creates a calendar from a Calendaria-shaped import payload
+	// (C-CAL-CREATE-ENDPOINT, 2026-05-19). Closes the empty-state
+	// dead-end the operator hit when Sync Calendar found no Chronicle
+	// calendar to sync against. Payload contract pinned in
+	// cordinator/decisions/2026-05-19-calendar-create-wire.md.
+	g.POST("", h.CreateCalendar)
 	g.PUT("/date", h.PutDate)
 	g.GET("/events", h.ListEvents)
 	g.POST("/events", h.CreateEvent)
