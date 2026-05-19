@@ -559,6 +559,16 @@ type calendarEventPublisherAdapter struct {
 }
 
 // PublishCalendarEvent translates calendar domain events into WebSocket messages.
+//
+// Internal eventType strings now match the public ws.MessageType values
+// 1:1 (C-CAL-WS-DOTTED, 2026-05-19). Earlier emitters used short forms
+// like "season.changed" and this adapter mapped them to the dotted public
+// names; the indirection is gone now so service.go publishes the same
+// string the bus broadcasts. Event-CRUD and date.advanced events keep
+// their short internal form because they weren't in the C-CAL-WS-DOTTED
+// scope — leaving them alone avoids touching consumers (test fixtures
+// and any future Foundry sync code) that already see the dotted public
+// names through the bus layer.
 func (a *calendarEventPublisherAdapter) PublishCalendarEvent(eventType, campaignID, resourceID string, payload any) {
 	if campaignID == "" {
 		return
@@ -573,16 +583,20 @@ func (a *calendarEventPublisherAdapter) PublishCalendarEvent(eventType, campaign
 		msgType = ws.MsgCalendarEventDeleted
 	case "date.advanced":
 		msgType = ws.MsgCalendarDateAdvanced
-	case "weather.changed":
+	case "calendar.weather.changed":
 		msgType = ws.MsgCalendarWeatherChanged
-	case "structure.updated":
+	case "calendar.structure.updated":
 		msgType = ws.MsgCalendarStructureUpdated
-	case "season.changed":
+	case "calendar.season.changed":
 		msgType = ws.MsgCalendarSeasonChanged
-	case "era.changed":
+	case "calendar.era.changed":
 		msgType = ws.MsgCalendarEraChanged
-	case "moon.phase_changed":
+	case "calendar.moon.phase_changed":
 		msgType = ws.MsgCalendarMoonPhaseChanged
+	case "calendar.cycle.changed":
+		msgType = ws.MsgCalendarCycleChanged
+	case "calendar.festival.changed":
+		msgType = ws.MsgCalendarFestivalChanged
 	default:
 		return
 	}

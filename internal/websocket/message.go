@@ -53,6 +53,12 @@ const (
 	MsgCalendarWeatherChanged   MessageType = "calendar.weather.changed"
 	MsgCalendarStructureUpdated MessageType = "calendar.structure.updated"
 	MsgCalendarEraChanged       MessageType = "calendar.era.changed"
+	// Per C-CAL-WS-DOTTED (2026-05-19): cycle + festival mutations now
+	// fan out a sub-resource event in addition to the umbrella
+	// structure.updated. Foundry-side editor (FM-CAL-EDITOR) can
+	// subscribe at the granularity it needs.
+	MsgCalendarCycleChanged    MessageType = "calendar.cycle.changed"
+	MsgCalendarFestivalChanged MessageType = "calendar.festival.changed"
 )
 
 // Entity type sync messages.
