@@ -147,6 +147,39 @@ apperror.NewConflict("slug already exists")
 apperror.NewUnauthorized("invalid session")
 ```
 
+## Partial-Update Endpoints (nil-preserve semantics)
+
+For Update handlers that accept a payload describing one or more rows, **prefer
+explicit nil-preserve guards or load-merge-write over unconditional field
+assignment.** Pointer-typed input fields (`*string`, `*int`, `*bool`, etc.)
+collapse "absent" and "explicit null" at the JSON bind layer — nil at the
+service is the signal for "the caller didn't send this field; keep current
+value", not "overwrite to NULL".
+
+```go
+// ❌ Wrong — partial-save silently blanks Description if absent from request.
+cal.Description = input.Description
+
+// ✓ Right — nil-guard preserves the existing value.
+if input.Description != nil {
+    cal.Description = input.Description
+}
+```
+
+For broader surfaces (e.g. weather, where 14+ pointer fields can each be
+absent), `load-merge-write` is cleaner than a wall of nil-guards: load the
+existing row, overlay the non-nil input fields, write the merged result.
+
+Canonical precedent: chronicle#318 (`UpdateEntityInput.IsPrivate *bool`) for
+single-field nil-guards; chronicle PR for C-CAL-NULL-PRESERVE (`SetWeather`
+load-merge-write) for the multi-field merge pattern. Audit context:
+`cordinator/reports/chronicle/2026-05-19-c-cal-null-preserve-audit.md`.
+
+**Trade-off to acknowledge:** nil-preserve guards make it harder to clear a
+field by sending explicit null. If "clear by null" is a real use case for a
+field, ship a dedicated endpoint or escape-hatch flag rather than mixing
+preserve-and-clear into one input — the two semantics interfere.
+
 ## Test Pattern (Table-Driven)
 
 ```go

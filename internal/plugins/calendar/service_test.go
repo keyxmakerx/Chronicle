@@ -40,6 +40,10 @@ type mockCalendarRepo struct {
 	searchEventsFn       func(ctx context.Context, calendarID, query string, role int) ([]Event, error)
 	updateEventVisFn     func(ctx context.Context, eventID string, visibility string, visRules *string) error
 	listByCampaignIDFn   func(ctx context.Context, campaignID string) ([]Calendar, error)
+	// Added in C-CAL-NULL-PRESERVE so SetWeather load-merge-write
+	// tests can inject the "existing row" the merge reads from.
+	getWeatherFn func(ctx context.Context, calendarID string) (*Weather, error)
+	setWeatherFn func(ctx context.Context, calendarID string, input WeatherInput) error
 }
 
 func (m *mockCalendarRepo) Create(ctx context.Context, cal *Calendar) error {
@@ -265,10 +269,16 @@ func (m *mockCalendarRepo) UpdateEventVisibility(ctx context.Context, eventID st
 }
 
 func (m *mockCalendarRepo) GetWeather(ctx context.Context, calendarID string) (*Weather, error) {
+	if m.getWeatherFn != nil {
+		return m.getWeatherFn(ctx, calendarID)
+	}
 	return nil, nil
 }
 
 func (m *mockCalendarRepo) SetWeather(ctx context.Context, calendarID string, input WeatherInput) error {
+	if m.setWeatherFn != nil {
+		return m.setWeatherFn(ctx, calendarID, input)
+	}
 	return nil
 }
 
