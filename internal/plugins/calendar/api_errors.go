@@ -60,7 +60,17 @@ func (e *APIError) Unwrap() error { return e.Cause }
 // HTTPStatus maps category → HTTP status. Matches the foundry_vtt
 // plugin's mapping exactly so the wire contract is consistent
 // across the two error producers.
+//
+// The `calendar_already_exists` code in the validation category gets
+// a one-off 409 mapping per HTTP semantics — the request is well-
+// formed but conflicts with the current resource state. Without the
+// override the duplicate-create case would surface as 422, which
+// Foundry's client treats as "fix your payload" rather than
+// "calendar already imported".
 func (e *APIError) HTTPStatus() int {
+	if e.Code == APIErrCodeCalendarAlreadyExists {
+		return http.StatusConflict
+	}
 	switch e.Category {
 	case APIErrCategoryAuth:
 		return http.StatusForbidden
@@ -159,6 +169,32 @@ func APIErrEventConflict(detail string) *APIError {
 			detail),
 	}
 }
+
+// APIErrCalendarAlreadyExists — caller POSTed POST /calendar to a
+// campaign that already has a calendar configured. 409 with the
+// existing calendar's name so the Foundry UI can show "Calendar of
+// Therin already imported; open Sync Calendar to view it." Mapped to
+// the validation HTTP status family in HTTPStatus (422 wouldn't
+// distinguish from a payload-malformed case; we override).
+//
+// Added in C-CAL-CREATE-ENDPOINT (2026-05-19).
+func APIErrCalendarAlreadyExists(existingName string) *APIError {
+	return &APIError{
+		Category: APIErrCategoryValidation,
+		Code:     "calendar_already_exists",
+		Message: fmt.Sprintf(
+			"A calendar (%q) is already configured for this campaign: "+
+				"importing a second calendar via this endpoint would conflict. "+
+				"Use the existing calendar's UI to edit it, or DELETE it before re-importing.",
+			existingName),
+	}
+}
+
+// HTTPStatusForAlreadyExists overrides the default validation→422
+// mapping for the duplicate-create case. Inline in the handler since
+// APIError's HTTPStatus is category-driven; this code lives in the
+// 409 family.
+const APIErrCodeCalendarAlreadyExists = "calendar_already_exists"
 
 // APIErrInternal — server-side fault (DB / FS error). 500.
 // Message is intentionally generic; the wrapped cause is logged.

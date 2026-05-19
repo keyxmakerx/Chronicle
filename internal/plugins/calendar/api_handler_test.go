@@ -83,6 +83,17 @@ type stubCalendarService struct {
 	lastUpdateEvent *UpdateEventInput
 	deleteErr    error
 	deletedEvent string
+
+	// C-CAL-CREATE-ENDPOINT (2026-05-19): create / import / delete-
+	// calendar wiring. createErr is reused via createCalErr to keep
+	// the field name lane clean from the event-create surface.
+	createCalErr     error
+	createdCal       *Calendar
+	lastCreateCalIn  *CreateCalendarInput
+	applyImportErr   error
+	lastApplyImport  *ImportResult
+	deleteCalErr     error
+	deletedCalendar  string
 }
 
 func (s *stubCalendarService) GetCalendar(_ context.Context, campaignID string) (*Calendar, error) {
@@ -185,6 +196,62 @@ func (s *stubCalendarService) DeleteEvent(_ context.Context, eventID string) err
 	return nil
 }
 
+// --- C-CAL-CREATE-ENDPOINT stubs ---
+
+func (s *stubCalendarService) CreateCalendar(_ context.Context, campaignID string, input CreateCalendarInput) (*Calendar, error) {
+	in := input
+	s.lastCreateCalIn = &in
+	if s.createCalErr != nil {
+		return nil, s.createCalErr
+	}
+	cal := &Calendar{
+		ID:               "cal-new",
+		CampaignID:       campaignID,
+		Mode:             input.Mode,
+		Name:             input.Name,
+		CurrentYear:      input.CurrentYear,
+		CurrentMonth:     1,
+		CurrentDay:       1,
+		HoursPerDay:      defaultIntForTest(input.HoursPerDay, 24),
+		MinutesPerHour:   defaultIntForTest(input.MinutesPerHour, 60),
+		SecondsPerMinute: defaultIntForTest(input.SecondsPerMinute, 60),
+	}
+	s.createdCal = cal
+	// First-write behavior — surface the new calendar via GetCalendar
+	// so subsequent calls in the same test (e.g. the 409 case) see it.
+	s.calendar = cal
+	return cal, nil
+}
+
+func (s *stubCalendarService) ApplyImport(_ context.Context, calendarID string, result *ImportResult) error {
+	if result != nil {
+		copyR := *result
+		s.lastApplyImport = &copyR
+	}
+	return s.applyImportErr
+}
+
+func (s *stubCalendarService) DeleteCalendar(_ context.Context, calendarID string) error {
+	s.deletedCalendar = calendarID
+	// Mirror the production DeleteCalendar behavior: deletion clears
+	// the campaign's "current calendar" surface so a subsequent
+	// GetCalendar returns nil.
+	if s.calendar != nil && s.calendar.ID == calendarID {
+		s.calendar = nil
+	}
+	return s.deleteCalErr
+}
+
+// defaultIntForTest mirrors the production CreateCalendar's default-
+// substitution behavior for time-system fields. Local to this test
+// file so it doesn't pollute the package-level helpers.
+func defaultIntForTest(v, fallback int) int {
+	if v <= 0 {
+		return fallback
+	}
+	return v
+}
+
 // --- harness ---
 
 func newTestHandler(t *testing.T) (*APIHandler, *stubCalendarService, *stubVerifier) {
@@ -227,6 +294,9 @@ func invoke(h *APIHandler, method, target, campaignID, eventID, token string, bo
 	switch {
 	case method == http.MethodGet && !strings.Contains(target, "/events"):
 		_ = h.GetCalendar(c)
+	case method == http.MethodPost && !strings.Contains(target, "/events"):
+		// POST /api/v1/campaigns/:cid/calendar — C-CAL-CREATE-ENDPOINT.
+		_ = h.CreateCalendar(c)
 	case method == http.MethodPut && strings.HasSuffix(target, "/date"):
 		_ = h.PutDate(c)
 	case method == http.MethodGet && strings.HasSuffix(target, "/events"):
