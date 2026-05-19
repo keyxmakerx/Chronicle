@@ -589,7 +589,7 @@ func (s *calendarService) SetWeather(ctx context.Context, calendarID string, inp
 	}
 	// Publish weather change event.
 	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
-		s.events.PublishCalendarEvent("weather.changed", cal.CampaignID, calendarID, input)
+		s.events.PublishCalendarEvent("calendar.weather.changed", cal.CampaignID, calendarID, input)
 	}
 	return nil
 }
@@ -600,13 +600,18 @@ func (s *calendarService) GetCycles(ctx context.Context, calendarID string) ([]C
 }
 
 // SetCycles replaces all cycles for a calendar.
+//
+// Emits two WS events per C-CAL-WS-DOTTED (2026-05-19): the umbrella
+// calendar.structure.updated (for subscribers that just want "structure
+// moved, refetch") plus the granular calendar.cycle.changed (for the
+// Foundry-side editor's targeted refresh path).
 func (s *calendarService) SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error {
 	if err := s.repo.SetCycles(ctx, calendarID, cycles); err != nil {
 		return fmt.Errorf("set cycles: %w", err)
 	}
-	// Publish structure updated event.
 	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
-		s.events.PublishCalendarEvent("structure.updated", cal.CampaignID, calendarID, nil)
+		s.events.PublishCalendarEvent("calendar.structure.updated", cal.CampaignID, calendarID, nil)
+		s.events.PublishCalendarEvent("calendar.cycle.changed", cal.CampaignID, calendarID, nil)
 	}
 	return nil
 }
@@ -617,13 +622,16 @@ func (s *calendarService) GetFestivals(ctx context.Context, calendarID string) (
 }
 
 // SetFestivals replaces all festivals for a calendar.
+//
+// Mirrors SetCycles' double-emit: structure.updated for the broad
+// listener + festival.changed for granular refresh. See C-CAL-WS-DOTTED.
 func (s *calendarService) SetFestivals(ctx context.Context, calendarID string, festivals []FestivalInput) error {
 	if err := s.repo.SetFestivals(ctx, calendarID, festivals); err != nil {
 		return fmt.Errorf("set festivals: %w", err)
 	}
-	// Publish structure updated event.
 	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
-		s.events.PublishCalendarEvent("structure.updated", cal.CampaignID, calendarID, nil)
+		s.events.PublishCalendarEvent("calendar.structure.updated", cal.CampaignID, calendarID, nil)
+		s.events.PublishCalendarEvent("calendar.festival.changed", cal.CampaignID, calendarID, nil)
 	}
 	return nil
 }
@@ -1244,10 +1252,10 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 	return results, nil
 }
 
-// publishStructureUpdated fires a structure.updated WS event.
+// publishStructureUpdated fires a calendar.structure.updated WS event.
 func (s *calendarService) publishStructureUpdated(ctx context.Context, calendarID string) {
 	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
-		s.events.PublishCalendarEvent("structure.updated", cal.CampaignID, calendarID, nil)
+		s.events.PublishCalendarEvent("calendar.structure.updated", cal.CampaignID, calendarID, nil)
 	}
 }
 
@@ -1287,7 +1295,7 @@ func (s *calendarService) publishStateChanges(ctx context.Context, cal *Calendar
 	// Season change detection.
 	if afterSeason := cal.CurrentSeason(); afterSeason != nil {
 		if afterSeason.Name != beforeSeason {
-			s.events.PublishCalendarEvent("season.changed", cal.CampaignID, cal.ID, map[string]any{
+			s.events.PublishCalendarEvent("calendar.season.changed", cal.CampaignID, cal.ID, map[string]any{
 				"id":    afterSeason.ID,
 				"name":  afterSeason.Name,
 				"color": afterSeason.Color,
@@ -1295,16 +1303,16 @@ func (s *calendarService) publishStateChanges(ctx context.Context, cal *Calendar
 		}
 	} else if beforeSeason != "" {
 		// Left a season without entering a new one.
-		s.events.PublishCalendarEvent("season.changed", cal.CampaignID, cal.ID, nil)
+		s.events.PublishCalendarEvent("calendar.season.changed", cal.CampaignID, cal.ID, nil)
 	}
 
 	// Era change detection.
 	if afterEra := cal.CurrentEra(); afterEra != nil {
 		if afterEra.Name != beforeEra {
-			s.events.PublishCalendarEvent("era.changed", cal.CampaignID, cal.ID, map[string]any{
-				"id":           afterEra.ID,
-				"name":         afterEra.Name,
-				"color":        afterEra.Color,
+			s.events.PublishCalendarEvent("calendar.era.changed", cal.CampaignID, cal.ID, map[string]any{
+				"id":    afterEra.ID,
+				"name":  afterEra.Name,
+				"color": afterEra.Color,
 			})
 		}
 	}
@@ -1315,7 +1323,7 @@ func (s *calendarService) publishStateChanges(ctx context.Context, cal *Calendar
 		moon := &cal.Moons[i]
 		afterPhase := moon.MoonPhaseName(absDay)
 		if afterPhase != beforeMoonPhases[moon.ID] {
-			s.events.PublishCalendarEvent("moon.phase_changed", cal.CampaignID, cal.ID, map[string]any{
+			s.events.PublishCalendarEvent("calendar.moon.phase_changed", cal.CampaignID, cal.ID, map[string]any{
 				"moon_id":        moon.ID,
 				"moon_name":      moon.Name,
 				"phase_name":     afterPhase,
