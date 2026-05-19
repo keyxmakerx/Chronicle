@@ -245,9 +245,18 @@ func (h *Handler) checkMediaAccess(c echo.Context, file *MediaFile, isThumb bool
 	expiresStr := c.QueryParam("expires")
 	sig := c.QueryParam("sig")
 
+	// signatureValid is hoisted to the function scope so the defense-in-depth
+	// block below can gate on it. A valid signed URL is itself proof of
+	// authorization (HMAC-SHA256 over fileID:expires, with a server-side
+	// secret) and the leak surface is time-bounded by the `expires` claim
+	// the verifier enforces. Without this hoist, cross-origin <img>
+	// requests from Foundry — which can't carry Chronicle session cookies —
+	// would fail the defense-in-depth check, hit the framework's 404 path,
+	// and redirect-loop to /login. C-MEDIA-SIGNED-URL-TRUST (Bug #23).
+	signatureValid := false
+
 	// Check signed URL if signer is configured.
 	if h.signer != nil {
-		signatureValid := false
 		if expiresStr != "" && sig != "" {
 			if isThumb {
 				signatureValid = h.signer.VerifyThumb(fileID, thumbSize, expiresStr, sig)
@@ -265,9 +274,16 @@ func (h *Handler) checkMediaAccess(c echo.Context, file *MediaFile, isThumb bool
 		}
 	}
 
-	// Defense-in-depth: for private campaigns, also require authenticated
-	// campaign membership even if the signed URL is valid.
-	if file.CampaignIsPublic != nil && !*file.CampaignIsPublic {
+	// Defense-in-depth: for private campaigns, ALSO require authenticated
+	// campaign membership IF we did not validate a signed URL above. A
+	// valid signed URL is itself proof of authorization — h.signer.Verify
+	// rejects expired URLs (`time.Now().Unix() > expires` per
+	// signed_url.go), and HMAC-SHA256 over a server-side secret means
+	// signatures cannot be forged. Skipping the cookie+membership check
+	// when signatureValid lets cross-origin <img> tags from Foundry
+	// resolve normally; without this, the operator's maps redirect-loop
+	// to /login (Bug #23, 2026-05-19).
+	if !signatureValid && file.CampaignIsPublic != nil && !*file.CampaignIsPublic {
 		userID := auth.GetUserID(c)
 		if userID == "" {
 			return apperror.NewNotFound("media file not found")
