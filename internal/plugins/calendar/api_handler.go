@@ -815,14 +815,14 @@ func buildImportResultFromAPI(req *apiCreateCalendarBody) *ImportResult {
 			IsRestDay: w.IsRestDay,
 		})
 	}
-	for i, m := range req.Moons {
-		r.Moons = append(r.Moons, MoonInput{
-			Name:        m.Name,
-			CycleDays:   m.CycleDays,
-			PhaseOffset: m.PhaseOffset,
-			Color:       m.Color,
-		})
-		_ = i
+	for _, m := range req.Moons {
+		// MoonInput's field layout matches apiCreateMoon's exactly
+		// today, so staticcheck (S1016) wants a type conversion here
+		// rather than a struct literal. The conversion is fine — if
+		// MoonInput gains a field later (e.g. SortOrder), a struct
+		// literal would silently zero it just as the conversion does;
+		// both rely on the same field-by-field correspondence.
+		r.Moons = append(r.Moons, MoonInput(m))
 	}
 	for _, s := range req.Seasons {
 		var description *string
