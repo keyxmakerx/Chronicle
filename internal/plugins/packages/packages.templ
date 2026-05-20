@@ -167,12 +167,24 @@ templ packageCard(pkg Package, csrfToken string) {
 					// manifest endpoint (foundry_vtt) rewrites URLs at serve time
 					// per-request, so there's no cached zip to repack.
 				}
-				<!-- Version Picker -->
+				<!-- Version Picker.
+				     data-fvtt-versions-trigger is set on foundry-module
+				     packages so the auto-pin banner's "Show affected
+				     campaigns" IIFE can locate the trigger without the
+				     server having to know the package ID at banner-
+				     render time. C-UPDATER-CLUSTER bug #20 fix. Multi-
+				     foundry-module deployments would need to revisit
+				     the selector (currently assumes one per instance,
+				     same assumption documented for the per-version
+				     trigger IDs further down). -->
 				<button
 					hx-get={ fmt.Sprintf("/admin/packages/%s/versions", pkg.ID) }
 					hx-target={ fmt.Sprintf("#versions-%s", pkg.ID) }
 					hx-swap="innerHTML"
 					class="btn-secondary text-sm"
+					if pkg.Type == PackageTypeFoundryModule {
+						data-fvtt-versions-trigger="true"
+					}
 				>
 					<i class="fa-solid fa-code-branch mr-1"></i>
 					Versions

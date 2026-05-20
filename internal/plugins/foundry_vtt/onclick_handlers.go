@@ -200,10 +200,30 @@ func dismissAutoPinBannerOnClick() templ.ComponentScript {
 // pinned. The banner already showed the count; this button is the
 // missing "act on it" affordance.
 //
-// Targets the version-scoped button ID set by packages.templ's
-// VersionList. If the button isn't found (e.g., page hasn't
-// rendered the package row yet, or the page isn't /admin/packages),
-// surfaces a Chronicle.notify message rather than failing silently.
+// Two-stage expand (C-UPDATER-CLUSTER fix for bug #20): the
+// `fvtt-campaigns-trigger-<sanitized-version>` button doesn't exist
+// in the DOM until the user clicks the foundry-module package's
+// "Versions" button to load the version list via HTMX. Pre-fix the
+// banner button looked up the campaigns trigger directly and surfaced
+// a confusing "Could not find the version row on this page. Open
+// /admin/packages and expand the foundry-module package manually"
+// error — even though the banner only renders on /admin/packages.
+// The real cause was lazy loading of the version list.
+//
+// New flow:
+//
+//  1. Fast path — if the campaigns trigger is already in the DOM
+//     (operator already expanded the version list), scroll + click it.
+//  2. Otherwise, find the Versions trigger via the
+//     `data-fvtt-versions-trigger` attribute packages.templ stamps
+//     onto the foundry-module package's Versions button.
+//  3. Wire a one-shot `htmx:afterSwap` listener on the trigger's
+//     `hx-target`, then click the trigger to load the version list.
+//  4. On swap complete, look up the campaigns trigger and scroll +
+//     click it.
+//
+// The data-attribute selector lets the JS find the target without
+// the server having to know the package ID at banner-render time.
 func showAffectedCampaignsOnClick(previousVersion string) templ.ComponentScript {
 	// sanitizeForID(version) replaces dots/plus/slash with hyphens —
 	// must match the packages.templ sanitizeForID helper. Calling
@@ -214,10 +234,23 @@ func showAffectedCampaignsOnClick(previousVersion string) templ.ComponentScript 
 	id := template.JSEscapeString("fvtt-campaigns-trigger-" + sanitized)
 	body := fmt.Sprintf(
 		`(function(){`+
-			`var b=document.getElementById('%s');`+
-			`if(!b){window.Chronicle.notify('Could not find the version row on this page. Open /admin/packages and expand the foundry-module package manually.','error');return;}`+
-			`b.scrollIntoView({behavior:'smooth',block:'center'});`+
-			`b.click();`+
+			`var id='%s';`+
+			// Fast path: campaigns trigger already in DOM → scroll + click.
+			`var existing=document.getElementById(id);`+
+			`if(existing){existing.scrollIntoView({behavior:'smooth',block:'center'});existing.click();return;}`+
+			// Stage 1: locate the foundry-module Versions trigger.
+			`var v=document.querySelector('[data-fvtt-versions-trigger]');`+
+			`if(!v){window.Chronicle.notify('Versions list could not be located on this page; reload and try again.','error');return;}`+
+			// Stage 2: wire a one-shot listener on the swap target,
+			// then click the Versions trigger to load the list.
+			`var targetSel=v.getAttribute('hx-target');`+
+			`var target=targetSel?document.querySelector(targetSel):null;`+
+			`var stage2=function(){var b=document.getElementById(id);if(b){b.scrollIntoView({behavior:'smooth',block:'center'});b.click();}else{window.Chronicle.notify('Version row not found after expanding the list; the version may have been pruned.','error');}};`+
+			`if(target){var onSwap=function(){target.removeEventListener('htmx:afterSwap',onSwap);stage2();};target.addEventListener('htmx:afterSwap',onSwap);}`+
+			// Fallback timer: if no swap target was wired, still attempt
+			// stage 2 after a beat in case HTMX completed faster than us.
+			`else{setTimeout(stage2,600);}`+
+			`v.click();`+
 			`})()`,
 		id)
 	return inlineOnClick("fvtt_showAffected", body)
