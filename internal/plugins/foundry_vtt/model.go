@@ -80,8 +80,9 @@ type OwnerTabData struct {
 }
 
 // PackageDescriptor is the parsed shape of chronicle-package.json
-// (schema v1 — see https://chronicle.bnuuy.haus/schemas/foundry-package.v1.json).
-// The hook reads this from the extracted install dir; falls back to
+// (schema v1 — the canonical definition lives in descriptor.go's
+// loadDescriptor; the loader is the source of truth). The hook reads
+// this from the extracted install dir; falls back to
 // defaultDescriptor() when no file is present. Schema versioning is
 // enforced in descriptor.go's loadDescriptor.
 type PackageDescriptor struct {

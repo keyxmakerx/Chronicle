@@ -137,11 +137,11 @@ func main() {
 	//
 	// C-FMC-5c: invoke foundry_vtt's pre-migration check BEFORE running
 	// the migration loop. The check refuses to start the server if the
-	// foundry_module_versions table has rows (the operator's bnuuy.haus
-	// was empty as of audit; a manual upload between C-FMC-5b deploy and
-	// C-FMC-5c deploy would otherwise be silently dropped by the
-	// migration). The check is idempotent + cheap; re-running after the
-	// migration has applied returns nil.
+	// foundry_module_versions table has rows (verified empty on the audit
+	// instance; a manual upload between C-FMC-5b deploy and C-FMC-5c
+	// deploy would otherwise be silently dropped by the migration). The
+	// check is idempotent + cheap; re-running after the migration has
+	// applied returns nil.
 	if err := foundry_vtt.PreMigrationCheck(context.Background(), db); err != nil {
 		slog.Error("foundry_vtt pre-migration check failed", slog.Any("error", err))
 		os.Exit(1)

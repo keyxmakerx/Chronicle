@@ -21,7 +21,7 @@ import (
 // ServeHandler serves static files from installed packages.
 type ServeHandler struct {
 	svc     PackageService
-	baseURL string // Public base URL for URL rewriting (e.g., "https://chronicle.bnuuy.haus").
+	baseURL string // Public base URL for URL rewriting (e.g., "https://chronicle.example.com").
 
 	mu    sync.RWMutex
 	cache map[string]string // "type/slug" -> install path

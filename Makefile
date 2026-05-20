@@ -86,6 +86,10 @@ test-cover: ## Run tests with coverage report
 lint: ## Run golangci-lint
 	golangci-lint run ./...
 
+.PHONY: check-scrub
+check-scrub: ## Verify operator instance hostnames are absent from source (C-SCRUB-INSTANCE-URLS)
+	./tools/check-no-instance-hostname.sh
+
 .PHONY: security
 security: ## Run gosec security scanner
 	gosec ./...
