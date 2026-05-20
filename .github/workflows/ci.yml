@@ -55,6 +55,13 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Scrub guard (no operator instance hostnames in tracked source)
+        # Per C-SCRUB-INSTANCE-URLS (2026-05-20): operator-security
+        # requirement that production hostnames stay out of the repo.
+        # The script itself reconstructs the forbidden token via fragment
+        # join so it doesn't fail-self.
+        run: ./tools/check-no-instance-hostname.sh
+
       - name: Test
         run: go test ./... -v -short
 

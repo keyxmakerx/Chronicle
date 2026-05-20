@@ -225,7 +225,9 @@ func ErrDescriptorInvalid(cause error) *Error {
 		Message: fmt.Sprintf(
 			"chronicle-package.json in the installed module is invalid: %v. " +
 				"The module's descriptor file does not conform to schema v1 " +
-				"(see chronicle.bnuuy.haus/schemas/foundry-package.v1.json). " +
+				"(the canonical schema lives in this repo at " +
+				"internal/plugins/foundry_vtt/descriptor.go; the loader is " +
+				"the source of truth). " +
 				"Remove the descriptor file from the module zip to fall back to " +
 				"hardcoded defaults, or fix the schema violation in the upstream " +
 				"module repo and re-cut the release.",
