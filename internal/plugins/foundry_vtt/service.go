@@ -32,6 +32,19 @@ type CampaignSettingsAdapter interface {
 	// clears the pin (back to latest-tracking).
 	SetFoundryModulePin(ctx context.Context, campaignID, version string) error
 
+	// GetFoundryModulePinMode returns the campaign's pin_mode setting
+	// — one of foundry_vtt.PinMode* constants, or empty string for
+	// "not yet set." Added in C-FMC-ADMIN-UX-AUDIT Chunk 1; consumed
+	// by Chunk 2's hook + Chunks 3/4's UIs. Until Chunk 2 ships,
+	// empty-pin campaigns continue to behave per the pre-existing
+	// C-FMC-6 preserve-state design regardless of pin_mode.
+	GetFoundryModulePinMode(ctx context.Context, campaignID string) (string, error)
+
+	// SetFoundryModulePinMode writes the campaign's pin_mode.
+	// Caller is responsible for validation via
+	// foundry_vtt.IsValidPinMode.
+	SetFoundryModulePinMode(ctx context.Context, campaignID, mode string) error
+
 	// CampaignExists is the existence check the rotate-token and
 	// install-URL builders use to reject unknown campaign IDs.
 	CampaignExists(ctx context.Context, campaignID string) (bool, error)
@@ -246,6 +259,13 @@ type service struct {
 	tokens   *TokenSigner
 	settings CampaignSettingsAdapter
 	pkgs     PackageReader
+	// registry centralizes the "one foundry-module per Chronicle"
+	// assumption. Added in C-FMC-ADMIN-UX-AUDIT Chunk 1. All new
+	// "find the foundry-module package" call sites should go through
+	// `s.registry.FoundryPackage(ctx)`; the legacy `FindFoundryPackage`
+	// method on this service is now a thin wrapper around the
+	// registry for backward compat with existing callers.
+	registry *PackageRegistry
 	baseURL  string // public Chronicle origin, trimmed of trailing slash
 
 	// kv is the site-settings KV store (settings.SettingsRepository
@@ -314,6 +334,7 @@ func NewService(
 		tokens:   tokens,
 		settings: settings,
 		pkgs:     pkgs,
+		registry: NewPackageRegistry(pkgs),
 		events:   events,
 		mail:     mail,
 		owners:   owners,
@@ -590,19 +611,31 @@ func substituteURLTemplate(tmpl, campaignID, token string) string {
 
 // FindFoundryPackage looks up the foundry-module typed package row.
 // Returns (nil, nil) if none exists — caller treats this as the
-// "no package registered" empty state. Multiple foundry-module
-// packages would be unusual; the first installed one wins.
+// "no package registered" empty state.
+//
+// As of C-FMC-ADMIN-UX-AUDIT Chunk 1, this method delegates to
+// `s.registry.FoundryPackage(ctx)` so the "one foundry-module per
+// Chronicle" assumption lives in one place (package_registry.go).
+// Kept here as a thin wrapper for backward compat with existing call
+// sites that hold a Service reference; new call sites should prefer
+// the registry directly.
 func (s *service) FindFoundryPackage(ctx context.Context) (*packages.Package, error) {
-	all, err := s.pkgs.ListPackages(ctx)
-	if err != nil {
-		return nil, ErrInternal("list_packages", err)
-	}
-	for i := range all {
-		if all[i].Type == packages.PackageTypeFoundryModule {
-			return &all[i], nil
+	if s.registry == nil {
+		// Defensive: pre-Chunk-1 callers / tests that construct a
+		// service struct without the registry-init code path. Fall
+		// through to the historical inline lookup so nothing breaks.
+		all, err := s.pkgs.ListPackages(ctx)
+		if err != nil {
+			return nil, ErrInternal("list_packages", err)
 		}
+		for i := range all {
+			if all[i].Type == packages.PackageTypeFoundryModule {
+				return &all[i], nil
+			}
+		}
+		return nil, nil
 	}
-	return nil, nil
+	return s.registry.FoundryPackage(ctx)
 }
 
 // --- owner pin management ---
@@ -680,6 +713,16 @@ func (s *service) OwnerTabData(ctx context.Context, campaignID string) (OwnerTab
 		out.CurrentVersion = pkg.InstalledVersion
 	} else {
 		out.CurrentVersion = pin
+	}
+
+	// pin_mode is populated as a separate adapter call. Soft-fail
+	// (treat error as empty mode) so a campaigns-side issue with the
+	// new field doesn't break the entire owner tab — Chunk 3's UI
+	// can render a sensible empty-state when the mode is missing.
+	// Added in C-FMC-ADMIN-UX-AUDIT Chunk 1.
+	mode, modeErr := s.settings.GetFoundryModulePinMode(ctx, campaignID)
+	if modeErr == nil {
+		out.CurrentPinMode = mode
 	}
 
 	// Detect descriptor presence on the currently-served version.

@@ -57,6 +57,16 @@ type OwnerTabData struct {
 	// May differ from CurrentPin when pin is empty (latest-tracking).
 	CurrentVersion string
 
+	// CurrentPinMode is the campaign's saved pin_mode setting — one
+	// of PinModePreserve / PinModePromote / PinModePinned, or empty
+	// string for "not yet set" (pre-Chunk-6 backfill state). Added
+	// in C-FMC-ADMIN-UX-AUDIT Chunk 1 to support the Option B
+	// owner-side UI refresh (Chunk 3) without round-tripping through
+	// a second adapter call at render time. Until Chunk 3's UI ships,
+	// the templ doesn't render this field — present here so Chunk 3
+	// doesn't need to touch the struct shape.
+	CurrentPinMode string
+
 	// AvailableVersions is the list of versions the packages plugin
 	// has extracted on disk for the foundry-module package. The pin
 	// dropdown shows these as options. Empty when no foundry-module

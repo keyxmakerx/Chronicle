@@ -69,6 +69,16 @@ type CampaignService interface {
 	// GetFoundryModulePin returns the campaign's current Foundry
 	// module pin, or "" if none.
 	GetFoundryModulePin(ctx context.Context, campaignID string) (string, error)
+	// SetFoundryModulePinMode writes the campaign's pin_mode setting
+	// (one of foundry_vtt.PinMode* constants) for Option B's three-
+	// state pin semantic. Added in C-FMC-ADMIN-UX-AUDIT Chunk 1.
+	// Validation is the caller's responsibility (foundry_vtt's
+	// SetPinMode handler validates via IsValidPinMode before
+	// calling).
+	SetFoundryModulePinMode(ctx context.Context, campaignID, mode string) error
+	// GetFoundryModulePinMode returns the campaign's pin_mode, or
+	// empty string for "not yet set" (pre-Chunk-6 backfill state).
+	GetFoundryModulePinMode(ctx context.Context, campaignID string) (string, error)
 	// CampaignExistsByID is a thin existence check for adapters that
 	// don't need the full Campaign struct.
 	CampaignExistsByID(ctx context.Context, campaignID string) (bool, error)
@@ -912,6 +922,42 @@ func (s *campaignService) GetFoundryModulePin(ctx context.Context, campaignID st
 		return "", apperror.NewNotFound("campaign not found")
 	}
 	return campaign.ParseSettings().FoundryModulePin, nil
+}
+
+// SetFoundryModulePinMode updates CampaignSettings.FoundryModulePinMode
+// and re-persists the settings JSON. Added in C-FMC-ADMIN-UX-AUDIT
+// Chunk 1 — companion to SetFoundryModulePin. Validation lives at the
+// foundry_vtt service layer (see foundry_vtt.IsValidPinMode); this
+// method writes whatever the caller passes through.
+func (s *campaignService) SetFoundryModulePinMode(ctx context.Context, campaignID, mode string) error {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	if campaign == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+	settings := campaign.ParseSettings()
+	settings.FoundryModulePinMode = mode
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// GetFoundryModulePinMode returns the campaign's pin_mode setting, or
+// empty string if not yet set (pre-Chunk-6 backfill state). Companion
+// to GetFoundryModulePin.
+func (s *campaignService) GetFoundryModulePinMode(ctx context.Context, campaignID string) (string, error) {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	if campaign == nil {
+		return "", apperror.NewNotFound("campaign not found")
+	}
+	return campaign.ParseSettings().FoundryModulePinMode, nil
 }
 
 // CampaignExistsByID returns true iff the campaign exists. Used by
