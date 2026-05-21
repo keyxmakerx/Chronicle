@@ -539,6 +539,20 @@ type CampaignSettings struct {
 	// LatestAvailable). Set via the owner-side Foundry Module settings
 	// tab; admins can override via the force-pin admin action.
 	FoundryModulePin string `json:"foundry_module_pin,omitempty"`
+
+	// FoundryModulePinMode controls how AutoPinOnInstall treats the
+	// campaign when an admin installs a new module version. Added in
+	// C-FMC-ADMIN-UX-AUDIT Chunk 1 (decisions/audit ref: §0.5 D5).
+	// Valid values are the foundry_vtt.PinMode* constants:
+	//   "preserve" → today's C-FMC-6 default; on install, campaign's
+	//                pin is set to the previous version (state preserved).
+	//   "promote"  → audit-resolved new default; on install, campaign's
+	//                pin is set to the new version (auto-bump).
+	//   "pinned"   → explicit version pin; install doesn't touch.
+	// Empty string = "not yet set" (pre-Chunk-6 backfill). Chunk 2's
+	// hook treats empty as the C-FMC-6 default until Chunk 6's
+	// migration writes the resolved default to every empty-mode row.
+	FoundryModulePinMode string `json:"foundry_module_pin_mode,omitempty"`
 }
 
 // TopbarStyle configures the visual appearance of the campaign's top navigation bar.

@@ -74,6 +74,20 @@ func (s *recordingSettings) SetFoundryModulePin(_ context.Context, campaignID, v
 	s.calls = append(s.calls, recordedPin{campaignID: campaignID, version: version})
 	return nil
 }
+
+// pin_mode stubs added in C-FMC-ADMIN-UX-AUDIT Chunk 1. Existing
+// auto_pin_test.go cases predate Chunk 2's hook behavior change, so
+// the stubs return zero/no-op values — the test cases don't exercise
+// pin_mode yet. New Chunk 1 tests (pin_mode_test.go) exercise the
+// settings adapter contract via a dedicated stub instead of reusing
+// this one.
+func (s *recordingSettings) GetFoundryModulePinMode(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+func (s *recordingSettings) SetFoundryModulePinMode(_ context.Context, _, _ string) error {
+	return nil
+}
+
 func (s *recordingSettings) CampaignExists(_ context.Context, _ string) (bool, error) {
 	return true, nil
 }

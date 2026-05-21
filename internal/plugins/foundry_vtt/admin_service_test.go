@@ -77,7 +77,8 @@ func (o *fakeOwners) GetCampaignOwnerEmail(_ context.Context, _ string) (string,
 // fakeSettings stubs CampaignSettingsAdapter for force-pin tests.
 // CampaignExists returns true; pin storage is in-memory.
 type fakeSettings struct {
-	pin string
+	pin     string
+	pinMode string // C-FMC-ADMIN-UX-AUDIT Chunk 1
 }
 
 func (s *fakeSettings) GetFoundryModulePin(_ context.Context, _ string) (string, error) {
@@ -85,6 +86,13 @@ func (s *fakeSettings) GetFoundryModulePin(_ context.Context, _ string) (string,
 }
 func (s *fakeSettings) SetFoundryModulePin(_ context.Context, _, version string) error {
 	s.pin = version
+	return nil
+}
+func (s *fakeSettings) GetFoundryModulePinMode(_ context.Context, _ string) (string, error) {
+	return s.pinMode, nil
+}
+func (s *fakeSettings) SetFoundryModulePinMode(_ context.Context, _, mode string) error {
+	s.pinMode = mode
 	return nil
 }
 func (s *fakeSettings) CampaignExists(_ context.Context, _ string) (bool, error) {

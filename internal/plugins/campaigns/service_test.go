@@ -37,6 +37,11 @@ type mockCampaignRepo struct {
 	updateDashboardLayoutFn func(ctx context.Context, campaignID string, layoutJSON *string) error
 	transferOwnershipFn     func(ctx context.Context, campaignID, fromUserID, toUserID string) error
 	forceTransferOwnershipFn func(ctx context.Context, campaignID, newOwnerID string) error
+	// updateSettingsFn is the recording hook for tests that need to
+	// assert what SetFoundryModulePin* wrote. Pre-Chunk-1 the
+	// UpdateSettings mock was a no-op stub; the hook is opt-in so
+	// existing tests don't need to change.
+	updateSettingsFn        func(ctx context.Context, campaignID, settingsJSON string) error
 }
 
 func (m *mockCampaignRepo) Create(ctx context.Context, campaign *Campaign) error {
@@ -206,6 +211,9 @@ func (m *mockCampaignRepo) UpdateBackdropPath(ctx context.Context, campaignID st
 }
 
 func (m *mockCampaignRepo) UpdateSettings(ctx context.Context, campaignID, settingsJSON string) error {
+	if m.updateSettingsFn != nil {
+		return m.updateSettingsFn(ctx, campaignID, settingsJSON)
+	}
 	return nil
 }
 

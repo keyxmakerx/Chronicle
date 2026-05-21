@@ -25,10 +25,32 @@ const (
 	AutoPinBannerDismissedAtKey   = "foundry_vtt.autopin_banner_dismissed_at"
 )
 
+// AutoPinSummarySchemaVersion is the current wire-shape version of
+// AutoPinSummary's JSON serialization. Bumped whenever the struct
+// gains a field that's load-bearing (i.e. callers can't safely
+// ignore). Added in C-FMC-ADMIN-UX-AUDIT Chunk 1.
+//
+// Read-path is LENIENT: existing serialized summaries that predate
+// this field deserialize SchemaVersion as 0 → treated as 1 (the
+// initial version that gained the field). Forward-incompatible
+// versions (SchemaVersion > AutoPinSummarySchemaVersion) are
+// REJECTED with a clear error so a future Chronicle version can't
+// silently drop data it doesn't understand. Pattern matches
+// PackageDescriptor (C-FMC-5a) and the audit's spec for this field.
+const AutoPinSummarySchemaVersion = 1
+
 // AutoPinSummary is the renderable bundle the admin banner displays.
 // Populated by AutoPinOnInstall + serialized to the settings KV;
 // read back by GetUnreadAutoPinSummary.
 type AutoPinSummary struct {
+	// SchemaVersion identifies the wire-shape version. Writers always
+	// set this to AutoPinSummarySchemaVersion (currently 1). Readers
+	// treat missing/zero as 1 (lenient pre-Chunk-1 backfill) and
+	// reject anything higher than AutoPinSummarySchemaVersion as
+	// forward-incompatible. The field is `omitempty` so a default-
+	// constructed (zero-value) summary doesn't accidentally
+	// serialize as `"schema_version":0` to confuse the read path.
+	SchemaVersion int `json:"schema_version,omitempty"`
 	// PreviousVersion is the version campaigns were effectively
 	// running before this install. The banner phrases it as the
 	// version campaigns are now pinned TO.
@@ -49,10 +71,16 @@ type AutoPinSummary struct {
 // per-campaign fan-out completes. Soft-fails (logs but doesn't
 // abort the install) if kv is nil or the write errors — the
 // summary is supplementary; missing it doesn't break installs.
+//
+// Always stamps SchemaVersion to the current AutoPinSummarySchemaVersion
+// regardless of the caller's value (defensive: a caller that
+// constructed the struct without setting the version field still
+// gets the correct on-disk shape).
 func (s *service) storeAutoPinSummary(ctx context.Context, summary AutoPinSummary) error {
 	if s.kv == nil {
 		return nil // KV not wired (tests); skip silently
 	}
+	summary.SchemaVersion = AutoPinSummarySchemaVersion
 	bytes, err := json.Marshal(summary)
 	if err != nil {
 		return fmt.Errorf("marshal autopin summary: %w", err)
@@ -81,6 +109,24 @@ func (s *service) GetUnreadAutoPinSummary(ctx context.Context) (*AutoPinSummary,
 	var summary AutoPinSummary
 	if err := json.Unmarshal([]byte(raw), &summary); err != nil {
 		return nil, fmt.Errorf("parse stored autopin summary: %w", err)
+	}
+
+	// Schema-version handling (added in C-FMC-ADMIN-UX-AUDIT Chunk 1):
+	//   - 0 (pre-Chunk-1 summaries, no schema_version field) → treat
+	//     as 1 silently. Lenient backfill.
+	//   - 1..AutoPinSummarySchemaVersion → use as-is.
+	//   - >AutoPinSummarySchemaVersion → REJECT with a clear error so
+	//     a future Chronicle version can't silently drop data it
+	//     doesn't understand (e.g. operator downgrades binary while
+	//     KV still holds a newer summary).
+	if summary.SchemaVersion == 0 {
+		summary.SchemaVersion = 1 // pre-Chunk-1 lenient default
+	}
+	if summary.SchemaVersion > AutoPinSummarySchemaVersion {
+		return nil, fmt.Errorf(
+			"stored autopin summary schema_version=%d is newer than this Chronicle (max=%d); "+
+				"upgrade Chronicle or clear the %q settings key to recover",
+			summary.SchemaVersion, AutoPinSummarySchemaVersion, LatestAutoPinSummaryKey)
 	}
 
 	// Check dismissal. A summary timestamp <= dismissed_at means

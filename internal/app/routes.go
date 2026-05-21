@@ -962,6 +962,21 @@ func (a *foundryCampaignSettingsAdapter) GetFoundryModulePin(ctx context.Context
 	return a.svc.GetFoundryModulePin(ctx, campaignID)
 }
 
+// SetFoundryModulePinMode delegates to the campaigns service. Added
+// in C-FMC-ADMIN-UX-AUDIT Chunk 1; consumed by Chunk 3's owner-side
+// UI (the new always-promote checkbox).
+func (a *foundryCampaignSettingsAdapter) SetFoundryModulePinMode(ctx context.Context, campaignID, mode string) error {
+	return a.svc.SetFoundryModulePinMode(ctx, campaignID, mode)
+}
+
+// GetFoundryModulePinMode delegates to the campaigns service. Added
+// in C-FMC-ADMIN-UX-AUDIT Chunk 1; consumed by OwnerTabData
+// population so the owner-side templ (Chunk 3) renders the right
+// initial state.
+func (a *foundryCampaignSettingsAdapter) GetFoundryModulePinMode(ctx context.Context, campaignID string) (string, error) {
+	return a.svc.GetFoundryModulePinMode(ctx, campaignID)
+}
+
 // CampaignExists is the existence check foundry_vtt's install-URL
 // builder and token-rotation flow use to reject unknown campaigns.
 func (a *foundryCampaignSettingsAdapter) CampaignExists(ctx context.Context, campaignID string) (bool, error) {
