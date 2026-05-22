@@ -1,16 +1,47 @@
 /* ============================================================================
  * Chronicle Tailwind CSS Input
  * ============================================================================
- * This is the Tailwind CSS input file. The standalone Tailwind CLI processes
- * this and generates static/css/app.css (which is gitignored).
+ * Canonical source for Chronicle's CSS. The standalone Tailwind CLI processes
+ * this and generates static/css/app.css (gitignored; only file served).
  *
- * Organized by layer: base → components → utilities.
- * Canonical source files live in base/, components/, utilities/ subdirectories.
- * This file is the concatenated build input.
+ * The subdirectories under static/css/ (base/, components/, utilities/) are
+ * legacy orphans NOT loaded by the build — see cordinator/plans/BACKLOG.md
+ * "Orphan CSS subdir cleanup".
  *
  * Run: make tailwind        (one-time build)
  * Run: make tailwind-watch  (watch mode for development)
  * ============================================================================ */
+
+/* ============================================================ */
+/* Cascade layer ordering — per cordinator/decisions/2026-05-22-ui-modernization-decisions.md Q4.
+   Macro ordering: reset → base → components → plugins → utilities.
+   Per-plugin sub-layers declared but currently RESERVED — no plugin CSS files
+   exist today. Reservation is forward-looking; the first plugin CSS file will
+   wrap into its sub-layer (e.g. `@layer plugins.foundry-vtt { ... }`). */
+@layer reset, base, components, plugins, utilities;
+@layer plugins {
+  @layer foundry-vtt, calendar, maps, packages, settings;
+}
+
+/* Reduced-motion total-disable guard — per Q6 decision + WCAG 2.1 SC 2.3.3.
+   Lives OUTSIDE any layer so it wins over Tailwind utilities and any plugin CSS.
+   Total-disable approach: animations, transitions, scroll-behavior, and
+   view-transition pseudos all silenced when the user has opted in via OS
+   preference. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+/* ============================================================ */
 
 @tailwind base;
 @tailwind components;
@@ -2239,3 +2270,24 @@
     white-space: nowrap;
   }
 }
+
+/* ============================================================ */
+/* @starting-style on .htmx-added — HTMX-injected fragments fade in instead of popping.
+   Per cordinator/reports/coordinator/2026-05-22-modern-ui-patterns-discovery.md §3.2.
+   HTMX adds .htmx-added to newly-inserted elements during the settle phase then
+   removes it; the transition triggers on class removal. @starting-style provides
+   the entry state. `transition-behavior: allow-discrete` is required for the
+   display/opacity entry transition to fire on insertion. */
+@layer utilities {
+  .htmx-added {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 150ms ease, transform 150ms ease;
+    transition-behavior: allow-discrete;
+    @starting-style {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+  }
+}
+/* ============================================================ */

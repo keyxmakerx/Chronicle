@@ -82,11 +82,15 @@ module.exports = {
   // Safelist grid column spans used by the dynamic entity page layout renderer.
   // These classes are generated programmatically from layout_json column widths,
   // so Tailwind's JIT scanner can't detect them in source files.
+  // `htmx-added` is added by HTMX at runtime to newly-inserted DOM fragments;
+  // it never appears in templ/go/js sources but the input.css @starting-style
+  // rule keying off it must survive the JIT purge.
   safelist: [
     'col-span-1', 'col-span-2', 'col-span-3', 'col-span-4',
     'col-span-5', 'col-span-6', 'col-span-7', 'col-span-8',
     'col-span-9', 'col-span-10', 'col-span-11', 'col-span-12',
     'grid-cols-12',
+    'htmx-added',
   ],
   plugins: [
     require('@tailwindcss/typography'),  // For prose styling (rich text editor)
