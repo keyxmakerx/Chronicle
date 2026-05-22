@@ -382,3 +382,50 @@ c.Name = req.Name
 // Delete deletes a campaign
 func (s *service) Delete(...) error
 ```
+
+## CI tenet-enforcement guards
+
+Per `C-CI-GUARDS-PHASE-2` (lands four mechanisms enforcing tenets from
+`cordinator/decisions/2026-05-21-core-tenets.md`). Each guard runs in
+`.github/workflows/ci.yml`. Extending the guards is part of normal PR
+work — coordinator updates the dispatch + audit citations.
+
+| Guard | File | Mode | Enforces |
+|---|---|---|---|
+| Plugin isolation grep | `tools/check-plugin-isolation.sh` | **diff-scoped FAIL** | T-B2: no new `foundry-vtt` / `foundry-module` / `foundry_vtt` literals outside `internal/plugins/foundry_vtt/*` |
+| Templ drift | `tools/check-templ-drift.sh` | **FAIL** | hygiene-audit §0.5 D6: generated `.templ.go` files always match their `.templ` source |
+| Wire-contract conformance | `internal/wire/wire_contract_test.go` + `internal/wire/routes_snapshot.txt` | **FAIL** (snapshot test) | T-O2 + hygiene-audit §5: every Echo route registration is in the curated snapshot. Drift triggers manual coordinator review. |
+| Decision-citations | `tools/check-decision-citations.sh` | **WARN** (always exit 0) | T-O3 + meta-audit Phase 2: every `cordinator/decisions/*.md` is referenced from at least one piece of code, dispatch, report, or other decision |
+
+### Extending the wire-contract snapshot
+
+When a PR intentionally adds, removes, or changes Echo routes:
+
+```bash
+UPDATE_ROUTES_SNAPSHOT=1 go test ./internal/wire/...
+```
+
+Commit the regenerated `internal/wire/routes_snapshot.txt` in the same PR.
+The PR description must cite the decision/audit that motivated the route
+change, especially when it touches one of the four auth surfaces named in
+`cordinator/reports/chronicle/2026-05-21-c-hygiene-audit.md` §5.1.
+
+### Extending the plugin-isolation guard
+
+Today's guard targets `foundry-vtt` strings. After NW-2.1 plugin-isolation
+audit lands and NW-2.2 cleanup removes the 161 existing violations, the
+guard's scope generalizes to every plugin's name + the WARN-not-FAIL mode
+for non-foundry paths flips to FAIL. The fragment-join token pattern (same
+as `tools/check-no-instance-hostname.sh`) lets the script scan its own
+directory tree without false-positiving on itself.
+
+### Phase 2B follow-ups for wire-contract test
+
+The Phase 2A snapshot captures `(method, path, file)` tuples via static AST
+extraction. Documented limitations (will lift in Phase 2B with
+`golang.org/x/tools/go/packages`):
+
+1. Group prefix not resolved — `e.Group("/admin")` rename doesn't trigger drift.
+2. Auth surface not classified — dispatch spec'd `(method, path, auth)`; we
+   ship `(method, path, file)` for Phase 2A.
+3. Programmatic registration (loops, builders) not captured.

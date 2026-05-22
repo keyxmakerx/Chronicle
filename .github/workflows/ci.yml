@@ -34,6 +34,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        # Full history required by the plugin-isolation guard's diff-base lookup
+        # (it diffs origin/<base>...HEAD; a shallow clone breaks that).
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -62,8 +66,34 @@ jobs:
         # join so it doesn't fail-self.
         run: ./tools/check-no-instance-hostname.sh
 
+      - name: Plugin isolation guard (M-B2.1)
+        # Per C-CI-GUARDS-PHASE-2 + cordinator/decisions/2026-05-21-core-tenets.md §T-B2.
+        # Diff-scoped FAIL: catches NEW foundry-vtt plugin-name literals
+        # introduced outside internal/plugins/foundry_vtt/. Existing 161
+        # violations in main are grandfathered until NW-2.2 cleanup lands.
+        # Needs full git history for the diff; fetch-depth: 0 below.
+        run: ./tools/check-plugin-isolation.sh
+
+      - name: Templ drift guard (M-O3.1 family)
+        # Per C-CI-GUARDS-PHASE-2 + cordinator/reports/chronicle/2026-05-21-c-hygiene-audit.md §0.5 D6.
+        # Re-runs `templ generate` and fails if the working tree diverges
+        # from what's checked in. Catches forgot-to-regenerate scenarios.
+        # templ binary already installed above; pinned to v0.3.1001.
+        run: ./tools/check-templ-drift.sh
+
       - name: Test
         run: go test ./... -v -short
+
+      - name: Decision-citations lint (M-O3.1, WARN-only)
+        # Per C-CI-GUARDS-PHASE-2 + cordinator/reports/coordinator/2026-05-21-c-meta-audit.md
+        # Phase 2 deliverable. Surfaces orphan cordinator/decisions/*.md docs.
+        # WARN-only: always exits 0. In Chronicle CI the Cordinator repo isn't
+        # checked out, so this prints "nothing to check" and exits clean. The
+        # guard is fully effective when run from a coordinator session that
+        # has all three repos local. Kept here so any future CI runner that
+        # checks out all three repos exercises it automatically.
+        continue-on-error: true
+        run: ./tools/check-decision-citations.sh
 
   # --- Lint ---
   lint:
