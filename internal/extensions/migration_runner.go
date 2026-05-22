@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/database"
 )
 
 // ExtensionMigration represents a single numbered migration for an extension.
@@ -252,8 +254,21 @@ func (r *MigrationRunner) DropExtensionTables(ctx context.Context, slug string) 
 	}
 
 	for _, table := range toDrop {
-		// Table name is from SHOW TABLES, safe to interpolate.
-		if _, err := r.db.ExecContext(ctx, "DROP TABLE IF EXISTS `"+table+"`"); err != nil {
+		// Table name is from SHOW TABLES (filtered by `prefix` above) so it's
+		// safe-by-source. database.SafeIdent makes that safety mechanical
+		// rather than convention-only — a future refactor that supplies the
+		// table name from a less-trusted path still cannot interpolate into
+		// the DDL string. Per cordinator/reports/chronicle/2026-05-22-c-security-audit.md
+		// §2 M-2 / §0.5 D5=(b).
+		quoted, identErr := database.SafeIdent(table)
+		if identErr != nil {
+			slog.Warn("skipping table with unsafe identifier",
+				slog.String("table", table),
+				slog.Any("error", identErr),
+			)
+			continue
+		}
+		if _, err := r.db.ExecContext(ctx, "DROP TABLE IF EXISTS "+quoted); err != nil {
 			slog.Warn("failed to drop extension table",
 				slog.String("table", table),
 				slog.Any("error", err),
