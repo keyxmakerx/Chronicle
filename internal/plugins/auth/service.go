@@ -584,7 +584,7 @@ func (s *authService) InitiatePasswordReset(ctx context.Context, email string) e
 			s.redis.Expire(ctx, rateLimitKey, 15*time.Minute)
 		}
 		if count > 3 {
-			slog.Debug("password reset rate-limited", slog.String("email", email))
+			slog.Debug("password reset rate-limited", slog.String("email_hash", hashEmail(email)))
 			return nil
 		}
 	}
@@ -603,7 +603,7 @@ func (s *authService) InitiatePasswordReset(ctx context.Context, email string) e
 	// Look up user. If not found, log and return nil (don't reveal existence).
 	user, err := s.repo.FindByEmail(ctx, email)
 	if err != nil {
-		slog.Debug("password reset requested for unknown email", slog.String("email", email))
+		slog.Debug("password reset requested for unknown email", slog.String("email_hash", hashEmail(email)))
 		return nil
 	}
 
