@@ -62,6 +62,12 @@ type App struct {
 	// pkgService is the package manager service, used for Foundry module
 	// path resolution and system loading from external repos.
 	pkgService packages.PackageService
+
+	// registeredPlugins is the metadata registry of plugins contributing
+	// to this App. Populated inline from RegisterRoutes at each plugin's
+	// setup point. Per cordinator/decisions/2026-05-23-plugin-registration.md
+	// + NW-2.2 Chunk A.
+	registeredPlugins []PluginRegistration
 }
 
 // New creates a new App instance with the given dependencies and configures
