@@ -1449,6 +1449,21 @@ func (a *App) RegisterRoutes() {
 	smtpService := smtp.NewSMTPService(smtpRepo, a.Config.Auth.SecretKey)
 	smtpHandler := smtp.NewHandler(smtpService)
 
+	// NW-2.2 Chunk A pilot: register smtp in the App's metadata registry.
+	// Per cordinator/decisions/2026-05-23-plugin-registration.md. Slug is
+	// the canonical plugin identifier; HealthCheck wraps the existing
+	// PluginHealth registry lookup so the registry surface exposes a
+	// uniform health signal.
+	a.registerPlugin(PluginRegistration{
+		Slug: smtp.PluginSlug,
+		HealthCheck: func() error {
+			if a.PluginHealth != nil && !a.PluginHealth.IsHealthy("smtp") {
+				return errors.New("smtp schema unhealthy")
+			}
+			return nil
+		},
+	})
+
 	// Wire SMTP into auth service for password reset emails.
 	auth.ConfigureMailSender(authService, smtpService, a.Config.BaseURL)
 
@@ -1850,6 +1865,22 @@ func (a *App) RegisterRoutes() {
 	// and removed Foundry coupling from the packages plugin. After
 	// this PR ships, the packages plugin has zero Foundry-specific
 	// code — Chronicle is fully Foundry-agnostic at the packages layer.
+
+	// NW-2.2 Chunk A pilot: register foundry_vtt in the App's metadata
+	// registry. Per cordinator/decisions/2026-05-23-plugin-registration.md.
+	// Slug is the canonical external identifier (matches the WS protocol
+	// + the URL prefix); HealthCheck wraps the existing PluginHealth key
+	// (which uses the Go package name "foundry_vtt", underscore form).
+	a.registerPlugin(PluginRegistration{
+		Slug: foundry_vtt.PluginSlug,
+		HealthCheck: func() error {
+			if a.PluginHealth != nil && !a.PluginHealth.IsHealthy("foundry_vtt") {
+				return errors.New("foundry_vtt schema unhealthy")
+			}
+			return nil
+		},
+	})
+
 	fvttRepo := foundry_vtt.NewRepository(a.DB)
 	fvttTokenSigner := foundry_vtt.NewTokenSigner(signingSecret)
 	fvttCampaignAdapter := &foundryCampaignSettingsAdapter{svc: campaignService}
