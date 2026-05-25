@@ -1457,7 +1457,7 @@ func (a *App) RegisterRoutes() {
 	a.registerPlugin(PluginRegistration{
 		Slug: smtp.PluginSlug,
 		HealthCheck: func() error {
-			if a.PluginHealth != nil && !a.PluginHealth.IsHealthy("smtp") {
+			if a.PluginHealth != nil && !a.PluginHealth.IsHealthy(smtp.PluginHealthKey) {
 				return errors.New("smtp schema unhealthy")
 			}
 			return nil
@@ -1869,12 +1869,14 @@ func (a *App) RegisterRoutes() {
 	// NW-2.2 Chunk A pilot: register foundry_vtt in the App's metadata
 	// registry. Per cordinator/decisions/2026-05-23-plugin-registration.md.
 	// Slug is the canonical external identifier (matches the WS protocol
-	// + the URL prefix); HealthCheck wraps the existing PluginHealth key
-	// (which uses the Go package name "foundry_vtt", underscore form).
+	// + the URL prefix); HealthCheck wraps the existing PluginHealth
+	// lookup via the plugin's exported PluginHealthKey const (which uses
+	// the Go-package-name underscore form for historical reasons —
+	// distinct from PluginSlug).
 	a.registerPlugin(PluginRegistration{
 		Slug: foundry_vtt.PluginSlug,
 		HealthCheck: func() error {
-			if a.PluginHealth != nil && !a.PluginHealth.IsHealthy("foundry_vtt") {
+			if a.PluginHealth != nil && !a.PluginHealth.IsHealthy(foundry_vtt.PluginHealthKey) {
 				return errors.New("foundry_vtt schema unhealthy")
 			}
 			return nil

@@ -20,3 +20,11 @@ package smtp
 // plugin owns the /admin group); decoupling that is a separate
 // migration, also recorded in the decision doc.
 const PluginSlug = "smtp"
+
+// PluginHealthKey is the identifier the database.PluginHealthRegistry
+// uses for this plugin. Happens to match PluginSlug because smtp's
+// Go package name + external slug coincide (no dash/underscore split).
+// Exported separately from PluginSlug so cross-package callers stay
+// symmetric with plugins where the two values differ (e.g.
+// foundry_vtt).
+const PluginHealthKey = "smtp"
