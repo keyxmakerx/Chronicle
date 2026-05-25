@@ -429,3 +429,53 @@ extraction. Documented limitations (will lift in Phase 2B with
 2. Auth surface not classified — dispatch spec'd `(method, path, auth)`; we
    ship `(method, path, file)` for Phase 2A.
 3. Programmatic registration (loops, builders) not captured.
+
+## Cross-plugin import discipline
+
+### For humans
+
+Plugins are physically isolated under `internal/plugins/<slug>/`. Cross-plugin
+communication is **always** mediated by an exported Go interface (a service or a
+middleware) defined on the providing plugin. Importing another plugin's
+repository, store, internal struct, or `_test.go` helpers is a layering
+violation.
+
+The shape that works:
+
+```go
+// In plugin-A's package: define the interface YOU need from plugin-B.
+type CampaignService interface {
+    Get(ctx context.Context, id string) (*Campaign, error)
+}
+
+// In plugin-B: implement it and expose via NewService(...) campaigns.CampaignService.
+
+// In plugin-A's wiring: accept the interface, not the concrete type.
+type Handler struct {
+    campaignSvc campaigns.CampaignService
+}
+```
+
+This pattern is already CLAUDE.md rule 8: *"Plugins talk to each other via
+service interfaces, never direct repo access."* This section formalizes it as
+the architectural-enforcement convention for Pillar 2 (`decisions/2026-05-21-four-pillars.md`).
+
+### For AI sessions
+
+**Verified clean.** The plugin-isolation audit (`cordinator/reports/chronicle/2026-05-23-c-plugin-isolation-audit.md §1.2`) walked every cross-plugin `import` in `internal/` and found **zero** suspicious-internal or suspicious-cross-plugin imports. All ~157 cross-plugin imports are exactly the legit-service / legit-middleware pattern above. The `internal/app/routes.go` is the registrar — the one place where imports of every plugin's package are expected and correct.
+
+**Implications:**
+
+1. Adding a new cross-plugin import requires the imported plugin to expose an interface (or a middleware constructor returning `echo.MiddlewareFunc`). Importing a concrete type from another plugin is a violation.
+2. `internal/app/routes.go` is the ONLY package that imports every plugin's package. New plugins register here.
+3. `foundry_vtt` is imported by `internal/websocket/{auth,client,hub}.go` for `foundry_vtt.ModuleSource` (NW-2.2 Chunk B). This is a thin const-usage import, not a cross-plugin "talk to service" import — analogous to how `packages.PackageTypeFoundryModule` is referenced from plugins that need to dispatch on package type. The "service-interface-only" rule is about behavioral coupling (calling methods); const sharing is acceptable.
+
+**Regression-prevention mechanisms:**
+
+| Mechanism | Catches |
+|---|---|
+| `tools/check-plugin-isolation.sh` (CI, diff-scoped FAIL) | New `foundry-vtt` / `foundry-module` magic-string literals outside `internal/plugins/foundry_vtt/`. Scope generalizes to other plugins per NW-2.3. |
+| Wire-contract conformance test (`internal/wire/wire_contract_test.go`) | New routes outside the curated snapshot. Forces dispatch citation when a new cross-plugin route lands. |
+| Code review | New `import "github.com/keyxmakerx/chronicle/internal/plugins/<X>/<subpkg>"` paths — anything beyond `internal/plugins/<X>` itself (i.e. importing `internal/plugins/<X>/repository`) is the canonical "you bypassed the interface" smell. |
+
+**Reference:** `cordinator/reports/chronicle/2026-05-23-c-plugin-isolation-audit.md §1.2, §3 Chunk C` (the audit that verified this convention is already honored — this section is the regression-prevention documentation that locks in the verified state).
