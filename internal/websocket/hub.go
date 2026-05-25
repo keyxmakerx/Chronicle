@@ -9,6 +9,7 @@ import (
 	gorillaWs "github.com/gorilla/websocket"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 )
 
 // foundryPresenceTTL is the window inside which a Foundry-module WS
@@ -101,7 +102,7 @@ func (h *Hub) Run() {
 			campaign[client.ID] = client
 			h.mu.Unlock()
 
-			if client.Source == "foundry-module" {
+			if client.Source == foundry_vtt.ModuleSource {
 				h.MarkFoundrySeen(client.CampaignID)
 			}
 
