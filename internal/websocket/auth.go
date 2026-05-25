@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 )
 
 // APIKeyAuthenticator authenticates API key tokens for WebSocket connections.
@@ -64,8 +66,8 @@ func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID
 	// for the /foundry-presence pill, not generic Foundry-style API
 	// key callers (CLI scripts, integration tests, etc.).
 	foundrySource := func() string {
-		if r.URL.Query().Get("client") == "foundry-module" {
-			return "foundry-module"
+		if r.URL.Query().Get("client") == foundry_vtt.ModuleSource {
+			return foundry_vtt.ModuleSource
 		}
 		return "foundry"
 	}

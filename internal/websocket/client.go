@@ -6,6 +6,8 @@ import (
 	"time"
 
 	gorillaWs "github.com/gorilla/websocket"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 )
 
 const (
@@ -75,7 +77,7 @@ func (c *Client) readPump() {
 		// Foundry-module pong receipts refresh the presence window so
 		// the /foundry-presence pill stays "connected" as long as the
 		// WS heartbeat is alive. Browser clients aren't tracked.
-		if c.Source == "foundry-module" {
+		if c.Source == foundry_vtt.ModuleSource {
 			c.hub.MarkFoundrySeen(c.CampaignID)
 		}
 		return c.conn.SetReadDeadline(time.Now().Add(pongWait))

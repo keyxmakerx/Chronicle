@@ -76,7 +76,7 @@ templ PackagesPage(packages []Package, csrfToken string) {
 						<label for="type" class="block text-sm font-medium text-fg-body mb-1">Type</label>
 						<select id="type" name="type" class="input w-full">
 							<option value="system">Game System</option>
-							<option value="foundry-module">Foundry Module</option>
+							<option value={ string(PackageTypeFoundryModule) }>Foundry Module</option>
 						</select>
 					</div>
 					<button type="submit" class="btn-primary text-sm">
