@@ -407,6 +407,7 @@ POST	/calendars/events	internal/plugins/calendar/routes.go
 POST	/calendars/import-setup	internal/plugins/calendar/routes.go
 POST	/campaigns	internal/plugins/campaigns/routes.go
 POST	/campaigns/:id/join	internal/plugins/admin/routes.go
+POST	/campaigns/:id/media	internal/plugins/syncapi/routes.go
 POST	/campaigns/import	internal/plugins/campaigns/routes.go
 POST	/cancel-transfer	internal/plugins/campaigns/routes.go
 POST	/content-templates	internal/plugins/entities/content_template_routes.go
@@ -455,7 +456,6 @@ POST	/maps/:mid/layers	internal/plugins/maps/routes.go
 POST	/maps/:mid/markers	internal/plugins/maps/routes.go
 POST	/maps/:mid/tokens	internal/plugins/maps/routes.go
 POST	/maps/new	internal/plugins/maps/routes.go
-POST	/media	internal/plugins/syncapi/routes.go
 POST	/media/upload	internal/plugins/media/routes.go
 POST	/members	internal/plugins/campaigns/routes.go
 POST	/notes	internal/plugins/syncapi/routes.go

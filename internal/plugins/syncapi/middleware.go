@@ -327,6 +327,50 @@ func RequireCampaignMatch() echo.MiddlewareFunc {
 	}
 }
 
+// RequireJSONContentType returns middleware that rejects state-changing
+// (POST / PUT / PATCH) requests whose Content-Type is not application/json.
+// Safe methods (GET / HEAD / DELETE / OPTIONS) pass through unchanged
+// because they carry no request body.
+//
+// The check accepts any media type whose top-level type+subtype is
+// application/json, including parameters like
+// "application/json; charset=utf-8". Anything else returns 415
+// Unsupported Media Type with a structured AppError body so a client
+// (or proxy) substituting a non-JSON body into a JSON-expecting
+// handler fails loudly rather than triggering Echo's silent
+// json.Unmarshal-of-zero behavior.
+//
+// Mounts on the /api/v1/* JSON group only. The single multipart
+// endpoint (POST /api/v1/campaigns/:id/media) is registered on a
+// parallel sub-group that omits this middleware — see RegisterAPIRoutes.
+// Closes FM-SEC C-4 / Chronicle audit M-3 per operator decision
+// D-C3.1 (sub-group skip).
+func RequireJSONContentType() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			switch c.Request().Method {
+			case http.MethodPost, http.MethodPut, http.MethodPatch:
+			default:
+				return next(c)
+			}
+			ct := c.Request().Header.Get("Content-Type")
+			// Strip any media-type parameters (";charset=utf-8" etc).
+			if i := strings.IndexByte(ct, ';'); i >= 0 {
+				ct = ct[:i]
+			}
+			ct = strings.TrimSpace(strings.ToLower(ct))
+			if ct != "application/json" {
+				return &apperror.AppError{
+					Code:    http.StatusUnsupportedMediaType,
+					Type:    "unsupported_media_type",
+					Message: "Content-Type must be application/json",
+				}
+			}
+			return next(c)
+		}
+	}
+}
+
 // --- Rate Limiting ---
 
 // rateLimiter tracks per-key request counts using a sliding window.
