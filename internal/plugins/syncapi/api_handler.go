@@ -213,6 +213,9 @@ func (h *APIHandler) ListEntities(c echo.Context) error {
 		items = []entities.Entity{}
 	}
 
+	// Defense-in-depth egress sanitize — see egress_sanitize.go.
+	sanitizeEntitiesHTMLForEgress(items)
+
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":     items,
 		"total":    total,
@@ -244,6 +247,9 @@ func (h *APIHandler) GetEntity(c echo.Context) error {
 	if accessErr != nil || !access.CanView {
 		return apperror.NewNotFound("entity not found")
 	}
+
+	// Defense-in-depth egress sanitize — see egress_sanitize.go.
+	sanitizeEntityHTMLForEgress(entity)
 
 	return c.JSON(http.StatusOK, entity)
 }
