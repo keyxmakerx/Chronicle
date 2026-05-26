@@ -48,6 +48,15 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	// map title. Lazy-loaded by maps/maps.templ. Campaign-member
 	// access (non-sensitive).
 	cg.GET("/foundry-vtt/presence-pill-fragment", h.CampaignShowPresencePillHandler)
+
+	// NW-2.3: relocated from campaigns.Handler.GetFoundryPresenceAPI.
+	// URL stays at /campaigns/:id/foundry-presence (preserves any
+	// operator bookmarks / external monitoring); member access is
+	// already enforced by the parent group's RequireCampaignAccess.
+	// Lives at the campaigns-prefix URL rather than under
+	// /foundry-vtt/... because the URL has shipped at this path since
+	// PR #298; renaming would break callers.
+	cg.GET("/foundry-presence", h.GetFoundryPresenceAPI)
 }
 
 // RegisterAdminRoutes mounts the admin endpoints used by the

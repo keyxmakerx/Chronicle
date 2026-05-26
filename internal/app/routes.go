@@ -2966,19 +2966,16 @@ func (a *App) RegisterRoutes() {
 	wsHub := ws.NewHub()
 	go wsHub.Run()
 
-	// Wire the hub's Foundry-presence lookup into the campaigns handler
-	// (for GET /campaigns/:id/foundry-presence) and the maps handler
-	// (for the "Connected to Foundry" pill on the map detail page).
-	// Wire the WS hub's presence lookup into the two consumers that
-	// still need it post-D2-cleanup:
-	//   - campaigns.Handler: GET /campaigns/:id/foundry-presence
-	//     (live diagnostic JSON endpoint)
-	//   - foundry_vtt.Handler: /foundry-vtt/presence-pill-fragment
-	//     (the lazy-loaded pill on the map detail page)
-	// The mapsHandler.SetFoundryPresence wire was removed in
-	// D2-cleanup — maps' templ now lazy-loads the pill from
-	// foundry_vtt and no longer needs hub access directly.
-	campaignHandler.SetFoundryPresence(wsHub)
+	// Wire the WS hub's presence lookup into foundry_vtt — the only
+	// remaining consumer post-NW-2.3. fvttHandler now owns both:
+	//   - GET /campaigns/:id/foundry-presence (live diagnostic JSON;
+	//     relocated from campaigns.Handler in NW-2.3)
+	//   - /foundry-vtt/presence-pill-fragment (lazy-loaded pill on the
+	//     map detail page; landed in NW-2.2 Chunk D)
+	// Both endpoints read through foundry_vtt.PresenceLookup, so a
+	// single SetPresenceLookup call covers them. The campaigns-side
+	// SetFoundryPresence wire was removed by NW-2.3; the maps-side
+	// SetFoundryPresence wire was removed earlier in D2-cleanup.
 	fvttHandler.SetPresenceLookup(wsHub)
 
 	wsAuth := ws.NewMultiAuthenticator(
