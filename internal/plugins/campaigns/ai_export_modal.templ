@@ -1,0 +1,87 @@
+// ai_export_modal.templ — HTMX fragment returned by
+// GenerateAIExport. Renders the markdown body inside a
+// <pre class="select-all"> + Copy button + Download-as-md link.
+//
+// The select-all class invites the user to click anywhere in the
+// pre block and Ctrl-A to select; the Copy button does the same
+// via navigator.clipboard.writeText (see static/js/widgets/ai_export.js).
+//
+// Per AskUserQuestion answer 3 (2026-05-26), the renderer's
+// "**Estimated tokens:** ~N,NNN" line is already in the markdown
+// header — no separate UI surface needed; it's visible in the <pre>.
+package campaigns
+
+import "fmt"
+
+// AIExportModal is the fragment the GenerateAIExport handler renders.
+// Either markdown is non-empty + errMsg is empty (success case) OR
+// markdown is empty + errMsg carries an explanation.
+//
+// The outer wrapper carries data-widget="ai-export" so the JS widget
+// (static/js/widgets/ai_export.js) can mount its Copy handler against
+// the contained <pre>. Modal uses Alpine.js for show/hide; the
+// settings-tab form HTMX-loads the fragment + triggers `ai-export:open`
+// to flip the visibility.
+templ AIExportModal(markdown, errMsg string) {
+	<div
+		data-widget="ai-export"
+		id="ai-export-modal"
+		role="dialog"
+		aria-labelledby="ai-export-modal-title"
+		x-data="{ open: true, copied: false }"
+		x-show="open"
+		@keydown.escape.window="open = false"
+		class="fixed inset-0 z-50 flex items-start justify-center p-4 pt-12 bg-black/50 overflow-y-auto"
+	>
+		<div
+			@click.outside="open = false"
+			class="bg-surface border border-edge rounded-lg shadow-xl max-w-4xl w-full flex flex-col max-h-[85vh]"
+		>
+			<div class="flex items-center justify-between px-5 py-3 border-b border-edge shrink-0">
+				<h3 id="ai-export-modal-title" class="text-lg font-semibold text-fg">
+					<i class="fa-solid fa-wand-magic-sparkles mr-2 text-accent"></i> AI Export
+				</h3>
+				<button
+					type="button"
+					@click="open = false"
+					aria-label="Close"
+					class="text-fg-muted hover:text-fg p-1 rounded transition-colors"
+				>
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+
+			if errMsg != "" {
+				<div class="px-5 py-4 text-sm text-rose-700 bg-rose-50 dark:text-rose-300 dark:bg-rose-950/30 border-b border-edge">
+					<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+					{ errMsg }
+				</div>
+			} else {
+				<div class="flex items-center gap-2 px-5 py-2 bg-surface-alt border-b border-edge text-xs text-fg-muted shrink-0">
+					<span class="flex-1">
+						Select all the text below and paste it into your AI tool. Token estimate is in the markdown header.
+					</span>
+					<button
+						type="button"
+						class="btn-primary text-xs px-3 py-1.5"
+						data-ai-export-copy
+						@click="copied = true; setTimeout(() => copied = false, 2000)"
+					>
+						<span x-show="!copied"><i class="fa-solid fa-copy mr-1"></i> Copy</span>
+						<span x-show="copied" x-cloak><i class="fa-solid fa-check mr-1"></i> Copied</span>
+					</button>
+				</div>
+
+				<div class="px-5 py-4 overflow-auto flex-1 min-h-0">
+					<pre
+						data-ai-export-body
+						class="select-all whitespace-pre-wrap break-words text-xs font-mono text-fg leading-relaxed bg-surface-alt p-4 rounded border border-edge"
+					>{ markdown }</pre>
+					<p class="text-xs text-fg-muted mt-2">
+						{ fmt.Sprintf("%d characters", len(markdown)) }
+					</p>
+				</div>
+			}
+		</div>
+	</div>
+}

@@ -116,6 +116,7 @@ GET	/addons	internal/plugins/addons/routes.go
 GET	/addons	internal/plugins/addons/routes.go
 GET	/addons	internal/plugins/syncapi/routes.go
 GET	/addons/fragment	internal/plugins/addons/routes.go
+GET	/ai-export/generate	internal/plugins/campaigns/routes.go
 GET	/api	internal/plugins/syncapi/routes.go
 GET	/api-keys	internal/plugins/syncapi/routes.go
 GET	/api-keys/sync-mappings	internal/plugins/syncapi/routes.go

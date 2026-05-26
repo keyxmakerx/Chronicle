@@ -13,6 +13,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -2397,6 +2398,26 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetSystemLister(&systemListerAdapter{})
 	tagHandler.SetAuditService(auditService)
 
+	// --- AI-Export (C-AI-EXPORT-V1) ---
+	// PR-A shipped the renderer package at internal/aiexport. PR-B
+	// wires it into the campaigns settings page. The package depends
+	// on narrow per-plugin lister interfaces — every plugin service
+	// already implements them (zero new SQL in this dispatch). The
+	// adapter below bridges campaigns.AIExportService (string-typed
+	// owner-supplied options) to aiexport.Options (typed constants).
+	// D4=(c) lossless backup carve-out preserved — no edits to
+	// internal/app/export_adapters.go or the restore pipeline.
+	aiExportRenderer := aiexport.NewService(
+		entityService,
+		noteSvc,
+		calendarService,
+		sessionsService,
+		timelineSvc,
+		relService,
+		tagService,
+	)
+	campaignHandler.SetAIExportService(&aiExportAdapter{svc: aiExportRenderer})
+
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)
 	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
@@ -3058,4 +3079,41 @@ func (a *mediaUploadAdapter) UploadRaw(ctx context.Context, campaignID, userID s
 		return "", err
 	}
 	return file.Filename, nil
+}
+
+// aiExportAdapter bridges campaigns.AIExportService (the narrow
+// interface campaigns/handler.go consumes) to the concrete
+// *aiexport.Service that internal/aiexport actually implements.
+// Translates the string-typed campaigns.AIExportOptions to
+// aiexport.Options' typed constants — same pattern as the
+// other plugin↔plugin adapters in this file.
+type aiExportAdapter struct {
+	svc *aiexport.Service
+}
+
+func (a *aiExportAdapter) Generate(ctx context.Context, campaignName, ownerID, campaignID string, opts campaigns.AIExportOptions) (string, error) {
+	mapped := aiexport.Options{
+		Privacy:               parseAIExportPrivacy(opts.Privacy),
+		IncludeSessionGMNotes: opts.IncludeSessionGMNotes,
+	}
+	for _, c := range opts.Categories {
+		mapped.Categories = append(mapped.Categories, aiexport.Category(c))
+	}
+	return a.svc.Generate(ctx, campaignName, ownerID, campaignID, mapped)
+}
+
+// parseAIExportPrivacy maps the form-string the campaigns handler
+// surfaces ("safe" / "permitted" / "everything") to the typed
+// aiexport.PrivacyMode constant. Unknown values fall back to Safe
+// (the most-restrictive default) so a future UI bug that ships an
+// unrecognised string can't silently downgrade the privacy filter.
+func parseAIExportPrivacy(s string) aiexport.PrivacyMode {
+	switch s {
+	case "permitted":
+		return aiexport.PrivacyModePermitted
+	case "everything":
+		return aiexport.PrivacyModeEverything
+	default:
+		return aiexport.PrivacyModeSafe
+	}
 }
