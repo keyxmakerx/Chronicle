@@ -82,9 +82,27 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	// /api/version is the contract the module already targets.
 	e.GET("/api/version", VersionHandler)
 
-	// API v1 group with session-or-bearer auth and rate limiting. Rate
-	// limiting is a no-op for session callers (see RateLimit comment).
+	// API v1 group with session-or-bearer auth, rate limiting, and
+	// JSON Content-Type enforcement. Rate limiting is a no-op for
+	// session callers (see RateLimit comment). RequireJSONContentType
+	// closes FM-SEC C-4 / Chronicle audit M-3 per operator decision
+	// D-C3.1 — anything POST/PUT/PATCH-ing on this group MUST be
+	// application/json; the lone multipart endpoint (UploadMedia)
+	// re-registers below on v1Multipart, which keeps auth + rate-limit
+	// but skips the JSON enforcement.
 	v1 := e.Group("/api/v1",
+		RequireAuthOrAPIKey(authSvc, campaignSvc, syncSvc),
+		RateLimit(syncSvc),
+		RequireJSONContentType(),
+	)
+
+	// Multipart sub-group at the same /api/v1 prefix. Same auth +
+	// rate-limit chain as v1, but no Content-Type lock so multipart/
+	// form-data is accepted at routes mounted here. UploadMedia is the
+	// only inhabitant today (see audit table in
+	// internal/middleware/multipart_auth_audit_test.go); any future
+	// multipart endpoint under /api/v1/* mounts here, not on v1.
+	v1Multipart := e.Group("/api/v1",
 		RequireAuthOrAPIKey(authSvc, campaignSvc, syncSvc),
 		RateLimit(syncSvc),
 	)
@@ -183,8 +201,16 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.GET("/media/stats", mediaAPI.GetMediaStats, RequirePermission(PermRead))
 	cg.GET("/media/:mediaID", mediaAPI.GetMedia, RequirePermission(PermRead))
 
-	// Media write endpoints (require "write" permission).
-	cg.POST("/media", mediaAPI.UploadMedia, RequirePermission(PermWrite))
+	// Media write endpoints (require "write" permission). UploadMedia
+	// is the lone multipart/form-data POST under /api/v1/* and mounts
+	// on v1Multipart so the JSON Content-Type lock on v1 doesn't 415
+	// the upload at the door — see the v1Multipart comment above.
+	// DeleteMedia stays on the JSON group: it accepts a body-less
+	// DELETE which the Content-Type middleware passes through anyway.
+	v1Multipart.POST("/campaigns/:id/media", mediaAPI.UploadMedia,
+		RequireCampaignMatch(),
+		RequirePermission(PermWrite),
+	)
 	cg.DELETE("/media/:mediaID", mediaAPI.DeleteMedia, RequirePermission(PermWrite))
 
 	// Map read endpoints (require "read" permission + maps addon).
