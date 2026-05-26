@@ -503,3 +503,98 @@ the architectural-enforcement convention for Pillar 2 (`decisions/2026-05-21-fou
 | Code review | New `import "github.com/keyxmakerx/chronicle/internal/plugins/<X>/<subpkg>"` paths — anything beyond `internal/plugins/<X>` itself (i.e. importing `internal/plugins/<X>/repository`) is the canonical "you bypassed the interface" smell. |
 
 **Reference:** `cordinator/reports/chronicle/2026-05-23-c-plugin-isolation-audit.md §1.2, §3 Chunk C` (the audit that verified this convention is already honored — this section is the regression-prevention documentation that locks in the verified state).
+
+## Security
+
+### For humans
+
+Chronicle's security posture is the consolidated state after the C-SECURITY-AUDIT (2026-05-22) and the C-SEC chunks 1-7 that implemented its findings. This section is the standing reference every PR that touches an auth surface, a sanitization site, a signed URL, or a SQL identifier interpolation should read FIRST.
+
+Per `cordinator/decisions/2026-05-21-core-tenets.md §T-B1`, security is the highest-priority tenet — every dispatch, audit chunk, and implementation PR considers security first. The mechanisms below are the operational consequences of that tenet.
+
+### For AI sessions
+
+When a PR touches any of the surfaces in this section, the PR description MUST include a Security-implication line per the audit's discipline. If the surface change is a regression risk, the corresponding CI guard (listed throughout this section) catches it; the guard is the load-bearing mechanism.
+
+### Auth surfaces — four canonical shapes
+
+Chronicle exposes **four distinct auth surfaces**. Conflating them is the chronicle#323 risk pattern that motivated the wire-contract conformance test (PR #330). Full inventory in `cordinator/reports/chronicle/2026-05-21-c-hygiene-audit.md §5.1`.
+
+| Surface | Mounting | Middleware | Consumers |
+|---|---|---|---|
+| **Session-cookie (web UI)** | `internal/app/routes.go` (campaigns, entities, calendar UI routes) | `auth.RequireAuth(authSvc)` + `campaigns.RequireCampaignAccess(campaignSvc)` | Browser users with `chronicle_session` cookie |
+| **Per-campaign-token (legacy public API)** | `internal/plugins/calendar/api_routes.go` + `internal/plugins/foundry_vtt/routes.go::RegisterPublicRoutes` | Token validation via signed URL `?token=` param | Foundry module manifest fetch + calendar public surface |
+| **Session-OR-Bearer (syncapi surface)** | `internal/plugins/syncapi/routes.go::RegisterAPIRoutes` | `syncapi.RequireAuthOrAPIKey` — accepts EITHER `chronicle_session` cookie OR `Authorization: Bearer <apiKey>` | Foundry sync REST API + in-app browser widgets |
+| **Admin-session (site admin UI)** | `internal/app/routes.go` (admin group) | `auth.RequireAuth` + `auth.RequireSiteAdmin` + optional `auth.RequireReauth` for sensitive actions | Site admin browser users |
+
+**Regression-prevention:** the wire-contract conformance test (`internal/wire/wire_contract_test.go` + `routes_snapshot.txt`) pins every Echo route registration. Adding a new route forces a snapshot regen + PR-description citation. Phase 2A captures `(method, path, file)`; per-route middleware capture is deferred to a Phase 2C upgrade (see "Phase 2B follow-ups for wire-contract test" above).
+
+### CSRF
+
+Double-submit cookie pattern via `internal/middleware/csrf.go`. On HTTPS the cookie uses the `__Host-` prefix for hardening. Applied to every session-cookie-authed write endpoint; Bearer-authed endpoints (syncapi) skip CSRF because cross-origin Bearer callers don't carry the cookie.
+
+CSP allows `'unsafe-inline'` + `'unsafe-eval'` — the Alpine.js trade-off — mitigated by the server-side `sanitize.HTML` bluemonday wrapper on every user-controlled HTML field (see "Sanitization invariant" below).
+
+Per `cordinator/reports/chronicle/2026-05-22-c-security-audit.md §2 G-CSRF` for the full inventory.
+
+### Signed URLs — HMAC-SHA256 with `crypto/subtle`
+
+Two signed-URL families:
+
+- **`/media/...` (media plugin)** — `internal/plugins/media/handler.go` mints + verifies signed URLs for protected media. Uses a shared instance secret. Domain-prefix scoping per the `C-MEDIA-SIGNED-URL-TRUST` (chronicle#322) decision: signed URLs ARE the auth proof for cross-origin consumers.
+- **`/foundry-vtt/...` (foundry_vtt plugin)** — `internal/plugins/foundry_vtt/token.go` mints per-campaign signed manifest URLs. `tokenDomain = "foundry-vtt"` const scopes the HMAC so a media-signed URL can't be replayed as a manifest URL (different domain prefix).
+
+Both use `hmac.Equal` (constant-time comparison via `crypto/subtle`) — never `==` or `bytes.Equal`. Verification includes expiry checks; replayed/expired URLs reject with 403.
+
+### Sanitization invariant — bluemonday UGCPolicy on every HTML write
+
+Every plugin's `Service.Create*` / `Service.Update*` method that accepts an HTML-typed field calls `sanitize.HTML(...)` (defined in `internal/sanitize/sanitize.go`) before persisting. Per audit §1.3, 8 plugins/widgets follow this convention today:
+
+- `internal/plugins/{entities,calendar,sessions,timeline,campaigns}/service.go`
+- `internal/widgets/{notes,posts,entity_notes}/service.go`
+
+**Regression-prevention (Chunk 7, PR #340):** `internal/sanitize/invariant_test.go` + `sanitize_invariant_snapshot.txt` pin a file-level invariant — any `service.go` (+ its sibling `model.go`) that declares HTML-typed inputs MUST have at least one `sanitize.HTML` call. The snapshot inventories all 25 plugin/widget service.go files; regenerate via `UPDATE_SANITIZE_SNAPSHOT=1 go test ./internal/sanitize/...`.
+
+**Egress side:** per the §0.5 D4=(c) decision the backup/restore round-trip is intentionally lossless (no re-sanitization on export). The Foundry-bound egress paths are not yet re-sanitized — the audit deferred this to a separate chunk per the C-SEC-CHUNK-6 stop-and-flag (the actual Foundry-bound egress lives in `/api/v1/` entity/note handlers, not in `export_adapters.go` as the audit initially located).
+
+### `SafeIdent` convention — DDL identifier interpolation
+
+Per `cordinator/reports/chronicle/2026-05-22-c-security-audit.md §2 M-2` (Chunk 5, PR #331), every SQL DDL statement that interpolates a table/column name into the SQL string MUST pass the identifier through `internal/database/safeident.go::SafeIdent`. Returns the identifier backtick-quoted, or an error if it doesn't match the conservative regex `^[a-zA-Z_][a-zA-Z0-9_]*$`.
+
+```go
+quoted, err := database.SafeIdent(tableName)
+if err != nil { return err }
+_, err = db.ExecContext(ctx, "DROP TABLE IF EXISTS "+quoted)
+```
+
+Today's only live caller is `internal/extensions/migration_runner.go::DropExtensionTables`. Future callers that need DDL identifier interpolation MUST use this helper rather than raw concat — even when the input is "trusted" (e.g. from `SHOW TABLES`). The helper's job is to make the safety mechanical rather than convention-only.
+
+### Historical footguns — the four medium findings
+
+Documented for future contributors who might re-introduce these patterns. Each finding's mitigation is now load-bearing in CI or in convention; the historical context explains WHY the mechanism exists.
+
+| Finding | Original gap | Mitigation | PR |
+|---|---|---|---|
+| **M-1** | Password-reset Debug logs emitted raw email as `slog.String("email", email)` — email enumeration via log access | `internal/plugins/auth/loghash.go::hashEmail()` — SHA-256 hex prefix; regression-pinned by `loghash_test.go` | #331 (Chunk 1) |
+| **M-2** | `DropExtensionTables` interpolated `table` name into `DROP TABLE` via raw concat | `internal/database/safeident.go::SafeIdent` — regex-validating identifier helper; convention enforced going forward | #331 (Chunk 5) |
+| **M-3** | Foundry public manifest endpoint's rate-limit middleware was optional in registration signature; silent removal possible | `internal/wire/foundry_public_ratelimit_test.go` — two focused AST assertions pin the wiring + the call site | #339 (Chunk 2) |
+| **M-4** | Sanitization on ingress but not on Foundry-bound egress | Egress side partially deferred per Chunk 6 stop-and-flag; the audit's cited sites were all backup-bound (lossless per D4=(c)); the actual Foundry-bound egress in syncapi handlers awaits a follow-up dispatch | (deferred — see `cordinator/reports/chronicle/2026-05-23-c-sec-chunk-6.md`) |
+
+### Deferred Wave 2 follow-ups (not yet shipped)
+
+For completeness, the security work that's authored but pending:
+
+- **C-SEC-CHUNK-3** (Content-Type enforcement on JSON APIs) — deferred; multipart `POST /api/v1/.../media` is inside the `/api/v1/*` group, contradicting the dispatch's "Out of scope" assumption. Operator decision required (D-C3.1 per `cordinator/reports/chronicle/2026-05-23-c-sec-chunk-3.md`).
+- **C-SEC-CHUNK-4** (loadDescriptor fallback decision doc + pinning test) — authored but not yet executed; cross-repo (Chronicle + Cordinator + Foundry-module comment).
+- **C-SEC-CHUNK-6** (selective Foundry-egress sanitization) — deferred; audit's cited sites were all backup-bound. Operator decision required (D-C6.1 per `cordinator/reports/chronicle/2026-05-23-c-sec-chunk-6.md`).
+- **C-SEC-CHUNK-2-PHASE-2C** — full middleware-chain capture for every route via `golang.org/x/tools/go/packages`. Deferred from PR #339's reshape.
+- **C-SEC-CHUNK-7-PHASE-2** — method-level sanitize invariant with flow analysis + helper tracing. Deferred from PR #340's reshape.
+
+### Reading order for a security-touching PR
+
+1. This section (`.ai/conventions.md` §Security) — start here
+2. `cordinator/decisions/2026-05-21-core-tenets.md §T-B1` — the binding tenet
+3. `cordinator/reports/chronicle/2026-05-22-c-security-audit.md` — full audit (§1.3 sanitization inventory + §2 findings + §3 guardrails + §5 chunk roadmap)
+4. `cordinator/reports/chronicle/2026-05-21-c-hygiene-audit.md §5.1` — auth surfaces detail
+5. The plugin's `.ai.md` for plugin-specific footguns
+6. The relevant CI guard's source (`tools/check-plugin-isolation.sh`, `internal/wire/wire_contract_test.go`, `internal/sanitize/invariant_test.go`, etc.) to understand what the guard catches
