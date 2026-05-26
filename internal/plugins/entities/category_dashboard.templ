@@ -293,8 +293,17 @@ templ PinnedCard(entity *Entity, cc *campaigns.CampaignContext) {
 // EntityTableRow renders a single row in the table view. Shows entity name with
 // image/icon, category type badge, tags, relative update time, and privacy indicator.
 // Reused by both category dashboard and all-pages list.
+//
+// The data-entity-id attribute is the contract the bulk-actions widget
+// (static/js/widgets/bulk_actions.js) reads to inject the per-row
+// multi-select <td> checkbox. Without it, the widget still injects the
+// select-all <th> on the header but skips the rows entirely, leaving
+// the header one column wider than every body row — most visible at
+// mobile breakpoints where most other columns are hidden. The widget
+// is only active when a parent declares data-widget="bulk-actions"
+// (All Pages today); the attribute is inert elsewhere.
 templ EntityTableRow(entity *Entity, cc *campaigns.CampaignContext) {
-	<tr class="hover:bg-surface-alt transition-colors group">
+	<tr class="hover:bg-surface-alt transition-colors group" data-entity-id={ entity.ID }>
 		<td class="px-4 py-2.5">
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
