@@ -1980,6 +1980,23 @@ func (a *App) RegisterRoutes() {
 	calendarService := calendar.NewCalendarService(calendarRepo)
 	calendarHandler := calendar.NewHandler(calendarService)
 	calendarHandler.SetAddonService(addonService)
+
+	// NW-2.2 Chunk F: register calendar in the App's metadata registry +
+	// expose its embedded static assets for serving at /static/plugins/calendar/.
+	// echo.MustSubFS strips the leading "static" dir from the embed so
+	// /static/plugins/calendar/js/calendar_widget.js maps cleanly. Per
+	// cordinator/decisions/2026-05-25-plugin-static-assets.md.
+	a.registerPlugin(PluginRegistration{
+		Slug: calendar.PluginSlug,
+		HealthCheck: func() error {
+			if a.PluginHealth != nil && !a.PluginHealth.IsHealthy(calendar.PluginHealthKey) {
+				return errors.New("calendar schema unhealthy")
+			}
+			return nil
+		},
+		StaticFS: echo.MustSubFS(calendar.StaticAssetsFS, "static"),
+	})
+
 	if a.PluginHealth.IsHealthy("calendar") {
 		calendar.RegisterRoutes(e, calendarHandler, campaignService, authService, addonService)
 
@@ -3028,6 +3045,13 @@ func (a *App) RegisterRoutes() {
 	// --- API Routes ---
 	// REST API v1 is registered above via syncapi.RegisterAPIRoutes().
 	// Endpoints: /api/v1/campaigns/:id/{entity-types,entities,sync}
+
+	// --- Plugin Static Assets ---
+	// NW-2.2 Chunk F: mount each registered plugin's static assets at
+	// /static/plugins/<slug>/. Must run AFTER all plugins have called
+	// a.registerPlugin() above. Per
+	// cordinator/decisions/2026-05-25-plugin-static-assets.md.
+	a.mountPluginStatic()
 }
 
 // mediaUploadAdapter adapts MediaService to the notes.MediaUploader interface.
