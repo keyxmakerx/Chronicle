@@ -15,20 +15,15 @@ import (
 // CampaignShowPage renders the campaign dashboard. If the campaign has a custom
 // dashboard_layout JSON set, renders from that layout. Otherwise falls back to
 // the hardcoded default dashboard.
-templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentEntities []RecentEntity, csrfToken string, fmBanner FoundryModuleBanner) {
+templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentEntities []RecentEntity, csrfToken string) {
 	@layouts.App(cc.Campaign.Name) {
 		<div class="max-w-5xl mx-auto">
-			// VTT update-available banner.
-			// NW-2.2 Chunk D: moved to foundry_vtt; lazy-loaded so
-			// campaigns stays VTT-agnostic. The fmBanner param +
-			// FoundryModuleBanner type + handler-side resolver stay
-			// in place for now (caller is left intact) and are
-			// flagged for cleanup in a follow-up. Until then the
-			// fragment endpoint at /foundry-vtt/show-banner-fragment
-			// fetches its own state via fvttService.
-			//
-			// Owner-only route gates the fragment; non-owners get
-			// 403 and HTMX skips swap (slot stays invisible).
+			// VTT update-available banner. NW-2.2 Chunk D moved this
+			// to foundry_vtt; D2-cleanup removed the unused fmBanner
+			// parameter + supporting types. The fragment endpoint
+			// at /foundry-vtt/show-banner-fragment fetches its own
+			// state via fvttService. Owner-only enforced at the route
+			// (requireOwner middleware in foundry_vtt.RegisterOwnerRoutes).
 			<span
 				hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/show-banner-fragment", cc.Campaign.ID) }
 				hx-trigger="load"

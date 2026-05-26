@@ -123,35 +123,13 @@ type SMTPChecker interface {
 // Implemented by the WebSocket hub; injected here to avoid importing
 // the websocket package directly (which would also pull in the gorilla
 // transport and balloon this package's binary surface).
+//
+// Consumed by GetFoundryPresenceAPI (GET /campaigns/:id/foundry-presence).
+// Separate from the (since-removed) `maps.FoundryPresenceLookup` and the
+// foundry_vtt-side equivalent — each plugin owns its own narrow
+// adapter against the WS hub.
 type FoundryPresenceLookup interface {
 	FoundryPresence(campaignID string) (lastSeen *time.Time, connected bool)
-}
-
-// FoundryModuleBanner is the renderable banner state for the campaign
-// show page. Empty / zero-valued instance = no banner. Populated by
-// the foundry_vtt adapter wired in routes.go (foundryVTTBannerAdapter
-// — replaced the original foundryModuleBannerAdapter when
-// foundry_modules was deleted in C-FMC-5c; the type name on this
-// side stays `FoundryModuleBanner` because the templ field is
-// stable and the rename was out of scope).
-type FoundryModuleBanner struct {
-	// HasUpdate is true when a newer non-deprecated version exists
-	// than what this campaign currently resolves to. False (the
-	// zero value) suppresses the banner entirely.
-	HasUpdate bool
-	// CurrentVersion is what Foundry sees today (pin if pinned, else latest).
-	CurrentVersion string
-	// LatestVersion is the newest available release (admin-side).
-	LatestVersion string
-}
-
-// FoundryModuleBannerLookup reports whether this campaign should see
-// the "newer Foundry module version available" dashboard banner.
-// Implemented by an adapter in routes.go over the foundry_vtt
-// service so the campaigns plugin doesn't import foundry_vtt
-// (which would cycle — foundry_vtt imports campaigns).
-type FoundryModuleBannerLookup interface {
-	GetFoundryModuleBanner(ctx context.Context, campaignID string) (FoundryModuleBanner, error)
 }
 
 // SystemLister lists available game systems for the settings page dropdown.
@@ -175,7 +153,6 @@ type Handler struct {
 	smtpChecker       SMTPChecker
 	systemLister      SystemLister
 	foundryPresence   FoundryPresenceLookup
-	foundryBanner     FoundryModuleBannerLookup
 	baseURL           string
 }
 
@@ -188,13 +165,6 @@ func NewHandler(service CampaignService) *Handler {
 // Set after the WS hub is constructed in routes.go.
 func (h *Handler) SetFoundryPresence(p FoundryPresenceLookup) {
 	h.foundryPresence = p
-}
-
-// SetFoundryModuleBanner wires the lookup used by the campaign show
-// page to render the "newer module version available" banner.
-// Set after the foundry_vtt service is constructed in routes.go.
-func (h *Handler) SetFoundryModuleBanner(b FoundryModuleBannerLookup) {
-	h.foundryBanner = b
 }
 
 // FoundryPresenceResponse is the JSON shape returned by the
@@ -413,16 +383,15 @@ func (h *Handler) Show(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 
-	// Foundry module update banner. Owner-only because non-owners
-	// can't act on it (the pin selector lives on the Owner settings
-	// tab). Soft-fail to zero-value (no banner) on lookup error so
-	// a flaky foundry_vtt check doesn't break the dashboard.
-	var fmBanner FoundryModuleBanner
-	if h.foundryBanner != nil && cc.MemberRole >= RoleOwner {
-		fmBanner, _ = h.foundryBanner.GetFoundryModuleBanner(c.Request().Context(), cc.Campaign.ID)
-	}
+	// VTT update-available banner is now lazy-loaded from
+	// foundry_vtt's /foundry-vtt/show-banner-fragment route; the
+	// fragment endpoint enforces owner-only via requireOwner
+	// middleware and fetches its own banner state via fvttService.
+	// Per cordinator/reports/chronicle/2026-05-25-c-nw-2-2-chunk-d.md
+	// (the move) + the D2-cleanup PR that removed the now-orphaned
+	// data flow.
 
-	return middleware.Render(c, http.StatusOK, CampaignShowPage(cc, transfer, recentEntities, csrfToken, fmBanner))
+	return middleware.Render(c, http.StatusOK, CampaignShowPage(cc, transfer, recentEntities, csrfToken))
 }
 
 // EditForm redirects to the unified settings page (GET /campaigns/:id/edit).
