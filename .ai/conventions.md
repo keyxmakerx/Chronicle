@@ -395,6 +395,7 @@ work — coordinator updates the dispatch + audit citations.
 | Plugin isolation grep | `tools/check-plugin-isolation.sh` | **diff-scoped FAIL** | T-B2: no new `foundry-vtt` / `foundry-module` / `foundry_vtt` literals outside `internal/plugins/foundry_vtt/*` |
 | Templ drift | `tools/check-templ-drift.sh` | **FAIL** | hygiene-audit §0.5 D6: generated `.templ.go` files always match their `.templ` source |
 | Wire-contract conformance | `internal/wire/wire_contract_test.go` + `internal/wire/routes_snapshot.txt` | **FAIL** (snapshot test) | T-O2 + hygiene-audit §5: every Echo route registration is in the curated snapshot. Drift triggers manual coordinator review. |
+| Foundry public rate-limit pin | `internal/wire/foundry_public_ratelimit_test.go` | **FAIL** | T-B1 + security-audit §2 M-3: the Foundry public manifest endpoint MUST be rate-limited. Two AST assertions pin the wiring (`g.Use(rateLimit)` in `foundry_vtt.RegisterPublicRoutes`) and the call site (`middleware.RateLimit(...)` argument in `app.RegisterRoutes`). |
 | Decision-citations | `tools/check-decision-citations.sh` | **WARN** (always exit 0) | T-O3 + meta-audit Phase 2: every `cordinator/decisions/*.md` is referenced from at least one piece of code, dispatch, report, or other decision |
 
 ### Extending the wire-contract snapshot
@@ -422,13 +423,36 @@ directory tree without false-positiving on itself.
 ### Phase 2B follow-ups for wire-contract test
 
 The Phase 2A snapshot captures `(method, path, file)` tuples via static AST
-extraction. Documented limitations (will lift in Phase 2B with
+extraction. Documented limitations (will lift in a future Phase 2C with
 `golang.org/x/tools/go/packages`):
 
 1. Group prefix not resolved — `e.Group("/admin")` rename doesn't trigger drift.
 2. Auth surface not classified — dispatch spec'd `(method, path, auth)`; we
    ship `(method, path, file)` for Phase 2A.
 3. Programmatic registration (loops, builders) not captured.
+4. Middleware chain NOT captured per-route — Phase 2A pins the curated
+   list of registered routes; it doesn't catch silent removal of middleware
+   from existing routes. C-SEC-CHUNK-2 (Phase 2B) closes this hole for the
+   specific Foundry public manifest invariant (M-3) via a focused AST
+   assertion at `internal/wire/foundry_public_ratelimit_test.go`; full
+   per-route middleware capture is deferred to Phase 2C.
+
+### Adding a focused middleware-pin test
+
+When a security finding requires that a specific route's middleware never
+silently disappear (e.g. rate-limit on a public endpoint, auth on an
+admin-only route), prefer a focused AST assertion over a full type-resolved
+walk. The Foundry public rate-limit pin (NW-2.2 era, C-SEC Chunk 2) is the
+reference implementation; copy its shape:
+
+1. Locate the function declaration that wires the middleware
+2. AST-walk its body asserting the `*.Use(...)` (or per-route equivalent)
+   call exists
+3. Locate the call site that supplies the middleware argument
+4. AST-walk asserting the argument is a non-nil call expression containing
+   the expected middleware name
+
+Two small assertions, no new dependencies, pin the invariant end-to-end.
 
 ## Cross-plugin import discipline
 
