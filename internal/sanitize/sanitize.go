@@ -73,6 +73,24 @@ func HTML(input string) string {
 	return getPolicy().Sanitize(input)
 }
 
+// HTMLPtr sanitizes the HTML behind a nullable string pointer and
+// returns a fresh pointer to the sanitized value. nil input returns
+// nil. The original *p value is not mutated — callers receive a new
+// pointer to a new string, which is the right shape for re-sanitizing
+// at EGRESS on response copies whose canonical value lives in the DB.
+//
+// Defense-in-depth companion to HTML: ingress sanitization (write
+// path) is the primary guarantee; calling HTMLPtr on response fields
+// covers historical rows or future tooling-bug-inserted rows that
+// slipped past ingress.
+func HTMLPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := HTML(*p)
+	return &s
+}
+
 // secretSpanRe matches <span data-secret="true" ...>...</span> elements.
 // Uses (?s) dotall flag so . matches newlines in multi-line secret content.
 // Assumes flat spans without nested <span> elements, which is consistent with

@@ -44,6 +44,8 @@ func (h *NoteAPIHandler) ListNotes(c echo.Context) error {
 		slog.Error("api: list notes failed", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list notes"))
 	}
+	// Defense-in-depth egress sanitize — see egress_sanitize.go.
+	sanitizeNotesHTMLForEgress(result)
 	return c.JSON(http.StatusOK, result)
 }
 
@@ -63,6 +65,8 @@ func (h *NoteAPIHandler) GetNote(c echo.Context) error {
 		return apperror.NewNotFound("note not found")
 	}
 
+	// Defense-in-depth egress sanitize — see egress_sanitize.go.
+	sanitizeNoteHTMLForEgress(note)
 	return c.JSON(http.StatusOK, note)
 }
 

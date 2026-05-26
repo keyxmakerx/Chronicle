@@ -329,6 +329,9 @@ func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
 		events = []calendar.Event{}
 	}
 
+	// Defense-in-depth egress sanitize — see egress_sanitize.go.
+	sanitizeCalendarEventsHTMLForEgress(events)
+
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":  events,
 		"total": len(events),
@@ -358,6 +361,9 @@ func (h *CalendarAPIHandler) GetEvent(c echo.Context) error {
 	if evt.Visibility == "dm_only" && !permissions.CanSeeDmOnly(role) {
 		return apperror.NewNotFound("event not found")
 	}
+
+	// Defense-in-depth egress sanitize — see egress_sanitize.go.
+	sanitizeCalendarEventHTMLForEgress(evt)
 
 	return c.JSON(http.StatusOK, evt)
 }
