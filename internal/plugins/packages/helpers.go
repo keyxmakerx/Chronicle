@@ -5,12 +5,12 @@
 // an HTMX lazy-load fragment owned by the type's plugin. This file
 // holds the type→URL dispatch.
 //
-// The "foundry-vtt" URL fragment in actionsFragmentURLFor is the
-// same kind of URL-path literal that already exists at
-// packages.templ:49 (the autopin-banner hx-get); the plugin-isolation
-// grep guard's regex requires a closing quote IMMEDIATELY after the
-// slug to flag a violation (URL paths like /admin/foundry-vtt/...
-// don't trip it). A future "per-type UI registry" interface would
+// The owning-plugin slug appears as a URL-path literal in
+// actionsFragmentURLFor — same kind of URL-path reference that
+// already exists at packages.templ:49 (the autopin-banner hx-get).
+// The plugin-isolation grep guard's regex requires a closing quote
+// immediately after the slug to flag a violation, which URL paths
+// don't trip. A future "per-type UI registry" interface would
 // decouple this entirely; deferred to a follow-up.
 
 package packages
