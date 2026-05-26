@@ -228,7 +228,7 @@ GET	/favorites	internal/plugins/entities/routes.go
 GET	/files/:name	internal/plugins/backup/routes.go
 GET	/flagged	internal/plugins/bestiary/routes.go
 GET	/forgot-password	internal/plugins/auth/routes.go
-GET	/foundry-presence	internal/plugins/campaigns/routes.go
+GET	/foundry-presence	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/dashboard-sync-block	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/install-url	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/presence-pill-fragment	internal/plugins/foundry_vtt/routes.go

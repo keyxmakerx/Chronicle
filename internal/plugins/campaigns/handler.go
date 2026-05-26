@@ -118,20 +118,6 @@ type SMTPChecker interface {
 	IsConfigured(ctx context.Context) bool
 }
 
-// FoundryPresenceLookup reports whether the campaign currently has a
-// Foundry-module WebSocket connection live and when it was last seen.
-// Implemented by the WebSocket hub; injected here to avoid importing
-// the websocket package directly (which would also pull in the gorilla
-// transport and balloon this package's binary surface).
-//
-// Consumed by GetFoundryPresenceAPI (GET /campaigns/:id/foundry-presence).
-// Separate from the (since-removed) `maps.FoundryPresenceLookup` and the
-// foundry_vtt-side equivalent — each plugin owns its own narrow
-// adapter against the WS hub.
-type FoundryPresenceLookup interface {
-	FoundryPresence(campaignID string) (lastSeen *time.Time, connected bool)
-}
-
 // SystemLister lists available game systems for the settings page dropdown.
 // Avoids importing the systems package directly (prevents import cycle).
 type SystemLister interface {
@@ -152,53 +138,12 @@ type Handler struct {
 	mediaUploader     MediaUploader
 	smtpChecker       SMTPChecker
 	systemLister      SystemLister
-	foundryPresence   FoundryPresenceLookup
 	baseURL           string
 }
 
 // NewHandler creates a new campaign handler.
 func NewHandler(service CampaignService) *Handler {
 	return &Handler{service: service}
-}
-
-// SetFoundryPresence wires the lookup used by GET /campaigns/:id/foundry-presence.
-// Set after the WS hub is constructed in routes.go.
-func (h *Handler) SetFoundryPresence(p FoundryPresenceLookup) {
-	h.foundryPresence = p
-}
-
-// FoundryPresenceResponse is the JSON shape returned by the
-// /foundry-presence endpoint. NeverSeen is true when we have no
-// record of any Foundry-module connection for this campaign (the
-// pill renders "never" in that case); otherwise LastSeen is set
-// to the most recent activity timestamp.
-type FoundryPresenceResponse struct {
-	Connected bool       `json:"connected"`
-	NeverSeen bool       `json:"never_seen"`
-	LastSeen  *time.Time `json:"last_seen,omitempty"`
-}
-
-// GetFoundryPresenceAPI returns the Foundry-module presence status for
-// the campaign. Any campaign member can read — presence is operator
-// diagnostic info, not sensitive state.
-//
-// GET /campaigns/:id/foundry-presence
-func (h *Handler) GetFoundryPresenceAPI(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	if h.foundryPresence == nil {
-		// Hub wasn't wired (test fixture or WS disabled). Treat as never seen.
-		return c.JSON(http.StatusOK, FoundryPresenceResponse{NeverSeen: true})
-	}
-	lastSeen, connected := h.foundryPresence.FoundryPresence(cc.Campaign.ID)
-	resp := FoundryPresenceResponse{
-		Connected: connected,
-		NeverSeen: lastSeen == nil,
-		LastSeen:  lastSeen,
-	}
-	return c.JSON(http.StatusOK, resp)
 }
 
 // SetGroupService sets the group service for campaign group management.

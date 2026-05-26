@@ -49,6 +49,53 @@ func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
+// FoundryPresenceResponse is the JSON shape returned by the
+// /campaigns/:id/foundry-presence diagnostic endpoint. NeverSeen is
+// true when we have no record of any Foundry-module connection for
+// this campaign (the pill renders "never" in that case); otherwise
+// LastSeen is set to the most recent activity timestamp.
+//
+// NW-2.3: relocated from the campaigns plugin where the endpoint
+// originally lived. URL, response shape, and auth chain are preserved
+// byte-for-byte to keep any operator bookmarks / external monitoring
+// working — the plugin boundary moved, not the wire contract.
+type FoundryPresenceResponse struct {
+	Connected bool       `json:"connected"`
+	NeverSeen bool       `json:"never_seen"`
+	LastSeen  *time.Time `json:"last_seen,omitempty"`
+}
+
+// GetFoundryPresenceAPI returns the Foundry-module presence status
+// for the campaign. Any campaign member can read — presence is
+// operator diagnostic info, not sensitive state. Member access is
+// enforced by the parent group's RequireCampaignAccess middleware
+// (see app/routes.go's fvttCampaignAuthed group).
+//
+// GET /campaigns/:id/foundry-presence
+//
+// NW-2.3: moved from campaigns.Handler.GetFoundryPresenceAPI. The
+// implementation reuses the existing foundry_vtt.PresenceLookup
+// (already wired by app/routes.go via SetPresenceLookup), so the
+// move shed the duplicate campaigns.FoundryPresenceLookup interface
+// + handler field + setter without changing the wiring's behavior.
+func (h *Handler) GetFoundryPresenceAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.presenceLookup == nil {
+		// Hub wasn't wired (test fixture or WS disabled). Treat as
+		// never-seen so the pill / diagnostic renders consistently.
+		return c.JSON(http.StatusOK, FoundryPresenceResponse{NeverSeen: true})
+	}
+	lastSeen, connected := h.presenceLookup.FoundryPresence(cc.Campaign.ID)
+	return c.JSON(http.StatusOK, FoundryPresenceResponse{
+		Connected: connected,
+		NeverSeen: lastSeen == nil,
+		LastSeen:  lastSeen,
+	})
+}
+
 // --- owner: tab fragment ---
 
 // OwnerTabFragmentHandler serves the per-campaign settings tab as
