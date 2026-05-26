@@ -919,30 +919,11 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	a.publishWithAudience(msgType, campaignID, marker.ID, marker, marker.IsDMOnly())
 }
 
-// foundryVTTBannerAdapter wraps a foundry_vtt.Service to satisfy
-// campaigns.FoundryModuleBannerLookup without the campaigns package
-// importing foundry_vtt (which would cycle). C-FMC-5c replacement
-// for the old foundryModuleBannerAdapter (foundry_modules deleted).
-// The campaigns-side FoundryModuleBanner type stays (still consumed
-// by show.templ); only the source service changed.
-type foundryVTTBannerAdapter struct {
-	svc foundry_vtt.Service
-}
-
-// GetFoundryModuleBanner translates foundry_vtt's BannerStatus into
-// the campaigns-side renderable struct. Field shape is identical to
-// the deleted adapter — only the source type changed.
-func (a *foundryVTTBannerAdapter) GetFoundryModuleBanner(ctx context.Context, campaignID string) (campaigns.FoundryModuleBanner, error) {
-	s, err := a.svc.GetBannerStatus(ctx, campaignID)
-	if err != nil {
-		return campaigns.FoundryModuleBanner{}, err
-	}
-	return campaigns.FoundryModuleBanner{
-		HasUpdate:      s.HasUpdate,
-		CurrentVersion: s.CurrentVersion,
-		LatestVersion:  s.LatestVersion,
-	}, nil
-}
+// (foundryVTTBannerAdapter + GetFoundryModuleBanner removed in NW-2.2
+// Chunk D2-cleanup. The campaigns show page now lazy-loads the banner
+// via foundry_vtt's /foundry-vtt/show-banner-fragment route, which
+// owns the adapter shape internally. Per
+// cordinator/reports/chronicle/2026-05-26-c-d2-cleanup-verification.md.)
 
 // foundryCampaignSettingsAdapter wraps campaigns.CampaignService to
 // implement foundry_vtt.CampaignSettingsAdapter without creating
@@ -1897,10 +1878,8 @@ func (a *App) RegisterRoutes() {
 		a.Config.BaseURL,
 	)
 	fvttHandler := foundry_vtt.NewHandler(fvttService)
-	// Wire the banner-status adapter into the campaigns handler so
-	// the campaign show page can render the "newer version available"
-	// banner without importing foundry_vtt.
-	campaignHandler.SetFoundryModuleBanner(&foundryVTTBannerAdapter{svc: fvttService})
+	// (Banner adapter wire removed in D2-cleanup; the campaign show
+	// page lazy-loads /foundry-vtt/show-banner-fragment instead.)
 	if a.PluginHealth.IsHealthy("foundry_vtt") && a.PluginHealth.IsHealthy("packages") {
 		// Register the PostInstallHook with the packages plugin. The
 		// hook fires after every foundry-module typed install and
@@ -2990,12 +2969,16 @@ func (a *App) RegisterRoutes() {
 	// Wire the hub's Foundry-presence lookup into the campaigns handler
 	// (for GET /campaigns/:id/foundry-presence) and the maps handler
 	// (for the "Connected to Foundry" pill on the map detail page).
-	// Hub already implements both FoundryPresenceLookup interface shapes.
-	// NW-2.2 Chunk D: fvttHandler also takes the lookup so the presence-pill
-	// fragment endpoint can render the same state (the maps templ no longer
-	// renders it inline; foundry_vtt owns the pill now).
+	// Wire the WS hub's presence lookup into the two consumers that
+	// still need it post-D2-cleanup:
+	//   - campaigns.Handler: GET /campaigns/:id/foundry-presence
+	//     (live diagnostic JSON endpoint)
+	//   - foundry_vtt.Handler: /foundry-vtt/presence-pill-fragment
+	//     (the lazy-loaded pill on the map detail page)
+	// The mapsHandler.SetFoundryPresence wire was removed in
+	// D2-cleanup — maps' templ now lazy-loads the pill from
+	// foundry_vtt and no longer needs hub access directly.
 	campaignHandler.SetFoundryPresence(wsHub)
-	mapsHandler.SetFoundryPresence(wsHub)
 	fvttHandler.SetPresenceLookup(wsHub)
 
 	wsAuth := ws.NewMultiAuthenticator(
