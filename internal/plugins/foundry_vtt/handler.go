@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -23,7 +24,24 @@ import (
 //   - Public endpoints: per-campaign manifest + download
 //   - Error mapping: foundry_vtt.Error → categorized JSON response
 type Handler struct {
-	svc Service
+	svc             Service
+	presenceLookup  PresenceLookup
+}
+
+// PresenceLookup is the narrow contract the presence-pill fragment
+// handler needs from the WebSocket hub. Mirrors maps.FoundryPresenceLookup
+// (same shape; intentionally duplicated to keep maps decoupled from
+// foundry_vtt). Wired in via SetPresenceLookup from app/routes.go after
+// the WS hub is constructed.
+type PresenceLookup interface {
+	FoundryPresence(campaignID string) (lastSeen *time.Time, connected bool)
+}
+
+// SetPresenceLookup injects the WS hub's foundry-presence accessor for
+// the per-campaign presence-pill fragment endpoint. Optional — if nil,
+// the fragment endpoint returns the "never connected" state defensively.
+func (h *Handler) SetPresenceLookup(p PresenceLookup) {
+	h.presenceLookup = p
 }
 
 // NewHandler constructs the Handler.
@@ -77,6 +95,108 @@ func (h *Handler) OwnerTabFragmentHandler(c echo.Context) error {
 	}
 	data.CSRFToken = middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK, OwnerTabFragment(data))
+}
+
+// CampaignSettingsFoundryGuideHandler serves the foundry-VTT-labeled
+// disclosure block inside the per-campaign Settings -> Integrations
+// tab's "VTT Setup Guides" section. Lazy-loaded by
+// campaigns/settings.templ via HTMX. Owner-gated by the route's
+// requireOwner middleware so a non-owner can't fetch the install-URL
+// inner-fragment-loader markup.
+//
+// GET /campaigns/:id/foundry-vtt/setup-guide-fragment
+//
+// Per cordinator/decisions/2026-05-23-packages-treatment.md (the
+// fragment-lazy-load convention) + NW-2.2 Chunk D.
+func (h *Handler) CampaignSettingsFoundryGuideHandler(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	isOwner := cc.MemberRole >= campaigns.RoleOwner
+	return middleware.Render(c, http.StatusOK, CampaignSettingsFoundryGuide(cc.Campaign.ID, isOwner))
+}
+
+// DashboardSyncBlockHandler serves the per-campaign dashboard "Foundry
+// VTT Sync" block. Lazy-loaded by campaigns/dashboard_blocks.templ
+// when the campaign's dashboard layout includes a sync_status block.
+// Campaign-member access; the inner /sync-status hx-get is owner-
+// gated by syncapi (preserves prior UX where non-owners see the
+// outer chrome but the inner status fails).
+//
+// GET /campaigns/:id/foundry-vtt/dashboard-sync-block
+//
+// Per cordinator/decisions/2026-05-23-packages-treatment.md +
+// NW-2.2 Chunk D.
+func (h *Handler) DashboardSyncBlockHandler(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	return middleware.Render(c, http.StatusOK, DashboardSyncBlock(cc.Campaign.ID))
+}
+
+// CampaignShowPresencePillHandler serves the "Connected to Foundry"
+// status chip displayed next to the map title. Lazy-loaded by
+// maps/maps.templ. Campaign-member access (non-sensitive status data).
+//
+// GET /campaigns/:id/foundry-vtt/presence-pill-fragment
+//
+// Per cordinator/decisions/2026-05-23-packages-treatment.md +
+// NW-2.2 Chunk D.
+func (h *Handler) CampaignShowPresencePillHandler(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	view := h.resolvePresence(cc.Campaign.ID)
+	return middleware.Render(c, http.StatusOK, CampaignShowPresencePill(view))
+}
+
+// resolvePresence converts the WS hub's (lastSeen, connected) tuple into
+// the templ's PresenceView. Mirrors maps.Handler.resolveFoundryPresence;
+// the duplication is deliberate (each plugin owns its own renderable
+// view of the same underlying data).
+func (h *Handler) resolvePresence(campaignID string) PresenceView {
+	if h.presenceLookup == nil {
+		// Defensive — SetPresenceLookup not called. Treat as never-
+		// connected so the pill renders consistently.
+		return PresenceView{NeverSeen: true}
+	}
+	last, connected := h.presenceLookup.FoundryPresence(campaignID)
+	if last == nil {
+		return PresenceView{NeverSeen: true}
+	}
+	return PresenceView{Connected: connected, LastSeen: last}
+}
+
+// CampaignShowBannerHandler serves the "newer Foundry module version
+// available" banner displayed at the top of the campaign show page.
+// Lazy-loaded by campaigns/show.templ. Owner-gated by the route's
+// requireOwner middleware — matches the prior in-handler role gate.
+//
+// Returns either the rendered banner (if HasUpdate) or an empty body
+// (if no update or banner not applicable). The templ itself renders
+// nothing when HasUpdate is false, so the lazy-load slot replaces
+// itself with empty content — graceful invisible state.
+//
+// GET /campaigns/:id/foundry-vtt/show-banner-fragment
+//
+// Per cordinator/decisions/2026-05-23-packages-treatment.md +
+// NW-2.2 Chunk D.
+func (h *Handler) CampaignShowBannerHandler(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	status, err := h.svc.GetBannerStatus(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		// Banner is supplementary; never fail the page-load chain over
+		// a banner-read issue. Empty body lets the slot resolve to
+		// invisible state.
+		return c.NoContent(http.StatusOK)
+	}
+	return middleware.Render(c, http.StatusOK, CampaignShowFoundryBanner(cc.Campaign.ID, status))
 }
 
 // --- owner: pin / rotate / install-url ---

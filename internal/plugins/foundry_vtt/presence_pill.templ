@@ -1,0 +1,87 @@
+// presence_pill.templ owns the "Connected to Foundry" status chip
+// shown next to the map title. Previously lived in maps/maps.templ
+// as foundryPresencePill + foundryPresenceRelative + foundryPresenceTimestamp;
+// moved here per NW-2.2 Chunk D so the maps plugin stays VTT-agnostic.
+//
+// Per cordinator/decisions/2026-05-23-packages-treatment.md +
+// reports/chronicle/2026-05-23-c-plugin-isolation-audit.md §1.3 + §3 Chunk D.
+//
+// URL: GET /campaigns/:id/foundry-vtt/presence-pill-fragment
+// Auth: campaign-member (the pill is a non-sensitive status indicator).
+
+package foundry_vtt
+
+import (
+	"fmt"
+	"time"
+)
+
+// PresenceView is the renderable subset of the Foundry-presence state
+// the pill templ needs. The maps plugin owns a structurally-identical
+// FoundryPresenceView for its own use; this is the foundry_vtt-internal
+// shape consumed by the moved pill templ.
+type PresenceView struct {
+	Connected bool
+	LastSeen  *time.Time
+	NeverSeen bool
+}
+
+// CampaignShowPresencePill renders the "Connected to Foundry" chip
+// state at page-load time (no live JS poll). Three-state: yes (green),
+// no/last-seen (gray), never (gray).
+templ CampaignShowPresencePill(p PresenceView) {
+	if p.Connected {
+		<span
+			class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/15 text-green-700 dark:text-green-300 ring-1 ring-green-500/30"
+			title="A Foundry module is currently connected to this campaign"
+		>
+			<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+			Connected to Foundry
+		</span>
+	} else if p.NeverSeen {
+		<span
+			class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-fg-muted/10 text-fg-muted ring-1 ring-edge"
+			title="No Foundry module has ever connected to this campaign"
+		>
+			<span class="w-1.5 h-1.5 rounded-full bg-fg-muted/40"></span>
+			Foundry: never connected
+		</span>
+	} else {
+		<span
+			class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-fg-muted/10 text-fg-muted ring-1 ring-edge"
+			title={ "Foundry was last seen " + presenceTimestamp(p.LastSeen) }
+		>
+			<span class="w-1.5 h-1.5 rounded-full bg-fg-muted/40"></span>
+			Foundry: last seen { presenceRelative(p.LastSeen) }
+		</span>
+	}
+}
+
+// presenceRelative renders a coarse relative-time string for the pill
+// ("just now", "5m ago", "2h ago", "3d ago"). Kept intentionally coarse —
+// the pill is a glance-level indicator.
+func presenceRelative(t *time.Time) string {
+	if t == nil {
+		return "never"
+	}
+	d := time.Since(*t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
+// presenceTimestamp renders the absolute timestamp for the pill's
+// tooltip.
+func presenceTimestamp(t *time.Time) string {
+	if t == nil {
+		return "never"
+	}
+	return t.Format("2006-01-02 15:04:05 MST")
+}

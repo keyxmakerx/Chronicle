@@ -61,7 +61,24 @@ templ DashboardBlockSwitch(cc *CampaignContext, block DashboardBlock, recentEnti
 		case "activity_feed":
 			@dashActivityFeed(cc, block.Config)
 		case "sync_status":
-			@dashSyncStatus(cc, block.Config)
+			// NW-2.2 Chunk D: sync block moved to foundry_vtt to keep
+			// campaigns VTT-agnostic. Lazy-loaded with a small skeleton
+			// per the §0 D1 operator-confirmed UX shift.
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/dashboard-sync-block", cc.Campaign.ID) }
+				hx-trigger="load"
+				hx-swap="outerHTML"
+			>
+				<div>
+					<div class="flex items-center justify-between mb-3">
+						<span class="inline-block w-32 h-4 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+						<span class="inline-block w-20 h-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+					</div>
+					<div class="card min-h-[60px] px-4 py-3">
+						<span class="inline-block w-48 h-3 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+					</div>
+				</div>
+			</div>
 	}
 }
 
@@ -695,31 +712,10 @@ templ dashActivityFeed(cc *CampaignContext, config map[string]any) {
 	</div>
 }
 
-// dashSyncStatus renders Foundry VTT sync connection health and status.
-// Lazy-loads via HTMX from the sync API status endpoint.
-templ dashSyncStatus(cc *CampaignContext, config map[string]any) {
-	<div>
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-				<i class="fa-solid fa-plug mr-1.5"></i>Foundry VTT Sync
-			</h2>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
-			>
-				Manage keys
-			</a>
-		</div>
-		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/sync-status", cc.Campaign.ID) }
-			hx-trigger="intersect once"
-			hx-swap="innerHTML"
-			class="card min-h-[60px]"
-		>
-			<div class="px-4 py-3 text-sm text-fg-muted">Checking sync status...</div>
-		</div>
-	</div>
-}
+// dashSyncStatus moved to internal/plugins/foundry_vtt/dashboard_sync_block.templ
+// (DashboardSyncBlock). campaigns now lazy-loads it via hx-get to keep this
+// plugin VTT-agnostic per NW-2.2 Chunk D. See the switch case "sync_status"
+// above + cordinator/decisions/2026-05-23-packages-treatment.md.
 
 // dashActivityLimit extracts the activity feed limit from block config (default 10).
 func dashActivityLimit(config map[string]any) int {

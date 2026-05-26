@@ -1,0 +1,48 @@
+// dashboard_sync_block.templ owns the per-campaign "Foundry VTT Sync"
+// dashboard block. Previously lived in campaigns/dashboard_blocks.templ
+// as the local templ `dashSyncStatus`; moved here per NW-2.2 Chunk D
+// so the campaigns plugin stays VTT-agnostic.
+//
+// Per cordinator/decisions/2026-05-23-packages-treatment.md (the
+// fragment-lazy-load convention) + reports/chronicle/2026-05-23-c-plugin-isolation-audit.md
+// §1.3 + §3 Chunk D.
+//
+// URL: GET /campaigns/:id/foundry-vtt/dashboard-sync-block
+// Auth: campaign-member (the inner /sync-status hx-get is owner-gated;
+// the outer chrome + "Manage keys" link is fine for any campaign member
+// — matches the prior behavior where non-owners saw the outer chrome
+// and only the inner sync-status call failed).
+
+package foundry_vtt
+
+import "fmt"
+
+// DashboardSyncBlock renders the dashboard block previously rendered
+// inline by campaigns.dashSyncStatus. Chrome (header + Manage keys
+// link) + lazy-load slot for the inner sync-status content. The
+// inner slot (/campaigns/:id/sync-status) is owner-gated by syncapi;
+// for non-owners the inner call 403s, but the outer chrome still
+// renders (preserving prior UX).
+templ DashboardSyncBlock(campaignID string) {
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-plug mr-1.5"></i>Foundry VTT Sync
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/api-keys", campaignID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				Manage keys
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/sync-status", campaignID) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card min-h-[60px]"
+		>
+			<div class="px-4 py-3 text-sm text-fg-muted">Checking sync status...</div>
+		</div>
+	</div>
+}

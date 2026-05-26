@@ -18,12 +18,22 @@ import (
 templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentEntities []RecentEntity, csrfToken string, fmBanner FoundryModuleBanner) {
 	@layouts.App(cc.Campaign.Name) {
 		<div class="max-w-5xl mx-auto">
-			// Foundry module update available banner (owner-only —
-			// the resolver in handler.go gates the lookup by role
-			// before populating).
-			if fmBanner.HasUpdate {
-				@foundryModuleUpdateBanner(cc.Campaign.ID, fmBanner)
-			}
+			// VTT update-available banner.
+			// NW-2.2 Chunk D: moved to foundry_vtt; lazy-loaded so
+			// campaigns stays VTT-agnostic. The fmBanner param +
+			// FoundryModuleBanner type + handler-side resolver stay
+			// in place for now (caller is left intact) and are
+			// flagged for cleanup in a follow-up. Until then the
+			// fragment endpoint at /foundry-vtt/show-banner-fragment
+			// fetches its own state via fvttService.
+			//
+			// Owner-only route gates the fragment; non-owners get
+			// 403 and HTMX skips swap (slot stays invisible).
+			<span
+				hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/show-banner-fragment", cc.Campaign.ID) }
+				hx-trigger="load"
+				hx-swap="outerHTML"
+			></span>
 			// Pending transfer banner for the target user.
 			if transfer != nil {
 				<div class="alert-warning mb-6">
@@ -129,48 +139,10 @@ func welcomeMessageQuoted(msg string) string {
 // campaign that wants to stay on the deprecated build can dismiss
 // every session without rebuilding the dismissal-by-version state
 // the dispatch's MOTD banner uses.
-templ foundryModuleUpdateBanner(campaignID string, b FoundryModuleBanner) {
-	<div
-		x-data={ fmt.Sprintf(`{
-			dismissed: false,
-			key: 'fmc-banner-dismissed-' + '%s',
-			init() {
-				if (sessionStorage.getItem(this.key) === '1') this.dismissed = true;
-			},
-			dismiss() {
-				this.dismissed = true;
-				sessionStorage.setItem(this.key, '1');
-			}
-		}`, campaignID) }
-		x-show="!dismissed"
-		x-transition
-		class="mb-6 p-4 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-start gap-3"
-	>
-		<i class="fa-solid fa-dice-d20 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0"></i>
-		<div class="flex-1 text-sm">
-			<p class="font-medium text-fg">
-				Foundry module v{ b.LatestVersion } is available.
-				if b.CurrentVersion != "" {
-					You&rsquo;re currently on v{ b.CurrentVersion }.
-				}
-			</p>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=integrations", campaignID)) }
-				class="text-amber-700 dark:text-amber-300 underline hover:no-underline text-xs mt-1 inline-block"
-			>
-				Update pin in campaign settings &rarr;
-			</a>
-		</div>
-		<button
-			type="button"
-			@click="dismiss()"
-			class="text-fg-muted hover:text-fg transition-colors shrink-0"
-			title="Dismiss until next session"
-		>
-			<i class="fa-solid fa-xmark text-xs"></i>
-		</button>
-	</div>
-}
+// foundryModuleUpdateBanner moved to internal/plugins/foundry_vtt/show_banner.templ
+// (CampaignShowFoundryBanner). campaigns/show.templ now lazy-loads it via hx-get
+// to keep this plugin VTT-agnostic per NW-2.2 Chunk D. See the lazy-load slot
+// at the top of CampaignShowPage above + cordinator/decisions/2026-05-23-packages-treatment.md.
 
 // customDashboard renders the campaign dashboard from a custom DashboardLayout
 // JSON. Iterates rows → columns → blocks, using a 12-column CSS grid.
