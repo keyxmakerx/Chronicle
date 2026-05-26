@@ -535,7 +535,8 @@ Chronicle exposes **four distinct auth surfaces**. Conflating them is the chroni
 |---|---|---|---|
 | **Session-cookie (web UI)** | `internal/app/routes.go` (campaigns, entities, calendar UI routes) | `auth.RequireAuth(authSvc)` + `campaigns.RequireCampaignAccess(campaignSvc)` | Browser users with `chronicle_session` cookie |
 | **Per-campaign-token (legacy public API)** | `internal/plugins/calendar/api_routes.go` + `internal/plugins/foundry_vtt/routes.go::RegisterPublicRoutes` | Token validation via signed URL `?token=` param | Foundry module manifest fetch + calendar public surface |
-| **Session-OR-Bearer (syncapi surface)** | `internal/plugins/syncapi/routes.go::RegisterAPIRoutes` | `syncapi.RequireAuthOrAPIKey` — accepts EITHER `chronicle_session` cookie OR `Authorization: Bearer <apiKey>` | Foundry sync REST API + in-app browser widgets |
+| **Session-OR-Bearer (syncapi JSON group)** | `internal/plugins/syncapi/routes.go::RegisterAPIRoutes` `v1` group | `syncapi.RequireAuthOrAPIKey` + `RateLimit` + `RequireJSONContentType` (PR #344) — state-changing methods rejected with 415 unless `Content-Type: application/json` | Foundry sync REST API + in-app browser widgets |
+| **Session-OR-Bearer (syncapi multipart sub-group)** | `internal/plugins/syncapi/routes.go::RegisterAPIRoutes` `v1Multipart` group | `RequireAuthOrAPIKey` + `RateLimit` (SKIPS `RequireJSONContentType`) | `POST /api/v1/campaigns/:id/media` (`UploadMedia`) — the only multipart endpoint under `/api/v1/*`. Per D-C3.1 sub-group-skip pattern |
 | **Admin-session (site admin UI)** | `internal/app/routes.go` (admin group) | `auth.RequireAuth` + `auth.RequireSiteAdmin` + optional `auth.RequireReauth` for sensitive actions | Site admin browser users |
 
 **Regression-prevention:** the wire-contract conformance test (`internal/wire/wire_contract_test.go` + `routes_snapshot.txt`) pins every Echo route registration. Adding a new route forces a snapshot regen + PR-description citation. Phase 2A captures `(method, path, file)`; per-route middleware capture is deferred to a Phase 2C upgrade (see "Phase 2B follow-ups for wire-contract test" above).
@@ -566,7 +567,7 @@ Every plugin's `Service.Create*` / `Service.Update*` method that accepts an HTML
 
 **Regression-prevention (Chunk 7, PR #340):** `internal/sanitize/invariant_test.go` + `sanitize_invariant_snapshot.txt` pin a file-level invariant — any `service.go` (+ its sibling `model.go`) that declares HTML-typed inputs MUST have at least one `sanitize.HTML` call. The snapshot inventories all 25 plugin/widget service.go files; regenerate via `UPDATE_SANITIZE_SNAPSHOT=1 go test ./internal/sanitize/...`.
 
-**Egress side:** per the §0.5 D4=(c) decision the backup/restore round-trip is intentionally lossless (no re-sanitization on export). The Foundry-bound egress paths are not yet re-sanitized — the audit deferred this to a separate chunk per the C-SEC-CHUNK-6 stop-and-flag (the actual Foundry-bound egress lives in `/api/v1/` entity/note handlers, not in `export_adapters.go` as the audit initially located).
+**Egress side (closed 2026-05-26 via PR #345 / C-SEC-CHUNK-6-AMENDED):** the Foundry-bound `/api/v1/*` GET handlers that emit user HTML — `GetEntity`, `ListEntities`, `GetNote`, `ListNotes`, `GetEvent`, `ListEvents` — re-sanitize through helpers in `internal/plugins/syncapi/egress_sanitize.go` (`sanitizeEntityHTMLForEgress`, `sanitizeNotesHTMLForEgress`, etc.) before `c.JSON`. The new `sanitize.HTMLPtr(*string) *string` is the nullable-pointer companion to `sanitize.HTML`. Per the §0.5 D4=(c) decision the backup/restore round-trip is intentionally lossless (no re-sanitization on export); the carve-out is preserved by NOT touching `internal/app/export_adapters.go` or `internal/plugins/campaigns/export_handler.go`. An AST-based structural pin (`TestEgressSanitize_HandlersInvokeHelpers`) asserts every named handler invokes its egress helper; dropping the call from a future refactor fails the test with a pinpointed subtest name. See `cordinator/reports/chronicle/2026-05-26-c-sec-chunk-6-amended.md` for the full inventory + D4=(c) diff-inspection record.
 
 ### `SafeIdent` convention — DDL identifier interpolation
 
@@ -589,15 +590,18 @@ Documented for future contributors who might re-introduce these patterns. Each f
 | **M-1** | Password-reset Debug logs emitted raw email as `slog.String("email", email)` — email enumeration via log access | `internal/plugins/auth/loghash.go::hashEmail()` — SHA-256 hex prefix; regression-pinned by `loghash_test.go` | #331 (Chunk 1) |
 | **M-2** | `DropExtensionTables` interpolated `table` name into `DROP TABLE` via raw concat | `internal/database/safeident.go::SafeIdent` — regex-validating identifier helper; convention enforced going forward | #331 (Chunk 5) |
 | **M-3** | Foundry public manifest endpoint's rate-limit middleware was optional in registration signature; silent removal possible | `internal/wire/foundry_public_ratelimit_test.go` — two focused AST assertions pin the wiring + the call site | #339 (Chunk 2) |
-| **M-4** | Sanitization on ingress but not on Foundry-bound egress | Egress side partially deferred per Chunk 6 stop-and-flag; the audit's cited sites were all backup-bound (lossless per D4=(c)); the actual Foundry-bound egress in syncapi handlers awaits a follow-up dispatch | (deferred — see `cordinator/reports/chronicle/2026-05-23-c-sec-chunk-6.md`) |
+| **M-4** | Sanitization on ingress but not on Foundry-bound egress | `internal/plugins/syncapi/egress_sanitize.go` — per-model helpers wrap `EntryHTML` / `PlayerNotesHTML` / `DescriptionHTML` on the 6 `/api/v1/*` GET handlers (entity x2, note x2, calendar event x2). `sanitize.HTMLPtr` is the nullable companion. AST structural pin (`TestEgressSanitize_HandlersInvokeHelpers`) catches handler→helper wiring drift. D4=(c) backup/restore lossless preserved | #345 (Chunk 6 AMENDED — original Chunk 6 stop-and-flagged 2026-05-23 because the audit cited backup-bound sites; D-C6.1 redirected to syncapi handlers) |
 
-### Deferred Wave 2 follow-ups (not yet shipped)
+### Wave 2 — closed (2026-05-26)
 
-For completeness, the security work that's authored but pending:
+All three originally-stop-and-flagged chunks shipped via AMENDED variants on 2026-05-26:
 
-- **C-SEC-CHUNK-3** (Content-Type enforcement on JSON APIs) — deferred; multipart `POST /api/v1/.../media` is inside the `/api/v1/*` group, contradicting the dispatch's "Out of scope" assumption. Operator decision required (D-C3.1 per `cordinator/reports/chronicle/2026-05-23-c-sec-chunk-3.md`).
-- **C-SEC-CHUNK-4** (loadDescriptor fallback decision doc + pinning test) — authored but not yet executed; cross-repo (Chronicle + Cordinator + Foundry-module comment).
-- **C-SEC-CHUNK-6** (selective Foundry-egress sanitization) — deferred; audit's cited sites were all backup-bound. Operator decision required (D-C6.1 per `cordinator/reports/chronicle/2026-05-23-c-sec-chunk-6.md`).
+- **C-SEC-CHUNK-3-AMENDED** (PR #344) — `syncapi.RequireJSONContentType()` middleware on the `/api/v1/*` group; `v1Multipart` parallel sub-group at the same prefix keeps auth + rate-limit but skips JSON enforcement so `UploadMedia` still accepts `multipart/form-data`. Per operator decision D-C3.1 = (a) sub-group skip.
+- **C-SEC-CHUNK-4-AMENDED** (PR #343) — `internal/plugins/foundry_vtt/descriptor_fallback_test.go` + `testdata/chronicle-package.json` pin `defaultDescriptor()` field-by-field against the canonical from `chronicle-foundry-module`. Cordinator-supplied canonical fixture per stop-and-flag recovery path (c); cross-repo comment in `chronicle-foundry-module/tools/check-package-descriptor.mjs` reminds maintainers to regenerate the snapshot. See `cordinator/decisions/2026-05-22-loadDescriptor-fallback.md` for the canonical-vs-fallback table.
+- **C-SEC-CHUNK-6-AMENDED** (PR #345) — egress sanitize helpers on the 6 `/api/v1/*` GET handlers per the "Sanitization invariant — Egress side" entry above. Per operator decision D-C6.1 = (a) redirect to syncapi handlers; D4=(c) backup/restore lossless carve-out preserved.
+
+### Deferred (not yet shipped)
+
 - **C-SEC-CHUNK-2-PHASE-2C** — full middleware-chain capture for every route via `golang.org/x/tools/go/packages`. Deferred from PR #339's reshape.
 - **C-SEC-CHUNK-7-PHASE-2** — method-level sanitize invariant with flow analysis + helper tracing. Deferred from PR #340's reshape.
 
@@ -609,3 +613,92 @@ For completeness, the security work that's authored but pending:
 4. `cordinator/reports/chronicle/2026-05-21-c-hygiene-audit.md §5.1` — auth surfaces detail
 5. The plugin's `.ai.md` for plugin-specific footguns
 6. The relevant CI guard's source (`tools/check-plugin-isolation.sh`, `internal/wire/wire_contract_test.go`, `internal/sanitize/invariant_test.go`, etc.) to understand what the guard catches
+
+## Production safety system
+
+Chronicle's `cmd/server/main.go` runs three startup layers before serving traffic. Touch any DB-adjacent surface and you intersect this system; the rubric below decides whether your dispatch needs runtime boot verification.
+
+| Layer | Purpose |
+|---|---|
+| `database.PreMigrationBackup(cfg)` | `mysqldump` + gzip before any migration applies. Silently skips when `mysqldump` is absent; `BACKUP_REQUIRED=1` flips that to fail-loud per `docs/deployment.md` |
+| `database.RunMigrations(db, cfg)` | golang-migrate, auto-Up, dirty-state retry |
+| `database.RunStartupHealthChecks(db, cfg)` | Multi-layer fail-fast validation (`os.Exit(1)` on any failure): migration version, critical-column inventory, DB connectivity, security audit (weak passwords / HTTP `BaseURL` / overprivileged grants / world-writable `schema_migrations`), and per-plugin smoke tests (e.g. `campaigns.ScanSmokeTest` issues a real `SELECT + Scan` to validate the column list matches the `Campaign` struct) |
+
+**Canonical rubric:** `cordinator/decisions/2026-05-26-chronicle-production-safety-system.md` (full layer breakdown, smoke-test extension pattern, future-scope inventory) + `internal/database/.ai.md §Startup Health Check System`.
+
+### Boot verification as a dispatch acceptance criterion
+
+A dispatch MUST include "Boot verification" when it touches any of:
+
+- Plugin `*.go` files containing `SELECT` + `Scan` patterns
+- Plugin `repository.go` files
+- Adding/removing routes that affect the wire snapshot (already covered by pre-flight v2 step 5)
+- Migration files
+- `HealthCheckConfig.CriticalColumns` map
+- `cmd/server/main.go` startup wiring
+- Any refactor that removes code referenced by an existing smoke test
+- Any refactor that removes handler setters/adapters wired at app startup
+
+A dispatch typically does NOT need boot verification when it touches ONLY templ files (UI rendering), handler logic without DB scan patterns, pure documentation, or test files.
+
+### Substitute pattern (docker-unavailable sandboxes)
+
+Cloud / AI dev sandboxes often lack a Docker daemon. When `make docker-up` isn't an option, the dispatch ships static substitutes per `decisions/2026-05-26-chronicle-production-safety-system.md §Environment availability`:
+
+1. **Wiring intact** — grep `cmd/server/main.go` for `RunStartupHealthChecks` + the smoke tests the refactor touches
+2. **No symbol leakage** — grep `cmd/server/*.go` for every removed/renamed symbol; expect zero hits
+3. **Clean binary** — `go build ./cmd/server/` succeeds
+4. **Reaches DB layer** — `go run ./cmd/server` emits the `starting Chronicle` log line and enters the MariaDB retry loop (proves static init completes without panic)
+
+The runtime check then transfers to the operator as a pre-merge gate: `make docker-up && go run ./cmd/server 2>&1 | head -50` — look for `smoketest passed` on each plugin smoke test the blast radius touches. The PR description must explicitly call out the substitute pattern. Established by PR #342 (D2-cleanup).
+
+## Pre-flight v2 — the dispatch checklist
+
+Every Chronicle dispatch executes 7 pre-flight steps before commits land. The convention formalizes the catches that have prevented wrong-target dispatches across the SEC + NW arcs (chronicle#323-class drift, the SEC-3 / SEC-4 / SEC-6 stop-and-flag chain).
+
+1. **Symbols exist** — grep / read every function, type, route, and middleware the dispatch references. If any is renamed or absent, stop-and-flag rather than guess at the intended target.
+2. **Content shape** — read the relevant source files end-to-end (not just excerpts). Confirm the response struct, the middleware chain, the SQL columns, the JSON shape — whatever the dispatch claims about wire / persistence / behavior.
+3. **Coupling** — identify cross-plugin / cross-repo dependencies. SEC-4 surfaced the Foundry-Module-side dependency at this step; SEC-6 surfaced the wrong-target (export_adapters vs syncapi) at this step.
+4. **Not-already-executed** — confirm the symbols / files the dispatch adds don't already exist. Catches duplicate dispatches and prior partial work.
+5. **`UPDATE_ROUTES_SNAPSHOT`** — if Echo routes change, regenerate `internal/wire/routes_snapshot.txt` in the same PR and cite the motivating decision per the §CI tenet-enforcement-guards table.
+6. **Full repo test** — `go test ./...` before opening a PR. Catches incidental fallout from package-internal renames, fixture drift, snapshot bumps.
+7. **Boot verification** — per the safety-system rubric above. Literal `make docker-up` when available; substitute pattern when not. Document the outcome (real or substitute) in the dispatch's status report.
+
+A dispatch that fails any step 1-4 stop-and-flags rather than presses through. The verify-before-claim discipline from `cordinator/decisions/2026-05-21-core-tenets.md §T-O1, §T-O2` is the binding source; this checklist is the operationalization.
+
+## Stop-and-flag workflow
+
+When a pre-flight step (or an in-flight discovery) surfaces something the dispatch can't honor — wrong target file, missing consumer, cross-repo blocker, materially-different existing behavior — STOP, ship a status report explaining what was found, and queue an amended dispatch. Don't press through.
+
+Reference cases: `cordinator/reports/chronicle/2026-05-23-c-sec-chunk-3.md` (multipart endpoint inside the JSON group), `cordinator/reports/chronicle/2026-05-23-c-sec-chunk-6.md` (audit cited wrong files), `cordinator/reports/chronicle/2026-05-26-c-sec-chunk-4.md` (Foundry-Module repo unreachable from sandbox). Each shipped an amended counterpart on a later date.
+
+## Reshape pattern — minimal-scope ships + N-suffix follow-ups
+
+When a dispatch's framing exceeds its actual goal (or the in-flight reality demands a tighter scope), ship the minimal version that closes the goal and spawn N-suffix follow-up dispatches for the residual scope rather than expanding mid-PR. Reference: PR #337 (Chunk G — per-row foundry UI fragment shipped; Blocks 2-4 deferred to G2-wave), PR #336 (Chunk F — calendar pilot shipped; remaining plugins deferred), PR #339 (Chunk 2 — focused AST middleware-pin shipped; full per-route capture deferred to Phase 2C). Each shipped value plus an explicit deferred-scope marker in the PR description.
+
+## CSS sub-layer naming — hyphen-vs-underscore
+
+Plugin CSS sub-layers under `@layer plugins` use **hyphens** matching the public plugin slug, NOT the Go package name's underscore. From `static/css/input.css`:
+
+```css
+@layer plugins { @layer foundry-vtt, calendar, maps, packages, settings }
+```
+
+Go: `internal/plugins/foundry_vtt/` (underscore — Go's package-naming convention disallows hyphens). CSS layer: `@layer plugins.foundry-vtt { ... }` (hyphen — matches the user-visible slug and Tailwind class conventions). The two naming systems intentionally diverge: Go's underscore satisfies its identifier rules; the CSS sub-layer matches every other public surface (URL paths, magic strings, the registry slug).
+
+If you add a new plugin with hyphen-containing slug, register its sub-layer with the hyphen form and keep the Go package's underscore form local to the Go source.
+
+## Tailwind JIT safelist for runtime-injected classes
+
+Tailwind's JIT compiler only emits classes it finds in source files. Classes added at runtime by JS or by HTMX itself (e.g. `.htmx-added` — applied by HTMX during the settle phase to newly-inserted nodes) won't be in the compiled CSS unless they're explicitly referenced. Chronicle uses two mechanisms:
+
+- **Inline `@layer` rule** — when the class only needs base styling (e.g. `.htmx-added { opacity: 0 }` for the cross-fade-in via `@starting-style`), define it directly in `static/css/input.css` so the bytes ship regardless of JIT.
+- **Safelist** — when a Tailwind-utility class is needed at runtime, add it to the safelist in `tailwind.config.js`.
+
+Always prefer the inline `@layer` for HTMX/Alpine-injected classes since the JIT can't see them. Reference: the `.htmx-added` + `@starting-style` pattern at `static/css/input.css:2275-2285`.
+
+## Plugin registration + per-plugin static assets (NW-2.2 lineage)
+
+Per `cordinator/decisions/2026-05-23-plugin-registration.md`: plugins self-describe via a `PluginRegistration` value (slug, optional `embed.FS` for migrations, optional `embed.FS` for static assets, optional smoke test). The registry lives at `internal/plugins/registry.go`; entries are populated by each plugin's `registration.go`. Pilots: foundry_vtt + smtp (PR #334).
+
+Per `cordinator/decisions/2026-05-25-plugin-static-assets.md`: each plugin's static assets (JS / CSS shipped under `static/`) embed via Go's `embed.FS` and mount through the registry — no more app-level static-route enumeration. Calendar is the pilot (PR #336); remaining plugins migrate opportunistically.

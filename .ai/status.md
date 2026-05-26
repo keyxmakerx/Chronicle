@@ -23,9 +23,15 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 ### Current release + branch state
 
 - **Release line:** 0.0.1 (Release Readiness completed 2026-04-25 — backup scripts + mariadb-client in image + deployment runbook)
-- **Active phase:** Phase 4 (post-hygiene + post-security + plugin-isolation arc). See `cordinator/plans/2026-05-21-master-plan.md` for the phase definition.
+- **Active phase:** Phase 4 (post-hygiene + post-security + plugin-isolation arc closed; G2/F2 follow-ups + NW-2.3 next). See `cordinator/plans/2026-05-21-master-plan.md` for the phase definition.
 - **Coordinator working branch (cordinator artifacts):** `claude/setup-working-memory-vROh3`
-- **Last cross-cutting decision:** `cordinator/decisions/2026-05-23-plugin-registration.md` (NW-2.2 Chunk A — the lightweight plugin registration model)
+- **Recent cross-cutting decisions** (most recent first):
+  - `cordinator/decisions/2026-05-26-chronicle-production-safety-system.md` — `RunStartupHealthChecks` rubric + docker-unavailable substitute pattern
+  - `cordinator/decisions/2026-05-26-ai-export-pipeline-design.md` — AI export pipeline design (future scope, scoping decisions locked)
+  - `cordinator/decisions/2026-05-26-draw-steel-spin-up-strategy.md` — Draw Steel game system spin-up strategy (own security audit first)
+  - `cordinator/decisions/2026-05-25-plugin-static-assets.md` — per-plugin `embed.FS` static-asset ownership (NW-2.2 Chunk F)
+  - `cordinator/decisions/2026-05-23-plugin-registration.md` — lightweight `PluginRegistration` registry (NW-2.2 Chunk A)
+  - `cordinator/decisions/2026-05-22-loadDescriptor-fallback.md` — Chronicle/Foundry-Module descriptor wire pin (locked, used by `internal/plugins/foundry_vtt/descriptor_fallback_test.go`)
 
 ### Bootstrap reads for a new session
 
@@ -84,25 +90,45 @@ In order:
 
 ### Cross-cutting state (not plugin-scoped)
 
-#### Active arc: NW-2.2 plugin-isolation refactor
+#### Closed arc: NW-2.2 plugin-isolation refactor
 
-Per `cordinator/reports/chronicle/2026-05-23-c-plugin-isolation-audit.md` §3 (7 chunks A-G):
+Per `cordinator/reports/chronicle/2026-05-23-c-plugin-isolation-audit.md` §3 (7 chunks A-G + D2-cleanup):
 
 | Chunk | What | Status |
 |---|---|---|
-| A | Lightweight PluginRegistration registry | ✅ shipped PR #334 |
-| B | Magic-string consolidation | ✅ shipped PR #332 |
-| C | Cross-plugin import discipline docs | ✅ shipped PR #333 |
-| D | Plugin-specific UI back into owning plugin | open |
-| E | Per-plugin .ai.md split + status shrink | (this chunk) |
-| F | Per-plugin static-asset ownership | open — unblocked by A |
-| G | Packages plugin rendering refactor | open |
+| A | Lightweight `PluginRegistration` registry (`internal/plugins/registry.go`); foundry_vtt + smtp pilots | ✅ shipped PR #334 |
+| B | Magic-string consolidation (4 code + 2 templ sites) | ✅ shipped PR #332 |
+| C | Cross-plugin import discipline docs (this file's §Cross-plugin imports above) | ✅ shipped PR #333 |
+| D | Plugin-specific UI back into owning plugin (4 sub-refactors: banner / dashboard sync block / settings guide / show-banner fragment) | ✅ shipped PR #338 |
+| D2-cleanup | Drop unused `fmBanner` + `maps.FoundryPresence` chains exposed by Chunk D; preserves campaigns.FoundryPresenceLookup (live diagnostic) | ✅ shipped PR #342 |
+| E | Per-plugin `.ai.md` split + `status.md` shrink via archive-and-thin-index | ✅ shipped PR #335 |
+| F | Per-plugin static-asset ownership via `embed.FS` (calendar pilot; other plugins migrate opportunistically) | ✅ shipped PR #336 |
+| G | Packages plugin per-row foundry UI fragment; pattern for D. Blocks 2-4 deferred to G2-wave per reshape pattern | ✅ shipped PR #337 |
 
-#### Other open work
+#### Closed arc: Wave 2 security work (2026-05-22 → 2026-05-26)
 
-- C-SEC Chunk 2 (Phase 2B wire-contract + rate-limit pin) — Wave 2 residual
-- C-SEC Chunk 7 (AST sanitize invariant test) — Wave 2 residual
-- Plugin Host interface design pass — deferred from Chunk A; tracked in `cordinator/decisions/2026-05-23-plugin-registration.md`
+| Chunk | What | Status |
+|---|---|---|
+| 1 + 5 | Password-reset log scrub (`auth.hashEmail`) + `database.SafeIdent` DDL helper | ✅ shipped PR #331 |
+| 2 (Phase 2B) | Focused AST middleware-pin for the Foundry public rate-limit invariant (`internal/wire/foundry_public_ratelimit_test.go`) | ✅ shipped PR #339 |
+| 3-AMENDED | `syncapi.RequireJSONContentType` middleware + `v1Multipart` sub-group skip pattern (D-C3.1) | ✅ shipped PR #344 |
+| 4-AMENDED | `loadDescriptor` fallback snapshot test pinning Chronicle defaults against canonical `chronicle-package.json` from Foundry-Module | ✅ shipped PR #343 |
+| 6-AMENDED | Egress HTML sanitization on the 6 `/api/v1/*` GET handlers via `internal/plugins/syncapi/egress_sanitize.go` (D-C6.1); D4=(c) backup/restore lossless preserved | ✅ shipped PR #345 |
+| 7 | File-level sanitize-on-write invariant (`internal/sanitize/invariant_test.go` + snapshot) | ✅ shipped PR #340 |
+| 8 | `.ai/conventions.md §Security` consolidated reference | ✅ shipped PR #341 |
+
+Wiki All-Pages mobile-layout cosmetic fix (`data-entity-id` on the shared `EntityTableRow` to match the bulk-actions widget's contract): ✅ shipped PR #346.
+
+#### Open work
+
+- **C-SEC-CHUNK-2-PHASE-2C** — full middleware-chain capture for every route via `golang.org/x/tools/go/packages`. Deferred from PR #339's reshape.
+- **C-SEC-CHUNK-7-PHASE-2** — method-level sanitize invariant with flow analysis + helper tracing. Deferred from PR #340's reshape.
+- **G2-wave** — packages plugin per-row foundry UI Blocks 2-4 (deferred from PR #337).
+- **F2-wave** — remaining plugins migrate to per-plugin `embed.FS` static assets (deferred from PR #336; calendar was the pilot).
+- **NW-2.3** — move `/foundry-presence` endpoint into the foundry_vtt plugin (currently lives on campaigns; was preserved by D2-cleanup as a parallel structure).
+- **Draw Steel spin-up** — pending its own security audit per `cordinator/decisions/2026-05-26-draw-steel-spin-up-strategy.md`.
+- **AI Export Pipeline** — scoping locked per `cordinator/decisions/2026-05-26-ai-export-pipeline-design.md`; implementation pending.
+- **Plugin Host interface design pass** — tracked in `cordinator/decisions/2026-05-23-plugin-registration.md`. Deferred from Chunk A.
 
 ### Archive
 
