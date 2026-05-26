@@ -154,29 +154,39 @@ templ packageCard(pkg Package, csrfToken string) {
 				>
 					<i class="fa-solid fa-rotate"></i>
 				</button>
-				// Foundry module: link to API monitor (configuration is per-campaign).
-				if pkg.Type == PackageTypeFoundryModule {
-					<a
-						href="/admin/api"
-						class="btn-secondary text-sm"
-						title="API monitor"
+				<!-- Per-type actions fragment slot (NW-2.2 Chunk G).
+				     packageCard stays generic. Each package type's
+				     type-specific links + buttons live in the owning
+				     plugin and load via HTMX. The skeleton pulses
+				     during load; T-B3 polish per
+				     cordinator/decisions/2026-05-23-packages-treatment.md
+				     and the §0 D1 operator-confirmed UX shift. Only
+				     types with a registered fragment URL render the
+				     slot; system packages skip it entirely. -->
+				if url := actionsFragmentURLFor(pkg); url != "" {
+					<span
+						hx-get={ url }
+						hx-trigger="load"
+						hx-swap="outerHTML"
 					>
-						<i class="fa-solid fa-chart-line"></i>
-					</a>
-					// C-FMC-5c removed the Repack zip button. The per-campaign
-					// manifest endpoint (foundry_vtt) rewrites URLs at serve time
-					// per-request, so there's no cached zip to repack.
+						<!-- skeleton: one pill-shaped placeholder
+						     matching an eventual icon button. -->
+						<span class="inline-block w-9 h-8 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+					</span>
 				}
-				<!-- Version Picker.
-				     data-fvtt-versions-trigger is set on foundry-module
-				     packages so the auto-pin banner's "Show affected
-				     campaigns" IIFE can locate the trigger without the
-				     server having to know the package ID at banner-
-				     render time. C-UPDATER-CLUSTER bug #20 fix. Multi-
-				     foundry-module deployments would need to revisit
-				     the selector (currently assumes one per instance,
-				     same assumption documented for the per-version
-				     trigger IDs further down). -->
+				<!-- Version Picker. The data-fvtt-versions-trigger
+				     residual below is the C-UPDATER-CLUSTER bug #20
+				     fix surface — the autopin banner's IIFE scrapes
+				     for this attribute to programmatically click the
+				     Versions button after an install. Migrating it
+				     fully into a fragment requires either a JS-bridge
+				     or moving the Versions button into the fragment
+				     (which creates a duplicate-button hazard since
+				     packages renders the generic Versions button
+				     here). Deferred to a follow-up G2 chunk that
+				     refactors the autopin banner's selector strategy.
+				     See cordinator/decisions/2026-05-23-packages-treatment.md
+				     "deferred to G2" section. -->
 				<button
 					hx-get={ fmt.Sprintf("/admin/packages/%s/versions", pkg.ID) }
 					hx-target={ fmt.Sprintf("#versions-%s", pkg.ID) }

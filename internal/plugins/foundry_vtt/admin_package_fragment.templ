@@ -1,0 +1,46 @@
+// admin_package_fragment.templ holds the per-foundry-module-package
+// UI fragment that the admin /admin/packages page lazy-loads into each
+// foundry-module row. Per cordinator/decisions/2026-05-23-packages-treatment.md
+// + NW-2.2 Chunk G.
+//
+// Lives in foundry_vtt (the owning plugin) rather than packages so the
+// packages plugin stays foundry-agnostic per Pillar 2. URL convention:
+//   GET /admin/foundry-vtt/packages/:id/actions-fragment
+//
+// Returns ONLY the action elements (links, buttons) that go inside the
+// per-row button group. packages.templ supplies the wrapping container;
+// this fragment is the type-specific innards.
+
+package foundry_vtt
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
+)
+
+// AdminPackageActionsFragment renders the foundry-module-specific row
+// actions inside the admin /admin/packages page. Lazy-loaded by
+// packages.templ via an hx-get slot with hx-swap="outerHTML" so this
+// fragment replaces the skeleton placeholder span entirely.
+//
+// Contents (this chunk):
+//   - "API monitor" link (foundry-only; the package's manifest is
+//     served from Chronicle so the API monitor surfaces hits)
+//
+// Out of scope (deferred to G2):
+//   - The Versions button's data-fvtt-versions-trigger attribute — left
+//     on the generic Versions button in packages.templ; moving it
+//     requires reshaping the autopin banner's selector strategy.
+//
+// csrfToken is threaded through for any state-changing actions the
+// fragment might grow later (e.g. a "Pin to current" quick action);
+// today's content is read-only but accepts the param for parity with
+// packages.templ's packageCard signature.
+templ AdminPackageActionsFragment(pkg packages.Package, csrfToken string) {
+	<a
+		href="/admin/api"
+		class="btn-secondary text-sm"
+		title="API monitor"
+	>
+		<i class="fa-solid fa-chart-line"></i>
+	</a>
+}

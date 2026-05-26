@@ -125,6 +125,14 @@ type stubPackageReader struct {
 func (s *stubPackageReader) ListPackages(_ context.Context) ([]packages.Package, error) {
 	return s.pkgs, nil
 }
+func (s *stubPackageReader) GetPackage(_ context.Context, id string) (*packages.Package, error) {
+	for i := range s.pkgs {
+		if s.pkgs[i].ID == id {
+			return &s.pkgs[i], nil
+		}
+	}
+	return nil, nil
+}
 func (s *stubPackageReader) InstallDirForVersion(_ packages.PackageType, _, _ string) string {
 	return ""
 }

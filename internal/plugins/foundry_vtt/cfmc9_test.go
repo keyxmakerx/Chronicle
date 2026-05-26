@@ -74,6 +74,9 @@ type noFoundryPackageReader struct{}
 func (noFoundryPackageReader) ListPackages(_ context.Context) ([]packages.Package, error) {
 	return nil, nil
 }
+func (noFoundryPackageReader) GetPackage(_ context.Context, _ string) (*packages.Package, error) {
+	return nil, nil
+}
 func (noFoundryPackageReader) InstallDirForVersion(_ packages.PackageType, _, _ string) string {
 	return ""
 }
