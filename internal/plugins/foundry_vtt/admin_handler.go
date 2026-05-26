@@ -8,6 +8,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 )
 
 // AdminVersionCampaignsHandler serves the "Campaigns Using v0.1.5"
@@ -144,4 +145,49 @@ func (h *Handler) AdminAutoPinBannerDismissHandler(c echo.Context) error {
 		return h.respondError(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// AdminPackageActionsFragmentHandler returns the per-row foundry-module
+// action UI (API monitor link + Versions trigger) as an HTMX fragment
+// for the /admin/packages page. packages.templ stays foundry-agnostic;
+// this handler is the only place that knows the foundry-module per-row
+// shape.
+//
+// GET /admin/foundry-vtt/packages/:id/actions-fragment
+//
+// Guards:
+//   - 404 if the package ID doesn't exist
+//   - 404 if the package isn't a foundry-module typed package (defensive
+//     — packages.templ should only lazy-load this URL for foundry-module
+//     rows, but a direct request from a poking admin shouldn't render
+//     foundry UI for system packages)
+//
+// Per cordinator/decisions/2026-05-23-packages-treatment.md + NW-2.2
+// Chunk G.
+func (h *Handler) AdminPackageActionsFragmentHandler(c echo.Context) error {
+	id := c.Param("id")
+	if id == "" {
+		return apperror.NewNotFound("package")
+	}
+
+	pkg, err := h.svc.GetPackageByID(c.Request().Context(), id)
+	if err != nil || pkg == nil {
+		// Package not found (or lookup error treated as not-found from
+		// the admin UI's perspective — fragment 404s silently and the
+		// row's lazy-load slot stays empty).
+		return apperror.NewNotFound("package")
+	}
+	if pkg.Type != packages.PackageTypeFoundryModule {
+		// Defensive: a system package's ID can't render the foundry
+		// fragment. Return 404 so packages.templ's lazy-load swap
+		// inserts an empty body for the wrong-type case.
+		return apperror.NewNotFound("package")
+	}
+
+	// csrfToken passed through for parity with packages.templ's
+	// per-row signature; current fragment contents are read-only but
+	// future state-changing per-row actions would use it.
+	csrfToken := middleware.GetCSRFToken(c)
+
+	return middleware.Render(c, http.StatusOK, AdminPackageActionsFragment(*pkg, csrfToken))
 }

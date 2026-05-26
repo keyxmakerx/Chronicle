@@ -66,6 +66,14 @@ func RegisterAdminRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFu
 	// reloads after the admin has acknowledged it.
 	g.GET("/autopin-banner", h.AdminAutoPinBannerHandler)
 	g.POST("/autopin-banner/dismiss", h.AdminAutoPinBannerDismissHandler)
+
+	// NW-2.2 Chunk G: per-row foundry-module fragment for the
+	// /admin/packages page. packages.templ lazy-loads this URL per
+	// foundry-module row so packages stays foundry-agnostic; the
+	// fragment returns the API-monitor link + Versions button +
+	// data-fvtt-versions-trigger attr. Per
+	// cordinator/decisions/2026-05-23-packages-treatment.md.
+	g.GET("/packages/:id/actions-fragment", h.AdminPackageActionsFragmentHandler)
 }
 
 // RegisterPublicRoutes mounts the unauthenticated manifest and

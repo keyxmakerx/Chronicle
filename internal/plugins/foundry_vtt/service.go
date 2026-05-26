@@ -62,6 +62,12 @@ type PackageReader interface {
 	// installed one.
 	ListPackages(ctx context.Context) ([]packages.Package, error)
 
+	// GetPackage returns a single package by ID. Used by the per-row
+	// admin fragment handler (NW-2.2 Chunk G) to look up a package
+	// the admin templates lazy-load actions for. Returns the package
+	// or an error if not found.
+	GetPackage(ctx context.Context, id string) (*packages.Package, error)
+
 	// InstallDirForVersion returns the on-disk path for a specific
 	// version of a package. Doesn't check existence; foundry_vtt
 	// stats the returned path to confirm the version is actually
@@ -181,6 +187,14 @@ type Service interface {
 	// the type filter. Returns (nil, nil) if no foundry-module
 	// package is registered.
 	FindFoundryPackage(ctx context.Context) (*packages.Package, error)
+
+	// GetPackageByID looks up a single package by ID. Used by the
+	// admin per-row fragment handler (NW-2.2 Chunk G) to validate
+	// that a fragment request's :id matches a foundry-module typed
+	// package before rendering. Thin wrapper around packages.GetPackage
+	// kept on the Service surface so the handler doesn't need a
+	// separate PackageReader handle.
+	GetPackageByID(ctx context.Context, id string) (*packages.Package, error)
 
 	// CampaignsUsingVersion returns the campaigns currently pinned
 	// to a specific Foundry module version. The admin's expandable
@@ -636,6 +650,14 @@ func (s *service) FindFoundryPackage(ctx context.Context) (*packages.Package, er
 		return nil, nil
 	}
 	return s.registry.FoundryPackage(ctx)
+}
+
+// GetPackageByID is a thin wrapper around the packages service's
+// GetPackage so the admin per-row fragment handler (NW-2.2 Chunk G)
+// can validate a fragment request's :id without holding a separate
+// PackageReader handle.
+func (s *service) GetPackageByID(ctx context.Context, id string) (*packages.Package, error) {
+	return s.pkgs.GetPackage(ctx, id)
 }
 
 // --- owner pin management ---
