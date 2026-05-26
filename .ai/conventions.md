@@ -396,6 +396,7 @@ work — coordinator updates the dispatch + audit citations.
 | Templ drift | `tools/check-templ-drift.sh` | **FAIL** | hygiene-audit §0.5 D6: generated `.templ.go` files always match their `.templ` source |
 | Wire-contract conformance | `internal/wire/wire_contract_test.go` + `internal/wire/routes_snapshot.txt` | **FAIL** (snapshot test) | T-O2 + hygiene-audit §5: every Echo route registration is in the curated snapshot. Drift triggers manual coordinator review. |
 | Foundry public rate-limit pin | `internal/wire/foundry_public_ratelimit_test.go` | **FAIL** | T-B1 + security-audit §2 M-3: the Foundry public manifest endpoint MUST be rate-limited. Two AST assertions pin the wiring (`g.Use(rateLimit)` in `foundry_vtt.RegisterPublicRoutes`) and the call site (`middleware.RateLimit(...)` argument in `app.RegisterRoutes`). |
+| Sanitize-on-write invariant | `internal/sanitize/invariant_test.go` + `internal/sanitize/sanitize_invariant_snapshot.txt` | **FAIL** (snapshot + invariant) | T-B1 + security-audit §3 G-C4: every `internal/plugins/*/service.go` (+ widgets) that declares HTML-typed inputs MUST call `sanitize.HTML` somewhere in the file. The snapshot pins the per-file inventory of HTML signals + sanitize-call counts; the invariant test fails outright if any file declares HTML inputs with zero sanitize calls. |
 | Decision-citations | `tools/check-decision-citations.sh` | **WARN** (always exit 0) | T-O3 + meta-audit Phase 2: every `cordinator/decisions/*.md` is referenced from at least one piece of code, dispatch, report, or other decision |
 
 ### Extending the wire-contract snapshot
@@ -436,6 +437,16 @@ extraction. Documented limitations (will lift in a future Phase 2C with
    specific Foundry public manifest invariant (M-3) via a focused AST
    assertion at `internal/wire/foundry_public_ratelimit_test.go`; full
    per-route middleware capture is deferred to Phase 2C.
+
+### Extending the sanitize-invariant snapshot
+
+When a PR intentionally adds a new plugin's `service.go`, or adds/removes HTML-typed inputs to an existing plugin:
+
+```bash
+UPDATE_SANITIZE_SNAPSHOT=1 go test ./internal/sanitize/...
+```
+
+Commit the regenerated `internal/sanitize/sanitize_invariant_snapshot.txt` in the same PR. The PR description must cite the audit if the change introduces a new sanitize surface.
 
 ### Adding a focused middleware-pin test
 
