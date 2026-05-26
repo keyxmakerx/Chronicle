@@ -706,73 +706,23 @@ templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
 		<div class="card p-4" x-data="{ guide: null }">
 			<h2 class="text-sm font-semibold text-fg mb-3">VTT Setup Guides</h2>
 			<div class="space-y-2">
-				// Foundry VTT guide.
+				// Per-VTT setup guides live in their owning plugins
+				// and lazy-load via HTMX. campaigns stays VTT-agnostic
+				// per Pillar 2 / NW-2.2 Chunk D. The wrapping card +
+				// alpine `guide` state stay generic so multiple VTTs
+				// can share the disclosure UI.
 				if baseURL != "" {
-					<div class="border border-edge rounded-lg overflow-hidden">
-						<button @click="guide = guide === 'foundry' ? null : 'foundry'" class="flex items-center justify-between w-full px-4 py-2.5 text-left text-sm hover:bg-surface-alt transition-colors">
-							<span class="font-medium text-fg"><i class="fa-solid fa-dice-d20 mr-2 text-xs text-fg-muted"></i> Foundry VTT</span>
-							<i class="fa-solid fa-chevron-down text-xs text-fg-muted transition-transform" :class="guide === 'foundry' && 'rotate-180'"></i>
-						</button>
-						<div x-show="guide === 'foundry'" x-collapse>
-							<div class="px-4 pb-4 space-y-3 border-t border-edge pt-3">
-								<div>
-									<label class="block text-xs font-medium text-fg-muted mb-1">Campaign ID</label>
-									<div class="flex items-center gap-2">
-										<input type="text" readonly value={ cc.Campaign.ID } class="input w-full font-mono text-xs bg-surface-alt py-1.5" id="foundry-campaign-id"/>
-										<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('foundry-campaign-id').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })" class="btn-secondary text-xs px-2.5 py-1.5 shrink-0" title="Copy">
-											<i class="fa-solid fa-copy"></i>
-										</button>
-									</div>
-								</div>
-								// Foundry module pin + dynamic install URL.
-								// Server-rendered fragment from the foundry_vtt
-								// sub-plugin so the campaigns plugin doesn't have
-								// to import it (foundry_vtt imports campaigns; the
-								// reverse would cycle). Lazy-loaded on disclosure
-								// expansion via hx-trigger="intersect once".
-								//
-								// C-FMC-6: corrected the URL from the deleted
-								// foundry_modules path (/foundry/settings-tab) to
-								// foundry_vtt's path (/foundry-vtt/settings-tab).
-								// C-FMC-5c deleted the old plugin and its routes
-								// but left this hx-get pointing at the dead URL,
-								// so owners saw a 404 / stalled loader where the
-								// install URL used to be. The fragment itself
-								// self-renders an empty state when no foundry-
-								// module package is registered — no gating needed
-								// in this campaigns templ. Future readers: if you
-								// add a new VTT integration, mirror this pattern
-								// (separate sub-plugin + this templ embeds its
-								// fragment).
-								if cc.MemberRole >= RoleOwner {
-									// C-FMC-9 (Bug 3): hx-on::htmx:responseError replaces
-									// the loading spinner with an inline error message if
-									// the fragment request fails (4xx/5xx, network error).
-									// Without this fallback the spinner stayed forever and
-									// owners saw a "blank" settings section. The handler
-									// itself was also fixed in C-FMC-9 to always return 200
-									// with a rendered error state, so this client-side
-									// fallback only triggers on genuine network failures
-					 				// (HTMX skips swap on connection errors regardless of
-					 				// the server's intent).
-									<div
-										id="foundry-module-pin-section"
-										hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/settings-tab", cc.Campaign.ID) }
-										hx-trigger="intersect once"
-										hx-swap="innerHTML"
-										hx-on::response-error="this.innerHTML = '<div class=&quot;card p-4 rounded-md border border-red-500/30 bg-red-500/5&quot;><p class=&quot;text-sm font-medium text-red-700 dark:text-red-400&quot;><i class=&quot;fa-solid fa-triangle-exclamation mr-1&quot;></i>Could not load Foundry VTT settings</p><p class=&quot;text-sm text-fg-secondary mt-2&quot;>The request to /campaigns/.../foundry-vtt/settings-tab failed at the network layer.</p><p class=&quot;text-xs text-fg-muted mt-2&quot;>Refresh the page. If this persists, contact a site admin.</p></div>'"
-									>
-										<div class="text-center py-6 text-fg-muted text-xs">
-											<i class="fa-solid fa-spinner fa-spin mr-1"></i>
-											Loading module settings&hellip;
-										</div>
-									</div>
-								} else {
-									<div>
-										<label class="block text-xs font-medium text-fg-muted mb-1">Module Install URL</label>
-										<p class="text-xs text-fg-muted">Visible to campaign owners only.</p>
-									</div>
-								}
+					<div
+						hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/setup-guide-fragment", cc.Campaign.ID) }
+						hx-trigger="load"
+						hx-swap="outerHTML"
+					>
+						<!-- skeleton: pulsing card-stripe matching the
+						     eventual disclosure row size. T-B3 polish bar. -->
+						<div class="border border-edge rounded-lg overflow-hidden">
+							<div class="flex items-center justify-between w-full px-4 py-2.5">
+								<span class="inline-block w-32 h-4 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+								<span class="inline-block w-4 h-4 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
 							</div>
 						</div>
 					</div>

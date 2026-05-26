@@ -2991,8 +2991,12 @@ func (a *App) RegisterRoutes() {
 	// (for GET /campaigns/:id/foundry-presence) and the maps handler
 	// (for the "Connected to Foundry" pill on the map detail page).
 	// Hub already implements both FoundryPresenceLookup interface shapes.
+	// NW-2.2 Chunk D: fvttHandler also takes the lookup so the presence-pill
+	// fragment endpoint can render the same state (the maps templ no longer
+	// renders it inline; foundry_vtt owns the pill now).
 	campaignHandler.SetFoundryPresence(wsHub)
 	mapsHandler.SetFoundryPresence(wsHub)
+	fvttHandler.SetPresenceLookup(wsHub)
 
 	wsAuth := ws.NewMultiAuthenticator(
 		syncService,

@@ -1,0 +1,75 @@
+// campaign_settings_guide.templ holds the foundry-specific portion of
+// the per-campaign Settings -> Integrations tab's "VTT Setup Guides"
+// section. Lazy-loaded by campaigns.settings.templ via HTMX so the
+// campaigns plugin stays foundry-agnostic per Pillar 2.
+//
+// Per cordinator/decisions/2026-05-23-packages-treatment.md (the
+// fragment-lazy-load convention) + NW-2.2 Chunk D.
+//
+// URL: GET /campaigns/:id/foundry-vtt/setup-guide-fragment (owner-gated)
+//
+// Owns the Foundry-VTT-labeled disclosure inside the VTT Setup Guides
+// card. The card itself stays in campaigns (it's the generic "here are
+// the VTT integrations" container); the Foundry disclosure is the
+// type-specific entry inside.
+
+package foundry_vtt
+
+import "fmt"
+
+// CampaignSettingsFoundryGuide renders the Foundry-VTT-labeled
+// disclosure that appears in the per-campaign Settings -> Integrations
+// tab. Self-contained: includes the disclosure header, campaign-ID
+// copy field, and the further-nested install URL lazy-loaded section
+// (the inner /foundry-vtt/settings-tab fragment already exists; this
+// guide is the outer wrapper that previously lived in
+// campaigns/settings.templ).
+//
+// isOwner is the gate the inner pin-section needs to know whether to
+// render the owner-only install URL block.
+templ CampaignSettingsFoundryGuide(campaignID string, isOwner bool) {
+	<div class="border border-edge rounded-lg overflow-hidden">
+		<button @click="guide = guide === 'foundry' ? null : 'foundry'" class="flex items-center justify-between w-full px-4 py-2.5 text-left text-sm hover:bg-surface-alt transition-colors">
+			<span class="font-medium text-fg"><i class="fa-solid fa-dice-d20 mr-2 text-xs text-fg-muted"></i> Foundry VTT</span>
+			<i class="fa-solid fa-chevron-down text-xs text-fg-muted transition-transform" :class="guide === 'foundry' && 'rotate-180'"></i>
+		</button>
+		<div x-show="guide === 'foundry'" x-collapse>
+			<div class="px-4 pb-4 space-y-3 border-t border-edge pt-3">
+				<div>
+					<label class="block text-xs font-medium text-fg-muted mb-1">Campaign ID</label>
+					<div class="flex items-center gap-2">
+						<input type="text" readonly value={ campaignID } class="input w-full font-mono text-xs bg-surface-alt py-1.5" id="foundry-campaign-id"/>
+						<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('foundry-campaign-id').value).then(() => { this.innerHTML = '<i class=\'fa-solid fa-check text-emerald-500\'></i>'; setTimeout(() => { this.innerHTML = '<i class=\'fa-solid fa-copy\'></i>'; }, 2000); })" class="btn-secondary text-xs px-2.5 py-1.5 shrink-0" title="Copy">
+							<i class="fa-solid fa-copy"></i>
+						</button>
+					</div>
+				</div>
+				// Foundry module pin + dynamic install URL. Inner
+				// fragment ALREADY served by foundry_vtt at
+				// /campaigns/:id/foundry-vtt/settings-tab; this guide
+				// inlines the lazy-load slot from the original
+				// campaigns/settings.templ verbatim. C-FMC-9 fallback
+				// on responseError preserved.
+				if isOwner {
+					<div
+						id="foundry-module-pin-section"
+						hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/settings-tab", campaignID) }
+						hx-trigger="intersect once"
+						hx-swap="innerHTML"
+						hx-on::response-error="this.innerHTML = '<div class=&quot;card p-4 rounded-md border border-red-500/30 bg-red-500/5&quot;><p class=&quot;text-sm font-medium text-red-700 dark:text-red-400&quot;><i class=&quot;fa-solid fa-triangle-exclamation mr-1&quot;></i>Could not load Foundry VTT settings</p><p class=&quot;text-sm text-fg-secondary mt-2&quot;>The request to /campaigns/.../foundry-vtt/settings-tab failed at the network layer.</p><p class=&quot;text-xs text-fg-muted mt-2&quot;>Refresh the page. If this persists, contact a site admin.</p></div>'"
+					>
+						<div class="text-center py-6 text-fg-muted text-xs">
+							<i class="fa-solid fa-spinner fa-spin mr-1"></i>
+							Loading module settings&hellip;
+						</div>
+					</div>
+				} else {
+					<div>
+						<label class="block text-xs font-medium text-fg-muted mb-1">Module Install URL</label>
+						<p class="text-xs text-fg-muted">Visible to campaign owners only.</p>
+					</div>
+				}
+			</div>
+		</div>
+	</div>
+}

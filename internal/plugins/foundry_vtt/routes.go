@@ -22,6 +22,32 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	cg.POST("/foundry-vtt/token/rotate", h.RotateTokenAPI, requireOwner)
 	cg.GET("/foundry-vtt/install-url", h.InstallURLAPI, requireOwner)
 	cg.GET("/foundry-vtt/settings-tab", h.OwnerTabFragmentHandler, requireOwner)
+	// NW-2.2 Chunk D: VTT Setup Guides outer wrapper for the
+	// campaign settings integrations tab. campaigns/settings.templ
+	// lazy-loads this URL; the fragment renders the Foundry-VTT
+	// disclosure (campaign-ID copy + the nested settings-tab
+	// fragment). Per
+	// cordinator/decisions/2026-05-23-packages-treatment.md.
+	cg.GET("/foundry-vtt/setup-guide-fragment", h.CampaignSettingsFoundryGuideHandler, requireOwner)
+
+	// NW-2.2 Chunk D: dashboard sync block fragment.
+	// campaigns/dashboard_blocks.templ lazy-loads this when a
+	// campaign's dashboard layout includes a sync_status block.
+	// Campaign-member access (no requireOwner) — the inner
+	// /sync-status fetch is owner-gated by syncapi which preserves
+	// the prior chrome-shows-status-fails UX for non-owners.
+	cg.GET("/foundry-vtt/dashboard-sync-block", h.DashboardSyncBlockHandler)
+
+	// NW-2.2 Chunk D: "newer module version available" banner for
+	// the campaign show page. Owner-gated — matches the prior
+	// in-handler role check. Returns empty body when no update
+	// (templ renders nothing when HasUpdate is false).
+	cg.GET("/foundry-vtt/show-banner-fragment", h.CampaignShowBannerHandler, requireOwner)
+
+	// NW-2.2 Chunk D: "Connected to Foundry" presence pill for the
+	// map title. Lazy-loaded by maps/maps.templ. Campaign-member
+	// access (non-sensitive).
+	cg.GET("/foundry-vtt/presence-pill-fragment", h.CampaignShowPresencePillHandler)
 }
 
 // RegisterAdminRoutes mounts the admin endpoints used by the
