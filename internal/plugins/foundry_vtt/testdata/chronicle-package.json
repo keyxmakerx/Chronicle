@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+
+  "package": {
+    "id": "chronicle-sync",
+    "kind": "foundry-module",
+    "moduleJsonPath": "module.json"
+  },
+
+  "serving": {
+    "rewriteFields": ["manifest", "download"],
+    "manifestEndpoint": "/api/v1/campaigns/{campaign_id}/foundry-vtt/module.json?token={token}",
+    "downloadEndpoint": "/api/v1/campaigns/{campaign_id}/foundry-vtt/module.zip?token={token}",
+    "perCampaignSignedToken": true,
+    "zipContentRoot": ""
+  }
+}
