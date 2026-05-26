@@ -292,6 +292,7 @@ GET	/notes/members	internal/widgets/notes/routes.go
 GET	/npcs	internal/plugins/npcs/routes.go
 GET	/npcs/count	internal/plugins/npcs/routes.go
 GET	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
+GET	/packages/:id/actions-fragment	internal/plugins/foundry_vtt/routes.go
 GET	/pending	internal/plugins/packages/routes.go
 GET	/plugins	internal/extensions/routes.go
 GET	/plugins	internal/extensions/routes.go
