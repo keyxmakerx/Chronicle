@@ -167,6 +167,13 @@ type Handler struct {
 	smtpChecker       SMTPChecker
 	systemLister      SystemLister
 	aiExport          AIExportService
+	// extraSettingsTabs holds tabs other plugins contribute via
+	// RegisterSettingsTab (see settings_tabs.go). Plugin-isolation
+	// keeps tab registration owned by the campaigns plugin; other
+	// plugins describe their tab + handler-side render closure and
+	// the settings page iterates the merged list. AI Workspace V1
+	// Phase 2 is the first caller.
+	extraSettingsTabs []SettingsTab
 	baseURL           string
 }
 
@@ -472,11 +479,8 @@ func (h *Handler) Update(c echo.Context) error {
 		errMsg := apperror.UserMessage(err, "failed to update campaign")
 		csrfToken := middleware.GetCSRFToken(c)
 		transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
-		var entityTypes []SettingsEntityType
-		if h.entityLister != nil {
-			entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
-		}
-		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, errMsg, h.baseURL, "general", false, nil, nil))
+		tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, nil, false)
+		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, errMsg, "general", tabs))
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.updated", nil)
@@ -934,11 +938,10 @@ func (h *Handler) Settings(c echo.Context) error {
 	transfer, _ := h.service.GetPendingTransfer(ctx, cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)
 
-	// Fetch entity types for sidebar config widget.
-	var entityTypes []SettingsEntityType
-	if h.entityLister != nil {
-		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(ctx, cc.Campaign.ID)
-	}
+	// (The entity-types fetch that used to live here was passed to
+	// CampaignSettingsPage but never read inside the templ. Removed
+	// during the SettingsTab refactor — Customize / Sidebar config
+	// still fetch it via h.entityLister separately.)
 
 	// Fetch members for the People tab.
 	members, _ := h.service.ListMembers(ctx, cc.Campaign.ID)
@@ -967,7 +970,8 @@ func (h *Handler) Settings(c echo.Context) error {
 		addons, _ = h.addonLister.ListForPluginHub(ctx, cc.Campaign.ID)
 	}
 
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, members, csrfToken, "", h.baseURL, activeTab, smtpConfigured, systemOptions, addons))
+	tabs := h.visibleSettingsTabs(cc, transfer, members, csrfToken, systemOptions, addons, smtpConfigured)
+	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, "", activeTab, tabs))
 }
 
 // PluginHub renders the campaign plugin hub page, showing all enabled
@@ -1523,13 +1527,8 @@ func (h *Handler) TransferForm(c echo.Context) error {
 
 	transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)
-
-	var entityTypes []SettingsEntityType
-	if h.entityLister != nil {
-		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
-	}
-
-	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, "", h.baseURL, "general", false, nil, nil))
+	tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, nil, false)
+	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, "", "general", tabs))
 }
 
 // Transfer initiates an ownership transfer (POST /campaigns/:id/transfer).
@@ -1550,11 +1549,8 @@ func (h *Handler) Transfer(c echo.Context) error {
 		transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := apperror.UserMessage(err, "failed to initiate transfer")
-		var entityTypes []SettingsEntityType
-		if h.entityLister != nil {
-			entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
-		}
-		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, entityTypes, nil, csrfToken, errMsg, h.baseURL, "general", false, nil, nil))
+		tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, nil, false)
+		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, errMsg, "general", tabs))
 	}
 
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/settings")
