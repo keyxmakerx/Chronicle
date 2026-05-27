@@ -78,7 +78,19 @@ func pluginHubAddonsJSON(addons []PluginHubAddon) string {
 }
 
 // CampaignSettingsPage renders the tabbed campaign settings hub.
-templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, entityTypes []SettingsEntityType, members []CampaignMember, csrfToken, errMsg, baseURL, activeTab string, smtpConfigured bool, systemOptions []SystemOption, addons []PluginHubAddon) {
+//
+// Tab list is built by the Handler (see settings_tabs.go) and passed
+// in already role-filtered + sort-ordered. The page iterates the list
+// for the tab bar AND the content blocks — no hardcoded tab refs here,
+// which lets plugins contribute additional tabs via the campaigns
+// handler's RegisterSettingsTab without forking this file.
+//
+// Parameters dropped vs the pre-refactor signature: entityTypes (was
+// dead — never referenced inside the templ), members / addons /
+// smtpConfigured / systemOptions (each captured inside its tab's
+// Content closure now). transfer + csrfToken remain because they're
+// used by the pre-tab banners.
+templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfToken, errMsg, activeTab string, tabs []SettingsTab) {
 	@layouts.App(cc.Campaign.Name + " - Settings") {
 		<div class="max-w-4xl mx-auto" x-data={ fmt.Sprintf("{ tab: '%s' }", activeTab) }>
 			<div class="flex items-center justify-between mb-4">
@@ -102,44 +114,43 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, ent
 			}
 			// Tab bar.
 			<div class="flex gap-0 border-b border-edge mb-6 overflow-x-auto">
-				<button @click="tab = 'general'; history.replaceState(null, '', '?tab=general')" :class="tab === 'general' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-gear mr-1.5 text-xs"></i> General</button>
-				if cc.MemberRole >= RoleOwner {
-					<button @click="tab = 'features'; history.replaceState(null, '', '?tab=features')" :class="tab === 'features' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-puzzle-piece mr-1.5 text-xs"></i> Features</button>
+				for _, t := range tabs {
+					@settingsTabButton(t)
 				}
-				<button @click="tab = 'people'; history.replaceState(null, '', '?tab=people')" :class="tab === 'people' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-users mr-1.5 text-xs"></i> People</button>
-				<button @click="tab = 'integrations'; history.replaceState(null, '', '?tab=integrations')" :class="tab === 'integrations' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-plug mr-1.5 text-xs"></i> Integrations</button>
-				if cc.MemberRole >= RoleOwner {
-					<button @click="tab = 'ai-export'; history.replaceState(null, '', '?tab=ai-export')" :class="tab === 'ai-export' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-xs"></i> AI Export</button>
-				}
-				<button @click="tab = 'activity'; history.replaceState(null, '', '?tab=activity')" :class="tab === 'activity' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'" class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"><i class="fa-solid fa-clock-rotate-left mr-1.5 text-xs"></i> Activity</button>
 			</div>
 			// Tab content.
-			<div x-show="tab === 'general'" x-cloak>
-				@settingsGeneralTab(cc, csrfToken, systemOptionsJSON(systemOptions))
-			</div>
-			if cc.MemberRole >= RoleOwner {
-				<div x-show="tab === 'features'" x-cloak>
-					@settingsFeaturesTab(cc, addons, csrfToken)
+			for _, t := range tabs {
+				<div x-show={ fmt.Sprintf("tab === '%s'", t.ID) } x-cloak>
+					@t.Content
 				</div>
 			}
-			<div x-show="tab === 'people'" x-cloak>
-				@settingsPeopleTab(cc, members, transfer, csrfToken, smtpConfigured)
-			</div>
-			<div x-show="tab === 'integrations'" x-cloak>
-				@settingsIntegrationsTab(cc, csrfToken, baseURL)
-			</div>
-			if cc.MemberRole >= RoleOwner {
-				<div x-show="tab === 'ai-export'" x-cloak>
-					@settingsAIExportTab(cc)
-				</div>
-			}
-			<div x-show="tab === 'activity'" x-cloak>
-				<div id="activity-content" hx-get={ fmt.Sprintf("/campaigns/%s/activity/fragment", cc.Campaign.ID) } hx-trigger="intersect once" hx-swap="innerHTML">
-					<div class="text-center py-12 text-fg-muted text-sm"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Loading activity...</div>
-				</div>
-			</div>
 		</div>
 	}
+}
+
+// settingsTabButton renders one tab-bar <button>. Splitting this out
+// keeps the per-tab Alpine/HTMX wiring readable + lets the templ
+// generator inline the same JS for every iteration.
+templ settingsTabButton(t SettingsTab) {
+	<button
+		@click={ fmt.Sprintf("tab = '%s'; history.replaceState(null, '', '?tab=%s')", t.ID, t.ID) }
+		:class={ fmt.Sprintf("tab === '%s' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'", t.ID) }
+		class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"
+	>
+		<i class={ t.Icon, "mr-1.5 text-xs" }></i>
+		{ " " + t.Label }
+	</button>
+}
+
+// settingsActivityTab is the Activity tab's content: a lazy-loaded
+// HTMX fragment that fetches the activity feed on intersect. Extracted
+// from the previously-inline content during the SettingsTab refactor
+// so every tab in the registry follows the same "Content is a
+// templ.Component" shape.
+templ settingsActivityTab(cc *CampaignContext) {
+	<div id="activity-content" hx-get={ fmt.Sprintf("/campaigns/%s/activity/fragment", cc.Campaign.ID) } hx-trigger="intersect once" hx-swap="innerHTML">
+		<div class="text-center py-12 text-fg-muted text-sm"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Loading activity...</div>
+	</div>
 }
 
 // settingsFeaturesTab renders the Features tab: addon toggles with optimistic UI.
