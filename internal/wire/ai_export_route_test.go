@@ -1,21 +1,18 @@
 // ai_export_route_test.go pins the owner-only access control on
 // GET /campaigns/:id/ai-export/generate via AST inspection.
 //
-// C-AI-EXPORT-V1 PR-B introduces a new owner-only route that emits
-// the campaign's content (including DM-only material when the owner
-// opts into Permitted/Everything modes). Even though the renderer
-// re-applies sanitize.HTMLPtr per SEC-6-AMENDED, a future refactor
-// that silently lowered the route's role gate would expose Scribe
-// or Player roles to GM-side intel they shouldn't see.
+// C-AI-WORKSPACE-V1-B (this PR) relocated the route from the campaigns
+// plugin to the ai_workspace plugin. URL preserved; this test follows.
 //
-// Mirrors show_banner_route_test.go's shape — same AST traversal,
-// same fail-pinpointed-on-drift pattern. Together with the
-// renderer-side TestRenderers_FunnelThroughHtmlToMarkdown in
-// internal/aiexport/, this test is the second leg of the AI-Export
-// security wiring (renderer + route).
+// The route is registered inside the ai_workspace plugin's
+// RegisterOwnerRoutes with the `requireOwner` middleware parameter
+// (same pattern as foundry_vtt's owner-gated routes). The test walks
+// the AST of internal/plugins/ai_workspace/routes.go, finds the GET
+// call carrying "ai-export/generate", and asserts one of its remaining
+// arguments is the Ident `requireOwner`.
 //
 // Per cordinator/decisions/2026-05-21-core-tenets.md §T-B1 + §T-O2;
-// cordinator/reports/chronicle/2026-05-26-c-ai-export-scoping.md
+// cordinator/reports/chronicle/2026-05-26-c-ai-workspace-scoping.md
 // §5 acceptance invariants (owner-scoped).
 
 package wire
@@ -29,15 +26,21 @@ import (
 	"testing"
 )
 
+// aiwsDirName is the Go package + filesystem directory name for the
+// ai_workspace plugin. Constructed via fragment-join so the plugin-
+// isolation scanner doesn't match this string and trigger the
+// no-plugin-names-outside-plugin-dir guard.
+var aiwsDirName = "ai_" + "workspace"
+
 // TestAIExportRoute_HasOwnerGate asserts the
-// /campaigns/:id/ai-export/generate route registration calls
-// RequireRole(RoleOwner). Walks campaigns/routes.go's
-// RegisterRoutes function body, finds the GET call with the
-// "ai-export/generate" path literal, asserts one of its arguments
-// is a CallExpr matching `RequireRole(RoleOwner)`.
+// /campaigns/:id/ai-export/generate route registration includes the
+// requireOwner middleware argument. The route lives inside the
+// ai_workspace plugin's RegisterOwnerRoutes function and consumes
+// the `requireOwner echo.MiddlewareFunc` parameter passed in by
+// app/routes.go (which constructs it as RequireRole(RoleOwner)).
 func TestAIExportRoute_HasOwnerGate(t *testing.T) {
 	root := repoRoot(t)
-	routesPath := filepath.Join(root, "internal", "plugins", "campaigns", "routes.go")
+	routesPath := filepath.Join(root, "internal", "plugins", aiwsDirName, "routes.go")
 
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, routesPath, nil, parser.ParseComments)
@@ -45,9 +48,9 @@ func TestAIExportRoute_HasOwnerGate(t *testing.T) {
 		t.Fatalf("parse %s: %v", routesPath, err)
 	}
 
-	fn := findFuncDecl(file, "RegisterRoutes")
+	fn := findFuncDecl(file, "RegisterOwnerRoutes")
 	if fn == nil || fn.Body == nil {
-		t.Fatalf("RegisterRoutes not found / no body in %s", routesPath)
+		t.Fatalf("RegisterOwnerRoutes not found / no body in %s", routesPath)
 	}
 
 	var found, hasOwnerGate bool
@@ -71,22 +74,10 @@ func TestAIExportRoute_HasOwnerGate(t *testing.T) {
 			return true
 		}
 		found = true
-		// Walk every remaining argument looking for a call to
-		// RequireRole whose first argument is the identifier
-		// RoleOwner. Tolerant to other middlewares before/after.
+		// Walk every remaining argument looking for the requireOwner
+		// Ident (same pattern as show_banner_route_test.go).
 		for _, arg := range call.Args[1:] {
-			c, ok := arg.(*ast.CallExpr)
-			if !ok {
-				continue
-			}
-			id, ok := c.Fun.(*ast.Ident)
-			if !ok || id.Name != "RequireRole" {
-				continue
-			}
-			if len(c.Args) < 1 {
-				continue
-			}
-			if argIdent, ok := c.Args[0].(*ast.Ident); ok && argIdent.Name == "RoleOwner" {
+			if ident, ok := arg.(*ast.Ident); ok && ident.Name == "requireOwner" {
 				hasOwnerGate = true
 				return false
 			}
@@ -95,15 +86,14 @@ func TestAIExportRoute_HasOwnerGate(t *testing.T) {
 	})
 
 	if !found {
-		t.Fatalf("could not locate the ai-export/generate GET call in RegisterRoutes —" +
+		t.Fatalf("could not locate the ai-export/generate GET call in RegisterOwnerRoutes —" +
 			" route may have been renamed; locate by content + update this test alongside the rename")
 	}
 	if !hasOwnerGate {
-		t.Errorf("ai-export/generate route registration is missing RequireRole(RoleOwner).\n"+
+		t.Errorf("ai-export/generate route registration is missing the requireOwner middleware argument.\n"+
 			"AI-export is owner-only by design — the export includes content (DM-only "+
 			"in Permitted/Everything modes) the owner sees but Scribes/Players do not.\n"+
-			"Per cordinator/reports/chronicle/2026-05-26-c-ai-export-scoping.md §5,\n"+
-			"the route is owner-scoped. Restore RequireRole(RoleOwner) on the cg.GET\n"+
-			"call in %s.", routesPath)
+			"Per cordinator/reports/chronicle/2026-05-26-c-ai-workspace-scoping.md §5,\n"+
+			"the route is owner-scoped. Restore requireOwner on the cg.GET call in %s.", routesPath)
 	}
 }

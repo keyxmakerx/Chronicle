@@ -124,33 +124,10 @@ type SystemLister interface {
 	ListSystems() []SystemOption
 }
 
-// AIExportService is the narrow contract the campaigns handler needs
-// from internal/aiexport. The interface keeps the campaigns plugin
-// decoupled from the concrete aiexport.Service type — same pattern
-// the other adapter fields on Handler follow (SystemLister, etc).
-//
-// Wired by app/routes.go via SetAIExportService(...) after the
-// aiexport.Service is constructed with every plugin's lister.
-type AIExportService interface {
-	// AIExportOptions mirrors aiexport.Options without importing the
-	// package directly (campaigns can't take an aiexport dep without
-	// creating a circular concern between presenters + the renderer
-	// in v2 when the renderer wants entity-name resolution from the
-	// campaigns context). The struct fields exactly mirror the
-	// aiexport.Options shape; campaigns/handler.go converts the form
-	// submission to this struct, the wiring adapter in app/routes.go
-	// then re-maps to aiexport.Options when calling Generate.
-	Generate(ctx context.Context, campaignName, ownerID, campaignID string, opts AIExportOptions) (string, error)
-}
-
-// AIExportOptions is the campaigns-side mirror of aiexport.Options.
-// Wire-adapter in app/routes.go translates between the two so this
-// package never directly imports internal/aiexport.
-type AIExportOptions struct {
-	Categories            []string // canonical category slugs; empty = all
-	Privacy               string   // "safe" | "permitted" | "everything"
-	IncludeSessionGMNotes bool
-}
+// (AIExportService + AIExportOptions removed in C-AI-WORKSPACE-V1-B.
+// The renderer + handler + modal moved to internal/plugins/ai_workspace,
+// which registers its settings tab via campaigns.RegisterSettingsTab
+// and mounts its own /ai-export/generate route.)
 
 // Handler handles HTTP requests for campaign operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
@@ -166,14 +143,12 @@ type Handler struct {
 	mediaUploader     MediaUploader
 	smtpChecker       SMTPChecker
 	systemLister      SystemLister
-	aiExport          AIExportService
-	// extraSettingsTabs holds tabs other plugins contribute via
-	// RegisterSettingsTab (see settings_tabs.go). Plugin-isolation
-	// keeps tab registration owned by the campaigns plugin; other
-	// plugins describe their tab + handler-side render closure and
-	// the settings page iterates the merged list. AI Workspace V1
-	// Phase 2 is the first caller.
-	extraSettingsTabs []SettingsTab
+	// extraSettingsTabs holds factory functions other plugins
+	// contribute via RegisterSettingsTab (see settings_tabs.go).
+	// Each factory is invoked per-request with the live
+	// CampaignContext so plugin-side tab content can bind
+	// cc.Campaign.ID into form URLs and similar.
+	extraSettingsTabs []func(*CampaignContext) SettingsTab
 	baseURL           string
 }
 
@@ -243,80 +218,10 @@ func (h *Handler) SetSystemLister(lister SystemLister) {
 	h.systemLister = lister
 }
 
-// SetAIExportService wires the AI-export renderer (PR-A's
-// internal/aiexport package) into the campaigns settings page.
-// Called by app/routes.go after the renderer Service is constructed
-// with every plugin's lister.
-func (h *Handler) SetAIExportService(svc AIExportService) {
-	h.aiExport = svc
-}
-
-// GenerateAIExport renders the AI-export markdown for the campaign
-// owner and returns the modal fragment that displays it with a Copy
-// button. Owner-gated at the route level (RequireRole(RoleOwner)).
-//
-// GET /campaigns/:id/ai-export/generate?privacy=safe&categories=...&gm_notes=on
-//
-// Form params (all query-string):
-//   - privacy: "safe" (default) | "permitted" | "everything"
-//   - categories: comma-separated subset of
-//     entities,notes,calendar_events,sessions,timelines (empty = all)
-//   - gm_notes: "on" to opt into session GM notes (honored only when
-//     privacy != safe)
-//
-// Always returns the modal templ; an error from the renderer surfaces
-// in the modal's error region rather than a top-level apperror so the
-// owner sees a recoverable in-modal failure instead of a blank screen.
-func (h *Handler) GenerateAIExport(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	if h.aiExport == nil {
-		// Service wasn't wired (test fixture or deliberately disabled).
-		// Render the modal with an explanatory error so operators see
-		// a clear message instead of an empty body.
-		return middleware.Render(c, http.StatusOK,
-			AIExportModal("", "AI-export is not configured on this server."))
-	}
-
-	opts := AIExportOptions{
-		Privacy:               strings.ToLower(strings.TrimSpace(c.QueryParam("privacy"))),
-		IncludeSessionGMNotes: c.QueryParam("gm_notes") == "on",
-	}
-	if opts.Privacy == "" {
-		opts.Privacy = "safe"
-	}
-	if raw := c.QueryParam("categories"); raw != "" {
-		for _, s := range strings.Split(raw, ",") {
-			s = strings.TrimSpace(s)
-			if s != "" {
-				opts.Categories = append(opts.Categories, s)
-			}
-		}
-	}
-
-	userID := auth.GetUserID(c)
-	markdown, err := h.aiExport.Generate(c.Request().Context(),
-		cc.Campaign.Name, userID, cc.Campaign.ID, opts)
-	if err != nil {
-		slog.Error("ai-export generate failed",
-			slog.String("campaign_id", cc.Campaign.ID),
-			slog.Any("error", err))
-		return middleware.Render(c, http.StatusOK,
-			AIExportModal("", "Could not generate export: "+err.Error()))
-	}
-
-	h.logAudit(c, cc.Campaign.ID, "campaign.ai_export.generated",
-		map[string]any{
-			"privacy":             opts.Privacy,
-			"category_count":      len(opts.Categories),
-			"include_gm_notes":    opts.IncludeSessionGMNotes,
-			"markdown_byte_count": len(markdown),
-		})
-
-	return middleware.Render(c, http.StatusOK, AIExportModal(markdown, ""))
-}
+// (SetAIExportService + GenerateAIExport relocated to
+// internal/plugins/ai_workspace in C-AI-WORKSPACE-V1-B. The campaigns
+// plugin no longer holds any AI-export state — the ai_workspace plugin
+// owns the renderer, the handler, the route, and the settings tab.)
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
 // never block the primary operation.

@@ -1,4 +1,5 @@
 internal/plugins/addons/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
+internal/plugins/ai_workspace/aiexport/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/armory/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/audit/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/auth/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-

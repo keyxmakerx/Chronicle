@@ -1,0 +1,141 @@
+// tab.templ — settings-tab body rendered as the "AI Workspace" tab
+// content in /campaigns/:id/settings. Registered with the campaigns
+// plugin via campaigns.Handler.RegisterSettingsTab(...).
+//
+// V1 Phase 2 ships only the AI Export section (migrated verbatim from
+// the campaigns-side settingsAIExportTab in PR #350). Phase 3 will
+// add a Prompt builder section above; Phase 4-5 will add an AI Import
+// section below. The CampaignContext parameter is bound per-request
+// inside campaigns.visibleSettingsTabs (via the factory function the
+// plugin registered), so cc.Campaign.ID is available for form URLs.
+
+package ai_workspace
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// SettingsTabBody renders the AI Workspace settings tab. Top-level
+// container that nests each capability's section (V1 Phase 2: only
+// the Export section). Future phases append below.
+templ SettingsTabBody(cc *campaigns.CampaignContext) {
+	<div class="space-y-6">
+		@aiExportSection(cc)
+		// Phase 3 will render @promptBuilderSection(cc) here.
+		// Phase 4-5 will render @importSection(cc) here.
+	</div>
+}
+
+// aiExportSection is the form + Generate button. Sends an HTMX hx-get
+// to /ai-export/generate; the response replaces #ai-export-modal-host
+// with the rendered modal (modal.templ). Functionally identical to
+// the pre-migration settingsAIExportTab in the campaigns plugin —
+// same form fields, same defaults, same loading indicator.
+templ aiExportSection(cc *campaigns.CampaignContext) {
+	<div class="card p-6">
+		<div class="flex items-start gap-4 mb-4">
+			<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+				<i class="fa-solid fa-wand-magic-sparkles text-accent text-lg"></i>
+			</span>
+			<div>
+				<h2 class="text-lg font-semibold text-fg">Export for AI</h2>
+				<p class="text-sm text-fg-secondary mt-0.5 leading-relaxed">
+					Generate a single markdown document of this campaign's content,
+					ready to paste into Claude, ChatGPT, NotebookLM, or other AI tools.
+					Intentionally lossy — the campaign export endpoint stays the
+					source of truth backup surface.
+				</p>
+			</div>
+		</div>
+
+		<form
+			hx-get={ fmt.Sprintf("/campaigns/%s/ai-export/generate", cc.Campaign.ID) }
+			hx-target="#ai-export-modal-host"
+			hx-swap="innerHTML"
+			hx-indicator="#ai-export-generating"
+			class="space-y-5 mt-4"
+		>
+			<div>
+				<h3 class="text-sm font-medium text-fg mb-2">Categories</h3>
+				<p class="text-xs text-fg-muted mb-3">
+					All on by default. Uncheck any you don't want in the export.
+					Maps + media not yet supported (binary content).
+				</p>
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input type="checkbox" name="categories" value="entities" checked class="rounded border-edge text-accent"/>
+						<span>Entities (pages)</span>
+					</label>
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input type="checkbox" name="categories" value="notes" checked class="rounded border-edge text-accent"/>
+						<span>Notes</span>
+					</label>
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input type="checkbox" name="categories" value="calendar_events" checked class="rounded border-edge text-accent"/>
+						<span>Calendar events</span>
+					</label>
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input type="checkbox" name="categories" value="sessions" checked class="rounded border-edge text-accent"/>
+						<span>Sessions</span>
+					</label>
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input type="checkbox" name="categories" value="timelines" checked class="rounded border-edge text-accent"/>
+						<span>Timelines</span>
+					</label>
+				</div>
+			</div>
+
+			<div>
+				<h3 class="text-sm font-medium text-fg mb-2">Privacy</h3>
+				<div class="space-y-2 text-sm">
+					<label class="flex items-start gap-2 cursor-pointer">
+						<input type="radio" name="privacy" value="safe" checked class="mt-0.5 border-edge text-accent"/>
+						<span>
+							<strong>Safe</strong> (recommended)
+							<span class="block text-xs text-fg-muted">Excludes DM-only content, private entities, and GM-only session notes. Best for sharing with an AI you don't fully trust.</span>
+						</span>
+					</label>
+					<label class="flex items-start gap-2 cursor-pointer">
+						<input type="radio" name="privacy" value="permitted" class="mt-0.5 border-edge text-accent"/>
+						<span>
+							<strong>Permitted</strong>
+							<span class="block text-xs text-fg-muted">Includes everything you can see as Owner. GM-only content is included if you opt in below.</span>
+						</span>
+					</label>
+					<label class="flex items-start gap-2 cursor-pointer">
+						<input type="radio" name="privacy" value="everything" class="mt-0.5 border-edge text-accent"/>
+						<span>
+							<strong>Everything</strong>
+							<span class="block text-xs text-fg-muted">No visibility filtering. Includes content even players never see. Use only with AI tools you fully trust.</span>
+						</span>
+					</label>
+				</div>
+			</div>
+
+			<div>
+				<label class="flex items-center gap-2 cursor-pointer text-sm">
+					<input type="checkbox" name="gm_notes" value="on" class="rounded border-edge text-accent"/>
+					<span>
+						Include session GM notes
+						<span class="block text-xs text-fg-muted">Only applies in Permitted or Everything mode. Session recaps are always included regardless.</span>
+					</span>
+				</label>
+			</div>
+
+			<div class="flex items-center gap-3 pt-2">
+				<button type="submit" class="btn-primary">
+					<i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i> Generate
+				</button>
+				<span id="ai-export-generating" class="htmx-indicator text-xs text-fg-muted">
+					<i class="fa-solid fa-spinner fa-spin mr-1"></i> Building markdown...
+				</span>
+			</div>
+		</form>
+
+		// Host element for the modal fragment — handler swaps content
+		// here, then the modal Alpine state takes over for show/hide.
+		<div id="ai-export-modal-host"></div>
+	</div>
+}

@@ -54,11 +54,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.PUT("", h.Update, RequireRole(RoleOwner))
 	cg.DELETE("", h.Delete, RequireRole(RoleOwner))
 	cg.GET("/settings", h.Settings, RequireRole(RoleOwner))
-	// AI-export markdown generator. Owner-only — the export is the
-	// owner's view of THEIR campaign; D4=(c) backup pipeline remains
-	// the separate lossless surface. Auth-pin lives at
-	// internal/wire/ai_export_route_test.go.
-	cg.GET("/ai-export/generate", h.GenerateAIExport, RequireRole(RoleOwner))
+	// /ai-export/generate relocated to the ai_workspace plugin in
+	// C-AI-WORKSPACE-V1-B. URL preserved; mounted via
+	// ai_workspace.RegisterOwnerRoutes against the same campaign
+	// group. AST owner-gate pin moved to track the new file location.
 	cg.GET("/customize", h.Customize, RequireRole(RoleOwner))
 	cg.GET("/customize/layout-editor/:etid", h.LayoutEditorFragment, RequireRole(RoleOwner))
 

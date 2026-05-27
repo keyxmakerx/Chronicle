@@ -33,12 +33,17 @@ type builtInTabSpec struct {
 	MinRole Role
 }
 
+// builtInTabs is the set of tabs the campaigns plugin owns directly.
+// The AI Export tab from V1-A was retired in C-AI-WORKSPACE-V1-B —
+// the renderer + tab content live in internal/plugins/ai_workspace/
+// now; the ai_workspace plugin registers its replacement at
+// SortOrder 55 via campaigns.RegisterSettingsTab. See
+// TestRegisterSettingsTab_MergesAndSorts for the merged-order pin.
 var builtInTabs = []builtInTabSpec{
 	{"general", RolePlayer},
 	{"features", RoleOwner},
 	{"people", RolePlayer},
 	{"integrations", RolePlayer},
-	{"ai-export", RoleOwner},
 	{"activity", RolePlayer},
 }
 
@@ -90,7 +95,7 @@ func TestSettingsTabs_PlayerDropsOwnerOnlyTabs(t *testing.T) {
 		}
 	}
 	for _, id := range gotIDs {
-		if id == "features" || id == "ai-export" {
+		if id == "features" {
 			t.Errorf("player leaked owner-only tab %q", id)
 		}
 	}
@@ -106,8 +111,8 @@ func TestSettingsTabs_ScribeMatchesOwnerMinusOwnerGates(t *testing.T) {
 
 	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, nil, false)
 	for _, tab := range got {
-		if tab.ID == "features" || tab.ID == "ai-export" {
-			t.Errorf("scribe leaked owner-only tab %q (pre-refactor templ gated these on >= RoleOwner)", tab.ID)
+		if tab.ID == "features" {
+			t.Errorf("scribe leaked owner-only tab %q (pre-refactor templ gated this on >= RoleOwner)", tab.ID)
 		}
 	}
 	wantCount := 4 // general, people, integrations, activity
@@ -122,18 +127,20 @@ func TestSettingsTabs_ScribeMatchesOwnerMinusOwnerGates(t *testing.T) {
 // Activity (60) — so this test pins that specific landing.
 func TestRegisterSettingsTab_MergesAndSorts(t *testing.T) {
 	h := &Handler{}
-	h.RegisterSettingsTab(SettingsTab{
-		ID:        "ai-workspace",
-		Label:     "AI Workspace",
-		Icon:      "fa-solid fa-brain",
-		MinRole:   RoleOwner,
-		SortOrder: 55,
+	h.RegisterSettingsTab(func(*CampaignContext) SettingsTab {
+		return SettingsTab{
+			ID:        "ai-workspace",
+			Label:     "AI Workspace",
+			Icon:      "fa-solid fa-brain",
+			MinRole:   RoleOwner,
+			SortOrder: 55,
+		}
 	})
 
 	cc := ctxWithRole(RoleOwner)
 	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, nil, false)
 	gotIDs := tabIDs(got)
-	want := []string{"general", "features", "people", "integrations", "ai-export", "ai-workspace", "activity"}
+	want := []string{"general", "features", "people", "integrations", "ai-workspace", "activity"}
 	if len(gotIDs) != len(want) {
 		t.Fatalf("merged tabs len=%d, want %d: got %v want %v", len(gotIDs), len(want), gotIDs, want)
 	}
@@ -150,9 +157,14 @@ func TestRegisterSettingsTab_MergesAndSorts(t *testing.T) {
 // like "AI Workspace > Prompt" + "AI Workspace > Import").
 func TestRegisterSettingsTab_StableSortOnTie(t *testing.T) {
 	h := &Handler{}
-	h.RegisterSettingsTab(SettingsTab{ID: "a", MinRole: RolePlayer, SortOrder: 100})
-	h.RegisterSettingsTab(SettingsTab{ID: "b", MinRole: RolePlayer, SortOrder: 100})
-	h.RegisterSettingsTab(SettingsTab{ID: "c", MinRole: RolePlayer, SortOrder: 100})
+	tabFactory := func(id string) func(*CampaignContext) SettingsTab {
+		return func(*CampaignContext) SettingsTab {
+			return SettingsTab{ID: id, MinRole: RolePlayer, SortOrder: 100}
+		}
+	}
+	h.RegisterSettingsTab(tabFactory("a"))
+	h.RegisterSettingsTab(tabFactory("b"))
+	h.RegisterSettingsTab(tabFactory("c"))
 
 	cc := ctxWithRole(RolePlayer)
 	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, nil, false)
