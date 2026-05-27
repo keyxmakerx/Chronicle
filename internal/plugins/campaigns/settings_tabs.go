@@ -50,19 +50,25 @@ type SettingsTab struct {
 	Content   templ.Component
 }
 
-// RegisterSettingsTab appends a tab to the Handler's plugin-contributed
-// registry. Called by other plugins at startup (after the campaigns
-// handler is constructed and after their own services are wired). The
-// AI Workspace plugin (Phase 2) is the first caller; the built-in tabs
-// don't go through this path — they're constructed inline in the
-// Settings handler so the existing per-tab dependency wiring stays
-// invisible to other plugins.
+// RegisterSettingsTab appends a tab-factory to the Handler's plugin-
+// contributed registry. Called by other plugins at startup (after the
+// campaigns handler is constructed and after their own services are
+// wired). The factory is invoked per-request inside visibleSettingsTabs
+// with the current CampaignContext so the plugin's tab Content closure
+// can capture per-request state (campaign ID, csrf token via context,
+// member role for finer-grained rendering, etc).
+//
+// The factory shape (rather than a static SettingsTab) is the
+// difference between Phase 1's API sketch and the working shape — the
+// AI Workspace plugin (Phase 2) is the first caller and needs the per-
+// request binding. Built-in tabs don't go through this path; they're
+// constructed inline in the Settings handler.
 //
 // Tabs added here merge with the built-ins at render time; sorting is
 // stable per SortOrder + insertion order so a plugin contributing two
 // tabs with the same SortOrder preserves call order.
-func (h *Handler) RegisterSettingsTab(t SettingsTab) {
-	h.extraSettingsTabs = append(h.extraSettingsTabs, t)
+func (h *Handler) RegisterSettingsTab(factory func(*CampaignContext) SettingsTab) {
+	h.extraSettingsTabs = append(h.extraSettingsTabs, factory)
 }
 
 // builtInSettingsTabs returns the six pre-AI-Workspace tabs in their
@@ -115,14 +121,12 @@ func (h *Handler) builtInSettingsTabs(
 			SortOrder: 40,
 			Content:   settingsIntegrationsTab(cc, csrfToken, h.baseURL),
 		},
-		{
-			ID:        "ai-export",
-			Label:     "AI Export",
-			Icon:      "fa-solid fa-wand-magic-sparkles",
-			MinRole:   RoleOwner,
-			SortOrder: 50,
-			Content:   settingsAIExportTab(cc),
-		},
+		// SortOrder slot 50 is intentionally left empty — the AI
+		// Workspace plugin (NW-2.2+ ai_workspace) registers its tab at
+		// slot 55 via campaigns.RegisterSettingsTab. The campaigns-side
+		// AI Export tab was retired in C-AI-WORKSPACE-V1-B; the
+		// renderer + tab content now live in
+		// internal/plugins/ai_workspace/.
 		{
 			ID:        "activity",
 			Label:     "Activity",
@@ -153,7 +157,9 @@ func (h *Handler) visibleSettingsTabs(
 	built := h.builtInSettingsTabs(cc, transfer, members, csrfToken, systemOptions, addons, smtpConfigured)
 	all := make([]SettingsTab, 0, len(built)+len(h.extraSettingsTabs))
 	all = append(all, built...)
-	all = append(all, h.extraSettingsTabs...)
+	for _, factory := range h.extraSettingsTabs {
+		all = append(all, factory(cc))
+	}
 	sort.SliceStable(all, func(i, j int) bool {
 		return all[i].SortOrder < all[j].SortOrder
 	})

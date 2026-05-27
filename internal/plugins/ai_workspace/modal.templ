@@ -1,27 +1,25 @@
-// ai_export_modal.templ — HTMX fragment returned by
-// GenerateAIExport. Renders the markdown body inside a
-// <pre class="select-all"> + Copy button + Download-as-md link.
+// modal.templ — HTMX fragment returned by the GenerateAIExport
+// handler. Same structure as the campaigns-plugin AI Export modal
+// from PR #350; moved into the AI Workspace plugin by V1-B per
+// reports/chronicle/2026-05-26-c-ai-workspace-scoping.md §4 Phase 2.
 //
-// The select-all class invites the user to click anywhere in the
-// pre block and Ctrl-A to select; the Copy button does the same
-// via navigator.clipboard.writeText (see static/js/widgets/ai_export.js).
+// Functionally identical to the pre-migration modal:
+//   - same select-all <pre> body
+//   - same Copy button wiring (data-widget="ai-export"; the global
+//     /static/js/widgets/ai_export.js handles clipboard write)
+//   - same Alpine.js show/hide via x-data + click.outside
 //
-// Per AskUserQuestion answer 3 (2026-05-26), the renderer's
-// "**Estimated tokens:** ~N,NNN" line is already in the markdown
-// header — no separate UI surface needed; it's visible in the <pre>.
-package campaigns
+// The token-estimate header is already embedded in the markdown body
+// (from aiexport.RenderHeader), so the modal surfaces no separate
+// token UI — the <pre>'s first lines are the estimate.
+
+package ai_workspace
 
 import "fmt"
 
-// AIExportModal is the fragment the GenerateAIExport handler renders.
-// Either markdown is non-empty + errMsg is empty (success case) OR
-// markdown is empty + errMsg carries an explanation.
-//
-// The outer wrapper carries data-widget="ai-export" so the JS widget
-// (static/js/widgets/ai_export.js) can mount its Copy handler against
-// the contained <pre>. Modal uses Alpine.js for show/hide; the
-// settings-tab form HTMX-loads the fragment + triggers `ai-export:open`
-// to flip the visibility.
+// AIExportModal renders the Generate response. Either markdown is
+// non-empty + errMsg is empty (success) OR markdown is empty +
+// errMsg carries a human-readable failure reason.
 templ AIExportModal(markdown, errMsg string) {
 	<div
 		data-widget="ai-export"

@@ -13,7 +13,6 @@ import (
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
 
-	"github.com/keyxmakerx/chronicle/internal/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -22,6 +21,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/backup"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -2398,16 +2399,24 @@ func (a *App) RegisterRoutes() {
 	campaignHandler.SetSystemLister(&systemListerAdapter{})
 	tagHandler.SetAuditService(auditService)
 
-	// --- AI-Export (C-AI-EXPORT-V1) ---
-	// PR-A shipped the renderer package at internal/aiexport. PR-B
-	// wires it into the campaigns settings page. The package depends
-	// on narrow per-plugin lister interfaces — every plugin service
-	// already implements them (zero new SQL in this dispatch). The
-	// adapter below bridges campaigns.AIExportService (string-typed
-	// owner-supplied options) to aiexport.Options (typed constants).
+	// --- AI Workspace (C-AI-WORKSPACE-V1-B) ---
+	// First plugin built under the post-NW-2.2 isolation rules.
+	// Owns the AI Export feature (relocated from internal/aiexport),
+	// the Prompt builder (Phase 3), and the AI Import surface
+	// (Phases 4-5). The renderer Service depends on narrow per-plugin
+	// listers; every plugin Service already implements them.
+	//
+	// Wiring:
+	//   1. Construct the renderer with each plugin's Service.
+	//   2. Build the plugin handler around the renderer + audit hook.
+	//   3. Register the settings-tab factory with campaigns.
+	//   4. Mount the owner-gated routes on a /campaigns/:id group
+	//      that already enforces auth + campaign membership (mirror
+	//      of foundry_vtt's RegisterOwnerRoutes pattern).
+	//
 	// D4=(c) lossless backup carve-out preserved — no edits to
 	// internal/app/export_adapters.go or the restore pipeline.
-	aiExportRenderer := aiexport.NewService(
+	aiWorkspaceRenderer := aiexport.NewService(
 		entityService,
 		noteSvc,
 		calendarService,
@@ -2416,7 +2425,16 @@ func (a *App) RegisterRoutes() {
 		relService,
 		tagService,
 	)
-	campaignHandler.SetAIExportService(&aiExportAdapter{svc: aiExportRenderer})
+	aiWorkspaceHandler := ai_workspace.NewHandler(aiWorkspaceRenderer)
+	aiWorkspaceHandler.SetAuditLogger(&aiWorkspaceAuditAdapter{svc: auditService})
+	campaignHandler.RegisterSettingsTab(aiWorkspaceHandler.SettingsTabFactory())
+
+	aiWorkspaceCampaignAuthed := e.Group("/campaigns/:id",
+		auth.RequireAuth(authService),
+		campaigns.RequireCampaignAccess(campaignService),
+	)
+	ai_workspace.RegisterOwnerRoutes(aiWorkspaceCampaignAuthed, aiWorkspaceHandler,
+		campaigns.RequireRole(campaigns.RoleOwner))
 
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)
@@ -3081,39 +3099,20 @@ func (a *mediaUploadAdapter) UploadRaw(ctx context.Context, campaignID, userID s
 	return file.Filename, nil
 }
 
-// aiExportAdapter bridges campaigns.AIExportService (the narrow
-// interface campaigns/handler.go consumes) to the concrete
-// *aiexport.Service that internal/aiexport actually implements.
-// Translates the string-typed campaigns.AIExportOptions to
-// aiexport.Options' typed constants — same pattern as the
-// other plugin↔plugin adapters in this file.
-type aiExportAdapter struct {
-	svc *aiexport.Service
+// aiWorkspaceAuditAdapter bridges audit.AuditService to the narrow
+// ai_workspace.AuditLogger contract. The plugin doesn't import the
+// audit package directly — same isolation pattern as
+// campaignAuditAdapter above (this adapter wraps the same underlying
+// service, just exposes a different narrow interface).
+type aiWorkspaceAuditAdapter struct {
+	svc audit.AuditService
 }
 
-func (a *aiExportAdapter) Generate(ctx context.Context, campaignName, ownerID, campaignID string, opts campaigns.AIExportOptions) (string, error) {
-	mapped := aiexport.Options{
-		Privacy:               parseAIExportPrivacy(opts.Privacy),
-		IncludeSessionGMNotes: opts.IncludeSessionGMNotes,
-	}
-	for _, c := range opts.Categories {
-		mapped.Categories = append(mapped.Categories, aiexport.Category(c))
-	}
-	return a.svc.Generate(ctx, campaignName, ownerID, campaignID, mapped)
-}
-
-// parseAIExportPrivacy maps the form-string the campaigns handler
-// surfaces ("safe" / "permitted" / "everything") to the typed
-// aiexport.PrivacyMode constant. Unknown values fall back to Safe
-// (the most-restrictive default) so a future UI bug that ships an
-// unrecognised string can't silently downgrade the privacy filter.
-func parseAIExportPrivacy(s string) aiexport.PrivacyMode {
-	switch s {
-	case "permitted":
-		return aiexport.PrivacyModePermitted
-	case "everything":
-		return aiexport.PrivacyModeEverything
-	default:
-		return aiexport.PrivacyModeSafe
-	}
+func (a *aiWorkspaceAuditAdapter) LogCampaignEvent(ctx context.Context, campaignID, action string, details map[string]any) {
+	// Fire-and-forget; audit failures must not break the response.
+	_ = a.svc.Log(ctx, &audit.AuditEntry{
+		CampaignID: campaignID,
+		Action:     action,
+		Details:    details,
+	})
 }
