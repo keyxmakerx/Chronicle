@@ -384,6 +384,7 @@ POST	/:id/review	internal/plugins/packages/routes.go
 POST	/account/avatar	internal/plugins/auth/routes.go
 POST	/account/reauth	internal/plugins/auth/routes.go
 POST	/addons	internal/plugins/addons/routes.go
+POST	/ai-workspace/import/parse	internal/plugins/ai_workspace/routes.go
 POST	/api-keys	internal/plugins/syncapi/routes.go
 POST	/api/cors	internal/plugins/settings/routes.go
 POST	/api/ip-blocks	internal/plugins/syncapi/routes.go

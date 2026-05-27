@@ -18,6 +18,7 @@ package ai_workspace
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -45,6 +47,12 @@ type Handler struct {
 	// — nil renders an explanatory error in the prompt modal so the
 	// operator sees a clear message instead of a panic.
 	promptBuilder *prompt.Service
+
+	// importLookup is the narrow contract the import classifier
+	// needs from the entities service. Optional — nil produces an
+	// "import not configured" message at parse time. Wired in
+	// app/routes.go alongside the renderer + prompt builder.
+	importLookup importer.CampaignLookup
 
 	// audit is invoked once per successful Generate. Same shape as
 	// the campaigns-plugin audit hook the V1 PR #350 used; we keep
@@ -82,6 +90,141 @@ func (h *Handler) SetAuditLogger(a AuditLogger) {
 // modal at GeneratePrompt time rather than a panic.
 func (h *Handler) SetPromptBuilder(b *prompt.Service) {
 	h.promptBuilder = b
+}
+
+// SetImportLookup wires the campaign lookup the import classifier
+// uses to detect slug conflicts + unknown entity-type categories.
+// Optional — nil produces a "service unavailable" review fragment
+// at parse time.
+func (h *Handler) SetImportLookup(l importer.CampaignLookup) {
+	h.importLookup = l
+}
+
+// ParseImport accepts multipart-or-textarea markdown input,
+// parses it into per-page ParsedPage structs, classifies each
+// against live campaign state (conflict / new category / etc),
+// and returns the review fragment that the operator inspects
+// before committing. NO entity is created in this PR — Submit
+// in the review screen is inert until Phase 5 wires the commit
+// handler.
+//
+// POST /campaigns/:id/ai-workspace/import/parse
+//
+// Form fields (multipart/form-data):
+//   - markdown_paste: textarea contents (single page or multi-page)
+//   - markdown_files: zero-or-more .md file uploads
+//
+// Files and paste content are concatenated with `\n\n` separators
+// before parsing — pasted text comes first, then each file in the
+// order the operator selected them.
+func (h *Handler) ParseImport(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.importLookup == nil {
+		return middleware.Render(c, http.StatusOK,
+			ImportReview(ImportReviewData{
+				CampaignID: cc.Campaign.ID,
+				SummaryCounts: ReviewSummary{Total: 0},
+			}))
+	}
+
+	body, err := readImportBody(c)
+	if err != nil {
+		return apperror.NewBadRequest(err.Error())
+	}
+	if strings.TrimSpace(body) == "" {
+		return apperror.NewBadRequest("no markdown content found — paste text or upload .md files")
+	}
+
+	pages := importer.Parse(body)
+	cls, err := importer.NewClassifier(h.importLookup, cc.Campaign.ID).
+		ClassifyAll(c.Request().Context(), pages)
+	if err != nil {
+		slog.Error("ai-workspace: classify failed",
+			slog.String("campaign_id", cc.Campaign.ID),
+			slog.Any("error", err))
+		return apperror.NewInternal(err)
+	}
+
+	summary := ReviewSummary{Total: len(pages)}
+	for _, c := range cls {
+		switch c.Status {
+		case importer.StatusNew:
+			summary.Selectable++
+		case importer.StatusConflict:
+			summary.Selectable++
+			summary.Conflicts++
+		case importer.StatusNewCategory:
+			summary.Selectable++
+			summary.NewCategories++
+		case importer.StatusParseError:
+			summary.ParseErrors++
+		}
+	}
+
+	if h.audit != nil {
+		h.audit.LogCampaignEvent(c.Request().Context(),
+			cc.Campaign.ID, "campaign.ai_import.parsed",
+			map[string]any{
+				"total_pages":     summary.Total,
+				"selectable":      summary.Selectable,
+				"conflicts":       summary.Conflicts,
+				"new_categories":  summary.NewCategories,
+				"parse_errors":    summary.ParseErrors,
+				"input_byte_size": len(body),
+			})
+	}
+
+	return middleware.Render(c, http.StatusOK, ImportReview(ImportReviewData{
+		CampaignID:    cc.Campaign.ID,
+		Pages:         pages,
+		Classes:       cls,
+		SummaryCounts: summary,
+	}))
+}
+
+// readImportBody concatenates the textarea + every uploaded .md
+// file's content. Caps total input at 5 MB to prevent a single
+// import from chewing memory.
+const importBodyCap = 5 * 1024 * 1024
+
+func readImportBody(c echo.Context) (string, error) {
+	var b strings.Builder
+	pasted := strings.TrimSpace(c.FormValue("markdown_paste"))
+	if pasted != "" {
+		b.WriteString(pasted)
+		b.WriteString("\n\n")
+	}
+
+	form, err := c.MultipartForm()
+	if err != nil && err != http.ErrNotMultipart {
+		return "", err
+	}
+	if form != nil {
+		files := form.File["markdown_files"]
+		for _, fh := range files {
+			if b.Len()+int(fh.Size) > importBodyCap {
+				return "", apperror.NewBadRequest(
+					"total upload + paste exceeds 5 MB cap; split into smaller batches").Internal
+			}
+			f, err := fh.Open()
+			if err != nil {
+				return "", err
+			}
+			buf := make([]byte, fh.Size)
+			if _, err := io.ReadFull(f, buf); err != nil {
+				_ = f.Close()
+				return "", err
+			}
+			_ = f.Close()
+			b.Write(buf)
+			b.WriteString("\n\n")
+		}
+	}
+
+	return b.String(), nil
 }
 
 // GeneratePrompt renders the "Copy AI Prompt" markdown for the
