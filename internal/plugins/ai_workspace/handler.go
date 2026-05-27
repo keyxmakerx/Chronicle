@@ -27,6 +27,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -39,6 +40,11 @@ type Handler struct {
 	// renderer is the (relocated) internal/aiexport orchestrator.
 	// Constructed in app/routes.go from every plugin's lister Service.
 	renderer *aiexport.Service
+
+	// promptBuilder assembles the "Copy AI Prompt" output. Optional
+	// — nil renders an explanatory error in the prompt modal so the
+	// operator sees a clear message instead of a panic.
+	promptBuilder *prompt.Service
 
 	// audit is invoked once per successful Generate. Same shape as
 	// the campaigns-plugin audit hook the V1 PR #350 used; we keep
@@ -67,6 +73,87 @@ func NewHandler(renderer *aiexport.Service) *Handler {
 // docstring.
 func (h *Handler) SetAuditLogger(a AuditLogger) {
 	h.audit = a
+}
+
+// SetPromptBuilder wires the prompt service. Called by app/routes.go
+// after the cross-plugin Service dependencies (entity lister, tag
+// lister, the renderer reused as the content Exporter) are wired.
+// Optional in test fixtures — nil produces a "service unavailable"
+// modal at GeneratePrompt time rather than a panic.
+func (h *Handler) SetPromptBuilder(b *prompt.Service) {
+	h.promptBuilder = b
+}
+
+// GeneratePrompt renders the "Copy AI Prompt" markdown for the
+// campaign owner and returns the modal fragment that displays it
+// with a Copy button. Owner-gated at the route level
+// (RequireRole(RoleOwner)). Reuses the same data-widget="ai-export"
+// JS hook the Export modal uses (one widget, two consumers).
+//
+// GET /campaigns/:id/ai-workspace/prompt/generate
+//
+// Query params (all optional; defaults shown):
+//   schema_types          ("on" → include entity-types section)
+//   schema_categories     ("on" → include categories-in-use section)
+//   schema_front_matter   ("on" → include front-matter example)
+//   content_mode          "none" (default) | "all" | comma-separated
+//                         category slugs
+//   privacy               "safe" (default) | "permitted" | "everything"
+//   gm_notes              "on" → include session GM notes in content
+//   instruction           operator's free-text textarea contents
+//
+// Returns the prompt modal templ; any error from the builder surfaces
+// in the modal's error region rather than a top-level apperror so
+// the operator sees an in-modal failure they can correct.
+func (h *Handler) GeneratePrompt(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.promptBuilder == nil {
+		return middleware.Render(c, http.StatusOK,
+			PromptModal("", "AI prompt builder is not configured on this server."))
+	}
+
+	in := prompt.Input{
+		IncludeEntityTypes:        c.QueryParam("schema_types") == "on",
+		IncludeCategoriesInUse:    c.QueryParam("schema_categories") == "on",
+		IncludeFrontMatterExample: c.QueryParam("schema_front_matter") == "on",
+		ContentMode:               strings.TrimSpace(c.QueryParam("content_mode")),
+		Privacy:                   parsePrivacy(c.QueryParam("privacy")),
+		IncludeSessionGMNotes:     c.QueryParam("gm_notes") == "on",
+		OperatorInstruction:       c.QueryParam("instruction"),
+	}
+	if in.ContentMode == "" {
+		in.ContentMode = "none"
+	}
+
+	userID := auth.GetUserID(c)
+	out, err := h.promptBuilder.Build(c.Request().Context(),
+		cc.Campaign.Name, userID, cc.Campaign.ID, in)
+	if err != nil {
+		slog.Error("ai-workspace: prompt generate failed",
+			slog.String("campaign_id", cc.Campaign.ID),
+			slog.Any("error", err))
+		return middleware.Render(c, http.StatusOK,
+			PromptModal("", "Could not build prompt: "+err.Error()))
+	}
+
+	if h.audit != nil {
+		h.audit.LogCampaignEvent(c.Request().Context(),
+			cc.Campaign.ID, "campaign.ai_prompt.generated",
+			map[string]any{
+				"content_mode":        in.ContentMode,
+				"privacy":             c.QueryParam("privacy"),
+				"schema_types":        in.IncludeEntityTypes,
+				"schema_categories":   in.IncludeCategoriesInUse,
+				"schema_front_matter": in.IncludeFrontMatterExample,
+				"include_gm_notes":    in.IncludeSessionGMNotes,
+				"prompt_byte_count":   len(out),
+			})
+	}
+
+	return middleware.Render(c, http.StatusOK, PromptModal(out, ""))
 }
 
 // GenerateAIExport renders the AI-export markdown for the campaign

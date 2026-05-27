@@ -1,0 +1,88 @@
+// prompt_modal.templ — modal returned by GeneratePrompt. Mirrors
+// AIExportModal's shape so the existing /static/js/widgets/ai_export.js
+// Copy widget can bind to both. The widget reads data-ai-export-body
+// + data-ai-export-copy; we keep those attribute names verbatim so
+// no JS changes are needed.
+
+package ai_workspace
+
+import "fmt"
+
+// PromptModal renders the GeneratePrompt response. Either prompt is
+// non-empty + errMsg is empty (success case) OR prompt is empty +
+// errMsg carries a human-readable failure reason.
+templ PromptModal(prompt, errMsg string) {
+	<div
+		data-widget="ai-export"
+		id="ai-prompt-modal"
+		role="dialog"
+		aria-labelledby="ai-prompt-modal-title"
+		x-data="{ open: true, copied: false }"
+		x-show="open"
+		@keydown.escape.window="open = false"
+		class="fixed inset-0 z-50 flex items-start justify-center p-4 pt-12 bg-black/50 overflow-y-auto"
+	>
+		<div
+			@click.outside="open = false"
+			class="bg-surface border border-edge rounded-lg shadow-xl max-w-4xl w-full flex flex-col max-h-[85vh]"
+		>
+			<div class="flex items-center justify-between px-5 py-3 border-b border-edge shrink-0">
+				<h3 id="ai-prompt-modal-title" class="text-lg font-semibold text-fg">
+					<i class="fa-solid fa-wand-magic-sparkles mr-2 text-accent"></i> Copy AI Prompt
+				</h3>
+				<button
+					type="button"
+					@click="open = false"
+					aria-label="Close"
+					class="text-fg-muted hover:text-fg p-1 rounded transition-colors"
+				>
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+
+			if errMsg != "" {
+				<div class="px-5 py-4 text-sm text-rose-700 bg-rose-50 dark:text-rose-300 dark:bg-rose-950/30 border-b border-edge">
+					<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+					{ errMsg }
+				</div>
+			} else {
+				<div class="flex items-center gap-2 px-5 py-2 bg-surface-alt border-b border-edge text-xs text-fg-muted shrink-0">
+					<span class="flex-1">
+						Copy this prompt and paste it into Claude, ChatGPT, or another AI tool. The output you paste back here should follow the same format.
+					</span>
+					<button
+						type="button"
+						class="btn-primary text-xs px-3 py-1.5"
+						data-ai-export-copy
+						@click="copied = true; setTimeout(() => copied = false, 2000)"
+					>
+						<span x-show="!copied"><i class="fa-solid fa-copy mr-1"></i> Copy</span>
+						<span x-show="copied" x-cloak><i class="fa-solid fa-check mr-1"></i> Copied</span>
+					</button>
+				</div>
+
+				<div class="px-5 py-4 overflow-auto flex-1 min-h-0">
+					<pre
+						data-ai-export-body
+						class="select-all whitespace-pre-wrap break-words text-xs font-mono text-fg leading-relaxed bg-surface-alt p-4 rounded border border-edge"
+					>{ prompt }</pre>
+					<p class="text-xs text-fg-muted mt-2">
+						{ fmt.Sprintf("%d characters · ~%d tokens", len(prompt), estimateTokens(prompt)) }
+					</p>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+// estimateTokens is the same 4-chars-per-token heuristic
+// aiexport.RenderHeader uses for the export modal. Keeping a
+// duplicate here (rather than importing aiexport) is intentional —
+// it's a one-liner and the prompt modal shouldn't drag in the
+// renderer package just for this UI surface.
+func estimateTokens(s string) int {
+	if s == "" {
+		return 0
+	}
+	return (len(s) + 3) / 4
+}
