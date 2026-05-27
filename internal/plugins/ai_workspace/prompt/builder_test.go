@@ -270,7 +270,7 @@ func TestBuild_OperatorInstructionPosition(t *testing.T) {
 	if schemaIdx < 0 || contentIdx < 0 || instructionIdx < 0 {
 		t.Fatalf("missing section anchors in output:\n%s", got)
 	}
-	if !(schemaIdx < contentIdx && contentIdx < instructionIdx) {
+	if schemaIdx >= contentIdx || contentIdx >= instructionIdx {
 		t.Errorf("section order schema(%d) → content(%d) → instruction(%d) violated",
 			schemaIdx, contentIdx, instructionIdx)
 	}
