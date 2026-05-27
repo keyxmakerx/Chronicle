@@ -26,6 +26,12 @@ type ImportReviewData struct {
 	Classes    []importer.Classification // same order/length as Pages
 	// SummaryCounts is a small struct for the header counters.
 	SummaryCounts ReviewSummary
+	// MarkdownSource is the original input markdown the operator
+	// pasted/uploaded. The review form embeds it as a hidden field
+	// so the commit handler can re-parse the body content per row
+	// at Submit time (avoids round-tripping the full per-page body
+	// + the original FM through the form as separate fields).
+	MarkdownSource string
 }
 
 // ReviewSummary is the per-status tally rendered above the table.
@@ -41,11 +47,20 @@ type ReviewSummary struct {
 // + the inert Submit button. HTMX swaps this into
 // #ai-import-review-host.
 templ ImportReview(d ImportReviewData) {
-	<div
+	<form
 		id="ai-import-review"
+		hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/commit", d.CampaignID) }
+		hx-target="#ai-import-review-host"
+		hx-swap="innerHTML"
+		hx-indicator="#ai-import-committing"
 		x-data={ "{ }" }
 		class="card p-4 mt-4"
 	>
+		// Re-pass the original markdown source so the commit handler
+		// can re-parse + match form fields by index. Avoids round-
+		// tripping every per-page body as a separate hidden field.
+		<input type="hidden" name="markdown_source" value={ d.MarkdownSource }/>
+
 		<div class="flex items-baseline justify-between mb-3">
 			<h3 class="text-base font-semibold text-fg">
 				Review — { strconv.Itoa(d.SummaryCounts.Total) } pages detected
@@ -78,22 +93,29 @@ templ ImportReview(d ImportReviewData) {
 		</div>
 
 		<div class="flex items-center gap-3 mt-5 pt-4 border-t border-edge">
-			// Submit is intentionally disabled in Phase 4 — the
-			// commit handler lands in Phase 5. The button stays
-			// visible so the operator can see the planned flow.
+			// Phase 5 (C-AI-WORKSPACE-V1-E) — Submit is live. The
+			// commit handler POST /ai-workspace/import/commit
+			// creates entities (with per-row autonomy) + creates
+			// any new categories the operator confirmed, then
+			// HTMX-swaps the import_result fragment into place.
 			<button
-				type="button"
-				disabled
-				class="btn-primary opacity-50 cursor-not-allowed"
-				title="Commit handler lands in Phase 5 (C-AI-WORKSPACE-V1-E). The review screen is read-only in this PR."
+				type="submit"
+				class="btn-primary"
+				disabled?={ d.SummaryCounts.Selectable == 0 }
 			>
-				<i class="fa-solid fa-lock mr-1.5"></i> Import { strconv.Itoa(d.SummaryCounts.Selectable) }
+				<i class="fa-solid fa-file-import mr-1.5"></i>
+				Import { strconv.Itoa(d.SummaryCounts.Selectable) } pages
 			</button>
-			<span class="text-xs text-fg-muted">
-				Submit is inert in Phase 4 (this PR) — Phase 5 wires the commit handler.
+			<span id="ai-import-committing" class="htmx-indicator text-xs text-fg-muted">
+				<i class="fa-solid fa-spinner fa-spin mr-1"></i> Committing...
 			</span>
+			if d.SummaryCounts.ParseErrors > 0 {
+				<span class="text-xs text-fg-muted">
+					{ fmt.Sprintf("(%d parse-error rows will be skipped)", d.SummaryCounts.ParseErrors) }
+				</span>
+			}
 		</div>
-	</div>
+	</form>
 }
 
 // bulkDefaultsBar renders the top-of-table controls. V1 Phase 4

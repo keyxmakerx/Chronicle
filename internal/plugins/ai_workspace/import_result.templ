@@ -1,0 +1,154 @@
+// import_result.templ renders the post-commit summary returned by
+// POST /ai-workspace/import/commit. One row per attempted page +
+// per-status counters at the top + a "Import more" affordance to
+// return the operator to the import form for another batch.
+//
+// Per scoping report §2.3 (result summary mockup — load-bearing).
+
+package ai_workspace
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// ImportResultData is the template's input. Built by the handler
+// from the Committer's CommitResult + the per-row name lookup so
+// the result rows can carry the original operator-typed name even
+// when the commit renamed/failed.
+type ImportResultData struct {
+	CampaignID string
+	Result     importer.CommitResult
+}
+
+// ImportResult is the fragment GeneratePrompt-style HTMX swap
+// replaces #ai-import-review-host with after a successful commit.
+templ ImportResult(d ImportResultData) {
+	<div id="ai-import-result" class="card p-4 mt-4">
+		<div class="flex items-baseline justify-between mb-3">
+			<h3 class="text-base font-semibold text-fg">
+				<i class="fa-solid fa-check-double mr-1 text-emerald-500"></i>
+				Import complete
+			</h3>
+			<button
+				type="button"
+				class="btn-secondary text-xs"
+				hx-get={ fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID) }
+				hx-target="#ai-import-review-host"
+				hx-swap="innerHTML"
+				title="Clear the result + return to the import form"
+			>
+				<i class="fa-solid fa-arrow-rotate-left mr-1"></i> Import more
+			</button>
+		</div>
+
+		@resultCounters(d.Result)
+
+		if len(d.Result.NewCategoriesCreated) > 0 || len(d.Result.NewCategoriesFailed) > 0 {
+			<div class="text-xs mt-2 text-fg-muted">
+				if len(d.Result.NewCategoriesCreated) > 0 {
+					<div>
+						<i class="fa-solid fa-folder-plus mr-1 text-sky-500"></i>
+						New categories created:
+						for i, slug := range d.Result.NewCategoriesCreated {
+							if i > 0 {
+								{ ", " }
+							}
+							<code>{ slug }</code>
+						}
+					</div>
+				}
+				if len(d.Result.NewCategoriesFailed) > 0 {
+					<div class="text-rose-700 dark:text-rose-300">
+						<i class="fa-solid fa-circle-xmark mr-1"></i>
+						Failed to create categories:
+						for i, slug := range d.Result.NewCategoriesFailed {
+							if i > 0 {
+								{ ", " }
+							}
+							<code>{ slug }</code>
+						}
+					</div>
+				}
+			</div>
+		}
+
+		<div class="space-y-2 mt-4">
+			for _, row := range d.Result.Rows {
+				@resultRow(d.CampaignID, row)
+			}
+		</div>
+	</div>
+}
+
+// resultCounters renders the top-of-result tally bar.
+templ resultCounters(r importer.CommitResult) {
+	<div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+		@counterPill("Created", r.Created, "emerald")
+		@counterPill("Renamed", r.Renamed, "amber")
+		@counterPill("Overwrote", r.Overwrote, "sky")
+		@counterPill("Skipped", r.Skipped, "slate")
+		@counterPill("Failed", r.Failed, "rose")
+	</div>
+}
+
+// counterPill is one cell of the counter grid.
+templ counterPill(label string, n int, color string) {
+	<div class={ "card p-2 text-center", "bg-" + color + "-50", "dark:bg-" + color + "-900/20" }>
+		<div class={ "text-base font-bold text-" + color + "-700", "dark:text-" + color + "-300" }>
+			{ fmt.Sprintf("%d", n) }
+		</div>
+		<div class="text-fg-muted">{ label }</div>
+	</div>
+}
+
+// resultRow renders one outcome row with a status icon + the
+// reason / entity link.
+templ resultRow(campaignID string, row importer.RowOutcome) {
+	<div class={
+		"flex items-start gap-2 text-xs",
+		templ.KV("text-fg", row.Status == importer.StatusCreated || row.Status == importer.StatusRenamed || row.Status == importer.StatusOverwrote),
+		templ.KV("text-fg-muted", row.Status == importer.StatusSkipped),
+		templ.KV("text-rose-700 dark:text-rose-300", row.Status == importer.StatusFailed),
+	}>
+		@resultRowIcon(row.Status)
+		<div class="flex-1 min-w-0">
+			<div class="font-medium">{ row.Name }</div>
+			if row.Reason != "" {
+				<div class="text-fg-muted">{ row.Reason }</div>
+			}
+		</div>
+		if row.EntityID != "" && row.Slug != "" {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", campaignID, row.Slug)) }
+				target="_blank"
+				rel="noopener"
+				class="text-accent hover:underline shrink-0"
+				title="Open the imported page"
+			>
+				Open <i class="fa-solid fa-arrow-up-right-from-square text-[10px] ml-0.5"></i>
+			</a>
+		}
+	</div>
+}
+
+// resultRowIcon is the small icon prefix per status.
+templ resultRowIcon(s importer.RowStatus) {
+	switch s {
+		case importer.StatusCreated:
+			<i class="fa-solid fa-check text-emerald-500 mt-0.5 shrink-0"></i>
+		case importer.StatusRenamed:
+			<i class="fa-solid fa-pen-to-square text-amber-500 mt-0.5 shrink-0"></i>
+		case importer.StatusOverwrote:
+			<i class="fa-solid fa-rotate text-sky-500 mt-0.5 shrink-0"></i>
+		case importer.StatusSkipped:
+			<i class="fa-solid fa-forward-step text-fg-muted mt-0.5 shrink-0"></i>
+		case importer.StatusFailed:
+			<i class="fa-solid fa-circle-xmark text-rose-500 mt-0.5 shrink-0"></i>
+	}
+}
+
+// ensure campaigns import referenced (silences unused).
+var _ = campaigns.RoleOwner

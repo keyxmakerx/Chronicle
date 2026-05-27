@@ -159,9 +159,13 @@ Body.`
 
 	out := rec.Body.String()
 
-	// Inert Submit button.
-	mustContain(t, out, "Submit is inert in Phase 4")
-	mustContain(t, out, "Phase 5 wires the commit handler")
+	// V1-E: Submit is now wired. Confirm the form posts to the
+	// commit endpoint + carries the markdown_source hidden field
+	// so the commit handler can re-parse without round-tripping
+	// the per-page bodies as separate fields.
+	mustContain(t, out, `hx-post="/campaigns/camp-1/ai-workspace/import/commit"`)
+	mustContain(t, out, `name="markdown_source"`)
+	mustContain(t, out, `type="submit"`)
 
 	// Page count + per-status counters.
 	mustContain(t, out, "5 pages detected")

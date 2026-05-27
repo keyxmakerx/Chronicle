@@ -34,4 +34,5 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	cg.GET("/ai-export/generate", h.GenerateAIExport, requireOwner)
 	cg.GET("/ai-workspace/prompt/generate", h.GeneratePrompt, requireOwner)
 	cg.POST("/ai-workspace/import/parse", h.ParseImport, requireOwner)
+	cg.POST("/ai-workspace/import/commit", h.CommitImport, requireOwner)
 }

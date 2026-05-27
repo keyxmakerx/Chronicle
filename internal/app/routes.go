@@ -23,6 +23,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/backup"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
@@ -2445,6 +2446,13 @@ func (a *App) RegisterRoutes() {
 	// GetEntityTypeBySlug + GetEntityTypes are already on its
 	// public interface). No adapter needed.
 	aiWorkspaceHandler.SetImportLookup(entityService)
+
+	// Phase 5 — Import commit. The entities service also
+	// implements importer.EntityCreator (Create + Update +
+	// UpdateEntry + CreateEntityType + the lookup methods).
+	// SEC-6-AMENDED ingress mirror is enforced by the AST pin in
+	// internal/plugins/ai_workspace/importer/committer_sanitize_test.go.
+	aiWorkspaceHandler.SetImportCommitter(importer.NewCommitter(entityService))
 
 	campaignHandler.RegisterSettingsTab(aiWorkspaceHandler.SettingsTabFactory())
 
