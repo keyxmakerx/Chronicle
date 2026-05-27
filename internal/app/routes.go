@@ -23,6 +23,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/backup"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -2427,6 +2428,18 @@ func (a *App) RegisterRoutes() {
 	)
 	aiWorkspaceHandler := ai_workspace.NewHandler(aiWorkspaceRenderer)
 	aiWorkspaceHandler.SetAuditLogger(&aiWorkspaceAuditAdapter{svc: auditService})
+
+	// Phase 3 — Prompt builder. Reuses the relocated aiexport renderer
+	// as the content Exporter so the prompt's "Existing world context"
+	// section inherits SEC-6-AMENDED egress sanitization + the privacy
+	// modes without duplicating logic.
+	aiWorkspacePrompt := prompt.NewService(
+		entityService,
+		tagService,
+		aiWorkspaceRenderer,
+	)
+	aiWorkspaceHandler.SetPromptBuilder(aiWorkspacePrompt)
+
 	campaignHandler.RegisterSettingsTab(aiWorkspaceHandler.SettingsTabFactory())
 
 	aiWorkspaceCampaignAuthed := e.Group("/campaigns/:id",

@@ -18,12 +18,19 @@ import (
 // plugin owns. Caller passes the same /campaigns/:id group used by
 // foundry_vtt + the RequireRole(RoleOwner) middleware.
 //
-// V1 Phase 2: only the relocated /ai-export/generate route. URL
-// preserved byte-for-byte from the campaigns-plugin registration
-// (PR #350) so operator bookmarks + external monitoring keep
-// working. The owner-gate AST pin in
-// internal/wire/ai_export_route_test.go is updated alongside this
-// PR to point at the new file path.
+// V1 Phase 2: the relocated /ai-export/generate route. URL preserved
+// byte-for-byte from the campaigns-plugin registration (PR #350) so
+// operator bookmarks + external monitoring keep working. The
+// owner-gate AST pin in internal/wire/ai_export_route_test.go points
+// at the new file path.
+//
+// V1 Phase 3 (this PR): adds /ai-workspace/prompt/generate — the
+// "Copy AI Prompt" builder. Same owner-gate; same per-route pin in
+// internal/wire/ai_workspace_prompt_route_test.go.
+//
+// Phases 4-5 will add /ai-workspace/import/parse +
+// /ai-workspace/import/commit on the same group.
 func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.MiddlewareFunc) {
 	cg.GET("/ai-export/generate", h.GenerateAIExport, requireOwner)
+	cg.GET("/ai-workspace/prompt/generate", h.GeneratePrompt, requireOwner)
 }

@@ -18,13 +18,180 @@ import (
 )
 
 // SettingsTabBody renders the AI Workspace settings tab. Top-level
-// container that nests each capability's section (V1 Phase 2: only
-// the Export section). Future phases append below.
+// container that nests each capability's section.
+//
+// Order matches the scoping report §2.1 mockup: Prompt builder
+// FIRST (entry point — operator generates a prompt, pastes into AI,
+// gets new content back, returns to Chronicle), then Export (the
+// other half of the same loop), then Import (Phase 4-5).
 templ SettingsTabBody(cc *campaigns.CampaignContext) {
 	<div class="space-y-6">
+		@promptBuilderSection(cc)
 		@aiExportSection(cc)
-		// Phase 3 will render @promptBuilderSection(cc) here.
 		// Phase 4-5 will render @importSection(cc) here.
+	</div>
+}
+
+// promptBuilderSection is the V1 Phase 3 picker UI. Operator selects
+// which schema bits to include + whether to embed content (and at
+// what privacy mode) + types the custom instruction; hits Generate
+// → the modal renders the assembled markdown with a Copy button.
+//
+// Per scoping §2.1 mockup + §3.5 template. Token estimate updates
+// reactively via Alpine.js — the rough estimate is computed
+// client-side from the picker state; the AUTHORITATIVE token count
+// is in the modal's footer once Generate runs (server-rendered).
+//
+// V1 picker exposes: entity types / categories / front-matter
+// example schema toggles; content mode (none / all); privacy radio;
+// GM-notes opt-in; custom instruction textarea. Sample-entity +
+// tags-vocabulary toggles are template-supported but deferred to V2
+// (no UI checkbox here).
+templ promptBuilderSection(cc *campaigns.CampaignContext) {
+	<div
+		class="card p-6"
+		x-data="{
+			schemaTypes: true,
+			schemaCategories: true,
+			schemaFrontMatter: true,
+			contentMode: 'none',
+			privacy: 'safe',
+			gmNotes: false,
+			instruction: '',
+			get estimate() {
+				let chars = 600; // base preamble + boilerplate
+				if (this.schemaTypes) chars += 400;
+				if (this.schemaCategories) chars += 600;
+				if (this.schemaFrontMatter) chars += 500;
+				if (this.contentMode !== 'none') chars += 30000; // content dominates
+				chars += this.instruction.length;
+				return Math.ceil(chars / 4);
+			}
+		}"
+	>
+		<div class="flex items-start gap-4 mb-4">
+			<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+				<i class="fa-solid fa-message text-accent text-lg"></i>
+			</span>
+			<div>
+				<h2 class="text-lg font-semibold text-fg">Copy AI Prompt</h2>
+				<p class="text-sm text-fg-secondary mt-0.5 leading-relaxed">
+					Build a context-rich prompt for Claude, ChatGPT, or another AI tool. Include your campaign's schema, optionally include existing content, and tell the AI what to generate. Output you paste back via AI Import (coming in Phase 4) is checked against this same schema.
+				</p>
+			</div>
+		</div>
+
+		<form
+			hx-get={ fmt.Sprintf("/campaigns/%s/ai-workspace/prompt/generate", cc.Campaign.ID) }
+			hx-target="#ai-prompt-modal-host"
+			hx-swap="innerHTML"
+			hx-indicator="#ai-prompt-generating"
+			class="space-y-5 mt-4"
+		>
+			<div>
+				<h3 class="text-sm font-medium text-fg mb-2">Schema bits</h3>
+				<p class="text-xs text-fg-muted mb-3">
+					What context to give the AI about your world's structure.
+				</p>
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input type="checkbox" name="schema_types" value="on" x-model="schemaTypes" class="rounded border-edge text-accent"/>
+						<span>Entity types (Character, Location, ...)</span>
+					</label>
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input type="checkbox" name="schema_categories" value="on" x-model="schemaCategories" class="rounded border-edge text-accent"/>
+						<span>Categories currently in use (with counts)</span>
+					</label>
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input type="checkbox" name="schema_front_matter" value="on" x-model="schemaFrontMatter" class="rounded border-edge text-accent"/>
+						<span>Front-matter format example</span>
+					</label>
+				</div>
+			</div>
+
+			<div>
+				<h3 class="text-sm font-medium text-fg mb-2">Content</h3>
+				<p class="text-xs text-fg-muted mb-3">
+					How much of your existing campaign content to include for the AI to reference.
+				</p>
+				<div class="space-y-2 text-sm">
+					<label class="flex items-start gap-2 cursor-pointer">
+						<input type="radio" name="content_mode" value="none" x-model="contentMode" class="mt-0.5 border-edge text-accent"/>
+						<span>
+							<strong>None</strong> (default)
+							<span class="block text-xs text-fg-muted">Schema only. Smallest prompt; AI generates new content based on your structure but won't reference existing pages.</span>
+						</span>
+					</label>
+					<label class="flex items-start gap-2 cursor-pointer">
+						<input type="radio" name="content_mode" value="all" x-model="contentMode" class="mt-0.5 border-edge text-accent"/>
+						<span>
+							<strong>All visible</strong>
+							<span class="block text-xs text-fg-muted">Everything the privacy filter below allows. AI can reference existing entities by name.</span>
+						</span>
+					</label>
+				</div>
+			</div>
+
+			<div x-show="contentMode !== 'none'" x-cloak>
+				<h3 class="text-sm font-medium text-fg mb-2">Privacy</h3>
+				<div class="space-y-2 text-sm">
+					<label class="flex items-start gap-2 cursor-pointer">
+						<input type="radio" name="privacy" value="safe" x-model="privacy" class="mt-0.5 border-edge text-accent"/>
+						<span>
+							<strong>Safe</strong> (recommended)
+							<span class="block text-xs text-fg-muted">Excludes DM-only content, private entities, and GM-only session notes.</span>
+						</span>
+					</label>
+					<label class="flex items-start gap-2 cursor-pointer">
+						<input type="radio" name="privacy" value="permitted" x-model="privacy" class="mt-0.5 border-edge text-accent"/>
+						<span>
+							<strong>Permitted</strong>
+							<span class="block text-xs text-fg-muted">Includes everything you can see as Owner. GM-only content included if you opt in below.</span>
+						</span>
+					</label>
+					<label class="flex items-start gap-2 cursor-pointer">
+						<input type="radio" name="privacy" value="everything" x-model="privacy" class="mt-0.5 border-edge text-accent"/>
+						<span>
+							<strong>Everything</strong>
+							<span class="block text-xs text-fg-muted">No visibility filtering. Use only with AI tools you fully trust.</span>
+						</span>
+					</label>
+				</div>
+				<label class="flex items-center gap-2 cursor-pointer text-sm mt-3">
+					<input type="checkbox" name="gm_notes" value="on" x-model="gmNotes" class="rounded border-edge text-accent"/>
+					<span>
+						Include session GM notes
+						<span class="block text-xs text-fg-muted">Only applies in Permitted or Everything mode.</span>
+					</span>
+				</label>
+			</div>
+
+			<div>
+				<h3 class="text-sm font-medium text-fg mb-2">What do you want the AI to generate?</h3>
+				<textarea
+					name="instruction"
+					x-model="instruction"
+					rows="4"
+					placeholder="Five new NPCs for the Drowned Reach. Mix of allies and rivals. Each should have a one-paragraph backstory tying them to the Coral Court fall."
+					class="input w-full text-sm font-mono"
+				></textarea>
+			</div>
+
+			<div class="flex items-center gap-3 pt-2">
+				<button type="submit" class="btn-primary">
+					<i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i> Generate
+				</button>
+				<span id="ai-prompt-generating" class="htmx-indicator text-xs text-fg-muted">
+					<i class="fa-solid fa-spinner fa-spin mr-1"></i> Building prompt...
+				</span>
+				<span class="text-xs text-fg-muted ml-auto">
+					Estimated: ~<span x-text="estimate.toLocaleString()"></span> tokens
+				</span>
+			</div>
+		</form>
+
+		// Host element for the prompt modal — handler swaps into here.
+		<div id="ai-prompt-modal-host"></div>
 	</div>
 }
 
