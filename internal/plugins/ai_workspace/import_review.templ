@@ -1,0 +1,359 @@
+// import_review.templ renders the per-page review screen returned
+// by POST /ai-workspace/import/parse. Operator inspects every
+// parsed page + bulk-defaults bar + decides Include / Name /
+// Category / Visibility / Conflict-mode per row. Submit is INERT
+// in Phase 4 — the commit handler lives in Phase 5.
+//
+// Per scoping §2.2 (review screen mockup). The screen consumes the
+// ParsedPage + Classification slices produced by the import handler.
+
+package ai_workspace
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+)
+
+// ImportReviewData bundles everything the templ needs. Built by
+// the handler from the parser + classifier outputs.
+type ImportReviewData struct {
+	CampaignID string
+	Pages      []importer.ParsedPage
+	Classes    []importer.Classification // same order/length as Pages
+	// SummaryCounts is a small struct for the header counters.
+	SummaryCounts ReviewSummary
+}
+
+// ReviewSummary is the per-status tally rendered above the table.
+type ReviewSummary struct {
+	Total      int
+	Selectable int
+	Conflicts  int
+	NewCategories int
+	ParseErrors int
+}
+
+// ImportReview renders the review fragment + the bulk-defaults bar
+// + the inert Submit button. HTMX swaps this into
+// #ai-import-review-host.
+templ ImportReview(d ImportReviewData) {
+	<div
+		id="ai-import-review"
+		x-data={ "{ }" }
+		class="card p-4 mt-4"
+	>
+		<div class="flex items-baseline justify-between mb-3">
+			<h3 class="text-base font-semibold text-fg">
+				Review — { strconv.Itoa(d.SummaryCounts.Total) } pages detected
+			</h3>
+			<button
+				type="button"
+				class="text-xs text-fg-muted hover:text-fg"
+				hx-get={ fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID) }
+				hx-target="#ai-import-review-host"
+				hx-swap="innerHTML"
+				title="Discard parse and start over"
+			>
+				<i class="fa-solid fa-rotate-left mr-1"></i> Cancel
+			</button>
+		</div>
+
+		<div class="text-xs text-fg-muted mb-3">
+			{ fmt.Sprintf("%d new", d.SummaryCounts.Selectable - d.SummaryCounts.Conflicts - d.SummaryCounts.NewCategories) } ·
+			{ fmt.Sprintf("%d conflicts", d.SummaryCounts.Conflicts) } ·
+			{ fmt.Sprintf("%d new categories", d.SummaryCounts.NewCategories) } ·
+			{ fmt.Sprintf("%d parse errors", d.SummaryCounts.ParseErrors) }
+		</div>
+
+		@bulkDefaultsBar(d)
+
+		<div class="space-y-3 mt-4">
+			for i, page := range d.Pages {
+				@reviewRow(d.CampaignID, i, page, d.Classes[i])
+			}
+		</div>
+
+		<div class="flex items-center gap-3 mt-5 pt-4 border-t border-edge">
+			// Submit is intentionally disabled in Phase 4 — the
+			// commit handler lands in Phase 5. The button stays
+			// visible so the operator can see the planned flow.
+			<button
+				type="button"
+				disabled
+				class="btn-primary opacity-50 cursor-not-allowed"
+				title="Commit handler lands in Phase 5 (C-AI-WORKSPACE-V1-E). The review screen is read-only in this PR."
+			>
+				<i class="fa-solid fa-lock mr-1.5"></i> Import { strconv.Itoa(d.SummaryCounts.Selectable) }
+			</button>
+			<span class="text-xs text-fg-muted">
+				Submit is inert in Phase 4 (this PR) — Phase 5 wires the commit handler.
+			</span>
+		</div>
+	</div>
+}
+
+// bulkDefaultsBar renders the top-of-table controls. V1 Phase 4
+// shows them visually; their values are read on Submit (Phase 5).
+templ bulkDefaultsBar(d ImportReviewData) {
+	<div class="card p-3 bg-surface-alt text-xs space-y-2">
+		<div class="font-medium text-fg">Bulk defaults</div>
+		<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+			<label class="space-y-1">
+				<span class="block text-fg-muted">Default category (for rows without front-matter)</span>
+				<select name="bulk_default_category" class="input text-xs w-full">
+					<option value="">— pick one —</option>
+					if len(d.Classes) > 0 {
+						for _, et := range d.Classes[0].AvailableTypes {
+							<option value={ et.Slug }>{ et.Name }</option>
+						}
+					}
+				</select>
+			</label>
+			<label class="space-y-1">
+				<span class="block text-fg-muted">Default visibility</span>
+				<select name="bulk_default_visibility" class="input text-xs w-full">
+					<option value="private" selected>Private</option>
+					<option value="dm_only">DM-only</option>
+					<option value="public">Public</option>
+				</select>
+			</label>
+			<label class="space-y-1">
+				<span class="block text-fg-muted">Default conflict mode</span>
+				<select name="bulk_default_conflict" class="input text-xs w-full">
+					<option value="rename" selected>Rename (suffix)</option>
+					<option value="skip">Skip</option>
+					<option value="overwrite">Overwrite existing</option>
+				</select>
+			</label>
+		</div>
+	</div>
+}
+
+// reviewRow renders one row per ParsedPage. The row's render
+// variant depends on Status — parse errors get a different shape
+// from successful rows.
+templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls importer.Classification) {
+	<div class={
+		"card p-3",
+		templ.KV("border-rose-300 dark:border-rose-700", cls.Status == importer.StatusParseError),
+		templ.KV("border-amber-300 dark:border-amber-700", cls.Status == importer.StatusConflict),
+		templ.KV("border-sky-300 dark:border-sky-700", cls.Status == importer.StatusNewCategory),
+	}>
+		<div class="flex items-start gap-3">
+			<input
+				type="checkbox"
+				name={ fmt.Sprintf("page_%d_include", idx) }
+				checked?={ page.Status != importer.StatusParseError }
+				disabled?={ page.Status == importer.StatusParseError }
+				class="mt-1 rounded border-edge text-accent"
+			/>
+			<div class="flex-1 min-w-0 space-y-1">
+				@reviewRowHeader(idx, page, cls)
+				if page.Status == importer.StatusParseError {
+					<div class="text-xs text-rose-700 dark:text-rose-300 mt-1">
+						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+						{ page.ParseError }
+					</div>
+				} else {
+					@reviewRowFields(idx, page, cls)
+				}
+				if len(page.Warnings) > 0 {
+					<details class="text-xs text-fg-muted mt-1">
+						<summary class="cursor-pointer">{ fmt.Sprintf("%d warning(s)", len(page.Warnings)) }</summary>
+						<ul class="list-disc ml-4 mt-1 space-y-0.5">
+							for _, w := range page.Warnings {
+								<li>{ w }</li>
+							}
+						</ul>
+					</details>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// reviewRowHeader renders the name input + status chip. Status
+// chip is the visual cue per row state.
+templ reviewRowHeader(idx int, page importer.ParsedPage, cls importer.Classification) {
+	<div class="flex items-center gap-2">
+		<input
+			type="text"
+			name={ fmt.Sprintf("page_%d_name", idx) }
+			value={ page.Name }
+			placeholder="Page name"
+			class="input text-sm flex-1 min-w-0"
+			disabled?={ page.Status == importer.StatusParseError }
+		/>
+		@statusChip(cls.Status)
+	</div>
+}
+
+// statusChip renders the small badge for the row's overall status.
+templ statusChip(s importer.ParseStatus) {
+	switch s {
+		case importer.StatusNew:
+			<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+				<i class="fa-solid fa-check mr-1"></i> New
+			</span>
+		case importer.StatusConflict:
+			<span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+				<i class="fa-solid fa-triangle-exclamation mr-1"></i> Name conflict
+			</span>
+		case importer.StatusNewCategory:
+			<span class="text-xs px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300">
+				<i class="fa-solid fa-folder-plus mr-1"></i> New category
+			</span>
+		case importer.StatusParseError:
+			<span class="text-xs px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
+				<i class="fa-solid fa-circle-xmark mr-1"></i> Parse error
+			</span>
+	}
+}
+
+// reviewRowFields renders the per-row Category / Visibility /
+// Conflict-mode controls (when applicable).
+templ reviewRowFields(idx int, page importer.ParsedPage, cls importer.Classification) {
+	<div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-xs">
+		// Category dropdown.
+		<label class="space-y-0.5">
+			<span class="block text-fg-muted">Category</span>
+			<select name={ fmt.Sprintf("page_%d_category", idx) } class="input text-xs w-full">
+				if cls.IsNewCategory {
+					<option value={ "new:" + cls.ProposedTypeSlug } selected>
+						{ "✨ Create new: " + cls.ProposedTypeSlug }
+					</option>
+				}
+				for _, et := range cls.AvailableTypes {
+					if cls.ExistingType != nil && et.ID == cls.ExistingType.ID {
+						<option value={ et.Slug } selected>{ et.Name }</option>
+					} else {
+						<option value={ et.Slug }>{ et.Name }</option>
+					}
+				}
+			</select>
+		</label>
+
+		// Visibility dropdown.
+		<label class="space-y-0.5">
+			<span class="block text-fg-muted">Visibility</span>
+			<select name={ fmt.Sprintf("page_%d_visibility", idx) } class="input text-xs w-full">
+				@visibilityOption(idx, "private", "Private", page.FrontMatter.Visibility)
+				@visibilityOption(idx, "dm_only", "DM-only", page.FrontMatter.Visibility)
+				@visibilityOption(idx, "public", "Public", page.FrontMatter.Visibility)
+			</select>
+		</label>
+
+		// Conflict mode (only when there's a conflict).
+		if cls.ConflictEntity != nil {
+			<label class="space-y-0.5">
+				<span class="block text-fg-muted">Conflict mode</span>
+				<select name={ fmt.Sprintf("page_%d_conflict", idx) } class="input text-xs w-full">
+					<option value="rename" selected>Rename (suffix)</option>
+					<option value="skip">Skip</option>
+					<option value="overwrite">Overwrite</option>
+				</select>
+				<span class="block text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+					Exists as: { cls.ConflictEntity.Name }
+				</span>
+			</label>
+		} else if cls.IsNewCategory {
+			<div class="space-y-0.5">
+				<span class="block text-fg-muted">Category source</span>
+				<span class="block text-[10px] text-sky-700 dark:text-sky-400">
+					Slug { "“" + cls.ProposedTypeSlug + "”" } doesn't exist yet — selection above will create it on Submit.
+				</span>
+			</div>
+		} else {
+			<div></div>
+		}
+	</div>
+}
+
+// visibilityOption renders one <option> with the front-matter
+// value pre-selected when matching.
+templ visibilityOption(idx int, value, label, fmValue string) {
+	if fmValue == value {
+		<option value={ value } selected>{ label }</option>
+	} else {
+		<option value={ value }>{ label }</option>
+	}
+}
+
+// SettingsImportSection — V1 Phase 4 surface. Paste textarea +
+// optional file upload (via the markdown_importer.js widget) +
+// Parse button. POST → review fragment swap.
+templ importSection(cc *campaigns.CampaignContext) {
+	<div class="card p-6">
+		<div class="flex items-start gap-4 mb-4">
+			<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+				<i class="fa-solid fa-file-import text-accent text-lg"></i>
+			</span>
+			<div>
+				<h2 class="text-lg font-semibold text-fg">AI Import</h2>
+				<p class="text-sm text-fg-secondary mt-0.5 leading-relaxed">
+					Paste AI-generated markdown (or drag-drop .md files) below. The next screen reviews every detected page; nothing is created until you confirm in Phase 5.
+				</p>
+			</div>
+		</div>
+
+		<form
+			hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/parse", cc.Campaign.ID) }
+			hx-target="#ai-import-review-host"
+			hx-swap="innerHTML"
+			hx-indicator="#ai-import-parsing"
+			hx-encoding="multipart/form-data"
+			class="space-y-3"
+		>
+			<div
+				data-widget="markdown-importer"
+				data-textarea-name="markdown_paste"
+				data-file-input-name="markdown_files"
+				class="space-y-3"
+			>
+				<textarea
+					name="markdown_paste"
+					rows="10"
+					placeholder="Paste AI-generated markdown here (multiple pages separated by --- front-matter blocks or # headings)..."
+					class="input w-full text-sm font-mono"
+				></textarea>
+				<div
+					data-importer-dropzone
+					class="border-2 border-dashed border-edge rounded-lg p-4 text-center text-xs text-fg-muted hover:border-accent transition-colors"
+				>
+					<i class="fa-solid fa-cloud-arrow-up mr-1"></i>
+					Drag and drop .md files here, or
+					<label class="text-accent cursor-pointer hover:underline">
+						browse
+						<input
+							type="file"
+							name="markdown_files"
+							accept=".md,.markdown,text/markdown"
+							multiple
+							class="hidden"
+							data-importer-file-input
+						/>
+					</label>
+				</div>
+				<div data-importer-file-list class="text-xs text-fg-muted space-y-1"></div>
+			</div>
+
+			<div class="flex items-center gap-3">
+				<button type="submit" class="btn-primary">
+					<i class="fa-solid fa-file-import mr-1.5"></i> Parse + review
+				</button>
+				<span id="ai-import-parsing" class="htmx-indicator text-xs text-fg-muted">
+					<i class="fa-solid fa-spinner fa-spin mr-1"></i> Parsing...
+				</span>
+			</div>
+		</form>
+
+		<div id="ai-import-review-host"></div>
+	</div>
+}
+
+// ensure entities import is referenced (silences unused-import).
+var _ = entities.Slugify

@@ -2440,6 +2440,12 @@ func (a *App) RegisterRoutes() {
 	)
 	aiWorkspaceHandler.SetPromptBuilder(aiWorkspacePrompt)
 
+	// Phase 4 — Import parse + review. The entities service
+	// implements importer.CampaignLookup as-is (GetBySlug +
+	// GetEntityTypeBySlug + GetEntityTypes are already on its
+	// public interface). No adapter needed.
+	aiWorkspaceHandler.SetImportLookup(entityService)
+
 	campaignHandler.RegisterSettingsTab(aiWorkspaceHandler.SettingsTabFactory())
 
 	aiWorkspaceCampaignAuthed := e.Group("/campaigns/:id",
