@@ -45,6 +45,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// body via respondSettingsError so the inline error region in each
 	// form gets a structured payload to render.
 	cg.PUT("/calendars/:calId/weather", h.UpdateWeatherAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// Weather zones (C-CAL-WEATHER-ZONES, Wave 0 PR 3): per-calendar
+	// climate region catalog. GET is Player+ (Foundry-side weather
+	// picker reads zone labels); PUT is Owner-only (catalog edit).
+	cg.GET("/calendars/:calId/weather/zones", h.GetWeatherZonesAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/calendars/:calId/weather/zones", h.UpdateWeatherZonesAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendars/:calId/cycles", h.UpdateCyclesAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendars/:calId/festivals", h.UpdateFestivalsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 

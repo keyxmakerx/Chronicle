@@ -937,6 +937,55 @@ func (h *Handler) UpdateWeatherAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// GetWeatherZonesAPI returns the per-calendar zone catalog plus the
+// active-zone reference.
+// GET /campaigns/:id/calendars/:calId/weather/zones
+func (h *Handler) GetWeatherZonesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	calID := c.Param("calId")
+
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return respondSettingsError(c, err)
+	}
+
+	state, err := h.svc.GetWeatherZones(ctx, cal.ID)
+	if err != nil {
+		return respondSettingsError(c, err)
+	}
+	if state.Zones == nil {
+		state.Zones = []WeatherZone{}
+	}
+	return c.JSON(http.StatusOK, state)
+}
+
+// UpdateWeatherZonesAPI replaces the catalog and optionally updates
+// the active-zone reference (REPLACE semantics matching the other
+// settings PUTs). A non-empty active_zone must point at one of the
+// supplied zones.
+// PUT /campaigns/:id/calendars/:calId/weather/zones
+func (h *Handler) UpdateWeatherZonesAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	calID := c.Param("calId")
+
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return respondSettingsError(c, err)
+	}
+
+	var state WeatherZonesState
+	if err := c.Bind(&state); err != nil {
+		return respondSettingsError(c, apperror.NewBadRequest("invalid weather zones payload"))
+	}
+
+	if err := h.svc.SetWeatherZones(ctx, cal.ID, state); err != nil {
+		return respondSettingsError(c, err)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // UpdateCyclesAPI replaces all cycles for a calendar.
 // PUT /campaigns/:id/calendars/:calId/cycles
 func (h *Handler) UpdateCyclesAPI(c echo.Context) error {

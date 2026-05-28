@@ -114,6 +114,64 @@ templ weatherSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 				</button>
 			</div>
 		</div>
+		// Weather zones — read-only catalog listing for V2 Wave 0 PR 3.
+		// Editing the catalog happens via PUT /weather/zones (Foundry
+		// sync today; full UI lands in Wave 1 weather panel).
+		@weatherZonesPanel(cc, cal)
+	</div>
+}
+
+// weatherZonesPanel renders the per-calendar zone catalog as a
+// read-only list. Fetches /weather/zones on mount; renders zone_id +
+// name + a small "active" badge for the currently active zone. The
+// edit affordance is intentionally absent — Wave 1's full weather
+// panel will own that surface.
+templ weatherZonesPanel(cc *campaigns.CampaignContext, cal *Calendar) {
+	<div
+		class="card p-4 space-y-3"
+		x-data={ fmt.Sprintf(`{
+			zones: [],
+			activeZone: '',
+			loading: true,
+			error: '',
+			init() {
+				Chronicle.apiFetch('/campaigns/%s/calendars/%s/weather/zones', { method: 'GET' })
+					.then(r => r.json().then(b => { if (!r.ok) { throw new Error((b && b.message) || 'Load failed'); } return b; }))
+					.then(state => { this.zones = state.zones || []; this.activeZone = state.active_zone || ''; })
+					.catch(e => { this.error = e.message; })
+					.finally(() => { this.loading = false; });
+			}
+		}`, cc.Campaign.ID, cal.ID) }
+	>
+		<div>
+			<h3 class="text-base font-semibold text-fg mb-1">Weather Zones</h3>
+			<p class="text-sm text-fg-secondary">
+				Per-calendar climate regions (e.g. temperate, tropical, arctic). Each zone carries its own presets + season overrides. Foundry sync edits the catalog today; the active zone drives the weather generator.
+			</p>
+		</div>
+		<div x-show="loading" class="text-sm text-fg-secondary">Loading zones...</div>
+		<div x-show="error" x-text="error" class="text-sm text-danger" role="alert"></div>
+		<div x-show="!loading && !error">
+			<div x-show="zones.length === 0" class="text-sm text-fg-secondary italic">
+				No zones defined.
+			</div>
+			<ul x-show="zones.length > 0" class="divide-y divide-border">
+				<template x-for="z in zones" :key="z.zone_id">
+					<li class="flex items-center justify-between py-2">
+						<div class="flex items-center gap-2">
+							<code class="text-xs text-fg-secondary" x-text="z.zone_id"></code>
+							<span class="text-sm text-fg" x-text="z.name"></span>
+						</div>
+						<span
+							x-show="z.zone_id === activeZone"
+							class="text-xs px-2 py-0.5 rounded bg-accent/10 text-accent"
+						>
+							active
+						</span>
+					</li>
+				</template>
+			</ul>
+		</div>
 	</div>
 }
 

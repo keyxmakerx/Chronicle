@@ -94,6 +94,15 @@ func (s *stubCalendarSvc) GetWeather(context.Context, string) (*calendar.Weather
 func (s *stubCalendarSvc) SetWeather(context.Context, string, calendar.WeatherInput) error {
 	return nil
 }
+func (s *stubCalendarSvc) GetWeatherZones(context.Context, string) (*calendar.WeatherZonesState, error) {
+	return nil, nil
+}
+func (s *stubCalendarSvc) SetWeatherZones(context.Context, string, calendar.WeatherZonesState) error {
+	return nil
+}
+func (s *stubCalendarSvc) SetActiveWeatherZone(context.Context, string, string) error {
+	return nil
+}
 func (s *stubCalendarSvc) GetCycles(context.Context, string) ([]calendar.Cycle, error) {
 	return nil, nil
 }

@@ -3,6 +3,7 @@ package calendar
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -67,6 +68,16 @@ type CalendarRepository interface {
 	// Weather.
 	GetWeather(ctx context.Context, calendarID string) (*Weather, error)
 	SetWeather(ctx context.Context, calendarID string, input WeatherInput) error
+
+	// Weather zones (V2 Wave 0 PR 3 / C-CAL-WEATHER-ZONES). Zone
+	// definitions are calendar-scoped; ApplyWeatherZones replaces the
+	// full zone set in one transaction (delete-then-insert pattern
+	// mirroring SetMonths / SetSeasons / etc.). SetActiveWeatherZone
+	// updates the active-zone reference on the existing calendar_weather
+	// row (columns added in migration 003; no schema change here).
+	GetWeatherZones(ctx context.Context, calendarID string) ([]WeatherZone, error)
+	ApplyWeatherZones(ctx context.Context, calendarID string, zones []WeatherZone) error
+	SetActiveWeatherZone(ctx context.Context, calendarID string, zoneID, zoneName string) error
 
 	// Cycles.
 	SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error
@@ -1144,6 +1155,91 @@ func (r *calendarRepo) SetWeather(ctx context.Context, calendarID string, input 
 		input.PrecipitationType, input.PrecipitationIntensity,
 		input.ZoneID, input.ZoneName, input.Description,
 	)
+	return err
+}
+
+// --- Weather zones (V2 Wave 0 PR 3 / C-CAL-WEATHER-ZONES) ---
+
+// GetWeatherZones returns all zone definitions for a calendar ordered
+// by zone_id (stable for the wire-contract response).
+func (r *calendarRepo) GetWeatherZones(ctx context.Context, calendarID string) ([]WeatherZone, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT calendar_id, zone_id, name, payload, created_at, updated_at
+		 FROM calendar_weather_zones WHERE calendar_id = ? ORDER BY zone_id`,
+		calendarID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var zones []WeatherZone
+	for rows.Next() {
+		var z WeatherZone
+		var payloadRaw []byte
+		if err := rows.Scan(&z.CalendarID, &z.ZoneID, &z.Name, &payloadRaw, &z.CreatedAt, &z.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if len(payloadRaw) > 0 {
+			if err := json.Unmarshal(payloadRaw, &z.Payload); err != nil {
+				return nil, fmt.Errorf("unmarshal zone %q payload: %w", z.ZoneID, err)
+			}
+		}
+		zones = append(zones, z)
+	}
+	return zones, rows.Err()
+}
+
+// ApplyWeatherZones replaces the full zone set for a calendar in one
+// transaction (delete-then-insert pattern mirroring SetMonths /
+// SetSeasons / etc.). Validation runs at the service layer before
+// this method is called.
+func (r *calendarRepo) ApplyWeatherZones(ctx context.Context, calendarID string, zones []WeatherZone) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM calendar_weather_zones WHERE calendar_id = ?`, calendarID); err != nil {
+		return fmt.Errorf("delete zones: %w", err)
+	}
+	for _, z := range zones {
+		payloadJSON, err := json.Marshal(z.Payload)
+		if err != nil {
+			return fmt.Errorf("marshal zone %q payload: %w", z.ZoneID, err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO calendar_weather_zones (calendar_id, zone_id, name, payload)
+			 VALUES (?, ?, ?, ?)`,
+			calendarID, z.ZoneID, z.Name, string(payloadJSON),
+		); err != nil {
+			return fmt.Errorf("insert zone %q: %w", z.ZoneID, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// SetActiveWeatherZone updates the active-zone reference on the
+// existing calendar_weather row. zone_id + zone_name columns were
+// added in migration 003; passing "" for both clears the active zone.
+// Upserts so a calendar with no prior weather row still gets the
+// active-zone reference recorded.
+func (r *calendarRepo) SetActiveWeatherZone(ctx context.Context, calendarID, zoneID, zoneName string) error {
+	var zoneIDPtr, zoneNamePtr any
+	if zoneID != "" {
+		zoneIDPtr = zoneID
+	}
+	if zoneName != "" {
+		zoneNamePtr = zoneName
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_weather (calendar_id, zone_id, zone_name)
+		 VALUES (?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		        zone_id = VALUES(zone_id),
+		        zone_name = VALUES(zone_name)`,
+		calendarID, zoneIDPtr, zoneNamePtr)
 	return err
 }
 
