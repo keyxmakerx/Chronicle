@@ -325,11 +325,21 @@ templ bulkDefaultsBar(d ImportReviewData) {
 // compute its "applies to N rows" hint without per-row pre-
 // aggregation in the handler.
 templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls importer.Classification, data ImportReviewData) {
+	// V2 design-tokens smoke adoption (PR C-CAL-V2-DESIGN-TOKENS) —
+	// `card-elev` composes on the existing `.card` to add the V2
+	// elevation tier shadow + hover lift via --elev-resting →
+	// --elev-hover + transform: translateY(-1px). The transition
+	// honors --dur-large + --ease-out from the locked motion
+	// vocabulary; `transition-colors` keeps the border-color
+	// transition for status changes (transform + opacity-only rule
+	// satisfied — box-shadow + transform on the lift; border-color
+	// is allowed for status-state crossfade per the dispatch's
+	// "clarify cause-and-effect" guidance).
 	<div
 		role="listitem"
 		aria-label={ fmt.Sprintf("Page %d: %s", idx+1, statusLabel(cls.Status)) }
 		class={
-			"card p-3 transition-colors",
+			"card card-elev p-3 transition-colors",
 			templ.KV("border-rose-300 dark:border-rose-700", cls.Status == importer.StatusParseError),
 			templ.KV("border-amber-300 dark:border-amber-700", cls.Status == importer.StatusConflict),
 			templ.KV("border-sky-300 dark:border-sky-700", cls.Status == importer.StatusNewCategory),

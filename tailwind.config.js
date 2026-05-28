@@ -77,6 +77,45 @@ module.exports = {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
+
+      // ── V2 motion vocabulary ───────────────────────────────────────
+      // Locked per cordinator/decisions/2026-05-28-cal-timeline-v2-design.md
+      // §B2. The CSS custom properties are the source of truth (see the
+      // `--ease-*` / `--dur-*` / `--elev-*` declarations in static/css/input.css
+      // `:root`); these Tailwind extensions just publish them as utility
+      // classes for V2-scope templ files.
+      //
+      // Intentional collision policy:
+      //   - `ease-in` / `ease-in-out`: identical to Tailwind defaults; the
+      //     override is a no-op (V2 just relabels them via the same bezier).
+      //   - `ease-out`: V2's bezier (0.16, 1, 0.3, 1) is more dramatic-
+      //     settle than Tailwind's default (0, 0, 0.2, 1). Overriding
+      //     projects V2 motion on every existing surface that uses the
+      //     utility — acceptable per the dispatch's goal of unifying motion
+      //     across Chronicle progressively in Waves 1-6.
+      //   - `ease-standard`: NEW name; no collision.
+      //   - `duration-{instant,micro,standard,large}`: NEW; no collision
+      //     with Tailwind's numeric duration scale (`duration-150` etc.).
+      //   - `shadow-elev-{static,resting,hover,dragged}`: NEW; no collision
+      //     with Tailwind's `shadow-{sm,md,lg,xl,...}` scale.
+      transitionTimingFunction: {
+        out: 'var(--ease-out)',
+        in: 'var(--ease-in)',
+        'in-out': 'var(--ease-in-out)',
+        standard: 'var(--ease-standard)',
+      },
+      transitionDuration: {
+        instant: '80ms',
+        micro: '120ms',
+        standard: '200ms',
+        large: '280ms',
+      },
+      boxShadow: {
+        'elev-static':  'var(--elev-static)',
+        'elev-resting': 'var(--elev-resting)',
+        'elev-hover':   'var(--elev-hover)',
+        'elev-dragged': 'var(--elev-dragged)',
+      },
     },
   },
   // Safelist grid column spans used by the dynamic entity page layout renderer.
