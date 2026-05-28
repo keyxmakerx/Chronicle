@@ -1,0 +1,396 @@
+// subresource_v2.templ — V2 sub-resource card grid editor (Wave 1
+// PR 2 / C-CAL-V2-SUBRESOURCE-CARDS-A). Establishes the shared
+// `subresourceCard` + drawer pattern that PR 3 (eras/categories/
+// festivals/cycles/zones) and PR 4 (event card) inherit.
+//
+// Composition: page wraps shell → grid wraps cards + add affordance
+// → drawer slides from right for create/edit. Drag-to-reorder via
+// `subresource_grid.js` (HTML5 D&D API). Save fires bulk-set PUT
+// to the existing V1 endpoints (no new write surface in this PR).
+//
+// Card primitive: composes with `.card` + `.card-elev` from
+// input.css:436-469. Token-only values per customization-readiness.
+
+package calendar
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// SubresourceSettingsPage renders the full V2 settings page for one
+// sub-resource. HTMX swaps target #subresource-grid for in-place
+// updates after drawer save / dnd reorder.
+templ SubresourceSettingsPage(cc *campaigns.CampaignContext, data SubresourceViewData) {
+	@layouts.App(subresourceTitle(data.Kind) + " — " + data.Calendar.Name) {
+		<div
+			class="h-full flex flex-col px-6 py-4"
+			data-subresource-kind={ string(data.Kind) }
+			data-subresource-payload={ subresourcePayloadJSON(data) }
+			data-subresource-put-url={ subresourcePUTPath(data.CampaignID, data.Calendar.ID, data.Kind) }
+			data-csrf-token={ data.CSRFToken }
+			data-is-owner={ boolToStr(data.IsOwner) }
+		>
+			@subresourceHeader(cc, data)
+			<div id="subresource-grid" class="flex-1 overflow-y-auto">
+				@SubresourceGridFragment(cc, data)
+			</div>
+		</div>
+		@subresourceDrawer(data)
+		<script src="/static/plugins/calendar/js/subresource_grid.js" defer></script>
+	}
+}
+
+// SubresourceGridFragment renders just the cards + add affordance.
+// HTMX-target for swaps after Save / dnd / delete.
+templ SubresourceGridFragment(cc *campaigns.CampaignContext, data SubresourceViewData) {
+	if len(data.Cards) == 0 {
+		@subresourceEmptyState(data)
+	} else {
+		<div
+			class="grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+			role="list"
+			aria-label={ subresourceTitle(data.Kind) + " grid" }
+			data-grid-root="true"
+		>
+			for _, card := range data.Cards {
+				@subresourceCard(data, card)
+			}
+			if data.IsOwner {
+				@subresourceAddCard(data)
+			}
+		</div>
+	}
+}
+
+// subresourceHeader is the page chrome: title + count + back-to-shell
+// link. Sized for one-line desktop; collapses on narrower viewports.
+templ subresourceHeader(cc *campaigns.CampaignContext, data SubresourceViewData) {
+	<div class="card card-elev px-4 py-3 mb-3 flex items-center justify-between gap-3 flex-wrap">
+		<div class="flex items-center gap-3 min-w-0">
+			<a
+				href={ subresourceBackHref(data) }
+				class="text-fg-secondary hover:text-accent transition-colors duration-micro text-sm"
+				aria-label="Back to calendar"
+			>
+				<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+			</a>
+			<h1 class="text-lg font-semibold text-fg">
+				{ subresourceTitle(data.Kind) }
+			</h1>
+			<span class="text-xs text-fg-secondary">
+				{ fmt.Sprintf("%d", len(data.Cards)) } items
+			</span>
+		</div>
+		<div class="flex items-center gap-2">
+			<span class="text-xs text-fg-secondary truncate">
+				{ data.Calendar.Name }
+			</span>
+		</div>
+	</div>
+}
+
+// subresourceCard renders one card in the grid. Click opens the
+// detail drawer in edit mode; drag-handle (visible on hover via
+// `group-hover:`) initiates reorder via subresource_grid.js.
+//
+// IsAccent items get an accent ring (used for weekday IsRestDay).
+// Color swatches surface for moons/seasons (Color non-empty).
+templ subresourceCard(data SubresourceViewData, card SubresourceCardData) {
+	<div
+		class={ subresourceCardClasses(card) }
+		role="listitem"
+		tabindex="0"
+		draggable={ subresourceDraggable(data) }
+		data-card-index={ fmt.Sprintf("%d", card.Index) }
+		data-card-id={ card.ID }
+	>
+		<div class="flex items-start justify-between gap-2">
+			<div class="flex items-center gap-2 min-w-0">
+				if card.Color != "" {
+					<span
+						class="inline-block w-3 h-3 rounded-full border border-edge flex-shrink-0"
+						style={ "background-color:" + card.Color }
+						aria-hidden="true"
+					></span>
+				}
+				<span class="text-sm font-semibold text-fg truncate">{ card.Name }</span>
+			</div>
+			if data.IsOwner {
+				<span
+					class="opacity-0 group-hover:opacity-100 text-fg-secondary text-xs cursor-grab transition-opacity duration-micro"
+					aria-label="Drag to reorder"
+					data-drag-handle="true"
+				>
+					<i class="fa-solid fa-grip-vertical" aria-hidden="true"></i>
+				</span>
+			}
+		</div>
+		if card.Subtitle != "" {
+			<div class="text-xs text-fg-secondary mt-1">{ card.Subtitle }</div>
+		}
+	</div>
+}
+
+// subresourceCardClasses composes the per-card class string. The
+// `group` modifier lets subresourceCard's drag-handle reveal on hover.
+// Accent ring used for weekday IsRestDay.
+func subresourceCardClasses(card SubresourceCardData) string {
+	base := "card card-elev p-3 cursor-pointer group transition-transform duration-micro hover:-translate-y-px"
+	if card.IsAccent {
+		base += " ring-1 ring-accent/40"
+	}
+	return base
+}
+
+// subresourceDraggable returns "true" for Owners, "false" otherwise.
+// Templ's `draggable` attribute takes a string.
+func subresourceDraggable(data SubresourceViewData) string {
+	if data.IsOwner {
+		return "true"
+	}
+	return "false"
+}
+
+// subresourceAddCard renders the trailing add affordance. Dashed
+// border distinguishes from data cards; click opens drawer in
+// create mode.
+templ subresourceAddCard(data SubresourceViewData) {
+	<button
+		type="button"
+		class="card p-3 border-2 border-dashed border-edge text-fg-secondary hover:text-accent hover:border-accent transition-colors duration-micro min-h-[68px] flex items-center justify-center gap-2 cursor-pointer"
+		data-add-card="true"
+		aria-label={ "Add " + subresourceSingular(data.Kind) }
+	>
+		<i class="fa-solid fa-plus" aria-hidden="true"></i>
+		<span class="text-sm">Add { subresourceSingular(data.Kind) }</span>
+	</button>
+}
+
+// subresourceEmptyState shows when a resource has zero items.
+// Includes a contextual explainer + the add affordance (Owners only).
+templ subresourceEmptyState(data SubresourceViewData) {
+	<div class="card card-elev p-8 text-center">
+		<i class="fa-solid fa-table-cells text-3xl text-fg-secondary mb-3" aria-hidden="true"></i>
+		<h2 class="text-lg font-semibold text-fg mb-2">
+			No { subresourceTitle(data.Kind) }
+		</h2>
+		<p class="text-sm text-fg-secondary mb-4">
+			{ subresourceEmptyExplainer(data.Kind) }
+		</p>
+		if data.IsOwner {
+			<button
+				type="button"
+				class="btn-primary text-sm inline-flex items-center gap-2"
+				data-add-card="true"
+			>
+				<i class="fa-solid fa-plus" aria-hidden="true"></i>
+				Add { subresourceSingular(data.Kind) }
+			</button>
+		}
+	</div>
+}
+
+// subresourceDrawer renders the right-slide editor drawer hosting
+// per-resource forms. The drawer's open/close state + dirty tracking
+// live in subresource_grid.js. Owner-only; non-owners never see the
+// drawer DOM (saves bandwidth + prevents stray opens).
+templ subresourceDrawer(data SubresourceViewData) {
+	if data.IsOwner {
+		<div
+			id="subresource-drawer"
+			class="fixed inset-0 z-30 hidden"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="subresource-drawer-title"
+		>
+			<div
+				class="absolute inset-0 bg-black/40 transition-opacity duration-standard"
+				data-drawer-backdrop="true"
+			></div>
+			<div
+				class="absolute right-0 top-0 bottom-0 w-full max-w-md card shadow-2xl flex flex-col"
+				style="transform: translateX(0); transition: transform var(--dur-standard) var(--ease-out);"
+				data-drawer-panel="true"
+			>
+				<div class="px-4 py-3 border-b border-edge flex items-center justify-between">
+					<h2 id="subresource-drawer-title" class="text-base font-semibold text-fg" data-drawer-title>
+						Edit { subresourceSingular(data.Kind) }
+					</h2>
+					<button
+						type="button"
+						class="text-fg-secondary hover:text-fg transition-colors duration-micro"
+						data-drawer-close="true"
+						aria-label="Close drawer"
+					>
+						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+					</button>
+				</div>
+				<div class="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+					@subresourceDrawerForm(data)
+				</div>
+				<div class="px-4 py-3 border-t border-edge flex items-center justify-between">
+					<button
+						type="button"
+						class="text-xs text-danger hover:bg-danger/10 px-2 py-1 rounded transition-colors duration-micro hidden"
+						data-drawer-delete="true"
+					>
+						<i class="fa-solid fa-trash mr-1" aria-hidden="true"></i>
+						Delete
+					</button>
+					<div class="flex items-center gap-2 ml-auto">
+						<button
+							type="button"
+							class="btn-secondary text-xs"
+							data-drawer-close="true"
+						>
+							Cancel
+						</button>
+						<button
+							type="button"
+							class="btn-primary text-xs"
+							data-drawer-save="true"
+						>
+							Save
+						</button>
+					</div>
+				</div>
+				// Delete-confirm overlay. V1.5 verb-set discipline:
+				// explicit confirm checkbox + "Delete permanently" label.
+				<div
+					class="hidden absolute inset-0 bg-bg-1/95 flex flex-col items-center justify-center px-4 text-center"
+					data-drawer-confirm="true"
+				>
+					<i class="fa-solid fa-triangle-exclamation text-3xl text-danger mb-3" aria-hidden="true"></i>
+					<p class="text-sm text-fg mb-3">
+						Delete this { subresourceSingular(data.Kind) }? This change is bulk-saved with the rest of the list and cannot be undone after Save.
+					</p>
+					<label class="flex items-center gap-2 text-xs text-fg-secondary mb-3">
+						<input type="checkbox" data-drawer-confirm-check="true"/>
+						I understand this { subresourceSingular(data.Kind) } will be removed
+					</label>
+					<div class="flex gap-2">
+						<button type="button" class="btn-secondary text-xs" data-drawer-confirm-cancel="true">Cancel</button>
+						<button type="button" class="btn-danger text-xs" data-drawer-confirm-do="true" disabled>
+							Delete permanently
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// subresourceDrawerForm branches on Kind to render the per-resource
+// fields. JS reads/writes these inputs via data-field attributes;
+// the field set per resource matches the model's input struct.
+templ subresourceDrawerForm(data SubresourceViewData) {
+	switch data.Kind {
+		case SubresourceMonths:
+			@drawerFieldsMonths()
+		case SubresourceWeekdays:
+			@drawerFieldsWeekdays()
+		case SubresourceMoons:
+			@drawerFieldsMoons()
+		case SubresourceSeasons:
+			@drawerFieldsSeasons()
+	}
+}
+
+templ drawerFieldsMonths() {
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Name</label>
+		<input type="text" class="input text-sm w-full" data-field="name" placeholder="e.g. Mirtul"/>
+	</div>
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Days</label>
+		<input type="number" min="1" max="400" class="input text-sm w-full" data-field="days" placeholder="30"/>
+	</div>
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Leap-year days (added)</label>
+		<input type="number" min="0" class="input text-sm w-full" data-field="leap_year_days" placeholder="0"/>
+		<p class="text-xs text-fg-secondary mt-1">Optional. Added to this month every leap year.</p>
+	</div>
+	<div>
+		<label class="flex items-center gap-2 text-sm text-fg">
+			<input type="checkbox" data-field="is_intercalary"/>
+			Intercalary (sits between regular months; no weekday cycle)
+		</label>
+	</div>
+}
+
+templ drawerFieldsWeekdays() {
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Name</label>
+		<input type="text" class="input text-sm w-full" data-field="name" placeholder="e.g. Sul"/>
+	</div>
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Abbreviation (optional)</label>
+		<input type="text" class="input text-sm w-full" data-field="abbreviation" placeholder="Su" maxlength="6"/>
+	</div>
+	<div>
+		<label class="flex items-center gap-2 text-sm text-fg">
+			<input type="checkbox" data-field="is_rest_day"/>
+			Rest day (tinted in Month view)
+		</label>
+	</div>
+}
+
+templ drawerFieldsMoons() {
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Name</label>
+		<input type="text" class="input text-sm w-full" data-field="name" placeholder="e.g. Selûne"/>
+	</div>
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Cycle days</label>
+		<input type="number" step="0.01" min="0.1" class="input text-sm w-full" data-field="cycle_days" placeholder="29.5"/>
+		<p class="text-xs text-fg-secondary mt-1">Fractional values allowed (e.g. 29.5 for Earth's moon).</p>
+	</div>
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Phase offset (days)</label>
+		<input type="number" step="0.01" class="input text-sm w-full" data-field="phase_offset" placeholder="0"/>
+	</div>
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Color</label>
+		<input type="color" class="input w-full h-[34px]" data-field="color" value="#aabbcc"/>
+	</div>
+}
+
+templ drawerFieldsSeasons() {
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Name</label>
+		<input type="text" class="input text-sm w-full" data-field="name" placeholder="e.g. Summer"/>
+	</div>
+	<div class="grid grid-cols-2 gap-2">
+		<div>
+			<label class="block text-xs font-medium text-fg-secondary mb-1">Start month</label>
+			<input type="number" min="1" class="input text-sm w-full" data-field="start_month"/>
+		</div>
+		<div>
+			<label class="block text-xs font-medium text-fg-secondary mb-1">Start day</label>
+			<input type="number" min="1" class="input text-sm w-full" data-field="start_day"/>
+		</div>
+		<div>
+			<label class="block text-xs font-medium text-fg-secondary mb-1">End month</label>
+			<input type="number" min="1" class="input text-sm w-full" data-field="end_month"/>
+		</div>
+		<div>
+			<label class="block text-xs font-medium text-fg-secondary mb-1">End day</label>
+			<input type="number" min="1" class="input text-sm w-full" data-field="end_day"/>
+		</div>
+	</div>
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Color</label>
+		<input type="color" class="input w-full h-[34px]" data-field="color" value="#ffcc66"/>
+	</div>
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Description (optional)</label>
+		<textarea class="input text-sm w-full" data-field="description" rows="2" placeholder="Short narrative"></textarea>
+	</div>
+	<div>
+		<label class="block text-xs font-medium text-fg-secondary mb-1">Weather effect (optional)</label>
+		<textarea class="input text-sm w-full" data-field="weather_effect" rows="2" placeholder="GM-side weather hint"></textarea>
+	</div>
+}

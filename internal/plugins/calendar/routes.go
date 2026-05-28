@@ -110,6 +110,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/calendar/v2/:calId", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/calendar/v2/:calId/:view", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/calendar/v2/switch", h.SwitchActiveCalendarAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// V2 sub-resource card grids (Wave 1 PR 2 / C-CAL-V2-SUBRESOURCE-CARDS-A).
+	// Read-only render is Player+ (the cards display data anyone with
+	// campaign access can see). Edit affordances (drawer + add + dnd)
+	// are gated client-side by IsOwner; mutations go through the
+	// existing V1 PUT endpoints which retain Owner-only auth.
+	cg.GET("/calendar/v2/:calId/settings/:resource", h.ShowV2SubresourceSettings, campaigns.RequireRole(campaigns.RolePlayer))
 }
 
 // legacyRedirect handles the old /campaigns/:id/calendar route by redirecting
