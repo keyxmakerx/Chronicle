@@ -278,6 +278,14 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		if conflict == "" {
 			conflict = bulkConflict
 		}
+		// V1.5 backward-compat alias (C-AI-WORKSPACE-V1-G): the
+		// review-screen rename Overwrite→Update means new submissions
+		// use "update"; in-flight sessions opened before V1.5 still
+		// send "overwrite". Accept both for one release; remove the
+		// alias in V2.
+		if conflict == "overwrite" {
+			conflict = "update"
+		}
 		visibility := strings.TrimSpace(c.FormValue(prefix + "visibility"))
 		if visibility == "" {
 			visibility = bulkVisibility
@@ -286,13 +294,32 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		if name == "" {
 			name = pages[i].Name
 		}
+		// V1.5: per-row action verb. Defaults to the AI-suggested
+		// action from front-matter when the form field is absent
+		// (i.e. UI didn't expose an override). Final fallback is
+		// "create" — preserves V1 behavior for any path that never
+		// goes through the V1.5 review screen.
+		action := strings.TrimSpace(c.FormValue(prefix + "action"))
+		if action == "" {
+			action = pages[i].FrontMatter.Action
+		}
+		if action == "" {
+			action = importer.ActionCreate
+		}
+		// V1.5: per-row Delete confirmation gate. Submit handler
+		// believes the form-encoded value; committer re-checks
+		// belt-and-suspenders for any client-side bypass.
+		deleteConfirmed := c.FormValue(prefix+"delete_confirmed") == "on"
+
 		decisions[i] = importer.RowDecision{
-			Include:      c.FormValue(prefix+"include") == "on",
-			Name:         name,
-			CategorySpec: category,
-			Subcategory:  pages[i].FrontMatter.Subcategory,
-			Visibility:   visibility,
-			ConflictMode: conflict,
+			Include:         c.FormValue(prefix+"include") == "on",
+			Name:            name,
+			CategorySpec:    category,
+			Subcategory:     pages[i].FrontMatter.Subcategory,
+			Visibility:      visibility,
+			ConflictMode:    conflict,
+			Action:          action,
+			DeleteConfirmed: deleteConfirmed,
 		}
 	}
 
@@ -311,12 +338,17 @@ func (h *Handler) CommitImport(c echo.Context) error {
 
 	if h.audit != nil {
 		// Counts ONLY — no names, no body content. Per dispatch.
+		// V1.5 (C-AI-WORKSPACE-V1-G) renames `overwrote` → `updated`
+		// for vocabulary consistency with the new action verb; adds
+		// `deleted` for action=delete completions. Counts-only
+		// discipline preserved (V1-E).
 		h.audit.LogCampaignEvent(c.Request().Context(),
 			cc.Campaign.ID, "campaign.ai_import.committed",
 			map[string]any{
 				"created":                result.Created,
 				"renamed":                result.Renamed,
-				"overwrote":              result.Overwrote,
+				"updated":                result.Updated,
+				"deleted":                result.Deleted,
 				"skipped":                result.Skipped,
 				"failed":                 result.Failed,
 				"new_categories_created": len(result.NewCategoriesCreated),

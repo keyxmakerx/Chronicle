@@ -27,10 +27,13 @@ type fakeCreator struct {
 	createCalls   []entities.CreateEntityInput
 	updateCalls   []entities.UpdateEntityInput
 	updateEntries []updateEntryCall
+	// V1.5 / C-AI-WORKSPACE-V1-G: capture for Delete dispatch tests.
+	deleteCalls   []string
 	createTypeFn  func(input entities.CreateEntityTypeInput) (*entities.EntityType, error)
 	createFn      func(input entities.CreateEntityInput) (*entities.Entity, error)
 	updateFn      func(id string, input entities.UpdateEntityInput) (*entities.Entity, error)
 	updateEntryFn func(id, entryJSON, entryHTML string) error
+	deleteFn      func(id string) error
 }
 
 type updateEntryCall struct {
@@ -97,6 +100,14 @@ func (f *fakeCreator) UpdateEntry(_ context.Context, id, entryJSON, entryHTML st
 	f.updateEntries = append(f.updateEntries, updateEntryCall{EntityID: id, EntryJSON: entryJSON, EntryHTML: entryHTML})
 	if f.updateEntryFn != nil {
 		return f.updateEntryFn(id, entryJSON, entryHTML)
+	}
+	return nil
+}
+
+func (f *fakeCreator) Delete(_ context.Context, id string) error {
+	f.deleteCalls = append(f.deleteCalls, id)
+	if f.deleteFn != nil {
+		return f.deleteFn(id)
 	}
 	return nil
 }
@@ -246,7 +257,11 @@ func TestCommit_RenameWithCollisionLoop(t *testing.T) {
 // original name. Audit semantics: the operator decided to keep the
 // existing entity (not create a new one) so the existing.ID is
 // what gets touched.
-func TestCommit_OverwritePreservesExistingNameAndID(t *testing.T) {
+// TestCommit_UpdatePreservesExistingNameAndID (V1-E test, renamed in
+// V1.5 along with the verb-set rename overwrite → update). The
+// committer accepts both labels for one release via the backward-
+// compat alias at committer.go's conflict-mode switch.
+func TestCommit_UpdatePreservesExistingNameAndID(t *testing.T) {
 	f := &fakeCreator{
 		types: []entities.EntityType{{ID: 1, Name: "Character", Slug: "character", Enabled: true}},
 		existing: map[string]*entities.Entity{
@@ -257,12 +272,14 @@ func TestCommit_OverwritePreservesExistingNameAndID(t *testing.T) {
 	res, err := c.Commit(context.Background(), "camp-1", CommitInput{
 		OwnerID:   "u-1",
 		Pages:     []ParsedPage{page("Lyra Vance", "character", "# Lyra\n\nNew body.")},
+		// "overwrite" form value still accepted as backward-compat
+		// alias for "update"; V2 removes the alias.
 		Decisions: []RowDecision{decision(true, "Lyra Vance", "character", "private", "overwrite")},
 	})
 	if err != nil {
 		t.Fatalf("Commit: %v", err)
 	}
-	if res.Overwrote != 1 || res.Rows[0].Status != StatusOverwrote {
+	if res.Updated != 1 || res.Rows[0].Status != StatusUpdated {
 		t.Errorf("expected 1 overwrote; got %+v", res)
 	}
 	if res.Rows[0].EntityID != "ent-original" {
