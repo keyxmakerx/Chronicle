@@ -553,6 +553,30 @@ type CampaignSettings struct {
 	// hook treats empty as the C-FMC-6 default until Chunk 6's
 	// migration writes the resolved default to every empty-mode row.
 	FoundryModulePinMode string `json:"foundry_module_pin_mode,omitempty"`
+
+	// EventTierDefinitions holds the per-campaign event tier vocabulary
+	// (V2 Wave 0 PR 2 per decisions/2026-05-28-cal-timeline-v2-design.md
+	// §C1). Empty/nil at read time returns the platform default trio
+	// (major / standard / detail) via GetEventTierDefinitions — matches
+	// the empty-means-default pattern used for AccentColor, FontFamily,
+	// etc. No migration on the campaigns table; tier defs nest in the
+	// existing settings JSON per Option B locked 2026-05-28 post-
+	// C-THEME-CUSTOMIZATION-AUDIT.
+	EventTierDefinitions []TierDefinition `json:"event_tier_definitions,omitempty"`
+}
+
+// TierDefinition is a single entry in the per-campaign event tier
+// vocabulary. Slugs are stored on Event.Tier (via the calendar plugin's
+// V2 Wave 0 PR 2 migration) as foreign-key-like references; the
+// TierDefinition supplies the rendering hints (color, prominence) the
+// Wave 1 calendar UI consumes. Exactly one tier per definition set
+// carries IsDefault=true.
+type TierDefinition struct {
+	Slug       string `json:"slug"`        // e.g. "major", "standard", "detail", "encounter"
+	Name       string `json:"name"`        // display name
+	Color      string `json:"color"`       // hex, validated as #RRGGBB
+	Prominence int    `json:"prominence"`  // 0-100 visual weight; higher = larger/bolder render
+	IsDefault  bool   `json:"is_default"`  // exactly one per definition set
 }
 
 // TopbarStyle configures the visual appearance of the campaign's top navigation bar.

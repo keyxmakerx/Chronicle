@@ -44,6 +44,12 @@ type mockCalendarRepo struct {
 	// tests can inject the "existing row" the merge reads from.
 	getWeatherFn func(ctx context.Context, calendarID string) (*Weather, error)
 	setWeatherFn func(ctx context.Context, calendarID string, input WeatherInput) error
+	// V2 Wave 0 PR 2: per-era CRUD + transactional ApplyImport injection.
+	createEraFn   func(ctx context.Context, calendarID string, input EraInput) (*Era, error)
+	updateEraFn   func(ctx context.Context, eraID int, input EraInput) error
+	deleteEraFn   func(ctx context.Context, eraID int) (string, error)
+	getEraByIDFn  func(ctx context.Context, eraID int) (*Era, error)
+	applyImportFn func(ctx context.Context, cal *Calendar, result *ImportResult) error
 }
 
 func (m *mockCalendarRepo) Create(ctx context.Context, cal *Calendar) error {
@@ -159,6 +165,41 @@ func (m *mockCalendarRepo) GetSeasons(ctx context.Context, calendarID string) ([
 func (m *mockCalendarRepo) SetEras(ctx context.Context, calendarID string, eras []EraInput) error {
 	if m.setErasFn != nil {
 		return m.setErasFn(ctx, calendarID, eras)
+	}
+	return nil
+}
+
+func (m *mockCalendarRepo) CreateEra(ctx context.Context, calendarID string, input EraInput) (*Era, error) {
+	if m.createEraFn != nil {
+		return m.createEraFn(ctx, calendarID, input)
+	}
+	return &Era{ID: 1, CalendarID: calendarID, Name: input.Name, StartYear: input.StartYear, EndYear: input.EndYear, Color: input.Color, SortOrder: input.SortOrder}, nil
+}
+
+func (m *mockCalendarRepo) UpdateEra(ctx context.Context, eraID int, input EraInput) error {
+	if m.updateEraFn != nil {
+		return m.updateEraFn(ctx, eraID, input)
+	}
+	return nil
+}
+
+func (m *mockCalendarRepo) DeleteEra(ctx context.Context, eraID int) (string, error) {
+	if m.deleteEraFn != nil {
+		return m.deleteEraFn(ctx, eraID)
+	}
+	return "", nil
+}
+
+func (m *mockCalendarRepo) GetEraByID(ctx context.Context, eraID int) (*Era, error) {
+	if m.getEraByIDFn != nil {
+		return m.getEraByIDFn(ctx, eraID)
+	}
+	return nil, nil
+}
+
+func (m *mockCalendarRepo) ApplyImport(ctx context.Context, cal *Calendar, result *ImportResult) error {
+	if m.applyImportFn != nil {
+		return m.applyImportFn(ctx, cal, result)
 	}
 	return nil
 }
