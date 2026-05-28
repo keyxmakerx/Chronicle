@@ -340,7 +340,7 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 		aria-label={ fmt.Sprintf("Page %d: %s", idx+1, statusLabel(cls.Status)) }
 		class={
 			"card card-elev p-3 transition-colors",
-			templ.KV("border-rose-300 dark:border-rose-700", cls.Status == importer.StatusParseError),
+			templ.KV("border-rose-300 dark:border-rose-700", cls.Status == importer.StatusParseError || cls.Status == importer.StatusActionMismatch),
 			templ.KV("border-amber-300 dark:border-amber-700", cls.Status == importer.StatusConflict),
 			templ.KV("border-sky-300 dark:border-sky-700", cls.Status == importer.StatusNewCategory),
 		}
@@ -361,9 +361,27 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 						<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
 						{ page.ParseError }
 					</div>
+				} else if cls.Status == importer.StatusActionMismatch {
+					<div class="text-xs text-rose-700 dark:text-rose-300 mt-1" role="alert">
+						<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
+						{ cls.Reason }
+					</div>
+					// V1.5: still expose the action chip so the operator can
+					// override (e.g., change action: delete → create) to
+					// recover the row without re-pasting markdown.
+					@reviewRowFields(idx, page, cls, data)
+					@reviewRowMeta(page)
 				} else {
 					@reviewRowFields(idx, page, cls, data)
 					@reviewRowMeta(page)
+				}
+				// V1.5 (C-AI-WORKSPACE-V1-G): per-row Delete confirmation.
+				// Renders only when the AI-suggested action is "delete";
+				// the per-row checkbox uses required-attribute so the
+				// browser's native form-validity gate blocks Submit if
+				// any Delete row is unconfirmed (audit §5.2 recommendation).
+				if page.FrontMatter.Action == importer.ActionDelete {
+					@reviewRowDeleteConfirm(idx, page.Name)
 				}
 				if len(page.Warnings) > 0 {
 					<details class="text-xs text-fg-muted mt-1">
@@ -377,6 +395,30 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 				}
 			</div>
 		</div>
+	</div>
+}
+
+// reviewRowDeleteConfirm renders the per-row "I understand X will be
+// permanently deleted" confirmation block. V1.5 / C-AI-WORKSPACE-V1-G
+// per audit §5.2. The checkbox uses the `required` attribute so the
+// browser's HTML5 form-validity gate prevents Submit until every
+// Delete row is confirmed; the committer re-checks DeleteConfirmed as
+// belt-and-suspenders against any client-side bypass.
+templ reviewRowDeleteConfirm(idx int, name string) {
+	<div class="mt-2 p-2 rounded border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/20">
+		<label class="flex items-start gap-2 text-xs text-rose-900 dark:text-rose-100 cursor-pointer">
+			<input
+				type="checkbox"
+				name={ fmt.Sprintf("page_%d_delete_confirmed", idx) }
+				required
+				class="mt-0.5 rounded border-rose-400 text-rose-600"
+				aria-label={ fmt.Sprintf("I confirm permanent deletion of %s", name) }
+			/>
+			<span>
+				I understand <strong>{ name }</strong> will be permanently deleted.
+				This cannot be undone.
+			</span>
+		</label>
 	</div>
 }
 
@@ -419,13 +461,17 @@ func statusLabel(s importer.ParseStatus) string {
 		return "New category"
 	case importer.StatusParseError:
 		return "Parse error"
+	case importer.StatusActionMismatch:
+		return "Action target missing"
 	default:
 		return "Page"
 	}
 }
 
-// reviewRowHeader renders the name input + status chip. Status
-// chip is the visual cue per row state.
+// reviewRowHeader renders the name input + Action chip (V1.5) + status
+// chip. The action chip is a writable select so the operator can
+// override the AI's suggested action without re-pasting markdown; the
+// status chip remains read-only as the parser+classifier's diagnosis.
 templ reviewRowHeader(idx int, page importer.ParsedPage, cls importer.Classification) {
 	<div class="flex items-center gap-2">
 		<input
@@ -437,8 +483,47 @@ templ reviewRowHeader(idx int, page importer.ParsedPage, cls importer.Classifica
 			disabled?={ page.Status == importer.StatusParseError }
 			aria-label={ fmt.Sprintf("Page %d name (editable)", idx+1) }
 		/>
+		if page.Status != importer.StatusParseError {
+			@reviewRowActionChip(idx, page.FrontMatter.Action)
+		}
 		@statusChip(cls.Status)
 	</div>
+}
+
+// reviewRowActionChip (V1.5 / C-AI-WORKSPACE-V1-G per audit §5.1)
+// renders the per-row Action chip as a writable select element styled
+// as a chip. The operator can override the AI-suggested action verb
+// for this row without re-pasting markdown (audit §5.4).
+//
+// Color treatment:
+//   - create  → emerald (matches StatusNew chip)
+//   - update  → sky     (matches StatusUpdated result icon)
+//   - delete  → rose    (warning-color for destructive action)
+templ reviewRowActionChip(idx int, action string) {
+	<select
+		name={ fmt.Sprintf("page_%d_action", idx) }
+		class={
+			"text-xs px-2 py-0.5 rounded-full border border-edge cursor-pointer",
+			templ.KV("bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300", action == importer.ActionCreate || action == ""),
+			templ.KV("bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300", action == importer.ActionUpdate),
+			templ.KV("bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300", action == importer.ActionDelete),
+		}
+		aria-label={ fmt.Sprintf("Action verb for page %d", idx+1) }
+	>
+		@actionOption(importer.ActionCreate, "Create", action)
+		@actionOption(importer.ActionUpdate, "Update", action)
+		@actionOption(importer.ActionDelete, "Delete", action)
+	</select>
+}
+
+// actionOption renders one option in the Action chip select, pre-
+// selected when the value matches the row's current action.
+templ actionOption(value, label, currentAction string) {
+	if currentAction == value || (currentAction == "" && value == importer.ActionCreate) {
+		<option value={ value } selected>{ label }</option>
+	} else {
+		<option value={ value }>{ label }</option>
+	}
 }
 
 // statusChip renders the small badge for the row's overall status.
@@ -459,6 +544,10 @@ templ statusChip(s importer.ParseStatus) {
 		case importer.StatusParseError:
 			<span class="text-xs px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
 				<i class="fa-solid fa-circle-xmark mr-1"></i> Parse error
+			</span>
+		case importer.StatusActionMismatch:
+			<span class="text-xs px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
+				<i class="fa-solid fa-circle-xmark mr-1"></i> Target missing
 			</span>
 	}
 }

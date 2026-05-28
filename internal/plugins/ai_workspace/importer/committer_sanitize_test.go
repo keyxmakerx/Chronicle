@@ -42,9 +42,15 @@ import (
 // Adding a function here is a security-relevant change; the PR
 // description must explain why the funnel guarantee still holds.
 var exemptFunctions = map[string]string{
-	"overwriteExisting": "Receives already-sanitized bodyJSON + bodyHTML " +
-		"as parameters from commitRow; commitRow itself is checked by " +
-		"this pin and is required to call MarkdownToHTML before invoking.",
+	// V1.5 (C-AI-WORKSPACE-V1-G) renamed overwriteExisting → commitUpdate
+	// for vocabulary consistency with the new front-matter `action: update`
+	// verb. Exemption reason is identical — the caller (commitRow OR
+	// commitUpdateExplicit) is responsible for the MarkdownToHTML funnel
+	// before invoking; both callers are pinned by this same test.
+	"commitUpdate": "Receives already-sanitized bodyJSON + bodyHTML as " +
+		"parameters from commitRow or commitUpdateExplicit; both callers " +
+		"are pinned by this same test and required to call MarkdownToHTML " +
+		"before invoking.",
 }
 
 // TestCommitter_EntityMutationsFunnelThroughMarkdownToHTML walks
@@ -64,12 +70,21 @@ func TestCommitter_EntityMutationsFunnelThroughMarkdownToHTML(t *testing.T) {
 		t.Fatalf("parse committer.go: %v", err)
 	}
 
-	// Method names that mutate entity state.
+	// Method names that mutate entity state. Direct calls to these
+	// on c.creator.* are the canonical pin targets.
 	mutators := map[string]bool{
 		"Create":      true,
 		"Update":      true,
 		"UpdateEntry": true,
 	}
+
+	// V1.5 (C-AI-WORKSPACE-V1-G) — wrapper functions on the Committer
+	// itself that are exempt from the body check (they receive pre-
+	// sanitized values from their caller) but whose CALLERS must
+	// still funnel through MarkdownToHTML. Treating these as
+	// transitive mutators ensures `commitUpdateExplicit` (and any
+	// future wrapper-of-a-wrapper) gets pinned correctly.
+	transitiveMutators := exemptFunctions
 
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
@@ -79,6 +94,10 @@ func TestCommitter_EntityMutationsFunnelThroughMarkdownToHTML(t *testing.T) {
 		name := fn.Name.Name
 
 		// Find every entity-mutation call inside this function.
+		// Two shapes:
+		//   1. c.creator.<Mutator>(...)  — direct mutator
+		//   2. c.<TransitiveMutator>(...) — wrapper of an exempt
+		//      function; pin its callers transitively
 		var mutationCalls []*ast.CallExpr
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
@@ -89,12 +108,19 @@ func TestCommitter_EntityMutationsFunnelThroughMarkdownToHTML(t *testing.T) {
 			if !ok {
 				return true
 			}
+			// Transitive wrapper match: c.commitUpdate(...) etc.
+			// Skip when the function being checked IS the wrapper
+			// itself (so commitUpdate doesn't recursively pin itself).
+			if _, isWrapper := transitiveMutators[sel.Sel.Name]; isWrapper && sel.Sel.Name != name {
+				if id, ok := sel.X.(*ast.Ident); ok && id.Name == "c" {
+					mutationCalls = append(mutationCalls, call)
+					return true
+				}
+			}
+			// Direct mutator match: c.creator.{Create,Update,UpdateEntry}.
 			if !mutators[sel.Sel.Name] {
 				return true
 			}
-			// Filter: receiver must be c.creator.* (the
-			// EntityCreator). We look for `<X>.<creator>.<Method>`
-			// shape via SelectorExpr -> SelectorExpr.
 			recv, ok := sel.X.(*ast.SelectorExpr)
 			if !ok {
 				return true

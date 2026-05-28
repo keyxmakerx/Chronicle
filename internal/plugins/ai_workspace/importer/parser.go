@@ -190,9 +190,35 @@ func parseOnePage(raw string) ParsedPage {
 		}
 	}
 
-	// Empty body is a soft warning, not an error.
+	// Validate + default the action field (V1.5 per C-AI-WORKSPACE-V1-G).
+	// Empty defaults to "create" so V1-era AI prompts (no `action:`)
+	// continue to parse with their previous semantics. Per-action
+	// required-field validation lives below (after the name check).
+	switch p.FrontMatter.Action {
+	case "":
+		p.FrontMatter.Action = ActionCreate
+	case ActionCreate, ActionUpdate, ActionDelete:
+		// ok
+	default:
+		p.Status = StatusParseError
+		p.ParseError = fmt.Sprintf(
+			"action: %q is not valid (must be one of create, update, delete)",
+			p.FrontMatter.Action)
+		return p
+	}
+
+	// Empty body is a soft warning, not an error. For Delete rows,
+	// the body is ignored at commit; for Update / Create it would
+	// produce an empty entity body which is a degraded but valid
+	// state. The Delete warning surfaces an AI-prompt-quality issue
+	// (wasted tokens) without blocking the commit.
 	if strings.TrimSpace(p.Body) == "" {
-		p.Warnings = append(p.Warnings, "Page body is empty")
+		if p.FrontMatter.Action != ActionDelete {
+			p.Warnings = append(p.Warnings, "Page body is empty")
+		}
+	} else if p.FrontMatter.Action == ActionDelete {
+		p.Warnings = append(p.Warnings,
+			"Body content is ignored for action: delete; the entity is removed by name")
 	}
 
 	if !p.HasName() {
@@ -275,6 +301,8 @@ func unknownYAMLKeys(rawYAML string) []string {
 	known := map[string]bool{
 		"name": true, "type": true, "subcategory": true,
 		"visibility": true, "tags": true, "description": true,
+		// V1.5 (C-AI-WORKSPACE-V1-G) declarative action verb.
+		"action": true,
 	}
 	var unknown []string
 	for _, line := range strings.Split(rawYAML, "\n") {

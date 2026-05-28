@@ -36,7 +36,27 @@ type FrontMatter struct {
 	Visibility  string   `yaml:"visibility"`  // "private" | "dm_only" | "public"
 	Tags        []string `yaml:"tags"`
 	Description string   `yaml:"description"` // V2 candidate; tolerated in V1
+	// Action (V1.5 / C-AI-WORKSPACE-V1-G) declares the AI's intent for
+	// this row: "create" (default; existing V1 behavior), "update" (load
+	// existing entity by name; replace metadata + body — same semantic
+	// as V1's ConflictMode=overwrite), or "delete" (load existing; remove).
+	// Empty string defaults to "create" so pages from V1-era AI prompts
+	// without the field continue to work. Validated by the parser
+	// against the {create, update, delete} enum; invalid value yields
+	// StatusParseError with a friendly message.
+	Action string `yaml:"action"`
 }
+
+// Front-matter action values (V1.5 verb-set extension per C-AI-WORKSPACE-V1-G;
+// Q-V2-AI-1 vocabulary locked 2026-05-28). The corresponding committer
+// dispatch lives in committer.go; the review-screen UI exposes them as
+// per-row chips. Empty Action defaults to ActionCreate at parse time so
+// V1-era AI prompts (no `action:` field) continue to work unchanged.
+const (
+	ActionCreate = "create"
+	ActionUpdate = "update"
+	ActionDelete = "delete"
+)
 
 // ParseStatus classifies how the parser fared on a single page.
 // Drives the review row's right-most "Status" column.
@@ -59,6 +79,12 @@ const (
 	// Default-EXCLUDE; the operator must fix the source markdown
 	// or skip the row.
 	StatusParseError ParseStatus = "parse_error"
+	// StatusActionMismatch (V1.5 / C-AI-WORKSPACE-V1-G) means the
+	// row's `action:` directive is incompatible with live campaign
+	// state — e.g. `action: update` or `action: delete` targeting an
+	// entity that doesn't exist. Default-EXCLUDE; operator can either
+	// fix the source or override the action via per-row controls.
+	StatusActionMismatch ParseStatus = "action_mismatch"
 )
 
 // ParsedPage is one page detected in the multi-page input. The

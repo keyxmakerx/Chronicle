@@ -37,11 +37,19 @@ var _ = fmt.Errorf
 
 // EntityCreator is the narrow contract the Committer needs. The
 // concrete entities.EntityService implements every method.
+//
+// Per C-AI-WORKSPACE-V1-G (V1.5 verb-set extension), Delete is added
+// alongside Create / Update. The destructive-scoping audit
+// (cordinator/reports/chronicle/2026-05-28-c-ai-workspace-destructive-
+// scoping.md §2.1) verified entities.EntityService.Delete exists at
+// entities/service.go:36; this is a narrow-interface widening, not
+// new entity-service work.
 type EntityCreator interface {
 	CreateEntityType(ctx context.Context, campaignID string, input entities.CreateEntityTypeInput) (*entities.EntityType, error)
 	Create(ctx context.Context, campaignID, userID string, input entities.CreateEntityInput) (*entities.Entity, error)
 	Update(ctx context.Context, entityID string, input entities.UpdateEntityInput) (*entities.Entity, error)
 	UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error
+	Delete(ctx context.Context, entityID string) error
 	GetBySlug(ctx context.Context, campaignID, slug string) (*entities.Entity, error)
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*entities.EntityType, error)
 	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
@@ -88,9 +96,32 @@ type RowDecision struct {
 	// field via Update; CreateEntityInput doesn't carry it.
 	Visibility string
 
-	// ConflictMode is "skip" | "rename" | "overwrite". Honored only
-	// when the corresponding entity slug exists.
+	// ConflictMode is "skip" | "rename" | "update". Honored only when
+	// the action is "create" (or empty) AND the corresponding entity
+	// slug exists in the campaign. Ignored for action=update /
+	// action=delete (those actions encode operator intent directly).
+	//
+	// V1.5 (C-AI-WORKSPACE-V1-G) renames the "overwrite" value to
+	// "update" for vocabulary consistency with the new front-matter
+	// action verb. The commit handler accepts "overwrite" as a
+	// backward-compat alias for one release (remove in V2).
 	ConflictMode string
+
+	// Action (V1.5 / C-AI-WORKSPACE-V1-G) is the operator-confirmed
+	// action verb for this row, normally inherited from the AI's
+	// front-matter `action:` field but operator-overridable in the
+	// review screen. Empty defaults to "create" so legacy form
+	// submissions without the field continue to work. Values:
+	// "create" | "update" | "delete".
+	Action string
+
+	// DeleteConfirmed (V1.5 / C-AI-WORKSPACE-V1-G) is the per-row
+	// confirmation flag for Action=delete rows. The review screen
+	// gates Submit on this being true for every Delete row;
+	// committer treats a Delete row without DeleteConfirmed as
+	// StatusFailed with an explicit reason (belt-and-suspenders
+	// against any client-side bypass of the gate).
+	DeleteConfirmed bool
 }
 
 // CommitInput bundles the per-request commit payload.
@@ -111,23 +142,31 @@ type RowOutcome struct {
 	Reason   string // human-readable reason for skip/failed; empty otherwise
 }
 
-// RowStatus enumerates the per-row commit outcomes.
+// RowStatus enumerates the per-row commit outcomes. V1.5 renames
+// StatusOverwrote to StatusUpdated for vocabulary consistency with
+// the new front-matter `action: update` verb (C-AI-WORKSPACE-V1-G);
+// adds StatusDeleted for action=delete completions.
 type RowStatus string
 
 const (
-	StatusCreated   RowStatus = "created"
-	StatusRenamed   RowStatus = "renamed"
-	StatusOverwrote RowStatus = "overwrote"
-	StatusSkipped   RowStatus = "skipped"
-	StatusFailed    RowStatus = "failed"
+	StatusCreated RowStatus = "created"
+	StatusRenamed RowStatus = "renamed"
+	StatusUpdated RowStatus = "updated"
+	StatusDeleted RowStatus = "deleted"
+	StatusSkipped RowStatus = "skipped"
+	StatusFailed  RowStatus = "failed"
 )
 
-// CommitResult is the aggregate returned to the handler.
+// CommitResult is the aggregate returned to the handler. V1.5 renames
+// the `Overwrote` count to `Updated` + adds `Deleted` for the new
+// action verb. Audit-log payload keys mirror these field names
+// verbatim (V1-E counts-only discipline preserved).
 type CommitResult struct {
 	Rows                 []RowOutcome
 	Created              int
 	Renamed              int
-	Overwrote            int
+	Updated              int
+	Deleted              int
 	Skipped              int
 	Failed               int
 	NewCategoriesCreated []string // slugs successfully created this batch
@@ -184,8 +223,10 @@ func (c *Committer) Commit(ctx context.Context, campaignID string, in CommitInpu
 			result.Created++
 		case StatusRenamed:
 			result.Renamed++
-		case StatusOverwrote:
-			result.Overwrote++
+		case StatusUpdated:
+			result.Updated++
+		case StatusDeleted:
+			result.Deleted++
 		case StatusSkipped:
 			result.Skipped++
 		case StatusFailed:
@@ -299,6 +340,17 @@ func (c *Committer) commitRow(
 		return out
 	}
 
+	// V1.5 action dispatch (C-AI-WORKSPACE-V1-G). Default is "create"
+	// when Action is empty so V1-era form submissions without the
+	// new field route through the original path.
+	switch dec.Action {
+	case ActionDelete:
+		return c.commitDelete(ctx, campaignID, page, dec, idx)
+	case ActionUpdate:
+		return c.commitUpdateExplicit(ctx, campaignID, page, dec, typesBySlug, newTypeIDs, failedNewTypes, idx)
+	}
+	// Fall-through: ActionCreate (or empty). Existing V1 path.
+
 	// Resolve entity type.
 	typeID, ok := resolveTypeID(dec.CategorySpec, typesBySlug, newTypeIDs)
 	if !ok {
@@ -350,8 +402,11 @@ func (c *Committer) commitRow(
 			out.Status = StatusSkipped
 			out.Reason = "Skipped: name conflicts with " + strconv.Quote(existing.Name)
 			return out
-		case "overwrite":
-			return c.overwriteExisting(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, idx)
+		case "update", "overwrite":
+			// V1.5 renames "overwrite" → "update" for vocabulary
+			// consistency with the action verb. Accept both labels
+			// for one release; remove "overwrite" alias in V2.
+			return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, idx)
 		default: // "rename" (default mode)
 			finalName = c.suffixUntilFree(ctx, campaignID, finalName)
 		}
@@ -391,11 +446,15 @@ func (c *Committer) commitRow(
 	return out
 }
 
-// overwriteExisting handles the Overwrite conflict mode: load the
-// existing entity by slug, run Update with the new metadata, then
-// UpdateEntry with the new body. Same SEC-6 funnel applies — body
-// is already sanitized before this call.
-func (c *Committer) overwriteExisting(
+// commitUpdate (renamed from overwriteExisting per V1.5 vocabulary
+// alignment) handles the Update conflict mode + the action=update
+// path: load the existing entity by slug, run Update with the new
+// metadata, then UpdateEntry with the new body. Same SEC-6 funnel
+// applies — body is already sanitized before this call. The AST pin
+// at committer_sanitize_test.go exempts this function with the same
+// reason that previously exempted overwriteExisting — caller's
+// responsibility to sanitize before invoking.
+func (c *Committer) commitUpdate(
 	ctx context.Context,
 	existing *entities.Entity,
 	page ParsedPage,
@@ -408,7 +467,7 @@ func (c *Committer) overwriteExisting(
 	out := RowOutcome{Index: idx, Name: existing.Name, Slug: existing.Slug, EntityID: existing.ID}
 
 	if _, err := c.creator.Update(ctx, existing.ID, entities.UpdateEntityInput{
-		Name:       existing.Name, // overwrite keeps the existing name
+		Name:       existing.Name, // update keeps the existing name
 		TypeLabel:  dec.Subcategory,
 		IsPrivate:  &isPrivate,
 		FieldsData: map[string]any{},
@@ -417,7 +476,7 @@ func (c *Committer) overwriteExisting(
 		// + go through service.go's sanitize.HTML for symmetry.
 	}); err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Could not overwrite the existing page's settings. The original page is unchanged."
+		out.Reason = "Could not update the existing page's settings. The original page is unchanged."
 		return out
 	}
 	if err := c.creator.UpdateEntry(ctx, existing.ID, bodyJSON, bodyHTML); err != nil {
@@ -425,7 +484,128 @@ func (c *Committer) overwriteExisting(
 		out.Reason = "Updated the page's settings, but could not write the new body."
 		return out
 	}
-	out.Status = StatusOverwrote
+	out.Status = StatusUpdated
+	return out
+}
+
+// commitUpdateExplicit handles action=update — the AI explicitly
+// requested an update via front-matter. Mirrors the conflict-mode
+// update path but with stricter expectations: the target MUST exist
+// (classifier should have filtered ActionMismatch already, but we
+// re-check defensively because the commit handler races against any
+// concurrent entity-delete elsewhere). Type resolution + sanitize
+// funnel match the create path so all entity-mutation writes still
+// route through MarkdownToHTML.
+//
+// SEC-6 pin: this function calls c.creator.Update via commitUpdate.
+// commitUpdate itself is exempted in committer_sanitize_test.go;
+// commitUpdateExplicit funnels through MarkdownToHTML before calling
+// it, so the pin's invariant holds.
+func (c *Committer) commitUpdateExplicit(
+	ctx context.Context,
+	campaignID string,
+	page ParsedPage,
+	dec RowDecision,
+	typesBySlug map[string]*entities.EntityType,
+	newTypeIDs map[string]int,
+	failedNewTypes []string,
+	idx int,
+) RowOutcome {
+	out := RowOutcome{Index: idx, Name: dec.Name}
+	if out.Name == "" {
+		out.Name = page.Name
+	}
+
+	// Find the target. Classifier already validated this for the
+	// AI-suggested action=update path; the re-check handles the
+	// (rare) case of concurrent deletion between classify + commit.
+	existing, _ := c.creator.GetBySlug(ctx, campaignID, entities.Slugify(out.Name))
+	if existing == nil {
+		out.Status = StatusFailed
+		out.Reason = "Cannot update: no existing entity named " + strconv.Quote(out.Name) + " in this campaign."
+		return out
+	}
+
+	// Type resolution — operator may have changed the category on a
+	// per-row override; falls back to existing type if empty.
+	typeID, ok := resolveTypeID(dec.CategorySpec, typesBySlug, newTypeIDs)
+	if !ok {
+		if slug, isNew := parseNewCategorySpec(dec.CategorySpec); isNew {
+			for _, f := range failedNewTypes {
+				if f == slug {
+					out.Status = StatusFailed
+					out.Reason = "Couldn't create category " + strconv.Quote(slug)
+					return out
+				}
+			}
+		}
+		// For action=update the operator may legitimately leave
+		// CategorySpec empty (no change to type); preserve existing.
+		typeID = 0
+	}
+
+	// SEC-6 funnel — sanitize body markdown BEFORE handing to
+	// commitUpdate. The pin verifies this funnel exists in every
+	// non-exempt function calling creator.Update / UpdateEntry.
+	bodyHTML, err := MarkdownToHTML(page.Body)
+	if err != nil {
+		out.Status = StatusFailed
+		out.Reason = "Could not parse the page's markdown body — check the heading structure."
+		return out
+	}
+	bodyJSON, err := htmlconv.Convert(bodyHTML)
+	if err != nil {
+		out.Status = StatusFailed
+		out.Reason = "Could not convert the page's body to the editor format. Try simpler markdown."
+		return out
+	}
+
+	isPrivate := dec.Visibility == "private" || dec.Visibility == "dm_only"
+	return c.commitUpdate(ctx, existing, page, dec, typeID, bodyJSON, bodyHTML, isPrivate, idx)
+}
+
+// commitDelete handles action=delete: load the existing entity by
+// slug, verify the DeleteConfirmed gate (belt-and-suspenders against
+// client-side bypass of the review-screen confirmation checkbox),
+// and call entities.EntityService.Delete. NO body sanitization
+// needed; the SEC-6 pin doesn't fire because Delete isn't in the
+// pin's mutators map (audit §7.2 verified this).
+//
+// Hard-delete vs soft-delete is delegated to the entities plugin's
+// Delete implementation — AI Workspace doesn't make that decision.
+func (c *Committer) commitDelete(
+	ctx context.Context,
+	campaignID string,
+	page ParsedPage,
+	dec RowDecision,
+	idx int,
+) RowOutcome {
+	out := RowOutcome{Index: idx, Name: dec.Name}
+	if out.Name == "" {
+		out.Name = page.Name
+	}
+
+	if !dec.DeleteConfirmed {
+		out.Status = StatusFailed
+		out.Reason = "Delete not confirmed — operator must check the per-row confirmation in the review screen."
+		return out
+	}
+
+	existing, _ := c.creator.GetBySlug(ctx, campaignID, entities.Slugify(out.Name))
+	if existing == nil {
+		out.Status = StatusFailed
+		out.Reason = "Cannot delete: no existing entity named " + strconv.Quote(out.Name) + " in this campaign."
+		return out
+	}
+	out.EntityID = existing.ID
+	out.Slug = existing.Slug
+
+	if err := c.creator.Delete(ctx, existing.ID); err != nil {
+		out.Status = StatusFailed
+		out.Reason = "Could not delete the page. Try again in a moment."
+		return out
+	}
+	out.Status = StatusDeleted
 	return out
 }
 

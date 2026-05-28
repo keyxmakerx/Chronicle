@@ -102,12 +102,15 @@ templ ImportResult(d ImportResultData) {
 	</div>
 }
 
-// resultCounters renders the top-of-result tally bar.
+// resultCounters renders the top-of-result tally bar. V1.5
+// (C-AI-WORKSPACE-V1-G) replaces the "Overwrote" pill with "Updated"
+// (verb-set rename) and adds "Deleted" for the new action verb.
 templ resultCounters(r importer.CommitResult) {
-	<div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+	<div class="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
 		@counterPill("Created", r.Created, "emerald")
 		@counterPill("Renamed", r.Renamed, "amber")
-		@counterPill("Overwrote", r.Overwrote, "sky")
+		@counterPill("Updated", r.Updated, "sky")
+		@counterPill("Deleted", r.Deleted, "rose")
 		@counterPill("Skipped", r.Skipped, "slate")
 		@counterPill("Failed", r.Failed, "rose")
 	</div>
@@ -128,8 +131,8 @@ templ counterPill(label string, n int, color string) {
 templ resultRow(campaignID string, row importer.RowOutcome) {
 	<div class={
 		"flex items-start gap-2 text-xs",
-		templ.KV("text-fg", row.Status == importer.StatusCreated || row.Status == importer.StatusRenamed || row.Status == importer.StatusOverwrote),
-		templ.KV("text-fg-muted", row.Status == importer.StatusSkipped),
+		templ.KV("text-fg", row.Status == importer.StatusCreated || row.Status == importer.StatusRenamed || row.Status == importer.StatusUpdated),
+		templ.KV("text-fg-muted", row.Status == importer.StatusSkipped || row.Status == importer.StatusDeleted),
 		templ.KV("text-rose-700 dark:text-rose-300", row.Status == importer.StatusFailed),
 	}>
 		@resultRowIcon(row.Status)
@@ -160,15 +163,18 @@ templ resultRow(campaignID string, row importer.RowOutcome) {
 	</div>
 }
 
-// resultRowIcon is the small icon prefix per status.
+// resultRowIcon is the small icon prefix per status. V1.5 renames
+// Overwrote→Updated and adds Deleted per C-AI-WORKSPACE-V1-G.
 templ resultRowIcon(s importer.RowStatus) {
 	switch s {
 		case importer.StatusCreated:
 			<i class="fa-solid fa-check text-emerald-500 mt-0.5 shrink-0"></i>
 		case importer.StatusRenamed:
 			<i class="fa-solid fa-pen-to-square text-amber-500 mt-0.5 shrink-0"></i>
-		case importer.StatusOverwrote:
+		case importer.StatusUpdated:
 			<i class="fa-solid fa-rotate text-sky-500 mt-0.5 shrink-0"></i>
+		case importer.StatusDeleted:
+			<i class="fa-solid fa-trash text-rose-500 mt-0.5 shrink-0"></i>
 		case importer.StatusSkipped:
 			<i class="fa-solid fa-forward-step text-fg-muted mt-0.5 shrink-0"></i>
 		case importer.StatusFailed:
