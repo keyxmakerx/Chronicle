@@ -147,8 +147,13 @@ type: location
 	if p.Status != StatusParseError {
 		t.Errorf("Status = %q, want StatusParseError; full: %+v", p.Status, p)
 	}
-	if !strings.Contains(p.ParseError, "front-matter YAML") {
-		t.Errorf("ParseError = %q", p.ParseError)
+	// V1-F: error wording switched to friendly text + the raw
+	// `yaml:` prefix is stripped before reaching the operator.
+	if !strings.Contains(p.ParseError, "front-matter could not be read as YAML") {
+		t.Errorf("ParseError = %q; want friendly YAML failure wording", p.ParseError)
+	}
+	if strings.Contains(p.ParseError, "yaml:") {
+		t.Errorf("ParseError = %q leaks the raw `yaml:` library prefix to the operator", p.ParseError)
 	}
 }
 

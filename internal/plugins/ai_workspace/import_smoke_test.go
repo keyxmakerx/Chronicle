@@ -167,11 +167,13 @@ Body.`
 	mustContain(t, out, `name="markdown_source"`)
 	mustContain(t, out, `type="submit"`)
 
-	// Page count + per-status counters.
+	// Page count + per-status counters. V1-F fixes the singular
+	// grammar ("1 conflicts" → "1 conflict") per dispatch §Review-
+	// screen polish item #6.
 	mustContain(t, out, "5 pages detected")
-	mustContain(t, out, "1 conflicts")
-	mustContain(t, out, "1 new categories")
-	mustContain(t, out, "1 parse errors")
+	mustContain(t, out, "1 conflict")
+	mustContain(t, out, "1 new category")
+	mustContain(t, out, "1 parse error")
 
 	// Per-row chips — each status appears at least once. Match the
 	// icon classes (stable across copy edits to the chip text).
@@ -187,8 +189,14 @@ Body.`
 	mustContain(t, out, `value="Ash-Wraith"`)
 	mustContain(t, out, `value="Bone Citadel"`)
 
-	// New-category UI surface.
-	mustContain(t, out, "Create new: warrior")
+	// New-category UI surface. V1-F replaced the old single-
+	// dropdown with an explicit Create-new / Map-to-existing radio
+	// pair (dispatch §Review-screen polish item #1). The proposed
+	// slug still surfaces in a <code> chip next to the Create radio.
+	mustContain(t, out, "Create new:")
+	mustContain(t, out, "warrior")
+	mustContain(t, out, `value="new"`)      // Create-new radio value
+	mustContain(t, out, `value="existing"`) // Map-to-existing radio value
 
 	// Conflict surface — operator sees the existing entity name
 	// so they know what they'd be overwriting.
@@ -223,8 +231,10 @@ func TestImport_EmptyBodyReturns400(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty body, got nil")
 	}
-	if !strings.Contains(err.Error(), "no markdown content") {
-		t.Errorf("error message = %q; want 'no markdown content' hint", err.Error())
+	// V1-F: error wording switched to friendlier phrasing. Match
+	// the "Nothing to import" hint operator now sees.
+	if !strings.Contains(err.Error(), "Nothing to import") {
+		t.Errorf("error message = %q; want 'Nothing to import' hint", err.Error())
 	}
 }
 

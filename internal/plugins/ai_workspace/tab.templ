@@ -26,9 +26,61 @@ import (
 // other half of the same loop), then Import (Phase 4-5).
 templ SettingsTabBody(cc *campaigns.CampaignContext) {
 	<div class="space-y-6">
+		@onboardingHint(cc)
 		@promptBuilderSection(cc)
 		@aiExportSection(cc)
 		@importSection(cc)
+	</div>
+}
+
+// onboardingHint renders a one-shot inline callout pointing at the
+// Copy AI Prompt section. Per V1-F dispatch §Onboarding hint —
+// localStorage-dismissable, per-campaign key so a different campaign
+// shows it again. Subtle inline callout, NOT a popup or overlay.
+//
+// State key: `ai-workspace-onboarded-<campaignID>`. Presence (any
+// value) suppresses the callout; clearing the key (DevTools or a
+// fresh browser) re-shows it.
+templ onboardingHint(cc *campaigns.CampaignContext) {
+	<div
+		x-data={ fmt.Sprintf(`{
+			storageKey: 'ai-workspace-onboarded-%s',
+			dismissed: false,
+			init() {
+				try {
+					this.dismissed = !!localStorage.getItem(this.storageKey);
+				} catch (e) {
+					// Private mode / disabled storage → never dismiss.
+					this.dismissed = false;
+				}
+			},
+			dismiss() {
+				this.dismissed = true;
+				try { localStorage.setItem(this.storageKey, '1'); } catch (e) {}
+			},
+		}`, cc.Campaign.ID) }
+		x-show="!dismissed"
+		x-cloak
+		x-transition.opacity
+		role="status"
+		aria-live="polite"
+		class="card p-4 bg-accent/5 border border-accent/30"
+	>
+		<div class="flex items-start gap-3">
+			<i class="fa-solid fa-lightbulb text-accent text-base mt-0.5" aria-hidden="true"></i>
+			<div class="flex-1 text-sm text-fg">
+				<strong class="font-medium">New here?</strong>
+				Start with <strong>Copy AI Prompt</strong> below. Paste the prompt into Claude / ChatGPT, get new entities back, then bring them in via <strong>AI Import</strong>. Owner-only; nothing is created until you confirm the review.
+			</div>
+			<button
+				type="button"
+				@click="dismiss()"
+				class="text-fg-muted hover:text-fg text-sm shrink-0"
+				aria-label="Dismiss the onboarding hint for this campaign"
+			>
+				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+			</button>
+		</div>
 	</div>
 }
 
