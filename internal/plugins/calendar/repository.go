@@ -851,16 +851,19 @@ func (r *calendarRepo) ListEventsForMonth(ctx context.Context, calendarID string
 		visFilter = ""
 	}
 
+	// Recurring events appear ONCE at their stored (year, month, day) —
+	// the SQL no longer expands yearly recurring rules across other
+	// years. V3 will ship unified recurring expansion; see
+	// decisions/2026-05-28-cal-timeline-v2-design.md Q-V2-6 resolution.
 	query := fmt.Sprintf(`
 		SELECT `+eventCols+`
 		FROM calendar_events e `+eventJoins+`
 		WHERE e.calendar_id = ?
-		  AND ((e.year = ? AND e.month = ? AND e.is_recurring = 0)
-		       OR (e.month = ? AND e.is_recurring = 1 AND e.recurrence_type = 'yearly'))
+		  AND e.year = ? AND e.month = ?
 		  %s
 		ORDER BY e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
-	rows, err := r.db.QueryContext(ctx, query, calendarID, year, month, month)
+	rows, err := r.db.QueryContext(ctx, query, calendarID, year, month)
 	if err != nil {
 		return nil, err
 	}
@@ -876,11 +879,13 @@ func (r *calendarRepo) ListEventsForYear(ctx context.Context, calendarID string,
 		visFilter = ""
 	}
 
+	// Recurring events surface only in their stored year. V3 will ship
+	// unified recurring expansion; see Q-V2-6 resolution.
 	query := fmt.Sprintf(`
 		SELECT `+eventCols+`
 		FROM calendar_events e `+eventJoins+`
 		WHERE e.calendar_id = ?
-		  AND (e.year = ? OR (e.is_recurring = 1 AND e.recurrence_type = 'yearly'))
+		  AND e.year = ?
 		  %s
 		ORDER BY e.month, e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
@@ -914,7 +919,10 @@ func (r *calendarRepo) ListAllEvents(ctx context.Context, calendarID string) ([]
 
 // ListEventsForDateRange returns events within a date range (same year).
 // Handles single-month or cross-month ranges within the same year.
-// Also includes yearly recurring events that fall in the range.
+//
+// Recurring events appear once at their stored (year, month, day); V3
+// will ship unified recurring expansion. See Q-V2-6 resolution at
+// decisions/2026-05-28-cal-timeline-v2-design.md.
 func (r *calendarRepo) ListEventsForDateRange(ctx context.Context, calendarID string, year, startMonth, startDay, endMonth, endDay int, role int) ([]Event, error) {
 	visFilter := "AND e.visibility = 'everyone'"
 	if permissions.CanSeeDmOnly(role) {
@@ -926,17 +934,14 @@ func (r *calendarRepo) ListEventsForDateRange(ctx context.Context, calendarID st
 		SELECT `+eventCols+`
 		FROM calendar_events e `+eventJoins+`
 		WHERE e.calendar_id = ?
-		  AND (
-		    (e.is_recurring = 0 AND e.year = ? AND (e.month * 100 + e.day) >= ? AND (e.month * 100 + e.day) <= ?)
-		    OR (e.is_recurring = 1 AND e.recurrence_type = 'yearly' AND (e.month * 100 + e.day) >= ? AND (e.month * 100 + e.day) <= ?)
-		  )
+		  AND e.year = ? AND (e.month * 100 + e.day) >= ? AND (e.month * 100 + e.day) <= ?
 		  %s
 		ORDER BY e.month, e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
 	startVal := startMonth*100 + startDay
 	endVal := endMonth*100 + endDay
 
-	rows, err := r.db.QueryContext(ctx, query, calendarID, year, startVal, endVal, startVal, endVal)
+	rows, err := r.db.QueryContext(ctx, query, calendarID, year, startVal, endVal)
 	if err != nil {
 		return nil, err
 	}
@@ -970,7 +975,12 @@ func (r *calendarRepo) ListEventsForEntity(ctx context.Context, entityID string,
 }
 
 // ListUpcomingEvents returns events on or after the given date, ordered
-// chronologically. Includes recurring yearly events for upcoming months.
+// chronologically.
+//
+// Recurring events appear once at their stored (year, month, day); they
+// surface here only if the stored date is on/after the supplied cursor.
+// V3 will ship unified recurring expansion; see Q-V2-6 resolution at
+// decisions/2026-05-28-cal-timeline-v2-design.md.
 func (r *calendarRepo) ListUpcomingEvents(ctx context.Context, calendarID string, year, month, day int, role int, limit int) ([]Event, error) {
 	visFilter := "AND e.visibility = 'everyone'"
 	if permissions.CanSeeDmOnly(role) {
@@ -982,26 +992,17 @@ func (r *calendarRepo) ListUpcomingEvents(ctx context.Context, calendarID string
 		FROM calendar_events e `+eventJoins+`
 		WHERE e.calendar_id = ?
 		  AND (
-		    (e.is_recurring = 0 AND (
-		      e.year > ? OR
-		      (e.year = ? AND e.month > ?) OR
-		      (e.year = ? AND e.month = ? AND e.day >= ?)
-		    ))
-		    OR (e.is_recurring = 1 AND e.recurrence_type = 'yearly' AND (
-		      e.month > ? OR (e.month = ? AND e.day >= ?)
-		    ))
+		    e.year > ? OR
+		    (e.year = ? AND e.month > ?) OR
+		    (e.year = ? AND e.month = ? AND e.day >= ?)
 		  )
 		  %s
-		ORDER BY
-		  CASE WHEN e.is_recurring = 1 THEN e.month ELSE e.month END,
-		  CASE WHEN e.is_recurring = 1 THEN e.day ELSE e.day END,
-		  e.year, e.name
+		ORDER BY e.year, e.month, e.day, e.name
 		LIMIT ?`, visFilter)
 
 	rows, err := r.db.QueryContext(ctx, query,
 		calendarID,
 		year, year, month, year, month, day,
-		month, month, day,
 		limit,
 	)
 	if err != nil {
