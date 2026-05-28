@@ -775,6 +775,50 @@ func (h *Handler) UpdateFontFamilyAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// GetEventTierDefinitionsAPI handles GET /campaigns/:id/event-tier-definitions.
+// Returns the per-campaign event tier vocabulary, falling back to the platform
+// default trio when no override is set (V2 Wave 0 PR 2 per
+// cordinator/dispatches/chronicle/C-CAL-V2-SCHEMA-FOUNDATION.md §5; campaign-
+// config surface, NOT exposed via syncapi).
+func (h *Handler) GetEventTierDefinitionsAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can view tier definitions")
+	}
+	defs, err := h.service.GetEventTierDefinitions(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, defs)
+}
+
+// UpdateEventTierDefinitionsAPI handles PUT /campaigns/:id/event-tier-definitions.
+// Replaces the campaign's tier vocabulary. Validation (exactly-one-default,
+// non-empty array, unique slugs, hex color, prominence 0-100) runs at the
+// service layer.
+func (h *Handler) UpdateEventTierDefinitionsAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can edit tier definitions")
+	}
+	var req []TierDefinition
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body — expected JSON array of tier definitions")
+	}
+	if err := h.service.SetEventTierDefinitions(c.Request().Context(), cc.Campaign.ID, req); err != nil {
+		return err
+	}
+	h.logAudit(c, cc.Campaign.ID, "campaign.event_tier_definitions.updated",
+		map[string]any{"tier_count": len(req)})
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // UpdateWelcomeMessageAPI handles PUT /campaigns/:id/welcome-message. Sets the
 // campaign's MOTD banner displayed on the dashboard.
 func (h *Handler) UpdateWelcomeMessageAPI(c echo.Context) error {

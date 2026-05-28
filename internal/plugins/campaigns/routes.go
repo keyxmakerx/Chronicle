@@ -88,6 +88,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.PUT("/font-family", h.UpdateFontFamilyAPI, RequireRole(RoleOwner))
 	cg.PUT("/welcome-message", h.UpdateWelcomeMessageAPI, RequireRole(RoleOwner))
 	cg.PUT("/default-visibility", h.UpdateDefaultVisibilityAPI, RequireRole(RoleOwner))
+	// V2 Wave 0 PR 2: event tier definitions per campaign. Owner-only
+	// campaign-config surface; not exposed via syncapi (Wave 5 territory).
+	cg.GET("/event-tier-definitions", h.GetEventTierDefinitionsAPI, RequireRole(RoleOwner))
+	cg.PUT("/event-tier-definitions", h.UpdateEventTierDefinitionsAPI, RequireRole(RoleOwner))
 
 	// DM grants (Owner only).
 	cg.GET("/dm-grants", h.GetDmGrantsAPI, RequireRole(RoleOwner))

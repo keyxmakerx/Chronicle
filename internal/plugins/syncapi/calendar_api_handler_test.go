@@ -77,6 +77,11 @@ func (s *stubCalendarSvc) SetWeekdays(context.Context, string, []calendar.Weekda
 func (s *stubCalendarSvc) SetMoons(context.Context, string, []calendar.MoonInput) error { return nil }
 func (s *stubCalendarSvc) SetSeasons(context.Context, string, []calendar.Season) error  { return nil }
 func (s *stubCalendarSvc) SetEras(context.Context, string, []calendar.EraInput) error   { return nil }
+func (s *stubCalendarSvc) CreateEra(context.Context, string, calendar.EraInput) (*calendar.Era, error) {
+	return nil, nil
+}
+func (s *stubCalendarSvc) UpdateEra(context.Context, int, calendar.EraInput) error { return nil }
+func (s *stubCalendarSvc) DeleteEra(context.Context, int) error                    { return nil }
 func (s *stubCalendarSvc) SetEventCategories(context.Context, string, []calendar.EventCategoryInput) error {
 	return nil
 }

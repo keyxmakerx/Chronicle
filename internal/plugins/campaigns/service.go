@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -86,6 +87,17 @@ type CampaignService interface {
 	UpdateFontFamily(ctx context.Context, campaignID, fontFamily string) error
 	// UpdateWelcomeMessage sets the campaign's MOTD banner message.
 	UpdateWelcomeMessage(ctx context.Context, campaignID, message string) error
+
+	// GetEventTierDefinitions returns the campaign's event tier vocabulary.
+	// Returns the platform default trio (major/standard/detail) when the
+	// campaign has no custom tier defs set — matches the empty-means-
+	// default semantic used for AccentColor / FontFamily / etc. V2 Wave 0
+	// PR 2 (cordinator/dispatches/chronicle/C-CAL-V2-SCHEMA-FOUNDATION.md §5).
+	GetEventTierDefinitions(ctx context.Context, campaignID string) ([]TierDefinition, error)
+	// SetEventTierDefinitions replaces the campaign's tier vocabulary.
+	// Validates exactly-one-default, non-empty array, unique slugs,
+	// hex color format, prominence range.
+	SetEventTierDefinitions(ctx context.Context, campaignID string, defs []TierDefinition) error
 	// UpdateDefaultVisibility sets the default visibility for new entities.
 	UpdateDefaultVisibility(ctx context.Context, campaignID, visibility string) error
 
@@ -1022,6 +1034,118 @@ func (s *campaignService) UpdateFontFamily(ctx context.Context, campaignID, font
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
 
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// platformDefaultTiers is the platform-wide event tier vocabulary
+// returned by GetEventTierDefinitions when a campaign has no override.
+// Slugs are stable for upgrades; renaming or removing requires a
+// migration of every campaign storing those slugs on Event.Tier (V2
+// Wave 0 PR 2 calendar_events.tier column).
+var platformDefaultTiers = []TierDefinition{
+	{Slug: "major", Name: "Major", Color: "#ef4444", Prominence: 100, IsDefault: false},
+	{Slug: "standard", Name: "Standard", Color: "#6366f1", Prominence: 50, IsDefault: true},
+	{Slug: "detail", Name: "Detail", Color: "#94a3b8", Prominence: 10, IsDefault: false},
+}
+
+// hexColorRE matches #RRGGBB color codes (uppercase OR lowercase hex).
+var hexColorRE = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
+
+// tierSlugRE matches valid tier slugs (lowercase ASCII letters, digits,
+// dash, underscore). Same shape as Chronicle's general slug pattern.
+var tierSlugRE = regexp.MustCompile(`^[a-z0-9_-]+$`)
+
+// validateTierDefinitions runs the per-set + per-entry validation rules.
+// Caller passes the proposed full set; returns nil if valid, an
+// apperror.AppError describing the first violation otherwise.
+func validateTierDefinitions(defs []TierDefinition) error {
+	if len(defs) == 0 {
+		return apperror.NewBadRequest("at least one tier definition is required")
+	}
+	defaults := 0
+	slugSeen := make(map[string]bool, len(defs))
+	for i, d := range defs {
+		if !tierSlugRE.MatchString(d.Slug) {
+			return apperror.NewBadRequest(fmt.Sprintf(
+				"tier %d: slug %q must be lowercase alphanumeric with dashes or underscores",
+				i+1, d.Slug))
+		}
+		if slugSeen[d.Slug] {
+			return apperror.NewBadRequest(fmt.Sprintf("tier slug %q appears more than once", d.Slug))
+		}
+		slugSeen[d.Slug] = true
+		if d.Name == "" {
+			return apperror.NewBadRequest(fmt.Sprintf("tier %q: name is required", d.Slug))
+		}
+		if !hexColorRE.MatchString(d.Color) {
+			return apperror.NewBadRequest(fmt.Sprintf(
+				"tier %q: color %q must be #RRGGBB hex format", d.Slug, d.Color))
+		}
+		if d.Prominence < 0 || d.Prominence > 100 {
+			return apperror.NewBadRequest(fmt.Sprintf(
+				"tier %q: prominence %d must be 0-100", d.Slug, d.Prominence))
+		}
+		if d.IsDefault {
+			defaults++
+		}
+	}
+	if defaults != 1 {
+		return apperror.NewBadRequest(fmt.Sprintf(
+			"exactly one tier must be marked is_default; got %d", defaults))
+	}
+	return nil
+}
+
+// GetEventTierDefinitions returns the campaign's tier vocabulary, falling
+// back to the platform default trio when the campaign has none set.
+// Mirrors the empty-means-default pattern used for AccentColor +
+// FontFamily + etc. — no migration backfill needed for existing
+// campaigns (per Option B locked 2026-05-28 post-C-THEME-CUSTOMIZATION-
+// AUDIT). Returns a defensive copy of the default slice so the caller
+// can't mutate platformDefaultTiers via the returned reference.
+func (s *campaignService) GetEventTierDefinitions(ctx context.Context, campaignID string) ([]TierDefinition, error) {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if campaign == nil {
+		return nil, apperror.NewNotFound("campaign not found")
+	}
+	settings := campaign.ParseSettings()
+	if len(settings.EventTierDefinitions) == 0 {
+		out := make([]TierDefinition, len(platformDefaultTiers))
+		copy(out, platformDefaultTiers)
+		return out, nil
+	}
+	return settings.EventTierDefinitions, nil
+}
+
+// SetEventTierDefinitions replaces the campaign's tier vocabulary with
+// the provided set. Validates exactly-one-default + non-empty array +
+// unique slugs + hex color + prominence range. To reset to the platform
+// default trio, the caller can set an empty array via a separate "reset"
+// affordance OR pass the platform default values explicitly — the
+// service treats the stored array as the source of truth when non-empty.
+func (s *campaignService) SetEventTierDefinitions(ctx context.Context, campaignID string, defs []TierDefinition) error {
+	if err := validateTierDefinitions(defs); err != nil {
+		return err
+	}
+
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	if campaign == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+
+	settings := campaign.ParseSettings()
+	settings.EventTierDefinitions = defs
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
 	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
 }
 

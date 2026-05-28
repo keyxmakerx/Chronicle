@@ -39,6 +39,12 @@ type CalendarService interface {
 	SetMoons(ctx context.Context, calendarID string, moons []MoonInput) error
 	SetSeasons(ctx context.Context, calendarID string, seasons []Season) error
 	SetEras(ctx context.Context, calendarID string, eras []EraInput) error
+	// Per-era CRUD (V2 Wave 0 PR 2). Complements SetEras bulk-replace
+	// for AI Workspace Wave 3 + per-card-edit Wave 1 use cases. All
+	// three publish `structure.updated`.
+	CreateEra(ctx context.Context, calendarID string, input EraInput) (*Era, error)
+	UpdateEra(ctx context.Context, eraID int, input EraInput) error
+	DeleteEra(ctx context.Context, eraID int) error
 	SetEventCategories(ctx context.Context, calendarID string, cats []EventCategoryInput) error
 	GetEventCategories(ctx context.Context, calendarID string) ([]EventCategory, error)
 
@@ -569,6 +575,71 @@ func (s *calendarService) SetEras(ctx context.Context, calendarID string, eras [
 	}
 	if err := s.repo.SetEras(ctx, calendarID, eras); err != nil {
 		return err
+	}
+	s.publishStructureUpdated(ctx, calendarID)
+	return nil
+}
+
+// validateEraInput runs the same validation rules SetEras applies per row.
+// Shared between bulk-set + per-era CRUD so AI Workspace Wave 3 imports
+// hit identical validation regardless of import shape.
+func validateEraInput(in *EraInput) error {
+	if in.Name == "" {
+		return apperror.NewValidation("era name is required")
+	}
+	if in.EndYear != nil && *in.EndYear < in.StartYear {
+		return apperror.NewValidation(fmt.Sprintf("era %q: end year cannot be before start year", in.Name))
+	}
+	if in.Color == "" {
+		in.Color = "#6366f1"
+	}
+	return nil
+}
+
+// CreateEra inserts a single era + publishes structure.updated.
+func (s *calendarService) CreateEra(ctx context.Context, calendarID string, input EraInput) (*Era, error) {
+	if err := validateEraInput(&input); err != nil {
+		return nil, err
+	}
+	era, err := s.repo.CreateEra(ctx, calendarID, input)
+	if err != nil {
+		return nil, fmt.Errorf("create era: %w", err)
+	}
+	s.publishStructureUpdated(ctx, calendarID)
+	return era, nil
+}
+
+// UpdateEra updates one era + publishes structure.updated. Looks up the
+// existing row first so the WS publish has the calendar context and so
+// "era not found" returns a clean NotFound.
+func (s *calendarService) UpdateEra(ctx context.Context, eraID int, input EraInput) error {
+	if err := validateEraInput(&input); err != nil {
+		return err
+	}
+	existing, err := s.repo.GetEraByID(ctx, eraID)
+	if err != nil {
+		return fmt.Errorf("get era: %w", err)
+	}
+	if existing == nil {
+		return apperror.NewNotFound("era not found")
+	}
+	if err := s.repo.UpdateEra(ctx, eraID, input); err != nil {
+		return fmt.Errorf("update era: %w", err)
+	}
+	s.publishStructureUpdated(ctx, existing.CalendarID)
+	return nil
+}
+
+// DeleteEra removes one era + publishes structure.updated for the calendar
+// the era belonged to. Deleting a non-existent era is treated as a no-op
+// (returns NotFound; consistent with existing Set* idempotency).
+func (s *calendarService) DeleteEra(ctx context.Context, eraID int) error {
+	calendarID, err := s.repo.DeleteEra(ctx, eraID)
+	if err != nil {
+		return fmt.Errorf("delete era: %w", err)
+	}
+	if calendarID == "" {
+		return apperror.NewNotFound("era not found")
 	}
 	s.publishStructureUpdated(ctx, calendarID)
 	return nil
@@ -1268,9 +1339,23 @@ func (s *calendarService) SetDate(ctx context.Context, calendarID string, year, 
 	return nil
 }
 
-// ApplyImport replaces a calendar's configuration with data from an ImportResult.
-// Updates the calendar settings and all sub-resources (months, weekdays, moons,
-// seasons, eras). This is a destructive operation — existing sub-resources are replaced.
+// ApplyImport replaces a calendar's configuration with data from an
+// ImportResult atomically. V1 ran 6 sequential service calls (Update +
+// SetMonths + SetWeekdays + SetMoons + SetSeasons + SetEras), each with
+// its own transaction; a partial failure (e.g., import file truncated
+// after seasons) left the calendar with new months + new weekdays + new
+// moons + new seasons + OLD eras — partial state operators couldn't
+// recover from cleanly. V2 Wave 0 PR 2 wraps the entire workflow in a
+// single repo-level transaction.
+//
+// Validation runs upfront — once the tx opens at the repo, we can't roll
+// back cleanly for validation reasons (defeats the point). Per-resource
+// validation mirrors the existing Set* methods exactly so AI Workspace
+// Wave 3 + UI per-card-edit hit identical validation regardless of
+// import shape.
+//
+// On success, a single structure.updated WS event publishes; consumers
+// (UI / sync clients) refresh once rather than 6 times mid-import.
 func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, result *ImportResult) error {
 	cal, err := s.repo.GetByID(ctx, calendarID)
 	if err != nil {
@@ -1280,7 +1365,49 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 		return apperror.NewNotFound("calendar not found")
 	}
 
-	// Update calendar-level settings from import.
+	// Validate sub-resource inputs upfront. Reuse the same rules each
+	// Set* method enforces; failing here keeps the tx unopened so the
+	// calendar stays at its pre-import state.
+	for i, m := range result.Months {
+		if m.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("month %d: name is required", i+1))
+		}
+		if m.Days <= 0 {
+			return apperror.NewValidation(fmt.Sprintf("month %q: days must be positive", m.Name))
+		}
+	}
+	for i, w := range result.Weekdays {
+		if w.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("weekday %d: name is required", i+1))
+		}
+	}
+	for i, m := range result.Moons {
+		if m.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("moon %d: name is required", i+1))
+		}
+		if m.CycleDays <= 0 {
+			return apperror.NewValidation(fmt.Sprintf("moon %q: cycle_days must be positive", m.Name))
+		}
+	}
+	for i, sn := range result.Seasons {
+		if sn.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("season %d: name is required", i+1))
+		}
+	}
+	for i, e := range result.Eras {
+		if e.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("era %d: name is required", i+1))
+		}
+		if e.EndYear != nil && *e.EndYear < e.StartYear {
+			return apperror.NewValidation(fmt.Sprintf("era %q: end year cannot be before start year", e.Name))
+		}
+		if e.Color == "" {
+			result.Eras[i].Color = "#6366f1"
+		}
+	}
+
+	// Mutate cal to reflect import-side fields; repo.ApplyImport reads
+	// these to UPDATE the calendars row within the tx.
 	if result.CalendarName != "" {
 		cal.Name = result.CalendarName
 	}
@@ -1296,31 +1423,11 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 	cal.LeapYearEvery = result.Settings.LeapYearEvery
 	cal.LeapYearOffset = result.Settings.LeapYearOffset
 
-	if err := s.repo.Update(ctx, cal); err != nil {
-		return fmt.Errorf("update calendar: %w", err)
+	if err := s.repo.ApplyImport(ctx, cal, result); err != nil {
+		return fmt.Errorf("apply import: %w", err)
 	}
 
-	// Apply sub-resources.
-	if len(result.Months) > 0 {
-		if err := s.SetMonths(ctx, calendarID, result.Months); err != nil {
-			return fmt.Errorf("set months: %w", err)
-		}
-	}
-	if len(result.Weekdays) > 0 {
-		if err := s.SetWeekdays(ctx, calendarID, result.Weekdays); err != nil {
-			return fmt.Errorf("set weekdays: %w", err)
-		}
-	}
-	if err := s.SetMoons(ctx, calendarID, result.Moons); err != nil {
-		return fmt.Errorf("set moons: %w", err)
-	}
-	if err := s.SetSeasons(ctx, calendarID, result.Seasons); err != nil {
-		return fmt.Errorf("set seasons: %w", err)
-	}
-	if err := s.SetEras(ctx, calendarID, result.Eras); err != nil {
-		return fmt.Errorf("set eras: %w", err)
-	}
-
+	s.publishStructureUpdated(ctx, calendarID)
 	return nil
 }
 

@@ -40,6 +40,25 @@ type CalendarRepository interface {
 	// Eras.
 	SetEras(ctx context.Context, calendarID string, eras []EraInput) error
 	GetEras(ctx context.Context, calendarID string) ([]Era, error)
+	// Per-era CRUD (V2 Wave 0 PR 2; complements bulk SetEras for AI Workspace
+	// Wave 3 + UI per-card-edit use cases). All three publish
+	// `structure.updated` at the service layer.
+	CreateEra(ctx context.Context, calendarID string, input EraInput) (*Era, error)
+	UpdateEra(ctx context.Context, eraID int, input EraInput) error
+	// DeleteEra removes one era + returns the calendarID that owned it
+	// so the service can publish a structure.updated event without an
+	// extra round-trip. Returns "" if the era didn't exist.
+	DeleteEra(ctx context.Context, eraID int) (calendarID string, err error)
+	GetEraByID(ctx context.Context, eraID int) (*Era, error)
+
+	// ApplyImport runs the entire calendar-import write workflow within
+	// ONE transaction so a partial failure can't leave a calendar in a
+	// mixed state (V1 tech debt addressed in V2 Wave 0 PR 2). Replaces
+	// what the service-level ApplyImport used to do via 6 sequential
+	// Set* calls (each opening its own transaction). The service
+	// validates inputs upfront, mutates `cal` to reflect import-side
+	// fields, then calls this method.
+	ApplyImport(ctx context.Context, cal *Calendar, result *ImportResult) error
 
 	// Event categories.
 	SetEventCategories(ctx context.Context, calendarID string, cats []EventCategoryInput) error
@@ -410,6 +429,244 @@ func (r *calendarRepo) SetEras(ctx context.Context, calendarID string, eras []Er
 			return err
 		}
 	}
+	return tx.Commit()
+}
+
+// CreateEra inserts a single era and returns the persisted row (with ID).
+// Auto-assigns sort_order to len(existing) so the new era sorts after
+// existing ones. Per-era CRUD complements SetEras (replace-all); both
+// shapes coexist.
+func (r *calendarRepo) CreateEra(ctx context.Context, calendarID string, input EraInput) (*Era, error) {
+	if input.SortOrder == 0 {
+		var maxSort sql.NullInt64
+		if err := r.db.QueryRowContext(ctx,
+			`SELECT MAX(sort_order) FROM calendar_eras WHERE calendar_id = ?`,
+			calendarID).Scan(&maxSort); err != nil {
+			return nil, err
+		}
+		if maxSort.Valid {
+			input.SortOrder = int(maxSort.Int64) + 1
+		}
+	}
+	res, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_eras (calendar_id, name, start_year, end_year, description, color, sort_order)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		calendarID, input.Name, input.StartYear, input.EndYear, input.Description, input.Color, input.SortOrder,
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return r.GetEraByID(ctx, int(id))
+}
+
+// UpdateEra updates a single era by ID. All fields from EraInput are
+// applied (no nil-preserve semantics — caller provides the full intended
+// shape). Returns sql.ErrNoRows-equivalent (apperror.NotFound) if the
+// era doesn't exist; the service layer maps.
+func (r *calendarRepo) UpdateEra(ctx context.Context, eraID int, input EraInput) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE calendar_eras
+		   SET name = ?, start_year = ?, end_year = ?, description = ?, color = ?, sort_order = ?
+		 WHERE id = ?`,
+		input.Name, input.StartYear, input.EndYear, input.Description, input.Color, input.SortOrder, eraID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// DeleteEra removes a single era + re-sorts remaining eras within the
+// same calendar so sort_order stays contiguous (0..N-1). Done in one
+// transaction so a partial reorder can't strand the calendar's eras
+// in an inconsistent sort order.
+func (r *calendarRepo) DeleteEra(ctx context.Context, eraID int) (string, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	var calendarID string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT calendar_id FROM calendar_eras WHERE id = ?`, eraID,
+	).Scan(&calendarID); err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", err
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM calendar_eras WHERE id = ?`, eraID); err != nil {
+		return "", err
+	}
+
+	// Re-sort remaining eras to be contiguous. SET sort_order = (
+	// row_number() over (...) - 1) — emulated in MariaDB via a session
+	// variable. Eras within a calendar are typically a small set
+	// (handfuls), so the linear-scan reorder is cheap.
+	if _, err := tx.ExecContext(ctx, `SET @i := -1`); err != nil {
+		return "", err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE calendar_eras SET sort_order = (@i := @i + 1)
+		 WHERE calendar_id = ? ORDER BY sort_order, start_year`, calendarID); err != nil {
+		return "", err
+	}
+
+	return calendarID, tx.Commit()
+}
+
+// GetEraByID returns one era by ID, or nil if not found.
+func (r *calendarRepo) GetEraByID(ctx context.Context, eraID int) (*Era, error) {
+	var e Era
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, calendar_id, name, start_year, end_year, description, color, sort_order
+		 FROM calendar_eras WHERE id = ?`, eraID,
+	).Scan(&e.ID, &e.CalendarID, &e.Name, &e.StartYear, &e.EndYear, &e.Description, &e.Color, &e.SortOrder)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+// ApplyImport runs the entire calendar-import write workflow within one
+// transaction. The caller (service layer) is responsible for validating
+// inputs BEFORE this method is called — validation here is impossible
+// because the tx is already open; rolling back due to validation defeats
+// the point of upfront validation.
+//
+// Pre-Wave-0-PR-2 service.ApplyImport called s.SetMonths / SetWeekdays /
+// SetMoons / SetSeasons / SetEras sequentially; each of those opened its
+// own transaction; a failure midway through left the calendar with
+// (some) replaced months + (untouched) old weekdays + etc. — partial
+// state operators couldn't recover from cleanly. This method takes a
+// single tx so on any error the whole import rolls back and the
+// calendar stays at its pre-import state.
+//
+// SQL is duplicated from the corresponding Set* methods rather than
+// extracted into shared helpers, keeping the existing Set* call sites
+// untouched (zero risk to their tests + WS publish semantics). When
+// Wave 3 AI Workspace lands an event-import path, the same pattern can
+// extend with `applyEventsTx` etc. without touching Set*.
+func (r *calendarRepo) ApplyImport(ctx context.Context, cal *Calendar, result *ImportResult) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin import tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Calendar fields (UPDATE).
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE calendars SET name = ?, description = ?, epoch_name = ?,
+		        current_year = ?, current_month = ?, current_day = ?,
+		        hours_per_day = ?, minutes_per_hour = ?, seconds_per_minute = ?,
+		        current_hour = ?, current_minute = ?,
+		        leap_year_every = ?, leap_year_offset = ?
+		 WHERE id = ?`,
+		cal.Name, cal.Description, cal.EpochName,
+		cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay,
+		cal.HoursPerDay, cal.MinutesPerHour, cal.SecondsPerMinute,
+		cal.CurrentHour, cal.CurrentMinute,
+		cal.LeapYearEvery, cal.LeapYearOffset, cal.ID,
+	); err != nil {
+		return fmt.Errorf("update calendar: %w", err)
+	}
+
+	// 2. Months (optional — V1 ApplyImport skipped if empty; we do too).
+	if len(result.Months) > 0 {
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM calendar_months WHERE calendar_id = ?`, cal.ID); err != nil {
+			return fmt.Errorf("delete months: %w", err)
+		}
+		for _, m := range result.Months {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO calendar_months (calendar_id, name, days, sort_order, is_intercalary, leap_year_days)
+				 VALUES (?, ?, ?, ?, ?, ?)`,
+				cal.ID, m.Name, m.Days, m.SortOrder, m.IsIntercalary, m.LeapYearDays,
+			); err != nil {
+				return fmt.Errorf("insert month %q: %w", m.Name, err)
+			}
+		}
+	}
+
+	// 3. Weekdays (optional).
+	if len(result.Weekdays) > 0 {
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM calendar_weekdays WHERE calendar_id = ?`, cal.ID); err != nil {
+			return fmt.Errorf("delete weekdays: %w", err)
+		}
+		for _, w := range result.Weekdays {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO calendar_weekdays (calendar_id, name, sort_order, is_rest_day)
+				 VALUES (?, ?, ?, ?)`,
+				cal.ID, w.Name, w.SortOrder, w.IsRestDay,
+			); err != nil {
+				return fmt.Errorf("insert weekday %q: %w", w.Name, err)
+			}
+		}
+	}
+
+	// 4. Moons (always replace; result.Moons may be empty to clear).
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM calendar_moons WHERE calendar_id = ?`, cal.ID); err != nil {
+		return fmt.Errorf("delete moons: %w", err)
+	}
+	for _, m := range result.Moons {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO calendar_moons (calendar_id, name, cycle_days, phase_offset, color)
+			 VALUES (?, ?, ?, ?, ?)`,
+			cal.ID, m.Name, m.CycleDays, m.PhaseOffset, m.Color,
+		); err != nil {
+			return fmt.Errorf("insert moon %q: %w", m.Name, err)
+		}
+	}
+
+	// 5. Seasons.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM calendar_seasons WHERE calendar_id = ?`, cal.ID); err != nil {
+		return fmt.Errorf("delete seasons: %w", err)
+	}
+	for _, s := range result.Seasons {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO calendar_seasons (calendar_id, name, start_month, start_day, end_month, end_day, description, color, weather_effect)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			cal.ID, s.Name, s.StartMonth, s.StartDay, s.EndMonth, s.EndDay, s.Description, s.Color, s.WeatherEffect,
+		); err != nil {
+			return fmt.Errorf("insert season %q: %w", s.Name, err)
+		}
+	}
+
+	// 6. Eras.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM calendar_eras WHERE calendar_id = ?`, cal.ID); err != nil {
+		return fmt.Errorf("delete eras: %w", err)
+	}
+	for _, e := range result.Eras {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO calendar_eras (calendar_id, name, start_year, end_year, description, color, sort_order)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			cal.ID, e.Name, e.StartYear, e.EndYear, e.Description, e.Color, e.SortOrder,
+		); err != nil {
+			return fmt.Errorf("insert era %q: %w", e.Name, err)
+		}
+	}
+
 	return tx.Commit()
 }
 
