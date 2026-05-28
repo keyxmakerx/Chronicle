@@ -782,6 +782,363 @@ func daysInRow(data CalendarV2ViewData, row int) []int {
 	return out
 }
 
+// --- Wave 1.5 §C: Week + Day hour-grid layout helpers ---
+
+// weekDay carries everything a Week-view day column needs to render
+// its header + hour-slot grid. Caller iterates the slice in column
+// order; day=0 indicates a column that falls outside the calendar's
+// month (e.g. when a fantasy week's column count would push the
+// window past the last day of the year).
+type weekDay struct {
+	Day       int // day-of-month (1..dim) or 0 for filler
+	Month     int
+	Year      int
+	IsToday   bool
+	IsRestDay bool
+	Weekday   string // weekday name for header
+}
+
+// weekDays builds the day-column descriptors for the visible Week
+// window centered on the cursor (data.Year, data.Month, data.Day).
+// The window length matches the calendar's per-week column count.
+//
+// PR #367 used `addDaysSimple(month, day, n)` for the +6 step; here
+// we extend with backward stepping so the cursor sits roughly mid-
+// week. Days that roll past month boundaries surface their actual
+// (year, month, day) so the header reads "Apr 28 · Apr 29 · Apr 30
+// · May 1 · ..." across boundaries.
+func weekDays(data CalendarV2ViewData) []weekDay {
+	if data.ActiveCalendar == nil {
+		return nil
+	}
+	cal := data.ActiveCalendar
+	cols := monthColumnCount(data)
+	if cols < 1 {
+		return nil
+	}
+	// Compute the start of the week: cursor minus N days where N is
+	// half the column count (rounded down).
+	startBack := cols / 2
+	startMonth, startDay := stepDaysBackward(cal, data.Month, data.Day, startBack)
+	startYear := data.Year
+	if startMonth > data.Month {
+		startYear--
+	}
+	out := make([]weekDay, cols)
+	curYear, curMonth, curDay := startYear, startMonth, startDay
+	for i := 0; i < cols; i++ {
+		isToday := curYear == cal.CurrentYear && curMonth == cal.CurrentMonth && curDay == cal.CurrentDay
+		// Rest-day check: day-of-year modulo week-length lands on a
+		// weekday with IsRestDay=true.
+		isRest := false
+		weekdayName := ""
+		if curMonth >= 1 && curMonth <= len(cal.Months) {
+			doy := v2DayOfYear(cal, curMonth, curDay)
+			idx := (doy - 1) % cols
+			if idx >= 0 && idx < len(cal.Weekdays) {
+				isRest = cal.Weekdays[idx].IsRestDay
+				weekdayName = cal.Weekdays[idx].Name
+			}
+		}
+		out[i] = weekDay{
+			Day:       curDay,
+			Month:     curMonth,
+			Year:      curYear,
+			IsToday:   isToday,
+			IsRestDay: isRest,
+			Weekday:   weekdayName,
+		}
+		// Step forward 1 day; detect year rollover only when the
+		// step actually wrapped through the last month of the year
+		// (prevMonth was the last month AND curDay reset to 1).
+		// This avoids false positives in single-month calendars
+		// where every step would otherwise look like a year boundary.
+		prevMonth := curMonth
+		curMonth, curDay = stepDaysForward(cal, curMonth, curDay, 1)
+		if prevMonth == len(cal.Months) && curMonth == 1 && curDay == 1 {
+			curYear++
+		}
+	}
+	return out
+}
+
+// stepDaysBackward steps (month, day) back by n days within the
+// calendar's month structure. Returns the resulting (month, day);
+// year rollover is left to the caller.
+func stepDaysBackward(cal *Calendar, month, day, n int) (int, int) {
+	for n > 0 {
+		if day > n {
+			day -= n
+			break
+		}
+		n -= day
+		month--
+		if month < 1 {
+			month = len(cal.Months)
+		}
+		day = cal.Months[month-1].Days
+	}
+	return month, day
+}
+
+// stepDaysForward steps (month, day) forward by n days.
+func stepDaysForward(cal *Calendar, month, day, n int) (int, int) {
+	for n > 0 {
+		remaining := cal.Months[month-1].Days - day
+		if n <= remaining {
+			day += n
+			break
+		}
+		n -= remaining + 1
+		day = 1
+		month++
+		if month > len(cal.Months) {
+			month = 1
+		}
+	}
+	return month, day
+}
+
+// hourRows returns the hour labels for the Week + Day hour grid.
+// Uses the calendar's HoursPerDay (already in the Calendar model;
+// no schema add needed — Wave 1.5 §1 finding). Falls back to 24 if
+// the field is somehow zero.
+func hourRows(cal *Calendar) []int {
+	if cal == nil || cal.HoursPerDay < 1 {
+		out := make([]int, 24)
+		for i := range out {
+			out[i] = i
+		}
+		return out
+	}
+	out := make([]int, cal.HoursPerDay)
+	for i := range out {
+		out[i] = i
+	}
+	return out
+}
+
+// fmtHourLabel renders a 2-digit "HH:00" hour label.
+func fmtHourLabel(h int) string {
+	hs := itoaCal(h)
+	if len(hs) == 1 {
+		hs = "0" + hs
+	}
+	return hs + ":00"
+}
+
+// eventsForWeekDay returns events that occur on this specific day in
+// the Week view, filtered to those with a time component (timed
+// events render in the hour grid; all-day events render in the strip
+// via allDayEventsForDay).
+func eventsForWeekDay(events []Event, year, month, day int) []Event {
+	var out []Event
+	for _, e := range events {
+		if isMultiDayEvent(e) {
+			continue
+		}
+		if e.Year != year || e.Month != month || e.Day != day {
+			continue
+		}
+		// Timed = has StartHour set.
+		if e.StartHour == nil {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// allDayEventsForDay returns events on a specific day that have no
+// time component — they render in the Week/Day view all-day strip.
+func allDayEventsForDay(events []Event, year, month, day int) []Event {
+	var out []Event
+	for _, e := range events {
+		if isMultiDayEvent(e) {
+			continue
+		}
+		if e.Year != year || e.Month != month || e.Day != day {
+			continue
+		}
+		if e.StartHour != nil {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// eventHourRange returns (startHour, endHour) for a single-day timed
+// event, clipped to the calendar's HoursPerDay so events that exceed
+// the day length don't render off-grid.
+func eventHourRange(e Event, cal *Calendar) (startHour, endHour int) {
+	if e.StartHour == nil {
+		return 0, 1
+	}
+	startHour = *e.StartHour
+	if e.EndHour != nil && (e.EndYear == nil || *e.EndYear == e.Year) &&
+		(e.EndMonth == nil || *e.EndMonth == e.Month) &&
+		(e.EndDay == nil || *e.EndDay == e.Day) {
+		endHour = *e.EndHour
+	} else {
+		endHour = startHour + 1
+	}
+	maxH := 24
+	if cal != nil && cal.HoursPerDay > 0 {
+		maxH = cal.HoursPerDay
+	}
+	if endHour > maxH {
+		endHour = maxH
+	}
+	if endHour <= startHour {
+		endHour = startHour + 1
+	}
+	return startHour, endHour
+}
+
+// weekTimedEventStyle composes the grid-row inline style for a Week
+// view timed event. Uses CSS Grid `grid-row: <start+1> / <end+1>`
+// because grid lines are 1-indexed and the all-day strip occupies
+// row 1.
+func weekTimedEventStyle(e Event, cal *Calendar) string {
+	startH, endH := eventHourRange(e, cal)
+	// Grid rows: row 1 = all-day strip header; hour 0 starts at row 2.
+	return "grid-row: " + itoaCal(startH+2) + " / " + itoaCal(endH+2) + ";"
+}
+
+// dayCellClasses returns the Tailwind classes for a Week-view day-
+// column header based on today/rest-day markers.
+func dayCellClasses(wd weekDay) string {
+	switch {
+	case wd.IsToday:
+		return "bg-accent/10 ring-2 ring-accent"
+	case wd.IsRestDay:
+		return "bg-surface-2"
+	}
+	return ""
+}
+
+// weekDayLabel composes the column-header text for a Week-view
+// column: weekday name + month-name-day (e.g. "Mon · Mirtul 5").
+func weekDayLabel(wd weekDay, cal *Calendar) string {
+	if wd.Day == 0 || cal == nil {
+		return ""
+	}
+	monthName := ""
+	if wd.Month >= 1 && wd.Month <= len(cal.Months) {
+		monthName = cal.Months[wd.Month-1].Name
+	}
+	if wd.Weekday != "" {
+		return wd.Weekday + " · " + monthName + " " + itoaCal(wd.Day)
+	}
+	return monthName + " " + itoaCal(wd.Day)
+}
+
+// weekHeading composes the Week view's top heading from the visible
+// window's first + last days (e.g. "Mirtul 3 – 9, 1492 DR").
+func weekHeading(data CalendarV2ViewData) string {
+	if data.ActiveCalendar == nil {
+		return "Week"
+	}
+	days := weekDays(data)
+	if len(days) == 0 {
+		return "Week"
+	}
+	first := days[0]
+	last := days[len(days)-1]
+	calName := func(m int) string {
+		if m >= 1 && m <= len(data.ActiveCalendar.Months) {
+			return data.ActiveCalendar.Months[m-1].Name
+		}
+		return ""
+	}
+	epoch := ""
+	if data.ActiveCalendar.EpochName != nil && *data.ActiveCalendar.EpochName != "" {
+		epoch = " " + *data.ActiveCalendar.EpochName
+	}
+	if first.Month == last.Month && first.Year == last.Year {
+		return calName(first.Month) + " " + itoaCal(first.Day) + " – " + itoaCal(last.Day) + ", " + itoaCal(first.Year) + epoch
+	}
+	return calName(first.Month) + " " + itoaCal(first.Day) + " – " + calName(last.Month) + " " + itoaCal(last.Day) + ", " + itoaCal(first.Year) + epoch
+}
+
+// dayHeading composes the Day view's heading (e.g. "Mirtul 5, 1492 DR").
+func dayHeading(data CalendarV2ViewData) string {
+	if data.ActiveCalendar == nil {
+		return "Day"
+	}
+	monthName := ""
+	if data.Month >= 1 && data.Month <= len(data.ActiveCalendar.Months) {
+		monthName = data.ActiveCalendar.Months[data.Month-1].Name
+	}
+	epoch := ""
+	if data.ActiveCalendar.EpochName != nil && *data.ActiveCalendar.EpochName != "" {
+		epoch = " " + *data.ActiveCalendar.EpochName
+	}
+	return monthName + " " + itoaCal(data.Day) + ", " + itoaCal(data.Year) + epoch
+}
+
+// weekColumnsStyle builds the CSS Grid template-columns for the
+// Week-view header + all-day strip: hour-label column at left
+// (~60px) + N equal day columns.
+func weekColumnsStyle(dayCount int) string {
+	if dayCount < 1 {
+		dayCount = 7
+	}
+	return "grid-template-columns: 60px repeat(" + itoaCal(dayCount) + ", minmax(0, 1fr));"
+}
+
+// weekHourGridStyle builds the CSS Grid template for the scrolling
+// hour grid: hour-label column + day columns × hour-per-day rows.
+// Each row is 32px to keep the grid readable; total height scales
+// with HoursPerDay.
+func weekHourGridStyle(data CalendarV2ViewData, dayCount int) string {
+	rows := 24
+	if data.ActiveCalendar != nil && data.ActiveCalendar.HoursPerDay > 0 {
+		rows = data.ActiveCalendar.HoursPerDay
+	}
+	if dayCount < 1 {
+		dayCount = 7
+	}
+	return "grid-template-columns: 60px repeat(" + itoaCal(dayCount) + ", minmax(0, 1fr)); " +
+		"grid-template-rows: 20px repeat(" + itoaCal(rows) + ", 32px);"
+}
+
+// dayHourGridStyle builds the CSS Grid template for the Day view's
+// hour grid: hour-label column + single content column × hour rows.
+func dayHourGridStyle(data CalendarV2ViewData) string {
+	rows := 24
+	if data.ActiveCalendar != nil && data.ActiveCalendar.HoursPerDay > 0 {
+		rows = data.ActiveCalendar.HoursPerDay
+	}
+	return "grid-template-columns: 60px 1fr; grid-template-rows: repeat(" + itoaCal(rows) + ", 40px);"
+}
+
+// dayTimedEventStyle is the Day view variant of weekTimedEventStyle.
+// Day view has no all-day-strip in the grid (rendered separately
+// above), so hour 0 starts at row 1 (not row 2).
+func dayTimedEventStyle(e Event, cal *Calendar) string {
+	startH, endH := eventHourRange(e, cal)
+	return "grid-row: " + itoaCal(startH+1) + " / " + itoaCal(endH+1) + ";"
+}
+
+// weekHourCellClasses returns the per-cell tint for a Week-view
+// background hour slot — today's column gets a subtle accent tint;
+// rest-day columns get the same surface-2 tint as Month rest days.
+func weekHourCellClasses(wd weekDay) string {
+	switch {
+	case wd.IsToday:
+		return "bg-accent/5"
+	case wd.IsRestDay:
+		return "bg-surface-2/30"
+	}
+	return ""
+}
+
+// intStr is a wrapper used by templ inline styles where a plain
+// strconv.Itoa would be too much to import locally.
+func intStr(n int) string { return itoaCal(n) }
+
 // eventsForDay returns the single-day events that fall on (year,
 // month, day). Multi-day events render via the ribbon layer and are
 // filtered out here; ribbons render once at the top of the week row.

@@ -462,12 +462,14 @@ templ monthDayCell(data CalendarV2ViewData, day monthDay) {
 	</div>
 }
 
-// weekViewPlaceholder renders the Week grid scaffolding: 7 day
-// columns × hour rows. PR 4 layers timed event blocks here.
+// weekViewPlaceholder renders the Week hour-grid view (Wave 1.5 §C).
+// Structure: top all-day strip + scrolling hour-grid below; columns
+// = calendar's weekday count; rows = hours-per-day. Timed events
+// position via CSS grid-row; all-day events fill the top strip.
 templ weekViewPlaceholder(data CalendarV2ViewData) {
-	<div class="card card-elev p-4">
+	<div class="card card-elev p-4" data-week-view="true">
 		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-lg font-semibold text-fg">Week view</h2>
+			<h2 class="text-lg font-semibold text-fg">{ weekHeading(data) }</h2>
 			<div class="flex items-center gap-1">
 				<a href={ v2ViewNavHref(data, -1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Previous week">
 					<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
@@ -478,8 +480,66 @@ templ weekViewPlaceholder(data CalendarV2ViewData) {
 				</a>
 			</div>
 		</div>
-		<div class="text-sm text-fg-secondary italic">
-			Week placeholder &mdash; PR 4 ships the hour-grid + event-card rendering.
+		{{ days := weekDays(data) }}
+		<div class="grid gap-px" style={ weekColumnsStyle(len(days)) }>
+			// Spacer + day headers.
+			<div class="text-xs text-fg-secondary text-right pr-2 py-1">Hour</div>
+			for _, wd := range days {
+				<div class={ "text-xs text-fg-secondary text-center py-1 rounded", dayCellClasses(wd) }>
+					{ weekDayLabel(wd, data.ActiveCalendar) }
+				</div>
+			}
+			// All-day strip: spans hour column + day columns.
+			<div class="text-[10px] text-fg-secondary text-right pr-2 py-1">all-day</div>
+			for _, wd := range days {
+				<div class="border border-edge/30 rounded p-1 min-h-[28px] flex flex-col gap-0.5">
+					if wd.Day != 0 {
+						for _, e := range allDayEventsForDay(data.Events, wd.Year, wd.Month, wd.Day) {
+							@calwidget.EventCard(eventToCardData(e, data.ActiveCalendar), calwidget.DensityCompact)
+						}
+					}
+				</div>
+			}
+		</div>
+		// Hour grid — scrollable, CSS-grid-positioned events.
+		<div class="mt-2 max-h-[60vh] overflow-y-auto">
+			<div class="grid gap-px" style={ weekHourGridStyle(data, len(days)) }>
+				for _, h := range hourRows(data.ActiveCalendar) {
+					<div
+						class="text-xs text-fg-secondary text-right pr-2 py-1 border-t border-edge/20"
+						style={ "grid-column: 1; grid-row: " + intStr(h+2) + ";" }
+					>
+						{ fmtHourLabel(h) }
+					</div>
+				}
+				for i, wd := range days {
+					if wd.Day != 0 {
+						// Background hour cells for this column.
+						for _, h := range hourRows(data.ActiveCalendar) {
+							_ = h
+							<div
+								class={ "border-t border-edge/20 cell-drop-target", weekHourCellClasses(wd) }
+								style={ "grid-column: " + intStr(i+2) + "; grid-row: " + intStr(h+2) + ";" }
+								data-cell-year={ intStr(wd.Year) }
+								data-cell-month={ intStr(wd.Month) }
+								data-cell-day={ intStr(wd.Day) }
+								data-cell-hour={ intStr(h) }
+							></div>
+						}
+						// Timed events for this column.
+						for _, e := range eventsForWeekDay(data.Events, wd.Year, wd.Month, wd.Day) {
+							<div
+								class="z-10 p-0.5"
+								style={ "grid-column: " + intStr(i+2) + "; " + weekTimedEventStyle(e, data.ActiveCalendar) }
+								data-event-id={ e.ID }
+								data-event-card="standard"
+							>
+								@calwidget.EventCard(eventToCardData(e, data.ActiveCalendar), calwidget.DensityStandard)
+							</div>
+						}
+					}
+				}
+			</div>
 		</div>
 	</div>
 }
@@ -594,12 +654,14 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 	</div>
 }
 
-// dayViewPlaceholder renders the Day shell. PR 4 layers the
-// single-day hour grid with event cards.
+// dayViewPlaceholder renders the Day hour-grid view (Wave 1.5 §C).
+// Single-column × hour-rows layout with all-day strip on top.
+// Events with time render full-width via the standard density;
+// all-day events render in the top strip.
 templ dayViewPlaceholder(data CalendarV2ViewData) {
-	<div class="card card-elev p-4">
+	<div class="card card-elev p-4" data-day-view="true">
 		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-lg font-semibold text-fg">Day view</h2>
+			<h2 class="text-lg font-semibold text-fg">{ dayHeading(data) }</h2>
 			<div class="flex items-center gap-1">
 				<a href={ v2ViewNavHref(data, -1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Previous day">
 					<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
@@ -610,8 +672,48 @@ templ dayViewPlaceholder(data CalendarV2ViewData) {
 				</a>
 			</div>
 		</div>
-		<div class="text-sm text-fg-secondary italic">
-			Day placeholder &mdash; PR 4 ships the hour-grid + event-card rendering.
+		// All-day strip.
+		{{ allDay := allDayEventsForDay(data.Events, data.Year, data.Month, data.Day) }}
+		if len(allDay) > 0 {
+			<div class="mb-2">
+				<div class="text-[10px] text-fg-secondary mb-1">All-day events</div>
+				<div class="space-y-1">
+					for _, e := range allDay {
+						@calwidget.EventCard(eventToCardData(e, data.ActiveCalendar), calwidget.DensityStandard)
+					}
+				</div>
+			</div>
+		}
+		// Hour grid.
+		<div class="max-h-[65vh] overflow-y-auto">
+			<div class="grid gap-px" style={ dayHourGridStyle(data) }>
+				for _, h := range hourRows(data.ActiveCalendar) {
+					<div
+						class="text-xs text-fg-secondary text-right pr-2 py-1 border-t border-edge/20"
+						style={ "grid-column: 1; grid-row: " + intStr(h+1) + ";" }
+					>
+						{ fmtHourLabel(h) }
+					</div>
+					<div
+						class="border-t border-edge/20 min-h-[40px] cell-drop-target"
+						style={ "grid-column: 2; grid-row: " + intStr(h+1) + ";" }
+						data-cell-year={ intStr(data.Year) }
+						data-cell-month={ intStr(data.Month) }
+						data-cell-day={ intStr(data.Day) }
+						data-cell-hour={ intStr(h) }
+					></div>
+				}
+				for _, e := range eventsForWeekDay(data.Events, data.Year, data.Month, data.Day) {
+					<div
+						class="z-10 p-1"
+						style={ "grid-column: 2; " + dayTimedEventStyle(e, data.ActiveCalendar) }
+						data-event-id={ e.ID }
+						data-event-card="detailed"
+					>
+						@calwidget.EventCard(eventToCardData(e, data.ActiveCalendar), calwidget.DensityDetailed)
+					</div>
+				}
+			</div>
 		</div>
 	</div>
 }
