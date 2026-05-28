@@ -2475,3 +2475,17 @@
     transition: none;
   }
 }
+
+/* === V2 Wave 1 PR 5 additions: popover + modal patterns === */
+@layer components {
+  .popover-scale-in {
+    animation: cal-v2-popover-in var(--motion-fast, 150ms) ease-out both;
+  }
+  @keyframes cal-v2-popover-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .popover-scale-in { animation: none; }
+}

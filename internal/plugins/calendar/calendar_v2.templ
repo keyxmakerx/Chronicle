@@ -72,9 +72,91 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 		</div>
 		if data.ActiveCalendar != nil && data.IsScribe {
 			@eventV2Drawer(data)
+		}
+		if data.ActiveCalendar != nil {
+			@shortcutsModalV2()
+			@dayDetailPopoverV2()
 			<script src="/static/plugins/calendar/js/event_grid.js" defer></script>
+			<script src="/static/plugins/calendar/js/calendar_v2_shell.js" defer></script>
 		}
 	}
+}
+
+// shortcutsModalV2 renders the `?` keyboard shortcuts help modal
+// (Wave 1 PR 5 §F). Plugin-scoped per template-first judgment —
+// single-surface use today; extract to widgets/modal when Wave 2
+// timeline needs the same shape.
+templ shortcutsModalV2() {
+	<div
+		id="cal-v2-shortcuts-modal"
+		class="fixed inset-0 z-40 hidden"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="cal-v2-shortcuts-title"
+	>
+		<div class="absolute inset-0 bg-black/40" data-shortcuts-backdrop="true"></div>
+		<div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 card card-elev w-full max-w-md p-5 popover-scale-in">
+			<div class="flex items-center justify-between mb-3">
+				<h2 id="cal-v2-shortcuts-title" class="text-base font-semibold text-fg">Keyboard shortcuts</h2>
+				<button
+					type="button"
+					class="text-fg-secondary hover:text-fg transition-colors duration-micro"
+					data-shortcuts-close="true"
+					aria-label="Close shortcuts"
+				>
+					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+				</button>
+			</div>
+			<dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
+				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">?</kbd></dt>
+				<dd class="text-fg-secondary">Show this help</dd>
+				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">t</kbd></dt>
+				<dd class="text-fg-secondary">Jump to today</dd>
+				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">j</kbd> / <kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">←</kbd></dt>
+				<dd class="text-fg-secondary">Previous period</dd>
+				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">k</kbd> / <kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">→</kbd></dt>
+				<dd class="text-fg-secondary">Next period</dd>
+				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">m</kbd></dt>
+				<dd class="text-fg-secondary">Month view</dd>
+				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">w</kbd></dt>
+				<dd class="text-fg-secondary">Week view</dd>
+				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">d</kbd></dt>
+				<dd class="text-fg-secondary">Day view</dd>
+				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">n</kbd></dt>
+				<dd class="text-fg-secondary">New event</dd>
+				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">/</kbd></dt>
+				<dd class="text-fg-secondary">Focus search</dd>
+				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">Esc</kbd></dt>
+				<dd class="text-fg-secondary">Close drawer / modal / popover</dd>
+			</dl>
+		</div>
+	</div>
+}
+
+// dayDetailPopoverV2 renders the day-detail popover that replaces
+// the decorative "+N more" affordance from PR #366 (Wave 1 PR 5 §J).
+// Plugin-scoped per template-first judgment.
+templ dayDetailPopoverV2() {
+	<div
+		id="cal-v2-day-popover"
+		class="hidden fixed z-30 card card-elev p-3 max-w-xs popover-scale-in"
+		role="dialog"
+		aria-label="Day detail"
+		data-day-popover="true"
+	>
+		<div class="flex items-center justify-between mb-2">
+			<h3 class="text-sm font-semibold text-fg" data-day-popover-title>Day</h3>
+			<button
+				type="button"
+				class="text-fg-secondary hover:text-fg transition-colors duration-micro"
+				data-day-popover-close="true"
+				aria-label="Close"
+			>
+				<i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
+			</button>
+		</div>
+		<div class="space-y-1 max-h-64 overflow-y-auto" data-day-popover-list></div>
+	</div>
 }
 
 // CalendarV2ViewFragment renders just the view slot for HTMX swaps
@@ -264,11 +346,78 @@ templ monthViewPlaceholder(data CalendarV2ViewData) {
 			for _, w := range monthWeekdayHeaders(data) {
 				<div class="text-xs font-medium text-fg-secondary text-center py-1">{ w.Name }</div>
 			}
-			for _, day := range monthDays(data) {
-				@monthDayCell(data, day)
-			}
 		</div>
+		// PR 5 §A: Per-week-row rendering with era bands + ribbons +
+		// cells. Each week row is a stack: era band layer (z-0) under
+		// ribbon layer (z-10) under cell content (z-20). Click on
+		// ribbon segment opens drawer for the multi-day event;
+		// individual cells host single-day events as before.
+		@monthWeekRows(data)
 	</div>
+}
+
+// monthWeekRows renders all visible week rows for the Month view,
+// stacking era bands + ribbons + cells per row. Per dispatch §A.1 /
+// §A.2 / §A.3 (PR 5).
+templ monthWeekRows(data CalendarV2ViewData) {
+	{{ ribbonRows := monthRibbonRows(data) }}
+	{{ eraBands := monthEraBands(data) }}
+	for row := 0; row < monthWeekRowCount(data); row++ {
+		<div class="relative my-1">
+			// Era-band layer — atmospheric background; events render above.
+			if len(eraBandsForRow(eraBands, row)) > 0 {
+				<div class="grid gap-1 absolute inset-0 z-0" style={ monthGridStyle(data) } aria-hidden="true">
+					for _, band := range eraBandsForRow(eraBands, row) {
+						<div
+							class="rounded-sm border-l-2 border-edge/30"
+							style={ eraBandStyle(band) }
+							title={ band.Name }
+						></div>
+					}
+				</div>
+			}
+			// Ribbon layer — multi-day events.
+			if len(ribbonsForRow(ribbonRows, row)) > 0 {
+				<div class="grid gap-1 mb-1 z-10 relative" style={ monthGridStyle(data) }>
+					for _, seg := range ribbonsForRow(ribbonRows, row) {
+						<button
+							type="button"
+							class={ ribbonClasses(seg) }
+							style={ ribbonInlineStyle(seg) }
+							data-event-id={ seg.EventID }
+							data-event-card="ribbon"
+							draggable="true"
+							aria-label={ "Multi-day event: " + seg.Name }
+						>
+							<span class="truncate">{ seg.Name }</span>
+							if !seg.IsPublic {
+								<i class="fa-solid fa-lock text-fg-secondary text-[10px] ml-1" aria-hidden="true"></i>
+							}
+							if !seg.OpenRight {
+								<span
+									class="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize bg-accent/0 hover:bg-accent/40 transition-colors duration-micro"
+									data-ribbon-resize="right"
+									role="separator"
+									aria-orientation="vertical"
+									aria-label="Drag to resize event"
+								></span>
+							}
+						</button>
+					}
+				</div>
+			}
+			// Cell layer — single-day events go inside their cells.
+			<div class="grid gap-1 z-20 relative" style={ monthGridStyle(data) }>
+				for _, d := range daysInRow(data, row) {
+					if d == 0 {
+						<div class="border border-edge/30 rounded min-h-[80px] opacity-50"></div>
+					} else {
+						@monthDayCell(data, monthDayFor(data, d))
+					}
+				}
+			</div>
+		</div>
+	}
 }
 
 // monthDayCell renders a single day cell with today highlight +

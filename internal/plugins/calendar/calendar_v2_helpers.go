@@ -288,8 +288,29 @@ func jsonMarshalSafe(v any) ([]byte, error) {
 func monthCellVisibleCap() int { return 3 }
 
 // monthCellEvents returns all single-day events for one Month cell.
+// Multi-day events render via the ribbon layer above the cell row.
 func monthCellEvents(data CalendarV2ViewData, day int) []Event {
 	return eventsForDay(data.Events, data.Year, data.Month, day)
+}
+
+// monthDayFor builds the monthDay struct for a specific day-of-month,
+// reusing the same today/rest-day logic as `monthDays` so per-row
+// rendering matches the original flat grid.
+func monthDayFor(data CalendarV2ViewData, day int) monthDay {
+	if data.ActiveCalendar == nil || day < 1 {
+		return monthDay{Day: day}
+	}
+	cal := data.ActiveCalendar
+	isToday := data.Year == cal.CurrentYear && data.Month == cal.CurrentMonth && day == cal.CurrentDay
+	isRest := false
+	if len(cal.Weekdays) > 0 {
+		doy := v2DayOfYear(cal, data.Month, day)
+		weekdayIdx := (doy - 1) % len(cal.Weekdays)
+		if weekdayIdx >= 0 && weekdayIdx < len(cal.Weekdays) && cal.Weekdays[weekdayIdx].IsRestDay {
+			isRest = true
+		}
+	}
+	return monthDay{Day: day, IsToday: isToday, IsRestDay: isRest}
 }
 
 // monthCellVisible returns up to monthCellVisibleCap() single-day
@@ -309,6 +330,456 @@ func monthCellOverflow(data CalendarV2ViewData, day int) int {
 		return 0
 	}
 	return len(all) - monthCellVisibleCap()
+}
+
+// --- Multi-day ribbon layout (Wave 1 PR 5 §A) ---
+
+// monthRibbonSegment is one ribbon segment in a Month-view week row.
+// A multi-day event spanning across week boundaries renders as
+// multiple segments (one per week row); same event_id across segments
+// so click opens the same drawer.
+type monthRibbonSegment struct {
+	EventID    string
+	Name       string
+	Color      string
+	IsPublic   bool
+	Tier       string // "minor" | "standard" | "major"
+	// 1-indexed grid column where the segment starts/ends (relative
+	// to the week row's column count).
+	StartCol int
+	Span     int
+	// Continuity flags: when true, the segment is mid-event (event
+	// continues out of this week-row edge); flat-cut rather than
+	// rounded.
+	OpenLeft  bool
+	OpenRight bool
+	// StackRow tells the renderer which stack slot this segment lives
+	// in (0 = top of band; PR 5 caps at 3 with overflow).
+	StackRow int
+}
+
+// ribbonStackCap is the max ribbons stacked per week row before the
+// "+N more" affordance kicks in. Tuned to keep cells readable at
+// default sizing.
+func ribbonStackCap() int { return 3 }
+
+// monthRibbonRows returns the ribbon segments per visible week row.
+// Outer slice index = week row (0-based); inner = segments to render
+// in that row, post-stacking. Cells whose day is in any segment's
+// range MUST suppress that event from their single-day render —
+// monthCellEvents already filters multi-day events out.
+func monthRibbonRows(data CalendarV2ViewData) [][]monthRibbonSegment {
+	if data.ActiveCalendar == nil || len(data.Events) == 0 {
+		return nil
+	}
+	cal := data.ActiveCalendar
+	cols := monthColumnCount(data)
+	if cols < 1 {
+		return nil
+	}
+	dim := cal.Months[data.Month-1].Days
+	rowCount := (dim + cols - 1) / cols
+	rows := make([][]monthRibbonSegment, rowCount)
+
+	// Tier sort key: major(2) > standard(1) > minor(0); ties by start day.
+	priority := func(t string) int {
+		switch t {
+		case "major":
+			return 2
+		case "minor":
+			return 0
+		}
+		return 1
+	}
+
+	type pending struct {
+		ev   Event
+		tier string
+	}
+	var multiDay []pending
+	for _, e := range data.Events {
+		if !isMultiDayEvent(e) {
+			continue
+		}
+		// Only show events that intersect the visible month.
+		if !ribbonIntersectsVisibleMonth(e, data.Year, data.Month) {
+			continue
+		}
+		multiDay = append(multiDay, pending{ev: e, tier: "standard"})
+	}
+	// Sort: tier-major first, then start day ascending. Simple
+	// O(n²) bubble keeps the implementation small for typical event
+	// counts (TTRPG campaigns rarely exceed dozens of multi-day events).
+	for i := 0; i < len(multiDay); i++ {
+		for j := i + 1; j < len(multiDay); j++ {
+			pi, pj := priority(multiDay[i].tier), priority(multiDay[j].tier)
+			swap := false
+			if pj > pi {
+				swap = true
+			} else if pj == pi {
+				if multiDay[j].ev.Month < multiDay[i].ev.Month ||
+					(multiDay[j].ev.Month == multiDay[i].ev.Month && multiDay[j].ev.Day < multiDay[i].ev.Day) {
+					swap = true
+				}
+			}
+			if swap {
+				multiDay[i], multiDay[j] = multiDay[j], multiDay[i]
+			}
+		}
+	}
+
+	// Per-row stack tracking: rows[r][stackSlot] = first free day-of-row.
+	// We pack segments greedily into the lowest stack slot where the
+	// segment's column range doesn't overlap.
+	occupied := make([][]int, rowCount) // [row][slot] = first free col
+	for r := range occupied {
+		occupied[r] = []int{}
+	}
+
+	for _, p := range multiDay {
+		startDay, endDay := ribbonRangeInVisibleMonth(p.ev, data.Year, data.Month, dim)
+		if startDay < 1 || endDay < startDay {
+			continue
+		}
+		startRow := (startDay - 1) / cols
+		endRow := (endDay - 1) / cols
+		for r := startRow; r <= endRow; r++ {
+			// Per-row column slice:
+			rowStartDay := r*cols + 1
+			rowEndDay := rowStartDay + cols - 1
+			segStartDay := startDay
+			segEndDay := endDay
+			if segStartDay < rowStartDay {
+				segStartDay = rowStartDay
+			}
+			if segEndDay > rowEndDay {
+				segEndDay = rowEndDay
+			}
+			startCol := segStartDay - rowStartDay + 1
+			endCol := segEndDay - rowStartDay + 1
+			span := endCol - startCol + 1
+			openLeft := startDay < rowStartDay || ribbonStartsBeforeMonth(p.ev, data.Year, data.Month)
+			openRight := endDay > rowEndDay || ribbonEndsAfterMonth(p.ev, data.Year, data.Month)
+
+			// Find lowest stack slot whose first-free-col <= startCol.
+			slot := -1
+			for i, free := range occupied[r] {
+				if free <= startCol {
+					slot = i
+					break
+				}
+			}
+			if slot == -1 {
+				slot = len(occupied[r])
+				occupied[r] = append(occupied[r], 0)
+			}
+			occupied[r][slot] = endCol + 1
+			if slot >= ribbonStackCap() {
+				continue // overflow; "+N more" affordance ratifies in §J
+			}
+
+			color := ""
+			if p.ev.Color != nil {
+				color = *p.ev.Color
+			}
+			if color == "" && p.ev.Category != nil {
+				for _, c := range cal.EventCategories {
+					if c.Slug == *p.ev.Category {
+						color = c.Color
+						break
+					}
+				}
+			}
+			rows[r] = append(rows[r], monthRibbonSegment{
+				EventID:   p.ev.ID,
+				Name:      p.ev.Name,
+				Color:     color,
+				IsPublic:  p.ev.Visibility == "everyone",
+				Tier:      p.tier,
+				StartCol:  startCol,
+				Span:      span,
+				OpenLeft:  openLeft,
+				OpenRight: openRight,
+				StackRow:  slot,
+			})
+		}
+	}
+	return rows
+}
+
+// monthColumnCount returns the number of column-equivalent cells in
+// each Month-view week row. Falls back to 7 (Gregorian) when the
+// calendar has no weekdays configured.
+func monthColumnCount(data CalendarV2ViewData) int {
+	if data.ActiveCalendar != nil && len(data.ActiveCalendar.Weekdays) > 0 {
+		return len(data.ActiveCalendar.Weekdays)
+	}
+	return 7
+}
+
+// ribbonRangeInMonth clips an event's full date range to the days of
+// the current month (1..dim). Multi-day events that start before the
+// month return startDay = 1; events ending after the month return
+// endDay = dim. The 2-arg form preserves PR 5 internal callers;
+// the 4-arg form takes visible (year, month) context for cross-month
+// events.
+func ribbonRangeInMonth(e Event, dim int) (startDay, endDay int) {
+	return ribbonRangeInVisibleMonth(e, e.Year, e.Month, dim)
+}
+
+// ribbonRangeInVisibleMonth clips an event range to the visible
+// (year, month). When the event starts before the visible month, the
+// returned startDay is 1; when it ends after, endDay is dim.
+func ribbonRangeInVisibleMonth(e Event, visYear, visMonth, dim int) (startDay, endDay int) {
+	// Default to the event's own range.
+	startDay = e.Day
+	endDay = e.Day
+	if e.EndDay != nil {
+		endDay = *e.EndDay
+	}
+	// If the event starts before the visible month, the segment
+	// begins at day 1.
+	if e.Year < visYear || (e.Year == visYear && e.Month < visMonth) {
+		startDay = 1
+	}
+	// If the event ends after the visible month, the segment goes
+	// through the last day of the month.
+	endY, endM := e.Year, e.Month
+	if e.EndYear != nil {
+		endY = *e.EndYear
+	}
+	if e.EndMonth != nil {
+		endM = *e.EndMonth
+	}
+	if endY > visYear || (endY == visYear && endM > visMonth) {
+		endDay = dim
+	}
+	if startDay < 1 {
+		startDay = 1
+	}
+	if endDay > dim {
+		endDay = dim
+	}
+	return startDay, endDay
+}
+
+// ribbonIntersectsVisibleMonth reports whether the event's date range
+// touches (year, month). PR 5 §A.3 cross-month boundary case.
+func ribbonIntersectsVisibleMonth(e Event, year, month int) bool {
+	// Start in or before visible month; end in or after.
+	startsBeforeOrIn := e.Year < year ||
+		(e.Year == year && e.Month <= month)
+	endY, endM := e.Year, e.Month
+	if e.EndYear != nil {
+		endY = *e.EndYear
+	}
+	if e.EndMonth != nil {
+		endM = *e.EndMonth
+	}
+	endsInOrAfter := endY > year ||
+		(endY == year && endM >= month)
+	return startsBeforeOrIn && endsInOrAfter
+}
+
+// ribbonStartsBeforeMonth reports whether the event starts before the
+// visible month — used to flat-cut the left edge.
+func ribbonStartsBeforeMonth(e Event, year, month int) bool {
+	if e.Year < year {
+		return true
+	}
+	if e.Year > year {
+		return false
+	}
+	return e.Month < month
+}
+
+// ribbonEndsAfterMonth reports whether the event ends after the
+// visible month — used to flat-cut the right edge.
+func ribbonEndsAfterMonth(e Event, year, month int) bool {
+	endY, endM := e.Year, e.Month
+	if e.EndYear != nil {
+		endY = *e.EndYear
+	}
+	if e.EndMonth != nil {
+		endM = *e.EndMonth
+	}
+	if endY > year {
+		return true
+	}
+	if endY < year {
+		return false
+	}
+	return endM > month
+}
+
+// ribbonClasses returns the Tailwind classes for a ribbon segment.
+// Composes the widget-package's tier styling with rounded-corner
+// overrides per continuity (cross-row events get flat edges).
+func ribbonClasses(seg monthRibbonSegment) string {
+	base := "card border-y border-edge text-xs px-2 truncate flex items-center cursor-pointer ribbon-enter"
+	switch seg.Tier {
+	case "major":
+		base += " border-t-accent ring-1 ring-accent/30 font-medium"
+	case "minor":
+		base += " opacity-40"
+	}
+	left := "rounded-l-md"
+	right := "rounded-r-md"
+	if seg.OpenLeft {
+		left = "rounded-l-none"
+	}
+	if seg.OpenRight {
+		right = "rounded-r-none"
+	}
+	return base + " " + left + " " + right
+}
+
+// ribbonInlineStyle composes grid-column + tint into one style string.
+func ribbonInlineStyle(seg monthRibbonSegment) string {
+	span := seg.Span
+	if span < 1 {
+		span = 1
+	}
+	tint := "var(--color-surface, #fff)"
+	if seg.Color != "" {
+		tint = "color-mix(in srgb, " + seg.Color + " 18%, transparent)"
+	}
+	return "grid-column: " + itoaCal(seg.StartCol) + " / span " + itoaCal(span) +
+		"; background-color: " + tint + ";"
+}
+
+// --- Era band display (Wave 1 PR 5 §E) ---
+
+// eraBand represents one era stretched as a horizontal band behind
+// the Month grid. Surfaces per week row; each row gets a band slice
+// for the era's portion of that row.
+type eraBand struct {
+	Name     string
+	Color    string
+	StartCol int
+	Span     int
+	OpenLeft bool
+	OpenRight bool
+	Row      int // week-row index
+}
+
+// monthEraBands returns the era-band slices for each visible week row.
+// Eras stack BELOW ribbons (z-order via separate stack slot per
+// dispatch §E.2). PR 5 surfaces eras that intersect the visible
+// (year, month); deeper era band design (column-row spans across
+// month boundaries) is a deferred enhancement.
+func monthEraBands(data CalendarV2ViewData) []eraBand {
+	if data.ActiveCalendar == nil {
+		return nil
+	}
+	cal := data.ActiveCalendar
+	cols := monthColumnCount(data)
+	if cols < 1 || data.Month < 1 || data.Month > len(cal.Months) {
+		return nil
+	}
+	dim := cal.Months[data.Month-1].Days
+	rowCount := (dim + cols - 1) / cols
+
+	var bands []eraBand
+	for _, era := range cal.Eras {
+		if era.StartYear > data.Year {
+			continue
+		}
+		if era.EndYear != nil && *era.EndYear < data.Year {
+			continue
+		}
+		// Era covers the full year → all weeks in this month.
+		for r := 0; r < rowCount; r++ {
+			rowStartDay := r*cols + 1
+			rowEndDay := rowStartDay + cols - 1
+			if rowEndDay > dim {
+				rowEndDay = dim
+			}
+			startCol := 1
+			span := rowEndDay - rowStartDay + 1
+			bands = append(bands, eraBand{
+				Name:     era.Name,
+				Color:    era.Color,
+				StartCol: startCol,
+				Span:     span,
+				Row:      r,
+				OpenLeft: r > 0 || era.StartYear < data.Year,
+				OpenRight: r < rowCount-1 || (era.EndYear == nil || *era.EndYear > data.Year),
+			})
+		}
+	}
+	return bands
+}
+
+// eraBandStyle returns the inline CSS for an era band — grid-column
+// + faded operator color + low z-index so events render legibly above.
+func eraBandStyle(band eraBand) string {
+	span := band.Span
+	if span < 1 {
+		span = 1
+	}
+	tint := "color-mix(in srgb, " + band.Color + " 28%, transparent)"
+	if band.Color == "" {
+		tint = "var(--color-surface-2, transparent)"
+	}
+	return "grid-column: " + itoaCal(band.StartCol) + " / span " + itoaCal(span) +
+		"; background-color: " + tint + ";"
+}
+
+// eraBandsForRow returns the era bands targeting a specific week row.
+// Templ filters during rendering.
+func eraBandsForRow(bands []eraBand, row int) []eraBand {
+	var out []eraBand
+	for _, b := range bands {
+		if b.Row == row {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// ribbonsForRow returns the ribbon segments for a specific week row,
+// indexed for templ iteration.
+func ribbonsForRow(rows [][]monthRibbonSegment, row int) []monthRibbonSegment {
+	if row < 0 || row >= len(rows) {
+		return nil
+	}
+	return rows[row]
+}
+
+// monthWeekRowCount returns the number of week rows for the current
+// month. Used by the templ to iterate.
+func monthWeekRowCount(data CalendarV2ViewData) int {
+	if data.ActiveCalendar == nil || data.Month < 1 || data.Month > len(data.ActiveCalendar.Months) {
+		return 0
+	}
+	cols := monthColumnCount(data)
+	if cols < 1 {
+		return 0
+	}
+	dim := data.ActiveCalendar.Months[data.Month-1].Days
+	return (dim + cols - 1) / cols
+}
+
+// daysInRow returns the day numbers belonging to one week row.
+// Last row may be short of full columns; templ uses 0 as a "filler"
+// signal.
+func daysInRow(data CalendarV2ViewData, row int) []int {
+	cols := monthColumnCount(data)
+	if cols < 1 || data.ActiveCalendar == nil {
+		return nil
+	}
+	dim := data.ActiveCalendar.Months[data.Month-1].Days
+	out := make([]int, cols)
+	for c := 0; c < cols; c++ {
+		d := row*cols + c + 1
+		if d > dim {
+			out[c] = 0
+		} else {
+			out[c] = d
+		}
+	}
+	return out
 }
 
 // eventsForDay returns the single-day events that fall on (year,
