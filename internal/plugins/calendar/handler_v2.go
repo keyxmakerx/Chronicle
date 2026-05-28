@@ -103,10 +103,60 @@ func (h *Handler) ShowV2(c echo.Context) error {
 		}
 	}
 
+	// Load events for the visible window (Wave 1 PR 4 — Month/Week/Day
+	// views render real events via the calendar_v2 widget layer).
+	// Zero-calendar campaigns skip event load (no calendar to scope by).
+	if active != nil {
+		role := cc.VisibilityRole()
+		switch view {
+		case "week", "day":
+			// Week + Day load a date-range; Day = single day, Week =
+			// 7 days centered on the cursor. The handler defers to
+			// service which already normalizes the end-of-range.
+			startMonth, startDay := data.Month, data.Day
+			endMonth, endDay := data.Month, data.Day
+			if view == "week" {
+				// Compute the 7-day window: start-3, end+3 (simple
+				// "near the cursor" baseline; PR 5 refines).
+				endMonth, endDay = addDaysSimple(active, startMonth, startDay, 6)
+			}
+			if events, err := h.svc.ListEventsForDateRange(ctx, active.ID, data.Year, startMonth, startDay, endMonth, endDay, role, userID); err == nil {
+				data.Events = events
+			}
+		default:
+			if events, err := h.svc.ListEventsForMonth(ctx, active.ID, data.Year, data.Month, role, userID); err == nil {
+				data.Events = events
+			}
+		}
+	}
+
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, CalendarV2ViewFragment(cc, data))
 	}
 	return middleware.Render(c, http.StatusOK, CalendarV2Page(cc, data))
+}
+
+// addDaysSimple steps (startMonth, startDay) forward by `n` days
+// using the calendar's per-month day count. Wraps into the next
+// month when the day exceeds month length. Stops at year-end without
+// rolling over (PR 4 keeps Week-view in a single calendar year; PR 5
+// can refine for year-boundary spans).
+func addDaysSimple(cal *Calendar, month, day, n int) (int, int) {
+	for n > 0 && month <= len(cal.Months) {
+		remaining := cal.Months[month-1].Days - day
+		if n <= remaining {
+			day += n
+			break
+		}
+		n -= remaining + 1
+		day = 1
+		month++
+	}
+	if month > len(cal.Months) {
+		month = len(cal.Months)
+		day = cal.Months[month-1].Days
+	}
+	return month, day
 }
 
 // SwitchActiveCalendarAPI persists the user's calendar choice.

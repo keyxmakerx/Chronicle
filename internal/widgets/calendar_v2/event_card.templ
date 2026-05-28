@@ -1,0 +1,161 @@
+// event_card.templ — reusable event-card widget. Three render
+// densities (Compact / Standard / Detailed); three tier variants
+// (Minor / Standard / Major). Composes with existing .card +
+// .card-elev classes from static/css/input.css:436-469 + the V2
+// widget animation classes in the same file.
+//
+// Consumed by the calendar plugin's Month/Week/Day views and
+// (planned) by AI Workspace event-import previews and any
+// downstream repo that imports this widget package.
+
+package calendar_v2
+
+// EventCard renders one event at the requested density. Click + drag
+// behaviors come from the host page's JS (event_grid.js in the
+// calendar plugin); this component just emits the markup + the
+// data-* hooks the JS reads.
+templ EventCard(data EventCardData, density Density) {
+	switch density {
+		case DensityCompact:
+			@eventCardCompact(data)
+		case DensityDetailed:
+			@eventCardDetailed(data)
+		default:
+			@eventCardStandard(data)
+	}
+}
+
+// eventCardCompact — inline cell chip. One line: dot + name.
+// Tier-minor shows the chip at 60% opacity; tier-major adds a small
+// diamond badge before the name.
+templ eventCardCompact(data EventCardData) {
+	<button
+		type="button"
+		class={ "flex items-center gap-1 text-xs px-1 py-0.5 rounded w-full text-left truncate hover:bg-surface-2 transition-colors duration-micro cursor-pointer",
+			compactTierClasses(data.Tier) }
+		data-event-id={ data.ID }
+		data-event-card="compact"
+		draggable="true"
+		aria-label={ "Event: " + data.Name }
+	>
+		if data.CategoryColor != "" {
+			<span
+				class="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
+				style={ "background-color:" + data.CategoryColor }
+				aria-hidden="true"
+			></span>
+		}
+		if data.Tier == TierMajor {
+			<span class="text-accent" aria-hidden="true">◆</span>
+		}
+		<span class="truncate">{ data.Name }</span>
+		if !data.IsPublic {
+			<i class="fa-solid fa-lock text-fg-secondary text-[10px] ml-auto" aria-hidden="true"></i>
+		}
+	</button>
+}
+
+// eventCardStandard — drawer/list card. Category bar + heading +
+// metadata + visibility lock.
+templ eventCardStandard(data EventCardData) {
+	<div
+		class={ tierClasses(data.Tier), "p-3 lift-hover" }
+		data-event-id={ data.ID }
+		data-event-card="standard"
+		style={ "border-left-color:" + leftBarColor(data.CategoryColor) }
+		role="button"
+		tabindex="0"
+	>
+		<div class="flex items-start justify-between gap-2 mb-1">
+			<div class="flex items-center gap-2 min-w-0">
+				if data.Tier != TierMinor {
+					<span class={ "text-xs", tierBadgeColor(data.Tier) } aria-hidden="true">
+						{ tierBadge(data.Tier) }
+					</span>
+				}
+				<span class="text-sm font-semibold text-fg truncate">{ data.Name }</span>
+			</div>
+			if !data.IsPublic {
+				<i class="fa-solid fa-lock text-fg-secondary text-xs flex-shrink-0" aria-hidden="true"></i>
+			}
+		</div>
+		if data.StartLabel != "" || data.CategoryName != "" {
+			<div class="flex items-center gap-2 text-xs text-fg-secondary">
+				if data.StartLabel != "" {
+					<span>{ data.StartLabel }</span>
+				}
+				if data.TimeLabel != "" {
+					<span>· { data.TimeLabel }</span>
+				}
+				if data.CategoryName != "" {
+					<span class="ml-auto flex items-center gap-1">
+						if data.CategoryColor != "" {
+							<span
+								class="inline-block w-2 h-2 rounded-full"
+								style={ "background-color:" + data.CategoryColor }
+								aria-hidden="true"
+							></span>
+						}
+						{ data.CategoryName }
+					</span>
+				}
+			</div>
+		}
+	</div>
+}
+
+// eventCardDetailed — drawer body. Full content with rendered HTML
+// description.
+templ eventCardDetailed(data EventCardData) {
+	<div
+		class={ tierClasses(data.Tier), "p-4 space-y-3" }
+		data-event-id={ data.ID }
+		data-event-card="detailed"
+		style={ "border-left-color:" + leftBarColor(data.CategoryColor) }
+	>
+		<div class="flex items-start justify-between gap-2">
+			<div class="flex items-center gap-2 min-w-0">
+				if data.Tier != TierMinor {
+					<span class={ "text-base", tierBadgeColor(data.Tier) } aria-hidden="true">
+						{ tierBadge(data.Tier) }
+					</span>
+				}
+				<h3 class="text-base font-semibold text-fg truncate">{ data.Name }</h3>
+			</div>
+			if !data.IsPublic {
+				<i class="fa-solid fa-lock text-fg-secondary" aria-hidden="true"></i>
+			}
+		</div>
+		<div class="flex flex-wrap gap-2 text-xs text-fg-secondary">
+			if data.StartLabel != "" {
+				<span class="inline-flex items-center gap-1">
+					<i class="fa-solid fa-calendar-day" aria-hidden="true"></i>
+					{ data.StartLabel }
+				</span>
+			}
+			if data.TimeLabel != "" {
+				<span class="inline-flex items-center gap-1">
+					<i class="fa-solid fa-clock" aria-hidden="true"></i>
+					{ data.TimeLabel }
+				</span>
+			}
+			if data.CategoryName != "" {
+				<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-2">
+					if data.CategoryColor != "" {
+						<span
+							class="inline-block w-2 h-2 rounded-full"
+							style={ "background-color:" + data.CategoryColor }
+							aria-hidden="true"
+						></span>
+					}
+					{ data.CategoryName }
+				</span>
+			}
+		</div>
+		if data.DescriptionHTML != "" {
+			<div class="prose prose-sm max-w-none text-fg-body" data-event-description-html>
+				@safeHTML(data.DescriptionHTML)
+			</div>
+		}
+	</div>
+}

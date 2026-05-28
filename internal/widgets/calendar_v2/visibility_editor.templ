@@ -1,0 +1,180 @@
+// visibility_editor.templ — chip-row builder visibility editor
+// per Q-V2-7 lock (decisions/2026-05-28-cal-timeline-v2-design.md).
+// Reusable for any per-entity visibility surface: events (today),
+// AI Workspace event imports, entity edit drawers, map pin
+// visibility, journal entry visibility.
+//
+// Structural shape:
+//   1. Radio: "Everyone (public)" / "Specific people"
+//   2. When "Specific people" selected:
+//      - "Add allow rule ▼" + "Add deny rule ▼" buttons (inline pickers)
+//      - Rule chip-row (allow = green; deny = amber; click × to remove)
+//      - Hidden input round-trips the rules JSON for form Save
+//      - Effective-audience summary computed client-side from rules
+//        + AvailableUsers/Roles populated by the host
+
+package calendar_v2
+
+import "fmt"
+
+// VisibilityEditor renders the chip-row builder. The host page wires
+// the form-submit handler that reads `data-visibility-rules-json`
+// from the hidden input + the "Everyone vs Specific" radio state.
+templ VisibilityEditor(data VisibilityEditorData) {
+	<div
+		class="space-y-3"
+		data-visibility-editor="true"
+		data-visibility-field-prefix={ data.FieldPrefix }
+		data-visibility-available-users={ usersToJSON(data.AvailableUsers) }
+		data-visibility-available-roles={ rolesToJSON(data.AvailableRoles) }
+	>
+		<div class="text-sm font-medium text-fg">Who can see this?</div>
+
+		<div class="flex items-center gap-4">
+			<label class="flex items-center gap-2 text-sm text-fg cursor-pointer">
+				<input
+					type="radio"
+					name={ data.FieldPrefix + "_mode" }
+					value="public"
+					checked?={ data.IsPublic }
+					data-visibility-mode="public"
+				/>
+				<span class="inline-flex items-center gap-1">
+					<i class="fa-solid fa-globe text-fg-secondary" aria-hidden="true"></i>
+					Everyone (public)
+				</span>
+			</label>
+			<label class="flex items-center gap-2 text-sm text-fg cursor-pointer">
+				<input
+					type="radio"
+					name={ data.FieldPrefix + "_mode" }
+					value="specific"
+					checked?={ !data.IsPublic }
+					data-visibility-mode="specific"
+				/>
+				<span class="inline-flex items-center gap-1">
+					<i class="fa-solid fa-user-group text-fg-secondary" aria-hidden="true"></i>
+					Specific people
+				</span>
+			</label>
+		</div>
+
+		<div
+			class="space-y-3"
+			data-visibility-specific-panel="true"
+			style={ specificPanelStyle(data.IsPublic) }
+		>
+			<div class="flex items-center gap-2">
+				<button
+					type="button"
+					class="text-xs px-2 py-1 rounded border border-edge hover:bg-surface-2 transition-colors duration-micro inline-flex items-center gap-1"
+					data-visibility-add="allow"
+				>
+					<i class="fa-solid fa-plus text-green-500" aria-hidden="true"></i>
+					Add allow rule
+				</button>
+				<button
+					type="button"
+					class="text-xs px-2 py-1 rounded border border-edge hover:bg-surface-2 transition-colors duration-micro inline-flex items-center gap-1"
+					data-visibility-add="deny"
+				>
+					<i class="fa-solid fa-minus text-amber-500" aria-hidden="true"></i>
+					Add deny rule
+				</button>
+			</div>
+
+			// Inline picker — initially hidden, JS toggles via
+			// data-visibility-picker-open + populates options from
+			// AvailableUsers/Roles JSON. The picker renders a kind
+			// toggle (User vs Role) + the autocomplete input.
+			<div
+				class="hidden border border-edge rounded p-2 space-y-2"
+				data-visibility-picker="true"
+			>
+				<div class="flex items-center gap-2">
+					<select class="input text-xs" data-visibility-picker-kind>
+						<option value="user">User</option>
+						<option value="role">Role</option>
+					</select>
+					<input
+						type="text"
+						class="input text-xs flex-1"
+						placeholder="Type a name…"
+						data-visibility-picker-input
+					/>
+					<button
+						type="button"
+						class="btn-primary text-xs"
+						data-visibility-picker-confirm
+					>
+						Add
+					</button>
+					<button
+						type="button"
+						class="text-xs text-fg-secondary hover:text-fg"
+						data-visibility-picker-cancel
+						aria-label="Cancel"
+					>
+						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+					</button>
+				</div>
+			</div>
+
+			<div
+				class="flex flex-wrap gap-2"
+				role="list"
+				aria-label="Visibility rules"
+				data-visibility-chip-row="true"
+			>
+				for i, r := range data.Rules {
+					@visibilityChip(r, i)
+				}
+			</div>
+
+			<div
+				class="text-xs text-fg-secondary"
+				data-visibility-summary="true"
+			>
+				{ effectiveAudienceSummary(data) }
+			</div>
+		</div>
+
+		// Hidden input round-trips the rules JSON for form Save.
+		<input
+			type="hidden"
+			name={ data.FieldPrefix + "_rules_json" }
+			value={ rulesToJSON(data.Rules) }
+			data-visibility-rules-json="true"
+		/>
+	</div>
+}
+
+// visibilityChip renders one rule chip. Color side bar + icon
+// indicates allow (green) vs deny (amber); click × to remove.
+templ visibilityChip(rule VisibilityRule, idx int) {
+	<span
+		class={ chipClasses(rule.Mode), "chip-add inline-flex items-center gap-1 text-xs rounded px-2 py-1 border" }
+		role="listitem"
+		data-visibility-chip-index={ fmt.Sprintf("%d", idx) }
+		data-visibility-chip-mode={ rule.Mode }
+		data-visibility-chip-kind={ rule.Kind }
+		data-visibility-chip-target={ rule.Target }
+	>
+		<span class={ chipIconClasses(rule.Mode) } aria-hidden="true">
+			if rule.Mode == "allow" {
+				<i class="fa-solid fa-check"></i>
+			} else {
+				<i class="fa-solid fa-ban"></i>
+			}
+		</span>
+		<span class="text-fg">{ chipLabel(rule) }</span>
+		<button
+			type="button"
+			class="text-fg-secondary hover:text-fg ml-1 transition-colors duration-micro"
+			data-visibility-chip-remove="true"
+			aria-label={ "Remove " + rule.Label }
+		>
+			<i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
+		</button>
+	</span>
+}

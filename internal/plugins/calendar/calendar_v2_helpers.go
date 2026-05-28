@@ -5,10 +5,21 @@
 package calendar
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/a-h/templ"
+
+	calwidget "github.com/keyxmakerx/chronicle/internal/widgets/calendar_v2"
 )
+
+// jsonMarshalImpl is the encoding/json indirection used by
+// jsonMarshalSafe. Separating the implementation lets tests stub the
+// marshaller (currently unused — the indirection is here for future
+// extension).
+func jsonMarshalImpl(v any) ([]byte, error) {
+	return json.Marshal(v)
+}
 
 // v2PageTitle builds the browser title for the V2 shell. Falls back
 // to "Calendar" when no active calendar is set (zero-calendar campaign).
@@ -208,7 +219,7 @@ func v2DayOfYear(cal *Calendar, month, day int) int {
 func monthDayClasses(_ CalendarV2ViewData, day monthDay) string {
 	switch {
 	case day.IsToday:
-		return "bg-accent/10 ring-2 ring-accent"
+		return "bg-accent/10 ring-2 ring-accent today-pulse"
 	case day.IsRestDay:
 		return "bg-surface-2"
 	case day.Filler:
@@ -216,4 +227,215 @@ func monthDayClasses(_ CalendarV2ViewData, day monthDay) string {
 	default:
 		return ""
 	}
+}
+
+// --- Event rendering glue (Wave 1 PR 4 / C-CAL-V2-EVENT-CARD-COMPOSITE) ---
+
+// v2CalendarID returns the active calendar's ID for the page root
+// data attribute. Empty when no calendar is loaded (zero-cal campaign).
+func v2CalendarID(data CalendarV2ViewData) string {
+	if data.ActiveCalendar == nil {
+		return ""
+	}
+	return data.ActiveCalendar.ID
+}
+
+// v2EventsJSON serializes the full event list as JSON for the
+// event_grid.js widget. The widget reads this once on mount and uses
+// it as the source of truth for drag/edit operations. Failure → "[]"
+// so the page still renders the grid even if event data is malformed.
+func v2EventsJSON(data CalendarV2ViewData) string {
+	if len(data.Events) == 0 {
+		return "[]"
+	}
+	b, err := jsonMarshalSafe(data.Events)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+// buildEventVisibilityEditor projects the V2 view data into the
+// VisibilityEditorData shape the calwidget consumes. PR 4 ships
+// minimal AvailableUsers/AvailableRoles — Members + standard roles
+// populate later when the drawer's pickers wire to the membership
+// service. For PR 4, the widget renders the chip-row with whatever
+// the operator already has set; rule add resolves client-side.
+func buildEventVisibilityEditor(data CalendarV2ViewData) calwidget.VisibilityEditorData {
+	return calwidget.VisibilityEditorData{
+		IsPublic:    true, // default; JS overrides on open
+		Rules:       nil,
+		FieldPrefix: "event_visibility",
+		AvailableRoles: []calwidget.RoleOption{
+			{Name: "owner", Label: "Owners"},
+			{Name: "scribe", Label: "Scribes"},
+			{Name: "player", Label: "Players"},
+		},
+	}
+}
+
+// jsonMarshalSafe wraps json.Marshal to avoid pulling the import into
+// the helpers file's main import list (already imported by service.go).
+// Plain indirection here; mainly improves readability of the call site.
+func jsonMarshalSafe(v any) ([]byte, error) {
+	return jsonMarshalImpl(v)
+}
+
+// monthCellVisibleCap is the per-cell event chip cap. Anything beyond
+// surfaces in the "+N more" affordance. Tuned for default Month-view
+// cell sizing (~80px min-height); PR 5 may make this dynamic per
+// viewport.
+func monthCellVisibleCap() int { return 3 }
+
+// monthCellEvents returns all single-day events for one Month cell.
+func monthCellEvents(data CalendarV2ViewData, day int) []Event {
+	return eventsForDay(data.Events, data.Year, data.Month, day)
+}
+
+// monthCellVisible returns up to monthCellVisibleCap() single-day
+// events. The rest go to the "+N more" overflow affordance.
+func monthCellVisible(data CalendarV2ViewData, day int) []Event {
+	all := monthCellEvents(data, day)
+	if len(all) <= monthCellVisibleCap() {
+		return all
+	}
+	return all[:monthCellVisibleCap()]
+}
+
+// monthCellOverflow returns the count of hidden events for a cell.
+func monthCellOverflow(data CalendarV2ViewData, day int) int {
+	all := monthCellEvents(data, day)
+	if len(all) <= monthCellVisibleCap() {
+		return 0
+	}
+	return len(all) - monthCellVisibleCap()
+}
+
+// eventsForDay returns the single-day events that fall on (year,
+// month, day). Multi-day events render via the ribbon layer and are
+// filtered out here; ribbons render once at the top of the week row.
+//
+// An event is "single-day" when EndYear/EndMonth/EndDay are nil or
+// when the end date equals the start date.
+func eventsForDay(events []Event, year, month, day int) []Event {
+	var out []Event
+	for _, e := range events {
+		if e.Year != year || e.Month != month || e.Day != day {
+			continue
+		}
+		if isMultiDayEvent(e) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// isMultiDayEvent reports whether an event spans more than one day.
+// Used by the rendering layer to route single-day vs ribbon paths.
+func isMultiDayEvent(e Event) bool {
+	if e.EndYear == nil && e.EndMonth == nil && e.EndDay == nil {
+		return false
+	}
+	if e.EndYear != nil && *e.EndYear != e.Year {
+		return true
+	}
+	if e.EndMonth != nil && *e.EndMonth != e.Month {
+		return true
+	}
+	if e.EndDay != nil && *e.EndDay != e.Day {
+		return true
+	}
+	return false
+}
+
+// eventToCardData projects a calendar.Event into the
+// calendar_v2.EventCardData widget payload. The category color
+// resolves from the calendar's EventCategories by matching Category
+// slug; falls back to Event.Color override; defaults to "".
+//
+// Tier is hardcoded to Standard in PR 4 — PR 5 wires the campaign's
+// tier definitions (PR #358 event_tier_definitions field). Visibility
+// is "public" iff Event.Visibility == "everyone".
+func eventToCardData(e Event, cal *Calendar) calwidget.EventCardData {
+	color := ""
+	cat := ""
+	if e.Color != nil && *e.Color != "" {
+		color = *e.Color
+	}
+	if e.Category != nil && *e.Category != "" {
+		cat = *e.Category
+		if color == "" && cal != nil {
+			for _, c := range cal.EventCategories {
+				if c.Slug == *e.Category {
+					color = c.Color
+					cat = c.Name
+					break
+				}
+			}
+		}
+	}
+	desc := ""
+	if e.DescriptionHTML != nil {
+		desc = *e.DescriptionHTML
+	}
+	timeLabel := ""
+	if e.StartHour != nil && e.StartMinute != nil {
+		timeLabel = fmtTimeDigits(*e.StartHour, *e.StartMinute)
+		if e.EndHour != nil && e.EndMinute != nil {
+			timeLabel += " — " + fmtTimeDigits(*e.EndHour, *e.EndMinute)
+		}
+	}
+	startLabel := ""
+	if cal != nil && e.Month >= 1 && e.Month <= len(cal.Months) {
+		startLabel = cal.Months[e.Month-1].Name + " " + itoaCal(e.Day)
+	}
+	return calwidget.EventCardData{
+		ID:              e.ID,
+		Name:            e.Name,
+		CategoryColor:   color,
+		CategoryName:    cat,
+		Tier:            calwidget.TierStandard,
+		IsPublic:        e.Visibility == "everyone",
+		DescriptionHTML: desc,
+		StartLabel:      startLabel,
+		TimeLabel:       timeLabel,
+	}
+}
+
+// fmtTimeDigits formats an hour:minute pair as two-digit "HH:MM".
+func fmtTimeDigits(h, m int) string {
+	hs := itoaCal(h)
+	if len(hs) == 1 {
+		hs = "0" + hs
+	}
+	ms := itoaCal(m)
+	if len(ms) == 1 {
+		ms = "0" + ms
+	}
+	return hs + ":" + ms
+}
+
+// itoaCal is a tiny strconv.Itoa stand-in (avoids adding the import).
+func itoaCal(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := false
+	if n < 0 {
+		neg = true
+		n = -n
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
 }
