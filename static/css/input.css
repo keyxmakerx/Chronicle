@@ -77,6 +77,50 @@
     --color-accent-hover-rgb: 79 70 229;
     --color-accent-light-rgb: 165 180 252;
     --color-sidebar-bg:    #1a1c23;  /* always dark */
+
+    /* ──────────────────────────────────────────────────────────────────
+     * V2 motion vocabulary — locked per
+     * cordinator/decisions/2026-05-28-cal-timeline-v2-design.md §B2.
+     *
+     * Strict Vercel/Kowalski discipline: only `transform` + `opacity`
+     * ever animated; NEVER `transition: all` (lint-guarded for V2 scope
+     * via tools/check-v2-motion-discipline.sh); keyboard-initiated
+     * actions stay sub-80ms (no animation distance between input + state).
+     *
+     * Reduced-motion handling is the existing total-disable guard at the
+     * top of this file (per Q6 of 2026-05-22-ui-modernization-decisions.md).
+     * That rule wins over these durations because it lives OUTSIDE any
+     * layer and uses `!important`. Don't add a duplicate reduced-motion
+     * override here.
+     * ─────────────────────────────────────────────────────────────── */
+
+    --ease-out:        cubic-bezier(0.16, 1, 0.3, 1);     /* arrivals, "settles" */
+    --ease-in:         cubic-bezier(0.4, 0, 1, 1);        /* exits */
+    --ease-in-out:     cubic-bezier(0.4, 0, 0.2, 1);      /* in-place morph */
+    --ease-standard:   cubic-bezier(0.2, 0, 0, 1);        /* Material-ish default */
+
+    --dur-instant:     80ms;     /* keyboard-driven actions */
+    --dur-micro:       120ms;    /* button/hover feedback */
+    --dur-standard:    200ms;    /* modal, dropdown, panel */
+    --dur-large:       280ms;    /* view-level transitions */
+
+    /* ──────────────────────────────────────────────────────────────────
+     * V2 card elevation tiers — per §B1.
+     *
+     * Material's *physics* (elevation, shadow, hover lift, drag elevation,
+     * z-stacking) applied with Chronicle's dark+accent aesthetic. Values
+     * here are black-with-opacity so they read correctly against both
+     * the light card surface (`#ffffff`) and the dark card surface
+     * (`#1f2937` — see `.dark`). The opacity-based shadows let the
+     * elevation read on either palette without forking per-mode values.
+     * ─────────────────────────────────────────────────────────────── */
+
+    --elev-static:     none;
+    --elev-resting:    0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --elev-hover:      0 6px 16px -4px rgb(0 0 0 / 0.12),
+                       0 2px 6px -2px rgb(0 0 0 / 0.08);
+    --elev-dragged:    0 16px 36px -8px rgb(0 0 0 / 0.22),
+                       0 4px 12px -4px rgb(0 0 0 / 0.12);
   }
 
   .dark {
@@ -393,6 +437,37 @@
     @apply bg-surface rounded-xl shadow-sm border border-edge p-4
            transition-all duration-200;
   }
+
+  /* .card-elev — V2 elevation/lift add-on. Composes on top of `.card`
+   * (or any card-shaped container); supplies the elevation-tier shadow
+   * + hover lift defined by the V2 motion + elevation tokens above.
+   *
+   * Animated properties: `box-shadow` and `transform` only — the V2
+   * "transform + opacity ever animated" rule from decision §B2. The
+   * 280ms (--dur-large) duration matches the view-level transition
+   * tier; hover feels intentional rather than twitchy.
+   *
+   * Use: <div class="card card-elev p-3"> for a resting card that
+   * lifts on hover. `.card-elev:active` honors a "dragged" elevation
+   * tier for inline-drag UX; surfaces that mount the draggable=true
+   * attribute (or use the cooperating Sortable/dnd library) pick up
+   * the elevation automatically. */
+  .card-elev {
+    box-shadow: var(--elev-resting);
+    transition: transform var(--dur-large) var(--ease-out),
+                box-shadow var(--dur-large) var(--ease-out);
+    will-change: transform;
+  }
+  .card-elev:hover {
+    box-shadow: var(--elev-hover);
+    transform: translateY(-1px);
+  }
+  .card-elev:active,
+  .card-elev.is-dragging {
+    box-shadow: var(--elev-dragged);
+    transform: translateY(-2px);
+  }
+
 
   /* ---- Form Inputs ---- */
   .input {
