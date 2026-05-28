@@ -50,6 +50,67 @@ const (
 
 	// ActionTagDeleted is logged when a tag is removed from a campaign.
 	ActionTagDeleted = "tag.deleted"
+
+	// --- Calendar plugin (V2 Wave 0 PR 4 / C-CAL-V2-AUDIT-LOG-INTEGRATION) ---
+	// Naming: snake_case verb suffix after the resource. Counts-only
+	// payload discipline — bulk Set* events log before/after counts in
+	// Details, not full arrays, to keep audit_log row size bounded.
+
+	ActionCalendarCreated            = "calendar.created"
+	ActionCalendarUpdated            = "calendar.updated"
+	ActionCalendarDeleted            = "calendar.deleted"
+	ActionCalendarDefaultChanged     = "calendar.default_changed"
+	ActionCalendarMonthsSet          = "calendar.months_set"
+	ActionCalendarWeekdaysSet        = "calendar.weekdays_set"
+	ActionCalendarMoonsSet           = "calendar.moons_set"
+	ActionCalendarSeasonsSet         = "calendar.seasons_set"
+	ActionCalendarErasSet            = "calendar.eras_set"
+	ActionCalendarCategoriesSet      = "calendar.categories_set"
+	ActionCalendarEraCreated         = "calendar.era_created"
+	ActionCalendarEraUpdated         = "calendar.era_updated"
+	ActionCalendarEraDeleted         = "calendar.era_deleted"
+	ActionCalendarWeatherSet         = "calendar.weather_set"
+	ActionCalendarCyclesSet          = "calendar.cycles_set"
+	ActionCalendarFestivalsSet       = "calendar.festivals_set"
+	ActionCalendarWeatherZonesSet    = "calendar.weather_zones_set"
+	// ActionCalendarWeatherActiveZoneChanged covers SetActiveWeatherZone
+	// (added in PR #360 alongside SetWeatherZones; refresh per coordinator
+	// commit 672ef9e expanded the dispatch to log this separately).
+	ActionCalendarWeatherActiveZoneChanged = "calendar.weather_active_zone_changed"
+	ActionCalendarEventCreated             = "calendar.event_created"
+	ActionCalendarEventUpdated             = "calendar.event_updated"
+	ActionCalendarEventDeleted             = "calendar.event_deleted"
+	ActionCalendarEventVisibilityChanged   = "calendar.event_visibility_changed"
+	ActionCalendarDateAdvanced             = "calendar.date_advanced"
+	ActionCalendarTimeAdvanced             = "calendar.time_advanced"
+	ActionCalendarDateSet                  = "calendar.date_set"
+	ActionCalendarImported                 = "calendar.imported"
+	// Note: tier definitions are emitted by the campaigns plugin
+	// (`campaign.event_tier_definitions.updated`) since the data lives in
+	// `campaigns.settings`, not in a calendar table. Wave 0 PR 2 added
+	// that emission at campaigns.UpdateEventTierDefinitionsAPI; the
+	// dispatch's `calendar.tier_definitions_set` label is reconciled with
+	// the campaign-plugin emission already in place.
+
+	// --- Timeline plugin (V2 Wave 0 PR 4) ---
+
+	ActionTimelineCreated                  = "timeline.created"
+	ActionTimelineUpdated                  = "timeline.updated"
+	ActionTimelineDeleted                  = "timeline.deleted"
+	ActionTimelineEventLinked              = "timeline.event_linked"
+	ActionTimelineEventUnlinked            = "timeline.event_unlinked"
+	ActionTimelineStandaloneEventCreated   = "timeline.standalone_event_created"
+	ActionTimelineStandaloneEventUpdated   = "timeline.standalone_event_updated"
+	ActionTimelineStandaloneEventDeleted   = "timeline.standalone_event_deleted"
+	ActionTimelineEntityGroupCreated       = "timeline.entity_group_created"
+	ActionTimelineEntityGroupUpdated       = "timeline.entity_group_updated"
+	ActionTimelineEntityGroupDeleted       = "timeline.entity_group_deleted"
+	ActionTimelineEntityGroupMemberAdded   = "timeline.entity_group_member_added"
+	ActionTimelineEntityGroupMemberRemoved = "timeline.entity_group_member_removed"
+	ActionTimelineEventConnectionCreated   = "timeline.event_connection_created"
+	ActionTimelineEventConnectionDeleted   = "timeline.event_connection_deleted"
+	ActionTimelineVisibilityChanged        = "timeline.visibility_changed"
+	ActionTimelineEventLinkVisibilityChanged = "timeline.event_link_visibility_changed"
 )
 
 // AuditEntry represents a single recorded action in the audit log.

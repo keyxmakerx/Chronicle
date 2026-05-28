@@ -2,12 +2,14 @@ package timeline
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -17,6 +19,7 @@ import (
 type Handler struct {
 	svc          TimelineService
 	memberLister campaigns.MemberLister
+	auditSvc     audit.AuditService
 }
 
 // NewHandler creates a new timeline Handler.
@@ -27,6 +30,37 @@ func NewHandler(svc TimelineService) *Handler {
 // SetMemberLister injects the campaign member lister for visibility settings.
 func (h *Handler) SetMemberLister(ml campaigns.MemberLister) {
 	h.memberLister = ml
+}
+
+// SetAuditService wires the audit-log emitter for timeline mutations.
+// Called after all plugins are constructed (matches entities pattern).
+func (h *Handler) SetAuditService(svc audit.AuditService) {
+	h.auditSvc = svc
+}
+
+// logTimelineAudit fires a fire-and-forget audit entry. Errors are
+// slog-logged and never block the primary operation per dispatch
+// §"Failure handling".
+func (h *Handler) logTimelineAudit(c echo.Context, campaignID, action, entityType, entityID, entityName string, details map[string]any) {
+	if h.auditSvc == nil {
+		return
+	}
+	userID := auth.GetUserID(c)
+	if err := h.auditSvc.Log(c.Request().Context(), &audit.AuditEntry{
+		CampaignID: campaignID,
+		UserID:     userID,
+		Action:     action,
+		EntityType: entityType,
+		EntityID:   entityID,
+		EntityName: entityName,
+		Details:    details,
+	}); err != nil {
+		slog.Warn("timeline audit log failed",
+			slog.String("action", action),
+			slog.String("entity_id", entityID),
+			slog.Any("error", err),
+		)
+	}
 }
 
 // requireTimelineInCampaign fetches a timeline by ID and verifies it belongs
@@ -180,6 +214,8 @@ func (h *Handler) CreateForm(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineCreated, "timeline", t.ID, t.Name,
+		map[string]any{"visibility": visibility})
 
 	return c.Redirect(http.StatusSeeOther,
 		fmt.Sprintf("/campaigns/%s/timelines/%s", cc.Campaign.ID, t.ID))
@@ -208,14 +244,19 @@ func (h *Handler) UpdateAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	return h.svc.UpdateTimeline(ctx, timelineID, UpdateTimelineInput{
+	if err := h.svc.UpdateTimeline(ctx, timelineID, UpdateTimelineInput{
 		Name:        req.Name,
 		Description: req.Description,
 		Color:       req.Color,
 		Icon:        req.Icon,
 		Visibility:  req.Visibility,
 		ZoomDefault: req.ZoomDefault,
-	})
+	}); err != nil {
+		return err
+	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineUpdated, "timeline", timelineID, req.Name,
+		map[string]any{"visibility": req.Visibility})
+	return nil
 }
 
 // DeleteAPI deletes a timeline and all associated data.
@@ -225,13 +266,15 @@ func (h *Handler) DeleteAPI(c echo.Context) error {
 	ctx := c.Request().Context()
 	timelineID := c.Param("tid")
 
-	if _, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID); err != nil {
+	tl, err := h.requireTimelineInCampaign(c, timelineID, cc.Campaign.ID)
+	if err != nil {
 		return err
 	}
 
 	if err := h.svc.DeleteTimeline(ctx, timelineID); err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineDeleted, "timeline", timelineID, tl.Name, nil)
 	return c.NoContent(http.StatusOK)
 }
 
@@ -262,6 +305,8 @@ func (h *Handler) LinkEventAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEventLinked, "timeline_event_link", req.EventID, "",
+		map[string]any{"timeline_id": timelineID})
 	return c.JSON(http.StatusCreated, link)
 }
 
@@ -280,6 +325,8 @@ func (h *Handler) UnlinkEventAPI(c echo.Context) error {
 	if err := h.svc.UnlinkEvent(ctx, timelineID, eventID); err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEventUnlinked, "timeline_event_link", eventID, "",
+		map[string]any{"timeline_id": timelineID})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -355,6 +402,8 @@ func (h *Handler) CreateStandaloneEventAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineStandaloneEventCreated, "timeline_standalone_event", e.ID, e.Name,
+		map[string]any{"timeline_id": timelineID, "year": req.Year, "month": req.Month, "day": req.Day, "visibility": visibility})
 	return c.JSON(http.StatusCreated, e)
 }
 
@@ -426,6 +475,8 @@ func (h *Handler) UpdateStandaloneEventAPI(c echo.Context) error {
 	}); err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineStandaloneEventUpdated, "timeline_standalone_event", eventID, req.Name,
+		map[string]any{"timeline_id": timelineID, "year": req.Year, "month": req.Month, "day": req.Day, "visibility": visibility})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -444,6 +495,8 @@ func (h *Handler) DeleteStandaloneEventAPI(c echo.Context) error {
 	if err := h.svc.DeleteStandaloneEvent(ctx, timelineID, eventID); err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineStandaloneEventDeleted, "timeline_standalone_event", eventID, "",
+		map[string]any{"timeline_id": timelineID})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -570,6 +623,8 @@ func (h *Handler) CreateEntityGroupAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEntityGroupCreated, "timeline_entity_group",
+		fmt.Sprintf("%d", g.ID), g.Name, map[string]any{"timeline_id": timelineID})
 	return c.JSON(http.StatusCreated, g)
 }
 
@@ -595,10 +650,15 @@ func (h *Handler) UpdateEntityGroupAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	return h.svc.UpdateEntityGroup(c.Request().Context(), timelineID, groupID, UpdateEntityGroupInput{
+	if err := h.svc.UpdateEntityGroup(c.Request().Context(), timelineID, groupID, UpdateEntityGroupInput{
 		Name:  req.Name,
 		Color: req.Color,
-	})
+	}); err != nil {
+		return err
+	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEntityGroupUpdated, "timeline_entity_group",
+		fmt.Sprintf("%d", groupID), req.Name, map[string]any{"timeline_id": timelineID})
+	return nil
 }
 
 // DeleteEntityGroupAPI removes an entity group and all its members.
@@ -618,6 +678,8 @@ func (h *Handler) DeleteEntityGroupAPI(c echo.Context) error {
 	if err := h.svc.DeleteEntityGroup(c.Request().Context(), timelineID, groupID); err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEntityGroupDeleted, "timeline_entity_group",
+		fmt.Sprintf("%d", groupID), "", map[string]any{"timeline_id": timelineID})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -648,6 +710,8 @@ func (h *Handler) AddGroupMemberAPI(c echo.Context) error {
 	if err := h.svc.AddGroupMember(c.Request().Context(), timelineID, groupID, req.EntityID); err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEntityGroupMemberAdded, "timeline_entity_group",
+		fmt.Sprintf("%d", groupID), "", map[string]any{"timeline_id": timelineID, "entity_id": req.EntityID})
 	return c.NoContent(http.StatusCreated)
 }
 
@@ -669,6 +733,8 @@ func (h *Handler) RemoveGroupMemberAPI(c echo.Context) error {
 	if err := h.svc.RemoveGroupMember(c.Request().Context(), timelineID, groupID, entityID); err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEntityGroupMemberRemoved, "timeline_entity_group",
+		fmt.Sprintf("%d", groupID), "", map[string]any{"timeline_id": timelineID, "entity_id": entityID})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -710,7 +776,7 @@ func (h *Handler) UpdateTimelineVisibilityAPI(c echo.Context) error {
 	}
 
 	// Build a full update preserving existing settings.
-	return h.svc.UpdateTimeline(ctx, timelineID, UpdateTimelineInput{
+	if err := h.svc.UpdateTimeline(ctx, timelineID, UpdateTimelineInput{
 		Name:            t.Name,
 		Description:     t.Description,
 		DescriptionHTML: t.DescriptionHTML,
@@ -719,7 +785,12 @@ func (h *Handler) UpdateTimelineVisibilityAPI(c echo.Context) error {
 		Visibility:      req.Visibility,
 		VisibilityRules: req.VisibilityRules,
 		ZoomDefault:     t.ZoomDefault,
-	})
+	}); err != nil {
+		return err
+	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineVisibilityChanged, "timeline", timelineID, t.Name,
+		map[string]any{"old_visibility": t.Visibility, "new_visibility": req.Visibility})
+	return nil
 }
 
 // UpdateEventVisibilityAPI updates per-event visibility on a timeline event link.
@@ -748,6 +819,12 @@ func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
 	}); err != nil {
 		return err
 	}
+	override := ""
+	if req.VisibilityOverride != nil {
+		override = *req.VisibilityOverride
+	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEventLinkVisibilityChanged, "timeline_event_link", eventID, "",
+		map[string]any{"timeline_id": timelineID, "new_override": override})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -816,6 +893,8 @@ func (h *Handler) UpdateStandaloneEventVisibilityAPI(c echo.Context) error {
 	}); err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineStandaloneEventUpdated, "timeline_standalone_event", eventID, e.Name,
+		map[string]any{"timeline_id": timelineID, "new_visibility": req.Visibility, "via": "visibility_only"})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -944,6 +1023,9 @@ func (h *Handler) CreateConnectionAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEventConnectionCreated, "timeline_event_connection",
+		fmt.Sprintf("%d", conn.ID), "", map[string]any{"timeline_id": timelineID,
+			"source_id": req.SourceID, "target_id": req.TargetID})
 	return c.JSON(http.StatusCreated, conn)
 }
 
@@ -966,6 +1048,8 @@ func (h *Handler) DeleteConnectionAPI(c echo.Context) error {
 	if err := h.svc.DeleteConnection(ctx, timelineID, connID); err != nil {
 		return err
 	}
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineEventConnectionDeleted, "timeline_event_connection",
+		fmt.Sprintf("%d", connID), "", map[string]any{"timeline_id": timelineID})
 	return c.NoContent(http.StatusNoContent)
 }
 

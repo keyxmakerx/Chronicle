@@ -14,6 +14,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
+	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -45,6 +46,7 @@ type Handler struct {
 	svc           CalendarService
 	addonSvc      addons.AddonService
 	sessionLister SessionLister
+	auditSvc      audit.AuditService
 }
 
 // NewHandler creates a new calendar Handler.
@@ -61,6 +63,42 @@ func (h *Handler) SetAddonService(svc addons.AddonService) {
 // SetSessionLister wires the session service for calendar grid display.
 func (h *Handler) SetSessionLister(sl SessionLister) {
 	h.sessionLister = sl
+}
+
+// SetAuditService wires the audit-log emitter for calendar mutations.
+// Called after all plugins are constructed (avoids init-order cycles).
+// Matches the entities plugin pattern.
+func (h *Handler) SetAuditService(svc audit.AuditService) {
+	h.auditSvc = svc
+}
+
+// logCalendarAudit fires a fire-and-forget audit entry for a calendar-
+// scoped mutation. EntityType is the audit-log resource label (e.g.
+// "calendar", "calendar_event", "calendar_era"); entityID is the
+// stringified resource id; details carries the action-specific payload.
+// Errors are slog-logged and never block the primary operation per
+// dispatch §"Failure handling". User-id comes from echo.Context — the
+// established pattern from internal/plugins/entities/handler.go.
+func (h *Handler) logCalendarAudit(c echo.Context, campaignID, action, entityType, entityID, entityName string, details map[string]any) {
+	if h.auditSvc == nil {
+		return
+	}
+	userID := auth.GetUserID(c)
+	if err := h.auditSvc.Log(c.Request().Context(), &audit.AuditEntry{
+		CampaignID: campaignID,
+		UserID:     userID,
+		Action:     action,
+		EntityType: entityType,
+		EntityID:   entityID,
+		EntityName: entityName,
+		Details:    details,
+	}); err != nil {
+		slog.Warn("calendar audit log failed",
+			slog.String("action", action),
+			slog.String("entity_id", entityID),
+			slog.Any("error", err),
+		)
+	}
 }
 
 // requireCalendarInCampaign fetches a calendar by ID and verifies it belongs
@@ -511,6 +549,8 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarCreated, "calendar", cal.ID, cal.Name,
+		map[string]any{"mode": string(mode), "epoch_name": epochName, "current_year": startYear})
 
 	// Auto-enable the calendar addon for this campaign so dashboard/entity
 	// blocks render immediately without manual extension toggling.
@@ -565,7 +605,7 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	return h.svc.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
+	if err := h.svc.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
 		Name:             req.Name,
 		Description:      req.Description,
 		EpochName:        req.EpochName,
@@ -579,7 +619,15 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 		SecondsPerMinute: req.SecondsPerMinute,
 		LeapYearEvery:    req.LeapYearEvery,
 		LeapYearOffset:   req.LeapYearOffset,
-	})
+	}); err != nil {
+		return err
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarUpdated, "calendar", cal.ID, req.Name,
+		map[string]any{
+			"current_year": req.CurrentYear, "current_month": req.CurrentMonth, "current_day": req.CurrentDay,
+			"hours_per_day": req.HoursPerDay, "minutes_per_hour": req.MinutesPerHour,
+		})
+	return nil
 }
 
 // UpdateMonthsAPI replaces all months.
@@ -599,7 +647,12 @@ func (h *Handler) UpdateMonthsAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	return h.svc.SetMonths(ctx, cal.ID, months)
+	if err := h.svc.SetMonths(ctx, cal.ID, months); err != nil {
+		return err
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarMonthsSet, "calendar", cal.ID, cal.Name,
+		map[string]any{"count": len(months)})
+	return nil
 }
 
 // UpdateWeekdaysAPI replaces all weekdays.
@@ -619,7 +672,12 @@ func (h *Handler) UpdateWeekdaysAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	return h.svc.SetWeekdays(ctx, cal.ID, weekdays)
+	if err := h.svc.SetWeekdays(ctx, cal.ID, weekdays); err != nil {
+		return err
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarWeekdaysSet, "calendar", cal.ID, cal.Name,
+		map[string]any{"count": len(weekdays)})
+	return nil
 }
 
 // UpdateMoonsAPI replaces all moons.
@@ -639,7 +697,12 @@ func (h *Handler) UpdateMoonsAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	return h.svc.SetMoons(ctx, cal.ID, moons)
+	if err := h.svc.SetMoons(ctx, cal.ID, moons); err != nil {
+		return err
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarMoonsSet, "calendar", cal.ID, cal.Name,
+		map[string]any{"count": len(moons)})
+	return nil
 }
 
 // CreateEventAPI creates a new event.
@@ -731,6 +794,9 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarEventCreated, "calendar_event", evt.ID, evt.Name,
+		map[string]any{"calendar_id": cal.ID, "year": req.Year, "month": req.Month, "day": req.Day,
+			"is_recurring": req.IsRecurring, "visibility": visibility})
 
 	return c.JSON(http.StatusCreated, evt)
 }
@@ -794,7 +860,7 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		visibility = "everyone"
 	}
 
-	return h.svc.UpdateEvent(ctx, eventID, UpdateEventInput{
+	if err := h.svc.UpdateEvent(ctx, eventID, UpdateEventInput{
 		Name:            req.Name,
 		Description:     req.Description,
 		DescriptionHTML: req.DescriptionHTML,
@@ -814,7 +880,12 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		Visibility:      visibility,
 		VisibilityRules: req.VisibilityRules,
 		Category:        req.Category,
-	})
+	}); err != nil {
+		return err
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarEventUpdated, "calendar_event", eventID, req.Name,
+		map[string]any{"year": req.Year, "month": req.Month, "day": req.Day, "visibility": visibility})
+	return nil
 }
 
 // DeleteEventAPI deletes an event.
@@ -825,13 +896,16 @@ func (h *Handler) DeleteEventAPI(c echo.Context) error {
 	eventID := c.Param("eid")
 
 	// IDOR protection: verify event belongs to this campaign's calendar.
-	if _, err := h.requireEventInCampaign(c, eventID, cc.Campaign.ID); err != nil {
+	evt, err := h.requireEventInCampaign(c, eventID, cc.Campaign.ID)
+	if err != nil {
 		return err
 	}
 
 	if err := h.svc.DeleteEvent(ctx, eventID); err != nil {
 		return err
 	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarEventDeleted, "calendar_event", eventID, evt.Name,
+		map[string]any{"calendar_id": evt.CalendarID, "year": evt.Year, "month": evt.Month, "day": evt.Day})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -843,7 +917,8 @@ func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
 	eventID := c.Param("eid")
 
 	// IDOR protection: verify event belongs to this campaign's calendar.
-	if _, err := h.requireEventInCampaign(c, eventID, cc.Campaign.ID); err != nil {
+	evt, err := h.requireEventInCampaign(c, eventID, cc.Campaign.ID)
+	if err != nil {
 		return err
 	}
 
@@ -855,6 +930,8 @@ func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
 	if err := h.svc.UpdateEventVisibility(ctx, eventID, input); err != nil {
 		return err
 	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarEventVisibilityChanged, "calendar_event", eventID, evt.Name,
+		map[string]any{"old_visibility": evt.Visibility, "new_visibility": input.Visibility})
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -875,7 +952,12 @@ func (h *Handler) UpdateSeasonsAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	return h.svc.SetSeasons(ctx, cal.ID, seasons)
+	if err := h.svc.SetSeasons(ctx, cal.ID, seasons); err != nil {
+		return err
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarSeasonsSet, "calendar", cal.ID, cal.Name,
+		map[string]any{"count": len(seasons)})
+	return nil
 }
 
 // UpdateErasAPI replaces all eras.
@@ -895,7 +977,12 @@ func (h *Handler) UpdateErasAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	return h.svc.SetEras(ctx, cal.ID, eras)
+	if err := h.svc.SetEras(ctx, cal.ID, eras); err != nil {
+		return err
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarErasSet, "calendar", cal.ID, cal.Name,
+		map[string]any{"count": len(eras)})
+	return nil
 }
 
 // --- C-CAL-WCF-UI: weather / cycles / festivals settings handlers ---
@@ -934,6 +1021,14 @@ func (h *Handler) UpdateWeatherAPI(c echo.Context) error {
 	if err := h.svc.SetWeather(ctx, cal.ID, input); err != nil {
 		return respondSettingsError(c, err)
 	}
+	details := map[string]any{}
+	if input.PresetID != nil {
+		details["preset_id"] = *input.PresetID
+	}
+	if input.TemperatureCelsius != nil {
+		details["temperature_celsius"] = *input.TemperatureCelsius
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarWeatherSet, "calendar", cal.ID, cal.Name, details)
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -983,6 +1078,8 @@ func (h *Handler) UpdateWeatherZonesAPI(c echo.Context) error {
 	if err := h.svc.SetWeatherZones(ctx, cal.ID, state); err != nil {
 		return respondSettingsError(c, err)
 	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarWeatherZonesSet, "calendar", cal.ID, cal.Name,
+		map[string]any{"zone_count": len(state.Zones), "active_zone": state.ActiveZone})
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -1006,6 +1103,8 @@ func (h *Handler) UpdateCyclesAPI(c echo.Context) error {
 	if err := h.svc.SetCycles(ctx, cal.ID, cycles); err != nil {
 		return respondSettingsError(c, err)
 	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarCyclesSet, "calendar", cal.ID, cal.Name,
+		map[string]any{"count": len(cycles)})
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -1033,6 +1132,8 @@ func (h *Handler) UpdateFestivalsAPI(c echo.Context) error {
 	if err := h.svc.SetFestivals(ctx, cal.ID, festivals); err != nil {
 		return respondSettingsError(c, err)
 	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarFestivalsSet, "calendar", cal.ID, cal.Name,
+		map[string]any{"count": len(festivals)})
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -1053,7 +1154,12 @@ func (h *Handler) UpdateEventCategoriesAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	return h.svc.SetEventCategories(ctx, cal.ID, cats)
+	if err := h.svc.SetEventCategories(ctx, cal.ID, cats); err != nil {
+		return err
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarCategoriesSet, "calendar", cal.ID, cal.Name,
+		map[string]any{"count": len(cats)})
+	return nil
 }
 
 // GetEventCategoriesAPI returns all event categories for a calendar.
@@ -1085,13 +1191,20 @@ func (h *Handler) DeleteCalendarAPI(c echo.Context) error {
 	ctx := c.Request().Context()
 	calID := c.Param("calId")
 
-	if _, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID); err != nil {
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
 		return err
 	}
 
 	if err := h.svc.DeleteCalendar(ctx, calID); err != nil {
 		return err
 	}
+	epochName := ""
+	if cal.EpochName != nil {
+		epochName = *cal.EpochName
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarDeleted, "calendar", calID, cal.Name,
+		map[string]any{"mode": string(cal.Mode), "epoch_name": epochName, "current_year": cal.CurrentYear})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -1135,7 +1248,12 @@ func (h *Handler) AdvanceDateAPI(c echo.Context) error {
 		return apperror.NewBadRequest("days must be between 1 and 3650")
 	}
 
-	return h.svc.AdvanceDate(ctx, cal.ID, req.Days)
+	if err := h.svc.AdvanceDate(ctx, cal.ID, req.Days); err != nil {
+		return err
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarDateAdvanced, "calendar", cal.ID, cal.Name,
+		map[string]any{"days": req.Days})
+	return nil
 }
 
 // AdvanceTimeAPI moves the current time forward by hours and/or minutes,
@@ -1168,7 +1286,12 @@ func (h *Handler) AdvanceTimeAPI(c echo.Context) error {
 		return apperror.NewBadRequest("hours must be at most 87600")
 	}
 
-	return h.svc.AdvanceTime(ctx, cal.ID, req.Hours, req.Minutes)
+	if err := h.svc.AdvanceTime(ctx, cal.ID, req.Hours, req.Minutes); err != nil {
+		return err
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarTimeAdvanced, "calendar", cal.ID, cal.Name,
+		map[string]any{"hours": req.Hours, "minutes": req.Minutes})
+	return nil
 }
 
 // EntityEventsFragment returns a small HTMX fragment listing calendar events
@@ -1368,6 +1491,15 @@ func (h *Handler) ImportCalendarAPI(c echo.Context) error {
 		slog.Error("import: failed to apply", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to apply import"))
 	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarImported, "calendar", cal.ID, cal.Name,
+		map[string]any{
+			"format":    result.Format,
+			"months":    len(result.Months),
+			"weekdays":  len(result.Weekdays),
+			"moons":     len(result.Moons),
+			"seasons":   len(result.Seasons),
+			"eras":      len(result.Eras),
+		})
 
 	// Return JSON response with summary.
 	return c.JSON(http.StatusOK, map[string]any{
@@ -1465,12 +1597,23 @@ func (h *Handler) ImportFromSetupAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarCreated, "calendar", cal.ID, cal.Name,
+		map[string]any{"mode": string(ModeFantasy), "via": "import_setup"})
 
 	// Apply imported sub-resources.
 	if err := h.svc.ApplyImport(ctx, cal.ID, result); err != nil {
 		slog.Error("import-setup: failed to apply", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to apply import"))
 	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarImported, "calendar", cal.ID, cal.Name,
+		map[string]any{
+			"format":   result.Format,
+			"months":   len(result.Months),
+			"weekdays": len(result.Weekdays),
+			"moons":    len(result.Moons),
+			"seasons":  len(result.Seasons),
+			"eras":     len(result.Eras),
+		})
 
 	// Auto-enable the calendar addon.
 	if h.addonSvc != nil {
