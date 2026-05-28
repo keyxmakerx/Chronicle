@@ -97,6 +97,19 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 
 	// Backward-compat routes: redirect old /calendar paths to /calendars.
 	pub.GET("/calendar", h.legacyRedirect)
+
+	// V2 calendar shell (Wave 1 PR 1 / C-CAL-V2-SHELL-FOUNDATION).
+	// Additive: lives alongside V1 routes during the migration; V1
+	// surface remains operational. Cutover decision happens when
+	// later Wave 1 PRs reach feature parity. URL forms:
+	//   GET  /campaigns/:id/calendar/v2                       — active cal, default view = month
+	//   GET  /campaigns/:id/calendar/v2/:calId                — explicit cal, default view = month
+	//   GET  /campaigns/:id/calendar/v2/:calId/:view          — explicit cal + view (month|week|day)
+	//   POST /campaigns/:id/calendar/v2/switch                — persist multi-cal switcher choice
+	cg.GET("/calendar/v2", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/calendar/v2/:calId", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/calendar/v2/:calId/:view", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/calendar/v2/switch", h.SwitchActiveCalendarAPI, campaigns.RequireRole(campaigns.RolePlayer))
 }
 
 // legacyRedirect handles the old /campaigns/:id/calendar route by redirecting

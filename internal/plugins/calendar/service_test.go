@@ -54,6 +54,9 @@ type mockCalendarRepo struct {
 	getWeatherZonesFn      func(ctx context.Context, calendarID string) ([]WeatherZone, error)
 	applyWeatherZonesFn    func(ctx context.Context, calendarID string, zones []WeatherZone) error
 	setActiveWeatherZoneFn func(ctx context.Context, calendarID, zoneID, zoneName string) error
+	// V2 Wave 1 PR 1: active-calendar pointer injection.
+	getActiveCalendarIDFn func(ctx context.Context, userID, campaignID string) (string, error)
+	setActiveCalendarFn   func(ctx context.Context, userID, campaignID, calendarID string) error
 }
 
 func (m *mockCalendarRepo) Create(ctx context.Context, cal *Calendar) error {
@@ -344,6 +347,20 @@ func (m *mockCalendarRepo) ApplyWeatherZones(ctx context.Context, calendarID str
 func (m *mockCalendarRepo) SetActiveWeatherZone(ctx context.Context, calendarID, zoneID, zoneName string) error {
 	if m.setActiveWeatherZoneFn != nil {
 		return m.setActiveWeatherZoneFn(ctx, calendarID, zoneID, zoneName)
+	}
+	return nil
+}
+
+func (m *mockCalendarRepo) GetActiveCalendarID(ctx context.Context, userID, campaignID string) (string, error) {
+	if m.getActiveCalendarIDFn != nil {
+		return m.getActiveCalendarIDFn(ctx, userID, campaignID)
+	}
+	return "", nil
+}
+
+func (m *mockCalendarRepo) SetActiveCalendar(ctx context.Context, userID, campaignID, calendarID string) error {
+	if m.setActiveCalendarFn != nil {
+		return m.setActiveCalendarFn(ctx, userID, campaignID, calendarID)
 	}
 	return nil
 }

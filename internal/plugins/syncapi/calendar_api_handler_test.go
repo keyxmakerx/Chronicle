@@ -103,6 +103,12 @@ func (s *stubCalendarSvc) SetWeatherZones(context.Context, string, calendar.Weat
 func (s *stubCalendarSvc) SetActiveWeatherZone(context.Context, string, string) error {
 	return nil
 }
+func (s *stubCalendarSvc) GetActiveCalendar(context.Context, string, string) (*calendar.Calendar, error) {
+	return nil, nil
+}
+func (s *stubCalendarSvc) SwitchActiveCalendar(context.Context, string, string, string) error {
+	return nil
+}
 func (s *stubCalendarSvc) GetCycles(context.Context, string) ([]calendar.Cycle, error) {
 	return nil, nil
 }

@@ -147,6 +147,9 @@ GET	/calendar/festivals	internal/plugins/syncapi/routes.go
 GET	/calendar/moons	internal/plugins/syncapi/routes.go
 GET	/calendar/seasons	internal/plugins/syncapi/routes.go
 GET	/calendar/structure	internal/plugins/syncapi/routes.go
+GET	/calendar/v2	internal/plugins/calendar/routes.go
+GET	/calendar/v2/:calId	internal/plugins/calendar/routes.go
+GET	/calendar/v2/:calId/:view	internal/plugins/calendar/routes.go
 GET	/calendar/weather	internal/plugins/syncapi/routes.go
 GET	/calendars	internal/plugins/calendar/routes.go
 GET	/calendars	internal/plugins/syncapi/routes.go
@@ -403,6 +406,7 @@ POST	/calendar/advance	internal/plugins/syncapi/routes.go
 POST	/calendar/advance-time	internal/plugins/syncapi/routes.go
 POST	/calendar/events	internal/plugins/syncapi/routes.go
 POST	/calendar/import	internal/plugins/syncapi/routes.go
+POST	/calendar/v2/switch	internal/plugins/calendar/routes.go
 POST	/calendars	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/advance	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/advance-time	internal/plugins/calendar/routes.go

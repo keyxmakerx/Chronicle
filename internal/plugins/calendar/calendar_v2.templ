@@ -1,0 +1,309 @@
+// calendar_v2.templ — V2 calendar shell foundation (Wave 1 PR 1 /
+// C-CAL-V2-SHELL-FOUNDATION). Slim shell that hosts:
+//   - active-calendar indicator + multi-cal switcher (header)
+//   - view switcher (Month / Week / Day — NO Year per Q-V2-8)
+//   - view-specific render slot (placeholder shells this PR; PR 2-4
+//     fill in card-based rendering)
+//   - sidebar slot (placeholder this PR; PR 4 fills in mini-month +
+//     upcoming events)
+//
+// V1 calendar.templ stays operational on `/campaigns/:id/calendars/...`
+// routes. V2 lives on `/campaigns/:id/calendar/v2/...`. PRs 2-5
+// extend this shell; the V1→V2 cutover decision happens when feature
+// parity lands.
+//
+// Card-pattern CSS foundation: composes with existing `.card` +
+// `.card-elev` classes (input.css:436-469). PR 2-5 sub-resource and
+// event cards consume the same classes for visual coherence.
+
+package calendar
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CalendarV2ViewData bundles everything the V2 shell + placeholder views need.
+// The slot fields (events, today markers) populate from the handler;
+// view-specific data comes via the View string + Year/Month/Day cursor.
+type CalendarV2ViewData struct {
+	ActiveCalendar  *Calendar  // currently-active (post-resolution)
+	AllCalendars    []Calendar // for the switcher dropdown
+	View            string     // "month" | "week" | "day"
+	Year            int
+	Month           int
+	Day             int
+	Events          []Event // empty in PR 1 placeholders; populated in PR 4
+	TodayYear       int
+	TodayMonth      int
+	TodayDay        int
+	CampaignID      string
+	UserID          string
+	IsOwner         bool
+	IsScribe        bool
+	CSRFToken       string
+}
+
+// CalendarV2Page is the full-page V2 shell. HTMX swaps target the
+// inner `#cal-v2-view-slot`; full page loads (or browser refreshes)
+// re-enter through this template.
+templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
+	@layouts.App(v2PageTitle(data)) {
+		<div class="h-full flex flex-col -mx-5 -my-4">
+			@calendarV2Header(cc, data)
+			<div id="cal-v2-view-slot" class="flex-1 overflow-y-auto px-6 py-4">
+				@calendarV2View(cc, data)
+			</div>
+		</div>
+	}
+}
+
+// CalendarV2ViewFragment renders just the view slot for HTMX swaps
+// when the operator changes view (Month/Week/Day) or switches calendars.
+templ CalendarV2ViewFragment(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
+	@calendarV2View(cc, data)
+}
+
+// calendarV2View dispatches to the placeholder for the current view.
+// Zero-calendar campaigns surface a create-calendar affordance per
+// dispatch §C empty-state requirement. PR 2-4 will replace each
+// placeholder with a card-based renderer.
+templ calendarV2View(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
+	if data.ActiveCalendar == nil {
+		@calendarV2EmptyState(cc, data)
+	} else {
+		switch data.View {
+			case "week":
+				@weekViewPlaceholder(data)
+			case "day":
+				@dayViewPlaceholder(data)
+			default:
+				@monthViewPlaceholder(data)
+		}
+	}
+}
+
+// calendarV2EmptyState renders the "no calendars yet" surface for
+// campaigns that haven't created their first calendar. Routes Owners
+// to the V1 setup flow (kept operational during the V2 migration).
+templ calendarV2EmptyState(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
+	<div class="card card-elev p-8 text-center">
+		<i class="fa-solid fa-calendar-plus text-4xl text-fg-secondary mb-3" aria-hidden="true"></i>
+		<h2 class="text-lg font-semibold text-fg mb-2">No calendar yet</h2>
+		<p class="text-sm text-fg-secondary mb-4">
+			This campaign doesn't have a calendar configured. Create one to start tracking in-world dates, events, and seasons.
+		</p>
+		if data.IsOwner {
+			<a
+				href={ v2CreateCalendarHref(data.CampaignID) }
+				class="btn-primary text-sm inline-flex items-center gap-2"
+			>
+				<i class="fa-solid fa-plus" aria-hidden="true"></i>
+				Create calendar
+			</a>
+		} else {
+			<p class="text-xs text-fg-secondary italic">Ask the campaign owner to add one.</p>
+		}
+	</div>
+}
+
+// calendarV2Header renders the top chrome: campaign breadcrumb,
+// active-calendar switcher, view switcher (Month/Week/Day), and the
+// new-event affordance (Scribe+ only). Sized to fit on one line on
+// desktop; collapses gracefully on narrower viewports.
+templ calendarV2Header(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
+	<div class="card-elev card px-4 py-3 mb-3 mx-6 mt-2 flex items-center justify-between gap-3 flex-wrap">
+		<div class="flex items-center gap-3 min-w-0">
+			<i class="fa-solid fa-calendar-days text-accent text-lg" aria-hidden="true"></i>
+			@calendarV2Switcher(cc, data)
+		</div>
+		<div class="flex items-center gap-2">
+			@calendarV2ViewSwitcher(cc, data)
+		</div>
+	</div>
+}
+
+// calendarV2Switcher renders the active-calendar label and (when
+// there are 2+ calendars) a dropdown to switch the active calendar.
+// On switch, the handler persists the choice via SwitchActiveCalendar
+// and HTMX-swaps the entire shell to reflect the new calendar's data.
+//
+// Empty state (zero calendars) returns a create affordance — handled
+// upstream so this template is only invoked when ActiveCalendar != nil.
+templ calendarV2Switcher(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
+	if data.ActiveCalendar == nil {
+		<span class="text-sm text-fg-secondary italic">No calendar</span>
+	} else if len(data.AllCalendars) <= 1 {
+		// Single-calendar campaigns render the name as a static label
+		// (predictable; no misleading "dropdown" affordance).
+		<span class="text-base font-semibold text-fg truncate" data-cal-id={ data.ActiveCalendar.ID }>
+			{ data.ActiveCalendar.Name }
+		</span>
+	} else {
+		// Multi-calendar: dropdown. Alpine `x-data` keeps the panel
+		// open state local to the component.
+		<div x-data="{ open: false }" @click.outside="open = false" class="relative">
+			<button
+				type="button"
+				@click="open = !open"
+				class="flex items-center gap-2 text-base font-semibold text-fg hover:text-accent transition-colors duration-micro"
+				aria-haspopup="true"
+				:aria-expanded="open"
+			>
+				<span class="truncate" data-cal-id={ data.ActiveCalendar.ID }>{ data.ActiveCalendar.Name }</span>
+				<i class="fa-solid fa-chevron-down text-xs text-fg-secondary" aria-hidden="true"></i>
+			</button>
+			<div
+				x-show="open"
+				x-cloak
+				x-transition.duration.standard
+				class="card card-elev absolute left-0 top-full mt-1 min-w-[12rem] z-20 py-1 px-0"
+				role="menu"
+			>
+				for _, cal := range data.AllCalendars {
+					if cal.ID == data.ActiveCalendar.ID {
+						<div
+							class="px-3 py-2 text-sm font-medium text-accent flex items-center gap-2"
+							role="menuitem"
+							aria-current="true"
+						>
+							<i class="fa-solid fa-check text-xs" aria-hidden="true"></i>
+							{ cal.Name }
+						</div>
+					} else {
+						<button
+							type="button"
+							class="block w-full text-left px-3 py-2 text-sm text-fg hover:bg-surface-2 transition-colors duration-micro"
+							role="menuitem"
+							hx-post={ fmt.Sprintf("/campaigns/%s/calendar/v2/switch", data.CampaignID) }
+							hx-vals={ fmt.Sprintf(`{"calendar_id":"%s"}`, cal.ID) }
+							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+							hx-swap="none"
+							@htmx:after-request="open = false; if (event.detail.successful) { window.location.href = window.location.pathname.replace(/\/(month|week|day)(\/.*)?$/, '') + '/month' }"
+						>
+							{ cal.Name }
+						</button>
+					}
+				}
+			</div>
+		</div>
+	}
+}
+
+// calendarV2ViewSwitcher renders the Month/Week/Day pill group. Year
+// view is intentionally absent per Q-V2-8 ratification (anti-pattern
+// per V2 audit §2). Each pill links to the corresponding view route.
+templ calendarV2ViewSwitcher(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
+	if data.ActiveCalendar == nil {
+		// No calendar = no view switcher.
+	} else {
+		<div class="inline-flex rounded-md border border-edge overflow-hidden" role="tablist" aria-label="Calendar view">
+			@calendarV2ViewPill(data, "month", "Month")
+			@calendarV2ViewPill(data, "week", "Week")
+			@calendarV2ViewPill(data, "day", "Day")
+		</div>
+	}
+}
+
+templ calendarV2ViewPill(data CalendarV2ViewData, view, label string) {
+	if data.View == view {
+		<span
+			class="px-3 py-1 text-xs font-medium bg-accent text-white"
+			role="tab"
+			aria-selected="true"
+		>{ label }</span>
+	} else {
+		<a
+			href={ v2ViewHref(data, view) }
+			class="px-3 py-1 text-xs font-medium text-fg-secondary hover:bg-surface-2 transition-colors duration-micro"
+			role="tab"
+			aria-selected="false"
+		>{ label }</a>
+	}
+}
+
+// monthViewPlaceholder renders the Month grid scaffolding. PR 4
+// replaces the empty event slots with the event-card composite.
+// Today highlight + rest-day tint come for free via per-cell classes.
+templ monthViewPlaceholder(data CalendarV2ViewData) {
+	<div class="card card-elev p-4">
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-lg font-semibold text-fg">
+				{ monthHeading(data) }
+			</h2>
+			<div class="flex items-center gap-1">
+				<a href={ v2ViewNavHref(data, -1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Previous month">
+					<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+				</a>
+				<a href={ v2ViewNavHref(data, 0) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro">Today</a>
+				<a href={ v2ViewNavHref(data, 1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Next month">
+					<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+				</a>
+			</div>
+		</div>
+		<div class="grid gap-1" style={ monthGridStyle(data) }>
+			for _, w := range monthWeekdayHeaders(data) {
+				<div class="text-xs font-medium text-fg-secondary text-center py-1">{ w.Name }</div>
+			}
+			for _, day := range monthDays(data) {
+				@monthDayCell(data, day)
+			}
+		</div>
+	</div>
+}
+
+// monthDayCell renders a single day cell with today highlight +
+// rest-day tint. Empty in PR 1 (no event chips); PR 4 layers the
+// event-card composite into the body.
+templ monthDayCell(data CalendarV2ViewData, day monthDay) {
+	<div class={ "border border-edge rounded p-1 min-h-[80px] flex flex-col", monthDayClasses(data, day) }>
+		<div class="text-xs font-medium text-fg-secondary">{ fmt.Sprint(day.Day) }</div>
+		<div class="flex-1"></div>
+	</div>
+}
+
+// weekViewPlaceholder renders the Week grid scaffolding: 7 day
+// columns × hour rows. PR 4 layers timed event blocks here.
+templ weekViewPlaceholder(data CalendarV2ViewData) {
+	<div class="card card-elev p-4">
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-lg font-semibold text-fg">Week view</h2>
+			<div class="flex items-center gap-1">
+				<a href={ v2ViewNavHref(data, -1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Previous week">
+					<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+				</a>
+				<a href={ v2ViewNavHref(data, 0) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro">Today</a>
+				<a href={ v2ViewNavHref(data, 1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Next week">
+					<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+				</a>
+			</div>
+		</div>
+		<div class="text-sm text-fg-secondary italic">
+			Week placeholder &mdash; PR 4 ships the hour-grid + event-card rendering.
+		</div>
+	</div>
+}
+
+// dayViewPlaceholder renders the Day shell. PR 4 layers the
+// single-day hour grid with event cards.
+templ dayViewPlaceholder(data CalendarV2ViewData) {
+	<div class="card card-elev p-4">
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-lg font-semibold text-fg">Day view</h2>
+			<div class="flex items-center gap-1">
+				<a href={ v2ViewNavHref(data, -1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Previous day">
+					<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+				</a>
+				<a href={ v2ViewNavHref(data, 0) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro">Today</a>
+				<a href={ v2ViewNavHref(data, 1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Next day">
+					<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+				</a>
+			</div>
+		</div>
+		<div class="text-sm text-fg-secondary italic">
+			Day placeholder &mdash; PR 4 ships the hour-grid + event-card rendering.
+		</div>
+	</div>
+}

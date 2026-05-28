@@ -34,6 +34,15 @@ type CalendarService interface {
 	ListCalendars(ctx context.Context, campaignID string) ([]Calendar, error)
 	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
 
+	// Active-calendar resolution (V2 Wave 1 PR 1 / C-CAL-V2-SHELL-FOUNDATION).
+	// GetActiveCalendar returns the user's currently-active calendar:
+	// their last-switched calendar via repo lookup, or the campaign's
+	// default when no pointer exists. Returns nil if the campaign has
+	// zero calendars. SwitchActiveCalendar validates that the target
+	// calendar belongs to the campaign before persisting.
+	GetActiveCalendar(ctx context.Context, userID, campaignID string) (*Calendar, error)
+	SwitchActiveCalendar(ctx context.Context, userID, campaignID, calendarID string) error
+
 	// Sub-resource bulk updates (replace all).
 	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
 	SetWeekdays(ctx context.Context, calendarID string, weekdays []WeekdayInput) error
@@ -497,6 +506,74 @@ func (s *calendarService) SetDefaultCalendar(ctx context.Context, campaignID, ca
 		return apperror.NewForbidden("calendar does not belong to this campaign")
 	}
 	return s.repo.SetDefault(ctx, campaignID, calendarID)
+}
+
+// --- Active-calendar resolution (V2 Wave 1 PR 1) ---
+
+// GetActiveCalendar resolves the user's currently-active calendar for
+// a campaign. Resolution order:
+//  1. Pointer in calendar_active (last switcher choice) — if it resolves to
+//     a calendar still in the campaign.
+//  2. Campaign default (`is_default = 1`).
+//  3. First calendar by sort_order (fallback if no default exists yet).
+//  4. nil if the campaign has zero calendars.
+//
+// Step 1's "still in the campaign" check covers a stale pointer (calendar
+// deleted between switches; FK cascade clears the pointer, but during
+// race conditions or post-failed-delete states a pointer may briefly
+// point at a wrong-campaign calendar — defensively re-verify).
+func (s *calendarService) GetActiveCalendar(ctx context.Context, userID, campaignID string) (*Calendar, error) {
+	if userID != "" {
+		ptrID, err := s.repo.GetActiveCalendarID(ctx, userID, campaignID)
+		if err != nil {
+			return nil, fmt.Errorf("get active calendar pointer: %w", err)
+		}
+		if ptrID != "" {
+			cal, err := s.repo.GetByID(ctx, ptrID)
+			if err == nil && cal != nil && cal.CampaignID == campaignID {
+				return cal, nil
+			}
+			// Stale pointer; fall through to default.
+		}
+	}
+	// Default fallback.
+	cal, err := s.repo.GetDefaultByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("get default calendar: %w", err)
+	}
+	if cal != nil {
+		return cal, nil
+	}
+	// No default set; take first by sort order so a campaign that never
+	// got a default flagged still resolves to *something*.
+	list, err := s.repo.ListByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list campaign calendars: %w", err)
+	}
+	if len(list) == 0 {
+		return nil, nil
+	}
+	return &list[0], nil
+}
+
+// SwitchActiveCalendar persists the user's calendar choice. Validates
+// IDOR (calendar must belong to campaign) before write. Subsequent
+// GetActiveCalendar calls return the switched calendar.
+func (s *calendarService) SwitchActiveCalendar(ctx context.Context, userID, campaignID, calendarID string) error {
+	if userID == "" {
+		return apperror.NewValidation("user_id required to switch active calendar")
+	}
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+	if cal.CampaignID != campaignID {
+		return apperror.NewForbidden("calendar does not belong to this campaign")
+	}
+	return s.repo.SetActiveCalendar(ctx, userID, campaignID, calendarID)
 }
 
 // SetMonths replaces all months. Validates at least one month exists.
