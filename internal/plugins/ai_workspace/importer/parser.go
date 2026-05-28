@@ -213,6 +213,12 @@ func parseOnePage(raw string) ParsedPage {
 // the body. Returns the body (front-matter and its fences removed),
 // the parsed FrontMatter, the RAW yaml bytes (for unknown-key
 // detection), or an error if the block is malformed.
+//
+// Error wording is operator-facing — kept human-readable; no raw
+// library prefixes ("yaml:") reach the review screen. Technical
+// detail (the underlying yaml.Unmarshal error) is preserved via the
+// %v formatter for log-side debugging but stripped of its leading
+// library tag.
 func extractFrontMatter(s string) (body string, fm FrontMatter, rawYAML string, err error) {
 	// Match: opening `---\n`, then yaml content, then `---\n` on its
 	// own line. The opening fence is already known to start at
@@ -220,22 +226,46 @@ func extractFrontMatter(s string) (body string, fm FrontMatter, rawYAML string, 
 	lines := strings.SplitN(s, "\n", 2)
 	if len(lines) < 2 {
 		return "", fm, "", fmt.Errorf(
-			"front-matter block has no closing `---` (open fence is on the only line)")
+			"front-matter block is missing its closing `---` line (the opening fence is on the only line)")
 	}
 	rest := lines[1]
 	closeIdx := fmOpenRe.FindStringIndex(rest)
 	if closeIdx == nil {
 		return "", fm, "", fmt.Errorf(
-			"front-matter block has no closing `---` line")
+			"front-matter block is missing its closing `---` line — add `---` on its own line after the YAML keys")
 	}
 	rawYAML = rest[:closeIdx[0]]
 	body = strings.TrimSpace(rest[closeIdx[1]:])
 
 	if err := yaml.Unmarshal([]byte(rawYAML), &fm); err != nil {
 		return "", FrontMatter{}, "",
-			fmt.Errorf("front-matter YAML parse failed: %v", err)
+			fmt.Errorf("front-matter could not be read as YAML — %s",
+				humanizeYAMLError(err))
 	}
 	return body, fm, rawYAML, nil
+}
+
+// humanizeYAMLError strips the `yaml:` prefix from a yaml.v3 error
+// and surfaces a friendly hint when the error message matches common
+// failure patterns (unindented mapping, unquoted colon-bearing
+// value, etc.). Falls back to the cleaned message verbatim when no
+// pattern matches.
+func humanizeYAMLError(err error) string {
+	msg := err.Error()
+	// yaml.v3 always prefixes with "yaml:" — strip it so operator
+	// doesn't see library jargon.
+	msg = strings.TrimPrefix(msg, "yaml: ")
+	msg = strings.TrimPrefix(msg, "yaml:")
+	switch {
+	case strings.Contains(msg, "mapping values are not allowed"):
+		return msg + " (check that values containing `:` are quoted, e.g. `name: \"Some: Name\"`)"
+	case strings.Contains(msg, "did not find expected"):
+		return msg + " (check the indentation + that lists use `-` markers)"
+	case strings.Contains(msg, "could not find expected ':'"):
+		return msg + " (each key must be followed by `:` and a space before the value)"
+	default:
+		return msg
+	}
 }
 
 // unknownYAMLKeys returns the top-level YAML keys that aren't in

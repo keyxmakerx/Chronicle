@@ -44,8 +44,19 @@ type ReviewSummary struct {
 }
 
 // ImportReview renders the review fragment + the bulk-defaults bar
-// + the inert Submit button. HTMX swaps this into
-// #ai-import-review-host.
+// + the Submit button. HTMX swaps this into #ai-import-review-host.
+//
+// A11y (V1-F): skip-link lands focus on Submit for keyboard users;
+// the bulk-defaults bar + per-row table carry role/aria-label/aria-
+// labelledby attributes; row cards use the focus-visible ring on
+// every interactive control.
+//
+// Bug 2 fix (V1-F): hx-push-url tells HTMX to register a history
+// entry on commit so the browser Back button after the result render
+// lands somewhere sensible. The pushed URL points back at the
+// settings tab — Back from result lands on a fresh settings page
+// (no re-POST risk; review state is sacrificed by design — restoring
+// it would require V2-class URL-encoded state).
 templ ImportReview(d ImportReviewData) {
 	<form
 		id="ai-import-review"
@@ -53,7 +64,10 @@ templ ImportReview(d ImportReviewData) {
 		hx-target="#ai-import-review-host"
 		hx-swap="innerHTML"
 		hx-indicator="#ai-import-committing"
-		x-data={ "{ }" }
+		hx-push-url={ fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID) }
+		x-data="aiImportReview()"
+		role="region"
+		aria-labelledby="ai-import-review-heading"
 		class="card p-4 mt-4"
 	>
 		// Re-pass the original markdown source so the commit handler
@@ -61,9 +75,20 @@ templ ImportReview(d ImportReviewData) {
 		// tripping every per-page body as a separate hidden field.
 		<input type="hidden" name="markdown_source" value={ d.MarkdownSource }/>
 
+		// Skip-link — a11y. Operators on keyboard-only nav can jump
+		// straight to Submit from the top of the review screen.
+		// `sr-only focus:not-sr-only` lights the link up only when
+		// focused — invisible to sighted operators unless tabbed to.
+		<a
+			href="#ai-import-submit"
+			class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-10 focus:bg-accent focus:text-white focus:px-3 focus:py-1.5 focus:rounded focus:text-xs"
+		>
+			Skip to Submit
+		</a>
+
 		<div class="flex items-baseline justify-between mb-3">
-			<h3 class="text-base font-semibold text-fg">
-				Review — { strconv.Itoa(d.SummaryCounts.Total) } pages detected
+			<h3 id="ai-import-review-heading" class="text-base font-semibold text-fg">
+				Review — { strconv.Itoa(d.SummaryCounts.Total) } { pluralize("page", "pages", d.SummaryCounts.Total) } detected
 			</h3>
 			<button
 				type="button"
@@ -71,24 +96,25 @@ templ ImportReview(d ImportReviewData) {
 				hx-get={ fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID) }
 				hx-target="#ai-import-review-host"
 				hx-swap="innerHTML"
+				aria-label="Discard the parsed pages and return to the import form"
 				title="Discard parse and start over"
 			>
-				<i class="fa-solid fa-rotate-left mr-1"></i> Cancel
+				<i class="fa-solid fa-rotate-left mr-1" aria-hidden="true"></i> Cancel
 			</button>
 		</div>
 
 		<div class="text-xs text-fg-muted mb-3">
 			{ fmt.Sprintf("%d new", d.SummaryCounts.Selectable - d.SummaryCounts.Conflicts - d.SummaryCounts.NewCategories) } ·
-			{ fmt.Sprintf("%d conflicts", d.SummaryCounts.Conflicts) } ·
-			{ fmt.Sprintf("%d new categories", d.SummaryCounts.NewCategories) } ·
-			{ fmt.Sprintf("%d parse errors", d.SummaryCounts.ParseErrors) }
+			{ fmt.Sprintf("%d %s", d.SummaryCounts.Conflicts, pluralize("conflict", "conflicts", d.SummaryCounts.Conflicts)) } ·
+			{ fmt.Sprintf("%d new %s", d.SummaryCounts.NewCategories, pluralize("category", "categories", d.SummaryCounts.NewCategories)) } ·
+			{ fmt.Sprintf("%d parse %s", d.SummaryCounts.ParseErrors, pluralize("error", "errors", d.SummaryCounts.ParseErrors)) }
 		</div>
 
 		@bulkDefaultsBar(d)
 
-		<div class="space-y-3 mt-4">
+		<div class="space-y-3 mt-4" role="list" aria-label="Parsed pages to review">
 			for i, page := range d.Pages {
-				@reviewRow(d.CampaignID, i, page, d.Classes[i])
+				@reviewRow(d.CampaignID, i, page, d.Classes[i], d)
 			}
 		</div>
 
@@ -98,35 +124,135 @@ templ ImportReview(d ImportReviewData) {
 			// creates entities (with per-row autonomy) + creates
 			// any new categories the operator confirmed, then
 			// HTMX-swaps the import_result fragment into place.
-			<button
-				type="submit"
-				class="btn-primary"
-				disabled?={ d.SummaryCounts.Selectable == 0 }
-			>
-				<i class="fa-solid fa-file-import mr-1.5"></i>
-				Import { strconv.Itoa(d.SummaryCounts.Selectable) } pages
-			</button>
-			<span id="ai-import-committing" class="htmx-indicator text-xs text-fg-muted">
-				<i class="fa-solid fa-spinner fa-spin mr-1"></i> Committing...
+			if d.SummaryCounts.ParseErrors > 0 {
+				<button
+					id="ai-import-submit"
+					type="submit"
+					class="btn-primary"
+					disabled?={ d.SummaryCounts.Selectable == 0 }
+					aria-describedby="ai-import-parse-errors-note"
+				>
+					<i class="fa-solid fa-file-import mr-1.5" aria-hidden="true"></i>
+					Import { strconv.Itoa(d.SummaryCounts.Selectable) } { pluralize("page", "pages", d.SummaryCounts.Selectable) }
+				</button>
+			} else {
+				<button
+					id="ai-import-submit"
+					type="submit"
+					class="btn-primary"
+					disabled?={ d.SummaryCounts.Selectable == 0 }
+				>
+					<i class="fa-solid fa-file-import mr-1.5" aria-hidden="true"></i>
+					Import { strconv.Itoa(d.SummaryCounts.Selectable) } { pluralize("page", "pages", d.SummaryCounts.Selectable) }
+				</button>
+			}
+			<span id="ai-import-committing" class="htmx-indicator text-xs text-fg-muted" role="status" aria-live="polite">
+				<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i> Committing...
 			</span>
 			if d.SummaryCounts.ParseErrors > 0 {
-				<span class="text-xs text-fg-muted">
-					{ fmt.Sprintf("(%d parse-error rows will be skipped)", d.SummaryCounts.ParseErrors) }
+				<span id="ai-import-parse-errors-note" class="text-xs text-fg-muted">
+					{ fmt.Sprintf("(%d parse-error %s will be skipped)", d.SummaryCounts.ParseErrors, pluralize("row", "rows", d.SummaryCounts.ParseErrors)) }
 				</span>
 			}
 		</div>
 	</form>
+	// Alpine x-data factory. Defined inline so the review screen
+	// doesn't require a separate JS bundle; mirror of the
+	// settings-tab x-data pattern used by promptBuilderSection.
+	//
+	// Bulk action ops (Apply defaults / Skip conflicts / Toggle all)
+	// run via direct DOM mutation rather than a fully-reactive row
+	// model — keeps the templ-rendered server-side state authoritative
+	// and avoids a 3-way sync between FormData, the templ markup, and
+	// the Alpine store.
+	<script>
+		(function () {
+			if (window.aiImportReview) { return; }
+			window.aiImportReview = function () {
+				return {
+					applyDefaultsToAll: function () {
+						var form = this.$root;
+						var bulkCategory = form.querySelector('[name=bulk_default_category]')?.value || '';
+						var bulkVisibility = form.querySelector('[name=bulk_default_visibility]')?.value || '';
+						var bulkConflict = form.querySelector('[name=bulk_default_conflict]')?.value || '';
+						form.querySelectorAll('select[name$="_category"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_category') return;
+							if (bulkCategory && Array.from(sel.options).some(function (o) { return o.value === bulkCategory; })) {
+								sel.value = bulkCategory;
+								sel.dispatchEvent(new Event('change'));
+							}
+						});
+						form.querySelectorAll('select[name$="_visibility"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_visibility') return;
+							if (bulkVisibility) { sel.value = bulkVisibility; }
+						});
+						form.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_conflict') return;
+							if (bulkConflict) { sel.value = bulkConflict; }
+						});
+					},
+					skipAllConflicts: function () {
+						this.$root.querySelectorAll('select[name$="_conflict"]').forEach(function (sel) {
+							if (sel.name === 'bulk_default_conflict') return;
+							sel.value = 'skip';
+						});
+					},
+					toggleAll: function (event) {
+						var checked = event.target.checked;
+						this.$root.querySelectorAll('input[type=checkbox][name$="_include"]').forEach(function (cb) {
+							if (cb.disabled) return;
+							cb.checked = checked;
+						});
+					},
+				};
+			};
+		})();
+	</script>
 }
 
-// bulkDefaultsBar renders the top-of-table controls. V1 Phase 4
-// shows them visually; their values are read on Submit (Phase 5).
+// pluralize returns singular when n==1, plural otherwise. Used in
+// the header summary line to fix the "1 new categories" grammar
+// per V1-F dispatch §Review-screen polish item #6.
+func pluralize(singular, plural string, n int) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
+}
+
+// countRowsForProposedSlug counts how many included rows reference
+// the same new-category slug. Used to surface the "applies to N
+// rows" hint per V1-F dispatch §Review-screen polish item #5; an
+// operator picking Create-vs-Map sees the downstream impact of the
+// decision.
+func countRowsForProposedSlug(d ImportReviewData, slug string) int {
+	n := 0
+	for _, c := range d.Classes {
+		if c.IsNewCategory && c.ProposedTypeSlug == slug {
+			n++
+		}
+	}
+	return n
+}
+
+// bulkDefaultsBar renders the top-of-table controls + action
+// buttons. V1-F adds the action buttons (Apply / Skip-conflicts /
+// Toggle-all) wired to the form-level Alpine factory; the dropdowns
+// continue to back the per-row default-fill logic on Submit.
+//
+// `position: sticky; top: 0` keeps the bar reachable on long
+// imports (20+ rows). z-index lifts it above row cards.
 templ bulkDefaultsBar(d ImportReviewData) {
-	<div class="card p-3 bg-surface-alt text-xs space-y-2">
-		<div class="font-medium text-fg">Bulk defaults</div>
+	<div
+		class="card p-3 bg-surface-alt text-xs space-y-2 sticky top-0 z-10"
+		role="region"
+		aria-labelledby="ai-import-bulk-heading"
+	>
+		<div id="ai-import-bulk-heading" class="font-medium text-fg">Bulk defaults</div>
 		<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 			<label class="space-y-1">
 				<span class="block text-fg-muted">Default category (for rows without front-matter)</span>
-				<select name="bulk_default_category" class="input text-xs w-full">
+				<select name="bulk_default_category" class="input text-xs w-full" aria-label="Default category to apply to rows without front-matter">
 					<option value="">— pick one —</option>
 					if len(d.Classes) > 0 {
 						for _, et := range d.Classes[0].AvailableTypes {
@@ -137,7 +263,7 @@ templ bulkDefaultsBar(d ImportReviewData) {
 			</label>
 			<label class="space-y-1">
 				<span class="block text-fg-muted">Default visibility</span>
-				<select name="bulk_default_visibility" class="input text-xs w-full">
+				<select name="bulk_default_visibility" class="input text-xs w-full" aria-label="Default visibility for new entities">
 					<option value="private" selected>Private</option>
 					<option value="dm_only">DM-only</option>
 					<option value="public">Public</option>
@@ -145,11 +271,45 @@ templ bulkDefaultsBar(d ImportReviewData) {
 			</label>
 			<label class="space-y-1">
 				<span class="block text-fg-muted">Default conflict mode</span>
-				<select name="bulk_default_conflict" class="input text-xs w-full">
+				<select name="bulk_default_conflict" class="input text-xs w-full" aria-label="Default action when a row's name conflicts with an existing entity">
 					<option value="rename" selected>Rename (suffix)</option>
 					<option value="skip">Skip</option>
 					<option value="overwrite">Overwrite existing</option>
 				</select>
+			</label>
+		</div>
+		// Bulk action buttons — per V1-F dispatch §Review-screen
+		// polish item #4. Pure client-side ops via the form's Alpine
+		// factory; no server round-trip until Submit.
+		<div class="flex flex-wrap items-center gap-2 pt-2">
+			<button
+				type="button"
+				class="btn-secondary text-[11px] px-2 py-1"
+				@click="applyDefaultsToAll()"
+				aria-label="Apply the bulk defaults above to every row"
+			>
+				<i class="fa-solid fa-arrow-down-to-bracket mr-1" aria-hidden="true"></i>
+				Apply defaults to all
+			</button>
+			if d.SummaryCounts.Conflicts > 0 {
+				<button
+					type="button"
+					class="btn-secondary text-[11px] px-2 py-1"
+					@click="skipAllConflicts()"
+					aria-label="Set every name-conflict row to Skip"
+				>
+					<i class="fa-solid fa-forward mr-1" aria-hidden="true"></i>
+					Skip all conflicts
+				</button>
+			}
+			<label class="inline-flex items-center gap-1 text-[11px] text-fg-muted ml-auto cursor-pointer">
+				<input
+					type="checkbox"
+					class="rounded border-edge text-accent"
+					@change="toggleAll($event)"
+					aria-label="Toggle every row's Include checkbox at once"
+				/>
+				Toggle all
 			</label>
 		</div>
 	</div>
@@ -157,14 +317,24 @@ templ bulkDefaultsBar(d ImportReviewData) {
 
 // reviewRow renders one row per ParsedPage. The row's render
 // variant depends on Status — parse errors get a different shape
-// from successful rows.
-templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls importer.Classification) {
-	<div class={
-		"card p-3",
-		templ.KV("border-rose-300 dark:border-rose-700", cls.Status == importer.StatusParseError),
-		templ.KV("border-amber-300 dark:border-amber-700", cls.Status == importer.StatusConflict),
-		templ.KV("border-sky-300 dark:border-sky-700", cls.Status == importer.StatusNewCategory),
-	}>
+// from successful rows. Per V1-F dispatch adds tags chips, the
+// subcategory label, and the map-to-existing radio surface for
+// new-category rows.
+//
+// The data parameter is the full ImportReviewData so the row can
+// compute its "applies to N rows" hint without per-row pre-
+// aggregation in the handler.
+templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls importer.Classification, data ImportReviewData) {
+	<div
+		role="listitem"
+		aria-label={ fmt.Sprintf("Page %d: %s", idx+1, statusLabel(cls.Status)) }
+		class={
+			"card p-3 transition-colors",
+			templ.KV("border-rose-300 dark:border-rose-700", cls.Status == importer.StatusParseError),
+			templ.KV("border-amber-300 dark:border-amber-700", cls.Status == importer.StatusConflict),
+			templ.KV("border-sky-300 dark:border-sky-700", cls.Status == importer.StatusNewCategory),
+		}
+	>
 		<div class="flex items-start gap-3">
 			<input
 				type="checkbox"
@@ -172,20 +342,22 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 				checked?={ page.Status != importer.StatusParseError }
 				disabled?={ page.Status == importer.StatusParseError }
 				class="mt-1 rounded border-edge text-accent"
+				aria-label={ fmt.Sprintf("Include page %d (%s) in this import", idx+1, page.Name) }
 			/>
 			<div class="flex-1 min-w-0 space-y-1">
 				@reviewRowHeader(idx, page, cls)
 				if page.Status == importer.StatusParseError {
-					<div class="text-xs text-rose-700 dark:text-rose-300 mt-1">
-						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+					<div class="text-xs text-rose-700 dark:text-rose-300 mt-1" role="alert">
+						<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
 						{ page.ParseError }
 					</div>
 				} else {
-					@reviewRowFields(idx, page, cls)
+					@reviewRowFields(idx, page, cls, data)
+					@reviewRowMeta(page)
 				}
 				if len(page.Warnings) > 0 {
 					<details class="text-xs text-fg-muted mt-1">
-						<summary class="cursor-pointer">{ fmt.Sprintf("%d warning(s)", len(page.Warnings)) }</summary>
+						<summary class="cursor-pointer">{ fmt.Sprintf("%d %s", len(page.Warnings), pluralize("warning", "warnings", len(page.Warnings))) }</summary>
 						<ul class="list-disc ml-4 mt-1 space-y-0.5">
 							for _, w := range page.Warnings {
 								<li>{ w }</li>
@@ -196,6 +368,50 @@ templ reviewRow(campaignID string, idx int, page importer.ParsedPage, cls import
 			</div>
 		</div>
 	</div>
+}
+
+// reviewRowMeta renders the read-only tags + subcategory line for
+// successfully-parsed rows. Per V1-F dispatch §Review-screen polish
+// items #2 (tags chips) + #3 (subcategory display).
+//
+// Empty tags + empty subcategory → no DOM emitted (avoid stale-empty
+// whitespace). Both surfaces are read-only in V1; V2 may allow
+// in-form editing.
+templ reviewRowMeta(page importer.ParsedPage) {
+	if len(page.FrontMatter.Tags) > 0 || page.FrontMatter.Subcategory != "" {
+		<div class="flex flex-wrap items-center gap-1.5 mt-1">
+			if page.FrontMatter.Subcategory != "" {
+				<span class="text-[10px] uppercase tracking-wide text-fg-muted px-1.5 py-0.5 rounded bg-fg-secondary/5">
+					<i class="fa-solid fa-folder-tree text-[9px] mr-1" aria-hidden="true"></i>
+					{ page.FrontMatter.Subcategory }
+				</span>
+			}
+			for _, t := range page.FrontMatter.Tags {
+				<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent">
+					<i class="fa-solid fa-tag text-[9px] mr-1" aria-hidden="true"></i>
+					{ t }
+				</span>
+			}
+		</div>
+	}
+}
+
+// statusLabel returns a one-word a11y label for the row's status.
+// Used by the row's aria-label so screen-reader output is
+// "Page 3: Name conflict" not just "Page 3".
+func statusLabel(s importer.ParseStatus) string {
+	switch s {
+	case importer.StatusNew:
+		return "New page"
+	case importer.StatusConflict:
+		return "Name conflict"
+	case importer.StatusNewCategory:
+		return "New category"
+	case importer.StatusParseError:
+		return "Parse error"
+	default:
+		return "Page"
+	}
 }
 
 // reviewRowHeader renders the name input + status chip. Status
@@ -209,6 +425,7 @@ templ reviewRowHeader(idx int, page importer.ParsedPage, cls importer.Classifica
 			placeholder="Page name"
 			class="input text-sm flex-1 min-w-0"
 			disabled?={ page.Status == importer.StatusParseError }
+			aria-label={ fmt.Sprintf("Page %d name (editable)", idx+1) }
 		/>
 		@statusChip(cls.Status)
 	</div>
@@ -237,32 +454,45 @@ templ statusChip(s importer.ParseStatus) {
 }
 
 // reviewRowFields renders the per-row Category / Visibility /
-// Conflict-mode controls (when applicable).
-templ reviewRowFields(idx int, page importer.ParsedPage, cls importer.Classification) {
+// Conflict-mode controls. New-category rows get the explicit
+// radio-pair surface (Create new / Map to existing) per V1-F
+// dispatch §Review-screen polish item #1; other rows keep the
+// existing dropdown.
+templ reviewRowFields(idx int, page importer.ParsedPage, cls importer.Classification, data ImportReviewData) {
 	<div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-xs">
-		// Category dropdown.
-		<label class="space-y-0.5">
-			<span class="block text-fg-muted">Category</span>
-			<select name={ fmt.Sprintf("page_%d_category", idx) } class="input text-xs w-full">
-				if cls.IsNewCategory {
-					<option value={ "new:" + cls.ProposedTypeSlug } selected>
-						{ "✨ Create new: " + cls.ProposedTypeSlug }
-					</option>
-				}
-				for _, et := range cls.AvailableTypes {
-					if cls.ExistingType != nil && et.ID == cls.ExistingType.ID {
-						<option value={ et.Slug } selected>{ et.Name }</option>
-					} else {
-						<option value={ et.Slug }>{ et.Name }</option>
+		// Category control. For new-category rows we hand off to the
+		// radio surface so the operator can explicitly choose
+		// Create-new vs Map-to-existing; for everything else a plain
+		// dropdown is fine.
+		if cls.IsNewCategory {
+			@newCategoryControl(idx, page, cls, data)
+		} else {
+			<label class="space-y-0.5">
+				<span class="block text-fg-muted">Category</span>
+				<select
+					name={ fmt.Sprintf("page_%d_category", idx) }
+					class="input text-xs w-full"
+					aria-label={ fmt.Sprintf("Category for page %d", idx+1) }
+				>
+					for _, et := range cls.AvailableTypes {
+						if cls.ExistingType != nil && et.ID == cls.ExistingType.ID {
+							<option value={ et.Slug } selected>{ et.Name }</option>
+						} else {
+							<option value={ et.Slug }>{ et.Name }</option>
+						}
 					}
-				}
-			</select>
-		</label>
+				</select>
+			</label>
+		}
 
 		// Visibility dropdown.
 		<label class="space-y-0.5">
 			<span class="block text-fg-muted">Visibility</span>
-			<select name={ fmt.Sprintf("page_%d_visibility", idx) } class="input text-xs w-full">
+			<select
+				name={ fmt.Sprintf("page_%d_visibility", idx) }
+				class="input text-xs w-full"
+				aria-label={ fmt.Sprintf("Visibility for page %d", idx+1) }
+			>
 				@visibilityOption(idx, "private", "Private", page.FrontMatter.Visibility)
 				@visibilityOption(idx, "dm_only", "DM-only", page.FrontMatter.Visibility)
 				@visibilityOption(idx, "public", "Public", page.FrontMatter.Visibility)
@@ -273,7 +503,11 @@ templ reviewRowFields(idx int, page importer.ParsedPage, cls importer.Classifica
 		if cls.ConflictEntity != nil {
 			<label class="space-y-0.5">
 				<span class="block text-fg-muted">Conflict mode</span>
-				<select name={ fmt.Sprintf("page_%d_conflict", idx) } class="input text-xs w-full">
+				<select
+					name={ fmt.Sprintf("page_%d_conflict", idx) }
+					class="input text-xs w-full"
+					aria-label={ fmt.Sprintf("How to handle the name conflict for page %d", idx+1) }
+				>
 					<option value="rename" selected>Rename (suffix)</option>
 					<option value="skip">Skip</option>
 					<option value="overwrite">Overwrite</option>
@@ -282,17 +516,93 @@ templ reviewRowFields(idx int, page importer.ParsedPage, cls importer.Classifica
 					Exists as: { cls.ConflictEntity.Name }
 				</span>
 			</label>
-		} else if cls.IsNewCategory {
-			<div class="space-y-0.5">
-				<span class="block text-fg-muted">Category source</span>
-				<span class="block text-[10px] text-sky-700 dark:text-sky-400">
-					Slug { "“" + cls.ProposedTypeSlug + "”" } doesn't exist yet — selection above will create it on Submit.
-				</span>
-			</div>
 		} else {
 			<div></div>
 		}
 	</div>
+}
+
+// newCategoryControl renders the Create-new / Map-to-existing radio
+// surface for rows whose front-matter proposes an unknown entity-
+// type slug. Per V1-F dispatch §Review-screen polish item #1 (spec
+// gap — §2.2 mockup had it; V1-D shipped only the dropdown).
+//
+// The hidden input keeps the form-encoded value compatible with the
+// commit handler's parser (which reads `page_N_category` as either
+// an existing slug or the "new:<slug>" sentinel — see
+// importer.parseNewCategorySpec).
+templ newCategoryControl(idx int, page importer.ParsedPage, cls importer.Classification, data ImportReviewData) {
+	{{ shared := countRowsForProposedSlug(data, cls.ProposedTypeSlug) }}
+	<div
+		class="space-y-1"
+		x-data={ fmt.Sprintf(`{ catMode: 'new', mapTarget: '%s' }`, firstExistingSlug(cls)) }
+		role="radiogroup"
+		aria-label={ fmt.Sprintf("Category resolution for page %d", idx+1) }
+	>
+		<span class="block text-fg-muted">Category</span>
+		<label class="flex items-start gap-1.5 cursor-pointer">
+			<input
+				type="radio"
+				value="new"
+				x-model="catMode"
+				class="mt-0.5 border-edge text-accent"
+				aria-label={ fmt.Sprintf("Create a new %q category", cls.ProposedTypeSlug) }
+			/>
+			<span class="text-[11px]">
+				<i class="fa-solid fa-wand-magic-sparkles mr-0.5 text-sky-500" aria-hidden="true"></i>
+				Create new:&nbsp;<code class="text-sky-700 dark:text-sky-300">{ cls.ProposedTypeSlug }</code>
+			</span>
+		</label>
+		<label class="flex items-start gap-1.5 cursor-pointer">
+			<input
+				type="radio"
+				value="existing"
+				x-model="catMode"
+				class="mt-0.5 border-edge text-accent"
+				aria-label="Map this page to an existing category instead of creating a new one"
+			/>
+			<span class="text-[11px] flex-1">
+				Map to existing:
+				<select
+					x-model="mapTarget"
+					:disabled="catMode !== 'existing'"
+					class="input text-[11px] inline-block ml-1 max-w-[12rem]"
+					aria-label="Existing category to map this page to"
+				>
+					for _, et := range cls.AvailableTypes {
+						<option value={ et.Slug }>{ et.Name }</option>
+					}
+				</select>
+			</span>
+		</label>
+		// Hidden input the form encodes. Value matches the commit
+		// handler's expectations: "new:<slug>" → category creation;
+		// bare existing slug → map.
+		<input
+			type="hidden"
+			name={ fmt.Sprintf("page_%d_category", idx) }
+			:value={ fmt.Sprintf(`catMode === 'new' ? 'new:%s' : mapTarget`, cls.ProposedTypeSlug) }
+		/>
+		if shared > 1 {
+			<div class="text-[10px] text-sky-700 dark:text-sky-400 mt-0.5">
+				<i class="fa-solid fa-circle-info mr-0.5" aria-hidden="true"></i>
+				Creating &quot;{ cls.ProposedTypeSlug }&quot; will apply to { strconv.Itoa(shared) } { pluralize("row", "rows", shared) }.
+			</div>
+		}
+	</div>
+}
+
+// firstExistingSlug returns a sensible default for the "map to
+// existing" dropdown — preferring the parser's pre-selected type
+// when one exists, otherwise the first available type's slug.
+func firstExistingSlug(cls importer.Classification) string {
+	if cls.ExistingType != nil {
+		return cls.ExistingType.Slug
+	}
+	if len(cls.AvailableTypes) > 0 {
+		return cls.AvailableTypes[0].Slug
+	}
+	return ""
 }
 
 // visibilityOption renders one <option> with the front-matter
@@ -308,16 +618,27 @@ templ visibilityOption(idx int, value, label, fmValue string) {
 // SettingsImportSection — V1 Phase 4 surface. Paste textarea +
 // optional file upload (via the markdown_importer.js widget) +
 // Parse button. POST → review fragment swap.
+//
+// V1-F additions:
+//   - Per-textarea Alpine state computes a live character counter
+//     (5 MB cap mirrored client-side; server still enforces it on
+//     the Parse handler at internal/plugins/ai_workspace/handler.go).
+//   - File input is visible (`block` rather than `hidden`) as a
+//     keyboard-only fallback to drag-drop; sighted operators see
+//     both the drop zone AND the file picker.
+//   - aria-live region announces files added to the import list,
+//     so screen-reader operators hear the file count update without
+//     visiting the visible list.
 templ importSection(cc *campaigns.CampaignContext) {
 	<div class="card p-6">
 		<div class="flex items-start gap-4 mb-4">
 			<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-				<i class="fa-solid fa-file-import text-accent text-lg"></i>
+				<i class="fa-solid fa-file-import text-accent text-lg" aria-hidden="true"></i>
 			</span>
 			<div>
 				<h2 class="text-lg font-semibold text-fg">AI Import</h2>
 				<p class="text-sm text-fg-secondary mt-0.5 leading-relaxed">
-					Paste AI-generated markdown (or drag-drop .md files) below. The next screen reviews every detected page; nothing is created until you confirm in Phase 5.
+					Paste AI-generated markdown (or drag-drop .md files) below. The next screen reviews every detected page; nothing is created until you confirm.
 				</p>
 			</div>
 		</div>
@@ -329,6 +650,7 @@ templ importSection(cc *campaigns.CampaignContext) {
 			hx-indicator="#ai-import-parsing"
 			hx-encoding="multipart/form-data"
 			class="space-y-3"
+			x-data="{ pasted: '', maxChars: 5242880 /* 5 MB in bytes; matches handler.go importBodyCap */ }"
 		>
 			<div
 				data-widget="markdown-importer"
@@ -336,39 +658,75 @@ templ importSection(cc *campaigns.CampaignContext) {
 				data-file-input-name="markdown_files"
 				class="space-y-3"
 			>
+				<label for="ai-import-paste-area" class="sr-only">Paste AI-generated markdown here</label>
 				<textarea
+					id="ai-import-paste-area"
 					name="markdown_paste"
 					rows="10"
 					placeholder="Paste AI-generated markdown here (multiple pages separated by --- front-matter blocks or # headings)..."
 					class="input w-full text-sm font-mono"
+					x-model="pasted"
+					maxlength="5242880"
+					aria-describedby="ai-import-char-counter"
 				></textarea>
+
+				// Char counter — V1-F dispatch §Large-input handling.
+				// 5 MB cap mirrors handler.go's importBodyCap; counter
+				// turns rose when within 10% of the limit so the
+				// operator notices BEFORE the server rejects.
+				<div
+					id="ai-import-char-counter"
+					class="text-[11px] text-right"
+					:class="pasted.length > maxChars * 0.9 ? 'text-rose-600 dark:text-rose-400' : 'text-fg-muted'"
+					role="status"
+					aria-live="polite"
+				>
+					<span x-text="pasted.length.toLocaleString()"></span>
+					<span class="text-fg-muted">/ 5,242,880 characters</span>
+					<span x-show="pasted.length > maxChars * 0.9" x-cloak class="ml-1">
+						<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+						Approaching limit
+					</span>
+				</div>
+
 				<div
 					data-importer-dropzone
 					class="border-2 border-dashed border-edge rounded-lg p-4 text-center text-xs text-fg-muted hover:border-accent transition-colors"
+					role="region"
+					aria-label="Drop .md files here, or use the file picker below"
 				>
-					<i class="fa-solid fa-cloud-arrow-up mr-1"></i>
-					Drag and drop .md files here, or
-					<label class="text-accent cursor-pointer hover:underline">
-						browse
-						<input
-							type="file"
-							name="markdown_files"
-							accept=".md,.markdown,text/markdown"
-							multiple
-							class="hidden"
-							data-importer-file-input
-						/>
-					</label>
+					<i class="fa-solid fa-cloud-arrow-up mr-1" aria-hidden="true"></i>
+					Drag and drop .md files here.
 				</div>
+				// File input is visible (V1-F a11y) — keyboard-only
+				// operators must be able to reach the picker without
+				// drag-drop. Mounted as a labelled input rather than
+				// hidden under the drop zone.
+				<label class="flex items-center gap-2 text-xs">
+					<span class="text-fg-muted">Or pick files:</span>
+					<input
+						type="file"
+						name="markdown_files"
+						accept=".md,.markdown,text/markdown"
+						multiple
+						class="text-xs file:btn-secondary file:mr-2 file:text-xs"
+						data-importer-file-input
+						aria-label="Choose one or more markdown files to import"
+					/>
+				</label>
+				// aria-live region announces file-list updates to
+				// assistive tech. Visible list is below; the live
+				// region is sr-only so it doesn't double up visually.
 				<div data-importer-file-list class="text-xs text-fg-muted space-y-1"></div>
+				<div data-importer-file-announce class="sr-only" role="status" aria-live="polite"></div>
 			</div>
 
 			<div class="flex items-center gap-3">
 				<button type="submit" class="btn-primary">
-					<i class="fa-solid fa-file-import mr-1.5"></i> Parse + review
+					<i class="fa-solid fa-file-import mr-1.5" aria-hidden="true"></i> Parse + review
 				</button>
-				<span id="ai-import-parsing" class="htmx-indicator text-xs text-fg-muted">
-					<i class="fa-solid fa-spinner fa-spin mr-1"></i> Parsing...
+				<span id="ai-import-parsing" class="htmx-indicator text-xs text-fg-muted" role="status" aria-live="polite">
+					<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i> Parsing...
 				</span>
 			</div>
 		</form>

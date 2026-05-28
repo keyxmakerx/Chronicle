@@ -55,15 +55,17 @@ var md = goldmark.New(
 //  3. Output is safe for storage in EntryHTML (Phase 5 committer)
 //     + safe for direct render via templ.Raw() in any consumer.
 //
-// Returns the empty string for empty input; returns the goldmark
-// error verbatim on parse failure (rare — goldmark is forgiving).
+// Returns the empty string for empty input. On parse failure the
+// error message is friendly-worded (no raw `goldmark:` prefix
+// reaches operator UIs); the underlying goldmark error is preserved
+// via %w for log-side debugging.
 func MarkdownToHTML(input string) (string, error) {
 	if input == "" {
 		return "", nil
 	}
 	var buf bytes.Buffer
 	if err := md.Convert([]byte(input), &buf); err != nil {
-		return "", fmt.Errorf("markdown→HTML: %w", err)
+		return "", fmt.Errorf("could not parse markdown body — check heading structure: %w", err)
 	}
 	return sanitize.HTML(buf.String()), nil
 }

@@ -26,10 +26,10 @@ type ImportResultData struct {
 // ImportResult is the fragment GeneratePrompt-style HTMX swap
 // replaces #ai-import-review-host with after a successful commit.
 templ ImportResult(d ImportResultData) {
-	<div id="ai-import-result" class="card p-4 mt-4">
+	<div id="ai-import-result" class="card p-4 mt-4" role="region" aria-labelledby="ai-import-result-heading">
 		<div class="flex items-baseline justify-between mb-3">
-			<h3 class="text-base font-semibold text-fg">
-				<i class="fa-solid fa-check-double mr-1 text-emerald-500"></i>
+			<h3 id="ai-import-result-heading" class="text-base font-semibold text-fg">
+				<i class="fa-solid fa-check-double mr-1 text-emerald-500" aria-hidden="true"></i>
 				Import complete
 			</h3>
 			<button
@@ -38,9 +38,10 @@ templ ImportResult(d ImportResultData) {
 				hx-get={ fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID) }
 				hx-target="#ai-import-review-host"
 				hx-swap="innerHTML"
+				aria-label="Clear the import result and return to the paste form"
 				title="Clear the result + return to the import form"
 			>
-				<i class="fa-solid fa-arrow-rotate-left mr-1"></i> Import more
+				<i class="fa-solid fa-arrow-rotate-left mr-1" aria-hidden="true"></i> Import more
 			</button>
 		</div>
 
@@ -79,6 +80,24 @@ templ ImportResult(d ImportResultData) {
 			for _, row := range d.Result.Rows {
 				@resultRow(d.CampaignID, row)
 			}
+		</div>
+
+		// Footer with a hard-navigation "Back to AI Workspace" link.
+		// The "Import more" button at the top swaps in-place to keep
+		// the operator inside the tab; this button is a full nav for
+		// operators who want a fresh page (also gives browser Back
+		// somewhere to land — see PR #355 smoke-found Bug 2).
+		<div class="flex items-center gap-3 mt-5 pt-4 border-t border-edge">
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID)) }
+				class="btn-secondary text-xs"
+				aria-label="Reload the AI Workspace tab as a fresh page"
+			>
+				<i class="fa-solid fa-arrow-left mr-1" aria-hidden="true"></i> Back to AI Workspace
+			</a>
+			<span class="text-xs text-fg-muted ml-auto">
+				{ fmt.Sprintf("%d page(s) processed", len(d.Result.Rows)) }
+			</span>
 		</div>
 	</div>
 }
@@ -120,15 +139,22 @@ templ resultRow(campaignID string, row importer.RowOutcome) {
 				<div class="text-fg-muted">{ row.Reason }</div>
 			}
 		</div>
-		if row.EntityID != "" && row.Slug != "" {
+		// Bug 1 fix (V1-F): the entity show route at
+		// internal/plugins/entities/routes.go:146 is keyed by UUID
+		// (`/entities/:eid`), NOT slug. V1-E's import_result.templ
+		// shipped with the slug, which 404'd. Use EntityID (the
+		// committer-populated UUID); guard on EntityID alone since
+		// Slug isn't part of the URL anymore.
+		if row.EntityID != "" {
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", campaignID, row.Slug)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", campaignID, row.EntityID)) }
 				target="_blank"
 				rel="noopener"
 				class="text-accent hover:underline shrink-0"
+				aria-label={ "Open the imported page " + row.Name + " in a new tab" }
 				title="Open the imported page"
 			>
-				Open <i class="fa-solid fa-arrow-up-right-from-square text-[10px] ml-0.5"></i>
+				Open <i class="fa-solid fa-arrow-up-right-from-square text-[10px] ml-0.5" aria-hidden="true"></i>
 			</a>
 		}
 	</div>

@@ -26,6 +26,7 @@ package htmlconv
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -55,10 +56,13 @@ type Mark struct {
 // TipTap editor's commands.setContent expects. Empty input returns
 // an empty document — TipTap renders that as an empty editor
 // (caller can guard if it wants the field to stay NULL).
+//
+// Operator-facing errors are friendly — no raw library prefixes
+// (`goquery:`, `json:`) reach the review/result UIs.
 func Convert(html string) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("could not parse the page HTML — try simpler markdown: %w", err)
 	}
 	body := doc.Find("body").First()
 	if body.Length() == 0 {
@@ -76,7 +80,7 @@ func Convert(html string) (string, error) {
 	}
 	out, err := json.Marshal(pm)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("could not convert the page to editor format: %w", err)
 	}
 	return string(out), nil
 }

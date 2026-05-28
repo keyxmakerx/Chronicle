@@ -147,10 +147,17 @@ func (h *Handler) ParseImport(c echo.Context) error {
 
 	body, err := readImportBody(c)
 	if err != nil {
+		// readImportBody already returns friendly wording (5MB cap
+		// hint, etc.); pass through verbatim to the BadRequest
+		// surface. Technical detail (file-read failure paths) is
+		// stowed in slog by callers up the stack.
+		slog.Warn("ai-workspace: import body read failed",
+			slog.String("campaign_id", cc.Campaign.ID),
+			slog.Any("error", err))
 		return apperror.NewBadRequest(err.Error())
 	}
 	if strings.TrimSpace(body) == "" {
-		return apperror.NewBadRequest("no markdown content found — paste text or upload .md files")
+		return apperror.NewBadRequest("Nothing to import — paste markdown into the textarea or drop one or more .md files.")
 	}
 
 	pages := importer.Parse(body)
@@ -241,7 +248,7 @@ func (h *Handler) CommitImport(c echo.Context) error {
 
 	source := c.FormValue("markdown_source")
 	if strings.TrimSpace(source) == "" {
-		return apperror.NewBadRequest("import session expired — paste your markdown again")
+		return apperror.NewBadRequest("Your import session expired. Please paste your markdown again.")
 	}
 
 	// Re-parse from scratch so the indexes match what the review
@@ -338,23 +345,26 @@ func readImportBody(c echo.Context) (string, error) {
 
 	form, err := c.MultipartForm()
 	if err != nil && err != http.ErrNotMultipart {
-		return "", err
+		return "", apperror.NewBadRequest(
+			"Could not read the uploaded files. Check the file sizes and try again.").Internal
 	}
 	if form != nil {
 		files := form.File["markdown_files"]
 		for _, fh := range files {
 			if b.Len()+int(fh.Size) > importBodyCap {
 				return "", apperror.NewBadRequest(
-					"total upload + paste exceeds 5 MB cap; split into smaller batches").Internal
+					"Your paste + uploaded files exceed the 5 MB import limit. Try fewer pages per import.").Internal
 			}
 			f, err := fh.Open()
 			if err != nil {
-				return "", err
+				return "", apperror.NewBadRequest(
+					"Could not read the uploaded file — try again or paste the contents instead.").Internal
 			}
 			buf := make([]byte, fh.Size)
 			if _, err := io.ReadFull(f, buf); err != nil {
 				_ = f.Close()
-				return "", err
+				return "", apperror.NewBadRequest(
+					"The uploaded file finished early or was incomplete. Try uploading it again.").Internal
 			}
 			_ = f.Close()
 			b.Write(buf)
@@ -417,7 +427,7 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 			slog.String("campaign_id", cc.Campaign.ID),
 			slog.Any("error", err))
 		return middleware.Render(c, http.StatusOK,
-			PromptModal("", "Could not build prompt: "+err.Error()))
+			PromptModal("", "Could not build the prompt. Try again in a moment."))
 	}
 
 	if h.audit != nil {
@@ -479,7 +489,7 @@ func (h *Handler) GenerateAIExport(c echo.Context) error {
 			slog.String("campaign_id", cc.Campaign.ID),
 			slog.Any("error", err))
 		return middleware.Render(c, http.StatusOK,
-			AIExportModal("", "Could not generate export: "+err.Error()))
+			AIExportModal("", "Could not generate the export. Try again in a moment."))
 	}
 
 	if h.audit != nil {

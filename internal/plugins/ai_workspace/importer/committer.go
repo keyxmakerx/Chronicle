@@ -153,10 +153,11 @@ func (c *Committer) Commit(ctx context.Context, campaignID string, in CommitInpu
 	result := CommitResult{Rows: make([]RowOutcome, len(in.Pages))}
 
 	// Build the existing-types index up-front so per-row work
-	// doesn't N+1 the registry.
+	// doesn't N+1 the registry. Operator-facing error is friendly;
+	// the underlying repo error is preserved via %w for slog.
 	types, err := c.creator.GetEntityTypes(ctx, campaignID)
 	if err != nil {
-		return result, fmt.Errorf("load entity types: %w", err)
+		return result, fmt.Errorf("could not load campaign categories — try again in a moment: %w", err)
 	}
 	typesBySlug := make(map[string]*entities.EntityType, len(types))
 	for i := range types {
@@ -318,17 +319,18 @@ func (c *Committer) commitRow(
 	}
 
 	// SEC-6 mirror — every entity-creation path funnels through
-	// MarkdownToHTML first.
+	// MarkdownToHTML first. Per-row errors are operator-friendly;
+	// the underlying library error stays in slog (handler-side).
 	bodyHTML, err := MarkdownToHTML(page.Body)
 	if err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Couldn't convert markdown body: " + err.Error()
+		out.Reason = "Could not parse the page's markdown body — check the heading structure."
 		return out
 	}
 	bodyJSON, err := htmlconv.Convert(bodyHTML)
 	if err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Couldn't convert HTML to editor format: " + err.Error()
+		out.Reason = "Could not convert the page's body to the editor format. Try simpler markdown."
 		return out
 	}
 
@@ -355,7 +357,9 @@ func (c *Committer) commitRow(
 		}
 	}
 
-	// Create.
+	// Create. Operator-facing errors stay friendly — the technical
+	// detail is captured by the handler's slog before this Reason is
+	// rendered.
 	ent, err := c.creator.Create(ctx, campaignID, ownerID, entities.CreateEntityInput{
 		Name:         finalName,
 		EntityTypeID: typeID,
@@ -365,12 +369,12 @@ func (c *Committer) commitRow(
 	})
 	if err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Entity create failed: " + err.Error()
+		out.Reason = "Could not save this page. Try again in a moment."
 		return out
 	}
 	if err := c.creator.UpdateEntry(ctx, ent.ID, bodyJSON, bodyHTML); err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Body update failed: " + err.Error()
+		out.Reason = "Saved the page, but could not write its body. Open the page to retry from the editor."
 		out.EntityID = ent.ID
 		out.Slug = ent.Slug
 		return out
@@ -413,12 +417,12 @@ func (c *Committer) overwriteExisting(
 		// + go through service.go's sanitize.HTML for symmetry.
 	}); err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Overwrite metadata update failed: " + err.Error()
+		out.Reason = "Could not overwrite the existing page's settings. The original page is unchanged."
 		return out
 	}
 	if err := c.creator.UpdateEntry(ctx, existing.ID, bodyJSON, bodyHTML); err != nil {
 		out.Status = StatusFailed
-		out.Reason = "Overwrite body update failed: " + err.Error()
+		out.Reason = "Updated the page's settings, but could not write the new body."
 		return out
 	}
 	out.Status = StatusOverwrote
