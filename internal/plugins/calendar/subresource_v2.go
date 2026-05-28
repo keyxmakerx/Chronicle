@@ -25,19 +25,35 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// SubresourceKind identifies which homogeneous bulk-set resource a
-// sub-resource grid page is editing. The four batch-A kinds share the
-// same card-grid + drawer shape; per-resource form fields branch by
-// kind. Batch B (PR 3) will add: eras, categories, festivals, cycles,
-// zones — all with the same shell but heterogeneous forms.
+// SubresourceKind identifies which sub-resource a settings page is
+// editing. The four batch-A kinds share the card-grid + drawer shape;
+// per-resource form fields branch by kind. Batch B (Wave 1 PR 3) adds
+// 5 more list resources (eras, categories, festivals, cycles, zones)
+// plus the weather-singular exception — see ShowV2SubresourceSettings
+// for the singular render path.
 type SubresourceKind string
 
 const (
-	SubresourceMonths   SubresourceKind = "months"
-	SubresourceWeekdays SubresourceKind = "weekdays"
-	SubresourceMoons    SubresourceKind = "moons"
-	SubresourceSeasons  SubresourceKind = "seasons"
+	SubresourceMonths     SubresourceKind = "months"
+	SubresourceWeekdays   SubresourceKind = "weekdays"
+	SubresourceMoons      SubresourceKind = "moons"
+	SubresourceSeasons    SubresourceKind = "seasons"
+	// V2 Wave 1 PR 3 / C-CAL-V2-SUBRESOURCE-CARDS-B additions:
+	SubresourceEras       SubresourceKind = "eras"
+	SubresourceCategories SubresourceKind = "categories"
+	SubresourceFestivals  SubresourceKind = "festivals"
+	SubresourceCycles     SubresourceKind = "cycles"
+	SubresourceZones      SubresourceKind = "zones"
+	SubresourceWeather    SubresourceKind = "weather"
 )
+
+// isSingular reports whether the kind renders as a single state card
+// rather than a card grid. Weather is the lone singular kind: a
+// calendar has one current weather state, not a list. The handler
+// + templ + JS all branch on this to skip dnd / add-card affordances.
+func (k SubresourceKind) isSingular() bool {
+	return k == SubresourceWeather
+}
 
 // SubresourceCardData is the uniform shape the shared subresourceCard
 // templ component renders. Per-resource lists project into this
@@ -64,11 +80,18 @@ type SubresourceViewData struct {
 	CSRFToken   string
 	// Per-resource raw payloads used by the drawer JS to round-trip the
 	// full list on Save (bulk-set PUT semantics). Only one is populated
-	// per request — by Kind.
-	Months   []Month
-	Weekdays []Weekday
-	Moons    []Moon
-	Seasons  []Season
+	// per request — by Kind. Weather (singular) populates Weather + the
+	// catalog of Zones the picker references.
+	Months          []Month
+	Weekdays        []Weekday
+	Moons           []Moon
+	Seasons         []Season
+	Eras            []Era
+	EventCategories []EventCategory
+	Festivals       []Festival
+	Cycles          []Cycle
+	Zones           []WeatherZone
+	Weather         *Weather // populated only when Kind == SubresourceWeather
 }
 
 // ShowV2SubresourceSettings renders the V2 card-grid editor for one
@@ -109,6 +132,53 @@ func (h *Handler) ShowV2SubresourceSettings(c echo.Context) error {
 	case SubresourceSeasons:
 		data.Seasons = cal.Seasons
 		data.Cards = seasonsToCards(cal.Seasons)
+	case SubresourceEras:
+		data.Eras = cal.Eras
+		data.Cards = erasToCards(cal.Eras)
+	case SubresourceCategories:
+		data.EventCategories = cal.EventCategories
+		data.Cards = categoriesToCards(cal.EventCategories)
+	case SubresourceFestivals:
+		// Festivals come from a separate Get call — they aren't in
+		// the eager-loaded calendar struct.
+		fests, err := h.svc.GetFestivals(c.Request().Context(), cal.ID)
+		if err != nil {
+			return err
+		}
+		data.Festivals = fests
+		data.Cards = festivalsToCards(fests)
+	case SubresourceCycles:
+		// Cycles are also from a separate Get.
+		cycles, err := h.svc.GetCycles(c.Request().Context(), cal.ID)
+		if err != nil {
+			return err
+		}
+		data.Cycles = cycles
+		data.Cards = cyclesToCards(cycles)
+	case SubresourceZones:
+		zonesState, err := h.svc.GetWeatherZones(c.Request().Context(), cal.ID)
+		if err != nil {
+			return err
+		}
+		if zonesState != nil {
+			data.Zones = zonesState.Zones
+			data.Cards = zonesToCards(zonesState.Zones, zonesState.ActiveZone)
+		}
+	case SubresourceWeather:
+		// Singular: load current state + the zones catalog (drawer
+		// uses zones for the active-zone picker).
+		weather, err := h.svc.GetWeather(c.Request().Context(), cal.ID)
+		if err != nil {
+			return err
+		}
+		data.Weather = weather
+		zonesState, err := h.svc.GetWeatherZones(c.Request().Context(), cal.ID)
+		if err != nil {
+			return err
+		}
+		if zonesState != nil {
+			data.Zones = zonesState.Zones
+		}
 	default:
 		return apperror.NewNotFound("unknown sub-resource")
 	}
@@ -194,6 +264,123 @@ func seasonsToCards(seasons []Season) []SubresourceCardData {
 	return out
 }
 
+// --- Batch B projections (PR 3 / C-CAL-V2-SUBRESOURCE-CARDS-B) ---
+
+func erasToCards(eras []Era) []SubresourceCardData {
+	out := make([]SubresourceCardData, len(eras))
+	for i, e := range eras {
+		sub := "from year " + itoa(e.StartYear)
+		if e.EndYear != nil {
+			sub += " to " + itoa(*e.EndYear)
+		} else {
+			sub += " · ongoing"
+		}
+		out[i] = SubresourceCardData{
+			ID:       itoa(i),
+			Index:    i,
+			Name:     e.Name,
+			Subtitle: sub,
+			Color:    e.Color,
+		}
+	}
+	return out
+}
+
+func categoriesToCards(cats []EventCategory) []SubresourceCardData {
+	out := make([]SubresourceCardData, len(cats))
+	for i, c := range cats {
+		// Categories ship slug + icon as identifying chrome; the subtitle
+		// shows slug (operator-recognizable) + icon name if set.
+		sub := c.Slug
+		if c.Icon != "" {
+			sub += " · " + c.Icon
+		}
+		out[i] = SubresourceCardData{
+			ID:       itoa(i),
+			Index:    i,
+			Name:     c.Name,
+			Subtitle: sub,
+			Color:    c.Color,
+		}
+	}
+	return out
+}
+
+func festivalsToCards(fests []Festival) []SubresourceCardData {
+	out := make([]SubresourceCardData, len(fests))
+	for i, f := range fests {
+		sub := ""
+		switch {
+		case f.AfterMonth != nil:
+			sub = "intercalary after month " + itoa(*f.AfterMonth)
+		case f.Month != nil && f.Day != nil:
+			sub = "month " + itoa(*f.Month) + " · day " + itoa(*f.Day)
+		case f.Month != nil:
+			sub = "month " + itoa(*f.Month)
+		default:
+			sub = "no date set"
+		}
+		color := ""
+		if f.Color != nil {
+			color = *f.Color
+		}
+		out[i] = SubresourceCardData{
+			ID:       itoa(i),
+			Index:    i,
+			Name:     f.Name,
+			Subtitle: sub,
+			Color:    color,
+		}
+	}
+	return out
+}
+
+func cyclesToCards(cycles []Cycle) []SubresourceCardData {
+	out := make([]SubresourceCardData, len(cycles))
+	for i, c := range cycles {
+		sub := c.Type
+		if c.CycleLength > 0 {
+			sub += " · length " + itoa(c.CycleLength)
+		}
+		if n := len(c.Entries); n > 0 {
+			sub += " · " + itoa(n) + " entries"
+		}
+		out[i] = SubresourceCardData{
+			ID:       itoa(i),
+			Index:    i,
+			Name:     c.Name,
+			Subtitle: sub,
+		}
+	}
+	return out
+}
+
+// zonesToCards projects WeatherZone definitions. The active zone gets
+// IsAccent=true so the card surfaces visually distinct from inactive
+// zones (matches the V1 read-only zones panel's "active" badge style).
+func zonesToCards(zones []WeatherZone, activeZoneID string) []SubresourceCardData {
+	out := make([]SubresourceCardData, len(zones))
+	for i, z := range zones {
+		sub := z.ZoneID
+		// Surface a hint about payload richness so operators know if
+		// a zone has presets vs. is empty. Payload shape is opaque
+		// per PR #360, but presence of "presets" is a common signal.
+		if z.Payload != nil {
+			if presets, ok := z.Payload["presets"].([]any); ok && len(presets) > 0 {
+				sub += " · " + itoa(len(presets)) + " presets"
+			}
+		}
+		out[i] = SubresourceCardData{
+			ID:       z.ZoneID,
+			Index:    i,
+			Name:     z.Name,
+			Subtitle: sub,
+			IsAccent: z.ZoneID == activeZoneID,
+		}
+	}
+	return out
+}
+
 // pluralizeDays returns "N day" or "N days" so the card subtitle
 // reads naturally for intercalary single-day months.
 func pluralizeDays(n int) string {
@@ -233,9 +420,19 @@ func itoa(n int) string {
 
 // subresourcePUTPath returns the endpoint the drawer's Save action
 // targets for a given resource. Reuses V1's existing bulk-set
-// endpoints — no new wire surface in this PR.
+// endpoints — no new wire surface in this PR. Two resources have
+// distinct path shapes:
+//   - categories →  /event-categories  (the V1 path)
+//   - zones      →  /weather/zones     (PR #360 path)
 func subresourcePUTPath(campaignID, calendarID string, kind SubresourceKind) string {
-	return "/campaigns/" + campaignID + "/calendars/" + calendarID + "/" + string(kind)
+	suffix := string(kind)
+	switch kind {
+	case SubresourceCategories:
+		suffix = "event-categories"
+	case SubresourceZones:
+		suffix = "weather/zones"
+	}
+	return "/campaigns/" + campaignID + "/calendars/" + calendarID + "/" + suffix
 }
 
 // subresourceTitle returns the human-readable heading for the page.
@@ -249,6 +446,18 @@ func subresourceTitle(kind SubresourceKind) string {
 		return "Moons"
 	case SubresourceSeasons:
 		return "Seasons"
+	case SubresourceEras:
+		return "Eras"
+	case SubresourceCategories:
+		return "Event Categories"
+	case SubresourceFestivals:
+		return "Festivals"
+	case SubresourceCycles:
+		return "Cycles"
+	case SubresourceZones:
+		return "Weather Zones"
+	case SubresourceWeather:
+		return "Weather"
 	}
 	return "Sub-resource"
 }
@@ -264,6 +473,18 @@ func subresourceSingular(kind SubresourceKind) string {
 		return "moon"
 	case SubresourceSeasons:
 		return "season"
+	case SubresourceEras:
+		return "era"
+	case SubresourceCategories:
+		return "category"
+	case SubresourceFestivals:
+		return "festival"
+	case SubresourceCycles:
+		return "cycle"
+	case SubresourceZones:
+		return "zone"
+	case SubresourceWeather:
+		return "weather state"
 	}
 	return "item"
 }

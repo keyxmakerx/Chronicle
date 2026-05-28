@@ -26,16 +26,20 @@
         if (!root) return;
 
         var kind = root.dataset.subresourceKind;
+        var isSingular = root.dataset.subresourceSingular === 'true';
         var putURL = root.dataset.subresourcePutUrl;
         var csrfToken = root.dataset.csrfToken;
         var isOwner = root.dataset.isOwner === 'true';
 
-        var payload = [];
+        // Singular kinds (weather) store the state as a single object,
+        // not an array. The drawer treats it as "index 0" — Save PUTs
+        // the object directly rather than an array.
+        var payload = isSingular ? {} : [];
         try {
-            payload = JSON.parse(root.dataset.subresourcePayload || '[]');
+            payload = JSON.parse(root.dataset.subresourcePayload || (isSingular ? '{}' : '[]'));
         } catch (e) {
             console.error('subresource_grid: invalid payload', e);
-            payload = [];
+            payload = isSingular ? {} : [];
         }
 
         // Editor state: which index is being edited (-1 = create mode).
@@ -47,6 +51,10 @@
 
         function openDrawer(index) {
             if (!isOwner || !drawer) return;
+            // Singular kinds always edit "index 0" — the state itself.
+            // The delete affordance hides because there's nothing to
+            // delete; the state can only be edited or cleared.
+            if (isSingular) index = 0;
             editingIndex = index;
             dirty = false;
             populateDrawer(index);
@@ -81,21 +89,45 @@
         function populateDrawer(index) {
             var title = drawer.querySelector('[data-drawer-title]');
             var deleteBtn = drawer.querySelector('[data-drawer-delete]');
-            var item = index >= 0 ? payload[index] : {};
+            // Singular kinds read from the payload object directly;
+            // list kinds index into the payload array.
+            var item;
+            if (isSingular) {
+                item = payload || {};
+            } else {
+                item = index >= 0 ? payload[index] : {};
+            }
 
             if (title) {
                 title.textContent = index >= 0 ? ('Edit ' + singular(kind)) : ('Add ' + singular(kind));
             }
             if (deleteBtn) {
-                if (index >= 0) deleteBtn.classList.remove('hidden');
+                // Singular kinds never delete (state always exists or
+                // is null; can't be removed). List items get the
+                // delete button when editing (index >= 0), hidden when
+                // adding.
+                if (index >= 0 && !isSingular) deleteBtn.classList.remove('hidden');
                 else deleteBtn.classList.add('hidden');
             }
 
-            // Populate each field input from item.
+            // Populate each field input from item. JSON-typed fields
+            // (e.g. zone payload) get stringified into the textarea.
             drawer.querySelectorAll('[data-field]').forEach(function (el) {
                 var field = el.dataset.field;
                 var value = item[field];
-                if (el.type === 'checkbox') {
+                if (el.dataset.fieldType === 'json') {
+                    if (value === undefined || value === null) {
+                        el.value = '';
+                    } else if (typeof value === 'string') {
+                        el.value = value;
+                    } else {
+                        try {
+                            el.value = JSON.stringify(value, null, 2);
+                        } catch (e) {
+                            el.value = '';
+                        }
+                    }
+                } else if (el.type === 'checkbox') {
                     el.checked = Boolean(value);
                 } else if (el.type === 'color') {
                     el.value = value || '#aabbcc';
@@ -107,9 +139,21 @@
 
         function readDrawerInput() {
             var item = {};
+            var jsonError = null;
             drawer.querySelectorAll('[data-field]').forEach(function (el) {
                 var field = el.dataset.field;
-                if (el.type === 'checkbox') {
+                if (el.dataset.fieldType === 'json') {
+                    var raw = el.value.trim();
+                    if (raw === '') {
+                        // Empty stays as no-key; caller can decide.
+                    } else {
+                        try {
+                            item[field] = JSON.parse(raw);
+                        } catch (e) {
+                            jsonError = field + ': invalid JSON';
+                        }
+                    }
+                } else if (el.type === 'checkbox') {
                     item[field] = el.checked;
                 } else if (el.type === 'number') {
                     var n = parseFloat(el.value);
@@ -119,23 +163,49 @@
                     if (v !== '') item[field] = v;
                 }
             });
+            if (jsonError) {
+                return { __jsonError: jsonError };
+            }
             return item;
         }
 
         function saveDrawer() {
             var item = readDrawerInput();
+            if (item.__jsonError) {
+                window.Chronicle.notify(item.__jsonError, 'error');
+                return;
+            }
+            // Singular kinds: PUT the item directly, no array, no
+            // name validation (weather has no name field).
+            if (isSingular) {
+                commitPayload(item, true);
+                return;
+            }
             // Minimal client-side validation: name required across all
-            // four resources. Server-side validation is the authority;
-            // this catches the common operator typo quickly.
-            if (!item.name) {
+            // list resources except zones (zone_id required there).
+            // Server-side validation is the authority; this catches
+            // the common operator typo quickly.
+            if (kind === 'zones') {
+                if (!item.zone_id) {
+                    window.Chronicle.notify('Zone ID is required', 'error');
+                    return;
+                }
+                if (!item.name) {
+                    window.Chronicle.notify('Display name is required', 'error');
+                    return;
+                }
+            } else if (!item.name) {
                 window.Chronicle.notify('Name is required', 'error');
                 return;
             }
             // Preserve sort_order: new items append; edited items keep
-            // their slot.
+            // their slot. Zones key on zone_id rather than positional
+            // sort_order (the API treats the array as a set), but
+            // setting sort_order is harmless for forward-compat.
             var next;
             if (editingIndex >= 0) {
-                item.sort_order = payload[editingIndex].sort_order || (editingIndex + 1);
+                var prev = payload[editingIndex] || {};
+                item.sort_order = prev.sort_order || (editingIndex + 1);
                 next = payload.slice();
                 next[editingIndex] = item;
             } else {
@@ -288,6 +358,40 @@
                 case 'seasons':
                     return 'month ' + item.start_month + ' · day ' + item.start_day +
                         ' → month ' + item.end_month + ' · day ' + item.end_day;
+                case 'eras': {
+                    var s = 'from year ' + (item.start_year || 0);
+                    if (item.end_year !== null && item.end_year !== undefined && item.end_year !== '') {
+                        s += ' to ' + item.end_year;
+                    } else {
+                        s += ' · ongoing';
+                    }
+                    return s;
+                }
+                case 'categories': {
+                    var bits = [];
+                    if (item.slug) bits.push(item.slug);
+                    if (item.icon) bits.push(item.icon);
+                    return bits.join(' · ');
+                }
+                case 'festivals': {
+                    if (item.after_month) return 'intercalary after month ' + item.after_month;
+                    if (item.month && item.day) return 'month ' + item.month + ' · day ' + item.day;
+                    if (item.month) return 'month ' + item.month;
+                    return 'no date set';
+                }
+                case 'cycles': {
+                    var c = item.type || '';
+                    if (item.cycle_length) c += ' · length ' + item.cycle_length;
+                    if (item.entries && item.entries.length) c += ' · ' + item.entries.length + ' entries';
+                    return c;
+                }
+                case 'zones': {
+                    var z = item.zone_id || '';
+                    if (item.payload && item.payload.presets && item.payload.presets.length) {
+                        z += ' · ' + item.payload.presets.length + ' presets';
+                    }
+                    return z;
+                }
             }
             return '';
         }
@@ -392,6 +496,12 @@
             case 'weekdays': return 'weekday';
             case 'moons': return 'moon';
             case 'seasons': return 'season';
+            case 'eras': return 'era';
+            case 'categories': return 'category';
+            case 'festivals': return 'festival';
+            case 'cycles': return 'cycle';
+            case 'zones': return 'zone';
+            case 'weather': return 'weather state';
         }
         return 'item';
     }
