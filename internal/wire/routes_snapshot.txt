@@ -159,6 +159,7 @@ GET	/calendars/:calId/sessions-fragment	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/settings	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/timeline	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/upcoming	internal/plugins/calendar/routes.go
+GET	/calendars/:calId/weather/zones	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/week	internal/plugins/calendar/routes.go
 GET	/calendars/embed	internal/plugins/calendar/routes.go
 GET	/calendars/entity-events/:eid	internal/plugins/calendar/routes.go
@@ -557,6 +558,7 @@ PUT	/calendars/:calId/moons	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/seasons	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/settings	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/weather	internal/plugins/calendar/routes.go
+PUT	/calendars/:calId/weather/zones	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/weekdays	internal/plugins/calendar/routes.go
 PUT	/campaigns/:id/storage	internal/plugins/settings/routes.go
 PUT	/campaigns/:id/storage/bypass	internal/plugins/settings/routes.go

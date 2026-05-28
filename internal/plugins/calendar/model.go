@@ -657,6 +657,37 @@ type WeatherInput struct {
 	Description        *string  `json:"description"`
 }
 
+// WeatherZone is a per-calendar climate region definition (e.g.
+// "temperate", "tropical", "arctic"). The zone's payload carries the
+// active presets + per-season overrides as opaque JSON — the structural
+// shape is owned by Calendaria/Foundry sync (presets array,
+// season_overrides map) and Chronicle stores it verbatim with a small
+// validation helper (see service.go validateWeatherZonePayload).
+//
+// Zones are calendar-scoped (V2 multi-cal): each calendar has its own
+// zones. The active-zone reference lives on calendar_weather.zone_id
+// (migration 003) + zone_name; the zone DEFINITIONS live in this
+// table (migration 005). Per C-CAL-WEATHER-ZONES dispatch +
+// cordinator/reports/chronicle/2026-05-28-c-cal-weather-zones.md
+// §"Scope decision."
+type WeatherZone struct {
+	CalendarID string                 `json:"calendar_id"`
+	ZoneID     string                 `json:"zone_id"`
+	Name       string                 `json:"name"`
+	Payload    map[string]any         `json:"payload"`
+	CreatedAt  time.Time              `json:"created_at,omitempty"`
+	UpdatedAt  time.Time              `json:"updated_at,omitempty"`
+}
+
+// WeatherZonesState bundles the per-calendar active-zone reference +
+// the full zone definitions list — the canonical GET response from
+// /api/v1/campaigns/:cid/calendar/weather/zones. ActiveZone is "" when
+// no zone is currently active; Zones may be empty.
+type WeatherZonesState struct {
+	ActiveZone string        `json:"active_zone"`
+	Zones      []WeatherZone `json:"zones"`
+}
+
 // Cycle is a periodic named cycle (zodiac, elemental, seasonal, etc.).
 // Entries rotate based on cycle_length (number of years per full rotation).
 type Cycle struct {

@@ -50,6 +50,10 @@ type mockCalendarRepo struct {
 	deleteEraFn   func(ctx context.Context, eraID int) (string, error)
 	getEraByIDFn  func(ctx context.Context, eraID int) (*Era, error)
 	applyImportFn func(ctx context.Context, cal *Calendar, result *ImportResult) error
+	// V2 Wave 0 PR 3: weather zone CRUD injection.
+	getWeatherZonesFn      func(ctx context.Context, calendarID string) ([]WeatherZone, error)
+	applyWeatherZonesFn    func(ctx context.Context, calendarID string, zones []WeatherZone) error
+	setActiveWeatherZoneFn func(ctx context.Context, calendarID, zoneID, zoneName string) error
 }
 
 func (m *mockCalendarRepo) Create(ctx context.Context, cal *Calendar) error {
@@ -319,6 +323,27 @@ func (m *mockCalendarRepo) GetWeather(ctx context.Context, calendarID string) (*
 func (m *mockCalendarRepo) SetWeather(ctx context.Context, calendarID string, input WeatherInput) error {
 	if m.setWeatherFn != nil {
 		return m.setWeatherFn(ctx, calendarID, input)
+	}
+	return nil
+}
+
+func (m *mockCalendarRepo) GetWeatherZones(ctx context.Context, calendarID string) ([]WeatherZone, error) {
+	if m.getWeatherZonesFn != nil {
+		return m.getWeatherZonesFn(ctx, calendarID)
+	}
+	return nil, nil
+}
+
+func (m *mockCalendarRepo) ApplyWeatherZones(ctx context.Context, calendarID string, zones []WeatherZone) error {
+	if m.applyWeatherZonesFn != nil {
+		return m.applyWeatherZonesFn(ctx, calendarID, zones)
+	}
+	return nil
+}
+
+func (m *mockCalendarRepo) SetActiveWeatherZone(ctx context.Context, calendarID, zoneID, zoneName string) error {
+	if m.setActiveWeatherZoneFn != nil {
+		return m.setActiveWeatherZoneFn(ctx, calendarID, zoneID, zoneName)
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -51,6 +52,15 @@ type CalendarService interface {
 	// Weather.
 	GetWeather(ctx context.Context, calendarID string) (*Weather, error)
 	SetWeather(ctx context.Context, calendarID string, input WeatherInput) error
+
+	// Weather zones (V2 Wave 0 PR 3 / C-CAL-WEATHER-ZONES).
+	// GetWeatherZones returns the active-zone reference plus the full
+	// zone catalog. SetWeatherZones replaces the catalog (REPLACE
+	// semantics matching SetMonths/SetSeasons/etc.). SetActiveWeatherZone
+	// updates only the calendar_weather.zone_id pointer.
+	GetWeatherZones(ctx context.Context, calendarID string) (*WeatherZonesState, error)
+	SetWeatherZones(ctx context.Context, calendarID string, state WeatherZonesState) error
+	SetActiveWeatherZone(ctx context.Context, calendarID, zoneID string) error
 
 	// Cycles.
 	GetCycles(ctx context.Context, calendarID string) ([]Cycle, error)
@@ -766,6 +776,172 @@ func mergeWeatherInput(existing *Weather, in WeatherInput) WeatherInput {
 		out.Description = existing.Description
 	}
 	return out
+}
+
+// --- Weather zones (V2 Wave 0 PR 3 / C-CAL-WEATHER-ZONES) ---
+
+// weatherZoneIDPattern matches a slug-style zone id: lowercase alnum
+// plus `_` and `-`, 1-50 chars. Mirrors the typical Chronicle slug shape
+// (eras, event categories) without dragging in a separate slug helper.
+var weatherZoneIDPattern = regexp.MustCompile(`^[a-z0-9_-]{1,50}$`)
+
+// GetWeatherZones returns the catalog + the currently active zone
+// reference (calendar_weather.zone_id) bundled into a single response.
+// Either or both can be empty.
+func (s *calendarService) GetWeatherZones(ctx context.Context, calendarID string) (*WeatherZonesState, error) {
+	zones, err := s.repo.GetWeatherZones(ctx, calendarID)
+	if err != nil {
+		return nil, fmt.Errorf("load weather zones: %w", err)
+	}
+	active := ""
+	if w, err := s.repo.GetWeather(ctx, calendarID); err == nil && w != nil && w.ZoneID != nil {
+		active = *w.ZoneID
+	}
+	return &WeatherZonesState{ActiveZone: active, Zones: zones}, nil
+}
+
+// SetWeatherZones replaces the full zone catalog (REPLACE semantics
+// matching SetMonths / SetSeasons / etc.). If ActiveZone is non-empty,
+// the active-zone reference on calendar_weather is updated as part of
+// the same operation; the reference must point at a zone in the new
+// catalog. Publishes `calendar.weather.zones.changed` (catalog edit)
+// and, when the active-zone changed, `calendar.weather.changed`
+// (state edit, matching the existing SetWeather event).
+func (s *calendarService) SetWeatherZones(ctx context.Context, calendarID string, state WeatherZonesState) error {
+	// Validate every zone: id slug, non-empty name, payload shape.
+	ids := make(map[string]struct{}, len(state.Zones))
+	for i, z := range state.Zones {
+		if !weatherZoneIDPattern.MatchString(z.ZoneID) {
+			return apperror.NewValidation(fmt.Sprintf("zone %d: id %q must match [a-z0-9_-]{1,50}", i+1, z.ZoneID))
+		}
+		if _, dup := ids[z.ZoneID]; dup {
+			return apperror.NewValidation(fmt.Sprintf("zone %d: id %q is duplicated", i+1, z.ZoneID))
+		}
+		ids[z.ZoneID] = struct{}{}
+		if z.Name == "" {
+			return apperror.NewValidation(fmt.Sprintf("zone %q: name is required", z.ZoneID))
+		}
+		if err := validateWeatherZonePayload(z.Payload); err != nil {
+			return apperror.NewValidation(fmt.Sprintf("zone %q: %s", z.ZoneID, err.Error()))
+		}
+	}
+	if state.ActiveZone != "" {
+		if _, ok := ids[state.ActiveZone]; !ok {
+			return apperror.NewValidation(fmt.Sprintf("active_zone %q is not present in zones", state.ActiveZone))
+		}
+	}
+
+	// Stamp calendar_id on each zone (handler may leave it blank since
+	// the path already names the calendar) so the repo INSERTs the
+	// correct value.
+	zones := make([]WeatherZone, len(state.Zones))
+	for i, z := range state.Zones {
+		z.CalendarID = calendarID
+		zones[i] = z
+	}
+	if err := s.repo.ApplyWeatherZones(ctx, calendarID, zones); err != nil {
+		return fmt.Errorf("apply weather zones: %w", err)
+	}
+
+	// Active-zone reference: if the caller supplied an empty string,
+	// we leave the existing reference alone (catalog-only edit). To
+	// CLEAR the active zone the caller hits SetActiveWeatherZone("").
+	activeChanged := false
+	if state.ActiveZone != "" {
+		// Lookup the zone name for the calendar_weather denormalized copy.
+		var zoneName string
+		for _, z := range zones {
+			if z.ZoneID == state.ActiveZone {
+				zoneName = z.Name
+				break
+			}
+		}
+		if err := s.repo.SetActiveWeatherZone(ctx, calendarID, state.ActiveZone, zoneName); err != nil {
+			return fmt.Errorf("set active weather zone: %w", err)
+		}
+		activeChanged = true
+	}
+
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err == nil && cal != nil {
+		s.events.PublishCalendarEvent("calendar.weather.zones.changed", cal.CampaignID, calendarID, nil)
+		if activeChanged {
+			s.events.PublishCalendarEvent("calendar.weather.changed", cal.CampaignID, calendarID, nil)
+		}
+	}
+	return nil
+}
+
+// SetActiveWeatherZone updates only the calendar_weather active-zone
+// reference. Empty zoneID clears the active zone. The zoneID must
+// already exist in the catalog (or be empty); we do not auto-create
+// zones from this endpoint.
+func (s *calendarService) SetActiveWeatherZone(ctx context.Context, calendarID, zoneID string) error {
+	var zoneName string
+	if zoneID != "" {
+		zones, err := s.repo.GetWeatherZones(ctx, calendarID)
+		if err != nil {
+			return fmt.Errorf("load weather zones: %w", err)
+		}
+		found := false
+		for _, z := range zones {
+			if z.ZoneID == zoneID {
+				zoneName = z.Name
+				found = true
+				break
+			}
+		}
+		if !found {
+			return apperror.NewValidation(fmt.Sprintf("zone %q not found in catalog", zoneID))
+		}
+	}
+	if err := s.repo.SetActiveWeatherZone(ctx, calendarID, zoneID, zoneName); err != nil {
+		return fmt.Errorf("set active weather zone: %w", err)
+	}
+	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
+		s.events.PublishCalendarEvent("calendar.weather.changed", cal.CampaignID, calendarID, nil)
+	}
+	return nil
+}
+
+// validateWeatherZonePayload sanity-checks the opaque zone payload.
+// The full shape is owned by Calendaria/Foundry sync; we enforce the
+// minimum that downstream code relies on:
+//   - presets, if present, is an array and each entry has a non-empty
+//     `label` (used in the picker) and a `temperature` number.
+//   - season_overrides, if present, is an object (map).
+//
+// Everything else passes through verbatim — future schema growth on
+// the Calendaria side doesn't need a Chronicle migration.
+func validateWeatherZonePayload(payload map[string]any) error {
+	if payload == nil {
+		return nil
+	}
+	if raw, ok := payload["presets"]; ok && raw != nil {
+		presets, ok := raw.([]any)
+		if !ok {
+			return fmt.Errorf("payload.presets must be an array")
+		}
+		for i, p := range presets {
+			m, ok := p.(map[string]any)
+			if !ok {
+				return fmt.Errorf("payload.presets[%d] must be an object", i)
+			}
+			label, _ := m["label"].(string)
+			if label == "" {
+				return fmt.Errorf("payload.presets[%d].label is required", i)
+			}
+			if _, ok := m["temperature"].(float64); !ok {
+				return fmt.Errorf("payload.presets[%d].temperature must be a number", i)
+			}
+		}
+	}
+	if raw, ok := payload["season_overrides"]; ok && raw != nil {
+		if _, ok := raw.(map[string]any); !ok {
+			return fmt.Errorf("payload.season_overrides must be an object")
+		}
+	}
+	return nil
 }
 
 // GetCycles returns all cycles for a calendar.
