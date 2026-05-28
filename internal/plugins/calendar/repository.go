@@ -22,6 +22,14 @@ type CalendarRepository interface {
 	Update(ctx context.Context, cal *Calendar) error
 	Delete(ctx context.Context, id string) error
 
+	// Active-calendar pointer (V2 Wave 1 PR 1 / C-CAL-V2-SHELL-FOUNDATION).
+	// Returns the user's last-selected calendar ID for the campaign, or
+	// "" if none has been recorded. Service layer resolves "" → campaign
+	// default. Set writes the pointer; the caller is responsible for
+	// validating that calendarID belongs to campaignID.
+	GetActiveCalendarID(ctx context.Context, userID, campaignID string) (string, error)
+	SetActiveCalendar(ctx context.Context, userID, campaignID, calendarID string) error
+
 	// Months.
 	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
 	GetMonths(ctx context.Context, calendarID string) ([]Month, error)
@@ -217,6 +225,36 @@ func (r *calendarRepo) SetDefault(ctx context.Context, campaignID, calendarID st
 	// Set the chosen one.
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE calendars SET is_default = 1 WHERE id = ? AND campaign_id = ?`, calendarID, campaignID)
+	return err
+}
+
+// GetActiveCalendarID returns the user's last-selected calendar ID
+// for a campaign, or "" if no row exists yet. Service layer falls
+// back to the campaign's default calendar when this returns "".
+func (r *calendarRepo) GetActiveCalendarID(ctx context.Context, userID, campaignID string) (string, error) {
+	var calendarID string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT calendar_id FROM calendar_active WHERE user_id = ? AND campaign_id = ?`,
+		userID, campaignID).Scan(&calendarID)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return calendarID, nil
+}
+
+// SetActiveCalendar writes the user-per-campaign active-calendar
+// pointer. Upserts so the first switch creates the row and subsequent
+// switches overwrite. Caller must validate calendarID belongs to
+// campaignID before calling.
+func (r *calendarRepo) SetActiveCalendar(ctx context.Context, userID, campaignID, calendarID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_active (user_id, campaign_id, calendar_id)
+		 VALUES (?, ?, ?)
+		 ON DUPLICATE KEY UPDATE calendar_id = VALUES(calendar_id)`,
+		userID, campaignID, calendarID)
 	return err
 }
 
