@@ -1,0 +1,53 @@
+// multi_day_ribbon.templ — horizontal ribbon spanning grid cells
+// for multi-day events. Reusable for era bands (Wave 1 PR 5),
+// session blocks (Wave 4 future), and encounter timelines
+// (downstream repos).
+
+package calendar_v2
+
+// MultiDayRibbonData parameters the ribbon: the day span (used to
+// size the ribbon via CSS Grid column-start/span), the event content,
+// and the visual tier.
+type MultiDayRibbonData struct {
+	ID             string
+	Name           string
+	CategoryColor  string
+	Tier           Tier
+	IsPublic       bool
+	// StartCol + Span use 1-indexed grid column positions. Caller
+	// computes these from the day-of-week indices for the visible
+	// week row. Renders via `grid-column: <StartCol> / span <Span>`.
+	StartCol int
+	Span     int
+	// CanResize controls whether the right-edge resize handle is
+	// rendered. Owners get the handle; Players don't.
+	CanResize bool
+}
+
+// MultiDayRibbon renders one ribbon. Click opens the event drawer;
+// drag-from-body reschedules; drag-from-right-edge resizes.
+templ MultiDayRibbon(data MultiDayRibbonData) {
+	<button
+		type="button"
+		class={ ribbonClasses(data.Tier), "ribbon-enter relative flex items-center px-2 text-xs truncate text-left transition-transform duration-micro hover:-translate-y-px" }
+		style={ ribbonStyle(data) }
+		data-event-id={ data.ID }
+		data-event-ribbon="true"
+		draggable="true"
+		aria-label={ "Multi-day event: " + data.Name }
+	>
+		<span class="truncate">{ data.Name }</span>
+		if !data.IsPublic {
+			<i class="fa-solid fa-lock text-fg-secondary text-[10px] ml-2 flex-shrink-0" aria-hidden="true"></i>
+		}
+		if data.CanResize {
+			<span
+				class="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize bg-accent/0 hover:bg-accent/40 transition-colors duration-micro"
+				data-ribbon-resize="right"
+				role="separator"
+				aria-orientation="vertical"
+				aria-label="Drag to resize event"
+			></span>
+		}
+	</button>
+}

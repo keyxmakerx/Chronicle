@@ -23,6 +23,8 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+	calwidget "github.com/keyxmakerx/chronicle/internal/widgets/calendar_v2"
 )
 
 // CalendarV2ViewData bundles everything the V2 shell + placeholder views need.
@@ -48,15 +50,30 @@ type CalendarV2ViewData struct {
 
 // CalendarV2Page is the full-page V2 shell. HTMX swaps target the
 // inner `#cal-v2-view-slot`; full page loads (or browser refreshes)
-// re-enter through this template.
+// re-enter through this template. PR 4 adds the event drawer + the
+// event_grid.js widget script so Month/Week/Day views can host drag
+// + click-to-edit interactions.
 templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 	@layouts.App(v2PageTitle(data)) {
-		<div class="h-full flex flex-col -mx-5 -my-4">
+		<div
+			class="h-full flex flex-col -mx-5 -my-4"
+			data-cal-v2-root="true"
+			data-cal-v2-calendar-id={ v2CalendarID(data) }
+			data-cal-v2-campaign-id={ data.CampaignID }
+			data-cal-v2-csrf-token={ data.CSRFToken }
+			data-cal-v2-is-scribe={ boolToStr(data.IsScribe) }
+			data-cal-v2-is-owner={ boolToStr(data.IsOwner) }
+			data-cal-v2-events={ v2EventsJSON(data) }
+		>
 			@calendarV2Header(cc, data)
 			<div id="cal-v2-view-slot" class="flex-1 overflow-y-auto px-6 py-4">
 				@calendarV2View(cc, data)
 			</div>
 		</div>
+		if data.ActiveCalendar != nil && data.IsScribe {
+			@eventV2Drawer(data)
+			<script src="/static/plugins/calendar/js/event_grid.js" defer></script>
+		}
 	}
 }
 
@@ -255,12 +272,44 @@ templ monthViewPlaceholder(data CalendarV2ViewData) {
 }
 
 // monthDayCell renders a single day cell with today highlight +
-// rest-day tint. Empty in PR 1 (no event chips); PR 4 layers the
-// event-card composite into the body.
+// rest-day tint plus the day's single-day events as compact cards.
+// Multi-day events render via the ribbon layer (not in this cell).
+// "+N more" overflow surfaces when a day has more events than fit.
 templ monthDayCell(data CalendarV2ViewData, day monthDay) {
-	<div class={ "border border-edge rounded p-1 min-h-[80px] flex flex-col", monthDayClasses(data, day) }>
-		<div class="text-xs font-medium text-fg-secondary">{ fmt.Sprint(day.Day) }</div>
-		<div class="flex-1"></div>
+	<div
+		class={ "border border-edge rounded p-1 min-h-[80px] flex flex-col gap-1 cell-drop-target", monthDayClasses(data, day) }
+		data-cell-year={ fmt.Sprintf("%d", data.Year) }
+		data-cell-month={ fmt.Sprintf("%d", data.Month) }
+		data-cell-day={ fmt.Sprintf("%d", day.Day) }
+	>
+		<div class="text-xs font-medium text-fg-secondary flex items-center justify-between">
+			<span>{ fmt.Sprint(day.Day) }</span>
+			if data.IsScribe && len(monthCellEvents(data, day.Day)) == 0 {
+				<button
+					type="button"
+					class="opacity-0 group-hover:opacity-100 text-fg-secondary hover:text-accent transition-opacity duration-micro text-[10px]"
+					data-cell-add-event="true"
+					aria-label="Create event on this day"
+				>
+					<i class="fa-solid fa-plus" aria-hidden="true"></i>
+				</button>
+			}
+		</div>
+		for i, e := range monthCellVisible(data, day.Day) {
+			if i < monthCellVisibleCap() {
+				@calwidget.EventCard(eventToCardData(e, data.ActiveCalendar), calwidget.DensityCompact)
+			}
+		}
+		if monthCellOverflow(data, day.Day) > 0 {
+			<button
+				type="button"
+				class="text-[10px] text-accent hover:underline text-left"
+				data-cell-overflow-toggle="true"
+				data-cell-overflow-day={ fmt.Sprintf("%d", day.Day) }
+			>
+				+{ fmt.Sprintf("%d", monthCellOverflow(data, day.Day)) } more
+			</button>
+		}
 	</div>
 }
 
@@ -282,6 +331,116 @@ templ weekViewPlaceholder(data CalendarV2ViewData) {
 		</div>
 		<div class="text-sm text-fg-secondary italic">
 			Week placeholder &mdash; PR 4 ships the hour-grid + event-card rendering.
+		</div>
+	</div>
+}
+
+// eventV2Drawer renders the right-slide event editor drawer. Hosts
+// the visibility editor widget (Q-V2-7 chip-row builder) + the
+// per-event form. JS in event_grid.js owns open/close state, dirty
+// tracking, and PUT/POST/DELETE wiring to existing V1 endpoints.
+//
+// Scribe+ only — Players never receive the drawer DOM.
+templ eventV2Drawer(data CalendarV2ViewData) {
+	<div
+		id="event-v2-drawer"
+		class="fixed inset-0 z-30 hidden"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="event-v2-drawer-title"
+	>
+		<div
+			class="absolute inset-0 bg-black/40 transition-opacity duration-standard"
+			data-drawer-backdrop="true"
+		></div>
+		<div
+			class="drawer-slide-in absolute right-0 top-0 bottom-0 w-full max-w-lg card shadow-2xl flex flex-col"
+			data-drawer-panel="true"
+		>
+			<div class="px-4 py-3 border-b border-edge flex items-center justify-between">
+				<h2 id="event-v2-drawer-title" class="text-base font-semibold text-fg" data-drawer-title>
+					Edit event
+				</h2>
+				<button
+					type="button"
+					class="text-fg-secondary hover:text-fg transition-colors duration-micro"
+					data-drawer-close="true"
+					aria-label="Close drawer"
+				>
+					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+				</button>
+			</div>
+			<div class="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+				<div>
+					<label class="block text-xs font-medium text-fg-secondary mb-1">Name</label>
+					<input type="text" class="input text-sm w-full" data-field="name" placeholder="Event name"/>
+				</div>
+				<div class="grid grid-cols-3 gap-2">
+					<div>
+						<label class="block text-xs font-medium text-fg-secondary mb-1">Year</label>
+						<input type="number" class="input text-sm w-full" data-field="year"/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-secondary mb-1">Month</label>
+						<select class="input text-sm w-full" data-field="month">
+							for i, m := range data.ActiveCalendar.Months {
+								<option value={ fmt.Sprintf("%d", i+1) }>{ m.Name }</option>
+							}
+						</select>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-secondary mb-1">Day</label>
+						<input type="number" min="1" class="input text-sm w-full" data-field="day"/>
+					</div>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-secondary mb-1">Category</label>
+					<select class="input text-sm w-full" data-field="category">
+						<option value="">— none —</option>
+						for _, cat := range data.ActiveCalendar.EventCategories {
+							<option value={ cat.Slug }>{ cat.Name }</option>
+						}
+					</select>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-secondary mb-1">Description</label>
+					<textarea class="input text-sm w-full" data-field="description" rows="3"></textarea>
+				</div>
+				@calwidget.VisibilityEditor(buildEventVisibilityEditor(data))
+			</div>
+			<div class="px-4 py-3 border-t border-edge flex items-center justify-between">
+				<button
+					type="button"
+					class="text-xs text-danger hover:bg-danger/10 px-2 py-1 rounded transition-colors duration-micro hidden"
+					data-drawer-delete="true"
+				>
+					<i class="fa-solid fa-trash mr-1" aria-hidden="true"></i>
+					Delete
+				</button>
+				<div class="flex items-center gap-2 ml-auto">
+					<button type="button" class="btn-secondary text-xs" data-drawer-close="true">Cancel</button>
+					<button type="button" class="btn-primary text-xs" data-drawer-save="true">Save</button>
+				</div>
+			</div>
+			<div
+				class="hidden absolute inset-0 bg-bg-1/95 flex flex-col items-center justify-center px-4 text-center"
+				data-drawer-confirm="true"
+			>
+				<i class="fa-solid fa-triangle-exclamation text-3xl text-danger mb-3" aria-hidden="true"></i>
+				<p class="text-sm text-fg mb-3">
+					Delete this event? This cannot be undone.
+				</p>
+				<label class="flex items-center gap-2 text-xs text-fg-secondary mb-3">
+					<input type="checkbox" data-drawer-confirm-check="true"/>
+					I understand this event will be permanently deleted
+				</label>
+				<div class="flex gap-2">
+					<button type="button" class="btn-secondary text-xs" data-drawer-confirm-cancel="true">Cancel</button>
+					<button type="button" class="btn-danger text-xs" data-drawer-confirm-do="true" disabled>
+						Delete permanently
+					</button>
+				</div>
+			</div>
 		</div>
 	</div>
 }
