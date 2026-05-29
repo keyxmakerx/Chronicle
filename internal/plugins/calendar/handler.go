@@ -47,6 +47,17 @@ type Handler struct {
 	addonSvc      addons.AddonService
 	sessionLister SessionLister
 	auditSvc      audit.AuditService
+	tierLister    TierDefinitionsLister
+}
+
+// TierDefinitionsLister surfaces the campaign-aware tier vocabulary
+// to the V2 calendar handler without forcing a broad campaigns
+// service dependency. Implemented by `campaigns.CampaignService`
+// (single-method match against existing `GetEventTierDefinitions`).
+// Narrow interface keeps the calendar plugin's test surface
+// tractable + matches the existing SessionLister pattern.
+type TierDefinitionsLister interface {
+	GetEventTierDefinitions(ctx context.Context, campaignID string) ([]campaigns.TierDefinition, error)
 }
 
 // NewHandler creates a new calendar Handler.
@@ -70,6 +81,15 @@ func (h *Handler) SetSessionLister(sl SessionLister) {
 // Matches the entities plugin pattern.
 func (h *Handler) SetAuditService(svc audit.AuditService) {
 	h.auditSvc = svc
+}
+
+// SetTierDefinitionsLister wires the tier-definition surface used by
+// the V2 calendar shell (Wave 1.6.5). Called after both calendar
+// and campaigns plugins are constructed. Nil-safe: V2 handler falls
+// back to platform-default tier rendering when the lister is unset
+// or returns an error (graceful degradation per PR #370 Phase 2).
+func (h *Handler) SetTierDefinitionsLister(lister TierDefinitionsLister) {
+	h.tierLister = lister
 }
 
 // logCalendarAudit fires a fire-and-forget audit entry for a calendar-
