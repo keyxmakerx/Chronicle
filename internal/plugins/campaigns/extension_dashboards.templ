@@ -1,0 +1,108 @@
+// extension_dashboards.templ — C-EXT-HUB Phase 2 dispatcher +
+// placeholders for the inline extension-dashboard panel.
+//
+// extensionDashboardSwitch routes by slug to the registered
+// component (modeled on DashboardBlockSwitch in
+// dashboard_blocks.templ:25-82). The fragment route in
+// extensions_hub_handler.go ExtensionDashboardFragmentAPI invokes
+// this with a map projected from BuildExtensionDashboards plus the
+// per-request enabled-state lookup, so disabled extensions render
+// the disabled placeholder regardless of whether a factory is
+// registered.
+//
+// All placeholders are V2-styled (token-driven; reduced-motion via
+// the global guard in static/css/input.css:31-42). The card chrome
+// is shared with extensionsHubCard so the panel reads as a natural
+// extension of the catalog above.
+
+package campaigns
+
+import "fmt"
+
+// extensionDashboardSwitch dispatches an inline dashboard render by
+// slug. Unknown slug → "missing" placeholder; disabled extension →
+// "disabled" placeholder; otherwise the registered component.
+// Returned by the fragment route as the HTMX swap target body.
+templ extensionDashboardSwitch(cc *CampaignContext, slug string, enabled bool, dashboards map[string]ExtensionDashboard) {
+	<div class="card-elev p-5 extensions-hub-dashboard-card" data-extension-dashboard-slug={ slug }>
+		<div class="flex items-center justify-between mb-3">
+			<h3 class="text-sm font-semibold text-fg">
+				{ extensionDashboardTitle(slug, dashboards) }
+			</h3>
+			<button
+				type="button"
+				class="text-xs text-fg-muted hover:text-fg transition-colors duration-micro"
+				data-extension-dashboard-collapse
+				aria-label="Close dashboard"
+				hx-on:click="document.getElementById('extensions-hub-dashboard-panel').innerHTML = ''"
+			>
+				<i class="fa-solid fa-xmark"></i>
+			</button>
+		</div>
+		if !enabled {
+			@extensionDashboardDisabled(slug)
+		} else if dashboard, ok := dashboards[slug]; ok && dashboard.Content != nil {
+			@dashboard.Content
+		} else {
+			@extensionDashboardMissing(slug)
+		}
+	</div>
+}
+
+// extensionDashboardDisabled renders inside the panel chrome when
+// the extension is currently disabled per the addons store. Includes
+// a CTA back to the hub catalog so the operator can flip the toggle
+// and re-expand.
+templ extensionDashboardDisabled(slug string) {
+	<div class="py-6 text-center">
+		<i class="fa-solid fa-pause-circle text-2xl text-fg-muted mb-2" aria-hidden="true"></i>
+		<p class="text-sm text-fg-secondary">
+			This extension is disabled. Enable it above to see its dashboard.
+		</p>
+	</div>
+}
+
+// extensionDashboardMissing renders when an HTMX request asks for a
+// slug that has no registered dashboard factory. Surfaces as a safe
+// no-op rather than 404 so a stale browser tab (catalog rendered
+// before the dashboard plugin loaded) doesn't visibly break.
+templ extensionDashboardMissing(slug string) {
+	<div class="py-6 text-center">
+		<i class="fa-solid fa-circle-question text-2xl text-fg-muted mb-2" aria-hidden="true"></i>
+		<p class="text-sm text-fg-secondary">
+			No dashboard registered for { fmt.Sprintf("%q", slug) } yet.
+		</p>
+	</div>
+}
+
+// extensionDashboardTitle returns the header label for the
+// dispatcher's card chrome. Uses the addon's display name when the
+// dashboard is registered (so the panel header reads e.g. "Calendar
+// dashboard"); falls back to the slug otherwise. Pure helper —
+// templ closes over it without an import dependency.
+func extensionDashboardTitle(slug string, dashboards map[string]ExtensionDashboard) string {
+	if _, ok := dashboards[slug]; ok {
+		return titleForSlug(slug) + " dashboard"
+	}
+	return slug + " dashboard"
+}
+
+// titleForSlug capitalizes a short slug for display. Avoids a
+// strings.Title-equivalent import in templ and keeps the table
+// small — only the slugs we actually mount.
+func titleForSlug(slug string) string {
+	switch slug {
+	case "calendar":
+		return "Calendar"
+	case "timeline":
+		return "Timeline"
+	case "maps":
+		return "Maps"
+	case "sessions":
+		return "Sessions"
+	case "notes":
+		return "Notes"
+	default:
+		return slug
+	}
+}

@@ -61,6 +61,22 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.GET("/customize", h.Customize, RequireRole(RoleOwner))
 	cg.GET("/customize/layout-editor/:etid", h.LayoutEditorFragment, RequireRole(RoleOwner))
 
+	// C-EXT-HUB Phase 1: top-level Extensions hub. Owns the bare
+	// /campaigns/:id/extensions path; the extensions plugin's
+	// standalone Content Packs GET retired in this PR and Content
+	// Packs renders as a card inside the hub via ContentPacksCardRenderer.
+	// The /extensions/fragment endpoint is the HTMX swap target after
+	// toggles; the addons-store toggle handler emits the
+	// `extensions-hub-refresh` HX-Trigger when posted with
+	// redirect_to=extensions-hub.
+	cg.GET("/extensions", h.ExtensionsHub, RequireRole(RoleOwner))
+	cg.GET("/extensions/fragment", h.ExtensionsHubFragmentAPI, RequireRole(RoleOwner))
+	// C-EXT-HUB Phase 2: per-extension inline dashboard fragment.
+	// Hub cards with HasDashboard=true hx-get this URL on expand;
+	// disabled / unknown-slug paths render safe placeholders inside
+	// the panel (no 4xx surfaces; matches audit §1.4 nil-safety).
+	cg.GET("/extensions/:slug/dashboard", h.ExtensionDashboardFragmentAPI, RequireRole(RoleOwner))
+
 	// Sidebar config API (Owner only).
 	cg.GET("/sidebar-config", h.GetSidebarConfig, RequireRole(RoleOwner))
 	cg.PUT("/sidebar-config", h.UpdateSidebarConfig, RequireRole(RoleOwner))

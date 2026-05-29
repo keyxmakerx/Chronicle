@@ -54,13 +54,26 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
 
-	g.GET("", h.ListCampaignExtensions)
+	// C-EXT-HUB Phase 1 path-collision resolution: the bare GET
+	// "/campaigns/:id/extensions" that used to render the standalone
+	// Content Packs list is retired here — the same path is now owned
+	// by the campaigns plugin's top-level Extensions hub
+	// (`Handler.ExtensionsHub` in internal/plugins/campaigns/). Content
+	// Packs continues to render via the same templ fragment
+	// (campaignExtensionListFragment), embedded as a card inside the
+	// hub via the ContentPacksCardRenderer interface — see
+	// extensions_card.go and internal/plugins/campaigns/extensions_hub.go.
+	// The handler method (ListCampaignExtensions) is preserved on
+	// *Handler so the JSON-API branch stays callable for any
+	// non-browser consumer; only the HTTP route registration retires.
 	g.GET("/marker-icons", h.ListMarkerIcons)
 	g.GET("/themes", h.ListThemes)
 	g.GET("/widgets", h.ListWidgets)
 	g.GET("/:extID/preview", h.PreviewExtension)
 
-	// Owner-only operations.
+	// Owner-only operations. Per-pack enable/disable POSTs are
+	// PRESERVED — the in-hub Content Packs card still HTMX-posts
+	// to these endpoints; only the standalone list GET retires.
 	owner := g.Group("", campaigns.RequireRole(campaigns.RoleOwner))
 	owner.POST("/:extID/enable", h.EnableExtension)
 	owner.POST("/:extID/disable", h.DisableExtension)

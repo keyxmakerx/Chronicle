@@ -1,0 +1,239 @@
+// extensions_hub.templ — C-EXT-HUB Phase 1 top-level Extensions hub.
+//
+// Operator's new top-level entry point at /campaigns/:id/extensions.
+// Replaces the Features Settings tab (removed in the same PR). V2
+// styling throughout — this is the operator's first encounter with V2
+// design tokens + motion vocabulary (Phase 2 lands the calendar
+// dashboard inside this same page so the V2-styling story carries
+// through to the dashboard fragment).
+//
+// Catalog source: PluginHubAddon list from the addons store. Each
+// card is one operator-facing extension; owners get a per-card
+// enable/disable toggle that fires the existing
+// `PUT /campaigns/:id/addons/:addonID/toggle` endpoint. Disable =
+// preserved-inert (data retained per operator decision 2026-05-29).
+//
+// Phase 2 wires the inline-dashboard panel below the catalog: cards
+// with HasDashboard=true gain an expand affordance that issues
+// `hx-get` to /extensions/:slug/dashboard, swapped into the panel.
+// Phase 1 ships the panel as an empty slot to keep the chrome stable
+// across the two phases.
+
+package campaigns
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// ExtensionsHubPage is the full-page render for owners landing on the
+// Extensions hub. Wraps the layouts.App chrome + page header + the
+// HTMX-refreshable hub fragment + the Phase 2 dashboard-panel slot +
+// the Content Packs card (if a renderer is wired).
+//
+// `contentPacksCard` is nil if the extensions plugin is not wired in
+// this build; the hub renders cleanly without it (graceful
+// degradation, matches AddonLister/MediaUploader/SMTPChecker shape).
+templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken string, contentPacksCard templ.Component) {
+	@layouts.App(cc.Campaign.Name + " - Extensions") {
+		<div class="max-w-5xl mx-auto px-4 py-6" data-extensions-hub>
+			<div class="flex items-center justify-between mb-6">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Extensions</h1>
+					<p class="text-sm text-fg-muted mt-1">
+						Enable or disable per-campaign features. Disabling preserves your data.
+					</p>
+				</div>
+			</div>
+			// Hub catalog — HTMX-refreshed in place after a toggle so
+			// the card list re-renders without a full nav.
+			<div
+				id="extensions-hub-list"
+				hx-get={ fmt.Sprintf("/campaigns/%s/extensions/fragment", cc.Campaign.ID) }
+				hx-trigger="extensions-hub-refresh from:body"
+				hx-swap="innerHTML"
+			>
+				@ExtensionsHubFragment(cc, addons, csrfToken)
+			</div>
+			// Phase 2 inline-dashboard panel. Empty slot in Phase 1;
+			// Phase 2 swaps in the calendar dashboard fragment when a
+			// card with HasDashboard=true is expanded.
+			<div
+				id="extensions-hub-dashboard-panel"
+				class="mt-6"
+				aria-live="polite"
+			></div>
+			// Content Packs card — installable content from the admin
+			// install surface. Lifts the existing extensions plugin
+			// fragment so the per-pack enable/disable POSTs at
+			// /campaigns/:id/extensions/:extID/{enable,disable} keep
+			// working unchanged. Skipped when no renderer is wired.
+			if contentPacksCard != nil {
+				<div class="mt-6">
+					<div class="card-elev p-5 lift-hover">
+						<div class="flex items-center gap-3 mb-4">
+							<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+								<i class="fa-solid fa-box-archive text-accent text-lg"></i>
+							</span>
+							<div class="flex-1 min-w-0">
+								<h2 class="text-base font-semibold text-fg">Content Packs</h2>
+								<p class="text-xs text-fg-muted mt-0.5">
+									Installable content from your administrator. Disabling a pack does not delete data.
+								</p>
+							</div>
+						</div>
+						@contentPacksCard
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+// ExtensionsHubFragment renders the catalog card grid only — used as
+// the HTMX swap target after toggles + as the body of the full page.
+// Show-all semantics: enabled and disabled cards both render, grouped
+// in the same grid (mirrors the operator-locked "show all extensions
+// with per-row toggle" decision; no Enabled/Available split here so
+// expansion targets stay stable across toggles).
+templ ExtensionsHubFragment(cc *CampaignContext, addons []PluginHubAddon, csrfToken string) {
+	if len(addons) == 0 {
+		<div class="card p-8 text-center">
+			<p class="text-fg-muted">No extensions available yet.</p>
+		</div>
+	} else {
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+			for _, addon := range addons {
+				@extensionsHubCard(cc, addon, csrfToken)
+			}
+		</div>
+	}
+}
+
+// extensionsHubCard renders a single extension card. Owner-only by
+// route gating — every render-time viewer is an owner; no role branch
+// here.
+//
+// HasDashboard cards reserve an "Open dashboard" expand button slot
+// rendered in Phase 1 as a disabled affordance ("Dashboard coming
+// shortly") so the chrome is stable when Phase 2 wires the real
+// expand. Phase 2 replaces the disabled button with the active
+// hx-get/hx-target affordance.
+templ extensionsHubCard(cc *CampaignContext, addon PluginHubAddon, csrfToken string) {
+	<div
+		class={ "card-elev p-4 lift-hover transition-shadow",
+			templ.KV("ring-1 ring-accent/30", addon.Enabled),
+			templ.KV("opacity-70", !addon.Enabled) }
+		data-extension-card
+		data-extension-slug={ addon.Slug }
+		data-extension-enabled={ extensionEnabledAttr(addon.Enabled) }
+	>
+		<div class="flex items-start gap-3">
+			<div class={ "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 tier-transition",
+				templ.KV("bg-accent/10", addon.Enabled),
+				templ.KV("bg-surface-alt", !addon.Enabled) }>
+				if addon.Icon != "" {
+					<i class={ "fa-solid " + addon.Icon, "text-lg",
+						templ.KV("text-accent", addon.Enabled),
+						templ.KV("text-fg-muted", !addon.Enabled) }></i>
+				} else {
+					<i class={ "fa-solid fa-puzzle-piece text-lg",
+						templ.KV("text-accent", addon.Enabled),
+						templ.KV("text-fg-muted", !addon.Enabled) }></i>
+				}
+			</div>
+			<div class="flex-1 min-w-0">
+				<div class="font-semibold text-fg text-sm">{ addon.Name }</div>
+				<p class="text-xs text-fg-muted mt-0.5">{ pluginDescription(addon.Slug) }</p>
+			</div>
+			@extensionsHubToggle(cc, addon, csrfToken)
+		</div>
+		// Dashboard expand affordance (Phase 2). hx-get loads the
+		// extension's inline dashboard into the panel below the
+		// catalog; one-card-expanded-at-a-time UX via hx-target
+		// (later expand replaces panel content). Disabled
+		// extensions still render the affordance — the fragment
+		// route resolves to the disabled placeholder so the
+		// operator sees explicit feedback rather than an unclickable
+		// button.
+		if addon.HasDashboard {
+			<div class="mt-3 pt-3 border-t border-edge-light flex items-center justify-end">
+				<button
+					type="button"
+					class="text-xs text-accent hover:underline px-2 py-1 rounded transition-colors duration-micro"
+					hx-get={ fmt.Sprintf("/campaigns/%s/extensions/%s/dashboard", cc.Campaign.ID, addon.Slug) }
+					hx-target="#extensions-hub-dashboard-panel"
+					hx-swap="innerHTML"
+					data-extension-dashboard-expand
+					data-extension-dashboard-slug={ addon.Slug }
+				>
+					<i class="fa-solid fa-table-columns text-[10px] mr-1"></i>
+					Open dashboard
+				</button>
+			</div>
+		}
+	</div>
+}
+
+// extensionsHubToggle renders the per-card enable/disable button.
+// Reuses the existing addons-store toggle endpoint
+// (`PUT /campaigns/:id/addons/:addonID/toggle`) so the addons store
+// remains the single source of truth for per-campaign feature state.
+// `redirect_to=extensions-hub` triggers an HX-Trigger response header
+// that fires the `extensions-hub-refresh` event the hub container
+// listens for (mirrors the existing `redirect_to=plugins` →
+// `plugin-hub-refresh` pattern used by the Features tab + plugin hub
+// page).
+//
+// Uninstalled addons (`!Installed`) render an inert "Coming Soon"
+// badge — toggling would 400 server-side because backing code is
+// missing.
+templ extensionsHubToggle(cc *CampaignContext, addon PluginHubAddon, csrfToken string) {
+	if !addon.Installed {
+		<span class="shrink-0 px-3 py-1 text-xs font-medium rounded-full bg-surface-alt text-fg-muted border border-edge cursor-default">
+			<i class="fa-solid fa-clock text-[10px] mr-1"></i>
+			Soon
+		</span>
+	} else {
+		<form
+			method="POST"
+			hx-put={ fmt.Sprintf("/campaigns/%s/addons/%d/toggle", cc.Campaign.ID, addon.AddonID) }
+			class="shrink-0"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			<input type="hidden" name="redirect_to" value="extensions-hub"/>
+			if addon.Enabled {
+				<input type="hidden" name="action" value="disable"/>
+				<button
+					type="submit"
+					class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors duration-micro"
+					title="Click to disable"
+				>
+					<i class="fa-solid fa-check text-[10px]"></i>
+					On
+				</button>
+			} else {
+				<input type="hidden" name="action" value="enable"/>
+				<button
+					type="submit"
+					class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-surface-alt text-fg-muted border border-edge hover:bg-accent/10 hover:text-accent transition-colors duration-micro"
+					title="Click to enable"
+				>
+					<i class="fa-solid fa-plus text-[10px]"></i>
+					Off
+				</button>
+			}
+		</form>
+	}
+}
+
+// extensionEnabledAttr maps the bool to a string suitable for a
+// data-* attribute (templ's KV doesn't fit data-* values cleanly).
+// Used by Phase 2 + tests for selector-targeting enabled/disabled cards.
+func extensionEnabledAttr(enabled bool) string {
+	if enabled {
+		return "true"
+	}
+	return "false"
+}
