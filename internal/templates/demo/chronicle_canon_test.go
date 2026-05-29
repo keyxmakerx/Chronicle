@@ -287,6 +287,134 @@ func TestDemoChronicleCanon_PickerInfrastructure(t *testing.T) {
 	}
 }
 
+// TestDemoChronicleCanon_RateModeMarkup — Phase 1.9 §A restoration.
+// The choice-picker must carry rate-mode markup for the 5 locked
+// decisions; otherwise the existing `choice-picker-rate` JS init block
+// binds zero pills (the exact Bug #1 from the PR #379 dashboard report).
+// Pin all 5 rate keys + the data-rate-id / data-rate / data-note hooks
+// the JS expects.
+func TestDemoChronicleCanon_RateModeMarkup(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	// 5 locked-decision keys.
+	for _, key := range []string{"typography", "token-namespace", "spacing-grid", "co-occurrence-rule", "oklch-only"} {
+		if !strings.Contains(html, `data-rate-id="`+key+`"`) {
+			t.Errorf("rate-mode group missing for key %q (data-rate-id)", key)
+		}
+	}
+	// JS block binds these hooks; pin presence so future edits can't
+	// silently drop the markup and reproduce Bug #1.
+	for _, marker := range []string{
+		`chronicle-rate-group`,
+		`chronicle-rate-pills`,
+		`chronicle-rate-pill`,
+		`chronicle-rate-note`,
+		`data-rate-label`,
+		`data-rate="1"`,
+		`data-rate="5"`,
+		`data-note`,
+		`id="rate-mode"`,
+		`id="vote-mode"`,
+	} {
+		if !strings.Contains(html, marker) {
+			t.Errorf("rate-mode markup hook missing: %s", marker)
+		}
+	}
+	// 5 groups × 5 pills = 25 pills total.
+	pills := strings.Count(html, `class="chronicle-rate-pill"`)
+	if pills != 25 {
+		t.Errorf("expected 25 rate-mode pills (5 groups × 5); got %d", pills)
+	}
+}
+
+// TestDemoChronicleCanon_DecisionsPanelReflectsStore — Phase 1.9 §B.
+// Pins the visible summary line + per-bucket pills that JS populates
+// from the unified store. Authoritative status-display lives here so
+// a render-bug in the textarea can't silently hide non-zero state
+// again (Bug #2 from PR #379).
+func TestDemoChronicleCanon_DecisionsPanelReflectsStore(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, marker := range []string{
+		`data-decisions-summary`,
+		`data-summary-ratings`,
+		`data-summary-votes`,
+		`data-summary-applied`,
+		`data-summary-empty`,
+	} {
+		if !strings.Contains(html, marker) {
+			t.Errorf("decisions-summary hook missing: %s", marker)
+		}
+	}
+	// The textarea must NOT carry a server-rendered "No decisions yet"
+	// default — JS owns the textarea content unconditionally now.
+	taIdx := strings.Index(html, `data-decisions-output`)
+	if taIdx >= 0 {
+		// Look at the tag's full open-then-content slice.
+		end := strings.Index(html[taIdx:], `</textarea>`)
+		if end < 0 {
+			t.Fatal("could not locate decisions-output closing tag")
+		}
+		tag := html[taIdx : taIdx+end]
+		if strings.Contains(tag, "No decisions yet") {
+			t.Errorf("decisions textarea must not pre-render 'No decisions yet' (let JS own the content; otherwise Bug #2 recurs when JS render is short-circuited)")
+		}
+	}
+}
+
+// TestChronicleCanonDemoJS_DecisionsPanelRenderRobust — Phase 1.9 §B.
+// Pins the JS-side robustness: the unified summarizeDecisions() ->
+// buildDecisionsMarkdown() -> renderDecisionsPanel() pipeline must
+// always set out.value (no early return on missing element should
+// leave the textarea at a stale state) AND must populate the visible
+// summary pills.
+func TestChronicleCanonDemoJS_DecisionsPanelRenderRobust(t *testing.T) {
+	js := readCanonJS(t)
+	for _, marker := range []string{
+		"function summarizeDecisions",
+		"function buildDecisionsMarkdown",
+		"function renderDecisionsPanel",
+		"data-summary-ratings",
+		"data-summary-votes",
+		"data-summary-applied",
+		"data-summary-empty",
+		// Three explicit markdown sections.
+		"## Ratings",
+		"## Votes",
+		"## Applied",
+		// Hydrate block renders immediately so a later block failure
+		// can't leave the panel blank.
+		"decision-store-hydrate",
+	} {
+		if !strings.Contains(js, marker) {
+			t.Errorf("decisions-render robustness marker missing in JS: %q", marker)
+		}
+	}
+	// renderDecisionsPanel must be called from inside the hydrate
+	// block (defensive double-render against init-block failures).
+	hydrateIdx := strings.Index(js, "registerInitBlock('decision-store-hydrate'")
+	if hydrateIdx < 0 {
+		t.Fatal("decision-store-hydrate block not found")
+	}
+	// Find the end of this block (the closing }) so the render-call
+	// search is scoped to inside the block.
+	tail := js[hydrateIdx:]
+	endIdx := strings.Index(tail, "});")
+	if endIdx < 0 {
+		t.Fatal("decision-store-hydrate block has no closing '});'")
+	}
+	body := tail[:endIdx]
+	if !strings.Contains(body, "renderDecisionsPanel()") {
+		t.Errorf("decision-store-hydrate block must call renderDecisionsPanel() after loading localStorage so the panel reflects persisted state even if a later init block throws")
+	}
+}
+
 // TestDemoChronicleCanon_PreviewArea — small live preview surface per
 // dispatch §E. Card + button row + input + chip set + drawer toggle.
 func TestDemoChronicleCanon_PreviewArea(t *testing.T) {
