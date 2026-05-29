@@ -402,7 +402,11 @@
     align-items: center;
     gap: 6px;
     padding: 8px 16px;
-    background: transparent;
+    /* Phase 1.7: secondary now has a RESTING fill (surface-card) so it
+     * reads as a distinct "outlined filled" button, not a transparent
+     * twin of ghost. Operator: "no differences between the majority of
+     * the buttons". */
+    background: var(--chronicle-surface-card);
     color: var(--chronicle-fg);
     border: 1px solid var(--chronicle-border-strong);
     border-radius: var(--chronicle-radius);
@@ -414,7 +418,7 @@
       border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard);
   }
   .chronicle-button-secondary:hover {
-    background: var(--chronicle-surface-card);
+    background: var(--chronicle-surface-raised);
     border-color: var(--chronicle-accent);
   }
   .chronicle-button-secondary:focus-visible {
@@ -443,6 +447,62 @@
   .chronicle-button-ghost:focus-visible {
     outline: 2px solid var(--chronicle-ring);
     outline-offset: 2px;
+  }
+
+  /* Phase 1.7: two more visually-distinct variants so the family spreads
+   * primary(solid) → tonal(accent-tint) → secondary(outlined-fill) →
+   * ghost(bare) → link(underlined text) → destructive(danger-solid).
+   * Operator: "no differences between the majority of the buttons". */
+  .chronicle-button-tonal {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: color-mix(in oklch, var(--chronicle-surface), var(--chronicle-accent) 16%);
+    color: var(--chronicle-accent);
+    border: 1px solid color-mix(in oklch, var(--chronicle-surface), var(--chronicle-accent) 26%);
+    border-radius: var(--chronicle-radius);
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-button-tonal:hover {
+    background: color-mix(in oklch, var(--chronicle-surface), var(--chronicle-accent) 24%);
+    border-color: var(--chronicle-accent);
+  }
+  .chronicle-button-tonal:focus-visible {
+    outline: 2px solid var(--chronicle-ring);
+    outline-offset: 2px;
+  }
+
+  .chronicle-button-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px;
+    background: transparent;
+    color: var(--chronicle-accent);
+    border: none;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    transition: color var(--chronicle-motion-fast) var(--chronicle-ease-standard);
+  }
+  .chronicle-button-link:hover {
+    color: color-mix(in oklch, var(--chronicle-accent), var(--chronicle-fg) 25%);
+    text-decoration-thickness: 2px;
+  }
+  .chronicle-button-link:focus-visible {
+    outline: 2px solid var(--chronicle-ring);
+    outline-offset: 2px;
+    border-radius: var(--chronicle-radius-sm);
   }
 
   /* ---------- C.5 Input ---------- */
@@ -2654,14 +2714,14 @@
   }
 
   /* Replay-trigger classes for the animation showcase tiles */
-  .chronicle-anim-stage.is-playing .chronicle-anim-stage-block { animation-play-state: running; }
-  .chronicle-anim-stage[data-anim="scale-in"].is-playing  .chronicle-anim-stage-block { animation: chronicle-anim-scale-in 250ms var(--chronicle-ease-decelerate) both; }
-  .chronicle-anim-stage[data-anim="drawer"].is-playing    .chronicle-anim-stage-block { animation: chronicle-anim-drawer-in 250ms var(--chronicle-ease-decelerate) both; }
-  .chronicle-anim-stage[data-anim="chip-add"].is-playing  .chronicle-anim-stage-block { animation: chronicle-anim-chip-add 150ms var(--chronicle-ease-decelerate) both; }
-  .chronicle-anim-stage[data-anim="chip-remove"].is-playing .chronicle-anim-stage-block { animation: chronicle-anim-chip-remove 150ms var(--chronicle-ease-accelerate) both; }
-  .chronicle-anim-stage[data-anim="ribbon"].is-playing    .chronicle-anim-stage-block { animation: chronicle-anim-ribbon-enter 200ms var(--chronicle-ease-decelerate) both; }
-  .chronicle-anim-stage[data-anim="spin"]                 .chronicle-anim-stage-block { animation: chronicle-spin 1s linear infinite; border-radius: var(--chronicle-radius-full); }
-  .chronicle-anim-stage[data-anim="shimmer"]              .chronicle-anim-stage-block {
+  .chronicle-anim-tile__stage.is-playing .chronicle-anim-stage-block { animation-play-state: running; }
+  .chronicle-anim-tile__stage[data-anim="scale-in"].is-playing  .chronicle-anim-stage-block { animation: chronicle-anim-scale-in 250ms var(--chronicle-ease-decelerate) both; }
+  .chronicle-anim-tile__stage[data-anim="drawer"].is-playing    .chronicle-anim-stage-block { animation: chronicle-anim-drawer-in 250ms var(--chronicle-ease-decelerate) both; }
+  .chronicle-anim-tile__stage[data-anim="chip-add"].is-playing  .chronicle-anim-stage-block { animation: chronicle-anim-chip-add 150ms var(--chronicle-ease-decelerate) both; }
+  .chronicle-anim-tile__stage[data-anim="chip-remove"].is-playing .chronicle-anim-stage-block { animation: chronicle-anim-chip-remove 150ms var(--chronicle-ease-accelerate) both; }
+  .chronicle-anim-tile__stage[data-anim="ribbon"].is-playing    .chronicle-anim-stage-block { animation: chronicle-anim-ribbon-enter 200ms var(--chronicle-ease-decelerate) both; }
+  .chronicle-anim-tile__stage[data-anim="spin"]                 .chronicle-anim-stage-block { animation: chronicle-spin 1s linear infinite; border-radius: var(--chronicle-radius-full); }
+  .chronicle-anim-tile__stage[data-anim="shimmer"]              .chronicle-anim-stage-block {
     background: linear-gradient(90deg,
       color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 6%) 0,
       color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 32%) 50%,
@@ -2669,7 +2729,7 @@
     background-size: 200% 100%;
     animation: chronicle-shimmer 1.4s ease-in-out infinite;
   }
-  .chronicle-anim-stage[data-anim="toast"].is-playing     .chronicle-anim-stage-block { animation: chronicle-toast-in 250ms var(--chronicle-ease-decelerate) both; }
+  .chronicle-anim-tile__stage[data-anim="toast"].is-playing     .chronicle-anim-stage-block { animation: chronicle-toast-in 250ms var(--chronicle-ease-decelerate) both; }
 
   /* Reduced-motion overrides for the new animations.
    * The existing .chronicle-card transitions inherit the global motion
@@ -2684,9 +2744,9 @@
     [data-chronicle-demo] .chronicle-modal,
     [data-chronicle-demo] .chronicle-progress--indeterminate .chronicle-progress__bar,
     [data-chronicle-demo] .chronicle-motion-track.is-playing .chronicle-motion-block,
-    [data-chronicle-demo] .chronicle-anim-stage.is-playing .chronicle-anim-stage-block,
-    [data-chronicle-demo] .chronicle-anim-stage[data-anim="spin"] .chronicle-anim-stage-block,
-    [data-chronicle-demo] .chronicle-anim-stage[data-anim="shimmer"] .chronicle-anim-stage-block {
+    [data-chronicle-demo] .chronicle-anim-tile__stage.is-playing .chronicle-anim-stage-block,
+    [data-chronicle-demo] .chronicle-anim-tile__stage[data-anim="spin"] .chronicle-anim-stage-block,
+    [data-chronicle-demo] .chronicle-anim-tile__stage[data-anim="shimmer"] .chronicle-anim-stage-block {
       animation: none !important;
     }
     [data-chronicle-demo] .chronicle-button-loading::before {
@@ -2699,9 +2759,9 @@
   [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-modal,
   [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-progress--indeterminate .chronicle-progress__bar,
   [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-motion-track.is-playing .chronicle-motion-block,
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-anim-stage.is-playing .chronicle-anim-stage-block,
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-anim-stage[data-anim="spin"] .chronicle-anim-stage-block,
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-anim-stage[data-anim="shimmer"] .chronicle-anim-stage-block {
+  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-anim-tile__stage.is-playing .chronicle-anim-stage-block,
+  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-anim-tile__stage[data-anim="spin"] .chronicle-anim-stage-block,
+  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-anim-tile__stage[data-anim="shimmer"] .chronicle-anim-stage-block {
     animation: none !important;
   }
 
@@ -2754,17 +2814,28 @@
     --chronicle-border-strong:   var(--chronicle-neutral-300);
   }
 
+  /* Phase 1.7: dark mode now defaults to the live site's COOL-GREY
+   * family (Tailwind v4 `gray` OKLCH — gray-900 page / gray-800 cards),
+   * NOT the near-black true-neutral ramp. Operator: "the background is
+   * pure black when it shouldn't be, it should be the same darkmode
+   * idea we already had on the website." These match input.css:140-161
+   * (#111827 / #1f2937 / #1a1c23) converted to OKLCH. The pure-neutral
+   * near-black is still available as the `data-chronicle-bg="black"`
+   * variant in the choice-picker. NOTE: surfaces -50..-950 below carry
+   * a slight cool (blue) hue — a deliberate deviation from canon D2's
+   * "true neutral, no hue-tint"; the bg-tint variant group surfaces
+   * this exact decision for the operator to resolve. */
   [data-chronicle-demo][data-chronicle-demo-theme="dark"] {
-    --chronicle-surface:         var(--chronicle-neutral-950);
-    --chronicle-surface-low:     var(--chronicle-neutral-900);
-    --chronicle-surface-card:    var(--chronicle-neutral-850);
-    --chronicle-surface-raised:  var(--chronicle-neutral-800);
-    --chronicle-surface-overlay: var(--chronicle-neutral-800);
-    --chronicle-fg:              var(--chronicle-neutral-50);
-    --chronicle-fg-muted:        var(--chronicle-neutral-400);
-    --chronicle-fg-subtle:       var(--chronicle-neutral-500);
-    --chronicle-border:          var(--chronicle-neutral-800);
-    --chronicle-border-strong:   var(--chronicle-neutral-700);
+    --chronicle-surface:         oklch(0.21 0.034 264.665);  /* gray-900 #111827 */
+    --chronicle-surface-low:     oklch(0.13 0.028 261.692);  /* gray-950 — wells */
+    --chronicle-surface-card:    oklch(0.278 0.033 256.848); /* gray-800 #1f2937 */
+    --chronicle-surface-raised:  oklch(0.34 0.034 259.733);  /* hover step-up */
+    --chronicle-surface-overlay: oklch(0.278 0.033 256.848); /* gray-800 */
+    --chronicle-fg:              oklch(0.985 0.002 247.839); /* gray-50 */
+    --chronicle-fg-muted:        oklch(0.707 0.022 261.325); /* gray-400 */
+    --chronicle-fg-subtle:       oklch(0.551 0.027 264.364); /* gray-500 */
+    --chronicle-border:          oklch(0.373 0.034 259.733); /* gray-700 */
+    --chronicle-border-strong:   oklch(0.446 0.030 256.802); /* gray-600 */
   }
 
   /* Belt-and-suspenders: .dark class fallback. demoScript() toggles
@@ -2772,17 +2843,59 @@
    * the [data-theme="dark"] block; works for any rule that can't
    * reach the attribute (e.g. ::backdrop pseudo on the modal). */
   [data-chronicle-demo].dark {
-    --chronicle-surface:         var(--chronicle-neutral-950);
-    --chronicle-surface-low:     var(--chronicle-neutral-900);
-    --chronicle-surface-card:    var(--chronicle-neutral-850);
-    --chronicle-surface-raised:  var(--chronicle-neutral-800);
-    --chronicle-surface-overlay: var(--chronicle-neutral-800);
-    --chronicle-fg:              var(--chronicle-neutral-50);
-    --chronicle-fg-muted:        var(--chronicle-neutral-400);
-    --chronicle-fg-subtle:       var(--chronicle-neutral-500);
-    --chronicle-border:          var(--chronicle-neutral-800);
-    --chronicle-border-strong:   var(--chronicle-neutral-700);
+    --chronicle-surface:         oklch(0.21 0.034 264.665);
+    --chronicle-surface-low:     oklch(0.13 0.028 261.692);
+    --chronicle-surface-card:    oklch(0.278 0.033 256.848);
+    --chronicle-surface-raised:  oklch(0.34 0.034 259.733);
+    --chronicle-surface-overlay: oklch(0.278 0.033 256.848);
+    --chronicle-fg:              oklch(0.985 0.002 247.839);
+    --chronicle-fg-muted:        oklch(0.707 0.022 261.325);
+    --chronicle-fg-subtle:       oklch(0.551 0.027 264.364);
+    --chronicle-border:          oklch(0.373 0.034 259.733);
+    --chronicle-border-strong:   oklch(0.446 0.030 256.802);
   }
+
+  /* ---------- Phase 1.7: dark background-tint variants (choose-mode) ----------
+   * The choice-picker's "Dark background tint" group sets data-chronicle-bg
+   * on the demo root; these override the cool-grey default above. Higher
+   * specificity (.dark + [data-chronicle-bg]) so the picked option wins.
+   * Only dark mode is affected — light mode surfaces are untouched. */
+
+  /* A — near-black true-neutral (the pre-1.7 look; canon D2 "true neutral") */
+  [data-chronicle-demo].dark[data-chronicle-bg="black"],
+  [data-chronicle-demo][data-chronicle-demo-theme="dark"][data-chronicle-bg="black"] {
+    --chronicle-surface:         oklch(0.08 0 0);
+    --chronicle-surface-low:     oklch(0.05 0 0);
+    --chronicle-surface-card:    oklch(0.14 0 0);
+    --chronicle-surface-raised:  oklch(0.19 0 0);
+    --chronicle-surface-overlay: oklch(0.16 0 0);
+    --chronicle-border:          oklch(0.26 0 0);
+    --chronicle-border-strong:   oklch(0.34 0 0);
+  }
+  /* C — warm charcoal (hue shifted to ~60, warmer than cool grays) */
+  [data-chronicle-demo].dark[data-chronicle-bg="warm"],
+  [data-chronicle-demo][data-chronicle-demo-theme="dark"][data-chronicle-bg="warm"] {
+    --chronicle-surface:         oklch(0.21 0.012 60);
+    --chronicle-surface-low:     oklch(0.14 0.010 60);
+    --chronicle-surface-card:    oklch(0.27 0.012 60);
+    --chronicle-surface-raised:  oklch(0.33 0.013 60);
+    --chronicle-surface-overlay: oklch(0.27 0.012 60);
+    --chronicle-border:          oklch(0.37 0.013 60);
+    --chronicle-border-strong:   oklch(0.45 0.013 60);
+  }
+  /* D — elevated indigo-charcoal (the #1a1c23 sidebar tone the operator likes) */
+  [data-chronicle-demo].dark[data-chronicle-bg="elevated"],
+  [data-chronicle-demo][data-chronicle-demo-theme="dark"][data-chronicle-bg="elevated"] {
+    --chronicle-surface:         oklch(0.205 0.015 277);
+    --chronicle-surface-low:     oklch(0.16 0.013 277);
+    --chronicle-surface-card:    oklch(0.255 0.018 277);
+    --chronicle-surface-raised:  oklch(0.31 0.020 277);
+    --chronicle-surface-overlay: oklch(0.255 0.018 277);
+    --chronicle-border:          oklch(0.35 0.020 277);
+    --chronicle-border-strong:   oklch(0.43 0.022 277);
+  }
+  /* B (cool gray-900) is the baseline above — no override needed; the
+   * picker shows data-chronicle-bg="cool" as the default selection. */
 
   /* ---------- Popover fallback (Firefox < 125 fix) ---------- */
 
@@ -3504,5 +3617,427 @@
   .chronicle-color-picker[data-functional="true"] .chronicle-color-picker__not-functional {
     display: none;
   }
+
+  /* ============================================================
+   * Phase 1.7 — Choice-picker infrastructure
+   * ============================================================
+   * The demo is now a decision-collection instrument. Each rateable
+   * element is wrapped in a picker control:
+   *   - rate-mode  (1–5 sentiment, for "we're using this no matter what")
+   *   - choose-mode (👍/👎 per option, for "which of these do you prefer")
+   * A sticky "Your Decisions" panel aggregates picks into markdown.
+   * State persists in localStorage. Operator decisions 2026-05-29. */
+
+  .chronicle-picker-item {
+    border-left: 2px solid var(--chronicle-border);
+    padding-left: 12px;
+    margin: 16px 0;
+    transition: border-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-picker-item[data-answered="true"] {
+    border-left-color: var(--chronicle-accent);
+  }
+  .chronicle-picker-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius);
+  }
+  .chronicle-picker-controls__label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--chronicle-fg-muted);
+  }
+
+  /* rate-mode — 1–5 pills */
+  .chronicle-rate {
+    display: inline-flex;
+    gap: 3px;
+  }
+  .chronicle-rate__pill {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--chronicle-radius-sm);
+    border: 1px solid var(--chronicle-border-strong);
+    background: var(--chronicle-surface-card);
+    color: var(--chronicle-fg-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard),
+      color            var(--chronicle-motion-fast) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-fast) var(--chronicle-ease-standard);
+  }
+  .chronicle-rate__pill:hover {
+    border-color: var(--chronicle-accent);
+    color: var(--chronicle-fg);
+  }
+  .chronicle-rate__pill[aria-pressed="true"] {
+    background: var(--chronicle-accent);
+    border-color: var(--chronicle-accent);
+    color: var(--chronicle-accent-fg);
+  }
+
+  /* choose-mode — 👍/👎 vote buttons */
+  .chronicle-vote {
+    display: inline-flex;
+    gap: 4px;
+  }
+  .chronicle-vote__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 26px;
+    border-radius: var(--chronicle-radius-sm);
+    border: 1px solid var(--chronicle-border-strong);
+    background: var(--chronicle-surface-card);
+    color: var(--chronicle-fg-muted);
+    cursor: pointer;
+    font-size: 13px;
+    transition:
+      background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-fast) var(--chronicle-ease-standard),
+      color            var(--chronicle-motion-fast) var(--chronicle-ease-standard);
+  }
+  .chronicle-vote__btn[data-vote="up"][aria-pressed="true"] {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-success) 22%);
+    border-color: var(--chronicle-success);
+    color: var(--chronicle-success);
+  }
+  .chronicle-vote__btn[data-vote="down"][aria-pressed="true"] {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-danger) 22%);
+    border-color: var(--chronicle-danger);
+    color: var(--chronicle-danger);
+  }
+
+  .chronicle-picker-note {
+    flex: 1;
+    min-width: 160px;
+    padding: 5px 8px;
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+    color: var(--chronicle-fg);
+    font-size: 12px;
+  }
+  .chronicle-picker-note:focus { outline: 2px solid color-mix(in oklch, var(--chronicle-ring), transparent 80%); outline-offset: 0; border-color: var(--chronicle-ring); }
+
+  /* Variant group — choose-mode option cards side-by-side */
+  .chronicle-variant-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+  }
+  .chronicle-variant-option {
+    border: 1.5px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+    background: var(--chronicle-surface-card);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition:
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-variant-option[data-chosen="true"] {
+    border-color: var(--chronicle-accent);
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 5%);
+  }
+  .chronicle-variant-option__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .chronicle-variant-option__name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-variant-option__preview {
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    background: var(--chronicle-surface);
+    border-radius: var(--chronicle-radius-sm);
+  }
+  .chronicle-variant-option__apply {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: var(--chronicle-radius-sm);
+    border: 1px solid var(--chronicle-border-strong);
+    background: transparent;
+    color: var(--chronicle-fg-muted);
+    cursor: pointer;
+  }
+  .chronicle-variant-option__apply:hover { border-color: var(--chronicle-accent); color: var(--chronicle-accent); }
+  .chronicle-variant-option[data-chosen="true"] .chronicle-variant-option__apply {
+    background: var(--chronicle-accent); border-color: var(--chronicle-accent); color: var(--chronicle-accent-fg);
+  }
+
+  /* "Your Decisions" sticky panel */
+  .chronicle-decisions {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    width: 360px;
+    max-width: calc(100vw - 32px);
+    max-height: 70vh;
+    z-index: 60;
+    background: var(--chronicle-surface-overlay);
+    border: 1px solid var(--chronicle-border-strong);
+    border-radius: var(--chronicle-radius-lg);
+    box-shadow: var(--chronicle-elev-4-shadow);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .chronicle-decisions[data-collapsed="true"] { height: auto; }
+  .chronicle-decisions[data-collapsed="true"] .chronicle-decisions__body { display: none; }
+  .chronicle-decisions__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--chronicle-surface-card);
+    border-bottom: 1px solid var(--chronicle-border);
+    cursor: pointer;
+  }
+  .chronicle-decisions__title { font-size: 13px; font-weight: 600; color: var(--chronicle-fg); }
+  .chronicle-decisions__count {
+    margin-left: auto;
+    font-size: 11px;
+    background: var(--chronicle-accent);
+    color: var(--chronicle-accent-fg);
+    padding: 1px 8px;
+    border-radius: var(--chronicle-radius-full);
+    font-weight: 600;
+  }
+  .chronicle-decisions__body { padding: 10px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .chronicle-decisions__output {
+    width: 100%;
+    min-height: 140px;
+    max-height: 32vh;
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 11px;
+    line-height: 1.45;
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+    color: var(--chronicle-fg);
+    padding: 8px;
+    resize: vertical;
+    white-space: pre;
+    overflow: auto;
+  }
+  .chronicle-decisions__actions { display: flex; gap: 8px; }
+
+  /* Section-stepper nav (combination wizard + scroll) */
+  .chronicle-stepper-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 8px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    background: var(--chronicle-surface-overlay);
+    border-bottom: 1px solid var(--chronicle-border);
+  }
+  .chronicle-stepper-nav__link {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: var(--chronicle-radius-full);
+    border: 1px solid var(--chronicle-border);
+    background: var(--chronicle-surface-card);
+    color: var(--chronicle-fg-muted);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard), color var(--chronicle-motion-fast) var(--chronicle-ease-standard), border-color var(--chronicle-motion-fast) var(--chronicle-ease-standard);
+  }
+  .chronicle-stepper-nav__link:hover { border-color: var(--chronicle-accent); color: var(--chronicle-fg); }
+  .chronicle-stepper-nav__link[aria-current="true"] {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 12%);
+    border-color: var(--chronicle-accent);
+    color: var(--chronicle-accent);
+    font-weight: 600;
+  }
+
+  /* ---------- C.3 Calendar drag (range select + draggable/resizable ribbon) ---------- */
+
+  .chronicle-mock-cal__day[data-in-range="true"] {
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 16%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), transparent 50%);
+  }
+  .chronicle-mock-cal__day[data-range-end="start"] { border-left: 2px solid var(--chronicle-accent); }
+  .chronicle-mock-cal__day[data-range-end="end"]   { border-right: 2px solid var(--chronicle-accent); }
+  .chronicle-mock-cal-grid { position: relative; touch-action: none; }
+  .chronicle-mock-ribbon {
+    position: absolute;
+    height: 18px;
+    background: color-mix(in oklch, var(--chronicle-surface), var(--chronicle-accent) 55%);
+    color: var(--chronicle-accent-fg);
+    border-radius: var(--chronicle-radius-sm);
+    font-size: 10px;
+    line-height: 18px;
+    padding: 0 6px;
+    cursor: grab;
+    user-select: none;
+    overflow: hidden;
+    white-space: nowrap;
+    box-shadow: var(--chronicle-elev-2-shadow);
+    display: flex;
+    align-items: center;
+    z-index: 5;
+  }
+  .chronicle-mock-ribbon[data-dragging="true"] { cursor: grabbing; box-shadow: var(--chronicle-elev-3-shadow); opacity: 0.92; }
+  .chronicle-mock-ribbon__resize {
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 8px;
+    cursor: ew-resize;
+    background: color-mix(in oklch, transparent, var(--chronicle-accent-fg) 30%);
+  }
+  .chronicle-mock-cal__draghint {
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+    margin-bottom: 6px;
+  }
+
+  /* ---------- C.4 Timeline mockup ---------- */
+
+  .chronicle-timeline {
+    position: relative;
+    padding: 24px 12px 36px;
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+    overflow: hidden;
+    user-select: none;
+  }
+  .chronicle-timeline__axis {
+    position: relative;
+    height: 2px;
+    background: var(--chronicle-border-strong);
+    margin: 40px 0 0;
+  }
+  .chronicle-timeline__tick {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 8px;
+    background: var(--chronicle-border-strong);
+    transform: translateY(-3px);
+  }
+  .chronicle-timeline__tick-label {
+    position: absolute;
+    top: 12px;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: var(--chronicle-fg-muted);
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    white-space: nowrap;
+  }
+  .chronicle-timeline__era {
+    position: absolute;
+    top: -24px;
+    height: 16px;
+    border-radius: var(--chronicle-radius-xs);
+    font-size: 10px;
+    line-height: 16px;
+    padding: 0 6px;
+    color: var(--chronicle-fg);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .chronicle-timeline__marker {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: var(--chronicle-radius-full);
+    background: var(--chronicle-accent);
+    border: 2px solid var(--chronicle-surface-card);
+    transform: translate(-50%, -5px);
+    cursor: pointer;
+    transition: transform var(--chronicle-motion-fast) var(--chronicle-ease-standard);
+    z-index: 3;
+  }
+  .chronicle-timeline__marker:hover { transform: translate(-50%, -5px) scale(1.3); }
+  .chronicle-timeline__marker--success { background: var(--chronicle-success); }
+  .chronicle-timeline__marker--warning { background: var(--chronicle-warning); }
+  .chronicle-timeline__playhead {
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    background: var(--chronicle-accent);
+    cursor: ew-resize;
+    z-index: 4;
+    touch-action: none;
+  }
+  .chronicle-timeline__playhead::before {
+    content: "";
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 10px;
+    height: 10px;
+    border-radius: var(--chronicle-radius-full);
+    background: var(--chronicle-accent);
+  }
+
+  /* ---------- Card hover-style variants (choose-mode live-apply) ----------
+   * The "Card hover style" picker group sets data-hover-style on the
+   * demo root; these override the default .chronicle-card:hover. Default
+   * (lift) needs no override — it's the base rule. All keep canon D3
+   * co-occurrence (never box-shadow alone). */
+  [data-hover-style="border"] .chronicle-card:hover {
+    background: var(--chronicle-surface-card);
+    border-color: var(--chronicle-accent);
+    box-shadow: none;
+  }
+  [data-hover-style="glow"] .chronicle-card:hover {
+    background: var(--chronicle-surface-raised);
+    border-color: color-mix(in oklch, var(--chronicle-accent), transparent 40%);
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--chronicle-accent), transparent 60%),
+                0 4px 16px -4px color-mix(in oklch, var(--chronicle-accent), transparent 55%);
+  }
+  [data-hover-style="navbar"] .chronicle-card {
+    position: relative;
+    overflow: hidden;
+  }
+  [data-hover-style="navbar"] .chronicle-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--chronicle-motion-base) var(--chronicle-ease-standard);
+    background:
+      linear-gradient(to top,  color-mix(in oklch, transparent, var(--chronicle-accent) 50%) 0, transparent 2px) no-repeat bottom right / 66% 2px,
+      linear-gradient(to left, color-mix(in oklch, transparent, var(--chronicle-accent) 45%) 0, transparent 2px) no-repeat right center / 2px 100%;
+  }
+  [data-hover-style="navbar"] .chronicle-card:hover {
+    background: var(--chronicle-surface-raised);
+    border-color: var(--chronicle-border-strong);
+    box-shadow: inset -20px 0 24px -12px color-mix(in oklch, transparent, var(--chronicle-accent) 12%);
+  }
+  [data-hover-style="navbar"] .chronicle-card:hover::before { opacity: 1; }
 
 }  /* end @layer chronicle-demo */

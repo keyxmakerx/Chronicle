@@ -48,10 +48,14 @@ templ DemoChronicleCanon() {
 			data-chronicle-demo-theme="dark"
 			data-chronicle-demo-reduce-motion="false"
 			data-chronicle-density="comfortable"
+			data-chronicle-bg="cool"
+			data-hover-style="lift"
 		>
 			@harness()
+			@stepperNav()
 			@browserCompatPanel()
 			@introSection()
+			@designChoicesSection()
 			@motionSection()
 			@cardSection()
 			@navbarEchoSection()
@@ -81,7 +85,9 @@ templ DemoChronicleCanon() {
 			@mockHubSection()
 			@mockSettingsSection()
 			@mockCalendarSection()
+			@mockTimelineSection()
 		</div>
+		@decisionsPanel()
 		@demoScript()
 	}
 }
@@ -1668,6 +1674,7 @@ templ mockCalendarSection() {
 				</div>
 			</div>
 		</div>
+		@rateControl("calendar-surface", "Calendar surface (drag-to-select + ribbon)")
 	</section>
 }
 
@@ -2049,6 +2056,264 @@ templ varietyLayoutsSection() {
 			</div>
 		</div>
 	</section>
+}
+
+// ============================================================
+// Phase 1.7 — Choice-picker templ components
+// ============================================================
+
+// stepperNav — combination wizard + scroll: sticky jump-links to the
+// major decision groups. JS tracks scroll position and marks the
+// active link (aria-current).
+templ stepperNav() {
+	<nav class="chronicle-stepper-nav" data-stepper-nav>
+		<a class="chronicle-stepper-nav__link" href="#choices">Design choices</a>
+		<a class="chronicle-stepper-nav__link" href="#motion">Motion</a>
+		<a class="chronicle-stepper-nav__link" href="#card">Cards</a>
+		<a class="chronicle-stepper-nav__link" href="#buttons">Buttons</a>
+		<a class="chronicle-stepper-nav__link" href="#forms">Forms</a>
+		<a class="chronicle-stepper-nav__link" href="#status">Status</a>
+		<a class="chronicle-stepper-nav__link" href="#nav">Navigation</a>
+		<a class="chronicle-stepper-nav__link" href="#data">Data</a>
+		<a class="chronicle-stepper-nav__link" href="#overlays">Overlays</a>
+		<a class="chronicle-stepper-nav__link" href="#containers">Containers</a>
+		<a class="chronicle-stepper-nav__link" href="#mockups">Mockups</a>
+		<a class="chronicle-stepper-nav__link" href="#mockups-timeline">Timeline</a>
+	</nav>
+}
+
+// decisionsPanel — sticky "Your Decisions" output. JS live-builds the
+// markdown into the textarea; Copy + Download export it. Persists in
+// localStorage.
+templ decisionsPanel() {
+	<aside class="chronicle-decisions" data-decisions data-collapsed="false">
+		<div class="chronicle-decisions__head" data-decisions-toggle>
+			<span class="chronicle-decisions__title">Your Decisions</span>
+			<span class="chronicle-decisions__count" data-decisions-count>0</span>
+		</div>
+		<div class="chronicle-decisions__body">
+			<p style="margin:0; font-size:11px; color:var(--chronicle-fg-muted);">
+				Rate the locked elements (1–5) and 👍/👎 the options you prefer. This builds a brief you copy back to me.
+			</p>
+			<textarea class="chronicle-decisions__output" data-decisions-output readonly aria-label="Decisions markdown">No decisions yet — start rating above.</textarea>
+			<div class="chronicle-decisions__actions">
+				<button type="button" class="chronicle-button-primary chronicle-button-primary--sm" data-decisions-copy>Copy markdown</button>
+				<button type="button" class="chronicle-button-secondary chronicle-button-secondary--sm" data-decisions-download>Download</button>
+				<button type="button" class="chronicle-button-ghost chronicle-button-ghost--sm" data-decisions-reset style="margin-left:auto;">Reset</button>
+			</div>
+		</div>
+	</aside>
+}
+
+// rateControl — rate-mode: 1–5 sentiment pills + note, for locked
+// elements ("we're using this no matter what, how do you feel?").
+templ rateControl(id, label string) {
+	<div class="chronicle-picker-controls" data-picker-item data-rate-id={ id } data-rate-label={ label }>
+		<span class="chronicle-picker-controls__label">{ label } — rate 1–5</span>
+		<div class="chronicle-rate" role="group" aria-label={ "Rate " + label }>
+			for n := 1; n <= 5; n++ {
+				<button type="button" class="chronicle-rate__pill" data-rate={ itoa(n) } aria-pressed="false">{ itoa(n) }</button>
+			}
+		</div>
+		<input type="text" class="chronicle-picker-note" data-note placeholder="optional note…"/>
+	</div>
+}
+
+// voteThumbs — choose-mode 👍/👎 for a single option.
+templ voteThumbs(id string) {
+	<div class="chronicle-vote" data-vote-id={ id } role="group" aria-label="Prefer this option?">
+		<button type="button" class="chronicle-vote__btn" data-vote="up" aria-pressed="false" aria-label="Thumbs up">▲</button>
+		<button type="button" class="chronicle-vote__btn" data-vote="down" aria-pressed="false" aria-label="Thumbs down">▼</button>
+	</div>
+}
+
+// variantCard — one option in a choose-mode group. previewStyle paints
+// the preview box (color/bg swatches); structural options rely on the
+// Apply button to live-apply to the whole page so the operator sees it.
+templ variantCard(group, value, name, previewStyle string, chosen bool) {
+	<div class="chronicle-variant-option" data-variant-group={ group } data-variant={ value } data-chosen={ boolToStr(chosen) }>
+		<div class="chronicle-variant-option__head">
+			<span class="chronicle-variant-option__name">{ name }</span>
+			@voteThumbs(group + "::" + value)
+		</div>
+		<div class="chronicle-variant-option__preview" style={ previewStyle }>
+			<span style="font-size:11px; color:var(--chronicle-fg-muted);">{ name }</span>
+		</div>
+		<button type="button" class="chronicle-variant-option__apply" data-variant-apply data-variant-group={ group } data-variant={ value }>
+			Apply &amp; preview
+		</button>
+	</div>
+}
+
+// designChoicesSection — the heart of the picker: the load-bearing
+// "which do you prefer" decisions, each a choose-mode variant group
+// whose Apply buttons live-apply a global token so the change ripples
+// across every component on the page.
+templ designChoicesSection() {
+	<section class="chronicle-section" id="choices">
+		<h2 class="chronicle-section__title">Design Choices — pick what you prefer</h2>
+		<p class="chronicle-section__intro">
+			These are the load-bearing decisions. For each, 👍/👎 the options and click <strong>Apply &amp; preview</strong> to see it ripple across the whole page (dark mode). Your picks build the "Your Decisions" brief in the corner. Operator's two modes: these are "which do you prefer"; locked components further down get a 1–5 "how do you feel" rating.
+		</p>
+
+		<h3 class="chronicle-state-label">Dark background tint</h3>
+		<p class="chronicle-section__intro">Operator: "the background should be the same darkmode idea we already had on the website." <strong>Cool gray-900</strong> is the new default (matches the live site); the others are alternatives.</p>
+		<div class="chronicle-variant-grid">
+			@variantCard("bg", "cool", "Cool gray-900 (site match)", "background: oklch(0.21 0.034 264.665);", true)
+			@variantCard("bg", "black", "Near-black neutral", "background: oklch(0.08 0 0);", false)
+			@variantCard("bg", "warm", "Warm charcoal", "background: oklch(0.21 0.012 60);", false)
+			@variantCard("bg", "elevated", "Indigo charcoal (sidebar tone)", "background: oklch(0.205 0.015 277);", false)
+		</div>
+
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Accent palette</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("accent", "indigo", "Indigo", "background: oklch(0.58 0.20 270);", true)
+			@variantCard("accent", "emerald", "Emerald", "background: oklch(0.65 0.15 155);", false)
+			@variantCard("accent", "amber", "Amber", "background: oklch(0.78 0.16 75);", false)
+			@variantCard("accent", "rose", "Rose", "background: oklch(0.65 0.20 22);", false)
+		</div>
+
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Corner radius</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("radius", "sharp", "Sharp (2/4px)", "", false)
+			@variantCard("radius", "medium", "Medium (6/8px)", "", true)
+			@variantCard("radius", "soft", "Soft (12/16px)", "", false)
+		</div>
+
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Shadow / elevation</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("shadow", "none", "Border-only (no shadow)", "", false)
+			@variantCard("shadow", "subtle", "Subtle (canon)", "", true)
+			@variantCard("shadow", "pronounced", "Pronounced", "", false)
+			@variantCard("shadow", "heavy", "Heavy", "", false)
+		</div>
+
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Card hover style</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("hover", "lift", "Surface-lift co-occurrence (canon D3)", "", true)
+			@variantCard("hover", "navbar", "Navbar-echo gradient", "", false)
+			@variantCard("hover", "border", "Border-only", "", false)
+			@variantCard("hover", "glow", "Accent glow", "", false)
+		</div>
+
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Motion speed</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("motion", "snappy", "Snappy (100/150ms)", "", false)
+			@variantCard("motion", "canon", "Canon (150/250ms)", "", true)
+			@variantCard("motion", "relaxed", "Relaxed (250/400ms)", "", false)
+		</div>
+
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Density</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("density", "compact", "Compact", "", false)
+			@variantCard("density", "comfortable", "Comfortable", "", true)
+			@variantCard("density", "spacious", "Spacious", "", false)
+		</div>
+
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Selected-state treatment</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("selected", "A", "A — accent border + tint (canon D3)", "", true)
+			@variantCard("selected", "B", "B — navbar half-hover", "", false)
+		</div>
+
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Button family — which treatments do you want?</h3>
+		<p class="chronicle-section__intro">Operator: "here are a dozen buttons, which do you prefer." 👍/👎 each. (Hover them to see states.)</p>
+		<div class="chronicle-variant-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+			@buttonVariantCard("primary", "Primary (solid)")
+			@buttonVariantCard("tonal", "Tonal (accent tint)")
+			@buttonVariantCard("secondary", "Secondary (outlined)")
+			@buttonVariantCard("ghost", "Ghost (bare)")
+			@buttonVariantCard("link", "Link (underlined)")
+			@buttonVariantCard("destructive", "Destructive (danger)")
+		</div>
+	</section>
+}
+
+// buttonVariantCard — a choose-mode card whose preview is a live button
+// of that variant, so the operator votes on the actual rendered style.
+templ buttonVariantCard(variant, name string) {
+	<div class="chronicle-variant-option" data-variant-group="button" data-variant={ variant }>
+		<div class="chronicle-variant-option__head">
+			<span class="chronicle-variant-option__name">{ name }</span>
+			@voteThumbs("button::" + variant)
+		</div>
+		<div class="chronicle-variant-option__preview">
+			@buttonVariantPreview(variant)
+		</div>
+	</div>
+}
+
+templ buttonVariantPreview(variant string) {
+	switch variant {
+		case "primary":
+			<button class="chronicle-button-primary chronicle-button-primary--sm">Action</button>
+		case "tonal":
+			<button class="chronicle-button-tonal">Action</button>
+		case "secondary":
+			<button class="chronicle-button-secondary chronicle-button-secondary--sm">Action</button>
+		case "ghost":
+			<button class="chronicle-button-ghost chronicle-button-ghost--sm">Action</button>
+		case "link":
+			<button class="chronicle-button-link">Action</button>
+		case "destructive":
+			<button class="chronicle-button-destructive">Delete</button>
+	}
+}
+
+// mockTimelineSection — C.4 the missing timeline. Horizontal axis +
+// era bands + event markers + zoom segmented control + draggable
+// playhead. Static mock data; wrapped in a rate-mode control.
+templ mockTimelineSection() {
+	<section class="chronicle-section" id="mockups-timeline">
+		<h2 class="chronicle-section__title">Page Composition Mockup 4 — Timeline</h2>
+		<div class="chronicle-mockup-banner">
+			<span>📌</span>
+			<span><strong>MOCKUP — not the real timeline.</strong> Operator: "you still haven't rebuilt a timeline mockup." Horizontal axis + era bands + event markers + zoom + a draggable playhead (drag the vertical line). Static mock data; previews the V2 timeline surface (C-TIMELINE-V2 arc).</span>
+		</div>
+		<div class="chronicle-mock">
+			<div class="chronicle-mock__title-bar">
+				<div>
+					<nav class="chronicle-mock__breadcrumbs">Campaigns › The Reckoning › Timeline</nav>
+					<h3 class="chronicle-mock__page-title">Ages of the Reckoning</h3>
+				</div>
+				<div style="margin-left:auto;">
+					<div class="chronicle-segmented" data-timeline-zoom>
+						<button class="chronicle-segmented__btn" aria-pressed="false" data-zoom="era">Era</button>
+						<button class="chronicle-segmented__btn" aria-pressed="true" data-zoom="year">Year</button>
+						<button class="chronicle-segmented__btn" aria-pressed="false" data-zoom="month">Month</button>
+					</div>
+				</div>
+			</div>
+			<div class="chronicle-timeline" data-timeline>
+				// Era bands
+				<div class="chronicle-timeline__era" style="left:2%; width:30%; background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 18%);">First Age</div>
+				<div class="chronicle-timeline__era" style="left:34%; width:40%; background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-success) 18%);">Age of Kings</div>
+				<div class="chronicle-timeline__era" style="left:76%; width:22%; background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-warning) 18%);">Reckoning</div>
+				<div class="chronicle-timeline__axis">
+					@timelineTicks()
+					@timelineMarkers()
+				</div>
+				<div class="chronicle-timeline__playhead" data-timeline-playhead style="left:62%;"></div>
+			</div>
+		</div>
+		@rateControl("timeline-surface", "Timeline surface")
+	</section>
+}
+
+templ timelineTicks() {
+	for i := 0; i <= 10; i++ {
+		<div class="chronicle-timeline__tick" style={ "left:" + itoa(i*10) + "%;" }></div>
+		<div class="chronicle-timeline__tick-label" style={ "left:" + itoa(i*10) + "%;" }>{ itoa(1000 + i*50) }</div>
+	}
+}
+
+templ timelineMarkers() {
+	<div class="chronicle-timeline__marker" style="left:12%;" title="Founding"></div>
+	<div class="chronicle-timeline__marker chronicle-timeline__marker--success" style="left:28%;" title="Coronation"></div>
+	<div class="chronicle-timeline__marker" style="left:45%;" title="Great Schism"></div>
+	<div class="chronicle-timeline__marker chronicle-timeline__marker--warning" style="left:58%;" title="The Burning"></div>
+	<div class="chronicle-timeline__marker" style="left:72%;" title="Trade Pact"></div>
+	<div class="chronicle-timeline__marker chronicle-timeline__marker--success" style="left:88%;" title="Reckoning Day"></div>
 }
 
 templ demoScript() {
@@ -2555,6 +2820,309 @@ templ demoScript() {
 				s.classList.add('is-revealed');
 			});
 		}, 200);
+
+		// ========================================================
+		// Phase 1.7 — Choice-picker: decision store + handlers
+		// ========================================================
+		var DECISIONS_KEY = 'chronicle-canon-decisions';
+		var decisions = {};
+		try { decisions = JSON.parse(localStorage.getItem(DECISIONS_KEY) || '{}') || {}; } catch (e) { decisions = {}; }
+
+		function persistDecisions() {
+			try { localStorage.setItem(DECISIONS_KEY, JSON.stringify(decisions)); } catch (e) {}
+		}
+		function variantLabel(group) {
+			return ({ bg: 'Dark background tint', accent: 'Accent palette', radius: 'Corner radius',
+				shadow: 'Shadow / elevation', hover: 'Card hover style', motion: 'Motion speed',
+				density: 'Density', selected: 'Selected-state', button: 'Button family' })[group] || group;
+		}
+		function setDecision(id, patch) {
+			decisions[id] = Object.assign({}, decisions[id], patch);
+			persistDecisions();
+			renderDecisions();
+		}
+		function renderDecisions() {
+			var out = document.querySelector('[data-decisions-output]');
+			var countEl = document.querySelector('[data-decisions-count]');
+			var ids = Object.keys(decisions).filter(function (k) {
+				var d = decisions[k];
+				return d && (d.rating || (d.votes && Object.keys(d.votes).length) || d.chosen || (d.note && d.note.trim()));
+			});
+			if (countEl) countEl.textContent = ids.length;
+			if (!out) return;
+			if (!ids.length) { out.value = 'No decisions yet — start rating above.'; return; }
+			var md = '# Chronicle Canon — Design Decisions\n';
+			md += '_' + (navigator.userAgent || '') + ' · ' + new Date().toISOString().slice(0, 10) + '_\n\n';
+			var rated = ids.filter(function (k) { return decisions[k].type === 'rate'; });
+			if (rated.length) {
+				md += '## Ratings (locked elements — 1–5)\n';
+				rated.forEach(function (k) {
+					var d = decisions[k];
+					md += '- ' + d.label + ': ' + (d.rating ? d.rating + '/5' : '—') + (d.note ? ' · note: ' + d.note : '') + '\n';
+				});
+				md += '\n';
+			}
+			var choices = ids.filter(function (k) { return decisions[k].type === 'choose'; });
+			if (choices.length) {
+				md += '## Choices (which do you prefer)\n';
+				choices.forEach(function (k) {
+					var d = decisions[k], ups = [], downs = [];
+					Object.keys(d.votes || {}).forEach(function (opt) {
+						if (d.votes[opt] === 'up') ups.push(opt); else if (d.votes[opt] === 'down') downs.push(opt);
+					});
+					md += '- ' + d.label + ': ' + (d.chosen ? 'applied=' + d.chosen + ' · ' : '') +
+						(ups.length ? '👍 ' + ups.join(', ') : '') +
+						(downs.length ? ' · 👎 ' + downs.join(', ') : '') +
+						(d.note ? ' · note: ' + d.note : '') + '\n';
+				});
+			}
+			out.value = md;
+		}
+		function hydratePicker() {
+			document.querySelectorAll('[data-rate-id]').forEach(function (grp) {
+				var d = decisions['rate:' + grp.getAttribute('data-rate-id')];
+				if (!d) return;
+				if (d.rating) grp.querySelectorAll('[data-rate]').forEach(function (p) {
+					p.setAttribute('aria-pressed', p.getAttribute('data-rate') === String(d.rating) ? 'true' : 'false');
+				});
+				var note = grp.querySelector('[data-note]'); if (note && d.note) note.value = d.note;
+				if (d.rating) { var it = grp.closest('[data-picker-item]') || grp; it.setAttribute('data-answered', 'true'); }
+			});
+			document.querySelectorAll('[data-vote-id]').forEach(function (grp) {
+				var id = grp.getAttribute('data-vote-id'), sep = id.indexOf('::');
+				var group = id.slice(0, sep), value = id.slice(sep + 2);
+				var d = decisions['choose:' + group];
+				if (d && d.votes && d.votes[value]) grp.querySelectorAll('[data-vote]').forEach(function (b) {
+					b.setAttribute('aria-pressed', b.getAttribute('data-vote') === d.votes[value] ? 'true' : 'false');
+				});
+			});
+			// Re-apply previously-chosen variants so the page reflects them.
+			Object.keys(decisions).forEach(function (k) {
+				if (k.indexOf('choose:') === 0 && decisions[k].chosen) {
+					var group = k.slice(7); applyVariant(group, decisions[k].chosen, true);
+				}
+			});
+		}
+
+		function applyVariant(group, value, silent) {
+			if (group === 'bg') { root.setAttribute('data-chronicle-bg', value); }
+			else if (group === 'accent') {
+				var am = { indigo: 'oklch(0.58 0.20 270)', emerald: 'oklch(0.65 0.15 155)', amber: 'oklch(0.78 0.16 75)', rose: 'oklch(0.65 0.20 22)' };
+				root.style.setProperty('--chronicle-accent', am[value] || am.indigo); updateTokenDisplay();
+			} else if (group === 'radius') {
+				var rs = { sharp: ['4px', '4px', '6px'], medium: ['6px', '8px', '12px'], soft: ['12px', '14px', '18px'] }[value];
+				if (rs) { root.style.setProperty('--chronicle-radius', rs[0]); root.style.setProperty('--chronicle-radius-md', rs[1]); root.style.setProperty('--chronicle-radius-lg', rs[2]); }
+			} else if (group === 'shadow') {
+				var sh = {
+					none: ['none', 'none', 'none'],
+					subtle: ['0 1px 2px 0 oklch(0 0 0 / 0.04)', '0 4px 12px -2px oklch(0 0 0 / 0.10)', '0 12px 32px -4px oklch(0 0 0 / 0.18)'],
+					pronounced: ['0 2px 6px -1px oklch(0 0 0 / 0.14)', '0 8px 20px -4px oklch(0 0 0 / 0.22)', '0 18px 40px -6px oklch(0 0 0 / 0.30)'],
+					heavy: ['0 4px 10px -1px oklch(0 0 0 / 0.24)', '0 14px 30px -4px oklch(0 0 0 / 0.34)', '0 26px 56px -8px oklch(0 0 0 / 0.42)']
+				}[value];
+				if (sh) { root.style.setProperty('--chronicle-elev-2-shadow', sh[0]); root.style.setProperty('--chronicle-elev-3-shadow', sh[1]); root.style.setProperty('--chronicle-elev-4-shadow', sh[2]); }
+			} else if (group === 'hover') { root.setAttribute('data-hover-style', value); }
+			else if (group === 'motion') {
+				var mo = { snappy: ['100ms', '150ms'], canon: ['150ms', '250ms'], relaxed: ['250ms', '400ms'] }[value];
+				if (mo) { root.style.setProperty('--chronicle-motion-base', mo[0]); root.style.setProperty('--chronicle-motion-medium', mo[1]); }
+			} else if (group === 'density') { root.setAttribute('data-chronicle-density', value); }
+			else if (group === 'selected') { root.setAttribute('data-selected-style', value); }
+		}
+
+		root.addEventListener('click', function (ev) {
+			var pill = ev.target.closest('[data-rate]');
+			if (pill && pill.closest('[data-rate-id]')) {
+				var grp = pill.closest('[data-rate-id]');
+				var id = grp.getAttribute('data-rate-id'), label = grp.getAttribute('data-rate-label') || id;
+				grp.querySelectorAll('[data-rate]').forEach(function (p) { p.setAttribute('aria-pressed', p === pill ? 'true' : 'false'); });
+				setDecision('rate:' + id, { type: 'rate', label: label, rating: parseInt(pill.getAttribute('data-rate'), 10), note: (decisions['rate:' + id] || {}).note });
+				(grp.closest('[data-picker-item]') || grp).setAttribute('data-answered', 'true');
+				return;
+			}
+			var vbtn = ev.target.closest('[data-vote]');
+			if (vbtn && vbtn.closest('[data-vote-id]')) {
+				var vg = vbtn.closest('[data-vote-id]'), vid = vg.getAttribute('data-vote-id'), vsep = vid.indexOf('::');
+				var group = vid.slice(0, vsep), value = vid.slice(vsep + 2), dir = vbtn.getAttribute('data-vote');
+				var cur = decisions['choose:' + group] || { type: 'choose', label: variantLabel(group), votes: {} };
+				cur.votes = cur.votes || {};
+				if (cur.votes[value] === dir) delete cur.votes[value]; else cur.votes[value] = dir;
+				vg.querySelectorAll('[data-vote]').forEach(function (b) { b.setAttribute('aria-pressed', (cur.votes[value] && b.getAttribute('data-vote') === cur.votes[value]) ? 'true' : 'false'); });
+				setDecision('choose:' + group, cur);
+				return;
+			}
+			var apply = ev.target.closest('[data-variant-apply]');
+			if (apply) {
+				var ag = apply.getAttribute('data-variant-group'), av = apply.getAttribute('data-variant');
+				applyVariant(ag, av);
+				document.querySelectorAll('.chronicle-variant-option[data-variant-group="' + ag + '"]').forEach(function (opt) {
+					opt.setAttribute('data-chosen', opt.getAttribute('data-variant') === av ? 'true' : 'false');
+				});
+				var c = decisions['choose:' + ag] || { type: 'choose', label: variantLabel(ag), votes: {} };
+				c.chosen = av; setDecision('choose:' + ag, c);
+				return;
+			}
+			if (ev.target.closest('[data-decisions-toggle]')) {
+				var pnl = document.querySelector('[data-decisions]');
+				if (pnl) pnl.setAttribute('data-collapsed', pnl.getAttribute('data-collapsed') === 'true' ? 'false' : 'true');
+				return;
+			}
+			if (ev.target.closest('[data-decisions-copy]')) { copyDecisions(); return; }
+			if (ev.target.closest('[data-decisions-download]')) { downloadDecisions(); return; }
+			if (ev.target.closest('[data-decisions-reset]')) {
+				if (confirm('Clear all your decisions?')) { decisions = {}; persistDecisions(); location.reload(); }
+				return;
+			}
+		});
+		root.addEventListener('input', function (ev) {
+			var note = ev.target.closest('[data-note]');
+			if (note && note.closest('[data-rate-id]')) {
+				var grp = note.closest('[data-rate-id]'), id = grp.getAttribute('data-rate-id'), label = grp.getAttribute('data-rate-label') || id;
+				setDecision('rate:' + id, Object.assign({ type: 'rate', label: label }, decisions['rate:' + id], { note: note.value }));
+			}
+		});
+
+		function copyDecisions() {
+			var out = document.querySelector('[data-decisions-output]'); if (!out) return;
+			var done = function () { var b = document.querySelector('[data-decisions-copy]'); if (b) { var t = b.textContent; b.textContent = 'Copied ✓'; setTimeout(function () { b.textContent = t; }, 1500); } };
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				navigator.clipboard.writeText(out.value).then(done, function () { out.select(); document.execCommand && document.execCommand('copy'); done(); });
+			} else { out.removeAttribute('readonly'); out.select(); try { document.execCommand('copy'); } catch (e) {} out.setAttribute('readonly', ''); done(); }
+		}
+		function downloadDecisions(fmt) {
+			var out = document.querySelector('[data-decisions-output]'); if (!out) return;
+			var md = out.value;
+			function dl(name, content, type) {
+				var blob = new Blob([content], { type: type });
+				var url = URL.createObjectURL(blob), a = document.createElement('a');
+				a.href = url; a.download = name; document.body.appendChild(a); a.click();
+				document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+			}
+			dl('chronicle-canon-decisions.md', md, 'text/markdown');
+			dl('chronicle-canon-decisions.json', JSON.stringify(decisions, null, 2), 'application/json');
+		}
+
+		// ---------- C.3 Calendar drag: range-select + ribbon move/resize ----------
+		(function calendarDrag() {
+			var grid = root.querySelector('[data-mock-cal-grid]'); if (!grid) return;
+			var ribbon = grid.querySelector('[data-mock-ribbon]');
+			var cells = grid.querySelectorAll('[data-mock-day]');
+			function cellIndexFromPoint(x, y) {
+				var el = document.elementFromPoint(x, y); if (!el) return -1;
+				var cell = el.closest('[data-mock-day]'); if (!cell) return -1;
+				for (var i = 0; i < cells.length; i++) if (cells[i] === cell) return i;
+				return -1;
+			}
+			function positionRibbon() {
+				if (!ribbon || !cells.length) return;
+				var start = parseInt(ribbon.getAttribute('data-start'), 10) || 0;
+				var span = parseInt(ribbon.getAttribute('data-span'), 10) || 1;
+				start = Math.max(0, Math.min(start, cells.length - 1));
+				var col = start % 7;
+				span = Math.max(1, Math.min(span, 7 - col, cells.length - start));
+				ribbon.setAttribute('data-start', start); ribbon.setAttribute('data-span', span);
+				var s = cells[start], e = cells[start + span - 1];
+				ribbon.style.left = s.offsetLeft + 'px';
+				ribbon.style.top = (s.offsetTop + 22) + 'px';
+				ribbon.style.width = ((e.offsetLeft + e.offsetWidth) - s.offsetLeft - 2) + 'px';
+			}
+			positionRibbon();
+			window.addEventListener('resize', positionRibbon);
+
+			// Range select on empty days.
+			var rangeAnchor = -1, ranging = false;
+			function clearRange() { cells.forEach(function (c) { c.removeAttribute('data-in-range'); c.removeAttribute('data-range-end'); }); }
+			function paintRange(a, b) {
+				clearRange(); var lo = Math.min(a, b), hi = Math.max(a, b);
+				for (var i = lo; i <= hi; i++) { cells[i].setAttribute('data-in-range', 'true'); }
+				cells[lo].setAttribute('data-range-end', 'start'); cells[hi].setAttribute('data-range-end', 'end');
+			}
+			grid.addEventListener('pointerdown', function (ev) {
+				if (ev.target.closest('[data-mock-ribbon]')) return; // ribbon has its own handlers
+				var idx = cellIndexFromPoint(ev.clientX, ev.clientY); if (idx < 0) return;
+				rangeAnchor = idx; ranging = true; paintRange(idx, idx);
+				try { grid.setPointerCapture(ev.pointerId); } catch (e) {}
+			});
+			grid.addEventListener('pointermove', function (ev) {
+				if (!ranging) return;
+				var idx = cellIndexFromPoint(ev.clientX, ev.clientY); if (idx < 0) return;
+				paintRange(rangeAnchor, idx);
+			});
+			grid.addEventListener('pointerup', function (ev) {
+				if (ranging) { ranging = false; try { grid.releasePointerCapture(ev.pointerId); } catch (e) {} }
+			});
+
+			// Ribbon move + resize (mirrors event_grid.js setPointerCapture).
+			if (ribbon) {
+				var mode = null, startMouseIdx = -1, origStart = 0, origSpan = 1;
+				ribbon.addEventListener('pointerdown', function (ev) {
+					ev.stopPropagation();
+					origStart = parseInt(ribbon.getAttribute('data-start'), 10) || 0;
+					origSpan = parseInt(ribbon.getAttribute('data-span'), 10) || 1;
+					mode = ev.target.closest('[data-mock-ribbon-resize]') ? 'resize' : 'move';
+					startMouseIdx = cellIndexFromPoint(ev.clientX, ev.clientY);
+					ribbon.setAttribute('data-dragging', 'true');
+					try { ribbon.setPointerCapture(ev.pointerId); } catch (e) {}
+				});
+				ribbon.addEventListener('pointermove', function (ev) {
+					if (!mode) return;
+					var idx = cellIndexFromPoint(ev.clientX, ev.clientY); if (idx < 0) return;
+					if (mode === 'move') {
+						var delta = idx - startMouseIdx;
+						ribbon.setAttribute('data-start', origStart + delta);
+						ribbon.setAttribute('data-span', origSpan);
+					} else {
+						ribbon.setAttribute('data-span', Math.max(1, idx - origStart + 1));
+					}
+					positionRibbon();
+				});
+				ribbon.addEventListener('pointerup', function (ev) {
+					if (mode) { mode = null; ribbon.setAttribute('data-dragging', 'false'); try { ribbon.releasePointerCapture(ev.pointerId); } catch (e) {} }
+				});
+			}
+		})();
+
+		// ---------- C.4 Timeline playhead drag + zoom ----------
+		(function timeline() {
+			var tl = root.querySelector('[data-timeline]'); if (!tl) return;
+			var head = tl.querySelector('[data-timeline-playhead]');
+			if (head) {
+				var dragging = false;
+				function place(x) {
+					var rect = tl.getBoundingClientRect();
+					var pct = Math.max(0, Math.min(100, ((x - rect.left) / rect.width) * 100));
+					head.style.left = pct + '%';
+				}
+				head.addEventListener('pointerdown', function (ev) { dragging = true; try { head.setPointerCapture(ev.pointerId); } catch (e) {} ev.preventDefault(); });
+				head.addEventListener('pointermove', function (ev) { if (dragging) place(ev.clientX); });
+				head.addEventListener('pointerup', function (ev) { if (dragging) { dragging = false; try { head.releasePointerCapture(ev.pointerId); } catch (e) {} } });
+			}
+			var zoom = root.querySelector('[data-timeline-zoom]');
+			if (zoom) zoom.addEventListener('click', function (ev) {
+				var b = ev.target.closest('[data-zoom]'); if (!b) return;
+				zoom.querySelectorAll('[data-zoom]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+			});
+		})();
+
+		// ---------- Stepper-nav active tracking ----------
+		(function stepper() {
+			var nav = root.querySelector('[data-stepper-nav]'); if (!nav) return;
+			var links = nav.querySelectorAll('.chronicle-stepper-nav__link');
+			if (typeof IntersectionObserver === 'function') {
+				var byId = {};
+				links.forEach(function (l) { byId[l.getAttribute('href').slice(1)] = l; });
+				var obs = new IntersectionObserver(function (entries) {
+					entries.forEach(function (en) {
+						if (en.isIntersecting && byId[en.target.id]) {
+							links.forEach(function (l) { l.setAttribute('aria-current', 'false'); });
+							byId[en.target.id].setAttribute('aria-current', 'true');
+						}
+					});
+				}, { rootMargin: '-20% 0px -70% 0px' });
+				links.forEach(function (l) { var s = document.getElementById(l.getAttribute('href').slice(1)); if (s) obs.observe(s); });
+			}
+		})();
+
+		hydratePicker();
+		renderDecisions();
 
 		updateTokenDisplay();
 		}  // end runInit
