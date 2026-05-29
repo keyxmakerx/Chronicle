@@ -10,6 +10,15 @@
 // Banner mounts at the top of every V1 calendar page (Month / Week /
 // Day / Timeline / Setup). V2 routes do NOT include this template —
 // V2 self-promotes via its own surface chrome.
+//
+// DORMANT as of 2026-05-29 (dispatch C-CAL-V1-BANNER-PULL): all five
+// mount sites in calendar.templ were removed because V2 calendar is not
+// yet reachable from campaign chrome, so the "Switch to V2" CTA pointed
+// at an unnavigable surface and the 2026-08-01 sunset clock is paused.
+// This component + v1BannerSwitchHref are intentionally kept intact so
+// reinstating the banner is a one-line `@V1DeprecationBanner(cc)` re-add
+// when C-CAL-V1-SUNSET lands (or so it can be folded into the future
+// generic banner system). Do not delete without coordinator sign-off.
 
 package calendar
 
