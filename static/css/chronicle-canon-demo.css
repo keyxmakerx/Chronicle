@@ -1,0 +1,701 @@
+/* chronicle-canon-demo.css — C-V2-DESIGN-REBUILD Phase 1 demo.
+ *
+ * Self-contained @layer cascade for the new Chronicle design canon. EVERY
+ * rule below sits inside `@layer chronicle-demo` so the demo cannot leak
+ * into existing surfaces (per the dispatch's scope-discipline rule). Live
+ * app keeps its rejected styling until Phase 3 migrates the merged-in-main
+ * hub + dashboard in-place.
+ *
+ * Imported once from static/css/input.css; the layer is declared in the
+ * cascade list at input.css:21. Order: chronicle-demo lands BEFORE
+ * utilities so Tailwind utility classes still win (operator may want to
+ * sprinkle Tailwind utilities on demo content; the canon is the base).
+ *
+ * Cross-refs:
+ *   - decisions/2026-05-29-chronicle-design-canon.md         (D1-D10 binding)
+ *   - reports/chronicle/2026-05-29-c-v2-design-rebuild-audit.md §1.4 (navbar ladder)
+ *   - plans/2026-05-29-v2-design-rebuild-reference-research.md Appendix A
+ *   - static/css/input.css:250-344 (navbar mechanism source-of-truth)
+ *
+ * Hard rules enforced here (one CI guard surface per dispatch §F):
+ *   - NEVER `transition: all` — explicit property lists only.
+ *   - NEVER `box-shadow` animated alone — D3 co-occurrence rule.
+ *   - NEVER hex literals outside the neutral-ramp comment block — OKLCH only.
+ */
+
+/* `@property` for animatable accent — canon D2 future-extension hook.
+ * Sits OUTSIDE the layer because @property is a top-level at-rule.
+ * Groundwork only; no animation in this phase. */
+@property --chronicle-accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: oklch(0.58 0.20 270);
+}
+
+@layer chronicle-demo {
+
+  /* ============================================================
+   * Tokens — :root scoped to anything carrying [data-chronicle-demo]
+   * so the canon doesn't bleed into the rest of the app.
+   * ============================================================ */
+  [data-chronicle-demo] {
+    color-scheme: light dark;
+
+    /* Neutral OKLCH ramp — research Appendix A; canon D2 */
+    --chronicle-neutral-50:  oklch(0.99 0 0);
+    --chronicle-neutral-100: oklch(0.97 0 0);
+    --chronicle-neutral-200: oklch(0.94 0 0);
+    --chronicle-neutral-300: oklch(0.89 0 0);
+    --chronicle-neutral-400: oklch(0.78 0 0);
+    --chronicle-neutral-500: oklch(0.62 0 0);
+    --chronicle-neutral-600: oklch(0.48 0 0);
+    --chronicle-neutral-700: oklch(0.36 0 0);
+    --chronicle-neutral-800: oklch(0.24 0 0);
+    --chronicle-neutral-850: oklch(0.18 0 0);
+    --chronicle-neutral-900: oklch(0.13 0 0);
+    --chronicle-neutral-950: oklch(0.08 0 0);
+
+    /* Accent palettes — canon D2 */
+    --chronicle-indigo:  oklch(0.58 0.20 270);
+    --chronicle-emerald: oklch(0.65 0.15 155);
+    --chronicle-amber:   oklch(0.78 0.16 75);
+    --chronicle-rose:    oklch(0.65 0.20 22);
+
+    /* Selected accent — per-campaign override hook (canon D2).
+     * Demo validation harness writes this inline to swap palettes. */
+    --chronicle-accent:    var(--chronicle-indigo);
+    --chronicle-accent-fg: oklch(0.99 0 0);
+
+    /* Gradient accent — D2 groundwork for future-extension. Default
+     * collapses to a single-color "gradient"; per-campaign override
+     * can supply a real gradient later. */
+    --chronicle-accent-gradient: linear-gradient(var(--chronicle-accent), var(--chronicle-accent));
+
+    /* Functional colors decoupled from accent — canon D2 §"functional
+     * colors decoupled" so success stays green even when accent rotates. */
+    --chronicle-success: var(--chronicle-emerald);
+    --chronicle-warning: var(--chronicle-amber);
+    --chronicle-danger:  var(--chronicle-rose);
+
+    /* Surface roles via light-dark() — canon D2 + D8.
+     * `--chronicle-surface` is the page; `-card` is the resting card
+     * background; `-raised` is the hover surface (one level up per
+     * canon D3 hybrid elevation); `-overlay` is born-with-shadow
+     * (popovers, drawers). */
+    --chronicle-surface:         light-dark(var(--chronicle-neutral-50),  var(--chronicle-neutral-950));
+    --chronicle-surface-low:     light-dark(var(--chronicle-neutral-100), var(--chronicle-neutral-900));
+    --chronicle-surface-card:    light-dark(oklch(1 0 0),                 var(--chronicle-neutral-850));
+    --chronicle-surface-raised:  light-dark(var(--chronicle-neutral-50),  var(--chronicle-neutral-800));
+    --chronicle-surface-overlay: light-dark(oklch(1 0 0),                 var(--chronicle-neutral-800));
+
+    /* Foreground roles */
+    --chronicle-fg:        light-dark(var(--chronicle-neutral-900), var(--chronicle-neutral-50));
+    --chronicle-fg-muted:  light-dark(var(--chronicle-neutral-600), var(--chronicle-neutral-400));
+    --chronicle-fg-subtle: light-dark(var(--chronicle-neutral-500), var(--chronicle-neutral-500));
+
+    /* Borders + focus ring */
+    --chronicle-border:        light-dark(var(--chronicle-neutral-200), var(--chronicle-neutral-800));
+    --chronicle-border-strong: light-dark(var(--chronicle-neutral-300), var(--chronicle-neutral-700));
+    --chronicle-ring:          var(--chronicle-accent);
+
+    /* Elevation bundles — canon D3.
+     * elev-1 = NONE (the rest state has no shadow); elev-2 = micro on
+     * hover; elev-3 = popover/dropdown born-with-shadow; elev-4 = drag
+     * transient. Composite (key + ambient) shadows per Fluent's
+     * key+ambient model the reference research §2.4 cites. */
+    --chronicle-elev-1-shadow: none;
+    --chronicle-elev-2-shadow: 0 1px 2px 0 oklch(0 0 0 / 0.04);
+    --chronicle-elev-3-shadow:
+      0 4px 12px -2px oklch(0 0 0 / 0.10),
+      0 2px 4px -1px  oklch(0 0 0 / 0.06);
+    --chronicle-elev-4-shadow:
+      0 12px 32px -4px oklch(0 0 0 / 0.18),
+      0 4px 8px -2px   oklch(0 0 0 / 0.08);
+
+    /* Motion — canon D5. */
+    --chronicle-motion-fast:    100ms;
+    --chronicle-motion-base:    150ms;
+    --chronicle-motion-medium:  250ms;
+    --chronicle-motion-long:    400ms;
+    --chronicle-ease-standard:   cubic-bezier(0.2, 0, 0, 1);
+    --chronicle-ease-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+    --chronicle-ease-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+
+    /* Radius scale — canon D4 (Linear-medium 6/8/12). */
+    --chronicle-radius-xs:   2px;
+    --chronicle-radius-sm:   4px;
+    --chronicle-radius:      6px;
+    --chronicle-radius-md:   8px;
+    --chronicle-radius-lg:   12px;
+    --chronicle-radius-xl:   16px;
+    --chronicle-radius-full: 9999px;
+  }
+
+  /* Theme override for the demo's light/dark toggle. Operator can flip
+   * the demo theme without touching their OS preference. */
+  [data-chronicle-demo-theme="light"] { color-scheme: light; }
+  [data-chronicle-demo-theme="dark"]  { color-scheme: dark; }
+
+  /* Reduced-motion preview toggle — operator can audit the canon's
+   * reduced-motion behaviour without changing their OS preference.
+   * The native `prefers-reduced-motion: reduce` query below ALSO
+   * applies independently. */
+  [data-chronicle-demo-reduce-motion="true"] {
+    --chronicle-motion-fast: 0ms;
+    --chronicle-motion-base: 0ms;
+    --chronicle-motion-medium: 0ms;
+    --chronicle-motion-long: 0ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-chronicle-demo] {
+      --chronicle-motion-fast: 0ms;
+      --chronicle-motion-base: 0ms;
+      --chronicle-motion-medium: 0ms;
+      --chronicle-motion-long: 0ms;
+    }
+  }
+
+  /* ============================================================
+   * Components — each consumes only the tokens above. No external
+   * Tailwind utilities; the canon is self-sufficient.
+   * ============================================================ */
+
+  /* ---------- C.1 Card ---------- */
+
+  .chronicle-card {
+    position: relative;
+    background: var(--chronicle-surface-card);
+    color: var(--chronicle-fg);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+    padding: var(--chronicle-space-4, 16px);
+    /* CANON D3 BINDING: three co-occurring transitions — NEVER box-shadow alone.
+     * Audit §1.4 navbar ladder echo: 150ms base for hover. */
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      box-shadow       var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+
+  .chronicle-card:hover {
+    background: var(--chronicle-surface-raised);
+    border-color: var(--chronicle-border-strong);
+    box-shadow: var(--chronicle-elev-2-shadow);
+  }
+
+  /* Pressed state — snappier than hover per audit §1.4 (navbar press
+   * is 0.15s opacity vs 0.2s hover; we echo 100ms vs 150ms). */
+  .chronicle-card:active,
+  .chronicle-card[data-state="pressed"] {
+    transition-duration: var(--chronicle-motion-fast);
+  }
+  .chronicle-card:active::after,
+  .chronicle-card[data-state="pressed"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    /* 12% on-surface state layer per M3 pressed convention. */
+    background: color-mix(in oklch, var(--chronicle-fg), transparent 88%);
+    pointer-events: none;
+  }
+
+  .chronicle-card:focus-visible {
+    outline: 2px solid var(--chronicle-ring);
+    outline-offset: 2px;
+    /* NO shadow change on focus — canon D3. */
+  }
+
+  /* Selected — VARIANT A (canon D3): accent border + tint, no shadow. */
+  .chronicle-card[data-selected="A"] {
+    border-color: var(--chronicle-accent);
+    border-width: 1.5px;
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 4%);
+    /* No box-shadow change — selection is identity, not elevation. */
+  }
+
+  /* Selected — VARIANT B (navbar echo): persistent half-hover. */
+  .chronicle-card[data-selected="B"] {
+    background: var(--chronicle-surface-raised);
+    border-color: var(--chronicle-border-strong);
+    box-shadow: 0 1px 2px 0 oklch(0 0 0 / 0.02);
+  }
+  .chronicle-card[data-selected="B"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    /* 0.5 opacity overlay = "permanent half-hover" per audit §1.4. */
+    background: color-mix(in oklch, transparent, var(--chronicle-accent) 6%);
+  }
+
+  /* ---------- C.2 Drawer ---------- */
+
+  .chronicle-drawer-layout {
+    /* Grid reflow when drawer is open. Canon D9. */
+    display: grid;
+    grid-template-columns: 1fr 0;
+    gap: 0;
+    transition: grid-template-columns var(--chronicle-motion-long) var(--chronicle-ease-decelerate);
+  }
+  .chronicle-drawer-layout[data-drawer-open="true"] {
+    grid-template-columns: 1fr 480px;
+  }
+  .chronicle-drawer {
+    overflow: hidden;
+    border-left: 1px solid var(--chronicle-border);
+    background: var(--chronicle-surface-overlay);
+    box-shadow: var(--chronicle-elev-3-shadow);
+    border-radius: var(--chronicle-radius-md) 0 0 var(--chronicle-radius-md);
+    display: flex;
+    flex-direction: column;
+    min-height: 360px;
+    max-height: 480px;
+    transform: translateX(100%);
+    transition:
+      transform var(--chronicle-motion-long) var(--chronicle-ease-decelerate),
+      opacity   var(--chronicle-motion-long) var(--chronicle-ease-decelerate);
+    opacity: 0;
+  }
+  .chronicle-drawer-layout[data-drawer-open="true"] .chronicle-drawer {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  .chronicle-drawer-header {
+    flex: 0 0 auto;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--chronicle-border);
+    background: var(--chronicle-surface-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-radius: var(--chronicle-radius-md) 0 0 0;
+  }
+  .chronicle-drawer-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    /* Audit §5.7 scroll-position fix: explicit auto behavior + JS
+     * scroll-top on open. */
+    scroll-behavior: auto;
+    padding: 16px;
+  }
+
+  /* ---------- C.3 Navbar-echo card variant ---------- */
+
+  /* Adapts the navbar's ::before-opacity-fade mechanism to the card
+   * shape. Operator named navbar twice as load-bearing reference; this
+   * is the validation crux beside the canon-D3 card.
+   * Audit §1.4 alpha stops translated to color-mix syntax. */
+  .chronicle-card--navbar-echo {
+    overflow: hidden;
+  }
+  .chronicle-card--navbar-echo::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition:
+      opacity    var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      background var(--chronicle-motion-base) var(--chronicle-ease-standard);
+    /* 3-side rest (operator's "partial"): bottom 66% + right edge + top-right 20%.
+     * Direct port of input.css:264-276 — translated to color-mix(in oklch). */
+    background:
+      linear-gradient(to top,
+        color-mix(in oklch, transparent, var(--chronicle-accent) 50%) 0,
+        transparent 2px) no-repeat bottom right / 66% 2px,
+      linear-gradient(to left,
+        color-mix(in oklch, transparent, var(--chronicle-accent) 45%) 0,
+        transparent 2px) no-repeat right center / 2px 100%,
+      linear-gradient(to bottom,
+        color-mix(in oklch, transparent, var(--chronicle-accent) 30%) 0,
+        transparent 2px) no-repeat top right / 20% 2px;
+  }
+  .chronicle-card--navbar-echo:hover::before {
+    opacity: 1;
+  }
+  .chronicle-card--navbar-echo:hover {
+    /* Right-side inset accent wash — direct port of input.css:284-285. */
+    box-shadow:
+      inset -20px 0 24px -12px color-mix(in oklch, transparent, var(--chronicle-accent) 10%);
+  }
+  /* Press: 4-side full wrap + deeper inset (audit §1.4 alpha stops). */
+  .chronicle-card--navbar-echo:active::before {
+    opacity: 1;
+    /* Press transition is intentionally faster (audit §1.4 — navbar uses
+     * 0.15s opacity on press vs 0.2s hover). */
+    transition:
+      opacity    var(--chronicle-motion-fast) var(--chronicle-ease-standard),
+      background var(--chronicle-motion-base) var(--chronicle-ease-standard);
+    background:
+      linear-gradient(to top,
+        color-mix(in oklch, transparent, var(--chronicle-accent) 55%) 0,
+        transparent 2px) no-repeat bottom center / 100% 2px,
+      linear-gradient(to left,
+        color-mix(in oklch, transparent, var(--chronicle-accent) 55%) 0,
+        transparent 2px) no-repeat right center / 2px 100%,
+      linear-gradient(to bottom,
+        color-mix(in oklch, transparent, var(--chronicle-accent) 45%) 0,
+        transparent 2px) no-repeat top center / 100% 2px,
+      linear-gradient(to right,
+        color-mix(in oklch, transparent, var(--chronicle-accent) 35%) 0,
+        transparent 2px) no-repeat left center / 2px 100%;
+  }
+  .chronicle-card--navbar-echo:active {
+    box-shadow:
+      inset -30px 0 30px -10px color-mix(in oklch, transparent, var(--chronicle-accent) 18%),
+      inset 0 0 20px -6px      color-mix(in oklch, transparent, var(--chronicle-accent) 10%);
+  }
+  /* Navbar-echo selected: persistent half-hover (audit §1.4 — opacity 0.5,
+   * 2-side gradient at 0.35/0.3, 0.08 wash). */
+  .chronicle-card--navbar-echo[data-selected="B"]::before {
+    opacity: 0.6;
+    background:
+      linear-gradient(to top,
+        color-mix(in oklch, transparent, var(--chronicle-accent) 35%) 0,
+        transparent 2px) no-repeat bottom right / 66% 2px,
+      linear-gradient(to left,
+        color-mix(in oklch, transparent, var(--chronicle-accent) 30%) 0,
+        transparent 2px) no-repeat right center / 2px 100%;
+  }
+  .chronicle-card--navbar-echo[data-selected="B"] {
+    box-shadow:
+      inset -16px 0 20px -10px color-mix(in oklch, transparent, var(--chronicle-accent) 8%);
+  }
+
+  /* ---------- C.4 Buttons ---------- */
+
+  .chronicle-button-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: var(--chronicle-accent);
+    color: var(--chronicle-accent-fg);
+    border: none;
+    border-radius: var(--chronicle-radius);
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.25;
+    cursor: pointer;
+    transition: background-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-button-primary:hover {
+    /* Brightness bump via color-mix; NO shadow appearance. */
+    background: color-mix(in oklch, var(--chronicle-accent), white 6%);
+  }
+  .chronicle-button-primary:focus-visible {
+    outline: 2px solid var(--chronicle-ring);
+    outline-offset: 2px;
+  }
+  .chronicle-button-primary:active {
+    background: color-mix(in oklch, var(--chronicle-accent), black 5%);
+  }
+
+  .chronicle-button-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: transparent;
+    color: var(--chronicle-fg);
+    border: 1px solid var(--chronicle-border-strong);
+    border-radius: var(--chronicle-radius);
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-button-secondary:hover {
+    background: var(--chronicle-surface-card);
+    border-color: var(--chronicle-accent);
+  }
+  .chronicle-button-secondary:focus-visible {
+    outline: 2px solid var(--chronicle-ring);
+    outline-offset: 2px;
+  }
+
+  .chronicle-button-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: transparent;
+    color: var(--chronicle-fg);
+    border: none;
+    border-radius: var(--chronicle-radius);
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-button-ghost:hover {
+    /* State layer: 4% on-surface overlay per M3. */
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 4%);
+  }
+  .chronicle-button-ghost:focus-visible {
+    outline: 2px solid var(--chronicle-ring);
+    outline-offset: 2px;
+  }
+
+  /* ---------- C.5 Input ---------- */
+
+  .chronicle-input {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--chronicle-surface-card);
+    color: var(--chronicle-fg);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius);
+    font-size: 14px;
+    line-height: 1.4;
+    transition:
+      border-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-input:focus,
+  .chronicle-input:focus-visible {
+    border-color: var(--chronicle-ring);
+    outline: 2px solid color-mix(in oklch, var(--chronicle-ring), transparent 80%);
+    outline-offset: 0;
+    /* NO shadow on focus. Canon D3. */
+  }
+  .chronicle-input::placeholder {
+    color: var(--chronicle-fg-subtle);
+  }
+
+  /* ---------- C.6 Popover (born with shadow) ---------- */
+
+  .chronicle-popover {
+    position: absolute;
+    background: var(--chronicle-surface-overlay);
+    color: var(--chronicle-fg);
+    border: 1px solid var(--chronicle-border-strong);
+    border-radius: var(--chronicle-radius-md);
+    box-shadow: var(--chronicle-elev-3-shadow);
+    padding: 12px;
+    min-width: 200px;
+    /* @starting-style + scale-in entry per canon D5. */
+    opacity: 1;
+    transform: scale(1);
+    transition:
+      opacity   var(--chronicle-motion-base) var(--chronicle-ease-decelerate),
+      transform var(--chronicle-motion-base) var(--chronicle-ease-decelerate),
+      display   var(--chronicle-motion-base) allow-discrete,
+      overlay   var(--chronicle-motion-base) allow-discrete;
+  }
+  .chronicle-popover:not(:popover-open) {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  @starting-style {
+    .chronicle-popover:popover-open {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+  }
+  /* Anchor positioning — canon D8. Feature-detected; older browsers
+   * fall back to JS-placed `position: absolute`. */
+  .chronicle-popover-anchor {
+    anchor-name: --chronicle-popover-demo;
+  }
+  .chronicle-popover[data-anchored] {
+    position-anchor: --chronicle-popover-demo;
+    top: calc(anchor(bottom) + 6px);
+    left: anchor(left);
+  }
+
+  /* ---------- C.7 Event chip ---------- */
+
+  .chronicle-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--chronicle-radius-full);
+    background: color-mix(in oklch, var(--chronicle-surface), var(--chronicle-accent) 12%);
+    border: 1px solid color-mix(in oklch, var(--chronicle-surface), var(--chronicle-accent) 25%);
+    color: var(--chronicle-accent);
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 500;
+  }
+  /* Tier-specific accent overrides — verifies color-mix renders cleanly
+   * across hues (validates the canon's tier-overlay mechanism). */
+  .chronicle-chip[data-tier="indigo"]  { --chronicle-chip-accent: var(--chronicle-indigo);  }
+  .chronicle-chip[data-tier="emerald"] { --chronicle-chip-accent: var(--chronicle-emerald); }
+  .chronicle-chip[data-tier="amber"]   { --chronicle-chip-accent: var(--chronicle-amber);   }
+  .chronicle-chip[data-tier]:not([data-tier=""]) {
+    background: color-mix(in oklch, var(--chronicle-surface), var(--chronicle-chip-accent) 12%);
+    border-color: color-mix(in oklch, var(--chronicle-surface), var(--chronicle-chip-accent) 25%);
+    color: var(--chronicle-chip-accent);
+  }
+
+  /* ---------- C.8 List item ---------- */
+
+  .chronicle-list {
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+    background: var(--chronicle-surface-card);
+    overflow: hidden;
+  }
+  .chronicle-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    color: var(--chronicle-fg);
+    border-bottom: 1px solid var(--chronicle-border);
+    transition: background-color var(--chronicle-motion-fast) linear;
+    cursor: pointer;
+  }
+  .chronicle-list-item:last-child { border-bottom: none; }
+  .chronicle-list-item:hover,
+  .chronicle-list-item[data-state="hover"] {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 4%);
+  }
+  .chronicle-list-item[data-selected="true"] {
+    border-left: 3px solid var(--chronicle-accent);
+    padding-left: 13px;
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 4%);
+  }
+  .chronicle-list-item:focus-visible {
+    outline: 2px solid var(--chronicle-ring);
+    outline-offset: -2px;
+  }
+
+  /* ---------- D. Validation harness ---------- */
+
+  .chronicle-harness {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    background: var(--chronicle-surface-overlay);
+    border-bottom: 1px solid var(--chronicle-border-strong);
+    box-shadow: var(--chronicle-elev-2-shadow);
+    font-size: 13px;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-harness__group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .chronicle-harness__label {
+    color: var(--chronicle-fg-muted);
+    font-weight: 500;
+  }
+  .chronicle-harness__swatch {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: var(--chronicle-radius);
+    border: 1px solid var(--chronicle-border);
+    background: var(--chronicle-surface-card);
+    color: var(--chronicle-fg);
+    font-size: 12px;
+    cursor: pointer;
+    transition:
+      background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-fast) var(--chronicle-ease-standard);
+  }
+  .chronicle-harness__swatch:hover {
+    background: var(--chronicle-surface-raised);
+    border-color: var(--chronicle-border-strong);
+  }
+  .chronicle-harness__swatch[aria-pressed="true"] {
+    border-color: var(--chronicle-accent);
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 6%);
+  }
+  .chronicle-harness__dot {
+    width: 10px;
+    height: 10px;
+    border-radius: var(--chronicle-radius-full);
+    display: inline-block;
+  }
+
+  .chronicle-tokens-display {
+    margin: 16px 0;
+    padding: 12px 16px;
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius);
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: var(--chronicle-fg-muted);
+    white-space: pre-wrap;
+    line-height: 1.6;
+  }
+
+  /* ---------- E. Page layout primitives ---------- */
+
+  .chronicle-canon-page {
+    background: var(--chronicle-surface);
+    color: var(--chronicle-fg);
+    min-height: 100%;
+  }
+  .chronicle-section {
+    padding: 24px;
+    border-bottom: 1px solid var(--chronicle-border);
+  }
+  .chronicle-section:last-child { border-bottom: none; }
+  .chronicle-section__title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-section__intro {
+    font-size: 13px;
+    color: var(--chronicle-fg-muted);
+    margin: 0 0 16px 0;
+    max-width: 64ch;
+  }
+  .chronicle-section__intro code {
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    background: var(--chronicle-surface-low);
+    padding: 1px 6px;
+    border-radius: var(--chronicle-radius-sm);
+    border: 1px solid var(--chronicle-border);
+    font-size: 12px;
+  }
+  .chronicle-section__grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+  .chronicle-state-label {
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+    display: block;
+    font-weight: 500;
+  }
+  .chronicle-card__title {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+  }
+  .chronicle-card__body {
+    font-size: 13px;
+    color: var(--chronicle-fg-muted);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+}  /* end @layer chronicle-demo */

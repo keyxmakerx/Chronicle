@@ -1,0 +1,426 @@
+// chronicle_canon.templ — C-V2-DESIGN-REBUILD Phase 1 demo route.
+//
+// Static demo at GET /demo/chronicle-canon proving the new Chronicle
+// design canon. Owner-validation hard gate; Phase 2+ does not fire
+// without operator green-light here.
+//
+// Scope: this templ touches no existing surface. All styling lives in
+// /static/css/chronicle-canon-demo.css under @layer chronicle-demo,
+// scoped to elements carrying [data-chronicle-demo]. The validation
+// harness toolbar at the top of the page hosts the three operator
+// controls (light/dark, accent palette, reduced-motion preview).
+//
+// Cross-refs:
+//   - decisions/2026-05-29-chronicle-design-canon.md       (D1-D10 binding)
+//   - reports/chronicle/2026-05-29-c-v2-design-rebuild-audit.md §1.4
+//   - plans/2026-05-29-v2-design-rebuild-reference-research.md Appendix A
+//   - dispatches/chronicle/C-V2-DESIGN-REBUILD-PHASE-1-DEMO.md
+
+package demo
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// DemoChronicleCanon renders the full canon-demo page inside the
+// standard @layouts.App shell so the operator can compare the
+// existing navbar/topbar against the canon-styled demo content in the
+// same viewport. The root element carries the canon's scope attribute
+// (`data-chronicle-demo`) so every component inside resolves the
+// `--chronicle-*` token cascade.
+templ DemoChronicleCanon() {
+	@layouts.App("Chronicle Canon Demo") {
+		// Canon CSS loaded directly here (not via input.css @import,
+		// which Tailwind v3-shape doesn't resolve). Browser respects
+		// the @layer chronicle-demo ordering declared in app.css
+		// across both stylesheets. Mirrors the maps plugin's leaflet
+		// CSS-link pattern (internal/plugins/maps/maps.templ:229).
+		<link rel="stylesheet" href="/static/css/chronicle-canon-demo.css"/>
+		<div
+			class="chronicle-canon-page"
+			data-chronicle-demo
+			data-chronicle-demo-theme="light"
+			data-chronicle-demo-reduce-motion="false"
+		>
+			@harness()
+			@introSection()
+			@cardSection()
+			@navbarEchoSection()
+			@selectedComparisonSection()
+			@buttonsSection()
+			@inputSection()
+			@popoverSection()
+			@chipSection()
+			@listSection()
+			@drawerSection()
+		</div>
+		@demoScript()
+	}
+}
+
+// harness — sticky operator-facing toolbar. Three controls + a
+// resolved-tokens display. Per dispatch §D.
+templ harness() {
+	<div class="chronicle-harness" role="region" aria-label="Canon demo controls">
+		<div class="chronicle-harness__group">
+			<span class="chronicle-harness__label">Theme:</span>
+			<button type="button" class="chronicle-harness__swatch" data-action="theme" data-value="light" aria-pressed="true">Light</button>
+			<button type="button" class="chronicle-harness__swatch" data-action="theme" data-value="dark" aria-pressed="false">Dark</button>
+		</div>
+		<div class="chronicle-harness__group">
+			<span class="chronicle-harness__label">Accent:</span>
+			<button type="button" class="chronicle-harness__swatch" data-action="accent" data-value="indigo" aria-pressed="true">
+				<span class="chronicle-harness__dot" style="background: oklch(0.58 0.20 270);"></span>Indigo
+			</button>
+			<button type="button" class="chronicle-harness__swatch" data-action="accent" data-value="emerald" aria-pressed="false">
+				<span class="chronicle-harness__dot" style="background: oklch(0.65 0.15 155);"></span>Emerald
+			</button>
+			<button type="button" class="chronicle-harness__swatch" data-action="accent" data-value="amber" aria-pressed="false">
+				<span class="chronicle-harness__dot" style="background: oklch(0.78 0.16 75);"></span>Amber
+			</button>
+			<button type="button" class="chronicle-harness__swatch" data-action="accent" data-value="rose" aria-pressed="false">
+				<span class="chronicle-harness__dot" style="background: oklch(0.65 0.20 22);"></span>Rose
+			</button>
+		</div>
+		<div class="chronicle-harness__group">
+			<span class="chronicle-harness__label">Motion:</span>
+			<button type="button" class="chronicle-harness__swatch" data-action="reduce-motion" data-value="false" aria-pressed="true">Normal</button>
+			<button type="button" class="chronicle-harness__swatch" data-action="reduce-motion" data-value="true" aria-pressed="false">Reduced</button>
+		</div>
+		<div class="chronicle-harness__group" style="margin-left: auto;">
+			<span class="chronicle-harness__label">Resolved tokens:</span>
+			<code id="chronicle-resolved-tokens" class="chronicle-tokens-display" style="margin: 0; padding: 4px 10px;">--chronicle-accent = …</code>
+		</div>
+	</div>
+}
+
+templ introSection() {
+	<section class="chronicle-section">
+		<h1 class="chronicle-section__title">Chronicle design canon — Phase 1 demo</h1>
+		<p class="chronicle-section__intro">
+			Validation surface for the new design language. The architectural plumbing of the merged Extensions hub stays as-is; only the visual layer is being rebuilt. Walk every section below, try the controls in the sticky bar above, then either green-light Phase 2 or surface concerns. Tokens defined under <code>&#64;layer chronicle-demo</code>; isolated from every other surface.
+		</p>
+	</section>
+}
+
+// cardSection — C.1. The canon's headline component. Renders all
+// five states (resting, hover, pressed, focus, selected variants
+// elsewhere) so operator sees the full state space at once.
+templ cardSection() {
+	<section class="chronicle-section" id="card">
+		<h2 class="chronicle-section__title">Card — canon D3 elevation</h2>
+		<p class="chronicle-section__intro">
+			Three co-occurring transitions on hover (<code>background-color</code> + <code>border-color</code> + <code>box-shadow</code>, 150ms). <strong>Never animates <code>box-shadow</code> alone</strong> — this is the entire fix for the "shadow from nowhere" complaint that triggered the rebuild.
+		</p>
+		<div class="chronicle-section__grid">
+			<div class="chronicle-card" tabindex="0">
+				<span class="chronicle-state-label">Resting</span>
+				<h3 class="chronicle-card__title">Quiet by default</h3>
+				<p class="chronicle-card__body">Border + tint at rest; zero shadow. Per canon D3.</p>
+			</div>
+			<div class="chronicle-card" data-state="hover" tabindex="0">
+				<span class="chronicle-state-label">Hover (frozen)</span>
+				<h3 class="chronicle-card__title">Surface lifts together</h3>
+				<p class="chronicle-card__body">Background, border, and shadow change in concert over 150ms. Live hover any card and watch.</p>
+			</div>
+			<div class="chronicle-card" data-state="pressed" tabindex="0">
+				<span class="chronicle-state-label">Pressed (frozen)</span>
+				<h3 class="chronicle-card__title">12% state layer</h3>
+				<p class="chronicle-card__body">Transition snappier than hover (100ms vs 150ms) — echoes the navbar's 0.15s-vs-0.2s asymmetry from audit §1.4.</p>
+			</div>
+			<div class="chronicle-card chronicle-card--focused" tabindex="0" autofocus>
+				<span class="chronicle-state-label">Focus (tab to me)</span>
+				<h3 class="chronicle-card__title">Ring outline only</h3>
+				<p class="chronicle-card__body">Focus changes nothing about elevation. Outline is the cue. Per canon D3.</p>
+			</div>
+		</div>
+	</section>
+}
+
+// navbarEchoSection — C.3. The navbar's ::before opacity-fade mechanism
+// translated onto a card shape. Sits next to the canon-D3 card so
+// operator can compare side-by-side (same hover/press states).
+templ navbarEchoSection() {
+	<section class="chronicle-section" id="navbar-echo">
+		<h2 class="chronicle-section__title">Navbar-echo card variant</h2>
+		<p class="chronicle-section__intro">
+			Same canon-D3 base, plus the navbar's <code>::before</code> opacity-fade gradient (the load-bearing pattern operator named twice). Hover for "partial" (3-side); press for "cover" (4-side). Alpha stops translated to <code>color-mix(in oklch, …)</code> from input.css:264-308. Audit §1.4 ladder.
+		</p>
+		<div class="chronicle-section__grid">
+			<div class="chronicle-card chronicle-card--navbar-echo" tabindex="0">
+				<span class="chronicle-state-label">Try me — hover then press</span>
+				<h3 class="chronicle-card__title">Partial → cover</h3>
+				<p class="chronicle-card__body">Rest opacity 0 · hover opacity 1 (3-side at 50/45/30%) · press opacity 1 (4-side at 55/55/45/35%). Press is faster (100ms) than hover (150ms).</p>
+			</div>
+			<div class="chronicle-card chronicle-card--navbar-echo" tabindex="0">
+				<span class="chronicle-state-label">Stuck in hover (CSS only — no JS)</span>
+				<h3 class="chronicle-card__title">Inset wash</h3>
+				<p class="chronicle-card__body">Box-shadow inset wash co-occurs with the gradient — never alone. Hover left → right; the wash fades from the right edge.</p>
+			</div>
+		</div>
+	</section>
+}
+
+// selectedComparisonSection — the operator-validation crux. Two
+// selected-state variants side-by-side; operator picks one.
+templ selectedComparisonSection() {
+	<section class="chronicle-section" id="selected-comparison">
+		<h2 class="chronicle-section__title">Selected state — pick one</h2>
+		<p class="chronicle-section__intro">
+			Both variants are canon-compatible; the choice is taste. Variant A treats selection as <em>identity</em> (accent border + tint, no shadow). Variant B treats selection as <em>persistent half-hover</em> (echoes the navbar's selected-link mechanism). Whichever you prefer becomes Phase 2's binding selected treatment.
+		</p>
+		<div class="chronicle-section__grid">
+			<div class="chronicle-card" data-selected="A" tabindex="0">
+				<span class="chronicle-state-label">Variant A — canon D3</span>
+				<h3 class="chronicle-card__title">Accent border + 4% tint</h3>
+				<p class="chronicle-card__body">No shadow change. Border thickens to 1.5px in accent. Background gains 4% accent tint via <code>color-mix(in oklch)</code>.</p>
+			</div>
+			<div class="chronicle-card" data-selected="B" tabindex="0">
+				<span class="chronicle-state-label">Variant B — navbar echo</span>
+				<h3 class="chronicle-card__title">Persistent half-hover</h3>
+				<p class="chronicle-card__body">Surface lifts one level + 6% accent overlay via <code>::before</code> at opacity 0.5. Matches the navbar's persistent-active treatment.</p>
+			</div>
+		</div>
+	</section>
+}
+
+templ buttonsSection() {
+	<section class="chronicle-section" id="buttons">
+		<h2 class="chronicle-section__title">Buttons — canon D2/D4</h2>
+		<p class="chronicle-section__intro">
+			Primary uses the active accent (responds to the swatch above). Hover never spawns a shadow — brightness shifts via <code>color-mix(in oklch, accent, white 6%)</code>. Focus = ring outline only.
+		</p>
+		<div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+			<button type="button" class="chronicle-button-primary">Primary action</button>
+			<button type="button" class="chronicle-button-secondary">Secondary</button>
+			<button type="button" class="chronicle-button-ghost">Ghost</button>
+			<button type="button" class="chronicle-button-primary" disabled style="opacity: 0.5; cursor: not-allowed;">Disabled</button>
+		</div>
+	</section>
+}
+
+templ inputSection() {
+	<section class="chronicle-section" id="input">
+		<h2 class="chronicle-section__title">Input — canon D2/D4</h2>
+		<p class="chronicle-section__intro">
+			Focus = border + 2px translucent ring outline. <strong>No shadow on focus.</strong> Per canon D3.
+		</p>
+		<div style="max-width: 320px; display: flex; flex-direction: column; gap: 8px;">
+			<input type="text" class="chronicle-input" placeholder="Type to see focus state…"/>
+			<input type="text" class="chronicle-input" value="Pre-filled value"/>
+		</div>
+	</section>
+}
+
+templ popoverSection() {
+	<section class="chronicle-section" id="popover">
+		<h2 class="chronicle-section__title">Popover — canon D8 (Popover API + anchor positioning)</h2>
+		<p class="chronicle-section__intro">
+			Born with shadow (elev-3) because the surface materialised; canon D3 §"popovers / dropdowns / modals." Uses native <code>popover</code> attribute + anchor positioning where supported; feature-detected, graceful fallback.
+		</p>
+		<div style="display: flex; gap: 12px; align-items: center;">
+			<button
+				type="button"
+				class="chronicle-button-secondary chronicle-popover-anchor"
+				popovertarget="chronicle-demo-popover"
+			>Open popover</button>
+			<div
+				id="chronicle-demo-popover"
+				class="chronicle-popover"
+				popover="auto"
+				data-anchored
+			>
+				<strong style="font-size: 13px;">Popover content</strong>
+				<p style="margin: 4px 0 0 0; font-size: 12px; color: var(--chronicle-fg-muted);">
+					Anchored to the trigger via <code>position-anchor</code> where the browser supports it. Close via the button, ESC, or click-outside.
+				</p>
+			</div>
+		</div>
+	</section>
+}
+
+templ chipSection() {
+	<section class="chronicle-section" id="chips">
+		<h2 class="chronicle-section__title">Event chip — canon D2 tier overlays</h2>
+		<p class="chronicle-section__intro">
+			Verifies <code>color-mix(in oklch)</code> renders cleanly across hues. Three tiers, three colour wells, one mechanism. Calendar's tier-overlay system will consume this pattern in Phase 4.
+		</p>
+		<div style="display: flex; gap: 8px; flex-wrap: wrap;">
+			<span class="chronicle-chip" data-tier="indigo">Coronation</span>
+			<span class="chronicle-chip" data-tier="emerald">Harvest moon</span>
+			<span class="chronicle-chip" data-tier="amber">Trade summit</span>
+			<span class="chronicle-chip">Uses active accent</span>
+		</div>
+	</section>
+}
+
+templ listSection() {
+	<section class="chronicle-section" id="list">
+		<h2 class="chronicle-section__title">List item — canon D3 state-layer</h2>
+		<p class="chronicle-section__intro">
+			Hover = 4% on-surface state layer; selected = 3px accent border-left + 4% accent tint. <strong>No shadow on either state</strong> — the elevation that matters here is the surface tint shift. Per canon D3.
+		</p>
+		<div class="chronicle-list" style="max-width: 480px;">
+			<div class="chronicle-list-item" tabindex="0">First entry — plain</div>
+			<div class="chronicle-list-item" data-state="hover" tabindex="0">Second entry — frozen hover (just look)</div>
+			<div class="chronicle-list-item" data-selected="true" tabindex="0">Third entry — selected (accent border-left)</div>
+			<div class="chronicle-list-item" tabindex="0">Fourth entry — interactive (hover me)</div>
+			<div class="chronicle-list-item" tabindex="0">Fifth entry — interactive</div>
+		</div>
+	</section>
+}
+
+// drawerSection — C.2. Tests the "opens in random section in the
+// middle" fix: drawer body uses scroll-behavior: auto + JS scroll-top
+// reset on close-then-open path.
+templ drawerSection() {
+	<section class="chronicle-section" id="drawer">
+		<h2 class="chronicle-section__title">Drawer — canon D9</h2>
+		<p class="chronicle-section__intro">
+			Right-side inline drawer with card-grid reflow. Operator's earlier "opens in random section in the middle" bug should NOT reproduce — close, scroll deep, reopen; scroll resets to top. Uses View Transitions API where supported.
+		</p>
+		<button type="button" class="chronicle-button-primary" data-action="drawer-toggle">Open drawer</button>
+		<div class="chronicle-drawer-layout" data-drawer-open="false" id="chronicle-drawer-layout">
+			<div class="chronicle-section__grid" style="padding-top: 16px;">
+				<div class="chronicle-card" tabindex="0">
+					<span class="chronicle-state-label">Card A</span>
+					<h3 class="chronicle-card__title">Grid reflows when drawer opens</h3>
+					<p class="chronicle-card__body">Width shrinks to fit the drawer; transition uses the same 400ms decelerate-easing as the drawer slide.</p>
+				</div>
+				<div class="chronicle-card" tabindex="0">
+					<span class="chronicle-state-label">Card B</span>
+					<h3 class="chronicle-card__title">No visual jump</h3>
+					<p class="chronicle-card__body">The grid is the moving piece; cards themselves don't change elevation when the drawer opens.</p>
+				</div>
+			</div>
+			<aside class="chronicle-drawer" id="chronicle-drawer">
+				<header class="chronicle-drawer-header">
+					<strong>Drawer title</strong>
+					<button type="button" class="chronicle-button-ghost" data-action="drawer-close" aria-label="Close drawer">✕</button>
+				</header>
+				<div class="chronicle-drawer-body" id="chronicle-drawer-body">
+					<p style="margin: 0 0 12px 0;">Scroll down…</p>
+					for i := 1; i <= 30; i++ {
+						<p style="margin: 0 0 12px 0; font-size: 13px; color: var(--chronicle-fg-muted);">
+							Filler row { itoa(i) }. Scroll-position fix: closing and reopening this drawer should always return scroll to top, regardless of how far you scrolled before close.
+						</p>
+					}
+				</div>
+			</aside>
+		</div>
+	</section>
+}
+
+// demoScript — single inline <script> that wires the validation
+// harness, drawer behaviour, accent palette swap, and the resolved-
+// tokens display. Inline keeps the demo self-contained (the dispatch
+// says no new dependency); the script reads/writes data-* attributes
+// and CSS custom properties only.
+templ demoScript() {
+	<script>
+	(function() {
+		const root = document.querySelector('[data-chronicle-demo]');
+		if (!root) return;
+
+		const ACCENT_PALETTES = {
+			indigo:  'oklch(0.58 0.20 270)',
+			emerald: 'oklch(0.65 0.15 155)',
+			amber:   'oklch(0.78 0.16 75)',
+			rose:    'oklch(0.65 0.20 22)',
+		};
+
+		function updateTokenDisplay() {
+			const el = document.getElementById('chronicle-resolved-tokens');
+			if (!el) return;
+			const cs = getComputedStyle(root);
+			const accent = cs.getPropertyValue('--chronicle-accent').trim();
+			const surface = cs.getPropertyValue('--chronicle-surface').trim();
+			const fg = cs.getPropertyValue('--chronicle-fg').trim();
+			el.textContent = '--chronicle-accent: ' + accent + '  ·  --chronicle-surface: ' + surface + '  ·  --chronicle-fg: ' + fg;
+		}
+
+		function setPressed(group, value) {
+			root.parentElement.querySelectorAll('[data-action="' + group + '"]').forEach(function(btn) {
+				btn.setAttribute('aria-pressed', btn.dataset.value === value ? 'true' : 'false');
+			});
+		}
+
+		root.parentElement.addEventListener('click', function(ev) {
+			const target = ev.target.closest('[data-action]');
+			if (!target) return;
+			const action = target.dataset.action;
+			const value = target.dataset.value;
+			if (action === 'theme') {
+				root.dataset.chronicleDemoTheme = value;
+				setPressed('theme', value);
+				updateTokenDisplay();
+			} else if (action === 'accent') {
+				root.style.setProperty('--chronicle-accent', ACCENT_PALETTES[value] || ACCENT_PALETTES.indigo);
+				setPressed('accent', value);
+				updateTokenDisplay();
+			} else if (action === 'reduce-motion') {
+				root.dataset.chronicleDemoReduceMotion = value;
+				setPressed('reduce-motion', value);
+			} else if (action === 'drawer-toggle') {
+				toggleDrawer(true);
+			} else if (action === 'drawer-close') {
+				toggleDrawer(false);
+			}
+		});
+
+		function toggleDrawer(open) {
+			const layout = document.getElementById('chronicle-drawer-layout');
+			const body = document.getElementById('chronicle-drawer-body');
+			if (!layout || !body) return;
+			const apply = function() {
+				layout.dataset.drawerOpen = open ? 'true' : 'false';
+				if (open) body.scrollTop = 0;  // canon D9 scroll-top fix
+			};
+			// View Transitions API per canon D5 + D8, feature-detected.
+			if (open !== (layout.dataset.drawerOpen === 'true') && typeof document.startViewTransition === 'function') {
+				document.startViewTransition(apply);
+			} else {
+				apply();
+			}
+		}
+
+		// Escape closes the drawer (per canon D9 dismissal semantics).
+		document.addEventListener('keydown', function(ev) {
+			if (ev.key === 'Escape') {
+				const layout = document.getElementById('chronicle-drawer-layout');
+				if (layout && layout.dataset.drawerOpen === 'true') {
+					toggleDrawer(false);
+				}
+			}
+		});
+
+		updateTokenDisplay();
+	})();
+	</script>
+}
+
+// itoa — local small helper so the drawer body filler can render
+// indices without importing strconv into the templ. templ's
+// expression language doesn't have a built-in for this.
+func itoa(i int) string {
+	const digits = "0123456789"
+	if i == 0 {
+		return "0"
+	}
+	neg := i < 0
+	if neg {
+		i = -i
+	}
+	var b [20]byte
+	pos := len(b)
+	for i > 0 {
+		pos--
+		b[pos] = digits[i%10]
+		i /= 10
+	}
+	if neg {
+		pos--
+		b[pos] = '-'
+	}
+	return string(b[pos:])
+}
