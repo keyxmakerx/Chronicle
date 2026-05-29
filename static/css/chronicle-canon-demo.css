@@ -1022,6 +1022,163 @@
     background: var(--chronicle-accent); border-color: var(--chronicle-accent); color: var(--chronicle-accent-fg);
   }
 
+  /* ============================================================
+   * Self-demonstrating variant previews (Phase 1.9 follow-up)
+   *
+   * Each preview box renders a sample styled to its own option so
+   * the operator sees the difference at a glance, without clicking
+   * Apply. The previous inert "label in an empty box" was the core
+   * "nothing is happening" complaint.
+   * ============================================================ */
+  .chronicle-variant-demo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 40px;
+  }
+  .chronicle-variant-demo--fill {
+    border-radius: var(--chronicle-radius-sm);
+    border: 1px solid var(--chronicle-border-strong);
+    min-height: 40px;
+  }
+  .chronicle-variant-demo__chip {
+    font-size: 10px;
+    color: var(--chronicle-fg-muted);
+    padding: 2px 6px;
+    background: color-mix(in oklch, var(--chronicle-surface-card), transparent 20%);
+    border-radius: var(--chronicle-radius-full);
+  }
+  .chronicle-variant-demo__swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--chronicle-radius-full);
+    display: inline-block;
+    border: 1px solid var(--chronicle-border-strong);
+  }
+  .chronicle-variant-demo__btn {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 5px 12px;
+    border-radius: var(--chronicle-radius);
+    display: inline-flex;
+    align-items: center;
+  }
+  /* radius + shadow sample box */
+  .chronicle-variant-demo__box {
+    width: 44px;
+    height: 30px;
+    display: inline-block;
+    background: var(--chronicle-surface-raised);
+    border: 1px solid var(--chronicle-border-strong);
+  }
+  /* hover sample — the difference is FROZEN-ON so it's visible at
+   * rest; hovering re-triggers the transition for the live feel. */
+  .chronicle-variant-demo__hover {
+    font-size: 11px;
+    color: var(--chronicle-fg);
+    padding: 7px 14px;
+    border-radius: var(--chronicle-radius);
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border-strong);
+    cursor: pointer;
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      box-shadow       var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      transform        var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-variant-demo__hover--lift:hover {
+    background: var(--chronicle-surface-raised);
+    border-color: var(--chronicle-border-strong);
+    box-shadow: 0 6px 16px -4px oklch(0 0 0 / 0.35);
+    transform: translateY(-2px);
+  }
+  .chronicle-variant-demo__hover--navbar {
+    position: relative;
+    overflow: hidden;
+  }
+  .chronicle-variant-demo__hover--navbar::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: var(--chronicle-accent);
+    opacity: 0;
+    transition: opacity var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-variant-demo__hover--navbar:hover::after { opacity: 1; }
+  .chronicle-variant-demo__hover--navbar:hover { background: var(--chronicle-surface-raised); }
+  .chronicle-variant-demo__hover--border:hover {
+    border-color: var(--chronicle-accent);
+  }
+  .chronicle-variant-demo__hover--glow:hover {
+    border-color: color-mix(in oklch, var(--chronicle-accent), transparent 40%);
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--chronicle-accent), transparent 60%),
+                0 4px 16px -4px color-mix(in oklch, var(--chronicle-accent), transparent 55%);
+  }
+  /* motion sample — hover slides the pill; duration set inline per value */
+  .chronicle-variant-demo__motion {
+    font-size: 11px;
+    color: var(--chronicle-fg);
+    padding: 7px 14px;
+    border-radius: var(--chronicle-radius);
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border-strong);
+    cursor: pointer;
+    transition-property: transform, background-color;
+    transition-timing-function: var(--chronicle-ease-standard);
+  }
+  .chronicle-variant-demo__motion:hover {
+    transform: translateX(10px);
+    background: var(--chronicle-surface-raised);
+  }
+  /* density sample — two faux text lines with per-value padding */
+  .chronicle-variant-demo--density {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    width: 100%;
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border-strong);
+    border-radius: var(--chronicle-radius-sm);
+  }
+  .chronicle-variant-demo--density-compact   { padding: 4px 8px; }
+  .chronicle-variant-demo--density-comfortable { padding: 10px 12px; }
+  .chronicle-variant-demo--density-spacious   { padding: 18px 16px; }
+  .chronicle-variant-demo__line {
+    height: 6px;
+    border-radius: var(--chronicle-radius-full);
+    background: color-mix(in oklch, var(--chronicle-fg), transparent 70%);
+  }
+  .chronicle-variant-demo__line--short { width: 60%; }
+  /* selected-state sample — frozen-selected per variant */
+  .chronicle-variant-demo__sel {
+    font-size: 11px;
+    color: var(--chronicle-fg);
+    padding: 8px 16px;
+    border-radius: var(--chronicle-radius);
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border-strong);
+    position: relative;
+    overflow: hidden;
+  }
+  .chronicle-variant-demo__sel--A {
+    border: 1.5px solid var(--chronicle-accent);
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 8%);
+  }
+  .chronicle-variant-demo__sel--B {
+    background: var(--chronicle-surface-raised);
+  }
+  .chronicle-variant-demo__sel--B::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: color-mix(in oklch, transparent, var(--chronicle-accent) 12%);
+    opacity: 0.5;
+  }
+
   /* "Your Decisions" sticky panel */
   .chronicle-decisions {
     position: fixed;
