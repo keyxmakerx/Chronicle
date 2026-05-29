@@ -117,8 +117,20 @@ func TestExtensionsHubFragment_SingleElementArray(t *testing.T) {
 	if !strings.Contains(html, `data-extension-enabled="true"`) {
 		t.Errorf("enabled-state attr missing for enabled card; got:\n%s", html)
 	}
-	if !strings.Contains(html, "Dashboard coming shortly") {
-		t.Errorf("Phase-2 expand affordance slot missing on HasDashboard card; got:\n%s", html)
+	// Phase 2: the expand affordance is now wired to the hub
+	// fragment route. The button hx-gets /extensions/calendar/dashboard
+	// into the panel below the catalog (one-card-at-a-time swap).
+	if !strings.Contains(html, `data-extension-dashboard-expand`) {
+		t.Errorf("expand affordance missing on HasDashboard card; got:\n%s", html)
+	}
+	if !strings.Contains(html, `hx-get="/campaigns/camp-1/extensions/calendar/dashboard"`) {
+		t.Errorf("expand affordance should hx-get the calendar dashboard fragment; got:\n%s", html)
+	}
+	if !strings.Contains(html, `hx-target="#extensions-hub-dashboard-panel"`) {
+		t.Errorf("expand affordance should target the panel slot; got:\n%s", html)
+	}
+	if !strings.Contains(html, "Open dashboard") {
+		t.Errorf("expand affordance copy should read 'Open dashboard'; got:\n%s", html)
 	}
 	// Toggle should target the existing addons endpoint with
 	// redirect_to=extensions-hub so the in-page refresh fires.
@@ -151,9 +163,9 @@ func TestExtensionsHubFragment_MixedEnabledDisabledAndNotInstalled(t *testing.T)
 	if !strings.Contains(html, "Soon</span>") {
 		t.Errorf("uninstalled addon should render Soon badge; got:\n%s", html)
 	}
-	// Only the HasDashboard=true card carries the expand slot.
-	if c := strings.Count(html, "Dashboard coming shortly"); c != 1 {
-		t.Errorf("expand-slot count = %d, want 1 (only HasDashboard cards); got:\n%s", c, html)
+	// Only the HasDashboard=true card carries the expand affordance.
+	if c := strings.Count(html, "data-extension-dashboard-expand"); c != 1 {
+		t.Errorf("expand-affordance count = %d, want 1 (only HasDashboard cards); got:\n%s", c, html)
 	}
 }
 

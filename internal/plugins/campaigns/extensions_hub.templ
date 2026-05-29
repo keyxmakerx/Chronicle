@@ -149,19 +149,27 @@ templ extensionsHubCard(cc *CampaignContext, addon PluginHubAddon, csrfToken str
 			</div>
 			@extensionsHubToggle(cc, addon, csrfToken)
 		</div>
-		// Dashboard expand-affordance slot. Phase 2 replaces the
-		// disabled placeholder with an active hx-get button.
+		// Dashboard expand affordance (Phase 2). hx-get loads the
+		// extension's inline dashboard into the panel below the
+		// catalog; one-card-expanded-at-a-time UX via hx-target
+		// (later expand replaces panel content). Disabled
+		// extensions still render the affordance — the fragment
+		// route resolves to the disabled placeholder so the
+		// operator sees explicit feedback rather than an unclickable
+		// button.
 		if addon.HasDashboard {
 			<div class="mt-3 pt-3 border-t border-edge-light flex items-center justify-end">
 				<button
 					type="button"
-					class="text-xs text-fg-muted px-2 py-1 rounded cursor-not-allowed"
-					disabled
+					class="text-xs text-accent hover:underline px-2 py-1 rounded transition-colors duration-micro"
+					hx-get={ fmt.Sprintf("/campaigns/%s/extensions/%s/dashboard", cc.Campaign.ID, addon.Slug) }
+					hx-target="#extensions-hub-dashboard-panel"
+					hx-swap="innerHTML"
 					data-extension-dashboard-expand
-					title="Dashboard expand wires in Phase 2"
+					data-extension-dashboard-slug={ addon.Slug }
 				>
 					<i class="fa-solid fa-table-columns text-[10px] mr-1"></i>
-					Dashboard coming shortly
+					Open dashboard
 				</button>
 			</div>
 		}

@@ -71,6 +71,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// redirect_to=extensions-hub.
 	cg.GET("/extensions", h.ExtensionsHub, RequireRole(RoleOwner))
 	cg.GET("/extensions/fragment", h.ExtensionsHubFragmentAPI, RequireRole(RoleOwner))
+	// C-EXT-HUB Phase 2: per-extension inline dashboard fragment.
+	// Hub cards with HasDashboard=true hx-get this URL on expand;
+	// disabled / unknown-slug paths render safe placeholders inside
+	// the panel (no 4xx surfaces; matches audit §1.4 nil-safety).
+	cg.GET("/extensions/:slug/dashboard", h.ExtensionDashboardFragmentAPI, RequireRole(RoleOwner))
 
 	// Sidebar config API (Owner only).
 	cg.GET("/sidebar-config", h.GetSidebarConfig, RequireRole(RoleOwner))

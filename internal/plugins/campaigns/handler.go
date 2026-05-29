@@ -169,6 +169,11 @@ type Handler struct {
 	extraSettingsTabs    []func(*CampaignContext) SettingsTab
 	baseURL              string
 	contentPacksRenderer ContentPacksCardRenderer
+	// C-EXT-HUB Phase 2: per-extension inline dashboard registry +
+	// enable-state check. Both nil-tolerant; the hub fragment route
+	// renders safe placeholders when either is unwired.
+	extensionDashboardFactories []func(*CampaignContext) ExtensionDashboard
+	extensionEnableChecker      ExtensionEnableChecker
 }
 
 // NewHandler creates a new campaign handler.

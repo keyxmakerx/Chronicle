@@ -95,3 +95,51 @@ func (h *Handler) ExtensionsHubFragmentAPI(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK,
 		ExtensionsHubFragment(cc, addons, csrfToken))
 }
+
+// ExtensionDashboardFragmentAPI returns the inline dashboard for a
+// single extension slug as an HTMX fragment. C-EXT-HUB Phase 2.
+//
+// Resolution rules — all paths render without panicking and without
+// surfacing a 4xx to the operator, mirroring the audit §1.4 nil-safe
+// design philosophy:
+//
+//   - Unknown slug      → extensionDashboardMissing placeholder
+//   - Disabled in store → extensionDashboardDisabled placeholder
+//   - Enabled + known   → registered Content from the factory
+//
+// Owner-only by route gating; per-request enable state is fetched
+// via the injected ExtensionEnableChecker. A nil checker renders as
+// `enabled` (test fixtures + early init); the production checker is
+// wired from internal/app/routes.go.
+func (h *Handler) ExtensionDashboardFragmentAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	slug := c.Param("slug")
+	if slug == "" {
+		return apperror.NewBadRequest("slug is required")
+	}
+
+	dashboards := h.BuildExtensionDashboards(cc)
+
+	enabled := true
+	if h.extensionEnableChecker != nil {
+		got, err := h.extensionEnableChecker.IsEnabledForCampaign(c.Request().Context(), cc.Campaign.ID, slug)
+		if err != nil {
+			slog.Warn("extension dashboard: enable check failed",
+				slog.String("slug", slug),
+				slog.String("campaign_id", cc.Campaign.ID),
+				slog.Any("error", err),
+			)
+			// Fail-open so a transient store error doesn't blank the
+			// operator's view; the catalog toggle is the real gate.
+			enabled = true
+		} else {
+			enabled = got
+		}
+	}
+
+	return middleware.Render(c, http.StatusOK,
+		extensionDashboardSwitch(cc, slug, enabled, dashboards))
+}

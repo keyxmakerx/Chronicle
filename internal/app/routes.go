@@ -2191,6 +2191,17 @@ func (a *App) RegisterRoutes() {
 	// TierDefinitionsLister interface via its existing
 	// GetEventTierDefinitions method.
 	calendarHandler.SetTierDefinitionsLister(campaignService)
+	// C-EXT-HUB Phase 2: register the calendar inline dashboard with
+	// the Extensions hub. Mirrors ai_workspace.SettingsTabFactory at
+	// the campaignHandler.RegisterSettingsTab call below. Per-request
+	// data load lives inside the factory closure (see
+	// internal/plugins/calendar/extension_dashboard.go).
+	campaignHandler.RegisterExtensionDashboard(calendarHandler.ExtensionDashboardFactory())
+	// And the enable-state checker the hub fragment route consults
+	// to render the disabled-extension placeholder. addonService
+	// already exposes IsEnabledForCampaign with the canonical narrow
+	// interface shape entities + syncapi use.
+	campaignHandler.SetExtensionEnableChecker(addonService)
 	timelineHandler.SetAuditService(auditService)
 	entityHandler.SetTagFetcher(&entityTagFetcherAdapter{svc: tagService})
 	entityHandler.SetTimelineSearcher(timelineSvc)

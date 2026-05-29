@@ -1,0 +1,178 @@
+// calendar_extension_dashboard.templ — C-EXT-HUB Phase 2 calendar
+// inline dashboard card.
+//
+// Renders inside the Extensions hub's panel below the catalog when
+// the operator expands the Calendar card. This is — per the audit
+// + Phase 2 dispatch — the operator's first encounter with V2
+// styling. Vocabulary deliberately matches calendar_v2:
+// `.card-elev`, `.lift-hover`, `.tier-transition`, tokens for color
+// + motion + elevation, reduced-motion compliant via the global
+// guard at static/css/input.css:31-42.
+//
+// Three render branches:
+//   - HasActive=false              → empty-state + create-cal CTA
+//   - HasActive=true, no events    → "no upcoming events" body + Open CTA
+//   - HasActive=true, events>0     → active-cal header + event list + Open CTA
+//
+// All branches end with the "Open V2 Calendar" CTA so the operator
+// can always jump to the full V2 surface from the hub card; that's
+// the door the stop-the-line closed.
+
+package calendar
+
+import (
+	"fmt"
+	"strconv"
+)
+
+// calendarExtensionDashboard is the entry component the campaigns
+// plugin wires via ExtensionDashboardFactory().
+templ calendarExtensionDashboard(data calendarExtensionDashboardData) {
+	<div class="space-y-4" data-cal-ext-dashboard>
+		if !data.HasActive {
+			@calendarExtensionDashboardEmpty(data.CampaignID)
+		} else {
+			@calendarExtensionDashboardActive(data)
+		}
+	</div>
+}
+
+// calendarExtensionDashboardEmpty renders the "no calendar
+// configured" branch (zero-calendar campaign). CTA points at the
+// V1 setup page, which is the only working calendar-create flow
+// today (V2 create may not exist yet — surfaced in the Phase 2
+// dispatch stop-and-flag list).
+templ calendarExtensionDashboardEmpty(campaignID string) {
+	<div class="text-center py-8">
+		<i class="fa-solid fa-calendar-plus text-3xl text-accent/70 mb-3" aria-hidden="true"></i>
+		<p class="text-sm text-fg mb-1">No calendar configured for this campaign.</p>
+		<p class="text-xs text-fg-muted mb-4">Create a calendar to track in-world dates, events, seasons, and eras.</p>
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", campaignID)) }
+			class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors duration-micro"
+		>
+			<i class="fa-solid fa-plus text-[10px]"></i>
+			Create a calendar
+		</a>
+	</div>
+}
+
+// calendarExtensionDashboardActive renders the active-calendar
+// summary + upcoming events + Open V2 Calendar CTA.
+templ calendarExtensionDashboardActive(data calendarExtensionDashboardData) {
+	<div class="space-y-4">
+		// Header: calendar name + current in-world date.
+		<div class="flex items-center justify-between gap-3 flex-wrap">
+			<div class="min-w-0">
+				<div class="flex items-center gap-2">
+					<i class="fa-solid fa-calendar-days text-accent" aria-hidden="true"></i>
+					<h4 class="text-sm font-semibold text-fg truncate">
+						{ data.Active.Name }
+					</h4>
+				</div>
+				<p class="text-xs text-fg-muted mt-0.5">
+					{ formatCalendarCurrentDate(data.Active) }
+				</p>
+			</div>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2", data.CampaignID)) }
+				class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors duration-micro"
+				data-extension-dashboard-open
+			>
+				Open V2 Calendar
+				<i class="fa-solid fa-arrow-right text-[10px]"></i>
+			</a>
+		</div>
+		// Upcoming events.
+		<div>
+			<h5 class="text-xs font-semibold uppercase tracking-wider text-fg-secondary mb-2">
+				Upcoming
+			</h5>
+			if len(data.Upcoming) == 0 {
+				<p class="text-xs text-fg-muted italic">
+					No upcoming events.
+				</p>
+			} else {
+				<ul class="divide-y divide-edge-light card">
+					for _, ev := range data.Upcoming {
+						@calendarExtensionDashboardEvent(data, ev)
+					}
+				</ul>
+			}
+		</div>
+	</div>
+}
+
+// calendarExtensionDashboardEvent renders one upcoming-event row.
+// Tier-colored chip per Wave 1.6.5 plumbing; falls back to neutral
+// styling when the event has no tier or the campaign hasn't
+// configured tier definitions.
+templ calendarExtensionDashboardEvent(data calendarExtensionDashboardData, ev Event) {
+	<li class="flex items-center gap-3 px-3 py-2 text-sm">
+		<span
+			class={ "inline-block w-2 h-2 rounded-full shrink-0 tier-transition",
+				templ.KV("bg-accent", ev.Tier == nil) }
+			style={ extensionDashboardEventChipStyle(ev, data.TierDefinitions) }
+			aria-hidden="true"
+		></span>
+		<div class="flex-1 min-w-0">
+			<div class="text-fg truncate">{ ev.Name }</div>
+			<div class="text-xs text-fg-muted">
+				{ formatExtDashboardEventDate(data.Active, ev) }
+			</div>
+		</div>
+	</li>
+}
+
+// formatCalendarCurrentDate renders the calendar's stored in-world
+// "today" — same fields handler_v2.go uses to seed cursor defaults.
+func formatCalendarCurrentDate(cal *Calendar) string {
+	if cal == nil {
+		return ""
+	}
+	monthName := ""
+	if cal.CurrentMonth >= 1 && cal.CurrentMonth <= len(cal.Months) {
+		monthName = cal.Months[cal.CurrentMonth-1].Name
+	}
+	if monthName == "" {
+		return strconv.Itoa(cal.CurrentYear)
+	}
+	return fmt.Sprintf("%s %d, %d", monthName, cal.CurrentDay, cal.CurrentYear)
+}
+
+// formatExtDashboardEventDate renders an event's date in the same calendar's
+// month vocabulary. Cheap; templ-local helper.
+func formatExtDashboardEventDate(cal *Calendar, ev Event) string {
+	if cal == nil {
+		return strconv.Itoa(ev.Year)
+	}
+	monthName := ""
+	if ev.Month >= 1 && ev.Month <= len(cal.Months) {
+		monthName = cal.Months[ev.Month-1].Name
+	}
+	if monthName == "" {
+		return fmt.Sprintf("%d-%02d-%02d", ev.Year, ev.Month, ev.Day)
+	}
+	return fmt.Sprintf("%s %d, %d", monthName, ev.Day, ev.Year)
+}
+
+// extensionDashboardEventChipStyle returns an inline style string
+// for the tier chip: the campaign-configured color for the event's
+// tier, or empty (Tailwind class kicks in) when the tier isn't
+// configured. Matches the V2 event-card tier-color pattern at the
+// chip level so the dashboard reads as a calendar_v2 surface.
+//
+// Defensive against nil tier defs (Wave 1.6.5 surface) and unknown
+// tier slugs — fallback empty string never breaks the templ render.
+func extensionDashboardEventChipStyle(ev Event, defs []TierDefinitionAlias) string {
+	if ev.Tier == nil || *ev.Tier == "" {
+		return ""
+	}
+	slug := *ev.Tier
+	for _, d := range defs {
+		if d.Slug == slug && d.Color != "" {
+			return "background-color: " + d.Color + ";"
+		}
+	}
+	return ""
+}
