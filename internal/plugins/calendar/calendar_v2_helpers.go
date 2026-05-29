@@ -7,6 +7,7 @@ package calendar
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/a-h/templ"
 
@@ -1186,6 +1187,17 @@ func isMultiDayEvent(e Event) bool {
 // tier definitions (PR #358 event_tier_definitions field). Visibility
 // is "public" iff Event.Visibility == "everyone".
 func eventToCardData(e Event, cal *Calendar) calwidget.EventCardData {
+	return eventToCardDataWithTiers(e, cal, nil)
+}
+
+// eventToCardDataWithTiers extends the projection with campaign-aware
+// tier resolution. Looks up e.Tier (the new field added in Wave 1.6
+// Phase 1) against the supplied tier definitions; sets TierLabel +
+// TierColor on the resulting EventCardData when resolved, falls back
+// to platform default (Tier: TierStandard) when nil or unresolved.
+// A reference to a deleted tier slug logs slog.Warn so operators
+// can clean up but doesn't crash the render.
+func eventToCardDataWithTiers(e Event, cal *Calendar, tiers []TierDefinitionAlias) calwidget.EventCardData {
 	color := ""
 	cat := ""
 	if e.Color != nil && *e.Color != "" {
@@ -1218,17 +1230,72 @@ func eventToCardData(e Event, cal *Calendar) calwidget.EventCardData {
 	if cal != nil && e.Month >= 1 && e.Month <= len(cal.Months) {
 		startLabel = cal.Months[e.Month-1].Name + " " + itoaCal(e.Day)
 	}
+
+	tier := calwidget.TierStandard
+	tierLabel := ""
+	tierColor := ""
+	if e.Tier != nil && *e.Tier != "" {
+		found := false
+		for _, td := range tiers {
+			if td.Slug == *e.Tier {
+				tier = mapProminenceToTier(td.Prominence)
+				tierLabel = td.Name
+				tierColor = td.Color
+				found = true
+				break
+			}
+		}
+		if !found {
+			slog.Warn("event references unknown tier slug; falling back to platform default",
+				slog.String("event_id", e.ID),
+				slog.String("tier_slug", *e.Tier),
+			)
+		}
+	}
+
 	return calwidget.EventCardData{
 		ID:              e.ID,
 		Name:            e.Name,
 		CategoryColor:   color,
 		CategoryName:    cat,
-		Tier:            calwidget.TierStandard,
+		Tier:            tier,
+		TierLabel:       tierLabel,
+		TierColor:       tierColor,
 		IsPublic:        e.Visibility == "everyone",
 		DescriptionHTML: desc,
 		StartLabel:      startLabel,
 		TimeLabel:       timeLabel,
 	}
+}
+
+// TierDefinitionAlias is the calendar-plugin-side view of campaigns.
+// TierDefinition. Kept local so the calendar plugin's helpers don't
+// import campaigns directly (per Chronicle plugin-isolation
+// convention). Handler-layer code copies from the campaigns service
+// into this shape before calling the projection.
+type TierDefinitionAlias struct {
+	Slug       string
+	Name       string
+	Color      string
+	Prominence int
+}
+
+// mapProminenceToTier collapses the 0-100 campaign prominence into
+// the widget's three-level enum:
+//   - 0..33  → TierMinor (subdued render)
+//   - 34..66 → TierStandard (default)
+//   - 67..100 → TierMajor (accent + elevation)
+//
+// The boundary numbers fall on natural thirds; future iterations can
+// widen the bands if operator-defined prominence patterns warrant.
+func mapProminenceToTier(prominence int) calwidget.Tier {
+	if prominence >= 67 {
+		return calwidget.TierMajor
+	}
+	if prominence <= 33 {
+		return calwidget.TierMinor
+	}
+	return calwidget.TierStandard
 }
 
 // fmtTimeDigits formats an hour:minute pair as two-digit "HH:MM".

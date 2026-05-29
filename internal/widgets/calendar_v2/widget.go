@@ -53,6 +53,13 @@ type EventCardData struct {
 	CategoryColor  string // hex; empty for no left bar
 	CategoryName   string // shown as chip in Standard+ density
 	Tier           Tier   // defaults to TierStandard if empty
+	// TierLabel + TierColor are the campaign-aware tier overlay
+	// (Wave 1.6 §D). When non-empty, the widget renders the
+	// campaign-defined tier label in the badge instead of the
+	// platform prominence name; ribbon tint uses TierColor over
+	// CategoryColor. Empty fields → platform-default rendering.
+	TierLabel       string
+	TierColor       string
 	IsPublic       bool   // controls visibility lock icon
 	DescriptionHTML string // sanitized HTML; rendered in Detailed density
 	StartLabel     string // e.g. "Mirtul 15"

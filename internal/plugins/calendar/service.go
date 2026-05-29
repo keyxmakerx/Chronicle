@@ -1146,6 +1146,7 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID string, in
 		Visibility:               input.Visibility,
 		VisibilityRules:          input.VisibilityRules,
 		Category:                 input.Category,
+		Tier:                     input.Tier,
 		Color:                    input.Color,
 		Icon:                     input.Icon,
 		AllDay:                   input.AllDay,
@@ -1287,6 +1288,11 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 	}
 	if input.Category != nil {
 		evt.Category = input.Category
+	}
+	// Tier nil-preserve (Wave 1.6 §D): nil leaves existing tier
+	// untouched; explicit empty-string slug clears to platform default.
+	if input.Tier != nil {
+		evt.Tier = input.Tier
 	}
 	if input.Color != nil {
 		evt.Color = input.Color

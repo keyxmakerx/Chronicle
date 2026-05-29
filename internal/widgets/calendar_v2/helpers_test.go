@@ -210,3 +210,22 @@ func TestLeftBarColor_FallsBackToVariable(t *testing.T) {
 		t.Errorf("explicit color should pass through; got %q", got)
 	}
 }
+
+// --- TierLabel + TierColor overlay fields (Wave 1.6 §D) ---
+
+func TestEventCardData_TierOverlayFieldsExist(t *testing.T) {
+	// Struct-level sanity that TierLabel + TierColor are available
+	// on the widget's EventCardData for campaign-aware overlay use.
+	data := EventCardData{
+		ID: "e1", Name: "X",
+		Tier:      TierMajor,
+		TierLabel: "Legendary",
+		TierColor: "#ff8800",
+	}
+	if data.TierLabel != "Legendary" {
+		t.Errorf("TierLabel field round-trip failed; got %q", data.TierLabel)
+	}
+	if data.TierColor != "#ff8800" {
+		t.Errorf("TierColor field round-trip failed; got %q", data.TierColor)
+	}
+}
