@@ -82,15 +82,33 @@ type AuditLogger interface {
 	LogEvent(ctx context.Context, campaignID, userID, action string, details map[string]any) error
 }
 
-// PluginHubAddon is a minimal addon representation for the plugin hub page.
+// PluginHubAddon is a minimal addon representation for the plugin hub page
+// and the C-EXT-HUB top-level Extensions hub.
+//
+// HasDashboard / HasEntitySetup are populated by addonListerAdapter from a
+// slug-keyed capability table in extensions_hub.go. They drive the
+// Extensions hub's per-card affordances:
+//   - HasDashboard=true cards gain an "Open dashboard" expand button (Phase 2
+//     wires the inline-dashboard fragment swap for slugs where this is true).
+//   - HasEntitySetup=true is a Phase 4 marker; surfaced in the catalog now so
+//     Phase 4's per-entity binding card can target it without a second pass.
+//
+// The Features Settings tab + the older /campaigns/:id/plugins page also
+// consume PluginHubAddon; for those surfaces the new flags are unused and
+// safely zero. The C-EXT-HUB-PHASE-1 dispatch (§"Catalog + Content-Packs-as-
+// card") chose this struct over the admin-side `PluginInfo` registry because
+// `ListForPluginHub` is already the operator-facing catalog; carrying the
+// capability flags here keeps a single source of truth.
 type PluginHubAddon struct {
-	AddonID   int
-	Slug      string
-	Name      string
-	Icon      string
-	Category  string
-	Enabled   bool
-	Installed bool // Whether backing code exists (for showing Coming Soon vs toggle).
+	AddonID        int
+	Slug           string
+	Name           string
+	Icon           string
+	Category       string
+	Enabled        bool
+	Installed      bool // Whether backing code exists (for showing Coming Soon vs toggle).
+	HasDashboard   bool
+	HasEntitySetup bool
 }
 
 // AddonLister lists addons for the plugin hub page. Avoids importing the addons
@@ -148,8 +166,9 @@ type Handler struct {
 	// Each factory is invoked per-request with the live
 	// CampaignContext so plugin-side tab content can bind
 	// cc.Campaign.ID into form URLs and similar.
-	extraSettingsTabs []func(*CampaignContext) SettingsTab
-	baseURL           string
+	extraSettingsTabs    []func(*CampaignContext) SettingsTab
+	baseURL              string
+	contentPacksRenderer ContentPacksCardRenderer
 }
 
 // NewHandler creates a new campaign handler.
@@ -384,7 +403,7 @@ func (h *Handler) Update(c echo.Context) error {
 		errMsg := apperror.UserMessage(err, "failed to update campaign")
 		csrfToken := middleware.GetCSRFToken(c)
 		transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
-		tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, nil, false)
+		tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, false)
 		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, errMsg, "general", tabs))
 	}
 
@@ -913,25 +932,29 @@ func (h *Handler) Settings(c echo.Context) error {
 		systemOptions = h.systemLister.ListSystems()
 	}
 
-	// Fetch addons for the Features tab (owner only).
-	var addons []PluginHubAddon
-	if cc.MemberRole >= RoleOwner && h.addonLister != nil {
-		addons, _ = h.addonLister.ListForPluginHub(ctx, cc.Campaign.ID)
-	}
+	// C-EXT-HUB Phase 1: the Features tab (which loaded the addons
+	// list here) retired in this PR; per-campaign feature toggles
+	// moved to the top-level Extensions hub at
+	// `/campaigns/:id/extensions`. The addons-store load goes with
+	// the tab — no remaining built-in tab needs it.
 
-	tabs := h.visibleSettingsTabs(cc, transfer, members, csrfToken, systemOptions, addons, smtpConfigured)
+	tabs := h.visibleSettingsTabs(cc, transfer, members, csrfToken, systemOptions, smtpConfigured)
 	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, "", activeTab, tabs))
 }
 
-// PluginHub renders the campaign plugin hub page, showing all enabled
-// addons with quick links to their main pages.
-// GET /campaigns/:id/plugins — redirects to Settings > Features tab.
+// PluginHub renders the campaign plugin hub page.
+// GET /campaigns/:id/plugins — historically redirected to Settings >
+// Features tab. C-EXT-HUB Phase 1 retired the Features tab and moved
+// the per-campaign feature catalog to the top-level Extensions hub at
+// `/campaigns/:id/extensions`; this redirect updates accordingly.
+// Sub-fragment route (`/plugins/fragment`) stays for any HTMX
+// consumers still pointed at it.
 func (h *Handler) PluginHub(c echo.Context) error {
 	cc := GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings?tab=features")
+	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/extensions")
 }
 
 // PluginHubFragment returns the plugin hub list content as an HTMX fragment.
@@ -1476,7 +1499,7 @@ func (h *Handler) TransferForm(c echo.Context) error {
 
 	transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)
-	tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, nil, false)
+	tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, false)
 	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, "", "general", tabs))
 }
 
@@ -1498,7 +1521,7 @@ func (h *Handler) Transfer(c echo.Context) error {
 		transfer, _ := h.service.GetPendingTransfer(c.Request().Context(), cc.Campaign.ID)
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := apperror.UserMessage(err, "failed to initiate transfer")
-		tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, nil, false)
+		tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, nil, false)
 		return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, errMsg, "general", tabs))
 	}
 

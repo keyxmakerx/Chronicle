@@ -39,9 +39,14 @@ type builtInTabSpec struct {
 // now; the ai_workspace plugin registers its replacement at
 // SortOrder 55 via campaigns.RegisterSettingsTab. See
 // TestRegisterSettingsTab_MergesAndSorts for the merged-order pin.
+//
+// C-EXT-HUB Phase 1 retired the "features" tab (slot 20) — per-
+// campaign feature toggles moved to the top-level Extensions hub
+// at /campaigns/:id/extensions. Slot 20 is intentionally vacant; a
+// regression pin (TestSettingsTabs_FeaturesTabRetired) catches
+// accidental re-registration.
 var builtInTabs = []builtInTabSpec{
 	{"general", RolePlayer},
-	{"features", RoleOwner},
 	{"people", RolePlayer},
 	{"integrations", RolePlayer},
 	{"activity", RolePlayer},
@@ -60,7 +65,7 @@ func TestSettingsTabs_OwnerSeesAllSixInOrder(t *testing.T) {
 	h := &Handler{}
 	cc := ctxWithRole(RoleOwner)
 
-	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, nil, false)
+	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, false)
 	if len(got) != len(builtInTabs) {
 		t.Fatalf("expected %d built-in tabs for owner, got %d: %+v",
 			len(builtInTabs), len(got), tabIDs(got))
@@ -75,14 +80,16 @@ func TestSettingsTabs_OwnerSeesAllSixInOrder(t *testing.T) {
 	}
 }
 
-// TestSettingsTabs_PlayerDropsOwnerOnlyTabs pins the pre-refactor
-// gating: Features + AI Export are owner-only; everything else is
-// member-visible.
-func TestSettingsTabs_PlayerDropsOwnerOnlyTabs(t *testing.T) {
+// TestSettingsTabs_PlayerSeesAllBuiltIns — after the Phase-1
+// retirement of the Features tab there are no owner-only built-in
+// tabs left, so a player viewer sees the same four built-ins as an
+// owner viewer. Plugin-contributed tabs (e.g. AI Workspace) may still
+// gate on RoleOwner; those are tested separately.
+func TestSettingsTabs_PlayerSeesAllBuiltIns(t *testing.T) {
 	h := &Handler{}
 	cc := ctxWithRole(RolePlayer)
 
-	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, nil, false)
+	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, false)
 	gotIDs := tabIDs(got)
 
 	wantIDs := []string{"general", "people", "integrations", "activity"}
@@ -94,30 +101,24 @@ func TestSettingsTabs_PlayerDropsOwnerOnlyTabs(t *testing.T) {
 			t.Errorf("player tab[%d]=%q, want %q (full list: %v)", i, gotIDs[i], want, gotIDs)
 		}
 	}
-	for _, id := range gotIDs {
-		if id == "features" {
-			t.Errorf("player leaked owner-only tab %q", id)
-		}
-	}
 }
 
-// TestSettingsTabs_ScribeMatchesOwnerMinusOwnerGates — Scribe role
-// sits between Player and Owner; should see the same four
-// player-visible tabs (no owner-only gate clears for Scribe in the
-// pre-refactor templ).
-func TestSettingsTabs_ScribeMatchesOwnerMinusOwnerGates(t *testing.T) {
+// TestSettingsTabs_FeaturesTabRetired is the C-EXT-HUB Phase 1
+// regression pin: the "features" tab must NOT appear in any viewer
+// role's tab list. If a future change accidentally re-adds it, the
+// Settings page would carry a duplicate of the Extensions hub's
+// per-campaign feature toggles — confusing and inconsistent.
+func TestSettingsTabs_FeaturesTabRetired(t *testing.T) {
 	h := &Handler{}
-	cc := ctxWithRole(RoleScribe)
-
-	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, nil, false)
-	for _, tab := range got {
-		if tab.ID == "features" {
-			t.Errorf("scribe leaked owner-only tab %q (pre-refactor templ gated this on >= RoleOwner)", tab.ID)
+	for _, role := range []Role{RolePlayer, RoleScribe, RoleOwner} {
+		cc := ctxWithRole(role)
+		got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, false)
+		for _, tab := range got {
+			if tab.ID == "features" {
+				t.Errorf("role=%d: 'features' tab leaked back into built-ins; "+
+					"per-campaign feature toggles must stay on the Extensions hub", role)
+			}
 		}
-	}
-	wantCount := 4 // general, people, integrations, activity
-	if len(got) != wantCount {
-		t.Errorf("scribe should see %d tabs, got %d: %v", wantCount, len(got), tabIDs(got))
 	}
 }
 
@@ -138,9 +139,12 @@ func TestRegisterSettingsTab_MergesAndSorts(t *testing.T) {
 	})
 
 	cc := ctxWithRole(RoleOwner)
-	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, nil, false)
+	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, false)
 	gotIDs := tabIDs(got)
-	want := []string{"general", "features", "people", "integrations", "ai-workspace", "activity"}
+	// "features" (slot 20) retired in C-EXT-HUB Phase 1; the merge
+	// still lands ai-workspace at 55, between integrations (40) and
+	// activity (60).
+	want := []string{"general", "people", "integrations", "ai-workspace", "activity"}
 	if len(gotIDs) != len(want) {
 		t.Fatalf("merged tabs len=%d, want %d: got %v want %v", len(gotIDs), len(want), gotIDs, want)
 	}
@@ -167,7 +171,7 @@ func TestRegisterSettingsTab_StableSortOnTie(t *testing.T) {
 	h.RegisterSettingsTab(tabFactory("c"))
 
 	cc := ctxWithRole(RolePlayer)
-	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, nil, false)
+	got := h.visibleSettingsTabs(cc, nil, nil, "csrf", nil, false)
 	// Filter to just the plugin extras (built-ins use 10..60).
 	var extra []string
 	for _, t := range got {

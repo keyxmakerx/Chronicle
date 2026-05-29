@@ -40,10 +40,25 @@ ta3="trans""ition-all"          # Tailwind utility (matches `transition-all` tok
                                  # following char is whitespace or quote)
 
 # V2-scope directories — only these are linted.
+#
+# Note: the guard checks NEW lines introduced by the PR (via the
+# diff-scoped `^[+]` filter below), so adding a directory here only
+# affects code added by future PRs. Pre-existing `transition: all`
+# inside an in-scope directory is grandfathered.
 scopes=(
   "internal/plugins/calendar"
   "internal/plugins/timeline"
   "internal/plugins/ai_workspace"
+  # C-EXT-HUB Phase 1 (2026-05-29): the top-level Extensions hub at
+  # internal/plugins/campaigns/extensions_hub*.templ is V2-styled and
+  # the operator's first encounter with V2 chrome. The campaigns
+  # plugin is added in full because the scope-glob below only walks
+  # one level (campaigns/*.templ); the diff-scoped `^[+]` filter then
+  # bounds enforcement to lines this PR (and future PRs) introduce.
+  # Pre-existing campaigns templs are not re-scanned. New `transition:
+  # all` introduced in any campaigns/*.templ will fail unless tagged
+  # `/* OK exempt: ... */` — the rare legacy-chrome edit can opt out.
+  "internal/plugins/campaigns"
 )
 
 # Determine the diff base. In CI, GITHUB_BASE_REF is set on PRs;

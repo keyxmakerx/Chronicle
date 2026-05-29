@@ -287,7 +287,11 @@ type addonListerAdapter struct {
 	svc addons.AddonService
 }
 
-// ListForPluginHub returns all addons formatted for the plugin hub page.
+// ListForPluginHub returns all addons formatted for the plugin hub page
+// and the C-EXT-HUB top-level Extensions hub. HasDashboard /
+// HasEntitySetup are sourced from the campaigns plugin's slug-keyed
+// capability tables so the hub catalog carries a single source of
+// truth (see internal/plugins/campaigns/extensions_hub.go).
 func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID string) ([]campaigns.PluginHubAddon, error) {
 	addonList, err := a.svc.ListForCampaign(ctx, campaignID)
 	if err != nil {
@@ -296,13 +300,15 @@ func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID st
 	result := make([]campaigns.PluginHubAddon, len(addonList))
 	for i, ca := range addonList {
 		result[i] = campaigns.PluginHubAddon{
-			AddonID:   ca.AddonID,
-			Slug:      ca.AddonSlug,
-			Name:      ca.AddonName,
-			Icon:      ca.AddonIcon,
-			Category:  string(ca.AddonCategory),
-			Enabled:   ca.Enabled,
-			Installed: ca.Installed,
+			AddonID:        ca.AddonID,
+			Slug:           ca.AddonSlug,
+			Name:           ca.AddonName,
+			Icon:           ca.AddonIcon,
+			Category:       string(ca.AddonCategory),
+			Enabled:        ca.Enabled,
+			Installed:      ca.Installed,
+			HasDashboard:   campaigns.HasExtensionDashboard(ca.AddonSlug),
+			HasEntitySetup: campaigns.HasExtensionEntitySetup(ca.AddonSlug),
 		}
 	}
 	return result, nil
@@ -1766,6 +1772,12 @@ func (a *App) RegisterRoutes() {
 	extensions.RegisterAdminRoutes(adminGroup, extHandler)
 	extensions.RegisterCampaignRoutes(e, extHandler, campaignService, authService)
 	extensions.RegisterAssetRoutes(e, extHandler)
+
+	// C-EXT-HUB Phase 1: let the top-level Extensions hub (campaigns
+	// plugin) embed the per-campaign Content Packs list as a card.
+	// Inverts the import direction so campaigns stays
+	// extensions-agnostic at compile time.
+	campaignHandler.SetContentPacksCardRenderer(extHandler)
 
 	// Package manager: external repo management for systems and Foundry module.
 	pkgRepo := packages.NewPackageRepository(a.DB)

@@ -82,7 +82,6 @@ DELETE	/users/:id/storage	internal/plugins/settings/routes.go
 DELETE	/users/:id/storage/bypass	internal/plugins/settings/routes.go
 DELETE	/worldbuilding-prompts/:pid	internal/plugins/entities/worldbuilding_prompt_routes.go
 GET		internal/extensions/routes.go
-GET		internal/extensions/routes.go
 GET		internal/plugins/admin/routes.go
 GET		internal/plugins/backup/routes.go
 GET		internal/plugins/bestiary/routes.go
@@ -229,7 +228,9 @@ GET	/entity-types/block-types	internal/plugins/entities/routes.go
 GET	/event-tier-definitions	internal/plugins/campaigns/routes.go
 GET	/events	internal/plugins/calendar/api_routes.go
 GET	/export	internal/plugins/campaigns/routes.go
+GET	/extensions	internal/plugins/campaigns/routes.go
 GET	/extensions/:extID/assets/*	internal/extensions/routes.go
+GET	/extensions/fragment	internal/plugins/campaigns/routes.go
 GET	/favorite-ids	internal/plugins/entities/routes.go
 GET	/favorites	internal/plugins/bestiary/routes.go
 GET	/favorites	internal/plugins/entities/routes.go

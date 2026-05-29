@@ -71,21 +71,29 @@ func (h *Handler) RegisterSettingsTab(factory func(*CampaignContext) SettingsTab
 	h.extraSettingsTabs = append(h.extraSettingsTabs, factory)
 }
 
-// builtInSettingsTabs returns the six pre-AI-Workspace tabs in their
-// canonical order. Constructed per-request because each tab's content
-// closure captures request-scoped state (csrf token, fetched members,
-// the operator's role, etc).
+// builtInSettingsTabs returns the canonical-order pre-plugin tabs.
+// Constructed per-request because each tab's content closure captures
+// request-scoped state (csrf token, fetched members, the operator's
+// role, etc).
 //
 // The data parameters mirror what the Settings handler already loads
 // today; the only structural change vs the pre-refactor templ is that
 // the closures live here instead of being inlined inside settings.templ.
+//
+// C-EXT-HUB Phase 1 (2026-05-29) removed the "features" tab (slot 20).
+// Per-campaign feature enable/disable lives on the new top-level
+// Extensions hub at `/campaigns/:id/extensions`. The addons store and
+// `settingsFeaturesTab` templ component are otherwise unchanged —
+// removing the tab here is the entire operator-visible delta for the
+// settings page. SortOrder 20 is intentionally left vacant for any
+// future plugin tab that wants to land between General (10) and
+// People (30).
 func (h *Handler) builtInSettingsTabs(
 	cc *CampaignContext,
 	transfer *OwnershipTransfer,
 	members []CampaignMember,
 	csrfToken string,
 	systemOptions []SystemOption,
-	addons []PluginHubAddon,
 	smtpConfigured bool,
 ) []SettingsTab {
 	return []SettingsTab{
@@ -97,14 +105,9 @@ func (h *Handler) builtInSettingsTabs(
 			SortOrder: 10,
 			Content:   settingsGeneralTab(cc, csrfToken, systemOptionsJSON(systemOptions)),
 		},
-		{
-			ID:        "features",
-			Label:     "Features",
-			Icon:      "fa-solid fa-puzzle-piece",
-			MinRole:   RoleOwner,
-			SortOrder: 20,
-			Content:   settingsFeaturesTab(cc, addons, csrfToken),
-		},
+		// Slot 20 (Features) retired by C-EXT-HUB Phase 1; per-
+		// campaign feature toggles moved to the top-level Extensions
+		// hub.
 		{
 			ID:        "people",
 			Label:     "People",
@@ -151,10 +154,9 @@ func (h *Handler) visibleSettingsTabs(
 	members []CampaignMember,
 	csrfToken string,
 	systemOptions []SystemOption,
-	addons []PluginHubAddon,
 	smtpConfigured bool,
 ) []SettingsTab {
-	built := h.builtInSettingsTabs(cc, transfer, members, csrfToken, systemOptions, addons, smtpConfigured)
+	built := h.builtInSettingsTabs(cc, transfer, members, csrfToken, systemOptions, smtpConfigured)
 	all := make([]SettingsTab, 0, len(built)+len(h.extraSettingsTabs))
 	all = append(all, built...)
 	for _, factory := range h.extraSettingsTabs {

@@ -449,6 +449,20 @@ templ Sidebar() {
 							</span>
 							Customize
 						</a>
+						// C-EXT-HUB Phase 1: top-level Extensions hub
+						// (operator's new per-campaign feature entry point;
+						// absorbs the retired Features Settings tab).
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", GetCampaignID(ctx))) }
+							class={ sidebarNavLink,
+								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/extensions", GetCampaignID(ctx)))),
+								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/extensions", GetCampaignID(ctx)))) }
+						>
+							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+								<i class="fa-solid fa-puzzle-piece text-xs"></i>
+							</span>
+							Extensions
+						</a>
 						<a
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx))) }
 							class={ sidebarNavLink,
