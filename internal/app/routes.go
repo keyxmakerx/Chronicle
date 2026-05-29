@@ -31,6 +31,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
+	"github.com/keyxmakerx/chronicle/internal/templates/demo"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
@@ -2762,6 +2763,17 @@ func (a *App) RegisterRoutes() {
 	// Dashboard redirects to campaigns list for authenticated users.
 	e.GET("/dashboard", func(c echo.Context) error {
 		return c.Redirect(http.StatusSeeOther, "/campaigns")
+	}, auth.RequireAuth(authService))
+
+	// C-V2-DESIGN-REBUILD Phase 1 demo route. Validation surface for
+	// the new design canon; non-campaign-scoped (the canon is the
+	// whole app's future visual language, not a per-campaign concern).
+	// Auth-gated mirroring the `/dashboard` precedent above — any
+	// authenticated user can view; the demo exposes no campaign data
+	// so site-admin gating is unnecessary. Dispatch:
+	// dispatches/chronicle/C-V2-DESIGN-REBUILD-PHASE-1-DEMO.md.
+	e.GET("/demo/chronicle-canon", func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, demo.DemoChronicleCanon())
 	}, auth.RequireAuth(authService))
 
 	// --- Layout Data Injector ---
