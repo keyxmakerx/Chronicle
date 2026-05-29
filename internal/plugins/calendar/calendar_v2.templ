@@ -46,6 +46,10 @@ type CalendarV2ViewData struct {
 	IsOwner         bool
 	IsScribe        bool
 	CSRFToken       string
+	// TierDefinitions: campaign-aware tier vocabulary (Wave 1.6 §D).
+	// Sourced from campaigns.GetEventTierDefinitions; nil/empty falls
+	// back to platform default tier rendering in eventToCardData.
+	TierDefinitions []TierDefinitionAlias
 }
 
 // CalendarV2Page is the full-page V2 shell. HTMX swaps target the
@@ -446,7 +450,7 @@ templ monthDayCell(data CalendarV2ViewData, day monthDay) {
 		</div>
 		for i, e := range monthCellVisible(data, day.Day) {
 			if i < monthCellVisibleCap() {
-				@calwidget.EventCard(eventToCardData(e, data.ActiveCalendar), calwidget.DensityCompact)
+				@calwidget.EventCard(eventToCardDataWithTiers(e, data.ActiveCalendar, data.TierDefinitions), calwidget.DensityCompact)
 			}
 		}
 		if monthCellOverflow(data, day.Day) > 0 {
@@ -495,7 +499,7 @@ templ weekViewPlaceholder(data CalendarV2ViewData) {
 				<div class="border border-edge/30 rounded p-1 min-h-[28px] flex flex-col gap-0.5">
 					if wd.Day != 0 {
 						for _, e := range allDayEventsForDay(data.Events, wd.Year, wd.Month, wd.Day) {
-							@calwidget.EventCard(eventToCardData(e, data.ActiveCalendar), calwidget.DensityCompact)
+							@calwidget.EventCard(eventToCardDataWithTiers(e, data.ActiveCalendar, data.TierDefinitions), calwidget.DensityCompact)
 						}
 					}
 				</div>
@@ -534,7 +538,7 @@ templ weekViewPlaceholder(data CalendarV2ViewData) {
 								data-event-id={ e.ID }
 								data-event-card="standard"
 							>
-								@calwidget.EventCard(eventToCardData(e, data.ActiveCalendar), calwidget.DensityStandard)
+								@calwidget.EventCard(eventToCardDataWithTiers(e, data.ActiveCalendar, data.TierDefinitions), calwidget.DensityStandard)
 							</div>
 						}
 					}
@@ -679,7 +683,7 @@ templ dayViewPlaceholder(data CalendarV2ViewData) {
 				<div class="text-[10px] text-fg-secondary mb-1">All-day events</div>
 				<div class="space-y-1">
 					for _, e := range allDay {
-						@calwidget.EventCard(eventToCardData(e, data.ActiveCalendar), calwidget.DensityStandard)
+						@calwidget.EventCard(eventToCardDataWithTiers(e, data.ActiveCalendar, data.TierDefinitions), calwidget.DensityStandard)
 					}
 				</div>
 			</div>
@@ -710,7 +714,7 @@ templ dayViewPlaceholder(data CalendarV2ViewData) {
 						data-event-id={ e.ID }
 						data-event-card="detailed"
 					>
-						@calwidget.EventCard(eventToCardData(e, data.ActiveCalendar), calwidget.DensityDetailed)
+						@calwidget.EventCard(eventToCardDataWithTiers(e, data.ActiveCalendar, data.TierDefinitions), calwidget.DensityDetailed)
 					</div>
 				}
 			</div>

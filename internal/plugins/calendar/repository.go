@@ -785,13 +785,15 @@ func (r *calendarRepo) GetEventCategories(ctx context.Context, calendarID string
 }
 
 // eventCols is the column list for event queries (with entity join fields).
+// Wave 1.6 added e.tier between e.category and e.color to close the
+// PR #358 schema-only gap surfaced by PR #368 stop-and-flag #2.
 const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description, e.description_html,
        e.year, e.month, e.day, e.start_hour, e.start_minute,
        e.end_year, e.end_month, e.end_day, e.end_hour, e.end_minute,
        e.is_recurring, e.recurrence_type,
        e.recurrence_interval, e.recurrence_end_year, e.recurrence_end_month,
        e.recurrence_end_day, e.recurrence_max_occurrences,
-       e.visibility, e.visibility_rules, e.category,
+       e.visibility, e.visibility_rules, e.category, e.tier,
        e.color, e.icon, e.all_day,
        e.created_by, e.created_at, e.updated_at,
        COALESCE(ent.name, ''), COALESCE(et.icon, ''), COALESCE(et.color, '')`
@@ -809,16 +811,16 @@ func (r *calendarRepo) CreateEvent(ctx context.Context, evt *Event) error {
 		        is_recurring, recurrence_type,
 		        recurrence_interval, recurrence_end_year, recurrence_end_month,
 		        recurrence_end_day, recurrence_max_occurrences,
-		        visibility, visibility_rules, category,
+		        visibility, visibility_rules, category, tier,
 		        color, icon, all_day, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		evt.ID, evt.CalendarID, evt.EntityID, evt.Name, evt.Description, evt.DescriptionHTML,
 		evt.Year, evt.Month, evt.Day, evt.StartHour, evt.StartMinute,
 		evt.EndYear, evt.EndMonth, evt.EndDay, evt.EndHour, evt.EndMinute,
 		evt.IsRecurring, evt.RecurrenceType,
 		evt.RecurrenceInterval, evt.RecurrenceEndYear, evt.RecurrenceEndMonth,
 		evt.RecurrenceEndDay, evt.RecurrenceMaxOccurrences,
-		evt.Visibility, evt.VisibilityRules, evt.Category,
+		evt.Visibility, evt.VisibilityRules, evt.Category, evt.Tier,
 		evt.Color, evt.Icon, evt.AllDay, evt.CreatedBy,
 	)
 	return err
@@ -837,7 +839,7 @@ func (r *calendarRepo) GetEvent(ctx context.Context, id string) (*Event, error) 
 		&evt.IsRecurring, &evt.RecurrenceType,
 		&evt.RecurrenceInterval, &evt.RecurrenceEndYear, &evt.RecurrenceEndMonth,
 		&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences,
-		&evt.Visibility, &evt.VisibilityRules, &evt.Category,
+		&evt.Visibility, &evt.VisibilityRules, &evt.Category, &evt.Tier,
 		&evt.Color, &evt.Icon, &evt.AllDay,
 		&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
 		&evt.EntityName, &evt.EntityIcon, &evt.EntityColor)
@@ -858,7 +860,7 @@ func (r *calendarRepo) UpdateEvent(ctx context.Context, evt *Event) error {
 		     is_recurring = ?, recurrence_type = ?,
 		     recurrence_interval = ?, recurrence_end_year = ?, recurrence_end_month = ?,
 		     recurrence_end_day = ?, recurrence_max_occurrences = ?,
-		     visibility = ?, visibility_rules = ?, category = ?,
+		     visibility = ?, visibility_rules = ?, category = ?, tier = ?,
 		     color = ?, icon = ?, all_day = ?
 		 WHERE id = ?`,
 		evt.Name, evt.Description, evt.DescriptionHTML, evt.EntityID,
@@ -868,7 +870,7 @@ func (r *calendarRepo) UpdateEvent(ctx context.Context, evt *Event) error {
 		evt.IsRecurring, evt.RecurrenceType,
 		evt.RecurrenceInterval, evt.RecurrenceEndYear, evt.RecurrenceEndMonth,
 		evt.RecurrenceEndDay, evt.RecurrenceMaxOccurrences,
-		evt.Visibility, evt.VisibilityRules, evt.Category,
+		evt.Visibility, evt.VisibilityRules, evt.Category, evt.Tier,
 		evt.Color, evt.Icon, evt.AllDay, evt.ID,
 	)
 	return err
@@ -1063,7 +1065,7 @@ func scanEvents(rows *sql.Rows) ([]Event, error) {
 			&evt.IsRecurring, &evt.RecurrenceType,
 			&evt.RecurrenceInterval, &evt.RecurrenceEndYear, &evt.RecurrenceEndMonth,
 			&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences,
-			&evt.Visibility, &evt.VisibilityRules, &evt.Category,
+			&evt.Visibility, &evt.VisibilityRules, &evt.Category, &evt.Tier,
 			&evt.Color, &evt.Icon, &evt.AllDay,
 			&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
 			&evt.EntityName, &evt.EntityIcon, &evt.EntityColor,

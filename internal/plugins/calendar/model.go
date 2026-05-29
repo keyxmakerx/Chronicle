@@ -367,6 +367,12 @@ type Event struct {
 	Visibility               string  `json:"visibility"`
 	VisibilityRules          *string `json:"visibility_rules,omitempty"`
 	Category                 *string `json:"category,omitempty"`
+	// Tier references one of the campaign's event_tier_definitions
+	// by slug (PR #358 migration 004 added the calendar_events.tier
+	// column; Wave 1.6 closes the Go-side plumbing per PR #368
+	// stop-and-flag #2). Nil means "use platform default" —
+	// render-time fallback per V2 design §C1 three-tier model.
+	Tier                     *string `json:"tier,omitempty"`
 	Color                    *string `json:"color,omitempty"`
 	Icon                     *string `json:"icon,omitempty"`
 	AllDay                   bool    `json:"all_day"`
@@ -515,6 +521,9 @@ type CreateEventInput struct {
 	Visibility               string
 	VisibilityRules          *string
 	Category                 *string
+	// Tier — campaign tier definition slug; nil = use platform default
+	// at render. PR #358 schema column + Wave 1.6 Go-side plumbing.
+	Tier                     *string
 	Color                    *string
 	Icon                     *string
 	AllDay                   bool
@@ -547,6 +556,8 @@ type UpdateEventInput struct {
 	Visibility               string
 	VisibilityRules          *string
 	Category                 *string
+	// Tier — see CreateEventInput.Tier doc.
+	Tier                     *string
 	Color                    *string
 	Icon                     *string
 	AllDay                   bool
