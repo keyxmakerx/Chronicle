@@ -283,6 +283,108 @@ func TestDemoChronicleCanon_DefaultsToDarkMode(t *testing.T) {
 	}
 }
 
+// TestDemoChronicleCanon_BrowserCompatPanel — Phase 1.6 dispatch §C.
+// The browser-compat diagnostic panel is the primary self-documenting
+// mechanism for future Firefox-style failure reports; if a future
+// edit removes it, operator loses the ability to diagnose silent
+// no-ops in their browser. Pin every key panel marker.
+func TestDemoChronicleCanon_BrowserCompatPanel(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, m := range []string{
+		`id="chronicle-compat"`,
+		`id="chronicle-compat-ua"`,
+		`id="chronicle-compat-table"`,
+		`Browser Compatibility`,
+		`data-feat="lightDark"`,
+		`data-feat="popoverApi"`,
+		`data-feat="anchorPositioning"`,
+		`data-feat="viewTransitions"`,
+		`data-feat="oklch"`,
+		`data-feat="colorMixOklch"`,
+	} {
+		if !strings.Contains(html, m) {
+			t.Errorf("compat panel marker missing: %s", m)
+		}
+	}
+}
+
+// TestDemoChronicleCanon_FeatureDetectionWiring — Phase 1.6 dispatch
+// §B.1 + §E. Pins the feature-detection helper + the per-feature
+// fallback attribute hooks so a future edit can't accidentally
+// remove the FF-fix.
+func TestDemoChronicleCanon_FeatureDetectionWiring(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	required := []struct {
+		marker string
+		why    string
+	}{
+		{"window.__chronicleDemoFeatures", "feature-detection results stored on window for diagnostic panel + dev console inspection"},
+		{"data-chronicle-popover-fallback", "popover fallback attribute hook (engages when native Popover API missing)"},
+		{"data-chronicle-anchor-fallback", "anchor positioning fallback attribute hook (engages when CSS anchor positioning missing)"},
+		{"applyTheme(theme)", "theme application toggles BOTH data-attribute AND .dark class for fallback"},
+		{"prefers-color-scheme", "OS preference detection"},
+		{"requestAnimationFrame(init)", "belt-and-suspenders binding pass"},
+		{"DOMContentLoaded", "secondary binding trigger"},
+	}
+	for _, r := range required {
+		if !strings.Contains(html, r.marker) {
+			t.Errorf("FF-fix wiring missing — %s: %s", r.why, r.marker)
+		}
+	}
+}
+
+// TestDemoChronicleCanon_InteractiveMockHooks — Phase 1.6 dispatch §D.10.
+// The interactive Mock E.1 hub + E.3 calendar are the highest-validation-
+// value addition. Pin the data-attribute hooks the JS handlers wire up.
+func TestDemoChronicleCanon_InteractiveMockHooks(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	required := []string{
+		"data-mock-card",
+		"data-mock-toggle",
+		"data-mock-expand",
+		"data-mock-drawer",
+		"data-mock-tab",
+		"data-mock-panel",
+		"data-mock-day",
+		"data-mock-events",
+		"data-mock-day-popover",
+		"data-mock-cal",
+	}
+	for _, m := range required {
+		if !strings.Contains(html, m) {
+			t.Errorf("interactive-mock hook missing: %s", m)
+		}
+	}
+	// Variety expansion section anchor IDs (D.1-D.9).
+	varietyIDs := []string{
+		`id="variety-forms"`,
+		`id="variety-buttons"`,
+		`id="variety-status"`,
+		`id="variety-nav"`,
+		`id="variety-data"`,
+		`id="variety-overlays"`,
+		`id="variety-animations"`,
+		`id="variety-layouts"`,
+	}
+	for _, id := range varietyIDs {
+		if !strings.Contains(html, id) {
+			t.Errorf("variety section missing: %s", id)
+		}
+	}
+}
+
 // TestDemoChronicleCanon_RendersAllExpansionSections — Phase 1.5
 // dispatch §B-§E section presence pin. The expansion's whole purpose
 // is operator's "quadruple what's there" framing; if a section gets

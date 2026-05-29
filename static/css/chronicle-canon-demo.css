@@ -2705,4 +2705,804 @@
     animation: none !important;
   }
 
+  /* ============================================================
+   * Phase 1.6 — Firefox-fix fallbacks + variety component styles
+   * ============================================================
+   *
+   * Operator validated PR #376 in Firefox and reported "most of it
+   * isn't working... no errors... they just are't doing anything".
+   * Analytical reproduction surfaced the root cause: light-dark()
+   * (used 11x in Phase 1 token block) requires FF 120+, and when
+   * unsupported every surface variable resolves to an invalid value
+   * — every background, every border colour, every text colour
+   * silently fails. The demo would look BLANK/colorless across the
+   * board. Plus minor: native Popover API needs FF 125+; anchor
+   * positioning needs FF 132+.
+   *
+   * Strategy: provide explicit theme-attribute fallbacks for EVERY
+   * light-dark() variable. The fallback uses a HIGHER-specificity
+   * selector ([data-chronicle-demo][data-chronicle-demo-theme="X"])
+   * which wins over the Phase 1 [data-chronicle-demo] rule
+   * regardless of source order. This way modern browsers still
+   * resolve light-dark() (fine — same colors), and old-FF browsers
+   * get the explicit attribute path.
+   *
+   * The PR #376 demoScript() already toggles
+   * data-chronicle-demo-theme="light"|"dark" on the root, so the
+   * fallbacks engage automatically. The init in Phase 1.6 also adds
+   * a .dark class belt-and-suspenders for the few rules where the
+   * attribute path can't reach.
+   *
+   * Cross-refs:
+   *   - dispatches/chronicle/C-V2-DESIGN-REBUILD-PHASE-1-6-FIREFOX-FIX-VARIETY.md
+   *   - PR #376 (Phase 1.5 base) + PR #375 (Phase 1)
+   *   - audit §4.2 (feature support matrix with FF version reqs)
+   */
+
+  /* ---------- Theme attribute fallbacks (Firefox < 120 fix) ---------- */
+
+  [data-chronicle-demo][data-chronicle-demo-theme="light"] {
+    --chronicle-surface:         var(--chronicle-neutral-50);
+    --chronicle-surface-low:     var(--chronicle-neutral-100);
+    --chronicle-surface-card:    oklch(1 0 0);
+    --chronicle-surface-raised:  var(--chronicle-neutral-50);
+    --chronicle-surface-overlay: oklch(1 0 0);
+    --chronicle-fg:              var(--chronicle-neutral-900);
+    --chronicle-fg-muted:        var(--chronicle-neutral-600);
+    --chronicle-fg-subtle:       var(--chronicle-neutral-500);
+    --chronicle-border:          var(--chronicle-neutral-200);
+    --chronicle-border-strong:   var(--chronicle-neutral-300);
+  }
+
+  [data-chronicle-demo][data-chronicle-demo-theme="dark"] {
+    --chronicle-surface:         var(--chronicle-neutral-950);
+    --chronicle-surface-low:     var(--chronicle-neutral-900);
+    --chronicle-surface-card:    var(--chronicle-neutral-850);
+    --chronicle-surface-raised:  var(--chronicle-neutral-800);
+    --chronicle-surface-overlay: var(--chronicle-neutral-800);
+    --chronicle-fg:              var(--chronicle-neutral-50);
+    --chronicle-fg-muted:        var(--chronicle-neutral-400);
+    --chronicle-fg-subtle:       var(--chronicle-neutral-500);
+    --chronicle-border:          var(--chronicle-neutral-800);
+    --chronicle-border-strong:   var(--chronicle-neutral-700);
+  }
+
+  /* Belt-and-suspenders: .dark class fallback. demoScript() toggles
+   * this in lockstep with the theme attribute. Identical values to
+   * the [data-theme="dark"] block; works for any rule that can't
+   * reach the attribute (e.g. ::backdrop pseudo on the modal). */
+  [data-chronicle-demo].dark {
+    --chronicle-surface:         var(--chronicle-neutral-950);
+    --chronicle-surface-low:     var(--chronicle-neutral-900);
+    --chronicle-surface-card:    var(--chronicle-neutral-850);
+    --chronicle-surface-raised:  var(--chronicle-neutral-800);
+    --chronicle-surface-overlay: var(--chronicle-neutral-800);
+    --chronicle-fg:              var(--chronicle-neutral-50);
+    --chronicle-fg-muted:        var(--chronicle-neutral-400);
+    --chronicle-fg-subtle:       var(--chronicle-neutral-500);
+    --chronicle-border:          var(--chronicle-neutral-800);
+    --chronicle-border-strong:   var(--chronicle-neutral-700);
+  }
+
+  /* ---------- Popover fallback (Firefox < 125 fix) ---------- */
+
+  /* When the native Popover API is unavailable, we render via a
+   * data-attribute state. The demoScript() Phase 1.6 init detects
+   * Popover API support and sets [data-chronicle-popover-fallback]
+   * on the demo root; when present, this CSS path engages. */
+  [data-chronicle-popover-fallback] .chronicle-popover {
+    display: none;
+  }
+  [data-chronicle-popover-fallback] .chronicle-popover[data-chronicle-popover-open="true"] {
+    display: block;
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* Anchor positioning fallback (Firefox < 132). When unsupported,
+   * the JS positioning helper writes inline top/left to the popover
+   * element, replacing the CSS anchor() values. The CSS path below
+   * just sets a sensible default position so the popover renders
+   * SOMEWHERE visible while JS computes the real position. */
+  [data-chronicle-anchor-fallback] .chronicle-popover[data-anchored] {
+    position: fixed;
+    top: 80px;
+    left: 24px;
+  }
+
+  /* ============================================================
+   * Browser-compat diagnostic panel (C — the self-documenting fix)
+   * ============================================================ */
+
+  .chronicle-compat {
+    margin: 8px 16px;
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+    overflow: hidden;
+    font-size: 12px;
+  }
+  .chronicle-compat__summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--chronicle-surface-low);
+    color: var(--chronicle-fg);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    font-weight: 500;
+  }
+  .chronicle-compat__summary::-webkit-details-marker { display: none; }
+  .chronicle-compat__summary::before {
+    content: "▶";
+    font-size: 10px;
+    transition: transform var(--chronicle-motion-fast) var(--chronicle-ease-standard);
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-compat[open] .chronicle-compat__summary::before {
+    transform: rotate(90deg);
+  }
+  .chronicle-compat__body {
+    padding: 12px;
+  }
+  .chronicle-compat__ua {
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+    padding: 6px 8px;
+    background: var(--chronicle-surface-low);
+    border-radius: var(--chronicle-radius-sm);
+    margin-bottom: 8px;
+    word-break: break-all;
+  }
+  .chronicle-compat__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .chronicle-compat__table th {
+    text-align: left;
+    color: var(--chronicle-fg-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 10px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--chronicle-border);
+  }
+  .chronicle-compat__table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--chronicle-border);
+    color: var(--chronicle-fg);
+    vertical-align: top;
+  }
+  .chronicle-compat__table tr:last-child td { border-bottom: none; }
+  .chronicle-compat__status {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: var(--chronicle-radius-sm);
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .chronicle-compat__status--supported {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-success) 14%);
+    color: var(--chronicle-success);
+  }
+  .chronicle-compat__status--missing {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-warning) 18%);
+    color: color-mix(in oklch, var(--chronicle-warning), var(--chronicle-fg) 25%);
+  }
+  .chronicle-compat__usage {
+    color: var(--chronicle-fg-muted);
+    font-size: 10px;
+  }
+
+  /* ============================================================
+   * D.1 — Form variety: autocomplete, multi-select chip, file upload
+   * ============================================================ */
+
+  .chronicle-autocomplete {
+    position: relative;
+  }
+  .chronicle-autocomplete__list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--chronicle-surface-overlay);
+    border: 1px solid var(--chronicle-border-strong);
+    border-radius: var(--chronicle-radius);
+    box-shadow: var(--chronicle-elev-3-shadow);
+    z-index: 30;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px;
+    display: none;
+  }
+  .chronicle-autocomplete[data-open="true"] .chronicle-autocomplete__list {
+    display: block;
+  }
+  .chronicle-autocomplete__option {
+    padding: 6px 10px;
+    border-radius: var(--chronicle-radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--chronicle-fg);
+    transition: background-color var(--chronicle-motion-fast) linear;
+  }
+  .chronicle-autocomplete__option:hover,
+  .chronicle-autocomplete__option[data-focus="true"] {
+    background: color-mix(in oklch, var(--chronicle-surface-overlay), var(--chronicle-accent) 8%);
+  }
+  .chronicle-autocomplete__option mark {
+    background: color-mix(in oklch, transparent, var(--chronicle-accent) 30%);
+    color: var(--chronicle-accent);
+    font-weight: 600;
+    padding: 0;
+  }
+
+  .chronicle-chip-input {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius);
+    min-height: 36px;
+    cursor: text;
+    transition: border-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-chip-input:focus-within {
+    border-color: var(--chronicle-ring);
+    outline: 2px solid color-mix(in oklch, var(--chronicle-ring), transparent 80%);
+    outline-offset: 0;
+  }
+  .chronicle-chip-input__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px 2px 8px;
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 12%);
+    border-radius: var(--chronicle-radius-sm);
+    color: var(--chronicle-accent);
+    font-size: 12px;
+  }
+  .chronicle-chip-input__chip button {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 10px;
+    border-radius: var(--chronicle-radius-sm);
+  }
+  .chronicle-chip-input__chip button:hover {
+    background: color-mix(in oklch, var(--chronicle-accent), var(--chronicle-fg) 20%);
+    color: oklch(1 0 0);
+  }
+  .chronicle-chip-input input {
+    flex: 1;
+    min-width: 80px;
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: 13px;
+    color: var(--chronicle-fg);
+    padding: 2px 4px;
+  }
+
+  .chronicle-dropzone {
+    border: 2px dashed var(--chronicle-border-strong);
+    border-radius: var(--chronicle-radius-md);
+    padding: 24px;
+    text-align: center;
+    color: var(--chronicle-fg-muted);
+    font-size: 13px;
+    background: var(--chronicle-surface-low);
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard);
+    cursor: pointer;
+  }
+  .chronicle-dropzone[data-state="over"] {
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 8%);
+    border-color: var(--chronicle-accent);
+    color: var(--chronicle-accent);
+  }
+  .chronicle-dropzone__icon {
+    font-size: 24px;
+    display: block;
+    margin-bottom: 6px;
+  }
+  .chronicle-file-list {
+    list-style: none;
+    padding: 0;
+    margin: 12px 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .chronicle-file-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+    font-size: 12px;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-file-list__remove {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--chronicle-fg-muted);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: var(--chronicle-radius-sm);
+  }
+  .chronicle-file-list__remove:hover {
+    color: var(--chronicle-danger);
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-danger) 8%);
+  }
+
+  /* ============================================================
+   * D.2 — Button variety: toggle group, button-as-link, FAB
+   * ============================================================ */
+
+  .chronicle-toggle-group {
+    display: inline-flex;
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius);
+    overflow: hidden;
+  }
+  .chronicle-toggle-group__btn {
+    padding: 6px 12px;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--chronicle-border);
+    color: var(--chronicle-fg-muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition:
+      background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard),
+      color            var(--chronicle-motion-fast) var(--chronicle-ease-standard);
+  }
+  .chronicle-toggle-group__btn:last-child { border-right: none; }
+  .chronicle-toggle-group__btn:hover { color: var(--chronicle-fg); }
+  .chronicle-toggle-group__btn[aria-pressed="true"] {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 10%);
+    color: var(--chronicle-accent);
+    font-weight: 500;
+  }
+
+  .chronicle-fab-demo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--chronicle-radius-full);
+    background: var(--chronicle-accent);
+    color: var(--chronicle-accent-fg);
+    border: none;
+    cursor: pointer;
+    font-size: 22px;
+    box-shadow: var(--chronicle-elev-3-shadow);
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      box-shadow       var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      transform        var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-fab-demo:hover {
+    background: color-mix(in oklch, var(--chronicle-accent), white 6%);
+    box-shadow: var(--chronicle-elev-4-shadow);
+    transform: translateY(-1px);
+  }
+
+  /* ============================================================
+   * D.3 — Status variety: inline validation, empty-state variants
+   * ============================================================ */
+
+  .chronicle-validation {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  .chronicle-validation--success { color: var(--chronicle-success); }
+  .chronicle-validation--warning { color: color-mix(in oklch, var(--chronicle-warning), var(--chronicle-fg) 25%); }
+  .chronicle-validation--error   { color: var(--chronicle-danger); }
+
+  .chronicle-empty-variants {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .chronicle-empty-variant {
+    padding: 24px 16px;
+    text-align: center;
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+    color: var(--chronicle-fg-muted);
+    font-size: 12px;
+  }
+  .chronicle-empty-variant__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--chronicle-radius-full);
+    margin: 0 auto 8px;
+    font-size: 18px;
+  }
+  .chronicle-empty-variant__icon--search { background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 14%); color: var(--chronicle-accent); }
+  .chronicle-empty-variant__icon--data   { background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 8%);     color: var(--chronicle-fg-muted); }
+  .chronicle-empty-variant__icon--perm   { background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-warning) 14%); color: color-mix(in oklch, var(--chronicle-warning), var(--chronicle-fg) 25%); }
+  .chronicle-empty-variant__icon--error  { background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-danger) 14%);  color: var(--chronicle-danger); }
+  .chronicle-empty-variant__title {
+    color: var(--chronicle-fg);
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 13px;
+  }
+
+  /* ============================================================
+   * D.4 — Nav variety: vertical sidebar, scroll-tabs
+   * ============================================================ */
+
+  .chronicle-vnav {
+    display: flex;
+    flex-direction: column;
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+    padding: 6px;
+    min-width: 200px;
+  }
+  .chronicle-vnav__section {
+    color: var(--chronicle-fg-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 6px 8px;
+    font-weight: 600;
+  }
+  .chronicle-vnav__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: var(--chronicle-radius-sm);
+    color: var(--chronicle-fg);
+    text-decoration: none;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color var(--chronicle-motion-fast) linear;
+  }
+  .chronicle-vnav__item:hover {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 4%);
+  }
+  .chronicle-vnav__item[aria-current="page"] {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 8%);
+    color: var(--chronicle-accent);
+    font-weight: 500;
+  }
+  .chronicle-vnav__sub {
+    margin-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  /* ============================================================
+   * D.5 — Data variety: progress ring with text
+   * ============================================================ */
+
+  .chronicle-progress-ring {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 64px;
+    height: 64px;
+  }
+  .chronicle-progress-ring svg { transform: rotate(-90deg); }
+  .chronicle-progress-ring__track { stroke: var(--chronicle-border); }
+  .chronicle-progress-ring__fill  { stroke: var(--chronicle-accent); transition: stroke-dashoffset var(--chronicle-motion-long) var(--chronicle-ease-standard); }
+  .chronicle-progress-ring__text {
+    position: absolute;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+
+  /* ============================================================
+   * D.7 — Overlay variety: tooltip variants, hover card
+   * ============================================================ */
+
+  .chronicle-tooltip--info    { background: color-mix(in oklch, var(--chronicle-neutral-900), var(--chronicle-accent) 20%); }
+  .chronicle-tooltip--warning { background: color-mix(in oklch, var(--chronicle-neutral-900), var(--chronicle-warning) 30%); }
+  .chronicle-tooltip--error   { background: color-mix(in oklch, var(--chronicle-neutral-900), var(--chronicle-danger) 30%); }
+
+  .chronicle-hover-card {
+    position: absolute;
+    background: var(--chronicle-surface-overlay);
+    border: 1px solid var(--chronicle-border-strong);
+    border-radius: var(--chronicle-radius-md);
+    box-shadow: var(--chronicle-elev-3-shadow);
+    padding: 12px;
+    width: 240px;
+    z-index: 30;
+    font-size: 12px;
+    pointer-events: none;
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+    transition:
+      opacity   var(--chronicle-motion-fast) var(--chronicle-ease-decelerate),
+      transform var(--chronicle-motion-fast) var(--chronicle-ease-decelerate);
+  }
+  .chronicle-hover-card[data-state="open"] {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    pointer-events: auto;
+  }
+
+  /* ============================================================
+   * D.8 — Animation patterns
+   * ============================================================ */
+
+  /* Staggered list reveal */
+  .chronicle-stagger > * {
+    opacity: 0;
+    transform: translateY(8px);
+    transition:
+      opacity   var(--chronicle-motion-medium) var(--chronicle-ease-decelerate),
+      transform var(--chronicle-motion-medium) var(--chronicle-ease-decelerate);
+  }
+  .chronicle-stagger.is-revealed > * {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .chronicle-stagger.is-revealed > *:nth-child(1) { transition-delay: 0ms; }
+  .chronicle-stagger.is-revealed > *:nth-child(2) { transition-delay: 50ms; }
+  .chronicle-stagger.is-revealed > *:nth-child(3) { transition-delay: 100ms; }
+  .chronicle-stagger.is-revealed > *:nth-child(4) { transition-delay: 150ms; }
+  .chronicle-stagger.is-revealed > *:nth-child(5) { transition-delay: 200ms; }
+  .chronicle-stagger.is-revealed > *:nth-child(6) { transition-delay: 250ms; }
+
+  /* Attention pulse */
+  .chronicle-attention-pulse {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: var(--chronicle-radius-full);
+    background: var(--chronicle-accent);
+    position: relative;
+  }
+  .chronicle-attention-pulse::before,
+  .chronicle-attention-pulse::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    border: 2px solid var(--chronicle-accent);
+    opacity: 0;
+    animation: chronicle-attention-ring 1.6s var(--chronicle-ease-decelerate) infinite;
+  }
+  .chronicle-attention-pulse::after { animation-delay: 0.6s; }
+
+  @keyframes chronicle-attention-ring {
+    0%   { opacity: 0.8; transform: scale(1); }
+    100% { opacity: 0;   transform: scale(2.4); }
+  }
+
+  /* Success checkmark draw */
+  .chronicle-checkmark {
+    width: 48px;
+    height: 48px;
+  }
+  .chronicle-checkmark__circle {
+    stroke: var(--chronicle-success);
+    fill: none;
+    stroke-width: 2;
+    stroke-dasharray: 150;
+    stroke-dashoffset: 150;
+    animation: chronicle-checkmark-circle 0.6s var(--chronicle-ease-standard) forwards;
+  }
+  .chronicle-checkmark__path {
+    stroke: var(--chronicle-success);
+    fill: none;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 35;
+    stroke-dashoffset: 35;
+    animation: chronicle-checkmark-path 0.4s var(--chronicle-ease-decelerate) 0.4s forwards;
+  }
+  @keyframes chronicle-checkmark-circle { to { stroke-dashoffset: 0; } }
+  @keyframes chronicle-checkmark-path   { to { stroke-dashoffset: 0; } }
+
+  /* ============================================================
+   * D.9 — Layout patterns: master/detail
+   * ============================================================ */
+
+  .chronicle-master-detail {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 16px;
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+    background: var(--chronicle-surface-card);
+    overflow: hidden;
+    min-height: 280px;
+  }
+  .chronicle-master-detail__list {
+    background: var(--chronicle-surface-low);
+    border-right: 1px solid var(--chronicle-border);
+    padding: 4px;
+    overflow-y: auto;
+    max-height: 320px;
+  }
+  .chronicle-master-detail__item {
+    padding: 8px 10px;
+    border-radius: var(--chronicle-radius-sm);
+    color: var(--chronicle-fg);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color var(--chronicle-motion-fast) linear;
+  }
+  .chronicle-master-detail__item:hover {
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-fg) 4%);
+  }
+  .chronicle-master-detail__item[aria-selected="true"] {
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 10%);
+    color: var(--chronicle-accent);
+    font-weight: 500;
+  }
+  .chronicle-master-detail__detail {
+    padding: 16px;
+  }
+
+  /* ============================================================
+   * D.10 — Interactive Mock E.1 / E.3 hooks
+   * ============================================================ */
+
+  .chronicle-mock-card[data-mock-enabled="false"] {
+    opacity: 0.6;
+  }
+  .chronicle-mock-card[data-mock-active="true"] {
+    border-color: var(--chronicle-accent);
+    box-shadow: var(--chronicle-elev-2-shadow);
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 4%);
+  }
+  .chronicle-mock-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 28px;
+    height: 16px;
+    background: var(--chronicle-border-strong);
+    border-radius: var(--chronicle-radius-full);
+    cursor: pointer;
+    border: none;
+    padding: 0;
+    transition: background-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-mock-toggle::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    background: oklch(1 0 0);
+    border-radius: var(--chronicle-radius-full);
+    transition: transform var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-mock-toggle[aria-pressed="true"] { background: var(--chronicle-accent); }
+  .chronicle-mock-toggle[aria-pressed="true"]::before { transform: translateX(12px); }
+
+  /* Mock E.1 drawer (in-page interactive expansion) */
+  .chronicle-mock-drawer {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius);
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition:
+      max-height var(--chronicle-motion-medium) var(--chronicle-ease-standard),
+      opacity    var(--chronicle-motion-medium) var(--chronicle-ease-standard),
+      padding    var(--chronicle-motion-medium) var(--chronicle-ease-standard),
+      margin-top var(--chronicle-motion-medium) var(--chronicle-ease-standard);
+    padding-block: 0;
+    margin-top: 0;
+  }
+  .chronicle-mock-drawer[data-open="true"] {
+    max-height: 480px;
+    opacity: 1;
+    padding: 12px;
+    margin-top: 12px;
+  }
+  .chronicle-mock-drawer__tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--chronicle-border);
+    margin-bottom: 10px;
+  }
+  .chronicle-mock-drawer__tab {
+    padding: 4px 10px;
+    border: none;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    color: var(--chronicle-fg-muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .chronicle-mock-drawer__tab[aria-selected="true"] {
+    color: var(--chronicle-fg);
+    border-bottom-color: var(--chronicle-accent);
+  }
+  .chronicle-mock-drawer__panel { font-size: 12px; color: var(--chronicle-fg-muted); }
+  .chronicle-mock-drawer__panel:not([data-active="true"]) { display: none; }
+
+  /* Mock E.3 day-detail popover (in-page absolute positioning) */
+  .chronicle-mock-day-popover {
+    position: absolute;
+    background: var(--chronicle-surface-overlay);
+    border: 1px solid var(--chronicle-border-strong);
+    border-radius: var(--chronicle-radius-md);
+    box-shadow: var(--chronicle-elev-3-shadow);
+    padding: 10px;
+    width: 220px;
+    z-index: 40;
+    font-size: 12px;
+    pointer-events: none;
+    opacity: 0;
+    transform: scale(0.96);
+    transition:
+      opacity   var(--chronicle-motion-fast) var(--chronicle-ease-decelerate),
+      transform var(--chronicle-motion-fast) var(--chronicle-ease-decelerate);
+  }
+  .chronicle-mock-day-popover[data-open="true"] {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+  }
+  .chronicle-mock-cal-container { position: relative; }
+  .chronicle-mock-cal__day {
+    cursor: pointer;
+    user-select: none;
+  }
+  .chronicle-mock-cal__day:hover {
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 4%);
+  }
+  .chronicle-mock-cal__day[data-selected="true"] {
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 12%);
+    border-color: var(--chronicle-accent);
+  }
+
+  /* Functional color picker live-preview swatch — operator clicks a
+   * swatch, sees the demo's accent update in real time. THE SCOPE
+   * is critical: this only mutates --chronicle-accent on the demo
+   * root, NEVER touches --color-accent-rgb. Per audit §6 +
+   * dispatch stop-and-flag #3. */
+  .chronicle-color-picker[data-functional="true"] .chronicle-color-picker__not-functional {
+    display: none;
+  }
+
 }  /* end @layer chronicle-demo */
