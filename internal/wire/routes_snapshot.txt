@@ -407,6 +407,7 @@ POST	/calendar/advance	internal/plugins/syncapi/routes.go
 POST	/calendar/advance-time	internal/plugins/syncapi/routes.go
 POST	/calendar/events	internal/plugins/syncapi/routes.go
 POST	/calendar/import	internal/plugins/syncapi/routes.go
+POST	/calendar/v2/sidebar-pin	internal/plugins/calendar/routes.go
 POST	/calendar/v2/switch	internal/plugins/calendar/routes.go
 POST	/calendars	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/advance	internal/plugins/calendar/routes.go

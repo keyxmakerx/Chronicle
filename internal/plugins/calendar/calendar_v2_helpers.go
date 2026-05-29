@@ -1334,3 +1334,92 @@ func itoaCal(n int) string {
 	}
 	return string(buf[i:])
 }
+
+// --- Wave 1.7A §G mini-month helpers ---
+
+// miniMonthDay carries minimum data for one mini-month cell.
+type miniMonthDay struct {
+	Day       int
+	IsToday   bool
+	IsSelected bool
+}
+
+// miniMonthHeading returns the sidebar heading text (e.g. "Mirtul 1492 DR").
+func miniMonthHeading(data CalendarV2ViewData) string {
+	return monthHeading(data)
+}
+
+// miniMonthGridStyle returns the CSS Grid template for the
+// mini-month: N equal columns where N = calendar's weekday count
+// (fantasy-week aware; matches monthGridStyle pattern).
+func miniMonthGridStyle(data CalendarV2ViewData) string {
+	return monthGridStyle(data)
+}
+
+// miniMonthWeekdayLabels returns abbreviated weekday labels for the
+// mini-month header row — first character only, to keep cells tight.
+func miniMonthWeekdayLabels(data CalendarV2ViewData) []string {
+	headers := monthWeekdayHeaders(data)
+	out := make([]string, len(headers))
+	for i, h := range headers {
+		if h.Name != "" {
+			out[i] = string(h.Name[0])
+		}
+	}
+	return out
+}
+
+// miniMonthDays builds the day cells for the mini-month. Same shape
+// as the main Month view's monthDays but with IsSelected reflecting
+// the page cursor (so navigating to a day highlights it in the
+// sidebar).
+func miniMonthDays(data CalendarV2ViewData) []miniMonthDay {
+	if data.ActiveCalendar == nil || data.Month < 1 || data.Month > len(data.ActiveCalendar.Months) {
+		return nil
+	}
+	cal := data.ActiveCalendar
+	dim := cal.Months[data.Month-1].Days
+	out := make([]miniMonthDay, dim)
+	for i := 0; i < dim; i++ {
+		day := i + 1
+		out[i] = miniMonthDay{
+			Day:        day,
+			IsToday:    data.Year == cal.CurrentYear && data.Month == cal.CurrentMonth && day == cal.CurrentDay,
+			IsSelected: day == data.Day,
+		}
+	}
+	return out
+}
+
+// miniMonthDayClasses returns the per-cell tint for the mini-month.
+// Today + selected combinations layer cleanly: today wins visually
+// when both apply (selected adds a slight overlay).
+func miniMonthDayClasses(d miniMonthDay) string {
+	switch {
+	case d.IsToday && d.IsSelected:
+		return "bg-accent text-white ring-2 ring-accent"
+	case d.IsToday:
+		return "ring-2 ring-accent text-fg"
+	case d.IsSelected:
+		return "bg-accent/20 text-fg font-medium"
+	}
+	return "text-fg"
+}
+
+// miniMonthDayHref builds a same-month jump link. Preserves view +
+// year/month; only the day cursor changes.
+func miniMonthDayHref(data CalendarV2ViewData, d miniMonthDay) templ.SafeURL {
+	if data.ActiveCalendar == nil {
+		return templ.SafeURL("/campaigns/" + data.CampaignID + "/calendar/v2")
+	}
+	return templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2/%s/%s?year=%d&month=%d&day=%d",
+		data.CampaignID, data.ActiveCalendar.ID, data.View, data.Year, data.Month, d.Day))
+}
+
+// miniMonthDataAttr serializes the jump target as a data attribute
+// for the JS click handler — matches the dispatch §B.3 convention
+// for date-jump targeting per view type. Format: "YYYY-MM-DD" using
+// fantasy-calendar year (not Gregorian).
+func miniMonthDataAttr(data CalendarV2ViewData, d miniMonthDay) string {
+	return fmt.Sprintf("%d-%02d-%02d", data.Year, data.Month, d.Day)
+}

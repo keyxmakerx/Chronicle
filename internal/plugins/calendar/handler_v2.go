@@ -67,6 +67,12 @@ func (h *Handler) ShowV2(c echo.Context) error {
 		}
 	}
 
+	// Sidebar pin preference (Wave 1.7A §G). Default TRUE; nil-safe.
+	sidebarPinned := true
+	if pinned, perr := h.svc.GetSidebarPinned(ctx, userID, cc.Campaign.ID); perr == nil {
+		sidebarPinned = pinned
+	}
+
 	data := CalendarV2ViewData{
 		ActiveCalendar:  active,
 		AllCalendars:    allCalendars,
@@ -77,6 +83,7 @@ func (h *Handler) ShowV2(c echo.Context) error {
 		IsScribe:        cc.MemberRole >= campaigns.RoleScribe,
 		CSRFToken:       middleware.GetCSRFToken(c),
 		TierDefinitions: h.loadTierDefinitions(ctx, cc.Campaign.ID),
+		SidebarPinned:   sidebarPinned,
 	}
 
 	// Cursor (year/month/day) — fall back to the calendar's stored
@@ -160,6 +167,34 @@ func addDaysSimple(cal *Calendar, month, day, n int) (int, int) {
 		day = cal.Months[month-1].Days
 	}
 	return month, day
+}
+
+// SidebarPinAPI toggles the per-user sidebar pin preference.
+// POST /campaigns/:id/calendar/v2/sidebar-pin  body: {"pinned": true|false}
+//
+// Wave 1.7A §G. Returns 200 with the persisted pin state. UI uses
+// the response to confirm the toggle landed; on error, the toggle
+// reverts client-side.
+func (h *Handler) SidebarPinAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+	var req struct {
+		Pinned bool `json:"pinned"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.svc.SetSidebarPinned(ctx, userID, cc.Campaign.ID, req.Pinned); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"status": "ok",
+		"pinned": req.Pinned,
+	})
 }
 
 // SwitchActiveCalendarAPI persists the user's calendar choice.

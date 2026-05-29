@@ -467,9 +467,215 @@
         });
     }
 
+    // --- Drag-to-resize on Month-view multi-day ribbons (Wave 1.7A §B) ---
+    //
+    // Pointer-capture pattern: pointerdown on the right-edge handle
+    // captures the pointer to the handle element so pointermove/up
+    // events route to it even when the cursor strays off the handle.
+    // stopPropagation() prevents the ribbon body's dragstart
+    // (drag-to-reschedule) from firing. snap-to-day-boundary keeps
+    // the resize semantically discrete (no sub-day resize on Month
+    // view per dispatch §A.2).
+    //
+    // Browser support: setPointerCapture is universal in Chromium +
+    // modern Firefox + Safari 13+. Older Safari falls back to
+    // document-level pointermove tracking (graceful degradation; the
+    // affordance still works but cursor-off-handle may not track as
+    // smoothly). Documented as known limitation per stop-and-flag.
+    function initRibbonResize() {
+        var root = document.querySelector('[data-cal-v2-root]');
+        if (!root) return;
+        var calendarID = root.dataset.calV2CalendarId;
+        var campaignID = root.dataset.calV2CampaignId;
+        var csrfToken = root.dataset.calV2CsrfToken;
+        if (!calendarID) return;
+
+        var events = [];
+        try {
+            events = JSON.parse(root.dataset.calV2Events || '[]');
+        } catch (e) {
+            console.error('event_grid resize: invalid events payload', e);
+        }
+
+        // Cache event-by-id lookup; the parent init() block defines
+        // an equivalent closure but we redefine locally to keep the
+        // resize handler self-contained.
+        function eventByID(id) {
+            for (var i = 0; i < events.length; i++) {
+                if (events[i].id === id) return events[i];
+            }
+            return null;
+        }
+
+        // Active drag state — single resize at a time.
+        var resizeState = null;
+
+        function onPointerDown(e) {
+            var handle = e.target.closest('[data-ribbon-resize="right"]');
+            if (!handle) return;
+            var ribbon = handle.closest('[data-event-id]');
+            if (!ribbon) return;
+            var eventID = ribbon.dataset.eventId;
+            var ev = eventByID(eventID);
+            if (!ev) return;
+            // Suppress the ribbon body's drag-to-reschedule
+            // (it shares the same DOM but different gesture target).
+            e.stopPropagation();
+            e.preventDefault();
+            try {
+                handle.setPointerCapture(e.pointerId);
+            } catch (err) {
+                // setPointerCapture unsupported (older Safari);
+                // fall through to document-level tracking via the
+                // pointermove handler registered globally below.
+            }
+            // Compute starting state.
+            var ribbonRect = ribbon.getBoundingClientRect();
+            var grid = ribbon.parentElement; // the .grid container
+            var gridRect = grid.getBoundingClientRect();
+            var cols = computeGridColumnCount(grid);
+            var cellWidth = gridRect.width / cols;
+            // Read existing grid-column to find the current start col + span.
+            var styleParse = parseGridColumn(ribbon.style.gridColumn);
+            resizeState = {
+                handle: handle,
+                ribbon: ribbon,
+                eventID: eventID,
+                event: ev,
+                gridRect: gridRect,
+                cellWidth: cellWidth,
+                cols: cols,
+                startCol: styleParse.start,
+                originalSpan: styleParse.span,
+                originalEndCol: styleParse.start + styleParse.span - 1,
+                originalRight: ribbonRect.right,
+                pointerID: e.pointerId,
+                committed: false,
+            };
+            ribbon.classList.add('is-resizing');
+        }
+
+        function onPointerMove(e) {
+            if (!resizeState) return;
+            if (e.pointerId !== resizeState.pointerID) return;
+            // Snap to nearest day boundary. cursorX within grid →
+            // target end-column (1-indexed inclusive).
+            var relX = e.clientX - resizeState.gridRect.left;
+            var targetCol = Math.round(relX / resizeState.cellWidth);
+            if (targetCol < resizeState.startCol) {
+                targetCol = resizeState.startCol;
+            }
+            if (targetCol > resizeState.cols) {
+                targetCol = resizeState.cols; // clamp to grid edge
+            }
+            var newSpan = targetCol - resizeState.startCol + 1;
+            resizeState.ribbon.style.gridColumn = resizeState.startCol + ' / span ' + newSpan;
+            resizeState.currentEndCol = targetCol;
+        }
+
+        function onPointerUp(e) {
+            if (!resizeState) return;
+            if (e.pointerId !== resizeState.pointerID) return;
+            var state = resizeState;
+            resizeState = null;
+            state.ribbon.classList.remove('is-resizing');
+            try {
+                state.handle.releasePointerCapture(e.pointerId);
+            } catch (err) { /* ignore */ }
+
+            var newEndCol = state.currentEndCol || state.originalEndCol;
+            if (newEndCol === state.originalEndCol) {
+                // No change; nothing to commit.
+                return;
+            }
+            // Convert end-col delta to end-day delta. The ribbon's
+            // grid-column maps day-of-week-row → column; we don't
+            // have access to the start day directly here, but the
+            // event.end_day field gives us the existing value to
+            // add the col delta to.
+            var dayDelta = newEndCol - state.originalEndCol;
+            var newEndDay = (state.event.end_day || state.event.day) + dayDelta;
+            // Single-day conversion confirm: if resizing collapses
+            // to start day, prompt before committing.
+            if (newSpanCollapsesToSingleDay(state)) {
+                if (!window.confirm('Convert to single-day event?')) {
+                    // Revert visual.
+                    state.ribbon.style.gridColumn = state.startCol + ' / span ' + state.originalSpan;
+                    return;
+                }
+            }
+            commitResize(state, newEndDay);
+        }
+
+        function newSpanCollapsesToSingleDay(state) {
+            // If the new end-col equals start-col AND the original
+            // event was multi-day, this is a collapse.
+            return state.currentEndCol === state.startCol &&
+                state.originalSpan > 1;
+        }
+
+        function commitResize(state, newEndDay) {
+            var body = Object.assign({}, state.event, {
+                end_year: state.event.end_year || state.event.year,
+                end_month: state.event.end_month || state.event.month,
+                end_day: newEndDay,
+            });
+            var url = '/campaigns/' + campaignID + '/calendars/' + calendarID + '/events/' + state.eventID;
+            window.Chronicle.apiFetch(url, {
+                method: 'PUT',
+                body: body,
+                headers: { 'X-CSRF-Token': csrfToken },
+            }).then(function (resp) {
+                if (!resp.ok) throw new Error('Resize failed');
+                setTimeout(function () { window.location.reload(); }, 200);
+            }).catch(function (err) {
+                // Revert ribbon to original span on failure.
+                state.ribbon.style.gridColumn = state.startCol + ' / span ' + state.originalSpan;
+                window.Chronicle.notify((err && err.message) || 'Resize failed', 'error');
+            });
+        }
+
+        // Helpers ---------------------------------------------------
+
+        // computeGridColumnCount inspects the CSS Grid template-
+        // columns to derive the column count. Falls back to 7
+        // (Gregorian default) when parsing fails.
+        function computeGridColumnCount(grid) {
+            var style = window.getComputedStyle(grid);
+            var template = style.gridTemplateColumns || '';
+            // template-columns resolves to a space-separated list of
+            // tracks; counting them gives the column count.
+            var tracks = template.trim().split(/\s+/).filter(Boolean);
+            if (tracks.length > 0) return tracks.length;
+            return 7;
+        }
+
+        // parseGridColumn parses an inline "grid-column: N / span M"
+        // style value into {start, span}. Returns {start: 1, span: 1}
+        // when parsing fails.
+        function parseGridColumn(value) {
+            if (!value) return { start: 1, span: 1 };
+            var m = value.match(/^(\d+)\s*\/\s*span\s*(\d+)$/i);
+            if (m) return { start: parseInt(m[1], 10), span: parseInt(m[2], 10) };
+            return { start: 1, span: 1 };
+        }
+
+        // Register listeners at the document level so pointer events
+        // route correctly even when the cursor strays off the handle
+        // (graceful fallback when setPointerCapture is unavailable).
+        document.addEventListener('pointerdown', onPointerDown);
+        document.addEventListener('pointermove', onPointerMove);
+        document.addEventListener('pointerup', onPointerUp);
+        document.addEventListener('pointercancel', onPointerUp);
+    }
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('DOMContentLoaded', function () {
+            init();
+            initRibbonResize();
+        });
     } else {
         init();
+        initRibbonResize();
     }
 })();

@@ -30,6 +30,12 @@ type CalendarRepository interface {
 	GetActiveCalendarID(ctx context.Context, userID, campaignID string) (string, error)
 	SetActiveCalendar(ctx context.Context, userID, campaignID, calendarID string) error
 
+	// Sidebar pin preference (V2 Wave 1.7A §G). Per-user-per-campaign
+	// boolean piggybacked on the calendar_active row; defaults TRUE
+	// for new rows + backfilled rows per migration 007.
+	GetSidebarPinned(ctx context.Context, userID, campaignID string) (bool, error)
+	SetSidebarPinned(ctx context.Context, userID, campaignID string, pinned bool) error
+
 	// Months.
 	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
 	GetMonths(ctx context.Context, calendarID string) ([]Month, error)
@@ -243,6 +249,39 @@ func (r *calendarRepo) GetActiveCalendarID(ctx context.Context, userID, campaign
 		return "", err
 	}
 	return calendarID, nil
+}
+
+// GetSidebarPinned returns the user-per-campaign sidebar pin
+// preference. Defaults to TRUE when no row exists (matches the
+// viewport-default pin behavior; operators on narrow viewports
+// dismiss via toggle which writes FALSE).
+func (r *calendarRepo) GetSidebarPinned(ctx context.Context, userID, campaignID string) (bool, error) {
+	var pinned bool
+	err := r.db.QueryRowContext(ctx,
+		`SELECT sidebar_pinned FROM calendar_active WHERE user_id = ? AND campaign_id = ?`,
+		userID, campaignID).Scan(&pinned)
+	if err == sql.ErrNoRows {
+		// No active-cal row yet → default to pinned per migration 007 default.
+		return true, nil
+	}
+	if err != nil {
+		return true, err
+	}
+	return pinned, nil
+}
+
+// SetSidebarPinned writes the pin preference. Upserts via the same
+// calendar_active row used for active-cal pointers; preserves any
+// existing calendar_id reference (empty string fallback on first
+// write so a user who toggles pin before ever selecting a calendar
+// still gets a row).
+func (r *calendarRepo) SetSidebarPinned(ctx context.Context, userID, campaignID string, pinned bool) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_active (user_id, campaign_id, calendar_id, sidebar_pinned)
+		 VALUES (?, ?, '', ?)
+		 ON DUPLICATE KEY UPDATE sidebar_pinned = VALUES(sidebar_pinned)`,
+		userID, campaignID, pinned)
+	return err
 }
 
 // SetActiveCalendar writes the user-per-campaign active-calendar

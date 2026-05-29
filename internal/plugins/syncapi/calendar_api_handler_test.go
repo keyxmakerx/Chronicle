@@ -109,6 +109,12 @@ func (s *stubCalendarSvc) GetActiveCalendar(context.Context, string, string) (*c
 func (s *stubCalendarSvc) SwitchActiveCalendar(context.Context, string, string, string) error {
 	return nil
 }
+func (s *stubCalendarSvc) GetSidebarPinned(context.Context, string, string) (bool, error) {
+	return true, nil
+}
+func (s *stubCalendarSvc) SetSidebarPinned(context.Context, string, string, bool) error {
+	return nil
+}
 func (s *stubCalendarSvc) GetCycles(context.Context, string) ([]calendar.Cycle, error) {
 	return nil, nil
 }

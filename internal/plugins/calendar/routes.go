@@ -110,6 +110,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/calendar/v2/:calId", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/calendar/v2/:calId/:view", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/calendar/v2/switch", h.SwitchActiveCalendarAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// Wave 1.7A §G: sidebar pin toggle.
+	cg.POST("/calendar/v2/sidebar-pin", h.SidebarPinAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// V2 sub-resource card grids (Wave 1 PR 2 / C-CAL-V2-SUBRESOURCE-CARDS-A).
 	// Read-only render is Player+ (the cards display data anyone with
