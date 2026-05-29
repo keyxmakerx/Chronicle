@@ -430,6 +430,140 @@ func TestDemoChronicleCanon_RendersAllExpansionSections(t *testing.T) {
 	}
 }
 
+// ============================================================
+// Phase 1.7 — choice-picker + bug-fix guards
+// ============================================================
+
+// TestDemoChronicleCanon_PickerInfrastructure pins the choice-picker:
+// rate-mode controls, choose-mode vote buttons + variant groups, and
+// the "Your Decisions" output panel with copy + download.
+func TestDemoChronicleCanon_PickerInfrastructure(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, m := range []string{
+		`data-rate-id`,                 // rate-mode 1–5 control
+		`data-rate=`,                   // individual rating pill
+		`data-vote=`,                   // choose-mode thumbs
+		`data-variant-group="bg"`,      // background tint variant group
+		`data-variant-group="accent"`,  // accent palette group
+		`data-variant-group="button"`,  // button family group (operator's "dozen buttons")
+		`data-variant-apply`,           // live-apply button
+		`data-decisions-output`,        // Your Decisions output panel
+		`data-decisions-copy`,          // copy-to-clipboard
+		`data-decisions-download`,      // download
+		`data-stepper-nav`,             // combination wizard nav
+		`id="choices"`,                 // design-choices section
+	} {
+		if !strings.Contains(html, m) {
+			t.Errorf("picker infrastructure marker missing: %s", m)
+		}
+	}
+}
+
+// TestDemoChronicleCanon_TimelineAndCalendarDrag pins the two
+// interaction bugs the operator reported: the missing timeline mockup
+// and the non-draggable calendar.
+func TestDemoChronicleCanon_TimelineAndCalendarDrag(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	// Timeline mockup (operator: "you still haven't rebuilt a timeline mockup").
+	for _, m := range []string{`id="mockups-timeline"`, `data-timeline`, `data-timeline-playhead`, `chronicle-timeline__marker`, `data-timeline-zoom`} {
+		if !strings.Contains(html, m) {
+			t.Errorf("timeline mockup marker missing: %s", m)
+		}
+	}
+	// Calendar drag (operator: "I can't click and drag on the calendar which was an important thing").
+	for _, m := range []string{`data-mock-cal-grid`, `data-mock-ribbon`, `data-mock-ribbon-resize`} {
+		if !strings.Contains(html, m) {
+			t.Errorf("calendar-drag marker missing: %s", m)
+		}
+	}
+}
+
+// TestChronicleCanonDemoCSS_DarkBackgroundNotBlack pins the operator's
+// "background is pure black when it shouldn't be" fix: the dark-mode
+// surface must default to the site's cool gray-900 (oklch ~0.21), NOT
+// the near-black neutral-950 (oklch 0.08). The near-black stays
+// available only as the opt-in data-chronicle-bg="black" variant.
+func TestChronicleCanonDemoCSS_DarkBackgroundNotBlack(t *testing.T) {
+	src := readCanonCSS(t)
+	// The .dark default block must map --chronicle-surface to gray-900.
+	if !strings.Contains(src, "oklch(0.21 0.034 264.665)") {
+		t.Errorf("dark-mode default surface should be cool gray-900 oklch(0.21 0.034 264.665) to match the live site")
+	}
+	// And the near-black must only appear under the opt-in black variant.
+	if !strings.Contains(src, `data-chronicle-bg="black"`) {
+		t.Errorf("near-black should be preserved as the opt-in data-chronicle-bg=\"black\" variant")
+	}
+	// The default .dark block must NOT still point surface at neutral-950.
+	darkIdx := strings.Index(src, "[data-chronicle-demo].dark {")
+	if darkIdx >= 0 {
+		block := src[darkIdx:]
+		if end := strings.Index(block, "}"); end >= 0 {
+			block = block[:end]
+			if strings.Contains(block, "--chronicle-surface:         var(--chronicle-neutral-950)") {
+				t.Errorf(".dark default still maps surface to near-black neutral-950; operator wants gray-900")
+			}
+		}
+	}
+}
+
+// TestChronicleCanonDemoCSS_AnimationClassMatches pins the animation
+// bug fix: the CSS keyframe triggers must target the SAME class the
+// templ renders on the stage container (.chronicle-anim-tile__stage),
+// not the old mismatched .chronicle-anim-stage. (Operator: "the
+// animations library is still not doing anything, it's just squares.")
+func TestChronicleCanonDemoCSS_AnimationClassMatches(t *testing.T) {
+	css := readCanonCSS(t)
+	// Trigger selectors must use the tile-stage class.
+	if !strings.Contains(css, ".chronicle-anim-tile__stage[data-anim=") {
+		t.Errorf("animation triggers must target .chronicle-anim-tile__stage[data-anim=...] (the class the templ renders)")
+	}
+	// The old mismatched container selector must be gone (but the
+	// inner .chronicle-anim-stage-block stays — guard against that).
+	reStale := regexp.MustCompile(`\.chronicle-anim-stage(\.|\[)`)
+	if reStale.MatchString(css) {
+		t.Errorf("stale .chronicle-anim-stage container selector still present — animations won't trigger")
+	}
+	// Confirm the inner block class is untouched.
+	if !strings.Contains(css, ".chronicle-anim-stage-block") {
+		t.Errorf("inner .chronicle-anim-stage-block class should remain (it's the animated element)")
+	}
+}
+
+// TestChronicleCanonDemoCSS_ButtonVariantsDistinct pins the 6-way
+// button spread so the family is visually distinct (operator: "no
+// differences between the majority of the buttons").
+func TestChronicleCanonDemoCSS_ButtonVariantsDistinct(t *testing.T) {
+	css := readCanonCSS(t)
+	for _, cls := range []string{
+		".chronicle-button-primary",
+		".chronicle-button-tonal",
+		".chronicle-button-secondary",
+		".chronicle-button-ghost",
+		".chronicle-button-link",
+		".chronicle-button-destructive",
+	} {
+		if !strings.Contains(css, cls+" {") {
+			t.Errorf("button variant definition missing: %s", cls)
+		}
+	}
+	// Secondary must have a resting fill now (distinct from ghost's bare).
+	secIdx := strings.Index(css, ".chronicle-button-secondary {")
+	if secIdx >= 0 {
+		block := css[secIdx:]
+		if end := strings.Index(block, "}"); end >= 0 && strings.Contains(block[:end], "background: transparent") {
+			t.Errorf("secondary button should have a resting surface fill, not transparent (else it reads identical to ghost)")
+		}
+	}
+}
+
 // stripCSSComments removes /* ... */ block comments from CSS source.
 // Used by the lint tests so the canon's own documentation comments
 // (which legitimately quote `transition: all` and other forbidden
