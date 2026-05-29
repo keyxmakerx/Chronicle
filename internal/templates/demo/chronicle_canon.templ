@@ -1,47 +1,50 @@
-// chronicle_canon.templ — C-V2-DESIGN-REBUILD Phase 1 demo route.
+// chronicle_canon.templ — C-V2-DESIGN-REBUILD Phase 1.8 demo route.
 //
-// Static demo at GET /demo/chronicle-canon proving the new Chronicle
-// design canon. Owner-validation hard gate; Phase 2+ does not fire
-// without operator green-light here.
+// Static demo at GET /demo/chronicle-canon, the validation surface for
+// the new Chronicle design canon. Owner-validation hard gate; Phase 2+
+// does not fire without operator green-light here.
+//
+// Phase 1.8 reset (this revision):
+//   - All JS moved to /static/js/chronicle-canon-demo.js (per dispatch §A).
+//     Templ no longer carries an inline `<script>` body.
+//   - Per-block error isolation lives in the external JS (registry +
+//     try/catch per init block) — fixes the silent-death failure mode.
+//   - Visible "Demo Diagnostics" dashboard at top of page so operator's
+//     next failure report includes specific init-block status instead
+//     of "doesn't work."
+//   - Surface aggressively shrunk from PRs #375-#378: 30+ component
+//     showcases, 4 page mockups, motion vocabulary, color/date pickers,
+//     11-anchor jump menu, accent/density toggles outside the picker
+//     — all dropped. Kept: choice-picker (9 groups), "Your Decisions"
+//     panel, small live preview, theme + reduced-motion toggles.
 //
 // Scope: this templ touches no existing surface. All styling lives in
 // /static/css/chronicle-canon-demo.css under @layer chronicle-demo,
-// scoped to elements carrying [data-chronicle-demo]. The validation
-// harness toolbar at the top of the page hosts the three operator
-// controls (light/dark, accent palette, reduced-motion preview).
+// scoped to elements carrying [data-chronicle-demo]. Accent mutation
+// is scope-isolated to the demo root (never --color-accent-rgb).
 //
 // Cross-refs:
 //   - decisions/2026-05-29-chronicle-design-canon.md       (D1-D10 binding)
-//   - reports/chronicle/2026-05-29-c-v2-design-rebuild-audit.md §1.4
-//   - plans/2026-05-29-v2-design-rebuild-reference-research.md Appendix A
-//   - dispatches/chronicle/C-V2-DESIGN-REBUILD-PHASE-1-DEMO.md
+//   - reports/chronicle/2026-05-29-chronicle-dev-demo-misfire-escalation.md
+//   - dispatches/chronicle/C-V2-DESIGN-REBUILD-PHASE-1-8-DEMO-RESET.md
+//   - PRs #375 / #376 / #377 / #378 (prior phases; component-showcase
+//     surface dropped here; choice-picker reframe survives)
 
 package demo
 
-import (
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
-)
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 
-// DemoChronicleCanon renders the full canon-demo page inside the
-// standard @layouts.App shell so the operator can compare the
-// existing navbar/topbar against the canon-styled demo content in the
-// same viewport. The root element carries the canon's scope attribute
-// (`data-chronicle-demo`) so every component inside resolves the
-// `--chronicle-*` token cascade.
+// DemoChronicleCanon renders the canon-demo page inside the standard
+// layouts.App shell. The root element carries the canon's scope
+// attribute (`data-chronicle-demo`) so every component inside resolves
+// the `--chronicle-*` token cascade.
 templ DemoChronicleCanon() {
 	@layouts.App("Chronicle Canon Demo") {
-		// Canon CSS loaded directly here (not via input.css @import,
-		// which Tailwind v3-shape doesn't resolve). Browser respects
-		// the @layer chronicle-demo ordering declared in app.css
-		// across both stylesheets. Mirrors the maps plugin's leaflet
-		// CSS-link pattern (internal/plugins/maps/maps.templ:229).
+		// Canon CSS loaded directly (not via input.css @import, which
+		// Tailwind v3-shape doesn't resolve). @layer chronicle-demo
+		// ordering is declared in app.css and respected across both
+		// stylesheets.
 		<link rel="stylesheet" href="/static/css/chronicle-canon-demo.css"/>
-		// Phase 1.5: default theme is now `dark` per operator
-		// feedback ("i'm used to dark mode"). The demoScript() init
-		// fires before the operator sees anything painted and applies
-		// localStorage > OS-preference > dark-default precedence on
-		// the same data-attr the CSS keys off. Setting the attribute
-		// here as `dark` makes the no-JS fallback already correct.
 		<div
 			class="chronicle-canon-page"
 			data-chronicle-demo
@@ -51,2075 +54,180 @@ templ DemoChronicleCanon() {
 			data-chronicle-bg="cool"
 			data-hover-style="lift"
 		>
+			@diagnosticsDashboard()
 			@harness()
-			@stepperNav()
-			@browserCompatPanel()
 			@introSection()
 			@designChoicesSection()
-			@motionSection()
-			@cardSection()
-			@navbarEchoSection()
-			@selectedComparisonSection()
-			@formsSection()
-			@buttonsSection()
-			@buttonsExtendedSection()
-			@statusSection()
-			@navigationSection()
-			@inputSection()
-			@dataSection()
-			@popoverSection()
-			@overlaysSection()
-			@chipSection()
-			@listSection()
-			@containersSection()
-			@drawerSection()
-			@densitySection()
-			@varietyFormSection()
-			@varietyButtonsSection()
-			@varietyStatusSection()
-			@varietyNavSection()
-			@varietyDataSection()
-			@varietyOverlaysSection()
-			@varietyAnimationsSection()
-			@varietyLayoutsSection()
-			@mockHubSection()
-			@mockSettingsSection()
-			@mockCalendarSection()
-			@mockTimelineSection()
+			@previewSection()
 		</div>
 		@decisionsPanel()
-		@demoScript()
+		// External JS — per-block error isolation + visible diagnostic
+		// dashboard. defer = runs after DOM parse, before
+		// DOMContentLoaded fires. No inline `<script>` body anywhere
+		// in this templ (per dispatch §A/§F).
+		<script src="/static/js/chronicle-canon-demo.js" defer></script>
 	}
 }
 
-// harness — sticky operator-facing toolbar. Three controls + a
-// resolved-tokens display. Per dispatch §D.
+// diagnosticsDashboard — the load-bearing visible diagnostic surface.
+// First thing operator sees. Shows init-block status (✓/✗ with error
+// text), element binding counts, browser-compat detection, UA string,
+// and a last-action log. Copy button exports everything as plain text
+// for pasting to the coordinator. Per dispatch §C.
+//
+// Skeleton is server-rendered; the external JS fills it on init. If
+// the JS fails to load entirely, the "(JS not yet loaded)" placeholders
+// stay visible — which IS the diagnostic signal.
+templ diagnosticsDashboard() {
+	<section class="chronicle-diagnostics" data-demo-diagnostics data-status="pending" aria-live="polite">
+		<header class="chronicle-diagnostics__head">
+			<div class="chronicle-diagnostics__title-wrap">
+				<h2 class="chronicle-diagnostics__title">Demo Diagnostics</h2>
+				<span class="chronicle-diagnostics__summary" data-diagnostics-summary>Awaiting init…</span>
+			</div>
+			<p class="chronicle-diagnostics__hint">
+				If anything is red — or this panel itself shows &quot;JS not yet loaded&quot; after a few seconds — copy this report to the coordinator. That tells us specifically what is broken instead of &quot;doesn&apos;t work.&quot;
+			</p>
+			<button type="button" class="chronicle-button-secondary chronicle-button-secondary--sm" data-copy-report>
+				Copy diagnostic report
+			</button>
+		</header>
+		<div class="chronicle-diagnostics__grid">
+			<div class="chronicle-diagnostics__col">
+				<h3 class="chronicle-diagnostics__col-title">Init blocks</h3>
+				<ul class="chronicle-diagnostics__list" data-init-block-list>
+					<li class="chronicle-diagnostics__item chronicle-diagnostics__item--pending">(JS not yet loaded)</li>
+				</ul>
+			</div>
+			<div class="chronicle-diagnostics__col">
+				<h3 class="chronicle-diagnostics__col-title">Element bindings</h3>
+				<ul class="chronicle-diagnostics__list" data-binding-list>
+					<li class="chronicle-diagnostics__item chronicle-diagnostics__item--pending">(JS not yet loaded)</li>
+				</ul>
+			</div>
+			<div class="chronicle-diagnostics__col">
+				<h3 class="chronicle-diagnostics__col-title">Browser features</h3>
+				<ul class="chronicle-diagnostics__list" data-feature-list>
+					<li class="chronicle-diagnostics__item chronicle-diagnostics__item--pending">(JS not yet loaded)</li>
+				</ul>
+			</div>
+		</div>
+		<footer class="chronicle-diagnostics__foot">
+			<div class="chronicle-diagnostics__ua">
+				<strong>User agent:</strong> <code data-ua-string>(unknown — JS not loaded)</code>
+			</div>
+			<div class="chronicle-diagnostics__actions">
+				<strong>Last actions (most recent first):</strong>
+				<ol class="chronicle-diagnostics__log" data-last-action-log>
+					<li>(no actions yet — click something below)</li>
+				</ol>
+			</div>
+		</footer>
+	</section>
+}
+
+// harness — minimal operator-facing toolbar. Theme + reduced-motion
+// only (accent + density fold into the choice-picker per dispatch §D).
 templ harness() {
 	<div class="chronicle-harness" role="region" aria-label="Canon demo controls">
 		<div class="chronicle-harness__group">
 			<span class="chronicle-harness__label">Theme:</span>
-			<button type="button" class="chronicle-harness__swatch" data-action="theme" data-value="light" aria-pressed="true">Light</button>
-			<button type="button" class="chronicle-harness__swatch" data-action="theme" data-value="dark" aria-pressed="false">Dark</button>
-		</div>
-		<div class="chronicle-harness__group">
-			<span class="chronicle-harness__label">Accent:</span>
-			<button type="button" class="chronicle-harness__swatch" data-action="accent" data-value="indigo" aria-pressed="true">
-				<span class="chronicle-harness__dot" style="background: oklch(0.58 0.20 270);"></span>Indigo
-			</button>
-			<button type="button" class="chronicle-harness__swatch" data-action="accent" data-value="emerald" aria-pressed="false">
-				<span class="chronicle-harness__dot" style="background: oklch(0.65 0.15 155);"></span>Emerald
-			</button>
-			<button type="button" class="chronicle-harness__swatch" data-action="accent" data-value="amber" aria-pressed="false">
-				<span class="chronicle-harness__dot" style="background: oklch(0.78 0.16 75);"></span>Amber
-			</button>
-			<button type="button" class="chronicle-harness__swatch" data-action="accent" data-value="rose" aria-pressed="false">
-				<span class="chronicle-harness__dot" style="background: oklch(0.65 0.20 22);"></span>Rose
-			</button>
+			<button type="button" class="chronicle-harness__swatch" data-action="theme" data-value="light" aria-pressed="false">Light</button>
+			<button type="button" class="chronicle-harness__swatch" data-action="theme" data-value="dark" aria-pressed="true">Dark</button>
 		</div>
 		<div class="chronicle-harness__group">
 			<span class="chronicle-harness__label">Motion:</span>
 			<button type="button" class="chronicle-harness__swatch" data-action="reduce-motion" data-value="false" aria-pressed="true">Normal</button>
 			<button type="button" class="chronicle-harness__swatch" data-action="reduce-motion" data-value="true" aria-pressed="false">Reduced</button>
 		</div>
-		<div class="chronicle-harness__group">
-			<span class="chronicle-harness__label">Density:</span>
-			<button type="button" class="chronicle-harness__swatch" data-action="density" data-value="compact" aria-pressed="false">Compact</button>
-			<button type="button" class="chronicle-harness__swatch" data-action="density" data-value="comfortable" aria-pressed="true">Comfortable</button>
-			<button type="button" class="chronicle-harness__swatch" data-action="density" data-value="spacious" aria-pressed="false">Spacious</button>
-		</div>
-		<div class="chronicle-harness__group" style="margin-left: auto;">
-			<span class="chronicle-harness__label">Resolved tokens:</span>
-			<code id="chronicle-resolved-tokens" class="chronicle-tokens-display" style="margin: 0; padding: 4px 10px;">--chronicle-accent = …</code>
-		</div>
-		<div class="chronicle-harness__group chronicle-harness__jump" style="flex-basis: 100%;">
-			<span class="chronicle-harness__label">Jump:</span>
-			<a class="chronicle-harness__jump-link" href="#motion">Motion</a>
-			<a class="chronicle-harness__jump-link" href="#card">Cards</a>
-			<a class="chronicle-harness__jump-link" href="#forms">Forms</a>
-			<a class="chronicle-harness__jump-link" href="#buttons">Buttons</a>
-			<a class="chronicle-harness__jump-link" href="#status">Status</a>
-			<a class="chronicle-harness__jump-link" href="#nav">Navigation</a>
-			<a class="chronicle-harness__jump-link" href="#data">Data</a>
-			<a class="chronicle-harness__jump-link" href="#overlays">Overlays</a>
-			<a class="chronicle-harness__jump-link" href="#containers">Containers</a>
-			<a class="chronicle-harness__jump-link" href="#density">Density</a>
-			<a class="chronicle-harness__jump-link" href="#mockups">Mockups</a>
-		</div>
 	</div>
 }
 
 templ introSection() {
 	<section class="chronicle-section">
-		<h1 class="chronicle-section__title">Chronicle design canon — Phase 1 demo</h1>
+		<h1 class="chronicle-section__title">Chronicle design canon — choice-picker validation</h1>
 		<p class="chronicle-section__intro">
-			Validation surface for the new design language. The architectural plumbing of the merged Extensions hub stays as-is; only the visual layer is being rebuilt. Walk every section below, try the controls in the sticky bar above, then either green-light Phase 2 or surface concerns. Tokens defined under <code>&#64;layer chronicle-demo</code>; isolated from every other surface.
+			This demo is a choice-picker, not a showcase. Rate the locked elements (1–5), 👍/👎 the options you prefer, and click <strong>Apply &amp; preview</strong> to see a variant ripple across the surfaces below. Your picks build the markdown brief in the &quot;Your Decisions&quot; panel — copy that back to the coordinator and Phase 2 of the design rebuild fires from your actual preferences.
 		</p>
 	</section>
 }
 
-// cardSection — C.1. The canon's headline component. Renders all
-// five states (resting, hover, pressed, focus, selected variants
-// elsewhere) so operator sees the full state space at once.
-templ cardSection() {
-	<section class="chronicle-section" id="card">
-		<h2 class="chronicle-section__title">Card — canon D3 elevation</h2>
+// designChoicesSection — the heart of the picker: nine load-bearing
+// "which do you prefer" decisions, each a choose-mode variant group
+// whose Apply buttons live-apply a global token so the change ripples
+// across the preview area below.
+templ designChoicesSection() {
+	<section class="chronicle-section" id="choices">
+		<h2 class="chronicle-section__title">Design choices — pick what you prefer</h2>
 		<p class="chronicle-section__intro">
-			Three co-occurring transitions on hover (<code>background-color</code> + <code>border-color</code> + <code>box-shadow</code>, 150ms). <strong>Never animates <code>box-shadow</code> alone</strong> — this is the entire fix for the "shadow from nowhere" complaint that triggered the rebuild.
+			Each block is a question. 👍/👎 each option to register a preference; click <strong>Apply &amp; preview</strong> on the one you want to test live (it updates the preview surfaces below). Notes optional.
 		</p>
-		<div class="chronicle-section__grid">
-			<div class="chronicle-card" tabindex="0">
-				<span class="chronicle-state-label">Resting</span>
-				<h3 class="chronicle-card__title">Quiet by default</h3>
-				<p class="chronicle-card__body">Border + tint at rest; zero shadow. Per canon D3.</p>
-			</div>
-			<div class="chronicle-card" data-state="hover" tabindex="0">
-				<span class="chronicle-state-label">Hover (frozen)</span>
-				<h3 class="chronicle-card__title">Surface lifts together</h3>
-				<p class="chronicle-card__body">Background, border, and shadow change in concert over 150ms. Live hover any card and watch.</p>
-			</div>
-			<div class="chronicle-card" data-state="pressed" tabindex="0">
-				<span class="chronicle-state-label">Pressed (frozen)</span>
-				<h3 class="chronicle-card__title">12% state layer</h3>
-				<p class="chronicle-card__body">Transition snappier than hover (100ms vs 150ms) — echoes the navbar's 0.15s-vs-0.2s asymmetry from audit §1.4.</p>
-			</div>
-			<div class="chronicle-card chronicle-card--focused" tabindex="0" autofocus>
-				<span class="chronicle-state-label">Focus (tab to me)</span>
-				<h3 class="chronicle-card__title">Ring outline only</h3>
-				<p class="chronicle-card__body">Focus changes nothing about elevation. Outline is the cue. Per canon D3.</p>
-			</div>
+		<h3 class="chronicle-state-label">Dark background tint</h3>
+		<p class="chronicle-section__intro">Operator: &quot;the background should be the same darkmode idea we already had on the website.&quot; <strong>Cool gray-900</strong> matches the live site (default).</p>
+		<div class="chronicle-variant-grid">
+			@variantCard("bg", "cool", "Cool gray-900 (site match)", "background: oklch(0.21 0.034 264.665);", true)
+			@variantCard("bg", "black", "Near-black neutral", "background: oklch(0.08 0 0);", false)
+			@variantCard("bg", "warm", "Warm charcoal", "background: oklch(0.21 0.012 60);", false)
+			@variantCard("bg", "elevated", "Indigo charcoal (sidebar tone)", "background: oklch(0.205 0.015 277);", false)
+		</div>
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Accent palette</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("accent", "indigo", "Indigo", "background: oklch(0.58 0.20 270);", true)
+			@variantCard("accent", "emerald", "Emerald", "background: oklch(0.65 0.15 155);", false)
+			@variantCard("accent", "amber", "Amber", "background: oklch(0.78 0.16 75);", false)
+			@variantCard("accent", "rose", "Rose", "background: oklch(0.65 0.20 22);", false)
+		</div>
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Corner radius</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("radius", "sharp", "Sharp (2/4px)", "", false)
+			@variantCard("radius", "medium", "Medium (6/8px)", "", true)
+			@variantCard("radius", "soft", "Soft (12/16px)", "", false)
+		</div>
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Shadow / elevation</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("shadow", "none", "Border-only (no shadow)", "", false)
+			@variantCard("shadow", "subtle", "Subtle (canon)", "", true)
+			@variantCard("shadow", "pronounced", "Pronounced", "", false)
+			@variantCard("shadow", "heavy", "Heavy", "", false)
+		</div>
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Card hover style</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("hover", "lift", "Surface-lift co-occurrence (canon D3)", "", true)
+			@variantCard("hover", "navbar", "Navbar-echo gradient", "", false)
+			@variantCard("hover", "border", "Border-only", "", false)
+			@variantCard("hover", "glow", "Accent glow", "", false)
+		</div>
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Motion speed</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("motion", "snappy", "Snappy (100/150ms)", "", false)
+			@variantCard("motion", "canon", "Canon (150/250ms)", "", true)
+			@variantCard("motion", "relaxed", "Relaxed (250/400ms)", "", false)
+		</div>
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Density</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("density", "compact", "Compact", "", false)
+			@variantCard("density", "comfortable", "Comfortable", "", true)
+			@variantCard("density", "spacious", "Spacious", "", false)
+		</div>
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Selected-state treatment</h3>
+		<div class="chronicle-variant-grid">
+			@variantCard("selected", "A", "Variant A — accent border + tint (canon D3)", "", true)
+			@variantCard("selected", "B", "Variant B — navbar half-hover", "", false)
+		</div>
+		<h3 class="chronicle-state-label" style="margin-top:20px;">Button family — which treatments do you want?</h3>
+		<p class="chronicle-section__intro">Operator: &quot;here are a dozen buttons, which do you prefer.&quot; 👍/👎 each. (Hover them to see states.)</p>
+		<div class="chronicle-variant-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+			@buttonVariantCard("primary", "Primary (solid)")
+			@buttonVariantCard("tonal", "Tonal (accent tint)")
+			@buttonVariantCard("secondary", "Secondary (outlined)")
+			@buttonVariantCard("ghost", "Ghost (bare)")
+			@buttonVariantCard("link", "Link (underlined)")
+			@buttonVariantCard("destructive", "Destructive (danger)")
 		</div>
 	</section>
 }
 
-// navbarEchoSection — C.3. The navbar's ::before opacity-fade mechanism
-// translated onto a card shape. Sits next to the canon-D3 card so
-// operator can compare side-by-side (same hover/press states).
-templ navbarEchoSection() {
-	<section class="chronicle-section" id="navbar-echo">
-		<h2 class="chronicle-section__title">Navbar-echo card variant</h2>
-		<p class="chronicle-section__intro">
-			Same canon-D3 base, plus the navbar's <code>::before</code> opacity-fade gradient (the load-bearing pattern operator named twice). Hover for "partial" (3-side); press for "cover" (4-side). Alpha stops translated to <code>color-mix(in oklch, …)</code> from input.css:264-308. Audit §1.4 ladder.
-		</p>
-		<div class="chronicle-section__grid">
-			<div class="chronicle-card chronicle-card--navbar-echo" tabindex="0">
-				<span class="chronicle-state-label">Try me — hover then press</span>
-				<h3 class="chronicle-card__title">Partial → cover</h3>
-				<p class="chronicle-card__body">Rest opacity 0 · hover opacity 1 (3-side at 50/45/30%) · press opacity 1 (4-side at 55/55/45/35%). Press is faster (100ms) than hover (150ms).</p>
-			</div>
-			<div class="chronicle-card chronicle-card--navbar-echo" tabindex="0">
-				<span class="chronicle-state-label">Stuck in hover (CSS only — no JS)</span>
-				<h3 class="chronicle-card__title">Inset wash</h3>
-				<p class="chronicle-card__body">Box-shadow inset wash co-occurs with the gradient — never alone. Hover left → right; the wash fades from the right edge.</p>
-			</div>
-		</div>
-	</section>
-}
-
-// selectedComparisonSection — the operator-validation crux. Two
-// selected-state variants side-by-side; operator picks one.
-templ selectedComparisonSection() {
-	<section class="chronicle-section" id="selected-comparison">
-		<h2 class="chronicle-section__title">Selected state — pick one</h2>
-		<p class="chronicle-section__intro">
-			Both variants are canon-compatible; the choice is taste. Variant A treats selection as <em>identity</em> (accent border + tint, no shadow). Variant B treats selection as <em>persistent half-hover</em> (echoes the navbar's selected-link mechanism). Whichever you prefer becomes Phase 2's binding selected treatment.
-		</p>
-		<div class="chronicle-section__grid">
-			<div class="chronicle-card" data-selected="A" tabindex="0">
-				<span class="chronicle-state-label">Variant A — canon D3</span>
-				<h3 class="chronicle-card__title">Accent border + 4% tint</h3>
-				<p class="chronicle-card__body">No shadow change. Border thickens to 1.5px in accent. Background gains 4% accent tint via <code>color-mix(in oklch)</code>.</p>
-			</div>
-			<div class="chronicle-card" data-selected="B" tabindex="0">
-				<span class="chronicle-state-label">Variant B — navbar echo</span>
-				<h3 class="chronicle-card__title">Persistent half-hover</h3>
-				<p class="chronicle-card__body">Surface lifts one level + 6% accent overlay via <code>::before</code> at opacity 0.5. Matches the navbar's persistent-active treatment.</p>
-			</div>
-		</div>
-	</section>
-}
-
-templ buttonsSection() {
-	<section class="chronicle-section" id="buttons">
-		<h2 class="chronicle-section__title">Buttons — canon D2/D4</h2>
-		<p class="chronicle-section__intro">
-			Primary uses the active accent (responds to the swatch above). Hover never spawns a shadow — brightness shifts via <code>color-mix(in oklch, accent, white 6%)</code>. Focus = ring outline only.
-		</p>
-		<div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
-			<button type="button" class="chronicle-button-primary">Primary action</button>
-			<button type="button" class="chronicle-button-secondary">Secondary</button>
-			<button type="button" class="chronicle-button-ghost">Ghost</button>
-			<button type="button" class="chronicle-button-primary" disabled style="opacity: 0.5; cursor: not-allowed;">Disabled</button>
-		</div>
-	</section>
-}
-
-templ inputSection() {
-	<section class="chronicle-section" id="input">
-		<h2 class="chronicle-section__title">Input — canon D2/D4</h2>
-		<p class="chronicle-section__intro">
-			Focus = border + 2px translucent ring outline. <strong>No shadow on focus.</strong> Per canon D3.
-		</p>
-		<div style="max-width: 320px; display: flex; flex-direction: column; gap: 8px;">
-			<input type="text" class="chronicle-input" placeholder="Type to see focus state…"/>
-			<input type="text" class="chronicle-input" value="Pre-filled value"/>
-		</div>
-	</section>
-}
-
-templ popoverSection() {
-	<section class="chronicle-section" id="popover">
-		<h2 class="chronicle-section__title">Popover — canon D8 (Popover API + anchor positioning)</h2>
-		<p class="chronicle-section__intro">
-			Born with shadow (elev-3) because the surface materialised; canon D3 §"popovers / dropdowns / modals." Uses native <code>popover</code> attribute + anchor positioning where supported; feature-detected, graceful fallback.
-		</p>
-		<div style="display: flex; gap: 12px; align-items: center;">
-			<button
-				type="button"
-				class="chronicle-button-secondary chronicle-popover-anchor"
-				popovertarget="chronicle-demo-popover"
-			>Open popover</button>
-			<div
-				id="chronicle-demo-popover"
-				class="chronicle-popover"
-				popover="auto"
-				data-anchored
-			>
-				<strong style="font-size: 13px;">Popover content</strong>
-				<p style="margin: 4px 0 0 0; font-size: 12px; color: var(--chronicle-fg-muted);">
-					Anchored to the trigger via <code>position-anchor</code> where the browser supports it. Close via the button, ESC, or click-outside.
-				</p>
-			</div>
-		</div>
-	</section>
-}
-
-templ chipSection() {
-	<section class="chronicle-section" id="chips">
-		<h2 class="chronicle-section__title">Event chip — canon D2 tier overlays</h2>
-		<p class="chronicle-section__intro">
-			Verifies <code>color-mix(in oklch)</code> renders cleanly across hues. Three tiers, three colour wells, one mechanism. Calendar's tier-overlay system will consume this pattern in Phase 4.
-		</p>
-		<div style="display: flex; gap: 8px; flex-wrap: wrap;">
-			<span class="chronicle-chip" data-tier="indigo">Coronation</span>
-			<span class="chronicle-chip" data-tier="emerald">Harvest moon</span>
-			<span class="chronicle-chip" data-tier="amber">Trade summit</span>
-			<span class="chronicle-chip">Uses active accent</span>
-		</div>
-	</section>
-}
-
-templ listSection() {
-	<section class="chronicle-section" id="list">
-		<h2 class="chronicle-section__title">List item — canon D3 state-layer</h2>
-		<p class="chronicle-section__intro">
-			Hover = 4% on-surface state layer; selected = 3px accent border-left + 4% accent tint. <strong>No shadow on either state</strong> — the elevation that matters here is the surface tint shift. Per canon D3.
-		</p>
-		<div class="chronicle-list" style="max-width: 480px;">
-			<div class="chronicle-list-item" tabindex="0">First entry — plain</div>
-			<div class="chronicle-list-item" data-state="hover" tabindex="0">Second entry — frozen hover (just look)</div>
-			<div class="chronicle-list-item" data-selected="true" tabindex="0">Third entry — selected (accent border-left)</div>
-			<div class="chronicle-list-item" tabindex="0">Fourth entry — interactive (hover me)</div>
-			<div class="chronicle-list-item" tabindex="0">Fifth entry — interactive</div>
-		</div>
-	</section>
-}
-
-// drawerSection — C.2. Tests the "opens in random section in the
-// middle" fix: drawer body uses scroll-behavior: auto + JS scroll-top
-// reset on close-then-open path.
-templ drawerSection() {
-	<section class="chronicle-section" id="drawer">
-		<h2 class="chronicle-section__title">Drawer — canon D9</h2>
-		<p class="chronicle-section__intro">
-			Right-side inline drawer with card-grid reflow. Operator's earlier "opens in random section in the middle" bug should NOT reproduce — close, scroll deep, reopen; scroll resets to top. Uses View Transitions API where supported.
-		</p>
-		<button type="button" class="chronicle-button-primary" data-action="drawer-toggle">Open drawer</button>
-		<div class="chronicle-drawer-layout" data-drawer-open="false" id="chronicle-drawer-layout">
-			<div class="chronicle-section__grid" style="padding-top: 16px;">
-				<div class="chronicle-card" tabindex="0">
-					<span class="chronicle-state-label">Card A</span>
-					<h3 class="chronicle-card__title">Grid reflows when drawer opens</h3>
-					<p class="chronicle-card__body">Width shrinks to fit the drawer; transition uses the same 400ms decelerate-easing as the drawer slide.</p>
-				</div>
-				<div class="chronicle-card" tabindex="0">
-					<span class="chronicle-state-label">Card B</span>
-					<h3 class="chronicle-card__title">No visual jump</h3>
-					<p class="chronicle-card__body">The grid is the moving piece; cards themselves don't change elevation when the drawer opens.</p>
-				</div>
-			</div>
-			<aside class="chronicle-drawer" id="chronicle-drawer">
-				<header class="chronicle-drawer-header">
-					<strong>Drawer title</strong>
-					<button type="button" class="chronicle-button-ghost" data-action="drawer-close" aria-label="Close drawer">✕</button>
-				</header>
-				<div class="chronicle-drawer-body" id="chronicle-drawer-body">
-					<p style="margin: 0 0 12px 0;">Scroll down…</p>
-					for i := 1; i <= 30; i++ {
-						<p style="margin: 0 0 12px 0; font-size: 13px; color: var(--chronicle-fg-muted);">
-							Filler row { itoa(i) }. Scroll-position fix: closing and reopening this drawer should always return scroll to top, regardless of how far you scrolled before close.
-						</p>
-					}
-				</div>
-			</aside>
-		</div>
-	</section>
-}
-
-// ============================================================
-// Phase 1.5 expansion sections — additive only. Each section
-// renders multiple states / sizes / semantic variants visible at
-// once so the operator can evaluate the canon across surface
-// breadth, not just primitives.
-//
-// Section IDs match the harness jump-menu hrefs (#motion, #forms,
-// #buttons, #status, #nav, #data, #overlays, #containers,
-// #density, #mockups).
-// ============================================================
-
-// motionSection — the dispatch §C headliner. C.1 duration ladder,
-// C.2 easing comparison, C.3 hover ladder, C.4 co-occurrence rule
-// (the killer side-by-side), C.5 animation library tiles, C.6
-// reduced-motion stress test. Lives near top so it's the first
-// non-card content operator hits.
-templ motionSection() {
-	<section class="chronicle-section" id="motion">
-		<h2 class="chronicle-section__title">Motion Vocabulary — canon D5</h2>
-		<p class="chronicle-section__intro">
-			Every motion token, isolated and replayable. The C.4 sub-section below shows the
-			rejected "shadow from nowhere" pattern vs the canon's co-occurring transitions
-			side-by-side — the most viscerally-validating element in the demo.
-		</p>
-
-		// C.1 duration ladder
-		<h3 class="chronicle-state-label" style="margin-top: 12px; margin-bottom: 8px;">C.1 — Duration ladder</h3>
-		<p class="chronicle-section__intro">
-			Five blocks sliding the same distance, each using a different <code>--chronicle-motion-*</code> token. Click "Replay all" to compare speeds.
-		</p>
-		<div style="margin-bottom: 16px;">
-			<button type="button" class="chronicle-button-secondary chronicle-button-secondary--sm" data-action="motion-replay" data-target="duration">Replay all</button>
-		</div>
-		@motionDurationTrack("fast",   "100ms")
-		@motionDurationTrack("base",   "150ms")
-		@motionDurationTrack("medium", "250ms")
-		@motionDurationTrack("long",   "400ms")
-		@motionDurationTrack("xlong",  "600ms")
-
-		// C.2 easing comparison
-		<h3 class="chronicle-state-label" style="margin-top: 24px; margin-bottom: 8px;">C.2 — Easing comparison</h3>
-		<p class="chronicle-section__intro">
-			Same distance, same duration (<code>--chronicle-motion-medium</code> 250ms), different easing curves.
-		</p>
-		<div style="margin-bottom: 16px;">
-			<button type="button" class="chronicle-button-secondary chronicle-button-secondary--sm" data-action="motion-replay" data-target="ease">Replay all</button>
-		</div>
-		@motionEaseTrack("standard")
-		@motionEaseTrack("decelerate")
-		@motionEaseTrack("accelerate")
-
-		// C.3 hover ladder — the navbar-echo writ large
-		<h3 class="chronicle-state-label" style="margin-top: 24px; margin-bottom: 8px;">C.3 — Hover ladder preview (audit §1.4)</h3>
-		<p class="chronicle-section__intro">
-			One card, four states triggered explicitly. Echoes the navbar's "partial → cover → animated" mechanism on a card shape.
-		</p>
-		<div class="chronicle-hover-ladder">
-			<div class="chronicle-hover-ladder__card" id="chronicle-hover-ladder-card" data-preview="rest">
-				<h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600;">Stepwise preview</h4>
-				<p style="margin: 0; font-size: 12px; color: var(--chronicle-fg-muted);">Current state shows above. Press buttons to step through.</p>
-			</div>
-			<div style="display: flex; gap: 6px;">
-				<button type="button" class="chronicle-button-secondary chronicle-button-secondary--sm" data-action="hover-ladder" data-value="rest">Rest</button>
-				<button type="button" class="chronicle-button-secondary chronicle-button-secondary--sm" data-action="hover-ladder" data-value="hover">Hover</button>
-				<button type="button" class="chronicle-button-secondary chronicle-button-secondary--sm" data-action="hover-ladder" data-value="pressed">Pressed</button>
-				<button type="button" class="chronicle-button-secondary chronicle-button-secondary--sm" data-action="hover-ladder" data-value="selected">Selected</button>
-			</div>
-		</div>
-
-		// C.4 co-occurrence rule comparison — THE killer
-		<h3 class="chronicle-state-label" style="margin-top: 24px; margin-bottom: 8px;">C.4 — Co-occurrence rule (the rejection fix made visible)</h3>
-		<p class="chronicle-section__intro">
-			Hover both cards. Left animates <strong>only</strong> <code>box-shadow</code> — the rejected pattern from the V2 surfaces operator rejected. Right animates <code>box-shadow</code> + <code>background-color</code> + <code>border-color</code> together — the canon D3 rule. The difference is the entire point of the rebuild.
-		</p>
-		<div class="chronicle-shadow-comparison">
-			<div class="chronicle-shadow-rejected" tabindex="0">
-				<span class="chronicle-shadow-label chronicle-shadow-label--rejected">Rejected — shadow alone</span>
-				<h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600;">Hover me</h4>
-				<p style="margin: 0; font-size: 12px; color: var(--chronicle-fg-muted);">Shadow appears, but the surface didn't change. Operator's "shadow from nowhere" complaint lives here.</p>
-			</div>
-			<div class="chronicle-shadow-canon" tabindex="0">
-				<span class="chronicle-shadow-label chronicle-shadow-label--canon">Canon — co-occurrence</span>
-				<h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600;">Hover me</h4>
-				<p style="margin: 0; font-size: 12px; color: var(--chronicle-fg-muted);">Surface lifts, border thickens, shadow appears — together. Shadow has narrative.</p>
-			</div>
-		</div>
-
-		// C.5 animation library showcase
-		<h3 class="chronicle-state-label" style="margin-top: 24px; margin-bottom: 8px;">C.5 — Animation library</h3>
-		<p class="chronicle-section__intro">
-			Canon-blessed animations. Click any tile to replay. Spinner + shimmer are continuous (the visual identity is "always running").
-		</p>
-		<div class="chronicle-section__grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
-			@animTile("scale-in",    "Card scale-in")
-			@animTile("drawer",      "Drawer slide")
-			@animTile("chip-add",    "Chip add")
-			@animTile("chip-remove", "Chip remove")
-			@animTile("ribbon",      "Ribbon enter")
-			@animTile("toast",       "Toast enter")
-			@animTileContinuous("spin",    "Spinner")
-			@animTileContinuous("shimmer", "Skeleton shimmer")
-		</div>
-
-		// C.6 reduced-motion comparison
-		<h3 class="chronicle-state-label" style="margin-top: 24px; margin-bottom: 8px;">C.6 — Reduced-motion stress test</h3>
-		<p class="chronicle-section__intro">
-			Toggle the "Motion: Reduced" button in the toolbar above and watch every animation in this section drop to zero duration without losing meaning. Reduced-motion compliant per WCAG 2.1 SC 2.3.3 + canon D5.
-		</p>
-	</section>
-}
-
-templ motionDurationTrack(token, duration string) {
-	<div class="chronicle-motion-row">
-		<span style="width: 60px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--chronicle-fg-muted);">{ token }</span>
-		<div class="chronicle-motion-track" data-motion-group="duration" style={ "--play-duration: " + duration + ";" }>
-			<div class="chronicle-motion-block"></div>
-		</div>
-		<span style="font-family: ui-monospace, monospace; font-size: 11px; color: var(--chronicle-fg-subtle); width: 60px;">{ duration }</span>
-	</div>
-}
-
-templ motionEaseTrack(ease string) {
-	<div class="chronicle-motion-row">
-		<span style="width: 100px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--chronicle-fg-muted);">{ ease }</span>
-		<div class="chronicle-motion-track" data-motion-group="ease" style={ "--play-duration: 250ms; --play-ease: var(--chronicle-ease-" + ease + ");" }>
-			<div class="chronicle-motion-block"></div>
-		</div>
-	</div>
-}
-
-templ animTile(anim, label string) {
-	<div class="chronicle-anim-tile">
-		<span class="chronicle-anim-tile__title">{ label }</span>
-		<div class="chronicle-anim-tile__stage" data-anim={ anim } data-action="anim-replay">
-			<div class="chronicle-anim-stage-block"></div>
-		</div>
-		<span style="font-size: 11px; color: var(--chronicle-fg-subtle);">Click to replay</span>
-	</div>
-}
-
-templ animTileContinuous(anim, label string) {
-	<div class="chronicle-anim-tile">
-		<span class="chronicle-anim-tile__title">{ label }</span>
-		<div class="chronicle-anim-tile__stage" data-anim={ anim }>
-			<div class="chronicle-anim-stage-block"></div>
-		</div>
-		<span style="font-size: 11px; color: var(--chronicle-fg-subtle);">Continuous</span>
-	</div>
-}
-
-// ============================================================
-// B.1 — Form controls
-// ============================================================
-templ formsSection() {
-	<section class="chronicle-section" id="forms">
-		<h2 class="chronicle-section__title">Form Controls — canon D2/D4</h2>
-		<p class="chronicle-section__intro">
-			Inputs at three sizes + with prefix/suffix icons, helper text, error states, disabled, read-only. Plus textarea with character counter, select, radios, checkboxes, switch sizes, sliders, and a stepper.
-		</p>
-
-		// Input sizes + variants
-		<h3 class="chronicle-state-label">Inputs — sizes &amp; variants</h3>
-		<div class="chronicle-section__grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Small</label>
-				<input type="text" class="chronicle-input chronicle-input--sm" placeholder="sm size"/>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Medium (default)</label>
-				<input type="text" class="chronicle-input chronicle-input--md" placeholder="md size"/>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Large</label>
-				<input type="text" class="chronicle-input chronicle-input--lg" placeholder="lg size"/>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">With prefix icon</label>
-				<div class="chronicle-input-wrap chronicle-input-wrap--has-prefix">
-					<span class="chronicle-input-wrap__icon chronicle-input-wrap__icon--prefix">&#64;</span>
-					<input type="text" class="chronicle-input" placeholder="username"/>
-				</div>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">With suffix icon</label>
-				<div class="chronicle-input-wrap chronicle-input-wrap--has-suffix">
-					<input type="text" class="chronicle-input" placeholder="search…"/>
-					<span class="chronicle-input-wrap__icon chronicle-input-wrap__icon--suffix">⌕</span>
-				</div>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">With helper text</label>
-				<input type="text" class="chronicle-input" placeholder="Type something"/>
-				<span class="chronicle-field__helper">Helper sits below the input in muted tone.</span>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label chronicle-field__label--required">Error state</label>
-				<input type="text" class="chronicle-input chronicle-input--error" value="invalid value" aria-invalid="true"/>
-				<span class="chronicle-field__error">✗ This field cannot be left blank.</span>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Disabled</label>
-				<input type="text" class="chronicle-input" value="Cannot edit" disabled/>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Read-only</label>
-				<input type="text" class="chronicle-input" value="Read-only value" readonly/>
-			</div>
-		</div>
-
-		// Textarea
-		<h3 class="chronicle-state-label" style="margin-top: 20px;">Textarea</h3>
-		<div class="chronicle-section__grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">With character counter</label>
-				<textarea class="chronicle-textarea" placeholder="Type to see the counter update…"></textarea>
-				<span class="chronicle-textarea__counter">0 / 280</span>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Error state</label>
-				<textarea class="chronicle-textarea chronicle-input--error" aria-invalid="true">Too short.</textarea>
-				<span class="chronicle-field__error">✗ Minimum 50 characters.</span>
-			</div>
-		</div>
-
-		// Select
-		<h3 class="chronicle-state-label" style="margin-top: 20px;">Select</h3>
-		<div class="chronicle-section__grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Default</label>
-				<select class="chronicle-select">
-					<option>Pick one…</option>
-					<option>Calendar</option>
-					<option>Timeline</option>
-					<option>Maps</option>
-				</select>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Disabled</label>
-				<select class="chronicle-select" disabled>
-					<option>Unavailable</option>
-				</select>
-			</div>
-		</div>
-
-		// Radio + checkbox
-		<h3 class="chronicle-state-label" style="margin-top: 20px;">Radio &amp; Checkbox</h3>
-		<div class="chronicle-section__grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
-			<fieldset class="chronicle-fieldset">
-				<legend class="chronicle-fieldset__legend">Radio group — vertical with descriptions</legend>
-				<div class="chronicle-radio-group">
-					<label class="chronicle-radio-row">
-						<input type="radio" name="vis" class="chronicle-radio" checked/>
-						<div class="chronicle-radio-row__copy">
-							<span class="chronicle-radio-row__label">Everyone</span>
-							<span class="chronicle-radio-row__desc">All campaign members can see this entity.</span>
-						</div>
-					</label>
-					<label class="chronicle-radio-row">
-						<input type="radio" name="vis" class="chronicle-radio"/>
-						<div class="chronicle-radio-row__copy">
-							<span class="chronicle-radio-row__label">DM only</span>
-							<span class="chronicle-radio-row__desc">Hidden until explicitly revealed.</span>
-						</div>
-					</label>
-					<label class="chronicle-radio-row">
-						<input type="radio" name="vis" class="chronicle-radio"/>
-						<div class="chronicle-radio-row__copy">
-							<span class="chronicle-radio-row__label">Specific people</span>
-							<span class="chronicle-radio-row__desc">Pick individual members below.</span>
-						</div>
-					</label>
-				</div>
-			</fieldset>
-			<fieldset class="chronicle-fieldset">
-				<legend class="chronicle-fieldset__legend">Checkboxes — including indeterminate</legend>
-				<div class="chronicle-checkbox-group">
-					<label class="chronicle-checkbox-row">
-						<input type="checkbox" class="chronicle-checkbox" data-indeterminate="true" id="ck-parent"/>
-						<span class="chronicle-checkbox-row__label">Select all (indeterminate)</span>
-					</label>
-					<label class="chronicle-checkbox-row" style="margin-left: 24px;">
-						<input type="checkbox" class="chronicle-checkbox" checked/>
-						<span class="chronicle-checkbox-row__label">Calendar plugin</span>
-					</label>
-					<label class="chronicle-checkbox-row" style="margin-left: 24px;">
-						<input type="checkbox" class="chronicle-checkbox"/>
-						<span class="chronicle-checkbox-row__label">Timeline plugin</span>
-					</label>
-					<label class="chronicle-checkbox-row" style="margin-left: 24px;">
-						<input type="checkbox" class="chronicle-checkbox" checked/>
-						<span class="chronicle-checkbox-row__label">Maps plugin</span>
-					</label>
-				</div>
-			</fieldset>
-		</div>
-
-		// Switches at three sizes
-		<h3 class="chronicle-state-label" style="margin-top: 20px;">Switches</h3>
-		<div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
-			<label class="chronicle-switch chronicle-switch--sm">
-				<input type="checkbox"/>
-				<span class="chronicle-switch__track"><span class="chronicle-switch__thumb"></span></span>
-				<span style="font-size: 13px;">Small</span>
-			</label>
-			<label class="chronicle-switch">
-				<input type="checkbox" checked/>
-				<span class="chronicle-switch__track"><span class="chronicle-switch__thumb"></span></span>
-				<span style="font-size: 13px;">Medium (on)</span>
-			</label>
-			<label class="chronicle-switch chronicle-switch--lg">
-				<input type="checkbox"/>
-				<span class="chronicle-switch__track"><span class="chronicle-switch__thumb"></span></span>
-				<span style="font-size: 13px;">Large</span>
-			</label>
-		</div>
-
-		// Slider
-		<h3 class="chronicle-state-label" style="margin-top: 20px;">Slider</h3>
-		<div class="chronicle-section__grid" style="grid-template-columns: 1fr 1fr; max-width: 600px;">
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Default (value: 40)</label>
-				<input type="range" class="chronicle-slider" min="0" max="100" value="40"/>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Disabled</label>
-				<input type="range" class="chronicle-slider" min="0" max="100" value="60" disabled/>
-			</div>
-		</div>
-
-		// Stepper (form progress)
-		<h3 class="chronicle-state-label" style="margin-top: 20px;">Multi-step form (stepper)</h3>
-		<div class="chronicle-stepper">
-			<div class="chronicle-stepper__step" data-state="done">
-				<span class="chronicle-stepper__circle">✓</span>
-				<span>Account</span>
-			</div>
-			<div class="chronicle-stepper__line"></div>
-			<div class="chronicle-stepper__step" data-state="current">
-				<span class="chronicle-stepper__circle">2</span>
-				<span>Campaign details</span>
-			</div>
-			<div class="chronicle-stepper__line"></div>
-			<div class="chronicle-stepper__step">
-				<span class="chronicle-stepper__circle">3</span>
-				<span>Invite players</span>
-			</div>
-		</div>
-	</section>
-}
-
-// ============================================================
-// B.2 — Button extensions (sizes / icon-only / segmented / split / loading / destructive)
-// Existing buttonsSection() at line ~226 stays unchanged; this is additive.
-// ============================================================
-templ buttonsExtendedSection() {
-	<section class="chronicle-section" id="buttons">
-		<h2 class="chronicle-section__title">Buttons — size scale &amp; specialty variants</h2>
-		<p class="chronicle-section__intro">
-			Five sizes per variant + icon-only + segmented control + split button + loading state + destructive (canon D2 functional <code>--chronicle-danger</code>).
-		</p>
-
-		// Sizes
-		<h3 class="chronicle-state-label">Sizes (xs / sm / md / lg / xl)</h3>
-		<div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
-			<button class="chronicle-button-primary chronicle-button-primary--xs">XS</button>
-			<button class="chronicle-button-primary chronicle-button-primary--sm">Small</button>
-			<button class="chronicle-button-primary">Medium</button>
-			<button class="chronicle-button-primary chronicle-button-primary--lg">Large</button>
-			<button class="chronicle-button-primary chronicle-button-primary--xl">XL</button>
-		</div>
-		<div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
-			<button class="chronicle-button-secondary chronicle-button-secondary--xs">XS</button>
-			<button class="chronicle-button-secondary chronicle-button-secondary--sm">Small</button>
-			<button class="chronicle-button-secondary">Medium</button>
-			<button class="chronicle-button-secondary chronicle-button-secondary--lg">Large</button>
-			<button class="chronicle-button-secondary chronicle-button-secondary--xl">XL</button>
-		</div>
-
-		// Icon-only
-		<h3 class="chronicle-state-label">Icon-only</h3>
-		<div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px;">
-			<button class="chronicle-button-icon chronicle-button-icon--sm" aria-label="settings">⚙</button>
-			<button class="chronicle-button-icon" aria-label="search">⌕</button>
-			<button class="chronicle-button-icon chronicle-button-icon--lg" aria-label="add">+</button>
-		</div>
-
-		// Segmented control
-		<h3 class="chronicle-state-label">Segmented control</h3>
-		<div style="margin-bottom: 16px;">
-			<div class="chronicle-segmented">
-				<button class="chronicle-segmented__btn" aria-pressed="true">Month</button>
-				<button class="chronicle-segmented__btn" aria-pressed="false">Week</button>
-				<button class="chronicle-segmented__btn" aria-pressed="false">Day</button>
-			</div>
-		</div>
-
-		// Split button
-		<h3 class="chronicle-state-label">Split button</h3>
-		<div style="margin-bottom: 16px;">
-			<div class="chronicle-split-button">
-				<button class="chronicle-split-button__main">Save</button>
-				<button class="chronicle-split-button__chevron" aria-label="Save options">▾</button>
-			</div>
-		</div>
-
-		// Loading + Destructive
-		<h3 class="chronicle-state-label">Loading &amp; Destructive</h3>
-		<div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-			<button class="chronicle-button-primary chronicle-button-loading">Saving…</button>
-			<button class="chronicle-button-destructive">Delete campaign</button>
-			<button class="chronicle-button-destructive" disabled style="opacity: 0.5; cursor: not-allowed;">Delete (disabled)</button>
-		</div>
-	</section>
-}
-
-// ============================================================
-// B.3 — Status & feedback
-// ============================================================
-templ statusSection() {
-	<section class="chronicle-section" id="status">
-		<h2 class="chronicle-section__title">Status &amp; Feedback — canon D2 functional colors</h2>
-		<p class="chronicle-section__intro">
-			Alerts, toasts, banners, skeletons, progress, spinners, empty state. Functional colors stay constant when accent rotates (D2 decoupling).
-		</p>
-
-		// Alerts
-		<h3 class="chronicle-state-label">Alerts — semantic variants</h3>
-		<div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
-			<div class="chronicle-alert chronicle-alert--info">
-				<span class="chronicle-alert__icon">ⓘ</span>
-				<div class="chronicle-alert__body">
-					<p class="chronicle-alert__title">Heads up</p>
-					<p class="chronicle-alert__text">This is an informational alert. Tone matches the active accent.</p>
-				</div>
-				<button class="chronicle-alert__close" aria-label="dismiss">✕</button>
-			</div>
-			<div class="chronicle-alert chronicle-alert--success">
-				<span class="chronicle-alert__icon">✓</span>
-				<div class="chronicle-alert__body">
-					<p class="chronicle-alert__title">Saved successfully</p>
-					<p class="chronicle-alert__text">All changes have been persisted.</p>
-				</div>
-			</div>
-			<div class="chronicle-alert chronicle-alert--warning">
-				<span class="chronicle-alert__icon">!</span>
-				<div class="chronicle-alert__body">
-					<p class="chronicle-alert__title">Heads up</p>
-					<p class="chronicle-alert__text">This feature is in preview and may change.</p>
-				</div>
-				<button class="chronicle-button-secondary chronicle-button-secondary--sm">Learn more</button>
-			</div>
-			<div class="chronicle-alert chronicle-alert--error">
-				<span class="chronicle-alert__icon">✗</span>
-				<div class="chronicle-alert__body">
-					<p class="chronicle-alert__title">Something went wrong</p>
-					<p class="chronicle-alert__text">The save request failed. Check your connection and try again.</p>
-				</div>
-			</div>
-			<div class="chronicle-alert chronicle-alert--neutral">
-				<span class="chronicle-alert__icon">◦</span>
-				<div class="chronicle-alert__body">
-					<p class="chronicle-alert__title">Neutral</p>
-					<p class="chronicle-alert__text">Default styling; no semantic colour.</p>
-				</div>
-			</div>
-		</div>
-
-		// Inline banner
-		<h3 class="chronicle-state-label">Inline banner</h3>
-		<div class="chronicle-banner" style="margin-bottom: 16px;">
-			<span class="chronicle-banner__icon">★</span>
-			<div class="chronicle-banner__text">A wider, top-of-section announcement style. Site-wide notice candidates.</div>
-			<div class="chronicle-banner__actions">
-				<button class="chronicle-button-ghost chronicle-button-ghost--sm">Dismiss</button>
-				<button class="chronicle-button-primary chronicle-button-primary--sm">Read more</button>
-			</div>
-		</div>
-
-		// Toasts
-		<h3 class="chronicle-state-label">Toasts (transient surface, born with shadow)</h3>
-		<div class="chronicle-toast-stack" style="margin-bottom: 16px; max-width: 360px;">
-			<div class="chronicle-toast">
-				<span style="color: var(--chronicle-success);">✓</span>
-				<span>Calendar saved</span>
-				<button class="chronicle-toast__action" style="margin-left: auto;">Undo</button>
-			</div>
-			<div class="chronicle-toast">
-				<span style="color: var(--chronicle-danger);">✗</span>
-				<span>Failed to delete event</span>
-			</div>
-		</div>
-
-		// Skeletons
-		<h3 class="chronicle-state-label">Skeleton loaders (shimmer)</h3>
-		<div style="display: flex; gap: 12px; align-items: flex-start; margin-bottom: 16px;">
-			<div class="chronicle-skeleton chronicle-skeleton--avatar"></div>
-			<div style="flex: 1; max-width: 320px; display: flex; flex-direction: column; gap: 8px;">
-				<div class="chronicle-skeleton chronicle-skeleton--text" style="width: 60%;"></div>
-				<div class="chronicle-skeleton chronicle-skeleton--line"></div>
-				<div class="chronicle-skeleton chronicle-skeleton--line" style="width: 80%;"></div>
-			</div>
-			<div class="chronicle-skeleton chronicle-skeleton--card" style="flex: 1; max-width: 240px;"></div>
-		</div>
-
-		// Progress + spinners
-		<h3 class="chronicle-state-label">Progress &amp; spinners</h3>
-		<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 600px; margin-bottom: 16px;">
-			<div>
-				<span style="font-size: 12px; color: var(--chronicle-fg-muted);">Determinate — 64%</span>
-				<div class="chronicle-progress" style="margin-top: 4px;"><div class="chronicle-progress__bar" style="width: 64%;"></div></div>
-			</div>
-			<div>
-				<span style="font-size: 12px; color: var(--chronicle-fg-muted);">Indeterminate</span>
-				<div class="chronicle-progress chronicle-progress--indeterminate" style="margin-top: 4px;"><div class="chronicle-progress__bar"></div></div>
-			</div>
-		</div>
-		<div style="display: flex; gap: 16px; align-items: center;">
-			<span class="chronicle-spinner chronicle-spinner--sm"></span>
-			<span class="chronicle-spinner"></span>
-			<span class="chronicle-spinner chronicle-spinner--lg"></span>
-		</div>
-
-		// Empty state
-		<h3 class="chronicle-state-label" style="margin-top: 20px;">Empty state</h3>
-		<div class="chronicle-empty" style="border: 1px dashed var(--chronicle-border); border-radius: var(--chronicle-radius-md);">
-			<div class="chronicle-empty__icon">◇</div>
-			<h4 class="chronicle-empty__title">No campaigns yet</h4>
-			<p class="chronicle-empty__body">Spin up your first campaign to start managing characters, calendars, and timelines.</p>
-			<button class="chronicle-button-primary">Create a campaign</button>
-		</div>
-	</section>
-}
-
-// ============================================================
-// B.4 — Navigation (tabs / breadcrumbs / pagination / stepper)
-// ============================================================
-templ navigationSection() {
-	<section class="chronicle-section" id="nav">
-		<h2 class="chronicle-section__title">Navigation</h2>
-		<p class="chronicle-section__intro">
-			Tabs (underline + pill), breadcrumbs, pagination, and stepper at horizontal + vertical layouts.
-		</p>
-
-		// Tabs — default underline
-		<h3 class="chronicle-state-label">Tabs — default (underline)</h3>
-		<div class="chronicle-tabs" role="tablist" style="margin-bottom: 16px;">
-			<button class="chronicle-tab" aria-selected="true" role="tab">Overview</button>
-			<button class="chronicle-tab" aria-selected="false" role="tab">Members <span class="chronicle-badge chronicle-badge--neutral" style="margin-left: 4px;">12</span></button>
-			<button class="chronicle-tab" aria-selected="false" role="tab">Settings</button>
-			<button class="chronicle-tab" aria-selected="false" role="tab">Activity</button>
-			<button class="chronicle-tab" aria-selected="false" role="tab">Archive</button>
-		</div>
-
-		// Tabs — pill
-		<h3 class="chronicle-state-label">Tabs — pill</h3>
-		<div class="chronicle-tabs chronicle-tabs--pill" role="tablist" style="margin-bottom: 16px;">
-			<button class="chronicle-tab" aria-selected="true" role="tab">Month</button>
-			<button class="chronicle-tab" aria-selected="false" role="tab">Week</button>
-			<button class="chronicle-tab" aria-selected="false" role="tab">Day</button>
-			<button class="chronicle-tab" aria-selected="false" role="tab">Year</button>
-		</div>
-
-		// Breadcrumbs
-		<h3 class="chronicle-state-label">Breadcrumbs</h3>
-		<nav class="chronicle-breadcrumbs" aria-label="breadcrumb" style="margin-bottom: 16px;">
-			<a class="chronicle-breadcrumbs__item" href="#">Campaigns</a>
-			<span class="chronicle-breadcrumbs__sep">›</span>
-			<a class="chronicle-breadcrumbs__item" href="#">The Reckoning</a>
-			<span class="chronicle-breadcrumbs__sep">›</span>
-			<a class="chronicle-breadcrumbs__item" href="#">Calendar</a>
-			<span class="chronicle-breadcrumbs__sep">›</span>
-			<span class="chronicle-breadcrumbs__item" aria-current="page">Month view</span>
-		</nav>
-
-		// Pagination
-		<h3 class="chronicle-state-label">Pagination</h3>
-		<nav class="chronicle-pagination" aria-label="pagination" style="margin-bottom: 16px;">
-			<button class="chronicle-pagination__btn" disabled>‹</button>
-			<button class="chronicle-pagination__btn">1</button>
-			<button class="chronicle-pagination__btn" aria-current="page">2</button>
-			<button class="chronicle-pagination__btn">3</button>
-			<span class="chronicle-pagination__ellipsis">…</span>
-			<button class="chronicle-pagination__btn">12</button>
-			<button class="chronicle-pagination__btn">›</button>
-		</nav>
-
-		// Stepper — vertical
-		<h3 class="chronicle-state-label">Stepper — vertical with error state</h3>
-		<div class="chronicle-stepper chronicle-stepper--vertical" style="max-width: 320px;">
-			<div class="chronicle-stepper__step" data-state="done">
-				<span class="chronicle-stepper__circle">✓</span>
-				<span>Step 1 — Account</span>
-			</div>
-			<div class="chronicle-stepper__step" data-state="done">
-				<span class="chronicle-stepper__circle">✓</span>
-				<span>Step 2 — Campaign</span>
-			</div>
-			<div class="chronicle-stepper__step" data-state="error">
-				<span class="chronicle-stepper__circle">!</span>
-				<span>Step 3 — Validation failed</span>
-			</div>
-			<div class="chronicle-stepper__step">
-				<span class="chronicle-stepper__circle">4</span>
-				<span>Step 4 — Invite</span>
-			</div>
-		</div>
-	</section>
-}
-
-// ============================================================
-// B.5 — Data display
-// ============================================================
-templ dataSection() {
-	<section class="chronicle-section" id="data">
-		<h2 class="chronicle-section__title">Data Display</h2>
-		<p class="chronicle-section__intro">
-			Table with sort + selected row + dense variant, stat / KPI cards, avatars (single + stack + status dots), badges, tag/chip extensions, definition list.
-		</p>
-
-		// Table
-		<h3 class="chronicle-state-label">Table — sortable + selectable + dense variant</h3>
-		<div class="chronicle-table-wrap" style="margin-bottom: 16px;">
-			<table class="chronicle-table">
-				<thead>
-					<tr>
-						<th style="width: 40px;"><input type="checkbox" class="chronicle-checkbox"/></th>
-						<th aria-sort="ascending">Name</th>
-						<th aria-sort="none">Slug</th>
-						<th aria-sort="none">Status</th>
-						<th aria-sort="none">Updated</th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr aria-selected="true">
-						<td><input type="checkbox" class="chronicle-checkbox" checked/></td>
-						<td>Calendar</td>
-						<td style="font-family: ui-monospace, monospace; font-size: 12px;">calendar</td>
-						<td><span class="chronicle-badge chronicle-badge--success">On</span></td>
-						<td>2 mins ago</td>
-					</tr>
-					<tr>
-						<td><input type="checkbox" class="chronicle-checkbox"/></td>
-						<td>Interactive Maps</td>
-						<td style="font-family: ui-monospace, monospace; font-size: 12px;">maps</td>
-						<td><span class="chronicle-badge chronicle-badge--success">On</span></td>
-						<td>1 hour ago</td>
-					</tr>
-					<tr>
-						<td><input type="checkbox" class="chronicle-checkbox"/></td>
-						<td>Timeline</td>
-						<td style="font-family: ui-monospace, monospace; font-size: 12px;">timeline</td>
-						<td><span class="chronicle-badge chronicle-badge--neutral">Off</span></td>
-						<td>3 days ago</td>
-					</tr>
-					<tr>
-						<td><input type="checkbox" class="chronicle-checkbox"/></td>
-						<td>Sessions</td>
-						<td style="font-family: ui-monospace, monospace; font-size: 12px;">sessions</td>
-						<td><span class="chronicle-badge chronicle-badge--warning">Soon</span></td>
-						<td>1 week ago</td>
-					</tr>
-				</tbody>
-			</table>
-		</div>
-
-		// Dense
-		<h3 class="chronicle-state-label">Table — dense variant</h3>
-		<div class="chronicle-table-wrap" style="margin-bottom: 16px;">
-			<table class="chronicle-table chronicle-table--dense">
-				<thead><tr><th>Slug</th><th>Hover any row</th><th>Updated</th></tr></thead>
-				<tbody>
-					<tr><td>calendar</td><td>Compact padding for data-heavy views</td><td>2m</td></tr>
-					<tr><td>maps</td><td>Same row hover state</td><td>1h</td></tr>
-					<tr><td>timeline</td><td>Same row hover state</td><td>3d</td></tr>
-				</tbody>
-			</table>
-		</div>
-
-		// Stat / KPI cards
-		<h3 class="chronicle-state-label">Stat / KPI cards</h3>
-		<div class="chronicle-section__grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 16px;">
-			<div class="chronicle-stat">
-				<span class="chronicle-stat__label">Active campaigns</span>
-				<span class="chronicle-stat__value">12</span>
-				<span class="chronicle-stat__delta chronicle-stat__delta--up">↑ 3 this week</span>
-				<div class="chronicle-stat__sparkline"></div>
-			</div>
-			<div class="chronicle-stat">
-				<span class="chronicle-stat__label">Events tracked</span>
-				<span class="chronicle-stat__value">487</span>
-				<span class="chronicle-stat__delta chronicle-stat__delta--up">↑ 24%</span>
-			</div>
-			<div class="chronicle-stat">
-				<span class="chronicle-stat__label">Disk used</span>
-				<span class="chronicle-stat__value">2.4 GB</span>
-				<span class="chronicle-stat__delta chronicle-stat__delta--down">↓ 0.3 GB (cleanup)</span>
-			</div>
-		</div>
-
-		// Avatars
-		<h3 class="chronicle-state-label">Avatars (sizes + status + stack)</h3>
-		<div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
-			<span class="chronicle-avatar chronicle-avatar--sm">AB</span>
-			<span class="chronicle-avatar">CD</span>
-			<span class="chronicle-avatar chronicle-avatar--lg">EF</span>
-			<span class="chronicle-avatar">GH<span class="chronicle-avatar__status chronicle-avatar__status--online"></span></span>
-			<span class="chronicle-avatar">IJ<span class="chronicle-avatar__status chronicle-avatar__status--away"></span></span>
-			<span class="chronicle-avatar">KL<span class="chronicle-avatar__status chronicle-avatar__status--offline"></span></span>
-			<div class="chronicle-avatar-stack" aria-label="5 members">
-				<span class="chronicle-avatar">+2</span>
-				<span class="chronicle-avatar">MN</span>
-				<span class="chronicle-avatar">OP</span>
-				<span class="chronicle-avatar">QR</span>
-			</div>
-		</div>
-
-		// Badges
-		<h3 class="chronicle-state-label">Badges</h3>
-		<div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
-			<span class="chronicle-badge">3</span>
-			<span class="chronicle-badge chronicle-badge--success">12</span>
-			<span class="chronicle-badge chronicle-badge--warning">!</span>
-			<span class="chronicle-badge chronicle-badge--danger">99+</span>
-			<span class="chronicle-badge chronicle-badge--dot"></span>
-			<span class="chronicle-badge-wrap">
-				<button class="chronicle-button-icon" aria-label="notifications">🔔</button>
-				<span class="chronicle-badge chronicle-badge--danger">5</span>
-			</span>
-		</div>
-
-		// Tags
-		<h3 class="chronicle-state-label">Tags / chips — closable, filter, with icon</h3>
-		<div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
-			<span class="chronicle-tag">basic</span>
-			<span class="chronicle-tag">
-				<span>with icon</span>
-				<span aria-hidden="true">★</span>
-			</span>
-			<span class="chronicle-tag">
-				closable
-				<button class="chronicle-tag__close" aria-label="remove">✕</button>
-			</span>
-			<button type="button" class="chronicle-tag chronicle-tag-filter" aria-pressed="true">Filter — active</button>
-			<button type="button" class="chronicle-tag chronicle-tag-filter" aria-pressed="false">Filter — inactive</button>
-			<button type="button" class="chronicle-tag chronicle-tag-filter" aria-pressed="false">Another filter</button>
-		</div>
-
-		// Definition list
-		<h3 class="chronicle-state-label">Definition list (key-value pairs)</h3>
-		<dl class="chronicle-dl" style="max-width: 480px;">
-			<dt>Campaign name</dt>
-			<dd>The Reckoning</dd>
-			<dt>System</dt>
-			<dd>Pathfinder 2e</dd>
-			<dt>Members</dt>
-			<dd>12</dd>
-			<div class="chronicle-dl__group">Calendar settings</div>
-			<dt>Months</dt>
-			<dd>13</dd>
-			<dt>Hours per day</dt>
-			<dd>24</dd>
-		</dl>
-	</section>
-}
-
-// ============================================================
-// B.6 — Containers (modal / accordion / disclosure)
-// ============================================================
-templ containersSection() {
-	<section class="chronicle-section" id="containers">
-		<h2 class="chronicle-section__title">Containers</h2>
-		<p class="chronicle-section__intro">
-			Modal/dialog (alert + confirmation shapes), accordion (multi-open), disclosure. The existing right-side drawer (below) extends naturally to a side-sheet pattern.
-		</p>
-
-		// Modal triggers
-		<h3 class="chronicle-state-label">Modal / dialog</h3>
-		<div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
-			<button type="button" class="chronicle-button-secondary" data-action="modal-open" data-target="alert">Open alert dialog</button>
-			<button type="button" class="chronicle-button-secondary" data-action="modal-open" data-target="confirm">Open confirmation</button>
-		</div>
-		<div id="chronicle-modal-alert" class="chronicle-modal-backdrop" hidden>
-			<div class="chronicle-modal" role="alertdialog" aria-modal="true">
-				<div class="chronicle-modal__header">
-					<span class="chronicle-modal__icon">!</span>
-					<div>
-						<h3 class="chronicle-modal__title">Delete campaign?</h3>
-						<p style="margin: 0; font-size: 12px; color: var(--chronicle-fg-muted);">This action cannot be undone.</p>
-					</div>
-				</div>
-				<div class="chronicle-modal__body">
-					Deleting the campaign permanently removes 12 members, 487 events, and 23 timelines. All players will lose access immediately. Type the campaign name to confirm.
-				</div>
-				<div class="chronicle-modal__footer">
-					<button type="button" class="chronicle-button-secondary" data-action="modal-close">Cancel</button>
-					<button type="button" class="chronicle-button-destructive">Delete forever</button>
-				</div>
-			</div>
-		</div>
-		<div id="chronicle-modal-confirm" class="chronicle-modal-backdrop" hidden>
-			<div class="chronicle-modal" role="dialog" aria-modal="true">
-				<div class="chronicle-modal__header">
-					<div>
-						<h3 class="chronicle-modal__title">Save changes?</h3>
-					</div>
-				</div>
-				<div class="chronicle-modal__body">
-					You've made unsaved changes to the calendar configuration. Save before continuing?
-				</div>
-				<div class="chronicle-modal__footer">
-					<button type="button" class="chronicle-button-secondary" data-action="modal-close">Discard</button>
-					<button type="button" class="chronicle-button-primary" data-action="modal-close">Save changes</button>
-				</div>
-			</div>
-		</div>
-
-		// Accordion
-		<h3 class="chronicle-state-label">Accordion (multi-open via click)</h3>
-		<div class="chronicle-accordion" style="max-width: 560px; margin-bottom: 16px;">
-			<div class="chronicle-accordion__item" data-open="true">
-				<button type="button" class="chronicle-accordion__trigger" data-action="accordion-toggle">
-					<span>What is the Chronicle canon?</span>
-					<span class="chronicle-accordion__chevron">▾</span>
-				</button>
-				<div class="chronicle-accordion__panel">
-					<div class="chronicle-accordion__content">
-						The Chronicle design canon is the locked visual vocabulary defined in decisions/2026-05-29-chronicle-design-canon.md (D1–D10). Every V2 surface will adopt it via the in-place migration in Phase 3+.
-					</div>
-				</div>
-			</div>
-			<div class="chronicle-accordion__item">
-				<button type="button" class="chronicle-accordion__trigger" data-action="accordion-toggle">
-					<span>Why don't existing surfaces look like this yet?</span>
-					<span class="chronicle-accordion__chevron">▾</span>
-				</button>
-				<div class="chronicle-accordion__panel">
-					<div class="chronicle-accordion__content">
-						The canon is isolated under @layer chronicle-demo while operator validates. Once you green-light, Phase 2 ships repo-wide tokens and Phase 3 migrates the merged-in-main hub + dashboard in-place.
-					</div>
-				</div>
-			</div>
-			<div class="chronicle-accordion__item">
-				<button type="button" class="chronicle-accordion__trigger" data-action="accordion-toggle">
-					<span>What changes after I validate?</span>
-					<span class="chronicle-accordion__chevron">▾</span>
-				</button>
-				<div class="chronicle-accordion__panel">
-					<div class="chronicle-accordion__content">
-						Phase 2 ships canon tokens + adapter shim. Phase 3 migrates the hub + dashboard. Phase 4 migrates Wave 1 calendar views. Phase 5 migrates sub-resource editors + ribbons. Phase 6 deletes calendar_v2 + the shim.
-					</div>
-				</div>
-			</div>
-		</div>
-
-		// Disclosure
-		<h3 class="chronicle-state-label">Disclosure (show more / show less)</h3>
-		<div style="max-width: 560px; margin-bottom: 16px;">
-			<p style="font-size: 13px; color: var(--chronicle-fg); margin: 0;">
-				The canon's elevation rule binds the co-occurrence pattern as load-bearing. Hover must not animate box-shadow alone…
-			</p>
-			<button type="button" class="chronicle-disclosure__trigger" data-action="disclosure-toggle">Show more</button>
-			<div class="chronicle-disclosure__content" hidden>
-				… because the operator's "shadow from nowhere" complaint diagnoses exactly that failure mode. The fix is to require every shadow change to co-occur with a surface tint shift and a border-color shift, so the shadow reads as a consequence of the surface lifting rather than a stamp pressed onto the card.
-			</div>
-		</div>
-	</section>
-}
-
-// ============================================================
-// B.7 — Overlays (tooltip / menu / command palette / date picker / color picker)
-// ============================================================
-templ overlaysSection() {
-	<section class="chronicle-section" id="overlays">
-		<h2 class="chronicle-section__title">Overlays</h2>
-		<p class="chronicle-section__intro">
-			Tooltips, menus with sections, command palette, date picker preview, color picker preview (canon D2 future-extension groundwork — labeled "not yet functional").
-		</p>
-
-		// Tooltip
-		<h3 class="chronicle-state-label">Tooltip</h3>
-		<div style="display: flex; gap: 32px; align-items: center; padding: 24px 0; flex-wrap: wrap; margin-bottom: 16px;">
-			<div style="position: relative;">
-				<button class="chronicle-button-secondary chronicle-button-secondary--sm">Hover for tooltip</button>
-				<span class="chronicle-tooltip" style="bottom: -28px; left: 50%; transform: translateX(-50%);">Small tooltip</span>
-			</div>
-			<div style="position: relative;">
-				<button class="chronicle-button-secondary">Hover for medium tooltip</button>
-				<span class="chronicle-tooltip chronicle-tooltip--md" style="bottom: -32px; left: 50%; transform: translateX(-50%);">Medium tooltip with more text</span>
-			</div>
-		</div>
-
-		// Menu / dropdown
-		<h3 class="chronicle-state-label">Menu / dropdown (sections + dividers + checks + shortcuts)</h3>
-		<div style="display: inline-block; margin-bottom: 16px;">
-			<div class="chronicle-menu" style="position: static;">
-				<div class="chronicle-menu__section">View</div>
-				<div class="chronicle-menu__item">
-					<span class="chronicle-menu__check">✓</span>
-					<span>Sidebar</span>
-					<span class="chronicle-menu__shortcut">⌘B</span>
-				</div>
-				<div class="chronicle-menu__item">
-					<span class="chronicle-menu__check"></span>
-					<span>Mini-month</span>
-					<span class="chronicle-menu__shortcut">⌘M</span>
-				</div>
-				<div class="chronicle-menu__divider"></div>
-				<div class="chronicle-menu__section">Actions</div>
-				<div class="chronicle-menu__item">
-					<span class="chronicle-menu__check"></span>
-					<span>Duplicate</span>
-					<span class="chronicle-menu__shortcut">⌘D</span>
-				</div>
-				<div class="chronicle-menu__item">
-					<span class="chronicle-menu__check"></span>
-					<span>Export…</span>
-				</div>
-				<div class="chronicle-menu__divider"></div>
-				<div class="chronicle-menu__item chronicle-menu__item--danger">
-					<span class="chronicle-menu__check"></span>
-					<span>Delete</span>
-					<span class="chronicle-menu__shortcut">⌫</span>
-				</div>
-			</div>
-		</div>
-
-		// Command palette
-		<h3 class="chronicle-state-label">Command palette / quick switcher</h3>
-		<div style="display: inline-block; margin-bottom: 16px; max-width: 540px; width: 100%;">
-			<div class="chronicle-cmd">
-				<input class="chronicle-cmd__input" placeholder="Type a command or search…" value="cal"/>
-				<div class="chronicle-cmd__list">
-					<div class="chronicle-cmd__group-label">Suggestions</div>
-					<div class="chronicle-cmd__item" data-focus="true">
-						<span style="color: var(--chronicle-accent);">⌕</span>
-						<span>Open Calendar V2</span>
-						<span style="margin-left: auto; font-size: 11px; color: var(--chronicle-fg-subtle); font-family: ui-monospace, monospace;">↵</span>
-					</div>
-					<div class="chronicle-cmd__item">
-						<span style="color: var(--chronicle-accent);">+</span>
-						<span>Create new calendar event</span>
-						<span style="margin-left: auto; font-size: 11px; color: var(--chronicle-fg-subtle); font-family: ui-monospace, monospace;">⌘N</span>
-					</div>
-					<div class="chronicle-cmd__group-label">Recent</div>
-					<div class="chronicle-cmd__item">
-						<span style="color: var(--chronicle-fg-muted);">⏱</span>
-						<span>Coronation — Tirsday 1st Sunwane</span>
-					</div>
-					<div class="chronicle-cmd__item">
-						<span style="color: var(--chronicle-fg-muted);">⏱</span>
-						<span>Harvest moon — Wedsday 14th Reaping</span>
-					</div>
-				</div>
-			</div>
-		</div>
-
-		// Date picker
-		<h3 class="chronicle-state-label">Date picker preview</h3>
-		<div style="display: inline-block; margin-right: 24px; vertical-align: top;">
-			<div class="chronicle-datepicker">
-				<div class="chronicle-datepicker__header">
-					<button class="chronicle-button-ghost chronicle-button-ghost--sm" aria-label="previous month">‹</button>
-					<span>January 2026</span>
-					<button class="chronicle-button-ghost chronicle-button-ghost--sm" aria-label="next month">›</button>
-				</div>
-				<div class="chronicle-datepicker__grid">
-					@dowLabels()
-					@datepickerDays()
-				</div>
-			</div>
-		</div>
-
-		// Color picker preview — D2 future-extension groundwork
-		<h3 class="chronicle-state-label" style="margin-top: 20px;">Color picker preview — D2 future-extension groundwork</h3>
-		<div style="display: inline-block; vertical-align: top; margin-bottom: 16px;">
-			<div class="chronicle-color-picker">
-				<span class="chronicle-color-picker__not-functional">NOT YET FUNCTIONAL</span>
-				<div class="chronicle-color-picker__row">
-					<label>Current</label>
-					<div class="chronicle-color-picker__preview"></div>
-					<input class="chronicle-input chronicle-input--sm" value="oklch(0.58 0.20 270)" style="flex: 1; font-family: ui-monospace, monospace;"/>
-				</div>
-				<div style="font-size: 11px; color: var(--chronicle-fg-muted); margin-bottom: 6px;">Recommended palettes</div>
-				<div class="chronicle-color-picker__swatches">
-					@swatch("oklch(0.58 0.20 270)")
-					@swatch("oklch(0.65 0.15 155)")
-					@swatch("oklch(0.78 0.16 75)")
-					@swatch("oklch(0.65 0.20 22)")
-					@swatch("oklch(0.62 0.20 320)")
-					@swatch("oklch(0.55 0.18 200)")
-					@swatch("oklch(0.70 0.16 100)")
-					@swatch("oklch(0.50 0.18 0)")
-				</div>
-				<div style="display: flex; flex-direction: column; gap: 8px;">
-					<div>
-						<div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--chronicle-fg-muted);"><span>Lightness</span><span>0.58</span></div>
-						<input type="range" class="chronicle-slider" min="0" max="100" value="58"/>
-					</div>
-					<div>
-						<div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--chronicle-fg-muted);"><span>Chroma</span><span>0.20</span></div>
-						<input type="range" class="chronicle-slider" min="0" max="40" value="20"/>
-					</div>
-					<div>
-						<div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--chronicle-fg-muted);"><span>Hue</span><span>270°</span></div>
-						<input type="range" class="chronicle-slider" min="0" max="360" value="270"/>
-					</div>
-				</div>
-				<div style="margin-top: 12px; font-size: 11px; color: var(--chronicle-fg-subtle); line-height: 1.4;">
-					Per-campaign accent + gradient + animated-accent picker UI groundwork (canon D2). Token plumbing is already in place via `--chronicle-accent` + `@property`; this UI ships in a future arc.
-				</div>
-			</div>
-		</div>
-	</section>
-}
-
-templ dowLabels() {
-	for _, d := range []string{"S", "M", "T", "W", "T", "F", "S"} {
-		<div class="chronicle-datepicker__dow">{ d }</div>
-	}
-}
-
-// datepickerDays renders 35 cells with one selected range demonstrating
-// the canon's tier-aware highlight tokens.
-templ datepickerDays() {
-	for i := 1; i <= 35; i++ {
-		if i == 5 {
-			<button class="chronicle-datepicker__day" data-state="range-start">{ itoa(i) }</button>
-		} else if i > 5 && i < 10 {
-			<button class="chronicle-datepicker__day" data-state="in-range">{ itoa(i) }</button>
-		} else if i == 10 {
-			<button class="chronicle-datepicker__day" data-state="range-end">{ itoa(i) }</button>
-		} else if i == 18 {
-			<button class="chronicle-datepicker__day" data-state="today">{ itoa(i) }</button>
-		} else if i > 31 {
-			<button class="chronicle-datepicker__day" data-state="muted">{ itoa(i - 31) }</button>
-		} else {
-			<button class="chronicle-datepicker__day">{ itoa(i) }</button>
-		}
-	}
-}
-
-templ swatch(color string) {
-	<button class="chronicle-color-picker__swatch" style={ "background: " + color + ";" } aria-label={ color }></button>
-}
-
-// ============================================================
-// D — Density variants
-// ============================================================
-templ densitySection() {
-	<section class="chronicle-section" id="density">
-		<h2 class="chronicle-section__title">Density Variants — canon D7</h2>
-		<p class="chronicle-section__intro">
-			Toggle the "Density" buttons in the toolbar above. Components below reflow via <code>--chronicle-density-*</code> tokens — same component, three densities.
-		</p>
-		<p class="chronicle-section__intro">
-			Try the toolbar density toggle; the tables below all reflow in concert. Picks any one to commit-to at validation; coordinator can refine the scale if the three modes don't compose cleanly with canon D7's 8px-on-4px spacing base (stop-and-flag #6).
-		</p>
-		<div class="chronicle-table-wrap" style="margin-bottom: 16px;">
-			<table class="chronicle-table">
-				<thead><tr><th>Slug</th><th>Name</th><th>Status</th></tr></thead>
-				<tbody>
-					<tr><td>calendar</td><td>Calendar</td><td><span class="chronicle-badge chronicle-badge--success">On</span></td></tr>
-					<tr><td>maps</td><td>Interactive Maps</td><td><span class="chronicle-badge chronicle-badge--success">On</span></td></tr>
-					<tr><td>timeline</td><td>Timeline</td><td><span class="chronicle-badge chronicle-badge--neutral">Off</span></td></tr>
-					<tr><td>sessions</td><td>Sessions</td><td><span class="chronicle-badge chronicle-badge--warning">Soon</span></td></tr>
-				</tbody>
-			</table>
-		</div>
-	</section>
-}
-
-// ============================================================
-// E — Page composition mockups (the killer addition)
-// Three mockups previewing what Phase 3-5 in-place migrations
-// produce. ALL render fake data — no real plugin / calendar /
-// extension calls.
-// ============================================================
-templ mockHubSection() {
-	<section class="chronicle-section" id="mockups">
-		<h2 class="chronicle-section__title">Page Composition Mockup 1 — Extensions Hub</h2>
-		<div class="chronicle-mockup-banner">
-			<span>📌</span>
-			<span><strong>MOCKUP — not the real hub.</strong> Visual preview of what Phase 3 in-place migration of <code>/campaigns/:id/extensions</code> will produce. Compare side-by-side with the live (still-rejected-look) page in another tab.</span>
-		</div>
-		<div class="chronicle-mock">
-			<div class="chronicle-mock__title-bar">
-				<div>
-					<nav class="chronicle-mock__breadcrumbs">Campaigns › The Reckoning › Extensions</nav>
-					<h3 class="chronicle-mock__page-title">Extensions</h3>
-				</div>
-				<div style="margin-left: auto; display: flex; gap: 8px;">
-					<button class="chronicle-button-secondary chronicle-button-secondary--sm">Documentation</button>
-					<button class="chronicle-button-primary chronicle-button-primary--sm">Install pack</button>
-				</div>
-			</div>
-			<div class="chronicle-mock__grid">
-				@mockExtCard("🗓", "Calendar", "Track in-world dates, events, seasons, eras.", true)
-				@mockExtCard("🗺", "Interactive Maps", "Upload maps, place markers, link entities.", true)
-				@mockExtCard("⏱", "Timeline", "Visual timeline with zoom and grouping.", false)
-				@mockExtCard("👥", "Sessions", "Schedule sessions with RSVP and linked entities.", true)
-				@mockExtCard("📜", "Notes", "Floating notebook for personal and shared notes.", true)
-				@mockExtCard("📦", "Content Packs", "Pack management — themes, icons, presets.", true)
-			</div>
-		</div>
-	</section>
-}
-
-// mockExtCard — Phase 1.6 D.10: now fully interactive. Toggle button
-// flips data-mock-enabled state; "Expand" button opens the inline
-// drawer with mock dashboard content + tabs. Operator can actually
-// USE the mockup, not just view it. State is purely visual; no
-// backend calls.
-templ mockExtCard(icon, name, desc string, enabled bool) {
-	<div class="chronicle-mock-card" data-mock-card data-mock-enabled={ boolToStr(enabled) }>
-		<div style="display: flex; align-items: flex-start; gap: 10px;">
-			<span class="chronicle-mock-card__icon">{ icon }</span>
-			<div style="flex: 1; min-width: 0;">
-				<h4 class="chronicle-mock-card__name">{ name }</h4>
-				<p class="chronicle-mock-card__desc">{ desc }</p>
-			</div>
-		</div>
-		<div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-			<button class="chronicle-mock-toggle" data-mock-toggle aria-pressed={ boolToStr(enabled) } aria-label={ "Toggle " + name }></button>
-			<button class="chronicle-button-ghost chronicle-button-ghost--sm" data-mock-expand>Expand ▾</button>
-		</div>
-		<div class="chronicle-mock-drawer" data-mock-drawer data-open="false">
-			<div class="chronicle-mock-drawer__tabs" role="tablist">
-				<button class="chronicle-mock-drawer__tab" data-mock-tab="overview" aria-selected="true" role="tab">Overview</button>
-				<button class="chronicle-mock-drawer__tab" data-mock-tab="activity" aria-selected="false" role="tab">Activity</button>
-				<button class="chronicle-mock-drawer__tab" data-mock-tab="settings" aria-selected="false" role="tab">Settings</button>
-			</div>
-			<div class="chronicle-mock-drawer__panel" data-mock-panel="overview" data-active="true">
-				<p style="margin: 0 0 8px;">Mock { name } dashboard. This is a fully-interactive preview of what Phase 3 in-place migration will produce — the tabs switch, the toggle toggles, no backend calls.</p>
-				<div class="chronicle-dl chronicle-dl--vertical" style="margin-top: 8px;">
-					<dt>Status</dt><dd>{ enabledLabel(enabled) }</dd>
-					<dt>Last activity</dt><dd>2 hours ago</dd>
-					<dt>Configured</dt><dd>Yes</dd>
-				</div>
-			</div>
-			<div class="chronicle-mock-drawer__panel" data-mock-panel="activity">
-				<ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px;">
-					<li>• 12 events created this week</li>
-					<li>• 3 members invited</li>
-					<li>• Last sync: 2 hours ago</li>
-				</ul>
-			</div>
-			<div class="chronicle-mock-drawer__panel" data-mock-panel="settings">
-				<label class="chronicle-checkbox-row" style="margin-bottom: 6px;">
-					<input type="checkbox" class="chronicle-checkbox" checked/>
-					<span class="chronicle-checkbox-row__label">Enable notifications</span>
-				</label>
-				<label class="chronicle-checkbox-row">
-					<input type="checkbox" class="chronicle-checkbox"/>
-					<span class="chronicle-checkbox-row__label">Auto-sync</span>
-				</label>
-			</div>
-		</div>
-	</div>
-}
-
-// boolToStr — local helper so templ expressions can output "true" / "false"
-// for data-attribute values without strconv.
-func boolToStr(b bool) string {
-	if b {
-		return "true"
-	}
-	return "false"
-}
-
-func enabledLabel(b bool) string {
-	if b {
-		return "Enabled"
-	}
-	return "Disabled"
-}
-
-templ mockSettingsSection() {
-	<section class="chronicle-section">
-		<h2 class="chronicle-section__title">Page Composition Mockup 2 — Settings</h2>
-		<div class="chronicle-mockup-banner">
-			<span>📌</span>
-			<span><strong>MOCKUP — not the real settings page.</strong> Visual preview of what Phase 5 migration of <code>/campaigns/:id/settings</code> will produce. Settings is already harmonized (audit §5); this proves the canon doesn't break what already works.</span>
-		</div>
-		<div class="chronicle-mock">
-			<div class="chronicle-mock__title-bar">
-				<div>
-					<nav class="chronicle-mock__breadcrumbs">Campaigns › The Reckoning › Settings</nav>
-					<h3 class="chronicle-mock__page-title">Campaign settings</h3>
-				</div>
-			</div>
-			<div class="chronicle-tabs" style="margin-bottom: 16px;">
-				<button class="chronicle-tab" aria-selected="true">General</button>
-				<button class="chronicle-tab" aria-selected="false">People</button>
-				<button class="chronicle-tab" aria-selected="false">Integrations</button>
-				<button class="chronicle-tab" aria-selected="false">Activity</button>
-			</div>
-			<div class="chronicle-alert chronicle-alert--info" style="margin-bottom: 16px;">
-				<span class="chronicle-alert__icon">ⓘ</span>
-				<div class="chronicle-alert__body">
-					<p class="chronicle-alert__title">Features tab retired</p>
-					<p class="chronicle-alert__text">Per-campaign toggles moved to the Extensions hub. See sidebar → Extensions.</p>
-				</div>
-			</div>
-			<div class="chronicle-section__grid" style="grid-template-columns: 1fr 1fr; max-width: 720px;">
-				<div class="chronicle-field">
-					<label class="chronicle-field__label">Campaign name</label>
-					<input class="chronicle-input" value="The Reckoning"/>
-				</div>
-				<div class="chronicle-field">
-					<label class="chronicle-field__label">System</label>
-					<select class="chronicle-select">
-						<option>Pathfinder 2e</option>
-						<option>D&amp;D 5e</option>
-						<option>Custom</option>
-					</select>
-				</div>
-				<div class="chronicle-field" style="grid-column: span 2;">
-					<label class="chronicle-field__label">Description</label>
-					<textarea class="chronicle-textarea" rows="3">A long-form Pathfinder campaign set in a custom calendar.</textarea>
-				</div>
-				<div class="chronicle-field" style="grid-column: span 2;">
-					<label class="chronicle-field__label">Default visibility</label>
-					<div class="chronicle-radio-group chronicle-radio-group--horizontal">
-						<label class="chronicle-radio-row">
-							<input type="radio" name="vis-mock" class="chronicle-radio" checked/>
-							<span class="chronicle-radio-row__label">Everyone</span>
-						</label>
-						<label class="chronicle-radio-row">
-							<input type="radio" name="vis-mock" class="chronicle-radio"/>
-							<span class="chronicle-radio-row__label">DM only</span>
-						</label>
-						<label class="chronicle-radio-row">
-							<input type="radio" name="vis-mock" class="chronicle-radio"/>
-							<span class="chronicle-radio-row__label">Private</span>
-						</label>
-					</div>
-				</div>
-			</div>
-			<div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
-				<button class="chronicle-button-secondary">Cancel</button>
-				<button class="chronicle-button-primary">Save changes</button>
-			</div>
-		</div>
-	</section>
-}
-
-templ mockCalendarSection() {
-	<section class="chronicle-section">
-		<h2 class="chronicle-section__title">Page Composition Mockup 3 — Calendar Dashboard</h2>
-		<div class="chronicle-mockup-banner">
-			<span>📌</span>
-			<span><strong>MOCKUP — not the real calendar.</strong> Visual preview of what Phase 4 Wave 1 V2 calendar migration will produce. 35 fake-data cells; no real event logic. Tier-coloured event chips demonstrate the canon's <code>color-mix(in oklch)</code> overlay system.</span>
-		</div>
-		<div class="chronicle-mock">
-			<div class="chronicle-mock__title-bar">
-				<div>
-					<nav class="chronicle-mock__breadcrumbs">Campaigns › The Reckoning › Calendar</nav>
-					<h3 class="chronicle-mock__page-title">Sunwane, 1492</h3>
-				</div>
-				<div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
-					<div class="chronicle-segmented">
-						<button class="chronicle-segmented__btn" aria-pressed="false">Year</button>
-						<button class="chronicle-segmented__btn" aria-pressed="true">Month</button>
-						<button class="chronicle-segmented__btn" aria-pressed="false">Week</button>
-						<button class="chronicle-segmented__btn" aria-pressed="false">Day</button>
-					</div>
-					<button class="chronicle-button-primary chronicle-button-primary--sm">+ New event</button>
-				</div>
-			</div>
-			<div style="display: grid; grid-template-columns: 240px 1fr; gap: 16px;">
-				<aside class="chronicle-mock-aside">
-					<h4 class="chronicle-mock-aside__title">Quick nav</h4>
-					<div style="margin-bottom: 12px;">
-						<div class="chronicle-mini-month" style="font-size: 11px;">
-							<div class="chronicle-datepicker__grid">
-								@dowLabels()
-								@miniMonthDays()
-							</div>
-						</div>
-					</div>
-					<h4 class="chronicle-mock-aside__title">Filters</h4>
-					<div style="display: flex; flex-direction: column; gap: 4px;">
-						<label class="chronicle-checkbox-row"><input type="checkbox" class="chronicle-checkbox" checked/><span style="font-size: 12px;">Major events</span></label>
-						<label class="chronicle-checkbox-row"><input type="checkbox" class="chronicle-checkbox" checked/><span style="font-size: 12px;">Sessions</span></label>
-						<label class="chronicle-checkbox-row"><input type="checkbox" class="chronicle-checkbox"/><span style="font-size: 12px;">Background events</span></label>
-					</div>
-				</aside>
-				<div class="chronicle-mock-cal-container" data-mock-cal>
-					<div class="chronicle-mock-cal">
-						@dowLabels()
-						@calDays()
-					</div>
-					// Day-detail popover (Phase 1.6 D.10 — fully interactive).
-					// Click a day cell → JS positions this popover near the
-					// clicked cell + populates it with mock event data.
-					// Pure visual; no backend calls.
-					<div class="chronicle-mock-day-popover" data-mock-day-popover data-open="false">
-						<strong style="display: block; margin-bottom: 6px; color: var(--chronicle-fg);" data-mock-day-popover-title>Day —</strong>
-						<div style="display: flex; flex-direction: column; gap: 4px;" data-mock-day-popover-events>
-							<span style="color: var(--chronicle-fg-muted); font-style: italic;">No events</span>
-						</div>
-						<div style="display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--chronicle-border);">
-							<button class="chronicle-button-primary chronicle-button-primary--xs">+ New event</button>
-							<button class="chronicle-button-ghost chronicle-button-ghost--xs" data-mock-day-popover-close>Close</button>
-						</div>
-					</div>
-				</div>
-			</div>
-		</div>
-		@rateControl("calendar-surface", "Calendar surface (drag-to-select + ribbon)")
-	</section>
-}
-
-templ miniMonthDays() {
-	for i := 1; i <= 35; i++ {
-		if i == 18 {
-			<button class="chronicle-datepicker__day" data-state="today">{ itoa(i) }</button>
-		} else if i > 31 {
-			<button class="chronicle-datepicker__day" data-state="muted">{ itoa(i - 31) }</button>
-		} else {
-			<button class="chronicle-datepicker__day">{ itoa(i) }</button>
-		}
-	}
-}
-
-// calDays — Phase 1.6 D.10: day cells are now clickable. Each cell
-// carries its index + optional encoded events (semicolon-separated)
-// as data attributes; the JS handler reads these to populate the
-// day-detail popover when a cell is clicked.
-templ calDays() {
-	for i := 1; i <= 35; i++ {
-		if i == 5 {
-			<div class="chronicle-mock-cal__day" data-mock-day={ itoa(i) } data-mock-events="Trade summit">
-				<span class="chronicle-mock-cal__num">{ itoa(i) }</span>
-				<span class="chronicle-mock-cal__event">Trade summit</span>
-			</div>
-		} else if i == 14 {
-			<div class="chronicle-mock-cal__day" data-mock-day={ itoa(i) } data-mock-events="Harvest moon;Lunar festival;Council toast">
-				<span class="chronicle-mock-cal__num">{ itoa(i) }</span>
-				<span class="chronicle-mock-cal__event chronicle-mock-cal__event--warning">Harvest moon</span>
-				<span class="chronicle-mock-cal__event">+ 2 more</span>
-			</div>
-		} else if i == 18 {
-			<div class="chronicle-mock-cal__day" data-today="true" data-mock-day={ itoa(i) } data-mock-events="Coronation;Session 12">
-				<span class="chronicle-mock-cal__num">{ itoa(i) }</span>
-				<span class="chronicle-mock-cal__event chronicle-mock-cal__event--success">Coronation</span>
-				<span class="chronicle-mock-cal__event">Session 12</span>
-			</div>
-		} else if i == 22 {
-			<div class="chronicle-mock-cal__day" data-mock-day={ itoa(i) } data-mock-events="Council vote">
-				<span class="chronicle-mock-cal__num">{ itoa(i) }</span>
-				<span class="chronicle-mock-cal__event">Council vote</span>
-			</div>
-		} else if i > 31 {
-			<div class="chronicle-mock-cal__day" data-muted="true" data-mock-day={ itoa(i - 31) }>
-				<span class="chronicle-mock-cal__num">{ itoa(i - 31) }</span>
-			</div>
-		} else {
-			<div class="chronicle-mock-cal__day" data-mock-day={ itoa(i) }>
-				<span class="chronicle-mock-cal__num">{ itoa(i) }</span>
-			</div>
-		}
-	}
-}
-
-// demoScript — single inline <script> that wires the validation
-// harness, drawer behaviour, accent palette swap, and the resolved-
-// tokens display. Inline keeps the demo self-contained (the dispatch
-// says no new dependency); the script reads/writes data-* attributes
-// and CSS custom properties only.
-//
-// Phase 1.5: extended for dark-mode init (localStorage > OS pref >
-// dark-default precedence), density toggle, motion-replay (duration +
-// easing tracks + animation tiles), hover-ladder preview, modal
-// open/close, accordion toggle, disclosure toggle, indeterminate
-// checkbox initialization.
-// ============================================================
-// Phase 1.6 — Browser-compat diagnostic panel + variety expansion
-// templ funcs. All additive; no edits to Phase 1 / 1.5 sections.
-// ============================================================
-
-// browserCompatPanel — the self-documenting fix. Renders a collapsible
-// <details> at the top of the page; the JS init populates the UA
-// string and the feature-detection results into the table after page
-// load. When operator reports "X doesn't work," they (or coordinator)
-// open this panel to see which features the operator's browser
-// supports. Eliminates speculative debugging.
-templ browserCompatPanel() {
-	<details class="chronicle-compat" id="chronicle-compat" open>
-		<summary class="chronicle-compat__summary">Browser Compatibility</summary>
-		<div class="chronicle-compat__body">
-			<div class="chronicle-compat__ua" id="chronicle-compat-ua">User Agent: detecting…</div>
-			<table class="chronicle-compat__table" id="chronicle-compat-table">
-				<thead>
-					<tr><th>Feature</th><th>Status</th><th>Used by</th></tr>
-				</thead>
-				<tbody>
-					<tr><td>OKLCH color</td><td data-feat="oklch">…</td><td class="chronicle-compat__usage">All canon colors</td></tr>
-					<tr><td><code>color-mix(in oklch)</code></td><td data-feat="colorMixOklch">…</td><td class="chronicle-compat__usage">State layers, accent overlays</td></tr>
-					<tr><td><code>light-dark()</code></td><td data-feat="lightDark">…</td><td class="chronicle-compat__usage">All surface colours (fallback: theme-attribute selectors)</td></tr>
-					<tr><td><code>&#64;property</code></td><td data-feat="property">…</td><td class="chronicle-compat__usage">Animatable <code>--chronicle-accent</code></td></tr>
-					<tr><td>Container queries</td><td data-feat="containerQueries">…</td><td class="chronicle-compat__usage">Card grid responsive reflow</td></tr>
-					<tr><td>Subgrid</td><td data-feat="subgrid">…</td><td class="chronicle-compat__usage">Future: calendar week grid alignment</td></tr>
-					<tr><td>Anchor positioning</td><td data-feat="anchorPositioning">…</td><td class="chronicle-compat__usage">Popover position (fallback: JS getBoundingClientRect)</td></tr>
-					<tr><td>Native Popover API</td><td data-feat="popoverApi">…</td><td class="chronicle-compat__usage">Popover demo (fallback: data-attribute state)</td></tr>
-					<tr><td>View Transitions API</td><td data-feat="viewTransitions">…</td><td class="chronicle-compat__usage">Drawer slide (fallback: CSS-only)</td></tr>
-					<tr><td><code>&#64;starting-style</code></td><td data-feat="startingStyle">…</td><td class="chronicle-compat__usage">Popover scale-in (fallback: JIT class add)</td></tr>
-					<tr><td><code>:has()</code> selector</td><td data-feat="hasSelector">…</td><td class="chronicle-compat__usage">Future: parent-state-aware rules</td></tr>
-					<tr><td><code>accent-color</code></td><td data-feat="accentColor">…</td><td class="chronicle-compat__usage">Native form controls (radio, checkbox)</td></tr>
-				</tbody>
-			</table>
-		</div>
-	</details>
-}
-
-// ============================================================
-// D — Variety expansion sections
-// ============================================================
-
-templ varietyFormSection() {
-	<section class="chronicle-section" id="variety-forms">
-		<h2 class="chronicle-section__title">More Form Patterns — D.1</h2>
-		<p class="chronicle-section__intro">
-			Autocomplete with keyboard navigation, multi-select chip input (type to add, click ✕ to remove), file dropzone with simulated file list, inline validation states (success / warning / error).
-		</p>
-		<div class="chronicle-section__grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Autocomplete — type to filter</label>
-				<div class="chronicle-autocomplete" data-autocomplete>
-					<input type="text" class="chronicle-input" placeholder="Type a calendar plugin…" data-autocomplete-input/>
-					<div class="chronicle-autocomplete__list" data-autocomplete-list></div>
-				</div>
-				<span class="chronicle-field__helper">Suggestions: calendar, maps, timeline, sessions, notes, npcs, armory.</span>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Multi-select chip input</label>
-				<div class="chronicle-chip-input" data-chip-input>
-					<span class="chronicle-chip-input__chip">Calendar <button type="button" data-chip-remove>✕</button></span>
-					<span class="chronicle-chip-input__chip">Maps <button type="button" data-chip-remove>✕</button></span>
-					<input type="text" placeholder="Add tag…" data-chip-add/>
-				</div>
-				<span class="chronicle-field__helper">Type and press Enter to add; click ✕ to remove.</span>
-			</div>
-			<div class="chronicle-field" style="grid-column: span 2;">
-				<label class="chronicle-field__label">File upload (dropzone simulation)</label>
-				<div class="chronicle-dropzone" data-dropzone>
-					<span class="chronicle-dropzone__icon">↑</span>
-					Drop files here or click to browse
-				</div>
-				<ul class="chronicle-file-list" data-file-list>
-					<li>📄 example-config.yml<span style="margin-left: auto; color: var(--chronicle-fg-subtle); font-size: 11px;">2.4 KB</span><button type="button" class="chronicle-file-list__remove" data-file-remove>✕</button></li>
-					<li>📄 backup-2026-05-29.zip<span style="margin-left: auto; color: var(--chronicle-fg-subtle); font-size: 11px;">487 KB</span><button type="button" class="chronicle-file-list__remove" data-file-remove>✕</button></li>
-				</ul>
-			</div>
-		</div>
-		<h3 class="chronicle-state-label" style="margin-top: 20px;">Inline validation states (D.3)</h3>
-		<div class="chronicle-section__grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Success</label>
-				<input type="text" class="chronicle-input" value="thereckoning2026" style="border-color: var(--chronicle-success);"/>
-				<span class="chronicle-validation chronicle-validation--success">✓ Slug is available</span>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label">Warning</label>
-				<input type="text" class="chronicle-input" value="myCampaign" style="border-color: var(--chronicle-warning);"/>
-				<span class="chronicle-validation chronicle-validation--warning">⚠ Mixed case will be normalised</span>
-			</div>
-			<div class="chronicle-field">
-				<label class="chronicle-field__label chronicle-field__label--required">Error</label>
-				<input type="text" class="chronicle-input chronicle-input--error" value=""/>
-				<span class="chronicle-validation chronicle-validation--error">✗ This field is required</span>
-			</div>
-		</div>
-	</section>
-}
-
-templ varietyButtonsSection() {
-	<section class="chronicle-section" id="variety-buttons">
-		<h2 class="chronicle-section__title">More Button Patterns — D.2</h2>
-		<p class="chronicle-section__intro">
-			Mutually-exclusive toggle group, button-as-link (semantically <code>&lt;a&gt;</code>), FAB-style action button, icon-only with tooltip.
-		</p>
-		<h3 class="chronicle-state-label">Toggle group</h3>
-		<div class="chronicle-toggle-group" data-toggle-group style="margin-bottom: 16px;">
-			<button class="chronicle-toggle-group__btn" aria-pressed="true">Day</button>
-			<button class="chronicle-toggle-group__btn" aria-pressed="false">Week</button>
-			<button class="chronicle-toggle-group__btn" aria-pressed="false">Month</button>
-		</div>
-		<h3 class="chronicle-state-label">Button-as-link</h3>
-		<div style="margin-bottom: 16px;">
-			<a class="chronicle-button-primary" href="#variety-forms">Jump to forms variety ↓</a>
-		</div>
-		<h3 class="chronicle-state-label">FAB-style action button</h3>
-		<div style="margin-bottom: 16px;">
-			<button class="chronicle-fab-demo" aria-label="Create new">+</button>
-		</div>
-	</section>
-}
-
-templ varietyStatusSection() {
-	<section class="chronicle-section" id="variety-status">
-		<h2 class="chronicle-section__title">More Status Patterns — D.3</h2>
-		<h3 class="chronicle-state-label">Empty state variants</h3>
-		<div class="chronicle-empty-variants" style="margin-bottom: 16px;">
-			<div class="chronicle-empty-variant">
-				<div class="chronicle-empty-variant__icon chronicle-empty-variant__icon--search">⌕</div>
-				<div class="chronicle-empty-variant__title">No results</div>
-				<p style="margin: 0;">Try a different search term.</p>
-			</div>
-			<div class="chronicle-empty-variant">
-				<div class="chronicle-empty-variant__icon chronicle-empty-variant__icon--data">◇</div>
-				<div class="chronicle-empty-variant__title">No data yet</div>
-				<p style="margin: 0;">Connect a data source to begin.</p>
-			</div>
-			<div class="chronicle-empty-variant">
-				<div class="chronicle-empty-variant__icon chronicle-empty-variant__icon--perm">🔒</div>
-				<div class="chronicle-empty-variant__title">No permission</div>
-				<p style="margin: 0;">Ask an owner for access.</p>
-			</div>
-			<div class="chronicle-empty-variant">
-				<div class="chronicle-empty-variant__icon chronicle-empty-variant__icon--error">✗</div>
-				<div class="chronicle-empty-variant__title">Couldn't load</div>
-				<p style="margin: 0;">Network error. Try again.</p>
-			</div>
-		</div>
-		<h3 class="chronicle-state-label">Attention pulse + success checkmark draw</h3>
-		<div style="display: flex; gap: 32px; align-items: center;">
-			<div style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px;">
-				<span class="chronicle-attention-pulse"></span>
-				New activity
-			</div>
-			<svg class="chronicle-checkmark" viewBox="0 0 50 50">
-				<circle class="chronicle-checkmark__circle" cx="25" cy="25" r="24"/>
-				<path class="chronicle-checkmark__path" d="M14,27 L22,35 L37,18"/>
-			</svg>
-			<span style="font-size: 13px; color: var(--chronicle-success); font-weight: 500;">Saved successfully</span>
-		</div>
-	</section>
-}
-
-templ varietyNavSection() {
-	<section class="chronicle-section" id="variety-nav">
-		<h2 class="chronicle-section__title">More Nav Patterns — D.4</h2>
-		<p class="chronicle-section__intro">
-			Vertical sidebar with multi-level sections + selected state echoing the navbar's mechanism.
-		</p>
-		<nav class="chronicle-vnav" style="max-width: 240px;">
-			<div class="chronicle-vnav__section">Workspace</div>
-			<a class="chronicle-vnav__item" aria-current="page">📊 Dashboard</a>
-			<a class="chronicle-vnav__item">👥 Members</a>
-			<div class="chronicle-vnav__section">Extensions</div>
-			<a class="chronicle-vnav__item">🗓 Calendar</a>
-			<div class="chronicle-vnav__sub">
-				<a class="chronicle-vnav__item">Events</a>
-				<a class="chronicle-vnav__item">Tiers</a>
-			</div>
-			<a class="chronicle-vnav__item">🗺 Maps</a>
-			<a class="chronicle-vnav__item">⏱ Timeline</a>
-		</nav>
-	</section>
-}
-
-templ varietyDataSection() {
-	<section class="chronicle-section" id="variety-data">
-		<h2 class="chronicle-section__title">More Data Display — D.5</h2>
-		<h3 class="chronicle-state-label">Progress ring with text label</h3>
-		<div style="display: flex; gap: 24px; align-items: center; margin-bottom: 16px;">
-			@progressRing(64, 64)
-			@progressRing(32, 80)
-			@progressRing(85, 22)
-		</div>
-		<h3 class="chronicle-state-label">Definition list with action column</h3>
-		<table class="chronicle-table" style="max-width: 480px;">
-			<tbody>
-				<tr><td style="color: var(--chronicle-fg-muted); width: 40%;">Campaign name</td><td>The Reckoning</td><td style="width: 80px; text-align: right;"><button class="chronicle-button-ghost chronicle-button-ghost--sm">Edit</button></td></tr>
-				<tr><td style="color: var(--chronicle-fg-muted);">System</td><td>Pathfinder 2e</td><td style="text-align: right;"><button class="chronicle-button-ghost chronicle-button-ghost--sm">Edit</button></td></tr>
-				<tr><td style="color: var(--chronicle-fg-muted);">Members</td><td>12</td><td style="text-align: right;"><button class="chronicle-button-ghost chronicle-button-ghost--sm">Manage</button></td></tr>
-			</tbody>
-		</table>
-	</section>
-}
-
-templ progressRing(value, hue int) {
-	<div class="chronicle-progress-ring">
-		<svg viewBox="0 0 64 64" width="64" height="64">
-			<circle class="chronicle-progress-ring__track" cx="32" cy="32" r="28" fill="none" stroke-width="4"/>
-			<circle class="chronicle-progress-ring__fill" cx="32" cy="32" r="28" fill="none" stroke-width="4" stroke-dasharray="175.93" stroke-dashoffset={ ringOffset(value) } stroke-linecap="round"/>
-		</svg>
-		<span class="chronicle-progress-ring__text">{ itoa(value) }%</span>
-	</div>
-}
-
-func ringOffset(value int) string {
-	// circumference 2*pi*r where r=28 ≈ 175.93
-	// offset = circumference - (value/100 * circumference)
-	off := 175.93 - (float64(value)/100.0)*175.93
-	return ftoa(off)
-}
-
-func ftoa(f float64) string {
-	// minimal float-to-string with 2 decimal places
-	whole := int(f)
-	frac := int((f - float64(whole)) * 100)
-	if frac < 0 {
-		frac = -frac
-	}
-	s := itoa(whole) + "."
-	if frac < 10 {
-		s += "0"
-	}
-	s += itoa(frac)
-	return s
-}
-
-templ varietyOverlaysSection() {
-	<section class="chronicle-section" id="variety-overlays">
-		<h2 class="chronicle-section__title">More Overlay Patterns — D.7</h2>
-		<h3 class="chronicle-state-label">Tooltip semantic variants</h3>
-		<div style="display: flex; gap: 32px; align-items: center; padding: 24px 0; flex-wrap: wrap; margin-bottom: 16px;">
-			<div style="position: relative;">
-				<button class="chronicle-button-secondary chronicle-button-secondary--sm">Info</button>
-				<span class="chronicle-tooltip chronicle-tooltip--info" style="bottom: -28px; left: 50%; transform: translateX(-50%);">Informational</span>
-			</div>
-			<div style="position: relative;">
-				<button class="chronicle-button-secondary chronicle-button-secondary--sm">Warning</button>
-				<span class="chronicle-tooltip chronicle-tooltip--warning" style="bottom: -28px; left: 50%; transform: translateX(-50%);">Heads up — this is risky</span>
-			</div>
-			<div style="position: relative;">
-				<button class="chronicle-button-secondary chronicle-button-secondary--sm">Error</button>
-				<span class="chronicle-tooltip chronicle-tooltip--error" style="bottom: -28px; left: 50%; transform: translateX(-50%);">Action failed</span>
-			</div>
-		</div>
-		<h3 class="chronicle-state-label">Hover card (rich preview)</h3>
-		<div style="position: relative; display: inline-block;" data-hover-card-trigger>
-			<a href="#" style="color: var(--chronicle-accent); text-decoration: underline; text-underline-offset: 2px;">&#64;thereckoning</a>
-			<div class="chronicle-hover-card" data-hover-card>
-				<div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
-					<span class="chronicle-avatar">TR</span>
-					<div>
-						<strong style="color: var(--chronicle-fg); font-size: 13px;">The Reckoning</strong>
-						<div style="color: var(--chronicle-fg-muted); font-size: 11px;">Pathfinder 2e · 12 members</div>
-					</div>
-				</div>
-				<p style="margin: 0; color: var(--chronicle-fg-muted); font-size: 11px; line-height: 1.4;">
-					A long-form Pathfinder campaign set in a custom calendar.
-				</p>
-			</div>
-		</div>
-	</section>
-}
-
-templ varietyAnimationsSection() {
-	<section class="chronicle-section" id="variety-animations">
-		<h2 class="chronicle-section__title">More Animation Patterns — D.8</h2>
-		<h3 class="chronicle-state-label">Staggered list reveal</h3>
-		<div style="margin-bottom: 16px;">
-			<button class="chronicle-button-secondary chronicle-button-secondary--sm" data-action="stagger-replay">Replay</button>
-			<ul class="chronicle-stagger" data-stagger style="list-style: none; padding: 0; margin: 12px 0 0 0; display: flex; flex-direction: column; gap: 8px; max-width: 360px;">
-				<li class="chronicle-card" style="padding: 10px 12px;">Item 1 — appears first</li>
-				<li class="chronicle-card" style="padding: 10px 12px;">Item 2 — 50ms later</li>
-				<li class="chronicle-card" style="padding: 10px 12px;">Item 3 — 100ms later</li>
-				<li class="chronicle-card" style="padding: 10px 12px;">Item 4 — 150ms later</li>
-				<li class="chronicle-card" style="padding: 10px 12px;">Item 5 — 200ms later</li>
-			</ul>
-		</div>
-	</section>
-}
-
-templ varietyLayoutsSection() {
-	<section class="chronicle-section" id="variety-layouts">
-		<h2 class="chronicle-section__title">More Layout Patterns — D.9</h2>
-		<h3 class="chronicle-state-label">Master/detail</h3>
-		<div class="chronicle-master-detail" data-master-detail>
-			<div class="chronicle-master-detail__list" role="listbox">
-				<div class="chronicle-master-detail__item" aria-selected="true" data-md-item="event-1">Coronation</div>
-				<div class="chronicle-master-detail__item" aria-selected="false" data-md-item="event-2">Harvest moon</div>
-				<div class="chronicle-master-detail__item" aria-selected="false" data-md-item="event-3">Council vote</div>
-				<div class="chronicle-master-detail__item" aria-selected="false" data-md-item="event-4">Trade summit</div>
-				<div class="chronicle-master-detail__item" aria-selected="false" data-md-item="event-5">Solstice festival</div>
-			</div>
-			<div class="chronicle-master-detail__detail" data-md-detail>
-				<h4 style="margin: 0 0 8px 0;">Coronation</h4>
-				<p style="color: var(--chronicle-fg-muted); margin: 0 0 12px 0; font-size: 13px;">Sunwane 18, 1492. The new sovereign is crowned at the Great Hall.</p>
-				<dl class="chronicle-dl">
-					<dt>Tier</dt><dd>Major</dd>
-					<dt>Visibility</dt><dd>Everyone</dd>
-					<dt>Created</dt><dd>2 weeks ago</dd>
-				</dl>
-			</div>
-		</div>
-	</section>
-}
-
-// ============================================================
-// Phase 1.7 — Choice-picker templ components
-// ============================================================
-
-// stepperNav — combination wizard + scroll: sticky jump-links to the
-// major decision groups. JS tracks scroll position and marks the
-// active link (aria-current).
-templ stepperNav() {
-	<nav class="chronicle-stepper-nav" data-stepper-nav>
-		<a class="chronicle-stepper-nav__link" href="#choices">Design choices</a>
-		<a class="chronicle-stepper-nav__link" href="#motion">Motion</a>
-		<a class="chronicle-stepper-nav__link" href="#card">Cards</a>
-		<a class="chronicle-stepper-nav__link" href="#buttons">Buttons</a>
-		<a class="chronicle-stepper-nav__link" href="#forms">Forms</a>
-		<a class="chronicle-stepper-nav__link" href="#status">Status</a>
-		<a class="chronicle-stepper-nav__link" href="#nav">Navigation</a>
-		<a class="chronicle-stepper-nav__link" href="#data">Data</a>
-		<a class="chronicle-stepper-nav__link" href="#overlays">Overlays</a>
-		<a class="chronicle-stepper-nav__link" href="#containers">Containers</a>
-		<a class="chronicle-stepper-nav__link" href="#mockups">Mockups</a>
-		<a class="chronicle-stepper-nav__link" href="#mockups-timeline">Timeline</a>
-	</nav>
-}
-
-// decisionsPanel — sticky "Your Decisions" output. JS live-builds the
-// markdown into the textarea; Copy + Download export it. Persists in
-// localStorage.
-templ decisionsPanel() {
-	<aside class="chronicle-decisions" data-decisions data-collapsed="false">
-		<div class="chronicle-decisions__head" data-decisions-toggle>
-			<span class="chronicle-decisions__title">Your Decisions</span>
-			<span class="chronicle-decisions__count" data-decisions-count>0</span>
-		</div>
-		<div class="chronicle-decisions__body">
-			<p style="margin:0; font-size:11px; color:var(--chronicle-fg-muted);">
-				Rate the locked elements (1–5) and 👍/👎 the options you prefer. This builds a brief you copy back to me.
-			</p>
-			<textarea class="chronicle-decisions__output" data-decisions-output readonly aria-label="Decisions markdown">No decisions yet — start rating above.</textarea>
-			<div class="chronicle-decisions__actions">
-				<button type="button" class="chronicle-button-primary chronicle-button-primary--sm" data-decisions-copy>Copy markdown</button>
-				<button type="button" class="chronicle-button-secondary chronicle-button-secondary--sm" data-decisions-download>Download</button>
-				<button type="button" class="chronicle-button-ghost chronicle-button-ghost--sm" data-decisions-reset style="margin-left:auto;">Reset</button>
-			</div>
-		</div>
-	</aside>
-}
-
-// rateControl — rate-mode: 1–5 sentiment pills + note, for locked
-// elements ("we're using this no matter what, how do you feel?").
-templ rateControl(id, label string) {
-	<div class="chronicle-picker-controls" data-picker-item data-rate-id={ id } data-rate-label={ label }>
-		<span class="chronicle-picker-controls__label">{ label } — rate 1–5</span>
-		<div class="chronicle-rate" role="group" aria-label={ "Rate " + label }>
-			for n := 1; n <= 5; n++ {
-				<button type="button" class="chronicle-rate__pill" data-rate={ itoa(n) } aria-pressed="false">{ itoa(n) }</button>
-			}
-		</div>
-		<input type="text" class="chronicle-picker-note" data-note placeholder="optional note…"/>
-	</div>
-}
-
-// voteThumbs — choose-mode 👍/👎 for a single option.
+// voteThumbs — choose-mode 👍/👎 buttons for a single option.
 templ voteThumbs(id string) {
 	<div class="chronicle-vote" data-vote-id={ id } role="group" aria-label="Prefer this option?">
 		<button type="button" class="chronicle-vote__btn" data-vote="up" aria-pressed="false" aria-label="Thumbs up">▲</button>
@@ -2128,8 +236,9 @@ templ voteThumbs(id string) {
 }
 
 // variantCard — one option in a choose-mode group. previewStyle paints
-// the preview box (color/bg swatches); structural options rely on the
-// Apply button to live-apply to the whole page so the operator sees it.
+// the swatch (color/bg only); the Apply button live-mutates the demo
+// root so the operator sees the actual visual result in the preview
+// area below.
 templ variantCard(group, value, name, previewStyle string, chosen bool) {
 	<div class="chronicle-variant-option" data-variant-group={ group } data-variant={ value } data-chosen={ boolToStr(chosen) }>
 		<div class="chronicle-variant-option__head">
@@ -2145,91 +254,7 @@ templ variantCard(group, value, name, previewStyle string, chosen bool) {
 	</div>
 }
 
-// designChoicesSection — the heart of the picker: the load-bearing
-// "which do you prefer" decisions, each a choose-mode variant group
-// whose Apply buttons live-apply a global token so the change ripples
-// across every component on the page.
-templ designChoicesSection() {
-	<section class="chronicle-section" id="choices">
-		<h2 class="chronicle-section__title">Design Choices — pick what you prefer</h2>
-		<p class="chronicle-section__intro">
-			These are the load-bearing decisions. For each, 👍/👎 the options and click <strong>Apply &amp; preview</strong> to see it ripple across the whole page (dark mode). Your picks build the "Your Decisions" brief in the corner. Operator's two modes: these are "which do you prefer"; locked components further down get a 1–5 "how do you feel" rating.
-		</p>
-
-		<h3 class="chronicle-state-label">Dark background tint</h3>
-		<p class="chronicle-section__intro">Operator: "the background should be the same darkmode idea we already had on the website." <strong>Cool gray-900</strong> is the new default (matches the live site); the others are alternatives.</p>
-		<div class="chronicle-variant-grid">
-			@variantCard("bg", "cool", "Cool gray-900 (site match)", "background: oklch(0.21 0.034 264.665);", true)
-			@variantCard("bg", "black", "Near-black neutral", "background: oklch(0.08 0 0);", false)
-			@variantCard("bg", "warm", "Warm charcoal", "background: oklch(0.21 0.012 60);", false)
-			@variantCard("bg", "elevated", "Indigo charcoal (sidebar tone)", "background: oklch(0.205 0.015 277);", false)
-		</div>
-
-		<h3 class="chronicle-state-label" style="margin-top:20px;">Accent palette</h3>
-		<div class="chronicle-variant-grid">
-			@variantCard("accent", "indigo", "Indigo", "background: oklch(0.58 0.20 270);", true)
-			@variantCard("accent", "emerald", "Emerald", "background: oklch(0.65 0.15 155);", false)
-			@variantCard("accent", "amber", "Amber", "background: oklch(0.78 0.16 75);", false)
-			@variantCard("accent", "rose", "Rose", "background: oklch(0.65 0.20 22);", false)
-		</div>
-
-		<h3 class="chronicle-state-label" style="margin-top:20px;">Corner radius</h3>
-		<div class="chronicle-variant-grid">
-			@variantCard("radius", "sharp", "Sharp (2/4px)", "", false)
-			@variantCard("radius", "medium", "Medium (6/8px)", "", true)
-			@variantCard("radius", "soft", "Soft (12/16px)", "", false)
-		</div>
-
-		<h3 class="chronicle-state-label" style="margin-top:20px;">Shadow / elevation</h3>
-		<div class="chronicle-variant-grid">
-			@variantCard("shadow", "none", "Border-only (no shadow)", "", false)
-			@variantCard("shadow", "subtle", "Subtle (canon)", "", true)
-			@variantCard("shadow", "pronounced", "Pronounced", "", false)
-			@variantCard("shadow", "heavy", "Heavy", "", false)
-		</div>
-
-		<h3 class="chronicle-state-label" style="margin-top:20px;">Card hover style</h3>
-		<div class="chronicle-variant-grid">
-			@variantCard("hover", "lift", "Surface-lift co-occurrence (canon D3)", "", true)
-			@variantCard("hover", "navbar", "Navbar-echo gradient", "", false)
-			@variantCard("hover", "border", "Border-only", "", false)
-			@variantCard("hover", "glow", "Accent glow", "", false)
-		</div>
-
-		<h3 class="chronicle-state-label" style="margin-top:20px;">Motion speed</h3>
-		<div class="chronicle-variant-grid">
-			@variantCard("motion", "snappy", "Snappy (100/150ms)", "", false)
-			@variantCard("motion", "canon", "Canon (150/250ms)", "", true)
-			@variantCard("motion", "relaxed", "Relaxed (250/400ms)", "", false)
-		</div>
-
-		<h3 class="chronicle-state-label" style="margin-top:20px;">Density</h3>
-		<div class="chronicle-variant-grid">
-			@variantCard("density", "compact", "Compact", "", false)
-			@variantCard("density", "comfortable", "Comfortable", "", true)
-			@variantCard("density", "spacious", "Spacious", "", false)
-		</div>
-
-		<h3 class="chronicle-state-label" style="margin-top:20px;">Selected-state treatment</h3>
-		<div class="chronicle-variant-grid">
-			@variantCard("selected", "A", "A — accent border + tint (canon D3)", "", true)
-			@variantCard("selected", "B", "B — navbar half-hover", "", false)
-		</div>
-
-		<h3 class="chronicle-state-label" style="margin-top:20px;">Button family — which treatments do you want?</h3>
-		<p class="chronicle-section__intro">Operator: "here are a dozen buttons, which do you prefer." 👍/👎 each. (Hover them to see states.)</p>
-		<div class="chronicle-variant-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
-			@buttonVariantCard("primary", "Primary (solid)")
-			@buttonVariantCard("tonal", "Tonal (accent tint)")
-			@buttonVariantCard("secondary", "Secondary (outlined)")
-			@buttonVariantCard("ghost", "Ghost (bare)")
-			@buttonVariantCard("link", "Link (underlined)")
-			@buttonVariantCard("destructive", "Destructive (danger)")
-		</div>
-	</section>
-}
-
-// buttonVariantCard — a choose-mode card whose preview is a live button
+// buttonVariantCard — choose-mode card whose preview is a live button
 // of that variant, so the operator votes on the actual rendered style.
 templ buttonVariantCard(variant, name string) {
 	<div class="chronicle-variant-option" data-variant-group="button" data-variant={ variant }>
@@ -2260,879 +285,80 @@ templ buttonVariantPreview(variant string) {
 	}
 }
 
-// mockTimelineSection — C.4 the missing timeline. Horizontal axis +
-// era bands + event markers + zoom segmented control + draggable
-// playhead. Static mock data; wrapped in a rate-mode control.
-templ mockTimelineSection() {
-	<section class="chronicle-section" id="mockups-timeline">
-		<h2 class="chronicle-section__title">Page Composition Mockup 4 — Timeline</h2>
-		<div class="chronicle-mockup-banner">
-			<span>📌</span>
-			<span><strong>MOCKUP — not the real timeline.</strong> Operator: "you still haven't rebuilt a timeline mockup." Horizontal axis + era bands + event markers + zoom + a draggable playhead (drag the vertical line). Static mock data; previews the V2 timeline surface (C-TIMELINE-V2 arc).</span>
-		</div>
-		<div class="chronicle-mock">
-			<div class="chronicle-mock__title-bar">
-				<div>
-					<nav class="chronicle-mock__breadcrumbs">Campaigns › The Reckoning › Timeline</nav>
-					<h3 class="chronicle-mock__page-title">Ages of the Reckoning</h3>
-				</div>
-				<div style="margin-left:auto;">
-					<div class="chronicle-segmented" data-timeline-zoom>
-						<button class="chronicle-segmented__btn" aria-pressed="false" data-zoom="era">Era</button>
-						<button class="chronicle-segmented__btn" aria-pressed="true" data-zoom="year">Year</button>
-						<button class="chronicle-segmented__btn" aria-pressed="false" data-zoom="month">Month</button>
-					</div>
+// previewSection — small live-preview surface per dispatch §E. Updates
+// as the operator Applies variants above. NOT a component showcase;
+// just enough to see the canon at the picked tokens.
+templ previewSection() {
+	<section class="chronicle-section" id="preview">
+		<h2 class="chronicle-section__title">Live preview — your picks applied</h2>
+		<p class="chronicle-section__intro">
+			As you click <strong>Apply &amp; preview</strong> in the picker above, the surfaces below update to the chosen tokens. One card, one button row, one input, one drawer, one chip set — enough to see the canon, not enough to scroll past.
+		</p>
+		<div class="chronicle-preview">
+			<div class="chronicle-preview__row chronicle-preview__row--cards">
+				<div class="chronicle-card" tabindex="0">
+					<span class="chronicle-state-label">Card example</span>
+					<h3 class="chronicle-card__title">Canon card</h3>
+					<p class="chronicle-card__body">Hover, focus, press — observe co-occurrence per canon D3 (background-color + border-color + box-shadow shifting together).</p>
 				</div>
 			</div>
-			<div class="chronicle-timeline" data-timeline>
-				// Era bands
-				<div class="chronicle-timeline__era" style="left:2%; width:30%; background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 18%);">First Age</div>
-				<div class="chronicle-timeline__era" style="left:34%; width:40%; background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-success) 18%);">Age of Kings</div>
-				<div class="chronicle-timeline__era" style="left:76%; width:22%; background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-warning) 18%);">Reckoning</div>
-				<div class="chronicle-timeline__axis">
-					@timelineTicks()
-					@timelineMarkers()
-				</div>
-				<div class="chronicle-timeline__playhead" data-timeline-playhead style="left:62%;"></div>
+			<div class="chronicle-preview__row chronicle-preview__row--buttons">
+				<span class="chronicle-preview__label">Buttons:</span>
+				<button type="button" class="chronicle-button-primary">Primary</button>
+				<button type="button" class="chronicle-button-tonal">Tonal</button>
+				<button type="button" class="chronicle-button-secondary">Secondary</button>
+				<button type="button" class="chronicle-button-ghost">Ghost</button>
+				<button type="button" class="chronicle-button-link">Link</button>
+				<button type="button" class="chronicle-button-destructive">Destructive</button>
+			</div>
+			<div class="chronicle-preview__row">
+				<span class="chronicle-preview__label">Input:</span>
+				<input type="text" class="chronicle-input" placeholder="Type to see focus state…"/>
+			</div>
+			<div class="chronicle-preview__row">
+				<span class="chronicle-preview__label">Chip set:</span>
+				<span class="chronicle-chip chronicle-chip--info">Session</span>
+				<span class="chronicle-chip chronicle-chip--success">Holiday</span>
+				<span class="chronicle-chip chronicle-chip--warning">Travel</span>
+			</div>
+			<div class="chronicle-preview__row">
+				<span class="chronicle-preview__label">Drawer:</span>
+				<button type="button" class="chronicle-button-secondary" data-preview-drawer-toggle>Open drawer</button>
 			</div>
 		</div>
-		@rateControl("timeline-surface", "Timeline surface")
+		<div class="chronicle-preview-drawer" data-preview-drawer data-open="false" aria-hidden="true">
+			<button type="button" class="chronicle-preview-drawer__close" data-preview-drawer-close aria-label="Close drawer">✕</button>
+			<h3 class="chronicle-preview-drawer__title">Drawer at picked tokens</h3>
+			<p class="chronicle-preview-drawer__body">Canon C.2: scroll-behavior auto + scroll-top reset on close-then-open. Press Escape or the ✕ to close.</p>
+		</div>
 	</section>
 }
 
-templ timelineTicks() {
-	for i := 0; i <= 10; i++ {
-		<div class="chronicle-timeline__tick" style={ "left:" + itoa(i*10) + "%;" }></div>
-		<div class="chronicle-timeline__tick-label" style={ "left:" + itoa(i*10) + "%;" }>{ itoa(1000 + i*50) }</div>
-	}
+// decisionsPanel — sticky "Your Decisions" output. JS live-builds the
+// markdown into the textarea; Copy + Download export it. Persists in
+// localStorage under `chronicle-canon-decisions`.
+templ decisionsPanel() {
+	<aside class="chronicle-decisions" data-decisions data-collapsed="false">
+		<div class="chronicle-decisions__head" data-decisions-toggle>
+			<span class="chronicle-decisions__title">Your Decisions</span>
+			<span class="chronicle-decisions__count" data-decisions-count>0</span>
+		</div>
+		<div class="chronicle-decisions__body">
+			<p style="margin:0; font-size:11px; color:var(--chronicle-fg-muted);">
+				Rate the locked elements (1–5), 👍/👎 the options you prefer, and Apply the variants you want live. This builds a brief you copy back to me.
+			</p>
+			<textarea class="chronicle-decisions__output" data-decisions-output readonly aria-label="Decisions markdown">No decisions yet — start rating above.</textarea>
+			<div class="chronicle-decisions__actions">
+				<button type="button" class="chronicle-button-primary chronicle-button-primary--sm" data-decisions-copy>Copy markdown</button>
+				<button type="button" class="chronicle-button-secondary chronicle-button-secondary--sm" data-decisions-download>Download</button>
+				<button type="button" class="chronicle-button-ghost chronicle-button-ghost--sm" data-decisions-reset style="margin-left:auto;">Reset</button>
+			</div>
+		</div>
+	</aside>
 }
 
-templ timelineMarkers() {
-	<div class="chronicle-timeline__marker" style="left:12%;" title="Founding"></div>
-	<div class="chronicle-timeline__marker chronicle-timeline__marker--success" style="left:28%;" title="Coronation"></div>
-	<div class="chronicle-timeline__marker" style="left:45%;" title="Great Schism"></div>
-	<div class="chronicle-timeline__marker chronicle-timeline__marker--warning" style="left:58%;" title="The Burning"></div>
-	<div class="chronicle-timeline__marker" style="left:72%;" title="Trade Pact"></div>
-	<div class="chronicle-timeline__marker chronicle-timeline__marker--success" style="left:88%;" title="Reckoning Day"></div>
-}
-
-templ demoScript() {
-	<script>
-	// ============================================================
-	// Phase 1.6 demo init — FF-safe + feature-detected + interactive
-	// ============================================================
-	//
-	// Belt-and-suspenders: this IIFE runs at script-tag-parse time;
-	// a second pass runs after DOMContentLoaded; a third after
-	// requestAnimationFrame. Whichever fires first does the work; the
-	// rest are no-ops (idempotent — the init() function checks
-	// window.__chronicleDemoInited).
-	//
-	// The CSS load is via <link rel="stylesheet"> directly above the
-	// demo root, so when this script runs the stylesheet is already
-	// requested; the visual init doesn't have to wait for it.
-	(function() {
-		function init() {
-			if (window.__chronicleDemoInited) return;
-			window.__chronicleDemoInited = true;
-			runInit();
-		}
-
-		// Belt-and-suspenders: three triggers, idempotent.
-		init();
-		if (document.readyState === 'loading') {
-			document.addEventListener('DOMContentLoaded', init);
-		}
-		if (typeof requestAnimationFrame === 'function') {
-			requestAnimationFrame(init);
-		}
-
-		function runInit() {
-		const root = document.querySelector('[data-chronicle-demo]');
-		if (!root) return;
-
-		// ========================================================
-		// Feature detection — populates window.__chronicleDemoFeatures
-		// + drives per-feature fallbacks below.
-		// ========================================================
-		function detect() {
-			const features = {
-				oklch:             cssSupports('color', 'oklch(0.5 0.1 180)'),
-				colorMixOklch:     cssSupports('color', 'color-mix(in oklch, red, blue)'),
-				lightDark:         cssSupports('color', 'light-dark(red, blue)'),
-				property:          typeof CSS !== 'undefined' && typeof CSS.registerProperty === 'function',
-				containerQueries:  cssSupports('container-type', 'inline-size'),
-				subgrid:           cssSupports('grid-template-columns', 'subgrid'),
-				anchorPositioning: cssSupports('anchor-name', '--x'),
-				popoverApi:        typeof HTMLElement !== 'undefined' && 'showPopover' in HTMLElement.prototype,
-				viewTransitions:   typeof document.startViewTransition === 'function',
-				startingStyle:     cssSupportsAtRule('@starting-style'),
-				hasSelector:       cssSupports('selector(:has(*))'),
-				accentColor:       cssSupports('accent-color', 'red'),
-			};
-			window.__chronicleDemoFeatures = features;
-			return features;
-		}
-		function cssSupports(prop, val) {
-			try {
-				if (val === undefined) {
-					return typeof CSS !== 'undefined' && CSS.supports(prop);
-				}
-				return typeof CSS !== 'undefined' && CSS.supports(prop, val);
-			} catch (e) { return false; }
-		}
-		function cssSupportsAtRule(rule) {
-			// @starting-style detection — CSS.supports doesn't directly
-			// answer for at-rules, so we use a heuristic: try to parse
-			// it inline. Fallback to false if browser is too old.
-			try {
-				const s = document.createElement('style');
-				s.textContent = '@supports (' + rule + ') { .x{} }';
-				document.head.appendChild(s);
-				const ok = s.sheet && s.sheet.cssRules && s.sheet.cssRules.length > 0;
-				document.head.removeChild(s);
-				return !!ok;
-			} catch (e) { return false; }
-		}
-		const features = detect();
-
-		// Apply data-attributes for CSS fallback paths to engage.
-		if (!features.popoverApi)        root.setAttribute('data-chronicle-popover-fallback', '');
-		if (!features.anchorPositioning) root.setAttribute('data-chronicle-anchor-fallback', '');
-
-		// Populate compat panel.
-		(function fillCompat() {
-			const uaEl = document.getElementById('chronicle-compat-ua');
-			if (uaEl) uaEl.textContent = 'User Agent: ' + (navigator.userAgent || 'unknown');
-			const table = document.getElementById('chronicle-compat-table');
-			if (!table) return;
-			table.querySelectorAll('[data-feat]').forEach(function(cell) {
-				const k = cell.getAttribute('data-feat');
-				const ok = !!features[k];
-				cell.innerHTML = '<span class="chronicle-compat__status chronicle-compat__status--' +
-					(ok ? 'supported' : 'missing') + '">' +
-					(ok ? 'Supported' : 'Missing') + '</span>';
-			});
-		})();
-
-		const ACCENT_PALETTES = {
-			indigo:  'oklch(0.58 0.20 270)',
-			emerald: 'oklch(0.65 0.15 155)',
-			amber:   'oklch(0.78 0.16 75)',
-			rose:    'oklch(0.65 0.20 22)',
-		};
-
-		// --- Theme init: localStorage > OS preference > dark default ---
-		(function initTheme() {
-			let theme = 'dark';
-			try {
-				const stored = localStorage.getItem('chronicle-demo-theme');
-				if (stored === 'light' || stored === 'dark') {
-					theme = stored;
-				} else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-					theme = 'light';
-				}
-			} catch (e) {
-				if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-					theme = 'light';
-				}
-			}
-			applyTheme(theme);
-			document.querySelectorAll('[data-action="theme"]').forEach(function(btn) {
-				btn.setAttribute('aria-pressed', btn.dataset.value === theme ? 'true' : 'false');
-			});
-		})();
-
-		// applyTheme — Phase 1.6 belt-and-suspenders: sets BOTH the
-		// data-attribute (the modern path) AND the .dark class (the
-		// fallback path) so theme switching works regardless of which
-		// CSS selector strategy resolves first.
-		function applyTheme(theme) {
-			root.dataset.chronicleDemoTheme = theme;
-			if (theme === 'dark') root.classList.add('dark');
-			else                  root.classList.remove('dark');
-		}
-
-		function updateTokenDisplay() {
-			const el = document.getElementById('chronicle-resolved-tokens');
-			if (!el) return;
-			const cs = getComputedStyle(root);
-			const accent = cs.getPropertyValue('--chronicle-accent').trim();
-			const surface = cs.getPropertyValue('--chronicle-surface').trim();
-			const fg = cs.getPropertyValue('--chronicle-fg').trim();
-			el.textContent = '--chronicle-accent: ' + accent + '  ·  --chronicle-surface: ' + surface + '  ·  --chronicle-fg: ' + fg;
-		}
-
-		function setPressed(group, value) {
-			document.querySelectorAll('[data-action="' + group + '"]').forEach(function(btn) {
-				btn.setAttribute('aria-pressed', btn.dataset.value === value ? 'true' : 'false');
-			});
-		}
-
-		document.querySelectorAll('[data-indeterminate="true"]').forEach(function(el) {
-			el.indeterminate = true;
-		});
-
-		// ========================================================
-		// Click delegation — scoped to root not document.body so the
-		// demo can't accidentally fire on the surrounding @layouts.App
-		// chrome. The demo root is large enough to cover everything
-		// the operator interacts with on this page.
-		// ========================================================
-		root.addEventListener('click', function(ev) {
-			const target = ev.target.closest('[data-action]');
-			if (target) {
-				const action = target.dataset.action;
-				const value = target.dataset.value;
-				if (action === 'theme') {
-					applyTheme(value);
-					setPressed('theme', value);
-					updateTokenDisplay();
-					try { localStorage.setItem('chronicle-demo-theme', value); } catch (e) {}
-				} else if (action === 'accent') {
-					// Scope-isolation per dispatch stop-and-flag #3:
-					// set on root only, NEVER touch global --color-accent-rgb.
-					root.style.setProperty('--chronicle-accent', ACCENT_PALETTES[value] || ACCENT_PALETTES.indigo);
-					setPressed('accent', value);
-					updateTokenDisplay();
-				} else if (action === 'reduce-motion') {
-					root.dataset.chronicleDemoReduceMotion = value;
-					setPressed('reduce-motion', value);
-				} else if (action === 'density') {
-					root.dataset.chronicleDensity = value;
-					setPressed('density', value);
-				} else if (action === 'drawer-toggle') {
-					toggleDrawer(true);
-				} else if (action === 'drawer-close') {
-					toggleDrawer(false);
-				} else if (action === 'motion-replay') {
-					replayMotion(target.dataset.target);
-				} else if (action === 'anim-replay') {
-					replayAnimTile(target);
-				} else if (action === 'hover-ladder') {
-					const card = document.getElementById('chronicle-hover-ladder-card');
-					if (card) card.dataset.preview = value;
-				} else if (action === 'modal-open') {
-					const id = 'chronicle-modal-' + target.dataset.target;
-					const m = document.getElementById(id);
-					if (m) m.hidden = false;
-				} else if (action === 'modal-close') {
-					const m = target.closest('.chronicle-modal-backdrop');
-					if (m) m.hidden = true;
-				} else if (action === 'accordion-toggle') {
-					const item = target.closest('.chronicle-accordion__item');
-					if (item) item.dataset.open = item.dataset.open === 'true' ? 'false' : 'true';
-				} else if (action === 'disclosure-toggle') {
-					const content = target.parentElement.querySelector('.chronicle-disclosure__content');
-					if (content) {
-						const willShow = content.hasAttribute('hidden');
-						if (willShow) { content.removeAttribute('hidden'); target.textContent = 'Show less'; }
-						else { content.setAttribute('hidden', ''); target.textContent = 'Show more'; }
-					}
-				} else if (action === 'stagger-replay') {
-					const list = document.querySelector('[data-stagger]');
-					if (list) {
-						list.classList.remove('is-revealed');
-						void list.offsetWidth;
-						list.classList.add('is-revealed');
-					}
-				}
-				return;
-			}
-
-			// --- Interactive Mock E.1 — toggle + expand drawer + tabs ---
-			const mockToggle = ev.target.closest('[data-mock-toggle]');
-			if (mockToggle) {
-				const card = mockToggle.closest('[data-mock-card]');
-				const next = mockToggle.getAttribute('aria-pressed') !== 'true';
-				mockToggle.setAttribute('aria-pressed', next ? 'true' : 'false');
-				if (card) card.setAttribute('data-mock-enabled', next ? 'true' : 'false');
-				return;
-			}
-			const mockExpand = ev.target.closest('[data-mock-expand]');
-			if (mockExpand) {
-				const card = mockExpand.closest('[data-mock-card]');
-				const drawer = card && card.querySelector('[data-mock-drawer]');
-				if (drawer) {
-					const next = drawer.dataset.open !== 'true';
-					drawer.dataset.open = next ? 'true' : 'false';
-					mockExpand.textContent = next ? 'Expand ▴' : 'Expand ▾';
-					if (next) card.setAttribute('data-mock-active', 'true');
-					else card.removeAttribute('data-mock-active');
-				}
-				return;
-			}
-			const mockTab = ev.target.closest('[data-mock-tab]');
-			if (mockTab) {
-				const tabName = mockTab.dataset.mockTab;
-				const tabs = mockTab.parentElement;
-				tabs.querySelectorAll('[data-mock-tab]').forEach(function(t) {
-					t.setAttribute('aria-selected', t.dataset.mockTab === tabName ? 'true' : 'false');
-				});
-				const drawer = mockTab.closest('[data-mock-drawer]');
-				drawer.querySelectorAll('[data-mock-panel]').forEach(function(p) {
-					if (p.dataset.mockPanel === tabName) p.setAttribute('data-active', 'true');
-					else p.removeAttribute('data-active');
-				});
-				return;
-			}
-
-			// --- Interactive Mock E.3 — calendar day click → popover ---
-			const dayCell = ev.target.closest('[data-mock-day]');
-			if (dayCell && dayCell.closest('[data-mock-cal]')) {
-				openDayPopover(dayCell);
-				return;
-			}
-			const dayClose = ev.target.closest('[data-mock-day-popover-close]');
-			if (dayClose) {
-				const pop = dayClose.closest('[data-mock-day-popover]');
-				if (pop) pop.setAttribute('data-open', 'false');
-				return;
-			}
-
-			// --- Functional color picker (scope-isolated to demo root) ---
-			const swatch = ev.target.closest('.chronicle-color-picker__swatch');
-			if (swatch) {
-				const color = swatch.getAttribute('aria-label');
-				if (color) {
-					root.style.setProperty('--chronicle-accent', color);
-					updateTokenDisplay();
-					// Also update the "current" preview block + sync accent toolbar.
-					const picker = swatch.closest('.chronicle-color-picker');
-					if (picker) {
-						picker.setAttribute('data-functional', 'true');
-						const preview = picker.querySelector('.chronicle-color-picker__preview');
-						if (preview) preview.style.background = color;
-						const input = picker.querySelector('input.chronicle-input');
-						if (input) input.value = color;
-					}
-				}
-				return;
-			}
-
-			// --- Functional date picker — click a day to toggle selected ---
-			const datepickerDay = ev.target.closest('.chronicle-datepicker__day');
-			if (datepickerDay) {
-				const grid = datepickerDay.closest('.chronicle-datepicker__grid');
-				if (grid) {
-					grid.querySelectorAll('.chronicle-datepicker__day[data-state="selected"]').forEach(function(d) {
-						if (d !== datepickerDay && d.dataset.state !== 'today') d.removeAttribute('data-state');
-					});
-					if (datepickerDay.dataset.state === 'today') return;
-					datepickerDay.dataset.state = datepickerDay.dataset.state === 'selected' ? '' : 'selected';
-				}
-				return;
-			}
-
-			// --- Master/detail row select ---
-			const mdItem = ev.target.closest('[data-md-item]');
-			if (mdItem) {
-				const list = mdItem.parentElement;
-				list.querySelectorAll('[data-md-item]').forEach(function(it) {
-					it.setAttribute('aria-selected', it === mdItem ? 'true' : 'false');
-				});
-				return;
-			}
-
-			// --- Multi-select chip-input remove ---
-			const chipRemove = ev.target.closest('[data-chip-remove]');
-			if (chipRemove) {
-				const chip = chipRemove.closest('.chronicle-chip-input__chip');
-				if (chip) chip.remove();
-				return;
-			}
-
-			// --- File-list remove ---
-			const fileRemove = ev.target.closest('[data-file-remove]');
-			if (fileRemove) {
-				const li = fileRemove.closest('li');
-				if (li) li.remove();
-				return;
-			}
-
-			// --- Toggle group + segmented + filter-tag exclusive selection ---
-			const tgBtn = ev.target.closest('.chronicle-toggle-group__btn');
-			if (tgBtn) {
-				const group = tgBtn.parentElement;
-				group.querySelectorAll('.chronicle-toggle-group__btn').forEach(function(b) {
-					b.setAttribute('aria-pressed', b === tgBtn ? 'true' : 'false');
-				});
-				return;
-			}
-		});
-
-		// Multi-select chip add (Enter key)
-		root.addEventListener('keydown', function(ev) {
-			if (ev.key !== 'Enter') return;
-			const input = ev.target.closest('[data-chip-add]');
-			if (!input || !input.value.trim()) return;
-			ev.preventDefault();
-			const value = input.value.trim();
-			const chip = document.createElement('span');
-			chip.className = 'chronicle-chip-input__chip';
-			chip.innerHTML = value + ' <button type="button" data-chip-remove>✕</button>';
-			input.parentElement.insertBefore(chip, input);
-			input.value = '';
-		});
-
-		// Autocomplete — type to filter; click option to select.
-		const AUTOCOMPLETE_OPTIONS = ['calendar', 'maps', 'timeline', 'sessions', 'notes', 'npcs', 'armory'];
-		root.addEventListener('input', function(ev) {
-			const input = ev.target.closest('[data-autocomplete-input]');
-			if (!input) return;
-			const wrap = input.closest('[data-autocomplete]');
-			const list = wrap.querySelector('[data-autocomplete-list]');
-			const q = input.value.toLowerCase().trim();
-			if (!q) {
-				wrap.dataset.open = 'false';
-				list.innerHTML = '';
-				return;
-			}
-			const matches = AUTOCOMPLETE_OPTIONS.filter(function(o) { return o.toLowerCase().includes(q); });
-			if (!matches.length) {
-				wrap.dataset.open = 'false';
-				list.innerHTML = '';
-				return;
-			}
-			wrap.dataset.open = 'true';
-			list.innerHTML = matches.map(function(m) {
-				const idx = m.toLowerCase().indexOf(q);
-				const hi = m.substring(0, idx) + '<mark>' + m.substring(idx, idx + q.length) + '</mark>' + m.substring(idx + q.length);
-				return '<div class="chronicle-autocomplete__option" data-ac-value="' + m + '">' + hi + '</div>';
-			}).join('');
-		});
-		root.addEventListener('click', function(ev) {
-			const opt = ev.target.closest('.chronicle-autocomplete__option');
-			if (!opt) return;
-			const wrap = opt.closest('[data-autocomplete]');
-			const input = wrap.querySelector('[data-autocomplete-input]');
-			input.value = opt.dataset.acValue || opt.textContent.trim();
-			wrap.dataset.open = 'false';
-		});
-
-		// Hover card — show on enter, hide on leave.
-		root.querySelectorAll('[data-hover-card-trigger]').forEach(function(trig) {
-			const card = trig.querySelector('[data-hover-card]');
-			if (!card) return;
-			let timer;
-			trig.addEventListener('mouseenter', function() {
-				clearTimeout(timer);
-				timer = setTimeout(function() { card.dataset.state = 'open'; }, 200);
-			});
-			trig.addEventListener('mouseleave', function() {
-				clearTimeout(timer);
-				card.dataset.state = 'closed';
-			});
-		});
-
-		// Modal backdrop click-to-close
-		document.querySelectorAll('.chronicle-modal-backdrop').forEach(function(m) {
-			m.addEventListener('click', function(ev) {
-				if (ev.target === m) m.hidden = true;
-			});
-		});
-
-		// --- Day popover positioning (replaces anchor positioning) ---
-		function openDayPopover(dayCell) {
-			const container = dayCell.closest('[data-mock-cal]');
-			const pop = container && container.querySelector('[data-mock-day-popover]');
-			if (!pop) return;
-			const dayNum = dayCell.dataset.mockDay;
-			const events = (dayCell.dataset.mockEvents || '').split(';').filter(Boolean);
-			const title = pop.querySelector('[data-mock-day-popover-title]');
-			const list = pop.querySelector('[data-mock-day-popover-events]');
-			if (title) title.textContent = 'Day ' + dayNum;
-			if (list) {
-				list.innerHTML = events.length
-					? events.map(function(e) {
-						return '<div style="padding: 4px 6px; background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 8%); border-radius: var(--chronicle-radius-sm); font-size: 11px;">' + e + '</div>';
-					}).join('')
-					: '<span style="color: var(--chronicle-fg-muted); font-style: italic;">No events</span>';
-			}
-			// Position next to the cell, using container as offset parent.
-			const cellRect = dayCell.getBoundingClientRect();
-			const contRect = container.getBoundingClientRect();
-			pop.style.top  = (cellRect.bottom - contRect.top + 6) + 'px';
-			pop.style.left = (cellRect.left - contRect.left) + 'px';
-			pop.dataset.open = 'true';
-			// Highlight clicked day.
-			container.querySelectorAll('.chronicle-mock-cal__day[data-selected="true"]').forEach(function(d) {
-				if (d !== dayCell) d.removeAttribute('data-selected');
-			});
-			dayCell.setAttribute('data-selected', 'true');
-		}
-
-		function toggleDrawer(open) {
-			const layout = document.getElementById('chronicle-drawer-layout');
-			const body = document.getElementById('chronicle-drawer-body');
-			if (!layout || !body) return;
-			const apply = function() {
-				layout.dataset.drawerOpen = open ? 'true' : 'false';
-				if (open) body.scrollTop = 0;
-			};
-			if (features.viewTransitions && open !== (layout.dataset.drawerOpen === 'true')) {
-				document.startViewTransition(apply);
-			} else {
-				apply();
-			}
-		}
-
-		function replayMotion(group) {
-			const tracks = document.querySelectorAll('[data-motion-group="' + group + '"]');
-			tracks.forEach(function(t) {
-				t.classList.remove('is-playing');
-				void t.offsetWidth;
-				t.classList.add('is-playing');
-			});
-		}
-
-		function replayAnimTile(target) {
-			target.classList.remove('is-playing');
-			void target.offsetWidth;
-			target.classList.add('is-playing');
-		}
-
-		// Esc closes drawer / modals / day popover.
-		document.addEventListener('keydown', function(ev) {
-			if (ev.key !== 'Escape') return;
-			const openModal = document.querySelector('.chronicle-modal-backdrop:not([hidden])');
-			if (openModal) { openModal.hidden = true; return; }
-			const dayPop = document.querySelector('[data-mock-day-popover][data-open="true"]');
-			if (dayPop) { dayPop.setAttribute('data-open', 'false'); return; }
-			const layout = document.getElementById('chronicle-drawer-layout');
-			if (layout && layout.dataset.drawerOpen === 'true') {
-				toggleDrawer(false);
-			}
-		});
-
-		// Click-outside dismissal for day popover.
-		document.addEventListener('click', function(ev) {
-			const pop = document.querySelector('[data-mock-day-popover][data-open="true"]');
-			if (!pop) return;
-			if (ev.target.closest('[data-mock-day-popover]')) return;
-			if (ev.target.closest('[data-mock-day]')) return;
-			pop.setAttribute('data-open', 'false');
-		});
-
-		// Stagger animation runs once on initial load.
-		setTimeout(function() {
-			document.querySelectorAll('[data-stagger]').forEach(function(s) {
-				s.classList.add('is-revealed');
-			});
-		}, 200);
-
-		// ========================================================
-		// Phase 1.7 — Choice-picker: decision store + handlers
-		// ========================================================
-		var DECISIONS_KEY = 'chronicle-canon-decisions';
-		var decisions = {};
-		try { decisions = JSON.parse(localStorage.getItem(DECISIONS_KEY) || '{}') || {}; } catch (e) { decisions = {}; }
-
-		function persistDecisions() {
-			try { localStorage.setItem(DECISIONS_KEY, JSON.stringify(decisions)); } catch (e) {}
-		}
-		function variantLabel(group) {
-			return ({ bg: 'Dark background tint', accent: 'Accent palette', radius: 'Corner radius',
-				shadow: 'Shadow / elevation', hover: 'Card hover style', motion: 'Motion speed',
-				density: 'Density', selected: 'Selected-state', button: 'Button family' })[group] || group;
-		}
-		function setDecision(id, patch) {
-			decisions[id] = Object.assign({}, decisions[id], patch);
-			persistDecisions();
-			renderDecisions();
-		}
-		function renderDecisions() {
-			var out = document.querySelector('[data-decisions-output]');
-			var countEl = document.querySelector('[data-decisions-count]');
-			var ids = Object.keys(decisions).filter(function (k) {
-				var d = decisions[k];
-				return d && (d.rating || (d.votes && Object.keys(d.votes).length) || d.chosen || (d.note && d.note.trim()));
-			});
-			if (countEl) countEl.textContent = ids.length;
-			if (!out) return;
-			if (!ids.length) { out.value = 'No decisions yet — start rating above.'; return; }
-			var md = '# Chronicle Canon — Design Decisions\n';
-			md += '_' + (navigator.userAgent || '') + ' · ' + new Date().toISOString().slice(0, 10) + '_\n\n';
-			var rated = ids.filter(function (k) { return decisions[k].type === 'rate'; });
-			if (rated.length) {
-				md += '## Ratings (locked elements — 1–5)\n';
-				rated.forEach(function (k) {
-					var d = decisions[k];
-					md += '- ' + d.label + ': ' + (d.rating ? d.rating + '/5' : '—') + (d.note ? ' · note: ' + d.note : '') + '\n';
-				});
-				md += '\n';
-			}
-			var choices = ids.filter(function (k) { return decisions[k].type === 'choose'; });
-			if (choices.length) {
-				md += '## Choices (which do you prefer)\n';
-				choices.forEach(function (k) {
-					var d = decisions[k], ups = [], downs = [];
-					Object.keys(d.votes || {}).forEach(function (opt) {
-						if (d.votes[opt] === 'up') ups.push(opt); else if (d.votes[opt] === 'down') downs.push(opt);
-					});
-					md += '- ' + d.label + ': ' + (d.chosen ? 'applied=' + d.chosen + ' · ' : '') +
-						(ups.length ? '👍 ' + ups.join(', ') : '') +
-						(downs.length ? ' · 👎 ' + downs.join(', ') : '') +
-						(d.note ? ' · note: ' + d.note : '') + '\n';
-				});
-			}
-			out.value = md;
-		}
-		function hydratePicker() {
-			document.querySelectorAll('[data-rate-id]').forEach(function (grp) {
-				var d = decisions['rate:' + grp.getAttribute('data-rate-id')];
-				if (!d) return;
-				if (d.rating) grp.querySelectorAll('[data-rate]').forEach(function (p) {
-					p.setAttribute('aria-pressed', p.getAttribute('data-rate') === String(d.rating) ? 'true' : 'false');
-				});
-				var note = grp.querySelector('[data-note]'); if (note && d.note) note.value = d.note;
-				if (d.rating) { var it = grp.closest('[data-picker-item]') || grp; it.setAttribute('data-answered', 'true'); }
-			});
-			document.querySelectorAll('[data-vote-id]').forEach(function (grp) {
-				var id = grp.getAttribute('data-vote-id'), sep = id.indexOf('::');
-				var group = id.slice(0, sep), value = id.slice(sep + 2);
-				var d = decisions['choose:' + group];
-				if (d && d.votes && d.votes[value]) grp.querySelectorAll('[data-vote]').forEach(function (b) {
-					b.setAttribute('aria-pressed', b.getAttribute('data-vote') === d.votes[value] ? 'true' : 'false');
-				});
-			});
-			// Re-apply previously-chosen variants so the page reflects them.
-			Object.keys(decisions).forEach(function (k) {
-				if (k.indexOf('choose:') === 0 && decisions[k].chosen) {
-					var group = k.slice(7); applyVariant(group, decisions[k].chosen, true);
-				}
-			});
-		}
-
-		function applyVariant(group, value, silent) {
-			if (group === 'bg') { root.setAttribute('data-chronicle-bg', value); }
-			else if (group === 'accent') {
-				var am = { indigo: 'oklch(0.58 0.20 270)', emerald: 'oklch(0.65 0.15 155)', amber: 'oklch(0.78 0.16 75)', rose: 'oklch(0.65 0.20 22)' };
-				root.style.setProperty('--chronicle-accent', am[value] || am.indigo); updateTokenDisplay();
-			} else if (group === 'radius') {
-				var rs = { sharp: ['4px', '4px', '6px'], medium: ['6px', '8px', '12px'], soft: ['12px', '14px', '18px'] }[value];
-				if (rs) { root.style.setProperty('--chronicle-radius', rs[0]); root.style.setProperty('--chronicle-radius-md', rs[1]); root.style.setProperty('--chronicle-radius-lg', rs[2]); }
-			} else if (group === 'shadow') {
-				var sh = {
-					none: ['none', 'none', 'none'],
-					subtle: ['0 1px 2px 0 oklch(0 0 0 / 0.04)', '0 4px 12px -2px oklch(0 0 0 / 0.10)', '0 12px 32px -4px oklch(0 0 0 / 0.18)'],
-					pronounced: ['0 2px 6px -1px oklch(0 0 0 / 0.14)', '0 8px 20px -4px oklch(0 0 0 / 0.22)', '0 18px 40px -6px oklch(0 0 0 / 0.30)'],
-					heavy: ['0 4px 10px -1px oklch(0 0 0 / 0.24)', '0 14px 30px -4px oklch(0 0 0 / 0.34)', '0 26px 56px -8px oklch(0 0 0 / 0.42)']
-				}[value];
-				if (sh) { root.style.setProperty('--chronicle-elev-2-shadow', sh[0]); root.style.setProperty('--chronicle-elev-3-shadow', sh[1]); root.style.setProperty('--chronicle-elev-4-shadow', sh[2]); }
-			} else if (group === 'hover') { root.setAttribute('data-hover-style', value); }
-			else if (group === 'motion') {
-				var mo = { snappy: ['100ms', '150ms'], canon: ['150ms', '250ms'], relaxed: ['250ms', '400ms'] }[value];
-				if (mo) { root.style.setProperty('--chronicle-motion-base', mo[0]); root.style.setProperty('--chronicle-motion-medium', mo[1]); }
-			} else if (group === 'density') { root.setAttribute('data-chronicle-density', value); }
-			else if (group === 'selected') { root.setAttribute('data-selected-style', value); }
-		}
-
-		root.addEventListener('click', function (ev) {
-			var pill = ev.target.closest('[data-rate]');
-			if (pill && pill.closest('[data-rate-id]')) {
-				var grp = pill.closest('[data-rate-id]');
-				var id = grp.getAttribute('data-rate-id'), label = grp.getAttribute('data-rate-label') || id;
-				grp.querySelectorAll('[data-rate]').forEach(function (p) { p.setAttribute('aria-pressed', p === pill ? 'true' : 'false'); });
-				setDecision('rate:' + id, { type: 'rate', label: label, rating: parseInt(pill.getAttribute('data-rate'), 10), note: (decisions['rate:' + id] || {}).note });
-				(grp.closest('[data-picker-item]') || grp).setAttribute('data-answered', 'true');
-				return;
-			}
-			var vbtn = ev.target.closest('[data-vote]');
-			if (vbtn && vbtn.closest('[data-vote-id]')) {
-				var vg = vbtn.closest('[data-vote-id]'), vid = vg.getAttribute('data-vote-id'), vsep = vid.indexOf('::');
-				var group = vid.slice(0, vsep), value = vid.slice(vsep + 2), dir = vbtn.getAttribute('data-vote');
-				var cur = decisions['choose:' + group] || { type: 'choose', label: variantLabel(group), votes: {} };
-				cur.votes = cur.votes || {};
-				if (cur.votes[value] === dir) delete cur.votes[value]; else cur.votes[value] = dir;
-				vg.querySelectorAll('[data-vote]').forEach(function (b) { b.setAttribute('aria-pressed', (cur.votes[value] && b.getAttribute('data-vote') === cur.votes[value]) ? 'true' : 'false'); });
-				setDecision('choose:' + group, cur);
-				return;
-			}
-			var apply = ev.target.closest('[data-variant-apply]');
-			if (apply) {
-				var ag = apply.getAttribute('data-variant-group'), av = apply.getAttribute('data-variant');
-				applyVariant(ag, av);
-				document.querySelectorAll('.chronicle-variant-option[data-variant-group="' + ag + '"]').forEach(function (opt) {
-					opt.setAttribute('data-chosen', opt.getAttribute('data-variant') === av ? 'true' : 'false');
-				});
-				var c = decisions['choose:' + ag] || { type: 'choose', label: variantLabel(ag), votes: {} };
-				c.chosen = av; setDecision('choose:' + ag, c);
-				return;
-			}
-			if (ev.target.closest('[data-decisions-toggle]')) {
-				var pnl = document.querySelector('[data-decisions]');
-				if (pnl) pnl.setAttribute('data-collapsed', pnl.getAttribute('data-collapsed') === 'true' ? 'false' : 'true');
-				return;
-			}
-			if (ev.target.closest('[data-decisions-copy]')) { copyDecisions(); return; }
-			if (ev.target.closest('[data-decisions-download]')) { downloadDecisions(); return; }
-			if (ev.target.closest('[data-decisions-reset]')) {
-				if (confirm('Clear all your decisions?')) { decisions = {}; persistDecisions(); location.reload(); }
-				return;
-			}
-		});
-		root.addEventListener('input', function (ev) {
-			var note = ev.target.closest('[data-note]');
-			if (note && note.closest('[data-rate-id]')) {
-				var grp = note.closest('[data-rate-id]'), id = grp.getAttribute('data-rate-id'), label = grp.getAttribute('data-rate-label') || id;
-				setDecision('rate:' + id, Object.assign({ type: 'rate', label: label }, decisions['rate:' + id], { note: note.value }));
-			}
-		});
-
-		function copyDecisions() {
-			var out = document.querySelector('[data-decisions-output]'); if (!out) return;
-			var done = function () { var b = document.querySelector('[data-decisions-copy]'); if (b) { var t = b.textContent; b.textContent = 'Copied ✓'; setTimeout(function () { b.textContent = t; }, 1500); } };
-			if (navigator.clipboard && navigator.clipboard.writeText) {
-				navigator.clipboard.writeText(out.value).then(done, function () { out.select(); document.execCommand && document.execCommand('copy'); done(); });
-			} else { out.removeAttribute('readonly'); out.select(); try { document.execCommand('copy'); } catch (e) {} out.setAttribute('readonly', ''); done(); }
-		}
-		function downloadDecisions(fmt) {
-			var out = document.querySelector('[data-decisions-output]'); if (!out) return;
-			var md = out.value;
-			function dl(name, content, type) {
-				var blob = new Blob([content], { type: type });
-				var url = URL.createObjectURL(blob), a = document.createElement('a');
-				a.href = url; a.download = name; document.body.appendChild(a); a.click();
-				document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-			}
-			dl('chronicle-canon-decisions.md', md, 'text/markdown');
-			dl('chronicle-canon-decisions.json', JSON.stringify(decisions, null, 2), 'application/json');
-		}
-
-		// ---------- C.3 Calendar drag: range-select + ribbon move/resize ----------
-		(function calendarDrag() {
-			var grid = root.querySelector('[data-mock-cal-grid]'); if (!grid) return;
-			var ribbon = grid.querySelector('[data-mock-ribbon]');
-			var cells = grid.querySelectorAll('[data-mock-day]');
-			function cellIndexFromPoint(x, y) {
-				var el = document.elementFromPoint(x, y); if (!el) return -1;
-				var cell = el.closest('[data-mock-day]'); if (!cell) return -1;
-				for (var i = 0; i < cells.length; i++) if (cells[i] === cell) return i;
-				return -1;
-			}
-			function positionRibbon() {
-				if (!ribbon || !cells.length) return;
-				var start = parseInt(ribbon.getAttribute('data-start'), 10) || 0;
-				var span = parseInt(ribbon.getAttribute('data-span'), 10) || 1;
-				start = Math.max(0, Math.min(start, cells.length - 1));
-				var col = start % 7;
-				span = Math.max(1, Math.min(span, 7 - col, cells.length - start));
-				ribbon.setAttribute('data-start', start); ribbon.setAttribute('data-span', span);
-				var s = cells[start], e = cells[start + span - 1];
-				ribbon.style.left = s.offsetLeft + 'px';
-				ribbon.style.top = (s.offsetTop + 22) + 'px';
-				ribbon.style.width = ((e.offsetLeft + e.offsetWidth) - s.offsetLeft - 2) + 'px';
-			}
-			positionRibbon();
-			window.addEventListener('resize', positionRibbon);
-
-			// Range select on empty days.
-			var rangeAnchor = -1, ranging = false;
-			function clearRange() { cells.forEach(function (c) { c.removeAttribute('data-in-range'); c.removeAttribute('data-range-end'); }); }
-			function paintRange(a, b) {
-				clearRange(); var lo = Math.min(a, b), hi = Math.max(a, b);
-				for (var i = lo; i <= hi; i++) { cells[i].setAttribute('data-in-range', 'true'); }
-				cells[lo].setAttribute('data-range-end', 'start'); cells[hi].setAttribute('data-range-end', 'end');
-			}
-			grid.addEventListener('pointerdown', function (ev) {
-				if (ev.target.closest('[data-mock-ribbon]')) return; // ribbon has its own handlers
-				var idx = cellIndexFromPoint(ev.clientX, ev.clientY); if (idx < 0) return;
-				rangeAnchor = idx; ranging = true; paintRange(idx, idx);
-				try { grid.setPointerCapture(ev.pointerId); } catch (e) {}
-			});
-			grid.addEventListener('pointermove', function (ev) {
-				if (!ranging) return;
-				var idx = cellIndexFromPoint(ev.clientX, ev.clientY); if (idx < 0) return;
-				paintRange(rangeAnchor, idx);
-			});
-			grid.addEventListener('pointerup', function (ev) {
-				if (ranging) { ranging = false; try { grid.releasePointerCapture(ev.pointerId); } catch (e) {} }
-			});
-
-			// Ribbon move + resize (mirrors event_grid.js setPointerCapture).
-			if (ribbon) {
-				var mode = null, startMouseIdx = -1, origStart = 0, origSpan = 1;
-				ribbon.addEventListener('pointerdown', function (ev) {
-					ev.stopPropagation();
-					origStart = parseInt(ribbon.getAttribute('data-start'), 10) || 0;
-					origSpan = parseInt(ribbon.getAttribute('data-span'), 10) || 1;
-					mode = ev.target.closest('[data-mock-ribbon-resize]') ? 'resize' : 'move';
-					startMouseIdx = cellIndexFromPoint(ev.clientX, ev.clientY);
-					ribbon.setAttribute('data-dragging', 'true');
-					try { ribbon.setPointerCapture(ev.pointerId); } catch (e) {}
-				});
-				ribbon.addEventListener('pointermove', function (ev) {
-					if (!mode) return;
-					var idx = cellIndexFromPoint(ev.clientX, ev.clientY); if (idx < 0) return;
-					if (mode === 'move') {
-						var delta = idx - startMouseIdx;
-						ribbon.setAttribute('data-start', origStart + delta);
-						ribbon.setAttribute('data-span', origSpan);
-					} else {
-						ribbon.setAttribute('data-span', Math.max(1, idx - origStart + 1));
-					}
-					positionRibbon();
-				});
-				ribbon.addEventListener('pointerup', function (ev) {
-					if (mode) { mode = null; ribbon.setAttribute('data-dragging', 'false'); try { ribbon.releasePointerCapture(ev.pointerId); } catch (e) {} }
-				});
-			}
-		})();
-
-		// ---------- C.4 Timeline playhead drag + zoom ----------
-		(function timeline() {
-			var tl = root.querySelector('[data-timeline]'); if (!tl) return;
-			var head = tl.querySelector('[data-timeline-playhead]');
-			if (head) {
-				var dragging = false;
-				function place(x) {
-					var rect = tl.getBoundingClientRect();
-					var pct = Math.max(0, Math.min(100, ((x - rect.left) / rect.width) * 100));
-					head.style.left = pct + '%';
-				}
-				head.addEventListener('pointerdown', function (ev) { dragging = true; try { head.setPointerCapture(ev.pointerId); } catch (e) {} ev.preventDefault(); });
-				head.addEventListener('pointermove', function (ev) { if (dragging) place(ev.clientX); });
-				head.addEventListener('pointerup', function (ev) { if (dragging) { dragging = false; try { head.releasePointerCapture(ev.pointerId); } catch (e) {} } });
-			}
-			var zoom = root.querySelector('[data-timeline-zoom]');
-			if (zoom) zoom.addEventListener('click', function (ev) {
-				var b = ev.target.closest('[data-zoom]'); if (!b) return;
-				zoom.querySelectorAll('[data-zoom]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
-			});
-		})();
-
-		// ---------- Stepper-nav active tracking ----------
-		(function stepper() {
-			var nav = root.querySelector('[data-stepper-nav]'); if (!nav) return;
-			var links = nav.querySelectorAll('.chronicle-stepper-nav__link');
-			if (typeof IntersectionObserver === 'function') {
-				var byId = {};
-				links.forEach(function (l) { byId[l.getAttribute('href').slice(1)] = l; });
-				var obs = new IntersectionObserver(function (entries) {
-					entries.forEach(function (en) {
-						if (en.isIntersecting && byId[en.target.id]) {
-							links.forEach(function (l) { l.setAttribute('aria-current', 'false'); });
-							byId[en.target.id].setAttribute('aria-current', 'true');
-						}
-					});
-				}, { rootMargin: '-20% 0px -70% 0px' });
-				links.forEach(function (l) { var s = document.getElementById(l.getAttribute('href').slice(1)); if (s) obs.observe(s); });
-			}
-		})();
-
-		hydratePicker();
-		renderDecisions();
-
-		updateTokenDisplay();
-		}  // end runInit
-	})();
-	</script>
-}
-
-// itoa — local small helper so the drawer body filler can render
-// indices without importing strconv into the templ. templ's
-// expression language doesn't have a built-in for this.
+// itoa — small int-to-string helper for templ expressions. templ's
+// expression language doesn't ship one and strconv isn't worth importing.
 func itoa(i int) string {
 	const digits = "0123456789"
 	if i == 0 {
@@ -3142,16 +368,21 @@ func itoa(i int) string {
 	if neg {
 		i = -i
 	}
-	var b [20]byte
-	pos := len(b)
+	buf := make([]byte, 0, 20)
 	for i > 0 {
-		pos--
-		b[pos] = digits[i%10]
+		buf = append([]byte{digits[i%10]}, buf...)
 		i /= 10
 	}
 	if neg {
-		pos--
-		b[pos] = '-'
+		buf = append([]byte{'-'}, buf...)
 	}
-	return string(b[pos:])
+	return string(buf)
+}
+
+// boolToStr — small helper for templ data-attribute expressions.
+func boolToStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
 }

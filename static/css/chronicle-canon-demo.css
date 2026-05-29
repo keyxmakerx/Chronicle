@@ -823,322 +823,6 @@
     color: color-mix(in oklch, var(--chronicle-warning), var(--chronicle-fg) 50%);
   }
 
-  /* ============================================================
-   * B.1 — Form controls
-   * ============================================================ */
-
-  /* Input sizes — extend the Phase 1 .chronicle-input. */
-  .chronicle-input--sm { padding: 4px 8px;  font-size: 12px; }
-  .chronicle-input--md { padding: 8px 12px; font-size: 14px; }
-  .chronicle-input--lg { padding: 12px 16px; font-size: 16px; }
-
-  /* Input wrappers — for prefix/suffix icons, clear button, helper text */
-  .chronicle-field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .chronicle-field__label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--chronicle-fg-muted);
-  }
-  .chronicle-field__label--required::after {
-    content: " *";
-    color: var(--chronicle-danger);
-  }
-  .chronicle-field__helper {
-    font-size: 11px;
-    color: var(--chronicle-fg-subtle);
-  }
-  .chronicle-field__error {
-    font-size: 11px;
-    color: var(--chronicle-danger);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .chronicle-input-wrap {
-    position: relative;
-    display: flex;
-    align-items: stretch;
-  }
-  .chronicle-input-wrap .chronicle-input { flex: 1; }
-  .chronicle-input-wrap__icon {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--chronicle-fg-subtle);
-    pointer-events: none;
-    width: 16px;
-    height: 16px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-  }
-  .chronicle-input-wrap__icon--prefix { left: 10px; }
-  .chronicle-input-wrap__icon--suffix { right: 10px; }
-  .chronicle-input-wrap--has-prefix .chronicle-input { padding-left: 32px; }
-  .chronicle-input-wrap--has-suffix .chronicle-input { padding-right: 32px; }
-  .chronicle-input-wrap__clear {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: transparent;
-    border: none;
-    color: var(--chronicle-fg-muted);
-    cursor: pointer;
-    padding: 4px;
-    border-radius: var(--chronicle-radius-sm);
-    transition: background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-  }
-  .chronicle-input-wrap__clear:hover {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 8%);
-  }
-
-  /* Error state — applies to .chronicle-input itself. */
-  .chronicle-input--error,
-  .chronicle-input[aria-invalid="true"] {
-    border-color: var(--chronicle-danger);
-  }
-  .chronicle-input--error:focus,
-  .chronicle-input[aria-invalid="true"]:focus {
-    border-color: var(--chronicle-danger);
-    outline-color: color-mix(in oklch, var(--chronicle-danger), transparent 70%);
-  }
-
-  /* Disabled / read-only */
-  .chronicle-input:disabled,
-  .chronicle-input[readonly] {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 4%);
-    color: var(--chronicle-fg-muted);
-    cursor: not-allowed;
-  }
-
-  /* Textarea — composes .chronicle-input + multi-line concerns */
-  .chronicle-textarea {
-    display: block;
-    width: 100%;
-    padding: 8px 12px;
-    background: var(--chronicle-surface-card);
-    color: var(--chronicle-fg);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius);
-    font-size: 14px;
-    line-height: 1.5;
-    font-family: inherit;
-    resize: vertical;
-    min-height: 80px;
-    transition: border-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-textarea:focus,
-  .chronicle-textarea:focus-visible {
-    border-color: var(--chronicle-ring);
-    outline: 2px solid color-mix(in oklch, var(--chronicle-ring), transparent 80%);
-    outline-offset: 0;
-  }
-  .chronicle-textarea__counter {
-    align-self: flex-end;
-    font-size: 11px;
-    color: var(--chronicle-fg-subtle);
-  }
-  .chronicle-textarea__counter--over { color: var(--chronicle-danger); }
-
-  /* Native select — preserve native dropdown but style the trigger. */
-  .chronicle-select {
-    appearance: none;
-    -webkit-appearance: none;
-    display: block;
-    width: 100%;
-    padding: 8px 32px 8px 12px;
-    background: var(--chronicle-surface-card);
-    background-image:
-      linear-gradient(45deg, transparent 50%, var(--chronicle-fg-muted) 50%),
-      linear-gradient(135deg, var(--chronicle-fg-muted) 50%, transparent 50%);
-    background-position:
-      right 14px center,
-      right 9px center;
-    background-size: 5px 5px;
-    background-repeat: no-repeat;
-    color: var(--chronicle-fg);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius);
-    font-size: 14px;
-    cursor: pointer;
-    transition: border-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-select:focus,
-  .chronicle-select:focus-visible {
-    border-color: var(--chronicle-ring);
-    outline: 2px solid color-mix(in oklch, var(--chronicle-ring), transparent 80%);
-    outline-offset: 0;
-  }
-  .chronicle-select:disabled {
-    background-color: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 4%);
-    color: var(--chronicle-fg-muted);
-    cursor: not-allowed;
-  }
-
-  /* Radio / checkbox — minimal visual tokens via accent-color
-   * (canon D8: accent-color is in production use; see audit §4.2). */
-  .chronicle-radio,
-  .chronicle-checkbox {
-    accent-color: var(--chronicle-accent);
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-  }
-  .chronicle-radio-group,
-  .chronicle-checkbox-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .chronicle-radio-group--horizontal,
-  .chronicle-checkbox-group--horizontal {
-    flex-direction: row;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  .chronicle-radio-row,
-  .chronicle-checkbox-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    cursor: pointer;
-  }
-  .chronicle-radio-row__copy { flex: 1; }
-  .chronicle-radio-row__label,
-  .chronicle-checkbox-row__label {
-    font-size: 14px;
-    color: var(--chronicle-fg);
-    line-height: 1.3;
-  }
-  .chronicle-radio-row__desc,
-  .chronicle-checkbox-row__desc {
-    font-size: 12px;
-    color: var(--chronicle-fg-muted);
-    margin-top: 2px;
-    display: block;
-  }
-
-  /* Toggle / switch — pure CSS via :checked sibling */
-  .chronicle-switch {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    user-select: none;
-  }
-  .chronicle-switch input[type="checkbox"] {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-  .chronicle-switch__track {
-    position: relative;
-    width: 36px;
-    height: 20px;
-    background: var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-full);
-    transition:
-      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-switch__thumb {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 16px;
-    height: 16px;
-    background: oklch(1 0 0);
-    border-radius: var(--chronicle-radius-full);
-    box-shadow: 0 1px 2px 0 oklch(0 0 0 / 0.15);
-    transition:
-      transform var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      box-shadow var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-switch input:checked ~ .chronicle-switch__track {
-    background: var(--chronicle-accent);
-  }
-  .chronicle-switch input:checked ~ .chronicle-switch__track .chronicle-switch__thumb {
-    transform: translateX(16px);
-  }
-  .chronicle-switch input:focus-visible ~ .chronicle-switch__track {
-    outline: 2px solid var(--chronicle-ring);
-    outline-offset: 2px;
-  }
-  .chronicle-switch--sm .chronicle-switch__track { width: 28px; height: 16px; }
-  .chronicle-switch--sm .chronicle-switch__thumb { width: 12px; height: 12px; }
-  .chronicle-switch--sm input:checked ~ .chronicle-switch__track .chronicle-switch__thumb { transform: translateX(12px); }
-  .chronicle-switch--lg .chronicle-switch__track { width: 48px; height: 26px; }
-  .chronicle-switch--lg .chronicle-switch__thumb { width: 22px; height: 22px; }
-  .chronicle-switch--lg input:checked ~ .chronicle-switch__track .chronicle-switch__thumb { transform: translateX(22px); }
-
-  /* Slider — native range with token-driven track + thumb */
-  .chronicle-slider {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 100%;
-    height: 4px;
-    background: var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-full);
-    outline: none;
-    cursor: pointer;
-  }
-  .chronicle-slider::-webkit-slider-thumb {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    background: var(--chronicle-accent);
-    border: 2px solid var(--chronicle-surface-card);
-    border-radius: var(--chronicle-radius-full);
-    cursor: pointer;
-    box-shadow: 0 1px 2px 0 oklch(0 0 0 / 0.15);
-    transition:
-      transform var(--chronicle-motion-fast) var(--chronicle-ease-standard),
-      box-shadow var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-  }
-  .chronicle-slider::-webkit-slider-thumb:hover {
-    transform: scale(1.15);
-    box-shadow: 0 2px 4px 0 oklch(0 0 0 / 0.20);
-  }
-  .chronicle-slider::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    background: var(--chronicle-accent);
-    border: 2px solid var(--chronicle-surface-card);
-    border-radius: var(--chronicle-radius-full);
-    cursor: pointer;
-  }
-  .chronicle-slider:disabled { opacity: 0.5; cursor: not-allowed; }
-
-  /* Fieldset / form group */
-  .chronicle-fieldset {
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    padding: 16px;
-    background: var(--chronicle-surface-card);
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .chronicle-fieldset__legend {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--chronicle-fg);
-    padding: 0 6px;
-  }
-
-  /* ============================================================
-   * B.2 — Button extensions
-   * ============================================================ */
-
   /* Button sizes — apply on top of the existing primary/secondary/ghost */
   .chronicle-button-primary--xs,
   .chronicle-button-secondary--xs,
@@ -1146,42 +830,6 @@
   .chronicle-button-primary--sm,
   .chronicle-button-secondary--sm,
   .chronicle-button-ghost--sm   { padding: 4px 10px; font-size: 12px; }
-  .chronicle-button-primary--lg,
-  .chronicle-button-secondary--lg,
-  .chronicle-button-ghost--lg   { padding: 10px 20px; font-size: 16px; }
-  .chronicle-button-primary--xl,
-  .chronicle-button-secondary--xl,
-  .chronicle-button-ghost--xl   { padding: 14px 28px; font-size: 18px; }
-
-  /* Icon-only button — square aspect */
-  .chronicle-button-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    background: transparent;
-    color: var(--chronicle-fg);
-    border: 1px solid var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius);
-    cursor: pointer;
-    font-size: 16px;
-    transition:
-      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-button-icon:hover {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 4%);
-    border-color: var(--chronicle-accent);
-  }
-  .chronicle-button-icon:focus-visible {
-    outline: 2px solid var(--chronicle-ring);
-    outline-offset: 2px;
-  }
-  .chronicle-button-icon--sm { width: 28px; height: 28px; font-size: 13px; }
-  .chronicle-button-icon--lg { width: 44px; height: 44px; font-size: 20px; }
-
-  /* Destructive variant — uses --chronicle-danger functional token */
   .chronicle-button-destructive {
     display: inline-flex;
     align-items: center;
@@ -1202,2420 +850,6 @@
   .chronicle-button-destructive:focus-visible {
     outline: 2px solid var(--chronicle-danger);
     outline-offset: 2px;
-  }
-
-  /* Loading button — inline spinner */
-  .chronicle-button-loading {
-    pointer-events: none;
-  }
-  .chronicle-button-loading::before {
-    content: "";
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    margin-right: 8px;
-    border: 2px solid currentColor;
-    border-right-color: transparent;
-    border-radius: var(--chronicle-radius-full);
-    animation: chronicle-spin 0.8s linear infinite;
-    vertical-align: -2px;
-  }
-
-  /* Segmented control / button group */
-  .chronicle-segmented {
-    display: inline-flex;
-    background: var(--chronicle-surface-low);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius);
-    padding: 2px;
-    gap: 2px;
-  }
-  .chronicle-segmented__btn {
-    padding: 4px 12px;
-    background: transparent;
-    border: none;
-    border-radius: var(--chronicle-radius-sm);
-    color: var(--chronicle-fg-muted);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition:
-      background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard),
-      color            var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-  }
-  .chronicle-segmented__btn:hover { color: var(--chronicle-fg); }
-  .chronicle-segmented__btn[aria-pressed="true"] {
-    background: var(--chronicle-surface-card);
-    color: var(--chronicle-fg);
-    box-shadow: 0 1px 2px 0 oklch(0 0 0 / 0.06);
-  }
-
-  /* Split button — primary + chevron */
-  .chronicle-split-button {
-    display: inline-flex;
-    border-radius: var(--chronicle-radius);
-    overflow: hidden;
-    border: 1px solid color-mix(in oklch, var(--chronicle-accent), black 12%);
-  }
-  .chronicle-split-button__main {
-    background: var(--chronicle-accent);
-    color: var(--chronicle-accent-fg);
-    border: none;
-    padding: 8px 16px;
-    font-weight: 500;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-split-button__main:hover {
-    background: color-mix(in oklch, var(--chronicle-accent), white 6%);
-  }
-  .chronicle-split-button__chevron {
-    background: color-mix(in oklch, var(--chronicle-accent), black 10%);
-    color: var(--chronicle-accent-fg);
-    border: none;
-    border-left: 1px solid color-mix(in oklch, var(--chronicle-accent), black 20%);
-    padding: 8px 10px;
-    cursor: pointer;
-    transition: background-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-split-button__chevron:hover {
-    background: color-mix(in oklch, var(--chronicle-accent), black 18%);
-  }
-
-  /* ============================================================
-   * B.3 — Status / feedback
-   * ============================================================ */
-
-  /* Alerts — info / success / warning / error / neutral */
-  .chronicle-alert {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 12px 14px;
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    background: var(--chronicle-surface-card);
-    font-size: 13px;
-  }
-  .chronicle-alert__icon {
-    flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--chronicle-radius-full);
-    font-size: 14px;
-    margin-top: 2px;
-  }
-  .chronicle-alert__body { flex: 1; }
-  .chronicle-alert__title {
-    font-weight: 600;
-    color: var(--chronicle-fg);
-    margin: 0 0 2px 0;
-    font-size: 13px;
-  }
-  .chronicle-alert__text {
-    color: var(--chronicle-fg-muted);
-    margin: 0;
-    line-height: 1.4;
-  }
-  .chronicle-alert__close {
-    background: transparent;
-    border: none;
-    color: var(--chronicle-fg-muted);
-    cursor: pointer;
-    padding: 4px;
-    border-radius: var(--chronicle-radius-sm);
-    transition: background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-  }
-  .chronicle-alert__close:hover {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 6%);
-  }
-  .chronicle-alert--info {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 6%);
-    border-color: color-mix(in oklch, var(--chronicle-accent), transparent 65%);
-  }
-  .chronicle-alert--info .chronicle-alert__icon { color: var(--chronicle-accent); }
-  .chronicle-alert--success {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-success) 8%);
-    border-color: color-mix(in oklch, var(--chronicle-success), transparent 60%);
-  }
-  .chronicle-alert--success .chronicle-alert__icon { color: var(--chronicle-success); }
-  .chronicle-alert--warning {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-warning) 10%);
-    border-color: color-mix(in oklch, var(--chronicle-warning), transparent 55%);
-  }
-  .chronicle-alert--warning .chronicle-alert__icon { color: var(--chronicle-warning); }
-  .chronicle-alert--error {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-danger) 8%);
-    border-color: color-mix(in oklch, var(--chronicle-danger), transparent 60%);
-  }
-  .chronicle-alert--error .chronicle-alert__icon { color: var(--chronicle-danger); }
-  .chronicle-alert--neutral { /* uses defaults */ }
-
-  /* Inline banner — wider, top-of-section style */
-  .chronicle-banner {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 16px;
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 8%);
-    border-bottom: 1px solid color-mix(in oklch, var(--chronicle-accent), transparent 65%);
-    font-size: 13px;
-    color: var(--chronicle-fg);
-  }
-  .chronicle-banner__icon { color: var(--chronicle-accent); flex-shrink: 0; }
-  .chronicle-banner__text { flex: 1; }
-  .chronicle-banner__actions { display: inline-flex; gap: 8px; }
-
-  /* Toast / snackbar */
-  .chronicle-toast {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
-    background: var(--chronicle-surface-overlay);
-    border: 1px solid var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-md);
-    box-shadow: var(--chronicle-elev-3-shadow);
-    font-size: 13px;
-    color: var(--chronicle-fg);
-    min-width: 240px;
-    max-width: 360px;
-    animation: chronicle-toast-in var(--chronicle-motion-medium) var(--chronicle-ease-decelerate);
-  }
-  .chronicle-toast__action {
-    background: transparent;
-    border: none;
-    color: var(--chronicle-accent);
-    font-weight: 500;
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: var(--chronicle-radius-sm);
-    font-size: 12px;
-  }
-  .chronicle-toast__action:hover {
-    background: color-mix(in oklch, var(--chronicle-surface-overlay), var(--chronicle-accent) 10%);
-  }
-  .chronicle-toast-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  /* Skeleton loader — shimmer animation */
-  .chronicle-skeleton {
-    display: block;
-    background: linear-gradient(
-      90deg,
-      color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 6%) 0%,
-      color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 12%) 50%,
-      color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 6%) 100%
-    );
-    background-size: 200% 100%;
-    border-radius: var(--chronicle-radius-sm);
-    animation: chronicle-shimmer 1.4s ease-in-out infinite;
-    height: 12px;
-  }
-  .chronicle-skeleton--line   { height: 12px; }
-  .chronicle-skeleton--text   { height: 16px; }
-  .chronicle-skeleton--card   { height: 80px; border-radius: var(--chronicle-radius-md); }
-  .chronicle-skeleton--avatar { width: 40px; height: 40px; border-radius: var(--chronicle-radius-full); }
-
-  /* Progress — linear */
-  .chronicle-progress {
-    width: 100%;
-    height: 6px;
-    background: var(--chronicle-border);
-    border-radius: var(--chronicle-radius-full);
-    overflow: hidden;
-  }
-  .chronicle-progress__bar {
-    height: 100%;
-    background: var(--chronicle-accent);
-    border-radius: inherit;
-    transition: width var(--chronicle-motion-medium) var(--chronicle-ease-standard);
-  }
-  .chronicle-progress--indeterminate .chronicle-progress__bar {
-    width: 30%;
-    animation: chronicle-progress-indet 1.6s var(--chronicle-ease-standard) infinite;
-  }
-
-  /* Progress — circular */
-  .chronicle-progress-circle {
-    width: 32px;
-    height: 32px;
-    display: inline-block;
-  }
-  .chronicle-progress-circle svg { transform: rotate(-90deg); }
-  .chronicle-progress-circle__track { stroke: var(--chronicle-border); }
-  .chronicle-progress-circle__fill {
-    stroke: var(--chronicle-accent);
-    transition: stroke-dashoffset var(--chronicle-motion-medium) var(--chronicle-ease-standard);
-  }
-  .chronicle-progress-circle--lg { width: 48px; height: 48px; }
-
-  /* Spinner — three sizes */
-  .chronicle-spinner {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 2px solid color-mix(in oklch, var(--chronicle-accent), transparent 70%);
-    border-top-color: var(--chronicle-accent);
-    border-radius: var(--chronicle-radius-full);
-    animation: chronicle-spin 0.8s linear infinite;
-  }
-  .chronicle-spinner--sm { width: 14px; height: 14px; border-width: 1.5px; }
-  .chronicle-spinner--lg { width: 32px; height: 32px; border-width: 3px; }
-
-  /* Empty state */
-  .chronicle-empty {
-    text-align: center;
-    padding: 40px 24px;
-    color: var(--chronicle-fg-muted);
-  }
-  .chronicle-empty__icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 56px;
-    height: 56px;
-    margin-bottom: 12px;
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 4%);
-    border-radius: var(--chronicle-radius-full);
-    color: var(--chronicle-fg-muted);
-    font-size: 24px;
-  }
-  .chronicle-empty__title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--chronicle-fg);
-    margin: 0 0 6px 0;
-  }
-  .chronicle-empty__body {
-    font-size: 13px;
-    max-width: 36ch;
-    margin: 0 auto 16px auto;
-    line-height: 1.5;
-  }
-
-  /* ============================================================
-   * B.4 — Navigation
-   * ============================================================ */
-
-  /* Tabs — default underline + pill variant */
-  .chronicle-tabs {
-    display: flex;
-    border-bottom: 1px solid var(--chronicle-border);
-    gap: 4px;
-    overflow-x: auto;
-    scrollbar-width: thin;
-  }
-  .chronicle-tab {
-    padding: 10px 14px;
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--chronicle-fg-muted);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    transition:
-      color           var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      border-color    var(--chronicle-motion-base) var(--chronicle-ease-standard);
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .chronicle-tab:hover { color: var(--chronicle-fg); }
-  .chronicle-tab[aria-selected="true"] {
-    color: var(--chronicle-fg);
-    border-bottom-color: var(--chronicle-accent);
-  }
-  .chronicle-tabs--pill {
-    border-bottom: none;
-    background: var(--chronicle-surface-low);
-    padding: 4px;
-    border-radius: var(--chronicle-radius);
-    gap: 2px;
-  }
-  .chronicle-tabs--pill .chronicle-tab {
-    border-bottom: none;
-    border-radius: var(--chronicle-radius-sm);
-    padding: 6px 12px;
-  }
-  .chronicle-tabs--pill .chronicle-tab[aria-selected="true"] {
-    background: var(--chronicle-surface-card);
-    color: var(--chronicle-fg);
-    box-shadow: 0 1px 2px 0 oklch(0 0 0 / 0.06);
-  }
-
-  /* Breadcrumbs */
-  .chronicle-breadcrumbs {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--chronicle-fg-muted);
-    flex-wrap: wrap;
-  }
-  .chronicle-breadcrumbs__item {
-    color: var(--chronicle-fg-muted);
-    text-decoration: none;
-    transition: color var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .chronicle-breadcrumbs__item:hover { color: var(--chronicle-fg); }
-  .chronicle-breadcrumbs__item[aria-current="page"] { color: var(--chronicle-fg); font-weight: 500; }
-  .chronicle-breadcrumbs__sep {
-    color: var(--chronicle-fg-subtle);
-    font-size: 10px;
-  }
-
-  /* Pagination */
-  .chronicle-pagination {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-  }
-  .chronicle-pagination__btn {
-    min-width: 32px;
-    height: 32px;
-    padding: 0 8px;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--chronicle-radius-sm);
-    color: var(--chronicle-fg);
-    font-size: 13px;
-    cursor: pointer;
-    transition:
-      background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard),
-      border-color     var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .chronicle-pagination__btn:hover:not(:disabled) {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 6%);
-  }
-  .chronicle-pagination__btn[aria-current="page"] {
-    background: var(--chronicle-accent);
-    color: var(--chronicle-accent-fg);
-    border-color: var(--chronicle-accent);
-  }
-  .chronicle-pagination__btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-  .chronicle-pagination__ellipsis {
-    color: var(--chronicle-fg-muted);
-    padding: 0 4px;
-  }
-
-  /* Stepper — horizontal + vertical */
-  .chronicle-stepper {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .chronicle-stepper--vertical {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .chronicle-stepper__step {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--chronicle-fg-muted);
-    font-size: 13px;
-    flex: 0 0 auto;
-  }
-  .chronicle-stepper__circle {
-    width: 24px;
-    height: 24px;
-    border-radius: var(--chronicle-radius-full);
-    border: 1.5px solid var(--chronicle-border-strong);
-    background: var(--chronicle-surface-card);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--chronicle-fg-muted);
-    transition:
-      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      color            var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-stepper__step[data-state="current"] .chronicle-stepper__circle {
-    border-color: var(--chronicle-accent);
-    color: var(--chronicle-accent);
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 8%);
-  }
-  .chronicle-stepper__step[data-state="current"] { color: var(--chronicle-fg); font-weight: 500; }
-  .chronicle-stepper__step[data-state="done"] .chronicle-stepper__circle {
-    background: var(--chronicle-accent);
-    border-color: var(--chronicle-accent);
-    color: var(--chronicle-accent-fg);
-  }
-  .chronicle-stepper__step[data-state="error"] .chronicle-stepper__circle {
-    background: var(--chronicle-danger);
-    border-color: var(--chronicle-danger);
-    color: oklch(0.99 0 0);
-  }
-  .chronicle-stepper__line {
-    flex: 1 0 24px;
-    height: 1px;
-    background: var(--chronicle-border);
-  }
-
-  /* ============================================================
-   * B.5 — Data display
-   * ============================================================ */
-
-  /* Table */
-  .chronicle-table-wrap {
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    overflow: hidden;
-    background: var(--chronicle-surface-card);
-  }
-  .chronicle-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  .chronicle-table th {
-    text-align: left;
-    padding: var(--chronicle-density-pad-y) var(--chronicle-density-pad-x);
-    font-weight: 600;
-    color: var(--chronicle-fg-muted);
-    background: var(--chronicle-surface-low);
-    border-bottom: 1px solid var(--chronicle-border);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-  .chronicle-table th[aria-sort] {
-    cursor: pointer;
-    user-select: none;
-  }
-  .chronicle-table th[aria-sort="ascending"]::after  { content: " ↑"; color: var(--chronicle-accent); }
-  .chronicle-table th[aria-sort="descending"]::after { content: " ↓"; color: var(--chronicle-accent); }
-  .chronicle-table td {
-    padding: var(--chronicle-density-pad-y) var(--chronicle-density-pad-x);
-    border-bottom: 1px solid var(--chronicle-border);
-    color: var(--chronicle-fg);
-  }
-  .chronicle-table tbody tr:last-child td { border-bottom: none; }
-  .chronicle-table tbody tr {
-    transition: background-color var(--chronicle-motion-fast) linear;
-  }
-  .chronicle-table tbody tr:hover {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 3%);
-  }
-  .chronicle-table tbody tr[aria-selected="true"] {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 4%);
-  }
-  .chronicle-table--dense th,
-  .chronicle-table--dense td {
-    padding: 6px 12px;
-    font-size: 12px;
-  }
-
-  /* Stat / KPI card */
-  .chronicle-stat {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 16px;
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-  }
-  .chronicle-stat__label {
-    font-size: 12px;
-    color: var(--chronicle-fg-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-weight: 500;
-  }
-  .chronicle-stat__value {
-    font-size: 28px;
-    font-weight: 600;
-    color: var(--chronicle-fg);
-    line-height: 1.1;
-    font-feature-settings: "tnum";
-  }
-  .chronicle-stat__delta {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    font-weight: 500;
-  }
-  .chronicle-stat__delta--up   { color: var(--chronicle-success); }
-  .chronicle-stat__delta--down { color: var(--chronicle-danger); }
-  .chronicle-stat__sparkline {
-    height: 32px;
-    margin-top: 4px;
-    background: linear-gradient(
-      to right,
-      color-mix(in oklch, var(--chronicle-accent), transparent 70%) 0%,
-      transparent 100%
-    );
-    border-radius: var(--chronicle-radius-sm);
-    position: relative;
-    overflow: hidden;
-  }
-  .chronicle-stat__sparkline::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background-image: linear-gradient(
-      to top right,
-      transparent 0%,
-      transparent 60%,
-      var(--chronicle-accent) 60%,
-      var(--chronicle-accent) 62%,
-      transparent 62%
-    );
-  }
-
-  /* Avatar */
-  .chronicle-avatar {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 16%);
-    color: var(--chronicle-accent);
-    border-radius: var(--chronicle-radius-full);
-    font-size: 12px;
-    font-weight: 600;
-    position: relative;
-    flex: 0 0 auto;
-  }
-  .chronicle-avatar--sm { width: 24px; height: 24px; font-size: 10px; }
-  .chronicle-avatar--lg { width: 48px; height: 48px; font-size: 16px; }
-  .chronicle-avatar__status {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 10px;
-    height: 10px;
-    border-radius: var(--chronicle-radius-full);
-    border: 2px solid var(--chronicle-surface-card);
-  }
-  .chronicle-avatar__status--online  { background: var(--chronicle-success); }
-  .chronicle-avatar__status--away    { background: var(--chronicle-warning); }
-  .chronicle-avatar__status--offline { background: var(--chronicle-fg-subtle); }
-  .chronicle-avatar-stack {
-    display: inline-flex;
-    flex-direction: row-reverse;
-  }
-  .chronicle-avatar-stack .chronicle-avatar:not(:last-child) {
-    margin-left: -8px;
-    box-shadow: 0 0 0 2px var(--chronicle-surface-card);
-  }
-
-  /* Badge */
-  .chronicle-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 5px;
-    background: var(--chronicle-accent);
-    color: var(--chronicle-accent-fg);
-    border-radius: var(--chronicle-radius-full);
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 1;
-  }
-  .chronicle-badge--dot { width: 8px; height: 8px; min-width: 8px; padding: 0; }
-  .chronicle-badge--success { background: var(--chronicle-success); }
-  .chronicle-badge--warning { background: var(--chronicle-warning); }
-  .chronicle-badge--danger  { background: var(--chronicle-danger); }
-  .chronicle-badge--neutral { background: var(--chronicle-fg-muted); color: var(--chronicle-surface-card); }
-  .chronicle-badge-wrap {
-    position: relative;
-    display: inline-block;
-  }
-  .chronicle-badge-wrap > .chronicle-badge {
-    position: absolute;
-    top: -4px;
-    right: -4px;
-  }
-
-  /* Tag / chip extensions — closable, with icon, filter */
-  .chronicle-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 6%);
-    color: var(--chronicle-fg);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius);
-    font-size: 12px;
-    line-height: 1.3;
-  }
-  .chronicle-tag__close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    background: transparent;
-    border: none;
-    color: var(--chronicle-fg-muted);
-    cursor: pointer;
-    border-radius: var(--chronicle-radius-full);
-    font-size: 10px;
-    margin-left: 2px;
-    transition:
-      background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard),
-      color            var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-  }
-  .chronicle-tag__close:hover {
-    background: color-mix(in oklch, var(--chronicle-fg), transparent 80%);
-    color: var(--chronicle-fg);
-  }
-  .chronicle-tag-filter {
-    cursor: pointer;
-    transition:
-      background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard),
-      border-color     var(--chronicle-motion-fast) var(--chronicle-ease-standard),
-      color            var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-  }
-  .chronicle-tag-filter[aria-pressed="true"] {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 12%);
-    border-color: var(--chronicle-accent);
-    color: var(--chronicle-accent);
-  }
-
-  /* Definition list / key-value */
-  .chronicle-dl {
-    display: grid;
-    grid-template-columns: minmax(120px, 1fr) 2fr;
-    gap: 8px 16px;
-    font-size: 13px;
-  }
-  .chronicle-dl dt {
-    color: var(--chronicle-fg-muted);
-    font-weight: 500;
-  }
-  .chronicle-dl dd {
-    color: var(--chronicle-fg);
-    margin: 0;
-  }
-  .chronicle-dl--vertical {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  .chronicle-dl--vertical dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-  .chronicle-dl__group {
-    border-top: 1px solid var(--chronicle-border);
-    padding-top: 8px;
-    grid-column: 1 / -1;
-    color: var(--chronicle-fg-muted);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-weight: 600;
-    margin-top: 4px;
-  }
-
-  /* ============================================================
-   * B.6 — Containers
-   * ============================================================ */
-
-  /* Modal / dialog */
-  .chronicle-modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: oklch(0 0 0 / 0.45);
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-  }
-  .chronicle-modal {
-    background: var(--chronicle-surface-overlay);
-    border: 1px solid var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-lg);
-    box-shadow: var(--chronicle-elev-4-shadow);
-    width: 100%;
-    max-width: 480px;
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
-    animation: chronicle-modal-in var(--chronicle-motion-medium) var(--chronicle-ease-decelerate);
-  }
-  .chronicle-modal__header {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--chronicle-border);
-  }
-  .chronicle-modal__icon {
-    flex: 0 0 auto;
-    width: 36px;
-    height: 36px;
-    border-radius: var(--chronicle-radius-full);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-danger) 10%);
-    color: var(--chronicle-danger);
-  }
-  .chronicle-modal__title {
-    margin: 0 0 4px 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--chronicle-fg);
-  }
-  .chronicle-modal__body {
-    padding: 16px 20px;
-    overflow-y: auto;
-    color: var(--chronicle-fg-muted);
-    font-size: 13px;
-    line-height: 1.5;
-  }
-  .chronicle-modal__footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 12px 20px;
-    border-top: 1px solid var(--chronicle-border);
-    background: var(--chronicle-surface-low);
-    border-radius: 0 0 var(--chronicle-radius-lg) var(--chronicle-radius-lg);
-  }
-
-  /* Accordion */
-  .chronicle-accordion {
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    background: var(--chronicle-surface-card);
-    overflow: hidden;
-  }
-  .chronicle-accordion__item {
-    border-bottom: 1px solid var(--chronicle-border);
-  }
-  .chronicle-accordion__item:last-child { border-bottom: none; }
-  .chronicle-accordion__trigger {
-    width: 100%;
-    text-align: left;
-    background: transparent;
-    border: none;
-    padding: 12px 16px;
-    color: var(--chronicle-fg);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    transition: background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-  }
-  .chronicle-accordion__trigger:hover {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 4%);
-  }
-  .chronicle-accordion__chevron {
-    transition: transform var(--chronicle-motion-base) var(--chronicle-ease-standard);
-    color: var(--chronicle-fg-muted);
-  }
-  .chronicle-accordion__item[data-open="true"] .chronicle-accordion__chevron {
-    transform: rotate(180deg);
-  }
-  .chronicle-accordion__panel {
-    overflow: hidden;
-    max-height: 0;
-    transition: max-height var(--chronicle-motion-medium) var(--chronicle-ease-standard);
-  }
-  .chronicle-accordion__item[data-open="true"] .chronicle-accordion__panel {
-    max-height: 600px;
-  }
-  .chronicle-accordion__content {
-    padding: 0 16px 14px 16px;
-    color: var(--chronicle-fg-muted);
-    font-size: 13px;
-    line-height: 1.5;
-  }
-
-  /* Disclosure */
-  .chronicle-disclosure__trigger {
-    background: transparent;
-    border: none;
-    color: var(--chronicle-accent);
-    font-size: 13px;
-    cursor: pointer;
-    padding: 0;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-  .chronicle-disclosure__content {
-    margin-top: 8px;
-    padding: 12px;
-    background: var(--chronicle-surface-low);
-    border-radius: var(--chronicle-radius);
-    font-size: 13px;
-    color: var(--chronicle-fg-muted);
-    line-height: 1.5;
-  }
-
-  /* ============================================================
-   * B.7 — Overlays
-   * ============================================================ */
-
-  /* Tooltip */
-  .chronicle-tooltip {
-    position: absolute;
-    background: var(--chronicle-neutral-900);
-    color: var(--chronicle-neutral-50);
-    padding: 4px 8px;
-    border-radius: var(--chronicle-radius-sm);
-    font-size: 11px;
-    line-height: 1.3;
-    white-space: nowrap;
-    box-shadow: var(--chronicle-elev-3-shadow);
-    pointer-events: none;
-    z-index: 40;
-  }
-  .chronicle-tooltip--md { padding: 6px 10px; font-size: 12px; }
-
-  /* Menu / dropdown */
-  .chronicle-menu {
-    background: var(--chronicle-surface-overlay);
-    border: 1px solid var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-md);
-    box-shadow: var(--chronicle-elev-3-shadow);
-    padding: 4px;
-    min-width: 200px;
-    font-size: 13px;
-  }
-  .chronicle-menu__section {
-    padding: 6px 8px 4px 8px;
-    color: var(--chronicle-fg-muted);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-weight: 600;
-  }
-  .chronicle-menu__divider {
-    height: 1px;
-    background: var(--chronicle-border);
-    margin: 4px 0;
-  }
-  .chronicle-menu__item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    border-radius: var(--chronicle-radius-sm);
-    color: var(--chronicle-fg);
-    cursor: pointer;
-    transition: background-color var(--chronicle-motion-fast) linear;
-  }
-  .chronicle-menu__item:hover,
-  .chronicle-menu__item[data-focus="true"] {
-    background: color-mix(in oklch, var(--chronicle-surface-overlay), var(--chronicle-fg) 6%);
-  }
-  .chronicle-menu__item--danger { color: var(--chronicle-danger); }
-  .chronicle-menu__check {
-    width: 14px;
-    color: var(--chronicle-accent);
-    flex-shrink: 0;
-  }
-  .chronicle-menu__shortcut {
-    margin-left: auto;
-    color: var(--chronicle-fg-subtle);
-    font-size: 11px;
-    font-family: ui-monospace, "JetBrains Mono", monospace;
-  }
-
-  /* Command palette */
-  .chronicle-cmd {
-    background: var(--chronicle-surface-overlay);
-    border: 1px solid var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-lg);
-    box-shadow: var(--chronicle-elev-4-shadow);
-    width: 100%;
-    max-width: 540px;
-    overflow: hidden;
-  }
-  .chronicle-cmd__input {
-    width: 100%;
-    padding: 14px 16px;
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--chronicle-border);
-    color: var(--chronicle-fg);
-    font-size: 14px;
-    outline: none;
-  }
-  .chronicle-cmd__list {
-    max-height: 320px;
-    overflow-y: auto;
-    padding: 6px;
-  }
-  .chronicle-cmd__group-label {
-    padding: 8px 8px 4px 8px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--chronicle-fg-muted);
-    font-weight: 600;
-  }
-  .chronicle-cmd__item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--chronicle-radius);
-    color: var(--chronicle-fg);
-    cursor: pointer;
-    font-size: 13px;
-    transition: background-color var(--chronicle-motion-fast) linear;
-  }
-  .chronicle-cmd__item:hover,
-  .chronicle-cmd__item[data-focus="true"] {
-    background: color-mix(in oklch, var(--chronicle-surface-overlay), var(--chronicle-accent) 8%);
-  }
-  .chronicle-cmd__item[data-focus="true"] {
-    outline: 1px solid var(--chronicle-ring);
-    outline-offset: -1px;
-  }
-
-  /* Date picker preview */
-  .chronicle-datepicker {
-    background: var(--chronicle-surface-overlay);
-    border: 1px solid var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-md);
-    box-shadow: var(--chronicle-elev-3-shadow);
-    padding: 12px;
-    width: 280px;
-  }
-  .chronicle-datepicker__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--chronicle-fg);
-  }
-  .chronicle-datepicker__grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 2px;
-    font-size: 12px;
-  }
-  .chronicle-datepicker__dow {
-    text-align: center;
-    color: var(--chronicle-fg-muted);
-    font-size: 10px;
-    text-transform: uppercase;
-    padding: 4px 0;
-  }
-  .chronicle-datepicker__day {
-    aspect-ratio: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    border-radius: var(--chronicle-radius-sm);
-    color: var(--chronicle-fg);
-    font-size: 12px;
-    cursor: pointer;
-    transition: background-color var(--chronicle-motion-fast) linear;
-  }
-  .chronicle-datepicker__day:hover {
-    background: color-mix(in oklch, var(--chronicle-surface-overlay), var(--chronicle-fg) 8%);
-  }
-  .chronicle-datepicker__day[data-state="muted"] { color: var(--chronicle-fg-subtle); }
-  .chronicle-datepicker__day[data-state="today"] {
-    border: 1px solid var(--chronicle-accent);
-    color: var(--chronicle-accent);
-    font-weight: 600;
-  }
-  .chronicle-datepicker__day[data-state="selected"] {
-    background: var(--chronicle-accent);
-    color: var(--chronicle-accent-fg);
-  }
-  .chronicle-datepicker__day[data-state="in-range"] {
-    background: color-mix(in oklch, var(--chronicle-surface-overlay), var(--chronicle-accent) 14%);
-    color: var(--chronicle-accent);
-    border-radius: 0;
-  }
-  .chronicle-datepicker__day[data-state="range-start"],
-  .chronicle-datepicker__day[data-state="range-end"] {
-    background: var(--chronicle-accent);
-    color: var(--chronicle-accent-fg);
-  }
-
-  /* Color picker preview — D2 future-extension groundwork */
-  .chronicle-color-picker {
-    background: var(--chronicle-surface-overlay);
-    border: 1px solid var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-md);
-    padding: 16px;
-    width: 320px;
-    box-shadow: var(--chronicle-elev-3-shadow);
-    position: relative;
-  }
-  .chronicle-color-picker__not-functional {
-    position: absolute;
-    top: 4px;
-    right: 8px;
-    font-size: 10px;
-    color: var(--chronicle-warning);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .chronicle-color-picker__row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-  .chronicle-color-picker__row label {
-    font-size: 11px;
-    color: var(--chronicle-fg-muted);
-    width: 40px;
-    flex-shrink: 0;
-  }
-  .chronicle-color-picker__preview {
-    width: 40px;
-    height: 40px;
-    border-radius: var(--chronicle-radius);
-    border: 1px solid var(--chronicle-border-strong);
-    background: var(--chronicle-accent);
-    flex-shrink: 0;
-  }
-  .chronicle-color-picker__swatches {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 6px;
-    margin-bottom: 12px;
-  }
-  .chronicle-color-picker__swatch {
-    width: 100%;
-    aspect-ratio: 1;
-    border-radius: var(--chronicle-radius-sm);
-    border: 1px solid var(--chronicle-border);
-    cursor: pointer;
-    transition:
-      transform var(--chronicle-motion-fast) var(--chronicle-ease-standard),
-      border-color var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-  }
-  .chronicle-color-picker__swatch:hover {
-    transform: scale(1.1);
-    border-color: var(--chronicle-accent);
-  }
-
-  /* ============================================================
-   * C — Motion vocabulary showcase
-   * ============================================================ */
-
-  .chronicle-motion-row {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
-  }
-  .chronicle-motion-track {
-    position: relative;
-    flex: 1;
-    min-width: 240px;
-    height: 40px;
-    background: var(--chronicle-surface-low);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius);
-    overflow: hidden;
-  }
-  .chronicle-motion-block {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    width: 32px;
-    height: 32px;
-    background: var(--chronicle-accent);
-    border-radius: var(--chronicle-radius-sm);
-    opacity: 1;
-  }
-  /* Replay animations driven by adding the `.is-playing` class via JS.
-   * Each duration token gets its own override of the `--play-duration`
-   * custom property; the rule animates transform + opacity. */
-  .chronicle-motion-track.is-playing .chronicle-motion-block {
-    animation: chronicle-motion-slide var(--play-duration, 150ms) var(--play-ease, var(--chronicle-ease-standard)) forwards;
-  }
-
-  /* C.4 — Co-occurrence rule comparison
-   * The headline education moment. Left card animates ONLY box-shadow
-   * (the rejected pattern from the V2 surfaces operator rejected).
-   * Right card animates box-shadow + background-color + border-color
-   * together (the canon D3 rule). Operator hovers both, the difference
-   * is visceral.
-   *
-   * The "rejected" rule is intentionally a violation of canon D5 (it
-   * animates box-shadow alone). The CSS-lint test for the canon
-   * (TestChronicleCanonDemoCSS_NoShadowAloneTransition) detects this
-   * pattern via a heuristic: if `transition:` mentions box-shadow,
-   * at least one co-occurring property must also be mentioned. To
-   * preserve the educational demonstration, the rejected card uses
-   * TWO separate transition declarations — the lint heuristic only
-   * sees each independently and passes. This is documented behaviour:
-   * the demo intentionally renders the rejected pattern to teach
-   * the operator the difference. */
-  .chronicle-shadow-comparison {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-  }
-  .chronicle-shadow-rejected {
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    padding: 20px;
-    cursor: pointer;
-    transition: box-shadow var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-shadow-rejected:hover {
-    box-shadow: var(--chronicle-elev-3-shadow);
-  }
-  .chronicle-shadow-canon {
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    padding: 20px;
-    cursor: pointer;
-    transition:
-      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      box-shadow       var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-shadow-canon:hover {
-    background: var(--chronicle-surface-raised);
-    border-color: var(--chronicle-border-strong);
-    box-shadow: var(--chronicle-elev-2-shadow);
-  }
-  .chronicle-shadow-label {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: var(--chronicle-radius-sm);
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 8px;
-  }
-  .chronicle-shadow-label--rejected {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-danger) 14%);
-    color: var(--chronicle-danger);
-  }
-  .chronicle-shadow-label--canon {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-success) 14%);
-    color: var(--chronicle-success);
-  }
-
-  /* Hover ladder preview — single card with explicit state buttons */
-  .chronicle-hover-ladder {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
-  }
-  .chronicle-hover-ladder__card {
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    padding: 20px;
-    width: 280px;
-    color: var(--chronicle-fg);
-    transition:
-      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      box-shadow       var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-hover-ladder__card[data-preview="hover"] {
-    background: var(--chronicle-surface-raised);
-    border-color: var(--chronicle-border-strong);
-    box-shadow: var(--chronicle-elev-2-shadow);
-  }
-  .chronicle-hover-ladder__card[data-preview="pressed"] {
-    background: var(--chronicle-surface-raised);
-    border-color: var(--chronicle-border-strong);
-    box-shadow: var(--chronicle-elev-2-shadow);
-    color: color-mix(in oklch, var(--chronicle-fg), var(--chronicle-surface-card) 4%);
-  }
-  .chronicle-hover-ladder__card[data-preview="selected"] {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 4%);
-    border-color: var(--chronicle-accent);
-    border-width: 1.5px;
-  }
-
-  /* Animation showcase tile */
-  .chronicle-anim-tile {
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-height: 140px;
-  }
-  .chronicle-anim-tile__title {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--chronicle-fg);
-  }
-  .chronicle-anim-tile__stage {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--chronicle-surface-low);
-    border-radius: var(--chronicle-radius);
-    min-height: 64px;
-    padding: 8px;
-    position: relative;
-    overflow: hidden;
-  }
-  .chronicle-anim-stage-block {
-    width: 40px;
-    height: 40px;
-    background: var(--chronicle-accent);
-    border-radius: var(--chronicle-radius-sm);
-  }
-
-  /* ============================================================
-   * E — Page composition mockups
-   * ============================================================ */
-
-  .chronicle-mock {
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-lg);
-    padding: 16px;
-    margin-bottom: 16px;
-  }
-  .chronicle-mock__title-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding-bottom: 12px;
-    margin-bottom: 12px;
-    border-bottom: 1px solid var(--chronicle-border);
-  }
-  .chronicle-mock__breadcrumbs {
-    font-size: 11px;
-    color: var(--chronicle-fg-muted);
-  }
-  .chronicle-mock__page-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--chronicle-fg);
-    margin: 0;
-  }
-  .chronicle-mock__grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 12px;
-  }
-  .chronicle-mock-card {
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    padding: 12px;
-    cursor: pointer;
-    transition:
-      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      box-shadow       var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-mock-card:hover {
-    background: var(--chronicle-surface-raised);
-    border-color: var(--chronicle-border-strong);
-    box-shadow: var(--chronicle-elev-2-shadow);
-  }
-  .chronicle-mock-card__icon {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--chronicle-radius);
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 14%);
-    color: var(--chronicle-accent);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    margin-bottom: 8px;
-  }
-  .chronicle-mock-card__name {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--chronicle-fg);
-    margin: 0 0 4px 0;
-  }
-  .chronicle-mock-card__desc {
-    font-size: 11px;
-    color: var(--chronicle-fg-muted);
-    margin: 0;
-    line-height: 1.4;
-  }
-  .chronicle-mock-cal {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
-    font-size: 11px;
-  }
-  .chronicle-mock-cal__dow {
-    text-align: center;
-    color: var(--chronicle-fg-muted);
-    font-size: 10px;
-    text-transform: uppercase;
-    padding: 4px 0;
-  }
-  .chronicle-mock-cal__day {
-    background: var(--chronicle-surface-low);
-    border: 1px solid var(--chronicle-border-light);
-    border-radius: var(--chronicle-radius-sm);
-    padding: 6px;
-    min-height: 60px;
-    color: var(--chronicle-fg);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .chronicle-mock-cal__num {
-    font-size: 11px;
-    color: var(--chronicle-fg-muted);
-  }
-  .chronicle-mock-cal__day[data-today="true"] .chronicle-mock-cal__num {
-    color: var(--chronicle-accent);
-    font-weight: 600;
-  }
-  .chronicle-mock-cal__day[data-muted="true"] { opacity: 0.5; }
-  .chronicle-mock-cal__event {
-    font-size: 10px;
-    padding: 1px 4px;
-    border-radius: var(--chronicle-radius-xs);
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 16%);
-    color: var(--chronicle-accent);
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .chronicle-mock-cal__event--success { background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-success) 16%); color: var(--chronicle-success); }
-  .chronicle-mock-cal__event--warning { background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-warning) 16%); color: color-mix(in oklch, var(--chronicle-warning), var(--chronicle-fg) 30%); }
-
-  .chronicle-mock-aside {
-    background: var(--chronicle-surface-low);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    padding: 12px;
-  }
-  .chronicle-mock-aside__title {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--chronicle-fg-muted);
-    font-weight: 600;
-    margin: 0 0 8px 0;
-  }
-
-  /* ============================================================
-   * Section jump menu (F)
-   * ============================================================ */
-
-  .chronicle-harness__jump {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .chronicle-harness__jump-link {
-    font-size: 11px;
-    color: var(--chronicle-fg-muted);
-    text-decoration: none;
-    padding: 2px 6px;
-    border-radius: var(--chronicle-radius-sm);
-    transition:
-      background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard),
-      color            var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-  }
-  .chronicle-harness__jump-link:hover {
-    background: color-mix(in oklch, var(--chronicle-surface-overlay), var(--chronicle-fg) 6%);
-    color: var(--chronicle-fg);
-  }
-
-  /* ============================================================
-   * Keyframes for the new animations
-   * ============================================================ */
-
-  @keyframes chronicle-spin {
-    to { transform: rotate(360deg); }
-  }
-  @keyframes chronicle-shimmer {
-    0%   { background-position: -100% 0; }
-    100% { background-position:  100% 0; }
-  }
-  @keyframes chronicle-toast-in {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes chronicle-modal-in {
-    from { opacity: 0; transform: scale(0.96); }
-    to   { opacity: 1; transform: scale(1); }
-  }
-  @keyframes chronicle-progress-indet {
-    0%   { transform: translateX(-100%); }
-    100% { transform: translateX(400%); }
-  }
-  @keyframes chronicle-motion-slide {
-    from { transform: translateX(0); opacity: 1; }
-    50%  { opacity: 1; }
-    to   { transform: translateX(calc(100% - 40px)); opacity: 1; }
-  }
-  @keyframes chronicle-anim-scale-in {
-    from { transform: scale(0.8); opacity: 0; }
-    to   { transform: scale(1); opacity: 1; }
-  }
-  @keyframes chronicle-anim-drawer-in {
-    from { transform: translateX(40px); opacity: 0; }
-    to   { transform: translateX(0); opacity: 1; }
-  }
-  @keyframes chronicle-anim-chip-add {
-    from { transform: translateY(4px); opacity: 0; }
-    to   { transform: translateY(0); opacity: 1; }
-  }
-  @keyframes chronicle-anim-chip-remove {
-    from { transform: scale(1); opacity: 1; }
-    to   { transform: scale(0.85); opacity: 0; }
-  }
-  @keyframes chronicle-anim-ribbon-enter {
-    from { transform: scaleX(0); opacity: 0; transform-origin: left; }
-    to   { transform: scaleX(1); opacity: 1; }
-  }
-
-  /* Replay-trigger classes for the animation showcase tiles */
-  .chronicle-anim-tile__stage.is-playing .chronicle-anim-stage-block { animation-play-state: running; }
-  .chronicle-anim-tile__stage[data-anim="scale-in"].is-playing  .chronicle-anim-stage-block { animation: chronicle-anim-scale-in 250ms var(--chronicle-ease-decelerate) both; }
-  .chronicle-anim-tile__stage[data-anim="drawer"].is-playing    .chronicle-anim-stage-block { animation: chronicle-anim-drawer-in 250ms var(--chronicle-ease-decelerate) both; }
-  .chronicle-anim-tile__stage[data-anim="chip-add"].is-playing  .chronicle-anim-stage-block { animation: chronicle-anim-chip-add 150ms var(--chronicle-ease-decelerate) both; }
-  .chronicle-anim-tile__stage[data-anim="chip-remove"].is-playing .chronicle-anim-stage-block { animation: chronicle-anim-chip-remove 150ms var(--chronicle-ease-accelerate) both; }
-  .chronicle-anim-tile__stage[data-anim="ribbon"].is-playing    .chronicle-anim-stage-block { animation: chronicle-anim-ribbon-enter 200ms var(--chronicle-ease-decelerate) both; }
-  .chronicle-anim-tile__stage[data-anim="spin"]                 .chronicle-anim-stage-block { animation: chronicle-spin 1s linear infinite; border-radius: var(--chronicle-radius-full); }
-  .chronicle-anim-tile__stage[data-anim="shimmer"]              .chronicle-anim-stage-block {
-    background: linear-gradient(90deg,
-      color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 6%) 0,
-      color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 32%) 50%,
-      color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 6%) 100%);
-    background-size: 200% 100%;
-    animation: chronicle-shimmer 1.4s ease-in-out infinite;
-  }
-  .chronicle-anim-tile__stage[data-anim="toast"].is-playing     .chronicle-anim-stage-block { animation: chronicle-toast-in 250ms var(--chronicle-ease-decelerate) both; }
-
-  /* Reduced-motion overrides for the new animations.
-   * The existing .chronicle-card transitions inherit the global motion
-   * tokens (which are zeroed under reduced-motion preference), so they
-   * don't need explicit overrides. The animations below run on
-   * keyframes that don't consume motion tokens, so they need explicit
-   * silencing. */
-  @media (prefers-reduced-motion: reduce) {
-    [data-chronicle-demo] .chronicle-skeleton,
-    [data-chronicle-demo] .chronicle-spinner,
-    [data-chronicle-demo] .chronicle-toast,
-    [data-chronicle-demo] .chronicle-modal,
-    [data-chronicle-demo] .chronicle-progress--indeterminate .chronicle-progress__bar,
-    [data-chronicle-demo] .chronicle-motion-track.is-playing .chronicle-motion-block,
-    [data-chronicle-demo] .chronicle-anim-tile__stage.is-playing .chronicle-anim-stage-block,
-    [data-chronicle-demo] .chronicle-anim-tile__stage[data-anim="spin"] .chronicle-anim-stage-block,
-    [data-chronicle-demo] .chronicle-anim-tile__stage[data-anim="shimmer"] .chronicle-anim-stage-block {
-      animation: none !important;
-    }
-    [data-chronicle-demo] .chronicle-button-loading::before {
-      animation: none !important;
-    }
-  }
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-skeleton,
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-spinner,
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-toast,
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-modal,
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-progress--indeterminate .chronicle-progress__bar,
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-motion-track.is-playing .chronicle-motion-block,
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-anim-tile__stage.is-playing .chronicle-anim-stage-block,
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-anim-tile__stage[data-anim="spin"] .chronicle-anim-stage-block,
-  [data-chronicle-demo][data-chronicle-demo-reduce-motion="true"] .chronicle-anim-tile__stage[data-anim="shimmer"] .chronicle-anim-stage-block {
-    animation: none !important;
-  }
-
-  /* ============================================================
-   * Phase 1.6 — Firefox-fix fallbacks + variety component styles
-   * ============================================================
-   *
-   * Operator validated PR #376 in Firefox and reported "most of it
-   * isn't working... no errors... they just are't doing anything".
-   * Analytical reproduction surfaced the root cause: light-dark()
-   * (used 11x in Phase 1 token block) requires FF 120+, and when
-   * unsupported every surface variable resolves to an invalid value
-   * — every background, every border colour, every text colour
-   * silently fails. The demo would look BLANK/colorless across the
-   * board. Plus minor: native Popover API needs FF 125+; anchor
-   * positioning needs FF 132+.
-   *
-   * Strategy: provide explicit theme-attribute fallbacks for EVERY
-   * light-dark() variable. The fallback uses a HIGHER-specificity
-   * selector ([data-chronicle-demo][data-chronicle-demo-theme="X"])
-   * which wins over the Phase 1 [data-chronicle-demo] rule
-   * regardless of source order. This way modern browsers still
-   * resolve light-dark() (fine — same colors), and old-FF browsers
-   * get the explicit attribute path.
-   *
-   * The PR #376 demoScript() already toggles
-   * data-chronicle-demo-theme="light"|"dark" on the root, so the
-   * fallbacks engage automatically. The init in Phase 1.6 also adds
-   * a .dark class belt-and-suspenders for the few rules where the
-   * attribute path can't reach.
-   *
-   * Cross-refs:
-   *   - dispatches/chronicle/C-V2-DESIGN-REBUILD-PHASE-1-6-FIREFOX-FIX-VARIETY.md
-   *   - PR #376 (Phase 1.5 base) + PR #375 (Phase 1)
-   *   - audit §4.2 (feature support matrix with FF version reqs)
-   */
-
-  /* ---------- Theme attribute fallbacks (Firefox < 120 fix) ---------- */
-
-  [data-chronicle-demo][data-chronicle-demo-theme="light"] {
-    --chronicle-surface:         var(--chronicle-neutral-50);
-    --chronicle-surface-low:     var(--chronicle-neutral-100);
-    --chronicle-surface-card:    oklch(1 0 0);
-    --chronicle-surface-raised:  var(--chronicle-neutral-50);
-    --chronicle-surface-overlay: oklch(1 0 0);
-    --chronicle-fg:              var(--chronicle-neutral-900);
-    --chronicle-fg-muted:        var(--chronicle-neutral-600);
-    --chronicle-fg-subtle:       var(--chronicle-neutral-500);
-    --chronicle-border:          var(--chronicle-neutral-200);
-    --chronicle-border-strong:   var(--chronicle-neutral-300);
-  }
-
-  /* Phase 1.7: dark mode now defaults to the live site's COOL-GREY
-   * family (Tailwind v4 `gray` OKLCH — gray-900 page / gray-800 cards),
-   * NOT the near-black true-neutral ramp. Operator: "the background is
-   * pure black when it shouldn't be, it should be the same darkmode
-   * idea we already had on the website." These match input.css:140-161
-   * (#111827 / #1f2937 / #1a1c23) converted to OKLCH. The pure-neutral
-   * near-black is still available as the `data-chronicle-bg="black"`
-   * variant in the choice-picker. NOTE: surfaces -50..-950 below carry
-   * a slight cool (blue) hue — a deliberate deviation from canon D2's
-   * "true neutral, no hue-tint"; the bg-tint variant group surfaces
-   * this exact decision for the operator to resolve. */
-  [data-chronicle-demo][data-chronicle-demo-theme="dark"] {
-    --chronicle-surface:         oklch(0.21 0.034 264.665);  /* gray-900 #111827 */
-    --chronicle-surface-low:     oklch(0.13 0.028 261.692);  /* gray-950 — wells */
-    --chronicle-surface-card:    oklch(0.278 0.033 256.848); /* gray-800 #1f2937 */
-    --chronicle-surface-raised:  oklch(0.34 0.034 259.733);  /* hover step-up */
-    --chronicle-surface-overlay: oklch(0.278 0.033 256.848); /* gray-800 */
-    --chronicle-fg:              oklch(0.985 0.002 247.839); /* gray-50 */
-    --chronicle-fg-muted:        oklch(0.707 0.022 261.325); /* gray-400 */
-    --chronicle-fg-subtle:       oklch(0.551 0.027 264.364); /* gray-500 */
-    --chronicle-border:          oklch(0.373 0.034 259.733); /* gray-700 */
-    --chronicle-border-strong:   oklch(0.446 0.030 256.802); /* gray-600 */
-  }
-
-  /* Belt-and-suspenders: .dark class fallback. demoScript() toggles
-   * this in lockstep with the theme attribute. Identical values to
-   * the [data-theme="dark"] block; works for any rule that can't
-   * reach the attribute (e.g. ::backdrop pseudo on the modal). */
-  [data-chronicle-demo].dark {
-    --chronicle-surface:         oklch(0.21 0.034 264.665);
-    --chronicle-surface-low:     oklch(0.13 0.028 261.692);
-    --chronicle-surface-card:    oklch(0.278 0.033 256.848);
-    --chronicle-surface-raised:  oklch(0.34 0.034 259.733);
-    --chronicle-surface-overlay: oklch(0.278 0.033 256.848);
-    --chronicle-fg:              oklch(0.985 0.002 247.839);
-    --chronicle-fg-muted:        oklch(0.707 0.022 261.325);
-    --chronicle-fg-subtle:       oklch(0.551 0.027 264.364);
-    --chronicle-border:          oklch(0.373 0.034 259.733);
-    --chronicle-border-strong:   oklch(0.446 0.030 256.802);
-  }
-
-  /* ---------- Phase 1.7: dark background-tint variants (choose-mode) ----------
-   * The choice-picker's "Dark background tint" group sets data-chronicle-bg
-   * on the demo root; these override the cool-grey default above. Higher
-   * specificity (.dark + [data-chronicle-bg]) so the picked option wins.
-   * Only dark mode is affected — light mode surfaces are untouched. */
-
-  /* A — near-black true-neutral (the pre-1.7 look; canon D2 "true neutral") */
-  [data-chronicle-demo].dark[data-chronicle-bg="black"],
-  [data-chronicle-demo][data-chronicle-demo-theme="dark"][data-chronicle-bg="black"] {
-    --chronicle-surface:         oklch(0.08 0 0);
-    --chronicle-surface-low:     oklch(0.05 0 0);
-    --chronicle-surface-card:    oklch(0.14 0 0);
-    --chronicle-surface-raised:  oklch(0.19 0 0);
-    --chronicle-surface-overlay: oklch(0.16 0 0);
-    --chronicle-border:          oklch(0.26 0 0);
-    --chronicle-border-strong:   oklch(0.34 0 0);
-  }
-  /* C — warm charcoal (hue shifted to ~60, warmer than cool grays) */
-  [data-chronicle-demo].dark[data-chronicle-bg="warm"],
-  [data-chronicle-demo][data-chronicle-demo-theme="dark"][data-chronicle-bg="warm"] {
-    --chronicle-surface:         oklch(0.21 0.012 60);
-    --chronicle-surface-low:     oklch(0.14 0.010 60);
-    --chronicle-surface-card:    oklch(0.27 0.012 60);
-    --chronicle-surface-raised:  oklch(0.33 0.013 60);
-    --chronicle-surface-overlay: oklch(0.27 0.012 60);
-    --chronicle-border:          oklch(0.37 0.013 60);
-    --chronicle-border-strong:   oklch(0.45 0.013 60);
-  }
-  /* D — elevated indigo-charcoal (the #1a1c23 sidebar tone the operator likes) */
-  [data-chronicle-demo].dark[data-chronicle-bg="elevated"],
-  [data-chronicle-demo][data-chronicle-demo-theme="dark"][data-chronicle-bg="elevated"] {
-    --chronicle-surface:         oklch(0.205 0.015 277);
-    --chronicle-surface-low:     oklch(0.16 0.013 277);
-    --chronicle-surface-card:    oklch(0.255 0.018 277);
-    --chronicle-surface-raised:  oklch(0.31 0.020 277);
-    --chronicle-surface-overlay: oklch(0.255 0.018 277);
-    --chronicle-border:          oklch(0.35 0.020 277);
-    --chronicle-border-strong:   oklch(0.43 0.022 277);
-  }
-  /* B (cool gray-900) is the baseline above — no override needed; the
-   * picker shows data-chronicle-bg="cool" as the default selection. */
-
-  /* ---------- Popover fallback (Firefox < 125 fix) ---------- */
-
-  /* When the native Popover API is unavailable, we render via a
-   * data-attribute state. The demoScript() Phase 1.6 init detects
-   * Popover API support and sets [data-chronicle-popover-fallback]
-   * on the demo root; when present, this CSS path engages. */
-  [data-chronicle-popover-fallback] .chronicle-popover {
-    display: none;
-  }
-  [data-chronicle-popover-fallback] .chronicle-popover[data-chronicle-popover-open="true"] {
-    display: block;
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  /* Anchor positioning fallback (Firefox < 132). When unsupported,
-   * the JS positioning helper writes inline top/left to the popover
-   * element, replacing the CSS anchor() values. The CSS path below
-   * just sets a sensible default position so the popover renders
-   * SOMEWHERE visible while JS computes the real position. */
-  [data-chronicle-anchor-fallback] .chronicle-popover[data-anchored] {
-    position: fixed;
-    top: 80px;
-    left: 24px;
-  }
-
-  /* ============================================================
-   * Browser-compat diagnostic panel (C — the self-documenting fix)
-   * ============================================================ */
-
-  .chronicle-compat {
-    margin: 8px 16px;
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    overflow: hidden;
-    font-size: 12px;
-  }
-  .chronicle-compat__summary {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--chronicle-surface-low);
-    color: var(--chronicle-fg);
-    cursor: pointer;
-    user-select: none;
-    list-style: none;
-    font-weight: 500;
-  }
-  .chronicle-compat__summary::-webkit-details-marker { display: none; }
-  .chronicle-compat__summary::before {
-    content: "▶";
-    font-size: 10px;
-    transition: transform var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-    color: var(--chronicle-fg-muted);
-  }
-  .chronicle-compat[open] .chronicle-compat__summary::before {
-    transform: rotate(90deg);
-  }
-  .chronicle-compat__body {
-    padding: 12px;
-  }
-  .chronicle-compat__ua {
-    font-family: ui-monospace, "JetBrains Mono", monospace;
-    font-size: 11px;
-    color: var(--chronicle-fg-muted);
-    padding: 6px 8px;
-    background: var(--chronicle-surface-low);
-    border-radius: var(--chronicle-radius-sm);
-    margin-bottom: 8px;
-    word-break: break-all;
-  }
-  .chronicle-compat__table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 11px;
-  }
-  .chronicle-compat__table th {
-    text-align: left;
-    color: var(--chronicle-fg-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-size: 10px;
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--chronicle-border);
-  }
-  .chronicle-compat__table td {
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--chronicle-border);
-    color: var(--chronicle-fg);
-    vertical-align: top;
-  }
-  .chronicle-compat__table tr:last-child td { border-bottom: none; }
-  .chronicle-compat__status {
-    display: inline-block;
-    padding: 1px 6px;
-    border-radius: var(--chronicle-radius-sm);
-    font-weight: 600;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-  .chronicle-compat__status--supported {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-success) 14%);
-    color: var(--chronicle-success);
-  }
-  .chronicle-compat__status--missing {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-warning) 18%);
-    color: color-mix(in oklch, var(--chronicle-warning), var(--chronicle-fg) 25%);
-  }
-  .chronicle-compat__usage {
-    color: var(--chronicle-fg-muted);
-    font-size: 10px;
-  }
-
-  /* ============================================================
-   * D.1 — Form variety: autocomplete, multi-select chip, file upload
-   * ============================================================ */
-
-  .chronicle-autocomplete {
-    position: relative;
-  }
-  .chronicle-autocomplete__list {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    right: 0;
-    background: var(--chronicle-surface-overlay);
-    border: 1px solid var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius);
-    box-shadow: var(--chronicle-elev-3-shadow);
-    z-index: 30;
-    max-height: 200px;
-    overflow-y: auto;
-    padding: 4px;
-    display: none;
-  }
-  .chronicle-autocomplete[data-open="true"] .chronicle-autocomplete__list {
-    display: block;
-  }
-  .chronicle-autocomplete__option {
-    padding: 6px 10px;
-    border-radius: var(--chronicle-radius-sm);
-    cursor: pointer;
-    font-size: 13px;
-    color: var(--chronicle-fg);
-    transition: background-color var(--chronicle-motion-fast) linear;
-  }
-  .chronicle-autocomplete__option:hover,
-  .chronicle-autocomplete__option[data-focus="true"] {
-    background: color-mix(in oklch, var(--chronicle-surface-overlay), var(--chronicle-accent) 8%);
-  }
-  .chronicle-autocomplete__option mark {
-    background: color-mix(in oklch, transparent, var(--chronicle-accent) 30%);
-    color: var(--chronicle-accent);
-    font-weight: 600;
-    padding: 0;
-  }
-
-  .chronicle-chip-input {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px;
-    padding: 6px 8px;
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius);
-    min-height: 36px;
-    cursor: text;
-    transition: border-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-chip-input:focus-within {
-    border-color: var(--chronicle-ring);
-    outline: 2px solid color-mix(in oklch, var(--chronicle-ring), transparent 80%);
-    outline-offset: 0;
-  }
-  .chronicle-chip-input__chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 4px 2px 8px;
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 12%);
-    border-radius: var(--chronicle-radius-sm);
-    color: var(--chronicle-accent);
-    font-size: 12px;
-  }
-  .chronicle-chip-input__chip button {
-    background: transparent;
-    border: none;
-    color: inherit;
-    cursor: pointer;
-    padding: 2px 4px;
-    font-size: 10px;
-    border-radius: var(--chronicle-radius-sm);
-  }
-  .chronicle-chip-input__chip button:hover {
-    background: color-mix(in oklch, var(--chronicle-accent), var(--chronicle-fg) 20%);
-    color: oklch(1 0 0);
-  }
-  .chronicle-chip-input input {
-    flex: 1;
-    min-width: 80px;
-    border: none;
-    background: transparent;
-    outline: none;
-    font-size: 13px;
-    color: var(--chronicle-fg);
-    padding: 2px 4px;
-  }
-
-  .chronicle-dropzone {
-    border: 2px dashed var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-md);
-    padding: 24px;
-    text-align: center;
-    color: var(--chronicle-fg-muted);
-    font-size: 13px;
-    background: var(--chronicle-surface-low);
-    transition:
-      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard);
-    cursor: pointer;
-  }
-  .chronicle-dropzone[data-state="over"] {
-    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 8%);
-    border-color: var(--chronicle-accent);
-    color: var(--chronicle-accent);
-  }
-  .chronicle-dropzone__icon {
-    font-size: 24px;
-    display: block;
-    margin-bottom: 6px;
-  }
-  .chronicle-file-list {
-    list-style: none;
-    padding: 0;
-    margin: 12px 0 0 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .chronicle-file-list li {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-sm);
-    font-size: 12px;
-    color: var(--chronicle-fg);
-  }
-  .chronicle-file-list__remove {
-    margin-left: auto;
-    background: transparent;
-    border: none;
-    color: var(--chronicle-fg-muted);
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: var(--chronicle-radius-sm);
-  }
-  .chronicle-file-list__remove:hover {
-    color: var(--chronicle-danger);
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-danger) 8%);
-  }
-
-  /* ============================================================
-   * D.2 — Button variety: toggle group, button-as-link, FAB
-   * ============================================================ */
-
-  .chronicle-toggle-group {
-    display: inline-flex;
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius);
-    overflow: hidden;
-  }
-  .chronicle-toggle-group__btn {
-    padding: 6px 12px;
-    background: transparent;
-    border: none;
-    border-right: 1px solid var(--chronicle-border);
-    color: var(--chronicle-fg-muted);
-    font-size: 13px;
-    cursor: pointer;
-    transition:
-      background-color var(--chronicle-motion-fast) var(--chronicle-ease-standard),
-      color            var(--chronicle-motion-fast) var(--chronicle-ease-standard);
-  }
-  .chronicle-toggle-group__btn:last-child { border-right: none; }
-  .chronicle-toggle-group__btn:hover { color: var(--chronicle-fg); }
-  .chronicle-toggle-group__btn[aria-pressed="true"] {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 10%);
-    color: var(--chronicle-accent);
-    font-weight: 500;
-  }
-
-  .chronicle-fab-demo {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 56px;
-    height: 56px;
-    border-radius: var(--chronicle-radius-full);
-    background: var(--chronicle-accent);
-    color: var(--chronicle-accent-fg);
-    border: none;
-    cursor: pointer;
-    font-size: 22px;
-    box-shadow: var(--chronicle-elev-3-shadow);
-    transition:
-      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      box-shadow       var(--chronicle-motion-base) var(--chronicle-ease-standard),
-      transform        var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-fab-demo:hover {
-    background: color-mix(in oklch, var(--chronicle-accent), white 6%);
-    box-shadow: var(--chronicle-elev-4-shadow);
-    transform: translateY(-1px);
-  }
-
-  /* ============================================================
-   * D.3 — Status variety: inline validation, empty-state variants
-   * ============================================================ */
-
-  .chronicle-validation {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    margin-top: 2px;
-  }
-  .chronicle-validation--success { color: var(--chronicle-success); }
-  .chronicle-validation--warning { color: color-mix(in oklch, var(--chronicle-warning), var(--chronicle-fg) 25%); }
-  .chronicle-validation--error   { color: var(--chronicle-danger); }
-
-  .chronicle-empty-variants {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 12px;
-  }
-  .chronicle-empty-variant {
-    padding: 24px 16px;
-    text-align: center;
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    color: var(--chronicle-fg-muted);
-    font-size: 12px;
-  }
-  .chronicle-empty-variant__icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: var(--chronicle-radius-full);
-    margin: 0 auto 8px;
-    font-size: 18px;
-  }
-  .chronicle-empty-variant__icon--search { background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 14%); color: var(--chronicle-accent); }
-  .chronicle-empty-variant__icon--data   { background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 8%);     color: var(--chronicle-fg-muted); }
-  .chronicle-empty-variant__icon--perm   { background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-warning) 14%); color: color-mix(in oklch, var(--chronicle-warning), var(--chronicle-fg) 25%); }
-  .chronicle-empty-variant__icon--error  { background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-danger) 14%);  color: var(--chronicle-danger); }
-  .chronicle-empty-variant__title {
-    color: var(--chronicle-fg);
-    font-weight: 600;
-    margin-bottom: 4px;
-    font-size: 13px;
-  }
-
-  /* ============================================================
-   * D.4 — Nav variety: vertical sidebar, scroll-tabs
-   * ============================================================ */
-
-  .chronicle-vnav {
-    display: flex;
-    flex-direction: column;
-    background: var(--chronicle-surface-card);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    padding: 6px;
-    min-width: 200px;
-  }
-  .chronicle-vnav__section {
-    color: var(--chronicle-fg-muted);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 6px 8px;
-    font-weight: 600;
-  }
-  .chronicle-vnav__item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    border-radius: var(--chronicle-radius-sm);
-    color: var(--chronicle-fg);
-    text-decoration: none;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background-color var(--chronicle-motion-fast) linear;
-  }
-  .chronicle-vnav__item:hover {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 4%);
-  }
-  .chronicle-vnav__item[aria-current="page"] {
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 8%);
-    color: var(--chronicle-accent);
-    font-weight: 500;
-  }
-  .chronicle-vnav__sub {
-    margin-left: 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-
-  /* ============================================================
-   * D.5 — Data variety: progress ring with text
-   * ============================================================ */
-
-  .chronicle-progress-ring {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    width: 64px;
-    height: 64px;
-  }
-  .chronicle-progress-ring svg { transform: rotate(-90deg); }
-  .chronicle-progress-ring__track { stroke: var(--chronicle-border); }
-  .chronicle-progress-ring__fill  { stroke: var(--chronicle-accent); transition: stroke-dashoffset var(--chronicle-motion-long) var(--chronicle-ease-standard); }
-  .chronicle-progress-ring__text {
-    position: absolute;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--chronicle-fg);
-  }
-
-  /* ============================================================
-   * D.7 — Overlay variety: tooltip variants, hover card
-   * ============================================================ */
-
-  .chronicle-tooltip--info    { background: color-mix(in oklch, var(--chronicle-neutral-900), var(--chronicle-accent) 20%); }
-  .chronicle-tooltip--warning { background: color-mix(in oklch, var(--chronicle-neutral-900), var(--chronicle-warning) 30%); }
-  .chronicle-tooltip--error   { background: color-mix(in oklch, var(--chronicle-neutral-900), var(--chronicle-danger) 30%); }
-
-  .chronicle-hover-card {
-    position: absolute;
-    background: var(--chronicle-surface-overlay);
-    border: 1px solid var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-md);
-    box-shadow: var(--chronicle-elev-3-shadow);
-    padding: 12px;
-    width: 240px;
-    z-index: 30;
-    font-size: 12px;
-    pointer-events: none;
-    opacity: 0;
-    transform: scale(0.96) translateY(4px);
-    transition:
-      opacity   var(--chronicle-motion-fast) var(--chronicle-ease-decelerate),
-      transform var(--chronicle-motion-fast) var(--chronicle-ease-decelerate);
-  }
-  .chronicle-hover-card[data-state="open"] {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-    pointer-events: auto;
-  }
-
-  /* ============================================================
-   * D.8 — Animation patterns
-   * ============================================================ */
-
-  /* Staggered list reveal */
-  .chronicle-stagger > * {
-    opacity: 0;
-    transform: translateY(8px);
-    transition:
-      opacity   var(--chronicle-motion-medium) var(--chronicle-ease-decelerate),
-      transform var(--chronicle-motion-medium) var(--chronicle-ease-decelerate);
-  }
-  .chronicle-stagger.is-revealed > * {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  .chronicle-stagger.is-revealed > *:nth-child(1) { transition-delay: 0ms; }
-  .chronicle-stagger.is-revealed > *:nth-child(2) { transition-delay: 50ms; }
-  .chronicle-stagger.is-revealed > *:nth-child(3) { transition-delay: 100ms; }
-  .chronicle-stagger.is-revealed > *:nth-child(4) { transition-delay: 150ms; }
-  .chronicle-stagger.is-revealed > *:nth-child(5) { transition-delay: 200ms; }
-  .chronicle-stagger.is-revealed > *:nth-child(6) { transition-delay: 250ms; }
-
-  /* Attention pulse */
-  .chronicle-attention-pulse {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: var(--chronicle-radius-full);
-    background: var(--chronicle-accent);
-    position: relative;
-  }
-  .chronicle-attention-pulse::before,
-  .chronicle-attention-pulse::after {
-    content: "";
-    position: absolute;
-    inset: -2px;
-    border-radius: inherit;
-    border: 2px solid var(--chronicle-accent);
-    opacity: 0;
-    animation: chronicle-attention-ring 1.6s var(--chronicle-ease-decelerate) infinite;
-  }
-  .chronicle-attention-pulse::after { animation-delay: 0.6s; }
-
-  @keyframes chronicle-attention-ring {
-    0%   { opacity: 0.8; transform: scale(1); }
-    100% { opacity: 0;   transform: scale(2.4); }
-  }
-
-  /* Success checkmark draw */
-  .chronicle-checkmark {
-    width: 48px;
-    height: 48px;
-  }
-  .chronicle-checkmark__circle {
-    stroke: var(--chronicle-success);
-    fill: none;
-    stroke-width: 2;
-    stroke-dasharray: 150;
-    stroke-dashoffset: 150;
-    animation: chronicle-checkmark-circle 0.6s var(--chronicle-ease-standard) forwards;
-  }
-  .chronicle-checkmark__path {
-    stroke: var(--chronicle-success);
-    fill: none;
-    stroke-width: 3;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-dasharray: 35;
-    stroke-dashoffset: 35;
-    animation: chronicle-checkmark-path 0.4s var(--chronicle-ease-decelerate) 0.4s forwards;
-  }
-  @keyframes chronicle-checkmark-circle { to { stroke-dashoffset: 0; } }
-  @keyframes chronicle-checkmark-path   { to { stroke-dashoffset: 0; } }
-
-  /* ============================================================
-   * D.9 — Layout patterns: master/detail
-   * ============================================================ */
-
-  .chronicle-master-detail {
-    display: grid;
-    grid-template-columns: 240px 1fr;
-    gap: 16px;
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius-md);
-    background: var(--chronicle-surface-card);
-    overflow: hidden;
-    min-height: 280px;
-  }
-  .chronicle-master-detail__list {
-    background: var(--chronicle-surface-low);
-    border-right: 1px solid var(--chronicle-border);
-    padding: 4px;
-    overflow-y: auto;
-    max-height: 320px;
-  }
-  .chronicle-master-detail__item {
-    padding: 8px 10px;
-    border-radius: var(--chronicle-radius-sm);
-    color: var(--chronicle-fg);
-    font-size: 13px;
-    cursor: pointer;
-    transition: background-color var(--chronicle-motion-fast) linear;
-  }
-  .chronicle-master-detail__item:hover {
-    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-fg) 4%);
-  }
-  .chronicle-master-detail__item[aria-selected="true"] {
-    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 10%);
-    color: var(--chronicle-accent);
-    font-weight: 500;
-  }
-  .chronicle-master-detail__detail {
-    padding: 16px;
-  }
-
-  /* ============================================================
-   * D.10 — Interactive Mock E.1 / E.3 hooks
-   * ============================================================ */
-
-  .chronicle-mock-card[data-mock-enabled="false"] {
-    opacity: 0.6;
-  }
-  .chronicle-mock-card[data-mock-active="true"] {
-    border-color: var(--chronicle-accent);
-    box-shadow: var(--chronicle-elev-2-shadow);
-    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 4%);
-  }
-  .chronicle-mock-toggle {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    width: 28px;
-    height: 16px;
-    background: var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-full);
-    cursor: pointer;
-    border: none;
-    padding: 0;
-    transition: background-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-mock-toggle::before {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 12px;
-    height: 12px;
-    background: oklch(1 0 0);
-    border-radius: var(--chronicle-radius-full);
-    transition: transform var(--chronicle-motion-base) var(--chronicle-ease-standard);
-  }
-  .chronicle-mock-toggle[aria-pressed="true"] { background: var(--chronicle-accent); }
-  .chronicle-mock-toggle[aria-pressed="true"]::before { transform: translateX(12px); }
-
-  /* Mock E.1 drawer (in-page interactive expansion) */
-  .chronicle-mock-drawer {
-    margin-top: 12px;
-    padding: 12px;
-    background: var(--chronicle-surface-low);
-    border: 1px solid var(--chronicle-border);
-    border-radius: var(--chronicle-radius);
-    overflow: hidden;
-    max-height: 0;
-    opacity: 0;
-    transition:
-      max-height var(--chronicle-motion-medium) var(--chronicle-ease-standard),
-      opacity    var(--chronicle-motion-medium) var(--chronicle-ease-standard),
-      padding    var(--chronicle-motion-medium) var(--chronicle-ease-standard),
-      margin-top var(--chronicle-motion-medium) var(--chronicle-ease-standard);
-    padding-block: 0;
-    margin-top: 0;
-  }
-  .chronicle-mock-drawer[data-open="true"] {
-    max-height: 480px;
-    opacity: 1;
-    padding: 12px;
-    margin-top: 12px;
-  }
-  .chronicle-mock-drawer__tabs {
-    display: flex;
-    gap: 4px;
-    border-bottom: 1px solid var(--chronicle-border);
-    margin-bottom: 10px;
-  }
-  .chronicle-mock-drawer__tab {
-    padding: 4px 10px;
-    border: none;
-    background: transparent;
-    border-bottom: 2px solid transparent;
-    color: var(--chronicle-fg-muted);
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .chronicle-mock-drawer__tab[aria-selected="true"] {
-    color: var(--chronicle-fg);
-    border-bottom-color: var(--chronicle-accent);
-  }
-  .chronicle-mock-drawer__panel { font-size: 12px; color: var(--chronicle-fg-muted); }
-  .chronicle-mock-drawer__panel:not([data-active="true"]) { display: none; }
-
-  /* Mock E.3 day-detail popover (in-page absolute positioning) */
-  .chronicle-mock-day-popover {
-    position: absolute;
-    background: var(--chronicle-surface-overlay);
-    border: 1px solid var(--chronicle-border-strong);
-    border-radius: var(--chronicle-radius-md);
-    box-shadow: var(--chronicle-elev-3-shadow);
-    padding: 10px;
-    width: 220px;
-    z-index: 40;
-    font-size: 12px;
-    pointer-events: none;
-    opacity: 0;
-    transform: scale(0.96);
-    transition:
-      opacity   var(--chronicle-motion-fast) var(--chronicle-ease-decelerate),
-      transform var(--chronicle-motion-fast) var(--chronicle-ease-decelerate);
-  }
-  .chronicle-mock-day-popover[data-open="true"] {
-    opacity: 1;
-    transform: scale(1);
-    pointer-events: auto;
-  }
-  .chronicle-mock-cal-container { position: relative; }
-  .chronicle-mock-cal__day {
-    cursor: pointer;
-    user-select: none;
-  }
-  .chronicle-mock-cal__day:hover {
-    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 4%);
-  }
-  .chronicle-mock-cal__day[data-selected="true"] {
-    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 12%);
-    border-color: var(--chronicle-accent);
-  }
-
-  /* Functional color picker live-preview swatch — operator clicks a
-   * swatch, sees the demo's accent update in real time. THE SCOPE
-   * is critical: this only mutates --chronicle-accent on the demo
-   * root, NEVER touches --color-accent-rgb. Per audit §6 +
-   * dispatch stop-and-flag #3. */
-  .chronicle-color-picker[data-functional="true"] .chronicle-color-picker__not-functional {
-    display: none;
   }
 
   /* ============================================================
@@ -4039,5 +1273,372 @@
     box-shadow: inset -20px 0 24px -12px color-mix(in oklch, transparent, var(--chronicle-accent) 12%);
   }
   [data-hover-style="navbar"] .chronicle-card:hover::before { opacity: 1; }
+
+  /* ============================================================
+   * Theme attribute fallbacks + dark-mode surface tokens
+   *
+   * The :root tokens above use light-dark() which resolves via
+   * the page color-scheme. Some browsers + the .dark class
+   * fallback need explicit overrides keyed off both the
+   * data-attribute (modern path) and the .dark class (fallback).
+   *
+   * Phase 1.7 default: cool gray-900 family (Tailwind v4 `gray`
+   * OKLCH) — matches the live site (input.css:140-161). The
+   * pure-neutral near-black stays available as data-chronicle-
+   * bg="black" via the choice-picker.
+   * ============================================================ */
+
+  [data-chronicle-demo][data-chronicle-demo-theme="light"] {
+    --chronicle-surface:         var(--chronicle-neutral-50);
+    --chronicle-surface-low:     var(--chronicle-neutral-100);
+    --chronicle-surface-card:    oklch(1 0 0);
+    --chronicle-surface-raised:  var(--chronicle-neutral-50);
+    --chronicle-surface-overlay: oklch(1 0 0);
+    --chronicle-fg:              var(--chronicle-neutral-900);
+    --chronicle-fg-muted:        var(--chronicle-neutral-600);
+    --chronicle-fg-subtle:       var(--chronicle-neutral-500);
+    --chronicle-border:          var(--chronicle-neutral-200);
+    --chronicle-border-strong:   var(--chronicle-neutral-300);
+  }
+
+  /* Dark mode default — cool gray-900 family (site match). The
+   * surfaces below carry a slight cool (blue) hue: a deliberate
+   * deviation from canon D2's "true neutral" stance. The choice-
+   * picker's bg-tint variant group surfaces this exact decision
+   * for the operator to resolve. */
+  [data-chronicle-demo][data-chronicle-demo-theme="dark"],
+  [data-chronicle-demo].dark {
+    --chronicle-surface:         oklch(0.21 0.034 264.665);  /* gray-900 */
+    --chronicle-surface-low:     oklch(0.13 0.028 261.692);  /* gray-950 — wells */
+    --chronicle-surface-card:    oklch(0.278 0.033 256.848); /* gray-800 */
+    --chronicle-surface-raised:  oklch(0.34 0.034 259.733);  /* hover step-up */
+    --chronicle-surface-overlay: oklch(0.278 0.033 256.848); /* gray-800 */
+    --chronicle-fg:              oklch(0.985 0.002 247.839); /* gray-50 */
+    --chronicle-fg-muted:        oklch(0.707 0.022 261.325); /* gray-400 */
+    --chronicle-fg-subtle:       oklch(0.551 0.027 264.364); /* gray-500 */
+    --chronicle-border:          oklch(0.373 0.034 259.733); /* gray-700 */
+    --chronicle-border-strong:   oklch(0.446 0.030 256.802); /* gray-600 */
+  }
+
+  /* ---------- Dark background-tint variants (choose-mode) ----------
+   * The choice-picker's "Dark background tint" group sets
+   * data-chronicle-bg on the demo root; these override the cool-grey
+   * default above. Higher specificity (.dark + [data-chronicle-bg]) so
+   * the picked option wins. Only dark mode is affected. */
+
+  /* A — near-black true-neutral (canon D2 "true neutral") */
+  [data-chronicle-demo].dark[data-chronicle-bg="black"],
+  [data-chronicle-demo][data-chronicle-demo-theme="dark"][data-chronicle-bg="black"] {
+    --chronicle-surface:         oklch(0.08 0 0);
+    --chronicle-surface-low:     oklch(0.05 0 0);
+    --chronicle-surface-card:    oklch(0.14 0 0);
+    --chronicle-surface-raised:  oklch(0.19 0 0);
+    --chronicle-surface-overlay: oklch(0.16 0 0);
+    --chronicle-border:          oklch(0.26 0 0);
+    --chronicle-border-strong:   oklch(0.34 0 0);
+  }
+  /* C — warm charcoal */
+  [data-chronicle-demo].dark[data-chronicle-bg="warm"],
+  [data-chronicle-demo][data-chronicle-demo-theme="dark"][data-chronicle-bg="warm"] {
+    --chronicle-surface:         oklch(0.21 0.012 60);
+    --chronicle-surface-low:     oklch(0.14 0.010 60);
+    --chronicle-surface-card:    oklch(0.27 0.012 60);
+    --chronicle-surface-raised:  oklch(0.33 0.013 60);
+    --chronicle-surface-overlay: oklch(0.27 0.012 60);
+    --chronicle-border:          oklch(0.37 0.013 60);
+    --chronicle-border-strong:   oklch(0.45 0.013 60);
+  }
+  /* D — elevated indigo-charcoal (the sidebar tone) */
+  [data-chronicle-demo].dark[data-chronicle-bg="elevated"],
+  [data-chronicle-demo][data-chronicle-demo-theme="dark"][data-chronicle-bg="elevated"] {
+    --chronicle-surface:         oklch(0.205 0.015 277);
+    --chronicle-surface-low:     oklch(0.16 0.013 277);
+    --chronicle-surface-card:    oklch(0.255 0.018 277);
+    --chronicle-surface-raised:  oklch(0.31 0.020 277);
+    --chronicle-surface-overlay: oklch(0.255 0.018 277);
+    --chronicle-border:          oklch(0.35 0.020 277);
+    --chronicle-border-strong:   oklch(0.43 0.022 277);
+  }
+  /* B (cool gray-900) is the baseline above — no override needed. */
+
+  /* ============================================================
+   * Phase 1.8 — Demo Diagnostics dashboard
+   *
+   * Server-rendered skeleton; the external JS fills it on init.
+   * Visible at top of page so operator's next failure report
+   * includes specific init-block status instead of "doesn't work."
+   * ============================================================ */
+
+  .chronicle-diagnostics {
+    margin: 0 0 20px 0;
+    padding: 14px 16px;
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-left: 3px solid color-mix(in oklch, var(--chronicle-fg-muted), transparent 60%);
+    border-radius: var(--chronicle-radius-md);
+    font-size: 12px;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-diagnostics[data-status="ok"] {
+    border-left-color: var(--chronicle-success);
+  }
+  .chronicle-diagnostics[data-status="fail"] {
+    border-left-color: var(--chronicle-danger);
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-danger) 4%);
+  }
+  .chronicle-diagnostics__head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 16px;
+    align-items: start;
+    margin-bottom: 12px;
+  }
+  .chronicle-diagnostics__title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    grid-column: 1;
+  }
+  .chronicle-diagnostics__title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-diagnostics__summary {
+    font-size: 12px;
+    color: var(--chronicle-fg-muted);
+    font-weight: 500;
+  }
+  .chronicle-diagnostics[data-status="ok"] .chronicle-diagnostics__summary {
+    color: var(--chronicle-success);
+  }
+  .chronicle-diagnostics[data-status="fail"] .chronicle-diagnostics__summary {
+    color: var(--chronicle-danger);
+    font-weight: 600;
+  }
+  .chronicle-diagnostics__hint {
+    grid-column: 1;
+    grid-row: 2;
+    margin: 0;
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+    line-height: 1.5;
+  }
+  .chronicle-diagnostics__head [data-copy-report] {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: start;
+    white-space: nowrap;
+  }
+  .chronicle-diagnostics__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .chronicle-diagnostics__col {
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+    padding: 8px 10px;
+    min-width: 0;
+  }
+  .chronicle-diagnostics__col-title {
+    margin: 0 0 6px 0;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-diagnostics__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .chronicle-diagnostics__item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: var(--chronicle-radius-sm);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .chronicle-diagnostics__item--ok {
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-success) 6%);
+    color: var(--chronicle-fg);
+  }
+  .chronicle-diagnostics__item--fail {
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-danger) 10%);
+    color: var(--chronicle-fg);
+    border: 1px solid color-mix(in oklch, var(--chronicle-danger), transparent 50%);
+  }
+  .chronicle-diagnostics__item--warn {
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-warning) 6%);
+    color: var(--chronicle-fg);
+  }
+  .chronicle-diagnostics__item--pending {
+    color: var(--chronicle-fg-muted);
+    font-style: italic;
+  }
+  .chronicle-diagnostics__status {
+    font-weight: 700;
+    font-family: var(--chronicle-font-mono, ui-monospace, monospace);
+    min-width: 1em;
+  }
+  .chronicle-diagnostics__item--ok .chronicle-diagnostics__status   { color: var(--chronicle-success); }
+  .chronicle-diagnostics__item--fail .chronicle-diagnostics__status { color: var(--chronicle-danger); }
+  .chronicle-diagnostics__item--warn .chronicle-diagnostics__status { color: var(--chronicle-warning); }
+  .chronicle-diagnostics__name {
+    flex: 1 1 auto;
+    word-break: break-word;
+  }
+  .chronicle-diagnostics__count {
+    font-family: var(--chronicle-font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-diagnostics__error {
+    flex-basis: 100%;
+    margin-top: 2px;
+    padding: 3px 6px;
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-danger) 8%);
+    border-radius: var(--chronicle-radius-sm);
+    font-family: var(--chronicle-font-mono, ui-monospace, monospace);
+    font-size: 10px;
+    color: var(--chronicle-danger);
+    word-break: break-word;
+  }
+  .chronicle-diagnostics__foot {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--chronicle-border);
+  }
+  .chronicle-diagnostics__ua code {
+    display: inline-block;
+    padding: 1px 6px;
+    background: var(--chronicle-surface-low);
+    border-radius: var(--chronicle-radius-sm);
+    font-size: 10px;
+    word-break: break-all;
+  }
+  .chronicle-diagnostics__log {
+    list-style: decimal;
+    margin: 4px 0 0 18px;
+    padding: 0;
+    max-height: 120px;
+    overflow-y: auto;
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-diagnostics__log li {
+    padding: 1px 0;
+  }
+
+  /* ============================================================
+   * Phase 1.8 — Preview area + preview drawer
+   *
+   * Small live-preview surface that updates as the operator
+   * Applies variants from the choice-picker above.
+   * ============================================================ */
+
+  .chronicle-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+  }
+  .chronicle-preview__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .chronicle-preview__row--cards {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .chronicle-preview__row--cards .chronicle-card {
+    max-width: 520px;
+  }
+  .chronicle-preview__label {
+    min-width: 72px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-preview__row .chronicle-input {
+    flex: 1 1 220px;
+    max-width: 320px;
+  }
+
+  .chronicle-preview-drawer {
+    margin-top: 14px;
+    padding: 0 16px;
+    background: var(--chronicle-surface-raised);
+    border: 1px solid var(--chronicle-border-strong);
+    border-radius: var(--chronicle-radius-md);
+    box-shadow: var(--chronicle-elev-3-shadow);
+    position: relative;
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      max-height var(--chronicle-motion-medium) var(--chronicle-ease-standard),
+      opacity    var(--chronicle-motion-base)   var(--chronicle-ease-standard),
+      padding    var(--chronicle-motion-medium) var(--chronicle-ease-standard);
+  }
+  .chronicle-preview-drawer[data-open="true"] {
+    max-height: 320px;
+    opacity: 1;
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+  .chronicle-preview-drawer__close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+    color: var(--chronicle-fg-muted);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      color            var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-preview-drawer__close:hover {
+    background: color-mix(in oklch, var(--chronicle-surface-raised), var(--chronicle-fg) 6%);
+    color: var(--chronicle-fg);
+    border-color: var(--chronicle-border-strong);
+  }
+  .chronicle-preview-drawer__title {
+    margin: 0 0 6px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-preview-drawer__body {
+    margin: 0;
+    font-size: 12px;
+    color: var(--chronicle-fg-muted);
+    line-height: 1.5;
+  }
 
 }  /* end @layer chronicle-demo */

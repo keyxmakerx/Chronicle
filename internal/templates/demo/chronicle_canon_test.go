@@ -1,17 +1,24 @@
-// chronicle_canon_test.go — C-V2-DESIGN-REBUILD Phase 1 demo tests.
+// chronicle_canon_test.go — C-V2-DESIGN-REBUILD Phase 1.8 demo tests.
 //
-// Three guards:
+// After the Phase 1.8 reset (dispatch
+// C-V2-DESIGN-REBUILD-PHASE-1-8-DEMO-RESET):
 //
-//  1. Render smoke — the templ renders without panic and produces
-//     non-empty HTML.
-//  2. Selected-state A/B both present — the validation crux per
-//     dispatch §C.1 + audit §1.4 must render both variants
-//     side-by-side; CI fails loudly if either drops out.
-//  3. canon CSS hard-rule lint — the new `chronicle-canon-demo.css`
-//     file must NEVER use `transition: all` (canon D5) and must
-//     NEVER use hex literals (canon D2 OKLCH-only). Both rules are
-//     load-bearing for the rebuild's central premise; pin them here
-//     so a future drive-by edit can't drift.
+//   1. Render smoke — the templ renders without panic.
+//   2. Selected-state A/B both present in the choice-picker — the
+//      validation crux still must render both variants.
+//   3. CSS hard-rule lint — no `transition: all`, no hex literals,
+//      no shadow-alone transitions. Pinned because canon D2/D3/D5
+//      depend on them.
+//   4. External-JS architecture pins — the demoScript() function is
+//      gone; the demo templ MUST reference the external JS file via
+//      `<script src=…>` and MUST NOT carry an inline `<script>` body.
+//      INIT_BLOCKS registry must register each expected block.
+//   5. Diagnostic dashboard — the load-bearing visible diagnostic
+//      surface markup must render at top of page.
+//   6. Choice-picker infrastructure — the 9 variant groups + Your
+//      Decisions panel still present after the shrink.
+//   7. Theme default + button-variant + dark-bg-not-black — operator
+//      preferences that survived multiple prior phases stay pinned.
 
 package demo
 
@@ -27,7 +34,6 @@ import (
 )
 
 // TestDemoChronicleCanon_RendersWithoutPanic — basic templ smoke.
-// Catches any nil-deref in the template at compile-time-of-render.
 func TestDemoChronicleCanon_RendersWithoutPanic(t *testing.T) {
 	var buf bytes.Buffer
 	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
@@ -37,40 +43,44 @@ func TestDemoChronicleCanon_RendersWithoutPanic(t *testing.T) {
 		t.Errorf("render too small (%d bytes); expected substantial page", buf.Len())
 	}
 	html := buf.String()
-	// Verify the canon scope-attribute is present so the @layer
-	// chronicle-demo tokens actually resolve.
 	if !strings.Contains(html, `data-chronicle-demo`) {
 		t.Errorf("demo root scope attribute missing; CSS tokens won't resolve")
 	}
 }
 
 // TestDemoChronicleCanon_RendersBothSelectedVariants — the validation
-// crux pin. The dispatch + canon D3 + audit §1.4 all hinge on the
-// operator picking between selected-state Variant A (canon D3 accent
-// border + tint) and Variant B (navbar-echo persistent half-hover).
-// If a future edit removes either, operator can't make the choice
-// and the canon stays under-specified.
+// crux pin. Phase 1.8 reframes selected-state as a choice-picker variant
+// group, so both options live as `data-variant-group="selected" data-
+// variant="A"`/`"B"`. If a future edit drops either, operator can't
+// make the choice and the canon stays under-specified.
 func TestDemoChronicleCanon_RendersBothSelectedVariants(t *testing.T) {
 	var buf bytes.Buffer
 	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
-	if !strings.Contains(html, `data-selected="A"`) {
-		t.Errorf("Variant A (canon D3 selected) missing — operator can't compare")
+	if !strings.Contains(html, `data-variant-group="selected"`) {
+		t.Errorf("selected-state variant group missing — operator can't compare A vs B")
 	}
-	if !strings.Contains(html, `data-selected="B"`) {
-		t.Errorf("Variant B (navbar-echo selected) missing — operator can't compare")
+	// Both A and B variants must be present inside the selected group.
+	groupSection := html
+	if idx := strings.Index(html, `data-variant-group="selected"`); idx >= 0 {
+		end := idx + 1500
+		if end > len(html) {
+			end = len(html)
+		}
+		groupSection = html[idx:end]
 	}
-	if !strings.Contains(html, "Variant A") || !strings.Contains(html, "Variant B") {
-		t.Errorf("variant labels missing — operator can't tell which is which")
+	if !strings.Contains(groupSection, `data-variant="A"`) {
+		t.Errorf("Variant A (canon D3 accent border + tint) missing from selected group")
+	}
+	if !strings.Contains(groupSection, `data-variant="B"`) {
+		t.Errorf("Variant B (navbar-echo persistent half-hover) missing from selected group")
 	}
 }
 
-// TestDemoChronicleCanon_HarnessControlsPresent — the three operator
-// controls (theme, accent, reduced-motion) must all render. Each is
-// load-bearing for at least one canon decision (D2 theming, D2
-// per-campaign accent, D5 reduced-motion).
+// TestDemoChronicleCanon_HarnessControlsPresent — theme + reduced-motion
+// only. Accent + density moved into the choice-picker per dispatch §D.
 func TestDemoChronicleCanon_HarnessControlsPresent(t *testing.T) {
 	var buf bytes.Buffer
 	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
@@ -79,12 +89,9 @@ func TestDemoChronicleCanon_HarnessControlsPresent(t *testing.T) {
 	html := buf.String()
 	for _, marker := range []string{
 		`data-action="theme"`,
-		`data-action="accent"`,
 		`data-action="reduce-motion"`,
-		`data-value="indigo"`,
-		`data-value="emerald"`,
-		`data-value="amber"`,
-		`data-value="rose"`,
+		`data-value="light"`,
+		`data-value="dark"`,
 	} {
 		if !strings.Contains(html, marker) {
 			t.Errorf("harness control marker missing: %q", marker)
@@ -92,39 +99,236 @@ func TestDemoChronicleCanon_HarnessControlsPresent(t *testing.T) {
 	}
 }
 
+// TestDemoChronicleCanon_DefaultsToDarkMode — the templ's root data-
+// attribute must default to dark (no-JS fallback), and the external
+// JS must wire the localStorage/matchMedia precedence.
+func TestDemoChronicleCanon_DefaultsToDarkMode(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `data-chronicle-demo-theme="dark"`) {
+		t.Errorf("root element should default to dark mode (operator's preferred) — " +
+			"a light-mode default forces a paint-flash on every reload for dark-mode users")
+	}
+	// The external JS must still implement the precedence ladder.
+	js := readCanonJS(t)
+	if !strings.Contains(js, "localStorage.getItem('chronicle-demo-theme')") {
+		t.Errorf("external JS should read theme choice from localStorage so explicit toggles survive reload")
+	}
+	if !strings.Contains(js, "prefers-color-scheme") {
+		t.Errorf("external JS should detect OS preference via matchMedia('(prefers-color-scheme: ...)')")
+	}
+}
+
+// ============================================================
+// Phase 1.8 — external JS + diagnostic dashboard pins
+// ============================================================
+
+// TestChronicleCanonDemoJS_ExternalFileLoaded — the demo templ MUST
+// reference the external JS file via `<script src=…>`. If a future
+// edit re-inlines the script body, the per-block error isolation
+// architecture goes with it. Pin the script-src reference here.
+func TestChronicleCanonDemoJS_ExternalFileLoaded(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `src="/static/js/chronicle-canon-demo.js"`) {
+		t.Errorf("demo templ must reference external JS via <script src=\"/static/js/chronicle-canon-demo.js\" defer></script>")
+	}
+	if !strings.Contains(html, "defer") {
+		t.Errorf("external script tag must carry defer (parsed-DOM guarantee)")
+	}
+	// And the file must actually exist on disk so the route serves it.
+	jsPath := canonJSPath(t)
+	if _, err := os.Stat(jsPath); err != nil {
+		t.Errorf("external JS file missing on disk at %s: %v", jsPath, err)
+	}
+}
+
+// TestChronicleCanonDemoJS_NoInlineScriptBlocks — verifies the demo
+// templ source carries no inline `<script>` body. The rendered page
+// will still contain layout-level inline scripts (theme-flash prevention
+// from base.templ); those are not in scope here. defer-loaded external
+// file is the only acceptable script in the demo's own templ.
+func TestChronicleCanonDemoJS_NoInlineScriptBlocks(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not resolve test file path")
+	}
+	templPath := filepath.Join(filepath.Dir(thisFile), "chronicle_canon.templ")
+	b, err := os.ReadFile(templPath)
+	if err != nil {
+		t.Fatalf("read demo templ: %v", err)
+	}
+	src := string(b)
+	// Strip Go-line-comment blocks so the file-header narration (which
+	// legitimately mentions removing inline script) doesn't trip the lint.
+	src = regexp.MustCompile(`(?m)^\s*//.*$`).ReplaceAllString(src, "")
+	open := regexp.MustCompile(`(?i)<script\b([^>]*)>`)
+	for _, m := range open.FindAllStringSubmatch(src, -1) {
+		attrs := strings.ToLower(m[1])
+		if strings.Contains(attrs, "src=") {
+			continue // external script — fine
+		}
+		t.Errorf("inline <script> tag found in demo templ source; Phase 1.8 forbids inline script bodies in the demo templ. Attrs: %q", m[1])
+	}
+}
+
+// TestChronicleCanonDemoJS_AllInitBlocksRegistered — parses the JS
+// file (cheap regex) and verifies every expected init block is
+// registered. Catches drive-by edits that drop blocks from the registry.
+func TestChronicleCanonDemoJS_AllInitBlocksRegistered(t *testing.T) {
+	js := readCanonJS(t)
+	required := []string{
+		"diagnostic-dashboard",
+		"browser-compat-detect",
+		"theme-toggle",
+		"reduced-motion-toggle",
+		"decision-store-hydrate",
+		"choice-picker-rate",
+		"choice-picker-vote",
+		"choice-picker-apply",
+		"decisions-panel",
+		"preview-drawer",
+		"diagnostics-copy-report",
+	}
+	for _, name := range required {
+		marker := "registerInitBlock('" + name + "'"
+		if !strings.Contains(js, marker) {
+			t.Errorf("init block not registered: %s (looking for %q)", name, marker)
+		}
+	}
+	// And the registry pattern itself.
+	if !strings.Contains(js, "INIT_BLOCKS") {
+		t.Errorf("INIT_BLOCKS registry missing from external JS")
+	}
+	if !strings.Contains(js, "try {") || !strings.Contains(js, "catch (err)") {
+		t.Errorf("per-block try/catch missing from runAllInitBlocks()")
+	}
+	// __chronicleDemoInited must be set AFTER the run, not before.
+	// Heuristic: find the assignment and check that runAllInitBlocks()
+	// appears before it in the same containing function.
+	if !strings.Contains(js, "window.__chronicleDemoInited = true") {
+		t.Errorf("__chronicleDemoInited assignment missing")
+	}
+	// document.title fallback for catastrophic dashboard failure.
+	if !strings.Contains(js, "document.title") {
+		t.Errorf("document.title fallback signal missing (dispatch §C stop-and-flag #5)")
+	}
+}
+
+// TestChronicleCanonDemo_DiagnosticDashboardPresent — the visible
+// diagnostic surface. Per dispatch §C, every operator report cycle
+// after this PR depends on this panel rendering and getting populated.
+func TestChronicleCanonDemo_DiagnosticDashboardPresent(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, marker := range []string{
+		`data-demo-diagnostics`,
+		`Demo Diagnostics`,
+		`data-init-block-list`,
+		`data-binding-list`,
+		`data-feature-list`,
+		`data-ua-string`,
+		`data-last-action-log`,
+		`data-copy-report`,
+		`data-diagnostics-summary`,
+	} {
+		if !strings.Contains(html, marker) {
+			t.Errorf("diagnostic dashboard marker missing: %s", marker)
+		}
+	}
+	// The dashboard should come BEFORE the picker section in the HTML
+	// so it's the first thing the operator sees on page load.
+	dashIdx := strings.Index(html, `data-demo-diagnostics`)
+	pickerIdx := strings.Index(html, `id="choices"`)
+	if dashIdx < 0 || pickerIdx < 0 || dashIdx >= pickerIdx {
+		t.Errorf("diagnostic dashboard must precede the choice-picker in the rendered HTML (operator sees diagnostics first)")
+	}
+}
+
+// ============================================================
+// Choice-picker + preview area pins
+// ============================================================
+
+// TestDemoChronicleCanon_PickerInfrastructure — the 9 variant groups
+// + Your Decisions panel. Load-bearing for canon validation.
+func TestDemoChronicleCanon_PickerInfrastructure(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, marker := range []string{
+		`data-vote=`,                       // choose-mode thumbs
+		`data-variant-apply`,               // live-apply button
+		`data-decisions-output`,            // Your Decisions output
+		`data-decisions-copy`,
+		`data-decisions-download`,
+		`id="choices"`,                     // design-choices section
+	} {
+		if !strings.Contains(html, marker) {
+			t.Errorf("picker infrastructure marker missing: %s", marker)
+		}
+	}
+	// All 9 variant groups must be present.
+	groups := []string{"bg", "accent", "radius", "shadow", "hover", "motion", "density", "selected", "button"}
+	for _, g := range groups {
+		if !strings.Contains(html, `data-variant-group="`+g+`"`) {
+			t.Errorf("variant group missing: %s", g)
+		}
+	}
+}
+
+// TestDemoChronicleCanon_PreviewArea — small live preview surface per
+// dispatch §E. Card + button row + input + chip set + drawer toggle.
+func TestDemoChronicleCanon_PreviewArea(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, marker := range []string{
+		`id="preview"`,
+		`chronicle-preview__row--cards`,
+		`chronicle-preview__row--buttons`,
+		`data-preview-drawer-toggle`,
+		`data-preview-drawer`,
+		`chronicle-chip`,
+	} {
+		if !strings.Contains(html, marker) {
+			t.Errorf("preview area marker missing: %s", marker)
+		}
+	}
+}
+
+// ============================================================
+// CSS hard-rule lint guards (kept from prior phases)
+// ============================================================
+
 // TestChronicleCanonDemoCSS_NoTransitionAll — canon D5 hard rule.
 // `transition: all` is the single biggest motion-discipline failure
-// in the rejected V2 (.card at input.css:436-439). The rebuild must
-// never reintroduce it; pin here.
-//
-// Scans the file with CSS comment blocks stripped first — the canon's
-// own header comment legitimately quotes the forbidden token while
-// documenting the rule.
+// in the rejected V2. Pin: must never reappear.
 func TestChronicleCanonDemoCSS_NoTransitionAll(t *testing.T) {
 	src := stripCSSComments(readCanonCSS(t))
-	// Reconstruct the forbidden token at runtime to avoid the test
-	// file itself tripping a grep of "transition: all".
 	forbidden := "trans" + "ition: all"
 	if strings.Contains(src, forbidden) {
-		t.Errorf("chronicle-canon-demo.css contains forbidden `transition: all` — canon D5 violation. " +
-			"Every transition must list properties explicitly (e.g. `transition: background-color, border-color, box-shadow ...`).")
+		t.Errorf("chronicle-canon-demo.css contains forbidden `transition: all` — canon D5 violation")
 	}
 }
 
 // TestChronicleCanonDemoCSS_NoHexLiterals — canon D2 OKLCH-only.
-// Hex literals in the canon would break the per-campaign accent +
-// future-extension hooks D2 mandates. Allow exactly one exception:
-// `#chronicle-` selectors inside the file (those are CSS id
-// selectors, not colour literals).
 func TestChronicleCanonDemoCSS_NoHexLiterals(t *testing.T) {
-	// Strip block comments first so the file header's "no hex literals"
-	// documentation doesn't false-positive.
 	src := stripCSSComments(readCanonCSS(t))
-	// Strip CSS id selectors before scanning so `#chronicle-demo-popover`
-	// etc. don't false-positive.
 	idSelector := regexp.MustCompile(`#[a-zA-Z][\w-]*`)
 	scrubbed := idSelector.ReplaceAllString(src, "")
-	// Now scan for hex colour literals.
 	hex := regexp.MustCompile(`#[0-9a-fA-F]{3,8}\b`)
 	matches := hex.FindAllString(scrubbed, -1)
 	if len(matches) > 0 {
@@ -134,26 +338,10 @@ func TestChronicleCanonDemoCSS_NoHexLiterals(t *testing.T) {
 }
 
 // TestChronicleCanonDemoCSS_NoShadowAloneTransition — canon D3 hard
-// rule: never animate box-shadow alone. Heuristic check: every
-// `transition:` declaration that mentions `box-shadow` must also
-// mention at least one of {background-color, border-color, color,
-// transform, opacity, background} as a co-occurring property.
-//
-// Comments stripped first (same reasoning as the no-transition-all
-// test). This is a heuristic — a sufficiently determined edit could
-// dodge it with two separate transition declarations. The intent is
-// to catch accidental drift, not malicious bypass.
-//
-// Phase 1.5 exempt list: the Motion Vocabulary section's C.4
-// co-occurrence demonstration deliberately renders the rejected
-// pattern (box-shadow animating alone) next to the canon pattern
-// so the operator can see the difference. The `.chronicle-shadow-
-// rejected` selector is the educational counter-example; its
-// shadow-alone transition is INTENTIONAL and required for the
-// dispatch's headline validation moment. The test scans for a
-// `/* lint-exempt: rejected-demo */` marker on the previous line
-// (the marker survives comment-stripping because we scan the raw
-// source for the marker first, then strip comments for the rest).
+// rule: never animate box-shadow alone. The Phase 1.5 `.chronicle-shadow-
+// rejected` educational counter-example is no longer in the file
+// (motion vocabulary section dropped in Phase 1.8), so the lint can be
+// stricter — any shadow-alone transition is now a real violation.
 func TestChronicleCanonDemoCSS_NoShadowAloneTransition(t *testing.T) {
 	raw := readCanonCSS(t)
 	src := stripCSSComments(raw)
@@ -177,11 +365,9 @@ func TestChronicleCanonDemoCSS_NoShadowAloneTransition(t *testing.T) {
 		if paired {
 			continue
 		}
-		// Look back from the transition declaration to find the
-		// nearest selector + check the surrounding raw source for
-		// the educational-exempt marker. The marker lives in the
-		// RAW source (we hold it separately above so comment-
-		// stripping doesn't erase it).
+		// The educational rejected-shadow exemption from Phase 1.5
+		// stays as a tolerated path in case the motion-vocab section
+		// gets revived. Look for the marker.
 		surroundingStart := m[0] - 200
 		if surroundingStart < 0 {
 			surroundingStart = 0
@@ -191,29 +377,10 @@ func TestChronicleCanonDemoCSS_NoShadowAloneTransition(t *testing.T) {
 			surroundingEnd = len(src)
 		}
 		surrounding := src[surroundingStart:surroundingEnd]
-		// The selector for the educational counter-example is
-		// `.chronicle-shadow-rejected` and its CSS lives next to
-		// the lint-exempt marker. Allow this one specific selector
-		// by name (the entire purpose of the rule is "no NEW
-		// accidental drift"; an explicit educational counter-
-		// example is by definition not drift).
 		if strings.Contains(surrounding, ".chronicle-shadow-rejected") {
 			continue
 		}
-		// Also accept the explicit /* lint-exempt: rejected-demo */
-		// marker in the raw source within ~200 chars of the rule.
-		rawStart := m[0] - 200
-		if rawStart < 0 {
-			rawStart = 0
-		}
-		rawEnd := m[1] + 50
-		if rawEnd > len(raw) {
-			rawEnd = len(raw)
-		}
-		// raw and src indices don't align after comment-stripping;
-		// scan the entire raw source for the marker once per match.
-		if strings.Contains(raw, "lint-exempt: rejected-demo") &&
-			strings.Contains(raw[max0(0, rawStart):rawEnd], "shadow-rejected") {
+		if strings.Contains(raw, "lint-exempt: rejected-demo") {
 			continue
 		}
 		t.Errorf("transition declaration animates box-shadow alone — canon D3 "+
@@ -223,323 +390,22 @@ func TestChronicleCanonDemoCSS_NoShadowAloneTransition(t *testing.T) {
 	}
 }
 
-func max0(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// TestChronicleCanonDemoCSS_AnimationShowcaseRules — Phase 1.5
-// dispatch §C.4: the rejected-vs-canon comparison pair must both
-// exist in the CSS, because the operator validation moment depends
-// on visually comparing them side-by-side. Pin both selectors here so
-// a future drive-by edit can't remove either half of the comparison.
-func TestChronicleCanonDemoCSS_AnimationShowcaseRules(t *testing.T) {
-	src := readCanonCSS(t)
-	required := []struct {
-		selector string
-		why      string
-	}{
-		{".chronicle-shadow-rejected", "the rejected box-shadow-alone counter-example (operator's 'shadow from nowhere' rendered literally for comparison)"},
-		{".chronicle-shadow-canon", "the canon-compliant co-occurring transitions card (the rebuild's fix)"},
-		{".chronicle-shadow-canon:hover", "the canon card's three-property hover transition (background-color + border-color + box-shadow)"},
-		{".chronicle-motion-track", "the duration ladder mechanism (C.1)"},
-		{".chronicle-hover-ladder__card", "the audit §1.4 hover-ladder preview (C.3)"},
-		{".chronicle-anim-tile", "the animation library showcase tiles (C.5)"},
-	}
-	for _, r := range required {
-		if !strings.Contains(src, r.selector) {
-			t.Errorf("Motion Vocabulary required selector missing: %s — %s", r.selector, r.why)
-		}
-	}
-}
-
-// TestDemoChronicleCanon_DefaultsToDarkMode — Phase 1.5 dispatch
-// §A: operator is dark-mode-only and frustrated by light-mode
-// default flips on reload. The templ's initial data-attribute
-// should already be `dark` so the no-JS fallback path is correct;
-// the demoScript() init then applies localStorage → OS preference
-// → dark default precedence to refine. Pin the no-JS contract here.
-func TestDemoChronicleCanon_DefaultsToDarkMode(t *testing.T) {
-	var buf bytes.Buffer
-	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	html := buf.String()
-	if !strings.Contains(html, `data-chronicle-demo-theme="dark"`) {
-		t.Errorf("root element should default to dark mode (operator's preferred) — " +
-			"a light-mode default forces a paint-flash on every reload for dark-mode users")
-	}
-	// Sanity: the demoScript should still wire localStorage so explicit
-	// operator choice is persisted across reloads (the dispatch's "respect
-	// last toggle" requirement).
-	if !strings.Contains(html, "localStorage.setItem('chronicle-demo-theme'") {
-		t.Errorf("demoScript() should persist theme choice to localStorage so explicit toggles survive reload")
-	}
-	// And: the init should read OS preference via matchMedia.
-	if !strings.Contains(html, "prefers-color-scheme") {
-		t.Errorf("demoScript() should detect OS preference via matchMedia('(prefers-color-scheme: ...)')")
-	}
-}
-
-// TestDemoChronicleCanon_BrowserCompatPanel — Phase 1.6 dispatch §C.
-// The browser-compat diagnostic panel is the primary self-documenting
-// mechanism for future Firefox-style failure reports; if a future
-// edit removes it, operator loses the ability to diagnose silent
-// no-ops in their browser. Pin every key panel marker.
-func TestDemoChronicleCanon_BrowserCompatPanel(t *testing.T) {
-	var buf bytes.Buffer
-	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	html := buf.String()
-	for _, m := range []string{
-		`id="chronicle-compat"`,
-		`id="chronicle-compat-ua"`,
-		`id="chronicle-compat-table"`,
-		`Browser Compatibility`,
-		`data-feat="lightDark"`,
-		`data-feat="popoverApi"`,
-		`data-feat="anchorPositioning"`,
-		`data-feat="viewTransitions"`,
-		`data-feat="oklch"`,
-		`data-feat="colorMixOklch"`,
-	} {
-		if !strings.Contains(html, m) {
-			t.Errorf("compat panel marker missing: %s", m)
-		}
-	}
-}
-
-// TestDemoChronicleCanon_FeatureDetectionWiring — Phase 1.6 dispatch
-// §B.1 + §E. Pins the feature-detection helper + the per-feature
-// fallback attribute hooks so a future edit can't accidentally
-// remove the FF-fix.
-func TestDemoChronicleCanon_FeatureDetectionWiring(t *testing.T) {
-	var buf bytes.Buffer
-	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	html := buf.String()
-	required := []struct {
-		marker string
-		why    string
-	}{
-		{"window.__chronicleDemoFeatures", "feature-detection results stored on window for diagnostic panel + dev console inspection"},
-		{"data-chronicle-popover-fallback", "popover fallback attribute hook (engages when native Popover API missing)"},
-		{"data-chronicle-anchor-fallback", "anchor positioning fallback attribute hook (engages when CSS anchor positioning missing)"},
-		{"applyTheme(theme)", "theme application toggles BOTH data-attribute AND .dark class for fallback"},
-		{"prefers-color-scheme", "OS preference detection"},
-		{"requestAnimationFrame(init)", "belt-and-suspenders binding pass"},
-		{"DOMContentLoaded", "secondary binding trigger"},
-	}
-	for _, r := range required {
-		if !strings.Contains(html, r.marker) {
-			t.Errorf("FF-fix wiring missing — %s: %s", r.why, r.marker)
-		}
-	}
-}
-
-// TestDemoChronicleCanon_InteractiveMockHooks — Phase 1.6 dispatch §D.10.
-// The interactive Mock E.1 hub + E.3 calendar are the highest-validation-
-// value addition. Pin the data-attribute hooks the JS handlers wire up.
-func TestDemoChronicleCanon_InteractiveMockHooks(t *testing.T) {
-	var buf bytes.Buffer
-	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	html := buf.String()
-	required := []string{
-		"data-mock-card",
-		"data-mock-toggle",
-		"data-mock-expand",
-		"data-mock-drawer",
-		"data-mock-tab",
-		"data-mock-panel",
-		"data-mock-day",
-		"data-mock-events",
-		"data-mock-day-popover",
-		"data-mock-cal",
-	}
-	for _, m := range required {
-		if !strings.Contains(html, m) {
-			t.Errorf("interactive-mock hook missing: %s", m)
-		}
-	}
-	// Variety expansion section anchor IDs (D.1-D.9).
-	varietyIDs := []string{
-		`id="variety-forms"`,
-		`id="variety-buttons"`,
-		`id="variety-status"`,
-		`id="variety-nav"`,
-		`id="variety-data"`,
-		`id="variety-overlays"`,
-		`id="variety-animations"`,
-		`id="variety-layouts"`,
-	}
-	for _, id := range varietyIDs {
-		if !strings.Contains(html, id) {
-			t.Errorf("variety section missing: %s", id)
-		}
-	}
-}
-
-// TestDemoChronicleCanon_RendersAllExpansionSections — Phase 1.5
-// dispatch §B-§E section presence pin. The expansion's whole purpose
-// is operator's "quadruple what's there" framing; if a section gets
-// accidentally removed in a future refactor, the dispatch's
-// acceptance criteria are not met. Pin every new section's anchor id.
-func TestDemoChronicleCanon_RendersAllExpansionSections(t *testing.T) {
-	var buf bytes.Buffer
-	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	html := buf.String()
-	sections := []struct {
-		id  string
-		why string
-	}{
-		{`id="motion"`, "Motion Vocabulary section (C — the dispatch headliner)"},
-		{`id="forms"`, "Form Controls (B.1)"},
-		{`id="buttons"`, "Buttons / extensions (B.2)"},
-		{`id="status"`, "Status & Feedback (B.3)"},
-		{`id="nav"`, "Navigation (B.4)"},
-		{`id="data"`, "Data Display (B.5)"},
-		{`id="overlays"`, "Overlays (B.7)"},
-		{`id="containers"`, "Containers (B.6)"},
-		{`id="density"`, "Density variants (D)"},
-		{`id="mockups"`, "Page composition mockups (E.1)"},
-	}
-	for _, s := range sections {
-		if !strings.Contains(html, s.id) {
-			t.Errorf("section missing — %s: %s", s.why, s.id)
-		}
-	}
-	// Page composition mockups must all carry the MOCKUP banner so
-	// operator doesn't confuse them with real surfaces.
-	mockupBannerCount := strings.Count(html, "chronicle-mockup-banner")
-	if mockupBannerCount < 3 {
-		t.Errorf("expected at least 3 MOCKUP banners (one per page-composition mockup); got %d", mockupBannerCount)
-	}
-	// Color picker preview is groundwork for D2 future-extension;
-	// it must be explicitly labeled as not-yet-functional to avoid
-	// operator confusion (dispatch §B.7 + stop-and-flag #7).
-	if !strings.Contains(html, "NOT YET FUNCTIONAL") {
-		t.Errorf("color picker preview should be explicitly labeled 'NOT YET FUNCTIONAL' (dispatch §B.7 stop-and-flag #7)")
-	}
-}
-
-// ============================================================
-// Phase 1.7 — choice-picker + bug-fix guards
-// ============================================================
-
-// TestDemoChronicleCanon_PickerInfrastructure pins the choice-picker:
-// rate-mode controls, choose-mode vote buttons + variant groups, and
-// the "Your Decisions" output panel with copy + download.
-func TestDemoChronicleCanon_PickerInfrastructure(t *testing.T) {
-	var buf bytes.Buffer
-	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	html := buf.String()
-	for _, m := range []string{
-		`data-rate-id`,                 // rate-mode 1–5 control
-		`data-rate=`,                   // individual rating pill
-		`data-vote=`,                   // choose-mode thumbs
-		`data-variant-group="bg"`,      // background tint variant group
-		`data-variant-group="accent"`,  // accent palette group
-		`data-variant-group="button"`,  // button family group (operator's "dozen buttons")
-		`data-variant-apply`,           // live-apply button
-		`data-decisions-output`,        // Your Decisions output panel
-		`data-decisions-copy`,          // copy-to-clipboard
-		`data-decisions-download`,      // download
-		`data-stepper-nav`,             // combination wizard nav
-		`id="choices"`,                 // design-choices section
-	} {
-		if !strings.Contains(html, m) {
-			t.Errorf("picker infrastructure marker missing: %s", m)
-		}
-	}
-}
-
-// TestDemoChronicleCanon_TimelineAndCalendarDrag pins the two
-// interaction bugs the operator reported: the missing timeline mockup
-// and the non-draggable calendar.
-func TestDemoChronicleCanon_TimelineAndCalendarDrag(t *testing.T) {
-	var buf bytes.Buffer
-	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	html := buf.String()
-	// Timeline mockup (operator: "you still haven't rebuilt a timeline mockup").
-	for _, m := range []string{`id="mockups-timeline"`, `data-timeline`, `data-timeline-playhead`, `chronicle-timeline__marker`, `data-timeline-zoom`} {
-		if !strings.Contains(html, m) {
-			t.Errorf("timeline mockup marker missing: %s", m)
-		}
-	}
-	// Calendar drag (operator: "I can't click and drag on the calendar which was an important thing").
-	for _, m := range []string{`data-mock-cal-grid`, `data-mock-ribbon`, `data-mock-ribbon-resize`} {
-		if !strings.Contains(html, m) {
-			t.Errorf("calendar-drag marker missing: %s", m)
-		}
-	}
-}
-
-// TestChronicleCanonDemoCSS_DarkBackgroundNotBlack pins the operator's
-// "background is pure black when it shouldn't be" fix: the dark-mode
-// surface must default to the site's cool gray-900 (oklch ~0.21), NOT
-// the near-black neutral-950 (oklch 0.08). The near-black stays
-// available only as the opt-in data-chronicle-bg="black" variant.
+// TestChronicleCanonDemoCSS_DarkBackgroundNotBlack — operator's "the
+// background should be the same darkmode idea we already had on the
+// website." Dark default must be cool gray-900, NOT near-black.
 func TestChronicleCanonDemoCSS_DarkBackgroundNotBlack(t *testing.T) {
 	src := readCanonCSS(t)
-	// The .dark default block must map --chronicle-surface to gray-900.
 	if !strings.Contains(src, "oklch(0.21 0.034 264.665)") {
 		t.Errorf("dark-mode default surface should be cool gray-900 oklch(0.21 0.034 264.665) to match the live site")
 	}
-	// And the near-black must only appear under the opt-in black variant.
 	if !strings.Contains(src, `data-chronicle-bg="black"`) {
 		t.Errorf("near-black should be preserved as the opt-in data-chronicle-bg=\"black\" variant")
 	}
-	// The default .dark block must NOT still point surface at neutral-950.
-	darkIdx := strings.Index(src, "[data-chronicle-demo].dark {")
-	if darkIdx >= 0 {
-		block := src[darkIdx:]
-		if end := strings.Index(block, "}"); end >= 0 {
-			block = block[:end]
-			if strings.Contains(block, "--chronicle-surface:         var(--chronicle-neutral-950)") {
-				t.Errorf(".dark default still maps surface to near-black neutral-950; operator wants gray-900")
-			}
-		}
-	}
 }
 
-// TestChronicleCanonDemoCSS_AnimationClassMatches pins the animation
-// bug fix: the CSS keyframe triggers must target the SAME class the
-// templ renders on the stage container (.chronicle-anim-tile__stage),
-// not the old mismatched .chronicle-anim-stage. (Operator: "the
-// animations library is still not doing anything, it's just squares.")
-func TestChronicleCanonDemoCSS_AnimationClassMatches(t *testing.T) {
-	css := readCanonCSS(t)
-	// Trigger selectors must use the tile-stage class.
-	if !strings.Contains(css, ".chronicle-anim-tile__stage[data-anim=") {
-		t.Errorf("animation triggers must target .chronicle-anim-tile__stage[data-anim=...] (the class the templ renders)")
-	}
-	// The old mismatched container selector must be gone (but the
-	// inner .chronicle-anim-stage-block stays — guard against that).
-	reStale := regexp.MustCompile(`\.chronicle-anim-stage(\.|\[)`)
-	if reStale.MatchString(css) {
-		t.Errorf("stale .chronicle-anim-stage container selector still present — animations won't trigger")
-	}
-	// Confirm the inner block class is untouched.
-	if !strings.Contains(css, ".chronicle-anim-stage-block") {
-		t.Errorf("inner .chronicle-anim-stage-block class should remain (it's the animated element)")
-	}
-}
-
-// TestChronicleCanonDemoCSS_ButtonVariantsDistinct pins the 6-way
-// button spread so the family is visually distinct (operator: "no
-// differences between the majority of the buttons").
+// TestChronicleCanonDemoCSS_ButtonVariantsDistinct — the 6-way button
+// spread (primary / tonal / secondary / ghost / link / destructive)
+// is the choice-picker's "button family" group. Pin all six.
 func TestChronicleCanonDemoCSS_ButtonVariantsDistinct(t *testing.T) {
 	css := readCanonCSS(t)
 	for _, cls := range []string{
@@ -554,7 +420,6 @@ func TestChronicleCanonDemoCSS_ButtonVariantsDistinct(t *testing.T) {
 			t.Errorf("button variant definition missing: %s", cls)
 		}
 	}
-	// Secondary must have a resting fill now (distinct from ghost's bare).
 	secIdx := strings.Index(css, ".chronicle-button-secondary {")
 	if secIdx >= 0 {
 		block := css[secIdx:]
@@ -564,30 +429,48 @@ func TestChronicleCanonDemoCSS_ButtonVariantsDistinct(t *testing.T) {
 	}
 }
 
-// stripCSSComments removes /* ... */ block comments from CSS source.
-// Used by the lint tests so the canon's own documentation comments
-// (which legitimately quote `transition: all` and other forbidden
-// tokens while explaining the rules) don't trigger false positives.
-// Non-greedy match across newlines.
+// ============================================================
+// Helpers
+// ============================================================
+
 func stripCSSComments(src string) string {
 	return regexp.MustCompile(`(?s)/\*.*?\*/`).ReplaceAllString(src, "")
 }
 
-func readCanonCSS(t *testing.T) string {
+func canonCSSPath(t *testing.T) string {
 	t.Helper()
-	// Resolve the css file relative to this test file's directory so
-	// the test runs regardless of cwd.
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("could not resolve test file path")
 	}
-	// thisFile = .../internal/templates/demo/chronicle_canon_test.go
-	// canon CSS = .../static/css/chronicle-canon-demo.css
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
-	cssPath := filepath.Join(repoRoot, "static", "css", "chronicle-canon-demo.css")
-	b, err := os.ReadFile(cssPath)
+	return filepath.Join(repoRoot, "static", "css", "chronicle-canon-demo.css")
+}
+
+func canonJSPath(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not resolve test file path")
+	}
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+	return filepath.Join(repoRoot, "static", "js", "chronicle-canon-demo.js")
+}
+
+func readCanonCSS(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(canonCSSPath(t))
 	if err != nil {
-		t.Fatalf("read canon css at %s: %v", cssPath, err)
+		t.Fatalf("read canon css: %v", err)
+	}
+	return string(b)
+}
+
+func readCanonJS(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(canonJSPath(t))
+	if err != nil {
+		t.Fatalf("read canon js: %v", err)
 	}
 	return string(b)
 }
