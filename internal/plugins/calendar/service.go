@@ -43,6 +43,13 @@ type CalendarService interface {
 	GetActiveCalendar(ctx context.Context, userID, campaignID string) (*Calendar, error)
 	SwitchActiveCalendar(ctx context.Context, userID, campaignID, calendarID string) error
 
+	// Sidebar pin preference (V2 Wave 1.7A §G). Default TRUE on
+	// initial read (matches viewport-aware default + migration 007
+	// backfill). SetSidebarPinned upserts via the existing
+	// calendar_active row.
+	GetSidebarPinned(ctx context.Context, userID, campaignID string) (bool, error)
+	SetSidebarPinned(ctx context.Context, userID, campaignID string, pinned bool) error
+
 	// Sub-resource bulk updates (replace all).
 	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
 	SetWeekdays(ctx context.Context, calendarID string, weekdays []WeekdayInput) error
@@ -574,6 +581,26 @@ func (s *calendarService) SwitchActiveCalendar(ctx context.Context, userID, camp
 		return apperror.NewForbidden("calendar does not belong to this campaign")
 	}
 	return s.repo.SetActiveCalendar(ctx, userID, campaignID, calendarID)
+}
+
+// GetSidebarPinned returns the user's sidebar pin preference for the
+// campaign. Anonymous users (empty user_id) default to TRUE — no
+// per-anonymous persistence; just the platform default.
+func (s *calendarService) GetSidebarPinned(ctx context.Context, userID, campaignID string) (bool, error) {
+	if userID == "" {
+		return true, nil
+	}
+	return s.repo.GetSidebarPinned(ctx, userID, campaignID)
+}
+
+// SetSidebarPinned persists the user's sidebar pin preference.
+// Empty user_id rejects — anonymous toggle isn't persisted (operator
+// would just see default on next page load).
+func (s *calendarService) SetSidebarPinned(ctx context.Context, userID, campaignID string, pinned bool) error {
+	if userID == "" {
+		return apperror.NewValidation("user_id required to set sidebar pin")
+	}
+	return s.repo.SetSidebarPinned(ctx, userID, campaignID, pinned)
 }
 
 // SetMonths replaces all months. Validates at least one month exists.

@@ -50,6 +50,9 @@ type CalendarV2ViewData struct {
 	// Sourced from campaigns.GetEventTierDefinitions; nil/empty falls
 	// back to platform default tier rendering in eventToCardData.
 	TierDefinitions []TierDefinitionAlias
+	// SidebarPinned: per-user-per-campaign sidebar pin preference
+	// (Wave 1.7A §G). Default TRUE; persisted via SidebarPinAPI.
+	SidebarPinned bool
 }
 
 // CalendarV2Page is the full-page V2 shell. HTMX swaps target the
@@ -60,7 +63,7 @@ type CalendarV2ViewData struct {
 templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 	@layouts.App(v2PageTitle(data)) {
 		<div
-			class="h-full flex flex-col -mx-5 -my-4"
+			class="h-full flex -mx-5 -my-4"
 			data-cal-v2-root="true"
 			data-cal-v2-calendar-id={ v2CalendarID(data) }
 			data-cal-v2-campaign-id={ data.CampaignID }
@@ -68,10 +71,16 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 			data-cal-v2-is-scribe={ boolToStr(data.IsScribe) }
 			data-cal-v2-is-owner={ boolToStr(data.IsOwner) }
 			data-cal-v2-events={ v2EventsJSON(data) }
+			data-cal-v2-sidebar-pinned={ boolToStr(data.SidebarPinned) }
 		>
-			@calendarV2Header(cc, data)
-			<div id="cal-v2-view-slot" class="flex-1 overflow-y-auto px-6 py-4">
-				@calendarV2View(cc, data)
+			if data.ActiveCalendar != nil && data.SidebarPinned {
+				@miniMonthV2Sidebar(data)
+			}
+			<div class="flex-1 flex flex-col min-w-0">
+				@calendarV2Header(cc, data)
+				<div id="cal-v2-view-slot" class="flex-1 overflow-y-auto px-6 py-4">
+					@calendarV2View(cc, data)
+				</div>
 			</div>
 		</div>
 		if data.ActiveCalendar != nil && data.IsScribe {
@@ -84,6 +93,57 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 			<script src="/static/plugins/calendar/js/calendar_v2_shell.js" defer></script>
 		}
 	}
+}
+
+// miniMonthV2Sidebar renders the left sidebar containing the
+// compact mini-month grid (Wave 1.7A §G). Per the operator-greenlit
+// scope-discipline pattern, this PR ships the minimal viable
+// sidebar: grid + click-to-jump + pin toggle. Month/year pickers
+// and responsive collapse to icon-toggle below 1024px are deferred
+// to a follow-up polish PR.
+//
+// Width 240px on desktop; on narrower viewports the sidebar still
+// renders inline (operator can dismiss via pin toggle to reclaim
+// horizontal space; full responsive collapse is the deferred polish).
+templ miniMonthV2Sidebar(data CalendarV2ViewData) {
+	<aside
+		class="w-60 flex-shrink-0 border-r border-edge px-3 py-4 overflow-y-auto"
+		data-cal-v2-sidebar="true"
+		aria-label="Calendar sidebar"
+	>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg">
+				{ miniMonthHeading(data) }
+			</h2>
+			<button
+				type="button"
+				class="text-fg-secondary hover:text-fg transition-colors duration-micro p-1"
+				data-cal-v2-sidebar-pin="true"
+				aria-label="Unpin sidebar"
+				title="Unpin sidebar"
+			>
+				<i class="fa-solid fa-thumbtack text-xs" aria-hidden="true"></i>
+			</button>
+		</div>
+		<div class="grid gap-px text-[10px]" style={ miniMonthGridStyle(data) }>
+			for _, w := range miniMonthWeekdayLabels(data) {
+				<div class="text-fg-secondary text-center py-0.5 font-medium">{ w }</div>
+			}
+			for _, d := range miniMonthDays(data) {
+				if d.Day == 0 {
+					<div class="text-fg-secondary/30 text-center py-1"></div>
+				} else {
+					<a
+						href={ miniMonthDayHref(data, d) }
+						class={ "text-center py-1 rounded hover:bg-surface-2 transition-colors duration-micro", miniMonthDayClasses(d) }
+						data-mini-month-jump-to={ miniMonthDataAttr(data, d) }
+					>
+						{ fmt.Sprint(d.Day) }
+					</a>
+				}
+			}
+		</div>
+	</aside>
 }
 
 // shortcutsModalV2 renders the `?` keyboard shortcuts help modal

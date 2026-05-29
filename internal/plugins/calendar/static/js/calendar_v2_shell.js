@@ -12,6 +12,38 @@
         if (!root) return;
         wireShortcuts(root);
         wireDayPopover(root);
+        wireSidebarPin(root);
+    }
+
+    // --- Sidebar pin toggle (Wave 1.7A §G) ---
+    //
+    // Toggle hides/shows the sidebar without reloading; persists the
+    // preference via POST /calendar/v2/sidebar-pin. Server state +
+    // client display kept in lock-step so a page refresh preserves
+    // the operator's choice. On failure, the visual state reverts +
+    // toast surfaces the error.
+    function wireSidebarPin(root) {
+        var btn = document.querySelector('[data-cal-v2-sidebar-pin]');
+        if (!btn) return;
+        var sidebar = document.querySelector('[data-cal-v2-sidebar]');
+        var campaignID = root.dataset.calV2CampaignId;
+        var csrfToken = root.dataset.calV2CsrfToken;
+        btn.addEventListener('click', function () {
+            var nextPinned = false; // toggle from pinned → unpinned
+            // Optimistic UI: hide sidebar immediately.
+            if (sidebar) sidebar.style.display = 'none';
+            window.Chronicle.apiFetch('/campaigns/' + campaignID + '/calendar/v2/sidebar-pin', {
+                method: 'POST',
+                body: { pinned: nextPinned },
+                headers: { 'X-CSRF-Token': csrfToken },
+            }).then(function (resp) {
+                if (!resp.ok) throw new Error('Toggle failed');
+            }).catch(function (err) {
+                // Revert visual; toast error.
+                if (sidebar) sidebar.style.display = '';
+                window.Chronicle.notify((err && err.message) || 'Pin toggle failed', 'error');
+            });
+        });
     }
 
     // --- Shortcuts modal ----------------------------------------

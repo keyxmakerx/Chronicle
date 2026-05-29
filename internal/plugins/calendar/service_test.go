@@ -57,6 +57,9 @@ type mockCalendarRepo struct {
 	// V2 Wave 1 PR 1: active-calendar pointer injection.
 	getActiveCalendarIDFn func(ctx context.Context, userID, campaignID string) (string, error)
 	setActiveCalendarFn   func(ctx context.Context, userID, campaignID, calendarID string) error
+	// Wave 1.7A §G sidebar pin preference injection.
+	getSidebarPinnedFn func(ctx context.Context, userID, campaignID string) (bool, error)
+	setSidebarPinnedFn func(ctx context.Context, userID, campaignID string, pinned bool) error
 }
 
 func (m *mockCalendarRepo) Create(ctx context.Context, cal *Calendar) error {
@@ -361,6 +364,20 @@ func (m *mockCalendarRepo) GetActiveCalendarID(ctx context.Context, userID, camp
 func (m *mockCalendarRepo) SetActiveCalendar(ctx context.Context, userID, campaignID, calendarID string) error {
 	if m.setActiveCalendarFn != nil {
 		return m.setActiveCalendarFn(ctx, userID, campaignID, calendarID)
+	}
+	return nil
+}
+
+func (m *mockCalendarRepo) GetSidebarPinned(ctx context.Context, userID, campaignID string) (bool, error) {
+	if m.getSidebarPinnedFn != nil {
+		return m.getSidebarPinnedFn(ctx, userID, campaignID)
+	}
+	return true, nil
+}
+
+func (m *mockCalendarRepo) SetSidebarPinned(ctx context.Context, userID, campaignID string, pinned bool) error {
+	if m.setSidebarPinnedFn != nil {
+		return m.setSidebarPinnedFn(ctx, userID, campaignID, pinned)
 	}
 	return nil
 }
