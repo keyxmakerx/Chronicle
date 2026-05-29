@@ -59,8 +59,15 @@ templ DemoChronicleCanon() {
 			@introSection()
 			@designChoicesSection()
 			@previewSection()
+			// decisionsPanel lives INSIDE the [data-chronicle-demo]
+			// root so it inherits the --chronicle-* token cascade.
+			// It's position:fixed, so DOM placement doesn't change
+			// where it renders on screen — but a sibling-of-root
+			// placement (the Phase 1.8 bug) left every var() resolving
+			// to nothing, so the panel rendered as unstyled black text
+			// on a white box. Inside the root, it styles correctly.
+			@decisionsPanel()
 		</div>
-		@decisionsPanel()
 		// External JS — per-block error isolation + visible diagnostic
 		// dashboard. defer = runs after DOM parse, before
 		// DOMContentLoaded fires. No inline `<script>` body anywhere
@@ -290,23 +297,71 @@ templ voteThumbs(id string) {
 	</div>
 }
 
-// variantCard — one option in a choose-mode group. previewStyle paints
-// the swatch (color/bg only); the Apply button live-mutates the demo
-// root so the operator sees the actual visual result in the preview
-// area below.
+// variantCard — one option in a choose-mode group. The preview box is
+// SELF-DEMONSTRATING: it renders a sample element styled to this exact
+// option's value (inline styles scoped to the box), so the operator
+// sees the difference at a glance without clicking Apply. Apply then
+// ripples the same change across the whole page for a full-context look.
 templ variantCard(group, value, name, previewStyle string, chosen bool) {
 	<div class="chronicle-variant-option" data-variant-group={ group } data-variant={ value } data-chosen={ boolToStr(chosen) }>
 		<div class="chronicle-variant-option__head">
 			<span class="chronicle-variant-option__name">{ name }</span>
 			@voteThumbs(group + "::" + value)
 		</div>
-		<div class="chronicle-variant-option__preview" style={ previewStyle }>
-			<span style="font-size:11px; color:var(--chronicle-fg-muted);">{ name }</span>
+		<div class="chronicle-variant-option__preview">
+			@variantPreview(group, value, previewStyle)
 		</div>
 		<button type="button" class="chronicle-variant-option__apply" data-variant-apply data-variant-group={ group } data-variant={ value }>
 			Apply &amp; preview
 		</button>
 	</div>
+}
+
+// variantPreview — renders a self-contained sample demonstrating the
+// specific group+value, using inline styles so the box shows the real
+// difference independent of the page-wide Apply. Each sample carries a
+// "hover me" affordance where the difference is a hover/motion effect.
+templ variantPreview(group, value, previewStyle string) {
+	switch group {
+		case "bg":
+			<div class="chronicle-variant-demo chronicle-variant-demo--fill" style={ previewStyle }>
+				<span class="chronicle-variant-demo__chip">Page</span>
+			</div>
+		case "accent":
+			<div class="chronicle-variant-demo">
+				<span class="chronicle-variant-demo__swatch" style={ previewStyle }></span>
+				<span class="chronicle-variant-demo__btn" style={ previewStyle + " color: oklch(0.99 0 0); border:none;" }>Button</span>
+			</div>
+		case "radius":
+			<div class="chronicle-variant-demo">
+				<span class="chronicle-variant-demo__box" style={ "border-radius:" + radiusDemo(value) + ";" }></span>
+			</div>
+		case "shadow":
+			<div class="chronicle-variant-demo">
+				<span class="chronicle-variant-demo__box" style={ "box-shadow:" + shadowDemo(value) + "; border-radius:8px;" }></span>
+			</div>
+		case "hover":
+			<div class="chronicle-variant-demo">
+				<span class={ "chronicle-variant-demo__hover chronicle-variant-demo__hover--" + value }>hover me</span>
+			</div>
+		case "motion":
+			<div class="chronicle-variant-demo">
+				<span class="chronicle-variant-demo__motion" style={ "transition-duration:" + motionDemo(value) + ";" }>hover me</span>
+			</div>
+		case "density":
+			<div class={ "chronicle-variant-demo chronicle-variant-demo--density chronicle-variant-demo--density-" + value }>
+				<span class="chronicle-variant-demo__line"></span>
+				<span class="chronicle-variant-demo__line chronicle-variant-demo__line--short"></span>
+			</div>
+		case "selected":
+			<div class="chronicle-variant-demo">
+				<span class={ "chronicle-variant-demo__sel chronicle-variant-demo__sel--" + value }>selected</span>
+			</div>
+		default:
+			<div class="chronicle-variant-demo">
+				<span class="chronicle-variant-demo__chip">preview</span>
+			</div>
+	}
 }
 
 // buttonVariantCard — choose-mode card whose preview is a live button
@@ -454,4 +509,43 @@ func boolToStr(b bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// radiusDemo / shadowDemo / motionDemo — per-value sample dimensions for
+// the self-demonstrating variant previews. Kept inline (not in the CSS)
+// so each preview box shows its own value without depending on the
+// page-wide Apply mutation.
+func radiusDemo(value string) string {
+	switch value {
+	case "sharp":
+		return "2px"
+	case "soft":
+		return "16px"
+	default: // medium
+		return "8px"
+	}
+}
+
+func shadowDemo(value string) string {
+	switch value {
+	case "none":
+		return "none"
+	case "pronounced":
+		return "0 8px 20px -4px oklch(0 0 0 / 0.45)"
+	case "heavy":
+		return "0 14px 30px -4px oklch(0 0 0 / 0.6)"
+	default: // subtle
+		return "0 4px 12px -2px oklch(0 0 0 / 0.25)"
+	}
+}
+
+func motionDemo(value string) string {
+	switch value {
+	case "snappy":
+		return "150ms"
+	case "relaxed":
+		return "400ms"
+	default: // canon
+		return "250ms"
+	}
 }

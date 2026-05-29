@@ -437,6 +437,95 @@ func TestDemoChronicleCanon_PreviewArea(t *testing.T) {
 	}
 }
 
+// TestDemoChronicleCanon_DecisionsPanelInsideTokenScope — the
+// regression guard for the "floating text on a white box" bug
+// (Phase 1.8 placed the decisions panel as a SIBLING of the
+// [data-chronicle-demo] root, so it inherited none of the
+// --chronicle-* tokens and rendered unstyled). The panel must be a
+// DESCENDANT of the root element. Verified by a div-depth scan: the
+// [data-decisions] marker must fall before the root <div> closes.
+func TestDemoChronicleCanon_DecisionsPanelInsideTokenScope(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	rootStart := strings.Index(html, "chronicle-canon-page")
+	if rootStart < 0 {
+		t.Fatal("root .chronicle-canon-page element not found")
+	}
+	// Back up to the opening "<div" of the root element.
+	openTag := strings.LastIndex(html[:rootStart], "<div")
+	if openTag < 0 {
+		t.Fatal("could not locate root opening <div")
+	}
+	// Walk forward from the root open, tracking div nesting depth.
+	// When depth returns to 0 we've found the root's closing </div>.
+	depth := 0
+	rootClose := -1
+	for i := openTag; i < len(html); {
+		if strings.HasPrefix(html[i:], "<div") {
+			depth++
+			i += 4
+			continue
+		}
+		if strings.HasPrefix(html[i:], "</div>") {
+			depth--
+			i += 6
+			if depth == 0 {
+				rootClose = i
+				break
+			}
+			continue
+		}
+		i++
+	}
+	if rootClose < 0 {
+		t.Fatal("could not find root closing </div> via depth scan")
+	}
+	panelIdx := strings.Index(html, "data-decisions")
+	if panelIdx < 0 {
+		t.Fatal("decisions panel marker not found")
+	}
+	if panelIdx > rootClose {
+		t.Errorf("decisions panel (data-decisions at %d) renders OUTSIDE the [data-chronicle-demo] root (closes at %d) — "+
+			"it will inherit no --chronicle-* tokens and render as unstyled black-text-on-white (the Phase 1.8 'white box' bug)", panelIdx, rootClose)
+	}
+}
+
+// TestDemoChronicleCanon_VariantPreviewsSelfDemonstrate — each variant
+// option's preview box must render a sample styled to its own option
+// (not an inert label), so the operator sees the difference without
+// clicking Apply. Pin the per-group demo hooks; their absence is the
+// "nothing is happening" complaint.
+func TestDemoChronicleCanon_VariantPreviewsSelfDemonstrate(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoChronicleCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, marker := range []string{
+		`chronicle-variant-demo`,             // base
+		`chronicle-variant-demo__box`,        // radius + shadow samples
+		`chronicle-variant-demo__hover--lift`, // hover sample
+		`chronicle-variant-demo__motion`,     // motion sample
+		`chronicle-variant-demo--density-compact`, // density sample
+		`chronicle-variant-demo__sel--A`,     // selected sample
+		`chronicle-variant-demo__sel--B`,
+	} {
+		if !strings.Contains(html, marker) {
+			t.Errorf("self-demonstrating variant-preview hook missing: %s", marker)
+		}
+	}
+	// The old inert pattern (a bare label span as the only preview
+	// content) must be gone for the structural groups — verify the
+	// radius sample carries an inline border-radius, proving it
+	// demonstrates rather than labels.
+	if !strings.Contains(html, "border-radius:2px") && !strings.Contains(html, "border-radius: 2px") {
+		t.Errorf("radius 'sharp' preview should carry an inline border-radius demonstrating the value")
+	}
+}
+
 // ============================================================
 // CSS hard-rule lint guards (kept from prior phases)
 // ============================================================
