@@ -1,0 +1,92 @@
+// v1_deprecation_banner.templ — soft-cutover banner on V1 calendar
+// surface. Wave 1.5 follow-up per operator-greenlit Option 2 cutover
+// + 2026-08-01 sunset (2026-05-28).
+//
+// V1 calendar surface deprecated 2026-05-28. Sunsets 2026-08-01 per
+// operator decision in `decisions/2026-05-28-cal-timeline-v2-design.md`
+// Wave 1 V1/V2 additive coexistence. V1 hard removal in dispatch
+// C-CAL-V1-SUNSET (to be authored post-Wave-1.6).
+//
+// Banner mounts at the top of every V1 calendar page (Month / Week /
+// Day / Timeline / Setup). V2 routes do NOT include this template —
+// V2 self-promotes via its own surface chrome.
+
+package calendar
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// V1DeprecationBanner renders the soft-cutover banner. Token-driven
+// styling (info tier — accent + surface-2 tint; NOT destructive red).
+// Session-only dismiss via sessionStorage + inline script (resurfaces
+// each session to keep sunset awareness top-of-mind through the
+// 9-week runway).
+//
+// The "Switch to V2" link routes to the V2 calendar shell preserving
+// the campaign context. Calendar-specific URL state (active calendar
+// id, view, cursor date) isn't preserved — V2 resolves active
+// calendar per-user via PR #363's pointer table and lands on Month
+// view by default, which matches operator expectations of "switch to
+// the new view" semantics.
+templ V1DeprecationBanner(cc *campaigns.CampaignContext) {
+	<div
+		class="bg-accent/10 border-b border-accent/30 px-4 py-2 text-sm flex items-center justify-between gap-3 flex-wrap"
+		role="region"
+		aria-label="Calendar V2 availability notice"
+		data-v1-banner="true"
+	>
+		<div class="flex items-center gap-2 min-w-0">
+			<i class="fa-solid fa-calendar-check text-accent" aria-hidden="true"></i>
+			<span class="text-fg">
+				<strong>Calendar V2 is now the recommended view.</strong>
+				V1 will be removed on <strong>August&nbsp;1, 2026</strong>.
+			</span>
+			<a
+				href={ v1BannerSwitchHref(cc) }
+				class="text-accent hover:underline font-medium inline-flex items-center gap-1 ml-2"
+			>
+				Switch to V2
+				<i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+			</a>
+		</div>
+		<button
+			type="button"
+			class="text-fg-secondary hover:text-fg transition-colors duration-micro p-1"
+			data-v1-banner-dismiss="true"
+			aria-label="Dismiss (reappears next session)"
+		>
+			<i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
+		</button>
+		<script>
+			(function () {
+				// Banner mounts at every V1 page render; the dismiss flag
+				// is session-only so operators see the sunset reminder
+				// each new session through the runway period. Persistent
+				// dismissal is intentionally NOT offered per dispatch §3.
+				var banners = document.querySelectorAll('[data-v1-banner]');
+				banners.forEach(function (banner) {
+					try {
+						if (sessionStorage.getItem('cal-v1-banner-dismissed') === '1') {
+							banner.style.display = 'none';
+						}
+					} catch (e) {
+						// sessionStorage unavailable (privacy mode);
+						// banner stays visible — graceful degradation.
+					}
+					var btn = banner.querySelector('[data-v1-banner-dismiss]');
+					if (btn) {
+						btn.addEventListener('click', function () {
+							banner.style.display = 'none';
+							try {
+								sessionStorage.setItem('cal-v1-banner-dismissed', '1');
+							} catch (e) {
+								// Best-effort persist for this tab.
+							}
+						});
+					}
+				});
+			})();
+		</script>
+	</div>
+}

@@ -17,6 +17,7 @@ import (
 // Presents three mode cards: Sync to Real Life, New Custom Calendar, Import.
 templ CalendarSetupPage(cc *campaigns.CampaignContext, csrfToken string) {
 	@layouts.App("Calendar - Setup") {
+		@V1DeprecationBanner(cc)
 		<div class="max-w-3xl mx-auto py-12 px-4">
 			@calendarSetupChooser(cc, csrfToken)
 		</div>
@@ -205,6 +206,7 @@ templ calendarSetupChooser(cc *campaigns.CampaignContext, csrfToken string) {
 // CalendarPage renders the full calendar page with monthly grid.
 templ CalendarPage(cc *campaigns.CampaignContext, data CalendarViewData) {
 	@layouts.App(data.Calendar.Name) {
+		@V1DeprecationBanner(cc)
 		<div class="h-full flex flex-col -mx-5 -my-4" data-calendar-months={ calendarMonthNamesJSON(data.Calendar) } data-calendar-categories={ calendarCategoriesJSON(data.Calendar) }>
 			@calendarHeader(cc, data)
 			<div class="flex-1 overflow-y-auto px-6 py-4">
@@ -1809,6 +1811,7 @@ templ UpcomingEventsEmpty() {
 // TimelinePage renders the full timeline view page.
 templ TimelinePage(cc *campaigns.CampaignContext, data TimelineViewData) {
 	@layouts.App(data.Calendar.Name + " - Timeline") {
+		@V1DeprecationBanner(cc)
 		<div class="max-w-3xl mx-auto">
 			@timelineContent(cc, data)
 		</div>
@@ -2061,6 +2064,7 @@ func categoryIcon(cats []EventCategory, slug string) string {
 // WeekPage renders the full calendar week view page.
 templ WeekPage(cc *campaigns.CampaignContext, data WeekViewData) {
 	@layouts.App(data.Calendar.Name + " - Week") {
+		@V1DeprecationBanner(cc)
 		<div class="max-w-6xl mx-auto">
 			@weekContent(cc, data)
 		</div>
@@ -2264,6 +2268,7 @@ func weekNextDay(data WeekViewData) int   { _, _, d := data.NextWeek(); return d
 // DayPage renders the full calendar day view page.
 templ DayPage(cc *campaigns.CampaignContext, data DayViewData) {
 	@layouts.App(data.Calendar.Name + " - " + data.MonthName() + " " + strconv.Itoa(data.Day)) {
+		@V1DeprecationBanner(cc)
 		<div class="max-w-3xl mx-auto">
 			@dayContent(cc, data)
 		</div>
