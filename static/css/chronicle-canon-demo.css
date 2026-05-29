@@ -1079,6 +1079,179 @@
   }
   .chronicle-decisions__actions { display: flex; gap: 8px; }
 
+  /* Phase 1.9 — visible summary pills + rate-mode markup.
+   *
+   * The summary pills are the authoritative human-readable status,
+   * separate from the markdown textarea. A render bug in the
+   * textarea can no longer silently hide non-zero state (Bug #2
+   * from PR #379 operator dashboard report). */
+  .chronicle-decisions__summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-decisions__summary-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 8%);
+    border: 1px solid color-mix(in oklch, var(--chronicle-border), var(--chronicle-accent) 30%);
+    border-radius: var(--chronicle-radius-full);
+    color: var(--chronicle-fg);
+    font-weight: 500;
+    font-size: 10px;
+    letter-spacing: 0.2px;
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      color            var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-decisions__summary-pill[data-zero="true"] {
+    background: var(--chronicle-surface-low);
+    border-color: var(--chronicle-border);
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-decisions__summary-empty {
+    font-style: italic;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-decisions__summary-empty[hidden] { display: none; }
+
+  /* Rate-mode section + per-group markup.
+   *
+   * Renders ABOVE the existing variant-group vote markup. A header
+   * row divides Section A (rate-mode) from Section B (vote-mode)
+   * so the operator can tell the two modes apart. */
+  .chronicle-rate-section {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    background: color-mix(in oklch, var(--chronicle-surface-low), transparent 0%);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+    margin: 12px 0 24px 0;
+  }
+  .chronicle-vote-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding-top: 14px;
+    border-top: 1px dashed var(--chronicle-border-strong);
+  }
+  .chronicle-rate-section__head {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .chronicle-rate-section__title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-rate-section__intro {
+    margin: 0;
+    font-size: 12px;
+    color: var(--chronicle-fg-muted);
+    line-height: 1.5;
+  }
+  .chronicle-rate-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+    transition:
+      border-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-rate-group[data-answered="true"] {
+    border-color: color-mix(in oklch, var(--chronicle-accent), transparent 50%);
+  }
+  .chronicle-rate-group__head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .chronicle-rate-group__title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-rate-group__context {
+    margin: 0;
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+    line-height: 1.4;
+  }
+  .chronicle-rate-group__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .chronicle-rate-pills {
+    display: inline-flex;
+    gap: 4px;
+    padding: 3px;
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius);
+  }
+  .chronicle-rate-pill {
+    min-width: 32px;
+    padding: 4px 10px;
+    background: transparent;
+    color: var(--chronicle-fg);
+    border: 1px solid transparent;
+    border-radius: var(--chronicle-radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    cursor: pointer;
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      color            var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-rate-pill:hover {
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-fg) 6%);
+    border-color: var(--chronicle-border-strong);
+  }
+  .chronicle-rate-pill[aria-pressed="true"] {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 16%);
+    border-color: var(--chronicle-accent);
+    color: var(--chronicle-fg);
+  }
+  .chronicle-rate-pill:focus-visible {
+    outline: 2px solid var(--chronicle-ring);
+    outline-offset: 1px;
+  }
+  .chronicle-rate-note {
+    flex: 1 1 220px;
+    min-width: 0;
+    padding: 6px 10px;
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+    color: var(--chronicle-fg);
+    font-size: 12px;
+    font-family: inherit;
+    transition:
+      border-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-rate-note:focus {
+    outline: 2px solid color-mix(in oklch, var(--chronicle-ring), transparent 80%);
+    outline-offset: 0;
+    border-color: var(--chronicle-ring);
+  }
+
   /* Section-stepper nav (combination wizard + scroll) */
   .chronicle-stepper-nav {
     display: flex;

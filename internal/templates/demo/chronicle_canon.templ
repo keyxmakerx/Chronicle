@@ -152,16 +152,48 @@ templ introSection() {
 	</section>
 }
 
-// designChoicesSection — the heart of the picker: nine load-bearing
-// "which do you prefer" decisions, each a choose-mode variant group
-// whose Apply buttons live-apply a global token so the change ripples
-// across the preview area below.
+// designChoicesSection — the heart of the picker. Two subsections:
+//
+//   A. Locked decisions (rate-mode) — canon decisions with no
+//      operator-facing alternative. Each renders a 1-5 sentiment pill
+//      row + optional note. Operator says "how does this land" rather
+//      than picking between options.
+//
+//   B. Variant groups (choose-mode) — nine load-bearing "which do
+//      you prefer" decisions. Each is a vote group with 👍/👎 per
+//      option + a live-applying Apply button.
+//
+// Phase 1.9 restored the rate-mode section after Phase 1.8 dropped it
+// (operator's diagnostic dashboard reported rate-mode pills: 0 — the
+// init block ran successfully but found no markup to bind). The
+// existing JS 'choice-picker-rate' init block (which iterates
+// [data-rate-id] groups) wires the new pills automatically.
 templ designChoicesSection() {
 	<section class="chronicle-section" id="choices">
 		<h2 class="chronicle-section__title">Design choices — pick what you prefer</h2>
 		<p class="chronicle-section__intro">
-			Each block is a question. 👍/👎 each option to register a preference; click <strong>Apply &amp; preview</strong> on the one you want to test live (it updates the preview surfaces below). Notes optional.
+			Two kinds of decisions below. <strong>Section A</strong> is canon-locked elements — rate each 1–5 for how well it lands. <strong>Section B</strong> is variant groups — 👍/👎 the options you prefer; click <strong>Apply &amp; preview</strong> on the one you want to test live (it ripples across the surfaces in the Live preview section). Notes optional everywhere.
 		</p>
+		<div class="chronicle-rate-section" id="rate-mode">
+			<div class="chronicle-rate-section__head">
+				<h3 class="chronicle-rate-section__title">A · Locked decisions — rate how they land</h3>
+				<p class="chronicle-rate-section__intro">
+					These are canon-locked and won&apos;t change in Phase 2; rate each so I know if the canon&apos;s direction matches what you wanted. 5 = right · 1 = wrong; optional note for specifics.
+				</p>
+			</div>
+			@rateGroup("typography", "Typography", "Inter Variable body + JetBrains Mono code · 14px body / 1.5 line-height. Canon D6.")
+			@rateGroup("token-namespace", "Token namespace", "All design tokens prefixed --chronicle-* (page-scoped via [data-chronicle-demo]). Canon D1 — keeps the demo isolated from the rest of the app.")
+			@rateGroup("spacing-grid", "Spacing grid", "4 / 8 / 12 / 16 / 24 px base grid for every gap, padding, and margin. Canon D7.")
+			@rateGroup("co-occurrence-rule", "Co-occurrence rule", "Every hover/press animates background-color + border-color + box-shadow TOGETHER over 150ms. Never animates box-shadow alone. Canon D3 — the &quot;shadow from nowhere&quot; fix.")
+			@rateGroup("oklch-only", "OKLCH-only colour", "All colour declared in OKLCH + color-mix(in oklch, ...). No hex literals anywhere in the canon CSS. Canon D2.")
+		</div>
+		<div class="chronicle-vote-section" id="vote-mode">
+			<div class="chronicle-rate-section__head">
+				<h3 class="chronicle-rate-section__title">B · Variant groups — pick what you prefer</h3>
+				<p class="chronicle-rate-section__intro">
+					Each block is an open question. 👍/👎 each option to register a preference; click <strong>Apply &amp; preview</strong> on the one you want me to test live.
+				</p>
+			</div>
 		<h3 class="chronicle-state-label">Dark background tint</h3>
 		<p class="chronicle-section__intro">Operator: &quot;the background should be the same darkmode idea we already had on the website.&quot; <strong>Cool gray-900</strong> matches the live site (default).</p>
 		<div class="chronicle-variant-grid">
@@ -224,7 +256,30 @@ templ designChoicesSection() {
 			@buttonVariantCard("link", "Link (underlined)")
 			@buttonVariantCard("destructive", "Destructive (danger)")
 		</div>
+		</div>
 	</section>
+}
+
+// rateGroup — one canon-locked-element rate row: 5 sentiment pills +
+// optional note. Binds via the JS 'choice-picker-rate' init block,
+// which iterates [data-rate-id] groups and wires each [data-rate]
+// pill + [data-note] textarea. id flows into 'rate:<id>' in the
+// decision store; label is shown in the markdown export.
+templ rateGroup(id, label, context string) {
+	<div class="chronicle-rate-group" data-rate-id={ id } data-rate-label={ label } data-picker-item>
+		<div class="chronicle-rate-group__head">
+			<h4 class="chronicle-rate-group__title">{ label }</h4>
+			<p class="chronicle-rate-group__context">{ context }</p>
+		</div>
+		<div class="chronicle-rate-group__row">
+			<div class="chronicle-rate-pills" role="radiogroup" aria-label={ "Rate " + label + " 1 to 5" }>
+				for n := 1; n <= 5; n++ {
+					<button type="button" class="chronicle-rate-pill" data-rate={ itoa(n) } aria-pressed="false" aria-label={ "Rating " + itoa(n) + " of 5" }>{ itoa(n) }</button>
+				}
+			</div>
+			<input type="text" class="chronicle-rate-note" data-note placeholder="optional note — what specifically lands or doesn&#39;t…" aria-label={ "Note for " + label }/>
+		</div>
+	</div>
 }
 
 // voteThumbs — choose-mode 👍/👎 buttons for a single option.
@@ -335,8 +390,16 @@ templ previewSection() {
 }
 
 // decisionsPanel — sticky "Your Decisions" output. JS live-builds the
-// markdown into the textarea; Copy + Download export it. Persists in
-// localStorage under `chronicle-canon-decisions`.
+// markdown into the textarea AND populates the visible summary line
+// (ratings / votes / applied counts). Copy + Download export the
+// markdown. Persists in localStorage under `chronicle-canon-decisions`.
+//
+// Phase 1.9: the textarea no longer carries a server-rendered
+// "No decisions yet" default. JS renders the textarea on init AND
+// on every store change. The visible [data-decisions-summary] line
+// is the authoritative human-readable status so a render bug in the
+// textarea can't silently hide non-zero state again (the Bug #2 from
+// operator's PR #379 dashboard report).
 templ decisionsPanel() {
 	<aside class="chronicle-decisions" data-decisions data-collapsed="false">
 		<div class="chronicle-decisions__head" data-decisions-toggle>
@@ -347,7 +410,13 @@ templ decisionsPanel() {
 			<p style="margin:0; font-size:11px; color:var(--chronicle-fg-muted);">
 				Rate the locked elements (1–5), 👍/👎 the options you prefer, and Apply the variants you want live. This builds a brief you copy back to me.
 			</p>
-			<textarea class="chronicle-decisions__output" data-decisions-output readonly aria-label="Decisions markdown">No decisions yet — start rating above.</textarea>
+			<div class="chronicle-decisions__summary" data-decisions-summary>
+				<span class="chronicle-decisions__summary-pill" data-summary-ratings>Ratings 0</span>
+				<span class="chronicle-decisions__summary-pill" data-summary-votes>Votes 0</span>
+				<span class="chronicle-decisions__summary-pill" data-summary-applied>Applied 0</span>
+				<span class="chronicle-decisions__summary-empty" data-summary-empty>No decisions yet — start rating above.</span>
+			</div>
+			<textarea class="chronicle-decisions__output" data-decisions-output readonly aria-label="Decisions markdown"></textarea>
 			<div class="chronicle-decisions__actions">
 				<button type="button" class="chronicle-button-primary chronicle-button-primary--sm" data-decisions-copy>Copy markdown</button>
 				<button type="button" class="chronicle-button-secondary chronicle-button-secondary--sm" data-decisions-download>Download</button>

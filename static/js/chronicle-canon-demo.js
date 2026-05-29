@@ -224,6 +224,12 @@
     } catch (e) {
       decisions = {};
     }
+    // Phase 1.9 — render immediately after hydrate so the panel
+    // reflects the persisted state even if a later init block throws
+    // before block 9 (decisions-panel) can do its end-of-init render.
+    // No-op when the panel markup isn't present yet (querySelector
+    // returns null and renderDecisionsPanel handles missing nodes).
+    try { renderDecisionsPanel(); } catch (e) {}
   });
 
   // ==========================================================
@@ -384,50 +390,120 @@
   });
 
   // ==========================================================
-  // Block 9 — "Your Decisions" panel: render markdown + Copy +
-  // Download + Reset + collapse toggle.
+  // Block 9 — "Your Decisions" panel.
+  //
+  // Phase 1.9 rewrite: render is bulletproof against the Bug #2 mode
+  // from PR #379 (counter showed 5, body said "No decisions yet").
+  // The new render ALWAYS:
+  //   - Computes ratings/votes/applied tallies from a unified pass
+  //     over `decisions`.
+  //   - Populates the visible [data-decisions-summary] pills with the
+  //     tallies (so a render bug in the textarea can't silently hide
+  //     non-zero state — the summary is the authoritative visible UI).
+  //   - Sets out.value unconditionally (never leaves the textarea at a
+  //     server-rendered default).
+  //   - Emits the markdown with three subsections (Ratings / Votes /
+  //     Applied) keyed off explicit type-and-content discriminators.
   // ==========================================================
-  function renderDecisionsPanel() {
-    var out = document.querySelector('[data-decisions-output]');
-    var countEl = document.querySelector('[data-decisions-count]');
-    var keys = Object.keys(decisions).filter(function (k) {
+  function summarizeDecisions() {
+    // Single pass over the store; classifies each entry into one
+    // or more buckets. A 'choose' entry can carry BOTH votes AND a
+    // chosen variant — it contributes to both Votes and Applied.
+    var ratings = []; // { key, label, rating, note }
+    var votes   = []; // { key, label, ups:[], downs:[], note }
+    var applied = []; // { key, label, chosen, note }
+    Object.keys(decisions).forEach(function (k) {
       var d = decisions[k];
-      return d && (d.rating || (d.votes && Object.keys(d.votes).length) || d.chosen || (d.note && d.note.trim()));
-    });
-    if (countEl) countEl.textContent = keys.length;
-    if (!out) return;
-    if (!keys.length) { out.value = 'No decisions yet — start rating above.'; return; }
-    var md = '# Chronicle Canon — Design Decisions\n';
-    md += '_' + (navigator.userAgent || '') + ' · ' + new Date().toISOString().slice(0, 10) + '_\n\n';
-    var rated = keys.filter(function (k) { return decisions[k].type === 'rate'; });
-    if (rated.length) {
-      md += '## Ratings\n';
-      rated.forEach(function (k) {
-        var d = decisions[k];
-        md += '- ' + d.label + ': ' + (d.rating ? d.rating + '/5' : '—');
-        if (d.note) md += ' · note: ' + d.note;
-        md += '\n';
-      });
-      md += '\n';
-    }
-    var chosen = keys.filter(function (k) { return decisions[k].type === 'choose'; });
-    if (chosen.length) {
-      md += '## Choices\n';
-      chosen.forEach(function (k) {
-        var d = decisions[k], ups = [], downs = [];
+      if (!d) return;
+      if (d.type === 'rate' && (d.rating || (d.note && d.note.trim()))) {
+        ratings.push({ key: k, label: d.label || k, rating: d.rating || 0, note: d.note || '' });
+        return;
+      }
+      if (d.type === 'choose') {
+        var ups = [], downs = [];
         Object.keys(d.votes || {}).forEach(function (opt) {
           if (d.votes[opt] === 'up') ups.push(opt);
           else if (d.votes[opt] === 'down') downs.push(opt);
         });
-        md += '- ' + d.label + ': ';
-        if (d.chosen) md += 'applied=' + d.chosen;
-        if (ups.length) md += (d.chosen ? ' · ' : '') + 'up=' + ups.join(',');
-        if (downs.length) md += ' · down=' + downs.join(',');
-        if (d.note) md += ' · note: ' + d.note;
-        md += '\n';
+        if (ups.length || downs.length) {
+          votes.push({ key: k, label: d.label || k, ups: ups, downs: downs, note: d.note || '' });
+        }
+        if (d.chosen) {
+          applied.push({ key: k, label: d.label || k, chosen: d.chosen, note: d.note || '' });
+        }
+      }
+    });
+    return { ratings: ratings, votes: votes, applied: applied };
+  }
+  function buildDecisionsMarkdown(summary) {
+    var lines = [];
+    lines.push('# Chronicle Canon — Design Decisions');
+    lines.push('_' + (navigator.userAgent || '') + ' · ' + new Date().toISOString().slice(0, 10) + '_');
+    lines.push('');
+    if (summary.ratings.length) {
+      lines.push('## Ratings (locked decisions — 1–5)');
+      summary.ratings.forEach(function (r) {
+        var line = '- ' + r.label + ': ' + (r.rating ? r.rating + '/5' : '—');
+        if (r.note) line += ' · note: ' + r.note;
+        lines.push(line);
       });
+      lines.push('');
     }
-    out.value = md;
+    if (summary.votes.length) {
+      lines.push('## Votes (which options you prefer)');
+      summary.votes.forEach(function (v) {
+        var line = '- ' + v.label + ':';
+        if (v.ups.length) line += ' 👍 ' + v.ups.join(', ');
+        if (v.downs.length) line += (v.ups.length ? ' ·' : '') + ' 👎 ' + v.downs.join(', ');
+        if (v.note) line += ' · note: ' + v.note;
+        lines.push(line);
+      });
+      lines.push('');
+    }
+    if (summary.applied.length) {
+      lines.push('## Applied (variants you live-previewed)');
+      summary.applied.forEach(function (a) {
+        var line = '- ' + a.label + ': ' + a.chosen;
+        if (a.note) line += ' · note: ' + a.note;
+        lines.push(line);
+      });
+      lines.push('');
+    }
+    if (!summary.ratings.length && !summary.votes.length && !summary.applied.length) {
+      lines.push('_No decisions yet — start rating, voting, or applying above._');
+    }
+    return lines.join('\n');
+  }
+  function renderDecisionsPanel() {
+    var summary = summarizeDecisions();
+    // Header counter — sum of buckets the operator has actually
+    // touched. (A single 'choose' entry with BOTH votes and chosen
+    // counts as 2 of these — that matches the visible summary pills.)
+    var total = summary.ratings.length + summary.votes.length + summary.applied.length;
+    var countEl = document.querySelector('[data-decisions-count]');
+    if (countEl) countEl.textContent = String(total);
+    // Visible summary pills.
+    var rEl = document.querySelector('[data-summary-ratings]');
+    var vEl = document.querySelector('[data-summary-votes]');
+    var aEl = document.querySelector('[data-summary-applied]');
+    var emptyEl = document.querySelector('[data-summary-empty]');
+    if (rEl) {
+      rEl.textContent = 'Ratings ' + summary.ratings.length;
+      rEl.setAttribute('data-zero', summary.ratings.length === 0 ? 'true' : 'false');
+    }
+    if (vEl) {
+      vEl.textContent = 'Votes ' + summary.votes.length;
+      vEl.setAttribute('data-zero', summary.votes.length === 0 ? 'true' : 'false');
+    }
+    if (aEl) {
+      aEl.textContent = 'Applied ' + summary.applied.length;
+      aEl.setAttribute('data-zero', summary.applied.length === 0 ? 'true' : 'false');
+    }
+    if (emptyEl) emptyEl.hidden = total > 0;
+    // Textarea — unconditional set so a server-rendered default
+    // can't ever stay visible.
+    var out = document.querySelector('[data-decisions-output]');
+    if (out) out.value = buildDecisionsMarkdown(summary);
   }
 
   registerInitBlock('decisions-panel', function () {
