@@ -2173,6 +2173,12 @@ func (a *App) RegisterRoutes() {
 	// Wire audit logging into mutation handlers so CRUD actions are recorded.
 	entityHandler.SetAuditService(auditService)
 	calendarHandler.SetAuditService(auditService)
+	// Wave 1.6.5: wire campaign tier vocabulary into the V2 calendar
+	// shell so EventCard + MultiDayRibbon render campaign-aware tier
+	// labels + colors. CampaignService satisfies the narrow
+	// TierDefinitionsLister interface via its existing
+	// GetEventTierDefinitions method.
+	calendarHandler.SetTierDefinitionsLister(campaignService)
 	timelineHandler.SetAuditService(auditService)
 	entityHandler.SetTagFetcher(&entityTagFetcherAdapter{svc: tagService})
 	entityHandler.SetTimelineSearcher(timelineSvc)

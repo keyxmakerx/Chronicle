@@ -8,6 +8,8 @@
 package calendar
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -66,14 +68,15 @@ func (h *Handler) ShowV2(c echo.Context) error {
 	}
 
 	data := CalendarV2ViewData{
-		ActiveCalendar: active,
-		AllCalendars:   allCalendars,
-		View:           view,
-		CampaignID:     cc.Campaign.ID,
-		UserID:         userID,
-		IsOwner:        cc.MemberRole >= campaigns.RoleOwner,
-		IsScribe:       cc.MemberRole >= campaigns.RoleScribe,
-		CSRFToken:      middleware.GetCSRFToken(c),
+		ActiveCalendar:  active,
+		AllCalendars:    allCalendars,
+		View:            view,
+		CampaignID:      cc.Campaign.ID,
+		UserID:          userID,
+		IsOwner:         cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:        cc.MemberRole >= campaigns.RoleScribe,
+		CSRFToken:       middleware.GetCSRFToken(c),
+		TierDefinitions: h.loadTierDefinitions(ctx, cc.Campaign.ID),
 	}
 
 	// Cursor (year/month/day) — fall back to the calendar's stored
@@ -192,4 +195,42 @@ func (h *Handler) SwitchActiveCalendarAPI(c echo.Context) error {
 		"status":      "ok",
 		"calendar_id": req.CalendarID,
 	})
+}
+
+// loadTierDefinitions fetches campaign-aware tier vocabulary for V2
+// rendering. Wave 1.6.5: activates PR #370 Phase 2 overlay
+// end-to-end. Returns nil when:
+//   - tierLister is not wired (early init order; safe fall-back)
+//   - lookup errors (slog.Warn + nil; widget falls back to platform default)
+//   - campaign has no event_tier_definitions configured (empty slice
+//     surfaces as nil per Go convention; same fall-back)
+//
+// Per dispatch §"Error handling" — every failure mode degrades
+// gracefully to platform-default tier rendering. No operator-visible
+// crash; lookup failures show up only in server logs.
+func (h *Handler) loadTierDefinitions(ctx context.Context, campaignID string) []TierDefinitionAlias {
+	if h.tierLister == nil {
+		return nil
+	}
+	defs, err := h.tierLister.GetEventTierDefinitions(ctx, campaignID)
+	if err != nil {
+		slog.Warn("load tier definitions failed; falling back to platform defaults",
+			slog.String("campaign_id", campaignID),
+			slog.Any("error", err),
+		)
+		return nil
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	out := make([]TierDefinitionAlias, len(defs))
+	for i, d := range defs {
+		out[i] = TierDefinitionAlias{
+			Slug:       d.Slug,
+			Name:       d.Name,
+			Color:      d.Color,
+			Prominence: d.Prominence,
+		}
+	}
+	return out
 }
