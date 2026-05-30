@@ -1,22 +1,23 @@
 // chronicle-canon.js — C-V2-DESIGN-REBUILD Phase 2A tabbed canon demo.
 //
-// Fresh implementation after the PR #375-#381 single-page arc was
-// scrapped. Architectural patterns carry forward conceptually:
+// Phase 2A.1 motion-diagnosis update:
+//   - NEW css-reality-probe init block: reports OS reduced-motion,
+//     canon-stylesheet-loaded, computed transitionDuration on an ACTUAL
+//     demo button (not document.querySelector('button'), which grabs a
+//     site-chrome button), canon token resolution, and scope-root
+//     presence. Closes the CSS-reality verification gap on-page.
+//   - NEW motion-banner block: ONLY un-hides the consensual
+//     motion-preview banner when prefers-reduced-motion:reduce is
+//     active; opt-in sets [data-canon-force-motion="true"] on the root.
+//   - "Your picks" summary panel removed; picks still persist + export
+//     via the single header "Copy my picks" button (build-on-demand).
 //
-//   - INIT_BLOCKS registry, per-block try/catch
-//   - __chronicleCanonInited flag set AFTER successful run
-//   - Visible diagnostic dashboard (collapsed by default this time;
-//     auto-expands if any block FAILED)
-//   - document.title fallback if even the dashboard render fails
+// Architecture carryover (from PR #379): INIT_BLOCKS registry with
+// per-block try/catch; __chronicleCanonInited set AFTER success;
+// externalized JS via <script src=… defer>; document.title fallback.
 //
-// Surface this phase: theme + reduced-motion toggles; tab strip (only
-// Buttons clickable); the Buttons tab's 6 pickable axes (variant,
-// size, shadow, hover, motion, selected) + 1 reference section
-// (states); per-tab notes textarea; "Your picks" summary + Copy
-// markdown brief + Download + Reset.
-//
-// localStorage key: chronicle-canon-picks-v2 (fresh; no migration
-// from the prior scrapped store).
+// localStorage key: chronicle-canon-picks-v2 (no migration from the
+// prior scrapped store).
 
 (function () {
   'use strict';
@@ -33,12 +34,14 @@
     blocks: [],     // [{name, status, error}]
     bindings: [],   // [{name, count}]
     features: [],   // [{name, supported}]
+    css: [],        // [{name, value, ok}] — CSS/motion reality rows
     actions: [],    // last-action log (most recent first; max 12)
     ua: '',
   };
 
   function recordBinding(name, count) { diagnostics.bindings.push({ name: name, count: count }); }
   function recordFeature(name, supported) { diagnostics.features.push({ name: name, supported: !!supported }); }
+  function recordCSS(name, value, ok) { diagnostics.css.push({ name: name, value: value, ok: !!ok }); }
   function logAction(label) {
     var ts;
     try { ts = new Date().toLocaleTimeString(); } catch (e) { ts = '?'; }
@@ -73,8 +76,7 @@
   }
 
   // ============================================================
-  // Block 1 — diagnostic dashboard skeleton + UA capture + title
-  // fallback if even this block fails.
+  // Block 1 — diagnostic dashboard skeleton + UA capture.
   // ============================================================
   registerInitBlock('diagnostic-dashboard', function () {
     try {
@@ -104,28 +106,21 @@
     }
     recordFeature('oklch',              supports('color', 'oklch(0.5 0.1 180)'));
     recordFeature('color-mix(oklch)',   supports('color', 'color-mix(in oklch, red, blue)'));
-    recordFeature('container-queries',  supports('container-type', 'inline-size'));
     recordFeature(':has() selector',    supports('selector(:has(*))'));
     recordFeature('clipboard.writeText', !!(navigator.clipboard && navigator.clipboard.writeText));
     recordFeature('localStorage', (function () {
       try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); return true; }
       catch (e) { return false; }
     })());
-    recordFeature('URLSearchParams',    typeof URLSearchParams === 'function');
   });
 
   // ============================================================
-  // Block 3 — theme toggle. Hydrates from localStorage > prefers-
-  // color-scheme > dark default. Persists explicit toggles.
+  // Block 3 — theme toggle. localStorage > prefers-color-scheme > dark.
   // ============================================================
   registerInitBlock('theme-toggle', function () {
     var root = document.querySelector('[data-chronicle-canon]');
     if (!root) throw new Error('canon root not found');
-
-    function applyTheme(theme) {
-      root.dataset.chronicleCanonTheme = theme;
-    }
-
+    function applyTheme(theme) { root.dataset.chronicleCanonTheme = theme; }
     var theme = 'dark';
     try {
       var stored = localStorage.getItem('chronicle-canon-theme');
@@ -135,7 +130,6 @@
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) theme = 'light';
     }
     applyTheme(theme);
-
     var btns = document.querySelectorAll('[data-action="theme"]');
     btns.forEach(function (b) {
       b.setAttribute('aria-pressed', b.dataset.value === theme ? 'true' : 'false');
@@ -151,7 +145,7 @@
   });
 
   // ============================================================
-  // Block 4 — reduced-motion toggle.
+  // Block 4 — reduced-motion toggle (demo-scoped attribute).
   // ============================================================
   registerInitBlock('reduced-motion-toggle', function () {
     var root = document.querySelector('[data-chronicle-canon]');
@@ -170,39 +164,27 @@
 
   // ============================================================
   // Block 5 — tab strip.
-  //
-  // Buttons is the only active tab this phase. Disabled tabs surface
-  // their "Coming next phase" tooltip; clicking them does nothing
-  // navigational but logs the click so operator sees it registered.
-  // URL hash reflects the active tab so refreshing keeps state.
   // ============================================================
   registerInitBlock('tab-strip', function () {
     var root = document.querySelector('[data-chronicle-canon]');
     if (!root) throw new Error('canon root not found');
     var tabs = document.querySelectorAll('[data-tab]');
-    var enabled = 0;
-    var disabled = 0;
+    var enabled = 0, disabled = 0;
     tabs.forEach(function (t) {
       var id = t.getAttribute('data-tab');
-      var isDisabled = t.hasAttribute('data-tab-disabled');
-      if (isDisabled) {
+      if (t.hasAttribute('data-tab-disabled')) {
         disabled++;
-        t.addEventListener('click', function () {
-          logAction('Tab (disabled) ' + id + ' — ships later');
-        });
+        t.addEventListener('click', function () { logAction('Tab (disabled) ' + id + ' — ships later'); });
         return;
       }
       enabled++;
       t.addEventListener('click', function () {
         root.dataset.activeTab = id;
-        tabs.forEach(function (o) {
-          o.setAttribute('aria-selected', o === t ? 'true' : 'false');
-        });
+        tabs.forEach(function (o) { o.setAttribute('aria-selected', o === t ? 'true' : 'false'); });
         try { history.replaceState(null, '', '#' + id); } catch (e) {}
         logAction('Tab → ' + id);
       });
     });
-    // Honour an existing hash on load (only matters if it's an enabled tab).
     if (location.hash) {
       var hashTab = location.hash.replace(/^#/, '');
       var match = document.querySelector('[data-tab="' + hashTab + '"]:not([data-tab-disabled])');
@@ -214,17 +196,8 @@
 
   // ============================================================
   // Picks store — single source of truth. localStorage key:
-  // chronicle-canon-picks-v2 (fresh; no migration from prior demo).
-  //
-  // Shape: { <tab>: { <axis>: <value> | [<value>, ...] } }
-  //
-  // - <tab> = "buttons" / "menus" / ...
-  // - <axis> = "variant" / "size" / "shadow" / "hover" / "motion" /
-  //   "selected" (axes are per-tab; the variant axis carries a
-  //   "<family>:<sub>" value such as "primary:A").
-  // - Single-select axes store a string; multi-select axes store an
-  //   array. Whether an axis is multi-select is dispatched on the
-  //   axis name (sizes are multi-select; everything else is single).
+  // chronicle-canon-picks-v2. Shape: { <tab>: { <axis>: value|[values],
+  // __notes: string } }.
   // ============================================================
   var PICKS_KEY = 'chronicle-canon-picks-v2';
   var MULTI_SELECT_AXES = { size: true };
@@ -250,11 +223,8 @@
   }
 
   // ============================================================
-  // Block 6 — pick handlers.
-  //
-  // Click (or Enter/Space on focus) on a [data-pick] card toggles
-  // its picked state. Multi-select axes accumulate; single-select
-  // axes clear sibling picks within the same axis on the same tab.
+  // Block 6 — pick handlers. Click/Enter/Space toggles a pick card.
+  // Multi-select on size axis; single-select elsewhere.
   // ============================================================
   registerInitBlock('picks-hydrate-and-bind', function () {
     loadPicks();
@@ -262,7 +232,6 @@
     cards.forEach(function (card) {
       var axis = card.getAttribute('data-pick-axis');
       var value = card.getAttribute('data-pick-value');
-      // Hydrate visual state from store.
       var tab = currentTab();
       var stored = tabPicks(tab)[axis];
       var isPicked = MULTI_SELECT_AXES[axis]
@@ -273,25 +242,22 @@
         card.setAttribute('aria-pressed', 'true');
       }
       function toggle() {
-        var tabNow = currentTab();
-        var bucket = tabPicks(tabNow);
+        var bucket = tabPicks(currentTab());
         if (MULTI_SELECT_AXES[axis]) {
           var list = Array.isArray(bucket[axis]) ? bucket[axis].slice() : [];
           var idx = list.indexOf(value);
-          if (idx === -1) { list.push(value); }
-          else { list.splice(idx, 1); }
+          if (idx === -1) list.push(value); else list.splice(idx, 1);
           bucket[axis] = list;
           card.setAttribute('data-picked', idx === -1 ? 'true' : 'false');
           card.setAttribute('aria-pressed', idx === -1 ? 'true' : 'false');
         } else {
-          // Single-select: clear other siblings within this axis.
           var siblings = document.querySelectorAll('[data-pick-axis="' + axis + '"]');
           siblings.forEach(function (s) {
             s.setAttribute('data-picked', 'false');
             s.setAttribute('aria-pressed', 'false');
           });
           if (bucket[axis] === value) {
-            delete bucket[axis]; // clicking the picked one un-picks
+            delete bucket[axis];
           } else {
             bucket[axis] = value;
             card.setAttribute('data-picked', 'true');
@@ -299,22 +265,11 @@
           }
         }
         savePicks();
-        renderPicksPanel();
         logAction('Pick ' + axis + ' → ' + value);
       }
-      card.addEventListener('click', function (ev) {
-        // Don't toggle if the click landed on a button inside the
-        // sample body (those buttons are previews; their state is
-        // illustrative, but the toggle should still fire on the
-        // surrounding card). So actually — toggle is on the whole
-        // card; sample buttons forward the click up naturally.
-        toggle();
-      });
+      card.addEventListener('click', function () { toggle(); });
       card.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Enter' || ev.key === ' ') {
-          ev.preventDefault();
-          toggle();
-        }
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); }
       });
     });
     recordBinding('pick cards', cards.length);
@@ -327,25 +282,100 @@
     var nodes = document.querySelectorAll('[data-notes]');
     nodes.forEach(function (n) {
       var tab = n.getAttribute('data-notes-tab') || currentTab();
-      // Hydrate from store.
       var bucket = tabPicks(tab);
       if (bucket && bucket.__notes) n.value = bucket.__notes;
       n.addEventListener('input', function () {
-        var b = tabPicks(tab);
-        b.__notes = n.value;
+        tabPicks(tab).__notes = n.value;
         savePicks();
-        renderPicksPanel();
       });
     });
     recordBinding('notes textareas', nodes.length);
   });
 
   // ============================================================
-  // "Your picks" summary + Copy/Download/Reset.
+  // Block 8 — CSS / motion reality probe (Phase 2A.1 §A).
+  //
+  // The verification gap that hid the dead-motion bug across phases was
+  // that nothing checked CSS reality in the actual browser. These rows
+  // compute, at runtime: OS reduce-motion, canon stylesheet loaded,
+  // computed transitionDuration on an ACTUAL demo button (the bug-prone
+  // one — NOT document.querySelector('button')), canon token
+  // resolution, and scope-root presence.
+  // ============================================================
+  registerInitBlock('css-reality-probe', function () {
+    var rm = false;
+    try { rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    recordCSS('OS reduce-motion', rm ? 'ACTIVE ⚠' : 'inactive', !rm);
+
+    var loaded = false;
+    try {
+      loaded = [].slice.call(document.styleSheets).some(function (s) {
+        return s.href && s.href.indexOf('chronicle-canon.css') !== -1;
+      });
+    } catch (e) {}
+    recordCSS('canon stylesheet', loaded ? 'loaded' : 'NOT FOUND', loaded);
+
+    var btn = document.querySelector('.chronicle-canon-btn');
+    if (btn) {
+      var cs = getComputedStyle(btn);
+      var dur = cs.transitionDuration || '(none)';
+      var ok = dur && dur !== '0s' && dur !== '0ms';
+      recordCSS('demo button transition', dur + ' / ' + (cs.transitionProperty || '?'), ok);
+    } else {
+      recordCSS('demo button transition', 'no .chronicle-canon-btn found', false);
+    }
+
+    var root = document.querySelector('[data-chronicle-canon]');
+    if (root) {
+      var accent = getComputedStyle(root).getPropertyValue('--chronicle-accent').trim();
+      recordCSS('--chronicle-accent', accent || '(unresolved)', !!accent);
+    } else {
+      recordCSS('--chronicle-accent', '(no scope root)', false);
+    }
+
+    recordCSS('scope root [data-chronicle-canon]', root ? 'found' : 'MISSING', !!root);
+  });
+
+  // ============================================================
+  // Block 9 — consensual motion-preview banner (Phase 2A.1 §B).
+  // ONLY un-hides the banner when OS reduce-motion is active. Opt-in
+  // sets [data-canon-force-motion="true"] on the root (CSS beats the
+  // global guard within the demo only). Choice persists.
+  // ============================================================
+  registerInitBlock('motion-banner', function () {
+    var root = document.querySelector('[data-chronicle-canon]');
+    var banner = document.querySelector('[data-motion-banner]');
+    if (!root || !banner) return; // banner absent is non-fatal
+    var rm = false;
+    try { rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+
+    var forced = false;
+    try { forced = localStorage.getItem('chronicle-canon-force-motion') === 'true'; } catch (e) {}
+    if (forced) root.setAttribute('data-canon-force-motion', 'true');
+
+    var btn = banner.querySelector('[data-motion-toggle]');
+    function paint() {
+      var on = root.getAttribute('data-canon-force-motion') === 'true';
+      if (btn) btn.textContent = on ? 'Disable motion preview' : 'Enable motion preview';
+    }
+    if (btn) btn.addEventListener('click', function () {
+      var on = root.getAttribute('data-canon-force-motion') === 'true';
+      if (on) root.removeAttribute('data-canon-force-motion');
+      else root.setAttribute('data-canon-force-motion', 'true');
+      try { localStorage.setItem('chronicle-canon-force-motion', on ? 'false' : 'true'); } catch (e) {}
+      paint();
+      logAction('Motion preview → ' + (on ? 'off' : 'on'));
+    });
+    paint();
+
+    if (rm) banner.removeAttribute('hidden');
+    recordBinding('motion-banner (shown)', rm ? 1 : 0);
+  });
+
+  // ============================================================
+  // Picks export — build the markdown brief on demand (no panel DOM).
   // ============================================================
   function pickLabel(axis, value) {
-    // For variant axis the value is "<family>:<sub>" — render both
-    // parts so operator sees "primary (A)" rather than "primary:A".
     if (axis === 'variant' && value && value.indexOf(':') !== -1) {
       var parts = value.split(':');
       return parts[0] + ' (' + parts[1] + ')';
@@ -379,9 +409,7 @@
     }
     if (s.rows.length) {
       lines.push('## Picks');
-      s.rows.forEach(function (r) {
-        lines.push('- **' + r.axis + ':** ' + r.value);
-      });
+      s.rows.forEach(function (r) { lines.push('- **' + r.axis + ':** ' + r.value); });
       lines.push('');
     }
     if (s.notes.trim()) {
@@ -391,88 +419,43 @@
     }
     return lines.join('\n');
   }
-  function renderPicksPanel() {
-    var s = summarize();
-    var countEl = document.querySelector('[data-picks-count]');
-    var nameEl = document.querySelector('[data-picks-tabname]');
-    var listEl = document.querySelector('[data-picks-list]');
-    var emptyEl = document.querySelector('[data-picks-empty]');
-    var briefEl = document.querySelector('[data-picks-brief]');
-    if (countEl) countEl.textContent = String(s.rows.length);
-    if (nameEl) nameEl.textContent = s.tab.charAt(0).toUpperCase() + s.tab.slice(1);
-    if (listEl) {
-      listEl.innerHTML = '';
-      s.rows.forEach(function (r) {
-        var li = document.createElement('li');
-        var k = document.createElement('strong');
-        k.textContent = r.axis;
-        var v = document.createElement('span');
-        v.textContent = r.value;
-        li.appendChild(k);
-        li.appendChild(v);
-        listEl.appendChild(li);
-      });
-    }
-    if (emptyEl) emptyEl.hidden = s.rows.length > 0 || (s.notes && s.notes.trim().length > 0);
-    if (briefEl) briefEl.value = buildBrief(s);
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) {}
   }
 
-  registerInitBlock('picks-panel', function () {
+  // ============================================================
+  // Block 10 — picks copy (replaces the removed picks-panel).
+  // Single "Copy my picks" button serializes the brief on demand.
+  // ============================================================
+  registerInitBlock('picks-copy', function () {
     var copyBtn = document.querySelector('[data-picks-copy]');
-    var dlBtn = document.querySelector('[data-picks-download]');
-    var resetBtn = document.querySelector('[data-picks-reset]');
-    if (copyBtn) copyBtn.addEventListener('click', function () {
-      var brief = document.querySelector('[data-picks-brief]');
-      if (!brief) return;
+    if (!copyBtn) throw new Error('[data-picks-copy] button missing');
+    copyBtn.addEventListener('click', function () {
+      var brief = buildBrief(summarize());
       var done = function () {
         var t = copyBtn.textContent;
         copyBtn.textContent = 'Copied ✓';
         setTimeout(function () { copyBtn.textContent = t; }, 1500);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(brief.value).then(done, function () {
-          try { brief.select(); document.execCommand && document.execCommand('copy'); } catch (e) {}
-          done();
-        });
+        navigator.clipboard.writeText(brief).then(done, function () { fallbackCopy(brief); done(); });
       } else {
-        try { brief.removeAttribute('readonly'); brief.select(); document.execCommand('copy'); brief.setAttribute('readonly', ''); } catch (e) {}
-        done();
+        fallbackCopy(brief); done();
       }
-      logAction('Copy brief');
+      logAction('Copy picks');
     });
-    if (dlBtn) dlBtn.addEventListener('click', function () {
-      var brief = document.querySelector('[data-picks-brief]');
-      if (!brief) return;
-      function dl(name, content, type) {
-        var blob = new Blob([content], { type: type });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url; a.download = name;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-      }
-      dl('chronicle-canon-picks.md', brief.value, 'text/markdown');
-      dl('chronicle-canon-picks.json', JSON.stringify(picks, null, 2), 'application/json');
-      logAction('Download brief');
-    });
-    if (resetBtn) resetBtn.addEventListener('click', function () {
-      if (!confirm('Clear all picks (including notes)?')) return;
-      picks = {};
-      savePicks();
-      location.reload();
-    });
-    // Initial render — defensive: the picks-hydrate block already
-    // populated `picks`, so we can render even if other blocks fail.
-    renderPicksPanel();
-    var n = 0;
-    if (copyBtn) n++;
-    if (dlBtn) n++;
-    if (resetBtn) n++;
-    recordBinding('picks-panel buttons', n);
+    recordBinding('picks-copy button', 1);
   });
 
   // ============================================================
-  // Block 9 — Copy diagnostic report button.
+  // Block 11 — Copy diagnostic report button.
   // ============================================================
   registerInitBlock('diagnostics-copy-report', function () {
     var btn = document.querySelector('[data-copy-report]');
@@ -491,6 +474,9 @@
       lines.push('## Element bindings');
       diagnostics.bindings.forEach(function (b) { lines.push('- ' + b.name + ': ' + b.count); });
       lines.push('');
+      lines.push('## CSS / motion reality');
+      diagnostics.css.forEach(function (c) { lines.push('- ' + c.name + ': ' + c.value + (c.ok ? '' : '  ⚠')); });
+      lines.push('');
       lines.push('## Browser features');
       diagnostics.features.forEach(function (f) { lines.push('- ' + f.name + ': ' + (f.supported ? 'Supported' : 'Missing')); });
       lines.push('');
@@ -504,79 +490,73 @@
         setTimeout(function () { btn.textContent = t; }, 1500);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(report).then(done, function () { alert(report); done(); });
-      } else {
-        try {
-          var ta = document.createElement('textarea');
-          ta.value = report;
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand('copy');
-          document.body.removeChild(ta);
-        } catch (e) {}
-        done();
-      }
+        navigator.clipboard.writeText(report).then(done, function () { fallbackCopy(report); done(); });
+      } else { fallbackCopy(report); done(); }
       logAction('Copy diagnostic report');
     });
   });
 
   // ============================================================
-  // Dashboard fill — runs once after all blocks. Auto-expands the
-  // <details> element if any block FAILED so collapsed-by-default
-  // can't hide a failure.
+  // Dashboard fill. Auto-expands the <details> if any block FAILED or
+  // any CSS-reality row warns.
   // ============================================================
+  function listInto(selector, items, classify, text) {
+    var list = document.querySelector(selector);
+    if (!list) return;
+    list.innerHTML = '';
+    if (!items.length) {
+      var li = document.createElement('li');
+      li.className = 'chronicle-canon__diagnostics-item chronicle-canon__diagnostics-item--warn';
+      li.textContent = '(none)';
+      list.appendChild(li);
+      return;
+    }
+    items.forEach(function (it) {
+      var li = document.createElement('li');
+      li.className = 'chronicle-canon__diagnostics-item chronicle-canon__diagnostics-item--' + classify(it);
+      li.textContent = text(it);
+      list.appendChild(li);
+    });
+  }
+
   function renderDashboard() {
     var panel = document.querySelector('[data-canon-diagnostics]');
     if (!panel) return;
     var failed = diagnostics.blocks.filter(function (b) { return b.status !== 'OK'; }).length;
-    panel.setAttribute('data-status', failed > 0 ? 'fail' : 'ok');
-    if (failed > 0) panel.setAttribute('open', '');
+    var cssFail = diagnostics.css.filter(function (c) { return !c.ok; }).length;
+    panel.setAttribute('data-status', (failed > 0) ? 'fail' : 'ok');
+    if (failed > 0 || cssFail > 0) panel.setAttribute('open', '');
     var summary = panel.querySelector('[data-diagnostics-status]');
     if (summary) {
       summary.textContent = failed > 0
         ? failed + ' of ' + diagnostics.blocks.length + ' init blocks FAILED'
-        : 'All ' + diagnostics.blocks.length + ' init blocks OK';
+        : (cssFail > 0
+            ? 'init OK; ' + cssFail + ' CSS-reality warning(s)'
+            : 'All ' + diagnostics.blocks.length + ' init blocks OK');
     }
-    var blockList = panel.querySelector('[data-init-block-list]');
-    if (blockList) {
-      blockList.innerHTML = '';
-      diagnostics.blocks.forEach(function (b) {
+    listInto('[data-init-block-list]', diagnostics.blocks,
+      function (b) { return b.status === 'OK' ? 'ok' : 'fail'; },
+      function (b) { return (b.status === 'OK' ? '✓ ' : '✗ ') + b.name + (b.error ? ' — ' + b.error : ''); });
+    listInto('[data-binding-list]', diagnostics.bindings,
+      function (b) { return b.count > 0 ? 'ok' : 'warn'; },
+      function (b) { return b.name + ': ' + b.count; });
+    listInto('[data-feature-list]', diagnostics.features,
+      function (f) { return f.supported ? 'ok' : 'warn'; },
+      function (f) { return (f.supported ? '✓ ' : '– ') + f.name; });
+    var cssList = document.querySelector('[data-css-reality-list]');
+    if (cssList) {
+      cssList.innerHTML = '';
+      diagnostics.css.forEach(function (c) {
         var li = document.createElement('li');
-        li.className = 'chronicle-canon__diagnostics-item chronicle-canon__diagnostics-item--' + (b.status === 'OK' ? 'ok' : 'fail');
-        li.textContent = (b.status === 'OK' ? '✓ ' : '✗ ') + b.name;
-        if (b.error) {
-          var err = document.createElement('code');
-          err.textContent = ' — ' + b.error;
-          li.appendChild(err);
-        }
-        blockList.appendChild(li);
-      });
-    }
-    var bindingList = panel.querySelector('[data-binding-list]');
-    if (bindingList) {
-      bindingList.innerHTML = '';
-      if (!diagnostics.bindings.length) {
-        var li = document.createElement('li');
-        li.className = 'chronicle-canon__diagnostics-item chronicle-canon__diagnostics-item--fail';
-        li.textContent = '(no bindings recorded)';
-        bindingList.appendChild(li);
-      } else {
-        diagnostics.bindings.forEach(function (b) {
-          var li = document.createElement('li');
-          li.className = 'chronicle-canon__diagnostics-item chronicle-canon__diagnostics-item--' + (b.count > 0 ? 'ok' : 'warn');
-          li.textContent = b.name + ': ' + b.count;
-          bindingList.appendChild(li);
-        });
-      }
-    }
-    var featureList = panel.querySelector('[data-feature-list]');
-    if (featureList) {
-      featureList.innerHTML = '';
-      diagnostics.features.forEach(function (f) {
-        var li = document.createElement('li');
-        li.className = 'chronicle-canon__diagnostics-item chronicle-canon__diagnostics-item--' + (f.supported ? 'ok' : 'warn');
-        li.textContent = (f.supported ? '✓ ' : '– ') + f.name;
-        featureList.appendChild(li);
+        li.className = 'chronicle-canon__diagnostics-item chronicle-canon__diagnostics-item--probe chronicle-canon__diagnostics-item--' + (c.ok ? 'ok' : 'warn');
+        var name = document.createElement('span');
+        name.textContent = (c.ok ? '✓ ' : '⚠ ') + c.name;
+        var val = document.createElement('span');
+        val.className = 'chronicle-canon__probe-value';
+        val.textContent = c.value;
+        li.appendChild(name);
+        li.appendChild(val);
+        cssList.appendChild(li);
       });
     }
     renderLastActionLog();
@@ -599,8 +579,7 @@
   }
 
   // ============================================================
-  // Trigger init. `defer` guarantees DOM is parsed; belt-and-
-  // suspenders against document.readyState anyway.
+  // Trigger init.
   // ============================================================
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

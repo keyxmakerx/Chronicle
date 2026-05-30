@@ -577,6 +577,38 @@
     cursor: not-allowed;
   }
 
+  /* Universal visible hover (Phase 2A.1 motion fix).
+   *
+   * Root cause of operator's "hover does nothing" report: the per-
+   * variant hovers (primary/tonal/etc.) only nudged background by ~8%
+   * — imperceptible, especially in dark mode — and the visceral
+   * lift/shadow/scale lived ONLY on the C.4/C.5 demo buttons. Every
+   * canon button now gets an unmistakable lift + elevation on hover so
+   * the motion is obvious wherever the operator points. The per-variant
+   * + per-axis rules below still layer their colour/shadow specifics on
+   * top via source order. box-shadow co-occurs with transform here so
+   * the canon-D3 "no shadow-alone transition" rule holds (the shared
+   * transition is declared on .chronicle-canon-btn above). */
+  .chronicle-canon-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px -2px oklch(0 0 0 / 0.30);
+  }
+  .chronicle-canon-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px -1px oklch(0 0 0 / 0.30);
+  }
+  /* Link + ghost are intentionally flat — no lift/shadow (they read as
+   * text, not surfaces). Override the universal hover back off. */
+  .chronicle-canon-btn--link:hover:not(:disabled),
+  .chronicle-canon-btn--linkA:hover:not(:disabled),
+  .chronicle-canon-btn--linkB:hover:not(:disabled),
+  .chronicle-canon-btn--ghost:hover:not(:disabled),
+  .chronicle-canon-btn--ghostA:hover:not(:disabled),
+  .chronicle-canon-btn--ghostB:hover:not(:disabled) {
+    transform: none;
+    box-shadow: none;
+  }
+
   /* Sizes. */
   .chronicle-canon-btn--xs { padding: 4px 8px;   font-size: 11px; }
   .chronicle-canon-btn--sm { padding: 5px 10px;  font-size: 12px; }
@@ -984,4 +1016,56 @@
     resize: vertical;
   }
   .chronicle-canon__picks-actions { display: flex; gap: var(--chronicle-space-2); align-items: center; }
+
+  /* ============================================================
+   * CSS-reality probe rows (Phase 2A.1) — rendered into the
+   * diagnostic dashboard by the css-reality-probe init block.
+   * Reuses the diagnostics-item visual states.
+   * ============================================================ */
+  .chronicle-canon__diagnostics-item--probe {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .chronicle-canon__probe-value {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    color: var(--chronicle-fg-muted);
+    word-break: break-all;
+  }
+
+  /* ============================================================
+   * Consensual motion-preview banner (Phase 2A.1 §B).
+   *
+   * Only un-hidden by JS when prefers-reduced-motion:reduce is active
+   * — a motion-design demo is the one legitimate context to offer
+   * motion despite a system suppression, but only on opt-in. Demo-
+   * scoped; never touches the global guard or production.
+   * ============================================================ */
+  .chronicle-canon__motion-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--chronicle-space-3);
+    padding: var(--chronicle-space-3) var(--chronicle-space-4);
+    margin-bottom: var(--chronicle-space-4);
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-warning) 10%);
+    border: 1px solid color-mix(in oklch, var(--chronicle-warning), transparent 50%);
+    border-radius: var(--chronicle-radius-md);
+    font-size: 13px;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon__motion-banner[hidden] { display: none; }
+  .chronicle-canon__motion-banner-text { flex: 1 1 auto; line-height: 1.5; }
+
+  /* When operator opts in, re-enable demo motion strongly enough to
+   * beat the global universal-selector !important reduced-motion guard.
+   * A class-scoped selector with !important beats the global
+   * `*{...!important}`. Demo-scoped via [data-canon-force-motion];
+   * production surfaces never carry that attribute. */
+  [data-canon-force-motion="true"] .chronicle-canon-btn,
+  [data-canon-force-motion="true"] .chronicle-canon-btn::before,
+  [data-canon-force-motion="true"] .chronicle-canon-btn::after,
+  [data-canon-force-motion="true"] .chronicle-canon__pick {
+    transition-duration: var(--chronicle-motion-base) !important;
+  }
 }  /* end @layer chronicle-canon */
