@@ -1,0 +1,987 @@
+/* chronicle-canon.css — C-V2-DESIGN-REBUILD Phase 2A canon demo.
+ *
+ * Fresh implementation after the PR #375-#381 single-page arc was
+ * scrapped. Scoped to [data-chronicle-canon] inside @layer chronicle-
+ * canon so it cannot leak into the rest of Chronicle's surface.
+ *
+ * Lint rules (enforced by canon_test.go):
+ *   D2 — OKLCH-only colour; no hex literals outside id selectors
+ *   D3 — transitions on box-shadow must co-occur with at least one of
+ *        background-color / border-color / color / transform / opacity
+ *   D5 — never `transition: all`; list properties explicitly
+ *   D6 — Inter Variable body + JetBrains Mono code; 14px body
+ *   D7 — 4/8/12/16/24 base spacing grid
+ */
+
+@layer chronicle-canon {
+  /* ============================================================
+   * Tokens — :root scoped to [data-chronicle-canon].
+   * ============================================================ */
+  [data-chronicle-canon] {
+    /* Neutral ramp — cool grays matching the live site. */
+    --chronicle-neutral-50:  oklch(0.985 0.002 247.839);
+    --chronicle-neutral-100: oklch(0.967 0.003 264.542);
+    --chronicle-neutral-200: oklch(0.928 0.006 264.531);
+    --chronicle-neutral-300: oklch(0.872 0.010 258.338);
+    --chronicle-neutral-400: oklch(0.707 0.022 261.325);
+    --chronicle-neutral-500: oklch(0.551 0.027 264.364);
+    --chronicle-neutral-600: oklch(0.446 0.030 256.802);
+    --chronicle-neutral-700: oklch(0.373 0.034 259.733);
+    --chronicle-neutral-800: oklch(0.278 0.033 256.848);
+    --chronicle-neutral-900: oklch(0.210 0.034 264.665);
+    --chronicle-neutral-950: oklch(0.130 0.028 261.692);
+
+    /* Functional tokens. Defaults are dark-mode values; light mode
+     * overrides below set the light values. The page defaults
+     * data-chronicle-canon-theme="dark", so this matches the no-JS
+     * fallback. */
+    --chronicle-surface:         var(--chronicle-neutral-900);
+    --chronicle-surface-low:     var(--chronicle-neutral-950);
+    --chronicle-surface-card:    var(--chronicle-neutral-800);
+    --chronicle-surface-raised:  oklch(0.34 0.034 259.733);
+    --chronicle-surface-overlay: var(--chronicle-neutral-800);
+    --chronicle-fg:              var(--chronicle-neutral-50);
+    --chronicle-fg-muted:        var(--chronicle-neutral-400);
+    --chronicle-fg-subtle:       var(--chronicle-neutral-500);
+    --chronicle-border:          var(--chronicle-neutral-700);
+    --chronicle-border-strong:   var(--chronicle-neutral-600);
+
+    /* Accent — indigo per canon D2 default. Per-page only; never
+     * touches the global --color-accent-rgb. */
+    --chronicle-accent:    oklch(0.58 0.20 270);
+    --chronicle-accent-fg: oklch(0.99 0 0);
+    --chronicle-ring:      color-mix(in oklch, var(--chronicle-accent), transparent 35%);
+    --chronicle-danger:    oklch(0.58 0.22 27);
+    --chronicle-success:   oklch(0.62 0.16 155);
+    --chronicle-warning:   oklch(0.78 0.16 75);
+
+    /* Spacing grid — canon D7 (4/8/12/16/24 base). */
+    --chronicle-space-1: 4px;
+    --chronicle-space-2: 8px;
+    --chronicle-space-3: 12px;
+    --chronicle-space-4: 16px;
+    --chronicle-space-5: 24px;
+    --chronicle-space-6: 32px;
+    --chronicle-space-7: 48px;
+
+    /* Radii. */
+    --chronicle-radius-sm:   4px;
+    --chronicle-radius:      6px;
+    --chronicle-radius-md:   8px;
+    --chronicle-radius-lg:   12px;
+    --chronicle-radius-full: 9999px;
+
+    /* Motion — canon D5 default 150ms. */
+    --chronicle-motion-fast:    100ms;
+    --chronicle-motion-base:    150ms;
+    --chronicle-motion-medium:  250ms;
+    --chronicle-ease-standard:  cubic-bezier(0.2, 0, 0, 1);
+
+    /* Elevation. */
+    --chronicle-elev-2-shadow: 0 1px 2px 0 oklch(0 0 0 / 0.04),
+                               0 2px 4px -1px oklch(0 0 0 / 0.10);
+    --chronicle-elev-3-shadow: 0 4px 12px -2px oklch(0 0 0 / 0.18);
+
+    /* Typography — canon D6. */
+    font-family: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--chronicle-fg);
+    background: var(--chronicle-surface);
+
+    min-height: 100vh;
+    padding: var(--chronicle-space-4);
+    box-sizing: border-box;
+  }
+
+  /* Light theme override. */
+  [data-chronicle-canon][data-chronicle-canon-theme="light"] {
+    --chronicle-surface:         var(--chronicle-neutral-50);
+    --chronicle-surface-low:     var(--chronicle-neutral-100);
+    --chronicle-surface-card:    oklch(1 0 0);
+    --chronicle-surface-raised:  var(--chronicle-neutral-50);
+    --chronicle-surface-overlay: oklch(1 0 0);
+    --chronicle-fg:              var(--chronicle-neutral-900);
+    --chronicle-fg-muted:        var(--chronicle-neutral-600);
+    --chronicle-fg-subtle:       var(--chronicle-neutral-500);
+    --chronicle-border:          var(--chronicle-neutral-200);
+    --chronicle-border-strong:   var(--chronicle-neutral-300);
+  }
+
+  /* Reduced-motion preview toggle — disables transitions/animations
+   * regardless of the OS preference. Operator can audit reduced-motion
+   * compliance without flipping the OS setting. */
+  [data-chronicle-canon][data-chronicle-canon-reduce-motion="true"] *,
+  [data-chronicle-canon][data-chronicle-canon-reduce-motion="true"] *::before,
+  [data-chronicle-canon][data-chronicle-canon-reduce-motion="true"] *::after {
+    transition-duration: 0ms;
+    animation-duration: 0ms;
+  }
+
+  /* ============================================================
+   * Header + controls.
+   * ============================================================ */
+  .chronicle-canon__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--chronicle-space-4);
+    align-items: end;
+    margin-bottom: var(--chronicle-space-4);
+  }
+  .chronicle-canon__header-main { min-width: 0; }
+  .chronicle-canon__title {
+    margin: 0 0 var(--chronicle-space-1) 0;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon__intro {
+    margin: 0;
+    font-size: 13px;
+    color: var(--chronicle-fg-muted);
+    line-height: 1.6;
+    max-width: 720px;
+  }
+  .chronicle-canon__header-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--chronicle-space-2);
+  }
+  .chronicle-canon__control-group {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--chronicle-space-1);
+  }
+  .chronicle-canon__control-label {
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+    margin-right: var(--chronicle-space-1);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .chronicle-canon__toggle {
+    padding: 4px 10px;
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+    color: var(--chronicle-fg-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      color            var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-canon__toggle:hover {
+    border-color: var(--chronicle-border-strong);
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon__toggle[aria-pressed="true"] {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 18%);
+    border-color: var(--chronicle-accent);
+    color: var(--chronicle-fg);
+  }
+
+  /* ============================================================
+   * Diagnostic dashboard — collapsed by default; auto-expands on fail.
+   * ============================================================ */
+  .chronicle-canon__diagnostics {
+    margin-bottom: var(--chronicle-space-4);
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-left: 3px solid color-mix(in oklch, var(--chronicle-fg-muted), transparent 60%);
+    border-radius: var(--chronicle-radius-md);
+    font-size: 12px;
+  }
+  .chronicle-canon__diagnostics[data-status="ok"] {
+    border-left-color: var(--chronicle-success);
+  }
+  .chronicle-canon__diagnostics[data-status="fail"] {
+    border-left-color: var(--chronicle-danger);
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-danger) 4%);
+  }
+  .chronicle-canon__diagnostics-summary {
+    cursor: pointer;
+    padding: var(--chronicle-space-2) var(--chronicle-space-3);
+    display: flex;
+    align-items: center;
+    gap: var(--chronicle-space-2);
+    list-style: none;
+  }
+  .chronicle-canon__diagnostics-summary::-webkit-details-marker { display: none; }
+  .chronicle-canon__diagnostics-title { font-weight: 600; color: var(--chronicle-fg); }
+  .chronicle-canon__diagnostics-status {
+    font-weight: 500;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-canon__diagnostics[data-status="ok"] .chronicle-canon__diagnostics-status {
+    color: var(--chronicle-success);
+  }
+  .chronicle-canon__diagnostics[data-status="fail"] .chronicle-canon__diagnostics-status {
+    color: var(--chronicle-danger);
+    font-weight: 600;
+  }
+  .chronicle-canon__diagnostics-hint {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--chronicle-fg-subtle);
+  }
+  .chronicle-canon__diagnostics-body {
+    padding: var(--chronicle-space-3);
+    border-top: 1px solid var(--chronicle-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--chronicle-space-3);
+  }
+  .chronicle-canon__diagnostics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--chronicle-space-3);
+  }
+  .chronicle-canon__diagnostics-col {
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+    padding: var(--chronicle-space-2) var(--chronicle-space-3);
+  }
+  .chronicle-canon__diagnostics-col h3 {
+    margin: 0 0 var(--chronicle-space-1) 0;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-canon__diagnostics-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--chronicle-space-1);
+  }
+  .chronicle-canon__diagnostics-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: var(--chronicle-radius-sm);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .chronicle-canon__diagnostics-item--ok   { background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-success) 6%); }
+  .chronicle-canon__diagnostics-item--fail { background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-danger) 10%); border: 1px solid color-mix(in oklch, var(--chronicle-danger), transparent 50%); }
+  .chronicle-canon__diagnostics-item--warn { background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-warning) 6%); }
+  .chronicle-canon__diagnostics-item--pending { color: var(--chronicle-fg-muted); font-style: italic; }
+  .chronicle-canon__diagnostics-foot {
+    display: flex;
+    flex-direction: column;
+    gap: var(--chronicle-space-2);
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-canon__diagnostics-foot code {
+    padding: 1px 6px;
+    background: var(--chronicle-surface-low);
+    border-radius: var(--chronicle-radius-sm);
+    font-size: 10px;
+    word-break: break-all;
+  }
+  .chronicle-canon__diagnostics-log {
+    list-style: decimal;
+    margin: 4px 0 0 18px;
+    padding: 0;
+    max-height: 100px;
+    overflow-y: auto;
+  }
+
+  /* ============================================================
+   * Tab strip.
+   * ============================================================ */
+  .chronicle-canon__tabs {
+    display: flex;
+    gap: var(--chronicle-space-1);
+    flex-wrap: wrap;
+    padding-bottom: var(--chronicle-space-2);
+    border-bottom: 1px solid var(--chronicle-border);
+    margin-bottom: var(--chronicle-space-4);
+  }
+  .chronicle-canon__tab {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: var(--chronicle-space-2) var(--chronicle-space-3);
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: 2px solid transparent;
+    border-radius: var(--chronicle-radius) var(--chronicle-radius) 0 0;
+    color: var(--chronicle-fg-muted);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      color            var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-canon__tab:hover {
+    background: color-mix(in oklch, var(--chronicle-surface-card), transparent 50%);
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon__tab--active {
+    background: var(--chronicle-surface-card);
+    border-color: var(--chronicle-border);
+    border-bottom-color: var(--chronicle-accent);
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon__tab--disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  .chronicle-canon__tab--disabled:hover {
+    background: transparent;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-canon__tab-label {
+    font-weight: 500;
+  }
+  .chronicle-canon__tab-hint {
+    font-size: 10px;
+    color: var(--chronicle-fg-subtle);
+    margin-top: 2px;
+  }
+  .chronicle-canon__tab--nextish .chronicle-canon__tab-hint {
+    color: var(--chronicle-accent);
+  }
+
+  /* ============================================================
+   * Panel + section structure.
+   * ============================================================ */
+  .chronicle-canon__panels { display: flex; flex-direction: column; gap: var(--chronicle-space-5); }
+  .chronicle-canon__panel { display: none; }
+  .chronicle-canon__panel--active { display: flex; flex-direction: column; gap: var(--chronicle-space-5); }
+  .chronicle-canon__panel-head { display: flex; flex-direction: column; gap: var(--chronicle-space-1); }
+  .chronicle-canon__panel-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon__panel-intro {
+    margin: 0;
+    font-size: 13px;
+    color: var(--chronicle-fg-muted);
+    line-height: 1.6;
+    max-width: 720px;
+  }
+  .chronicle-canon__section {
+    padding: var(--chronicle-space-4);
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--chronicle-space-3);
+  }
+  .chronicle-canon__section-head { display: flex; flex-direction: column; gap: var(--chronicle-space-1); }
+  .chronicle-canon__section-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon__section-intro {
+    margin: 0;
+    font-size: 12px;
+    color: var(--chronicle-fg-muted);
+    line-height: 1.5;
+    max-width: 680px;
+  }
+
+  /* Grids — each axis's options laid out side-by-side. */
+  .chronicle-canon__grid {
+    display: grid;
+    gap: var(--chronicle-space-3);
+  }
+  .chronicle-canon__grid--variants  { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .chronicle-canon__grid--sizes     { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  .chronicle-canon__grid--shadows   { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .chronicle-canon__grid--hover     { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .chronicle-canon__grid--motion    { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .chronicle-canon__grid--selected  { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .chronicle-canon__staterow {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--chronicle-space-3);
+  }
+  .chronicle-canon__statecell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--chronicle-space-2);
+    padding: var(--chronicle-space-3);
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+  }
+  .chronicle-canon__statelabel {
+    font-size: 10px;
+    color: var(--chronicle-fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Variant pair (C.1). */
+  .chronicle-canon__variant-family {
+    display: flex;
+    flex-direction: column;
+    gap: var(--chronicle-space-2);
+    padding: var(--chronicle-space-3);
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+  }
+  .chronicle-canon__variant-family-head { display: flex; flex-direction: column; gap: 2px; }
+  .chronicle-canon__variant-family-name {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon__variant-family-desc {
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-canon__pickrow {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--chronicle-space-2);
+  }
+
+  /* ============================================================
+   * Pick card — the click-to-pick affordance.
+   * ============================================================ */
+  .chronicle-canon__pick {
+    display: flex;
+    flex-direction: column;
+    gap: var(--chronicle-space-2);
+    padding: var(--chronicle-space-3);
+    background: var(--chronicle-surface);
+    border: 1.5px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-md);
+    cursor: pointer;
+    position: relative;
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      box-shadow       var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-canon__pick:hover {
+    border-color: var(--chronicle-border-strong);
+    background: color-mix(in oklch, var(--chronicle-surface), var(--chronicle-fg) 3%);
+    box-shadow: 0 2px 8px -2px oklch(0 0 0 / 0.18);
+  }
+  .chronicle-canon__pick:focus-visible {
+    outline: 2px solid var(--chronicle-ring);
+    outline-offset: 2px;
+  }
+  .chronicle-canon__pick[data-picked="true"] {
+    border-color: var(--chronicle-accent);
+    background: color-mix(in oklch, var(--chronicle-surface), var(--chronicle-accent) 6%);
+  }
+  .chronicle-canon__pick-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--chronicle-space-2);
+  }
+  .chronicle-canon__pick-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon__pick-check {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    border-radius: var(--chronicle-radius-full);
+    background: var(--chronicle-surface-low);
+    color: transparent;
+    border: 1px solid var(--chronicle-border);
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      color            var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-canon__pick[data-picked="true"] .chronicle-canon__pick-check {
+    background: var(--chronicle-accent);
+    border-color: var(--chronicle-accent);
+    color: var(--chronicle-accent-fg);
+  }
+  .chronicle-canon__pick-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--chronicle-space-2);
+    min-height: 56px;
+  }
+  .chronicle-canon__pick-desc {
+    margin: 0;
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+    line-height: 1.4;
+  }
+
+  /* ============================================================
+   * Buttons — the actual canon button surface being evaluated.
+   *
+   * The base .chronicle-canon-btn carries the canon defaults
+   * (radius, motion timing, focus ring). Modifiers layer variant
+   * (primary/tonal/secondary/ghost/link/destructive), size, and
+   * forced-state. Per-section axes (data-shadow / data-hover /
+   * data-motion / data-selected) layer on additional treatments.
+   * ============================================================ */
+  .chronicle-canon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--chronicle-space-1);
+    padding: 8px 16px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.2;
+    border: 1px solid transparent;
+    border-radius: var(--chronicle-radius);
+    cursor: pointer;
+    background: transparent;
+    color: var(--chronicle-fg);
+    transition:
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      border-color     var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      color            var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      box-shadow       var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      transform        var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-canon-btn:focus-visible {
+    outline: 2px solid var(--chronicle-ring);
+    outline-offset: 2px;
+  }
+  .chronicle-canon-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Sizes. */
+  .chronicle-canon-btn--xs { padding: 4px 8px;   font-size: 11px; }
+  .chronicle-canon-btn--sm { padding: 5px 10px;  font-size: 12px; }
+  .chronicle-canon-btn--md { padding: 8px 16px;  font-size: 14px; }
+  .chronicle-canon-btn--lg { padding: 10px 20px; font-size: 16px; }
+  .chronicle-canon-btn--xl { padding: 14px 28px; font-size: 18px; }
+
+  /* Primary — A (canon solid). */
+  .chronicle-canon-btn--primary,
+  .chronicle-canon-btn--primaryA {
+    background: var(--chronicle-accent);
+    color: var(--chronicle-accent-fg);
+    border-color: transparent;
+  }
+  .chronicle-canon-btn--primary:hover:not(:disabled),
+  .chronicle-canon-btn--primaryA:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 8%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 16%);
+    color: var(--chronicle-accent-fg);
+  }
+  /* Primary — B (gradient alternative). */
+  .chronicle-canon-btn--primaryB {
+    background: linear-gradient(to bottom,
+      color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 8%),
+      var(--chronicle-accent));
+    color: var(--chronicle-accent-fg);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0 0 0) 12%);
+  }
+  .chronicle-canon-btn--primaryB:hover:not(:disabled) {
+    background: linear-gradient(to bottom,
+      color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 14%),
+      color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 4%));
+    border-color: var(--chronicle-accent);
+    color: var(--chronicle-accent-fg);
+  }
+
+  /* Tonal — A (8% tint) / B (16% tint, stronger). */
+  .chronicle-canon-btn--tonal,
+  .chronicle-canon-btn--tonalA {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 10%);
+    color: var(--chronicle-fg);
+    border-color: transparent;
+  }
+  .chronicle-canon-btn--tonal:hover:not(:disabled),
+  .chronicle-canon-btn--tonalA:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 18%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), transparent 60%);
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon-btn--tonalB {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 18%);
+    color: color-mix(in oklch, var(--chronicle-accent), var(--chronicle-fg) 30%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), transparent 70%);
+  }
+  .chronicle-canon-btn--tonalB:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 26%);
+    border-color: var(--chronicle-accent);
+    color: var(--chronicle-fg);
+  }
+
+  /* Secondary outlined — A (1px) / B (1.5px stronger). */
+  .chronicle-canon-btn--secondary,
+  .chronicle-canon-btn--secondaryA {
+    background: transparent;
+    color: var(--chronicle-fg);
+    border: 1px solid var(--chronicle-border-strong);
+  }
+  .chronicle-canon-btn--secondary:hover:not(:disabled),
+  .chronicle-canon-btn--secondaryA:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 4%);
+    border-color: var(--chronicle-accent);
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon-btn--secondaryB {
+    background: transparent;
+    color: var(--chronicle-fg);
+    border: 1.5px solid var(--chronicle-accent);
+  }
+  .chronicle-canon-btn--secondaryB:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 6%);
+    border-color: var(--chronicle-accent);
+    color: var(--chronicle-fg);
+  }
+
+  /* Ghost — A (no border) / B (subtle border on hover). */
+  .chronicle-canon-btn--ghost,
+  .chronicle-canon-btn--ghostA {
+    background: transparent;
+    color: var(--chronicle-fg-muted);
+    border-color: transparent;
+  }
+  .chronicle-canon-btn--ghost:hover:not(:disabled),
+  .chronicle-canon-btn--ghostA:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 6%);
+    color: var(--chronicle-fg);
+    border-color: transparent;
+  }
+  .chronicle-canon-btn--ghostB {
+    background: transparent;
+    color: var(--chronicle-fg-muted);
+    border: 1px dashed color-mix(in oklch, var(--chronicle-border), transparent 30%);
+  }
+  .chronicle-canon-btn--ghostB:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-fg) 6%);
+    border-style: solid;
+    border-color: var(--chronicle-border-strong);
+    color: var(--chronicle-fg);
+  }
+
+  /* Link — A (always underlined) / B (underline on hover). */
+  .chronicle-canon-btn--link,
+  .chronicle-canon-btn--linkA {
+    background: transparent;
+    color: var(--chronicle-accent);
+    border-color: transparent;
+    text-decoration: underline;
+    padding: 2px 4px;
+  }
+  .chronicle-canon-btn--link:hover:not(:disabled),
+  .chronicle-canon-btn--linkA:hover:not(:disabled) {
+    color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 14%);
+    background: transparent;
+    border-color: transparent;
+  }
+  .chronicle-canon-btn--linkB {
+    background: transparent;
+    color: var(--chronicle-accent);
+    border-color: transparent;
+    text-decoration: none;
+    padding: 2px 4px;
+  }
+  .chronicle-canon-btn--linkB:hover:not(:disabled) {
+    color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 14%);
+    text-decoration: underline;
+    background: transparent;
+    border-color: transparent;
+  }
+
+  /* Destructive — A (solid) / B (outlined danger). */
+  .chronicle-canon-btn--destructive,
+  .chronicle-canon-btn--destructiveA {
+    background: var(--chronicle-danger);
+    color: oklch(0.99 0 0);
+    border-color: transparent;
+  }
+  .chronicle-canon-btn--destructive:hover:not(:disabled),
+  .chronicle-canon-btn--destructiveA:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-danger), oklch(0 0 0) 8%);
+    border-color: color-mix(in oklch, var(--chronicle-danger), oklch(0 0 0) 16%);
+    color: oklch(0.99 0 0);
+  }
+  .chronicle-canon-btn--destructiveB {
+    background: transparent;
+    color: var(--chronicle-danger);
+    border: 1.5px solid var(--chronicle-danger);
+  }
+  .chronicle-canon-btn--destructiveB:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-surface), var(--chronicle-danger) 10%);
+    border-color: var(--chronicle-danger);
+    color: var(--chronicle-danger);
+  }
+
+  /* Forced-state — used in the C.3 reference. data-force-state values
+   * are static, so we render the visual without depending on real
+   * pointer/focus state. */
+  .chronicle-canon-btn[data-force-state="hover"] {
+    background: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 10%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 20%);
+    color: var(--chronicle-accent-fg);
+  }
+  .chronicle-canon-btn[data-force-state="active"] {
+    background: color-mix(in oklch, var(--chronicle-accent), oklch(0 0 0) 12%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0 0 0) 24%);
+    color: var(--chronicle-accent-fg);
+    transform: translateY(1px);
+  }
+  .chronicle-canon-btn[data-force-state="focus"] {
+    outline: 2px solid var(--chronicle-ring);
+    outline-offset: 2px;
+  }
+
+  /* Per-axis hover-treatment overrides (C.4-C.7).
+   *
+   * Each data-shadow/hover/motion/selected variant layers its own
+   * treatment on top of the base primary button. Every shadow rule
+   * pairs with background-color + border-color + transform changes so
+   * canon D3 (no shadow-alone transitions) holds. */
+
+  /* Shadows (C.4). */
+  .chronicle-canon-btn[data-shadow="none"]:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 10%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 20%);
+    color: var(--chronicle-accent-fg);
+    box-shadow: none;
+  }
+  .chronicle-canon-btn[data-shadow="subtle"]:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 10%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 20%);
+    color: var(--chronicle-accent-fg);
+    box-shadow: 0 4px 12px -2px oklch(0 0 0 / 0.30);
+  }
+  .chronicle-canon-btn[data-shadow="pronounced"]:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 10%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 20%);
+    color: var(--chronicle-accent-fg);
+    box-shadow: 0 8px 20px -4px oklch(0 0 0 / 0.45);
+  }
+  .chronicle-canon-btn[data-shadow="heavy"]:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 10%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 20%);
+    color: var(--chronicle-accent-fg);
+    box-shadow: 0 14px 30px -4px oklch(0 0 0 / 0.55);
+  }
+
+  /* Hover animation (C.5). */
+  .chronicle-canon-btn[data-hover="none"]:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 12%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 20%);
+    color: var(--chronicle-accent-fg);
+  }
+  .chronicle-canon-btn[data-hover="lift"]:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 10%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 20%);
+    color: var(--chronicle-accent-fg);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px -2px oklch(0 0 0 / 0.30);
+  }
+  .chronicle-canon-btn[data-hover="scale"]:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 10%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 20%);
+    color: var(--chronicle-accent-fg);
+    transform: scale(1.02);
+  }
+  .chronicle-canon-btn[data-hover="navbar"] {
+    position: relative;
+    overflow: hidden;
+  }
+  .chronicle-canon-btn[data-hover="navbar"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    background:
+      linear-gradient(to top,  color-mix(in oklch, transparent, oklch(0.99 0 0) 35%) 0, transparent 2px) no-repeat bottom right / 66% 2px,
+      linear-gradient(to left, color-mix(in oklch, transparent, oklch(0.99 0 0) 30%) 0, transparent 2px) no-repeat right center / 2px 100%;
+    transition:
+      opacity var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-canon-btn[data-hover="navbar"]:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 12%);
+    border-color: color-mix(in oklch, var(--chronicle-accent), oklch(0.99 0 0) 20%);
+    color: var(--chronicle-accent-fg);
+  }
+  .chronicle-canon-btn[data-hover="navbar"]:hover:not(:disabled)::before {
+    opacity: 1;
+  }
+
+  /* Motion timing (C.6). */
+  .chronicle-canon-btn[data-motion="snappy"]  { transition-duration: 100ms; }
+  .chronicle-canon-btn[data-motion="canon"]   { transition-duration: 150ms; }
+  .chronicle-canon-btn[data-motion="relaxed"] { transition-duration: 250ms; }
+
+  /* Selected-state (C.7). Each rendered frozen-selected so operator
+   * sees the difference without clicking. */
+  .chronicle-canon-btn[data-selected="A"] {
+    border: 1.5px solid var(--chronicle-accent);
+    background: color-mix(in oklch, var(--chronicle-surface-card), var(--chronicle-accent) 6%);
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon-btn[data-selected="B"] {
+    position: relative;
+    background: var(--chronicle-surface-raised);
+    color: var(--chronicle-fg);
+    border-color: var(--chronicle-border-strong);
+    overflow: hidden;
+  }
+  .chronicle-canon-btn[data-selected="B"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: color-mix(in oklch, transparent, var(--chronicle-accent) 14%);
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  /* ============================================================
+   * Notes textarea + "Your picks" panel.
+   * ============================================================ */
+  .chronicle-canon__notes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--chronicle-space-1);
+  }
+  .chronicle-canon__notes-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--chronicle-fg-muted);
+  }
+  .chronicle-canon__notes-input {
+    padding: var(--chronicle-space-2);
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius);
+    color: var(--chronicle-fg);
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 80px;
+    transition:
+      border-color var(--chronicle-motion-base) var(--chronicle-ease-standard),
+      background-color var(--chronicle-motion-base) var(--chronicle-ease-standard);
+  }
+  .chronicle-canon__notes-input:focus {
+    outline: 2px solid color-mix(in oklch, var(--chronicle-ring), transparent 70%);
+    outline-offset: 0;
+    border-color: var(--chronicle-accent);
+  }
+
+  .chronicle-canon__picks {
+    margin-top: var(--chronicle-space-5);
+    padding: var(--chronicle-space-4);
+    background: var(--chronicle-surface-card);
+    border: 1px solid var(--chronicle-border);
+    border-left: 3px solid var(--chronicle-accent);
+    border-radius: var(--chronicle-radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--chronicle-space-3);
+  }
+  .chronicle-canon__picks-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--chronicle-space-2);
+  }
+  .chronicle-canon__picks-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--chronicle-fg);
+  }
+  .chronicle-canon__picks-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 22px;
+    padding: 0 6px;
+    background: color-mix(in oklch, var(--chronicle-surface-low), var(--chronicle-accent) 18%);
+    border: 1px solid color-mix(in oklch, var(--chronicle-accent), transparent 50%);
+    border-radius: var(--chronicle-radius-full);
+    color: var(--chronicle-fg);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .chronicle-canon__picks-tabname {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--chronicle-fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .chronicle-canon__picks-summary { display: flex; flex-direction: column; gap: var(--chronicle-space-2); }
+  .chronicle-canon__picks-empty {
+    font-size: 12px;
+    color: var(--chronicle-fg-muted);
+    font-style: italic;
+  }
+  .chronicle-canon__picks-empty[hidden] { display: none; }
+  .chronicle-canon__picks-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--chronicle-space-1);
+  }
+  .chronicle-canon__picks-list li {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: var(--chronicle-space-2);
+    font-size: 12px;
+    padding: var(--chronicle-space-1) var(--chronicle-space-2);
+    background: var(--chronicle-surface-low);
+    border-radius: var(--chronicle-radius-sm);
+  }
+  .chronicle-canon__picks-list li strong {
+    color: var(--chronicle-fg-muted);
+    font-weight: 600;
+    text-transform: capitalize;
+  }
+  .chronicle-canon__picks-brief {
+    width: 100%;
+    min-height: 120px;
+    max-height: 240px;
+    padding: var(--chronicle-space-2);
+    background: var(--chronicle-surface-low);
+    border: 1px solid var(--chronicle-border);
+    border-radius: var(--chronicle-radius-sm);
+    color: var(--chronicle-fg);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+  .chronicle-canon__picks-actions { display: flex; gap: var(--chronicle-space-2); align-items: center; }
+}  /* end @layer chronicle-canon */
