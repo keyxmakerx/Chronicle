@@ -209,27 +209,99 @@ func TestDemoCanon_PickHooks(t *testing.T) {
 	}
 }
 
-func TestDemoCanon_PicksPanelMarkup(t *testing.T) {
+// TestDemoCanon_PicksPanelRemoved — Phase 2A.1 §C. The persistent
+// "Your picks" summary panel was removed per operator request; the
+// minimal "Copy my picks" button + per-tab notes survive as the export
+// path. Pin both the removal and the survival.
+func TestDemoCanon_PicksPanelRemoved(t *testing.T) {
 	var buf bytes.Buffer
 	if err := DemoCanon().Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
-	for _, m := range []string{
+	for _, gone := range []string{
 		`data-picks-panel`,
-		`data-picks-count`,
-		`data-picks-tabname`,
 		`data-picks-list`,
-		`data-picks-empty`,
 		`data-picks-brief`,
-		`data-picks-copy`,
 		`data-picks-download`,
 		`data-picks-reset`,
+		`chronicle-canon__picks-summary`,
+	} {
+		if strings.Contains(html, gone) {
+			t.Errorf("picks summary panel marker should be removed but is present: %s", gone)
+		}
+	}
+	for _, keep := range []string{
+		`data-picks-copy`,
 		`data-notes-tab="buttons"`,
 	} {
-		if !strings.Contains(html, m) {
-			t.Errorf("picks-panel marker missing: %s", m)
+		if !strings.Contains(html, keep) {
+			t.Errorf("retained export marker missing: %s", keep)
 		}
+	}
+}
+
+// TestDemoCanon_CSSRealityProbePresent — Phase 2A.1 §A. The diagnostic
+// dashboard must carry a CSS/motion reality subsection container that
+// the css-reality-probe init block fills. Closes the "looks styled but
+// isn't" verification gap on-page.
+func TestDemoCanon_CSSRealityProbePresent(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `data-css-reality-list`) {
+		t.Errorf("CSS/motion reality probe container [data-css-reality-list] missing from dashboard")
+	}
+	if !strings.Contains(html, `CSS / motion reality`) {
+		t.Errorf("CSS/motion reality column heading missing")
+	}
+	js := readCanonJS(t)
+	for _, m := range []string{
+		"registerInitBlock('css-reality-probe'",
+		".chronicle-canon-btn",            // probes the actual demo button
+		"prefers-reduced-motion: reduce",  // OS reduce-motion row
+		"chronicle-canon.css",             // stylesheet-loaded row
+		"transitionDuration",              // computed transition row
+		"--chronicle-accent",              // token resolution row
+	} {
+		if !strings.Contains(js, m) {
+			t.Errorf("css-reality-probe JS marker missing: %s", m)
+		}
+	}
+}
+
+// TestDemoCanon_MotionOverrideCSS — Phase 2A.1 §B. The consensual
+// force-motion override must exist (demo-scoped; beats the global
+// reduced-motion guard within the demo only) and the banner must be
+// gated (hidden by default; JS un-hides only under reduced-motion).
+func TestDemoCanon_MotionOverrideCSS(t *testing.T) {
+	css := readCanonCSS(t)
+	if !strings.Contains(css, `[data-canon-force-motion="true"]`) {
+		t.Errorf("force-motion override selector missing from canon CSS")
+	}
+	var buf bytes.Buffer
+	if err := DemoCanon().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `data-motion-banner`) {
+		t.Errorf("motion banner markup missing")
+	}
+	if !strings.Contains(html, `data-motion-banner hidden`) {
+		t.Errorf("motion banner must render hidden by default (gated behind reduced-motion detection)")
+	}
+}
+
+// TestDemoCanon_UniversalButtonHover — Phase 2A.1 root-cause fix. Every
+// canon button must get a visible hover (lift + shadow), not just the
+// C.4/C.5 demo buttons. The dead-hover report was because the variant
+// buttons only had an ~8% colour nudge. Pin the universal hover rule.
+func TestDemoCanon_UniversalButtonHover(t *testing.T) {
+	css := readCanonCSS(t)
+	if !strings.Contains(css, `.chronicle-canon-btn:hover:not(:disabled)`) {
+		t.Errorf("universal button hover rule missing — variant buttons would have no visible hover")
 	}
 }
 
@@ -288,7 +360,9 @@ func TestDemoCanonJS_AllInitBlocksRegistered(t *testing.T) {
 		"tab-strip",
 		"picks-hydrate-and-bind",
 		"notes-bind",
-		"picks-panel",
+		"css-reality-probe",
+		"motion-banner",
+		"picks-copy",
 		"diagnostics-copy-report",
 	}
 	for _, name := range required {

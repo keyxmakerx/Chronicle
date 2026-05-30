@@ -42,11 +42,11 @@ templ DemoCanon() {
 			data-chronicle-canon-reduce-motion="false"
 			data-active-tab="buttons"
 		>
+			@canonMotionBanner()
 			@canonHeader()
 			@canonDiagnostics()
 			@canonTabStrip()
 			@canonTabContent()
-			@canonPicksPanel()
 		</div>
 		<script src="/static/js/chronicle-canon.js" defer></script>
 	}
@@ -74,8 +74,31 @@ templ canonHeader() {
 				<button type="button" class="chronicle-canon__toggle" data-action="reduce-motion" data-value="false" aria-pressed="true">Normal</button>
 				<button type="button" class="chronicle-canon__toggle" data-action="reduce-motion" data-value="true" aria-pressed="false">Reduced</button>
 			</div>
+			<div class="chronicle-canon__control-group">
+				// Phase 2A.1: the persistent "Your picks" summary panel
+				// was removed per operator request. The export path
+				// survives as this single button — picks still persist
+				// in localStorage and serialize to markdown on click.
+				<button type="button" class="chronicle-canon-btn chronicle-canon-btn--secondary chronicle-canon-btn--sm" data-picks-copy>Copy my picks</button>
+			</div>
 		</div>
 	</header>
+}
+
+// canonMotionBanner — consensual motion-preview opt-in. Hidden by
+// default; the motion-banner init block un-hides it ONLY when
+// prefers-reduced-motion:reduce is active (won't fire for the current
+// operator, whose OS reduce-motion is off — kept for correctness +
+// future operators). Enabling sets [data-canon-force-motion="true"] on
+// the demo root, which the CSS uses to beat the global reduced-motion
+// guard within the demo only.
+templ canonMotionBanner() {
+	<div class="chronicle-canon__motion-banner" data-motion-banner hidden>
+		<span class="chronicle-canon__motion-banner-text">
+			⚠ Your system has <strong>reduce motion</strong> enabled, so animations are suppressed site-wide. This demo evaluates motion as a first-class concern — enable a motion preview within this demo only.
+		</span>
+		<button type="button" class="chronicle-canon-btn chronicle-canon-btn--primary chronicle-canon-btn--sm" data-motion-toggle>Enable motion preview</button>
+	</div>
 }
 
 // canonDiagnostics — collapsed-by-default diagnostic dashboard. Same
@@ -107,6 +130,18 @@ templ canonDiagnostics() {
 				<div class="chronicle-canon__diagnostics-col">
 					<h3>Browser features</h3>
 					<ul class="chronicle-canon__diagnostics-list" data-feature-list>
+						<li class="chronicle-canon__diagnostics-item chronicle-canon__diagnostics-item--pending">(JS not yet loaded)</li>
+					</ul>
+				</div>
+				// Phase 2A.1 §A — CSS / motion reality probe. JS fills
+				// this with runtime-computed rows: OS reduced-motion,
+				// canon stylesheet loaded, transitionDuration on an
+				// actual demo button, canon token resolution, scope
+				// root presence. Closes the "looks styled but isn't"
+				// verification gap on-page.
+				<div class="chronicle-canon__diagnostics-col">
+					<h3>CSS / motion reality</h3>
+					<ul class="chronicle-canon__diagnostics-list" data-css-reality-list>
 						<li class="chronicle-canon__diagnostics-item chronicle-canon__diagnostics-item--pending">(JS not yet loaded)</li>
 					</ul>
 				</div>
@@ -467,32 +502,8 @@ templ renderButton(variant, sub, label, size string) {
 	</button>
 }
 
-// canonPicksPanel — "Your picks" summary panel pinned at the bottom of
-// the page. Renders the current picks for the active tab + has a
-// Copy markdown brief + Reset. JS populates the summary unconditionally
-// on init and on every pick change (the Phase 1.9 hardening lesson:
-// always write both the visible summary AND the brief).
-templ canonPicksPanel() {
-	<aside class="chronicle-canon__picks" data-picks-panel>
-		<header class="chronicle-canon__picks-head">
-			<h2 class="chronicle-canon__picks-title">Your picks</h2>
-			<span class="chronicle-canon__picks-count" data-picks-count>0</span>
-			<span class="chronicle-canon__picks-tabname" data-picks-tabname>Buttons</span>
-		</header>
-		<div class="chronicle-canon__picks-summary" data-picks-summary>
-			<span class="chronicle-canon__picks-empty" data-picks-empty>No picks yet — click any card above.</span>
-			<ul class="chronicle-canon__picks-list" data-picks-list></ul>
-		</div>
-		<textarea
-			class="chronicle-canon__picks-brief"
-			data-picks-brief
-			readonly
-			aria-label="Markdown brief"
-		></textarea>
-		<div class="chronicle-canon__picks-actions">
-			<button type="button" class="chronicle-canon-btn chronicle-canon-btn--primary chronicle-canon-btn--sm" data-picks-copy>Copy markdown brief</button>
-			<button type="button" class="chronicle-canon-btn chronicle-canon-btn--secondary chronicle-canon-btn--sm" data-picks-download>Download</button>
-			<button type="button" class="chronicle-canon-btn chronicle-canon-btn--ghost chronicle-canon-btn--sm" data-picks-reset style="margin-left:auto;">Reset</button>
-		</div>
-	</aside>
-}
+// (Phase 2A.1) The persistent "Your picks" summary panel was removed
+// per operator request — it was redundant visual weight. Picks still
+// persist in localStorage and the in-place per-card highlight remains
+// the visual record; the single "Copy my picks" button in the header
+// (data-picks-copy) serializes them to markdown on demand.
