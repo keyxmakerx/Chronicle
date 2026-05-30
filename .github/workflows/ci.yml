@@ -179,3 +179,11 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Disable provenance + SBOM attestations. build-push-action@v6
+          # generates these by default, which adds extra manifest/blob
+          # entries that ghcr.io intermittently rejects on push with
+          # "ERROR: unknown blob". We don't consume the attestations, so
+          # turning them off both fixes the flaky push and produces a
+          # cleaner single-manifest image.
+          provenance: false
+          sbom: false

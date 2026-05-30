@@ -2765,15 +2765,19 @@ func (a *App) RegisterRoutes() {
 		return c.Redirect(http.StatusSeeOther, "/campaigns")
 	}, auth.RequireAuth(authService))
 
-	// C-V2-DESIGN-REBUILD Phase 1 demo route. Validation surface for
-	// the new design canon; non-campaign-scoped (the canon is the
+	// C-V2-DESIGN-REBUILD Phase 2A — tabbed canon demo. Phase 2A scrapped
+	// the Phase 1 single-page arc (PRs #375-#381) and replaced it with a
+	// tabbed shell at /demo/canon. One subject per tab; Buttons ships
+	// first; future phases 2B-2F activate the other tabs (Menus / Cards
+	// / Forms / Calendar / Timeline) one at a time. Validation surface
+	// for the new design canon; non-campaign-scoped (the canon is the
 	// whole app's future visual language, not a per-campaign concern).
 	// Auth-gated mirroring the `/dashboard` precedent above — any
 	// authenticated user can view; the demo exposes no campaign data
 	// so site-admin gating is unnecessary. Dispatch:
-	// dispatches/chronicle/C-V2-DESIGN-REBUILD-PHASE-1-DEMO.md.
-	e.GET("/demo/chronicle-canon", func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, demo.DemoChronicleCanon())
+	// dispatches/chronicle/C-V2-DESIGN-REBUILD-PHASE-2A-DEMO-V2-BUTTONS-TAB.md.
+	e.GET("/demo/canon", func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, demo.DemoCanon())
 	}, auth.RequireAuth(authService))
 
 	// --- Layout Data Injector ---
