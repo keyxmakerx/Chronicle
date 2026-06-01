@@ -14,28 +14,19 @@
 
 /* ============================================================ */
 /* Cascade layer ordering — per cordinator/decisions/2026-05-22-ui-modernization-decisions.md Q4.
-   Macro ordering: reset → base → components → plugins → chronicle-demo → utilities.
+   Macro ordering: reset → base → components → plugins → utilities.
    Per-plugin sub-layers declared but currently RESERVED — no plugin CSS files
    exist today. Reservation is forward-looking; the first plugin CSS file will
    wrap into its sub-layer (e.g. `@layer plugins.foundry-vtt { ... }`).
 
-   `chronicle-demo` (C-V2-DESIGN-REBUILD Phase 1 — added 2026-05-29) lands
-   BEFORE utilities so Tailwind utility classes still win on demo content
-   that wants to compose with the canon. The layer's CSS lives in
-   chronicle-canon-demo.css (imported below); it touches no other surface. */
-@layer reset, base, components, plugins, chronicle-demo, utilities;
+   (A demo-only cascade layer reserved during the V2 demo arc was removed
+   2026-06-01 when that arc was scrapped for the static no-JS showcase at
+   /demo/showcase, whose static/css/showcase.css is fully self-contained,
+   uses a unique .showcase-* prefix, and declares no cascade layer.) */
+@layer reset, base, components, plugins, utilities;
 @layer plugins {
   @layer foundry-vtt, calendar, maps, packages, settings;
 }
-
-/* C-V2-DESIGN-REBUILD Phase 1 demo canon: the `chronicle-demo` layer
- * above reserves the cascade slot. The actual canon CSS lives in
- * static/css/chronicle-canon-demo.css and is loaded by the demo templ
- * directly via <link rel="stylesheet"> (see
- * internal/templates/demo/chronicle_canon.templ). Browser respects
- * the layer ordering across both files. This keeps the canon
- * completely isolated from the Tailwind build pipeline until
- * Phase 2 unifies them. */
 
 /* Reduced-motion total-disable guard — per Q6 decision + WCAG 2.1 SC 2.3.3.
    Lives OUTSIDE any layer so it wins over Tailwind utilities and any plugin CSS.
