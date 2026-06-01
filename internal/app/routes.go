@@ -2765,19 +2765,18 @@ func (a *App) RegisterRoutes() {
 		return c.Redirect(http.StatusSeeOther, "/campaigns")
 	}, auth.RequireAuth(authService))
 
-	// C-V2-DESIGN-REBUILD Phase 2A — tabbed canon demo. Phase 2A scrapped
-	// the Phase 1 single-page arc (PRs #375-#381) and replaced it with a
-	// tabbed shell at /demo/canon. One subject per tab; Buttons ships
-	// first; future phases 2B-2F activate the other tabs (Menus / Cards
-	// / Forms / Calendar / Timeline) one at a time. Validation surface
-	// for the new design canon; non-campaign-scoped (the canon is the
-	// whole app's future visual language, not a per-campaign concern).
-	// Auth-gated mirroring the `/dashboard` precedent above — any
-	// authenticated user can view; the demo exposes no campaign data
-	// so site-admin gating is unnecessary. Dispatch:
-	// dispatches/chronicle/C-V2-DESIGN-REBUILD-PHASE-2A-DEMO-V2-BUTTONS-TAB.md.
-	e.GET("/demo/canon", func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, demo.DemoCanon())
+	// C-V2-DESIGN-REBUILD demo showcase. Third strategic reset of the
+	// demo arc: scrapped the instrument-shaped builds (PRs #375-#383)
+	// for a static, no-JS labeled catalogue at /demo/showcase. Operator
+	// reads it like a brochure and names the options they like in chat;
+	// the coordinator authors Phase 3 (canon tokens ship-wide) from that
+	// plain-language reply. Self-contained .showcase-* CSS — no Tailwind,
+	// no @layer, no JS — so nothing can lose a cascade fight. Auth-gated
+	// mirroring the `/dashboard` precedent above; exposes no campaign
+	// data. Dispatch:
+	// dispatches/chronicle/C-V2-DESIGN-REBUILD-DEMO-RESET-V3-LABELED-SHOWCASE.md.
+	e.GET("/demo/showcase", func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, demo.DemoShowcase())
 	}, auth.RequireAuth(authService))
 
 	// --- Layout Data Injector ---
