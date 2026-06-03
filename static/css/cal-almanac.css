@@ -981,3 +981,536 @@
   color: oklch(0.985 0 0);
 }
 .cal-almanac-shell .cal-almanac-time__pipicon { width: 14px; height: 14px; }
+
+/* ============================================================
+ * REFINEMENT-V2 — ambient sky, era vignette, snowglobe,
+ * two-tier popup + action menu. Self-contained .cal-almanac-*;
+ * no @layer / Tailwind / canon tokens; motion vars inherited
+ * from .cal-almanac-shell.
+ * ============================================================ */
+
+/* ---- Era corner vignette --------------------------------------- */
+.cal-almanac-shell .cal-almanac-eravig {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 46%;
+  height: 64%;
+  z-index: 4;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  /* Densest at corner (0,0); fades right + down. */
+  background:
+    radial-gradient(120% 120% at 0% 0%,
+      color-mix(in oklch, var(--era-color), transparent 32%) 0%,
+      color-mix(in oklch, var(--era-color), transparent 62%) 24%,
+      transparent 62%);
+  transition: width var(--cal-d-standard) var(--cal-ease-out),
+              height var(--cal-d-standard) var(--cal-ease-out),
+              filter var(--cal-d-standard) var(--cal-ease-standard);
+  pointer-events: auto;
+}
+.cal-almanac-shell .cal-almanac-eravig:hover,
+.cal-almanac--proof-era-vignette-hover .cal-almanac-eravig {
+  width: 60%;
+  height: 80%;
+  filter: brightness(1.22) saturate(1.1);
+}
+.cal-almanac-shell .cal-almanac-eravig__label {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-shadow: 0 1px 3px oklch(0 0 0 / 0.6);
+}
+.cal-almanac-shell .cal-almanac-eravig__name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: oklch(0.985 0.002 247.839);
+}
+.cal-almanac-shell .cal-almanac-eravig__span {
+  font-size: 10px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  color: color-mix(in oklch, oklch(0.985 0 0), var(--era-color) 40%);
+  opacity: 0.85;
+}
+
+/* ---- Sky-band ambient: weather + celestial layers -------------- */
+.cal-almanac-shell .cal-almanac-sky { position: relative; overflow: hidden; }
+.cal-almanac-shell .cal-almanac-sky__weather,
+.cal-almanac-shell .cal-almanac-sky__celestial {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.cal-almanac-shell .cal-almanac-sky__celestial { z-index: 2; }
+
+/* Sun is draggable — show the grab cursor. */
+.cal-almanac-shell .cal-almanac-sky__sun { cursor: grab; touch-action: none; }
+.cal-almanac-shell .cal-almanac-sky__sun:active { cursor: grabbing; }
+
+/* Moon phase rendering: a shadow disc over the lit base via an inset
+ * gradient. --moon-color sets the lit colour. */
+.cal-almanac-shell .cal-almanac-sky__moon {
+  background: var(--moon-color, oklch(0.9 0.04 95));
+  overflow: hidden;
+}
+.cal-almanac-shell .cal-almanac-sky__moon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: oklch(0.10 0.02 264);
+}
+.cal-almanac-shell .cal-almanac-sky__moon--new::after     { transform: translateX(0); }
+.cal-almanac-shell .cal-almanac-sky__moon--cres-wax::after  { transform: translateX(72%); border-radius: 50%; }
+.cal-almanac-shell .cal-almanac-sky__moon--quarter-wax::after { transform: translateX(50%); }
+.cal-almanac-shell .cal-almanac-sky__moon--gibb-wax::after  { transform: translateX(28%); opacity: 0.5; }
+.cal-almanac-shell .cal-almanac-sky__moon--full::after    { transform: translateX(0); opacity: 0; }
+.cal-almanac-shell .cal-almanac-sky__moon--gibb-wane::after { transform: translateX(-28%); opacity: 0.5; }
+.cal-almanac-shell .cal-almanac-sky__moon--quarter-wane::after { transform: translateX(-50%); }
+.cal-almanac-shell .cal-almanac-sky__moon--cres-wane::after { transform: translateX(-72%); }
+
+/* Time label button (replaces scrubber). */
+.cal-almanac-shell .cal-almanac-sky__time {
+  background: oklch(0 0 0 / 0.25);
+  border: 1px solid oklch(1 0 0 / 0.12);
+  border-radius: 5px;
+  color: oklch(0.985 0 0);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background-color var(--cal-d-micro) var(--cal-ease-standard);
+}
+.cal-almanac-shell .cal-almanac-sky__time:hover { background: oklch(0 0 0 / 0.40); }
+.cal-almanac-shell .cal-almanac-sky__time-input {
+  width: 70px;
+  background: oklch(0 0 0 / 0.45);
+  border: 1px solid var(--moon-color, oklch(0.78 0.16 60));
+  border-radius: 5px;
+  color: oklch(0.985 0 0);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+  padding: 2px 8px;
+}
+.cal-almanac-shell .cal-almanac-sky__happening {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.cal-almanac-shell .cal-almanac-sky__happening-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: oklch(0 0 0 / 0.35);
+  border: 1px solid oklch(1 0 0 / 0.14);
+  color: oklch(0.92 0.06 90);
+}
+.cal-almanac-shell .cal-almanac-sky__happening-icon { width: 15px; height: 15px; }
+
+/* --- Rain --- */
+.cal-almanac-shell .cal-almanac-rain {
+  position: absolute;
+  top: -12%;
+  width: 1.5px;
+  height: 14px;
+  background: linear-gradient(oklch(0.85 0.08 230 / 0), oklch(0.85 0.08 230 / 0.7));
+  animation: cal-rain linear infinite;
+}
+.cal-almanac-shell .cal-almanac-rain--heavy { height: 18px; width: 2px; opacity: 0.85; }
+@keyframes cal-rain {
+  0%   { transform: translateY(0); opacity: 0; }
+  10%  { opacity: 1; }
+  100% { transform: translateY(220px); opacity: 0.2; }
+}
+/* --- Snow --- */
+.cal-almanac-shell .cal-almanac-snow {
+  position: absolute;
+  top: -6%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: oklch(0.97 0.01 240 / 0.9);
+  animation: cal-snow linear infinite;
+}
+@keyframes cal-snow {
+  0%   { transform: translate(0, 0); opacity: 0; }
+  10%  { opacity: 1; }
+  100% { transform: translate(var(--drift, 0), 200px); opacity: 0.3; }
+}
+/* --- Fog --- */
+.cal-almanac-shell .cal-almanac-fog {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 46%;
+  background: linear-gradient(oklch(0.7 0.01 240 / 0), oklch(0.7 0.02 240 / 0.55));
+  backdrop-filter: blur(2px);
+  animation: cal-fog 18s ease-in-out infinite alternate;
+}
+@keyframes cal-fog { from { opacity: 0.5; } to { opacity: 0.85; } }
+/* --- Clouds --- */
+.cal-almanac-shell .cal-almanac-cloud {
+  position: absolute;
+  height: 26px;
+  border-radius: 16px;
+  background: oklch(0.85 0.02 250 / 0.30);
+  filter: blur(3px);
+  animation: cal-cloud linear infinite;
+}
+.cal-almanac-shell .cal-almanac-cloud--1 { top: 18%; width: 120px; animation-duration: 48s; }
+.cal-almanac-shell .cal-almanac-cloud--2 { top: 34%; width: 90px;  animation-duration: 62s; opacity: 0.7; }
+.cal-almanac-shell .cal-almanac-cloud--3 { top: 10%; width: 150px; animation-duration: 75s; opacity: 0.5; }
+@keyframes cal-cloud { from { transform: translateX(-180px); } to { transform: translateX(1100px); } }
+.cal-almanac-shell .cal-almanac-cloudbank {
+  position: absolute;
+  inset: 0 0 40% 0;
+  background: linear-gradient(oklch(0.25 0.02 264 / 0.55), oklch(0.25 0.02 264 / 0));
+}
+.cal-almanac-shell .cal-almanac-cloudbank--dark { background: linear-gradient(oklch(0.16 0.02 264 / 0.7), oklch(0.16 0.02 264 / 0)); }
+/* --- Lightning --- */
+.cal-almanac-shell .cal-almanac-lightning {
+  position: absolute;
+  inset: 0;
+  background: oklch(0.98 0.02 250 / 0.85);
+  opacity: 0;
+  animation: cal-lightning 5s steps(1) infinite;
+}
+@keyframes cal-lightning {
+  0%, 92%, 100% { opacity: 0; }
+  93% { opacity: 0.8; }
+  94% { opacity: 0; }
+  95% { opacity: 0.6; }
+  96% { opacity: 0; }
+}
+/* --- Meteors --- */
+.cal-almanac-shell .cal-almanac-meteor {
+  position: absolute;
+  width: 80px;
+  height: 2px;
+  background: linear-gradient(90deg, oklch(0.95 0.10 80 / 0), oklch(0.95 0.10 80 / 0.9));
+  transform: rotate(28deg);
+  opacity: 0;
+  animation: cal-meteor 6s linear infinite;
+}
+@keyframes cal-meteor {
+  0%   { transform: translate(0,0) rotate(28deg); opacity: 0; }
+  4%   { opacity: 1; }
+  16%  { transform: translate(-260px, 150px) rotate(28deg); opacity: 0; }
+  100% { opacity: 0; }
+}
+/* --- Eclipse --- */
+.cal-almanac-shell .cal-almanac-eclipse {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.cal-almanac-shell .cal-almanac-eclipse--solar {
+  background: radial-gradient(circle at 50% 38%, oklch(0 0 0 / 0.0) 0, oklch(0 0 0 / 0.55) 16%, oklch(0 0 0 / 0.0) 30%),
+              linear-gradient(oklch(0.10 0.02 60 / 0.45), oklch(0.10 0.02 60 / 0.0));
+  animation: cal-eclipse-pulse 8s ease-in-out infinite;
+}
+.cal-almanac-shell .cal-almanac-eclipse--lunar {
+  background: radial-gradient(circle at 76% 30%, oklch(0.55 0.18 25 / 0.5) 0, oklch(0.55 0.18 25 / 0.0) 12%);
+}
+@keyframes cal-eclipse-pulse { 0%,100% { opacity: 0.85; } 50% { opacity: 1; } }
+.cal-almanac-shell .cal-almanac-celestial-stub {
+  position: absolute;
+  bottom: 6px;
+  right: 90px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: oklch(0 0 0 / 0.4);
+  color: oklch(0.85 0.08 300);
+  border: 1px dashed oklch(0.6 0.12 300 / 0.5);
+}
+
+/* Forced-state proof classes (headless screenshots). Force a given
+ * effect's particles visible regardless of the day's data. */
+.cal-almanac--proof-sky-rain .cal-almanac-sky__weather::before,
+.cal-almanac--proof-sky-meteor .cal-almanac-sky__celestial::before { content: ""; }
+
+/* ---- Snowglobe time-piece -------------------------------------- */
+.cal-almanac-shell .cal-almanac-globe {
+  position: absolute;
+  width: 188px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+}
+.cal-almanac-shell .cal-almanac-globe__handle {
+  width: 100%;
+  text-align: center;
+  padding: 3px;
+  cursor: grab;
+}
+.cal-almanac-shell .cal-almanac-globe[data-cal-time-dragging="true"] .cal-almanac-globe__handle { cursor: grabbing; }
+.cal-almanac-shell .cal-almanac-globe__tag {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: oklch(0.62 0.022 261);
+}
+.cal-almanac-shell .cal-almanac-globe__dome {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid oklch(0.42 0.03 258);
+  box-shadow: 0 12px 26px -8px oklch(0 0 0 / 0.6),
+              inset 0 0 24px oklch(0 0 0 / 0.4);
+}
+.cal-almanac-shell .cal-almanac-globe__sky { position: absolute; inset: 0; }
+.cal-almanac-shell .cal-almanac-globe__sun {
+  position: absolute;
+  width: 22px; height: 22px;
+  margin-left: -11px; margin-top: -11px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, oklch(0.98 0.08 90), oklch(0.82 0.18 65));
+  box-shadow: 0 0 14px oklch(0.85 0.18 75 / 0.6);
+}
+.cal-almanac-shell .cal-almanac-globe__moon {
+  position: absolute;
+  width: 14px; height: 14px;
+  margin-left: -7px; margin-top: -7px;
+  border-radius: 50%;
+  background: var(--moon-color, oklch(0.9 0.04 95));
+  overflow: hidden;
+}
+.cal-almanac-shell .cal-almanac-globe__moon::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: oklch(0.10 0.02 264);
+}
+.cal-almanac-shell .cal-almanac-globe__weather,
+.cal-almanac-shell .cal-almanac-globe__celestial { position: absolute; inset: 0; overflow: hidden; }
+.cal-almanac-shell .cal-almanac-globe__weather .cal-almanac-rain { height: 8px; }
+.cal-almanac-shell .cal-almanac-globe__weather .cal-almanac-snow { width: 3px; height: 3px; }
+.cal-almanac-shell .cal-almanac-globe__glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle at 32% 26%, oklch(1 0 0 / 0.30) 0, oklch(1 0 0 / 0.0) 28%),
+             radial-gradient(circle at 70% 80%, oklch(0 0 0 / 0.25) 0, oklch(0 0 0 / 0.0) 40%);
+}
+.cal-almanac-shell .cal-almanac-globe__base {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -6px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, oklch(0.30 0.025 264), oklch(0.22 0.020 264));
+  border: 1px solid oklch(0.40 0.030 258);
+  border-radius: 10px;
+  box-shadow: 0 8px 18px -8px oklch(0 0 0 / 0.5);
+}
+.cal-almanac-shell .cal-almanac-globe__date { display: flex; flex-direction: column; gap: 1px; }
+.cal-almanac-shell .cal-almanac-globe__day {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px; font-weight: 600; color: oklch(0.985 0 0);
+}
+.cal-almanac-shell .cal-almanac-globe__weekday {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; color: oklch(0.62 0.022 261);
+}
+.cal-almanac-shell .cal-almanac-globe__clock {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 16px; font-weight: 600; color: oklch(0.78 0.18 60);
+  text-shadow: 0 0 8px oklch(0.78 0.18 60 / 0.35);
+}
+.cal-almanac-shell .cal-almanac-globe__tick {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; margin-left: auto;
+  background: oklch(0.26 0.022 264); border: 1px solid oklch(0.36 0.028 260);
+  border-radius: 6px; color: oklch(0.85 0.04 220); cursor: pointer;
+  transition: background-color var(--cal-d-micro) var(--cal-ease-standard), border-color var(--cal-d-micro) var(--cal-ease-standard);
+}
+.cal-almanac-shell .cal-almanac-globe__tick:hover { background: oklch(0.34 0.03 264); border-color: oklch(0.58 0.20 270); color: oklch(0.985 0 0); }
+.cal-almanac-shell .cal-almanac-globe__tickicon { width: 14px; height: 14px; }
+
+/* ---- Quick-view (tier 1) --------------------------------------- */
+.cal-almanac-shell .cal-almanac-qv {
+  position: fixed;
+  top: 0; right: 0;
+  width: 360px; max-width: 92vw; height: 100vh;
+  background: oklch(0.20 0.022 264);
+  border-left: 1px solid oklch(0.34 0.030 259);
+  box-shadow: -16px 0 34px -10px oklch(0 0 0 / 0.5);
+  display: flex; flex-direction: column;
+  z-index: 70;
+  transform: translateX(100%);
+  opacity: 0; pointer-events: none;
+  transition: transform var(--cal-d-standard) var(--cal-ease-out), opacity var(--cal-d-standard) var(--cal-ease-out);
+}
+.cal-almanac-shell .cal-almanac-qv[data-cal-qv-open="true"],
+.cal-almanac--proof-popup-quickview .cal-almanac-qv {
+  transform: translateX(0); opacity: 1; pointer-events: auto;
+}
+/* When the editor is open, the quick-view slides further left ("zooms out"). */
+.cal-almanac-shell .cal-almanac-qv[data-cal-qv-zoomed="true"] { transform: translateX(-120px) scale(0.96); opacity: 0.5; }
+.cal-almanac-shell .cal-almanac-qv__head { display: flex; align-items: flex-start; gap: 6px; padding: 14px 16px 10px; border-bottom: 1px solid oklch(0.30 0.025 260); }
+.cal-almanac-shell .cal-almanac-qv__title-wrap { flex: 1 1 auto; min-width: 0; }
+.cal-almanac-shell .cal-almanac-qv__title {
+  width: 100%; background: transparent; border: 1px solid transparent; border-radius: 5px;
+  color: oklch(0.985 0 0); font-size: 15px; font-weight: 600; padding: 3px 6px;
+  transition: background-color var(--cal-d-micro) var(--cal-ease-standard), border-color var(--cal-d-micro) var(--cal-ease-standard);
+}
+.cal-almanac-shell .cal-almanac-qv__title:hover { background: oklch(0.24 0.022 264); }
+.cal-almanac-shell .cal-almanac-qv__title:focus { outline: none; background: oklch(0.16 0.02 264); border-color: oklch(0.58 0.20 270); }
+.cal-almanac-shell .cal-almanac-qv__meta { margin: 2px 0 0 6px; font-size: 11px; color: oklch(0.74 0.022 261); font-family: "JetBrains Mono", ui-monospace, monospace; }
+.cal-almanac-shell .cal-almanac-qv__body { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex: 1 1 auto; }
+.cal-almanac-shell .cal-almanac-qv__desc {
+  width: 100%; background: oklch(0.16 0.022 264); border: 1px solid oklch(0.32 0.028 260);
+  border-radius: 6px; color: oklch(0.92 0.02 250); font: inherit; font-size: 13px; padding: 8px; resize: vertical;
+}
+.cal-almanac-shell .cal-almanac-qv__desc:focus { outline: none; border-color: oklch(0.58 0.20 270); }
+.cal-almanac-shell .cal-almanac-qv__events { display: flex; flex-direction: column; gap: 4px; }
+.cal-almanac-shell .cal-almanac-qv__state { display: flex; flex-direction: column; gap: 6px; }
+.cal-almanac-shell .cal-almanac-qv__links { display: flex; flex-wrap: wrap; gap: 6px; }
+.cal-almanac-shell .cal-almanac-qv__link {
+  font-size: 11px; padding: 3px 8px; border-radius: 5px; cursor: pointer;
+  background: oklch(0.25 0.022 264); border: 1px solid oklch(0.34 0.03 259); color: oklch(0.85 0.02 250);
+}
+.cal-almanac-shell .cal-almanac-qv__link:hover { background: oklch(0.30 0.025 264); color: oklch(0.985 0 0); }
+.cal-almanac-shell .cal-almanac-qv__foot { display: flex; gap: 8px; align-items: center; padding: 10px 16px; border-top: 1px solid oklch(0.30 0.025 260); }
+.cal-almanac-shell .cal-almanac-qv__pop-event {
+  display: flex; align-items: center; gap: 8px; padding: 5px 8px; font-size: 12px;
+  background: oklch(0.18 0.022 264); border-left: 3px solid var(--chip-cat, oklch(0.55 0.025 264)); border-radius: 4px; cursor: pointer;
+}
+.cal-almanac-shell .cal-almanac-qv__pop-event:hover { background: oklch(0.24 0.022 264); }
+
+/* ---- Editor (tier 2) ------------------------------------------- */
+.cal-almanac-shell .cal-almanac-editor {
+  position: fixed;
+  top: 0; right: 0;
+  width: 480px; max-width: 96vw; height: 100vh;
+  background: oklch(0.19 0.022 264);
+  border-left: 1px solid oklch(0.36 0.030 259);
+  box-shadow: -22px 0 44px -10px oklch(0 0 0 / 0.55);
+  display: flex; flex-direction: column;
+  z-index: 80;
+  transform: translateX(100%);
+  opacity: 0; pointer-events: none;
+  transition: transform var(--cal-d-standard) var(--cal-ease-out), opacity var(--cal-d-standard) var(--cal-ease-out);
+}
+.cal-almanac-shell .cal-almanac-editor[data-cal-editor-open="true"],
+.cal-almanac--proof-popup-expanded .cal-almanac-editor {
+  transform: translateX(0); opacity: 1; pointer-events: auto;
+}
+.cal-almanac-shell .cal-almanac-editor__head { display: flex; align-items: flex-start; gap: 6px; padding: 16px 18px; border-bottom: 1px solid oklch(0.32 0.028 260); }
+.cal-almanac-shell .cal-almanac-editor__title { margin: 0; font-size: 16px; font-weight: 600; flex: 1 1 auto; }
+.cal-almanac-shell .cal-almanac-editor__meta { margin: 2px 0 0; font-size: 12px; color: oklch(0.74 0.022 261); }
+.cal-almanac-shell .cal-almanac-editor__tabs { display: flex; gap: 4px; padding: 8px 14px 0; }
+.cal-almanac-shell .cal-almanac-editor__tab {
+  flex: 1 1 0; padding: 6px 10px; background: transparent; border: 1px solid transparent; border-bottom: 2px solid transparent;
+  color: oklch(0.74 0.022 261); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; border-radius: 5px 5px 0 0;
+  transition: background-color var(--cal-d-micro) var(--cal-ease-standard), color var(--cal-d-micro) var(--cal-ease-standard), border-color var(--cal-d-micro) var(--cal-ease-standard);
+}
+.cal-almanac-shell .cal-almanac-editor__tab:hover { color: oklch(0.985 0 0); background: oklch(0.24 0.022 264); }
+.cal-almanac-shell .cal-almanac-editor__tab--active { color: oklch(0.985 0 0); background: oklch(0.23 0.022 264); border-bottom-color: oklch(0.58 0.20 270); }
+.cal-almanac-shell .cal-almanac-editor__panels { padding: 12px 18px; overflow-y: auto; flex: 1 1 auto; }
+.cal-almanac-shell .cal-almanac-editor__panel { display: none; }
+.cal-almanac-shell .cal-almanac-editor__panel--active { display: block; }
+.cal-almanac-shell .cal-almanac-editor__lbl { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: oklch(0.74 0.022 261); margin: 10px 0 4px; }
+.cal-almanac-shell .cal-almanac-editor__field {
+  width: 100%; background: oklch(0.16 0.022 264); border: 1px solid oklch(0.34 0.030 259); border-radius: 6px;
+  color: oklch(0.985 0 0); font: inherit; font-size: 13px; padding: 7px 9px;
+}
+.cal-almanac-shell .cal-almanac-editor__field:focus { outline: none; border-color: oklch(0.58 0.20 270); }
+.cal-almanac-shell .cal-almanac-editor__field--area { resize: vertical; }
+.cal-almanac-shell .cal-almanac-editor__row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cal-almanac-shell .cal-almanac-editor__linked { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+
+/* ---- 8-action menu --------------------------------------------- */
+.cal-almanac-shell .cal-almanac-actions {
+  border-top: 1px solid oklch(0.32 0.028 260);
+  padding: 8px;
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 38vh; overflow-y: auto;
+  background: oklch(0.17 0.020 264);
+}
+.cal-almanac-shell .cal-almanac-actions__item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; background: transparent; border: none; border-radius: 6px;
+  color: oklch(0.92 0.02 250); font: inherit; font-size: 13px; text-align: left; cursor: pointer; width: 100%;
+  transition: background-color var(--cal-d-micro) var(--cal-ease-standard);
+}
+.cal-almanac-shell .cal-almanac-actions__item:hover { background: oklch(0.25 0.025 264); }
+.cal-almanac-shell .cal-almanac-actions__item--danger { color: oklch(0.72 0.18 25); }
+.cal-almanac-shell .cal-almanac-actions__item--danger:hover { background: oklch(0.28 0.10 25); color: oklch(0.88 0.14 25); }
+.cal-almanac-shell .cal-almanac-actions__ic { width: 15px; height: 15px; flex: none; opacity: 0.85; }
+.cal-almanac-shell .cal-almanac-actions__chev { margin-left: auto; opacity: 0.6; font-size: 11px; }
+
+/* ---- Sub-popover (submenu / config / confirm) ------------------ */
+.cal-almanac-shell .cal-almanac-subpop {
+  position: absolute; left: 12px; right: 12px; bottom: 12px;
+  background: oklch(0.23 0.022 264); border: 1px solid oklch(0.42 0.03 258); border-radius: 10px;
+  box-shadow: 0 -12px 30px -10px oklch(0 0 0 / 0.55); z-index: 5;
+  max-height: 60vh; overflow-y: auto;
+}
+.cal-almanac-shell .cal-almanac-subpop[hidden] { display: none; }
+.cal-almanac--proof-popup-actionmenu .cal-almanac-subpop { display: block; }
+.cal-almanac-shell .cal-almanac-subpop__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; border-bottom: 1px solid oklch(0.32 0.028 260); font-weight: 600; font-size: 13px;
+}
+.cal-almanac-shell .cal-almanac-subpop__body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.cal-almanac-shell .cal-almanac-subpop__opt {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  background: oklch(0.18 0.022 264); border: 1px solid oklch(0.32 0.028 260); border-radius: 6px;
+  color: oklch(0.92 0.02 250); font: inherit; font-size: 13px; cursor: pointer; text-align: left;
+}
+.cal-almanac-shell .cal-almanac-subpop__opt:hover { background: oklch(0.26 0.025 264); border-color: oklch(0.46 0.04 258); }
+.cal-almanac-shell .cal-almanac-subpop__opt-ic { width: 15px; height: 15px; flex: none; opacity: 0.85; }
+.cal-almanac-shell .cal-almanac-subpop__hist {
+  font-size: 12px; padding: 6px 8px; border-left: 2px solid oklch(0.42 0.03 258);
+  background: oklch(0.18 0.022 264); border-radius: 0 4px 4px 0;
+}
+.cal-almanac-shell .cal-almanac-subpop__hist b { color: oklch(0.985 0 0); }
+
+/* ---- Sky "what's happening" panel ------------------------------ */
+.cal-almanac-shell .cal-almanac-skypanel {
+  position: fixed; top: 0; right: 0; width: 320px; max-width: 90vw; height: 100vh;
+  background: oklch(0.20 0.022 264); border-left: 1px solid oklch(0.34 0.03 259);
+  box-shadow: -16px 0 34px -10px oklch(0 0 0 / 0.5); z-index: 65;
+  transform: translateX(100%); opacity: 0; pointer-events: none;
+  display: flex; flex-direction: column;
+  transition: transform var(--cal-d-standard) var(--cal-ease-out), opacity var(--cal-d-standard) var(--cal-ease-out);
+}
+.cal-almanac-shell .cal-almanac-skypanel[data-cal-skypanel-open="true"] { transform: translateX(0); opacity: 1; pointer-events: auto; }
+.cal-almanac-shell .cal-almanac-skypanel__head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid oklch(0.32 0.028 260); }
+.cal-almanac-shell .cal-almanac-skypanel__title { margin: 0; font-size: 15px; font-weight: 600; }
+.cal-almanac-shell .cal-almanac-skypanel__body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.cal-almanac-shell .cal-almanac-skypanel__row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  background: oklch(0.17 0.02 264); border-radius: 6px; font-size: 13px;
+}
+.cal-almanac-shell .cal-almanac-skypanel__row-ic { width: 16px; height: 16px; flex: none; }
+
+/* Snowglobe proof */
+.cal-almanac--proof-snowglobe .cal-almanac-globe { outline: 1px dashed oklch(0.5 0.1 260 / 0.4); }
+
+/* ---- Reduced motion: zero all v2 animation --------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .cal-almanac-shell .cal-almanac-rain,
+  .cal-almanac-shell .cal-almanac-snow,
+  .cal-almanac-shell .cal-almanac-cloud,
+  .cal-almanac-shell .cal-almanac-lightning,
+  .cal-almanac-shell .cal-almanac-meteor,
+  .cal-almanac-shell .cal-almanac-fog,
+  .cal-almanac-shell .cal-almanac-eclipse--solar {
+    animation: none !important;
+  }
+  .cal-almanac-shell .cal-almanac-snow,
+  .cal-almanac-shell .cal-almanac-rain { opacity: 0.6; }
+}

@@ -31,6 +31,14 @@ type CalAlmanacMockData struct {
 	DayWeather   map[string]string       `json:"day_weather"`    // "Y-M-D" -> weather-type ID
 	DayNotes     map[string]string       `json:"day_notes"`      // "Y-M-D" -> free-text note
 	Recurring    []CalAlmanacRecurring   `json:"recurring"`      // weekly/monthly templates
+	// Refinement v2 (REFINEMENT-V2 dispatch) — ambient sky + action menu.
+	CelestialEvents map[string][]CalAlmanacCelestial `json:"celestial_events"` // "Y-M-D" -> celestial events
+	EventHistory    map[string][]CalAlmanacHistory   `json:"event_history"`    // event-id -> change log
+	EventEntities   map[string][]CalAlmanacEntityRef `json:"event_entities"`   // event-id -> linked entities
+	EntityEvents    map[string][]string              `json:"entity_events"`    // entity-id -> event-ids
+	EntityTypes     []CalAlmanacEntityType           `json:"entity_types"`     // "Create Entity From" targets
+	WeatherEffects  []CalAlmanacEffect               `json:"weather_effects"`  // registry metadata (MUST + TBD stubs)
+	CelestialEffects []CalAlmanacEffect              `json:"celestial_effects"`// registry metadata (MUST + TBD stubs)
 	// CurrentMonth + Year are what the grid renders on initial load.
 	CurrentYear  int `json:"current_year"`
 	CurrentMonth int `json:"current_month"` // 1-indexed
@@ -178,6 +186,51 @@ type CalAlmanacRecurring struct {
 	// replacement name (showcase scope — production would override
 	// any field).
 	Overrides map[string]string `json:"overrides,omitempty"`
+}
+
+// CalAlmanacCelestial — a celestial event on a specific day (meteor
+// shower, eclipse, + TBD stubs). The sky-band's CELESTIAL_EFFECTS
+// registry renders the MUST-tier ones (meteor/eclipse) fully and the
+// TBD ones as a small label glyph.
+type CalAlmanacCelestial struct {
+	Type      string `json:"type"`       // "meteor-shower" / "eclipse-solar" / "eclipse-lunar" / TBD ids
+	Name      string `json:"name"`
+	StartTime int    `json:"start_time"` // hour 0..23; -1 = all-night
+	Duration  int    `json:"duration"`   // hours
+}
+
+// CalAlmanacHistory — one entry in an event's change log (read-only).
+type CalAlmanacHistory struct {
+	At     string `json:"at"`     // ISO-ish display string
+	By     string `json:"by"`     // user display name
+	Action string `json:"action"` // "created" / "edited title" / etc.
+}
+
+// CalAlmanacEntityRef — a link from an event to a Chronicle entity.
+type CalAlmanacEntityRef struct {
+	Type string `json:"type"` // "npc" / "location" / "item" / "faction" / "region" / "religion"
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// CalAlmanacEntityType — a target type for the "Create Entity From"
+// submenu. Icon names map to the inline-SVG glyph set.
+type CalAlmanacEntityType struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Icon string `json:"icon"`
+}
+
+// CalAlmanacEffect — registry metadata for a weather or celestial
+// effect. `tier:"must"` ships a full render; `tier:"tbd"` ships a stub
+// (small label glyph only). Mirrors the JS WEATHER_EFFECTS /
+// CELESTIAL_EFFECTS registries so the templ can reference icon + name.
+type CalAlmanacEffect struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Icon  string `json:"icon"`
+	Color string `json:"color"`
+	Tier  string `json:"tier"` // "must" | "tbd"
 }
 
 // CalAlmanacMock returns the in-memory mock dataset. Pure function;
@@ -371,6 +424,71 @@ func CalAlmanacMock() CalAlmanacMockData {
 				1492, 5, 5, 0, 0, 19, "standard", "session", "public", nil, nil, "rec-session"},
 			{"e15", "The Spire re-ignites", "Major world beat. Locks in only after the party returns from the crypt.",
 				1492, 5, 12, 0, 0, -1, "major", "world", "public", nil, nil, ""},
+		},
+		// --- Refinement v2 data ---
+		CelestialEvents: map[string][]CalAlmanacCelestial{
+			"1492-4-11": {{"meteor-shower", "The Tears of Selûne", 21, 6}},  // MUST exemplar
+			"1492-4-23": {{"eclipse-lunar", "Selûne in Shadow", 0, 4}},      // MUST exemplar (full-moon lunar)
+			"1492-4-1":  {{"eclipse-solar", "Shar Devours the Sun", 12, 1}}, // MUST exemplar (new-moon solar)
+			"1492-4-17": {{"arcane-surge", "Ley Confluence", 14, 5}},        // TBD stub
+			"1492-4-7":  {{"volcanic", "Tremors of the Spire", 0, 24}},      // TBD stub
+		},
+		EventHistory: map[string][]CalAlmanacHistory{
+			"e1":  {{"1492-03-02 14:10", "GM Aria", "created"}, {"1492-03-30 09:22", "GM Aria", "edited description"}},
+			"e3":  {{"1492-03-28 18:40", "GM Aria", "created"}, {"1492-04-02 11:05", "Player Rolan", "added travel note"}},
+			"e4":  {{"1492-04-10 20:00", "GM Aria", "created from recurring series"}},
+			"e7":  {{"1492-03-15 16:30", "GM Aria", "created"}, {"1492-04-08 21:14", "GM Aria", "set visibility → specific"}},
+			"e8":  {{"1492-03-20 23:00", "GM Aria", "created (DM-only)"}},
+			"e11": {{"1492-04-01 08:00", "System", "auto-generated from moon phase"}},
+		},
+		EventEntities: map[string][]CalAlmanacEntityRef{
+			"e1":  {{"location", "loc-spire", "The Celestial Spire"}, {"faction", "fac-watch", "The City Watch"}},
+			"e3":  {{"location", "loc-waterdeep", "Waterdeep"}, {"npc", "npc-merchant", "Daggerford Merchants"}},
+			"e7":  {{"npc", "npc-marisha", "Marisha Coppervein"}},
+			"e8":  {{"item", "item-letter", "The Black Letter"}},
+			"e2":  {{"religion", "rel-chauntea", "Faith of Chauntea"}, {"region", "reg-sword", "Sword Coast"}},
+		},
+		EntityEvents: map[string][]string{
+			"npc-marisha":  {"e7"},
+			"loc-spire":    {"e1", "e15"},
+			"loc-waterdeep": {"e3"},
+		},
+		EntityTypes: []CalAlmanacEntityType{
+			{"npc", "NPC", "mask"},
+			{"location", "Location", "compass"},
+			{"item", "Item", "spire"},
+			{"faction", "Faction", "hearth"},
+			{"region", "Region", "compass"},
+			{"religion", "Religion", "flame"},
+		},
+		// Effect registries — metadata mirror of the JS registries. MUST
+		// tier gets full renders; TBD ships stub label-glyphs only.
+		WeatherEffects: []CalAlmanacEffect{
+			{"clear", "Clear", "sun", "oklch(0.85 0.14 80)", "must"},
+			{"cloudy", "Cloudy", "cloud", "oklch(0.74 0.02 240)", "must"},
+			{"rain", "Rain", "rain", "oklch(0.62 0.12 240)", "must"},
+			{"thunderstorm", "Thunderstorm", "storm", "oklch(0.52 0.20 285)", "must"},
+			{"snow", "Snow", "snowflake", "oklch(0.85 0.04 240)", "must"},
+			{"fog", "Fog", "fog", "oklch(0.70 0.02 240)", "must"},
+			// TBD stubs — registry-wired, visuals deferred.
+			{"ashfall", "Ashfall", "ember", "oklch(0.60 0.04 30)", "tbd"},
+			{"acid-rain", "Acid Rain", "rain", "oklch(0.70 0.18 145)", "tbd"},
+			{"arcane-winds", "Arcane Winds", "swirl", "oklch(0.72 0.22 290)", "tbd"},
+			{"ley-surge", "Ley Surge", "swirl", "oklch(0.65 0.20 195)", "tbd"},
+			{"sakura-bloom", "Sakura Bloom", "petal", "oklch(0.80 0.12 350)", "tbd"},
+		},
+		CelestialEffects: []CalAlmanacEffect{
+			{"meteor-shower", "Meteor Shower", "meteor", "oklch(0.92 0.10 80)", "must"},
+			{"eclipse-solar", "Solar Eclipse", "eclipse", "oklch(0.40 0.06 60)", "must"},
+			{"eclipse-lunar", "Lunar Eclipse", "eclipse", "oklch(0.55 0.16 25)", "must"},
+			// TBD stubs.
+			{"volcanic", "Volcanic Event", "ember", "oklch(0.58 0.20 35)", "tbd"},
+			{"ice-age", "Ice Age", "snowflake", "oklch(0.80 0.05 230)", "tbd"},
+			{"plague", "Plague", "swirl", "oklch(0.55 0.14 140)", "tbd"},
+			{"arcane-surge", "Arcane Event", "swirl", "oklch(0.70 0.22 300)", "tbd"},
+			{"moon-special", "Moon Special", "moon", "oklch(0.88 0.06 95)", "tbd"},
+			{"aurora", "Aurora", "swirl", "oklch(0.78 0.16 160)", "tbd"},
+			{"comet", "Comet", "meteor", "oklch(0.86 0.10 210)", "tbd"},
 		},
 	}
 }

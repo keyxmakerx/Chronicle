@@ -244,18 +244,24 @@ func TestDemoCalendar_AlmanacHooks(t *testing.T) {
 		"data-cal-sky",
 		"data-cal-sky-sun",
 		"data-cal-sky-moon",
-		"data-cal-sky-scrub",
+		"data-cal-sky-time-label", // v2: click-to-type time (replaced the scrubber)
 		"data-cal-grid",
 		"data-cal-cell",
 		"data-cal-event-id",
 		"data-cal-drag-ghost",
-		"data-cal-drawer",
+		"data-cal-editor",         // v2: expanded editor (replaced the side drawer)
 		"data-cal-vis-mode",
 		"data-cal-vis-rules",
 		"data-cal-vis-chips",
 	} {
 		if !strings.Contains(html, h) {
 			t.Errorf("required hook missing: %s", h)
+		}
+	}
+	// The retired scrubber + side drawer must be gone (v2 replaced them).
+	for _, gone := range []string{"data-cal-sky-scrub", "data-cal-drawer", "cal-almanac-eras"} {
+		if strings.Contains(html, gone) {
+			t.Errorf("retired hook still present: %s", gone)
 		}
 	}
 }
@@ -322,50 +328,177 @@ func TestDemoCalendar_RefinementMockData(t *testing.T) {
 	}
 }
 
-// TestDemoCalendar_PopoverAndTimepiece — the refinement adds an
-// anchored popover (replacing the right-edge drawer for quick edits)
-// + a standalone timepiece widget. Pin their markup hooks.
-func TestDemoCalendar_PopoverAndTimepiece(t *testing.T) {
+// TestDemoCalendar_RefinementV2Hooks — the v2 refinement: ambient sky
+// (weather + celestial layers, sun-drag, click-time), era corner
+// vignette, snowglobe timepiece, two-tier popup, named weather/category
+// chips. Pin the markup hooks the JS init blocks bind.
+func TestDemoCalendar_RefinementV2Hooks(t *testing.T) {
 	var buf bytes.Buffer
 	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
 	for _, h := range []string{
-		// Popover.
-		"data-cal-pop",
-		"data-cal-pop-title",
-		"data-cal-pop-meta",
-		"data-cal-pop-desc",
-		`data-cal-pop-tab="detail"`,
-		`data-cal-pop-tab="notes"`,
-		`data-cal-pop-tab="vis"`,
-		"data-cal-pop-notes",
-		"data-cal-pop-open-drawer",
-		"data-cal-pop-close",
-		"data-cal-pop-arrow",
-		// Eras.
-		"data-cal-eras",
-		"cal-almanac-eras__band--current",
-		// Timepiece.
-		"data-cal-time",
-		"data-cal-time-drag",
+		// Ambient sky.
+		"data-cal-sky-weather-layer",
+		"data-cal-sky-celestial-layer",
+		"data-cal-sky-happening",
+		"data-cal-sky-time-label",
+		// Era corner vignette.
+		"data-cal-era-vignette",
+		"cal-almanac-eravig",
+		// Snowglobe timepiece.
+		"cal-almanac-globe__dome",
+		"data-cal-globe-sun",
 		"data-cal-time-tick",
 		"data-cal-time-clock",
-		// Named weather chip in cells.
+		// Named weather chip + category icons + recurring marker (carried).
 		"cal-almanac-cell__wchip",
-		// Category icons in event chips.
 		"cal-almanac-chip__icon",
-		// Recurring marker.
 		"cal-almanac-chip--recurring",
 	} {
 		if !strings.Contains(html, h) {
-			t.Errorf("refinement hook missing: %s", h)
+			t.Errorf("v2 hook missing: %s", h)
 		}
 	}
-	// The side drawer stays for heavy edits — must still exist.
-	if !strings.Contains(html, "data-cal-drawer") {
-		t.Errorf("side drawer markup should still be present (heavy-edit escalation target)")
+}
+
+// TestCalAlmanac_SkyBandAmbientRegistry — the WEATHER_EFFECTS +
+// CELESTIAL_EFFECTS registries exist in the JS with MUST entries +
+// TBD stubs (dispatch §F).
+func TestCalAlmanac_SkyBandAmbientRegistry(t *testing.T) {
+	js := readCalAlmanacJS(t)
+	for _, m := range []string{
+		"WEATHER_EFFECTS", "CELESTIAL_EFFECTS",
+		"registerInitBlock('weather-registry'", "registerInitBlock('celestial-registry'",
+		"registerInitBlock('sky-band-ambient'",
+		// MUST weather renders.
+		"WEATHER_EFFECTS.rain", "WEATHER_EFFECTS.snow", "WEATHER_EFFECTS.thunderstorm", "WEATHER_EFFECTS.fog",
+		// MUST celestial renders.
+		"meteor-shower", "eclipse-solar", "eclipse-lunar",
+		// TBD stubs registered.
+		"'volcanic'", "'ice-age'", "'plague'", "'aurora'", "'comet'",
+	} {
+		if !strings.Contains(js, m) {
+			t.Errorf("registry marker missing in JS: %q", m)
+		}
+	}
+	// Mock mirrors the registries (templ can reference effect metadata).
+	d := CalAlmanacMock()
+	must, tbd := 0, 0
+	for _, e := range append(append([]CalAlmanacEffect{}, d.WeatherEffects...), d.CelestialEffects...) {
+		switch e.Tier {
+		case "must":
+			must++
+		case "tbd":
+			tbd++
+		}
+	}
+	if must < 6 {
+		t.Errorf("expected ≥6 MUST-tier effects in the mock registries; got %d", must)
+	}
+	if tbd < 7 {
+		t.Errorf("expected ≥7 TBD-stub effects (architecture wired, visuals deferred); got %d", tbd)
+	}
+}
+
+// TestCalAlmanac_PopupSlidableTiers — the two-tier popup: quick-view +
+// expanded editor, with the expand affordance wired.
+func TestCalAlmanac_PopupSlidableTiers(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, h := range []string{
+		"data-cal-qv",          // quick-view tier
+		"data-cal-qv-title",
+		"data-cal-qv-expand",   // expand affordance
+		"data-cal-editor",      // expanded tier
+		`data-cal-editor-tab="detail"`,
+		`data-cal-editor-tab="notes"`,
+		`data-cal-editor-tab="vis"`,
+		"data-cal-editor-collapse",
+	} {
+		if !strings.Contains(html, h) {
+			t.Errorf("two-tier popup hook missing: %s", h)
+		}
+	}
+	js := readCalAlmanacJS(t)
+	for _, m := range []string{"registerInitBlock('popup-slidein'", "registerInitBlock('popup-expand'", "expandToEditor"} {
+		if !strings.Contains(js, m) {
+			t.Errorf("popup JS marker missing: %q", m)
+		}
+	}
+}
+
+// TestCalAlmanac_ActionMenu8Items — all 8 actions render in the
+// expanded editor (dispatch §D / operator Q2 "Full").
+func TestCalAlmanac_ActionMenu8Items(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	actions := []string{"create-entity", "timeline", "permalink", "duplicate", "recurring", "override-weather", "history", "delete"}
+	for _, a := range actions {
+		if !strings.Contains(html, `data-cal-action="`+a+`"`) {
+			t.Errorf("action-menu item missing: %s", a)
+		}
+	}
+	if c := strings.Count(html, `data-cal-action="`); c != 8 {
+		t.Errorf("expected exactly 8 action-menu items; got %d", c)
+	}
+	js := readCalAlmanacJS(t)
+	if !strings.Contains(js, "registerInitBlock('action-menu'") {
+		t.Errorf("action-menu init block missing")
+	}
+	// Create Entity From submenu must have the entity types.
+	d := CalAlmanacMock()
+	if len(d.EntityTypes) < 6 {
+		t.Errorf("expected ≥6 entity types for the Create Entity From submenu; got %d", len(d.EntityTypes))
+	}
+}
+
+// TestCalAlmanac_SnowglobeTimepiece — the timepiece is now a snowglobe
+// dome, not the old horizontal strip.
+func TestCalAlmanac_SnowglobeTimepiece(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, h := range []string{"cal-almanac-globe", "cal-almanac-globe__dome", "cal-almanac-globe__glass", "data-cal-globe-sun"} {
+		if !strings.Contains(html, h) {
+			t.Errorf("snowglobe markup missing: %s", h)
+		}
+	}
+	if strings.Contains(html, "cal-almanac-time__clock") || strings.Contains(html, "cal-almanac-time__pips") {
+		t.Errorf("old horizontal-strip timepiece markup should be gone")
+	}
+	js := readCalAlmanacJS(t)
+	if !strings.Contains(js, "registerInitBlock('snowglobe-timepiece'") {
+		t.Errorf("snowglobe-timepiece init block missing")
+	}
+}
+
+// TestCalAlmanac_EraVignetteNoStrip — the horizontal era strip is gone,
+// replaced by the corner vignette.
+func TestCalAlmanac_EraVignetteNoStrip(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	if strings.Contains(html, "cal-almanac-eras__band") || strings.Contains(html, "data-cal-eras") {
+		t.Errorf("the horizontal era strip should be removed in favour of the corner vignette")
+	}
+	if !strings.Contains(html, "cal-almanac-eravig") || !strings.Contains(html, "data-cal-era-vignette") {
+		t.Errorf("era corner-vignette markup missing")
+	}
+	js := readCalAlmanacJS(t)
+	if !strings.Contains(js, "registerInitBlock('era-vignette'") {
+		t.Errorf("era-vignette init block missing")
 	}
 }
 
@@ -387,6 +520,15 @@ func readCalAlmanacCSS(t *testing.T) string {
 	b, err := os.ReadFile(filepath.Join(calDemoRepoRoot(t), "static", "css", "cal-almanac.css"))
 	if err != nil {
 		t.Fatalf("read cal-almanac.css: %v", err)
+	}
+	return string(b)
+}
+
+func readCalAlmanacJS(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(calDemoRepoRoot(t), "static", "js", "cal-almanac.js"))
+	if err != nil {
+		t.Fatalf("read cal-almanac.js: %v", err)
 	}
 	return string(b)
 }
